@@ -1,5 +1,10 @@
 # The Products screen as a category tree
 
+> 2026-10-10: [A461's plan](../plans/2026-10-10-a461-product-search.md) supersedes this
+> Products search presentation and selection lifetime. Search now shows flat own matches with
+> inline paths and keeps eligible ticks across search and filter changes.
+
+
 **Status:** owner decisions of 2026-10-02, from one brainstorm over two screenshots of the Products
 screen and three rounds of mockups (layout A, "the ⋮ menu", "All products" as the top row).
 Not built. Folds in backlog A205 (a product row's click opens it) and cancels A207 (a blue Add

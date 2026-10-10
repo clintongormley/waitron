@@ -1,5 +1,10 @@
 # The Products screen as a category tree — Implementation Plan
 
+> 2026-10-10: [A461's plan](../plans/2026-10-10-a461-product-search.md) supersedes this
+> Products search presentation and selection lifetime. Search now shows flat own matches with
+> inline paths and keeps eligible ticks across search and filter changes.
+
+
 > Update, 2026-10-09 (A435-1): the product Disable/Enable behavior described here is historical.
 > Products and variants now archive permanently. See [the current product guide](../../products.md)
 > for Archive, View and the editor's staged Archive/Keep actions.

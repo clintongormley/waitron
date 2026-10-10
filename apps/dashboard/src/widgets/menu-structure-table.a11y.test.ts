@@ -1,12 +1,12 @@
 import { page } from "vitest/browser";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, onTestFinished } from "vitest";
 import { registerIcons } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-input.js";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "./test-helpers.js";
 import { MenuStructureTable } from "./menu-structure-table.js";
 import type { CategorySummary, MenuStructureNode, Product } from "../api/client.js";
 import { DASHBOARD_ICONS } from "../icons.js";
-import { t } from "../i18n/t.js";
+import { currentLocale, setLocale, t } from "../i18n/t.js";
 
 registerIcons(DASHBOARD_ICONS);
 afterEach(cleanupWidgets);
@@ -386,3 +386,48 @@ describe.each(["light", "dark"] as const)("menu structure table (%s)", (theme) =
     await expectNoA11yViolations(host);
   });
 });
+
+it.each(
+  ["en", "es"].flatMap((locale) =>
+    ["light", "dark"].flatMap((theme) => [390, 1280].map((width) => ({ locale, theme, width }))),
+  ),
+)(
+  "A461 repeated checked paths render at $locale $theme $width",
+  async ({ locale, theme, width }) => {
+    const oldLocale = currentLocale();
+    setLocale(locale);
+    onTestFinished(() => setLocale(oldLocale));
+    await page.viewport(width, 844);
+    onTestFinished(() => page.viewport(1280, 844));
+    expect(window.innerWidth).toBe(width);
+    const drinks = section("m-drinks", "s-drinks", "Drinks", [productNode("m-lager", "p-lager")]);
+    const { el, host } = await mountWidget<MenuStructureTable>(
+      "dashboard-menu-structure-table",
+      {
+        nodes: [drinks, section("m-fav", "s-fav", "Favourites", [{ ...drinks, memberId: "copy" }])],
+        products,
+        menuName: "Lunch Menu",
+        selecting: true,
+        search: "lager",
+        selected: ["m-drinks/m-lager"],
+      },
+      theme as "light" | "dark",
+    );
+    const table = el.shadowRoot!.querySelector("wt-data-table")!;
+    await table.updateComplete;
+    expect(
+      [...table.shadowRoot!.querySelectorAll<HTMLInputElement>('tbody input[type="checkbox"]')].map(
+        (box) => box.checked,
+      ),
+    ).toEqual([true, true]);
+    expect(
+      [...table.shadowRoot!.querySelectorAll('[part~="search-path"]')].map(
+        (span) => span.textContent,
+      ),
+    ).toEqual(["Drinks", "Favourites › Drinks"]);
+    await expectNoA11yViolations(host);
+    await page.screenshot({
+      path: `__screenshots__/a461-final/repeated-${locale}-${theme}-${width}.png`,
+    });
+  },
+);

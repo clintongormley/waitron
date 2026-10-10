@@ -4826,14 +4826,17 @@ describe("the Structure tree", () => {
       await toggleRow(el, "m-fav/m-fav-drinks");
       await pressSelect(el);
       await tick(el, "m-drinks/m-lemonade");
-      await tick(el, "m-fav/m-fav-drinks/m-lemonade");
+      expect(
+        inStructure<HTMLInputElement>(el, '[data-test="select-m-fav/m-fav-drinks/m-lemonade"]')!
+          .checked,
+      ).toBe(true);
     }
 
-    it("removes a member ticked in two places once, counting the ticks in the bar and the member in the confirm", async () => {
+    it("removes a member shown in two places once, counting one tick in the bar and confirm", async () => {
       const client = api();
       const el = await mountLunch(client);
       await tickLemonadeInBothPlaces(el);
-      expect(text(q(el, '[data-test="selected-count"]'))).toBe("2 selected");
+      expect(text(q(el, '[data-test="selected-count"]'))).toBe("1 selected");
       await openRemove(el);
       const dialog = modal(el, "remove-selected");
       expect(dialog.getAttribute("heading")).toBe("Remove 1 item?");
@@ -4908,12 +4911,8 @@ describe("the Structure tree", () => {
       await pressSelect(el);
       inStructure(el, '[data-test="select-all"]')!.click();
       await settleStructure(el);
-      expect(structure(el).selected).toEqual([
-        "m-drinks/m-lemonade",
-        "m-fav/m-fav-lemonade",
-        "m-fav/m-fav-drinks/m-lemonade",
-      ]);
-      expect(text(q(el, '[data-test="selected-count"]'))).toBe("3 selected");
+      expect(structure(el).selected).toEqual(["m-drinks/m-lemonade", "m-fav/m-fav-lemonade"]);
+      expect(text(q(el, '[data-test="selected-count"]'))).toBe("2 selected");
       q(el, '[data-test="selection-move"]')!.click();
       await vi.waitFor(() => expect(modal(el, "move-selected").open).toBe(true));
       await el.updateComplete;

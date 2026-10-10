@@ -3381,7 +3381,7 @@ describe("Select mode while a search or filter hides rows", () => {
     ]);
     expect(await selectAll(el)).toEqual([
       {
-        selected: ["m-drinks/m-lemonade", "m-fav/m-fav-lemonade", "m-fav/m-fav-drinks/m-lemonade"],
+        selected: ["m-drinks/m-lemonade", "m-fav/m-fav-lemonade"],
       },
     ]);
   });
@@ -4142,4 +4142,58 @@ it("A461 Structure wraps new paths after resize and reconnect", async () => {
     },
   ];
   await bounded();
+});
+
+it("A461 repeated member paths share one tick and untick from either copy", async () => {
+  const el = await mount({ selecting: true, search: "lager" });
+  el.addEventListener("wt-selection-change", (event) => {
+    el.selected = (event as CustomEvent<{ selected: string[] }>).detail.selected;
+  });
+  const first = () => item(el, "select-m-drinks/m-lager") as HTMLInputElement;
+  const copy = () => item(el, "select-m-fav/m-fav-drinks/m-lager") as HTMLInputElement;
+  expect(drawn(el)).toContain("m-drinks/m-lager");
+  expect(drawn(el)).toContain("m-fav/m-fav-drinks/m-lager");
+  first().click();
+  await settle(el);
+  expect(first().checked).toBe(true);
+  expect(copy().checked).toBe(true);
+  expect(el.selected).toEqual(["m-drinks/m-lager"]);
+  copy().click();
+  await settle(el);
+  expect(first().checked).toBe(false);
+  expect(copy().checked).toBe(false);
+  expect(el.selected).toEqual([]);
+  item(el, "select-all").click();
+  await settle(el);
+  expect(el.selected).toEqual(["m-drinks/m-lager", "m-drinks/m-beer/m-lager-2"]);
+  expect(first().checked).toBe(true);
+  expect(copy().checked).toBe(true);
+});
+
+it("A461 dragging a selected repeated copy carries visible members once", async () => {
+  const selected = ["m-drinks/m-lager", "m-burger"];
+  const el = await mount({
+    selecting: true,
+    selected,
+    nodes: [
+      ...lunchNodes(),
+      {
+        memberId: "m-empty",
+        ref: { kind: "section", sectionId: "s-empty" },
+        internalName: "Empty",
+        ownerMenuId: "menu-lunch",
+        children: [],
+      },
+    ],
+    dragSelection: (key, visible) =>
+      selected.includes(key) ? selected.filter((each) => visible.has(each)) : [key],
+  });
+  await toggle(el, "m-fav");
+  await toggle(el, "m-fav/m-fav-drinks");
+  const batches = listen(el, "wt-members-drop");
+  const from = grip(el, "m-fav/m-fav-drinks/m-lager");
+  pointer(from, "pointerdown");
+  await dragOver(el, from, "m-empty", "middle");
+  pointer(from, "pointerup", nameAt(el, "m-empty"));
+  expect(batches).toEqual([{ keys: ["m-fav/m-fav-drinks/m-lager", "m-burger"], to: ["m-empty"] }]);
 });

@@ -814,6 +814,8 @@ export class WtDataTable<Row = unknown> extends LitElement {
   @property({ attribute: false }) rowSelectable: (row: Row) => boolean = () => true;
   /** Domain eligibility for retained ticks; rowSelectable still controls visible checkboxes. */
   @property({ attribute: false }) rowSelectionAllowed?: (row: Row) => boolean;
+  /** Copies may share a selection identity while retaining their own row paths. */
+  @property({ attribute: false }) rowSelectionKey?: (row: Row) => string;
   @property({ attribute: false }) selected: readonly string[] = [];
   @property({ attribute: false }) selectionLabel: (row: Row) => string = () => "Select row";
   @property() selectAllLabel = "Select all";
@@ -1587,22 +1589,35 @@ export class WtDataTable<Row = unknown> extends LitElement {
         );
   }
 
+  #selectionKey(row: Row, key: string): string {
+    return this.rowSelectionKey?.(row) ?? key;
+  }
+
   #emitSelection(next: string[]): void {
     const keyedRows = this.#shownRows();
     const selectable = new Map(
-      this.rows.map((row, index) => [this.rowKey(row, index), this.rowSelectable(row)]),
+      this.rows.map((row, index) => [
+        this.#selectionKey(row, this.rowKey(row, index)),
+        this.rowSelectable(row),
+      ]),
     );
     // Rendered keys take precedence: a caller can key flat rows by their sorted, filtered position.
     keyedRows.forEach((row, index) => {
-      selectable.set(this.rowKey(row, index), this.rowSelectable(row));
+      selectable.set(this.#selectionKey(row, this.rowKey(row, index)), this.rowSelectable(row));
     });
     let selected: string[];
     if (this.rowSelectionAllowed) {
       const allowed = new Map(
-        this.rows.map((row, index) => [this.rowKey(row, index), this.rowSelectionAllowed!(row)]),
+        this.rows.map((row, index) => [
+          this.#selectionKey(row, this.rowKey(row, index)),
+          this.rowSelectionAllowed!(row),
+        ]),
       );
       keyedRows.forEach((row, index) => {
-        allowed.set(this.rowKey(row, index), this.rowSelectionAllowed!(row));
+        allowed.set(
+          this.#selectionKey(row, this.rowKey(row, index)),
+          this.rowSelectionAllowed!(row),
+        );
       });
       selected = next.filter(
         (key) =>
@@ -2284,10 +2299,10 @@ export class WtDataTable<Row = unknown> extends LitElement {
                 type="checkbox"
                 data-test=${`select-${key}`}
                 aria-label=${this.selectionLabel(row)}
-                .checked=${this.selected.includes(key)}
+                .checked=${this.selected.includes(this.#selectionKey(row, key))}
                 @change=${(event: Event) => {
                   event.stopPropagation();
-                  this.#toggleRow(key);
+                  this.#toggleRow(this.#selectionKey(row, key));
                 }}
               />`
             : nothing
@@ -2688,7 +2703,7 @@ export class WtDataTable<Row = unknown> extends LitElement {
       const sorted = this.#sortedRows(visible, sortColumn, searchRanks);
       const rowKeys = sorted.map((row, index) => this.rowKey(row, index));
       const visibleKeys = sorted.flatMap((row, index) =>
-        this.rowSelectable(row) ? [this.rowKey(row, index)] : [],
+        this.rowSelectable(row) ? [this.#selectionKey(row, this.rowKey(row, index))] : [],
       );
       return this.#withToolbar(
         html`<div class="scroll" tabindex="0" role="region" aria-label=${label ?? nothing}>
@@ -2749,7 +2764,9 @@ export class WtDataTable<Row = unknown> extends LitElement {
 
     const { rows: treeRows, ancestorOnly, heldOpen } = treeVisible!;
     const entries = this.#treeShown().entries ?? this.#treeRows(treeRows, heldOpen, sortColumn);
-    const visibleKeys = entries.filter(({ row }) => this.rowSelectable(row)).map(({ key }) => key);
+    const visibleKeys = entries
+      .filter(({ row }) => this.rowSelectable(row))
+      .map(({ row, key }) => this.#selectionKey(row, key));
     return this.#withToolbar(
       html`<div class="scroll" tabindex="0" role="region" aria-label=${label ?? nothing}>
         <table

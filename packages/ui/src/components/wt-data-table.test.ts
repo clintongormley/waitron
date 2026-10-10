@@ -8821,3 +8821,31 @@ test("A461 opening a search child remembers its ancestors for the next visit", a
   expect(nextVisit.isExpanded("coffee")).toBe(true);
   expect(treeKeys(nextVisit)).toEqual(treeKeys(el));
 });
+
+test("A461 distinct row paths can share one controlled selection", async () => {
+  const el = await table({
+    selectable: true,
+    rowSelectionKey: () => "a",
+    rowSelectionAllowed: () => true,
+  });
+  el.addEventListener("wt-selection-change", (event) => {
+    el.selected = (event as CustomEvent).detail.selected;
+  });
+  const box = (key: string) =>
+    el.shadowRoot!.querySelector<HTMLInputElement>(`[data-test=select-${key}]`)!;
+  box("b").click();
+  await el.updateComplete;
+  expect(el.selected).toEqual(["a"]);
+  expect(box("a").checked).toBe(true);
+  expect(box("b").checked).toBe(true);
+  expect(el.shadowRoot!.querySelector<HTMLInputElement>("[data-test=select-all]")!.checked).toBe(
+    true,
+  );
+  box("a").click();
+  await el.updateComplete;
+  expect(el.selected).toEqual([]);
+  expect(box("b").checked).toBe(false);
+  el.shadowRoot!.querySelector<HTMLInputElement>("[data-test=select-all]")!.click();
+  await el.updateComplete;
+  expect(el.selected).toEqual(["a"]);
+});

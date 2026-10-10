@@ -3,103 +3,6 @@
 The open entries are listed in [the backlog](../backlog.md), under "Menus and the catalogue". This file holds
 their full text.
 
-## A461 — product search shows what matches, finds categories on the till, and keeps ticks between searches
-
-Covers the Products screen and the Menus screen's Structure table on the dashboard, and the till's home page.
-
-Owner, 2026-10-10, queued for implementation. Three changes; the owner's choices between drawn
-layouts are recorded as decisions. Setup used for the examples: category Drinks › Coffee holds
-Espresso, Iced coffee, Add ice and Ginger tea; category Desserts holds Coffee cake.
-
-**1. Dashboard Products search: a flat list of what matches.** Today a search for "coffee" shows
-the Coffee category held open without its chevron and every product in it, because `wt-data-table`
-with `searchOpensPath` pulls in every row below a match (`#treeVisible`,
-`packages/ui/src/components/wt-data-table.ts`) and hides the chevron of a row it holds open. When
-only the category's name matches, it already shows collapsed with its chevron. Decided:
-
-- While a search is typed, the Products list is a flat list of the rows whose own name matches
-  (a product still matches on its variant names, as today), ranked by closeness as today. Rows in a
-  matching category are not shown unless their own name matches.
-- Each row shows its category path after its name on the same line, moving to the next line only
-  when there is no room: "Iced coffee  Drinks › Coffee", "Coffee cake  Desserts", and for the
-  category itself "Coffee  Drinks". The owner chose this over the path beneath the name and over a
-  matches-only tree.
-- A matching category is a collapsed row with its chevron; opening it shows its contents indented
-  beneath it, as in the tree.
-- Clearing the search returns to the tree as it was.
-
-The same goes for the Menus screen's Structure table (owner, 2026-10-10: "do the same for menus").
-It also sets `searchOpensPath` (`apps/dashboard/src/widgets/menu-structure-table.ts`): while a search
-is typed it becomes a flat list of the sections and items whose own name matches, each followed by
-its path within the menu, with a matching section collapsed and showing its chevron. Those two
-screens are the only users of `searchOpensPath` today.
-
-**2. Till home page: sections in the results.** Today `#matches`
-(`apps/till/src/widgets/menu-browser.ts`) searches product names only, so a section never appears.
-Decided: matching section tiles and matching product tiles share one grid, ranked purely by how
-closely the name matches (the owner chose this over sections first and over a section header with
-its matches beside it). A section tile looks as it does on the home page. Assumed, not asked:
-tapping a section tile opens that section and clears the search, as tapping it on the home page
-does; a section the diet filter has emptied shows greyed and disabled, as on the home page; with
-several menus served, each menu's section of results includes its own matching sections.
-
-**3. Ticks survive a new search, on Products and on the Menus Structure table.** Today typing in
-either search box empties the selection (`apps/dashboard/src/widgets/catalogue-browser.ts`,
-`if (changed.has("search")) this.selected = []`, pinned by "clears selection on %s and keeps
-selection mode on" in `catalogue-browser.test.ts`; `structureSelected = []` beside the search
-box's change handler in `apps/dashboard/src/screens/menus-screen.ts`). On Menus, dragging is off
-while a search is typed (`#reorderable`, `menu-structure-table.ts`), so ticks gathered across
-searches are moved by dragging after the search is cleared, or with the Move action.
-Decided: a ticked row stays ticked when the search changes or is cleared, so the owner can tick
-results from several searches and then drag them all to one place. Read, not run: dragging a ticked
-row already drags every ticked item, shown or not (`#moveDrag`, `apps/dashboard/src/widgets/product-list.ts`). Assumed, not asked, and to be confirmed with the owner at
-the plan: a column-filter change keeps ticks too, for the same reason; "select all" still adds
-only the rows shown; the selected count already shown in select mode is how the owner sees ticks
-the current search hides; leaving select mode, Done, and a finished move or delete still clear
-them as today.
-
-## A462 — dashboard table toolbars: column chooser at the end, no Expand all, closing a branch closes everything in it
-
-Owner, 2026-10-10, from screenshots of Products, a menu's Structure and Price overrides tabs, and
-Modifiers → Extras. Five changes; the owner's answers of 2026-10-10 to the first draft's open
-points are folded in.
-
-**1. The Customise columns button sits at the right-hand end of every table's toolbar**, after the
-search field. Today `wt-data-table` draws Filters, `toolbar-start`, Expand all, `toolbar-end`,
-Customise, then search, and design-system.md (Tables, the toolbar-order paragraph) puts search last
-on purpose, so Tab crosses the buttons on the first line before reaching search on its own line
-when the table is narrow. Moving Customise after search changes that rule: at each width, the order
-Tab follows must still match what is drawn, and the "Tab follows" cases in
-`packages/ui/src/components/wt-data-table.test.ts` and
-`apps/dashboard/src/widgets/catalogue-browser.test.ts` change with it. Owner, 2026-10-10: "we'll
-almost never use this button, so it goes on the right" — at every width it is the last control,
-drawn and reached by Tab after search; where search takes its own line, Customise ends that line.
-
-**2. No Expand all or Collapse all on Products or a menu's Structure tab.** The top row ("All
-products"; the menu's own name on Structure) opens and closes everything instead. Today that row
-cannot be closed at all: both tables pass `rowCollapsible` returning false for the root row
-(`apps/dashboard/src/widgets/product-list.ts`, `apps/dashboard/src/widgets/menu-structure-table.ts`),
-so the top row needs a chevron. Owner, 2026-10-10: opening the top row opens only its own level,
-like any other branch. Closing it closes every level, by point 3, so on both tables it is how to
-collapse everything. A menu's Preview tab (`apps/dashboard/src/widgets/menu-document-tree.ts`) keeps
-its Expand all (owner, 2026-10-10), so `wt-data-table` keeps the feature. The entry "The Menus Structure tree notices Collapse all only by watching its table
-redraw" below then needs revisiting: closing the top row still closes many branches at once.
-
-**3. Closing a branch closes every branch inside it**, on Products and on a menu's Structure tab,
-so opening it again shows its categories or sections closed rather than as they were left.
-
-**4. A menu's Structure tab has one button for Reorder and Select.** Pressing it shows the
-checkboxes and the drag handles together, as Products already does (`catalogue-browser.ts` passes
-one `selecting` state to both `.selecting` and `.reordering`); today `menus-screen.ts` keeps
-`structureReordering` and `structureSelecting` apart.
-
-**5. The header's Select all checkbox lines up with the rows' checkboxes, on every table** (owner,
-2026-10-10: "do this everywhere"). Seen on Products at phone width with select mode on: the rows'
-checkboxes sit at the start of the controls column with the drag handle after them, while the
-header's checkbox sits further right, over the gap between them. The header and the rows are drawn
-by `wt-data-table` (the select-all cell and the row-controls cell), so fix it there, with and
-without drag handles, and pin the alignment in a test that measures both boxes.
-
 ## `mergeAllergenMaps` (`src/derivation.ts`) can list a source twice and order sources differently from run to run
 
 - Found by #603 (`packages/catalogue`). **`mergeAllergenMaps` (`src/derivation.ts`) can list a
@@ -876,6 +779,18 @@ From **Allergens and nutrition (#370, #377, #385) — what is left open.**
   and decides whether the product editor keeps both summaries.
 
 ## Decisions and deliberate limits
+
+**Product search (A461, owner 2026-10-10).** Products and Menu Structure show flat own matches
+with inline paths. Each new query starts branches collapsed. Opening one shows its contents
+and keeps matching descendants as flat results too; openings and their parents persist after
+clearing. Products shows its one category placement; Menu Structure shows every member path.
+Repeated views of one list/member share one tick, while distinct memberships remain separate.
+Table-sort ties remain the A454 rule, confirmed by the owner. Search and filters retain eligible
+ticks; Select all changes visible ticks only. Dragging carries visible ticks on both dashboards
+and keeps hidden ticks; Move/Remove take the full selection. Removed or no-longer-owned rows
+are trimmed. The till mixes products and displayed sections by closeness with traversal-order
+ties, disables diet-empty sections, and opens a section without changing the basket.
+[Implementation plan](../superpowers/plans/2026-10-10-a461-product-search.md).
 
 **Products: the tree's Name column lines up, and the Main category column goes — DONE (W84, #1199, owner
 2026-10-04).** Seven existing test assertions that pinned the column changed, for the owner to

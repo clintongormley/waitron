@@ -1,5 +1,10 @@
 # Every search follows one rule — implementation plan
 
+> 2026-10-10: [A461's plan](../plans/2026-10-10-a461-product-search.md) supersedes
+> Products and Menus Structure tree-search presentation and selection lifetime, and adds matching
+> sections to the till's results. Search closeness and table-sort ties remain unchanged.
+
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Every typed search in Waitron matches every word typed in any order, ignoring accents,

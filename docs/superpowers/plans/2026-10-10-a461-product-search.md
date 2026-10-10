@@ -76,16 +76,14 @@ Visible-only drag selection is filtered before Menu membership grouping; success
 clears the carried members and leaves unrelated hidden ticks. Move/Remove still use the full
 selection.
 
-Amendment 4 has a scope conflict requiring an owner decision before Task 10. Products storage
-has one `category_id` (`packages/db/src/schema/catalogue.ts:51`), and `listProducts` exposes it
-as `categoryId` and `primaryCategoryId` (`packages/catalogue/src/operations.ts:252`). The
-existing database case “moves products and folders together into a folder and to the top level”
-in `packages/catalogue/src/catalogue-items.db.test.ts` was run and passed: moving replaces that
-category and then clears it. It does not exercise secondary memberships. The search plan
-forbids schema and route changes, so it cannot yet supply the owner's two-category Products
-example. Decide whether this slice shows every existing placement (one Products category,
-several Menu member paths), or also introduces secondary-category storage and editing with
-specified Move/Remove semantics. No multi-category support is claimed by this checkpoint.
+**Owner settled amendment 4 (2026-10-10, watcher receipt at 17:47): option A.**
+Show every existing placement without schema or route changes. Products has one category per
+product, so it has one flat result. Menu Structure has one result per member path. Repeated
+views of the same list/member share one tick and one request entry; distinct memberships remain
+separate choices, so moving or removing one does not change another placement. The widget maps
+those repeated views to the first owned path for selection and maps a drag back to a visible path.
+The shared table's optional `rowSelectionKey` separates this identity from the display row key.
+A product in more than one category is separate backlog work, as the owner requested.
 
 Task 9's first visual/layout receipts were collected against the earlier defaults. They
 remain evidence for the measured wrapping fixes, but do not validate this amendment.

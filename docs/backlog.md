@@ -628,16 +628,10 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
 
 _Formerly the catalogue and menus entries in the opening part of the old Track A (before A1), and the catalogue entries filed under A2; part of A9._ Detail: [backlog/catalogue.md](backlog/catalogue.md).
 
-- **A461 — product search shows what matches, finds categories on the till, and keeps ticks
-  between searches (owner, 2026-10-10; queued).** On the dashboard's Products screen, searching
-  "coffee" shows the Coffee category held open with no chevron and every product in it ("Add ice",
-  "Ginger tea"). The owner wants a flat list of matches only, each followed by its category path
-  ("Iced coffee  Drinks › Coffee"); a matching category is a collapsed row with its chevron. The
-  till's home-page search should find sections as well as products, in one grid ranked by
-  closeness. And a ticked row stays ticked when the search changes, so items from several searches
-  can be dragged to one place together. The Menus screen's Structure table gets the same flat
-  list and kept ticks.
-  [Detail](backlog/catalogue.md#a461--product-search-shows-what-matches-finds-categories-on-the-till-and-keeps-ticks-between-searches)
+- **A product in more than one category (owner 2026-10-10, A461 amendment 4).** Define the
+  storage, editor and what Move/Remove do to memberships. Products currently has one category;
+  A461 shows existing placements only. This work is not queued.
+
 
 - **A462 — dashboard table toolbars: column chooser at the end, no Expand all, closing a branch
   closes everything in it (owner, 2026-10-10; open).** Every table's Customise columns button moves
@@ -654,10 +648,6 @@ _Formerly the catalogue and menus entries in the opening part of the old Track A
   between redraws that do not change the products (`apps/dashboard/src/widgets/product-list.ts`), so
   `wt-data-table`'s per-rows cache holds.
 
-- **Owner question left by A454 (#1491): rows that tie on closeness in a searched table follow the
-  table's chosen sort**, as the owner's decision 3 ("ahead of a table's own sort") and the plan say;
-  the spec's rule section says "caller order". Built as the table's sort. **Next action:** the owner
-  confirms, or asks for caller order.
 
 - **The Products tree's hidden counts may be placed against the page at narrow width** — not
   measured; left open by A453. At 440px or less the tree hides its counts visually
@@ -2568,7 +2558,7 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   [Detail](backlog/till.md#every-remembered-round-is-marked-again-against-the-open-tables-menu)
 
 - **The till's home page (Task 9, #729).** — left open by the menus plan. Search matches the staff
-  name only, not a customer name; finding a section by its name is A461.
+  name only, not a customer name. The till also searches displayed section names (A461).
   [Detail](backlog/till.md#the-tills-home-page-task-9-729)
 
 - **The till says "Not found" (menus spec §9) only when a newly read version drops the section it

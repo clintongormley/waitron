@@ -542,15 +542,25 @@ export class MenuStructureTable extends LitElement {
         this.#finishDrag();
         return;
       }
-      if (this.selected.includes(drag.key) && this.dragSelection) {
+      if (this.selected.includes(this.#selectionKey(drag.key)) && this.dragSelection) {
         const visible = new Set(
           [...this.#table()!.shadowRoot!.querySelectorAll<HTMLElement>("tr[data-row-key]")].map(
             (row) => row.dataset.rowKey!,
           ),
         );
-        drag.keys = [...new Set(this.dragSelection(drag.key, visible))].filter((key) =>
-          visible.has(key),
-        );
+        const visibleBySelection = new Map<string, string>();
+        for (const key of visible)
+          if (!visibleBySelection.has(this.#selectionKey(key)))
+            visibleBySelection.set(this.#selectionKey(key), key);
+        visibleBySelection.set(this.#selectionKey(drag.key), drag.key);
+        drag.keys = [
+          ...new Set(
+            this.dragSelection(this.#selectionKey(drag.key), new Set(visibleBySelection.keys())),
+          ),
+        ].flatMap((key) => {
+          const shown = visibleBySelection.get(key);
+          return shown ? [shown] : [];
+        });
         if (!this.#dragRows(drag.keys)) {
           this.#finishDrag();
           return;
@@ -972,6 +982,11 @@ export class MenuStructureTable extends LitElement {
   }
 
   #rowsMemo?: { inputs: readonly unknown[]; rows: TableRow[] };
+  #selectionKeys = new Map<string, string>();
+
+  #selectionKey(key: string): string {
+    return this.#selectionKeys.get(key) ?? key;
+  }
 
   /** The same array while what the rows are built from is unchanged, so a typed search does not
    * make the table fold every row again. An empty menu draws no row, so the table shows its empty
@@ -1000,6 +1015,17 @@ export class MenuStructureTable extends LitElement {
     const rows = members.length === 0 ? [] : [root, ...members];
     this.#rowsMemo = { inputs, rows };
     this.#rowByKey = new Map(members.map((row) => [row.key, row]));
+    const identities = new Map<string, string>();
+    this.#selectionKeys = new Map(
+      members
+        .filter((row) => !row.readOnly)
+        .map((row) => {
+          const identity = JSON.stringify([row.list, row.node.memberId]);
+          const key = identities.get(identity) ?? row.key;
+          identities.set(identity, key);
+          return [row.key, key];
+        }),
+    );
     return rows;
   }
 
@@ -1414,6 +1440,7 @@ export class MenuStructureTable extends LitElement {
         .selectable=${this.selecting}
         selectAllLabel=${t("menus.select_all")}
         .selected=${this.selected}
+        .rowSelectionKey=${(row: TableRow) => this.#selectionKey(row.key)}
         .rowSelectable=${(row: TableRow) => this.#rowSelectable(row)}
         .rowSelectionAllowed=${(row: TableRow) => row.kind !== "root" && !row.readOnly}
         .selectionLabel=${(row: TableRow) =>
