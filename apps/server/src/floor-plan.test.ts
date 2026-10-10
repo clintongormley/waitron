@@ -299,6 +299,24 @@ describe("checkZonePlanSave", () => {
     expect(error.params).toEqual({ label: taken });
   });
 
+  it("refuses a name a live table with no zone uses", async () => {
+    const taken = fresh("Zoneless");
+    await inTx(v, (tx) =>
+      tx.insert(diningTables).values({ locationId: v.cfg.locationId, label: taken, zoneId: null }),
+    );
+    const { z, input } = await planned();
+    const save: ZonePlanSave = {
+      ...input,
+      tables: [
+        ...input.tables,
+        { key: "n", label: taken, seats: null, fixed: false, placement: null },
+      ],
+    };
+    const error = await refusal(check(z, save));
+    expect(error.code).toBe("table.label_taken");
+    expect(error.params).toEqual({ label: taken });
+  });
+
   it("compares names as the database does, by exact characters", async () => {
     const other = await zone();
     const taken = fresh("Loose");
@@ -717,6 +735,41 @@ describe("saveZonePlan", () => {
       tx.select().from(diningTables).where(eq(diningTables.id, barLive)),
     );
     expect(gone).toEqual([]);
+  });
+
+  it("saves a change to one column of a kept table and leaves the other tables as they were", async () => {
+    const { z, t1, bar, result } = await firstSaved();
+    const mastersOf = () =>
+      inTx(v, (tx) =>
+        tx
+          .select()
+          .from(floorPlanTables)
+          .where(inArray(floorPlanTables.id, [result.ids.t1!, result.ids.bar!]))
+          .orderBy(asc(floorPlanTables.label)),
+      );
+    const before = await mastersOf();
+
+    await save(z, {
+      revision: 1,
+      tables: [
+        entry("t1", t1, { id: result.ids.t1!, seats: 6 }),
+        entry("bar", bar, {
+          id: result.ids.bar!,
+          seats: null,
+          fixed: true,
+          placement: { ...PLACE, x: 20 },
+        }),
+      ],
+      joins: [],
+    });
+
+    const after = await mastersOf();
+    const t1Before = before.find((row) => row.id === result.ids.t1)!;
+    expect(t1Before.seats).toBe(4);
+    expect(after.find((row) => row.id === result.ids.t1)).toEqual({ ...t1Before, seats: 6 });
+    expect(after.find((row) => row.id === result.ids.bar)).toEqual(
+      before.find((row) => row.id === result.ids.bar),
+    );
   });
 
   it("deletes a table that is in a saved join", async () => {
