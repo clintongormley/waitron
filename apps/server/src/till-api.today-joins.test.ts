@@ -453,3 +453,48 @@ describe("moving guests to one of their own merged tables", () => {
     });
   }
 });
+
+describe("moving guests off their merge entirely", () => {
+  it("leaves the merge standing, free, when the party moves to an unmerged table", async () => {
+    const { a, b, c } = await tables({ key: "a", x: 0 }, { key: "b", x: 20 }, { key: "c", x: 60 });
+    await freeMerge(a!, b!);
+    const p = await seat(a!);
+    const merge = await mergeOf(v, a!);
+    const placed = [await place(a!), await place(b!)];
+
+    await ok(
+      post(`/api/parties/${p}/move`, {
+        toTableId: c,
+        expectedPartyRevision: await revision(p),
+        otherPartyId: null,
+      }),
+    );
+
+    expect(await holders(a!, b!, c!)).toEqual([null, null, p]);
+    expect(await mergeOf(v, a!)).toEqual(merge);
+    expect([await place(a!), await place(b!)]).toEqual(placed);
+  });
+
+  it("leaves the merge standing, free, when the party moves onto another party's table", async () => {
+    const { a, b, d } = await tables({ key: "a", x: 0 }, { key: "b", x: 20 }, { key: "d", x: 60 });
+    await freeMerge(a!, b!);
+    const p = await seat(a!);
+    const q = await seat(d!);
+    const merge = await mergeOf(v, a!);
+    const placed = [await place(a!), await place(b!)];
+
+    const moved = (await ok(
+      post(`/api/parties/${p}/move`, {
+        toTableId: d,
+        expectedPartyRevision: await revision(p),
+        otherPartyId: q,
+        expectedOtherPartyRevision: await revision(q),
+      }),
+    )) as { partyId: string };
+
+    expect(moved.partyId).toBe(q);
+    expect(await holders(a!, b!, d!)).toEqual([null, null, q]);
+    expect(await mergeOf(v, a!)).toEqual(merge);
+    expect([await place(a!), await place(b!)]).toEqual(placed);
+  });
+});

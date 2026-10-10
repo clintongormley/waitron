@@ -162,6 +162,7 @@ import {
   holderOf,
   joinMergeMembers,
   leaveMergesRestoring,
+  mergeMembers,
   partyRevision,
   writeMerge,
 } from "./floor-today-merges.js";
@@ -2423,9 +2424,11 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
           const heldBefore = await memberTables(tx, partyId);
           const acted = await act(tx, sendCfg, partyId, tableId, command);
           if (path === "move") {
+            // Only a party staying on part of its merge breaks it up; a merge left whole stays, free.
+            const merged = await mergeMembers(tx, tableId);
             await leaveMergesRestoring(
               tx,
-              heldBefore.filter((id) => id !== tableId),
+              heldBefore.filter((id) => id !== tableId && merged.includes(id)),
             );
           }
           await joinMergeMembers(tx, sendCfg, acted.partyId, tableId, personId);
