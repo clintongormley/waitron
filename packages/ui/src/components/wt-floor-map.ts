@@ -172,24 +172,37 @@ export class WtFloorMap extends LitElement {
       [part="table"][data-held] [part="shape"] {
         border-color: var(--wt-color-primary);
         box-shadow: inset 0 0 0 1px var(--wt-color-primary);
-        /* Outside the edge: the seated fill is the primary colour itself. */
+      }
+
+      /* Outside the edge, so --wt-focus-offset and not --wt-selected-ring-offset: the seated fill
+         is the primary colour itself. */
+      [part="table"][data-held]:not([data-merge]) [part="shape"],
+      [part="table"][data-held][data-merge] {
         outline: var(--wt-selected-ring);
         outline-offset: var(--wt-focus-offset);
+      }
+
+      /* Once around the whole merge, above a table touching it. */
+      [part="table"][data-held][data-merge] {
+        z-index: 1;
       }
 
       [part="shape"][data-shape="round"] {
         border-radius: 50%;
       }
 
-      /* Painted in the fill, over the seam between a merge's tables. */
       [part="name"] {
         position: relative;
         max-width: 100%;
-        padding-inline: var(--wt-space-1);
-        border-radius: var(--wt-radius-sm);
         overflow: hidden;
         text-overflow: ellipsis;
         text-wrap: nowrap;
+      }
+
+      /* Painted in the fill, over the seam between a merge's tables. */
+      [part="table"][data-merge] [part="name"] {
+        padding-inline: var(--wt-space-1);
+        border-radius: var(--wt-radius-sm);
       }
 
       [part="dot"] {
@@ -592,7 +605,8 @@ export class WtFloorMap extends LitElement {
     const { box, members } = group;
     const [first] = members as [FloorMapTable, ...FloorMapTable[]];
     const label = mapLabel(members.map((m) => m.label));
-    const named = showsName(members.length === 1 ? first.placement : box, view.scale);
+    const merged = members.length > 1;
+    const named = showsName(merged ? box : first.placement, view.scale);
     const drag = this.#drag?.tableId === first.id ? this.#drag : null;
     const dot = members.find((m) => m.dot !== null)?.dot ?? null;
     return html`<button
@@ -600,6 +614,7 @@ export class WtFloorMap extends LitElement {
       part="table"
       data-table-id=${first.id}
       data-fill=${first.fill}
+      ?data-merge=${merged}
       tabindex=${tabStop ? 0 : -1}
       aria-label=${`${label}, ${first.description}`}
       style=${styleMap({
@@ -610,7 +625,11 @@ export class WtFloorMap extends LitElement {
       })}
     >
       ${members.map((m) => this.#renderShape(m, box, view.scale))}
-      ${named ? html`<span part="name" data-fill=${first.fill}>${label}</span>` : nothing}
+      ${
+        named
+          ? html`<span part="name" data-fill=${merged ? first.fill : nothing}>${label}</span>`
+          : nothing
+      }
       ${
         dot === null ? nothing : html`<span part="dot" data-dot=${dot} ?data-still=${still}></span>`
       }

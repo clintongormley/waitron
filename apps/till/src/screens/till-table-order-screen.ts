@@ -425,10 +425,6 @@ export class TillTableOrderScreen extends LitElement {
         font-weight: var(--wt-font-weight-bold);
       }
 
-      /* The pending-round drawer handle (+ its Back sibling): a SIBLING of the header (never inside it),
-         so the drawer handle survives when the standalone header is dropped in an embedded card host
-         (SP-B2.2) — it is table BODY function, not shell chrome. Back lives here too but is dropped when
-         embedded (the card host owns nav). Mirrors the floor and station screens' actions extraction. */
       .head-actions {
         display: flex;
         flex-wrap: wrap;

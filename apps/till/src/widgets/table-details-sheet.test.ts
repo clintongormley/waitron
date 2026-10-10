@@ -245,6 +245,24 @@ describe("till-table-details-sheet", () => {
     expect(chips.top - last.bottom).toBeCloseTo(gap);
   });
 
+  it("with no lines, draws no list and puts no space above the chips", async () => {
+    const el = await mount({
+      table: table({
+        today: {
+          placement: null,
+          seats: null,
+          fixed: false,
+          takenOff: false,
+          joinId: null,
+          joinSeats: null,
+        },
+        signals: [{ kind: "bill_requested", requestedAt: "2026-10-10T12:00:00Z" }],
+      }),
+    });
+    expect(find(el, ".lines")).toBeNull();
+    expect(getComputedStyle(find(el, ".chips")!).marginTop).toBe("0px");
+  });
+
   it("says Free for a free table with nothing on it", async () => {
     const el = await mount({ table: table() });
     expect(lines(el)).toEqual(["Free"]);

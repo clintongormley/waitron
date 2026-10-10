@@ -66,6 +66,9 @@ export class TillTableDetailsSheet extends LitElement {
         display: flex;
         flex-wrap: wrap;
         gap: var(--wt-space-2);
+      }
+
+      .lines + .chips {
         margin-top: var(--wt-space-2);
       }
 
@@ -138,14 +141,18 @@ export class TillTableDetailsSheet extends LitElement {
   #body(table: TableState): TemplateResult {
     const seats = seatsFor(table);
     const chips = signalChips(table.signals);
-    return html`<ul class="lines">
-        ${
-          seats === null
-            ? nothing
-            : html`<li data-seats>${countText(seats, "floor.seats", "floor.seats_one")}</li>`
-        }
-        ${this.#lines(table, chips.length)}
-      </ul>
+    const lines = this.#lines(table, chips.length);
+    if (seats !== null)
+      lines.unshift(
+        html`<li data-seats>${countText(seats, "floor.seats", "floor.seats_one")}</li>`,
+      );
+    return html`${
+        lines.length === 0
+          ? nothing
+          : html`<ul class="lines">
+              ${lines}
+            </ul>`
+      }
       ${chips.length === 0 ? nothing : html`<div class="chips">${renderFloorChips(chips)}</div>`}
       <wt-button
         slot="footer"

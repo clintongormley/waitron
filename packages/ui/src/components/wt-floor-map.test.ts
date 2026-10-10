@@ -187,6 +187,17 @@ it("paints a merge's name in its fill, so the seam between its tables does not c
   expect(name.paddingRight).toBe("5px");
 });
 
+it("leaves a single table's name unpadded and unpainted, so it has the table's whole width", async () => {
+  const el = await map([t("t1", "T1", {}, { fill: "seated" })]);
+  host.style.setProperty("--wt-space-1", "5px");
+  const name = getComputedStyle(within(el, "name", "t1")!);
+  expect([name.paddingLeft, name.paddingRight, name.backgroundColor]).toEqual([
+    "0px",
+    "0px",
+    "rgba(0, 0, 0, 0)",
+  ]);
+});
+
 it("paints the map's background from the surface token", async () => {
   const el = await map([t1]);
   host.style.setProperty("--wt-color-surface", "rgb(10, 11, 12)");

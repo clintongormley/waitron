@@ -132,6 +132,15 @@ describe("words", () => {
     expect(words({ ...seated, readyToServe: 2 })).toBe("Ocupada, 2 listos");
   });
 
+  it("says one ready dish in the singular, on the pin and in the words", () => {
+    expect(words({ ...seated, readyToServe: 1 })).toBe("Seated, 1 ready");
+    expect(pin({ ...seated, readyToServe: 1 })).toBe("1 ready");
+    setLocale("es");
+    expect(words({ ...seated, readyToServe: 1 })).toBe("Ocupada, 1 listo");
+    expect(pin({ ...seated, readyToServe: 1 })).toBe("1 listo");
+    expect(pin({ ...seated, readyToServe: 2 })).toBe("2 listos");
+  });
+
   it("gives the pin its shortest word", () => {
     expect(pin({ ...seated, readyToServe: 2, timingBand: "forgotten" })).toBe("Forgotten");
     expect(pin({ ...seated, readyToServe: 2, pendingToServe: 3 })).toBe("2 ready");

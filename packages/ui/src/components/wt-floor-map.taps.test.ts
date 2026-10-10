@@ -249,6 +249,39 @@ it("rings a held table outside its edge, so a table filled in the primary colour
   expect(shape.outlineOffset).toBe("2px");
 });
 
+it("rings a held merge once around its whole box, drawn above a table touching it", async () => {
+  const el = await map([
+    t("m1", "M1", { x: 2, y: 5 }, { joinId: "j1", fill: "seated" }),
+    t("m2", "M2", { x: 10, y: 5 }, { joinId: "j1", fill: "seated" }),
+    t("t3", "T3", { x: 2, y: 9 }),
+  ]);
+  applyTokens(el);
+  el.style.setProperty("--wt-color-primary", "rgb(1, 2, 3)");
+  const outer = el.getBoundingClientRect();
+  const shape = shapeOf(el, "m1").getBoundingClientRect();
+  down(el, shape.left - outer.left + 5, shape.top - outer.top + 5);
+  vi.advanceTimersByTime(500);
+  const merge = getComputedStyle(button(el, "m1"));
+  expect([merge.outlineStyle, merge.outlineWidth, merge.outlineColor, merge.outlineOffset]).toEqual(
+    ["solid", "2px", "rgb(1, 2, 3)", "2px"],
+  );
+  expect(merge.zIndex).toBe("1");
+  const shapes = [...button(el, "m1").querySelectorAll<HTMLElement>('[part="shape"]')];
+  expect(shapes.map((m) => getComputedStyle(m).outlineStyle)).toEqual(["none", "none"]);
+  expect(shapes.map((m) => getComputedStyle(m).borderTopColor)).toEqual([
+    "rgb(1, 2, 3)",
+    "rgb(1, 2, 3)",
+  ]);
+});
+
+it("a held single table has no ring on its button", async () => {
+  const el = await map([t1]);
+  applyTokens(el);
+  down(el, 300, 150);
+  vi.advanceTimersByTime(500);
+  expect(getComputedStyle(button(el, "t1")).outlineStyle).toBe("none");
+});
+
 it("a table not held has no ring", async () => {
   const el = await map([t1]);
   expect(getComputedStyle(shapeOf(el, "t1")).outlineStyle).toBe("none");

@@ -1,6 +1,6 @@
 import type { FloorMapDot, FloorMapFill, FloorMapTable } from "@waitron/ui";
 import type { TableState } from "../api/client.js";
-import { t } from "../i18n/t.js";
+import { countText, t } from "../i18n/t.js";
 import { signalOf } from "./table-signals.js";
 
 export interface StandInStatus {
@@ -76,7 +76,9 @@ function fillWords(table: TableState, fill: FloorMapFill): string {
 }
 
 function dotWords(table: TableState, dot: FloorMapDot): string {
-  return dot === "forgotten" ? t("floor.forgotten") : `${table.readyToServe} ${t("floor.ready")}`;
+  return dot === "forgotten"
+    ? t("floor.forgotten")
+    : countText(table.readyToServe, "table.flash_ready", "table.flash_ready_one");
 }
 
 /** The fill's words, then the dot's: "Seated, 2 ready". Pass a merge's members together. */

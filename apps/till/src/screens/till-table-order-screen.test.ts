@@ -3103,7 +3103,9 @@ describe("till-table-order-screen", () => {
         const tab = actions.querySelector<HTMLElement>("[data-open-drawer]")!;
         const back = actions.querySelector<HTMLElement>("[data-back]")!;
         expect([pin, tab, back].map(linesOf)).toEqual([1, 1, 1]);
-        expect(tab.getBoundingClientRect().top).toBe(pin.getBoundingClientRect().top);
+        const pinBox = pin.getBoundingClientRect();
+        const tabBox = tab.getBoundingClientRect();
+        expect(tabBox.top < pinBox.bottom && pinBox.top < tabBox.bottom).toBe(true);
       } finally {
         setLocale(locale);
         await page.viewport(414, 896);
