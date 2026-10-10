@@ -2765,3 +2765,167 @@ describe("A461 current-menu mixed search", () => {
     expect(names(entries(el, "results")).filter((n) => n === "Coffee cake")).toHaveLength(1);
   });
 });
+
+describe("A461 served-menu section search", () => {
+  const espresso = product("espresso", "Espresso", { catalogueId: "other", unitPrice: "7.00" });
+  const cake = product("cake", "Coffee cake", { catalogueId: "other" });
+  const current = lunch({ structure: { members: [member("cafe")] }, ...withShortcuts([]) });
+  const first = section("copy", "internal", { en: "Coffee first" }, [member("espresso")]);
+  const second = section("copy", "internal", { en: "Coffee second" }, [member("cake")]);
+  const other = {
+    ...current,
+    id: "other",
+    name: "Other",
+    isDefault: false,
+    structure: {
+      members: [
+        {
+          ...section("hidden", "internal", { en: "Coffee hidden" }, [first, second]),
+          direct: true,
+        } as DocumentMember,
+        section("parent", "internal", { en: "Drinks" }, [
+          section("nested", "internal", { en: "Coffee nested" }, [member("espresso")]),
+        ]),
+      ],
+    },
+  };
+  const setup = (props: Partial<TillMenuBrowser> = {}) =>
+    mount({
+      menu: current,
+      products: [cafe],
+      menus: [current, other],
+      servedProducts: [cafe, espresso, cake],
+      ...props,
+    });
+
+  it("A461 other menus show their own mixed ranked results and own offers", async () => {
+    const { el, store } = await setup();
+    await search(el, "coffee");
+    const groups = [...root(el).querySelectorAll<HTMLElement>("section[data-menu]")];
+    expect(groups.map((g) => g.dataset.menu)).toEqual([current.id, other.id]);
+    expect(names(entries(el, "results"))).toEqual([
+      "Coffee cake",
+      "Coffee first",
+      "Coffee second",
+      "Coffee nested",
+    ]);
+    await search(el, "espresso");
+    await tap(el, entry(el, "results", "Espresso"));
+    expect(store.lines[0]!.product.menuItemId).toBe(espresso.menuItemId);
+    expect(store.lines[0]!.product.unitPrice).toBe("7.00");
+    el.menus = [current, { ...other, orderable: false }];
+    await el.updateComplete;
+    expect(entries(el, "results")).toEqual([]);
+  });
+
+  it("A461 another menu with only a diet-disabled section still appears", async () => {
+    const { el, store } = await setup({
+      servedProducts: [cafe],
+      unfilteredServedProducts: [cafe, espresso, cake],
+    } as Partial<TillMenuBrowser>);
+    const selected = vi.fn();
+    el.addEventListener("menu-selected", selected);
+    await search(el, "coffee");
+    expect(names(entries(el, "results"))).toEqual([
+      "Coffee first",
+      "Coffee second",
+      "Coffee nested",
+    ]);
+    const tile = entry(el, "results", "Coffee second");
+    expect(tile.shadowRoot!.querySelector("button")!.disabled).toBe(true);
+    tile.shadowRoot!.querySelector("button")!.click();
+    await el.updateComplete;
+    expect(selected).not.toHaveBeenCalled();
+    expect(store.lines).toEqual([]);
+    expect(root(el).querySelector("wt-input")!.shadowRoot!.querySelector("input")!.value).toBe(
+      "coffee",
+    );
+  });
+
+  it.each(["Coffee second", "Coffee nested"])(
+    "A461 other-menu section tap waits for its owner and opens %s",
+    async (label) => {
+      const { el, store } = await setup();
+      store.addProduct(cafe, "1");
+      const basket = [...store.lines];
+      const events: CustomEvent<{ id: string }>[] = [];
+      el.addEventListener("menu-selected", (event) =>
+        events.push(event as CustomEvent<{ id: string }>),
+      );
+      await search(el, "coffee");
+      await tap(el, entry(el, "results", label));
+      expect(events).toHaveLength(1);
+      expect(events[0]!.detail).toEqual({ id: "other" });
+      expect(events[0]!.bubbles).toBe(true);
+      expect(events[0]!.composed).toBe(true);
+      expect(el.menu).toBe(current);
+      expect(notice(el)).toBeNull();
+      expect(root(el).querySelector("wt-input")!.shadowRoot!.querySelector("input")!.value).toBe(
+        "",
+      );
+      el.menu = other;
+      el.products = [espresso, cake];
+      await el.updateComplete;
+      expect(breadcrumb(el)).toBe(
+        label === "Coffee second" ? "Home › Coffee second" : "Home › Drinks › Coffee nested",
+      );
+      expect(names(entries(el, "section"))).toEqual(
+        label === "Coffee second" ? ["Coffee cake"] : ["Espresso"],
+      );
+      expect(store.lines).toEqual(basket);
+      el.menu = current;
+      el.products = [cafe];
+      await el.updateComplete;
+      el.menu = other;
+      el.products = [espresso, cake];
+      await el.updateComplete;
+      expect(root(el).querySelector('[data-region="section"]')).toBeNull();
+    },
+  );
+
+  it("A461 a pending copy cancels when its own offers disappear while another copy remains", async () => {
+    const { el } = await setup();
+    await search(el, "coffee");
+    await tap(el, entry(el, "results", "Coffee second"));
+    el.servedProducts = [cafe, espresso];
+    await el.updateComplete;
+    el.servedProducts = [cafe, espresso, cake];
+    el.menu = other;
+    el.products = [espresso, cake];
+    await el.updateComplete;
+    expect(root(el).querySelector('[data-region="section"]')).toBeNull();
+  });
+
+  it("A461 a pending section refuses a target that becomes unorderable as its input arrives", async () => {
+    const { el } = await setup();
+    await search(el, "coffee");
+    await tap(el, entry(el, "results", "Coffee second"));
+    const ended = { ...other, orderable: false };
+    el.menus = [current, ended];
+    el.menu = ended;
+    el.products = [espresso, cake];
+    await el.updateComplete;
+    expect(root(el).querySelector('[data-region="section"]')).toBeNull();
+  });
+
+  it.each(["removed", "ended", "path-lost", "unrelated"])(
+    "A461 a pending section cancels when %s",
+    async (change) => {
+      const { el, store } = await setup();
+      await search(el, "coffee");
+      await tap(el, entry(el, "results", "Coffee second"));
+      if (change === "removed") el.menus = [current];
+      if (change === "ended") el.menus = [current, { ...other, orderable: false }];
+      if (change === "path-lost")
+        el.menus = [current, { ...other, structure: { members: [member("espresso")] } }];
+      if (change === "unrelated") el.menu = { ...current, id: "unrelated" };
+      await el.updateComplete;
+      el.menus = [current, other];
+      el.menu = other;
+      el.products = [espresso, cake];
+      await el.updateComplete;
+      expect(root(el).querySelector('[data-region="section"]')).toBeNull();
+      expect(store.lines).toEqual([]);
+    },
+  );
+});
