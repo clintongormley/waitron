@@ -801,8 +801,7 @@ export class MenuStructureTable extends LitElement {
   }
 
   #grip(row: Row) {
-    if (!this.reordering) return nothing;
-    if (row.readOnly || !this.#reorderable) return gripSpace;
+    if (row.readOnly) return gripSpace;
     return html`<button
       part="drag-grip"
       type="button"
@@ -1044,7 +1043,7 @@ export class MenuStructureTable extends LitElement {
         expandAllLabel=${t("folders.expand_all")}
         collapseAllLabel=${t("folders.collapse_all")}
         initiallyCollapsed
-        .rowControls=${this.reordering ? (row: Row) => this.#grip(row) : undefined}
+        .rowControls=${this.#reorderable ? (row: Row) => this.#grip(row) : undefined}
         rowControlsLabel=${t("folders.drag")}
         rowControlsAlign="center"
         .rowActivation=${(row: Row) => (row.node.ref.kind === "section" ? "toggle" : "none")}

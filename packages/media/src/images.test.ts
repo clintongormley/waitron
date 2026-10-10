@@ -497,10 +497,10 @@ describe("one search rule with every other search", () => {
   it("lists the library for a relevance sort with no search", async () => {
     await withTransaction(suite.db, async (tx) => {
       const bread = await add(tx, 410, { en: "Bread" });
-      expect(await listImages(tx, { query: "", sort: "relevance" })).toMatchObject({
-        images: [{ id: bread }],
-        total: 1,
-      });
+      const butter = await add(tx, 411, { en: "Butter" });
+      const listed = await listImages(tx, { query: "", sort: "relevance" });
+      expect(listed.total).toBe(2);
+      expect(listed.images.map((image) => image.id).sort()).toEqual([bread, butter].sort());
     });
   });
 

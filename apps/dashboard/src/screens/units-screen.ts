@@ -678,7 +678,6 @@ export class UnitsScreen extends LitElement {
                 </div>
                 <wt-data-table
                   noMatchesMessage=${tableNoMatches()}
-                  emptyMessage=${tableNoMatches()}
                   aria-label=${t("units.in_use_title")}
                   .rows=${this.inUseProducts}
                   .searchTerm=${this.inUseSearch}

@@ -3099,8 +3099,16 @@ describe("search and the Available filter", () => {
     await search(el, "u");
     expect(shown(el)).toEqual(["m-burger", "m-fav"]);
     expect(all(el, '[part~="drag-grip"]')).toEqual([]);
-    for (const key of shown(el))
-      expect(row(el, key)!.querySelector('[part~="grip-space"]'), key).not.toBeNull();
+    expect(all(el, '[part~="grip-space"]')).toEqual([]);
+    const nameLefts = () => shown(el).map((key) => nameAt(el, key).getBoundingClientRect().left);
+    const searchingLefts = nameLefts();
+    el.reordering = false;
+    await settle(el);
+    expect(shown(el)).toEqual(["m-burger", "m-fav"]);
+    for (const [index, left] of nameLefts().entries())
+      expect(Math.abs(left - searchingLefts[index]!)).toBeLessThanOrEqual(1);
+    el.reordering = true;
+    await settle(el);
     await search(el, "");
     expect(all(el, '[part~="drag-grip"]').map((each) => each.dataset.test)).toEqual([
       "drag-m-burger",
