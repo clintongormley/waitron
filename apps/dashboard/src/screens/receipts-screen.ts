@@ -932,6 +932,7 @@ export class ReceiptsScreen extends LitElement {
       .api=${this.api}
       .departmentId=${this.departmentId}
       .departmentName=${this.departmentName}
+      .receiptLanguage=${this.receiptLanguage?.language ?? ""}
       .venueDefaults=${this.receiptLoaded ? this.#venueDefaults() : undefined}
       .draftParent=${this}
       @receipt-field-focus=${(event: CustomEvent<{ field: string | null }>) => this.#focusField(event)}
@@ -1017,12 +1018,13 @@ export class ReceiptsScreen extends LitElement {
           : nothing
       }
       ${
-        this.locationLoadFailed || this.languageLoadFailed
+        !this.departmentId && (this.locationLoadFailed || this.languageLoadFailed)
           ? html`<p role="alert">${t("location_settings.load_error")}</p>`
           : nothing
       }
       ${
-        this.locationLoadFailed || this.languageLoadFailed || this.receiptLoadError !== null
+        (!this.departmentId && (this.locationLoadFailed || this.languageLoadFailed)) ||
+        this.receiptLoadError !== null
           ? html`<wt-button data-test="retry" @click=${() => void this.#load()}
               >${t("location_settings.retry")}</wt-button
             >`

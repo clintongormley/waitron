@@ -519,3 +519,27 @@ it.each(["bar", "closed"])(
     expect(api.putReceipt).not.toHaveBeenCalled();
   },
 );
+
+it("the hosted editor marks the saved receipt language and copy languages", async () => {
+  url("bar");
+  const { el } = await mount();
+  const child = await loadedEditor(el);
+  await vi.waitFor(() =>
+    expect(child.shadowRoot!.querySelector('h3[lang="es-ES"]')?.textContent).toContain(
+      "(receipts)",
+    ),
+  );
+  expect(child.shadowRoot!.querySelector('h3[lang="ca-ES"]')?.textContent).toContain("(copies)");
+});
+
+it("department mode keeps its editor and preview when unrelated venue reads refuse", async () => {
+  url("bar");
+  const api = apiFixture();
+  api.getLocationSettings.mockRejectedValue(new Error("permission refused"));
+  api.getReceiptLanguage.mockRejectedValue(new Error("permission refused"));
+  const { el } = await mount(api);
+  await loadedEditor(el);
+  await vi.waitFor(() => expect(el.shadowRoot!.querySelector(".paper-viewport")).not.toBeNull());
+  expect(el.shadowRoot!.querySelector('[role="alert"]')).toBeNull();
+  expect(el.shadowRoot!.querySelector('[data-test="retry"]')).toBeNull();
+});

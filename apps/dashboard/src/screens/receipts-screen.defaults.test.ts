@@ -503,7 +503,12 @@ for (const failed of ["getReceipt", "getLocationSettings", "getReceiptLanguage"]
     const api = fixture();
     api[failed].mockRejectedValue({ code: "server.internal" });
     const { el, host } = await mount(api, "light", true);
-    await vi.waitFor(() => expect(el.shadowRoot!.querySelector("[role=alert]")).toBeTruthy());
+    if (failed === "getReceipt")
+      await vi.waitFor(() => expect(el.shadowRoot!.querySelector("[role=alert]")).toBeTruthy());
+    else {
+      await vi.waitFor(() => expect(api[failed]).toHaveBeenCalledOnce());
+      expect(el.shadowRoot!.querySelector("[role=alert]")).toBeNull();
+    }
     await vi.waitFor(() =>
       expect(department(el)?.shadowRoot?.querySelector("wt-input[name=email]")).toBeTruthy(),
     );
@@ -552,8 +557,18 @@ for (const failed of ["getReceipt", "getLocationSettings", "getReceiptLanguage"]
     await vi.waitFor(() => expect(message()).not.toBe(""));
     const refusal = message();
     api[failed].mockImplementation(read as never);
-    el.shadowRoot!.querySelector<HTMLElement>("[data-test=retry]")!.click();
+    const previousReads = api[failed].mock.calls.length;
+    if (failed === "getReceipt")
+      el.shadowRoot!.querySelector<HTMLElement>("[data-test=retry]")!.click();
+    else api.liveData.invalidate([{ type: "locations" }]);
+    await vi.waitFor(() => expect(api[failed].mock.calls.length).toBeGreaterThan(previousReads));
     await vi.waitFor(() => expect(el.shadowRoot!.querySelector("[data-test=retry]")).toBeNull());
+    if (failed === "getReceiptLanguage")
+      await vi.waitFor(() =>
+        expect(form.shadowRoot!.querySelector('h3[lang="es-ES"]')?.textContent).toContain(
+          "(receipts)",
+        ),
+      );
     expect(department(el)).toBe(form);
     expect(message()).toBe(refusal);
     expect(

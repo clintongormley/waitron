@@ -7407,6 +7407,15 @@ describe("mounted public department pages", () => {
         .departmentId,
     ).toBe("d2");
   });
+  it("Settings hides Edit the receipt when the host cannot offer Receipt", async () => {
+    const app = await mountDepartments("/manage/venue-operations/department/d1", [
+      "venue_service.manage",
+      "venue.view",
+      "venue.configure",
+    ]);
+    expect(find(app, 'button[data-key="settings"]')?.getAttribute("aria-selected")).toBe("true");
+    expect(find(app, '[data-test="edit-receipt"]')).toBeNull();
+  });
   it.each([["venue_service.manage"], ["layout.configure"], []])(
     "a Receipt deep link cannot bypass either permission: %j",
     async (...permissions) => {
@@ -7416,6 +7425,12 @@ describe("mounted public department pages", () => {
       );
       expect(find(app, "dashboard-receipts-screen")).toBeNull();
       expect(find(app, 'button[data-key="receipt"]')).toBeNull();
+      if (permissions.includes("venue_service.manage")) {
+        expect(find(app, 'button[data-key="settings"]')?.getAttribute("aria-selected")).toBe(
+          "true",
+        );
+        expect((find(app, 'wt-input[name="name"]') as WtInput).value).toBe("Restaurant");
+      }
     },
   );
   it("the real Zones tab asks, keeps the draft, and navigates after Discard", async () => {

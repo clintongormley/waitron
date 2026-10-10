@@ -154,6 +154,7 @@ export class DepartmentPage extends LitElement {
           .model=${this.model}
           .departmentId=${row.id}
           .showEnable=${false}
+          .showReceipt=${receipt !== null}
         ></department-settings>
         <slot name="zones" slot="zones"></slot>
         ${view === "receipt" ? html`<section slot="receipt">${this.receiptPolicy()}${receipt}</section>` : nothing}

@@ -3550,7 +3550,7 @@ You open a department from the list, even when the venue has only one. Its page 
 Departments parent link above the name and offers Settings, Zones and, with `layout.configure`,
 Receipt tabs. Settings holds the
 name, trading name, service settings and transfers. Zones shows the department's zones and the
-selected zone's settings. Edit the receipt opens that department's Receipt tab, including an
+selected zone's settings. With `layout.configure`, Edit the receipt opens that department's Receipt tab, including an
 explicitly addressed disabled department. Venue settings keeps the global logo, subtitle,
 footer, address switch, receipt language and sales description. Department contacts never
 inherit the stored global phone or email. The Zones tab shows the selected zone's normal-week closed times under its name, with a link
