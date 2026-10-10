@@ -38,7 +38,7 @@ their full text.
   numbers removed. Part B, still to build and re-grounded on main first: station hours and
   fallbacks removed, closing a station with open dishes asks what to do with them, and each
   station's worked-out times. The owner answered its decisions 29–37 on 2026-10-09; the changes
-  to 29, 33 and 35 are built (A455).
+  to 29, 33 and 35 are built (A455), and 32 needed nothing.
   Slice 6's remaining work is Part C's floor-plan entry,
   in Lane D after A429. [Slice 6 plan](../superpowers/plans/2026-10-08-a366-slice-6-departments.md).
 

@@ -3155,8 +3155,9 @@ row holds a saved choice, No category; a column for Every zone and each active s
 window shows the labels, Every zone and one zone column without scrolling (the "at phone width"
 cases in `routing-grid.test.ts`). Each cell is a button showing its station (an inherited one muted
 and in italics) and one line per period choice ("Lunch, Afternoon: Downstairs bar"). Under a line
-the cell stores whose period's menus offer none of the row's active products, the grid and the
-editor show "Not on Lunch menus" in the warning colour; it does not change Save. It opens the
+the cell stores whose period's menus offer none of the row's active products, the grid shows "Not
+on Lunch menus" in the warning colour; the editor shows it under that saved line until the line's
+periods or station change, and it does not change Save. It opens the
 routing cell editor (`routing-cell-editor.ts`): "Any other time" holds the cell's own station,
 and "+ Different station during some periods" adds a line of periods with a station. A zone column offers only its
 department's periods, and none when the zone has no department; a line offers only periods whose

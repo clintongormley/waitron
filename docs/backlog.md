@@ -1486,9 +1486,9 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   whether an options answer deserves its own prominent form on the ticket.
   [Detail](backlog/kitchen.md#is-a--sub-line-enough-for-a-doneness-answer-on-the-kitchen-ticket)
 
-- **Prep stations review notes retained for future cleanup** — left open by A261 step 3 (#1269): the
-  overview API object still exposes write methods (server routes remain the permission boundary),
-  and station reordering repeats an active filter after an active-only read.
+- **Prep stations review note retained for future cleanup** — left open by A261 step 3 (#1269):
+  station reordering repeats an active filter after an active-only read (`reorderStations`,
+  `apps/server/src/kitchen.ts`).
 
 - **`GET /management-api/stations/outputs-down` and the dashboard's `listOutputsDown` have no
   caller** — found while removing the Stations tab's health read (A366 slice 4 decision 34): the
