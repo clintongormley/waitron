@@ -175,7 +175,6 @@ describe("VENUE_SERVICE_DASHBOARD", () => {
       group: "operations",
       order: 30,
       requiresPermission: "venue_service.manage",
-      readPermission: "venue.view",
     });
     const handle = prep.create({
       request: createRequest({ fetchImpl: fetchImpl as unknown as typeof fetch }),

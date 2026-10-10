@@ -36,17 +36,12 @@ export const VENUE_SERVICE_DASHBOARD: DashboardContribution = {
         group: "operations",
         order: 30,
         requiresPermission: "venue_service.manage",
-        readPermission: "venue.view",
       },
       create(ctx) {
         const api = new PrepStationsApi(ctx.request, ctx.liveData);
-        const overview = api.overview;
         return {
-          render: (readOnly = false) =>
-            html`<dashboard-prep-stations-screen
-              .api=${readOnly ? overview : api}
-              .readOnly=${readOnly}
-            ></dashboard-prep-stations-screen>`,
+          render: () =>
+            html`<dashboard-prep-stations-screen .api=${api}></dashboard-prep-stations-screen>`,
         };
       },
     },

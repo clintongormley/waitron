@@ -448,23 +448,6 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
       }),
     );
 
-    app.get("/management-api/venue-service/stations/overview", (c) =>
-      run(c, log, async () => {
-        const sessionId = requireManagementSession(c);
-        return c.json(
-          await withTransaction(ctx.db, async (tx) => {
-            await authorizeManager(tx, {
-              managementSessionId: sessionId,
-              permission: "venue.view",
-            });
-            const { stations, defaultStationId, stationTimes, todayEnds, clockReadable } =
-              await routingModel(tx, ctx.cfg, new Date());
-            return { stations, defaultStationId, stationTimes, todayEnds, clockReadable };
-          }),
-        );
-      }),
-    );
-
     app.get("/management-api/venue-service/routing", (c) =>
       run(c, log, async () => {
         const sessionId = requireManagementSession(c);

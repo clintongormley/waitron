@@ -1,7 +1,7 @@
 import type { StationThresholds } from "@waitron/shared";
 import type { DashboardRequest, LiveData } from "@waitron/dashboard-kit";
 import type { ResolvedKitchenScreen } from "@waitron/module";
-import type { RouteTarget, RoutingModel } from "../routing.js";
+import type { RouteTarget } from "../routing.js";
 import type {
   CellAddress,
   PeriodLine,
@@ -71,49 +71,14 @@ export class PrepStationsApi {
     private readonly request: DashboardRequest,
     readonly liveData?: LiveData,
     private readonly passive = false,
-    private readonly readOnly = false,
   ) {}
   get background() {
-    return new PrepStationsApi(this.request, this.liveData, true, this.readOnly);
-  }
-  get overview() {
-    return new PrepStationsApi(this.request, this.liveData, this.passive, true);
+    return new PrepStationsApi(this.request, this.liveData, true);
   }
   #read<T>(path: string): Promise<T> {
     return this.request<T>(path, "GET", undefined, { passive: this.passive });
   }
   async load(): Promise<PrepStationsView> {
-    if (this.readOnly) {
-      const [overview, stations] = await Promise.all([
-        this.#read<
-          Pick<
-            RoutingModel,
-            "stations" | "defaultStationId" | "stationTimes" | "todayEnds" | "clockReadable"
-          >
-        >("/management-api/venue-service/stations/overview"),
-        this.#read<PrepStation[]>("/management-api/stations?includeDisabled=true"),
-      ]);
-      return {
-        routing: {
-          ...overview,
-          zones: [],
-          categories: [],
-          products: [],
-          periods: [],
-          cells: [],
-          canMakeDefault: false,
-        },
-        stations,
-        categories: [],
-        zones: [],
-        products: [],
-        printers: [],
-        stationPrinters: [],
-        devices: [],
-        watchers: [],
-        disabledWatchers: [],
-      };
-    }
     const [routing, stations, categories, zones, products, printers, devices, watchers] =
       await Promise.all([
         this.#read<RoutingView>("/management-api/venue-service/routing"),

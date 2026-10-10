@@ -3764,7 +3764,7 @@ describe("dashboard-app — per-user locale (Task 10)", () => {
 describe("dashboard URL navigation", () => {
   it.each([
     ["manager", ["venue_service.manage"], ["venue-service"], "/manage/prep-stations/view/stations"],
-    ["supervisor", ["venue.view"], ["venue-service"], "/manage/prep-stations/view/stations"],
+    ["supervisor", ["venue.view"], ["venue-service"], "/manage/overview"],
     ["manager", [], [], "/manage/overview"],
   ] as const)(
     "replaces a retired printing bookmark with a permitted destination (%s, %s)",
@@ -3777,10 +3777,7 @@ describe("dashboard URL navigation", () => {
           getMe: vi.fn().mockResolvedValue({ ...meResponse, role, permissions, modules }),
         }),
         request: async (path) => {
-          if (
-            path === "/management-api/venue-service/routing" ||
-            path === "/management-api/venue-service/stations/overview"
-          )
+          if (path === "/management-api/venue-service/routing")
             return {
               stations: [],
               defaultStationId: null,
@@ -3820,8 +3817,12 @@ describe("dashboard URL navigation", () => {
     },
   );
 
-  it("opens the live Prep overview for venue viewers through a saved configuration-tab link", async () => {
-    history.replaceState(null, "", "/manage/prep-stations/view/settings");
+  it.each([
+    "/manage/prep-stations",
+    "/manage/prep-stations/view/stations",
+    "/manage/prep-stations/view/settings",
+  ])("does not offer Prep stations to a venue viewer (%s)", async (address) => {
+    history.replaceState(null, "", address);
     const reads: string[] = [];
     const { el } = await mountWidget<DashboardApp>("dashboard-app", {
       api: stubApi({
@@ -3838,36 +3839,66 @@ describe("dashboard URL navigation", () => {
       }),
       request: async (path) => {
         reads.push(path);
-        if (path === "/management-api/venue-service/stations/overview")
-          return {
-            stations: [],
-            defaultStationId: null,
-            stationTimes: [],
-            todayEnds: { timeOfDay: "06:00", tomorrow: true },
-            clockReadable: true,
-          } as never;
-        if (path === "/management-api/stations?includeDisabled=true") return [] as never;
         if (path === "/management-api/stations/outputs-down")
           return { printersDown: [], screensDark: [] } as never;
         return [] as never;
       },
     });
     await flush(el);
+    await expect.poll(() => location.pathname).toBe("/manage/overview");
+    expect(navItem(el, "prep-stations")).toBeNull();
+    expect(navItem(el, "opening-hours")).not.toBeNull();
+    expect(navItem(el, "hours")).not.toBeNull();
+    expect(el.shadowRoot!.querySelector("dashboard-prep-stations-screen")).toBeNull();
+    expect(
+      reads.filter((path) => path.startsWith("/management-api/venue-service/stations")),
+    ).toEqual([]);
+    expect(reads).not.toContain("/management-api/venue-service/routing");
+  });
+
+  it("offers a venue service manager Prep stations with every tab", async () => {
+    history.replaceState(null, "", "/manage/prep-stations");
+    const { el } = await mountWidget<DashboardApp>("dashboard-app", {
+      api: stubApi({
+        getMe: vi.fn().mockResolvedValue({
+          personId: "p1",
+          role: "manager",
+          locale: "en-GB",
+          venueLocale: "en-GB",
+          sessionDefault: "en-GB",
+          permissions: ["venue_service.manage"],
+          modules: ["venue-service"],
+          venueName: "Venue",
+        }),
+      }),
+      request: async (path, method, body, options) =>
+        path === "/management-api/venue-service/routing"
+          ? ({
+              stationTimes: [],
+              todayEnds: null,
+              clockReadable: true,
+              zones: [],
+              categories: [],
+              products: [],
+              periods: [],
+              cells: [],
+              defaultStationId: null,
+              stations: [],
+              canMakeDefault: false,
+            } as never)
+          : stubRequest(path, method, body, options),
+    });
+    await flush(el);
     expect(navItem(el, "prep-stations")).not.toBeNull();
     const screen = el.shadowRoot!.querySelector("dashboard-prep-stations-screen")!;
-    expect(screen).not.toBeNull();
     await vi.waitFor(() => expect(screen.shadowRoot!.querySelector("wt-tabs")).not.toBeNull());
-    expect(screen.shadowRoot!.querySelector('[data-test="new-station"]')).toBeNull();
-    expect(location.pathname).toBe("/manage/prep-stations/view/stations");
-    expect(reads).toContain("/management-api/venue-service/stations/overview");
-    for (const path of [
-      "/management-api/venue-service/routing",
-      "/management-api/printers",
-      "/management-api/devices",
-      "/management-api/watchers",
-      "/management-api/products",
-    ])
-      expect(reads).not.toContain(path);
+    const tabs = screen.shadowRoot!.querySelector("wt-tabs")!;
+    await tabs.updateComplete;
+    expect(
+      [...tabs.shadowRoot!.querySelectorAll('[role="tab"]')].map((tab) =>
+        tab.getAttribute("data-key"),
+      ),
+    ).toEqual(["stations", "routing", "watchers", "settings"]);
   });
 
   it("an old tester link opens the Routing tab", async () => {
