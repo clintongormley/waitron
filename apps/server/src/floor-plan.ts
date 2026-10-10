@@ -223,7 +223,11 @@ function checkEntries(input: ZonePlanSave): void {
   });
 }
 
-/** Names a table of this save may not take: other zones' master tables, and live tables outside every plan. */
+/**
+ * Names a table of this save may not take: other zones' master names, every live table's name in
+ * another zone, and this zone's never-planned tables the save does not adopt. This zone's planned
+ * tables do not count: its own reset frees their names, a removed table's once its removal succeeds.
+ */
 async function namesTaken(
   tx: Transaction,
   cfg: TillConfig,
@@ -236,14 +240,19 @@ async function namesTaken(
     .innerJoin(floorPlans, eq(floorPlans.id, floorPlanTables.planId))
     .innerJoin(floorZones, eq(floorZones.id, floorPlans.zoneId))
     .where(and(eq(floorZones.locationId, cfg.locationId), ne(floorPlans.zoneId, zoneId)));
-  const loose = await tx
-    .select({ id: diningTables.id, label: diningTables.label })
+  const live = await tx
+    .select({
+      id: diningTables.id,
+      label: diningTables.label,
+      zoneId: diningTables.zoneId,
+      planned: diningTables.planned,
+    })
     .from(diningTables)
-    .where(and(eq(diningTables.locationId, cfg.locationId), isNull(diningTables.planTableId)));
-  return new Set([
-    ...masters.map((m) => m.label),
-    ...loose.filter((t) => !adopted.has(t.id)).map((t) => t.label),
-  ]);
+    .where(eq(diningTables.locationId, cfg.locationId));
+  const blocking = live.filter((t) =>
+    t.zoneId === zoneId ? !t.planned && !adopted.has(t.id) : true,
+  );
+  return new Set([...masters.map((m) => m.label), ...blocking.map((t) => t.label)]);
 }
 
 /**

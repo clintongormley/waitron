@@ -497,4 +497,72 @@ describe("checkZonePlanSave", () => {
     await seat(v, live);
     await expect(check(z, { ...input, tables: [] })).resolves.toBeUndefined();
   });
+
+  it("refuses the name of this zone's never-planned table the save does not adopt", async () => {
+    const { z, spare, input } = await planned();
+    const [row] = await inTx(v, (tx) =>
+      tx.select({ label: diningTables.label }).from(diningTables).where(eq(diningTables.id, spare)),
+    );
+    const save: ZonePlanSave = {
+      ...input,
+      tables: [
+        ...input.tables,
+        { key: "n", label: row!.label, seats: null, fixed: false, placement: null },
+      ],
+    };
+    const error = await refusal(check(z, save));
+    expect(error.code).toBe("table.label_taken");
+    expect(error.params).toEqual({ label: row!.label });
+  });
+
+  it("lets a re-saved plan keep a name its zone's deleted table still holds", async () => {
+    const { z, live, master, input } = await planned();
+    const label = input.tables[0]!.label;
+    // The first save deleted T1 and added a new T1, written as saveZonePlan writes it.
+    const added = await inTx(v, async (tx) => {
+      await tx.update(diningTables).set({ planTableId: null }).where(eq(diningTables.id, live));
+      await tx.delete(floorPlanTables).where(eq(floorPlanTables.id, master));
+      const [plan] = await tx
+        .update(floorPlans)
+        .set({ revision: 2 })
+        .where(eq(floorPlans.zoneId, z))
+        .returning({ id: floorPlans.id });
+      const [row] = await tx
+        .insert(floorPlanTables)
+        .values({ planId: plan!.id, label, seats: 4 })
+        .returning({ id: floorPlanTables.id });
+      return row!.id;
+    });
+    const save: ZonePlanSave = {
+      revision: 2,
+      tables: [{ id: added, key: "a", label, seats: 4, fixed: false, placement: null }],
+      joins: [],
+    };
+    await expect(check(z, save)).resolves.toBeUndefined();
+  });
+
+  it("refuses a name another zone's live table still holds, so a swap across zones cannot stall", async () => {
+    const a = await zone();
+    const b = await zone();
+    const p = fresh("P");
+    const q = fresh("Q");
+    const x = fresh("X");
+    const [ma] = await masterOf(a, [{ label: p, live: await liveTable(a, fresh("a")) }]);
+    const [mb] = await masterOf(b, [{ label: q, live: await liveTable(b, fresh("b")) }]);
+    const entry = { fixed: false, seats: null, placement: null, key: "k" };
+    // First save: zone A's P is renamed X; its live table keeps P until the next reset.
+    await expect(
+      check(a, { revision: 1, tables: [{ ...entry, id: ma!, label: x }], joins: [] }),
+    ).resolves.toBeUndefined();
+    await inTx(v, async (tx) => {
+      await tx.update(floorPlanTables).set({ label: x }).where(eq(floorPlanTables.id, ma!));
+      await tx.update(floorPlans).set({ revision: 2 }).where(eq(floorPlans.zoneId, a));
+    });
+
+    const error = await refusal(
+      check(b, { revision: 1, tables: [{ ...entry, id: mb!, label: p }], joins: [] }),
+    );
+    expect(error.code).toBe("table.label_taken");
+    expect(error.params).toEqual({ label: p });
+  });
 });
