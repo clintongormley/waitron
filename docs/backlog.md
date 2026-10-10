@@ -670,14 +670,6 @@ _Formerly the catalogue and menus entries in the opening part of the old Track A
   sorting without changing its results.
   [Detail](backlog/catalogue.md#the-media-library-still-reads-every-matching-image-for-search-and-name-sorting-inside-the-venue-write-lock)
 
-- **Product search and image search follow different rules, and a search of only punctuation
-  lists every product** — OPEN (left by #1478). Product search finds the word being typed anywhere
-  inside a word; image search finds it only at the start of one. "&" or "-" alone lists every
-  product in menu order, where before #1478 it listed only names containing that character.
-  **Next action:** the owner decides whether both searches should share one rule, and whether a
-  punctuation-only search should list everything.
-  [Detail](backlog/catalogue.md#product-search-and-image-search-follow-different-rules-and-a-search-of-only-punctuation-lists-every-product)
-
 - **A negative catalogue price can still be stored by a direct call** — OPEN (left by #487).
   `createProduct` and `updateProduct` (`packages/catalogue/src/operations.ts`) still accept and
   store a negative when called directly — a seed, a script or a future caller — and
@@ -3417,10 +3409,6 @@ _Formerly A7, and the dashboard entries in the opening part of the old Track A (
   by A261 step 5 (Hours). Found in #1298's review; I believe it predates the branch (not checked
   with `git blame`).
 
-- **`wt-data-table` searches a column's sort value when it has no search value**, so a number
-  column matches typed digits unless it opts out; changing that default needs a check of every
-  table that searches prices or counts.
-
 - **Two blocking derivations remain OPEN** — left open by W1 (#1117), secret checks and the write
   lock. `hashSecret` derives with `scryptSync` (`packages/identity/src/secret-hash.ts`), so minting
   a token or setting a PIN or password stops the event loop; and `deriveKey`
@@ -4617,6 +4605,14 @@ _Formerly B9, and the old Track C's development-stack and house-rules items; par
 - **The payments test "refreshes only active reader statuses" failed once locally beside another
   coverage run**, then passed five times alone and in CI; not investigated. Left open by W100
   (#1332).
+
+- **Two browser tests failed once each during A454's work (search everywhere), and neither was
+  reproduced or checked on `main`**: "edge scroll reaches hidden column choices during a stationary
+  reorder" (`packages/ui/src/components/wt-data-table.test.ts`), once in a `packages/ui` coverage
+  run; and "cancel keeps reassignment selections and target until explicit local Discard"
+  (`apps/dashboard/src/screens/units-reassignment.unsaved.test.ts`), once in seven runs, then six
+  passes alone. Neither types a search. **Next action:** reproduce each under load and fix at the
+  root (standing rule: a flaky test is fixed, never re-run to green).
 
 - **The test-shape half of #339's lesson is unwritten.** #339 passed review and CI and the first
   person to open the screen got a 500; the "open it and look" half is CLAUDE.md §4's rule. The

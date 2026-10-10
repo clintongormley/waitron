@@ -948,9 +948,12 @@ Actions menu offers Edit product at every width.
 The toolbar has a search box ("Search this menu" / "Buscar en esta carta") that matches the names the
 rows show and opens the sections above a match, and the Available column has a Yes / No filter; a
 section or an included menu answers neither, so it stays only on the way to a match. There is no
-filter on Type: its three values are already told apart by the folder frame and the arrow. While a
-search or filter hides rows, ArrowUp and ArrowDown move a member past the next sibling that is
-drawn, never past a hidden one. The search clears when another menu opens or the menu empties.
+filter on Type: its three values are already told apart by the folder frame and the arrow. A search
+draws the closest matches first rather than in the menu's order, so while the search box holds
+anything but spaces, punctuation alone included, Reorder draws no grips and a drag already held ends
+with no move; clearing the search brings the grips back. While the Available filter alone hides rows,
+ArrowUp and ArrowDown move a member past the next sibling that is drawn, never past a hidden one.
+The search clears when another menu opens or the menu empties.
 
 Beside Reorder is a Select icon button (the Products tree's, "Select" / "Seleccionar"). In Select
 mode every row the menu owns has a box named "<name>, in <list>" (rows inside an included menu have
@@ -1086,11 +1089,22 @@ Each section retains the `wt-combobox` choices its column's `filter` descriptor 
 everything. A row passes it when it matches any chosen value, and it counts once in the Filters
 badge however many it holds. The search box is
 named `search` and each dropdown `<column key>-filter`. A row must pass every active filter and
-the search to show. A column exposes text to the search with `searchValue` (falling back to
-`sortValue`). A filter's `value` may return a list for a row that belongs under several options
+the search to show. A column exposes text to the search with `searchValue`; a column without one is
+not searched. A filter's `value` may return a list for a row that belongs under several options
 at once, such as a product placed in two sections; the row shows when the list holds a chosen
 option. Pass `sortKey`/`sortDirection` to choose the starting sort; the table then owns it and
 emits `wt-sort-change`.
+
+**One search rule.** The table, `wt-combobox`, the screens with their own search and the server's
+searches all use the matcher in `@waitron/shared` (`textSearch`, `packages/shared/src/text-search.ts`;
+the venue store registers it with SQLite as `waitron_search_rank`). A row matches when its names — a
+table's `searchValue` columns — hold every word typed, in any order, ignoring accents, capitals and
+punctuation. A word followed by a space or punctuation must be a whole word; the word still being
+typed may be any part of one. A search of only spaces is no search, and a search of only
+punctuation matches nothing. Matches are listed closest first (`compareSearchRanks`: a whole word,
+then the start of a word, then the inside of one), ahead of the table's own sort, which then orders
+rows that tie; `rowGroup` still comes before both. In a tree the closest come first among the rows
+under each parent, and in a grouped `wt-combobox` within each group.
 
 Give the table a `viewKey` and it remembers its sort and filter choices in the tab's session storage
 — never the search text. It restores them once it has columns: a stored sort only if a current
@@ -2431,8 +2445,10 @@ A search box sits at the top of the sidebar, above the groups: a `wt-input type=
 `hide-label`, named `nav-search`, whose hidden label (its accessible name) and placeholder are both
 **Search pages**. A staff session sees My schedule and Orders in its sidebar, without a search box.
 While the box holds a term (spaces trimmed), the nav
-shows only the pages whose label in the current language contains it, ignoring case and accents
-("categorias" finds "Categorías"), plus every page of a group whose header contains it. The search
+shows only the pages whose label in the current language matches it by the one search rule
+(Remembered, searchable, filterable tables), so "categorias" finds "Categorías", plus each page that
+matches only with its group's header read beside its label. Within a group the pages whose own label
+matches come first, closest first, then the others in nav order. The search
 narrows the rows the nav would already show, so a page this person may not open never appears,
 however exactly its name is typed. A group with no match is hidden, header and all. A group with a
 match shows open whatever its collapsed state. While a term is typed each shown header stops being a
