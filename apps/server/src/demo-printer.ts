@@ -1,4 +1,5 @@
-import "./errors.js";
+// The registry of `printer.not_found`, which `routeToDemoPrinter` throws.
+import "@waitron/printing";
 import { and, eq, isNull } from "drizzle-orm";
 import { AppError } from "@waitron/shared";
 import {

@@ -4853,17 +4853,11 @@ _Formerly parts of B9 and Track C._ Detail: [backlog/dependencies.md](backlog/de
 
 _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._ Detail: [backlog/architecture.md](backlog/architecture.md).
 
-- **A435 — permanent delete for hardware and venue setup (owner, 2026-10-08; steps 2–6 open).**
-  Printers are next. Each point below is a separate remaining step.
+- **A435 — permanent delete for hardware and venue setup (owner, 2026-10-08; steps 3–6 open).**
+  Card readers are next. Each point below is a separate remaining step.
   [Spec](superpowers/specs/2026-10-08-delete-and-archive-design.md),
   [product archive plan](superpowers/plans/2026-10-08-a435-1-product-archive.md).
-- **A435 step 2 — printers: open, next.** Add permanent Delete beside Disable, the impact read,
-  deleted-state uniqueness rules and shared confirmation dialog.
-  [Printer delete plan](superpowers/plans/2026-10-09-a435-2-printer-delete.md).
-  The plan cites `apps/server/src/station-health.ts`, which A366 slice 4 Part A deleted, and
-  `packages/venue-service/src/dashboard/station-health-table.ts`, which it renamed
-  `station-table.ts` without the down-printer notes; re-ground those rows before building.
-- **A435 step 3 — card readers: open, following printers in the build order.** Add permanent Delete beside Disable.
+- **A435 step 3 — card readers: open, next.** Add permanent Delete beside Disable.
 - **A435 step 4 — devices: open, following printers in the build order.** Add permanent Delete beside Disable.
 - **A435 step 5 — courses and kitchen stations: open, following devices in the build order.** Replace Disable with Delete,
   and drop the list's Status column and Status filter, which no longer have anything to show (owner,
