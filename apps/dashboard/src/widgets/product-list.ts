@@ -15,6 +15,7 @@ import "@waitron/ui/src/components/wt-row-actions.js";
 import "@waitron/ui/src/components/wt-icon.js";
 import "@waitron/ui/src/components/wt-input.js";
 import { t, currentLocale } from "../i18n/t.js";
+import { countOf } from "./count-text.js";
 import {
   allergenState,
   allergenStateName,
@@ -77,13 +78,6 @@ interface ProductRow {
   parentKey: string;
   product: Product;
   variant: Product["variants"][number] | null;
-}
-
-export function countOf(
-  key: "folders.count" | "folders.product_count" | "menus.section_count" | "product.variant_count",
-  count: number,
-): string {
-  return t(count === 1 ? `${key}_one` : key).replace("{count}", String(count));
 }
 
 function orderingName(ordering: ProductOrdering): string {

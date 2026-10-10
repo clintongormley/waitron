@@ -35,7 +35,7 @@ import {
   type DropGap,
 } from "./tree-drag.js";
 import { productMedia, productMediaStyles } from "./product-media.js";
-import { countOf } from "./product-list.js";
+import { countOf } from "./count-text.js";
 import { swatchChip, swatchPartStyles } from "./swatch-styles.js";
 import { folderFrame, menuTreeCell, menuTreeStyles } from "./menu-tree-presentation.js";
 import { categoryColor } from "@waitron/catalogue/src/color-inheritance.js";
