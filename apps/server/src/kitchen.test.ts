@@ -367,7 +367,7 @@ async function seedVariant(parentId: string): Promise<string> {
 }
 
 describe("kitchen-course config", () => {
-  it("creates/lists/updates/deactivates a course and orders by display_order then name", async () => {
+  it("creates/lists/updates/deletes a course and orders by display_order then name", async () => {
     const cfg = await setupVenue();
     const { id: a } = await asApp(cfg, (tx) =>
       createCourse(tx, cfg, { name: "Principales", displayOrder: 1 }),
@@ -379,17 +379,17 @@ describe("kitchen-course config", () => {
     expect(list.map((c) => c.name)).toEqual(["Alpha", "Entrantes", "Zebra", "Principales"]);
     expect(list[3]).toEqual({ id: a, name: "Principales", displayOrder: 1, active: true });
     await asApp(cfg, (tx) => updateCourse(tx, cfg, a, { name: "Segundos", displayOrder: 9 }));
-    // A product's default course is a reference, so the removal disables rather than deletes.
     const productId = await seedProduct();
     await asApp(cfg, (tx) => setProductCourse(tx, cfg, productId, a));
     await asApp(cfg, (tx) => removeCourse(tx, cfg, a));
     expect((await asApp(cfg, (tx) => listCourses(tx, cfg))).some((c) => c.id === a)).toBe(false);
-    await asApp(cfg, (tx) => updateCourse(tx, cfg, a, { active: true }));
-    expect(await asApp(cfg, (tx) => listCourses(tx, cfg))).toContainEqual({
-      id: a,
-      name: "Segundos",
-      displayOrder: 9,
-      active: true,
+    expect(await productCourse(productId)).toBeNull();
+    expect(
+      await asApp(cfg, (tx) => tx.select().from(kitchenCourses).where(eq(kitchenCourses.id, a))),
+    ).toMatchObject([{ id: a, name: "Segundos", displayOrder: 9, active: false }]);
+    await expect(asApp(cfg, (tx) => updateCourse(tx, cfg, a, {}))).rejects.toMatchObject({
+      code: "course.not_found",
+      params: { courseId: a },
     });
   });
 
@@ -429,11 +429,13 @@ describe("kitchen-course config", () => {
     const { id } = await asApp(cfg, (tx) =>
       createCourse(tx, cfg, { name: "Postres", displayOrder: 3 }),
     );
-    await asApp(cfg, (tx) => updateCourse(tx, cfg, id, { active: false }));
+    await asApp(cfg, (tx) =>
+      tx.update(kitchenCourses).set({ active: false }).where(eq(kitchenCourses.id, id)),
+    );
     const other = await setupVenue();
     const foreignCfg: TillConfig = { ...cfg, locationId: other.locationId };
     await expect(
-      asApp(cfg, (tx) => updateCourse(tx, foreignCfg, id, { active: true, name: "Taken over" })),
+      asApp(cfg, (tx) => updateCourse(tx, foreignCfg, id, { name: "Taken over" })),
     ).rejects.toMatchObject({ code: "course.not_found", params: { courseId: id } });
     expect(
       await asApp(cfg, (tx) => tx.select().from(kitchenCourses).where(eq(kitchenCourses.id, id))),
@@ -513,7 +515,9 @@ describe("moveCourse", () => {
   it("counts only active courses and leaves an inactive one's stored order alone", async () => {
     const cfg = await setupVenue();
     const [a, b, c, d] = await fourCourses(cfg);
-    await asApp(cfg, (tx) => updateCourse(tx, cfg, b!, { active: false }));
+    await asApp(cfg, (tx) =>
+      tx.update(kitchenCourses).set({ active: false }).where(eq(kitchenCourses.id, b!)),
+    );
     const moved = await asApp(cfg, (tx) => moveCourse(tx, cfg, a!, 1));
     expect(moved.map((x) => x.id)).toEqual([c, a, d]);
     expect(moved.map((x) => x.displayOrder)).toEqual([0, 1, 2]);
@@ -523,7 +527,9 @@ describe("moveCourse", () => {
   it("refuses an inactive course with course.not_found and changes nothing", async () => {
     const cfg = await setupVenue();
     const [a, b, c, d] = await fourCourses(cfg);
-    await asApp(cfg, (tx) => updateCourse(tx, cfg, b!, { active: false }));
+    await asApp(cfg, (tx) =>
+      tx.update(kitchenCourses).set({ active: false }).where(eq(kitchenCourses.id, b!)),
+    );
     await expect(asApp(cfg, (tx) => moveCourse(tx, cfg, b!, 0))).rejects.toMatchObject({
       code: "course.not_found",
       params: { courseId: b },
@@ -639,7 +645,9 @@ describe("product-course config", () => {
       asApp(cfg, (tx) => setProductCourse(tx, cfg, productId, missing)),
     ).rejects.toMatchObject({ code: "course.not_found", params: { courseId: missing } });
     const { id: dead } = await asApp(cfg, (tx) => createCourse(tx, cfg, { name: "Retired" }));
-    await asApp(cfg, (tx) => updateCourse(tx, cfg, dead, { active: false }));
+    await asApp(cfg, (tx) =>
+      tx.update(kitchenCourses).set({ active: false }).where(eq(kitchenCourses.id, dead)),
+    );
     await expect(
       asApp(cfg, (tx) => setProductCourse(tx, cfg, productId, dead)),
     ).rejects.toMatchObject({ code: "course.not_found", params: { courseId: dead } });

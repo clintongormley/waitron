@@ -6,17 +6,15 @@ import {
   fireControlMode,
   isUniqueViolation,
   kitchenCourses,
-  orderDraftLines,
   products,
   kitchenStations,
   kitchenStationTiming,
-  ticketItems,
-  workingOrderLines,
 } from "@waitron/db";
 import type { StationThresholds } from "@waitron/shared";
 import type { Transaction } from "@waitron/db";
 import { assertProductWritable, productWithId, type ProductScope } from "@waitron/catalogue";
-import { idsInUse, type Reference } from "./in-use.js";
+import { deleteCourse } from "./course-delete.js";
+export { COURSE_REFERENCES, coursesInUse } from "./course-delete.js";
 import { VENUE_SERVICE } from "./modules.js";
 import { replaceStationPrinters } from "./station-printers.js";
 import type { TillConfig } from "./till-config.js";
@@ -365,7 +363,7 @@ export async function requireCourse(
   }
 }
 
-/** Create a kitchen course in `cfg.locationId`. A duplicate `(location, name)` is `course.name_taken`. */
+/** Create a kitchen course in `cfg.locationId`. A duplicate live `(location, name)` is `course.name_taken`. */
 export async function createCourse(
   tx: Transaction,
   cfg: TillConfig,
@@ -389,13 +387,8 @@ export async function createCourse(
   }
 }
 
-/** The venue's courses in firing order: lowest `display_order` first, then `name`. Active ones
- *  only, unless `includeDisabled`. */
-export async function listCourses(
-  tx: Transaction,
-  cfg: TillConfig,
-  includeDisabled = false,
-): Promise<Course[]> {
+/** Active courses in firing order: lowest `display_order` first, then `name`. */
+export async function listCourses(tx: Transaction, cfg: TillConfig): Promise<Course[]> {
   return tx
     .select({
       id: kitchenCourses.id,
@@ -404,12 +397,7 @@ export async function listCourses(
       active: kitchenCourses.active,
     })
     .from(kitchenCourses)
-    .where(
-      and(
-        eq(kitchenCourses.locationId, cfg.locationId),
-        includeDisabled ? undefined : eq(kitchenCourses.active, true),
-      ),
-    )
+    .where(and(eq(kitchenCourses.locationId, cfg.locationId), eq(kitchenCourses.active, true)))
     .orderBy(kitchenCourses.displayOrder, kitchenCourses.name);
 }
 
@@ -444,19 +432,22 @@ export async function moveCourse(
 }
 
 /**
- * Edit any subset of a course's `name`/`displayOrder`/`active`. An absent or another venue's id
- * throws `course.not_found`; a name collision throws `course.name_taken`.
+ * Edit a live course's name or firing order; a live name collision is `course.name_taken`.
  */
 export async function updateCourse(
   tx: Transaction,
   cfg: TillConfig,
   id: string,
-  patch: { name?: string; displayOrder?: number; active?: boolean },
+  patch: { name?: string; displayOrder?: number },
 ): Promise<void> {
-  const set: { name?: string; displayOrder?: number; active?: boolean } = {};
+  if (Object.hasOwn(patch, "active")) {
+    throw new AppError("management.request_invalid", { field: "active" });
+  }
+  await requireLiveCourse(tx, cfg, id);
+  const set: { name?: string; displayOrder?: number } = {};
   if (patch.name !== undefined) set.name = patch.name;
   if (patch.displayOrder !== undefined) set.displayOrder = patch.displayOrder;
-  if (patch.active !== undefined) set.active = patch.active;
+  if (Object.keys(set).length === 0) return;
 
   let updated: { id: string }[];
   try {
@@ -477,36 +468,14 @@ export async function updateCourse(
   }
 }
 
-/** What keeps a course from being deleted. `in-use-references.test.ts` checks it against declared foreign keys only. */
-export const COURSE_REFERENCES: readonly Reference[] = [
-  { table: products, column: products.courseId },
-  { table: orderDraftLines, column: orderDraftLines.courseId },
-  { table: workingOrderLines, column: workingOrderLines.courseId },
-  { table: ticketItems, column: ticketItems.courseId },
-];
-
-export function coursesInUse(tx: Transaction, ids: readonly string[]): Promise<Set<string>> {
-  return idsInUse(tx, COURSE_REFERENCES, ids);
-}
-
-/** Delete a course nothing refers to and disable one something still names; with `disable`, only
- *  ever disable it. */
 export async function removeCourse(
   tx: Transaction,
   cfg: TillConfig,
   id: string,
   disable = false,
 ): Promise<void> {
-  const [found] = await tx
-    .select({ active: kitchenCourses.active })
-    .from(kitchenCourses)
-    .where(and(eq(kitchenCourses.id, id), eq(kitchenCourses.locationId, cfg.locationId)));
-  if (!found) throw new AppError("course.not_found", { courseId: id });
-  if (!disable && (await coursesInUse(tx, [id])).size === 0) {
-    await tx.delete(kitchenCourses).where(eq(kitchenCourses.id, id));
-  } else if (found.active) {
-    await tx.update(kitchenCourses).set({ active: false }).where(eq(kitchenCourses.id, id));
-  }
+  if (disable) throw new AppError("management.request_invalid", { field: "disable" });
+  await deleteCourse(tx, cfg, id);
 }
 
 export async function setProductCourse(

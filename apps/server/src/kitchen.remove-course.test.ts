@@ -54,18 +54,29 @@ describe("removing a course", () => {
     expect(await courseRow(v, id)).toEqual([]);
   });
 
-  it("disables a course a product names as its default, keeping the row", async () => {
+  it("retains a deleted course a product names as its default, keeping the row", async () => {
     const v = await setupPartyVenue(suite.db);
     const id = await course(v);
     await inTx(v, (tx) => setProductCourse(tx, v.cfg, v.productId("Flan"), id));
     expect(await inTx(v, (tx) => coursesInUse(tx, [id]))).toEqual(new Set([id]));
     await inTx(v, (tx) => removeCourse(tx, v.cfg, id));
     expect(await courseRow(v, id)).toMatchObject([{ id, name: "Postres", active: false }]);
-    await inTx(v, (tx) => removeCourse(tx, v.cfg, id));
+    expect(
+      await inTx(v, (tx) =>
+        tx
+          .select({ courseId: products.courseId })
+          .from(products)
+          .where(eq(products.id, v.productId("Flan"))),
+      ),
+    ).toEqual([{ courseId: null }]);
+    await expect(inTx(v, (tx) => removeCourse(tx, v.cfg, id))).rejects.toMatchObject({
+      code: "course.not_found",
+      params: { courseId: id },
+    });
     expect(await courseRow(v, id)).toMatchObject([{ id, active: false }]);
   });
 
-  it("disables a course only an order's line names", async () => {
+  it("retains a deleted course only an order's line names", async () => {
     const v = await setupPartyVenue(suite.db);
     const id = await course(v);
     const tabId = await orderedWith(v, id);
@@ -84,7 +95,7 @@ describe("removing a course", () => {
     expect(await courseRow(v, id)).toMatchObject([{ id, active: false }]);
   });
 
-  it("disables a course only a kitchen record names", async () => {
+  it("retains a deleted course only a kitchen record names", async () => {
     const v = await setupPartyVenue(suite.db);
     const id = await course(v);
     const tabId = await orderedWith(v, id);
@@ -106,7 +117,7 @@ describe("removing a course", () => {
     expect(await courseRow(v, id)).toMatchObject([{ id, active: false }]);
   });
 
-  it("disables a course only an unsent draft's line names", async () => {
+  it("retains a deleted course only an unsent draft's line names", async () => {
     const v = await setupPartyVenue(suite.db);
     const id = await course(v);
     const { partyId } = await seat(v, await v.table("Borrador"));
@@ -141,14 +152,15 @@ describe("removing a course", () => {
     expect(await courseRow(v, id)).toMatchObject([{ id, active: false }]);
   });
 
-  it("only disables a course nothing refers to when the request asks to disable it", async () => {
+  it("rejects the temporary bridge's disable request without changing an unused course", async () => {
     const v = await setupPartyVenue(suite.db);
     const id = await course(v);
     expect(await inTx(v, (tx) => coursesInUse(tx, [id]))).toEqual(new Set());
-    await inTx(v, (tx) => removeCourse(tx, v.cfg, id, true));
-    expect(await courseRow(v, id)).toMatchObject([{ id, name: "Postres", active: false }]);
-    await inTx(v, (tx) => removeCourse(tx, v.cfg, id, true));
-    expect(await courseRow(v, id)).toMatchObject([{ id, active: false }]);
+    await expect(inTx(v, (tx) => removeCourse(tx, v.cfg, id, true))).rejects.toMatchObject({
+      code: "management.request_invalid",
+      params: { field: "disable" },
+    });
+    expect(await courseRow(v, id)).toMatchObject([{ id, name: "Postres", active: true }]);
   });
 
   it("stops reading references once every course asked about is found, counting a repeated id once", async () => {
@@ -190,7 +202,7 @@ describe("removing a course", () => {
     }
   });
 
-  it("deletes a disabled course once nothing refers to it any more", async () => {
+  it("refuses repeated removal even once nothing refers to the retained row", async () => {
     const v = await setupPartyVenue(suite.db);
     const id = await course(v);
     await inTx(v, (tx) => setProductCourse(tx, v.cfg, v.productId("Flan"), id));
@@ -198,8 +210,11 @@ describe("removing a course", () => {
     await inTx(v, (tx) =>
       tx.update(products).set({ courseId: null }).where(eq(products.courseId, id)),
     );
-    await inTx(v, (tx) => removeCourse(tx, v.cfg, id));
-    expect(await courseRow(v, id)).toEqual([]);
+    await expect(inTx(v, (tx) => removeCourse(tx, v.cfg, id))).rejects.toMatchObject({
+      code: "course.not_found",
+      params: { courseId: id },
+    });
+    expect(await courseRow(v, id)).toMatchObject([{ id, active: false }]);
   });
 
   it("refuses an unknown or another venue's course with course.not_found, changing nothing", async () => {
@@ -225,7 +240,7 @@ describe("removing a course", () => {
     expect(await courseRow(v, id)).toMatchObject([{ id, active: true }]);
   });
 
-  it("reads which of many courses are in use in one call, and lists disabled ones only when asked", async () => {
+  it("reads which of many courses are in use in one call, and never lists deleted ones", async () => {
     const v = await setupPartyVenue(suite.db);
     const used = await course(v, "Used");
     const free = await course(v, "Free");
@@ -235,12 +250,22 @@ describe("removing a course", () => {
     await inTx(v, (tx) => removeCourse(tx, v.cfg, used));
     expect((await inTx(v, (tx) => listCourses(tx, v.cfg))).map((c) => c.id)).toEqual([free]);
     expect(
-      (await inTx(v, (tx) => listCourses(tx, v.cfg, true))).map((c) => [c.id, c.active]),
-    ).toEqual([
-      [free, true],
-      [used, false],
-    ]);
-    await inTx(v, (tx) => updateCourse(tx, v.cfg, used, { active: true }));
-    expect((await inTx(v, (tx) => listCourses(tx, v.cfg))).map((c) => c.id)).toEqual([free, used]);
+      (
+        await inTx(v, (tx) =>
+          (
+            listCourses as (
+              tx: Parameters<typeof listCourses>[0],
+              cfg: Parameters<typeof listCourses>[1],
+              obsoleteFlag: boolean,
+            ) => ReturnType<typeof listCourses>
+          )(tx, v.cfg, true),
+        )
+      ).map((c) => [c.id, c.active]),
+    ).toEqual([[free, true]]);
+    await expect(inTx(v, (tx) => updateCourse(tx, v.cfg, used, {}))).rejects.toMatchObject({
+      code: "course.not_found",
+      params: { courseId: used },
+    });
+    expect((await inTx(v, (tx) => listCourses(tx, v.cfg))).map((c) => c.id)).toEqual([free]);
   });
 });
