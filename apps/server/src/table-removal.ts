@@ -1,4 +1,4 @@
-import { and, eq, exists, inArray, isNull, ne, or } from "drizzle-orm";
+import { and, eq, inArray, or } from "drizzle-orm";
 import {
   diningTables,
   floorResetTables,
@@ -7,13 +7,12 @@ import {
   isRefusal,
   parties,
   partyTables,
-  ticketItems,
   workingOrders,
 } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import type { TableRemoval } from "@waitron/module";
 import type { AppError } from "@waitron/shared";
-import { releaseDeliveries } from "./delivery-release.js";
+import { foodOnItsWay, releaseDeliveries } from "./delivery-release.js";
 import { leaveMerges } from "./floor-today-merges.js";
 import type { TillConfig } from "./till-config.js";
 
@@ -32,31 +31,13 @@ export async function tablesTied(
   const tied = new Set(parted.map((row) => row.tableId));
   const rest = ids.filter((id) => !tied.has(id));
   if (rest.length === 0) return tied;
-  // The floor's pending-delivery test (`listTablesWithState`), or an order not yet paid.
   const ordered = await tx
     .selectDistinct({ tableId: workingOrders.deliveryTableId })
     .from(workingOrders)
     .where(
       and(
         inArray(workingOrders.deliveryTableId, rest),
-        or(
-          inArray(workingOrders.status, ["open", "placed"]),
-          and(
-            ne(workingOrders.status, "abandoned"),
-            isNull(workingOrders.collectedAt),
-            exists(
-              tx
-                .select({ id: ticketItems.id })
-                .from(ticketItems)
-                .where(
-                  and(
-                    eq(ticketItems.workingOrderId, workingOrders.id),
-                    eq(ticketItems.madeHere, false),
-                  ),
-                ),
-            ),
-          ),
-        ),
+        or(inArray(workingOrders.status, ["open", "placed"]), foodOnItsWay()),
       ),
     );
   for (const row of ordered) tied.add(row.tableId!);

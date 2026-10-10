@@ -156,6 +156,7 @@ import { issuancePass } from "./issuance-pass.js";
 import { issueMoment, type IssueMoment } from "./issue-moment.js";
 import { VENUE_SERVICE } from "./modules.js";
 import { readMadeHereStations } from "./made-here.js";
+import { foodOnItsWay } from "./delivery-release.js";
 import { requireCourse, requireLiveCourse } from "./kitchen.js";
 import { readUnsentDrafts } from "./order-drafts.js";
 import { readBillSignals, readPartySignals, tableSignals } from "./table-signals.js";
@@ -7144,19 +7145,11 @@ export async function listTablesWithState(
       where pt.left_at is null
       group by pt.table_id
     ) tab on tab.table_id = dt.id
-    -- The delivery count, grouped the same way: the LATERAL form's correlation was
-    -- d.delivery_table_id = dt.id, so it becomes the join key. A NULL delivery_table_id groups
-    -- to a row nothing joins to, which is the LATERAL form's no-rows answer.
     left join (
-      select d.delivery_table_id, cast(count(*) as int) as pending
-      from working_orders d
-      where d.status <> 'abandoned' and d.collected_at is null
-        and exists (
-          select 1 from ticket_items ti
-          where ti.working_order_id = d.id
-            and ti.made_here = 0
-        )
-      group by d.delivery_table_id
+      select delivery_table_id, cast(count(*) as int) as pending
+      from ${workingOrders}
+      where ${foodOnItsWay()}
+      group by delivery_table_id
     ) del on del.delivery_table_id = dt.id
     left join table_service_statuses tss
       on tss.id = dt.status_id
