@@ -1,4 +1,4 @@
-import { and, asc, eq, inArray, isNull } from "drizzle-orm";
+import { and, asc, eq, inArray, isNull, sql } from "drizzle-orm";
 import { deviceProfiles, devices, floorZones, kitchenStations } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import type {
@@ -575,11 +575,11 @@ export async function countDeviceKitchenScreens(
   tx: Transaction,
   deviceId: string,
 ): Promise<number> {
-  const rows = await tx
-    .select({ screen: deviceKitchenScreens.screen })
+  const [{ count }] = await tx
+    .select({ count: sql<number>`count(*)` })
     .from(deviceKitchenScreens)
     .where(eq(deviceKitchenScreens.deviceId, deviceId));
-  return rows.length;
+  return count;
 }
 
 /** Removes the device's kitchen screens, their stations and zones, and what narrowings took from it.
