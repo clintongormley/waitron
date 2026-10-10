@@ -1,5 +1,6 @@
 import { LitElement, type TemplateResult, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
+import { repeat } from "lit/directives/repeat.js";
 import { styleMap } from "lit/directives/style-map.js";
 import { baseStyles } from "../base-styles.js";
 import {
@@ -70,6 +71,8 @@ export class WtFloorPlanCanvas extends LitElement {
 
       .grid {
         position: relative;
+        min-width: 100%;
+        min-height: 100%;
         background-color: var(--wt-color-surface);
         background-image:
           linear-gradient(to right, var(--wt-color-border) 1px, transparent 1px),
@@ -117,6 +120,13 @@ export class WtFloorPlanCanvas extends LitElement {
         border-bottom-left-radius: var(--wt-radius-sm);
         background: var(--wt-color-text-muted);
       }
+
+      /* A circle clips the corner, so the mark sits where the circle still covers it. */
+      .table[data-shape="round"] .fixed-marker {
+        top: 15%;
+        right: 15%;
+        border-radius: 50%;
+      }
     `,
   ];
 
@@ -129,10 +139,12 @@ export class WtFloorPlanCanvas extends LitElement {
   @state() private visible = { columns: 0, rows: 0 };
 
   #observer = new ResizeObserver(([entry]) => {
-    const size = entry!.borderBoxSize[0]!;
+    // The content box excludes scrollbars, and rounding down keeps the grid inside it, so the grid
+    // never overflows only because a scrollbar appeared; min-width/min-height fill the remainder.
+    const size = entry!.contentBoxSize[0]!;
     this.visible = {
-      columns: Math.ceil(size.inlineSize / GRID_SQUARE_PX),
-      rows: Math.ceil(size.blockSize / GRID_SQUARE_PX),
+      columns: Math.floor(size.inlineSize / GRID_SQUARE_PX),
+      rows: Math.floor(size.blockSize / GRID_SQUARE_PX),
     };
   });
 
@@ -142,9 +154,9 @@ export class WtFloorPlanCanvas extends LitElement {
 
   override connectedCallback(): void {
     super.connectedCallback();
-    void this.updateComplete.then(() =>
-      this.#observer.observe(this.renderRoot.querySelector(".viewport")!),
-    );
+    void this.updateComplete.then(() => {
+      if (this.isConnected) this.#observer.observe(this.renderRoot.querySelector(".viewport")!);
+    });
   }
 
   override disconnectedCallback(): void {
@@ -173,7 +185,11 @@ export class WtFloorPlanCanvas extends LitElement {
           style=${gridStyle}
           @click=${this.#onGridClick}
         >
-          ${this.tables.map((t) => this.#renderTable(t, copy))}
+          ${repeat(
+            this.tables,
+            (t) => t.key,
+            (t) => this.#renderTable(t, copy),
+          )}
         </div>
       </div>
     `;

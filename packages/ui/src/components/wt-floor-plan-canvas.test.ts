@@ -1,4 +1,4 @@
-import { afterEach, expect, it } from "vitest";
+import { afterEach, expect, it, vi } from "vitest";
 import { userEvent } from "vitest/browser";
 import { cleanup, host, mount, mountInShadowRoot } from "../test-helpers.js";
 import type { PlanPlacement } from "../floor-plan-geometry.js";
@@ -80,6 +80,26 @@ it("draws a round table as a circle when its sides match", async () => {
   expect(getComputedStyle(button(el, "s")).borderTopLeftRadius).toBe("5px");
 });
 
+it("paints the fixed mark from a token", async () => {
+  const el = await canvas([table("t2", "T2", {}, true)]);
+  host.style.setProperty("--wt-color-text-muted", "rgb(13, 14, 15)");
+  const marker = button(el, "t2").querySelector<HTMLElement>('[part="fixed-marker"]')!;
+  expect(getComputedStyle(marker).backgroundColor).toBe("rgb(13, 14, 15)");
+});
+
+it("keeps the fixed mark inside a round table", async () => {
+  const el = await canvas([
+    table("round", "R", { width: 6, height: 6, shape: "round" }, true),
+    table("small", "S", { x: 10, width: 2, height: 2, shape: "round" }, true),
+  ]);
+  for (const key of ["round", "small"]) {
+    const marker = button(el, key).querySelector<HTMLElement>('[part="fixed-marker"]')!;
+    const box = marker.getBoundingClientRect();
+    const hit = el.shadowRoot!.elementFromPoint(box.left + box.width / 2, box.top + box.height / 2);
+    expect(hit, key).toBe(marker);
+  }
+});
+
 it("marks a fixed table and says so in its name", async () => {
   const el = await canvas([table("t1", "T1"), table("t2", "T2", { x: 10 }, true)]);
   expect(button(el, "t2").querySelector('[part="fixed-marker"]')).not.toBeNull();
@@ -112,14 +132,52 @@ it("fills the visible area with grid when there are no tables", async () => {
   expect(getComputedStyle(part(el, "grid")).backgroundSize).toBe("12px 12px, 12px 12px");
 });
 
-it("rounds the visible area up to whole squares", async () => {
+it("fills a box that is not a whole number of squares without overflowing it", async () => {
   const el = await canvas([]);
+  el.style.width = "605px";
+  el.style.height = "301px";
+  await settled(el);
+  const grid = part(el, "grid").getBoundingClientRect();
+  expect(grid.width).toBe(605);
+  expect(grid.height).toBe(301);
+});
+
+/**
+ * Stands in for classic scrollbars, which take room inside the viewport's box: this headless
+ * Chromium draws none that do, even under a `::-webkit-scrollbar` width.
+ */
+function classicScrollbars(el: WtFloorPlanCanvas): void {
+  const style = document.createElement("style");
+  style.textContent =
+    "wt-floor-plan-canvas::part(viewport) { border-right: 15px solid transparent; border-bottom: 15px solid transparent }";
+  el.parentNode!.appendChild(style);
+}
+
+it("shows no scrollbars on an empty plan, even where scrollbars take room", async () => {
+  const el = await canvas([]);
+  classicScrollbars(el);
   el.style.width = "605px";
   el.style.height = "300px";
   await settled(el);
-  const grid = part(el, "grid").getBoundingClientRect();
-  expect(grid.width).toBe(612);
-  expect(grid.height).toBe(300);
+  await settled(el);
+  const viewport = part(el, "viewport");
+  expect(viewport.clientWidth).toBe(590);
+  expect(viewport.scrollWidth).toBe(viewport.clientWidth);
+  expect(viewport.scrollHeight).toBe(viewport.clientHeight);
+});
+
+it("keeps a steady height in a box that takes its height from the plan", async () => {
+  const el = (await mount(
+    '<wt-floor-plan-canvas style="width: 600px"></wt-floor-plan-canvas>',
+  )) as WtFloorPlanCanvas;
+  classicScrollbars(el);
+  el.tables = [table("t1", "T1", { x: 100 })];
+  const heights: number[] = [];
+  for (let frame = 0; frame < 6; frame++) {
+    await settled(el);
+    heights.push(part(el, "grid").getBoundingClientRect().height);
+  }
+  expect(heights).toEqual(Array(6).fill(192));
 });
 
 it("draws 8 squares past the furthest table", async () => {
@@ -150,8 +208,7 @@ it("a click on empty grid asks to clear the selection", async () => {
   const seen = selects(el);
   let clicks = 0;
   host.addEventListener("click", () => clicks++);
-  const grid = part(el, "grid");
-  grid.dispatchEvent(new MouseEvent("click", { bubbles: true, composed: true }));
+  await userEvent.click(part(el, "grid"), { position: { x: 400, y: 300 } });
   expect(seen).toHaveLength(1);
   expect(seen[0]!.detail).toEqual({ key: null });
   expect(clicks).toBe(0);
@@ -188,6 +245,8 @@ it("paints from tokens", async () => {
   host.style.setProperty("--wt-color-surface-lifted", "rgb(1, 2, 3)");
   host.style.setProperty("--wt-color-primary", "rgb(4, 5, 6)");
   host.style.setProperty("--wt-color-border", "rgb(7, 8, 9)");
+  host.style.setProperty("--wt-color-surface", "rgb(10, 11, 12)");
+  expect(getComputedStyle(part(el, "grid")).backgroundColor).toBe("rgb(10, 11, 12)");
   expect(getComputedStyle(button(el, "t2")).backgroundColor).toBe("rgb(1, 2, 3)");
   expect(getComputedStyle(button(el, "t2")).borderTopColor).toBe("rgb(7, 8, 9)");
   expect(getComputedStyle(button(el, "t1")).borderTopColor).toBe("rgb(4, 5, 6)");
@@ -225,6 +284,33 @@ it("stops following its size once it is removed", async () => {
   el.remove();
   await settled(el);
   expect(part(el, "grid").style.width).toBe("600px");
+});
+
+it("keeps focus and the pressed state off another table when the list is reordered", async () => {
+  const t1 = table("t1", "T1");
+  const t2 = table("t2", "T2", { x: 10 });
+  const el = await canvas([t1, t2], { selected: "t1" });
+  const first = button(el, "t1");
+  first.focus();
+  el.tables = [t2, t1];
+  await el.updateComplete;
+  expect(button(el, "t1")).toBe(first);
+  expect(el.shadowRoot!.activeElement).not.toBe(button(el, "t2"));
+  expect(first.getAttribute("aria-pressed")).toBe("true");
+});
+
+it("does not watch its size when removed before its first draw", async () => {
+  const observe = vi.spyOn(ResizeObserver.prototype, "observe");
+  try {
+    const el = document.createElement("wt-floor-plan-canvas");
+    document.body.appendChild(el);
+    el.remove();
+    await el.updateComplete;
+    await Promise.resolve();
+    expect(observe).not.toHaveBeenCalled();
+  } finally {
+    observe.mockRestore();
+  }
 });
 
 it("passes focus to its first table", async () => {
