@@ -670,7 +670,6 @@ export class PrepStationsScreen extends LitElement {
   }
   override disconnectedCallback() {
     this.#cellRun++;
-    this.#stationEditRun++;
     if (
       this.#stationIdentity ||
       this.pending !== undefined ||
@@ -1156,7 +1155,11 @@ export class PrepStationsScreen extends LitElement {
       (row) => row.printerId,
     );
   }
-  async #saveStationEdit(token: object, detail: StationEditorSave) {
+  async #saveStationEdit(
+    token: object,
+    sender: HTMLElementTagNameMap["prep-station-editor"],
+    detail: StationEditorSave,
+  ) {
     const edit = this.stationEdit;
     if (
       !edit ||
@@ -1182,7 +1185,10 @@ export class PrepStationsScreen extends LitElement {
     if (!current()) return;
     this.stationEditBusy = false;
     await this.updateComplete;
-    if (this.renderRoot.querySelector("prep-station-editor")?.saved()) this.stationEdit = undefined;
+    const shown = this.renderRoot.querySelector("prep-station-editor");
+    // A render while the screen was away draws a new editor, which never sent this save and so
+    // cannot answer saved(); it closes unless the person has changed it since.
+    if (shown === sender ? shown.saved() : shown?.dirty === false) this.stationEdit = undefined;
     await this.#load();
   }
   #stationEditor() {
@@ -1212,7 +1218,11 @@ export class PrepStationsScreen extends LitElement {
         .refusal=${this.stationEditRefusal}
         @station-save=${(event: CustomEvent<StationEditorSave>) => {
           event.stopPropagation();
-          void this.#saveStationEdit(token, event.detail);
+          void this.#saveStationEdit(
+            token,
+            event.currentTarget as HTMLElementTagNameMap["prep-station-editor"],
+            event.detail,
+          );
         }}
         @station-close=${(event: Event) => {
           event.stopPropagation();

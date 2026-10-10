@@ -447,3 +447,63 @@ for (const outcome of ["written", "refused"] as const) {
     await expect.poll(() => modalIn(screen)).toBeNull();
   });
 }
+
+for (const outcome of ["written", "refused"] as const) {
+  it(`Edit counts a lone save ${outcome} after reconnect when no newer save was sent`, async () => {
+    const { screen } = await mount();
+    const requests: ReturnType<typeof deferred>[] = [];
+    app.api.updateStation = (async () => {
+      const write = deferred();
+      requests.push(write);
+      await write.promise;
+    }) as PrepStationsApi["updateStation"];
+    const first = await open(screen, true);
+    await field(first, "First");
+    first.querySelector<HTMLElement>("[data-test=save-station-edit]")!.click();
+    await expect.poll(() => requests.length).toBe(1);
+    screen.remove();
+    await screen.updateComplete;
+    app.shadowRoot!.append(screen);
+    await screen.updateComplete;
+    const modal = modalIn(screen)!;
+    const save = modal.querySelector<HTMLElementTagNameMap["wt-button"]>(
+      "[data-test=save-station-edit]",
+    )!;
+    if (outcome === "written") {
+      requests[0]!.resolve();
+      await expect.poll(() => modalIn(screen)).toBeNull();
+    } else {
+      requests[0]!.reject({ code: "station.name_taken" });
+      await expect
+        .poll(() => modal.querySelector<HTMLElementTagNameMap["wt-input"]>("wt-input")!.error)
+        .not.toBe("");
+      expect(modalIn(screen)).toBe(modal);
+      await save.updateComplete;
+      expect(save.loading).toBe(false);
+    }
+    expect(requests).toHaveLength(1);
+  });
+}
+
+it("Edit keeps a redrawn editor open when a lone save written after reconnect finds it changed", async () => {
+  const { screen } = await mount();
+  const write = deferred();
+  app.api.updateStation = (async () => {
+    await write.promise;
+  }) as PrepStationsApi["updateStation"];
+  const first = await open(screen, true);
+  await field(first, "First");
+  first.querySelector<HTMLElement>("[data-test=save-station-edit]")!.click();
+  screen.remove();
+  await screen.updateComplete;
+  app.shadowRoot!.append(screen);
+  await screen.updateComplete;
+  const modal = modalIn(screen)!;
+  await field(modal, "Typed while it was sent");
+  write.resolve();
+  await new Promise((resolve) => setTimeout(resolve, 50));
+  await screen.updateComplete;
+  expect(modalIn(screen)).toBe(modal);
+  expect(modal.querySelector("wt-input")!.value).toBe("Typed while it was sent");
+  expect(unload()).toBe(true);
+});
