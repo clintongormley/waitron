@@ -1834,8 +1834,9 @@ and nothing guards it across screens:
   `*.unsaved.test.ts` suites cover reconnect. Disable confirmations have no draft and stay `danger`.
   Slice 6 replaces the inline editors described in
   [the earlier Batch 4b table](../superpowers/plans/2026-10-07-a331-save-follows-changes.md#batch-4b--the-venue-service-screens-slice-1-rewrote-lane-b-a331-4b);
-- A429 slice 2: the floor plan editor page, whose Save sits in its header. Its leave cases are in
-  `apps/dashboard/src/screens/floor-plan-editor.unsaved.test.ts`;
+- A429 slice 2: the floor plan editor page, whose Save sits in its header, and its Add join
+  dialog. Their leave cases are in `apps/dashboard/src/screens/floor-plan-editor.unsaved.test.ts`
+  and `apps/dashboard/src/screens/floor-plan-add-join.unsaved.test.ts`;
 - batch 4c: the venue-service local holiday Add and Edit (its Remove and Forget stay `danger`
   confirmations, and the holiday area saves on choice); and the
   till's profile dialog, whose Switch waits until another profile is chosen. The profile dialog is
@@ -3552,7 +3553,7 @@ Venue settings' Receipts tab. The Zones tab shows the selected zone's normal-wee
 that opens that zone in Opening hours. Identical ranges share a day group; more than two groups
 show a day count. A week without closed ranges says the zone opens with its department. Named-day
 exceptions stay in Opening hours. Disabled zones have no hours summary or link.
-Beside it, Edit floor plan opens the zone's floor plan editor, whose Close returns to the zone; a
+Under it, Edit floor plan opens the zone's floor plan editor, whose Close returns to the zone; a
 disabled zone has no such link, and the zone's ⋮ menu does not offer it.
 Floor-plan previews remain separate work.
 

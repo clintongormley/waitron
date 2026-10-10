@@ -42,7 +42,7 @@ their full text.
   dishes at closure or Disable, and shows each station's computed times in Opening hours.
   The owner answered its decisions 29–37 on 2026-10-09; the changes
   to 29, 33 and 35 are built (A455), and 32 needed nothing.
-  Slice 6's remaining work is Part C's floor-plan entry,
+  Slice 6's remaining work is Part C's floor-plan preview and "Add a floor plan",
   in Lane D after A429. [Slice 6 plan](../superpowers/plans/2026-10-08-a366-slice-6-departments.md).
 
 ## Refresh service settings on an open till
