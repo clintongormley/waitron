@@ -15357,6 +15357,35 @@ describe("the device's equipment, chosen from the header", () => {
     expect(equipmentDialog(el)!.error).toEqual({ code: "printer.not_found" });
   });
 
+  it("after a reader.not_found refusal the list is read again, so a deleted reader drops out", async () => {
+    const R1 = item("R1", "Bar reader");
+    const before = structuredClone(initial);
+    before.roles[3]!.choices = [R1];
+    const after = structuredClone(initial);
+    const getDeviceEquipment = vi.fn().mockResolvedValue(before);
+    const el = await openEquipment({
+      getDeviceEquipment,
+      setDeviceEquipment: vi
+        .fn()
+        .mockRejectedValue({ code: "reader.not_found", params: { id: "R1" }, status: 400 }),
+    });
+    const reads = getDeviceEquipment.mock.calls.length;
+    getDeviceEquipment.mockResolvedValue(after);
+
+    emit(equipmentDialog(el)!, "equipment-change", {
+      role: "card_terminal",
+      selection: { id: "R1" },
+      via: "list",
+      takeOver: false,
+    } satisfies EquipmentChange);
+    await flush(el);
+    await flush(el);
+
+    expect(getDeviceEquipment).toHaveBeenCalledTimes(reads + 1);
+    expect(equipmentDialog(el)!.equipment).toEqual(after);
+    expect(equipmentDialog(el)!.error).toEqual({ code: "reader.not_found" });
+  });
+
   it("after any other refusal the list is not read again", async () => {
     const getDeviceEquipment = vi.fn().mockResolvedValue(initial);
     const el = await openEquipment({

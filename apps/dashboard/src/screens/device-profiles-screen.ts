@@ -1119,6 +1119,30 @@ export class DeviceProfilesScreen extends LitElement {
     }
   }
 
+  /** After a reader deleted elsewhere is refused, so it drops out of the list and the default. */
+  async #rereadReaders(profileId: string, opened: number, turn: number): Promise<void> {
+    try {
+      const [readers, list] = await Promise.all([
+        this.api.listReaders(),
+        this.api.getProfileReaders(profileId),
+      ]);
+      if (opened !== this.#opened || turn !== this.#saveTurn) return;
+      const exists = (id: string | null) => readers.some((reader) => reader.id === id);
+      this.readers = readers;
+      this.#loadedReaders = list;
+      this.#readerScope?.commit(list);
+      const draft = this.draftReaders;
+      this.draftReaders = {
+        readerIds: draft.readerIds.filter(exists),
+        defaultReaderId: exists(draft.defaultReaderId) ? draft.defaultReaderId : null,
+      };
+      this.#readerScope?.changed();
+    } catch (error) {
+      if (opened !== this.#opened || turn !== this.#saveTurn) return;
+      this.#showReadError(error);
+    }
+  }
+
   /** Drawn once read, and only where the venue has a reader or the profile still lists one. */
   #readersShown(): boolean {
     return (
@@ -1394,6 +1418,7 @@ export class DeviceProfilesScreen extends LitElement {
     readers: ProfileReaderList | null,
     scope: DraftScope<ProfileReaderList> | undefined,
     active: () => boolean,
+    turn: number,
   ): Promise<boolean> {
     if (readers === null || sameReaders(readers, this.#loadedReaders)) return true;
     try {
@@ -1401,6 +1426,8 @@ export class DeviceProfilesScreen extends LitElement {
     } catch (error) {
       if (!active()) return false;
       this.#keepEditing(saved, submitted);
+      if (codeOf(error) === "reader.not_found")
+        void this.#rereadReaders(saved.id, this.#opened, turn);
       const refused = this.#refusedField(error);
       if (refused === null) this.#showError(codeOf(error));
       else {
@@ -1482,7 +1509,7 @@ export class DeviceProfilesScreen extends LitElement {
       if (!active()) return;
       this.narrowed = (saved as { narrowedDevices?: NarrowedDevice[] }).narrowedDevices ?? [];
       scope?.commit(submitted);
-      if (!(await this.#saveReaders(saved, submitted, readers, readerScope, active))) return;
+      if (!(await this.#saveReaders(saved, submitted, readers, readerScope, active, turn))) return;
       if (scope?.isDirty() || readerScope?.isDirty()) this.#keepEditing(saved, submitted);
       else {
         this.#clearDraft();

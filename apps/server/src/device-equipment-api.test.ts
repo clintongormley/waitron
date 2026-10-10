@@ -2,9 +2,17 @@ import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { and, eq, inArray, sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { devices, locations, printerHolders, printers, withTransaction } from "@waitron/db";
+import {
+  billPayments,
+  devices,
+  locations,
+  printerHolders,
+  printers,
+  withTransaction,
+} from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
+import { loadKeyRing, putCredential } from "@waitron/credentials";
 import { startManagementSession } from "@waitron/identity";
 import { emptyPrinterLists, setProfilePrinterLists } from "@waitron/layouts";
 import type { ProfilePrinterLists } from "@waitron/layouts";
@@ -15,13 +23,16 @@ import {
   failAttempting,
   payments,
   setProfileReaderList,
+  type CardProviderContribution,
 } from "@waitron/payments";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
+import { prepareCardReaderDelete } from "./card-reader-delete.js";
 import { mountDeviceApi } from "./device-api.js";
 import type { EquipmentRole, RoleEquipment, RoleSummary } from "./device-equipment.js";
 import type { Logger } from "./logger.js";
 import { mountJoinApi } from "./join-api.js";
 import { createPairingMode } from "./pairing-mode.js";
+import { mountPaymentsApi } from "./payments-api.js";
 import { deletePrinter } from "./printer-delete.js";
 import { provisionBillVenue, send, tabWith, type BillVenue } from "./testing/bill-venue.js";
 
@@ -225,6 +236,19 @@ async function stalledPayment(cookie: string, readerId?: string) {
   const paid = await pay(cookie, readerId);
   expect(paid.status, JSON.stringify(paid.json)).toBe(200);
   return paid.workingOrderId;
+}
+
+function cardOnBill(billId: string, cookie: string, readerId?: string) {
+  return send(venue.app, cookie, "POST", `/api/working-orders/${billId}/payments`, {
+    submissionId: randomUUID(),
+    kind: "contribution",
+    amount: "5.00",
+    method: "card",
+    entry: "reader",
+    applied: "5.00",
+    tip: "0.00",
+    ...(readerId === undefined ? {} : { readerId }),
+  });
 }
 
 describe("choosing a portable printer, by scan or by a confirmed list choice", () => {
@@ -477,19 +501,6 @@ describe("paying only on a reader this device holds, with no other device's paym
   });
 
   describe("the bill payment route", () => {
-    function cardOnBill(billId: string, cookie: string, readerId?: string) {
-      return send(venue.app, cookie, "POST", `/api/working-orders/${billId}/payments`, {
-        submissionId: randomUUID(),
-        kind: "contribution",
-        amount: "5.00",
-        method: "card",
-        entry: "reader",
-        applied: "5.00",
-        tip: "0.00",
-        ...(readerId === undefined ? {} : { readerId }),
-      });
-    }
-
     it("refuses a reader this device does not hold as reader.not_held, charging nothing", async () => {
       const billId = await tabWith(venue, "Tarta");
       const calls = venue.card.collectCalls.length;
@@ -1083,5 +1094,227 @@ describe("a deleted printer named by a stale choice", () => {
 
     expect(res.status).toBe(204);
     expect(await columns(a)).toEqual({ receipt: null, slip: pp, drawer: null });
+  });
+});
+
+describe("a deleted reader", () => {
+  const RING = loadKeyRing({
+    WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 7).toString("base64"),
+    WAITRON_CREDENTIALS_KEY_VERSION: "1",
+  });
+  const unused = (): never => {
+    throw new Error("the fake seat is only asked to unpair");
+  };
+  let removed: string[];
+  /** Run inside the seat's `remove`, while a delete is at the provider. */
+  let duringRemove: () => Promise<void>;
+  /** The bill venue's `fake` provider as a seat that unpairs, recording each provider id removed. */
+  const fakeSeat: CardProviderContribution = {
+    providerId: "fake",
+    credentialPurpose: "payments.stripe",
+    credentialFields: [],
+    readerAdd: { kind: "reference", refLabelKey: "x" },
+    connect: unused,
+    build: unused,
+    readers: {
+      canUnpair: true,
+      list: unused,
+      add: unused,
+      status: unused,
+      remove: async (_deps, providerRef) => {
+        removed.push(providerRef);
+        await duringRemove();
+      },
+    },
+  };
+  let paymentsApp: Hono;
+
+  beforeEach(async () => {
+    removed = [];
+    duringRemove = async () => {};
+    await inTx((tx) =>
+      putCredential(tx, RING, {
+        purpose: "payments.stripe",
+        value: {
+          secretKey: "sk_test_deleted_reader",
+          webhookSecret: "whsec_test",
+          successUrl: "https://example.test/ok",
+          cancelUrl: "https://example.test/cancel",
+        },
+      }),
+    );
+    paymentsApp = new Hono();
+    mountPaymentsApi(
+      paymentsApp,
+      {
+        db: suite.db,
+        backend: venue.backend,
+        clock: venue.clock,
+        cfg: venue.cfg,
+        ring: RING,
+        environment: "preproduction",
+        pool: venue.pool,
+        providers: [fakeSeat],
+      },
+      quiet,
+    );
+  });
+
+  async function deleteReader(id: string) {
+    const res = await send(
+      paymentsApp,
+      managerCookie,
+      "DELETE",
+      `/management-api/payments/readers/${id}`,
+    );
+    expect(res.status, JSON.stringify(res.json)).toBe(200);
+  }
+
+  async function readerState() {
+    return {
+      choices: await readerChoices(),
+      holders: await suite.db.select().from(cardReaderHolders),
+    };
+  }
+
+  function billRowsOf(billId: string) {
+    return suite.db
+      .select({ state: billPayments.state })
+      .from(billPayments)
+      .where(eq(billPayments.workingOrderId, billId));
+  }
+
+  it.each([
+    ["list", undefined],
+    ["list", true],
+    ["scan", undefined],
+    ["scan", true],
+  ] as const)(
+    "the till choosing the deleted reader again by %s (takeOver %s) is 400 reader.not_found, changing nothing",
+    async (via, takeOver) => {
+      await deleteReader(r1);
+      expect(removed).toEqual(["reader-1"]);
+      const before = await readerState();
+
+      const res = await choose(venue.cookie, "card_terminal", { id: r1 }, via, takeOver);
+
+      expect(res.status).toBe(400);
+      expect(res.json).toEqual({ code: "reader.not_found", params: { id: r1 } });
+      expect(await readerState()).toEqual(before);
+    },
+  );
+
+  it("a scan taking over a deleted reader another device held is 400 reader.not_found", async () => {
+    await deleteReader(r2);
+    const before = await readerState();
+
+    const res = await choose(venue.cookie, "card_terminal", { id: r2 }, "scan", true);
+
+    expect(res.status).toBe(400);
+    expect(res.json).toEqual({ code: "reader.not_found", params: { id: r2 } });
+    expect(await readerState()).toEqual(before);
+  });
+
+  it("the till can still choose Use default, and an unlisted reader that is not deleted is still device.binding_invalid", async () => {
+    await deleteReader(r1);
+
+    expect((await choose(venue.cookie, "card_terminal", "default", "list")).status).toBe(200);
+    expect((await choose(venue.cookie, "card_terminal", { id: r3 }, "list")).status).toBe(200);
+    expect(await readerChoices()).toEqual({ [a]: r3, [b]: r2 });
+
+    const unlisted = await seedReader("Sin lista");
+    const res = await choose(venue.cookie, "card_terminal", { id: unlisted }, "scan", true);
+    expect(res.status).toBe(400);
+    expect(res.json).toEqual({
+      code: "device.binding_invalid",
+      params: { field: "cardReaderId" },
+    });
+  });
+
+  it("/api/pay naming the deleted reader is 404 reader.not_found, charging nothing and writing no payment", async () => {
+    await deleteReader(r1);
+    const calls = venue.card.collectCalls.length;
+
+    const named = await pay(venue.cookie, r1);
+
+    expect(named.status).toBe(404);
+    expect(named.json).toEqual({ code: "reader.not_found", params: { id: r1 } });
+    expect(await paymentsOf(named.workingOrderId)).toEqual([]);
+    expect(venue.card.collectCalls.length).toBe(calls);
+  });
+
+  it("a card bill payment naming the deleted reader is 404 reader.not_found, charging nothing", async () => {
+    await deleteReader(r1);
+    const billId = await tabWith(venue, "Tarta");
+    const calls = venue.card.collectCalls.length;
+
+    const paid = await cardOnBill(billId, venue.cookie, r1);
+
+    expect(paid.status).toBe(404);
+    expect(paid.json).toEqual({ code: "reader.not_found", params: { id: r1 } });
+    expect(await paymentsOf(billId)).toEqual([]);
+    expect(await billRowsOf(billId)).toEqual([]);
+    expect(venue.card.collectCalls.length).toBe(calls);
+  });
+
+  it("while the delete is at the provider, Enable is refused and a pay naming the reader is 404 reader.not_found, charging nothing", async () => {
+    const calls = venue.card.collectCalls.length;
+    let enabled: { status: number; json: unknown } | undefined;
+    let paid: Awaited<ReturnType<typeof pay>> | undefined;
+    duringRemove = async () => {
+      enabled = await send(
+        paymentsApp,
+        managerCookie,
+        "POST",
+        `/management-api/payments/readers/${r1}/enable`,
+      );
+      paid = await pay(venue.cookie, r1);
+    };
+
+    await deleteReader(r1);
+
+    expect(enabled).toMatchObject({
+      status: 409,
+      json: { code: "reader.unpair_in_progress", params: { readerId: r1 } },
+    });
+    expect(paid).toMatchObject({
+      status: 404,
+      json: { code: "reader.not_found", params: { id: r1 } },
+    });
+    expect(await paymentsOf(paid!.workingOrderId)).toEqual([]);
+    expect(venue.card.collectCalls.length).toBe(calls);
+  });
+
+  describe("once the delete has switched the reader off, before the provider is called", () => {
+    const prepare = (id: string) =>
+      inTx((tx) => prepareCardReaderDelete(tx, [fakeSeat], id)).then((plan) => {
+        expect(plan.unpairAtProvider).toBe(true);
+      });
+
+    it("control: before it, the same pays reach the provider", async () => {
+      const calls = venue.card.collectCalls.length;
+
+      const named = await pay(venue.cookie, r1);
+      const resolved = await pay(venue.cookie);
+
+      expect([named.status, resolved.status]).toEqual([200, 200]);
+      expect(venue.card.collectCalls.length).toBe(calls + 2);
+    });
+
+    it("a pay naming the reader and a pay on the device's own choice are 404 reader.not_found, writing no payment", async () => {
+      await prepare(r1);
+      const calls = venue.card.collectCalls.length;
+
+      const named = await pay(venue.cookie, r1);
+      const resolved = await pay(venue.cookie);
+
+      for (const res of [named, resolved]) {
+        expect(res.status).toBe(404);
+        expect(res.json).toEqual({ code: "reader.not_found", params: { id: r1 } });
+        expect(await paymentsOf(res.workingOrderId)).toEqual([]);
+      }
+      expect(venue.card.collectCalls.length).toBe(calls);
+      expect(removed).toEqual([]);
+    });
   });
 });

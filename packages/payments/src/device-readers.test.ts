@@ -291,6 +291,30 @@ describe("a device's card reader", () => {
     },
   );
 
+  it.each(["scan", "list", "manage"] as const)(
+    "refuses a deleted reader as deleted by %s, storing nothing, though the device holds nothing and its profile lists nothing",
+    async (via) => {
+      const s = await seed();
+      const [deleted] = await suite.db
+        .insert(cardReaders)
+        .values({
+          provider: "sumup",
+          providerRef: `deleted-${randomUUID()}`,
+          name: "deleted",
+          active: false,
+          deletedAt: new Date().toISOString(),
+        })
+        .returning({ id: cardReaders.id });
+      const id = deleted!.id;
+      const result = await inTx((tx) =>
+        selectDeviceReader(tx, { deviceId: s.deviceA, selection: { id }, via, takeOver: true }),
+      );
+      expect(result).toEqual({ ok: false, refusal: "deleted" });
+      expect(await chosen(s.deviceA)).toBeNull();
+      expect(await holders(id)).toEqual({});
+    },
+  );
+
   it("a listed, active reader is accepted", async () => {
     const s = await seed();
     await list(s, [s.r1]);

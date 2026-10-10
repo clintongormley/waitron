@@ -61,6 +61,28 @@ it("reads a device's delete impact passively after the first read, and sends its
   expect(active).toHaveBeenCalledTimes(2);
 });
 
+it("reads a card reader's delete impact passively after the first read, and sends its delete as activity", async () => {
+  const impact = { target: { id: "r1", name: "Barra" }, refusals: [], ends: [], removes: [] };
+  const fetchImpl = vi.fn<(path: string, init: RequestInit) => Promise<Response>>(
+    async () => new Response(JSON.stringify(impact), { status: 200 }),
+  );
+  const active = vi.fn();
+  const api = new DashboardApi("", fetchImpl, undefined, active);
+  const query = dashboardQuery(api, "getReaderDeleteImpact", ["r1"]);
+  expect(await query.read()).toEqual(impact);
+  await query.read();
+  expect(fetchImpl.mock.calls[1]![0]).toBe("/management-api/payments/readers/r1/delete-impact");
+  expect(fetchImpl.mock.calls[1]![1].method).toBe("GET");
+  expect(new Headers(fetchImpl.mock.calls[1]![1].headers).get("x-waitron-live")).toBe("1");
+  expect(active).toHaveBeenCalledOnce();
+
+  expect(await api.deleteReader("r1")).toEqual(impact);
+  expect(fetchImpl.mock.calls[2]![0]).toBe("/management-api/payments/readers/r1");
+  expect(fetchImpl.mock.calls[2]![1].method).toBe("DELETE");
+  expect(new Headers(fetchImpl.mock.calls[2]![1].headers).has("x-waitron-live")).toBe(false);
+  expect(active).toHaveBeenCalledTimes(2);
+});
+
 it.each([
   ["listOrderPages", [{ status: "all", anyDate: false, credited: false }, 1], "working_orders"],
   ["listOrderPages", [{ status: "all", anyDate: false, credited: false }, 1], "bill_payments"],
@@ -211,6 +233,22 @@ it.each([
       "device_profiles",
       "device_card_readers",
       "device_kitchen_screens",
+    ],
+  ],
+  // `cardReaderDeleteRules` (apps/server/src/card-reader-delete.ts): the reader, its payments in
+  // progress, and the devices, profiles and holders it would be taken from, each named. The
+  // provider check reads `tenant_credentials`, which no module declares as a live resource.
+  [
+    "getReaderDeleteImpact",
+    ["r1"],
+    [
+      "card_readers",
+      "payments",
+      "devices",
+      "device_profiles",
+      "device_card_readers",
+      "device_profile_card_readers",
+      "card_reader_holders",
     ],
   ],
   // `readProfileKitchenScreens` (packages/venue-service/src/kitchen-screens.ts): each profile's

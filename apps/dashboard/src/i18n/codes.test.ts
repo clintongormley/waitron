@@ -506,3 +506,21 @@ it.each([
     expect(codeMessage(code, language)).not.toBe(codeMessage("unmapped", language));
   }
 });
+
+it("says a card reader the provider could not unpair is left disabled, in English and Spanish", () => {
+  expect(codeMessage("reader.unpair_failed", "en")).toBe(
+    "Unpairing at the provider failed. The reader is disabled; try again.",
+  );
+  expect(codeMessage("reader.unpair_failed", "es")).toBe(
+    "No se pudo desvincular el lector en el proveedor. Queda deshabilitado; inténtalo de nuevo.",
+  );
+});
+
+it("says a card reader another request is unpairing or deleting can be tried again, in English and Spanish", () => {
+  expect(codeMessage("reader.unpair_in_progress", "en")).toBe(
+    "That card reader is being unpaired or deleted. Try again when that finishes.",
+  );
+  expect(codeMessage("reader.unpair_in_progress", "es")).toBe(
+    "Ese lector de tarjetas se está desvinculando o eliminando. Vuelve a intentarlo cuando termine.",
+  );
+});

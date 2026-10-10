@@ -3828,6 +3828,14 @@ export class DashboardApi {
     return this.#request<void>(`/management-api/payments/readers/${id}/unpair`, "POST");
   }
 
+  getReaderDeleteImpact(id: string): Promise<DeleteImpact> {
+    return this.#request(`/management-api/payments/readers/${id}/delete-impact`, "GET");
+  }
+
+  deleteReader(id: string): Promise<DeleteImpact> {
+    return this.#request(`/management-api/payments/readers/${id}`, "DELETE");
+  }
+
   getDeviceReader(id: string): Promise<{ readerId: string | null }> {
     return this.#request<{ readerId: string | null }>(
       `/management-api/payments/devices/${id}/reader`,

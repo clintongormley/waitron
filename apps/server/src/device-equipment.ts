@@ -319,7 +319,8 @@ export type EquipmentSelection = {
 /**
  * Sets one of the device's roles to Use default or to an item, taking it over from another device
  * only by a scan or a confirmed list choice. Refuses, writing nothing, an item the device may not
- * newly choose, a reader another device has a payment in progress on, and a held item otherwise.
+ * newly choose, a deleted reader (`reader.not_found`), a reader another device has a payment in
+ * progress on, and a held item otherwise.
  */
 export async function selectDeviceEquipment(
   tx: Transaction,
@@ -333,6 +334,9 @@ export async function selectDeviceEquipment(
       : await selectDevicePrinter(tx, { deviceId, role, selection, via, takeOver });
   if (result.ok) return;
   const field = FIELD[role];
+  if (result.refusal === "deleted") {
+    throw new AppError("reader.not_found", { id: (selection as { id: string }).id });
+  }
   if (result.refusal === "not_permitted") throw new AppError("device.binding_invalid", { field });
   if (result.refusal === "busy") {
     throw new AppError("reader.payment_in_progress", {

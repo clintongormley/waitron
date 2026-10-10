@@ -94,6 +94,16 @@ export const QUERY_DEPENDENCIES = {
   listRecentJobs: ["print_jobs", "printers", "print_agents"],
   listAgents: ["print_agents"],
   listReaders: ["card_readers", "device_card_readers", "device_profile_card_readers", "devices"],
+  // Its provider check also reads `tenant_credentials`, which no module declares as a live resource.
+  getReaderDeleteImpact: [
+    "card_readers",
+    "payments",
+    "devices",
+    "device_profiles",
+    "device_card_readers",
+    "device_profile_card_readers",
+    "card_reader_holders",
+  ],
   listReaderHolders: ["card_reader_holders", "payments"],
   getProfileReaders: ["device_profile_card_readers", "card_readers"],
   // The route reads `tenant_credentials`, which no module declares as a live resource.

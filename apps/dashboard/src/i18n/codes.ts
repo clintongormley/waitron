@@ -908,8 +908,16 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     es: "Ese lector de tarjetas ya no existe",
   },
   "reader.provider_disconnected": {
-    en: "Connect this payment provider before adding a reader for it",
-    es: "Conecta este proveedor de pagos antes de añadirle un lector",
+    en: "Connect this payment provider first",
+    es: "Conecta primero este proveedor de pagos",
+  },
+  "reader.unpair_failed": {
+    en: "Unpairing at the provider failed. The reader is disabled; try again.",
+    es: "No se pudo desvincular el lector en el proveedor. Queda deshabilitado; inténtalo de nuevo.",
+  },
+  "reader.unpair_in_progress": {
+    en: "That card reader is being unpaired or deleted. Try again when that finishes.",
+    es: "Ese lector de tarjetas se está desvinculando o eliminando. Vuelve a intentarlo cuando termine.",
   },
   "payment.provider_in_use": {
     en: "Disable this provider's card readers before disconnecting it",

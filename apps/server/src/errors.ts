@@ -217,13 +217,27 @@ declare module "@waitron/shared" {
     };
     /** No card reader with this id. `id` is the reader uuid the caller already holds, not a secret. */
     "reader.not_found": { id: string };
-    /** Adoption names a reference absent from the provider account. Public provider id only. */
+    /**
+     * Adoption names a reference absent from the provider account, or one an Unpair or Delete
+     * dropped there after the adoption's list request began. Public provider id only.
+     */
     "reader.not_listed": { providerId: string };
     /**
      * A reader operation was asked for a provider that has no sealed credential. `providerId` is the
      * public provider token (`"sumup"`/`"stripe"`), never a credential.
      */
     "reader.provider_disconnected": { providerId: string };
+    /**
+     * The provider's unpair call failed, so the reader was not deleted. `providerId` is the public
+     * provider token, never a credential.
+     */
+    "reader.unpair_failed": { providerId: string };
+    /**
+     * A Delete or Unpair of this reader is running, so a second one, an Enable, or an adoption of
+     * the same provider reader (`providerRef`) is refused until it ends. `readerId` is the reader's
+     * uuid, which the reader list shows under the same permission; not a secret.
+     */
+    "reader.unpair_in_progress": { readerId: string };
     /**
      * An active card reader's battery is at or below the warning floor — a dashboard alert, not a
      * thrown request error (`alert-sources.ts`). `reader` is the display name, `percent` a whole
