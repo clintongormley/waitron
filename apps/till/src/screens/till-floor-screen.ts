@@ -45,6 +45,7 @@ import "../widgets/seat-dialog.js";
 import "../widgets/today-seats-dialog.js";
 import "../widgets/bill-choice-dialog.js";
 import "../widgets/join-with-dialog.js";
+import "../widgets/floor-zone-menu.js";
 import type { JoinWithPickDetail } from "../widgets/join-with-dialog.js";
 import type { BillChoiceDetail } from "../widgets/bill-choice-dialog.js";
 import { otherPartyRead, partyScope } from "../widgets/table-targets.js";
@@ -55,6 +56,7 @@ import {
   type SheetAction,
   dropAction,
   pendingPlaces,
+  spareSpot,
 } from "../state/floor-today.js";
 import { partyPaid, unsentText } from "../widgets/table-details-sheet.js";
 import type { SeatConfirmDetail } from "../widgets/seat-dialog.js";
@@ -1004,6 +1006,40 @@ export class TillFloorScreen extends LitElement {
     ></till-bill-choice-dialog>`;
   }
 
+  /** Every action is a write through a `take-orders` route, so the menu needs `canChangeToday`. */
+  #zoneMenu(
+    planned: boolean,
+    activeKey: string | null | undefined,
+  ): TemplateResult | typeof nothing {
+    const zone = this.zones.find((each) => each.id === activeKey);
+    if (!planned || !this.canChangeToday || zone === undefined) return nothing;
+    return html`<till-floor-zone-menu
+      .zone=${zone}
+      .tables=${this.#zone.visible}
+      @zone-place-spare=${(event: Event) =>
+        this.#onZoneChange(event, (api, { tableId }) =>
+          api.placeSpareToday(tableId!, spareSpot(this.#zone.visible)),
+        )}
+      @zone-put-back=${(event: Event) =>
+        this.#onZoneChange(event, (api, { tableId }) => api.putBackToday(tableId!))}
+      @zone-reset=${(event: Event) =>
+        this.#onZoneChange(event, (api, { zoneId }) => api.resetZoneToday(zoneId!))}
+    ></till-floor-zone-menu>`;
+  }
+
+  #onZoneChange(
+    event: Event,
+    call: (api: TillApi, detail: { tableId?: string; zoneId?: string }) => Promise<void>,
+  ): void {
+    event.stopPropagation();
+    this.refusal = null;
+    const api = this.api;
+    if (api === undefined) return;
+    void this.#settle(
+      call(api, (event as CustomEvent<{ tableId?: string; zoneId?: string }>).detail),
+    );
+  }
+
   #requestFloorRefresh(): void {
     this.dispatchEvent(new CustomEvent("floor-refresh", { bubbles: true, composed: true }));
   }
@@ -1166,6 +1202,7 @@ export class TillFloorScreen extends LitElement {
                 </wt-button>`
               : nothing
           }
+          ${this.#zoneMenu(planned, activeKey)}
         </div>
         ${
           tabs.length > 0
