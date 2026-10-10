@@ -1906,7 +1906,7 @@ applied), each zone's closed ranges as slice 2's reader gives them, each period'
 `routing-store.ts:302`, M) with the moment's period set to the period being tested. At most 42
 days per call (`management.request_invalid` beyond).
 
-- [ ] Steps: failing tests (review focus 9's three cases; the default station answers `always:
+- [x] Steps: failing tests (review focus 9's three cases; the default station answers `always:
   "default"`; a switched-off one `switched_off`; a station no routing reaches has no ranges);
   watch them fail (`pnpm --filter @waitron/venue-service exec vitest run --project node src/station-service-times.test.ts`);
   implement; the node project; typecheck; commit
@@ -2081,3 +2081,32 @@ B8 needs Part A's `routing-periods.ts` reader and period-aware routing selection
 `feat/service-periods-slice-4-part-a`. Reconcile after that branch lands; do not duplicate its
 reader or cherry-pick another lane's unlanded work. If migration numbering collides on rebase,
 regenerate from the new main schema/journal and repeat the specified guards.
+
+### Part B reconciliation and B8 checkpoint — 2026-10-10
+
+Part A #1489 is on the branch's base. The reconciliation retains its station editor, period
+choices and monitor tables. Station-hours retirement is regenerated as venue-service 0047;
+core 0126 adds the retained-at-release flag. Reconciliation checks ran 1,704 node, 557 browser
+and 213 server cases, the schema/upgrade/subscription suites (357) and unedited fiscal suites
+(20); the five affected packages typechecked.
+
+B8 adds `station-service-times.ts` and the read-only station service-times route. Its 26 reader
+cases cover Lunch-only routing, own and repeating named days, zone subtraction and unions,
+multiple departments, staff menus and parent routing for variants, overnight ranges, inactive
+content, daily override/extension exclusion, venue isolation and the date bound. The route
+cases check manager/supervisor reads, staff/anonymous refusals, invalid ranges and actual
+non-default period ranges. `pnpm --filter @waitron/venue-service exec vitest run --project node`
+ran 1,738 cases; affected-package types and focused lint/format passed. In an installed
+throwaway checkout, removing the station's venue predicate failed its foreign-station case;
+removing this route's read authorization failed its staff case (200 instead of 403). Restoring
+both passed the two reader cases and seven route cases selected for those controls.
+
+The dashboard Disable/send path also needs an audit representation for an authenticated manager
+with no registered device. Core 0127 is a proposal: a nullable device foreign key and a CHECK
+requiring a device or person. The former device-required schema case becomes a person-only
+write plus refusal of a write naming neither actor. This proposal waits for the owner under the
+campaign's controversial-test-change rule. It must be approved or revised before landing.
+
+Remaining: B9, B12's full prose audit, B1/B2 cross-package qualification, final visual inspection,
+two whole-branch Claude reviews, normal push hook and current-head CI. This checkpoint is not
+ready for finish-branch.

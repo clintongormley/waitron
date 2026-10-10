@@ -294,6 +294,7 @@ function requirePreviewChange(body: Record<string, unknown>): RoutingChange {
   return { kind: "cell", ...requireCellChange(body) };
 }
 
+import { stationServiceTimes } from "./station-service-times.js";
 import { readNamedDaysModel } from "./named-days.js";
 
 export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
@@ -317,6 +318,18 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
         await authorizeManager(tx, { managementSessionId: sessionId, permission: "venue.view" });
         return fn(tx);
       });
+
+    app.get("/management-api/venue-service/stations/:stationId/service-times", (c) =>
+      run(c, log, async () => {
+        const sessionId = requireManagementSession(c);
+        const stationId = requireUuidParam(c.req.param("stationId"), "stationId");
+        const from = c.req.query("from") ?? "";
+        const to = c.req.query("to") ?? "";
+        return c.json(
+          await viewed(sessionId, (tx) => stationServiceTimes(tx, ctx.cfg, stationId, from, to)),
+        );
+      }),
+    );
 
     app.get("/management-api/venue-service/named-days", (c) =>
       run(c, log, async () => {

@@ -62,3 +62,9 @@ export { withdrawPendingDepartmentTransfers } from "./department-transfer-lifecy
 export { readNamedDaysModel, namedDaysOn, namedDaysBetween } from "./named-days.js";
 
 export { replaceZoneClosedWeek } from "./zone-closed-times.js";
+
+export {
+  stationServiceTimes,
+  type StationServiceDay,
+  type StationServiceTimes,
+} from "./station-service-times.js";
