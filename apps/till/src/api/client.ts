@@ -1254,6 +1254,12 @@ export interface QueueGroup {
 
 /** One ticket item on a station's queue; `id` is the per-line bump target. */
 export interface StationQueueItem {
+  lastMove?: {
+    fromStationName: string;
+    personName: string | null;
+    deviceName: string | null;
+    movedAt: string;
+  };
   /** The dish's frozen answers to its options lists; absent on a line that answered none and on
    *  every child line. The six names per answer are the server's, copied by value. */
   optionSnapshots?: OptionSnapshot[];

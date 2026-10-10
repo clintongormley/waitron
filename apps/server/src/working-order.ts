@@ -1,3 +1,4 @@
+import { readStationQueueMoves, type StationQueueMove } from "./station-queue-moves.js";
 import {
   checkedInvoiceChoiceDelivery,
   reserveStagedInvoiceDelivery,
@@ -6213,6 +6214,7 @@ export interface QueueGroup {
 }
 
 export interface StationQueueItem {
+  lastMove?: StationQueueMove;
   id: string;
   workingOrderLineId: string;
   state: TicketState;
@@ -6527,6 +6529,10 @@ export async function listStationQueues(
     // `line_no` breaks the tie between lines fired together with an identical `queued_at`.
     .orderBy(ticketItems.queuedAt, workingOrderLines.lineNo);
 
+  const lastMoves = await readStationQueueMoves(
+    tx,
+    rows.map((row) => row.workingOrderLineId),
+  );
   const { modifiersByParent, crossRefsByLine, asServedByParent } = await readQueueSubItems(
     tx,
     rows.map((row) => row.workingOrderLineId),
@@ -6602,9 +6608,20 @@ export async function listStationQueues(
       };
       groups.set(row.orderId, group);
     }
+    const move = lastMoves.get(row.workingOrderLineId);
+    const lastMove =
+      move?.toStationId === stationId
+        ? {
+            fromStationName: move.fromStationName,
+            personName: move.personName,
+            deviceName: move.deviceName,
+            movedAt: move.movedAt,
+          }
+        : undefined;
     group.items.push({
       id: row.itemId,
       workingOrderLineId: row.workingOrderLineId,
+      ...optional("lastMove", lastMove),
       state: row.state,
       name: kitchenPresentationName(row),
       optionSnapshots: row.optionSnapshots,

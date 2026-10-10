@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { eq, inArray } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { deviceProfiles, ticketItemMoves, ticketItems } from "@waitron/db";
+import { devices, deviceProfiles, ticketItemMoves, ticketItems } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import type { DeviceKitchenScreen } from "@waitron/module";
@@ -134,6 +134,35 @@ describe("POST /api/device/working-orders/:id/lines/move-station", () => {
       reroutedTo: "Grill",
       workingOrderId: tabId,
     });
+  });
+
+  it("the receiving kitchen display reads the move's device when nobody was signed in", async () => {
+    const source = await display(stationScreen(bar));
+    const receiving = await display(stationScreen(grill));
+    const { tabId, item } = await paella();
+    const answer = await move(source.cookie, tabId, {
+      lineIds: [item.workingOrderLineId],
+      stationId: grill,
+    });
+    expect(answer.status).toBe(200);
+    await inTx(venue, (tx) =>
+      tx.update(devices).set({ label: "Kitchen display" }).where(eq(devices.id, source.id)),
+    );
+    const [record] = await movesOf(item.workingOrderLineId);
+    const screen = await send(app, receiving.cookie, "GET", "/api/device/station-screen");
+    expect(screen.status).toBe(200);
+    const station = (
+      screen.json.stations as { id: string; queue: { orderId: string; items: unknown[] }[] }[]
+    ).find((row) => row.id === grill)!;
+    expect(station.queue.find((row) => row.orderId === tabId)!.items[0]).toHaveProperty(
+      "lastMove",
+      {
+        fromStationName: "Bar",
+        personName: null,
+        deviceName: "Kitchen display",
+        movedAt: record!.movedAt,
+      },
+    );
   });
 
   it("refuses a dish at a station the screen does not work, and moves nothing", async () => {

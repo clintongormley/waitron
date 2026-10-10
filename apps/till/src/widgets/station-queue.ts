@@ -5,7 +5,7 @@ import { LitElement, type TemplateResult, css, html, nothing } from "lit";
 import { customElement, property } from "lit/decorators.js";
 import { TickingClock, baseStyles, registerIcons } from "@waitron/ui";
 import { BAND_RANK, type TimingBand, classifyBand } from "@waitron/shared";
-import { currentLocale, t } from "../i18n/t.js";
+import { clockTime, currentLocale, t } from "../i18n/t.js";
 import { allergenName } from "../i18n/allergen-names.js";
 import { dietBadgeStyles, dietBadges, extraNutrition } from "./diet-badges.js";
 import { dishLine, snapshotDescriptionFor } from "./dish-format.js";
@@ -378,6 +378,11 @@ export class TillStationQueue extends LitElement {
         white-space: nowrap;
       }
 
+      .line-move {
+        overflow-wrap: anywhere;
+      }
+
+      .line-move,
       .line-state {
         color: var(--wt-color-text-muted);
         font-size: var(--wt-font-size-sm);
@@ -1074,6 +1079,20 @@ export class TillStationQueue extends LitElement {
           ? nothing
           : html`<span class="line-station" data-line-station>${station}</span>`
       }`;
+    const move = item.lastMove;
+    const attribution =
+      move === undefined
+        ? nothing
+        : html`<span class="line-move" data-last-move
+            >${[
+              t("station.moved_from").replace("{station}", () => move.fromStationName),
+              move.personName,
+              move.deviceName,
+              clockTime(new Date(move.movedAt)),
+            ]
+              .filter((part) => part !== null)
+              .join(" · ")}</span
+          >`;
     const customisation = this.#customisation(item);
     const modifiers = this.#modifiers(item);
     const crossRefs = queueCrossRefs(item, "line");
@@ -1086,7 +1105,7 @@ export class TillStationQueue extends LitElement {
         ? html`<span
             class="line state-${item.state} ${held ? "held" : "terminal"}"
             data-item=${item.id}
-            >${main}${customisation}${modifiers}${crossRefs}${allergens}${diet}</span
+            >${main}${attribution}${customisation}${modifiers}${crossRefs}${allergens}${diet}</span
           >`
         : html`<button
             class="line state-${item.state}"
@@ -1094,7 +1113,7 @@ export class TillStationQueue extends LitElement {
             aria-label=${this.#bumpLabel(group)}
             @click=${() => this.#bump(group, item, next)}
           >
-            ${main}${customisation}${modifiers}${crossRefs}${allergens}${diet}
+            ${main}${attribution}${customisation}${modifiers}${crossRefs}${allergens}${diet}
           </button>`;
     if (!this.#movable(item)) return line;
     return html`<div class="movable">

@@ -11941,6 +11941,24 @@ describe("persistent till destinations", () => {
     expect(fresh.shadowRoot!.querySelector(selector)).not.toBeNull();
   });
 
+  it.each([true, false])(
+    "the till Station view offers moves only with Take orders (%s)",
+    async (allowed) => {
+      const { el } = await mountApp({
+        getTill: vi
+          .fn()
+          .mockResolvedValue({
+            ...till,
+            capabilities: ["show-station", ...(allowed ? ["take-orders"] : [])],
+          }),
+      });
+      await toCounter(el);
+      emit(el.shadowRoot!.querySelector("till-tab-shell")!, "show-station");
+      await flush(el);
+      expect(station(el)!.canMoveStation).toBe(allowed);
+    },
+  );
+
   it("restores selected stations and ignores a departed station list request", async () => {
     const second = { ...defaultStation, id: "st-bar", name: "Bar", isDefault: false };
     const { el } = await mountApp({

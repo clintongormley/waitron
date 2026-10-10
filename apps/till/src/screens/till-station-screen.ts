@@ -215,7 +215,6 @@ export class TillStationScreen extends LitElement {
   @property({ attribute: false }) deviceId?: string;
   /** Mounted inside a card host, which supplies the header; the view toggle and the out-of-date banner stay. */
   @property({ type: Boolean }) embedded = false;
-  /** The device's profile allows Take orders; a kitchen display then offers Move on waiting dishes. */
   @property({ type: Boolean }) canMoveStation = false;
 
   @state() private stations: Station[] = [];
@@ -705,7 +704,7 @@ export class TillStationScreen extends LitElement {
   }
 
   #canMove(): boolean {
-    return this.deviceMode && this.canMoveStation;
+    return this.canMoveStation;
   }
 
   async #onMoveStation(event: Event): Promise<void> {
@@ -718,7 +717,9 @@ export class TillStationScreen extends LitElement {
     this.moveErrorCode = undefined;
     const limit = limited(READ_LIMIT_MS);
     try {
-      const stations = await this.api.deviceStations({ signal: limit.signal });
+      const stations = await (this.deviceMode
+        ? this.api.deviceStations({ signal: limit.signal })
+        : this.api.listStations({ signal: limit.signal }));
       this.moving = { ...detail, stations, busy: false, refusal: null };
     } catch (error) {
       if (!this.#switched(error)) {
@@ -740,7 +741,10 @@ export class TillStationScreen extends LitElement {
     const limit = limited(TABLE_REQUEST_LIMIT_MS);
     try {
       await resendUnanswered(
-        (signal) => this.api.deviceMoveDishStation(open.workingOrderId, body, { signal }),
+        (signal) =>
+          this.deviceMode
+            ? this.api.deviceMoveDishStation(open.workingOrderId, body, { signal })
+            : this.api.moveDishStation(open.workingOrderId, body, { signal }),
         limit.signal,
         () => this.isConnected,
       );
