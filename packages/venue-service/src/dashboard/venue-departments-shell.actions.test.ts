@@ -3,6 +3,7 @@ import { applyTokens } from "@waitron/ui";
 import { page, userEvent } from "vitest/browser";
 import { setLocale, type DashboardRequest } from "@waitron/dashboard-kit";
 import { VenueServiceApi, type VenueServiceView } from "./client.js";
+import { departmentHoursModel } from "../testing/department-hours-fixture.js";
 import "./venue-departments-shell.js";
 
 const initialUrl = location.href;
@@ -71,7 +72,12 @@ async function mount(
     if (url.endsWith("/removal-impact")) return { zones: [] };
     return { departmentId: "d1", receivingProfileId: null, destinationDepartmentIds: [] };
   });
-  shell.api = new VenueServiceApi(request as DashboardRequest);
+  shell.api = new VenueServiceApi(((...args: Parameters<DashboardRequest>) => {
+    const [url, method] = args;
+    if (url === "/management-api/venue-service/opening-hours" && method === "GET")
+      return Promise.resolve(departmentHoursModel());
+    return (request as DashboardRequest)(...args);
+  }) as DashboardRequest);
   shell.model = model;
   hosts.push(shell);
   document.body.append(shell);

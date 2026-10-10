@@ -6,7 +6,7 @@ their full text.
 ## Service times, departments, zones and prep stations (A366, owner 2026-10-07) — SPEC APPROVED 2026-10-07
 
 - **Service times, departments, zones and prep stations (A366, owner 2026-10-07) — SPEC
-  APPROVED 2026-10-07; remaining work is slice 4 Part B, slice 7, slice 5 Part B and slice 6 Parts B/C, each planned
+  APPROVED 2026-10-07; remaining work is slice 4 Part B, slice 7, slice 5 Part B and slice 6 Part C, each planned
   then built without stopping for the owner**
   ([slice 1 plan](../superpowers/plans/2026-10-07-a366-slice-1-service-periods.md); slice 2 plan
   written ahead: [slice 2 plan](../superpowers/plans/2026-10-08-a366-slice-2-zone-closed-times-and-named-days.md)). Opening hours and the menu timetable become one idea: a period is
@@ -38,8 +38,8 @@ their full text.
   numbers removed. Part B, still to build and re-grounded on main first: station hours and
   fallbacks removed, closing a station with open dishes asks what to do with them, and each
   station's worked-out times. Its new decisions 29–37 wait for the owner.
-  Slice 6's remaining work is Part B's closed-times summary and Part C's floor-plan entry,
-  in Lane D after slice 2/A429. [Slice 6 plan](../superpowers/plans/2026-10-08-a366-slice-6-departments.md).
+  Slice 6's remaining work is Part C's floor-plan entry,
+  in Lane D after A429. [Slice 6 plan](../superpowers/plans/2026-10-08-a366-slice-6-departments.md).
 
 ## Refresh service settings on an open till
 

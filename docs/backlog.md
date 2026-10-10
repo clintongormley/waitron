@@ -1288,11 +1288,11 @@ _Formerly entries spread across the old sections, A261's venue-operations steps 
   working assumption, to confirm before go-live. Hours moved to A254.
 
 - **Service times, departments, zones and prep stations (A366, owner 2026-10-07) — SPEC
-  APPROVED 2026-10-07; remaining work is slice 4 Part B, slice 7, slice 5 Part B and slice 6 Parts B/C.**
+  APPROVED 2026-10-07; remaining work is slice 4 Part B, slice 7, slice 5 Part B and slice 6 Part C.**
   Slice 4 Part A is built: combined tickets on shared printers, which retiring watchers (slice 5
   Part B) waited for, period choices in routing cells and the station editor. Station-hours and
   fallback retirement (slice 4 Part B) and department receipts (slice 7) remain. Slice 6's
-  remaining parts add the closed-times summary and floor-plan entry. Slice 7's 2026-10-10 docs
+  remaining part adds the floor-plan entry. Slice 7's 2026-10-10 docs
   revision is complete; its build remains open after landed 3A/6A.
   Keep live venue defaults, omit optional current address on A4, and add no consent step.
   [Detail](backlog/service-periods.md#service-times-departments-zones-and-prep-stations-a366-owner-2026-10-07--spec-approved-2026-10-07)

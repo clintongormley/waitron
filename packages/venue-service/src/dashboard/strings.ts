@@ -34,6 +34,12 @@ const en = {
   "named.field_refused": "Check this field.",
   "named.station_hours": "This day has station hours. Remove them in Station hours first.",
 
+  "venue.zone_open_with_department": "Open whenever the department is",
+  "venue.zone_closed_days": "Closed at some times on {count} days",
+  "venue.zone_day_range": "{start} to {end}",
+  "venue.zone_closed_summary": "Closed {groups}",
+  "venue.zone_closed_from": "from {time}",
+  "venue.zone_opening_hours": "Opening hours (normal week)",
   "opening.title": "Opening hours",
   "opening.all_departments": "All departments",
   "opening.zone_placeholder": "{name}: closed times",
@@ -720,6 +726,12 @@ const es: Record<keyof typeof en, string> = {
   "named.station_hours":
     "Este día tiene horarios de estaciones. Elimínalos primero en Horarios de estaciones.",
 
+  "venue.zone_open_with_department": "Abierta cuando lo está el departamento",
+  "venue.zone_closed_days": "Cerrada en algunas franjas de {count} días",
+  "venue.zone_day_range": "{start} a {end}",
+  "venue.zone_closed_summary": "Cerrada {groups}",
+  "venue.zone_closed_from": "desde {time}",
+  "venue.zone_opening_hours": "Horario de apertura (semana normal)",
   "opening.title": "Horario de apertura",
   "opening.all_departments": "Todos los departamentos",
   "opening.zone_placeholder": "{name}: horarios de cierre",

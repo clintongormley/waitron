@@ -6,6 +6,20 @@ import { setLocale, type DashboardRequest } from "@waitron/dashboard-kit";
 import { VenueServiceApi } from "./client.js";
 import { zonesModel } from "../testing/department-zones-fixture.js";
 import "./department-zones.js";
+function settingsApi(request: DashboardRequest) {
+  return new VenueServiceApi(((path, method, body, options) => {
+    if (path === "/management-api/venue-service/opening-hours")
+      return Promise.resolve({
+        timeZone: "Europe/Madrid",
+        clockReadable: true,
+        dayCutover: "06:00",
+        menus: [],
+        namedDays: [],
+        departments: [],
+      });
+    return request(path, method, body, options);
+  }) as DashboardRequest);
+}
 let el: HTMLElementTagNameMap["department-zones"];
 beforeEach(() => setLocale("en"));
 afterEach(() => {
@@ -70,7 +84,7 @@ it("selects the first zone when none is named and shows Add in an empty departme
 it("shows only inherited placeholders, clears to null and saves all four settings once", async () => {
   await mount("z3");
   const writes: unknown[] = [];
-  el.api = new VenueServiceApi((async (path, method, body) => {
+  el.api = settingsApi((async (path, method, body) => {
     writes.push({ path, method, body });
   }) as DashboardRequest);
   expect(button("save-zone").disabled).toBe(true);
@@ -174,7 +188,7 @@ it("a disabled zone stays visible and read-only, offering Enable only under an a
 });
 it("marks a field refusal, keeps retry available and shows a bottom message", async () => {
   await mount();
-  el.api = new VenueServiceApi((async () => {
+  el.api = settingsApi((async () => {
     throw { code: "management.request_invalid", params: { field: "paidWhen" } };
   }) as DashboardRequest);
   await change({ paidWhen: "ticket_then_pay" });
@@ -206,7 +220,7 @@ it("keeps a draft over a live refresh, but a pristine editor takes new values", 
 it("a save locks row actions and zone switching until it settles", async () => {
   await mount();
   let finish!: () => void;
-  el.api = new VenueServiceApi(
+  el.api = settingsApi(
     (() => new Promise<void>((resolve) => (finish = resolve))) as DashboardRequest,
   );
   await change({ orderStart: "counter" });
@@ -226,7 +240,7 @@ it("a save locks row actions and zone switching until it settles", async () => {
 });
 it("a refused setting focuses its native control", async () => {
   await mount();
-  el.api = new VenueServiceApi((async () => {
+  el.api = settingsApi((async () => {
     throw { code: "management.request_invalid", params: { field: "paidWhen" } };
   }) as DashboardRequest);
   await change({ paidWhen: "ticket_then_pay" });
@@ -246,7 +260,7 @@ it("Cancel without a shell restores the baseline, and choice Enter does not subm
   expect(fields().value.orderStart).toBe(null);
   expect(button("save-zone").disabled).toBe(true);
   const writes: unknown[] = [];
-  el.api = new VenueServiceApi((async (_path, _method, body) => {
+  el.api = settingsApi((async (_path, _method, body) => {
     writes.push(body);
   }) as DashboardRequest);
   await change({ paidWhen: "ticket_then_pay" });
@@ -303,7 +317,7 @@ it("a removed zone releases its form, while a zone with no policy starts by inhe
 });
 it("an unshown field refusal stays at the bottom instead of marking a service field", async () => {
   await mount();
-  el.api = new VenueServiceApi((async () => {
+  el.api = settingsApi((async () => {
     throw { code: "management.request_invalid", params: { field: "name" } };
   }) as DashboardRequest);
   await change({ orderStart: "counter" });
@@ -324,7 +338,7 @@ it.each([
   "a refused %s survives a different service edit until its own value changes",
   async (refused, corrected, other, value) => {
     await mount();
-    el.api = new VenueServiceApi((async () => {
+    el.api = settingsApi((async () => {
       throw { code: "management.request_invalid", params: { field: refused } };
     }) as DashboardRequest);
     await change({ orderStart: "table" });
@@ -385,7 +399,7 @@ it.each([
     await el.updateComplete;
     let finish!: () => void;
     const writes: unknown[] = [];
-    el.api = new VenueServiceApi((async (path, method, body) => {
+    el.api = settingsApi((async (path, method, body) => {
       writes.push({ path, method, body });
       await new Promise<void>((resolve) => {
         finish = resolve;
@@ -464,7 +478,7 @@ it.each([
           },
         },
       ]);
-      el.api = new VenueServiceApi((async (path, method, body) => {
+      el.api = settingsApi((async (path, method, body) => {
         writes.push({ path, method, body });
         throw { code: "connection.failed" };
       }) as DashboardRequest);
@@ -505,7 +519,7 @@ it.each([
     el.model = { ...el.model!, salePolicies: { ...el.model!.salePolicies, zones: [] } };
     await el.updateComplete;
     const writes: unknown[] = [];
-    el.api = new VenueServiceApi((async (path, method, body) => {
+    el.api = settingsApi((async (path, method, body) => {
       writes.push({ path, method, body });
       throw new Error("offline");
     }) as DashboardRequest);
