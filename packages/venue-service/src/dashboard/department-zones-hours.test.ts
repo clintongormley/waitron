@@ -2,7 +2,7 @@ import { afterEach, beforeEach, expect, it } from "vitest";
 import { applyTokens } from "@waitron/ui";
 import { setLocale, type DashboardRequest } from "@waitron/dashboard-kit";
 import type { OpeningHoursModel } from "../menu-timetable-types.js";
-import { zonesModel } from "../testing/department-zones-fixture.js";
+import { placedZonePlan, zonesModel } from "../testing/department-zones-fixture.js";
 import { VenueServiceApi } from "./client.js";
 import "./department-zones.js";
 import { departmentHoursModel as model } from "../testing/department-hours-fixture.js";
@@ -15,9 +15,11 @@ afterEach(() => {
 });
 async function mount(hours: OpeningHoursModel, request?: DashboardRequest) {
   el = document.createElement("department-zones");
-  el.api = new VenueServiceApi(
-    request ?? ((async () => structuredClone(hours)) as DashboardRequest),
-  );
+  const answer = request ?? ((async () => structuredClone(hours)) as DashboardRequest);
+  el.api = new VenueServiceApi(((path, ...rest) =>
+    path.endsWith("/floor-plan")
+      ? Promise.resolve(structuredClone(placedZonePlan))
+      : answer(path, ...rest)) as DashboardRequest);
   el.model = structuredClone(zonesModel);
   el.departmentId = "d1";
   el.zone = "z1";

@@ -43,6 +43,13 @@ export const QUERY_DEPENDENCIES = {
     "holiday_geographies",
   ],
   holidays: ["tenants", "locations", "holiday_geographies", "special_dates"],
+  "floor-plan": [
+    "floor_plans",
+    "floor_plan_tables",
+    "floor_plan_joins",
+    "floor_plan_join_tables",
+    "dining_tables",
+  ],
   "opening-hours": [
     "menu_periods",
     "menu_period_staff_menus",

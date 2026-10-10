@@ -5,7 +5,7 @@ import { setLocale, type DashboardRequest } from "@waitron/dashboard-kit";
 import { cleanup, host, formMessageOf } from "@waitron/ui/src/test-helpers.js";
 import { mountThemed, expectNoA11yViolations } from "@waitron/ui/src/a11y-helpers.js";
 import { VenueServiceApi } from "./client.js";
-import { zonesModel } from "../testing/department-zones-fixture.js";
+import { placedZonePlan, zonesModel } from "../testing/department-zones-fixture.js";
 import "./department-zones.js";
 registerIcons({
   kebab:
@@ -17,7 +17,7 @@ afterEach(() => {
   setLocale("en");
 });
 describe.each(["light", "dark"] as const)("Zones (%s)", (theme) => {
-  it.each(["active", "disabled", "empty", "refusal", "menu"] as const)(
+  it.each(["active", "preview", "disabled", "empty", "refusal", "menu"] as const)(
     "%s is accessible",
     async (state) => {
       setLocale("en");
@@ -30,10 +30,20 @@ describe.each(["light", "dark"] as const)("Zones (%s)", (theme) => {
       el.zone = "z2";
       if (state === "disabled") el.model.zones[1]!.active = false;
       if (state === "empty") el.model.zones = [];
-      el.api = new VenueServiceApi((async () => {
+      el.api = new VenueServiceApi((async (path: string) => {
+        if (state === "preview" && path.endsWith("/floor-plan")) return placedZonePlan;
         throw { code: "management.request_invalid", params: { field: "paidWhen" } };
       }) as DashboardRequest);
       await el.updateComplete;
+      if (state === "preview")
+        await expect
+          .poll(() =>
+            el
+              .shadowRoot!.querySelector("wt-floor-plan-preview")
+              ?.shadowRoot?.querySelector("[role=img]")
+              ?.getAttribute("aria-label"),
+          )
+          .toBe("Floor plan: Bar");
       if (state === "refusal") {
         const fields = el.shadowRoot!.querySelector("dashboard-service-settings-fields")!;
         fields.dispatchEvent(

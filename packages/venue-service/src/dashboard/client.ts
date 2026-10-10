@@ -1,4 +1,7 @@
 import type { DashboardRequest, LiveData } from "@waitron/dashboard-kit";
+import type { PlanPlacement } from "@waitron/ui";
+import { QUERY_DEPENDENCIES } from "./live-queries.js";
+import { ModelWatches } from "./model-watch.js";
 import { OpeningHoursApi } from "./opening-hours-client.js";
 
 export type ServiceMode = "table_tab" | "prepay" | "ticket_then_pay";
@@ -65,6 +68,18 @@ export interface NamedRow {
 export interface FloorZone extends NamedRow {
   active?: boolean;
 }
+/** The part of a zone's master plan the zone panel draws (`ZonePlan`, apps/server/src/floor-plan.ts). */
+export interface ZoneFloorPlan {
+  zoneId: string;
+  revision: number;
+  tables: {
+    id: string | null;
+    liveTableId: string | null;
+    label: string;
+    fixed: boolean;
+    placement: PlanPlacement | null;
+  }[];
+}
 export interface VenueServiceModel {
   departments: Department[];
   zones: ServiceZone[];
@@ -104,12 +119,36 @@ export interface DepartmentTransfersView {
 
 export class VenueServiceApi {
   readonly openingHours: OpeningHoursApi;
+  readonly #watches: ModelWatches;
   constructor(
     private readonly request: DashboardRequest,
     readonly liveData?: LiveData,
     private readonly passive = false,
   ) {
     this.openingHours = new OpeningHoursApi(request, liveData);
+    this.#watches = new ModelWatches(liveData);
+  }
+
+  watchZoneFloorPlan(
+    zoneId: string,
+    apply: (plan: ZoneFloorPlan) => void,
+    failed: (error: unknown) => void,
+    recovered: () => void,
+  ): () => void {
+    return this.#watches.watch(
+      `venue-service:floor-plan:${zoneId}`,
+      QUERY_DEPENDENCIES["floor-plan"],
+      () =>
+        this.request<ZoneFloorPlan>(
+          `/management-api/zones/${encodeURIComponent(zoneId)}/floor-plan`,
+          "GET",
+          undefined,
+          { passive: true },
+        ),
+      apply,
+      failed,
+      recovered,
+    );
   }
 
   get background(): VenueServiceApi {

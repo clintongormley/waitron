@@ -11,8 +11,14 @@ import {
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-row-actions.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
+import "@waitron/ui/src/components/wt-floor-plan-preview.js";
 import "./service-settings-fields.js";
-import type { VenueServiceApi, VenueServiceView, ZoneServiceSettingsInput } from "./client.js";
+import type {
+  VenueServiceApi,
+  VenueServiceView,
+  ZoneFloorPlan,
+  ZoneServiceSettingsInput,
+} from "./client.js";
 import { t } from "./strings.js";
 import { currentLocale } from "@waitron/dashboard-kit";
 import type { OpeningHoursModel } from "../menu-timetable-types.js";
@@ -64,7 +70,8 @@ export class DepartmentZones extends LitElement {
       .muted {
         color: var(--wt-color-text-muted);
       }
-      .floor-plan-link {
+      .floor-plan-link,
+      wt-floor-plan-preview {
         margin-block-start: var(--wt-space-2);
       }
       .form {
@@ -86,6 +93,11 @@ export class DepartmentZones extends LitElement {
   @state() private hoursFailed = false;
   private hoursDetach?: () => void;
   private hoursApi?: VenueServiceApi;
+  @state() private plan?: ZoneFloorPlan;
+  @state() private planFailed = false;
+  private planDetach?: () => void;
+  private planApi?: VenueServiceApi;
+  private planZone?: string;
   @state() private draft?: ZoneServiceSettingsInput;
   @state() private busy = false;
   @state() private failure = "";
@@ -106,6 +118,7 @@ export class DepartmentZones extends LitElement {
     this.hoursApi = undefined;
     this.hours = undefined;
     this.hoursFailed = false;
+    this.watchPlan(undefined, undefined);
     this.scope?.dispose();
     this.scope = undefined;
     this.leave = undefined;
@@ -145,6 +158,7 @@ export class DepartmentZones extends LitElement {
       );
     }
     const row = this.selected;
+    if (this.isConnected) this.watchPlan(this.api, row?.active === false ? undefined : row?.id);
     if (!row) {
       this.scope?.dispose();
       this.scope = undefined;
@@ -197,6 +211,48 @@ export class DepartmentZones extends LitElement {
       this.baseline = copy(source);
       this.scope.commit(this.baseline);
     }
+  }
+  /** Reads only the selected, active zone's plan; a reply for an earlier zone is dropped. */
+  private watchPlan(api: VenueServiceApi | undefined, zoneId: string | undefined) {
+    if (api === this.planApi && zoneId === this.planZone) return;
+    this.planDetach?.();
+    this.planDetach = undefined;
+    this.planApi = api;
+    this.planZone = zoneId;
+    this.plan = undefined;
+    this.planFailed = false;
+    if (!api || zoneId === undefined) return;
+    const current = () => this.planApi === api && this.planZone === zoneId;
+    this.planDetach = api.watchZoneFloorPlan?.(
+      zoneId,
+      (plan) => {
+        if (!current()) return;
+        this.plan = plan;
+        this.planFailed = false;
+      },
+      () => {
+        if (current()) this.planFailed = true;
+      },
+      () => {
+        if (current()) this.planFailed = false;
+      },
+    );
+  }
+  private floorPlan(zone: { id: string; name: string }, departmentId: string) {
+    const placed = (this.plan?.tables ?? []).flatMap(
+      ({ id, liveTableId, label, fixed, placement }) =>
+        placement ? [{ key: id ?? liveTableId ?? label, label, fixed, placement }] : [],
+    );
+    const empty = this.plan !== undefined && placed.length === 0;
+    return html`${this.planFailed ? html`<p role="alert" data-test="floor-plan-error">${t("venue.floor_plan_load_error")}</p>` : nothing}
+      ${placed.length ? html`<wt-floor-plan-preview .tables=${placed} label=${t("venue.zone_floor_plan_preview").replace("{zone}", zone.name)}></wt-floor-plan-preview>` : nothing}
+      <p class="floor-plan-link">
+        <a
+          data-test="zone-floor-plan"
+          href=${`/manage/floor-plan/zone/${encodeURIComponent(zone.id)}?back=${encodeURIComponent(`/manage/venue-operations/department/${encodeURIComponent(departmentId)}/view/zones/zone/${encodeURIComponent(zone.id)}`)}`}
+          >${t(empty ? "venue.zone_add_floor_plan" : "venue.zone_floor_plan")}</a
+        >
+      </p>`;
   }
   private emit(name: string, detail: object) {
     this.dispatchEvent(new CustomEvent(name, { detail, bubbles: true, composed: true }));
@@ -403,13 +459,7 @@ export class DepartmentZones extends LitElement {
                           >${t("venue.zone_opening_hours")}</a
                         >
                       </p>
-                      <p class="floor-plan-link">
-                        <a
-                          data-test="zone-floor-plan"
-                          href=${`/manage/floor-plan/zone/${encodeURIComponent(row.id)}?back=${encodeURIComponent(`/manage/venue-operations/department/${encodeURIComponent(department.id)}/view/zones/zone/${encodeURIComponent(row.id)}`)}`}
-                          >${t("venue.zone_floor_plan")}</a
-                        >
-                      </p>
+                      ${this.floorPlan(row, department.id)}
                     </div>`
               }
               <dashboard-service-settings-fields
