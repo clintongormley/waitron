@@ -2125,3 +2125,30 @@ core 0126–0130 regenerated the candidate as core 0131; it retains A455's hidde
 and removal of extras notes. Lane D's local `receipts/a366-4b/resume-owner/` holds the red/green
 logs, fixture inventory, schema upgrade run and presentation captures. B12, B1/B2 qualification,
 whole-branch review and current-head CI remain; this checkpoint is not branch readiness.
+
+
+### Part B cross-package qualification — 2026-10-10
+
+B12 audits the current developer docs and backlog prose and adds dated pointers to historical
+plans and specs, preserving their original bodies. B1/B2 qualification ran the venue-service
+node project (1,748 cases), affected venue-service browser suites (866), server suites (1,163),
+till suites (411), and the unedited fiscal pair (20). After rebasing onto A414, the affected till
+screens and phone checks ran 292 cases and the dashboard folder/navigation files ran 62.
+
+Two inherited fixtures needed the intentional contract carried forward: the folder's period-line
+case now supplies the active default instead of a configured fallback, retaining its result
+assertion; the navigation whole-shape pin gains the station child while retaining its other keys.
+The original runs failed at those assertions; the corrected files pass. Both changes belong in
+the final PR's Changed test checks list.
+
+Current captures inspected include the read-only station Week view's six states, the Stations
+list and editor, routing/settings, the till close dialog and the Disable dialog, in English and
+Spanish, light and dark, at phone and desktop widths. The final Disable capture run also ran
+12 accessibility cases; temporary screenshot instrumentation was restored byte for byte. Old
+Tickets-tab and Rename captures in the same folders are excluded from final visual evidence.
+The Opening hours tab-strip points still tracked in the backlog are not closed by
+these captures. Lane D keeps the command logs and image inventory locally under
+`receipts/a366-4b/qualification/`.
+
+Two whole-branch Claude run-it reviews, accepted fixes, the normal push hook, current-head CI
+and authorised landing remain. No CI or branch-readiness claim follows from local qualification.
