@@ -1316,10 +1316,9 @@ its buttons:
 
 Save opens quiet and disabled; bind it with `saveActionState` as shown under Forms.
 
-A widget in a window's body that draws its own buttons, such as a section's Add products
-(`apps/dashboard/src/widgets/section-add-products.ts`), cannot reach the footer slot, so it keeps
-its count and buttons in a block stuck to the bottom of the scrolling body (`position: sticky`)
-instead.
+A section's Add products (`apps/dashboard/src/widgets/section-add-products.ts`) draws its own count
+and buttons, so they cannot go in the window's footer slot; it keeps them in a block stuck to the
+bottom of the scrolling body (`position: sticky`) instead.
 
 The setup wizard is not a modal: its screens sit in a raised column centred on the page, with the
 Waitron logo at the top of every screen (owner decision 2026-09-28, C39).

@@ -339,6 +339,7 @@ export class WtDialog extends LitElement {
   private contentFrame = 0;
 
   private watchContent(): void {
+    if (this.bodyTabStop === "always") return;
     this.contentChanges.observe(this, {
       subtree: true,
       childList: true,
@@ -358,10 +359,8 @@ export class WtDialog extends LitElement {
     const overflows = this.dialog.open && body.scrollHeight > body.clientHeight;
     if (this.bodyTabStop === "always" || overflows) {
       body.tabIndex = 0;
-      // A tab stop is announced when it takes focus, so it says what it holds. A group rather than
-      // a region: a region is a landmark, and axe's landmark-unique and
-      // landmark-banner-is-top-level rules failed on dashboard dialogs whose content holds regions
-      // or a <header>.
+      // A group rather than a region: a region is a landmark, and a dialog's content can hold
+      // landmarks of its own.
       body.setAttribute("role", "group");
       if (this.heading) body.setAttribute("aria-labelledby", this.headingId);
       else body.removeAttribute("aria-labelledby");

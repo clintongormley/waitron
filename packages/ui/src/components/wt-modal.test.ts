@@ -920,3 +920,20 @@ test("wraps a long unbroken heading inside the modal at phone width", async () =
     await page.viewport(1280, 900);
   }
 });
+
+test("asks for no frame when its content changes, since its body is always a tab stop", async () => {
+  const modal = await openModal("<p>Line</p>");
+  const inner = modal.querySelector("p")!;
+  const frames = vi.spyOn(window, "requestAnimationFrame");
+  try {
+    inner.textContent = "Lines";
+    await Promise.resolve();
+    inner.style.color = "red";
+    await Promise.resolve();
+    inner.append(document.createElement("span"));
+    await Promise.resolve();
+    expect(frames).not.toHaveBeenCalled();
+  } finally {
+    frames.mockRestore();
+  }
+});

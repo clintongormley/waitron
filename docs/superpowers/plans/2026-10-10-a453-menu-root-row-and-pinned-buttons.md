@@ -548,8 +548,7 @@ Files: `packages/ui/src/components/wt-dialog.ts`, `wt-dialog.test.ts`, `wt-dialo
     cannot reach the footer slot.
 - `docs/backlog.md` and `docs/backlog/*.md`: no entry names A453, the toolbar "+" or pinned window
   buttons (grep `A453`, `toolbar`, `Add to this menu`, `pinned`, `scroll` on 2026-10-10 found
-  none), so delete nothing. Add short entries only for points this branch leaves open: the
-  root-key collision residual (decision 1) if the reviewer wants it tracked, and any `wt-dialog`
+  none), so delete nothing. Add short entries only for points this branch leaves open: any `wt-dialog`
   consumer whose look Task 6 changed and the LOOK did not cover.
 - `grep -rn "toolbar's Add\|Add to this menu\|no row for the menu" docs/developers apps packages`
   prints nothing outside dated specs and plans.
