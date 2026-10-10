@@ -25,6 +25,8 @@ export interface FloorMapTable {
   fill: FloorMapFill;
   dot: FloorMapDot | null;
   joinId: string | null;
+  /** A fixed table is not drawn moved by a drag: a copy follows the finger. Unset is movable. */
+  fixed?: boolean;
   /** Read after the name: "Seated, 2 ready". */
   description: string;
 }
@@ -69,6 +71,8 @@ interface Drag {
   dy: number;
   x: number;
   y: number;
+  /** The first other table under the pointer. */
+  targetId: string | null;
 }
 
 const MIN_ZOOM = 1 / 2;
@@ -81,6 +85,7 @@ interface Group {
   members: FloorMapTable[];
   box: PlanRect;
   label: string;
+  fixed: boolean;
 }
 
 const DEFAULT_COPY: FloorMapCopy = { label: "Tables" };
@@ -125,6 +130,7 @@ function groupsOf(tables: readonly FloorMapTable[]): Group[] {
       members,
       box: bounds(members.map((m) => m.placement))!,
       label: mergeLabel(members.map((m) => m.label)),
+      fixed: members.some((m) => m.fixed === true),
     };
   });
 }
@@ -207,6 +213,39 @@ export class WtFloorMap extends LitElement {
       /* Once around the whole merge, above a table touching it. */
       [part="table"][data-held][data-merge] {
         z-index: 1;
+      }
+
+      [part="table"][data-drop-target]:not([data-merge]) [part="shape"],
+      [part="table"][data-drop-target][data-merge] {
+        outline: var(--wt-selected-ring);
+        outline-offset: var(--wt-focus-offset);
+      }
+
+      [part="ghost"],
+      [part="drag-link"] {
+        position: absolute;
+        z-index: 3;
+        pointer-events: none;
+      }
+
+      [part="ghost"] {
+        opacity: 0.5;
+      }
+
+      [part="ghost"] [part="shape"] {
+        pointer-events: none;
+      }
+
+      [part="drag-link"] {
+        inset: 0;
+        width: 100%;
+        height: 100%;
+        overflow: visible;
+      }
+
+      [part="drag-link"] line {
+        stroke: var(--wt-color-primary);
+        stroke-width: 1px;
       }
 
       [part="shape"][data-shape="round"] {
@@ -432,7 +471,8 @@ export class WtFloorMap extends LitElement {
     this.requestUpdate();
   }
 
-  readonly #onHoldDrag = ({ dx, dy }: { dx: number; dy: number }): void => {
+  readonly #onHoldDrag = (at: GesturePoint & { dx: number; dy: number }): void => {
+    const { dx, dy } = at;
     const id = this.#held?.dataset["tableId"];
     const first =
       id === undefined ? undefined : this.#groupOf.get(id)?.members.find((m) => m.id === id);
@@ -442,28 +482,39 @@ export class WtFloorMap extends LitElement {
     const y = clampToGrid(first.placement.y + snapToSquare(dy, scale));
     const movedX = x - first.placement.x;
     const movedY = y - first.placement.y;
+    const targetId = this.#targetAt(at, first.id);
     const drag = this.#drag;
     if (
       drag?.tableId === first.id &&
       drag.x === x &&
       drag.y === y &&
       drag.dx === movedX &&
-      drag.dy === movedY
+      drag.dy === movedY &&
+      drag.targetId === targetId
     ) {
       return;
     }
-    this.#drag = { tableId: first.id, dx: movedX, dy: movedY, x, y };
+    this.#drag = { tableId: first.id, dx: movedX, dy: movedY, x, y, targetId };
     this.requestUpdate();
   };
 
-  #sendDrop(drag: Drag, at: GesturePoint): void {
-    const targetId =
+  #targetAt(at: GesturePoint, tableId: string): string | null {
+    return (
       this.shadowRoot!.elementsFromPoint(at.x, at.y)
         .map(idOf)
-        .find((id) => id !== drag.tableId) ?? null;
+        .find((id) => id !== tableId) ?? null
+    );
+  }
+
+  #sendDrop(drag: Drag, at: GesturePoint): void {
     this.dispatchEvent(
       new CustomEvent<FloorMapDrop>("wt-table-drag-end", {
-        detail: { tableId: drag.tableId, x: drag.x, y: drag.y, targetId },
+        detail: {
+          tableId: drag.tableId,
+          x: drag.x,
+          y: drag.y,
+          targetId: this.#targetAt(at, drag.tableId),
+        },
         bubbles: true,
         composed: true,
       }),
@@ -616,6 +667,8 @@ export class WtFloorMap extends LitElement {
       this.#groups = groupsOf(this.tables);
       this.#readingOrder = readingOrder(this.#groups);
       this.#groupOf = new Map(this.#groups.flatMap((g) => g.members.map((m) => [m.id, g])));
+      if (this.#held !== null && !this.#groupOf.has(this.#held.dataset["tableId"]!))
+        this.#endDrag();
     }
     if (changed.has("fitKey")) this.#needsFit = true;
     if (this.#needsFit) this.#fitView();
@@ -652,7 +705,7 @@ export class WtFloorMap extends LitElement {
       this.#groups,
       (g) => g.key,
       (g) => this.#renderGroup(g, view, still, g === tabStop),
-    )}`;
+    )}${this.#renderFixedDrag(view)}`;
   }
 
   #renderGroup(group: Group, view: View, still: boolean, tabStop: boolean): TemplateResult {
@@ -660,7 +713,7 @@ export class WtFloorMap extends LitElement {
     const [first] = members as [FloorMapTable, ...FloorMapTable[]];
     const merged = members.length > 1;
     const named = showsName(merged ? box : first.placement, view.scale);
-    const drag = this.#drag?.tableId === first.id ? this.#drag : null;
+    const drag = this.#drag?.tableId === first.id && !group.fixed ? this.#drag : null;
     const dot = members.find((m) => m.dot !== null)?.dot ?? null;
     return html`<button
       type="button"
@@ -668,6 +721,7 @@ export class WtFloorMap extends LitElement {
       data-table-id=${first.id}
       data-fill=${first.fill}
       ?data-merge=${merged}
+      ?data-drop-target=${this.#drag?.targetId === first.id}
       tabindex=${tabStop ? 0 : -1}
       aria-label=${`${label}, ${first.description}`}
       style=${styleMap({
@@ -687,6 +741,38 @@ export class WtFloorMap extends LitElement {
         dot === null ? nothing : html`<span part="dot" data-dot=${dot} ?data-still=${still}></span>`
       }
     </button>`;
+  }
+
+  /** A fixed group's copy where the drag would put it, and a line to the table under the pointer. */
+  #renderFixedDrag(view: View): TemplateResult | typeof nothing {
+    const drag = this.#drag;
+    const group = drag === null ? undefined : this.#groupOf.get(drag.tableId);
+    if (!group?.fixed) return nothing;
+    const { box, members } = group;
+    const target = drag!.targetId === null ? undefined : this.#groupOf.get(drag!.targetId);
+    const centre = (b: PlanRect) => ({
+      x: view.x + (b.x + b.width / 2) * view.scale,
+      y: view.y + (b.y + b.height / 2) * view.scale,
+    });
+    const from = centre(box);
+    const to = target === undefined ? null : centre(target.box);
+    return html`<span
+        part="ghost"
+        aria-hidden="true"
+        style=${styleMap({
+          left: px(view.x + (box.x + drag!.dx) * view.scale),
+          top: px(view.y + (box.y + drag!.dy) * view.scale),
+          width: px(box.width * view.scale),
+          height: px(box.height * view.scale),
+        })}
+        >${members.map((m) => this.#renderShape(m, box, view.scale))}</span
+      >${
+        to === null
+          ? nothing
+          : html`<svg part="drag-link" aria-hidden="true">
+              <line x1=${from.x} y1=${from.y} x2=${to.x} y2=${to.y}></line>
+            </svg>`
+      }`;
   }
 
   #renderShape(table: FloorMapTable, box: PlanRect, scale: number): TemplateResult {
