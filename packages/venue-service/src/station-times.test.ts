@@ -107,6 +107,7 @@ describe("station times", () => {
         await routingModel(tx, f.cfg, new Date("2026-10-02T18:00:00Z"))
       ).stationTimes.find((station) => station.stationId === f.upstairs);
       expect(row).not.toHaveProperty("hours");
+      expect(row).not.toHaveProperty("fallbackStationId");
       expect(row?.status).toEqual({ open: true, why: "open" });
     });
   });
@@ -118,7 +119,6 @@ describe("station times", () => {
         (await routingModel(tx, f.cfg, new Date("2026-10-02T18:00:00Z"))).stationTimes;
       const ignored = async (id: string, active: boolean) => {
         expect((await view()).find((s) => s.stationId === id)).toMatchObject({
-          fallbackStationId: null,
           closedSendsTo: f.kitchen,
           status: active ? { open: true, why: "open" } : { open: false, why: "switched_off" },
         });

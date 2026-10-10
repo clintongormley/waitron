@@ -1,10 +1,11 @@
+import type { RetiredFallbackPrepStationsView as PrepStationsView } from "../../test/retired-routing-fixture-types.js";
 import { afterEach, expect, it } from "vitest";
 import { userEvent, page } from "vitest/browser";
 import { expectNoA11yViolations } from "@waitron/ui/src/a11y-helpers.js";
 import { LitElement, html } from "lit";
 import { LeaveController, applyTokens } from "@waitron/ui";
 import { LiveData, setLocale } from "@waitron/dashboard-kit";
-import type { PrepStationsApi, PrepStationsView, StationDisableChoice } from "./routing-client.js";
+import type { PrepStationsApi, StationDisableChoice } from "./routing-client.js";
 import { PrepStationsScreen } from "./prep-stations-screen.js";
 const view: PrepStationsView = {
   routing: {

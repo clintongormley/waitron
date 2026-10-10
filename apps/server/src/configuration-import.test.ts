@@ -1,4 +1,3 @@
-import { randomUUID } from "node:crypto";
 import { mkdtemp, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -359,10 +358,16 @@ describe("staged configuration import", () => {
     });
   });
 
-  it("writes nothing when the archive's opening hours overlap, as a save would refuse", async () => {
+  it.each([
+    "hours_week_cells",
+    "hours_week_periods",
+    "special_date_hours",
+    "special_date_hours_periods",
+    "station_fallbacks",
+  ])("writes nothing when an archive names retired %s", async (retiredTable) => {
     const stateDir = await mkdtemp(join(tmpdir(), "waitron-config-import-"));
     dirs.push(stateDir);
-    const withHours = [
+    const withVenueService = [
       {
         ...modules[0]!,
         configurationTransfer: {
@@ -386,44 +391,13 @@ describe("staged configuration import", () => {
     const tables: ConfigurationBundle["tables"] = Object.fromEntries(
       VENUE_SERVICE_CONFIGURATION_TRANSFER.tables.map((table) => [table.name, []]),
     );
-    const cells = [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({
-      id: `cell-${weekday}`,
-      department_id: null,
-      station_id: "station",
-      weekday,
-      mode: "periods",
-    }));
-    const periods = cells.map((cell) => ({
-      id: randomUUID(),
-      cell_id: cell.id,
-      position: 0,
-      opens_at: "12:00:00",
-      closes_at: "16:00:00",
-    }));
     const valid: ConfigurationBundle = {
       ...bundle,
       modules: versions,
-      tables: {
-        ...tables,
-        ...bundle.tables,
-        departments: [{ id: "department" }],
-        kitchen_stations: [{ id: "station", is_default: false }],
-        hours_week_cells: cells,
-        hours_week_periods: periods,
-      },
+      tables: { ...tables, ...bundle.tables, kitchen_stations: [] },
     };
-    const overlapping: ConfigurationBundle = {
-      ...valid,
-      tables: {
-        ...valid.tables,
-        hours_week_periods: [
-          ...periods,
-          { ...periods[0]!, id: randomUUID(), position: 1, opens_at: "15:00:00" },
-        ],
-      },
-    };
-    const validateWithHours = (candidate: ConfigurationBundle): Promise<void> => {
-      validateConfigurationBundle(candidate, withHours, versions);
+    const validateWithVenueService = (candidate: ConfigurationBundle): Promise<void> => {
+      validateConfigurationBundle(candidate, withVenueService, versions);
       return Promise.resolve();
     };
     const control = await mkdtemp(join(tmpdir(), "waitron-config-import-"));
@@ -434,21 +408,23 @@ describe("staged configuration import", () => {
         ring,
         encodeConfigurationBundle(valid, "a strong passphrase"),
         "a strong passphrase",
-        validateWithHours,
+        validateWithVenueService,
       ),
-    ).resolves.toMatchObject({ counts: { hours_week_periods: 7 } });
-
+    ).resolves.toMatchObject({ counts: { products: 1 } });
     await expect(
       stageConfigurationImport(
         stateDir,
         ring,
-        encodeConfigurationBundle(overlapping, "a strong passphrase"),
+        encodeConfigurationBundle(
+          { ...valid, tables: { ...valid.tables, [retiredTable]: [{ id: "retired" }] } },
+          "a strong passphrase",
+        ),
         "a strong passphrase",
-        validateWithHours,
+        validateWithVenueService,
       ),
     ).rejects.toMatchObject({
       code: "setup.request_invalid",
-      params: { field: "hours_week_cells" },
+      params: { field: "tables" },
     });
     await expect(readFile(join(stateDir, "configuration-import.json"))).rejects.toMatchObject({
       code: "ENOENT",

@@ -5,6 +5,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import {
   kitchenStations,
   ticketItems,
+  ticketItemMoves,
   workingOrderLines,
   workingOrders,
   locations,
@@ -59,6 +60,7 @@ let bar: string;
 let grill: string;
 let pastry: string;
 let staffDevice: string;
+let managerDeviceId: string;
 
 beforeEach(async () => {
   v = await setupPartyVenue(suite.db);
@@ -92,6 +94,7 @@ beforeEach(async () => {
     locationId: locationId(v.cfg.locationId),
     capabilities: [],
   });
+  managerDeviceId = managerDevice.deviceId;
   const waiterDevice = await seedDevice(suite.db, {
     locationId: locationId(v.cfg.locationId),
     capabilities: ["take-orders", "open-cash-drawer"],
@@ -253,6 +256,15 @@ describe("the till's station day", () => {
         .from(workingOrderLines)
         .where(eq(workingOrderLines.id, item.workingOrderLineId));
       expect(line!.makeAtStationId).toBe(pastry);
+      expect(await suite.db.select().from(ticketItemMoves)).toEqual([
+        expect.objectContaining({
+          workingOrderLineId: item.workingOrderLineId,
+          fromStationId: grill,
+          toStationId: pastry,
+          movedByDeviceId: managerDeviceId,
+          movedByPersonId: manager,
+        }),
+      ]);
     },
   );
   it.each(["queued", "held", "preparing", "ready"] as const)(
@@ -391,6 +403,24 @@ describe("the till's station day", () => {
       (await suite.db.select().from(ticketItems).where(eq(ticketItems.id, item.id)))[0],
     ).toEqual(item);
   });
+  it("records the manager who authorizes a staff till's close", async () => {
+    const item = await stationDish();
+    const answer = await call(
+      "PUT",
+      today(),
+      { ...close(), openDishes: "send", override: { personId: manager, pin: "1234" } },
+      staffCookie,
+    );
+    expect(answer.status).toBe(204);
+    expect(await suite.db.select().from(ticketItemMoves)).toEqual([
+      expect.objectContaining({
+        workingOrderLineId: item.workingOrderLineId,
+        movedByDeviceId: staffDevice,
+        movedByPersonId: manager,
+      }),
+    ]);
+  });
+
   it("an unauthorized close cannot send waiting work", async () => {
     const item = await stationDish();
     const answer = await call("PUT", today(), { ...close(), openDishes: "send" }, staffCookie);
@@ -699,6 +729,19 @@ describe("the kitchen display's station day", () => {
       const [after] = await suite.db.select().from(ticketItems).where(eq(ticketItems.id, item.id));
       expect(after!.stationId).toBe(openDishes === "send" ? bar : grill);
       expect(after!.stationChosenAt).not.toBeNull();
+      expect(await suite.db.select().from(ticketItemMoves)).toEqual(
+        openDishes === "send"
+          ? [
+              expect.objectContaining({
+                workingOrderLineId: item.workingOrderLineId,
+                fromStationId: grill,
+                toStationId: bar,
+                movedByDeviceId: deviceId,
+                movedByPersonId: manager,
+              }),
+            ]
+          : [],
+      );
     },
   );
 

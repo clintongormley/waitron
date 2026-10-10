@@ -55,9 +55,7 @@ describe("seedFloor", () => {
         menuIds,
       });
       const { rows: hours } = await tx.execute(sql`
-        select c.id from hours_week_cells c
-        join kitchen_stations s on s.id = c.station_id
-        where s.location_id = ${locationId}`);
+        select name from sqlite_master where type = 'table' and name = 'hours_week_cells'`);
       const { rows: periods } = await tx.execute<{ name: string }>(sql`
         select p.name from menu_periods p join departments d on d.id = p.department_id
         where d.location_id = ${locationId} order by d.name`);
@@ -112,10 +110,8 @@ describe("seedFloor", () => {
         menuIds,
       });
       return (
-        await tx.execute(sql`select fallback.station_id, fallback.fallback_station_id
-        from station_fallbacks fallback
-        inner join kitchen_stations station on station.id = fallback.station_id
-        where station.location_id = ${locationId}`)
+        await tx.execute(sql`select name from sqlite_master
+        where type = 'table' and name = 'station_fallbacks'`)
       ).rows;
     });
     expect(rows).toEqual([]);

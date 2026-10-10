@@ -137,7 +137,7 @@ describe("seedDemoRestaurant", () => {
       })),
     ]);
     const { rows: separate } = await suite.db.execute<{ count: number }>(sql`
-      select cast(count(*) as integer) as count from hours_week_cells where department_id is not null`);
+      select cast(count(*) as integer) as count from sqlite_master where type = 'table' and name = 'hours_week_cells'`);
     expect(separate).toEqual([{ count: 0 }]);
   });
 
@@ -338,23 +338,10 @@ describe("seedDemoRestaurant", () => {
 
     await withTransaction(suite.db, async (tx) => {
       const cfg = { locationId: brandLocationId(venue.locationId) };
-      const { rows: hours } = await tx.execute<{
-        weekday: number;
-        opens_at: string;
-        closes_at: string;
-      }>(sql`
-        select c.weekday, p.opens_at, p.closes_at from hours_week_periods p
-        join hours_week_cells c on c.id = p.cell_id
-        join kitchen_stations s on s.id = c.station_id
-        where s.location_id = ${venue.locationId} and s.name = 'Upstairs bar'
-        order by c.weekday`);
-      expect(hours).toEqual([]);
-      const { rows: fallbacks } = await tx.execute<{ name: string }>(sql`
-        select fallback.name from station_fallbacks f
-        join kitchen_stations s on s.id = f.station_id
-        join kitchen_stations fallback on fallback.id = f.fallback_station_id
-        where s.location_id = ${venue.locationId} and s.name = 'Upstairs bar'`);
-      expect(fallbacks).toEqual([]);
+      const { rows: retired } = await tx.execute(sql`
+        select name from sqlite_master where type = 'table'
+        and name in ('hours_week_cells', 'hours_week_periods', 'station_fallbacks')`);
+      expect(retired).toEqual([]);
 
       const { rows: subjects } = await tx.execute<{ id: string; name: string }>(sql`
         select id, name from departments where location_id = ${venue.locationId} order by name`);

@@ -33,3 +33,6 @@ export type RootDateHoursCell = import("../src/index.js").DateHoursCell;
 
 // @ts-expect-error Station hours have no public wire contract (A366 slice 4 B6).
 export type WireDateHoursCell = import("../src/hours-types.js").DateHoursCell;
+
+// @ts-expect-error Configured fallbacks have no routing wire field (A366 slice 4 B1b).
+export type RetiredFallback = import("../src/routing-types.js").StationTimes["fallbackStationId"];

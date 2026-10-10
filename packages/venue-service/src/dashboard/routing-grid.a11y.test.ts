@@ -3,7 +3,7 @@ import { userEvent } from "vitest/browser";
 import { setLocale } from "@waitron/dashboard-kit";
 import { cleanup, host } from "@waitron/ui/src/test-helpers.js";
 import { expectNoA11yViolations, mountThemed } from "@waitron/ui/src/a11y-helpers.js";
-import type { RoutingView } from "../routing.js";
+import type { RetiredFallbackRoutingView as RoutingView } from "../../test/retired-routing-fixture-types.js";
 import type { RoutingGrid } from "./routing-grid.js";
 import "./routing-grid.js";
 

@@ -205,3 +205,27 @@ it("changing the real week reloads counted ranges and ignores the departed week'
     "/management-api/venue-service/stations/bar/service-times?from=2026-10-19&to=2026-10-25",
   ]);
 });
+
+it("reloads the same station view when reattached without changing its properties", async () => {
+  let startsAt = "12:00";
+  const { screen } = await mount("bar", () => ({
+    always: null,
+    days: [
+      {
+        date: "2026-10-12",
+        departments: [
+          {
+            departmentId: "dining",
+            ranges: [{ periodId: "lunch", startsAt, endsAt: "16:00" }],
+          },
+        ],
+      },
+    ],
+  }));
+  await expect.poll(() => grid(screen)?.columns[0]?.slots[0]?.startsAt).toBe("12:00");
+  const view = stationView(screen)!;
+  view.remove();
+  startsAt = "13:00";
+  screen.shadowRoot!.append(view);
+  await expect.poll(() => grid(screen)?.columns[0]?.slots[0]?.startsAt).toBe("13:00");
+});

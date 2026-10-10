@@ -4,7 +4,7 @@ import { setLocale } from "@waitron/dashboard-kit";
 import { applyTokens } from "@waitron/ui";
 import { cellKey } from "../routing.js";
 import type { CellAddress, RouteTarget, RoutingCell, RoutingPeriod } from "../routing.js";
-import type { RoutingView } from "../routing.js";
+import type { RetiredFallbackRoutingView as RoutingView } from "../../test/retired-routing-fixture-types.js";
 import type { RoutingGrid } from "./routing-grid.js";
 import "./routing-grid.js";
 
