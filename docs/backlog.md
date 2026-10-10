@@ -650,6 +650,20 @@ _Formerly the catalogue and menus entries in the opening part of the old Track A
   the spec's rule section says "caller order". Built as the table's sort. **Next action:** the owner
   confirms, or asks for caller order.
 
+- **The Products tree's hidden counts may be placed against the page at narrow width** — not
+  measured; left open by A453. At 440px or less the tree hides its counts visually
+  (`wt-data-table[narrow]::part(count)`, `apps/dashboard/src/widgets/product-list.ts`) as the menu's
+  Structure tab does. A453 found the Structure tab's hidden root count was positioned against the
+  page, not the table's scroll box, and gave its root label `position: relative`; Products' root
+  label has no such rule. **Next action:** measure at phone width with a long name before changing
+  anything.
+
+- **A menu member whose id is literally `root` would share a key with the Structure tab's root row**
+  — left open by A453, stated rather than guarded. Minted member ids are UUIDs, but a configuration
+  import keeps the file's ids, and no UUID check on them was found (A453 plan, decision 1), so a
+  hand-written import could carry `root`. **Next action:** decide whether an import should refuse a
+  member id that is not a UUID.
+
 - **Menu-root default fallback when content languages are unset (A420 review).**
   `updateMenuDetails` validates against English; section and include-folder writers use
   their supplied venue fallback. Decide whether the menu-root writer should take that
