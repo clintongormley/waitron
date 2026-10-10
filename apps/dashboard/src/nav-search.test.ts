@@ -22,6 +22,16 @@ describe("navMatches", () => {
     ).toEqual(["Menus", "Units", "Products", "Modifiers"]);
   });
 
+  it("keeps the pages that match equally closely only with the heading in nav order", () => {
+    const menuPages = ["Menus", "Products", "Modifiers", "Units"].map((label) => ({ label }));
+    expect(navMatches("menus", menuPages, "Products and menus").map((page) => page.label)).toEqual([
+      "Menus",
+      "Products",
+      "Modifiers",
+      "Units",
+    ]);
+  });
+
   it("puts a whole-word match ahead of a start-of-word one among the pages needing the heading", () => {
     const drinks = ["Ginger", "Gin"].map((label) => ({ label }));
     expect(navMatches("menu gin", drinks, "Menu").map((page) => page.label)).toEqual([

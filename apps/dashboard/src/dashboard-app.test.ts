@@ -6000,11 +6000,11 @@ describe("the nav search", () => {
     expect(shownItems(el)).toEqual(["nav-device-profiles", "nav-devices"]);
   });
 
-  it("shows a whole group whose name matches, the pages matching by their own label first, then the others shortest first", async () => {
+  it("shows a whole group whose name matches, the pages matching by their own label first", async () => {
     const el = await mountSession(sessionIn("en-GB"));
     await search(el, "menus");
     expect(shownHeaders(el)).toEqual(["nav-group-menu"]);
-    expect(shownItems(el)).toEqual(["nav-menus", "nav-units", "nav-catalogue", "nav-modifiers"]);
+    expect(shownItems(el)).toEqual(["nav-menus", "nav-catalogue", "nav-modifiers", "nav-units"]);
   });
 
   it("finds the moved pages under Venue operations", async () => {
@@ -6044,7 +6044,7 @@ describe("the nav search", () => {
     );
     // "Menus" is a manager page; its group's name holds the term, so the group's other pages show.
     await search(el, "Menus");
-    expect(shownItems(el)).toEqual(["nav-units", "nav-catalogue"]);
+    expect(shownItems(el)).toEqual(["nav-catalogue", "nav-units"]);
     await search(el, "Diagnostics");
     expect(shownItems(el)).toEqual([]);
     // Bookings is enabled for the venue, but this session lacks its permission.
