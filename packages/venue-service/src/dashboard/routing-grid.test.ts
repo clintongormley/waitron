@@ -790,6 +790,14 @@ describe("venue-routing-grid", () => {
       expect(name(el, "p:bread", "terrace")).toBe("Bread, Terrace: No preparation, inherited");
     });
 
+    it("a product row storing its own station shows and names only that station", async () => {
+      const { el } = await mount();
+      root(el).querySelector<HTMLElement>('[data-test="expand-all"]')!.click();
+      await el.updateComplete;
+      expect(text(el, "p:burger", "every")).toBe("Kitchen");
+      expect(name(el, "p:burger", "every")).toBe("Food › Burger, Every zone: Kitchen, set here");
+    });
+
     it("the All categories × Every zone cell shows only the default station, editable or not", async () => {
       const { el } = await mount();
       expect(text(el, "all", "every")).toBe("Kitchen");
