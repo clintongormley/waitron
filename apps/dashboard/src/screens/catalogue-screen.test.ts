@@ -261,6 +261,7 @@ function stubApi(overrides: Partial<DashboardApi> = {}): DashboardApi {
       categories: [],
       products: [],
       cells: [],
+      periods: [],
       defaultStationId: null,
       stations: [],
       canMakeDefault: false,
