@@ -5830,6 +5830,22 @@ describe("product-list filters (A463)", () => {
     expect(rowKeys(root)).toEqual(["a-bun", "a-bun:small"]);
   });
 
+  it("sorts Availability as ordinary, then Unavailable, then Archived", async () => {
+    const { el } = await mountWidget<ProductList>("dashboard-product-list", {
+      products: [
+        product({ id: "a-gone", name: "A", active: false }),
+        product({ id: "b-sold-out", name: "B", available: false }),
+        product({ id: "c-ok", name: "C" }),
+      ],
+    });
+    await showArchived(el);
+    const table = el.shadowRoot!.querySelector("wt-data-table")!;
+    const root = await tableRoot(el);
+    root.querySelector<HTMLElement>('button[data-sort="availability"]')!.click();
+    await table.updateComplete;
+    expect(rowKeys(root)).toEqual(["c-ok", "b-sold-out", "a-gone"]);
+  });
+
   it.each([
     ["en", { unavailable: "Unavailable", archived: "Archived", variantArchived: "Archived" }],
     ["es", { unavailable: "No disponible", archived: "Archivado", variantArchived: "Archivada" }],
