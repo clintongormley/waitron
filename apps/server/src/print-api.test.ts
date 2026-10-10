@@ -12,6 +12,8 @@ import {
   printAgents,
   printJobs,
   printerHolders,
+  printers,
+  stationPrinters,
   withTransaction,
 } from "@waitron/db";
 import { VENUE_SERVICE_MIGRATIONS } from "@waitron/venue-service";
@@ -41,6 +43,8 @@ import {
 } from "@waitron/shared";
 import { printingAlertSource } from "./alert-sources.js";
 import { JOBS_WAITING_MS } from "./print-job-trouble.js";
+import { stationPrintersDown } from "./station-outputs-down.js";
+import { createStation } from "./kitchen.js";
 import type { Logger } from "./logger.js";
 import { mountPrintApi } from "./print-api.js";
 import { configureDemoPrinter, deliverDemoPrinterJobs } from "./demo-printer.js";
@@ -169,7 +173,7 @@ function mountApp(
 
 async function send(
   app: Hono,
-  method: "GET" | "POST" | "PATCH" | "PUT",
+  method: "GET" | "POST" | "PATCH" | "PUT" | "DELETE",
   path: string,
   opts: { body?: unknown; cookie?: string; bearer?: string } = {},
 ): Promise<Response> {
@@ -2600,7 +2604,7 @@ describe("mountPrintApi — management: recent jobs", () => {
 describe("mountPrintApi — the printer.manage gate", () => {
   const DUMMY = "00000000-0000-0000-0000-000000000000";
 
-  const routes: ["GET" | "POST" | "PATCH", string, unknown?][] = [
+  const routes: ["GET" | "POST" | "PATCH" | "DELETE", string, unknown?][] = [
     ["GET", "/management-api/print-agents"],
     ["PATCH", `/management-api/print-agents/${DUMMY}`, { name: "Renamed" }],
     ["POST", `/management-api/print-agents/${DUMMY}/revoke`],
@@ -2608,6 +2612,8 @@ describe("mountPrintApi — the printer.manage gate", () => {
     ["GET", "/management-api/printers"],
     ["PATCH", `/management-api/printers/${DUMMY}`, { name: "X" }],
     ["POST", `/management-api/printers/${DUMMY}/deactivate`],
+    ["GET", `/management-api/printers/${DUMMY}/delete-impact`],
+    ["DELETE", `/management-api/printers/${DUMMY}`],
     ["POST", `/management-api/printers/${DUMMY}/test-print`],
     ["GET", "/management-api/print-jobs"],
   ];
@@ -4120,5 +4126,441 @@ describe("Bluetooth Pair and Forget commands", () => {
       ]);
       expect(await jobRow(stale)).toMatchObject(UNPAIRED_END);
     });
+  });
+});
+
+describe("a deleted printer in discovery", () => {
+  interface Discovered {
+    agentId: string;
+    transport: string;
+    localKey?: string;
+    host?: string;
+    port?: number;
+    alreadyRegistered: boolean;
+    printerId: string | null;
+  }
+
+  async function discovered(app: Hono): Promise<Discovered[]> {
+    const res = await send(app, "GET", "/management-api/discovered-printers", {
+      cookie: managerCookie,
+    });
+    expect(res.status).toBe(200);
+    return (await res.json()) as Discovered[];
+  }
+
+  async function create(app: Hono, body: Record<string, unknown>): Promise<string> {
+    const res = await send(app, "POST", "/management-api/printers", {
+      cookie: managerCookie,
+      body,
+    });
+    expect(res.status).toBe(201);
+    return ((await res.json()) as { id: string }).id;
+  }
+
+  async function disable(app: Hono, id: string): Promise<void> {
+    const res = await send(app, "PATCH", `/management-api/printers/${id}`, {
+      cookie: managerCookie,
+      body: { active: false },
+    });
+    expect(res.status).toBe(204);
+  }
+
+  async function remove(app: Hono, id: string): Promise<void> {
+    const res = await send(app, "DELETE", `/management-api/printers/${id}`, {
+      cookie: managerCookie,
+    });
+    expect(res.status).toBe(200);
+  }
+
+  async function printerRow(id: string): Promise<Record<string, unknown>> {
+    const { rows } = await suite.db.execute<Record<string, unknown>>(
+      sql`select * from printers where id = ${id}`,
+    );
+    return rows[0]!;
+  }
+
+  function uniqueHost(): string {
+    const [a, b] = randomUUID().split("-")[0]!.match(/../g)!;
+    return `10.77.${parseInt(a!, 16) % 250}.${parseInt(b!, 16) % 250}`;
+  }
+
+  function randomMac(): string {
+    return Array.from(randomBytes(6), (b) => b.toString(16).padStart(2, "0").toUpperCase()).join(
+      ":",
+    );
+  }
+
+  // Each case: what the agent reports, the create body for the registration, and how to find the
+  // discovered row. The Bluetooth address is registered lower-cased, as a manager may type it, and
+  // the network printers once with 9100 named and once with no port at all.
+  const shapes: {
+    label: string;
+    make: () => {
+      inventory: { visible: unknown[]; scanned: unknown[] };
+      body: (name: string) => Record<string, unknown>;
+      find: (row: Discovered) => boolean;
+      /** Stores the port as NULL, which the create route never writes (the column defaults to 9100). */
+      nullPort?: true;
+    };
+  }[] = [
+    {
+      label: "a USB serial",
+      make: () => {
+        const serial = `SN-DEL-${randomUUID()}`;
+        return {
+          inventory: { visible: [{ transport: "usb", localKey: serial }], scanned: [] },
+          body: (name) => ({ name, transport: "usb", localKey: serial }),
+          find: (row) => row.localKey === serial,
+        };
+      },
+    },
+    {
+      label: "a Bluetooth address registered lower-cased",
+      make: () => {
+        const mac = randomMac();
+        return {
+          inventory: { visible: [{ transport: "bluetooth", localKey: mac }], scanned: [] },
+          body: (name) => ({ name, transport: "bluetooth", localKey: mac.toLowerCase() }),
+          find: (row) => row.localKey === mac,
+        };
+      },
+    },
+    {
+      label: "a network host on an explicit 9100",
+      make: () => {
+        const host = uniqueHost();
+        return {
+          inventory: { visible: [], scanned: [{ transport: "network_tcp", host, port: 9100 }] },
+          body: (name) => ({ name, transport: "network_tcp", host, port: 9100 }),
+          find: (row) => row.host === host && row.port === 9100,
+        };
+      },
+    },
+    {
+      label: "a network host whose stored port is NULL, matched on the default 9100",
+      make: () => {
+        const host = uniqueHost();
+        return {
+          inventory: { visible: [], scanned: [{ transport: "network_tcp", host, port: 9100 }] },
+          body: (name) => ({ name, transport: "network_tcp", host }),
+          find: (row) => row.host === host && row.port === 9100,
+          nullPort: true,
+        };
+      },
+    },
+  ];
+
+  for (const shape of shapes) {
+    it(`${shape.label}: a disabled printer still matches, a deleted one does not, and its replacement takes a new id`, async () => {
+      const app = mountApp();
+      const { token } = await joinAndAccept(app, "Discovery agent");
+      const { inventory, body, find, nullPort } = shape.make();
+      const register = async (name: string) => {
+        const id = await create(app, body(name));
+        if (nullPort)
+          await suite.db.update(printers).set({ port: null }).where(eq(printers.id, id));
+        return id;
+      };
+      const original = await register("Old kitchen");
+      await pull(app, token, inventory);
+
+      await disable(app, original);
+      expect((await discovered(app)).find(find)).toMatchObject({
+        alreadyRegistered: true,
+        printerId: original,
+      });
+
+      await remove(app, original);
+      expect((await discovered(app)).find(find)).toMatchObject({
+        alreadyRegistered: false,
+        printerId: null,
+      });
+
+      const replacement = await register("New kitchen");
+      expect(replacement).not.toBe(original);
+      if (nullPort) expect((await printerRow(replacement)).port).toBeNull();
+      expect((await discovered(app)).find(find)).toMatchObject({
+        alreadyRegistered: true,
+        printerId: replacement,
+      });
+      expect(await printerRow(original)).toMatchObject({ name: "Old kitchen" });
+      expect((await printerRow(original)).deleted_at).not.toBeNull();
+    });
+  }
+
+  it("a deleted printer on one port leaves the live printer on another port of the same host matched", async () => {
+    const app = mountApp();
+    const { token } = await joinAndAccept(app, "Discovery agent");
+    const host = uniqueHost();
+    const deleted = await create(app, { name: "Old", transport: "network_tcp", host, port: 9100 });
+    const live = await create(app, { name: "Live", transport: "network_tcp", host, port: 9101 });
+    await pull(app, token, {
+      visible: [],
+      scanned: [
+        { transport: "network_tcp", host, port: 9100 },
+        { transport: "network_tcp", host, port: 9101 },
+      ],
+    });
+    await remove(app, deleted);
+
+    const rows = await discovered(app);
+    expect(rows.find((r) => r.host === host && r.port === 9100)).toMatchObject({
+      alreadyRegistered: false,
+      printerId: null,
+    });
+    expect(rows.find((r) => r.host === host && r.port === 9101)).toMatchObject({
+      alreadyRegistered: true,
+      printerId: live,
+    });
+  });
+
+  it("two live printers still cannot share a device key after a replacement, while network duplicates stay allowed", async () => {
+    const app = mountApp();
+    const serial = `SN-DEL-${randomUUID()}`;
+    await remove(app, await create(app, { name: "Old", transport: "usb", localKey: serial }));
+    await create(app, { name: "New", transport: "usb", localKey: serial });
+    const third = await send(app, "POST", "/management-api/printers", {
+      cookie: managerCookie,
+      body: { name: "Third", transport: "usb", localKey: serial },
+    });
+    expect(third.status).toBe(409);
+    expect(((await third.json()) as { error: { code: string } }).error.code).toBe(
+      "printer.already_registered",
+    );
+
+    const host = uniqueHost();
+    const first = await create(app, { name: "A", transport: "network_tcp", host, port: 9100 });
+    const second = await create(app, { name: "B", transport: "network_tcp", host, port: 9100 });
+    expect(second).not.toBe(first);
+  });
+
+  it("after a replacement, a stale pull, late result and unpairing leave the old printer and its jobs where they were", async () => {
+    const app = mountApp();
+    const { agentId, token } = await joinAndAccept(app, "Stale agent");
+    const mac = randomMac();
+    const original = await create(app, {
+      name: "Old kitchen",
+      transport: "bluetooth",
+      localKey: mac,
+    });
+    const claimed = await enqueue(original, esc(WIDE).line("claimed").cut().bytes());
+    const visible = { visible: [{ transport: "bluetooth", localKey: mac }], scanned: [] };
+    const first = await pull(app, token, visible);
+    expect(first.jobs.map((job) => job.id)).toEqual([claimed]);
+    const waiting = await enqueue(original, esc(WIDE).line("waiting").cut().bytes());
+
+    await remove(app, original);
+    const replacement = await create(app, {
+      name: "New kitchen",
+      transport: "bluetooth",
+      localKey: mac,
+    });
+    // Neither is a state the delete leaves: switched back on and holding a waiting job, the old row
+    // shows any write the pull, the late result or the unpairing makes to it, and any claim.
+    await suite.db.update(printers).set({ active: true }).where(eq(printers.id, original));
+    const [seeded] = await suite.db
+      .insert(printJobs)
+      .values({ locationId, printerId: original, payload: new Uint8Array([0x41]) })
+      .returning({ id: printJobs.id });
+    const tombstone = await printerRow(original);
+    expect(Number(tombstone.active)).toBe(1);
+    const endedJobs = [await jobRow(claimed), await jobRow(waiting), await jobRow(seeded!.id)];
+
+    const late = await send(app, "POST", `/print-api/agent/jobs/${claimed}/result`, {
+      bearer: token,
+      body: { status: "done" },
+    });
+    expect(late.status).toBe(204);
+    const stale = await pull(app, token, visible);
+    expect(stale.jobs).toEqual([]);
+
+    await pull(app, token, { pairedBluetooth: [{ localKey: mac }] });
+    const forget = await send(
+      app,
+      "POST",
+      `/management-api/print-agents/${agentId}/bluetooth/forget`,
+      {
+        cookie: managerCookie,
+        body: { address: mac },
+      },
+    );
+    expect(forget.status).toBe(202);
+    const { command } = (await forget.json()) as { command: { id: string } };
+    await pull(app, token, { bluetoothOutcomes: [{ id: command.id, ok: true }] });
+
+    expect(await printerRow(original)).toEqual(tombstone);
+    expect([await jobRow(claimed), await jobRow(waiting), await jobRow(seeded!.id)]).toEqual(
+      endedJobs,
+    );
+    const { rows } = await suite.db.execute<{ id: string; printer_id: string }>(
+      sql`select id, printer_id from print_jobs
+        where id in (${claimed}, ${waiting}, ${seeded!.id}) order by id`,
+    );
+    expect(rows.every((row) => row.printer_id === original)).toBe(true);
+    // The unpairing still reaches the live printer at the address.
+    expect(Number((await printerRow(replacement)).active)).toBe(0);
+  });
+});
+
+describe("a deleted printer's job history", () => {
+  interface JobRow {
+    id: string;
+    printerId: string;
+    printerName: string;
+    status: string;
+    canResend: boolean;
+  }
+
+  async function finish(jobId: string, status: "done" | "failed"): Promise<void> {
+    await suite.db
+      .update(printJobs)
+      .set(
+        status === "done"
+          ? { status, deliveredAt: new Date().toISOString() }
+          : { status, attempts: MAX_DELIVERY_ATTEMPTS, lastError: "offline" },
+      )
+      .where(eq(printJobs.id, jobId));
+  }
+
+  it("names the old printer on its jobs, previews them as drawn, and offers no resend to it", async () => {
+    const app = mountApp();
+    const serial = `SN-HIST-${randomUUID()}`;
+    const created = await send(app, "POST", "/management-api/printers", {
+      cookie: managerCookie,
+      body: {
+        name: "Old kitchen",
+        transport: "usb",
+        localKey: serial,
+        paperWidth: "58mm",
+        resolution: "203dpi",
+      },
+    });
+    const { id: original } = (await created.json()) as { id: string };
+    const narrow = esc({ paperWidth: "58mm", resolution: "203dpi" }).init().line("Mesa 7").bytes();
+    const printed = await enqueue(original, narrow);
+    const exhausted = await enqueue(original, esc(WIDE).line("lost").bytes());
+    await finish(printed, "done");
+    await finish(exhausted, "failed");
+    const off = await createUsbPrinter(app, `SN-HIST-${randomUUID()}`, "Off printer");
+    const offJob = await enqueue(off, esc(WIDE).line("off").bytes());
+    await finish(offJob, "done");
+    const disabled = await send(app, "PATCH", `/management-api/printers/${off}`, {
+      cookie: managerCookie,
+      body: { active: false },
+    });
+    expect(disabled.status).toBe(204);
+
+    const deleted = await send(app, "DELETE", `/management-api/printers/${original}`, {
+      cookie: managerCookie,
+    });
+    expect(deleted.status).toBe(200);
+    const replacement = await createUsbPrinter(app, serial, "New kitchen");
+    const replacementJob = await enqueue(replacement, esc(WIDE).line("new").bytes());
+    await finish(replacementJob, "done");
+
+    const res = await send(app, "GET", "/management-api/print-jobs", { cookie: managerCookie });
+    expect(res.status).toBe(200);
+    const rows = (await res.json()) as JobRow[];
+    const byId = new Map(rows.map((row) => [row.id, row]));
+    expect(byId.get(printed)).toMatchObject({
+      printerId: original,
+      printerName: "Old kitchen",
+      status: "done",
+      canResend: false,
+    });
+    expect(byId.get(exhausted)).toMatchObject({
+      printerId: original,
+      printerName: "Old kitchen",
+      status: "failed",
+      canResend: false,
+    });
+    expect(byId.get(offJob)).toMatchObject({ printerName: "Off printer", canResend: true });
+    expect(byId.get(replacementJob)).toMatchObject({
+      printerId: replacement,
+      printerName: "New kitchen",
+      canResend: true,
+    });
+    expect(Object.keys(byId.get(printed)!).sort()).toEqual(
+      [
+        "attempts",
+        "canResend",
+        "createdAt",
+        "deliveredAt",
+        "id",
+        "lastError",
+        "printerId",
+        "printerName",
+        "status",
+      ].sort(),
+    );
+
+    const preview = await send(app, "GET", `/management-api/print-jobs/${printed}/preview`, {
+      cookie: managerCookie,
+    });
+    expect(preview.status).toBe(200);
+    expect(await preview.json()).toMatchObject({ widthDots: 384, text: "Mesa 7\n" });
+
+    const jobsBefore = await suite.db.select({ id: printJobs.id }).from(printJobs);
+    const resend = await send(app, "POST", `/management-api/print-jobs/${printed}/resend`, {
+      cookie: managerCookie,
+    });
+    expect(resend.status).toBe(404);
+    expect(((await resend.json()) as { error: { code: string } }).error.code).toBe(
+      "printer.not_found",
+    );
+    expect(await suite.db.select({ id: printJobs.id }).from(printJobs)).toHaveLength(
+      jobsBefore.length,
+    );
+  });
+});
+
+describe("a deleted printer's alerts", () => {
+  it("raises no waiting-jobs or station-down alert for the jobs its deletion ended, while a live printer's still do", async () => {
+    const app = mountApp();
+    const station = await withTransaction(suite.db, (tx) =>
+      createStation(tx, cfg, { name: `Grill ${randomUUID()}` }),
+    );
+    const deleted = await createNetworkPrinter(app, "10.78.0.1", 9100, "Old kitchen");
+    const live = await createNetworkPrinter(app, "10.78.0.2", 9100, "Live kitchen");
+    await suite.db.insert(stationPrinters).values([
+      { stationId: station.id, printerId: deleted },
+      { stationId: station.id, printerId: live },
+    ]);
+    const oldJob = await enqueue(deleted, esc(WIDE).line("Mesa 1").cut().bytes());
+    await enqueue(live, esc(WIDE).line("Mesa 2").cut().bytes());
+    const kept = () =>
+      suite.db
+        .select({ id: printJobs.id, printerId: printJobs.printerId, payload: printJobs.payload })
+        .from(printJobs)
+        .where(eq(printJobs.id, oldJob));
+    const keptBefore = await kept();
+    expect(keptBefore).toHaveLength(1);
+    const later = new Date(Date.now() + JOBS_WAITING_MS + 60_000);
+    const read = () =>
+      withTransaction(suite.db, async (tx) => ({
+        waiting: (await printingAlertSource().read({ tx, now: later }))
+          .map((alert) => alert.key)
+          .filter((key) => key.endsWith(deleted) || key.endsWith(live))
+          .sort(),
+        down: (await stationPrintersDown(tx, locationId, later, [station.id]))
+          .map((row) => row.printerName)
+          .sort(),
+      }));
+    expect(await read()).toEqual({
+      waiting: [`printer.jobs_waiting:${deleted}`, `printer.jobs_waiting:${live}`].sort(),
+      down: ["Live kitchen", "Old kitchen"],
+    });
+
+    const res = await send(app, "DELETE", `/management-api/printers/${deleted}`, {
+      cookie: managerCookie,
+    });
+    expect(res.status).toBe(200);
+
+    expect(await read()).toEqual({
+      waiting: [`printer.jobs_waiting:${live}`],
+      down: ["Live kitchen"],
+    });
+    // The job the alert was about stays in history, on the old printer, with its bytes.
+    expect(await kept()).toEqual(keptBefore);
   });
 });

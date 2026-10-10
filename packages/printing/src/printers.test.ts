@@ -300,6 +300,57 @@ describe("updatePrinter", () => {
   });
 });
 
+describe("a deleted printer", () => {
+  async function markDeleted(cfg: PrintConfig, id: string): Promise<void> {
+    // Deletion is set independently of `active`, so a predicate that reads only `active` fails here.
+    await asTx(cfg, (tx) =>
+      tx
+        .update(printers)
+        .set({ deletedAt: "2026-10-09T10:00:00.000Z", active: true })
+        .where(eq(printers.id, id)),
+    );
+  }
+
+  it("deleted printer refuses empty patch and Enable, disabled can Enable", async () => {
+    const cfg = await setup();
+    const id = await seedPrinter(cfg);
+    await markDeleted(cfg, id);
+    for (const patch of [{}, { active: true }, { name: "Renamed" }]) {
+      await expect(asTx(cfg, (tx) => updatePrinter(tx, cfg, id, patch))).rejects.toMatchObject({
+        code: "printer.not_found",
+      });
+    }
+    expect(await asTx(cfg, (tx) => listPrinters(tx, cfg))).toEqual([]);
+    const disabled = await seedPrinter(cfg, "Disabled control");
+    await asTx(cfg, (tx) => deactivatePrinter(tx, cfg, disabled));
+    await asTx(cfg, (tx) => updatePrinter(tx, cfg, disabled, { active: true }));
+    expect((await asTx(cfg, (tx) => listPrinters(tx, cfg))).map((p) => p.id)).toEqual([disabled]);
+  });
+
+  it("deactivatePrinter refuses a deleted printer and leaves it unchanged", async () => {
+    const cfg = await setup();
+    const id = await seedPrinter(cfg);
+    await markDeleted(cfg, id);
+    await expect(asTx(cfg, (tx) => deactivatePrinter(tx, cfg, id))).rejects.toMatchObject({
+      code: "printer.not_found",
+    });
+    expect((await fullRow(id)).active).toBe(true);
+  });
+
+  it("a deleted printer's local_key can be registered again", async () => {
+    const cfg = await setup();
+    const { id: first } = await asTx(cfg, (tx) =>
+      createPrinter(tx, cfg, { name: "Old", transport: "usb", localKey: "SN-REUSE" }),
+    );
+    await markDeleted(cfg, first);
+    const { id: second } = await asTx(cfg, (tx) =>
+      createPrinter(tx, cfg, { name: "Old", transport: "usb", localKey: "SN-REUSE" }),
+    );
+    expect(second).not.toBe(first);
+    expect((await asTx(cfg, (tx) => listPrinters(tx, cfg))).map((p) => p.id)).toEqual([second]);
+  });
+});
+
 describe("deactivatePrinter", () => {
   it("flips active=false (never a delete) and 404s an unknown id", async () => {
     const cfg = await setup();

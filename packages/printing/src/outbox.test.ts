@@ -7,6 +7,7 @@ import {
   invoiceSeries,
   locations,
   printJobs,
+  printers,
   sales,
   withTransaction,
 } from "@waitron/db";
@@ -16,6 +17,7 @@ import { seedDevice, seedNode, seedTenant } from "@waitron/db/testing/seed.js";
 import { locationId as brandLocationId } from "@waitron/shared";
 import { createPrinter, deactivatePrinter } from "./printers.js";
 import { canResendPrintJob, enqueuePrintJob, resendPrintJob } from "./outbox.js";
+import { PRINTER_DELETED } from "./printer-delete-jobs.js";
 import type { PrintConfig } from "./printers.js";
 import "./errors.js";
 
@@ -345,5 +347,63 @@ describe("resendPrintJob", () => {
         code: "printer.not_found",
       });
     });
+  });
+});
+
+describe("a deleted printer's jobs", () => {
+  async function deletedPrinterWithJobs(cfg: PrintConfig) {
+    return withTransaction(suite.db, async (tx) => {
+      const printer = await createPrinter(tx, cfg, {
+        name: "Deleted",
+        transport: "network_tcp",
+        host: "printer.local",
+      });
+      const done = await enqueuePrintJob(tx, cfg, printer.id, new Uint8Array([1]));
+      const ended = await enqueuePrintJob(tx, cfg, printer.id, new Uint8Array([2]));
+      await tx.update(printJobs).set({ status: "done" }).where(eq(printJobs.id, done.jobId));
+      await tx
+        .update(printJobs)
+        .set({ status: "failed", attempts: 5, lastError: PRINTER_DELETED })
+        .where(eq(printJobs.id, ended.jobId));
+      await tx
+        .update(printers)
+        .set({ active: false, deletedAt: "2026-10-10T09:00:00.000Z" })
+        .where(eq(printers.id, printer.id));
+      return { printerId: printer.id, done: done.jobId, ended: ended.jobId };
+    });
+  }
+
+  it("cannot be resent once a delete ended them, whatever the kind, status and attempts say", () => {
+    const exhausted = { kind: "document", status: "failed", attempts: 5 } as const;
+    expect(canResendPrintJob({ ...exhausted, lastError: PRINTER_DELETED })).toBe(false);
+    expect(canResendPrintJob({ ...exhausted, lastError: "paper" })).toBe(true);
+    expect(canResendPrintJob({ ...exhausted, lastError: null })).toBe(true);
+    expect(canResendPrintJob(exhausted)).toBe(true);
+  });
+
+  it("answers printer.not_found to a resend of any of them, before its eligibility, and adds no job", async () => {
+    const cfg = await setup();
+    const { printerId, done, ended } = await deletedPrinterWithJobs(cfg);
+    const before = await suite.db.select().from(printJobs);
+
+    for (const jobId of [done, ended]) {
+      await expect(
+        withTransaction(suite.db, (tx) => resendPrintJob(tx, jobId)),
+      ).rejects.toMatchObject({ code: "printer.not_found", params: { id: printerId } });
+    }
+    expect(await suite.db.select().from(printJobs)).toEqual(before);
+  });
+
+  it("answers printer.not_found to a new job for a deleted printer, even one left marked active", async () => {
+    const cfg = await setup();
+    const { printerId } = await deletedPrinterWithJobs(cfg);
+    // Not a state the delete leaves; it isolates the deleted-row check from the active one.
+    await suite.db.update(printers).set({ active: true }).where(eq(printers.id, printerId));
+    const before = await suite.db.select().from(printJobs);
+
+    await expect(
+      withTransaction(suite.db, (tx) => enqueuePrintJob(tx, cfg, printerId, new Uint8Array([3]))),
+    ).rejects.toMatchObject({ code: "printer.not_found", params: { id: printerId } });
+    expect(await suite.db.select().from(printJobs)).toEqual(before);
   });
 });

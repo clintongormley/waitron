@@ -45,4 +45,9 @@ export {
   reportPrintJob,
   runAgentOnce,
 } from "./runtime.js";
+export {
+  PRINTER_DELETED,
+  endDeletedPrinterJobs,
+  readPrinterDeleteJobIds,
+} from "./printer-delete-jobs.js";
 export type { AgentRunResult, AgentRuntimeDeps, ClaimedJob, JobOutcome } from "./runtime.js";

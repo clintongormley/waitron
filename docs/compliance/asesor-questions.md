@@ -1757,6 +1757,9 @@ so there is nothing on the document that says who each *duplicado* belongs to.
   documento no es una factura*, with no invoice number, series or QR code
   (`apps/server/src/payment-slip.ts`).
 
+**Source update, 2026-10-10 (A435-2):** for (d), a job whose printer was deleted cannot be resent;
+`resendPrintJob` answers `printer.not_found`.
+
 > **(a)** En un establecimiento de hostelería que expide **facturas simplificadas**, cuando varios
 > clientes comparten mesa y desean cada uno su propio justificante, ¿es conforme a derecho expedir una
 > **factura simplificada independiente por cada cliente**, documentando cada una los consumos que se le

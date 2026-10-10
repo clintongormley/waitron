@@ -6,11 +6,13 @@ import { beforeAll, describe, expect, it, vi } from "vitest";
 import {
   deviceProfilePrinters,
   deviceProfiles,
+  devices,
   kitchenStations,
   locations,
   nowIso,
   printAgents,
   printJobs,
+  printerHolders,
   printers,
   stationPrinters,
   tenants,
@@ -22,7 +24,7 @@ import {
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { hashPin, persons, startManagementSession } from "@waitron/identity";
-import { enqueuePrintJob } from "@waitron/printing";
+import { enqueuePrintJob, MAX_DELIVERY_ATTEMPTS, PRINTER_DELETED } from "@waitron/printing";
 import {
   locationId as brandLocationId,
   nodeId as brandNodeId,
@@ -119,7 +121,7 @@ function cfgOf(tenant: Tenant): TillConfig {
   };
 }
 
-function mountApp(tenant: Tenant): Hono {
+function mountApp(tenant: Tenant, now?: () => Date): Hono {
   const app = new Hono();
   const pairingMode = createPairingMode();
   pairingMode.open();
@@ -131,6 +133,7 @@ function mountApp(tenant: Tenant): Hono {
       pairingMode,
       readMembership: async () => null,
       venueLocale: "es-ES",
+      ...(now === undefined ? {} : { now }),
     },
     noopLog,
   );
@@ -982,5 +985,368 @@ describe("station printer selection replacement", () => {
       expect(await response.json()).toMatchObject({ error: { code } });
       expect(await f.mappings()).toEqual([{ stationId: f.stationId, printerId: f.old }]);
     }
+  });
+});
+
+describe("printer delete routes (printer.manage)", () => {
+  const NOW = new Date("2026-10-10T10:00:00.000Z");
+
+  /** The rows a printer delete may change, and the history it must not add to. */
+  async function printingRows(): Promise<Record<string, unknown[]>> {
+    const out: Record<string, unknown[]> = {};
+    for (const name of [
+      "printers",
+      "print_jobs",
+      "invoice_deliveries",
+      "devices",
+      "device_profile_printers",
+      "station_printers",
+      "printer_holders",
+      "drawer_opens",
+      "receipt_reprints",
+    ]) {
+      out[name] = (
+        await suite.db.execute(sql`select * from ${sql.identifier(name)} order by rowid`)
+      ).rows;
+    }
+    return out;
+  }
+
+  /** A portable printer a station prints to, a profile defaults to, and a device chose and holds. */
+  async function linkedPrinter(app: Hono) {
+    const agent = await joinAndAccept(app, `Delete agent ${randomUUID()}`);
+    const printerId = await createPrinter(app, agent.agentId, `Counter ${randomUUID()}`);
+    const [printer] = await suite.db
+      .update(printers)
+      .set({ portable: true })
+      .where(eq(printers.id, printerId))
+      .returning({ name: printers.name });
+    const stationName = `Grill ${randomUUID()}`;
+    const stationId = await seedStation(tenantA, stationName);
+    await suite.db.insert(stationPrinters).values({ stationId, printerId });
+    const profileName = `Waiters ${randomUUID()}`;
+    const [profile] = await suite.db
+      .insert(deviceProfiles)
+      .values({ name: profileName, formFactor: "phone-portrait" })
+      .returning({ id: deviceProfiles.id });
+    await suite.db.insert(deviceProfilePrinters).values({
+      deviceProfileId: profile!.id,
+      printerId,
+      role: "receipt",
+      position: 0,
+      isDefault: true,
+    });
+    const deviceLabel = `Handheld ${randomUUID()}`;
+    const [device] = await suite.db
+      .insert(devices)
+      .values({
+        locationId: tenantA.locationId,
+        deviceProfileId: profile!.id,
+        label: deviceLabel,
+        tokenHash: randomUUID(),
+        receiptPrinterId: printerId,
+      })
+      .returning({ id: devices.id });
+    await suite.db.insert(printerHolders).values({ printerId, deviceId: device!.id });
+    const jobId = await enqueue(tenantA, printerId, new Uint8Array([1]));
+    const device_ = { id: device!.id, name: deviceLabel };
+    const profile_ = { id: profile!.id, name: profileName };
+    return {
+      printerId,
+      jobId,
+      stationId,
+      deviceId: device!.id,
+      profileId: profile!.id,
+      impact: (jobs: number) => ({
+        target: { id: printerId, name: printer!.name },
+        refusals: [],
+        ends: [
+          { key: "print_jobs", count: jobs, targets: [] },
+          { key: "portable_holder", count: 1, targets: [device_] },
+        ],
+        removes: [
+          { key: "device_receipt", count: 1, targets: [device_] },
+          { key: "profile_receipt", count: 1, targets: [profile_] },
+          { key: "profile_receipt_default", count: 1, targets: [profile_] },
+          { key: "station_printers", count: 1, targets: [{ id: stationId, name: stationName }] },
+        ],
+      }),
+    };
+  }
+
+  it("reads the impact, then deletes with the impact recomputed: work queued after the read is ended too", async () => {
+    const app = mountApp(tenantA, () => NOW);
+    const p = await linkedPrinter(app);
+
+    const read = await send(app, "GET", `/management-api/printers/${p.printerId}/delete-impact`, {
+      cookie: managerCookie,
+    });
+    expect(read.status).toBe(200);
+    expect(await read.json()).toEqual(p.impact(1));
+
+    const later = await enqueue(tenantA, p.printerId, new Uint8Array([2]));
+    const deleted = await send(app, "DELETE", `/management-api/printers/${p.printerId}`, {
+      cookie: managerCookie,
+    });
+    expect(deleted.status).toBe(200);
+    expect(await deleted.json()).toEqual(p.impact(2));
+
+    const [row] = await suite.db
+      .select({ active: printers.active, deletedAt: printers.deletedAt })
+      .from(printers)
+      .where(eq(printers.id, p.printerId));
+    expect(row).toEqual({ active: false, deletedAt: NOW.toISOString() });
+    for (const jobId of [p.jobId, later]) {
+      const [job] = await suite.db
+        .select({
+          status: printJobs.status,
+          attempts: printJobs.attempts,
+          lastError: printJobs.lastError,
+        })
+        .from(printJobs)
+        .where(eq(printJobs.id, jobId));
+      expect(job).toEqual({
+        status: "failed",
+        attempts: MAX_DELIVERY_ATTEMPTS,
+        lastError: PRINTER_DELETED,
+      });
+    }
+    const [device] = await suite.db
+      .select({ receipt: devices.receiptPrinterId })
+      .from(devices)
+      .where(eq(devices.id, p.deviceId));
+    expect(device).toEqual({ receipt: null });
+    expect(
+      await suite.db
+        .select()
+        .from(stationPrinters)
+        .where(eq(stationPrinters.printerId, p.printerId)),
+    ).toEqual([]);
+    expect(
+      await suite.db
+        .select()
+        .from(deviceProfilePrinters)
+        .where(eq(deviceProfilePrinters.printerId, p.printerId)),
+    ).toEqual([]);
+    expect(
+      await suite.db.select().from(printerHolders).where(eq(printerHolders.printerId, p.printerId)),
+    ).toEqual([]);
+
+    const before = await printingRows();
+    for (const [method, path] of [
+      ["GET", `/management-api/printers/${p.printerId}/delete-impact`],
+      ["DELETE", `/management-api/printers/${p.printerId}`],
+    ] as const) {
+      const again = await send(app, method, path, { cookie: managerCookie });
+      expect(again.status, method).toBe(404);
+      expect(await again.json()).toMatchObject({
+        error: { code: "printer.not_found", params: { id: p.printerId } },
+      });
+    }
+    expect(await printingRows()).toEqual(before);
+  });
+
+  it("refuses unauthenticated, staff, malformed and unknown targets without writing", async () => {
+    const app = mountApp(tenantA, () => NOW);
+    const p = await linkedPrinter(app);
+    const before = await printingRows();
+
+    for (const [method, path] of [
+      ["GET", `/management-api/printers/${p.printerId}/delete-impact`],
+      ["DELETE", `/management-api/printers/${p.printerId}`],
+    ] as const) {
+      const unauthenticated = await send(app, method, path);
+      expect(unauthenticated.status, method).toBe(401);
+      expect(await unauthenticated.json()).toMatchObject({
+        error: { code: "management_session.required" },
+      });
+      const staff = await send(app, method, path, { cookie: staffCookie });
+      expect(staff.status, method).toBe(403);
+      expect(await staff.json()).toMatchObject({ error: { code: "authorization.not_permitted" } });
+    }
+    for (const [method, path] of [
+      ["GET", "/management-api/printers/not-a-uuid/delete-impact"],
+      ["DELETE", "/management-api/printers/not-a-uuid"],
+    ] as const) {
+      const malformed = await send(app, method, path, { cookie: managerCookie });
+      expect(malformed.status, method).toBe(400);
+      expect(await malformed.json()).toMatchObject({ error: { code: "shared.invalid_id" } });
+    }
+    const unknown = randomUUID();
+    for (const [method, path] of [
+      ["GET", `/management-api/printers/${unknown}/delete-impact`],
+      ["DELETE", `/management-api/printers/${unknown}`],
+    ] as const) {
+      const missing = await send(app, method, path, { cookie: managerCookie });
+      expect(missing.status, method).toBe(404);
+      expect(await missing.json()).toMatchObject({
+        error: { code: "printer.not_found", params: { id: unknown } },
+      });
+    }
+    expect(await printingRows()).toEqual(before);
+  });
+
+  it("refuses the delete when the manager lost printer.manage after reading the impact", async () => {
+    const app = mountApp(tenantA, () => NOW);
+    const p = await linkedPrinter(app);
+    const { personId, cookie } = await withTransaction(suite.db, async (tx) => {
+      const [person] = await tx
+        .insert(persons)
+        .values({ displayName: "Demoted", pinHash: hashPin("1234"), role: "manager" })
+        .returning({ id: persons.id });
+      const session = await startManagementSession(tx, { personId: person!.id });
+      return { personId: person!.id, cookie: `${MANAGEMENT_COOKIE}=${session.token}` };
+    });
+    const read = await send(app, "GET", `/management-api/printers/${p.printerId}/delete-impact`, {
+      cookie,
+    });
+    expect(read.status).toBe(200);
+    await suite.db.update(persons).set({ role: "staff" }).where(eq(persons.id, personId));
+    const before = await printingRows();
+
+    const deleted = await send(app, "DELETE", `/management-api/printers/${p.printerId}`, {
+      cookie,
+    });
+
+    expect(deleted.status).toBe(403);
+    expect(await deleted.json()).toMatchObject({ error: { code: "authorization.not_permitted" } });
+    expect(await printingRows()).toEqual(before);
+  });
+
+  it("lets one of two concurrent deletes succeed and answers the other printer.not_found", async () => {
+    const app = mountApp(tenantA, () => NOW);
+    const p = await linkedPrinter(app);
+
+    const responses = await Promise.all(
+      [0, 1].map(() =>
+        send(app, "DELETE", `/management-api/printers/${p.printerId}`, { cookie: managerCookie }),
+      ),
+    );
+
+    expect(responses.map((r) => r.status).sort()).toEqual([200, 404]);
+    const refused = responses.find((r) => r.status === 404)!;
+    expect(await refused.json()).toMatchObject({ error: { code: "printer.not_found" } });
+    const succeeded = responses.find((r) => r.status === 200)!;
+    expect(await succeeded.json()).toEqual(p.impact(1));
+  });
+
+  describe("every by-id route naming a deleted printer", () => {
+    type Call = [string, "GET" | "POST" | "PUT" | "PATCH" | "DELETE", string, unknown?];
+
+    async function deletedPrinterCalls(app: Hono) {
+      const p = await linkedPrinter(app);
+      const otherStation = await seedStation(tenantA, `Fryer ${randomUUID()}`);
+      await suite.db.update(printJobs).set({ status: "done" }).where(eq(printJobs.id, p.jobId));
+      const deleted = await send(app, "DELETE", `/management-api/printers/${p.printerId}`, {
+        cookie: managerCookie,
+      });
+      expect(deleted.status).toBe(200);
+      const printer = `/management-api/printers/${p.printerId}`;
+      const calls: Call[] = [
+        ["empty edit", "PATCH", printer, {}],
+        ["Enable", "PATCH", printer, { active: true }],
+        ["Disable", "PATCH", printer, { active: false }],
+        ["rename", "PATCH", printer, { name: "Brought back" }],
+        ["connection", "PATCH", printer, { host: "10.0.0.10", port: 9100 }],
+        ["paper", "PATCH", printer, { paperWidth: "58mm", resolution: "180dpi" }],
+        ["drawer", "PATCH", printer, { hasCashDrawer: true }],
+        ["portable unchanged", "PATCH", printer, { portable: true }],
+        ["portable changed", "PATCH", printer, { portable: false }],
+        ["deactivate", "POST", `${printer}/deactivate`],
+        [
+          "station attach",
+          "POST",
+          `/management-api/stations/${otherStation}/printers/${p.printerId}`,
+        ],
+        [
+          "station detach",
+          "DELETE",
+          `/management-api/stations/${p.stationId}/printers/${p.printerId}`,
+        ],
+        ["stations by printer", "GET", `/management-api/printers/${p.printerId}/stations`],
+        [
+          "station list",
+          "PUT",
+          `/management-api/stations/${p.stationId}/printers`,
+          { printerIds: [p.printerId] },
+        ],
+        ["test print", "POST", `${printer}/test-print`],
+        ["test page", "POST", `${printer}/print-test-page`],
+        [
+          "sample receipt",
+          "POST",
+          `${printer}/sample-receipt`,
+          { paperWidth: "80mm", resolution: "203dpi" },
+        ],
+        ["test drawer", "POST", `${printer}/test-drawer`],
+        ["original resend", "POST", `/management-api/print-jobs/${p.jobId}/resend`],
+      ];
+      return { p, calls };
+    }
+
+    it("answers each with printer.not_found and writes no row, job or audit", async () => {
+      const app = mountApp(tenantA, () => NOW);
+      const { p, calls } = await deletedPrinterCalls(app);
+      const before = await printingRows();
+
+      for (const [label, method, path, body] of calls) {
+        const res = await send(app, method, path, {
+          cookie: managerCookie,
+          ...(body === undefined ? {} : { body }),
+        });
+        const text = await res.text();
+        expect([label, res.status, text === "" ? null : JSON.parse(text)]).toEqual([
+          label,
+          404,
+          { error: { code: "printer.not_found", params: { id: p.printerId } } },
+        ]);
+      }
+      expect(await printingRows()).toEqual(before);
+    });
+
+    it("still edits, Enables, lists and detaches a switched-off printer that is not deleted", async () => {
+      const app = mountApp(tenantA, () => NOW);
+      const p = await linkedPrinter(app);
+      const printer = `/management-api/printers/${p.printerId}`;
+      const off = await send(app, "POST", `${printer}/deactivate`, { cookie: managerCookie });
+      expect(off.status).toBe(204);
+
+      for (const [label, method, path, body, status] of [
+        ["rename", "PATCH", printer, { name: `Renamed ${randomUUID()}` }, 204],
+        ["portable", "PATCH", printer, { portable: false }, 204],
+        [
+          "stations by printer",
+          "GET",
+          `/management-api/printers/${p.printerId}/stations`,
+          undefined,
+          200,
+        ],
+        [
+          "station detach",
+          "DELETE",
+          `/management-api/stations/${p.stationId}/printers/${p.printerId}`,
+          undefined,
+          204,
+        ],
+        ["Enable", "PATCH", printer, { active: true }, 204],
+      ] as const) {
+        const res = await send(app, method, path, {
+          cookie: managerCookie,
+          ...(body === undefined ? {} : { body }),
+        });
+        expect([label, res.status]).toEqual([label, status]);
+      }
+      const [row] = await suite.db
+        .select({ active: printers.active, portable: printers.portable })
+        .from(printers)
+        .where(eq(printers.id, p.printerId));
+      expect(row).toEqual({ active: true, portable: false });
+      expect(
+        await suite.db
+          .select()
+          .from(stationPrinters)
+          .where(eq(stationPrinters.printerId, p.printerId)),
+      ).toEqual([]);
+    });
   });
 });

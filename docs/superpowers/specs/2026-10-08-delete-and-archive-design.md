@@ -94,7 +94,8 @@ A row elsewhere that holds a deleted record's id is one of three kinds:
    read is ended too; the confirmation's counts are what was true when it was shown.
 
 The dashboard shows the impact in one confirmation dialog, with the refusals first, then what will be
-ended, then what will be removed, and the words "This can't be undone." The delete action is
+ended, then what will be removed, and the words "This can't be undone." _(2026-10-10, A435 step 2:
+the dialog first names the record being deleted, in bold.)_ The delete action is
 disabled while any refusal stands. The dialog is ONE shared component, placed where both
 `apps/dashboard` and `packages/venue-service/src/dashboard` (zones, departments, stations) can import
 it; the printers step decides where, following the design-system rules for whichever home it picks.

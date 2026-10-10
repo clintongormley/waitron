@@ -148,6 +148,9 @@ every screen it asks for resolves to its own schedule (`#permittedScreen`, `:136
   original, and a receipt never printed (the location's receipt printing is not automatic:
   `enqueueSaleReceipt`, `receipt-print.ts:122-126`) has no job to resend. It records no person
   either: `print_jobs` has no person column (`packages/db/src/schema/print-jobs.ts`).
+  _(2026-10-10, A435-2: a job whose printer has been deleted is not resent: the Printers screen
+  offers no Resend for it, and the route answers `printer.not_found` (`resendPrintJob`,
+  `packages/printing/src/outbox.ts`).)_
 - `POST /api/orders/:id/reprint` (`till-api.ts:1457`) reprints kitchen tickets, not a receipt.
 
 None of the three opens the drawer: a drawer kick is a separate `drawer` job

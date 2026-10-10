@@ -38,8 +38,42 @@ describe("validateCoreConfiguration", () => {
     expect(() => validateCoreConfiguration({})).not.toThrow();
   });
 
+  it("refuses a printer row marked deleted, which the exporter never sends", () => {
+    expect(() =>
+      validateCoreConfiguration({
+        printers: [
+          { id: "p1", deleted_at: null },
+          { id: "p2", deleted_at: "2026-10-10T10:00:00.000Z" },
+        ],
+      }),
+    ).toThrowError(
+      expect.objectContaining({
+        code: "setup.request_invalid",
+        params: { field: "printers.deleted_at" },
+      }),
+    );
+  });
+
+  it("accepts printer rows whose deleted mark is null or absent", () => {
+    expect(() =>
+      validateCoreConfiguration({ printers: [{ id: "p1", deleted_at: null }, { id: "p2" }] }),
+    ).not.toThrow();
+  });
+
   it("is the core transfer's validate", () => {
     expect(validateCoreConfiguration).toBeTypeOf("function");
     expect(CORE_CONFIGURATION_TRANSFER.validate).toBe(validateCoreConfiguration);
+  });
+});
+
+describe("CORE_CONFIGURATION_TRANSFER", () => {
+  it("leaves a deleted printer behind and never carries its poll credential", () => {
+    expect(CORE_CONFIGURATION_TRANSFER.tables.find((table) => table.name === "printers")).toEqual({
+      name: "printers",
+      locationColumns: ["location_id"],
+      omit: ["poll_token_hash"],
+      reconnect: true,
+      leaveBehindWhenSet: "deleted_at",
+    });
   });
 });

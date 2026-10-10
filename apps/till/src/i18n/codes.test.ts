@@ -501,3 +501,16 @@ it("tells a kitchen display why its pass lever was refused, in both languages", 
     "Este dispositivo ya no muestra esa pantalla. Pide a un responsable que vuelva a elegir sus pantallas.",
   );
 });
+
+it("says a printer was deleted, or no longer exists, in both languages", () => {
+  expect(codeMessage("printer.deleted", "en")).toBe(
+    "The printer was deleted, so this job will not be retried.",
+  );
+  expect(codeMessage("printer.deleted", "es")).toBe(
+    "La impresora se eliminó, por lo que no se volverá a intentar este trabajo.",
+  );
+  expect(codeMessage("printer.not_found", "en")).toBe(
+    "That printer no longer exists. Choose another",
+  );
+  expect(codeMessage("printer.not_found", "es")).toBe("Esa impresora ya no existe. Elige otra");
+});

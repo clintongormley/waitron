@@ -4,7 +4,16 @@ import { eq, sql } from "drizzle-orm";
 import { describe, expect, it, vi } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { deviceProfiles, printJobs, printers, receiptReprints, sales, tenants } from "@waitron/db";
+import {
+  deviceProfiles,
+  drawerOpens,
+  kitchenPrintJobs,
+  printJobs,
+  printers,
+  receiptReprints,
+  sales,
+  tenants,
+} from "@waitron/db";
 import { createPrinter } from "@waitron/printing";
 import type { FiscalBackend } from "@waitron/fiscal";
 import { inTx, send } from "./testing/bill-venue.js";
@@ -12,6 +21,7 @@ import { decodeTicket } from "./testing/decode-ticket.js";
 import { enrolDeviceForTest } from "./testing/enrol.js";
 import { DEV_DEVICE_HEADER, DEVICE_COOKIE } from "./device-session.js";
 import { mountOrdersApi } from "./orders-api.js";
+import { deletePrinter } from "./printer-delete.js";
 import {
   billlessSale,
   collect,
@@ -315,5 +325,103 @@ describe("dashboard receipt reprint", () => {
     const after = await counts();
     expect(after.jobs).toBe(before.jobs);
     expect(after.reprints).toBe(before.reprints);
+  });
+});
+
+describe("a receipt copy printed on a printer later deleted", () => {
+  const newPrinter = (name: string) =>
+    inTx(venue, (tx) =>
+      createPrinter(
+        tx,
+        { locationId: venue.cfg.locationId },
+        { name, transport: "cloud_poll", pollId: `poll-${randomUUID()}`, paperWidth: "58mm" },
+      ),
+    );
+
+  it("keeps the old printer's name on the order, refuses it for a new copy, and prints the new copy on the replacement", async () => {
+    const billId = await placedIssuedBill(venue, "Caña");
+    expect((await collect(venue, billId, "3.00")).status).toBe(200);
+    const old = await newPrinter("Old kitchen");
+    const first = await post(venue.adminDashboard, billId, old.id);
+    expect(first.status).toBe(202);
+    const oldJobId = (first.json as { jobId: string }).jobId;
+    await inTx(venue, (tx) =>
+      tx
+        .update(printJobs)
+        .set({ status: "done", deliveredAt: new Date().toISOString() })
+        .where(eq(printJobs.id, oldJobId)),
+    );
+    const history = () =>
+      inTx(venue, async (tx) => ({
+        oldJob: await tx.select().from(printJobs).where(eq(printJobs.id, oldJobId)),
+        drawers: await tx.select().from(drawerOpens),
+        kitchenLinks: await tx.select().from(kitchenPrintJobs),
+        sales: await tx.select().from(sales),
+        registros: await tx.all(sql`select * from registros_facturacion`),
+      }));
+    const before = await history();
+
+    await inTx(venue, (tx) => deletePrinter(tx, { locationId: venue.cfg.locationId }, old.id));
+    const replacement = await newPrinter("New kitchen");
+
+    const choices = await send(
+      venue.orders,
+      venue.adminDashboard,
+      "GET",
+      "/management-api/orders/printers",
+    );
+    const chosen = (choices.json as unknown as { id: string }[]).map((row) => row.id);
+    expect(chosen).toContain(replacement.id);
+    expect(chosen).not.toContain(old.id);
+
+    const refusedAt = await counts();
+    expect(await post(venue.adminDashboard, billId, old.id)).toMatchObject({
+      status: 404,
+      json: { code: "printer.not_found" },
+    });
+    expect(await counts()).toEqual(refusedAt);
+
+    const second = await post(venue.adminDashboard, billId, replacement.id);
+    expect(second.status).toBe(202);
+    const newJobId = (second.json as { jobId: string }).jobId;
+    expect(await counts()).toEqual({
+      ...refusedAt,
+      jobs: refusedAt.jobs + 1,
+      reprints: refusedAt.reprints + 1,
+    });
+    const [newJob] = await inTx(venue, (tx) =>
+      tx.select().from(printJobs).where(eq(printJobs.id, newJobId)),
+    );
+    expect(newJob).toMatchObject({ printerId: replacement.id, kind: "document" });
+    expect(decodeTicket(newJob!.payload)).toContain("DUPLICADO");
+    const audits = await inTx(venue, (tx) =>
+      tx
+        .select()
+        .from(receiptReprints)
+        .where(
+          eq(receiptReprints.saleId, before.sales.find((s) => s.workingOrderId === billId)!.id),
+        ),
+    );
+    expect(audits.map((audit) => [audit.printJobId, audit.personId])).toEqual([
+      [oldJobId, venue.adminId],
+      [newJobId, venue.adminId],
+    ]);
+
+    const detail = await send(
+      venue.orders,
+      venue.adminDashboard,
+      "GET",
+      `/management-api/orders/${billId}`,
+    );
+    expect(detail.status).toBe(200);
+    expect(
+      (detail.json as { reprints: { printerName: string }[] }).reprints.map((r) => r.printerName),
+    ).toEqual(["Old kitchen", "New kitchen"]);
+    expect(await history()).toEqual(before);
+    const [tombstone] = await inTx(venue, (tx) =>
+      tx.select().from(printers).where(eq(printers.id, old.id)),
+    );
+    expect(tombstone).toMatchObject({ name: "Old kitchen", active: false });
+    expect(tombstone!.deletedAt).not.toBeNull();
   });
 });

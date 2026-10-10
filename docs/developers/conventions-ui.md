@@ -547,8 +547,10 @@ screens do with events such as `fire-course` and `mark-collected`.
 Discovery matches disabled records as well as active ones; the dashboard offers disabled matches
 (printers and card readers as Enable) and reactivates their existing id, preserving
 history and routing. Only active matches
-disappear from the add list. Cost: deleting a USB printer left it in the registered table and hid it
-from discovery, blocking re-add. The table now defaults to Active with Disabled/All filters. Built in
+disappear from the add list. A deleted printer is different: discovery no longer matches it, so its
+device shows as new and Add registers it again under a new id, while the deleted row stays behind
+only to name its old jobs. Guard: "a deleted printer in discovery" in `apps/server/src/print-api.test.ts`. Cost: disabling a USB printer (an action then labelled Delete) left it in the registered table and
+hid it from discovery, blocking re-add. The table now defaults to Active with Disabled/All filters. Built in
 #321.
 
 Devices follow the same rule, though nothing discovers them. A disabled device's browser keeps its

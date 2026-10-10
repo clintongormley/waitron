@@ -2,6 +2,7 @@
 import "./errors.js";
 import { and, eq } from "drizzle-orm";
 import { AppError } from "@waitron/shared";
+import { refuseDeletedPrinters } from "@waitron/layouts";
 import { kitchenStations, printers, stationPrinters } from "@waitron/db";
 import type { SQL } from "drizzle-orm";
 import type { Transaction } from "@waitron/db";
@@ -41,7 +42,8 @@ export async function attachPrinterToStation(
 
 /**
  * Deliberately does not check that either end is still active: a mapping to a retired station or
- * printer must stay detachable so the config can be cleaned up.
+ * switched-off printer must stay detachable so the config can be cleaned up. A deleted printer has
+ * no mappings left, so naming it is `printer.not_found`.
  */
 export async function detachPrinterFromStation(
   tx: Transaction,
@@ -49,6 +51,11 @@ export async function detachPrinterFromStation(
   { stationId, printerId }: StationPrinter,
 ): Promise<void> {
   void cfg;
+  await refuseDeletedPrinters(tx, [printerId]);
+  await removeMapping(tx, { stationId, printerId });
+}
+
+async function removeMapping(tx: Transaction, { stationId, printerId }: StationPrinter) {
   await tx
     .delete(stationPrinters)
     .where(and(eq(stationPrinters.stationId, stationId), eq(stationPrinters.printerId, printerId)));
@@ -65,6 +72,7 @@ export async function replaceStationPrinters(
     .from(kitchenStations)
     .where(and(eq(kitchenStations.id, stationId), eq(kitchenStations.active, true)));
   if (!station) throw new AppError("station.not_found", { stationId });
+  await refuseDeletedPrinters(tx, printerIds);
   const current = await listStationPrinters(tx, cfg, { stationId });
   for (const printerId of printerIds) {
     if (!current.some((row) => row.printerId === printerId)) {
@@ -72,7 +80,7 @@ export async function replaceStationPrinters(
     }
   }
   for (const row of current) {
-    if (!printerIds.includes(row.printerId)) await detachPrinterFromStation(tx, cfg, row);
+    if (!printerIds.includes(row.printerId)) await removeMapping(tx, row);
   }
 }
 
@@ -82,6 +90,7 @@ export async function listStationPrinters(
   filter?: { stationId?: string; printerId?: string },
 ): Promise<StationPrinter[]> {
   void cfg;
+  if (filter?.printerId !== undefined) await refuseDeletedPrinters(tx, [filter.printerId]);
   const conditions: SQL[] = [];
   if (filter?.stationId !== undefined) {
     conditions.push(eq(stationPrinters.stationId, filter.stationId));

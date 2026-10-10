@@ -76,6 +76,7 @@ export {
   readPrinterRoles,
   readPrinterEquipment,
   releaseDevicePrinters,
+  refuseDeletedPrinters,
   resolveDevicePrinterId,
   resolveDevicePrinterIds,
   selectDevicePrinter,

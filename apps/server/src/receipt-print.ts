@@ -9,7 +9,7 @@ import {
   sales,
 } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
-import { canResendPrintJob, enqueuePrintJob, esc } from "@waitron/printing";
+import { PRINTER_DELETED, canResendPrintJob, enqueuePrintJob, esc } from "@waitron/printing";
 import type { EscSetting, PrintConfig } from "@waitron/printing";
 import { getPrintedReceipt, profileAllows, readPrinterRoles } from "@waitron/layouts";
 import type { ProfilePrinterRole } from "@waitron/layouts";
@@ -364,6 +364,8 @@ export type OriginalReceiptPrint =
       status: "queued" | "printing" | "failed" | "done";
       jobId: string;
       canRetry: boolean;
+      /** Only on a failed original: its printer was deleted, so it will never print there. */
+      failureCode?: typeof PRINTER_DELETED;
       handover?: { personId: string; confirmedAt: string };
     };
 
@@ -378,9 +380,12 @@ export async function readOriginalReceiptPrint(
       status: printJobs.status,
       attempts: printJobs.attempts,
       kind: printJobs.kind,
+      lastError: printJobs.lastError,
       handover: printJobs.receiptHandover,
+      printerDeletedAt: printers.deletedAt,
     })
     .from(printJobs)
+    .innerJoin(printers, eq(printers.id, printJobs.printerId))
     .where(
       and(
         eq(printJobs.saleId, saleId),
@@ -393,10 +398,12 @@ export async function readOriginalReceiptPrint(
   const job = jobs.find((candidate) => candidate.status === "done") ?? jobs[0];
   if (job === undefined) return { status: "not_queued" };
   const handover = jobs.find((candidate) => candidate.handover !== null)?.handover;
+  const targetDeleted = job.printerDeletedAt !== null;
   return {
     status: job.status,
     jobId: job.id,
-    canRetry: job.status === "failed" && canResendPrintJob(job),
+    canRetry: job.status === "failed" && !targetDeleted && canResendPrintJob(job),
+    ...(job.status === "failed" && targetDeleted ? { failureCode: PRINTER_DELETED } : {}),
     ...(handover == null ? {} : { handover }),
   };
 }

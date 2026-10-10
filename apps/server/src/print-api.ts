@@ -4,7 +4,7 @@ import { createPrinterProbes } from "./printer-probes.js";
 import { createPrinterBluetoothCommands } from "./printer-bluetooth-commands.js";
 import type { Hono } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
-import { and, desc, eq, gte, inArray, lt, ne, or, sql } from "drizzle-orm";
+import { and, desc, eq, gte, inArray, isNull, lt, ne, or, sql } from "drizzle-orm";
 import { AppError } from "@waitron/shared";
 import type { SupportedLocale } from "@waitron/shared";
 import type { ReceiptQrText } from "@waitron/fiscal";
@@ -79,6 +79,7 @@ import { resolveSessionLocale } from "./session-locale.js";
 import { DEMO_PRINTER_KEY } from "./demo-printer.js";
 import { setPrinterPortable } from "@waitron/layouts";
 import { readPrinterHolders } from "./device-equipment.js";
+import { deletePrinter, readPrinterDeleteImpact } from "./printer-delete.js";
 
 export interface PrintApiDeps {
   db: Database;
@@ -560,7 +561,11 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
               .update(printers)
               .set({ active: false })
               .where(
-                and(eq(printers.transport, "bluetooth"), inArray(printers.localKey, addresses)),
+                and(
+                  eq(printers.transport, "bluetooth"),
+                  inArray(printers.localKey, addresses),
+                  isNull(printers.deletedAt),
+                ),
               );
             const ended = await endUnpairedPrinterJobs(tx, agentId, addresses);
             await endInvoicePrintDeliveries(tx, ended, deps.now?.());
@@ -807,7 +812,8 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
             host: printers.host,
             port: printers.port,
           })
-          .from(printers),
+          .from(printers)
+          .where(isNull(printers.deletedAt)),
         agents: await tx.select({ id: printAgents.id, name: printAgents.name }).from(printAgents),
       }));
       const names = new Map(agents.map((a) => [a.id, a.name]));
@@ -999,6 +1005,22 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
     }),
   );
 
+  app.get("/management-api/printers/:id/delete-impact", (c) =>
+    run(c, log, async () => {
+      const sessionId = requireManagementSession(c);
+      const id = requireUuidParam(c.req.param("id"), "PrinterId");
+      return c.json(await gated(sessionId, (tx) => readPrinterDeleteImpact(tx, deps.cfg, id)));
+    }),
+  );
+
+  app.delete("/management-api/printers/:id", (c) =>
+    run(c, log, async () => {
+      const sessionId = requireManagementSession(c);
+      const id = requireUuidParam(c.req.param("id"), "PrinterId");
+      return c.json(await gated(sessionId, (tx) => deletePrinter(tx, deps.cfg, id, deps.now?.())));
+    }),
+  );
+
   app.post("/management-api/printers/:id/test-drawer", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
@@ -1162,6 +1184,8 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
           .select({
             id: printJobs.id,
             printerId: printJobs.printerId,
+            printerName: printers.name,
+            printerDeletedAt: printers.deletedAt,
             status: printJobs.status,
             kind: printJobs.kind,
             attempts: printJobs.attempts,
@@ -1170,6 +1194,7 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
             deliveredAt: printJobs.deliveredAt,
           })
           .from(printJobs)
+          .innerJoin(printers, eq(printers.id, printJobs.printerId))
           .where(
             or(
               and(ne(printJobs.status, "done"), ne(printJobs.status, "failed")),
@@ -1181,9 +1206,9 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
           .orderBy(desc(printJobs.createdAt), desc(printJobs.id));
       });
       return c.json(
-        rows.map(({ kind, ...job }) => ({
+        rows.map(({ kind, printerDeletedAt, ...job }) => ({
           ...job,
-          canResend: canResendPrintJob({ ...job, kind }),
+          canResend: printerDeletedAt === null && canResendPrintJob({ ...job, kind }),
         })),
       );
     }),

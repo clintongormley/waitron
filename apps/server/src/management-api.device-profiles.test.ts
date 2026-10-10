@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { eq, sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
-import { devices, printers, withTransaction } from "@waitron/db";
+import { devices, printerHolders, printers, withTransaction } from "@waitron/db";
 import { createCatalogue } from "@waitron/catalogue";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -21,6 +21,7 @@ import { mountManagementApi } from "./management-api.js";
 import { ALL_MODULES, VENUE_SERVICE } from "./modules.js";
 import { TOTP_KEY_RING } from "./testing/authenticator.js";
 import { createStation } from "./kitchen.js";
+import { deletePrinter } from "./printer-delete.js";
 import type { TillConfig } from "./till-config.js";
 import {
   locationId as brandLocationId,
@@ -1136,6 +1137,259 @@ describe("Management API — device-profile CRUD (Task 4)", () => {
     });
     expect(res.status).toBe(403);
     expect(await res.json()).toMatchObject({ error: { code: "authorization.not_permitted" } });
+  });
+
+  describe("a deleted printer on a stale profile form", () => {
+    type Lists = Pick<
+      ProfileRow,
+      | "receiptPrinterIds"
+      | "paymentSlipPrinterIds"
+      | "cashDrawerPrinterIds"
+      | "receiptPrinterDefaultId"
+      | "paymentSlipPrinterDefaultId"
+      | "cashDrawerPrinterDefaultId"
+    >;
+
+    async function seedDrawerPrinter(name: string): Promise<string> {
+      const id = await seedPrinter(name);
+      await suite.db.update(printers).set({ hasCashDrawer: true }).where(eq(printers.id, id));
+      return id;
+    }
+
+    const removePrinter = (id: string) =>
+      withTransaction(suite.db, (tx) => deletePrinter(tx, venueCfg, id));
+
+    const ROLES = [
+      ["receiptPrinterIds", "receiptPrinterDefaultId"],
+      ["paymentSlipPrinterIds", "paymentSlipPrinterDefaultId"],
+      ["cashDrawerPrinterIds", "cashDrawerPrinterDefaultId"],
+    ] as const;
+
+    /** A form naming P on one role's list, and as that role's default with `asDefault`. */
+    function formNaming(
+      p: string,
+      q: string,
+      [list, defaultField]: (typeof ROLES)[number],
+      asDefault: boolean,
+    ): Lists {
+      return {
+        receiptPrinterIds: [q],
+        paymentSlipPrinterIds: [q],
+        cashDrawerPrinterIds: [q],
+        receiptPrinterDefaultId: q,
+        paymentSlipPrinterDefaultId: q,
+        cashDrawerPrinterDefaultId: q,
+        [list]: [q, p],
+        ...(asDefault ? { [defaultField]: p } : {}),
+      };
+    }
+
+    async function stored(app: Hono, id: string) {
+      const res = await app.request(`/management-api/device-profiles/${id}`, {
+        headers: { cookie: managerCookie },
+      });
+      expect(res.status).toBe(200);
+      return res.json();
+    }
+
+    const cases = ROLES.flatMap((role) => [
+      [role[0], role, false] as const,
+      [role[1], role, true] as const,
+    ]);
+
+    it.each(cases)(
+      "refuses creating a profile naming it on %s with 404 printer.not_found, storing nothing",
+      async (_field, role, asDefault) => {
+        const app = mountApp();
+        const p = await seedDrawerPrinter(uniqueName("Gone"));
+        const q = await seedDrawerPrinter(uniqueName("Kept"));
+        await removePrinter(p);
+        const name = uniqueName("Stale create");
+
+        const res = await app.request("/management-api/device-profiles", {
+          method: "POST",
+          headers: { ...JSON_HEADERS, cookie: managerCookie },
+          body: JSON.stringify({
+            name,
+            formFactor: "till",
+            ...ordering,
+            canvasId: null,
+            capabilities: [],
+            ...formNaming(p, q, role, asDefault),
+          }),
+        });
+
+        expect(res.status).toBe(404);
+        expect(await res.json()).toEqual({
+          error: { code: "printer.not_found", params: { id: p } },
+        });
+        const listed = await app.request("/management-api/device-profiles", {
+          headers: { cookie: managerCookie },
+        });
+        const { deviceProfiles } = (await listed.json()) as { deviceProfiles: ProfileRow[] };
+        expect(deviceProfiles.some((row) => row.name === name)).toBe(false);
+      },
+    );
+
+    it.each(cases)(
+      "refuses a stale save still naming it on %s with 404 printer.not_found, changing nothing",
+      async (_field, role, asDefault) => {
+        const app = mountApp();
+        const p = await seedDrawerPrinter(uniqueName("Gone"));
+        const q = await seedDrawerPrinter(uniqueName("Kept"));
+        const r = await seedDrawerPrinter(uniqueName("Other"));
+        const name = uniqueName("Stale save");
+        const form = formNaming(p, q, role, asDefault);
+        const created = await app.request("/management-api/device-profiles", {
+          method: "POST",
+          headers: { ...JSON_HEADERS, cookie: managerCookie },
+          body: JSON.stringify({
+            name,
+            formFactor: "till",
+            ...ordering,
+            canvasId: null,
+            capabilities: [],
+            ...form,
+          }),
+        });
+        expect(created.status).toBe(201);
+        const { id } = (await created.json()) as ProfileRow;
+        const location = await suite.db.execute<{ id: string }>(
+          sql`select id from locations limit 1`,
+        );
+        const [device] = await suite.db
+          .insert(devices)
+          .values({
+            locationId: location.rows[0]!.id,
+            label: uniqueName("On stale profile"),
+            tokenHash: "scrypt$00$00",
+            deviceProfileId: id,
+            receiptPrinterId: q,
+            paymentSlipPrinterId: q,
+            cashDrawerPrinterId: q,
+          })
+          .returning({ id: devices.id });
+        // The device holds R, which it does not use: a save that reached device settling would
+        // release it.
+        await suite.db.update(printers).set({ portable: true }).where(eq(printers.id, r));
+        await suite.db.insert(printerHolders).values({ printerId: r, deviceId: device!.id });
+        await removePrinter(p);
+        const before = await stored(app, id);
+        const choicesOf = async () =>
+          (
+            await suite.db
+              .select({
+                receipt: devices.receiptPrinterId,
+                slip: devices.paymentSlipPrinterId,
+                drawer: devices.cashDrawerPrinterId,
+              })
+              .from(devices)
+              .where(eq(devices.id, device!.id))
+          )[0];
+        const choicesBefore = await choicesOf();
+        const holdersBefore = await suite.db.select().from(printerHolders);
+
+        const res = await app.request(`/management-api/device-profiles/${id}`, {
+          method: "PUT",
+          headers: { ...JSON_HEADERS, cookie: managerCookie },
+          body: JSON.stringify({
+            name: uniqueName("Renamed"),
+            formFactor: "till",
+            ...ordering,
+            canvasId: null,
+            capabilities: [],
+            ...form,
+            // A new printer beside the stale one, so a partial save would show.
+            [role[0]]: [r, ...form[role[0]]],
+          }),
+        });
+
+        expect(res.status).toBe(404);
+        expect(await res.json()).toEqual({
+          error: { code: "printer.not_found", params: { id: p } },
+        });
+        expect(await stored(app, id)).toEqual(before);
+        expect(await choicesOf()).toEqual(choicesBefore);
+        expect(await suite.db.select().from(printerHolders)).toEqual(holdersBefore);
+      },
+    );
+
+    it("refuses a save naming it only as a default, with 404 printer.not_found", async () => {
+      const app = mountApp();
+      const p = await seedDrawerPrinter(uniqueName("Gone"));
+      const q = await seedDrawerPrinter(uniqueName("Kept"));
+      const name = uniqueName("Default only");
+      const created = await app.request("/management-api/device-profiles", {
+        method: "POST",
+        headers: { ...JSON_HEADERS, cookie: managerCookie },
+        body: JSON.stringify({
+          name,
+          formFactor: "till",
+          ...ordering,
+          canvasId: null,
+          capabilities: [],
+          receiptPrinterIds: [q, p],
+          receiptPrinterDefaultId: p,
+        }),
+      });
+      const { id } = (await created.json()) as ProfileRow;
+      await removePrinter(p);
+      const before = await stored(app, id);
+
+      const res = await app.request(`/management-api/device-profiles/${id}`, {
+        method: "PUT",
+        headers: { ...JSON_HEADERS, cookie: managerCookie },
+        body: JSON.stringify({
+          name,
+          formFactor: "till",
+          ...ordering,
+          canvasId: null,
+          capabilities: [],
+          receiptPrinterDefaultId: p,
+        }),
+      });
+
+      expect(res.status).toBe(404);
+      expect(await res.json()).toEqual({
+        error: { code: "printer.not_found", params: { id: p } },
+      });
+      expect(await stored(app, id)).toEqual(before);
+    });
+
+    it("saves the same form once the deleted printer is taken off it, and lists a switched-off one", async () => {
+      const app = mountApp();
+      const p = await seedDrawerPrinter(uniqueName("Gone"));
+      const q = await seedDrawerPrinter(uniqueName("Kept"));
+      const off = await seedDrawerPrinter(uniqueName("Switched off"));
+      await suite.db.update(printers).set({ active: false }).where(eq(printers.id, off));
+      await removePrinter(p);
+
+      const res = await app.request("/management-api/device-profiles", {
+        method: "POST",
+        headers: { ...JSON_HEADERS, cookie: managerCookie },
+        body: JSON.stringify({
+          name: uniqueName("Clean"),
+          formFactor: "till",
+          ...ordering,
+          canvasId: null,
+          capabilities: [],
+          receiptPrinterIds: [q, off],
+          paymentSlipPrinterIds: [q],
+          cashDrawerPrinterIds: [off],
+          receiptPrinterDefaultId: off,
+          cashDrawerPrinterDefaultId: null,
+        }),
+      });
+
+      expect(res.status).toBe(201);
+      expect(await res.json()).toMatchObject({
+        receiptPrinterIds: [q, off],
+        paymentSlipPrinterIds: [q],
+        cashDrawerPrinterIds: [off],
+        receiptPrinterDefaultId: off,
+        cashDrawerPrinterDefaultId: null,
+      });
+    });
   });
 
   describe("a kitchen display profile's kitchen screens", () => {

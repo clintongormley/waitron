@@ -4673,3 +4673,100 @@ describe.each([
     expect(links.every((link) => link.tabIndex === 0)).toBe(true);
   });
 });
+
+describe("a printer deleted elsewhere while a form holds it", () => {
+  const withoutNext: PrepStationsView = {
+    ...ticketView,
+    printers: ticketView.printers.filter((printer) => printer.id !== "next"),
+  };
+  const offered = (combo: WtCombobox) => combo.options.map((option) => option.value);
+  const deleted = { code: "printer.not_found", params: { id: "next" } };
+  const DROPPED = "A printer you chose was deleted.";
+
+  it("the station editor re-reads after printer.not_found and no longer holds or offers it", async () => {
+    setLocale("en");
+    const load = vi.fn().mockResolvedValueOnce(ticketView).mockResolvedValue(withoutNext);
+    const updateStation = vi.fn().mockRejectedValueOnce(deleted).mockResolvedValue(undefined);
+    const { el } = await mountStations({ load, updateStation });
+    await openPrinters(el);
+    await pickPrinters(el, ["old", "next"]);
+    editorSave(el).click();
+    await vi.waitFor(() => expect(load).toHaveBeenCalledTimes(2));
+    await settleEditor(el);
+    const combo = printersOf(el)!;
+    expect(offered(combo)).not.toContain("next");
+    expect(combo.values).toEqual(["old"]);
+    expect(combo.countLabel(2)).not.toContain("next");
+    expect(combo.error).toBe("");
+    expect(editorMessage(el)).toBe(DROPPED);
+    await pickPrinters(el, []);
+    expect(editorMessage(el)).toBe("");
+    editorSave(el).click();
+    await vi.waitFor(() =>
+      expect(updateStation).toHaveBeenLastCalledWith("bar", { printerIds: [] }),
+    );
+  });
+
+  it("the station editor drops a printer another tab deleted, on the live read alone", async () => {
+    const liveData = new LiveData();
+    const load = vi.fn().mockResolvedValueOnce(ticketView).mockResolvedValue(withoutNext);
+    const { el, a } = await mountStations({ liveData, load });
+    await openPrinters(el);
+    await pickPrinters(el, ["old", "next"]);
+    liveData.invalidate([{ type: "printers", id: "next" }]);
+    await vi.waitFor(() => expect(load).toHaveBeenCalledTimes(2));
+    await settleEditor(el);
+    const combo = printersOf(el)!;
+    expect(offered(combo)).not.toContain("next");
+    expect(combo.values).toEqual(["old"]);
+    expect(editorMessage(el)).toBe(DROPPED);
+    expect(editorSave(el).disabled).toBe(true);
+    expect(a.updateStation).not.toHaveBeenCalled();
+  });
+
+  it("the station editor stays unchanged when a printer the station already had is deleted", async () => {
+    const liveData = new LiveData();
+    const load = vi
+      .fn()
+      .mockResolvedValueOnce(ticketView)
+      .mockResolvedValue({
+        ...ticketView,
+        printers: ticketView.printers.filter((printer) => printer.id !== "old"),
+        stationPrinters: [],
+      });
+    const { el } = await mountStations({ liveData, load });
+    await openPrinters(el);
+    liveData.invalidate([{ type: "printers", id: "old" }]);
+    await vi.waitFor(() => expect(load).toHaveBeenCalledTimes(2));
+    await settleEditor(el);
+    expect(printersOf(el)!.values).toEqual([]);
+    expect(editorSave(el).disabled).toBe(true);
+    expect(stationEditor(el)!.dirty).toBe(false);
+  });
+
+  it("Add station re-reads after printer.not_found and saves without the deleted printer", async () => {
+    setLocale("en");
+    const load = vi.fn().mockResolvedValueOnce(ticketView).mockResolvedValue(withoutNext);
+    const createStation = vi.fn().mockRejectedValueOnce(deleted).mockResolvedValue(undefined);
+    const el = await mount(api({ load, createStation }));
+    q(el, '[data-test="new-station"]')!.click();
+    await settle(el);
+    await editSaveField(el, q(el, 'wt-input[name="name"]')!, "Grill");
+    await editSaveField(el, q(el, "wt-combobox[name=printerIds]")!, ["old", "next"]);
+    q(el, '[data-test="save-station"]')!.click();
+    await vi.waitFor(() => expect(load).toHaveBeenCalledTimes(2));
+    await settle(el);
+    const combo = q(el, "wt-combobox[name=printerIds]") as WtCombobox;
+    expect(offered(combo)).not.toContain("next");
+    expect(combo.values).toEqual(["old"]);
+    expect(combo.countLabel(2)).not.toContain("next");
+    expect(combo.error).toBe("");
+    const modal = q(el, "wt-modal")!.textContent!;
+    expect(modal).toContain(DROPPED);
+    expect(modal).not.toContain("Correct the highlighted fields to continue.");
+    expect(q(el, '[data-test="save-station"]')!.hasAttribute("disabled")).toBe(false);
+    q(el, '[data-test="save-station"]')!.click();
+    await vi.waitFor(() => expect(createStation).toHaveBeenCalledTimes(2));
+    expect(createStation.mock.calls[1]![0]).toMatchObject({ name: "Grill", printerIds: ["old"] });
+  });
+});

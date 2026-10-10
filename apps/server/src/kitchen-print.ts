@@ -100,9 +100,9 @@ interface PrinterMapping {
 }
 
 /**
- * The station→printer mappings for `stationIds`, ACTIVE printers only unless `switchedOffToo`. The
- * fire and correction paths both resolve printers here without it, so the header's never-block
- * argument covers both.
+ * The station→printer mappings for `stationIds`, ACTIVE printers only unless `switchedOffToo`, which
+ * adds switched-off printers but never a deleted one. The fire and correction paths both resolve
+ * printers here without it, so the header's never-block argument covers both.
  */
 async function printerMappings(
   tx: Transaction,
@@ -121,7 +121,7 @@ async function printerMappings(
     .where(
       and(
         inArray(stationPrinters.stationId, stationIds),
-        switchedOffToo ? undefined : eq(printers.active, true),
+        switchedOffToo ? isNull(printers.deletedAt) : eq(printers.active, true),
       ),
     );
 }

@@ -4715,6 +4715,13 @@ _Formerly B9, and the old Track C's development-stack and house-rules items; par
   second full run green. A463 (#1508) does not touch that screen. **Next action:** reproduce it
   under load and fix at the root (standing rule: a flaky test is fixed, never re-run to green).
 
+- **A printers-screen test failed once during A435 step 2's review fixes and was not reproduced**:
+  "a press after one edit sends the edit and the field as it was read"
+  (`apps/dashboard/src/screens/printers-screen.save-state.test.ts`), once in eight runs of the
+  printers-screen files on 2026-10-10, then passing alone and in the seven later runs; its error was
+  not captured. **Next action:** reproduce it under load and fix at the root (standing rule: a flaky
+  test is fixed, never re-run to green).
+
 - **The test-shape half of #339's lesson is unwritten.** #339 passed review and CI and the first
   person to open the screen got a 500; the "open it and look" half is CLAUDE.md §4's rule. The
   other half — a matrix that varies two things separately and never crosses them proves less than
@@ -4853,18 +4860,12 @@ _Formerly parts of B9 and Track C._ Detail: [backlog/dependencies.md](backlog/de
 
 _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._ Detail: [backlog/architecture.md](backlog/architecture.md).
 
-- **A435 — permanent delete for hardware and venue setup (owner, 2026-10-08; steps 2–6 open).**
-  Printers are next. Each point below is a separate remaining step.
+- **A435 — permanent delete for hardware and venue setup (owner, 2026-10-08; steps 3–6 open).**
+  Card readers are next. Each point below is a separate remaining step.
   [Spec](superpowers/specs/2026-10-08-delete-and-archive-design.md),
   [product archive plan](superpowers/plans/2026-10-08-a435-1-product-archive.md).
-- **A435 step 2 — printers: open, next.** Add permanent Delete beside Disable, the impact read,
-  deleted-state uniqueness rules and shared confirmation dialog.
-  [Printer delete plan](superpowers/plans/2026-10-09-a435-2-printer-delete.md).
-  The plan cites `apps/server/src/station-health.ts`, which A366 slice 4 Part A deleted, and
-  `packages/venue-service/src/dashboard/station-health-table.ts`, which it renamed
-  `station-table.ts` without the down-printer notes; re-ground those rows before building.
-- **A435 step 3 — card readers: open, following printers in the build order.** Add permanent Delete beside Disable.
-- **A435 step 4 — devices: open, following printers in the build order.** Add permanent Delete beside Disable.
+- **A435 step 3 — card readers: open, next.** Add permanent Delete beside Disable.
+- **A435 step 4 — devices: open, following card readers in the build order.** Add permanent Delete beside Disable.
 - **A435 step 5 — courses and kitchen stations: open, following devices in the build order.** Replace Disable with Delete,
   and drop the list's Status column and Status filter, which no longer have anything to show (owner,
   2026-10-10); first check what else the Status cell shows, as Products' carried its Unavailable badge (A463).
@@ -4873,6 +4874,22 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
   Printers, card readers and devices keep both, because they keep Disable. Each remaining step follows the
   linked spec and preserves recorded history.
 
+- **The till's status for an original whose printer was deleted uses the error code's sentence**
+  ("…this job will not be retried."), where its neighbours speak of "the original". Owner to choose
+  the wording. Left open by A435 step 2.
+- **The Spanish for `printer.deleted` breaks its twin's pattern**: "por lo que no se volverá a
+  intentar este trabajo" where `printer.unpaired` says "así que este trabajo no se volverá a
+  intentar". Left open by A435 step 2.
+- **Shorter printer-delete copy was offered to the owner during the build**: for the till's
+  deleted-printer sentence, "Trabajo que finalizará", and one dialog line per inherited default.
+  Left open by A435 step 2.
+- **`refuseDeletedPrinters` lives in `@waitron/layouts`** though `@waitron/printing` holds the
+  printer functions and `printer.not_found`'s registry. Left open by A435 step 2.
+- **`deletePrinter` writes the device choices, profile lists and holders that layouts owns**; one
+  layouts function could clear them. Left open by A435 step 2.
+- **Several printer queries that already require an active printer or a live job also filter
+  `deleted_at`**; one test pinning "deleted means switched off with no live jobs" could replace the
+  copies. Left open by A435 step 2.
 
 - **`modules.json` has no flow-down channel** from a primary to its standby (matters under
   _Afterwards_, designed now that bookings is genuinely toggleable), and a toggleable module that is

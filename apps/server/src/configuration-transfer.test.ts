@@ -30,7 +30,10 @@ import {
   writeProductModifiers,
 } from "@waitron/catalogue";
 import { randomUUID } from "node:crypto";
-import { readFile } from "node:fs/promises";
+import { mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { loadKeyRing } from "@waitron/credentials";
 import { and, eq, sql } from "drizzle-orm";
 import { uploadImage, readImageBytes } from "@waitron/media";
 import { samplePreparedImage } from "@waitron/media/testing/sample-image.js";
@@ -51,7 +54,11 @@ import {
   locations,
   printAgents,
   printers,
+  printerHolders,
+  printJobs,
   pagePrinters,
+  deviceProfilePrinters,
+  drawerOpens,
   stationPrinters,
   CORE_CONFIGURATION_TRANSFER,
   products,
@@ -135,6 +142,8 @@ import { createStatus } from "./tables.js";
 import { setDefaultStation } from "./kitchen.js";
 import { selfEnrolNodeAgent } from "./join-requests.js";
 import type { TillConfig } from "./till-config.js";
+import { deletePrinter } from "./printer-delete.js";
+import { stageConfigurationImport } from "./configuration-import.js";
 
 // TWO databases: a transfer exports from a prepared venue's database and imports into a fresh
 // production database, and each holds one tenant. `suite` holds the source venue, `targetSuite` the
@@ -5336,4 +5345,259 @@ it("transfers department receipt maps and pictures with remapped ids and unchang
   expect(imported.bad).toEqual({ email: "good@example.com", headerSubtitle: { "ca-ES": "Good" } });
   expect(imported.global).toEqual(defaults);
   expect(imported.pictures).toEqual(pictures);
+});
+
+describe("a deleted printer in a configuration transfer", () => {
+  /** A venue with a live, a disabled and a deleted printer. The deleted one had a station, a
+   * profile list, a holder, a job and a drawer audit before its delete; afterwards a station and
+   * a profile row naming it are written straight into the tables, a state the
+   * delete never leaves, so the exporter's own exclusion is what keeps them out. */
+  async function venueWithDeletedPrinter(taxId: string) {
+    const source = await applyVenue(planVenue(venue(taxId), ALL_MODULES), {
+      db: suite.db,
+      modules: ALL_MODULES,
+    });
+    const ids = await withTransaction(suite.db, async (tx) => {
+      const [live, disabled, old] = await tx
+        .insert(printers)
+        .values([
+          {
+            locationId: source.locationId,
+            name: "Live bar",
+            transport: "cloud_poll" as const,
+            pollId: "poll-live",
+            pollTokenHash: "live-poll-hash",
+          },
+          {
+            locationId: source.locationId,
+            name: "Disabled bar",
+            transport: "network_tcp" as const,
+            host: "10.0.3.2",
+            active: false,
+          },
+          {
+            locationId: source.locationId,
+            name: "Old kitchen",
+            transport: "cloud_poll" as const,
+            pollId: "poll-old",
+            pollTokenHash: "old-poll-hash",
+            portable: true,
+          },
+        ])
+        .returning({ id: printers.id });
+      const [station] = await tx
+        .insert(kitchenStations)
+        .values({ locationId: source.locationId, name: "Grill" })
+        .returning({ id: kitchenStations.id });
+      const [profile] = await tx
+        .insert(deviceProfiles)
+        .values({ name: "Counter till", formFactor: "till" })
+        .returning({ id: deviceProfiles.id });
+      await tx.insert(stationPrinters).values([
+        { stationId: station!.id, printerId: live!.id },
+        { stationId: station!.id, printerId: old!.id },
+      ]);
+      await setProfilePrinterLists(tx, profile!.id, {
+        ...emptyPrinterLists(),
+        receiptPrinterIds: [old!.id, live!.id],
+      });
+      return {
+        live: live!.id,
+        disabled: disabled!.id,
+        old: old!.id,
+        station: station!.id,
+        profile: profile!.id,
+      };
+    });
+    const { deviceId } = await seedDevice(suite.db, { locationId: source.locationId });
+    await suite.db.insert(printerHolders).values({ printerId: ids.old, deviceId });
+    await suite.db.insert(printJobs).values([
+      { locationId: source.locationId, printerId: ids.old, payload: new Uint8Array([1]) },
+      {
+        locationId: source.locationId,
+        printerId: ids.live,
+        payload: new Uint8Array([2]),
+        status: "done",
+      },
+    ]);
+    await suite.db
+      .insert(drawerOpens)
+      .values({ printerId: ids.old, personId: "admin", reason: "calibration" });
+    await withTransaction(suite.db, (tx) =>
+      deletePrinter(tx, { locationId: source.locationId }, ids.old),
+    );
+    await suite.db.insert(stationPrinters).values({ stationId: ids.station, printerId: ids.old });
+    await suite.db.insert(deviceProfilePrinters).values({
+      deviceProfileId: ids.profile,
+      printerId: ids.old,
+      role: "payment_slip",
+      position: 0,
+    });
+    const versions = await schemaVersionsByModule(suite.db, ALL_MODULES);
+    const transferred = await buildConfigurationBundle(
+      suite.db,
+      source,
+      ALL_MODULES,
+      new Date("2026-10-10T12:00:00Z"),
+      versions,
+    );
+    return { source, ids, versions, transferred };
+  }
+
+  it("leaves the deleted printer and every row naming it behind, and the rest arrives switched off under new ids", async () => {
+    const { ids, versions, transferred } = await venueWithDeletedPrinter("B30303031");
+    expect(
+      transferred.tables.printers!.map((row) => [row.id, row.name, row.deleted_at]).sort(),
+    ).toEqual(
+      [
+        [ids.disabled, "Disabled bar", null],
+        [ids.live, "Live bar", null],
+      ].sort(),
+    );
+    for (const row of transferred.tables.printers!)
+      expect(row).not.toHaveProperty("poll_token_hash");
+    expect(JSON.stringify(transferred)).not.toContain("poll-hash");
+    expect(transferred.tables.station_printers).toEqual([
+      { station_id: ids.station, printer_id: ids.live },
+    ]);
+    expect(
+      transferred.tables.device_profile_printers!.map((row) => [
+        row.device_profile_id,
+        row.printer_id,
+      ]),
+    ).toEqual([[ids.profile, ids.live]]);
+    for (const table of ["print_jobs", "printer_holders", "drawer_opens"])
+      expect(transferred.tables).not.toHaveProperty(table);
+    expect(transferred.reconnect).toContain("printers");
+
+    const target = await applyVenue(planVenue(venue("B30303032"), ALL_MODULES), {
+      db: targetSuite.db,
+      modules: ALL_MODULES,
+      beforeCommit: (tx, result) =>
+        importConfigurationTables(tx, transferred, result, ALL_MODULES, versions),
+    });
+    const imported = await targetSuite.db
+      .select({
+        id: printers.id,
+        name: printers.name,
+        locationId: printers.locationId,
+        active: printers.active,
+        deletedAt: printers.deletedAt,
+        pollTokenHash: printers.pollTokenHash,
+      })
+      .from(printers)
+      .orderBy(printers.name);
+    expect(imported).toEqual([
+      {
+        id: expect.any(String),
+        name: "Disabled bar",
+        locationId: target.locationId,
+        active: false,
+        deletedAt: null,
+        pollTokenHash: null,
+      },
+      {
+        id: expect.any(String),
+        name: "Live bar",
+        locationId: target.locationId,
+        active: false,
+        deletedAt: null,
+        pollTokenHash: null,
+      },
+    ]);
+    for (const row of imported) expect([ids.live, ids.disabled, ids.old]).not.toContain(row.id);
+    const live = imported.find((row) => row.name === "Live bar")!;
+    expect(
+      (
+        await targetSuite.db.select({ printerId: stationPrinters.printerId }).from(stationPrinters)
+      ).map((row) => row.printerId),
+    ).toEqual([live.id]);
+    expect(
+      (
+        await targetSuite.db
+          .select({ printerId: deviceProfilePrinters.printerId })
+          .from(deviceProfilePrinters)
+      ).map((row) => row.printerId),
+    ).toEqual([live.id]);
+    expect(await targetSuite.db.select().from(printJobs)).toEqual([]);
+    expect(await targetSuite.db.select().from(printerHolders)).toEqual([]);
+    expect(await targetSuite.db.select().from(drawerOpens)).toEqual([]);
+  });
+
+  it("refuses a bundle carrying a deleted printer and a setting naming it, at staging and at import, before writing anything", async () => {
+    const { ids, versions, transferred } = await venueWithDeletedPrinter("B30303033");
+    const station = transferred.tables.station_printers![0]!;
+    const forged: ConfigurationBundle = {
+      ...transferred,
+      tables: {
+        ...transferred.tables,
+        printers: [
+          ...transferred.tables.printers!,
+          {
+            ...transferred.tables.printers!.find((row) => row.id === ids.live)!,
+            id: ids.old,
+            name: "Old kitchen",
+            poll_id: "poll-old",
+            deleted_at: "2026-10-10T10:00:00.000Z",
+          },
+        ],
+        station_printers: [
+          ...transferred.tables.station_printers!,
+          { ...station, printer_id: ids.old },
+        ],
+      },
+    };
+    const refusal = { code: "setup.request_invalid", params: { field: "printers.deleted_at" } };
+    expect(() => validateConfigurationBundle(forged, ALL_MODULES, versions)).toThrowError(
+      expect.objectContaining(refusal),
+    );
+
+    const stateDir = await mkdtemp(join(tmpdir(), "waitron-config-import-"));
+    try {
+      const names = [
+        "configuration-import.artifact",
+        "configuration-import.key",
+        "configuration-import.json",
+      ];
+      for (const name of names) await writeFile(join(stateDir, name), `retained ${name}`);
+      const ring = loadKeyRing({
+        WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 17).toString("base64"),
+      });
+      await expect(
+        stageConfigurationImport(
+          stateDir,
+          ring,
+          encodeConfigurationBundle(forged, "a strong passphrase"),
+          "a strong passphrase",
+          async (decoded) => validateConfigurationBundle(decoded, ALL_MODULES, versions),
+        ),
+      ).rejects.toMatchObject(refusal);
+      expect((await readdir(stateDir)).sort()).toEqual([...names].sort());
+      for (const name of names)
+        expect(await readFile(join(stateDir, name), "utf8")).toBe(`retained ${name}`);
+    } finally {
+      await rm(stateDir, { recursive: true, force: true });
+    }
+
+    const counts = async () =>
+      (
+        await targetSuite.db.execute<Record<string, number>>(sql`
+          select (select count(*) from tenants) as tenants,
+                 (select count(*) from printers) as printers,
+                 (select count(*) from station_printers) as station_printers,
+                 (select count(*) from kitchen_stations) as kitchen_stations
+        `)
+      ).rows[0];
+    const before = await counts();
+    const target = venue("B30303034");
+    await expect(
+      applyVenue(planVenue(target, ALL_MODULES), {
+        db: targetSuite.db,
+        modules: ALL_MODULES,
+        beforeCommit: (tx, result) =>
+          importConfigurationTables(tx, forged, result, ALL_MODULES, versions),
+      }),
+    ).rejects.toMatchObject(refusal);
+    expect(await counts()).toEqual(before);
+  });
 });

@@ -4,13 +4,14 @@ import { and, desc, eq, inArray, lte, isNull, gt, sql } from "drizzle-orm";
 import {
   invoiceDeliveries,
   printJobs,
+  printers,
   sales,
   nodes,
   pagePrinters,
   type InvoiceEmailConsent,
   type Transaction,
 } from "@waitron/db";
-import { MAX_DELIVERY_ATTEMPTS } from "@waitron/printing";
+import { MAX_DELIVERY_ATTEMPTS, PRINTER_DELETED } from "@waitron/printing";
 import { AppError } from "@waitron/shared";
 
 export type InvoiceDelivery = typeof invoiceDeliveries.$inferSelect;
@@ -48,6 +49,16 @@ export async function reserveInvoiceDelivery(
     .where(eq(sales.id, saleId));
   if (sale === undefined) throw new AppError("invoice_delivery.not_found", {});
   if (sale.recipient === null) throw new AppError("invoice_delivery.full_invoice_required", {});
+  if (input.medium === "receipt") {
+    const [target] = await tx
+      .select({ id: printers.id, deletedAt: printers.deletedAt })
+      .from(printJobs)
+      .innerJoin(printers, eq(printers.id, printJobs.printerId))
+      .where(eq(printJobs.id, input.printJobId));
+    if (target !== undefined && target.deletedAt !== null) {
+      throw new AppError("printer.not_found", { id: target.id });
+    }
+  }
   const [replay] = await tx
     .select()
     .from(invoiceDeliveries)
@@ -186,11 +197,13 @@ export async function claimInvoiceDelivery(
     const [job] = await tx
       .select({ id: printJobs.id })
       .from(printJobs)
+      .innerJoin(printers, eq(printers.id, printJobs.printerId))
       .where(
         and(
           eq(printJobs.id, delivery.printJobId!),
           eq(printJobs.status, "printing"),
           eq(printJobs.claimedBy, holder),
+          isNull(printers.deletedAt),
         ),
       );
     if (job === undefined) return undefined;
@@ -247,9 +260,26 @@ export async function expireInvoiceDeliveryClaims(
         attempts: MAX_DELIVERY_ATTEMPTS,
         lastError: restart ? "restart" : "timeout",
       })
-      .where(inArray(printJobs.id, jobIds));
+      .where(and(inArray(printJobs.id, jobIds), notEndedByDelete()));
   }
   return expired.length;
+}
+
+/** A print job neither ended by its printer's delete nor belonging to a deleted printer. */
+function notEndedByDelete() {
+  return and(
+    sql`${printJobs.lastError} is not ${PRINTER_DELETED}`,
+    sql`not exists (select 1 from ${printers} where ${printers.id} = ${printJobs.printerId}
+      and ${printers.deletedAt} is not null)`,
+  );
+}
+
+function reportedFacts(outcome: InvoiceDeliveryOutcome, now: Date) {
+  return {
+    reportedOutcome: outcome.status,
+    reportedAt: now.toISOString(),
+    reportedFailureCode: outcome.status === "sent" ? null : outcome.failureCode,
+  };
 }
 
 export async function reportInvoiceDelivery(
@@ -283,6 +313,20 @@ export async function reportInvoiceDelivery(
     )
     .limit(1);
   const historical = newer !== undefined;
+  if (delivery.printJobId !== null) {
+    const [live] = await tx
+      .select({ id: printJobs.id })
+      .from(printJobs)
+      .where(and(eq(printJobs.id, delivery.printJobId), notEndedByDelete()));
+    if (live === undefined) {
+      // A deleted printer's receipt keeps the state its delete gave it; the report is history only.
+      await tx
+        .update(invoiceDeliveries)
+        .set(reportedFacts(outcome, now))
+        .where(eq(invoiceDeliveries.id, delivery.id));
+      return { updated: false, historical };
+    }
+  }
   // Retain the expired token's hash for authenticated late reports; its state ends claim eligibility.
   const status = historical
     ? delivery.status
@@ -292,9 +336,7 @@ export async function reportInvoiceDelivery(
   await tx
     .update(invoiceDeliveries)
     .set({
-      reportedOutcome: outcome.status,
-      reportedAt: now.toISOString(),
-      reportedFailureCode: outcome.status === "sent" ? null : outcome.failureCode,
+      ...reportedFacts(outcome, now),
       ...(historical
         ? {}
         : {
