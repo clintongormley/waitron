@@ -575,8 +575,8 @@ right or down. The selected table has a rotation handle above it, or below it wh
 has no room above, a sibling of its button (`copy.rotate`); dragging it round the table's centre
 turns the table by as much as the pointer went round, or ArrowRight and ArrowLeft on it, sends
 `wt-table-rotate` (`{ key, rotation }`) in 15° steps. A table with `refused` set has a 2 px
-`--wt-color-danger` outline and that text below it in the same colour, past the handle when the
-handle is below; the text is a sibling of the button, so a round table does not clip it, and is the
+`--wt-color-danger` outline and that text below it in the same colour, centred but kept inside
+the grid, past the handle when the handle is below; the text is a sibling of the button, so a round table does not clip it, and is the
 button's accessible description.
 
 `wt-sheet` is a bar with a top border on the surface colour, whose toggle (at least `--wt-tap-min`

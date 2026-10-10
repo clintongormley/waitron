@@ -175,6 +175,30 @@ it("writes a selected refused table's reason below its handle when the handle is
   expect(reasonOf(el, "t1")!.getBoundingClientRect().top).toBeGreaterThanOrEqual(handle.bottom);
 });
 
+it("keeps a refused table's reason inside the grid at its left and right edges", async () => {
+  const el = await canvas([
+    refusedTable("left", "L", "Booked 12 Oct, 21:00", { x: 0, width: 4, height: 4 }),
+    refusedTable("mid", "M", "Booked 12 Oct, 21:00", { x: 20, width: 4, height: 4 }),
+  ]);
+  await settled(el);
+  const grid = part(el, "grid").getBoundingClientRect();
+  const left = reasonOf(el, "left")!.getBoundingClientRect();
+  expect(left.left).toBeGreaterThanOrEqual(grid.left);
+  expect(left.width).toBeGreaterThan(48);
+  const mid = reasonOf(el, "mid")!.getBoundingClientRect();
+  const midBox = button(el, "mid").getBoundingClientRect();
+  expect(mid.left + mid.width / 2).toBeCloseTo(midBox.left + midBox.width / 2, 0);
+  const long = "This table has an upcoming booking. Move the booking first";
+  el.tables = [refusedTable("right", "R", long, { x: 40, width: 2, height: 2 })];
+  await settled(el);
+  const wide = part(el, "grid").getBoundingClientRect();
+  const right = reasonOf(el, "right")!.getBoundingClientRect();
+  const rightBox = button(el, "right").getBoundingClientRect();
+  expect(rightBox.left + rightBox.width / 2 + right.width / 2).toBeGreaterThan(wide.right);
+  expect(right.right).toBeLessThanOrEqual(wide.right);
+  expect(right.left).toBeGreaterThanOrEqual(wide.left);
+});
+
 it("keeps room in the grid for the reason of a refused table at the bottom", async () => {
   const el = await canvas([refusedTable("t1", "T1", "Booked at 21:00", { y: 22 })]);
   await settled(el);

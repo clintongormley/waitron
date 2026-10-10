@@ -316,17 +316,16 @@ export class WtFloorPlanCanvas extends LitElement {
     const box = rotatedRect(p);
     const handleBelow = t.key === this.selected && !this.#handleAbove(t);
     const style = styleMap({
-      left: px(box.x + box.width / 2),
       top: handleBelow
         ? `calc(${px(box.y + box.height)} + var(--wt-tap-min) + 2 * var(--wt-space-1))`
         : `calc(${px(box.y + box.height)} + var(--wt-space-1))`,
-      transform: "translateX(-50%)",
     });
     return html`<span
       class="refused-reason"
       part="refused-reason"
       id="reason-${t.key}"
       data-key=${t.key}
+      data-centre=${(box.x + box.width / 2) * GRID_SQUARE_PX}
       style=${style}
       >${t.refused}</span
     >`;
@@ -371,6 +370,18 @@ export class WtFloorPlanCanvas extends LitElement {
         parseFloat(host.getPropertyValue("--wt-space-1"));
     }
     return this.#room;
+  }
+
+  /** Centres each reason under its table, held inside the grid: its width is known only once drawn. */
+  override updated(): void {
+    const reasons = this.renderRoot.querySelectorAll<HTMLElement>(".refused-reason");
+    if (reasons.length === 0) return;
+    const grid = this.renderRoot.querySelector<HTMLElement>(".grid")!.clientWidth;
+    for (const reason of reasons) {
+      const width = reason.getBoundingClientRect().width;
+      const centred = Number(reason.dataset.centre) - width / 2;
+      reason.style.left = `${Math.min(Math.max(centred, 0), Math.max(grid - width, 0))}px`;
+    }
   }
 
   #onTableKey(e: KeyboardEvent, t: PlanCanvasTable): void {

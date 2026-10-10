@@ -5,6 +5,7 @@ import type { WtButton, WtFloorPlanCanvas, WtSheet } from "@waitron/ui";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import "./floor-plan-editor.js";
 import type { FloorPlanEditor } from "./floor-plan-editor.js";
+import type { FloorPlanTablesPanel } from "./floor-plan-tables-panel.js";
 import type { DashboardApi, FloorPlan } from "../api/client.js";
 import { currentLocale, setLocale } from "../i18n/t.js";
 import {
@@ -246,7 +247,7 @@ it("a booked table the draft deleted comes back as opened, marked with its booki
   const el = await openPlaced(
     vi.fn().mockRejectedValue(booked({ tableId: "l2", date: "2026-10-12", time: "21:00" })),
   );
-  await change(el, deleteTable(draftFromPlan(placedM2()), "m2"));
+  await change(el, moveTable(deleteTable(draftFromPlan(placedM2()), "m2"), "m1", 5, 4));
   expect(drawn(el, "m2")).toBeUndefined();
   await press(el, "save");
   expect(drawn(el, "m2")).toEqual({
@@ -283,6 +284,7 @@ it("a booked table's mark goes at the next Save, which sends it back", async () 
     "live:l9",
     "m2",
   ]);
+  expect(saveFloorPlan.mock.calls[1]![1].joins).toEqual([{ seats: 6, tableKeys: ["m1", "m2"] }]);
   expect(drawn(el, "m2")?.refused).toBeUndefined();
 });
 
@@ -312,6 +314,58 @@ it("a booked table's mark goes when it is moved, rotated, edited or deleted agai
   }
 });
 
+it("a booked table whose delete was the only change comes back with its join, leaving Save quiet", async () => {
+  const el = await openPlaced(
+    vi.fn().mockRejectedValue(booked({ tableId: "l2", date: "2026-10-12", time: "21:00" })),
+  );
+  await change(el, deleteTable(draftFromPlan(placedM2()), "m2"));
+  await press(el, "save");
+  expect(drawn(el, "m2")?.refused).toBe("Booked 12 Oct, 21:00");
+  expect(el["draft"]!.joins).toEqual([{ key: "j1", seats: 6, tableKeys: ["m1", "m2"] }]);
+  expect(button(el, "save").disabled).toBe(true);
+});
+
+it("a booked table comes back as last saved when the re-read after that save failed", async () => {
+  const saveFloorPlan = vi
+    .fn()
+    .mockResolvedValueOnce({ revision: 4, ids: {} })
+    .mockRejectedValueOnce(booked({ tableId: "l2", date: "2026-10-12", time: "21:00" }));
+  const getFloorPlan = vi
+    .fn()
+    .mockResolvedValueOnce(placedM2())
+    .mockRejectedValue({ code: "server.internal" });
+  const el = await open(stubApi({ getFloorPlan, saveFloorPlan }));
+  const moved = moveTable(draftFromPlan(placedM2()), "m2", 30, 10);
+  await change(el, moved);
+  await press(el, "save");
+  await change(el, deleteTable(moved, "m2"));
+  await press(el, "save");
+  expect(drawn(el, "m2")?.placement).toMatchObject({ x: 30, y: 10 });
+  expect(drawn(el, "m2")?.refused).toBe("Booked 12 Oct, 21:00");
+  expect(button(el, "save").disabled).toBe(true);
+});
+
+it("the tables list is handed the same refused value until the mark changes", async () => {
+  const el = await openPlaced(
+    vi.fn().mockRejectedValue(booked({ tableId: "l2", date: "2026-10-12", time: "21:00" })),
+  );
+  const panel = () =>
+    el.shadowRoot!.querySelector<FloorPlanTablesPanel>("floor-plan-tables-panel")!;
+  await change(el, moveTable(deleteTable(draftFromPlan(placedM2()), "m2"), "m1", 5, 4));
+  await press(el, "save");
+  const first = panel().refused;
+  expect(first).toEqual({ key: "m2", reason: "Booked 12 Oct, 21:00" });
+  canvas(el).dispatchEvent(
+    new CustomEvent("wt-table-select", { detail: { key: "m1" }, bubbles: true, composed: true }),
+  );
+  await el.updateComplete;
+  expect(canvas(el).selected).toBe("m1");
+  expect(panel().refused).toBe(first);
+  setLocale("es-ES");
+  await el.updateComplete;
+  expect(panel().refused).toEqual({ key: "m2", reason: "Reservada el 12 oct, 21:00" });
+});
+
 it("Load newer plan clears a booked table's mark", async () => {
   const saveFloorPlan = vi
     .fn()
@@ -321,7 +375,7 @@ it("Load newer plan clears a booked table's mark", async () => {
     .mockResolvedValueOnce(placedM2())
     .mockResolvedValue({ ...placedM2(), revision: 4 });
   const el = await open(stubApi({ getFloorPlan, saveFloorPlan }));
-  await change(el, deleteTable(draftFromPlan(placedM2()), "m2"));
+  await change(el, moveTable(deleteTable(draftFromPlan(placedM2()), "m2"), "m1", 5, 4));
   await press(el, "save");
   expect(drawn(el, "m2")?.refused).toBe("Booked 12 Oct, 21:00");
   saveFloorPlan.mockRejectedValueOnce({

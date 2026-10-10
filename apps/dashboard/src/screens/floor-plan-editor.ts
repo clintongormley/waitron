@@ -19,6 +19,7 @@ import "@waitron/ui/src/components/wt-form-actions.js";
 import "@waitron/ui/src/components/wt-floor-plan-canvas.js";
 import "@waitron/ui/src/components/wt-sheet.js";
 import "./floor-plan-tables-panel.js";
+import { bookedReason } from "./floor-plan-booked.js";
 import { dashboardPath } from "../navigation.js";
 import { currentLocale, t } from "../i18n/t.js";
 import { LocaleChangeController } from "../state/locale-controller.js";
@@ -112,21 +113,6 @@ const actionMessage = (text: () => string): EditorMessage => ({ text, from: "act
 interface RefusedTable {
   table: DraftTable;
   reason: () => string;
-}
-
-/** `date` is read from its parts in UTC, so no time zone moves it to another day. */
-function bookedReason(params: Record<string, unknown>): string {
-  const { date, time } = params;
-  if (typeof date !== "string" || typeof time !== "string") return codeMessage("table.booked");
-  const [year, month, day] = date.split("-").map(Number);
-  const shortDate = new Intl.DateTimeFormat(currentLocale(), {
-    day: "numeric",
-    month: "short",
-    timeZone: "UTC",
-  }).format(new Date(Date.UTC(year!, month! - 1, day)));
-  return t("floor_plan_editor.booked").replace(/\{(date|time)\}/g, (_, slot: string) =>
-    slot === "date" ? shortDate : time,
-  );
 }
 
 /** The server stores labels trimmed; tables sent with a padded label take the trimmed one. */
@@ -457,9 +443,10 @@ export class FloorPlanEditor extends LitElement {
     if (refused !== null && !next.tables.includes(refused.table)) this.refused = null;
   }
 
-  /** Puts a table the save could not delete back as opened, one undo step, marked and selected. */
+  /** Puts a table the save could not delete back as last saved, with its joins, as one undo step,
+   *  marked and selected. */
   #restoreRefused(table: DraftTable, params: Record<string, unknown>): void {
-    this.#change(restoreTable(this.draft!, table));
+    this.#change(restoreTable(this.draft!, table, this.#opened!.joins));
     const restored = this.draft!.tables.find((t) => t.key === table.key)!;
     this.refused = { table: restored, reason: () => bookedReason(params) };
     this.#selectFlagged(restored.key);
@@ -498,7 +485,7 @@ export class FloorPlanEditor extends LitElement {
       serverField = named?.[2];
     } else if (code === "table.booked" && typeof params.tableId === "string") {
       const tableId = params.tableId;
-      const table = draftFromPlan(this.plan!).tables.find((t) => t.liveTableId === tableId);
+      const table = this.#opened!.tables.find((t) => t.liveTableId === tableId);
       if (table !== undefined) {
         this.#restoreRefused(table, params);
         return;
@@ -652,6 +639,23 @@ export class FloorPlanEditor extends LitElement {
     return this.#tables;
   }
 
+  #panelFor: RefusedTable | null = null;
+  #panelLocale: string | null = null;
+  #panelRefused: { key: string; reason: string } | null = null;
+
+  /** The same object while the mark and the language stay, so the panel does not redraw for it. */
+  #refusedForPanel(): { key: string; reason: string } | null {
+    const refused = this.refused;
+    const locale = currentLocale();
+    if (refused !== this.#panelFor || locale !== this.#panelLocale) {
+      this.#panelFor = refused;
+      this.#panelLocale = locale;
+      this.#panelRefused =
+        refused === null ? null : { key: refused.table.key, reason: refused.reason() };
+    }
+    return this.#panelRefused;
+  }
+
   #copyLocale: string | null = null;
   #copy!: FloorPlanCanvasCopy;
 
@@ -680,11 +684,7 @@ export class FloorPlanEditor extends LitElement {
     const panel = html`<floor-plan-tables-panel
       .draft=${draft}
       .selected=${this.selected}
-      .refused=${
-        this.refused === null
-          ? null
-          : { key: this.refused.table.key, reason: this.refused.reason() }
-      }
+      .refused=${this.#refusedForPanel()}
       .inSheet=${this.narrow}
     ></floor-plan-tables-panel>`;
     return html`<div class="layout ${this.narrow ? "narrow" : ""}">

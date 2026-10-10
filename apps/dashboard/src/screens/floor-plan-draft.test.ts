@@ -383,6 +383,25 @@ describe("floor plan draft", () => {
     expect(moved.tables.some((t) => t.key === "m1")).toBe(false);
   });
 
+  it("puts back only the opened joins through the restored table whose other tables are there", () => {
+    const m3 = { key: "m3", id: "m3", liveTableId: "l3", label: "T3", seats: 2, fixed: false };
+    const opened: FloorPlanDraft = {
+      tables: [...open().tables, { ...m3, placement: null }],
+      joins: [
+        { key: "j1", seats: 6, tableKeys: ["m1", "m2"] },
+        { key: "j2", seats: 5, tableKeys: ["m2", "m3"] },
+        { key: "j3", seats: 4, tableKeys: ["m1", "live:l9"] },
+      ],
+    };
+    const deleted = removeJoin(deleteTable(deleteTable(opened, "m2"), "m3"), "j3");
+    expect(deleted.joins).toEqual([]);
+    const restored = restoreTable(deleted, table(opened, "m2"), opened.joins);
+    expect(restored.joins).toEqual([opened.joins[0]]);
+    expect(restored.joins[0]!.tableKeys).not.toBe(opened.joins[0]!.tableKeys);
+    const onlyM2 = restoreTable(deleteTable(opened, "m2"), table(opened, "m2"), opened.joins);
+    expect(sameDraft(onlyM2, opened)).toBe(true);
+  });
+
   it("returns the draft itself when the key is already in it", () => {
     const d = open();
     expect(restoreTable(d, { ...table(d, "m2"), label: "Other" })).toBe(d);
