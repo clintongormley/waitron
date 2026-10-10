@@ -1679,13 +1679,6 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
 
 _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
 
-- **`PUT /api/device/equipment` checks the sign-in, then writes in a second transaction**
-  (`apps/server/src/device-api.ts:345-355`). Neither `selectDevicePrinter`
-  (`packages/layouts/src/device-equipment.ts:307-310`) nor, for a card reader, `selectDeviceReader`
-  (`packages/payments/src/device-readers.ts:265-273`) reads the device's `active`, so a Disable or
-  Delete committing between them can leave a printer or card reader choice or hold for the device.
-  Believed to predate A435 step 4 (the route came with W100, #1332). Left open by A435 step 4.
-
 - **The device delete dialog's sign-in count is not live**: `sessions` is not a declared live
   table (`apps/dashboard/src/api/live-queries.ts:75-92`), so a sign-in or sign-out while the
   dialog is open does not by itself update its count; the delete itself recomputes. Left open by A435 step 4.

@@ -29,6 +29,7 @@ import { createErrorBoundary } from "@waitron/server-kit";
 import { readJsonBody } from "@waitron/server-kit";
 import { requireManagementSession } from "@waitron/server-kit";
 import {
+  assertDeviceStillProven,
   assertProfileAction,
   parseDeviceCookie,
   readDeviceCookie,
@@ -347,6 +348,8 @@ export function mountDeviceApi(app: Hono, deps: DeviceApiDeps, log: Logger): voi
       const { device } = await requireSession({ db: deps.db }, c);
       const choice = parseEquipmentChoice(await readJsonBody<Record<string, unknown>>(c));
       const equipment = await withTransaction(deps.db, async (tx) => {
+        // A Delete or Disable may have committed since requireSession's own transaction.
+        await assertDeviceStillProven(tx, { device, tokenHash: null });
         await selectDeviceEquipment(tx, { deviceId: device.deviceId, ...choice });
         return readDeviceEquipment(tx, device.deviceId);
       });

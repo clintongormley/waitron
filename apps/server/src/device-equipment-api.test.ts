@@ -626,6 +626,73 @@ describe("what a device may newly choose", () => {
     expect(anonymous.status).toBe(401);
   });
 
+  describe.each([
+    ["Delete", "DELETE", ""],
+    ["Disable", "POST", "/revoke"],
+  ] as const)("a %s committed after the session check", (_name, method, suffix) => {
+    async function aState() {
+      return {
+        columns: await columns(a),
+        printerHolds: await suite.db
+          .select({ printerId: printerHolders.printerId })
+          .from(printerHolders)
+          .where(eq(printerHolders.deviceId, a)),
+        readerHolds: await suite.db
+          .select({ readerId: cardReaderHolders.readerId })
+          .from(cardReaderHolders)
+          .where(eq(cardReaderHolders.deviceId, a)),
+        readerChoice: await suite.db
+          .select({ readerId: deviceCardReaders.readerId })
+          .from(deviceCardReaders)
+          .where(eq(deviceCardReaders.deviceId, a)),
+      };
+    }
+
+    it.each([
+      ["receipt", () => pp],
+      ["card_terminal", () => r3],
+    ] as const)("refuses a %s choice and writes nothing for the device", async (role, item) => {
+      let afterManagement: Awaited<ReturnType<typeof aState>> | undefined;
+      const racing = new Hono();
+      // The management write lands while the till's request is reading its body, after
+      // requireSession has passed it.
+      racing.use("/api/device/equipment", async (c, next) => {
+        const parse = c.req.json.bind(c.req);
+        c.req.json = async () => {
+          const res = await send(
+            deviceApp,
+            managerCookie,
+            method,
+            `/management-api/devices/${a}${suffix}`,
+          );
+          expect(res.status, JSON.stringify(res.json)).toBeLessThan(300);
+          afterManagement = await aState();
+          return parse();
+        };
+        await next();
+      });
+      racing.route("/", deviceApp);
+
+      const res = await send(racing, venue.cookie, "PUT", "/api/device/equipment", {
+        role,
+        selection: { id: item() },
+        via: "list",
+      });
+
+      expect(afterManagement).toBeDefined();
+      expect(res.status).toBe(401);
+      expect(res.json).toMatchObject({ code: "device.unauthorized" });
+      const after = await aState();
+      expect(after).toEqual(afterManagement);
+      expect(after).toMatchObject({
+        columns: { receipt: null, slip: null, drawer: null },
+        printerHolds: [],
+        readerHolds: [],
+      });
+      if (method === "DELETE") expect(after.readerChoice).toEqual([]);
+    });
+  });
+
   it("no longer answers the old printers route, and stores nothing through it", async () => {
     const gone = await send(deviceApp, venue.cookie, "PUT", "/api/device/printers", {
       paymentSlipPrinterId: fp,
