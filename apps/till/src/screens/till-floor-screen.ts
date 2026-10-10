@@ -14,6 +14,7 @@ import {
   defaultTraySlot,
   floorTrayStyles,
   isTableZoneless,
+  mapLabel,
   renderFloorChips,
   resolveActiveTabKey,
   toFloorTable,
@@ -27,25 +28,18 @@ import type {
   ZoneTab,
 } from "@waitron/ui";
 import { decimal, formatMoney, isZeroDecimal } from "@waitron/shared";
-import { countText, currentLocale, named, t } from "../i18n/t.js";
+import { currentLocale, t } from "../i18n/t.js";
 import "../widgets/seat-dialog.js";
+import { partyPaid, unsentText } from "../widgets/table-details-sheet.js";
 import type { SeatConfirmDetail } from "../widgets/seat-dialog.js";
 import { isPlannedZone, listedTables, mapTables, seatsFor } from "../state/floor-map.js";
-import type { FloorZone, TableState, TableParty, TillApi, UnsentDraft } from "../api/client.js";
+import type { FloorZone, TableState, TableParty, TillApi } from "../api/client.js";
 import { delayUntil, reminderDueAt } from "../state/release-reminder.js";
 import { readyByStation, signalOf, type StationReady } from "../state/table-signals.js";
 import { signalChipStyles, signalChips } from "../widgets/signal-chips.js";
 
 function needsClearing(table: TableState): boolean {
   return table.condition === "needs_clearing";
-}
-
-function unsentText({ ownerName, lineCount }: UnsentDraft): string {
-  return named(
-    ownerName,
-    countText(lineCount, "floor.unsent_owner", "floor.unsent_owner_one"),
-    countText(lineCount, "floor.unsent", "floor.unsent_one"),
-  );
 }
 
 /** The party's name when it says more than the table's own label: a name staff gave, or a joined
@@ -58,13 +52,6 @@ function shownPartyName(table: TableState): string | undefined {
 /** The table's own Forgotten badge already says a forgotten wait. */
 function tableChips(table: TableState) {
   return signalChips(table.signals, { forgottenShown: table.timingBand === "forgotten" });
-}
-
-/** Nothing of the party is left to pay, and no tab is open that could still take a round. */
-function partyPaid(table: TableState): boolean {
-  return (
-    table.party !== null && !table.hasOpenTab && isZeroDecimal(decimal(table.party.outstanding))
-  );
 }
 
 interface ZoneOnScreen {
@@ -446,6 +433,8 @@ export class TillFloorScreen extends LitElement {
   @state() private refusedZoneId: string | null = null;
   /** The table tapped on the map that needs clearing. */
   @state() private clearing: TableState | null = null;
+  /** The table whose details sheet is open, read afresh from `tables` on each render. */
+  @state() private details: { tableId: string; heading: string } | null = null;
 
   readonly #url = new UrlStateController(
     this,
@@ -484,6 +473,8 @@ export class TillFloorScreen extends LitElement {
 
   override willUpdate(): void {
     this.#drawnAt = this.now ?? Date.now();
+    if (this.details !== null && !this.tables.some((table) => table.id === this.details!.tableId))
+      this.details = null;
     // Edit plan's writes move the old placement columns, which a planned zone's map does not read.
     this.#zone = this.#zoneOnScreen();
     if (this.#zone.planned) this.editing = false;
@@ -545,6 +536,36 @@ export class TillFloorScreen extends LitElement {
     this.seating = null;
     const { guestCount } = (event as CustomEvent<SeatConfirmDetail>).detail;
     this.#emit("open-table", { tableId: table.id, seated: false, guestCount });
+  }
+
+  /** Headed as the map names the table: a merge by all its drawn members' labels. */
+  #onDetails(event: Event): void {
+    event.stopPropagation();
+    const { tableId } = (event as CustomEvent<{ tableId: string }>).detail;
+    const found = this.tables.find((table) => table.id === tableId);
+    if (found === undefined) return;
+    const joinId = found.today?.joinId ?? null;
+    const labels =
+      joinId === null
+        ? [found.label]
+        : mapTables(this.#zone.visible)
+            .filter((table) => table.joinId === joinId)
+            .map((table) => table.label);
+    this.details = { tableId, heading: mapLabel(labels) };
+  }
+
+  #detailsSheet(): TemplateResult | typeof nothing {
+    const details = this.details;
+    if (details === null) return nothing;
+    return html`<till-table-details-sheet
+      .table=${this.tables.find((table) => table.id === details.tableId)!}
+      .heading=${details.heading}
+      .now=${this.#drawnAt}
+      @details-close=${(event: Event) => {
+        event.stopPropagation();
+        this.details = null;
+      }}
+    ></till-table-details-sheet>`;
   }
 
   #markCleared(table: TableState): void {
@@ -775,7 +796,7 @@ export class TillFloorScreen extends LitElement {
               ? this.#plannedMap(onMap, unplaced, activeKey)
               : this.#map(placed, unplaced)
         }
-        ${this.#seatDialog()} ${this.#clearDialog()}
+        ${this.#seatDialog()} ${this.#clearDialog()} ${this.#detailsSheet()}
       </section>
     `;
   }
@@ -814,6 +835,7 @@ export class TillFloorScreen extends LitElement {
           .fitKey=${activeKey ?? ""}
           .copy=${{ label: t("floor.map_label") }}
           @wt-table-tap=${(event: Event) => this.#onCanvasOpen(event)}
+          @wt-table-details=${(event: Event) => this.#onDetails(event)}
         ></wt-floor-map>
         ${this.#tray(unplaced, [])}
       </div>
