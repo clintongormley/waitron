@@ -1,4 +1,5 @@
 import type { DepartmentReceiptConfig, VenueReceiptSettings } from "@waitron/shared";
+import type { PlanPlacement } from "@waitron/ui";
 import type { CatalogueSettings } from "@waitron/catalogue/src/settings-types.js";
 export type { CatalogueSettings };
 import type {
@@ -605,17 +606,7 @@ export interface DashboardTable {
   rotation?: number | null;
 }
 
-export type PlanShape = "rect" | "round";
-
-/** A table's place on a floor plan, in whole grid squares. */
-export interface PlanPlacement {
-  x: number;
-  y: number;
-  width: number;
-  height: number;
-  shape: PlanShape;
-  rotation: number;
-}
+export type { PlanPlacement, PlanShape } from "@waitron/ui";
 
 /** A zone's master plan as the server reads it (`ZonePlan`, apps/server/src/floor-plan.ts). */
 export interface FloorPlan {

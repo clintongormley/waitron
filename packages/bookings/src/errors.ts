@@ -12,8 +12,7 @@ declare module "@waitron/shared" {
     /** Seating named no table and the booking has none assigned. */
     "booking.table_required": Record<string, never>;
     /** A table cannot be removed while a booking from the venue's today on is booked at it; `date`
-     *  (`YYYY-MM-DD`) and `time` (`HH:MM`) are the earliest such booking's, which
-     *  `BOOKINGS_TABLE_REMOVAL` always sets. */
+     *  (`YYYY-MM-DD`) and `time` (`HH:MM`) are the earliest such booking's. */
     "table.booked": { tableId: string; date?: string; time?: string };
   }
 }

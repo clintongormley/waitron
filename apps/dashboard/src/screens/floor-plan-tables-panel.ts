@@ -4,8 +4,14 @@ import { baseStyles } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 import { currentLocale, t } from "../i18n/t.js";
 import { LocaleChangeController } from "../state/locale-controller.js";
-import { placeTable, type DraftTable, type FloorPlanDraft } from "./floor-plan-draft.js";
-import type { FloorPlanChange, FloorPlanSelect } from "./floor-plan-editor.js";
+import {
+  placeTable,
+  sendChange,
+  tableName,
+  type DraftTable,
+  type FloorPlanDraft,
+} from "./floor-plan-draft.js";
+import type { FloorPlanSelect } from "./floor-plan-editor.js";
 
 @customElement("floor-plan-tables-panel")
 export class FloorPlanTablesPanel extends LitElement {
@@ -42,7 +48,6 @@ export class FloorPlanTablesPanel extends LitElement {
   ];
 
   @property({ attribute: false }) draft!: FloorPlanDraft;
-  @property() selected: string | null = null;
   /** A table a save could not delete, with why. */
   @property({ attribute: false }) refused: { key: string; reason: string } | null = null;
   /** Inside a `wt-sheet` the toggle names the list, so the panel drops its own heading. */
@@ -70,11 +75,7 @@ export class FloorPlanTablesPanel extends LitElement {
   }
 
   #press(table: DraftTable): void {
-    if (table.placement === null) {
-      this.#send<FloorPlanChange>("floor-plan-change", {
-        draft: placeTable(this.draft, table.key),
-      });
-    }
+    if (table.placement === null) sendChange(this, placeTable(this.draft, table.key));
     this.#send<FloorPlanSelect>("floor-plan-select", { key: table.key });
   }
 
@@ -100,7 +101,7 @@ export class FloorPlanTablesPanel extends LitElement {
                 data-table=${table.key}
                 ?data-placed=${table.placement !== null}
                 @click=${() => this.#press(table)}
-                >${table.label.trim() || t("floor_plan_editor.unnamed")}${
+                >${tableName(table)}${
                   this.refused?.key === table.key
                     ? html`<span class="refused"> — ${this.refused.reason}</span>`
                     : nothing

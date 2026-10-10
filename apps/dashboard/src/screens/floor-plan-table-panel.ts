@@ -1,7 +1,7 @@
 import { LitElement, css, html, nothing } from "lit";
 import { customElement, property } from "lit/decorators.js";
 import { live } from "lit/directives/live.js";
-import { baseStyles } from "@waitron/ui";
+import { ROTATION_STEP, baseStyles } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-combobox.js";
 import "@waitron/ui/src/components/wt-input.js";
@@ -18,12 +18,13 @@ import {
   patchTable,
   placeTable,
   removeJoin,
+  sendChange,
+  tableName,
   type DraftTable,
   type FloorPlanDraft,
 } from "./floor-plan-draft.js";
 import type {
   FloorPlanAddJoinAsk,
-  FloorPlanChange,
   FloorPlanInvalid,
   FloorPlanPanelError,
   FloorPlanSelect,
@@ -32,7 +33,6 @@ import type {
 
 const MIN_SIZE = 1;
 const MAX_SIZE = 99;
-const ROTATION_STEP = 15;
 const TURN = 360;
 
 const ROTATIONS = Array.from({ length: TURN / ROTATION_STEP }, (_, i) => {
@@ -110,12 +110,8 @@ export class FloorPlanTablePanel extends LitElement {
     this.dispatchEvent(new CustomEvent<T>(type, { detail, bubbles: true, composed: true }));
   }
 
-  #change(draft: FloorPlanDraft, mergeKey?: string): void {
-    this.#send<FloorPlanChange>("floor-plan-change", mergeKey ? { draft, mergeKey } : { draft });
-  }
-
   #patch(patch: Parameters<typeof patchTable>[2], mergeKey?: string): void {
-    this.#change(patchTable(this.draft, this.tableKey, patch), mergeKey);
+    sendChange(this, patchTable(this.draft, this.tableKey, patch), mergeKey);
   }
 
   /** A typed value the draft cannot hold goes to the page, which marks it and holds Save. */
@@ -185,19 +181,14 @@ export class FloorPlanTablePanel extends LitElement {
   }
 
   #delete(): void {
-    this.#change(deleteTable(this.draft, this.tableKey));
+    sendChange(this, deleteTable(this.draft, this.tableKey));
     this.#send<FloorPlanSelect>("floor-plan-select", { key: null });
-  }
-
-  #label(key: string): string {
-    const label = this.draft.tables.find((t) => t.key === key)?.label.trim() ?? "";
-    return label || t("floor_plan_editor.unnamed");
   }
 
   #otherNames(tableKeys: string[]): string {
     return tableKeys
       .filter((key) => key !== this.tableKey)
-      .map((key) => this.#label(key))
+      .map((key) => tableName(this.draft.tables.find((t) => t.key === key)))
       .join(", ");
   }
 
@@ -224,7 +215,7 @@ export class FloorPlanTablePanel extends LitElement {
                       variant="secondary"
                       data-test="remove-join"
                       aria-label=${`${t("action.remove")}: ${this.#otherNames(join.tableKeys)}`}
-                      @click=${() => this.#change(removeJoin(this.draft, join.key))}
+                      @click=${() => sendChange(this, removeJoin(this.draft, join.key))}
                       >${t("action.remove")}</wt-button
                     >
                   </li>`,
@@ -329,7 +320,7 @@ export class FloorPlanTablePanel extends LitElement {
             ? html`<wt-button
                 variant="secondary"
                 data-test="place"
-                @click=${() => this.#change(placeTable(this.draft, this.tableKey))}
+                @click=${() => sendChange(this, placeTable(this.draft, this.tableKey))}
                 >${t("floor_plan_editor.place")}</wt-button
               >`
             : html`<wt-button

@@ -303,6 +303,12 @@ it("Close links to the way back, or to /manage when it is not a dashboard path",
   const elsewhere = await open(stubApi(), "/manage/floor-plan/zone/z1?back=%2Flogin");
   expect(close(elsewhere)).toBe("/manage");
   cleanupWidgets();
+  const unparsable = await open(
+    stubApi(),
+    `/manage/floor-plan/zone/z1?back=${encodeURIComponent("http://[")}`,
+  );
+  expect(close(unparsable)).toBe("/manage");
+  cleanupWidgets();
   const none = await open();
   expect(close(none)).toBe("/manage");
 });

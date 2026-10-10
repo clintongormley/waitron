@@ -35,19 +35,16 @@ import {
   draftFromPlan,
   moveTable,
   rekeyDraft,
+  rekeyWith,
   restoreTable,
   rotateTable,
   sameDraft,
   saveFromDraft,
   withLiveTables,
   type DraftTable,
+  type FloorPlanChange,
   type FloorPlanDraft,
 } from "./floor-plan-draft.js";
-
-export interface FloorPlanChange {
-  draft: FloorPlanDraft;
-  mergeKey?: string;
-}
 
 export interface FloorPlanSelect {
   key: string | null;
@@ -174,16 +171,10 @@ function trimLabels(draft: FloorPlanDraft, sent: FloorPlanDraft = draft): FloorP
 
 /** `back` when it is a dashboard path on this origin, else the dashboard's home. */
 function closeHref(back: string | null): string {
-  if (back === null) return HOME;
-  try {
-    const url = new URL(back, location.origin);
-    if (url.origin === location.origin && url.pathname.startsWith(`${HOME}/`)) {
-      return `${url.pathname}${url.search}${url.hash}`;
-    }
-  } catch {
-    // An unparsable `back` falls through to home.
-  }
-  return HOME;
+  const url = back === null ? null : URL.parse(back, location.origin);
+  return url !== null && url.origin === location.origin && url.pathname.startsWith(`${HOME}/`)
+    ? `${url.pathname}${url.search}${url.hash}`
+    : HOME;
 }
 
 @customElement("dashboard-floor-plan-editor")
@@ -227,7 +218,9 @@ export class FloorPlanEditor extends LitElement {
       }
       .layout {
         display: grid;
-        grid-template-columns: minmax(0, 1fr) minmax(192px, 288px);
+        grid-template-columns:
+          minmax(0, 1fr)
+          minmax(calc(var(--wt-space-6) * 6), calc(var(--wt-space-6) * 9));
         gap: var(--wt-space-4);
         align-items: start;
       }
@@ -294,9 +287,6 @@ export class FloorPlanEditor extends LitElement {
     const mark = this.mark ?? this.typedMarks[0] ?? null;
     return mark === null ? null : { key: mark.key, field: mark.field, message: mark.text() };
   }
-
-  /** The body of the last save sent, so a refusal naming `tables.<i>` finds the key it meant. */
-  protected sent: FloorPlanSave | null = null;
 
   /** Other tables of the venue, for the panels' name checks. */
   protected venueTables: DashboardTable[] = [];
@@ -372,9 +362,7 @@ export class FloorPlanEditor extends LitElement {
   }
 
   override disconnectedCallback(): void {
-    this.#saveRequest++;
-    this.saving = false;
-    this.loadingNewer = false;
+    this.#cancelPending();
     this.#resize.disconnect();
     this.#sheetResize.disconnect();
     this.#watchedSheet = null;
@@ -440,6 +428,20 @@ export class FloorPlanEditor extends LitElement {
     this.#scope?.commit({ draft: saved, refusedText: false });
   }
 
+  #cancelPending(): void {
+    this.#saveRequest++;
+    this.saving = false;
+    this.loadingNewer = false;
+  }
+
+  #clearFeedback(): void {
+    this.message = null;
+    this.outOfDate = false;
+    this.mark = null;
+    this.typedMarks = [];
+    this.refused = null;
+  }
+
   #disposeScope(): void {
     this.#scope?.dispose();
     this.#scope = undefined;
@@ -451,9 +453,7 @@ export class FloorPlanEditor extends LitElement {
     if (zoneId === this.#zoneId) return;
     this.#zoneId = zoneId;
     const request = ++this.#request;
-    this.#saveRequest++;
-    this.saving = false;
-    this.loadingNewer = false;
+    this.#cancelPending();
     this.#disposeScope();
     this.plan = null;
     this.zoneName = null;
@@ -463,12 +463,7 @@ export class FloorPlanEditor extends LitElement {
     this.#liveFrom = null;
     this.selected = null;
     this.loadError = null;
-    this.message = null;
-    this.outOfDate = false;
-    this.mark = null;
-    this.typedMarks = [];
-    this.refused = null;
-    this.sent = null;
+    this.#clearFeedback();
     if (zoneId !== null) void this.#load(zoneId, request);
   }
 
@@ -684,7 +679,6 @@ export class FloorPlanEditor extends LitElement {
     const body = saveFromDraft(this.revision, sentDraft);
     const request = this.#request;
     const saveRequest = ++this.#saveRequest;
-    this.sent = body;
     this.saving = true;
     this.message = null;
     this.mark = null;
@@ -709,7 +703,7 @@ export class FloorPlanEditor extends LitElement {
     const saved = rekeyDraft(sentDraft, ids);
     const current = rekeyDraft(trimLabels(this.draft!, draft), ids);
     this.renderRoot.querySelector("floor-plan-add-join")?.rekey(ids);
-    const rekey = (key: string): string => (Object.hasOwn(ids, key) ? ids[key]! : key);
+    const rekey = rekeyWith(ids);
     this.#rekeyMarks(rekey);
     this.revision = answer.revision;
     this.outOfDate = false;
@@ -752,11 +746,7 @@ export class FloorPlanEditor extends LitElement {
     this.loadingNewer = false;
     this.#clearReadMessage();
     if (replace) {
-      this.outOfDate = false;
-      this.message = null;
-      this.mark = null;
-      this.typedMarks = [];
-      this.refused = null;
+      this.#clearFeedback();
     } else if (!saveActionState(this.#scope).unchanged) {
       this.#adoptLiveTables(draftFromPlan(plan));
       return;
@@ -838,7 +828,7 @@ export class FloorPlanEditor extends LitElement {
   #takenTables: DashboardTable[] | null = null;
   #taken: ReadonlySet<string> = new Set();
 
-  /** Decision 8: another zone's tables, and this zone's switched-off ones no draft table follows. */
+  /** Another zone's tables, and this zone's switched-off ones no draft table follows. */
   #takenElsewhere(draft: FloorPlanDraft): ReadonlySet<string> {
     if (draft !== this.#takenFor || this.venueTables !== this.#takenTables) {
       this.#takenFor = draft;
@@ -930,7 +920,6 @@ export class FloorPlanEditor extends LitElement {
     ></wt-floor-plan-canvas>`;
     const panel = html`<floor-plan-tables-panel
       .draft=${draft}
-      .selected=${this.selected}
       .refused=${this.#refusedForPanel()}
       .inSheet=${this.narrow}
     ></floor-plan-tables-panel>`;
@@ -990,7 +979,7 @@ export class FloorPlanEditor extends LitElement {
                   data-action="load-newer"
                   variant="secondary"
                   @click=${this.#loadNewer}
-                  >${t("floor_plan_editor.load_newer")}</wt-button
+                  >${t("floor_plan_editor.reload")}</wt-button
                 >`
               : nothing
           }
