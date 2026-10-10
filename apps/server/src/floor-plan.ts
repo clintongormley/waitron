@@ -383,17 +383,18 @@ export async function saveZonePlan(
   for (const [id, label] of spare) {
     await tx.update(floorPlanTables).set({ label }).where(eq(floorPlanTables.id, id));
   }
-  const ids: Record<string, string> = {};
+  // A Map, because a draft key is any string: on a plain object `__proto__` sets the prototype.
+  const ids = new Map<string, string>();
   for (const table of input.tables) {
     if (table.id !== undefined) {
-      ids[table.key] = table.id;
+      ids.set(table.key, table.id);
       continue;
     }
     const [row] = await tx
       .insert(floorPlanTables)
       .values({ planId, label: table.label.trim(), ...masterColumns(table) })
       .returning({ id: floorPlanTables.id });
-    ids[table.key] = row!.id;
+    ids.set(table.key, row!.id);
   }
   for (const table of input.tables) {
     if (table.id === undefined) continue;
@@ -409,7 +410,7 @@ export async function saveZonePlan(
       .values({ planId, seats: join.seats })
       .returning({ id: floorPlanJoins.id });
     for (const key of join.tableKeys) {
-      await tx.insert(floorPlanJoinTables).values({ joinId: row!.id, planTableId: ids[key]! });
+      await tx.insert(floorPlanJoinTables).values({ joinId: row!.id, planTableId: ids.get(key)! });
     }
   }
 
@@ -417,7 +418,7 @@ export async function saveZonePlan(
     if (table.liveTableId === undefined) continue;
     await tx
       .update(diningTables)
-      .set({ planTableId: ids[table.key]!, planned: true })
+      .set({ planTableId: ids.get(table.key)!, planned: true })
       .where(eq(diningTables.id, table.liveTableId));
   }
 
@@ -429,5 +430,5 @@ export async function saveZonePlan(
     .from(floorTodayZones)
     .where(eq(floorTodayZones.zoneId, zoneId));
   if (today === undefined) await resetZone(tx, cfg, removals, zoneId, now);
-  return { revision, ids };
+  return { revision, ids: Object.fromEntries(ids) };
 }

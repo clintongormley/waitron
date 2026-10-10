@@ -875,6 +875,25 @@ describe("saveZonePlan", () => {
     expect(await labelsOf(z)).toEqual({ [ids.a!]: renamed, [ids.b!]: ids.a });
   });
 
+  it("returns the id of a table whose draft key is __proto__, and saves a join naming it", async () => {
+    const z = await zone();
+    const result = await save(z, {
+      revision: 0,
+      tables: [entry("__proto__", fresh("Proto 1")), entry("b", fresh("Proto 2"))],
+      joins: [{ seats: 6, tableKeys: ["__proto__", "b"] }],
+    });
+
+    expect(Object.hasOwn(result.ids, "__proto__")).toBe(true);
+    const plan = await inTx(v, (tx) => readZonePlan(tx, v.cfg, z));
+    expect(plan.tables.map((t) => t.id)).toContain(result.ids["__proto__"]);
+    expect(plan.joins).toEqual([
+      expect.objectContaining({
+        seats: 6,
+        tableIds: [result.ids["__proto__"], result.ids.b].sort(),
+      }),
+    ]);
+  });
+
   it("writes nothing when a check refuses", async () => {
     const { z, result } = await firstSaved();
     const before = await inTx(v, (tx) => readZonePlan(tx, v.cfg, z));
