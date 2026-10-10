@@ -66,6 +66,7 @@ export class TillTableDetailsSheet extends LitElement {
         display: flex;
         flex-wrap: wrap;
         gap: var(--wt-space-2);
+        margin-top: var(--wt-space-2);
       }
 
       .fire-due {

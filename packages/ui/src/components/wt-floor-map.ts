@@ -166,15 +166,21 @@ export class WtFloorMap extends LitElement {
       [part="table"][data-held] [part="shape"] {
         border-color: var(--wt-color-primary);
         box-shadow: inset 0 0 0 1px var(--wt-color-primary);
+        /* Outside the edge: the seated fill is the primary colour itself. */
+        outline: var(--wt-selected-ring);
+        outline-offset: var(--wt-focus-offset);
       }
 
       [part="shape"][data-shape="round"] {
         border-radius: 50%;
       }
 
+      /* Painted in the fill, over the seam between a merge's tables. */
       [part="name"] {
         position: relative;
         max-width: 100%;
+        padding-inline: var(--wt-space-1);
+        border-radius: var(--wt-radius-sm);
         overflow: hidden;
         text-overflow: ellipsis;
         text-wrap: nowrap;
@@ -598,7 +604,7 @@ export class WtFloorMap extends LitElement {
       })}
     >
       ${members.map((m) => this.#renderShape(m, box, view.scale))}
-      ${named ? html`<span part="name">${label}</span>` : nothing}
+      ${named ? html`<span part="name" data-fill=${first.fill}>${label}</span>` : nothing}
       ${
         dot === null ? nothing : html`<span part="dot" data-dot=${dot} ?data-still=${still}></span>`
       }

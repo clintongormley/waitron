@@ -236,6 +236,24 @@ it("outlines a held table in the primary colour", async () => {
   expect(shape.boxShadow).toBe("rgb(1, 2, 3) 0px 0px 0px 1px inset");
 });
 
+it("rings a held table outside its edge, so a table filled in the primary colour shows it too", async () => {
+  const el = await map([t("t1", "T1", { x: 10, y: 5 }, { fill: "seated" })]);
+  applyTokens(el);
+  el.style.setProperty("--wt-color-primary", "rgb(1, 2, 3)");
+  down(el, 300, 150);
+  vi.advanceTimersByTime(500);
+  const shape = getComputedStyle(shapeOf(el, "t1"));
+  expect(shape.outlineStyle).toBe("solid");
+  expect(shape.outlineWidth).toBe("2px");
+  expect(shape.outlineColor).toBe("rgb(1, 2, 3)");
+  expect(shape.outlineOffset).toBe("2px");
+});
+
+it("a table not held has no ring", async () => {
+  const el = await map([t1]);
+  expect(getComputedStyle(shapeOf(el, "t1")).outlineStyle).toBe("none");
+});
+
 it("a right-click asks for details once and stops the browser's menu", async () => {
   const el = await map([t1]);
   let reachedPage = false;

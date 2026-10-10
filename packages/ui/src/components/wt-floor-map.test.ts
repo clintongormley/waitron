@@ -174,6 +174,19 @@ it("paints a table from its fill's tokens", async () => {
   expect(getComputedStyle(button(el, "t1")).backgroundColor).toBe("rgba(0, 0, 0, 0)");
 });
 
+it("paints a merge's name in its fill, so the seam between its tables does not cross it", async () => {
+  const el = await map([
+    t("ten", "10", { x: 8, y: 0 }, { joinId: "j1", fill: "seated" }),
+    t("four", "4", { x: 0, y: 0 }, { joinId: "j1", fill: "seated" }),
+  ]);
+  host.style.setProperty("--wt-color-table-seated", "rgb(1, 2, 3)");
+  host.style.setProperty("--wt-space-1", "5px");
+  const name = getComputedStyle(within(el, "name", "four")!);
+  expect(name.backgroundColor).toBe("rgb(1, 2, 3)");
+  expect(name.paddingLeft).toBe("5px");
+  expect(name.paddingRight).toBe("5px");
+});
+
 it("paints the map's background from the surface token", async () => {
   const el = await map([t1]);
   host.style.setProperty("--wt-color-surface", "rgb(10, 11, 12)");

@@ -431,6 +431,7 @@ export class TillTableOrderScreen extends LitElement {
          embedded (the card host owns nav). Mirrors the floor and station screens' actions extraction. */
       .head-actions {
         display: flex;
+        flex-wrap: wrap;
         align-items: center;
         gap: var(--wt-space-2);
       }

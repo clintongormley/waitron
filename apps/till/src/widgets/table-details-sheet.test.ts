@@ -230,6 +230,21 @@ describe("till-table-details-sheet", () => {
     expect(find(el, "[data-free]")).toBeNull();
   });
 
+  it("spaces the chips from the last line as the lines are spaced", async () => {
+    const el = await mount({
+      table: table({
+        pendingDeliveries: 1,
+        signals: [{ kind: "bill_requested", requestedAt: "2026-10-10T12:00:00Z" }],
+      }),
+    });
+    const list = find(el, ".lines")!;
+    const last = list.lastElementChild!.getBoundingClientRect();
+    const chips = find(el, ".chips")!.getBoundingClientRect();
+    const gap = parseFloat(getComputedStyle(list).rowGap);
+    expect(gap).toBeGreaterThan(0);
+    expect(chips.top - last.bottom).toBeCloseTo(gap);
+  });
+
   it("says Free for a free table with nothing on it", async () => {
     const el = await mount({ table: table() });
     expect(lines(el)).toEqual(["Free"]);
