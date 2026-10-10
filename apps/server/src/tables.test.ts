@@ -293,6 +293,16 @@ describe("updateTable on a table in a floor plan", () => {
     expect((await readTable(id)).active).toBe(false);
   });
 
+  it("answers zone.not_found, not table.in_floor_plan, for a planned table moved to a missing zone", async () => {
+    const cfg = await setupVenue();
+    const { id } = await seedTable(cfg, true);
+    const zoneId = randomUUID();
+    await expect(asApp(cfg, (tx) => updateTable(tx, cfg, id, { zoneId }))).rejects.toMatchObject({
+      code: "zone.not_found",
+      params: { zoneId },
+    });
+  });
+
   it("changes the capacity, even when the old screen resends the unchanged name", async () => {
     const cfg = await setupVenue();
     const { id } = await seedTable(cfg, true);

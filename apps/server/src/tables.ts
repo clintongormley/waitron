@@ -148,6 +148,7 @@ export async function updateTable(
     capacity?: number | null;
     active?: boolean;
   } = {};
+  if (input.zoneId !== undefined) await requireZone(tx, input.zoneId);
   const current =
     input.label !== undefined || input.zoneId !== undefined || input.active !== undefined
       ? await refuseFloorPlanChange(tx, id, input)
@@ -155,10 +156,7 @@ export async function updateTable(
   if (input.label !== undefined) patch.label = input.label;
   if (input.capacity !== undefined) patch.capacity = input.capacity;
   if (input.active !== undefined) patch.active = input.active;
-  if (input.zoneId !== undefined) {
-    patch.zoneId = input.zoneId;
-    await requireZone(tx, input.zoneId);
-  }
+  if (input.zoneId !== undefined) patch.zoneId = input.zoneId;
   if (input.active === true || (input.zoneId !== undefined && input.active !== false)) {
     const zoneId = input.zoneId ?? current?.zoneId ?? null;
     if (current !== undefined && (input.active ?? current.active) && zoneId !== null) {
