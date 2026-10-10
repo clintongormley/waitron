@@ -6116,3 +6116,62 @@ it("A461 pointer drop payload includes a selected product inside a collapsed cat
   send("pointerup", to);
   expect(drops).toEqual([{ keys: ["iced", "cake"], folderId: "storage" }]);
 });
+
+it.each([390, 1280])(
+  "A461 name and path share a line and wrap before Actions at %i",
+  async (width) => {
+    await page.viewport(width, 844);
+    expect(window.innerWidth).toBe(width);
+    setLocale("en-GB");
+    const { el, table, root } = await mountTree({
+      categories: [
+        {
+          ...drinks,
+          name:
+            width === 1280
+              ? "Drinks"
+              : "Long category name ".repeat(8) + "UnbrokenCategory".repeat(12),
+        },
+      ],
+      products: [product({ id: "coffee", name: "Iced coffee", primaryCategoryId: "d" })],
+      search: "coffee",
+      selecting: true,
+    });
+    el.style.width = "100%";
+    await new Promise<void>((resolve) =>
+      requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
+    );
+    const row = root.querySelector('tr[data-row-key="coffee"]')!;
+    const path = row.querySelector<HTMLElement>('[part~="search-path"]')!;
+    const line = row.querySelector<HTMLElement>('[part~="search-name-line"]')!;
+    const range = document.createRange();
+    range.selectNodeContents(path);
+    const rects = [...range.getClientRects()];
+    const actions = row.querySelector("td:last-child")!.getBoundingClientRect();
+    expect(rects.length).toBeGreaterThan(0);
+    for (const rect of rects) expect(rect.right).toBeLessThanOrEqual(actions.left + 1);
+    const nameRange = document.createRange();
+    nameRange.selectNodeContents(line.firstChild!);
+    const name = nameRange.getBoundingClientRect();
+    if (width === 1280) expect(Math.abs(rects[0]!.bottom - name.bottom)).toBeLessThanOrEqual(3);
+    else {
+      expect(rects.length).toBeGreaterThan(1);
+      expect(rects.at(-1)!.top).toBeGreaterThan(name.top);
+    }
+    expect(row.querySelector('td.select input[type="checkbox"]')).not.toBeNull();
+    expect(row.querySelector("wt-row-actions")).not.toBeNull();
+    await table.updateComplete;
+  },
+);
+
+it("A461 path colour font and gap follow host tokens", async () => {
+  const { el, root } = await mountTree({ search: "cola" });
+  const path = root.querySelector<HTMLElement>('[part~="search-path"]')!;
+  const line = root.querySelector<HTMLElement>('[part~="search-name-line"]')!;
+  el.style.setProperty("--wt-color-text-muted", "rgb(13, 57, 91)");
+  el.style.setProperty("--wt-font-size-sm", "19px");
+  el.style.setProperty("--wt-space-2", "17px");
+  expect(getComputedStyle(path).color).toBe("rgb(13, 57, 91)");
+  expect(getComputedStyle(path).fontSize).toBe("19px");
+  expect(getComputedStyle(line).columnGap).toBe("17px");
+});

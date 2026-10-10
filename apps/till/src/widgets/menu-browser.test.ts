@@ -2929,3 +2929,94 @@ describe("A461 served-menu section search", () => {
     },
   );
 });
+
+it.each(
+  [390, 1280].flatMap((width) =>
+    (["en-GB", "es-ES"] as const).flatMap((locale) =>
+      (["light", "dark"] as const).map((theme) => ({ width, locale, theme })),
+    ),
+  ),
+)("A461 visual till mixed results $width $locale $theme", async ({ width, locale, theme }) => {
+  const before = currentLocale();
+  setLocale(locale);
+  setContentLanguages({
+    defaultLanguage: locale.startsWith("es") ? "es" : "en",
+    languages: ["en", "es"],
+  });
+  await page.viewport(width, 844);
+  expect(window.innerWidth).toBe(width);
+  try {
+    const mixed = section("coffee", "internal", { en: "Coffee", es: "Café" }, [member("iced")]);
+    const disabled = section(
+      "coffee-disabled",
+      "internal disabled",
+      {
+        en: "Coffee long disabled section " + "Unbroken".repeat(8),
+        es: "Café largo desactivado " + "SinEspacios".repeat(8),
+      },
+      [member("filtered")],
+    );
+    const icedName = locale.startsWith("es") ? "Café helado" : "Iced coffee";
+    const cakeName = locale.startsWith("es") ? "Tarta de café" : "Coffee cake";
+    const offers = [product("iced", icedName), product("filtered", "Filtered dish")];
+    const { el, host, store } = await mount({
+      handheld: width === 390,
+      menu: lunch({
+        structure: { members: [mixed, disabled, member("cake")] },
+        ...withShortcuts([]),
+      }),
+      products: [offers[0]!, product("cake", cakeName)],
+      unfilteredProducts: [...offers, product("cake", cakeName)],
+    });
+    host.setAttribute("data-theme", theme);
+    host.style.width = `${width === 1280 ? 780 : width}px`;
+    if (width === 1280) host.style.maxWidth = "780px";
+    const capture = async (state: string) => {
+      await el.updateComplete;
+      await new Promise<void>((resolve) =>
+        requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
+      );
+      await page.screenshot({
+        element: el,
+        path: `.superpowers/a461-task9/till-${locale}-${theme}-${width}-${state}.png`,
+      });
+    };
+    await search(el, locale.startsWith("es") ? "cafe" : "coffee");
+    expect(entries(el, "results").filter((tile) => tile.dataset.kind === "section")).toHaveLength(
+      2,
+    );
+    const disabledTile = entries(el, "results").find((tile) => tile.disabled)!;
+    expect(disabledTile).toBeDefined();
+    await (disabledTile as HTMLElementTagNameMap["wt-button"]).updateComplete;
+    expect(disabledTile.shadowRoot!.querySelector<HTMLButtonElement>("button")!.disabled).toBe(
+      true,
+    );
+    await Promise.all(
+      entries(el, "results").map(
+        (tile) => (tile as HTMLElementTagNameMap["wt-button"]).updateComplete,
+      ),
+    );
+    await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+    if (width === 390)
+      for (const tile of entries(el, "results")) {
+        const rect = tile.getBoundingClientRect();
+        expect(rect.right).toBeLessThanOrEqual(width + 1);
+      }
+    await capture("mixed-disabled");
+    const enabled = entries(el, "results").find(
+      (tile) => tile.dataset.kind === "section" && !tile.disabled,
+    )!;
+    await tap(el, enabled);
+    expect(names(entries(el, "section"))).toContain(icedName);
+    expect(store.lines).toHaveLength(0);
+    await capture("opened");
+    await search(el, "zz-no-match");
+    expect(entries(el, "results")).toHaveLength(0);
+    await capture("no-match");
+    await search(el, "");
+    await capture("restored");
+  } finally {
+    setLocale(before);
+    await page.viewport(1280, 844);
+  }
+});

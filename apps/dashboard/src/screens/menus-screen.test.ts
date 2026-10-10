@@ -10610,3 +10610,70 @@ it.each(["member", "destination", "menu"])(
     expect(client.moveSectionMembersInto).not.toHaveBeenCalled();
   },
 );
+
+it.each(
+  [390, 1280].flatMap((width) =>
+    (["en-GB", "es-ES"] as const).flatMap((locale) =>
+      (["light", "dark"] as const).map((theme) => ({ width, locale, theme })),
+    ),
+  ),
+)("A461 visual Menus Structure $width $locale $theme", async ({ width, locale, theme }) => {
+  registerIcons(DASHBOARD_ICONS);
+  const before = currentLocale();
+  setLocale(locale);
+  onTestFinished(() => setLocale(before));
+  await page.viewport(width, 844);
+  onTestFinished(() => page.viewport(1280, 844));
+  expect(window.innerWidth).toBe(width);
+  const client = api({
+    getMenuStructure: vi.fn().mockResolvedValue(
+      lunchWith([
+        productNode("m-burger", "p-burger"),
+        { ...drinksNode("m-drinks"), internalName: "Drinks" },
+        {
+          ...drinksNode("long-copy", "s-long"),
+          internalName: "Long section path " + "UnbrokenSection".repeat(8),
+        },
+      ]),
+    ),
+  });
+  const el = await mount(client, LUNCH_PATH, theme);
+  await vi.waitFor(() => expect(structure(el)).not.toBeNull());
+  const capture = async (state: string) => {
+    await settleStructure(el);
+    await new Promise<void>((resolve) =>
+      requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
+    );
+    await page.screenshot({
+      element: el,
+      path: `.superpowers/a461-task9/menus-${locale}-${theme}-${width}-${state}.png`,
+    });
+  };
+  const search = async (value: string) => {
+    type(q(el, 'wt-input[name="structure-search"]')!, value);
+    await settleStructure(el);
+  };
+  q<HTMLElement>(el, '[data-test="select"]')!.click();
+  await settleStructure(el);
+  await search("Lemonade");
+  const boxes = allInStructure<HTMLInputElement>(el, "td.select input");
+  expect(boxes.length).toBeGreaterThan(0);
+  boxes[0]!.click();
+  await capture("long-path");
+  await search("Drinks");
+  expect(rowOf(el, "m-drinks")!.getAttribute("aria-expanded")).toBe("false");
+  await capture("flat");
+  await toggleRow(el, "m-drinks");
+  expect(rowOf(el, "m-drinks/m-lemonade")).not.toBeNull();
+  await capture("opened");
+  await search("Burger");
+  expect(structure(el).selected.length).toBe(1);
+  await capture("hidden-selected");
+  await search("zz-no-match");
+  expect(allInStructure(el, "tbody tr[data-row-key]")).toHaveLength(0);
+  await capture("no-match");
+  await search("");
+  expect(structure(el).selected.length).toBe(1);
+  expect(inStructure(el, '[part~="search-path"]')).toBeNull();
+  await capture("restored");
+});

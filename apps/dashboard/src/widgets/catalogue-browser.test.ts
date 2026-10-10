@@ -4620,3 +4620,62 @@ it.each([false, true])(
     );
   },
 );
+
+it.each(
+  [390, 1280].flatMap((width) =>
+    (["en-GB", "es-ES"] as const).flatMap((locale) =>
+      (["light", "dark"] as const).map((theme) => ({ width, locale, theme })),
+    ),
+  ),
+)("A461 visual Products $width $locale $theme", async ({ width, locale, theme }) => {
+  const { page } = await import("vitest/browser");
+  await page.viewport(width, 844);
+  onTestFinished(() => page.viewport(1280, 844));
+  setLocale(locale);
+  onTestFinished(() => setLocale("en-GB"));
+  expect(window.innerWidth).toBe(width);
+  const el = await mountBrowser({
+    categories: [
+      folder("d", "Drinks", null),
+      folder("coffee", "Coffee", "d"),
+      folder("desserts", "Desserts long spaced path " + "Unbroken".repeat(8), null),
+    ],
+    products: [
+      product("iced", "Iced coffee", "coffee"),
+      product("cake", "Coffee cake", "desserts"),
+      product("ice", "Add ice", "coffee"),
+    ],
+  });
+  el.parentElement!.setAttribute("data-theme", theme);
+  const capture = async (state: string) => {
+    await tableOf(el);
+    await new Promise<void>((resolve) =>
+      requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
+    );
+    await page.screenshot({
+      element: el,
+      path: `.superpowers/a461-task9/products-${locale}-${theme}-${width}-${state}.png`,
+    });
+  };
+  await press(el, "select");
+  await typeSearch(el, "iced");
+  (await tableOf(el))
+    .shadowRoot!.querySelector<HTMLInputElement>('tr[data-row-key="iced"] td.select input')!
+    .click();
+  await typeSearch(el, "coffee");
+  expect(await rowKeys(el)).toEqual(["folder:coffee", "cake", "iced"]);
+  await capture("flat");
+  await toggleCategory(el, "coffee");
+  expect(await rowKeys(el)).toContain("ice");
+  await capture("opened");
+  await typeSearch(el, "cake");
+  expect((await tableOf(el)).selected).toEqual(["iced"]);
+  await capture("hidden-selected");
+  await typeSearch(el, "zz-no-match");
+  expect(await rowKeys(el)).toEqual([]);
+  await capture("no-match");
+  await typeSearch(el, "");
+  expect((await tableOf(el)).selected).toEqual(["iced"]);
+  expect((await tableOf(el)).shadowRoot!.querySelector('[part~="search-path"]')).toBeNull();
+  await capture("restored");
+});

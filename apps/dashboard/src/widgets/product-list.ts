@@ -404,7 +404,6 @@ export class ProductList extends LitElement {
   @property({ attribute: false }) optionLists: ModifierListChoice[] = [];
   /** The content language a stored unit's abbreviation is read in. */
   @property() unitLanguage = "en";
-  /** The search box's text; while it lasts, the table holds every category above a match open. */
   @property() search = "";
   /** Whether a product can be made yet: the editor needs a content language and a unit. */
   @property({ type: Boolean }) canAddProduct = false;

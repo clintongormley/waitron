@@ -102,12 +102,14 @@ export class TillMenuBrowser extends LitElement {
     css`
       :host {
         display: grid;
+        grid-template-columns: minmax(0, 1fr);
         gap: var(--wt-space-4);
         align-content: start;
       }
 
       section {
         display: grid;
+        grid-template-columns: minmax(0, 1fr);
         gap: var(--wt-space-2);
       }
 

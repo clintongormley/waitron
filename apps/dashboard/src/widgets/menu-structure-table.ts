@@ -193,6 +193,7 @@ export class MenuStructureTable extends LitElement {
         flex-wrap: wrap;
         align-items: baseline;
         column-gap: var(--wt-space-2);
+        max-inline-size: var(--search-name-room);
         overflow-wrap: anywhere;
       }
       wt-data-table::part(search-path) {
@@ -302,7 +303,53 @@ export class MenuStructureTable extends LitElement {
   /** Whether a column filter is narrowing the rows, as the table last reported. */
   @state() private filtering = false;
 
+  #fitFrame = 0;
+  readonly #pathResize = new ResizeObserver(() => this.#schedulePathFit());
+  readonly #pathNarrow = new MutationObserver(() => this.#schedulePathFit());
+
+  #watchPathWidth(): void {
+    const table = this.#table()!;
+    this.#pathResize.observe(table);
+    this.#pathNarrow.observe(table, { attributes: true, attributeFilter: ["narrow"] });
+  }
+
+  override connectedCallback(): void {
+    super.connectedCallback();
+    if (this.hasUpdated) this.#watchPathWidth();
+  }
+
+  #schedulePathFit(): void {
+    if (this.#fitFrame) return;
+    this.#fitFrame = requestAnimationFrame(() => {
+      this.#fitFrame = 0;
+      const root = this.#table()!.shadowRoot!;
+      const scroll = root.querySelector<HTMLElement>(".scroll")!;
+      const lines = [...root.querySelectorAll<HTMLElement>('[part~="search-name-line"]')];
+      const rooms = lines.map((line) => {
+        const cell = line.closest("td")!;
+        const end = cell
+          .closest("tr")!
+          .querySelector('td[data-pinned="end"]')!
+          .getBoundingClientRect().left;
+        return Math.max(
+          0,
+          end -
+            line.getBoundingClientRect().left -
+            scroll.scrollLeft -
+            parseFloat(getComputedStyle(cell).paddingInlineEnd),
+        );
+      });
+      lines.forEach((line, index) =>
+        line.style.setProperty("--search-name-room", `${rooms[index]}px`),
+      );
+    });
+  }
+
   override disconnectedCallback(): void {
+    this.#pathResize.disconnect();
+    this.#pathNarrow.disconnect();
+    cancelAnimationFrame(this.#fitFrame);
+    this.#fitFrame = 0;
     if (this.#drag) this.#finishDrag();
     super.disconnectedCallback();
   }
@@ -341,9 +388,11 @@ export class MenuStructureTable extends LitElement {
   }
 
   protected override firstUpdated(): void {
+    this.#watchPathWidth();
     // Collapse all closes branches without telling anyone, so the table's own updates are watched.
     this.#table()!.addController({
       hostUpdated: () => {
+        this.#schedulePathFit();
         this.#checkCurrentShown();
         this.#restoreFocus();
         this.#restoreMovedFocus();

@@ -4013,3 +4013,101 @@ it("A461 drop rejects a destination hidden by a collapsed branch while dragging"
   expect(errors).toEqual([]);
   expect(batches).toEqual([]);
 });
+
+it.each([390, 1280])(
+  "A461 Structure name and path share a line and wrap before Actions at %i",
+  async (width) => {
+    await page.viewport(width, 844);
+    expect(window.innerWidth).toBe(width);
+    const el = await mount({
+      selecting: true,
+      search: "Lemonade",
+      nodes: [
+        {
+          ...drinksNode("m-drinks"),
+          internalName:
+            width === 1280
+              ? "Drinks"
+              : "Long section name ".repeat(8) + "UnbrokenSection".repeat(12),
+          children: [productNode("m-lemonade", "p-lemonade")],
+        },
+      ],
+    });
+    el.style.width = "100%";
+    await new Promise<void>((resolve) =>
+      requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
+    );
+    const found = row(el, "m-drinks/m-lemonade")!;
+    const path = found.querySelector<HTMLElement>('[part~="search-path"]')!;
+    const line = found.querySelector<HTMLElement>('[part~="search-name-line"]')!;
+    const range = document.createRange();
+    range.selectNodeContents(path);
+    const rects = [...range.getClientRects()];
+    const actions = found.querySelector("td:last-child")!.getBoundingClientRect();
+    expect(rects.length).toBeGreaterThan(0);
+    for (const rect of rects) expect(rect.right).toBeLessThanOrEqual(actions.left + 1);
+    const nameRange = document.createRange();
+    nameRange.selectNodeContents(line.querySelector('[part~="name"]')!);
+    const name = nameRange.getBoundingClientRect();
+    if (width === 1280) expect(Math.abs(rects[0]!.bottom - name.bottom)).toBeLessThanOrEqual(3);
+    else {
+      expect(rects.length).toBeGreaterThan(1);
+      expect(rects.at(-1)!.top).toBeGreaterThan(name.top);
+    }
+    expect(found.querySelector('td.select input[type="checkbox"]')).not.toBeNull();
+    expect(found.querySelector("wt-row-actions")).not.toBeNull();
+  },
+);
+
+it("A461 Structure path colour font and gap follow host tokens", async () => {
+  const el = await mount({ search: "Lemonade" });
+  const path = inTable<HTMLElement>(el, '[part~="search-path"]')!;
+  const line = inTable<HTMLElement>(el, '[part~="search-name-line"]')!;
+  el.style.setProperty("--wt-color-text-muted", "rgb(13, 57, 91)");
+  el.style.setProperty("--wt-font-size-sm", "19px");
+  el.style.setProperty("--wt-space-2", "17px");
+  expect(getComputedStyle(path).color).toBe("rgb(13, 57, 91)");
+  expect(getComputedStyle(path).fontSize).toBe("19px");
+  expect(getComputedStyle(line).columnGap).toBe("17px");
+});
+
+it("A461 Structure wraps new paths after resize and reconnect", async () => {
+  const el = await mount({
+    search: "Lemonade",
+    nodes: [
+      {
+        ...drinksNode("m-drinks"),
+        internalName: "Long section ".repeat(20),
+        children: [productNode("m-lemonade", "p-lemonade")],
+      },
+    ],
+  });
+  const host = el.parentElement!;
+  host.style.width = "1000px";
+  const bounded = async () => {
+    await settle(el);
+    await vi.waitFor(() => {
+      const found = row(el, "m-drinks/m-lemonade")!;
+      const range = document.createRange();
+      range.selectNodeContents(found.querySelector('[part~="search-path"]')!);
+      const end = found.querySelector('td[data-pinned="end"]')!.getBoundingClientRect().left;
+      for (const rect of range.getClientRects()) expect(rect.right).toBeLessThanOrEqual(end + 1);
+    });
+  };
+  await bounded();
+  host.style.width = "370px";
+  await bounded();
+  el.remove();
+  await el.updateComplete;
+  host.append(el);
+  host.style.width = "700px";
+  await bounded();
+  el.nodes = [
+    {
+      ...drinksNode("m-drinks"),
+      internalName: "ReplacementUnbrokenPath".repeat(20),
+      children: [productNode("m-lemonade", "p-lemonade")],
+    },
+  ];
+  await bounded();
+});
