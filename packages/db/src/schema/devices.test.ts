@@ -94,6 +94,39 @@ describe("devices schema (columns, FKs, unique)", () => {
     expect(columns).not.toContain("watcher_id");
   });
 
+  it("devices: carries a nullable deleted_at that reads back, null by default", async () => {
+    const columns = suite.db.all<{ name: string; notnull: number }>(
+      sql`select name, "notnull" from pragma_table_info('devices')`,
+    );
+    expect(columns.find((c) => c.name === "deleted_at")).toEqual({
+      name: "deleted_at",
+      notnull: 0,
+    });
+    const id = await seedDevice("Caja 1");
+    const [fresh] = suite.db.all<{ deleted_at: string | null }>(
+      sql`select deleted_at from devices where id = ${id}`,
+    );
+    expect(fresh!.deleted_at).toBeNull();
+    await inTx((tx) =>
+      tx.update(devices).set({ deletedAt: "2026-10-10T10:00:00.000Z" }).where(eq(devices.id, id)),
+    );
+    const [typed] = await inTx((tx) =>
+      tx.select({ deletedAt: devices.deletedAt }).from(devices).where(eq(devices.id, id)),
+    );
+    expect(typed!.deletedAt).toBe("2026-10-10T10:00:00.000Z");
+  });
+
+  it("devices: a deleted device frees its name, as a disabled one does", async () => {
+    const first = await seedDevice("Caja 1");
+    await inTx(async (tx) => {
+      await tx.execute(
+        sql`update devices set active = 0, deleted_at = '2026-10-10T10:00:00.000Z' where id = ${first}`,
+      );
+    });
+    const second = await seedDevice("Caja 1");
+    expect(second).not.toBe(first);
+  });
+
   it("devices: the location FK rejects a non-existent location (direct location_id → locations.id)", async () => {
     // Positive control first, so the rejection below is the location FK and not a malformed row.
     await seedDevice("Real location", LOCATION_B);

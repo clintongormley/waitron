@@ -1,0 +1,1 @@
+ALTER TABLE `devices` ADD `deleted_at` text;
