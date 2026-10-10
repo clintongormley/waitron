@@ -3557,6 +3557,18 @@ and come back as the same device. **Delete** is permanent: it signs the device o
 holds, removes its settings, and keeps the row only as history. A deleted device's browser comes
 back only as a new device. A disabled row's menu offers Delete alone.
 
+A card reader offers both. **Disable** switches the reader off and keeps its id, and Enable brings
+it back unless it was also unpaired. **Delete** is permanent, and is refused while a payment is in progress on the reader. A
+reader still paired at a provider that can unpair it (SumUp) is unpaired there first: the delete is
+refused while that provider's account is disconnected, and an unpair that fails leaves the reader
+disabled but not deleted. While a Delete or an Unpair of a reader is running, Enable, Unpair,
+another Delete and adopting it are refused (`reader.unpair_in_progress`), and an adoption whose
+provider list was requested before an Unpair or Delete dropped the reader there is refused
+`reader.not_listed`. A Stripe reader is deleted without contacting Stripe. Delete takes the
+reader off every device and profile and off the device holding it, and the row is kept only as
+history, for the payments that point at it. Nothing brings a deleted reader back; found again, it is
+added as a new reader.
+
 Products use **Archive**, with **Archived** in the Availability column, and **View** for an archived
 row. In Spanish these are **Archivar**, **Archivado** for a product, **Archivada** for a variant,
 and **Ver**. Archive is permanent; it has no Enable action.

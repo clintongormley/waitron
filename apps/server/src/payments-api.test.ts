@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
-import { eq, sql } from "drizzle-orm";
+import { eq, isNull, sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import {
   deviceProfiles,
@@ -26,6 +26,7 @@ import {
   type CardProviderContribution,
 } from "@waitron/payments";
 import {
+  AppError,
   locationId as brandLocationId,
   nodeId as brandNodeId,
   seriesId as brandSeriesId,
@@ -1174,6 +1175,54 @@ describe("reader adoption and local management", () => {
     expect(removed).toEqual([]);
   });
 
+  it("adopting a deleted reader's provider id creates a new reader and leaves the deleted row as it was", async () => {
+    const venue = await seedVenue();
+    const app = mountApp(venue, [discoverySeat(async () => [vendor])]);
+    await connectStripe(app, venue);
+    const opts = { cookie: venue.managerCookie };
+    const first = await send(app, "POST", `${base}/readers/adopt`, { ...opts, body: adoption });
+    expect(first.status).toBe(201);
+    const { id: oldId } = (await first.json()) as { id: string };
+    await suite.db
+      .update(cardReaders)
+      .set({ active: false, deletedAt: "2026-10-10T10:00:00.000Z" })
+      .where(eq(cardReaders.id, oldId));
+    const before = await suite.db.select().from(cardReaders).where(eq(cardReaders.id, oldId));
+    const again = await send(app, "POST", `${base}/readers/adopt`, {
+      ...opts,
+      body: { ...adoption, name: "Terrace" },
+    });
+    expect(again.status).toBe(201);
+    const { id: newId } = (await again.json()) as { id: string };
+    expect(newId).not.toBe(oldId);
+    expect(await suite.db.select().from(cardReaders).where(eq(cardReaders.id, oldId))).toEqual(
+      before,
+    );
+    expect(
+      await suite.db
+        .select({ name: cardReaders.name, active: cardReaders.active })
+        .from(cardReaders)
+        .where(eq(cardReaders.id, newId)),
+    ).toEqual([{ name: "Terrace", active: true }]);
+  });
+
+  it("drizzle 0.45 prints a conflict target's targetWhere before do update", async () => {
+    await withTransaction(suite.db, async (tx) => {
+      const statement = tx
+        .insert(cardReaders)
+        .values({ provider: "stripe", providerRef: "tmr_x", name: "Counter" })
+        .onConflictDoUpdate({
+          target: [cardReaders.provider, cardReaders.providerRef],
+          targetWhere: isNull(cardReaders.deletedAt),
+          set: { name: "Counter", active: true, disabledAt: null, unpairedAt: null },
+        });
+      expect(statement.toSQL().sql).toContain(
+        'on conflict ("card_readers"."provider", "card_readers"."provider_ref") ' +
+          'where "card_readers"."deleted_at" is null do update set',
+      );
+    });
+  });
+
   it("refuses an unlisted reference without inserting or removing anything", async () => {
     const venue = await seedVenue();
     const removed: string[] = [];
@@ -1649,5 +1698,716 @@ describe("screens and unknown ids", () => {
       cookie: venue.managerCookie,
     });
     expect(await read.json()).toEqual({ readerId: null });
+  });
+});
+
+describe("reader delete", () => {
+  const base = "/management-api/payments";
+  type Remove = CardProviderContribution["readers"]["remove"];
+
+  /** The Stripe seat able to unpair, its `remove` recording each provider id it was asked to drop. */
+  function unpairingSeat(onRemove: (providerRef: string) => Promise<void> = async () => {}): {
+    seat: CardProviderContribution;
+    removed: string[];
+  } {
+    const removed: string[] = [];
+    const remove: Remove = async (_deps, providerRef) => {
+      removed.push(providerRef);
+      await onRemove(providerRef);
+    };
+    return {
+      seat: { ...stripeSeat, readers: { ...stripeSeat.readers, canUnpair: true, remove } },
+      removed,
+    };
+  }
+
+  async function readerRow(id: string) {
+    const [row] = await suite.db.select().from(cardReaders).where(eq(cardReaders.id, id));
+    return row!;
+  }
+
+  /** Every row in the three link tables naming the reader. */
+  async function linksOf(readerId: string) {
+    return {
+      chosen: await suite.db
+        .select()
+        .from(deviceCardReaders)
+        .where(eq(deviceCardReaders.readerId, readerId)),
+      listed: await suite.db
+        .select()
+        .from(deviceProfileCardReaders)
+        .where(eq(deviceProfileCardReaders.readerId, readerId)),
+      held: await suite.db
+        .select()
+        .from(cardReaderHolders)
+        .where(eq(cardReaderHolders.readerId, readerId)),
+    };
+  }
+
+  /** A device that lists, chooses and holds the reader: one row in each link table. */
+  async function linkReader(venue: Venue, readerId: string): Promise<string> {
+    const device = await seedDevice(venue);
+    await listOnProfile(device, readerId);
+    await suite.db.insert(deviceCardReaders).values({ deviceId: device, readerId });
+    await suite.db.insert(cardReaderHolders).values({ readerId, deviceId: device });
+    return device;
+  }
+
+  let orderNumber = 0;
+  /** An `attempting` payment on the reader, through the table rather than a pay route. */
+  async function startPayment(venue: Venue, readerId: string): Promise<string> {
+    orderNumber += 1;
+    const [order] = await suite.db
+      .insert(workingOrders)
+      .values({ source: "dashboard", locationId: venue.locationId, orderNumber })
+      .returning({ id: workingOrders.id });
+    const [payment] = await suite.db
+      .insert(payments)
+      .values({
+        workingOrderId: order!.id,
+        source: "device",
+        deviceId: await seedDevice(venue),
+        readerId,
+        provider: "stripe",
+        paymentRef: randomUUID(),
+        amount: 500,
+        state: "attempting",
+      })
+      .returning({ id: payments.id });
+    return payment!.id;
+  }
+
+  async function pairedReader(app: Hono, venue: Venue): Promise<{ id: string; ref: string }> {
+    expect((await connectStripe(app, venue)).status).toBe(200);
+    const ref = nextRef();
+    const added = await addReader(app, venue, ref);
+    expect(added.status).toBe(201);
+    return { id: ((await added.json()) as { id: string }).id, ref };
+  }
+
+  const impactOf = (app: Hono, venue: Venue, id: string) =>
+    send(app, "GET", `${base}/readers/${id}/delete-impact`, { cookie: venue.managerCookie });
+  const deleteOf = (app: Hono, venue: Venue, id: string) =>
+    send(app, "DELETE", `${base}/readers/${id}`, { cookie: venue.managerCookie });
+
+  it("refuses a caller without payments.manage, a malformed id, an unknown id and the demo reader, changing nothing", async () => {
+    const venue = await seedVenue();
+    const { seat, removed } = unpairingSeat();
+    const app = mountApp(venue, [seat]);
+    const { id } = await pairedReader(app, venue);
+    await linkReader(venue, id);
+    const row = await readerRow(id);
+    const links = await linksOf(id);
+    const unknown = randomUUID();
+
+    for (const [method, path] of [
+      ["GET", `${base}/readers/${id}/delete-impact`],
+      ["DELETE", `${base}/readers/${id}`],
+    ] as const) {
+      const staff = await send(app, method, path, { cookie: venue.staffCookie });
+      expect(staff.status).toBe(403);
+      expect(await staff.json()).toMatchObject({ error: { code: "authorization.not_permitted" } });
+      const anonymous = await send(app, method, path);
+      expect(anonymous.status).toBe(401);
+      expect(await anonymous.json()).toMatchObject({
+        error: { code: "management_session.required" },
+      });
+    }
+    for (const [method, suffix] of [
+      ["GET", "/delete-impact"],
+      ["DELETE", ""],
+    ] as const) {
+      const malformed = await send(app, method, `${base}/readers/not-a-uuid${suffix}`, {
+        cookie: venue.managerCookie,
+      });
+      expect(malformed.status).toBe(400);
+      expect(await malformed.json()).toMatchObject({ error: { code: "shared.invalid_id" } });
+      for (const missing of [unknown, DEMO_READER_ID]) {
+        const res = await send(app, method, `${base}/readers/${missing}${suffix}`, {
+          cookie: venue.managerCookie,
+        });
+        expect(res.status).toBe(404);
+        expect(await res.json()).toEqual({
+          error: { code: "reader.not_found", params: { id: missing } },
+        });
+      }
+    }
+
+    expect(await readerRow(id)).toEqual(row);
+    expect(await linksOf(id)).toEqual(links);
+    expect(removed).toEqual([]);
+  });
+
+  it("switches a paired reader off before the provider is called, unpairs it there, then deletes it and its links", async () => {
+    const venue = await seedVenue();
+    // Shows the order only: a read from inside a transaction's body sees its uncommitted rows, so
+    // the outage case below is the one that shows the switch-off is committed first.
+    const seen: { active: boolean; deletedAt: string | null }[] = [];
+    const { seat, removed } = unpairingSeat(async () => {
+      const row = await readerRow(id);
+      seen.push({ active: row.active, deletedAt: row.deletedAt });
+    });
+    const app = mountApp(venue, [seat]);
+    const { id, ref } = await pairedReader(app, venue);
+    await linkReader(venue, id);
+
+    const impact = await impactOf(app, venue, id);
+    expect(impact.status).toBe(200);
+    expect(((await impact.json()) as { ends: unknown }).ends).toEqual([
+      { key: "provider_pairing", count: 1, targets: [{ id: "stripe", name: "stripe" }] },
+    ]);
+
+    const deleted = await deleteOf(app, venue, id);
+    expect(deleted.status).toBe(200);
+    expect(removed).toEqual([ref]);
+    expect(seen).toEqual([{ active: false, deletedAt: null }]);
+    const row = await readerRow(id);
+    expect(row.active).toBe(false);
+    expect(row.deletedAt).not.toBeNull();
+    expect(row.unpairedAt).not.toBeNull();
+    expect(await linksOf(id)).toEqual({ chosen: [], listed: [], held: [] });
+
+    const again = await deleteOf(app, venue, id);
+    expect(again.status).toBe(404);
+    expect(await again.json()).toEqual({ error: { code: "reader.not_found", params: { id } } });
+    expect(removed).toEqual([ref]);
+  });
+
+  it("answers reader.unpair_failed when the provider call fails, the switch-off before it committed and the reader not deleted", async () => {
+    const venue = await seedVenue();
+    const { seat, removed } = unpairingSeat(async () => {
+      throw new Error("outage");
+    });
+    const app = mountApp(venue, [seat]);
+    const { id } = await pairedReader(app, venue);
+    await linkReader(venue, id);
+    const before = await readerRow(id);
+    const links = await linksOf(id);
+
+    const res = await deleteOf(app, venue, id);
+
+    expect(res.status).toBe(502);
+    expect(await res.json()).toEqual({
+      error: { code: "reader.unpair_failed", params: { providerId: "stripe" } },
+    });
+    expect(removed).toHaveLength(1);
+    const after = await readerRow(id);
+    expect(after.disabledAt).not.toBeNull();
+    expect(after).toEqual({ ...before, active: false, disabledAt: after.disabledAt });
+    expect(after.unpairedAt).toBeNull();
+    expect(after.deletedAt).toBeNull();
+    expect(await linksOf(id)).toEqual(links);
+  });
+
+  it("passes a provider's own refusal through unwrapped", async () => {
+    const venue = await seedVenue();
+    const { seat } = unpairingSeat(async () => {
+      throw new AppError("payment.provider_credential_rejected", { providerId: "stripe" });
+    });
+    const app = mountApp(venue, [seat]);
+    const { id } = await pairedReader(app, venue);
+
+    const res = await deleteOf(app, venue, id);
+
+    expect(res.status).toBe(422);
+    expect(await res.json()).toEqual({
+      error: { code: "payment.provider_credential_rejected", params: { providerId: "stripe" } },
+    });
+    expect((await readerRow(id)).deletedAt).toBeNull();
+  });
+
+  it("refuses reader.provider_disconnected for a still-paired reader once its provider is disconnected", async () => {
+    const venue = await seedVenue();
+    const { seat, removed } = unpairingSeat();
+    const app = mountApp(venue, [seat]);
+    const { id } = await pairedReader(app, venue);
+    const opts = { cookie: venue.managerCookie };
+    expect((await send(app, "POST", `${base}/readers/${id}/disable`, opts)).status).toBe(204);
+    expect((await send(app, "POST", `${base}/providers/stripe/disconnect`, opts)).status).toBe(204);
+    const row = await readerRow(id);
+
+    const impact = await impactOf(app, venue, id);
+    expect(((await impact.json()) as { refusals: unknown }).refusals).toEqual([
+      { code: "reader.provider_disconnected", params: { providerId: "stripe" }, targets: [] },
+    ]);
+    const res = await deleteOf(app, venue, id);
+    expect(res.status).toBe(409);
+    expect(await res.json()).toEqual({
+      error: { code: "reader.provider_disconnected", params: { providerId: "stripe" } },
+    });
+    expect(removed).toEqual([]);
+    expect(await readerRow(id)).toEqual(row);
+  });
+
+  it("deletes a reader already unpaired through Unpair without the provider, even once disconnected", async () => {
+    const venue = await seedVenue();
+    const { seat, removed } = unpairingSeat();
+    const app = mountApp(venue, [seat]);
+    const { id, ref } = await pairedReader(app, venue);
+    const opts = { cookie: venue.managerCookie };
+    expect((await send(app, "POST", `${base}/readers/${id}/unpair`, opts)).status).toBe(204);
+    expect((await send(app, "POST", `${base}/providers/stripe/disconnect`, opts)).status).toBe(204);
+
+    const res = await deleteOf(app, venue, id);
+
+    expect(res.status).toBe(200);
+    expect(removed).toEqual([ref]);
+    expect((await readerRow(id)).deletedAt).not.toBeNull();
+  });
+
+  it("deletes a reader whose provider cannot unpair without marking it unpaired", async () => {
+    const venue = await seedVenue();
+    const app = mountApp(venue);
+    const { id } = await pairedReader(app, venue);
+
+    const res = await deleteOf(app, venue, id);
+
+    expect(res.status).toBe(200);
+    const row = await readerRow(id);
+    expect(row.deletedAt).not.toBeNull();
+    expect(row.unpairedAt).toBeNull();
+  });
+
+  it("refuses reader.payment_in_progress before calling the provider", async () => {
+    const venue = await seedVenue();
+    const { seat, removed } = unpairingSeat();
+    const app = mountApp(venue, [seat]);
+    const { id } = await pairedReader(app, venue);
+    await startPayment(venue, id);
+    const row = await readerRow(id);
+
+    const res = await deleteOf(app, venue, id);
+
+    expect(res.status).toBe(409);
+    expect(await res.json()).toEqual({
+      error: { code: "reader.payment_in_progress", params: { readerId: id } },
+    });
+    expect(removed).toEqual([]);
+    expect(await readerRow(id)).toEqual(row);
+  });
+
+  it("refuses a payment that starts during the provider call, leaving the reader unpaired and not deleted; a retry deletes without unpairing again", async () => {
+    const venue = await seedVenue();
+    let paymentId = "";
+    const { seat, removed } = unpairingSeat(async () => {
+      paymentId = await startPayment(venue, id);
+    });
+    const app = mountApp(venue, [seat]);
+    const { id } = await pairedReader(app, venue);
+    await linkReader(venue, id);
+    const links = await linksOf(id);
+
+    const refused = await deleteOf(app, venue, id);
+
+    expect(refused.status).toBe(409);
+    expect(await refused.json()).toEqual({
+      error: { code: "reader.payment_in_progress", params: { readerId: id } },
+    });
+    const row = await readerRow(id);
+    expect(row.unpairedAt).not.toBeNull();
+    expect(row.active).toBe(false);
+    expect(row.deletedAt).toBeNull();
+    expect(await linksOf(id)).toEqual(links);
+
+    await suite.db.update(payments).set({ state: "failed" }).where(eq(payments.id, paymentId));
+    expect((await deleteOf(app, venue, id)).status).toBe(200);
+    expect(removed).toHaveLength(1);
+  });
+
+  it("answers the same impact from the read and the delete of an already-unpaired reader", async () => {
+    const venue = await seedVenue();
+    const { seat } = unpairingSeat();
+    const app = mountApp(venue, [seat]);
+    const { id } = await pairedReader(app, venue);
+    await linkReader(venue, id);
+    const opts = { cookie: venue.managerCookie };
+    expect((await send(app, "POST", `${base}/readers/${id}/unpair`, opts)).status).toBe(204);
+
+    const impact = await impactOf(app, venue, id);
+    const deleted = await deleteOf(app, venue, id);
+
+    expect(impact.status).toBe(200);
+    expect(deleted.status).toBe(200);
+    expect(await deleted.json()).toEqual(await impact.json());
+  });
+
+  it("deletes once when two deletes race", async () => {
+    const venue = await seedVenue();
+    const { seat, removed } = unpairingSeat();
+    const app = mountApp(venue, [seat]);
+    const { id, ref } = await pairedReader(app, venue);
+
+    const statuses = (await Promise.all([deleteOf(app, venue, id), deleteOf(app, venue, id)])).map(
+      (res) => res.status,
+    );
+
+    // The loser is refused while the winner holds the reader, or finds it deleted after.
+    const [winner, loser] = statuses.sort();
+    expect(winner).toBe(200);
+    expect([404, 409]).toContain(loser);
+    const row = await readerRow(id);
+    expect(row.deletedAt).not.toBeNull();
+    expect(row.unpairedAt).not.toBeNull();
+    expect(removed).toEqual([ref]);
+  });
+
+  it("refuses Enable, Unpair, a second Delete and adopting its provider id while a delete is unpairing the reader; a failed unpair leaves it switched off", async () => {
+    const venue = await seedVenue();
+    const refused: { request: string; status: number; body: unknown }[] = [];
+    let activeDuringCall: boolean | undefined;
+    const { seat, removed } = unpairingSeat(async () => {
+      if (removed.length > 1) return;
+      activeDuringCall = (await readerRow(id)).active;
+      for (const [method, path, body] of [
+        ["POST", `${base}/readers/${id}/enable`, undefined],
+        ["POST", `${base}/readers/${id}/unpair`, undefined],
+        ["DELETE", `${base}/readers/${id}`, undefined],
+        [
+          "POST",
+          `${base}/readers/adopt`,
+          { providerId: "stripe", providerRef: ref, name: "Again" },
+        ],
+      ] as const) {
+        const res = await send(app, method, path, { cookie: venue.managerCookie, body });
+        refused.push({
+          request: `${method} ${path}`,
+          status: res.status,
+          body: res.status === 204 ? null : await res.json(),
+        });
+      }
+      throw new Error("outage");
+    });
+    const listing: CardProviderContribution = {
+      ...seat,
+      readers: {
+        ...seat.readers,
+        list: async () => [{ providerRef: ref, name: "Again", model: "solo" }],
+      },
+    };
+    const app = mountApp(venue, [listing]);
+    const { id, ref } = await pairedReader(app, venue);
+
+    const res = await deleteOf(app, venue, id);
+
+    expect(res.status).toBe(502);
+    expect(await res.json()).toMatchObject({ error: { code: "reader.unpair_failed" } });
+    expect(activeDuringCall).toBe(false);
+    const inProgress = { error: { code: "reader.unpair_in_progress", params: { readerId: id } } };
+    expect(refused).toEqual([
+      { request: `POST ${base}/readers/${id}/enable`, status: 409, body: inProgress },
+      { request: `POST ${base}/readers/${id}/unpair`, status: 409, body: inProgress },
+      { request: `DELETE ${base}/readers/${id}`, status: 409, body: inProgress },
+      { request: `POST ${base}/readers/adopt`, status: 409, body: inProgress },
+    ]);
+    expect(removed).toEqual([ref]);
+    const row = await readerRow(id);
+    expect(row).toMatchObject({ active: false, deletedAt: null, unpairedAt: null });
+    expect(row.disabledAt).not.toBeNull();
+    expect(
+      await suite.db
+        .select({ id: cardReaders.id })
+        .from(cardReaders)
+        .where(eq(cardReaders.providerRef, ref)),
+    ).toEqual([{ id }]);
+
+    // The failed delete let go of the reader: Enable is served again.
+    expect(
+      (await send(app, "POST", `${base}/readers/${id}/enable`, { cookie: venue.managerCookie }))
+        .status,
+    ).toBe(204);
+    expect((await readerRow(id)).active).toBe(true);
+  });
+
+  it("refuses a Delete while an Unpair of the reader is at its provider, calling the provider once", async () => {
+    const venue = await seedVenue();
+    let during: { status: number; body: unknown } | undefined;
+    const { seat, removed } = unpairingSeat(async () => {
+      if (removed.length > 1) return;
+      const res = await deleteOf(app, venue, id);
+      during = { status: res.status, body: await res.json() };
+    });
+    const app = mountApp(venue, [seat]);
+    const { id, ref } = await pairedReader(app, venue);
+
+    const unpaired = await send(app, "POST", `${base}/readers/${id}/unpair`, {
+      cookie: venue.managerCookie,
+    });
+
+    expect(unpaired.status).toBe(204);
+    expect(during).toEqual({
+      status: 409,
+      body: { error: { code: "reader.unpair_in_progress", params: { readerId: id } } },
+    });
+    expect(removed).toEqual([ref]);
+    expect((await readerRow(id)).deletedAt).toBeNull();
+    // Once the Unpair has finished, the delete is served without calling the provider again.
+    expect((await deleteOf(app, venue, id)).status).toBe(200);
+    expect(removed).toEqual([ref]);
+  });
+
+  for (const [action, drop] of [
+    [
+      "an Unpair",
+      (app: Hono, venue: Venue, id: string) =>
+        send(app, "POST", `${base}/readers/${id}/unpair`, { cookie: venue.managerCookie }),
+    ],
+    ["a Delete", deleteOf],
+  ] as const) {
+    it(`refuses adopting a provider id whose listing was taken before ${action} dropped it there, changing nothing`, async () => {
+      const venue = await seedVenue();
+      const { seat, removed } = unpairingSeat();
+      let dropped: { status: number; row: typeof cardReaders.$inferSelect } | undefined;
+      const listing: CardProviderContribution = {
+        ...seat,
+        readers: {
+          ...seat.readers,
+          list: async () => {
+            const listed = [{ providerRef: ref, name: "My Reader", model: "solo" }];
+            const res = await drop(app, venue, id);
+            dropped = { status: res.status, row: await readerRow(id) };
+            return listed;
+          },
+        },
+      };
+      const app = mountApp(venue, [listing]);
+      const { id, ref } = await pairedReader(app, venue);
+
+      const res = await send(app, "POST", `${base}/readers/adopt`, {
+        cookie: venue.managerCookie,
+        body: { providerId: "stripe", providerRef: ref, name: "Again" },
+      });
+
+      expect(dropped?.status).toBe(action === "a Delete" ? 200 : 204);
+      expect(removed).toEqual([ref]);
+      expect({ status: res.status, body: await res.json() }).toEqual({
+        status: 422,
+        body: { error: { code: "reader.not_listed", params: { providerId: "stripe" } } },
+      });
+      expect(
+        await suite.db.select().from(cardReaders).where(eq(cardReaders.providerRef, ref)),
+      ).toEqual([dropped!.row]);
+      expect(dropped!.row).toMatchObject({ active: false });
+      expect(dropped!.row.unpairedAt).not.toBeNull();
+    });
+  }
+
+  describe("a deleted reader", () => {
+    const vendorOf = (providerRef: string) => ({
+      providerRef,
+      name: "My Reader",
+      model: "solo",
+      serial: "serial-1",
+    });
+
+    /** A seat that can unpair and lists `listed()`, recording every `remove` and `status` call. */
+    function spySeat(listed: () => string[] = () => []) {
+      const removed: string[] = [];
+      const statusAsked: string[] = [];
+      const seat: CardProviderContribution = {
+        ...stripeSeat,
+        readers: {
+          ...stripeSeat.readers,
+          canUnpair: true,
+          list: async () => listed().map(vendorOf),
+          remove: async (_deps, providerRef) => {
+            removed.push(providerRef);
+          },
+          status: async (deps, providerRef) => {
+            statusAsked.push(providerRef);
+            return stripeSeat.readers.status(deps, providerRef);
+          },
+        },
+      };
+      return { seat, removed, statusAsked };
+    }
+
+    /** A paired reader deleted through the DELETE route; the spies are emptied afterwards. */
+    async function deletedReader(app: Hono, venue: Venue, spies: ReturnType<typeof spySeat>) {
+      const { id, ref } = await pairedReader(app, venue);
+      expect((await deleteOf(app, venue, id)).status).toBe(200);
+      spies.removed.length = 0;
+      spies.statusAsked.length = 0;
+      return { id, ref, row: await readerRow(id) };
+    }
+
+    it("answers reader.not_found to rename, disable, enable, unpair and status, calling no provider and changing nothing", async () => {
+      const venue = await seedVenue();
+      const spies = spySeat();
+      const app = mountApp(venue, [spies.seat]);
+      const { id, row } = await deletedReader(app, venue, spies);
+
+      for (const [method, path, body] of [
+        ["PATCH", `${base}/readers/${id}`, { name: "Terrace" }],
+        ["POST", `${base}/readers/${id}/disable`, undefined],
+        ["POST", `${base}/readers/${id}/enable`, undefined],
+        ["POST", `${base}/readers/${id}/unpair`, undefined],
+        ["GET", `${base}/readers/${id}/status`, undefined],
+      ] as const) {
+        const res = await send(app, method, path, { cookie: venue.managerCookie, body });
+        const text = await res.text();
+        expect({
+          route: `${method} ${path}`,
+          status: res.status,
+          body: text && JSON.parse(text),
+        }).toEqual({
+          route: `${method} ${path}`,
+          status: 404,
+          body: { error: { code: "reader.not_found", params: { id } } },
+        });
+      }
+
+      expect(await readerRow(id)).toEqual(row);
+      expect(spies.removed).toEqual([]);
+      expect(spies.statusAsked).toEqual([]);
+    });
+
+    it("cannot be chosen for a device or put back on a profile's list, which stay as the delete left them", async () => {
+      const venue = await seedVenue();
+      const spies = spySeat();
+      const app = mountApp(venue, [spies.seat]);
+      const opts = { cookie: venue.managerCookie };
+      const { id: kept } = await pairedReader(app, venue);
+      const added = await addReader(app, venue, nextRef(), "Terraza");
+      expect(added.status).toBe(201);
+      const { id: doomed } = (await added.json()) as { id: string };
+      const device = await seedDevice(venue);
+      const [{ profileId }] = (await suite.db
+        .select({ profileId: devices.deviceProfileId })
+        .from(devices)
+        .where(eq(devices.id, device))) as [{ profileId: string }];
+      const profilePath = `${base}/device-profiles/${profileId}/readers`;
+      const listed = await send(app, "PUT", profilePath, {
+        ...opts,
+        body: { readerIds: [kept, doomed], defaultReaderId: kept },
+      });
+      expect(listed.status).toBe(200);
+      expect((await deleteOf(app, venue, doomed)).status).toBe(200);
+      const afterDelete = { readerIds: [kept], defaultReaderId: kept };
+      expect(await (await send(app, "GET", profilePath, opts)).json()).toEqual(afterDelete);
+
+      const chosen = await send(app, "PUT", `${base}/devices/${device}/reader`, {
+        ...opts,
+        body: { readerId: doomed },
+      });
+      const relisted = await send(app, "PUT", profilePath, {
+        ...opts,
+        body: { readerIds: [kept, doomed], defaultReaderId: kept },
+      });
+
+      const notFound = { error: { code: "reader.not_found", params: { id: doomed } } };
+      expect({ status: chosen.status, body: await chosen.json() }).toEqual({
+        status: 404,
+        body: notFound,
+      });
+      expect({ status: relisted.status, body: await relisted.json() }).toEqual({
+        status: 404,
+        body: notFound,
+      });
+      expect(
+        await (await send(app, "GET", `${base}/devices/${device}/reader`, opts)).json(),
+      ).toEqual({ readerId: null });
+      expect(await (await send(app, "GET", profilePath, opts)).json()).toEqual(afterDelete);
+      expect(await linksOf(doomed)).toEqual({ chosen: [], listed: [], held: [] });
+    });
+
+    it("is left out of the reader list, while a disabled reader stays in it switched off", async () => {
+      const venue = await seedVenue();
+      const spies = spySeat();
+      const app = mountApp(venue, [spies.seat]);
+      const opts = { cookie: venue.managerCookie };
+      const { id: deleted } = await deletedReader(app, venue, spies);
+      const added = await addReader(app, venue, nextRef(), "Terraza");
+      const { id: disabled } = (await added.json()) as { id: string };
+      expect((await send(app, "POST", `${base}/readers/${disabled}/disable`, opts)).status).toBe(
+        204,
+      );
+
+      const list = (await (await send(app, "GET", `${base}/readers`, opts)).json()) as {
+        id: string;
+        active: boolean;
+      }[];
+
+      expect(list.map(({ id, active }) => ({ id, active }))).toEqual([
+        { id: disabled, active: false },
+      ]);
+      expect(list.some(({ id }) => id === deleted)).toBe(false);
+    });
+
+    it("is offered by discovery as new, and adopting it makes a new record beside the deleted one", async () => {
+      const venue = await seedVenue();
+      let listed: string[] = [];
+      const spies = spySeat(() => listed);
+      const app = mountApp(venue, [spies.seat]);
+      const opts = { cookie: venue.managerCookie };
+      const { id, ref, row } = await deletedReader(app, venue, spies);
+      listed = [ref];
+      const available = async () =>
+        (await send(app, "GET", `${base}/providers/stripe/available-readers`, opts)).json();
+
+      expect(await available()).toEqual([{ ...vendorOf(ref), status: "available" }]);
+      const adopted = await send(app, "POST", `${base}/readers/adopt`, {
+        ...opts,
+        body: { providerId: "stripe", providerRef: ref, name: "Counter" },
+      });
+
+      expect(adopted.status).toBe(201);
+      const { id: newId } = (await adopted.json()) as { id: string };
+      expect(newId).not.toBe(id);
+      expect(await available()).toEqual([{ ...vendorOf(ref), status: "added" }]);
+      expect(await readerRow(id)).toEqual(row);
+      expect(row).toMatchObject({ active: false, name: "Barra 1" });
+      expect(row.deletedAt).not.toBeNull();
+      expect(row.unpairedAt).not.toBeNull();
+      expect(spies.removed).toEqual([]);
+    });
+
+    it("never shadows a live reader with the same provider id in discovery, whichever row was written first", async () => {
+      const venue = await seedVenue();
+      const [deletedFirst, liveFirst] = [nextRef(), nextRef()];
+      const spies = spySeat(() => [deletedFirst, liveFirst]);
+      const app = mountApp(venue, [spies.seat]);
+      expect((await connectStripe(app, venue)).status).toBe(200);
+      const deletedRow = (providerRef: string) => ({
+        provider: "stripe",
+        providerRef,
+        name: "Old",
+        active: false,
+        unpairedAt: "2026-10-10T09:00:00.000Z",
+        deletedAt: "2026-10-10T10:00:00.000Z",
+      });
+      const liveRow = (providerRef: string) => ({ provider: "stripe", providerRef, name: "New" });
+      for (const values of [
+        deletedRow(deletedFirst),
+        liveRow(deletedFirst),
+        liveRow(liveFirst),
+        deletedRow(liveFirst),
+      ]) {
+        await suite.db.insert(cardReaders).values(values);
+      }
+
+      const res = await send(app, "GET", `${base}/providers/stripe/available-readers`, {
+        cookie: venue.managerCookie,
+      });
+
+      expect(await res.json()).toEqual([
+        { ...vendorOf(deletedFirst), status: "added" },
+        { ...vendorOf(liveFirst), status: "added" },
+      ]);
+    });
+
+    it("lets a new pairing take its provider id, as a new record", async () => {
+      const venue = await seedVenue();
+      const spies = spySeat();
+      const app = mountApp(venue, [spies.seat]);
+      const { id, ref, row } = await deletedReader(app, venue, spies);
+
+      const again = await addReader(app, venue, ref, "Terraza");
+
+      expect(again.status).toBe(201);
+      const { id: newId } = (await again.json()) as { id: string };
+      expect(newId).not.toBe(id);
+      expect(await readerRow(id)).toEqual(row);
+      expect(await readerRow(newId)).toMatchObject({ providerRef: ref, active: true });
+    });
   });
 });

@@ -200,6 +200,88 @@ describe.each(["light", "dark"] as const)("payments-screen a11y (%s theme)", (th
     },
   );
 
+  const deleteImpact = (refused: boolean) => ({
+    target: { id: "r-1", name: "Front counter" },
+    refusals: refused
+      ? [
+          {
+            code: "reader.payment_in_progress",
+            params: { readerId: "r-1" },
+            targets: [{ id: "device-2", name: "Caja 2" }],
+          },
+        ]
+      : [],
+    ends: [{ key: "provider_pairing", count: 1, targets: [{ id: "acme", name: "acme" }] }],
+    removes: [{ key: "device_reader", count: 2, targets: [{ id: "d-1", name: "Bar till" }] }],
+  });
+
+  async function openReaderDelete(api: DashboardApi) {
+    const { el, host } = await mountWidget<PaymentsScreen>(
+      "dashboard-payments-screen",
+      { api, request: vi.fn() as unknown as PaymentsScreen["request"], panels: PANELS },
+      theme,
+    );
+    await flush(el);
+    el.shadowRoot!.querySelector("wt-data-table")!
+      .shadowRoot!.querySelector<HTMLElement>("[data-test=delete-r-1]")!
+      .click();
+    await flush(el);
+    const dialog = el.shadowRoot!.querySelector("wt-delete-dialog")!;
+    await dialog.updateComplete;
+    expect(dialog.open).toBe(true);
+    return { el, host, dialog };
+  }
+
+  it.each(["en", "es-ES"] as const)(
+    "renders the delete dialog loading, read, after a failed read and after a refused delete accessibly (%s)",
+    async (locale) => {
+      setLocale(locale);
+      let answer!: (value: unknown) => void;
+      const impact = deleteImpact(false);
+      const { el, host, dialog } = await openReaderDelete(
+        stubApi({
+          getReaderDeleteImpact: vi
+            .fn()
+            .mockImplementationOnce(() => new Promise((resolve) => (answer = resolve)))
+            .mockRejectedValueOnce({ code: "connection.failed" })
+            .mockResolvedValue(impact),
+          deleteReader: vi.fn().mockRejectedValue({ code: "connection.failed" }),
+        }),
+      );
+      expect(dialog.loading).toBe(true);
+      await expectNoA11yViolations(host);
+
+      answer(impact);
+      await flush(el);
+      expect(dialog.loading).toBe(false);
+      await expectNoA11yViolations(host);
+
+      dialog.dispatchEvent(new CustomEvent("wt-delete-retry", { bubbles: true, composed: true }));
+      await flush(el);
+      expect(dialog.readError).not.toBe("");
+      await expectNoA11yViolations(host);
+
+      dialog.shadowRoot!.querySelector<HTMLElement>("[data-test=delete-retry]")!.click();
+      await flush(el);
+      dialog.shadowRoot!.querySelector<HTMLElement>("[data-test=delete-confirm]")!.click();
+      await flush(el);
+      expect(dialog.actionError).not.toBe("");
+      await expectNoA11yViolations(host);
+    },
+  );
+
+  it.each(["en", "es-ES"] as const)(
+    "renders the delete dialog refused by its impact accessibly (%s)",
+    async (locale) => {
+      setLocale(locale);
+      const { host, dialog } = await openReaderDelete(
+        stubApi({ getReaderDeleteImpact: vi.fn().mockResolvedValue(deleteImpact(true)) }),
+      );
+      expect(dialog.impact?.refusals).toHaveLength(1);
+      await expectNoA11yViolations(host);
+    },
+  );
+
   it("renders the rename dialog with Save quiet, then with a change, accessibly", async () => {
     const { el, host } = await mountWidget<PaymentsScreen>(
       "dashboard-payments-screen",

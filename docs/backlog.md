@@ -4862,12 +4862,11 @@ _Formerly parts of B9 and Track C._ Detail: [backlog/dependencies.md](backlog/de
 
 _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._ Detail: [backlog/architecture.md](backlog/architecture.md).
 
-- **A435 — permanent delete for hardware and venue setup (owner, 2026-10-08; steps 3, 5 and 6 open).**
-  Card readers are next. Each point below is a separate remaining step.
+- **A435 — permanent delete for hardware and venue setup (owner, 2026-10-08; steps 5 and 6 open).**
+  Courses and kitchen stations are next. Each point below is a separate remaining step.
   [Spec](superpowers/specs/2026-10-08-delete-and-archive-design.md),
   [product archive plan](superpowers/plans/2026-10-08-a435-1-product-archive.md).
-- **A435 step 3 — card readers: open, next.** Add permanent Delete beside Disable.
-- **A435 step 5 — courses and kitchen stations: open, following card readers in the build order.** Replace Disable with Delete,
+- **A435 step 5 — courses and kitchen stations: open, next.** Replace Disable with Delete,
   and drop the list's Status column and Status filter, which no longer have anything to show (owner,
   2026-10-10); first check what else the Status cell shows, as Products' carried its Unavailable badge (A463).
 - **A435 step 6 — tables, zones and departments: open, following courses and stations in the build order.** Replace
@@ -4891,12 +4890,22 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
 - **Several printer queries that already require an active printer or a live job also filter
   `deleted_at`**; one test pinning "deleted means switched off with no live jobs" could replace the
   copies. Left open by A435 step 2.
-- **The devices screen copies the printers screen's delete-dialog logic** (about 110 lines in
-  `apps/dashboard/src/screens/devices-screen.ts`); steps 3, 5 and 6 would add more copies. Pull it
-  into one shared piece once step 3 (card readers) has landed. Left open by A435 step 4 (#1519).
+- **The devices and payments screens copy the printers screen's delete-dialog logic**
+  (`apps/dashboard/src/screens/devices-screen.ts`, and since A435 step 3 `payments-screen.ts`);
+  steps 5 and 6 would add more copies. Pull it into one shared piece, with the `names` helper that
+  `printer-delete-copy.ts`, `reader-delete-copy.ts` and `device-delete-copy.ts` each repeat and the
+  `line` helper the first two share. Left open by A435 step 4 (#1519) and step 3.
 - **"A device that is not deleted" is written by hand** as `isNull(devices.deletedAt)` at about 13
   places in 6 files; one named check would keep a new query from forgetting it. Left open by A435
   step 4 (#1519).
+- **Owner question: may a reader still paired at SumUp be deleted while SumUp cannot be reached?**
+  Today its delete is refused "Connect SumUp first" while the account is disconnected, and answers
+  `reader.unpair_failed`, leaving it disabled, while SumUp rejects the stored key. Deleting it
+  locally would leave it paired at SumUp. Left open by A435 step 3 (its plan's decision 18).
+- **A failed SumUp unpair is logged with reason `unknown`**: `deleteReader`
+  (`packages/payments-sumup/src/sumup-client.ts`) throws a plain `Error` carrying the HTTP status
+  only in its message, which the log never reads, so a refused key, an outage and a dropped
+  connection log alike. Unpair logs the same. Left open by A435 step 3.
 
 - **`modules.json` has no flow-down channel** from a primary to its standby (matters under
   _Afterwards_, designed now that bookings is genuinely toggleable), and a toggleable module that is

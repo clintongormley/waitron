@@ -328,6 +328,32 @@ async function clickAndAwaitClose(el: DevicesScreen, modal: string, button: stri
 
 const text = (el: DevicesScreen, sel: string) => q(el, sel)?.textContent?.trim();
 
+/** The screen inside an application that asks before unsaved changes are lost. */
+class DevicesLeaveHost extends LitElement {
+  readonly leave = new LeaveController(this);
+  api!: DashboardApi;
+  override render() {
+    return html`<dashboard-devices-screen
+        .api=${this.api}
+        .panels=${PANELS}
+      ></dashboard-devices-screen
+      >${this.leave.render({
+        heading: t("unsaved.heading"),
+        message: t("unsaved.message"),
+        keepLabel: t("unsaved.keep"),
+        discardLabel: t("unsaved.discard"),
+      })}`;
+  }
+}
+customElements.define("devices-screen-leave-test-host", DevicesLeaveHost);
+
+/** Whether the page would ask before it is left. */
+function unloadAsks(): boolean {
+  const event = new Event("beforeunload", { cancelable: true });
+  window.dispatchEvent(event);
+  return event.defaultPrevented;
+}
+
 /** Table cells live in the table's own shadow root, so a row's hooks are found through it. */
 function dq(root: ShadowRoot | Element, sel: string): HTMLElement | null {
   const found = root.querySelector<HTMLElement>(sel);
@@ -1607,6 +1633,282 @@ describe("the Edit dialog", () => {
     await flush(el);
     expect(field(el, "edit-reader").error).toBe("");
   });
+
+  it.each([
+    ["en", "That card reader no longer exists"],
+    ["es", "Ese lector de tarjetas ya no existe"],
+  ] as const)(
+    "a deleted reader picked from a stale list is refused in %s, then read again: no longer offered, the device on Use default",
+    async (locale, sentence) => {
+      const before = currentLocale();
+      setLocale(locale);
+      try {
+        const api = editApi({
+          getDeviceReader: vi.fn().mockResolvedValue({ readerId: null }),
+          setDeviceReader: vi
+            .fn()
+            .mockRejectedValue({ code: "reader.not_found", params: { id: "r1" } }),
+        });
+        const el = await openEdit(api);
+        const reads = vi.mocked(api.listReaders).mock.calls.length;
+        vi.mocked(api.listReaders).mockResolvedValue(readers.filter((r) => r.id !== "r1"));
+        vi.mocked(api.getProfileReaders).mockResolvedValue({
+          readerIds: ["r2", "r3"],
+          defaultReaderId: null,
+        });
+        await rename(el, "Caja 2");
+        await chooseOption(q(el, "[data-test=edit-reader]")!, "r1");
+        await flush(el);
+        await save(el);
+
+        await vi.waitFor(() => expect(field(el, "edit-reader").error).toBe(sentence));
+        expect(await bottom(el)).toBe(t("form.fix_fields"));
+        expect(q(el, "[data-test=edit-device-modal]")).not.toBeNull();
+        expect(api.setDeviceReader).toHaveBeenCalledExactlyOnceWith("t1", "r1");
+
+        await vi.waitFor(() =>
+          expect(vi.mocked(api.listReaders).mock.calls.length).toBe(reads + 1),
+        );
+        await flush(el);
+        const reader = field(el, "edit-reader");
+        expect(reader.options.map((option) => option.value)).toEqual(["", "r2"]);
+        expect(reader.options.map((option) => option.label).join(" ")).not.toContain(
+          "Front counter",
+        );
+        expect(reader.value).toBe("");
+        expect(reader.error).toBe(sentence);
+        await expectSaveQuiet(el);
+      } finally {
+        setLocale(before);
+      }
+    },
+  );
+
+  it("after a deleted reader is refused, a device holding another reader goes back to it once read again", async () => {
+    const api = editApi({
+      setDeviceReader: vi
+        .fn()
+        .mockRejectedValue({ code: "reader.not_found", params: { id: "r1" } }),
+    });
+    const el = await openEdit(api);
+    expect(field(el, "edit-reader").value).toBe("r2");
+    vi.mocked(api.listReaders).mockResolvedValue(readers.filter((r) => r.id !== "r1"));
+    await chooseOption(q(el, "[data-test=edit-reader]")!, "r1");
+    await flush(el);
+    await save(el);
+
+    await vi.waitFor(() => expect(field(el, "edit-reader").value).toBe("r2"));
+    expect(field(el, "edit-reader").options.map((option) => option.value)).not.toContain("r1");
+    expect(field(el, "edit-reader").error).toBe(codeMessage("reader.not_found"));
+    await expectSaveQuiet(el);
+  });
+
+  it("a reader picked while the deleted reader's re-read is unanswered is kept", async () => {
+    let answer!: (rows: ReaderRow[]) => void;
+    const api = editApi({
+      getDeviceReader: vi.fn().mockResolvedValue({ readerId: null }),
+      setDeviceReader: vi
+        .fn()
+        .mockRejectedValue({ code: "reader.not_found", params: { id: "r1" } }),
+    });
+    const el = await openEdit(api);
+    vi.mocked(api.listReaders).mockReturnValue(new Promise((resolve) => (answer = resolve)));
+    await chooseOption(q(el, "[data-test=edit-reader]")!, "r1");
+    await flush(el);
+    await save(el);
+    await vi.waitFor(() => expect(api.listReaders).toHaveBeenCalledTimes(2));
+    await chooseOption(q(el, "[data-test=edit-reader]")!, "r2");
+    await flush(el);
+
+    answer(readers.filter((r) => r.id !== "r1"));
+    await flush(el);
+    await flush(el);
+
+    expect(field(el, "edit-reader").value).toBe("r2");
+    expect(field(el, "edit-reader").error).toBe("");
+    expect((q(el, "[data-test=edit-save]") as Button).disabled).toBe(false);
+  });
+
+  it.each([
+    ["answering", "after"],
+    ["failing", "after"],
+    ["answering", "before"],
+  ] as const)(
+    "a deleted reader's re-read %s %s a later Save of another reader leaves the next reader change saved",
+    async (outcome, timing) => {
+      let answer!: (rows: ReaderRow[]) => void;
+      let fail!: (error: unknown) => void;
+      let finishSecondSave!: () => void;
+      let stored: string | null = null;
+      const api = editApi({
+        getDeviceReader: vi.fn(async () => ({ readerId: stored })),
+        setDeviceReader: vi.fn(async (_id: string, readerId: string | null) => {
+          if (readerId === "r1") throw { code: "reader.not_found", params: { id: "r1" } };
+          stored = readerId;
+        }),
+        updateDevice: vi
+          .fn()
+          .mockResolvedValueOnce(undefined)
+          .mockImplementationOnce(
+            () => new Promise<void>((resolve) => (finishSecondSave = resolve)),
+          )
+          .mockResolvedValue(undefined),
+      });
+      const el = await openEdit(api);
+      vi.mocked(api.listReaders).mockReturnValueOnce(
+        new Promise((resolve, reject) => {
+          answer = resolve;
+          fail = reject;
+        }),
+      );
+      await chooseOption(q(el, "[data-test=edit-reader]")!, "r1");
+      await flush(el);
+      await save(el);
+      await vi.waitFor(() => expect(api.listReaders).toHaveBeenCalledTimes(2));
+      if (timing === "before") {
+        answer(readers.filter((r) => r.id !== "r1"));
+        await flush(el);
+      }
+
+      await chooseOption(q(el, "[data-test=edit-reader]")!, "r2");
+      await flush(el);
+      await save(el);
+      await rename(el, "Still editing");
+      finishSecondSave();
+      await flush(el);
+      expect(stored).toBe("r2");
+      expect(q(el, "[data-test=edit-device-modal]")).not.toBeNull();
+      if (timing === "after") {
+        if (outcome === "answering") answer(readers.filter((r) => r.id !== "r1"));
+        else fail({ code: "connection.failed" });
+      }
+      await flush(el);
+      await flush(el);
+      expect(await bottom(el)).toBe("");
+
+      await chooseOption(q(el, "[data-test=edit-reader]")!, "");
+      await flush(el);
+      await save(el);
+      expect(stored).toBeNull();
+      expect(vi.mocked(api.setDeviceReader).mock.calls.map((call) => call[1])).toEqual([
+        "r1",
+        "r2",
+        null,
+      ]);
+    },
+  );
+
+  it("a deleted reader's re-read that fails is said at the bottom", async () => {
+    const api = editApi({
+      setDeviceReader: vi
+        .fn()
+        .mockRejectedValue({ code: "reader.not_found", params: { id: "r1" } }),
+    });
+    const el = await openEdit(api);
+    vi.mocked(api.listReaders).mockRejectedValue({ code: "connection.failed" });
+    await chooseOption(q(el, "[data-test=edit-reader]")!, "r1");
+    await flush(el);
+    await save(el);
+
+    await vi.waitFor(async () =>
+      expect(await bottom(el)).toBe(`${codeMessage("connection.failed")} ${t("form.fix_fields")}`),
+    );
+    expect(field(el, "edit-reader").error).toBe(codeMessage("reader.not_found"));
+  });
+
+  async function openEditInHost(
+    api: DashboardApi,
+  ): Promise<{ host: DevicesLeaveHost; el: DevicesScreen }> {
+    const { el: host } = await mountWidget<DevicesLeaveHost>("devices-screen-leave-test-host", {
+      api,
+    });
+    const el = host.shadowRoot!.querySelector<DevicesScreen>("dashboard-devices-screen")!;
+    await flush(el);
+    dq(el.shadowRoot!, "[data-test=edit-device-t1]")!.click();
+    await vi.waitFor(() => expect(q(el, "[data-test=edit-device-modal]")).not.toBeNull());
+    await flush(el);
+    await flush(el);
+    return { host, el };
+  }
+
+  async function discardChanges(host: DevicesLeaveHost): Promise<void> {
+    const question = host.shadowRoot!.querySelector("wt-unsaved-changes")!;
+    await vi.waitFor(() => expect(question.open).toBe(true));
+    await question.updateComplete;
+    question.shadowRoot!.querySelector<HTMLElement>("[data-choice=discard]")!.click();
+    await vi.waitFor(() => expect(question.open).toBe(false));
+  }
+
+  it("after a deleted reader's re-read puts the device back on Use default, leaving the page asks nothing", async () => {
+    const api = editApi({
+      getDeviceReader: vi.fn().mockResolvedValue({ readerId: null }),
+      setDeviceReader: vi
+        .fn()
+        .mockRejectedValue({ code: "reader.not_found", params: { id: "r1" } }),
+    });
+    const { el } = await openEditInHost(api);
+    vi.mocked(api.listReaders).mockResolvedValue(readers.filter((r) => r.id !== "r1"));
+    await rename(el, "Caja 2");
+    await chooseOption(q(el, "[data-test=edit-reader]")!, "r1");
+    await flush(el);
+    await save(el);
+
+    await vi.waitFor(() => expect(api.listReaders).toHaveBeenCalledTimes(2));
+    await flush(el);
+    expect(field(el, "edit-reader").value).toBe("");
+    expect(unloadAsks()).toBe(false);
+  });
+
+  it.each(["answers", "fails"] as const)(
+    "a deleted reader's re-read that %s after Edit was discarded and opened again leaves the new dialog alone",
+    async (outcome) => {
+      let resolve!: (rows: ReaderRow[]) => void;
+      let reject!: (error: unknown) => void;
+      const api = editApi({
+        getDeviceReader: vi
+          .fn()
+          .mockResolvedValueOnce({ readerId: null })
+          .mockResolvedValueOnce({ readerId: "r2" })
+          .mockResolvedValue({ readerId: null }),
+        setDeviceReader: vi
+          .fn()
+          .mockRejectedValue({ code: "reader.not_found", params: { id: "r1" } }),
+      });
+      const { host, el } = await openEditInHost(api);
+      vi.mocked(api.listReaders)
+        .mockReturnValueOnce(
+          new Promise<ReaderRow[]>((res, rej) => {
+            resolve = res;
+            reject = rej;
+          }),
+        )
+        .mockResolvedValue(readers);
+      await chooseOption(q(el, "[data-test=edit-reader]")!, "r1");
+      await flush(el);
+      await save(el);
+      await vi.waitFor(() => expect(api.listReaders).toHaveBeenCalledTimes(2));
+
+      q(el, "[data-test=edit-cancel]")!.click();
+      await discardChanges(host);
+      await vi.waitFor(() => expect(q(el, "[data-test=edit-device-modal]")).toBeNull());
+      dq(el.shadowRoot!, "[data-test=edit-device-t1]")!.click();
+      await vi.waitFor(() => expect(field(el, "edit-reader")?.disabled).toBe(false));
+      expect(api.listReaders).toHaveBeenCalledTimes(3);
+
+      if (outcome === "answers") resolve([]);
+      else reject({ code: "connection.failed" });
+      await flush(el);
+      await flush(el);
+
+      const reader = field(el, "edit-reader");
+      expect(reader.options.map((option) => option.value)).toEqual(["", "r1", "r2"]);
+      expect(reader.value).toBe("");
+      expect(reader.error).toBe("");
+      expect(await bottom(el)).toBe("");
+      await expectSaveQuiet(el);
+      expect(unloadAsks()).toBe(false);
+    },
+  );
 
   it("not told up front, a reader read the server refuses for want of payments.manage drops the reader field, and nothing else is refused", async () => {
     const notPermitted = { code: "authorization.not_permitted" };

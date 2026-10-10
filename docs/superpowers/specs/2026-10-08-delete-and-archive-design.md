@@ -153,6 +153,9 @@ re-checks its kind's list against the schema before building on it.
   reached the delete is refused. An already-unpaired reader is deleted without contacting the
   provider. The unpair marker stays on the deleted row; adopting the same physical reader later goes
   through the provider check and creates a new record.
+  _2026-10-10 (A435 step 3): the delete switches the reader off before calling the provider, so a
+  failed unpair leaves it disabled, not deleted, and a Delete is refused `reader.unpair_in_progress`
+  while another Delete or an Unpair of the reader is running._
 - **Removed:** its rows in `device_card_readers`, `device_profile_card_readers` and
   `card_reader_holders`.
 - **Not deletable:** the seeded demo reader, which management routes already hide.

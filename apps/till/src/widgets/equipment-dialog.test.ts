@@ -470,6 +470,61 @@ describe("till-equipment-dialog", () => {
     expect(contextText(el, "receipt") ?? "").not.toContain("Bar printer");
   });
 
+  it.each(["en", "es"] as const)(
+    "a reader deleted elsewhere, picked from a stale list, is refused in %s and gone once the list is read again",
+    async (locale) => {
+      setLocale(locale);
+      try {
+        const el = await mountDialog();
+        const picker = combobox(el, "cardReaderId")!;
+        const seen = changes(el);
+
+        await chooseOption(picker, "R2");
+        el.error = { code: "reader.not_found" };
+        await el.updateComplete;
+
+        expect(seen).toEqual([
+          { role: "card_terminal", selection: { id: "R2" }, via: "list", takeOver: false },
+        ]);
+        expect(picker.value).toBe("");
+        expect(picker.error).toBe("");
+        expect(bottom(el)).toBe(codeMessage("reader.not_found"));
+        expect(bottom(el)).toContain(
+          locale === "en" ? "no card reader it can use" : "no tiene un lector de tarjetas",
+        );
+
+        el.equipment = equipment({ card_terminal: onDefault("card_terminal", R1, [R1]) });
+        el.error = null;
+        await el.updateComplete;
+
+        const refreshed = combobox(el, "cardReaderId")!;
+        expect(refreshed.value).toBe("");
+        expect(refreshed.options.map((option) => option.value)).toEqual(["", "R1"]);
+        expect(optionLabels(refreshed).join(" ")).not.toContain("Reader two");
+        expect(contextText(el, "card_terminal")).toBe(t("equipment.from_default"));
+      } finally {
+        setLocale("en");
+      }
+    },
+  );
+
+  it("a chosen reader deleted elsewhere reads as Use default once the list is read again, with no switched-off or held entry for it", async () => {
+    const el = await mountDialog({
+      equipment: equipment({ card_terminal: onItem("card_terminal", R2, [R1, R2], R1) }),
+    });
+    expect(combobox(el, "cardReaderId")!.value).toBe("R2");
+
+    el.equipment = equipment({ card_terminal: onDefault("card_terminal", R1, [R1]) });
+    await el.updateComplete;
+
+    const refreshed = combobox(el, "cardReaderId")!;
+    expect(refreshed.value).toBe("");
+    expect(refreshed.options.map((option) => option.value)).not.toContain("R2");
+    expect(optionLabels(refreshed).join(" ")).not.toContain("Reader two");
+    expect(resolvedText(el, "card_terminal")).toBe("Reader one");
+    expect(contextText(el, "card_terminal") ?? "").not.toContain("Reader two");
+  });
+
   it("sends nothing when the current choice is picked again", async () => {
     const el = await mountDialog();
     const seen = changes(el);

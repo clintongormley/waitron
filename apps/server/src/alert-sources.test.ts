@@ -46,6 +46,7 @@ import {
   STREAM_BEHIND_AFTER_MS,
 } from "./alert-sources.js";
 import type { BackupStatus } from "./backup-status.js";
+import { deleteCardReader } from "./card-reader-delete.js";
 import { createTtlCache } from "./ttl-cache.js";
 
 const NOW = new Date("2026-09-15T12:00:00Z");
@@ -1076,6 +1077,25 @@ describe("batteryAlertSource", () => {
     clock = new Date(NOW.getTime() + 6 * 60_000);
     await readBattery(source, clock);
     expect(calls.n).toBe(2);
+  });
+
+  it("raises nothing for a deleted low reader while an active one still alerts", async () => {
+    await seedTenant(batterySuite.db);
+    const keptId = await seedReader({ providerRef: "pKept", name: "Counter" });
+    const deletedId = await seedReader({ providerRef: "pDeleted", name: "Deleted" });
+    const calls = { n: 0 };
+    const provider = stubProvider({ battery: () => 5, calls });
+    await withTransaction(batterySuite.db, (tx) => deleteCardReader(tx, [provider], deletedId));
+    const source = batteryAlertSource({
+      providers: [provider],
+      runtimeDeps: stubRuntimeDeps(batterySuite.db),
+      cache: createTtlCache<number | null>({ ttlMs: 5 * 60_000, now: () => NOW }),
+    });
+
+    expect((await readBattery(source)).map((alert) => alert.key)).toEqual([
+      `reader.battery_low:${keptId}`,
+    ]);
+    expect(calls.n).toBe(1);
   });
 
   it("ignores a deactivated low reader", async () => {

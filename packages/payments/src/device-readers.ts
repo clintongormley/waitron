@@ -33,6 +33,7 @@ export type SelectDeviceReaderInput = {
 export type SelectDeviceReaderResult =
   | { ok: true; previousHolderDeviceId: string | null }
   | { ok: false; refusal: "not_permitted" }
+  | { ok: false; refusal: "deleted" }
   | { ok: false; refusal: "busy" }
   | { ok: false; refusal: "held"; holderDeviceId: string };
 
@@ -256,8 +257,9 @@ export async function resolveDeviceReaderId(
 }
 
 /**
- * Sets the device to Use default or to a reader it may newly choose. A reader another device has a
- * payment in progress on is refused before anything else, so nobody is asked to confirm a takeover
+ * Sets the device to Use default or to a reader it may newly choose. A deleted reader is refused
+ * first, whatever the device and its profile. A reader another device has a payment in progress on
+ * is refused before the holder is considered, so nobody is asked to confirm a takeover
  * that would then be refused. A reader another device holds is refused unless taken by a scan or a
  * confirmed list choice, never by a manager; taking it clears the previous holder's choice of it,
  * and that device acquires nothing.
@@ -267,6 +269,13 @@ export async function selectDeviceReader(
   input: SelectDeviceReaderInput,
 ): Promise<SelectDeviceReaderResult> {
   const { deviceId, selection } = input;
+  if (selection !== "default") {
+    const [target] = await tx
+      .select({ deletedAt: cardReaders.deletedAt })
+      .from(cardReaders)
+      .where(eq(cardReaders.id, selection.id));
+    if (target?.deletedAt != null) return { ok: false, refusal: "deleted" };
+  }
   const [device] = await tx
     .select({ profileId: devices.deviceProfileId })
     .from(devices)

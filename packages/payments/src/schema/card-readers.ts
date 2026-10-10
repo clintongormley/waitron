@@ -1,12 +1,8 @@
-import { unique } from "drizzle-orm/sqlite-core";
+import { sql } from "drizzle-orm";
+import { uniqueIndex } from "drizzle-orm/sqlite-core";
 import { flag, id, label, newId, nowIso, table, tsString } from "@waitron/db";
 
-/**
- * A reader is disabled (`active=false`, `disabled_at` set), never deleted, so historical payments
- * still resolve its name. Only the `on delete restrict` keys from `payments.reader_id`,
- * `device_card_readers.reader_id` and `device_profile_card_readers.reader_id` refuse a delete, so a
- * reader nothing references can be deleted; `card_reader_holders` cascades and refuses nothing.
- */
+/** Disable clears `active`; Delete also sets `deleted_at`; payments keep the row either way. */
 export const cardReaders = table(
   "card_readers",
   {
@@ -20,6 +16,12 @@ export const cardReaders = table(
     disabledAt: tsString("disabled_at"),
     // Local Enable cannot restore a registration we removed at the provider; verified adoption can.
     unpairedAt: tsString("unpaired_at"),
+    deletedAt: tsString("deleted_at"),
   },
-  (t) => [unique("card_readers_provider_ref_key").on(t.provider, t.providerRef)],
+  (t) => [
+    // One undeleted reader per provider id; a deleted row frees it, a disabled one keeps it.
+    uniqueIndex("card_readers_provider_ref_key")
+      .on(t.provider, t.providerRef)
+      .where(sql`${t.deletedAt} is null`),
+  ],
 );

@@ -49,7 +49,7 @@ import {
   type PinThrottle,
   type SecretCheck,
 } from "@waitron/identity";
-import { createErrorBoundary } from "@waitron/server-kit";
+import { codeOf, createErrorBoundary } from "@waitron/server-kit";
 import { readJsonBody } from "@waitron/server-kit";
 import { requireManagementSession } from "@waitron/server-kit";
 import { requireBodyUuid, requireString, requireUuidParam } from "@waitron/server-kit";
@@ -73,6 +73,12 @@ import {
 } from "./till-sale.js";
 import { storedDeviceOrigin } from "./request-config.js";
 import { readReaderHolders, selectDeviceEquipment } from "./device-equipment.js";
+import {
+  deleteCardReader,
+  markCardReaderUnpaired,
+  prepareCardReaderDelete,
+  readCardReaderDeleteImpact,
+} from "./card-reader-delete.js";
 
 /**
  * The routes never import a provider package. `fetch` is injected by tests; the live host omits it and the seats fall back to the global.
@@ -114,6 +120,8 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "reader.not_found": 404,
   "reader.not_listed": 422,
   "reader.payment_in_progress": 409,
+  "reader.unpair_failed": 502,
+  "reader.unpair_in_progress": 409,
   "device.not_found": 404,
   "device.binding_invalid": 400,
   "device.equipment_held": 409,
@@ -141,12 +149,13 @@ const DASHBOARD_PIN_SLOT = "management";
 
 const run = createErrorBoundary(STATUS, "payments.failed");
 
-/** Refuses an id naming no reader, or the demo reader, which no device or profile ever lists. */
+/** Refuses an id naming no reader, a deleted reader, or the demo reader, which no device or
+ * profile ever lists. */
 async function requireKnownReader(tx: Transaction, readerId: string): Promise<void> {
   const [reader] = await tx
     .select({ id: cardReaders.id })
     .from(cardReaders)
-    .where(eq(cardReaders.id, readerId));
+    .where(and(eq(cardReaders.id, readerId), isNull(cardReaders.deletedAt)));
   if (reader === undefined || readerId === DEMO_READER_ID) {
     throw new AppError("reader.not_found", { id: readerId });
   }
@@ -339,13 +348,49 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
   const requireReader = async (tx: Transaction, id: string) => {
     // No lock is taken: `withTransaction` (`packages/db/src/tenancy.ts`) runs one write
     // transaction per file at a time, so no other write lands between this read and the caller's
-    // own write in the same `gated` call. The unpair route reads and writes in separate
-    // transactions with the provider call between them, so its decision is taken on a row it no
-    // longer holds.
-    const [reader] = await tx.select().from(cardReaders).where(readerWhere(id));
+    // own write in the same `gated` call.
+    const [reader] = await tx
+      .select()
+      .from(cardReaders)
+      .where(and(readerWhere(id), isNull(cardReaders.deletedAt)));
     if (reader === undefined || id === DEMO_READER_ID)
       throw new AppError("reader.not_found", { id });
     return reader;
+  };
+
+  // The readers a Delete or Unpair is working on, from its first transaction until it returns.
+  // One process owns a venue's database (`openVenueStore` holds `venue.lock`), so this set holds
+  // every one in progress.
+  const unpairing = new Set<string>();
+  const refuseWhileUnpairing = (id: string): void => {
+    if (unpairing.has(id)) throw new AppError("reader.unpair_in_progress", { readerId: id });
+  };
+  /** Runs `fn`, releasing the reader when it ends if `fn` called `hold`, which refuses one held. */
+  const holdingReader = async <T>(id: string, fn: (hold: () => void) => Promise<T>): Promise<T> => {
+    let held = false;
+    try {
+      return await fn(() => {
+        refuseWhileUnpairing(id);
+        unpairing.add(id);
+        held = true;
+      });
+    } finally {
+      if (held) unpairing.delete(id);
+    }
+  };
+  /**
+   * Adopts from just before their provider list request until their save ends; a Delete or Unpair
+   * calling the provider to remove that reader, even a call that fails, voids them.
+   */
+  const adopting = new Set<{ provider: string; providerRef: string; stale: boolean }>();
+  const removeAtProvider = async (seat: CardProviderContribution, providerRef: string) => {
+    try {
+      await seat.readers.remove(runtimeDeps(), providerRef);
+    } finally {
+      for (const adopt of adopting)
+        if (adopt.provider === seat.providerId && adopt.providerRef === providerRef)
+          adopt.stale = true;
+    }
   };
 
   app.get("/management-api/payments/providers/:id/available-readers", (c) =>
@@ -358,7 +403,7 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
         tx
           .select({ providerRef: cardReaders.providerRef, active: cardReaders.active })
           .from(cardReaders)
-          .where(eq(cardReaders.provider, seat.providerId)),
+          .where(and(eq(cardReaders.provider, seat.providerId), isNull(cardReaders.deletedAt))),
       );
       const registered = new Map(rows.map((row) => [row.providerRef, row.active]));
       return c.json(
@@ -384,24 +429,43 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
       if (!name) throw new AppError("management.request_invalid", { field: "name" });
       const seat = cardProviderById(deps.providers, providerId);
       await gated(sessionId, (tx) => requireConnected(tx, seat));
-      const listed = await seat.readers.list(runtimeDeps());
-      if (!listed.some((reader) => reader.providerRef === providerRef))
-        throw new AppError("reader.not_listed", { providerId });
-      // Re-read after the network call; as in pairing below, the residual disconnect window remains.
-      // Adoption creates nothing at the provider to roll back.
-      const row = await gated(sessionId, async (tx) => {
-        await requireConnected(tx, seat);
-        const [saved] = await tx
-          .insert(cardReaders)
-          .values({ provider: providerId, providerRef, name })
-          .onConflictDoUpdate({
-            target: [cardReaders.provider, cardReaders.providerRef],
-            set: { name, active: true, disabledAt: null, unpairedAt: null },
-          })
-          .returning({ id: cardReaders.id });
-        return saved!;
-      });
-      return c.json({ id: row.id, status: "paired" }, 201);
+      const adopt = { provider: providerId, providerRef, stale: false };
+      adopting.add(adopt);
+      try {
+        const listed = await seat.readers.list(runtimeDeps());
+        if (!listed.some((reader) => reader.providerRef === providerRef))
+          throw new AppError("reader.not_listed", { providerId });
+        // Re-read after the network call; as in pairing below, the residual disconnect window remains.
+        // Adoption creates nothing at the provider to roll back.
+        const row = await gated(sessionId, async (tx) => {
+          await requireConnected(tx, seat);
+          const [existing] = await tx
+            .select({ id: cardReaders.id })
+            .from(cardReaders)
+            .where(
+              and(
+                eq(cardReaders.provider, providerId),
+                eq(cardReaders.providerRef, providerRef),
+                isNull(cardReaders.deletedAt),
+              ),
+            );
+          if (existing !== undefined) refuseWhileUnpairing(existing.id);
+          if (adopt.stale) throw new AppError("reader.not_listed", { providerId });
+          const [saved] = await tx
+            .insert(cardReaders)
+            .values({ provider: providerId, providerRef, name })
+            .onConflictDoUpdate({
+              target: [cardReaders.provider, cardReaders.providerRef],
+              targetWhere: isNull(cardReaders.deletedAt),
+              set: { name, active: true, disabledAt: null, unpairedAt: null },
+            })
+            .returning({ id: cardReaders.id });
+          return saved!;
+        });
+        return c.json({ id: row.id, status: "paired" }, 201);
+      } finally {
+        adopting.delete(adopt);
+      }
     }),
   );
 
@@ -428,6 +492,7 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
         await gated(sessionId, async (tx) => {
           const reader = await requireReader(tx, id);
           if (action === "enable") {
+            refuseWhileUnpairing(id);
             await requireConnected(tx, cardProviderById(deps.providers, reader.provider));
             if (reader.unpairedAt !== null)
               throw new AppError("reader.not_listed", { providerId: reader.provider });
@@ -444,6 +509,49 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
       }),
     );
   }
+
+  app.get("/management-api/payments/readers/:id/delete-impact", (c) =>
+    run(c, log, async () => {
+      const sessionId = requireManagementSession(c);
+      const id = requireUuidParam(c.req.param("id"), "CardReaderId");
+      return c.json(
+        await gated(sessionId, (tx) => readCardReaderDeleteImpact(tx, deps.providers, id)),
+      );
+    }),
+  );
+
+  app.delete("/management-api/payments/readers/:id", (c) =>
+    run(c, log, async () => {
+      const sessionId = requireManagementSession(c);
+      const id = requireUuidParam(c.req.param("id"), "CardReaderId");
+      // Three transactions, not one: a transaction holds the database's only write lock
+      // (`packages/store/src/write-queue.ts:5`, `packages/db/src/tenancy.ts:19`), so a provider call
+      // inside one would make every other write wait on the network. A refusal after the unpair
+      // leaves the reader unpaired and switched off, as Unpair would, and not deleted.
+      return holdingReader(id, async (hold) => {
+        const plan = await gated(sessionId, (tx) => {
+          hold();
+          return prepareCardReaderDelete(tx, deps.providers, id);
+        });
+        if (plan.unpairAtProvider) {
+          const seat = cardProviderById(deps.providers, plan.provider);
+          try {
+            await removeAtProvider(seat, plan.providerRef);
+          } catch (error) {
+            if (isAppError(error)) throw error;
+            throw new AppError(
+              "reader.unpair_failed",
+              { providerId: plan.provider },
+              { reason: codeOf(error) },
+            );
+          }
+          const unpairedAt = nowIso();
+          await gated(sessionId, (tx) => markCardReaderUnpaired(tx, id, unpairedAt));
+        }
+        return c.json(await gated(sessionId, (tx) => deleteCardReader(tx, deps.providers, id)));
+      });
+    }),
+  );
 
   app.get("/management-api/payments/providers", (c) =>
     run(c, log, async () => {
@@ -535,7 +643,7 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
             unpairedAt: cardReaders.unpairedAt,
           })
           .from(cardReaders)
-          .where(ne(cardReaders.id, DEMO_READER_ID))
+          .where(and(ne(cardReaders.id, DEMO_READER_ID), isNull(cardReaders.deletedAt)))
           .orderBy(cardReaders.name),
         assignments: await tx
           .select({
@@ -634,7 +742,7 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
         const [row] = await tx
           .select({ provider: cardReaders.provider, providerRef: cardReaders.providerRef })
           .from(cardReaders)
-          .where(eq(cardReaders.id, readerId));
+          .where(and(eq(cardReaders.id, readerId), isNull(cardReaders.deletedAt)));
         if (row === undefined || readerId === DEMO_READER_ID)
           throw new AppError("reader.not_found", { id: readerId });
         return row;
@@ -649,22 +757,22 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
       const id = requireUuidParam(c.req.param("id"), "CardReaderId");
-      const reader = await gated(sessionId, (tx) => requireReader(tx, id));
-      const seat = cardProviderById(deps.providers, reader.provider);
-      if (!seat.readers.canUnpair)
-        throw new AppError("management.request_invalid", { field: "providerId" });
-      await gated(sessionId, (tx) => requireConnected(tx, seat));
-      // Vendor failure leaves the local row unchanged. Disabled rows remain addressable for retries.
-      await seat.readers.remove(runtimeDeps(), reader.providerRef);
-      // One clock reading for both stamps, so the unpair lands as one moment.
-      const unpairedAt = nowIso();
-      await gated(sessionId, (tx) =>
-        tx
-          .update(cardReaders)
-          .set({ active: false, disabledAt: unpairedAt, unpairedAt })
-          .where(readerWhere(id)),
-      );
-      return c.body(null, 204);
+      return holdingReader(id, async (hold) => {
+        const reader = await gated(sessionId, (tx) => {
+          hold();
+          return requireReader(tx, id);
+        });
+        const seat = cardProviderById(deps.providers, reader.provider);
+        if (!seat.readers.canUnpair)
+          throw new AppError("management.request_invalid", { field: "providerId" });
+        await gated(sessionId, (tx) => requireConnected(tx, seat));
+        // Vendor failure leaves the local row unchanged. Disabled rows remain addressable for retries.
+        await removeAtProvider(seat, reader.providerRef);
+        // One clock reading for both stamps, so the unpair lands as one moment.
+        const unpairedAt = nowIso();
+        await gated(sessionId, (tx) => markCardReaderUnpaired(tx, id, unpairedAt));
+        return c.body(null, 204);
+      });
     }),
   );
 

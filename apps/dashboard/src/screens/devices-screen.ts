@@ -580,6 +580,9 @@ export class DevicesScreen extends LitElement {
   /** Set when the profile changes before the reader has loaded, so the late load keeps Use default. */
   #profileChangedWhileReaderLoads = false;
   #editEpoch = 0;
+  /** Counts Saves, so a deleted reader's re-read answering after a later Save does not replace
+   * what that Save stored. */
+  #saveTurn = 0;
   #editLeave?: LeaveCoordinator;
   #editScope?: DraftScope<Parameters<DashboardApi["updateDevice"]>[1]>;
   #readerScope?: DraftScope<string>;
@@ -1239,6 +1242,33 @@ export class DevicesScreen extends LitElement {
     }
   }
 
+  /** After a reader deleted elsewhere is refused, so it drops out of the list; a choice no longer
+   * offered goes back to what the device holds. */
+  async #rereadReaders(deviceId: string, epoch: number, turn: number): Promise<void> {
+    const profileId = this.editForm.profileId;
+    try {
+      const [{ readerId }, readers, holders, list] = await Promise.all([
+        this.api.getDeviceReader(deviceId),
+        this.api.listReaders(),
+        this.api.listReaderHolders(),
+        this.api.getProfileReaders(profileId),
+      ]);
+      if (epoch !== this.#editEpoch || turn !== this.#saveTurn) return;
+      this.readers = readers.filter((reader) => reader.active);
+      this.readerHolders = new Map(holders.map((row) => [row.readerId, row]));
+      this.profileReaders = new Map([...this.profileReaders, [profileId, list]]);
+      this.#storedReaderId = readerId;
+      this.#readerScope?.commit(readerId ?? "");
+      if (!this.#readerOptions().some((option) => option.value === this.chosenReaderId)) {
+        this.chosenReaderId = readerId ?? "";
+        this.#readerScope?.changed();
+      }
+    } catch (error) {
+      if (epoch !== this.#editEpoch || turn !== this.#saveTurn) return;
+      this.readerReadError = codeOf(error);
+    }
+  }
+
   #endEdit(): void {
     if (this.editing === null) return;
     this.#editEpoch++;
@@ -1461,6 +1491,7 @@ export class DevicesScreen extends LitElement {
     }
     const form = this.editForm;
     const epoch = this.#editEpoch;
+    const turn = ++this.#saveTurn;
     this.editSaving = true;
     this.editError = null;
     this.editRefusal = null;
@@ -1537,6 +1568,8 @@ export class DevicesScreen extends LitElement {
             code: codeOf(error),
             sentence: equipmentSentence(error, "reader"),
           };
+          if (codeOf(error) === "reader.not_found")
+            void this.#rereadReaders(device.id, epoch, turn);
           return;
         }
       }

@@ -14,6 +14,7 @@ import type {
   ProfileKitchenScreens,
   ProfileReaderList,
   ProfileScopeChoices,
+  ReaderRow,
   Station,
 } from "../api/client.js";
 import { currentLocale, setLocale, t } from "../i18n/t.js";
@@ -2468,6 +2469,190 @@ describe("device-profiles-screen equipment defaults, drawers and card readers", 
     expect(el.shadowRoot!.querySelector("[data-test=editor-form]")).not.toBeNull();
     expect(el.shadowRoot!.textContent).toContain(codeMessage("reader.not_found"));
   });
+
+  /** The profile lists r1; Save adds r2 as its default, and r2 was deleted in another tab. */
+  async function saveDeletedReader(
+    reread: () => Promise<unknown> = async () => [readers[0]!],
+    rereadList: ProfileReaderList = { readerIds: ["r1"], defaultReaderId: "r1" },
+  ) {
+    const { api, el } = await editListed({
+      setProfileReaders: vi
+        .fn()
+        .mockRejectedValueOnce({ code: "reader.not_found", params: { id: "r2" } })
+        .mockImplementation((_id, list) => Promise.resolve(list)),
+    });
+    const reads = vi.mocked(api.listReaders).mock.calls.length;
+    vi.mocked(api.listReaders).mockImplementation(reread as never);
+    vi.mocked(api.getProfileReaders).mockResolvedValueOnce(rereadList);
+    rename(el);
+    toggle(el, "profile-reader-r2", true);
+    await flush(el);
+    await chooseOption(field(el, "profile-readers-default"), "r2");
+    await flush(el);
+    await save(el);
+    return { api, el, reads };
+  }
+
+  it.each([
+    ["en", "That card reader no longer exists"],
+    ["es", "Ese lector de tarjetas ya no existe"],
+  ] as const)(
+    "a deleted reader in the reader list is refused on Save in %s, then read again: gone from the list and the default",
+    async (locale, sentence) => {
+      const previous = currentLocale();
+      setLocale(locale);
+      try {
+        const { api, el, reads } = await saveDeletedReader();
+
+        expect(api.setProfileReaders).toHaveBeenCalledExactlyOnceWith("p1", {
+          readerIds: ["r1", "r2"],
+          defaultReaderId: "r2",
+        });
+        expect(el.shadowRoot!.querySelector("[data-test=editor-form]")).not.toBeNull();
+        expect(bottom(el)).toBe(sentence);
+
+        await vi.waitFor(() =>
+          expect(vi.mocked(api.listReaders).mock.calls.length).toBe(reads + 1),
+        );
+        await flush(el);
+        expect(el.shadowRoot!.querySelector("[data-test=profile-reader-r2]")).toBeNull();
+        const fallback = field(el, "profile-readers-default");
+        expect(fallback.options.map((option) => option.value)).toEqual(["", "r1"]);
+        expect(fallback.value).toBe("");
+        expect(bottom(el)).toBe(sentence);
+
+        await save(el);
+        expect(api.setProfileReaders).toHaveBeenLastCalledWith("p1", {
+          readerIds: ["r1"],
+          defaultReaderId: null,
+        });
+      } finally {
+        setLocale(previous);
+      }
+    },
+  );
+
+  it.each([
+    ["answering", "after"],
+    ["failing", "after"],
+    ["answering", "before"],
+  ] as const)(
+    "a deleted reader's re-read %s %s a later Save of the readers leaves the next reader change saved",
+    async (outcome, timing) => {
+      let answer!: (rows: ReaderRow[]) => void;
+      let fail!: (error: unknown) => void;
+      let finishSecondSave!: () => void;
+      let stored: ProfileReaderList = { readerIds: ["r1"], defaultReaderId: "r1" };
+      const { api, el } = await editListed({
+        getProfileReaders: vi.fn(async () => structuredClone(stored)),
+        setProfileReaders: vi.fn(async (_id: string, list: ProfileReaderList) => {
+          if (list.readerIds.includes("r2"))
+            throw { code: "reader.not_found", params: { id: "r2" } };
+          stored = structuredClone(list);
+          return list;
+        }),
+      });
+      vi.mocked(api.listReaders).mockReturnValueOnce(
+        new Promise((resolve, reject) => {
+          answer = resolve;
+          fail = reject;
+        }),
+      );
+      rename(el);
+      toggle(el, "profile-reader-r2", true);
+      await flush(el);
+      await chooseOption(field(el, "profile-readers-default"), "r2");
+      await flush(el);
+      await save(el);
+      await vi.waitFor(() => expect(api.listReaders).toHaveBeenCalledTimes(2));
+      if (timing === "before") {
+        answer([readers[0]!]);
+        await flush(el);
+      } else toggle(el, "profile-reader-r2", false);
+
+      await chooseOption(field(el, "profile-readers-default"), "");
+      await flush(el);
+      vi.mocked(api.updateDeviceProfile).mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            finishSecondSave = () => resolve({ ...listedProfile, name: "Renamed" });
+          }),
+      );
+      await save(el);
+      rename(el, "Still editing");
+      await flush(el);
+      finishSecondSave();
+      await flush(el);
+      await flush(el);
+      expect(stored.defaultReaderId).toBeNull();
+      expect(el.shadowRoot!.querySelector("[data-test=editor-form]")).not.toBeNull();
+      if (timing === "after") {
+        if (outcome === "answering") answer([readers[0]!]);
+        else fail({ code: "connection.failed" });
+      }
+      await flush(el);
+      await flush(el);
+      expect(bottom(el) ?? "").toBe("");
+
+      await chooseOption(field(el, "profile-readers-default"), "r1");
+      await flush(el);
+      await save(el);
+      expect(stored).toEqual({ readerIds: ["r1"], defaultReaderId: "r1" });
+    },
+  );
+
+  it("a deleted reader's re-read that fails leaves the refusal shown", async () => {
+    const { api, el, reads } = await saveDeletedReader(() =>
+      Promise.reject({ code: "connection.failed" }),
+    );
+    await vi.waitFor(() => expect(vi.mocked(api.listReaders).mock.calls.length).toBe(reads + 1));
+    await flush(el);
+    expect(bottom(el)).toBe(codeMessage("reader.not_found"));
+  });
+
+  it.each(["answers", "fails"] as const)(
+    "a deleted reader's re-read that %s after the editor was cancelled and opened again leaves the new editor alone",
+    async (outcome) => {
+      let resolve!: (rows: ReaderRow[]) => void;
+      let reject!: (error: unknown) => void;
+      const { api, el, reads } = await saveDeletedReader(
+        () =>
+          new Promise<ReaderRow[]>((res, rej) => {
+            resolve = res;
+            reject = rej;
+          }),
+        { readerIds: ["r2"], defaultReaderId: "r2" },
+      );
+      await vi.waitFor(() => expect(vi.mocked(api.listReaders).mock.calls.length).toBe(reads + 1));
+
+      el.shadowRoot!.querySelector<HTMLElement>("[data-test=profile-cancel]")!.click();
+      await flush(el);
+      expect(el.shadowRoot!.querySelector("[data-test=editor-form]")).toBeNull();
+      vi.mocked(api.listReaders).mockResolvedValue(readers);
+      el.shadowRoot!.querySelector<HTMLElement>("[data-test=edit-p1]")!.click();
+      await flush(el);
+      await flush(el);
+      expect(field(el, "profile-readers-default").value).toBe("r1");
+
+      if (outcome === "answers") resolve([]);
+      else reject({ code: "connection.failed" });
+      await flush(el);
+      await flush(el);
+
+      const switches = [
+        ...el.shadowRoot!.querySelectorAll<HTMLElement & { checked: boolean }>(
+          "[data-test=profile-readers] wt-switch",
+        ),
+      ];
+      expect(switches.map((s) => [s.dataset.test, s.checked])).toEqual([
+        ["profile-reader-r1", true],
+        ["profile-reader-r2", false],
+      ]);
+      expect(field(el, "profile-readers-default").value).toBe("r1");
+      expect(bottom(el) ?? "").toBe("");
+      await expectSaveQuiet(el);
+    },
+  );
 
   it("the reader section is absent without the payments permission", async () => {
     const notPermitted = { code: "authorization.not_permitted" };

@@ -18,6 +18,7 @@ import {
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-combobox.js";
 import "@waitron/ui/src/components/wt-data-table.js";
+import "@waitron/ui/src/components/wt-delete-dialog.js";
 import "@waitron/ui/src/components/wt-dialog.js";
 import "@waitron/ui/src/components/wt-input.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
@@ -25,7 +26,7 @@ import "@waitron/ui/src/components/wt-row-actions.js";
 import "@waitron/ui/src/components/wt-tabs.js";
 import "@waitron/ui/src/components/wt-toast.js";
 import { CARD_PROVIDER_PANELS } from "@waitron/dashboard-modules";
-import { centsToDecimal, formatMoney, stringToCents } from "@waitron/shared";
+import { centsToDecimal, formatMoney, stringToCents, type DeleteImpact } from "@waitron/shared";
 import {
   registerCatalogue,
   tableNoMatches,
@@ -53,6 +54,7 @@ import { currentLocale, t } from "../i18n/t.js";
 import { formatAlertTime, sourceLabel } from "../widgets/alert-format.js";
 import "../widgets/equipment-label.js";
 import { holderText } from "../i18n/equipment.js";
+import { readerDeleteCopy } from "../widgets/reader-delete-copy.js";
 
 /** The section's own wording for a refused check; any other code reads its shared message. */
 function stuckRefusalText(error: unknown): string {
@@ -410,6 +412,22 @@ export class PaymentsScreen extends LitElement {
   @state() private billAttempted = false;
   @state() private billFormError: string | null = null;
   @state() private billFormErrorText: string | null = null;
+  /** The id of the reader the delete dialog is open on. Each opening and close is a new generation, so a
+   * delete's answer for an earlier one is never applied; an impact read for an earlier one is
+   * dropped by its query slot, which the next `watch` or `release` replaces. */
+  @state() private deleteTarget: string | null = null;
+  @state() private deleteImpact: DeleteImpact | null = null;
+  @state() private deleteLoading = false;
+  @state() private deleteSubmitting = false;
+  @state() private deleteReadError = "";
+  @state() private deleteActionError = "";
+  #deleteGeneration = 0;
+  #deleteOpener: HTMLElement | null = null;
+  readonly #impactQueries = new DashboardQueries(
+    this,
+    () => this.api,
+    (error) => this.#impactFailed(error),
+  );
   readonly #queries = new DashboardQueries(
     this,
     () => this.api,
@@ -525,6 +543,7 @@ export class PaymentsScreen extends LitElement {
 
   override disconnectedCallback(): void {
     super.disconnectedCallback();
+    this.#closeDelete();
     this.#statusVersion++;
     this.#billOperation = undefined;
     this.renderRoot
@@ -573,7 +592,10 @@ export class PaymentsScreen extends LitElement {
       }),
       this.#listQueries
         .watch("listReaders", [], (readers) => {
+          const listed = new Set(readers.map(({ id }) => id));
+          const gone = (this.readers ?? []).filter(({ id }) => !listed.has(id));
           this.readers = readers;
+          for (const { id } of gone) this.#readerGone(id, true);
           if (this.view === null) {
             this.view = readers.length > 0 ? "readers" : "providers";
             if (this.#url.read("dashboard") === "payments")
@@ -886,6 +908,138 @@ export class PaymentsScreen extends LitElement {
         this.busy = false;
       }
     }
+  }
+
+  // ── Delete ───────────────────────────────────────────────────────────────────────────────────────
+
+  #openDelete(reader: ReaderRow, event: Event): void {
+    const menu = (event.currentTarget as HTMLElement).closest("wt-row-actions")!;
+    this.#deleteGeneration++;
+    this.#deleteOpener = menu.shadowRoot!.querySelector<HTMLButtonElement>("button");
+    this.deleteTarget = reader.id;
+    this.deleteImpact = null;
+    this.deleteLoading = true;
+    this.deleteSubmitting = false;
+    this.deleteReadError = "";
+    this.deleteActionError = "";
+    this.#readImpact(reader.id);
+  }
+
+  #readImpact(id: string): void {
+    this.#impactQueries
+      .watch("getReaderDeleteImpact", [id], (impact) => {
+        this.deleteImpact = impact;
+        this.deleteLoading = false;
+        this.deleteReadError = "";
+      })
+      // A failure has already reached `#impactFailed`.
+      .catch(() => undefined);
+  }
+
+  #impactFailed(error: unknown): void {
+    const code = codeOf(error);
+    if (code === "reader.not_found") {
+      // The delete in flight may be what removed it; its own answer decides what is shown. A
+      // released slot reports no failure (`QueryController.watch`), and every close releases it.
+      if (!this.deleteSubmitting) this.#readerGone(this.deleteTarget!, true);
+      return;
+    }
+    this.deleteLoading = false;
+    this.deleteReadError = codeMessage(code);
+  }
+
+  #retryImpact(): void {
+    const target = this.deleteTarget;
+    if (target === null || this.deleteSubmitting) return;
+    this.deleteLoading = true;
+    this.deleteReadError = "";
+    this.#readImpact(target);
+  }
+
+  #closeDelete(): void {
+    this.#deleteGeneration++;
+    this.#impactQueries.release("getReaderDeleteImpact");
+    this.deleteTarget = null;
+    this.deleteImpact = null;
+    this.deleteLoading = false;
+    this.deleteSubmitting = false;
+    this.deleteReadError = "";
+    this.deleteActionError = "";
+  }
+
+  async #confirmDelete(id: string): Promise<void> {
+    if (id !== this.deleteTarget || this.deleteSubmitting) return;
+    const generation = this.#deleteGeneration;
+    this.deleteSubmitting = true;
+    this.deleteActionError = "";
+    try {
+      await this.api.deleteReader(id);
+    } catch (error) {
+      if (generation !== this.#deleteGeneration) return;
+      this.deleteSubmitting = false;
+      const code = codeOf(error);
+      if (code !== "reader.not_found") {
+        this.deleteActionError = codeMessage(code);
+        return;
+      }
+      this.#readerGone(id, true);
+      await this.#load();
+      return;
+    }
+    if (generation !== this.#deleteGeneration) return;
+    this.#readerGone(id, false);
+    await this.#load();
+  }
+
+  /**
+   * Ends everything still open on a reader that no longer exists — its delete dialog, its editor
+   * and its label — without asking to keep a draft, and drops its row. `refuse` says so where
+   * something was open on it.
+   */
+  #readerGone(id: string, refuse: boolean): void {
+    const ours = this.deleteSubmitting && this.deleteTarget === id;
+    let open = false;
+    if (this.deleteTarget === id) {
+      open = true;
+      // The row menu that opened the dialog goes with the reader. Not Refresh: it is disabled
+      // while statuses load, which a re-read of the list can start.
+      this.#deleteOpener = this.renderRoot.querySelector<HTMLElement>(
+        "wt-combobox[name=reader-status-filter]",
+      );
+      this.#closeDelete();
+    }
+    if (this.editor?.reader.id === id) {
+      open = true;
+      this.#editScope?.dispose();
+      this.#editScope = undefined;
+      this.#readerOperation = undefined;
+      this.busy = false;
+      this.editor = null;
+    }
+    if (this.labelReader?.id === id) {
+      open = true;
+      this.labelReader = null;
+    }
+    this.readers = this.readers?.filter((reader) => reader.id !== id);
+    if (refuse && open && !ours) this.#showError("reader.not_found");
+  }
+
+  #renderDeleteDialog(): TemplateResult {
+    return html`<wt-delete-dialog
+      data-test="delete-reader-dialog"
+      .open=${this.deleteTarget !== null}
+      .impact=${this.deleteImpact}
+      .loading=${this.deleteLoading}
+      .submitting=${this.deleteSubmitting}
+      .readError=${this.deleteReadError}
+      .actionError=${this.deleteActionError}
+      .copy=${readerDeleteCopy((id) => this.#providerName(id))}
+      .opener=${this.#deleteOpener}
+      @wt-delete-confirm=${(event: CustomEvent<{ id: string }>) =>
+        void this.#confirmDelete(event.detail.id)}
+      @wt-delete-retry=${() => this.#retryImpact()}
+      @wt-close=${() => this.#closeDelete()}
+    ></wt-delete-dialog>`;
   }
 
   #stuckOrder(row: StuckPaymentRow): string {
@@ -1692,6 +1846,14 @@ export class PaymentsScreen extends LitElement {
                   >`
                 : nothing
             }
+            <wt-button
+              variant=${this.busy ? "secondary" : "danger"}
+              align="start"
+              data-test=${`delete-${reader.id}`}
+              ?disabled=${this.busy}
+              @click=${(event: Event) => this.#openDelete(reader, event)}
+              >${t("action.delete")}</wt-button
+            >
           </wt-row-actions>`,
       },
     ];
@@ -2015,8 +2177,8 @@ export class PaymentsScreen extends LitElement {
         </section>
       </wt-tabs>
       ${keyed(this.#discoveryVersion, this.#renderDiscovery())}
-      ${keyed(this.editor, this.#renderEditor())} ${this.#renderResolveDialog()}
-      ${keyed(this.billAction, this.#renderBillDialog())}
+      ${keyed(this.editor, this.#renderEditor())} ${this.#renderDeleteDialog()}
+      ${this.#renderResolveDialog()} ${keyed(this.billAction, this.#renderBillDialog())}
       ${
         this.labelReader === null
           ? nothing

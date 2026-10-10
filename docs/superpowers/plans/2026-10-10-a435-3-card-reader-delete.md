@@ -48,6 +48,11 @@ of every shared file, not only the conflict hunks.
   core migration. If it lands first with its own name-sorting helper, use that instead of
   creating `delete-impact-items.ts`.
 
+_Note, 2026-10-10 (rebase): step 4 landed first (#1519) and created `apps/server/src/delete-impact.ts`
+with `named`; this step's helper was folded into it (`distinctTargets` added there, `named` built on
+it, tests in `delete-impact.test.ts`), so `delete-impact-items.ts` and `namedItem` below no longer
+exist._
+
 ## Decisions this plan makes that the spec does not
 
 Each line is the default that will be built. The owner may overrule any of them before Task 1.
@@ -72,6 +77,12 @@ Each line is the default that will be built. The owner may overrule any of them 
    unpaired the reader under that payment. That window — one in-flight pay that had resolved its
    reader before (a) committed — is accepted, as the existing Unpair route accepts a wider one (it
    has no payment check at all, `payments-api.ts:639-662`).
+   _2026-10-10, finish-branch review: the review reproduced Enable switching the reader back on
+   during (b), and two deletes both unpairing. The delete and Unpair routes now hold the reader in
+   memory while a Delete or Unpair runs (`mountPaymentsApi`, `apps/server/src/payments-api.ts`), and
+   Enable, Unpair, a second Delete and adopting it are refused `reader.unpair_in_progress`; an
+   adoption whose provider list was requested before an Unpair or Delete dropped the reader there
+   is refused `reader.not_listed`._
 2. **A provider that cannot unpair (Stripe) does not block the delete.** Stripe's seat declares
    `canUnpair: false` (`packages/payments-stripe/src/card-provider.ts:191`) and its `remove` makes
    no call (`:234-236`), and the Unpair route refuses it (`payments-api.ts:645-646`). Default: the
@@ -799,6 +810,9 @@ Unpair's write moved to the shared guarded helper.
     Assert `remove` was called once or twice, not an exact count: both requests can pass step (a)
     before either reaches (c), and each then unpairs. A second unpair is harmless at SumUp, whose
     client treats a 404 on that call as success (`packages/payments-sumup/src/sumup-client.ts:282`).
+    _2026-10-10, finish-branch review: superseded — the route now holds the reader while a Delete
+    or Unpair runs, so the race test requires one `remove` call and the loser answers 404 or 409
+    `reader.unpair_in_progress`; see decision 1's note._
 
 - [ ] **Step 2: Run and watch them fail.**
   `pnpm --filter @waitron/server exec vitest run src/payments-api.test.ts -t "reader delete"`
@@ -954,6 +968,11 @@ passed step (a); battery alerts skip deleted readers.
   `device.binding_invalid`. The pay, step (a), bill and battery cases may pass at once (they rest
   on `active` filters); report each as a pin, not a RED.
 
+  _Note, 2026-10-10 (Task 8a):_ the pay and card bill payment cases were written in
+  `apps/server/src/device-equipment-api.test.ts` (its "a deleted reader" block), not in
+  `till-api.test.ts` or `bill-payments-api.test.ts`, so the `-t "deleted reader"` command above
+  finds them only in that file.
+
 - [ ] **Step 3: Implement.** In `selectDeviceReader`, before reading the device:
 
 ```ts
@@ -1022,7 +1041,8 @@ EN/ES strings and the new code's message.
   `action.cancel`. Codes: `reader.unpair_failed` → "Couldn't reach the provider. The reader is
   disabled; try again." / "No se pudo contactar con el proveedor. El lector queda deshabilitado;
   inténtalo de nuevo." (decision 3: a failed call leaves it switched off). Assert no line
-  contains a raw key or a uuid.
+  contains a raw key or a uuid. _2026-10-10: the message is now the one in `codes.ts`
+  (`reader.unpair_failed`)._
 
   Client and dependencies: assert `getReaderDeleteImpact("r1")` sends GET
   `/management-api/payments/readers/r1/delete-impact` and `deleteReader("r1")` sends DELETE
@@ -1126,6 +1146,14 @@ html`<wt-button
   `pnpm exec vitest run scripts/pinned-actions-column.test.ts scripts/native-form-fields.test.ts
   scripts/style-token-names.test.ts`. Disposable-copy control: drop the generation check in
   `#confirmDelete` and see Review focus 5 fail.
+
+  _Note, 2026-10-10 (Task 8a):_ that control catches a delete answer arriving after its dialog
+  closed, not the open-A, close, open-B order: A's late impact read is dropped by the screen's
+  query slot (`DashboardQueries` over `QueryController.watch`,
+  `packages/dashboard-kit/src/query-controller.ts`; read, not mutated). Measured 2026-10-10 with both generation
+  checks in `#confirmDelete` deleted: "a read for an earlier reader never lands on the next one's
+  dialog…" still passed, and both "a delete still out when its dialog was closed…" cases failed
+  (`payments-screen.delete.test.ts`, 2 failed, 17 passed).
 
 - [ ] **Step 5: Commit** (`git commit -s -m "Card readers can be deleted from the Payments screen,
   after a confirmation that says what the delete will do"`).
