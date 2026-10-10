@@ -626,8 +626,8 @@ without the table.
 ```ts
 // packages/module/src/module.ts
 export interface TableRemoval {
-  /** Throws an AppError while this module still needs the table. */
-  refuse(tx: Transaction, cfg: { locationId: LocationId }, tableId: string, now: Date): Promise<void>;
+  /** The refusal for each of `tableIds` this module still needs; a table it lets go of has no entry. */
+  refuse(tx: Transaction, cfg: { locationId: LocationId }, tableIds: readonly string[], now: Date): Promise<ReadonlyMap<string, AppError>>;
   /** Lets go of every row naming the table, keeping `label` as text where history needs it. */
   release(tx: Transaction, cfg: { locationId: LocationId }, tableId: string, label: string): Promise<void>;
 }
@@ -639,8 +639,9 @@ export const BOOKINGS_TABLE_REMOVAL: TableRemoval;
 // booking JSON gains tableLabel: string | null
 ```
 
-`refuse` throws `table.booked { tableId }` when a `booked` booking names the table on the venue's
-today or later (today from the venue's wall clock, as `floor.ts`'s `venueWallClock` computes it —
+`refuse` answers `table.booked { tableId }` for each table a `booked` booking names on the venue's
+today or later (amended 2026-10-10: as built, the seat takes a list of tables and answers a map, so
+bookings reads the venue's day once and asks about every table in one query) (today from the venue's wall clock, as `floor.ts`'s `venueWallClock` computes it —
 move `venueWallClock` and `safeTimeZone` into a shared file in the package rather than copying
 them). `release` sets `table_label = label, table_id = null` on every booking naming the table.
 
@@ -649,7 +650,8 @@ them). `release` sets `table_label = label, table_id = null` on every booking na
 
 ```ts
 it("refuses while a booking from today on is booked at the table", async () => {
-  await expect(inTx((tx) => BOOKINGS_TABLE_REMOVAL.refuse(tx, cfg, tableId, now))).rejects.toMatchObject({ code: "table.booked", params: { tableId } });
+  const refused = await inTx((tx) => BOOKINGS_TABLE_REMOVAL.refuse(tx, cfg, [tableId], now));
+  expect(refused.get(tableId)).toMatchObject({ code: "table.booked", params: { tableId } });
 });
 it("does not refuse for yesterday's booking, or a cancelled or completed one today", async () => { /* … */ });
 it("keeps the table's name on past bookings when it lets go", async () => {
@@ -712,7 +714,7 @@ it; until then pass it through). A clock that cannot be read leaves today's plan
 `floor_reset_tables` rows with `targetsFromMaster` (every row pending); `catchUpZone`.
 
 `catchUpZone`: read the zone's pending reset rows as targets, its live tables (`held` from
-`party_tables` rows whose `left_at` is null; `tied` from `tableTied`, Task 1.9 — until then
+`party_tables` rows whose `left_at` is null; `tied` from `tablesTied`, Task 1.9 — until then
 `tied = held`; `hasToday`; `mergedWithHeld` from `floor_today_join_tables`), and
 `takenElsewhere` (labels of every live table of the venue outside the zone); call `planReset`;
 apply it in this order:
@@ -777,7 +779,7 @@ it("leaves a table the master never had untouched", async () => { /* planned fal
 **Files:**
 - Create: `apps/server/src/table-removal.ts`, `apps/server/src/table-removal.test.ts`
 - Modify: `apps/server/src/floor-today-store.ts` (`catchUpZone` removes `remove` tables; `tied`
-  from `tableTied`)
+  from `tablesTied`)
 
 **Interfaces:**
 - Consumes: `TableRemoval` (Task 1.6), `releaseDeliveries` (Task 1.4), `closePartyTables` on every
@@ -785,13 +787,13 @@ it("leaves a table the master never had untouched", async () => { /* planned fal
 - Produces:
 
 ```ts
-/** An open party holds the table or used it earlier in its meal, or an order to it is unpaid or has food on its way. */
-export async function tableTied(tx: Transaction, tableId: string): Promise<boolean>;
+/** The tables of `tableIds` an open party holds or used earlier in its meal, or an order to which is unpaid or has food on its way. */
+export async function tablesTied(tx: Transaction, tableIds: readonly string[]): Promise<Set<string>>;
 /** Removes the live table for good. Returns false when a module refuses, having changed nothing, or when something unknown still names it, having kept its reset row and the table itself. */
 export async function removeLiveTable(tx: Transaction, cfg: Pick<TillConfig, "locationId">, removals: readonly TableRemoval[], tableId: string, now: Date): Promise<boolean>;
 ```
 
-`tableTied`: a `party_tables` row of an OPEN party names the table (held, or left earlier while
+`tablesTied` (amended 2026-10-10: one call answers for every candidate table): a `party_tables` row of an OPEN party names the table (held, or left earlier while
 the party is still open); or an order names it in `delivery_table_id` and either its `status` is
 `open` or `placed`, or the floor's pending-delivery test holds — the conditions at
 `working-order.ts:7015-7023` exactly (not abandoned, `collected_at` null, and a ticket item with
