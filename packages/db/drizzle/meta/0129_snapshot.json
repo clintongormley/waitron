@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "2eadf0a3-6def-484b-a9fd-8d570e4f3f53",
+  "id": "ae9788a9-80f7-4bbb-afc5-1f5390c1e10d",
   "prevId": "78f578a2-87d3-451a-bb91-e7926fee0872",
   "tables": {
     "locations": {
@@ -1869,7 +1869,7 @@
           "columnsTo": [
             "id"
           ],
-          "onDelete": "set null",
+          "onDelete": "no action",
           "onUpdate": "no action"
         },
         "floor_reset_tables_zone_fk": {

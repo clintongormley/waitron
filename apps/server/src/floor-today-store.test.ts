@@ -134,6 +134,10 @@ async function deleteFromMaster(masterId: string): Promise<void> {
       .update(diningTables)
       .set({ planTableId: null })
       .where(eq(diningTables.planTableId, masterId));
+    await tx
+      .update(floorResetTables)
+      .set({ planTableId: null })
+      .where(eq(floorResetTables.planTableId, masterId));
     await tx.delete(floorPlanTables).where(eq(floorPlanTables.id, masterId));
   });
 }
