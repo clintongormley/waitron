@@ -151,12 +151,6 @@ under `docs/backlog/`.
 
 _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's fiscal items; part of A9._ Detail: [backlog/fiscal.md](backlog/fiscal.md).
 
-- **Find an invoice does not find a bare number as an invoice number** — owner question left by
-  A454 (#1491). The search spec says a bare number "still finds that number exactly, as today", but
-  before #1491 too, "12" searched customer names; `A/12` (series and number) finds invoice 12
-  exactly. **Next action:** the owner decides whether "12" alone should also match invoice
-  number 12.
-
 - **A444. A full invoice for a meal past midnight should carry the day the meal ends**, not the day
   the bill was opened (A231's provisional rule). The 2026-10-09 research found a binding ruling dating
   a service at its end (V1476-13, by analogy); asked as [S4](compliance/asesor-questions.md#the-shortened-list-2026-10-09). Change before F1 is switched on.
@@ -4701,6 +4695,15 @@ _Formerly B9, and the old Track C's development-stack and house-rules items; par
   (`apps/server/src/orders-list.ts`, search text) and `TEXT_MAX` (`apps/server/src/orders-api.ts`, the Orders request's text fields).
   Changing one leaves the other. Left open by A454 (#1491). **Next action:** decide whether they are
   the same limit and, if so, share one constant.
+
+- **Till retained-basket history test failed in main CI after A464.** Run
+  [38062347613](https://github.com/clintongormley/waitron/actions/runs/38062347613), head
+  `9ccb026c77ce577db8846c6130e5d7f58dad8110`, failed `test-till (1)` in
+  `retained basket traverses indexed and unindexed history without a discard warning`:
+  `counter(el)` was null at `apps/till/src/till-app.test.ts:17818`, where the test reads its
+  store after switching to Counter. The shard reported 1 failed and 3264 passed. Found during
+  A459's required readback of A464's merge CI. **Next action:** reproduce the history/tab
+  sequence and distinguish a render wait from a lost basket. No cause or repair verified.
 
 - **Two browser tests failed once each during A454's work (search everywhere), and neither was
   reproduced or checked on `main`**: "edge scroll reaches hidden column choices during a stationary

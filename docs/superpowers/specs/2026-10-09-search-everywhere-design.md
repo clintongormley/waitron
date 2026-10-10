@@ -34,6 +34,10 @@ asked (2026-10-09) for every search to follow the new rule.
    order or bill by its party name, delivery label and table labels (the till's Find a bill has no
    table filter, so its search is the only way to find a bill by table).
 
+_2026-10-10, A459: the owner clarified Find an invoice. A bare number also finds that invoice
+number in every full-invoice series, listed newest first ahead of customer-name matches. Names
+keep the shared ranking; `A/12` remains an exact series-and-number search._
+
 ## The rule, precisely
 
 - **Folding.** Text and query are compared after decomposing accented letters, dropping the accent
