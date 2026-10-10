@@ -303,7 +303,7 @@ function filterClauses(filter: OrderListFilter): SQL[] {
     if (words === undefined) clauses.push(newer);
     else {
       const { rank } = filter.after;
-      // Bound as a number: SQLite sorts every number below every text, so a text rank compares wrong.
+      // Bound as a number: SQLite sorts every number below every text.
       if (typeof rank !== "number")
         throw new AppError("management.request_invalid", { field: "after" });
       clauses.push(sql`(r.search_rank > ${rank} or (r.search_rank = ${rank} and ${newer}))`);
@@ -314,8 +314,9 @@ function filterClauses(filter: OrderListFilter): SQL[] {
 
 /**
  * One page of rows: closest match first when searched by words, then newest first by `at`, then
- * by id. At most seven queries whatever the page holds: the page, then the invoices' amounts due, payments before an invoice (two), credit-note numbers,
- * tables and staff, each for the whole page and each skipped when the page has nothing to ask.
+ * by id. At most seven queries whatever the page holds: the page, then the invoices' amounts due,
+ * payments before an invoice (two), credit-note numbers, tables and staff, each for the whole page
+ * and each skipped when the page has nothing to ask.
  */
 export function ordersPageSql(filter: OrderListFilter): SQL {
   const clauses = filterClauses(filter);
@@ -330,7 +331,7 @@ export function ordersPageSql(filter: OrderListFilter): SQL {
     limit ${filter.limit + 1}`;
   return sql`
     with base as (${rowsSql(filter)}),
-    r as (
+    r as materialized (
       select base.*, waitron_search_rank(${words}, base.party_name, base.delivery_label,
         (select group_concat(dt.label, ' ') from party_tables pt join dining_tables dt on dt.id = pt.table_id
          where pt.party_id = base.party_id)) as search_rank

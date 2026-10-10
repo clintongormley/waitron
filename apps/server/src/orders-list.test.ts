@@ -397,7 +397,7 @@ describe("a word search", () => {
     expect((await search("gin ")).ids).toEqual([gin.tabId]);
   });
 
-  it("pages through ranks tied in pairs with no row repeated or skipped", async () => {
+  it("pages through ranks tied in pairs, a page ending inside a pair, with no row repeated or skipped", async () => {
     vi.useFakeTimers({ toFake: ["Date"], now: new Date("2026-04-04T12:00:00.000Z") });
     try {
       for (const name of ["Zorba", "Zorba Uno", "Zorbas", "Zorba", "Zorba Uno"])
@@ -408,16 +408,19 @@ describe("a word search", () => {
     const whole = await search("zorba");
     expect(whole.ids).toHaveLength(5);
     expect(whole.next).toBeNull();
-    const walked: string[] = [];
-    let after: OrderCursor | undefined;
-    for (let pages = 0; pages < 5; pages++) {
-      const page = await search("zorba", { limit: 2, ...(after === undefined ? {} : { after }) });
-      walked.push(...page.ids);
-      if (page.next === null) break;
-      expect(typeof page.next.rank).toBe("number");
-      after = page.next;
+    // Pages of one and of three each end inside a pair tied on rank.
+    for (const limit of [1, 3]) {
+      const walked: string[] = [];
+      let after: OrderCursor | undefined;
+      for (let pages = 0; pages < 5; pages++) {
+        const page = await search("zorba", { limit, ...(after === undefined ? {} : { after }) });
+        walked.push(...page.ids);
+        if (page.next === null) break;
+        expect(typeof page.next.rank).toBe("number");
+        after = page.next;
+      }
+      expect(walked, `limit ${limit}`).toEqual(whole.ids);
     }
-    expect(walked).toEqual(whole.ids);
   });
 
   it("refuses a page bookmark without a rank", async () => {

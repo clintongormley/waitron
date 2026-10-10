@@ -68,7 +68,6 @@ function requireCursor(
   const words = search !== undefined && !isNumberSearch(search);
   if (words !== (match[1] !== undefined)) throw invalid("after");
   const cursor = { at: match[2]!, id: match[3]!.toLowerCase() };
-  // A number, never the text: SQLite sorts every number below every text.
   return words ? { rank: Number(match[1]), ...cursor } : cursor;
 }
 
