@@ -548,28 +548,28 @@ dashboard API methods/types/tests.
 **Files:** server receipt-print/document/ticket tests, address/sample helpers and the chosen
 optional document enqueue boundary. Keep drawer and fiscal paths separately intact.
 
-- [ ] Reproduce changed behavior with failing tests: two departments on one printer; null id and
+- [x] Reproduce changed behavior with failing tests: two departments on one printer; null id and
   absent header with distinct venue/default-department fields show only venue fields; disabled recorded
   department/current edited fields; current address changed after issuance with global true/false;
   each language candidate and no-third-language control. Preserve the snapshot trading-name cases.
   Include a null-id header containing an inconsistent trading name: omit it but keep venue
   logo/subtitle/footer. Empty department fields inherit live; phone/email do not inherit.
-- [ ] Change the exact top-order pin at `receipt-ticket.test.ts:2630` to subtitle before legal
+- [x] Change the exact top-order pin at `receipt-ticket.test.ts:2630` to subtitle before legal
   name for both widths; preserve every other ordered line/centering/QR assertion. Record this
   changed check with earlier owner answer 7 (top order); record the later answer 4 for
   A4 suppression and the thermal/till F1 address-check changes separately. Test absent trading name
   and duplicate optional elements.
-- [ ] Resolve using saved department only; read current receipt language separately from filed
+- [x] Resolve using saved department only; read current receipt language separately from filed
   language; apply global address setting independently. Use existing bounded bitmap decoder.
   Route automatic, explicit original, reprint and translated copy through that presentation.
   Pass surface `thermal`; even thermal F1 with a filed domicile follows the optional address
   switch. Keep filed domicile unchanged and separately pin A4 suppression in A5.
-- [ ] Implement decision 19's recoverable optional failure boundary after investigating the real
+- [x] Implement decision 19's recoverable optional failure boundary after investigating the real
   transaction/savepoint API. First observe injected read/format/partial-job failures in focused
   tests; then contain them. Run an actual refusal/savepoint probe: optional partial rows roll
   back, sale/tender/header/numbering commit once, replay adds no sale. Do not catch fiscal or
   drawer writes. A failure invalidating the whole engine transaction is a stated limit.
-- [ ] Preserve original-versus-copy status and explicit delivery enrolment. Test failed enqueue
+- [x] Preserve original-versus-copy status and explicit delivery enrolment. Test failed enqueue
   never records successful delivery and later retry remains possible; already-issued manual
   print failure does not rewrite fiscal facts. Run focused thermal/print/sale integration cases
   and affected types. LOOK once at task end for thermal 58/80 and retain bytes/screens/evidence.

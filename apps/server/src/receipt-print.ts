@@ -1,7 +1,3 @@
-// Receipt printing only enqueues bytes inside the caller's transaction. It opens no hardware
-// connection. Printer resolution reads an active row, and the caller's write transaction is the only
-// one running on the venue file, so a deactivation cannot land between that read and the enqueue.
-// Originals and duplicates are separate actions; a queue resend preserves the original job bytes.
 import { and, desc, eq, inArray, sql } from "drizzle-orm";
 import {
   deviceProfiles,
@@ -18,10 +14,14 @@ import type { EscSetting, PrintConfig } from "@waitron/printing";
 import { getPrintedReceipt, profileAllows, readPrinterRoles } from "@waitron/layouts";
 import type { ProfilePrinterRole } from "@waitron/layouts";
 import { receiptLabelsFor } from "@waitron/country-packs";
+import { readReceiptLanguage } from "@waitron/catalogue";
+import { receiptLogoSource, resolveReceiptTrim } from "@waitron/shared";
+import { readVenueReceiptLanguageRules } from "./venue-locale.js";
 import type { Origin } from "@waitron/shared";
 import { AppError } from "@waitron/shared";
 import "./errors.js";
 import { formatReceipt } from "./receipt-ticket.js";
+import { optionalDocument } from "./optional-document.js";
 import { reserveStagedInvoiceDelivery } from "./invoice-choice-delivery.js";
 import { expireInvoiceDeliveryClaims, reserveInvoiceDelivery } from "./invoice-delivery.js";
 import { VENUE_SERVICE } from "./modules.js";
@@ -154,21 +154,56 @@ async function buildReceiptBytes(
   const taxpayer = await readTenant(tx);
   /* v8 ignore start */
   if (taxpayer === null) {
-    // Unreachable: provisioning writes the one taxpayer row. Degrade to not printing, because a
-    // throw in the sale hook would roll the filed sale back (§5).
     return undefined;
   }
   /* v8 ignore stop */
-  const { receipt, logo } = await getPrintedReceipt(tx, printer.paperWidth);
-  const venueAddress = await readReceiptAddress(tx, cfg.locationId, receipt);
-  const receiptHeader = await VENUE_SERVICE.readSaleReceiptHeader(tx, saleId);
+  const diagnostic = (event: {
+    operation: string;
+    code: string;
+    receiptId?: 1;
+    departmentId?: string;
+  }) => console.warn("receipt.optional_read_failed", event);
+  const venue = await getPrintedReceipt(tx, printer.paperWidth, diagnostic);
+  const venueAddress = await readReceiptAddress(tx, cfg.locationId, venue.receipt);
+  const header = await VENUE_SERVICE.readSaleReceiptHeader(tx, saleId);
+  const departmentId = header?.departmentId ?? null;
+  const current = await readReceiptLanguage(tx, cfg.locationId);
+  const languages = await readVenueReceiptLanguageRules(tx, cfg);
+  const department =
+    departmentId === null
+      ? null
+      : await VENUE_SERVICE.readPrintedDepartmentReceipt(
+          tx,
+          {
+            ...cfg,
+            receiptLanguages: [...new Set([current.locale, ...languages.choices])],
+            receiptDiagnostic: diagnostic,
+          },
+          departmentId,
+          printer.paperWidth,
+        );
+  const authored =
+    department === null
+      ? null
+      : department.logo === null
+        ? { ...department.receipt, logo: undefined }
+        : department.receipt;
+  const receipt = resolveReceiptTrim(
+    authored,
+    venue.receipt,
+    language ?? ticket.locale,
+    current.locale,
+  );
+  const logo =
+    receiptLogoSource(authored, venue.receipt) === "department" ? department!.logo : venue.logo;
+  const receiptHeader = departmentId === null ? undefined : (header ?? undefined);
   return formatReceipt({
     result: ticket,
     issuer: ticket.issuer ?? { venueName: taxpayer.legalName, nif: taxpayer.taxId },
     receipt,
     venueAddress,
     logo,
-    receiptHeader: receiptHeader ?? undefined,
+    receiptHeader,
     invoiceLocale: language ?? ticket.locale,
     namesLocale: ticket.locale,
     printer,
@@ -206,22 +241,24 @@ export async function enqueueSaleReceipt(
   saleId: string,
   printers: PrinterLookup = printerLookup(tx, cfg.origin),
 ): Promise<void> {
-  const [sale] = await tx
-    .select({ workingOrderId: sales.workingOrderId, operatorId: sales.operatorId })
-    .from(sales)
-    .where(eq(sales.id, saleId));
-  const context = sale?.workingOrderId
-    ? await VENUE_SERVICE.findOrderContext(tx, cfg, sale.workingOrderId)
-    : null;
-  if (context?.serviceMode === "prepay") {
-    await enqueueCollectionTicket(tx, cfg, context.zoneId, ticket.orderNumber, printers);
-  }
-  if (await reserveStagedInvoiceDelivery(tx, saleId)) return;
-  const mode = context
-    ? (await VENUE_SERVICE.resolveSalePolicy(tx, cfg, context.zoneId)).receiptPrintMode
-    : "auto";
-  if (ticket.invoiceType !== "F1" && mode !== "auto") return;
-  await enqueueOriginalReceipt(tx, cfg, ticket, saleId, printers, sale?.operatorId ?? null);
+  await optionalDocument(tx, "enqueueSaleReceipt", saleId, async () => {
+    const [sale] = await tx
+      .select({ workingOrderId: sales.workingOrderId, operatorId: sales.operatorId })
+      .from(sales)
+      .where(eq(sales.id, saleId));
+    const context = sale?.workingOrderId
+      ? await VENUE_SERVICE.findOrderContext(tx, cfg, sale.workingOrderId)
+      : null;
+    if (context?.serviceMode === "prepay") {
+      await enqueueCollectionTicket(tx, cfg, context.zoneId, ticket.orderNumber, printers);
+    }
+    if ((await reserveStagedInvoiceDelivery(tx, saleId)) !== false) return;
+    const mode = context
+      ? (await VENUE_SERVICE.resolveSalePolicy(tx, cfg, context.zoneId)).receiptPrintMode
+      : "auto";
+    if (ticket.invoiceType !== "F1" && mode !== "auto") return;
+    await enqueueOriginalReceipt(tx, cfg, ticket, saleId, printers, sale?.operatorId ?? null);
+  });
 }
 
 /** A collection number is a separate document, never a fiscal receipt or a drawer command. */

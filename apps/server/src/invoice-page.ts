@@ -72,7 +72,7 @@ export function layoutInvoicePages(input: ReceiptDocumentInput): InvoicePage[] {
       y += LINE_HEIGHT;
     }
   };
-  for (const element of buildReceiptDocument(input).elements) {
+  for (const element of buildReceiptDocument({ ...input, surface: "a4" }).elements) {
     switch (element.kind) {
       case "align":
         alignment = element.alignment;

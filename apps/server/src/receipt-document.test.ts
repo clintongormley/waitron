@@ -23,7 +23,9 @@ describe("format-neutral invoice content", () => {
     expect(text).toContain("segunda planta, Madrid 28001");
     expect(text).toContain("tercera planta, Madrid 28002");
     expect(text).toContain("19,69");
-    expect(text).not.toContain("Current mutable");
+    expect(text).not.toContain("Current mutable issuer");
+    expect(text).not.toContain("Current mutable domicile");
+    expect(text).toContain("Current mutable location address");
   });
 
   it("exposes the saved invoice figures and names without choosing a printer or wrapping the text", () => {
@@ -44,6 +46,7 @@ describe("format-neutral invoice content", () => {
     );
     expect(text).toContain("1  Menú del día con un nombre especialmente largo");
     expect(text).not.toContain("Current mutable issuer");
+    expect(text).not.toContain("Current mutable domicile");
     expect(text).not.toContain("Current mutable location address");
     expect(rows).toEqual([
       ["Factura", "FF/1"],
@@ -69,3 +72,30 @@ describe("format-neutral invoice content", () => {
     ]);
   });
 });
+
+it.each(["thermal", "a4"] as const)(
+  "keeps filed domicile separate from optional current address on %s",
+  (surface) => {
+    for (const domicile of ["Filed domicile", undefined]) {
+      const document = buildReceiptDocument({
+        ...FULL_INVOICE_DOCUMENT_FIXTURE,
+        surface,
+        result: {
+          ...FULL_INVOICE_DOCUMENT_FIXTURE.result,
+          issuer: {
+            venueName: "Filed issuer",
+            nif: "B12345678",
+            ...(domicile === undefined ? {} : { domicile }),
+          },
+        },
+        venueAddress: ["Current address"],
+      });
+      const text = document.elements.flatMap((e) => (e.kind === "text" ? [e.text] : []));
+      expect(text.includes("Current address")).toBe(surface === "thermal");
+      expect(text.includes("Filed domicile")).toBe(domicile !== undefined);
+      expect(text).toContain("Filed issuer");
+      expect(text).not.toContain("Current mutable issuer");
+      expect(text).not.toContain("Current mutable domicile");
+    }
+  },
+);

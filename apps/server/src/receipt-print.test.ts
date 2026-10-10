@@ -1,10 +1,14 @@
 import { recordSale } from "@waitron/core";
 import { reserveInvoiceDelivery } from "./invoice-delivery.js";
+import { reserveStagedInvoiceDelivery } from "./invoice-choice-delivery.js";
 import { issueOrderInvoice } from "./testing/issue-order.js";
 import { randomUUID } from "node:crypto";
 import { eq, inArray, sql } from "drizzle-orm";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import type { MockInstance } from "vitest";
+import type { Transaction } from "@waitron/db";
+import * as receiptTicket from "./receipt-ticket.js";
+import { VENUE_SERVICE } from "./modules.js";
 import {
   deviceProfilePrinters,
   deviceProfiles,
@@ -13,6 +17,8 @@ import {
   drawerOpens,
   invoiceDeliveries,
   invoiceSeries,
+  tenders,
+  locations,
   pagePrinters,
   workingOrders,
   nowIso,
@@ -28,7 +34,15 @@ import {
 } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { departmentSalePolicies, departments, zoneSalePolicies } from "@waitron/venue-service";
+import {
+  departmentSalePolicies,
+  departments,
+  zoneSalePolicies,
+  zoneServicePolicies,
+  saleReceiptHeaders,
+  departmentReceipts,
+  createDepartment,
+} from "@waitron/venue-service";
 import {
   assignCatalogueToLocation,
   createCatalogue,
@@ -76,6 +90,7 @@ import { takeBillPayment } from "./bill-payments.js";
 import {
   DRAWER_KICK,
   enqueueReceiptReprint,
+  enqueueOriginalReceipt,
   enqueueSaleReceipt,
   resolvePaymentSlipPrinter,
   resolveReceiptPrinter,
@@ -2064,6 +2079,19 @@ describe("the receipt's top block: logo, address, phone and email", () => {
         .insert(tenantReceipts)
         .values({ receipt })
         .onConflictDoUpdate({ target: tenantReceipts.id, set: { receipt } });
+      const contact = {
+        ...(typeof receipt.phone === "string" ? { phone: receipt.phone } : {}),
+        ...(typeof receipt.email === "string" ? { email: receipt.email } : {}),
+      };
+      const rows = await tx.select({ id: departments.id }).from(departments);
+      for (const row of rows)
+        await tx
+          .insert(departmentReceipts)
+          .values({ departmentId: row.id, receipt: contact })
+          .onConflictDoUpdate({
+            target: departmentReceipts.departmentId,
+            set: { receipt: contact },
+          });
     });
   }
 
@@ -2212,7 +2240,19 @@ describe("the receipt's top block: logo, address, phone and email", () => {
 });
 
 describe("automatic F1 receipt delivery enrollment", () => {
-  async function issued(mode: "auto" | "on_request", attributed = true, full = true) {
+  async function issued(
+    mode: "auto" | "on_request",
+    attributed = true,
+    full = true,
+    beforeCommit?: (
+      tx: Transaction,
+      value: {
+        cfg: DeviceRequestConfig;
+        ticket: Awaited<ReturnType<typeof readSettledTicket>>;
+        saleId: string;
+      },
+    ) => Promise<void>,
+  ) {
     const { cfg, each, zoneId } = await setupVenue();
     const printerId = await makePrinter(cfg);
     await configureReceipt(cfg, { mode, printerId });
@@ -2258,6 +2298,7 @@ describe("automatic F1 receipt delivery enrollment", () => {
         ...(attributed ? { operatorId: operator!.id } : {}),
       });
       const ticket = await readSettledTicket(backend, tx, cfg, orderId);
+      await beforeCommit?.(tx, { cfg, ticket, saleId: sale.saleId });
       return {
         cfg,
         printerId,
@@ -2269,6 +2310,166 @@ describe("automatic F1 receipt delivery enrollment", () => {
       };
     });
   }
+
+  it("propagates an engine rollback and reports no successful optional rollback", async () => {
+    const warning = vi.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      await expect(
+        issued("auto", true, true, async (tx, value) => {
+          await tx.execute(
+            sql`create trigger test_engine_receipt_rollback before insert on invoice_deliveries begin select raise(rollback, 'engine transaction invalidated'); end`,
+          );
+          await enqueueSaleReceipt(tx, value.cfg, value.ticket, value.saleId);
+        }),
+      ).rejects.toThrow(/no transaction is active|no such savepoint/u);
+      expect(warning.mock.calls).toEqual([]);
+      expect(await suite.db.select().from(sales)).toEqual([]);
+      expect(await suite.db.select().from(printJobs)).toEqual([]);
+      expect(await suite.db.select().from(invoiceDeliveries)).toEqual([]);
+      expect(await suite.db.select().from(registrosFacturacion)).toEqual([]);
+      expect(
+        (
+          await suite.db.execute(
+            sql`select name from sqlite_schema where name = 'test_engine_receipt_rollback'`,
+          )
+        ).rows,
+      ).toEqual([]);
+    } finally {
+      warning.mockRestore();
+    }
+  });
+
+  it("returns an explicit copy failure without rewriting an already-issued invoice", async () => {
+    const { cfg, saleId, ticket } = await issued("auto");
+    const before = await suite.db.select().from(sales);
+    const fiscalBefore = await suite.db.select().from(registrosFacturacion);
+    const formatter = vi.spyOn(receiptTicket, "formatReceipt").mockImplementationOnce(() => {
+      throw new Error("explicit print failure");
+    });
+    try {
+      await expect(
+        withTransaction(suite.db, (tx) => enqueueReceiptReprint(tx, cfg, ticket, saleId)),
+      ).rejects.toThrow("explicit print failure");
+      expect(await suite.db.select().from(sales)).toEqual(before);
+      expect(await suite.db.select().from(registrosFacturacion)).toEqual(fiscalBefore);
+      expect(await suite.db.select().from(printJobs)).toEqual([]);
+      expect(await suite.db.select().from(invoiceDeliveries)).toEqual([]);
+    } finally {
+      formatter.mockRestore();
+    }
+    await withTransaction(suite.db, (tx) => enqueueReceiptReprint(tx, cfg, ticket, saleId));
+    expect(await suite.db.select().from(printJobs)).toEqual([
+      expect.objectContaining({ saleId, receiptCopy: true }),
+    ]);
+    expect(await suite.db.select().from(sales)).toEqual(before);
+  });
+
+  it("omits a refused staged delivery reservation inside an invoice transaction", async () => {
+    const { cfg } = await issued("auto", true, true, async (tx, value) => {
+      const [sale] = await tx.select().from(sales).where(eq(sales.id, value.saleId));
+      await tx
+        .update(workingOrders)
+        .set({
+          invoiceDelivery: {
+            medium: "email",
+            recipient: "customer@example.test",
+            consent: {
+              statementVersion: "invoice-email-v1",
+              language: "es-ES",
+              recordedAt: "2026-10-07T17:00:00.000Z",
+              personId: sale!.operatorId!,
+              contactEmail: "venue@example.test",
+            },
+          },
+        })
+        .where(eq(workingOrders.id, sale!.workingOrderId!));
+      await tx.execute(
+        sql`create trigger test_staged_delivery_refusal before insert on invoice_deliveries when new.medium = 'email' begin select raise(abort, 'optional staged refusal'); end`,
+      );
+      try {
+        expect(await reserveStagedInvoiceDelivery(tx, value.saleId)).toBeUndefined();
+        await enqueueSaleReceipt(tx, value.cfg, value.ticket, value.saleId);
+        await tx.update(tenants).set({ legalName: "Staged refusal did not abort invoice" });
+      } finally {
+        await tx.execute(sql`drop trigger test_staged_delivery_refusal`);
+      }
+    });
+    expect(await registroCount(cfg)).toBe(1);
+    expect(await suite.db.select().from(sales)).toHaveLength(1);
+    expect(await suite.db.select().from(invoiceDeliveries)).toEqual([]);
+    expect(await suite.db.select().from(printJobs)).toEqual([]);
+    expect((await readTenant(suite.db))!.legalName).toBe("Staged refusal did not abort invoice");
+  });
+
+  it("rolls back a partial automatic document on a delivery refusal while committing the invoice", async () => {
+    const { cfg, saleId, ticket } = await issued("auto", true, true, async (tx, value) => {
+      await VENUE_SERVICE.recordSaleReceiptHeader(tx, value.cfg, value.saleId, null);
+      await tx.execute(
+        sql`create trigger test_receipt_delivery_refusal before insert on invoice_deliveries begin select raise(abort, 'optional receipt refusal'); end`,
+      );
+      try {
+        await enqueueSaleReceipt(tx, value.cfg, value.ticket, value.saleId);
+        await tx.update(tenants).set({ legalName: "Outer write remains usable" });
+      } finally {
+        await tx.execute(sql`drop trigger test_receipt_delivery_refusal`);
+      }
+    });
+    expect(await registroCount(cfg)).toBe(1);
+    expect(await suite.db.select().from(sales)).toHaveLength(1);
+    expect(await suite.db.select().from(saleReceiptHeaders)).toHaveLength(1);
+    expect(await suite.db.select().from(printJobs)).toEqual([]);
+    expect(await suite.db.select().from(invoiceDeliveries)).toEqual([]);
+    expect((await readTenant(suite.db))!.legalName).toBe("Outer write remains usable");
+    await withTransaction(suite.db, (tx) => enqueueSaleReceipt(tx, cfg, ticket, saleId));
+    const jobs = await suite.db.select().from(printJobs);
+    expect(jobs).toHaveLength(1);
+    expect(await suite.db.select().from(invoiceDeliveries)).toEqual([
+      expect.objectContaining({ saleId, medium: "receipt", printJobId: jobs[0]!.id }),
+    ]);
+    expect(await registroCount(cfg)).toBe(1);
+  });
+
+  it.each(["absent", "null"] as const)(
+    "uses only venue fields with an %s department header",
+    async (kind) => {
+      const { cfg, saleId, ticket } = await issued("auto");
+      await suite.db.insert(tenantReceipts).values({
+        receipt: {
+          headerSubtitle: "Venue subtitle",
+          footerMessage: "Venue footer",
+          phone: "910000000",
+          email: "venue@example.test",
+        },
+      });
+      const [department] = await suite.db.select().from(departments);
+      await suite.db.insert(departmentReceipts).values({
+        departmentId: department!.id,
+        receipt: {
+          headerSubtitle: { "es-ES": "Default department text" },
+          email: "default@example.test",
+        },
+      });
+      if (kind === "null")
+        await suite.db.insert(saleReceiptHeaders).values({
+          saleId,
+          departmentId: null,
+          tradingName: "Inconsistent brand",
+          printTradingName: true,
+        });
+      await withTransaction(suite.db, (tx) => enqueueReceiptReprint(tx, cfg, ticket, saleId));
+      const jobs = await suite.db.select().from(printJobs);
+      expect(jobs).toHaveLength(1);
+      const text = decodeTicket(jobs[0]!.payload);
+      expect(text).toContain("Venue subtitle");
+      expect(text).toContain("Venue footer");
+      expect(text).toContain("910000000");
+      expect(text).toContain("venue@example.test");
+      expect(text).not.toContain("Default department text");
+      expect(text).not.toContain("default@example.test");
+      expect(text).not.toContain("Inconsistent brand");
+      expect(await registroCount(cfg)).toBe(1);
+    },
+  );
 
   it.each(["auto", "on_request"] as const)(
     "enrolls the automatic original with its recorded issuer under %s policy",
@@ -2405,7 +2606,7 @@ describe("automatic F1 receipt delivery enrollment", () => {
     expect(await suite.db.select().from(printJobs)).toEqual([]);
   });
 
-  it("refuses unattributed A4 issuance rather than inventing an operator", async () => {
+  it("reports unattributed automatic A4 issuance without inventing an operator", async () => {
     const { cfg, saleId, orderId, ticket } = await issued("auto", false);
     await withTransaction(suite.db, (tx) =>
       tx
@@ -2415,12 +2616,23 @@ describe("automatic F1 receipt delivery enrollment", () => {
         })
         .where(eq(workingOrders.id, orderId)),
     );
-    await expect(
-      withTransaction(suite.db, (tx) => enqueueSaleReceipt(tx, cfg, ticket, saleId)),
-    ).rejects.toMatchObject({
-      code: "management.request_invalid",
-      params: { field: "operatorId" },
-    });
+    const warning = vi.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      await withTransaction(suite.db, (tx) => enqueueSaleReceipt(tx, cfg, ticket, saleId));
+      expect(warning.mock.calls).toEqual([
+        [
+          "receipt.optional_document_failed",
+          {
+            operation: "reserveStagedInvoiceDelivery",
+            saleId,
+            code: "management.request_invalid",
+            field: "operatorId",
+          },
+        ],
+      ]);
+    } finally {
+      warning.mockRestore();
+    }
     expect(await suite.db.select().from(invoiceDeliveries)).toEqual([]);
     expect(await suite.db.select().from(printJobs)).toEqual([]);
   });
@@ -2547,7 +2759,9 @@ describe("automatic F1 receipt delivery enrollment", () => {
       }),
     );
     await expect(
-      withTransaction(suite.db, (tx) => enqueueSaleReceipt(tx, cfg, ticket, saleId)),
+      withTransaction(suite.db, (tx) =>
+        enqueueOriginalReceipt(tx, cfg, ticket, saleId, undefined, personId),
+      ),
     ).rejects.toMatchObject({ code: "invoice_delivery.active" });
     expect(await suite.db.select().from(printJobs)).toEqual([]);
     expect(await suite.db.select().from(invoiceDeliveries)).toHaveLength(1);
@@ -2576,4 +2790,328 @@ describe("automatic F1 receipt delivery enrollment", () => {
     expect(await suite.db.select().from(printJobs)).toEqual([]);
     expect(await suite.db.select().from(invoiceDeliveries)).toEqual([]);
   });
+});
+
+describe("department receipt presentation on thermal jobs", () => {
+  async function setupReceipt() {
+    const { cfg, each, zoneId } = await setupVenue();
+    const printerId = await makePrinter(cfg);
+    await configureReceipt(cfg, { printerId });
+    const [{ departmentId }] = await suite.db
+      .select({ departmentId: zoneServicePolicies.departmentId })
+      .from(zoneServicePolicies)
+      .where(eq(zoneServicePolicies.zoneId, zoneId));
+    await suite.db.insert(tenantReceipts).values({
+      receipt: {
+        headerSubtitle: "Venue subtitle",
+        footerMessage: "Venue footer",
+        phone: "910000000",
+        email: "venue@example.test",
+      },
+    });
+    await suite.db
+      .update(departments)
+      .set({ tradingName: "Recorded brand" })
+      .where(eq(departments.id, departmentId!));
+    await suite.db
+      .update(departmentSalePolicies)
+      .set({ printTradingName: true })
+      .where(eq(departmentSalePolicies.departmentId, departmentId!));
+    const sell = () =>
+      recordTillSale(
+        deps(),
+        cfg,
+        {
+          zoneId,
+          lines: [{ menuItemId: each.menuItemId, quantity: "1" }],
+          tender: { method: "cash" as const, amount: "1.50" },
+        },
+        OPERATOR,
+      );
+    const documents = async () =>
+      (await suite.db.select().from(printJobs)).filter(
+        (job) => job.saleId !== null && job.kind === "document",
+      );
+    return { cfg, departmentId: departmentId!, zoneId, sell, documents };
+  }
+
+  it.each(["58mm", "80mm"] as const)(
+    "uses the current owner of the logo on %s and inherits after clearing",
+    async (paperWidth) => {
+      const { cfg, departmentId, sell, documents } = await setupReceipt();
+      await suite.db
+        .update(printers)
+        .set({ paperWidth })
+        .where(eq(printers.locationId, cfg.locationId));
+      const venuePair = {
+        "58mm": { widthDots: 8, heightDots: 1, data: "gQ==" },
+        "80mm": { widthDots: 16, heightDots: 1, data: "gf8=" },
+      };
+      const ownPair = {
+        "58mm": { widthDots: 16, heightDots: 1, data: "//8=" },
+        "80mm": { widthDots: 24, heightDots: 1, data: "////" },
+      };
+      await suite.db
+        .update(tenantReceipts)
+        .set({ receipt: { logo: `${"a".repeat(64)}.png`, logoRasters: venuePair } });
+      await suite.db
+        .insert(departmentReceipts)
+        .values({ departmentId, receipt: { logo: `${"b".repeat(64)}.png` }, logoRasters: ownPair });
+      const ticket = await sell();
+      const saleId = await onlySaleId(cfg);
+      await suite.db
+        .update(departmentReceipts)
+        .set({ receipt: {}, logoRasters: null })
+        .where(eq(departmentReceipts.departmentId, departmentId));
+      await withTransaction(suite.db, (tx) => enqueueReceiptReprint(tx, cfg, ticket, saleId));
+      const logoBytes = (await documents()).map((job) =>
+        printedCommands(job.payload)
+          .filter((c) => c.name === "GS v 0" && c.text === undefined)
+          .slice(1)
+          .map((c) => [...c.bytes.subarray(8)]),
+      );
+      expect(logoBytes).toEqual(
+        paperWidth === "58mm" ? [[[255, 255]], [[129]]] : [[[255, 255, 255]], [[129, 255]]],
+      );
+      expect(await registroCount(cfg)).toBe(1);
+    },
+  );
+
+  it("drops a corrupt department picture, retaining its text and the usable venue logo", async () => {
+    const { cfg, departmentId, sell, documents } = await setupReceipt();
+    const pair = {
+      "58mm": { widthDots: 8, heightDots: 1, data: "gQ==" },
+      "80mm": { widthDots: 8, heightDots: 1, data: "gQ==" },
+    };
+    await suite.db
+      .update(tenantReceipts)
+      .set({ receipt: { logo: `${"a".repeat(64)}.png`, logoRasters: pair } });
+    await suite.db.insert(departmentReceipts).values({
+      departmentId,
+      receipt: {
+        logo: `${"b".repeat(64)}.png`,
+        headerSubtitle: { "es-ES": "Retained own text" },
+      },
+    });
+    await suite.db.execute(
+      sql`update department_receipts set logo_rasters = ${JSON.stringify({ "58mm": { widthDots: 999999, heightDots: 1, data: "bad" }, "80mm": { widthDots: 8, heightDots: 1, data: "bad" } })} where department_id = ${departmentId}`,
+    );
+    await sell();
+    const [job] = await documents();
+    expect(decodeTicket(job!.payload)).toContain("Retained own text");
+    const logos = printedCommands(job!.payload)
+      .filter((c) => c.name === "GS v 0" && c.text === undefined)
+      .slice(1);
+    expect(logos.map((c) => [...c.bytes.subarray(8)])).toEqual([[129]]);
+    expect(await registroCount(cfg)).toBe(1);
+    expect(await suite.db.select().from(tenders)).toHaveLength(1);
+  });
+
+  it("lets a mandatory drawer refusal roll back the sale", async () => {
+    const { sell } = await setupReceipt();
+    await suite.db.execute(
+      sql`create trigger test_mandatory_drawer_refusal before insert on drawer_opens begin select raise(abort, 'mandatory drawer refusal'); end`,
+    );
+    try {
+      await expect(sell()).rejects.toThrow("mandatory drawer refusal");
+      expect(await suite.db.select().from(sales)).toEqual([]);
+      expect(await suite.db.select().from(tenders)).toEqual([]);
+      expect(await suite.db.select().from(saleReceiptHeaders)).toEqual([]);
+      expect(await suite.db.select().from(printJobs)).toEqual([]);
+      expect(await suite.db.select().from(registrosFacturacion)).toEqual([]);
+    } finally {
+      await suite.db.execute(sql`drop trigger test_mandatory_drawer_refusal`);
+    }
+  });
+
+  it.each(["venue", "department"] as const)(
+    "omits a failed %s optional read with bounded diagnostic and surviving fields",
+    async (source) => {
+      const { cfg, departmentId, sell, documents } = await setupReceipt();
+      await suite.db.insert(departmentReceipts).values({
+        departmentId,
+        receipt: { headerSubtitle: { "es-ES": "Own subtitle" }, email: "own@example.test" },
+      });
+      const warning = vi.spyOn(console, "warn").mockImplementation(() => {});
+      if (source === "venue")
+        await suite.db.execute(sql`alter table tenant_receipts rename to test_hidden_receipts`);
+      else
+        await suite.db.execute(
+          sql`alter table department_receipts rename to test_hidden_department_receipts`,
+        );
+      try {
+        const ticket = await sell();
+        expect(ticket.total).toBe("1.50");
+        const jobs = await documents();
+        expect(jobs).toHaveLength(1);
+        const text = decodeTicket(jobs[0]!.payload);
+        expect(text).toContain(source === "venue" ? "Own subtitle" : "Venue subtitle");
+        expect(text.includes("own@example.test")).toBe(source === "venue");
+        expect(text).not.toContain("venue@example.test");
+        expect(await registroCount(cfg)).toBe(1);
+        expect(await suite.db.select().from(tenders)).toHaveLength(1);
+        expect(warning.mock.calls).toEqual([
+          [
+            "receipt.optional_read_failed",
+            source === "venue"
+              ? { operation: "getPrintedReceipt", receiptId: 1, code: "receipt.read_failed" }
+              : {
+                  operation: "readPrintedDepartmentReceipt",
+                  departmentId,
+                  code: "receipt.read_failed",
+                },
+          ],
+        ]);
+      } finally {
+        if (source === "venue")
+          await suite.db.execute(sql`alter table test_hidden_receipts rename to tenant_receipts`);
+        else
+          await suite.db.execute(
+            sql`alter table test_hidden_department_receipts rename to department_receipts`,
+          );
+        warning.mockRestore();
+      }
+    },
+  );
+
+  it("commits one sale, tender, header and drawer when optional formatting fails, including replay", async () => {
+    const { cfg, sell } = await setupReceipt();
+    const formatter = vi.spyOn(receiptTicket, "formatReceipt").mockImplementationOnce(() => {
+      throw new Error("untrusted imported detail");
+    });
+    try {
+      const ticket = await sell();
+      expect(ticket.total).toBe("1.50");
+      expect(await registroCount(cfg)).toBe(1);
+      const sold = await suite.db.select().from(sales);
+      expect(sold).toHaveLength(1);
+      expect(await suite.db.select().from(tenders)).toHaveLength(1);
+      expect(await suite.db.select().from(saleReceiptHeaders)).toHaveLength(1);
+      expect((await suite.db.select().from(printJobs)).map((job) => job.kind)).toEqual(["drawer"]);
+      expect(await drawerOpensFor(cfg)).toHaveLength(1);
+      const before = await suite.db
+        .select({ id: invoiceSeries.id, nextNumber: invoiceSeries.nextNumber })
+        .from(invoiceSeries);
+      const replay = await recordTillSale(
+        deps(),
+        cfg,
+        {
+          workingOrderId: sold[0]!.workingOrderId!,
+          lines: [],
+          tender: { method: "cash", amount: "1.50" },
+        },
+        OPERATOR,
+      );
+      expect(replay.invoiceNumber).toBe(ticket.invoiceNumber);
+      expect(await registroCount(cfg)).toBe(1);
+      expect(await suite.db.select().from(tenders)).toHaveLength(1);
+      expect(
+        await suite.db
+          .select({ id: invoiceSeries.id, nextNumber: invoiceSeries.nextNumber })
+          .from(invoiceSeries),
+      ).toEqual(before);
+      expect(await drawerOpensFor(cfg)).toHaveLength(1);
+    } finally {
+      formatter.mockRestore();
+    }
+  });
+
+  it("uses two recorded departments on one printer without inheriting venue contact", async () => {
+    const { cfg, departmentId, zoneId, sell, documents } = await setupReceipt();
+    await suite.db.insert(departmentReceipts).values({
+      departmentId,
+      receipt: { headerSubtitle: { "es-ES": "First subtitle" }, phone: "911111111" },
+    });
+    await sell();
+    const other = await withTransaction(suite.db, (tx) =>
+      createDepartment(tx, cfg, { name: "Second", tradingName: "Second brand" }),
+    );
+    await suite.db.insert(departmentReceipts).values({
+      departmentId: other.id,
+      receipt: { headerSubtitle: { "es-ES": "Second subtitle" }, email: "second@example.test" },
+    });
+    await suite.db
+      .update(zoneServicePolicies)
+      .set({ departmentId: other.id })
+      .where(eq(zoneServicePolicies.zoneId, zoneId));
+    await withTransaction(suite.db, (tx) => offerProducts(tx, cfg, { zone: { zoneId } }));
+    await sell();
+    const text = (await documents()).map((job) => decodeTicket(job.payload));
+    expect(text).toHaveLength(2);
+    expect(text[0]).toContain("First subtitle");
+    expect(text[0]).toContain("911111111");
+    expect(text[0]).not.toContain("Venue subtitle");
+    expect(text[0]).not.toContain("venue@example.test");
+    expect(text[1]).toContain("Second subtitle");
+    expect(text[1]).toContain("second@example.test");
+    expect(text[1]).not.toContain("910000000");
+    expect(text[1]).not.toContain("First subtitle");
+    expect(text.every((t) => t.includes("Venue footer"))).toBe(true);
+  });
+
+  it("reprints a disabled recorded department with live text and recorded trading name", async () => {
+    const { cfg, departmentId, sell, documents } = await setupReceipt();
+    await suite.db
+      .insert(departmentReceipts)
+      .values({ departmentId, receipt: { headerSubtitle: { "es-ES": "Before edit" } } });
+    const ticket = await sell();
+    const id = await onlySaleId(cfg);
+    await suite.db
+      .update(departments)
+      .set({ active: false, tradingName: "New mutable brand" })
+      .where(eq(departments.id, departmentId));
+    await suite.db
+      .update(departmentReceipts)
+      .set({ receipt: { headerSubtitle: { "es-ES": "After edit" } } })
+      .where(eq(departmentReceipts.departmentId, departmentId));
+    await suite.db.update(tenantReceipts).set({ receipt: { footerMessage: "New venue footer" } });
+    await suite.db
+      .update(locations)
+      .set({ addressLine1: "New current address" })
+      .where(eq(locations.id, cfg.locationId));
+    await withTransaction(suite.db, (tx) => enqueueReceiptReprint(tx, cfg, ticket, id));
+    const text = (await documents()).map((job) => decodeTicket(job.payload));
+    expect(text[0]).toContain("Before edit");
+    expect(text[1]).toContain("After edit");
+    expect(text[1]).toContain("New venue footer");
+    expect(text[1]).toContain("Recorded brand");
+    expect(text[1]).not.toContain("New mutable brand");
+    expect(text[1]).toContain("New current address");
+    expect(text[1]).toContain("DUPLICADO");
+    expect(await registroCount(cfg)).toBe(1);
+    await suite.db.update(tenantReceipts).set({ receipt: { printAddress: false } });
+    await withTransaction(suite.db, (tx) => enqueueReceiptReprint(tx, cfg, ticket, id));
+    expect(decodeTicket((await documents())[2]!.payload)).not.toContain("New current address");
+  });
+
+  it.each([
+    { printed: "ca-ES", current: "es-ES", subtitle: "Catalan subtitle", footer: "Spanish footer" },
+    { printed: "ca-ES", current: "gl-ES", subtitle: "Catalan subtitle", footer: "Galician footer" },
+    { printed: "eu-ES", current: "gl-ES", subtitle: "Venue subtitle", footer: "Galician footer" },
+  ])(
+    "resolves $printed against current $current without a third-language candidate",
+    async ({ printed, current, subtitle, footer }) => {
+      const { cfg, departmentId, sell, documents } = await setupReceipt();
+      await suite.db.insert(departmentReceipts).values({
+        departmentId,
+        receipt: {
+          headerSubtitle: { "ca-ES": "Catalan subtitle", "es-ES": "Spanish subtitle" },
+          footerMessage: { "es-ES": "Spanish footer", "gl-ES": "Galician footer" },
+        },
+      });
+      const ticket = await sell();
+      const id = await onlySaleId(cfg);
+      await suite.db
+        .update(locations)
+        .set({ invoiceLocales: [current] })
+        .where(eq(locations.id, cfg.locationId));
+      await withTransaction(suite.db, (tx) => enqueueReceiptReprint(tx, cfg, ticket, id, printed));
+      const text = decodeTicket((await documents())[1]!.payload);
+      expect(text).toContain(subtitle);
+      expect(text).toContain(footer);
+      expect(text).not.toContain("venue@example.test");
+      expect(text).not.toContain("Spanish subtitle");
+      expect(await registroCount(cfg)).toBe(1);
+    },
+  );
 });

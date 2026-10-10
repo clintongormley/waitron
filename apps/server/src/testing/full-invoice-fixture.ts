@@ -2,6 +2,7 @@ import type { FormatReceiptInput } from "../receipt-ticket.js";
 import type { ReceiptDocumentInput } from "../receipt-document.js";
 
 export const FULL_INVOICE_DOCUMENT_FIXTURE: ReceiptDocumentInput = {
+  surface: "a4",
   result: {
     invoiceType: "F1",
     locale: "es-ES",

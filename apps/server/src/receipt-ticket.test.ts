@@ -485,12 +485,12 @@ it.each([PRINTER_58, PRINTER_80])(
 );
 
 it.each([PRINTER_58, PRINTER_80])(
-  "uses the taxpayer domicile instead of the location address only on F1 with a domicile on $paperWidth",
+  "prints the current thermal address separately from filed F1 domicile on $paperWidth",
   (printer) => {
     for (const invoiceLocale of ["es-ES", "en-GB"]) {
       for (const duplicate of [false, true]) {
         for (const { invoiceType, domicile, showLocation } of [
-          { invoiceType: "F1", domicile: "Calle Fiscal 27", showLocation: false },
+          { invoiceType: "F1", domicile: "Calle Fiscal 27", showLocation: true },
           { invoiceType: "F1", domicile: undefined, showLocation: true },
           { invoiceType: "F2", domicile: "Calle Fiscal 27", showLocation: true },
           { invoiceType: "F2", domicile: undefined, showLocation: true },
@@ -589,8 +589,8 @@ it.each([PRINTER_58, PRINTER_80])(
     );
     expect(lines.slice(0, 4)).toEqual([
       centred(printer, "Bar La Buena"),
-      centred(printer, ISSUER.venueName),
       centred(printer, TRIM.headerSubtitle!),
+      centred(printer, ISSUER.venueName),
       centred(printer, "NIF: B12345678"),
     ]);
   },
@@ -615,8 +615,8 @@ it.each([
       }),
     );
     expect(lines.slice(0, 3)).toEqual([
-      centred(PRINTER_80, ISSUER.venueName),
       centred(PRINTER_80, TRIM.headerSubtitle!),
+      centred(PRINTER_80, ISSUER.venueName),
       centred(PRINTER_80, "NIF: B12345678"),
     ]);
     expect(lines.filter((line) => line === centred(PRINTER_80, ISSUER.venueName))).toHaveLength(1);
@@ -731,7 +731,12 @@ it("prints a QR the regime gives no words for on its own, before the issuer", ()
       printer: PRINTER_80,
     }),
   );
-  expect(lines.slice(0, 3)).toEqual(["<QR>", "", centred(PRINTER_80, ISSUER.venueName)]);
+  expect(lines.slice(0, 4)).toEqual([
+    "<QR>",
+    "",
+    centred(PRINTER_80, TRIM.headerSubtitle!),
+    centred(PRINTER_80, ISSUER.venueName),
+  ]);
 });
 
 /** A centred line on `printer`'s paper, padded as the receipt pads it. */
@@ -765,8 +770,8 @@ describe("the QR comes first on an invoice that carries one", () => {
         "<QR>",
         centred(printer, "VERI*FACTU"),
         "",
-        centred(printer, ISSUER.venueName),
         centred(printer, TRIM.headerSubtitle!),
+        centred(printer, ISSUER.venueName),
         centred(printer, `NIF: ${ISSUER.nif}`),
       ]);
     },
@@ -810,7 +815,7 @@ describe("the QR comes first on an invoice that carries one", () => {
     expect(lines.at(-1)).toBe("PRUEBA - SIN COBRO REAL");
   });
 
-  it("prints a sale with no QR issuer-first, and no legend anywhere: the footer follows the tender", () => {
+  it("prints a sale with no QR subtitle-first, and no legend anywhere: the footer follows the tender", () => {
     const lines = drawn(
       formatReceipt({
         result: NO_QR_SALE,
@@ -820,7 +825,8 @@ describe("the QR comes first on an invoice that carries one", () => {
         printer: PRINTER_80,
       }),
     );
-    expect(lines[0]).toBe(centred(PRINTER_80, ISSUER.venueName));
+    expect(lines[0]).toBe(centred(PRINTER_80, TRIM.headerSubtitle!));
+    expect(lines[1]).toBe(centred(PRINTER_80, ISSUER.venueName));
     const change = lines.findIndex((line) => line.startsWith("Cambio"));
     expect(change).toBeGreaterThan(0);
     expect(lines.slice(change + 1)).toEqual(["", centred(PRINTER_80, TRIM.footerMessage!)]);
@@ -988,8 +994,8 @@ describe("formatReceipt — the faithful, legally-complete customer receipt", ()
     );
     const order = [
       "VERI*FACTU",
-      ISSUER.venueName,
       TRIM.headerSubtitle!,
+      ISSUER.venueName,
       `NIF: ${ISSUER.nif}`,
       FILED_SALE.invoiceNumber,
       "Fecha",
@@ -2632,8 +2638,8 @@ describe("the top block is centred: logo, names, slogan, address, phone, email, 
         "",
         `<${logo.widthDots}×${logo.heightDots}>`,
         centred(printer, "Bar La Buena"),
-        centred(printer, ISSUER.venueName),
         centred(printer, TRIM.headerSubtitle!),
+        centred(printer, ISSUER.venueName),
         centred(printer, "Calle Mayor 1"),
         centred(printer, "28013 Madrid"),
         centred(printer, "Tel. 912 345 678"),
@@ -2707,29 +2713,39 @@ describe("the top block is centred: logo, names, slogan, address, phone, email, 
     },
     { name: "a phone", receipt: { phone: "912 345 678" }, extra: ["Tel. 912 345 678"] },
     { name: "an email", receipt: { email: "hola@labuena.es" }, extra: ["hola@labuena.es"] },
-    { name: "a slogan", receipt: { headerSubtitle: "Desde 1952" }, extra: ["Desde 1952"] },
+    {
+      name: "a slogan",
+      receipt: { headerSubtitle: "Desde 1952" },
+      extra: [],
+      before: ["Desde 1952"],
+    },
     { name: "an address", receipt: {}, venueAddress: ["Calle Mayor 1"], extra: ["Calle Mayor 1"] },
-  ])("prints only the lines that are set: $name", ({ receipt, venueAddress, logo, extra }) => {
-    const lines = afterQr(
-      formatReceipt({
-        result: FILED_SALE,
-        issuer: ISSUER,
-        receipt,
-        ...(venueAddress === undefined ? {} : { venueAddress }),
-        ...(logo === undefined ? {} : { logo }),
-        invoiceLocale: "es-ES",
-        printer: PRINTER_80,
-      }),
-    );
-    const block = [ISSUER.venueName, ...extra, "NIF: B12345678"].map((s) => centred(PRINTER_80, s));
-    expect(lines.slice(0, block.length + 4)).toEqual([
-      centred(PRINTER_80, "VERI*FACTU"),
-      "",
-      ...block,
-      "",
-      "Mesa 6 · Pedido 41",
-    ]);
-  });
+  ])(
+    "prints only the lines that are set: $name",
+    ({ receipt, venueAddress, logo, extra, before }) => {
+      const lines = afterQr(
+        formatReceipt({
+          result: FILED_SALE,
+          issuer: ISSUER,
+          receipt,
+          ...(venueAddress === undefined ? {} : { venueAddress }),
+          ...(logo === undefined ? {} : { logo }),
+          invoiceLocale: "es-ES",
+          printer: PRINTER_80,
+        }),
+      );
+      const block = [...(before ?? []), ISSUER.venueName, ...extra, "NIF: B12345678"].map((s) =>
+        centred(PRINTER_80, s),
+      );
+      expect(lines.slice(0, block.length + 4)).toEqual([
+        centred(PRINTER_80, "VERI*FACTU"),
+        "",
+        ...block,
+        "",
+        "Mesa 6 · Pedido 41",
+      ]);
+    },
+  );
 
   it("wraps a long address line like other text, each part centred and no word lost", () => {
     const long = "Polígono Industrial Las Mercedes, Nave 14, Calle de la Fundición 27";

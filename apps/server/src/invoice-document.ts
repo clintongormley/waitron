@@ -95,6 +95,7 @@ export async function readInvoiceDocument(
     .toISOString()
     .slice(0, 10);
   return {
+    surface: "a4",
     issuer,
     receipt,
     receiptHeader: header ?? undefined,

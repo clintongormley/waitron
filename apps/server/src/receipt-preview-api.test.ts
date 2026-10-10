@@ -175,8 +175,8 @@ describe("GET /management-api/receipt-preview", () => {
     const lines = printedLines(result);
     const name = lines.indexOf("Deli Test SL");
     expect(name).toBeGreaterThanOrEqual(0);
-    expect(lines[name + 1]).toBe("Calle Mayor 1, Madrid");
-    expect(lines.slice(name + 2, name + 5)).toEqual([
+    expect(lines[name - 1]).toBe("Calle Mayor 1, Madrid");
+    expect(lines.slice(name + 1, name + 4)).toEqual([
       "Calle Mayor 1",
       "28013 Madrid",
       `NIF: ${taxId}`,
@@ -255,9 +255,7 @@ describe("GET /management-api/receipt-preview", () => {
     expect(headerSubtitle).not.toBeNull();
     expect(headerSubtitle!.end - headerSubtitle!.start).toBe(2);
     expect(linesOf(result, headerSubtitle!.start, headerSubtitle!.end).join(" ")).toBe(header);
-    expect(linesOf(result, headerSubtitle!.start - 1, headerSubtitle!.start)).toEqual([
-      "Deli Test SL",
-    ]);
+    expect(linesOf(result, headerSubtitle!.end, headerSubtitle!.end + 1)).toEqual(["Deli Test SL"]);
     expect(linesOf(result, footerMessage!.start, footerMessage!.end)).toEqual(["Hasta pronto"]);
   });
 
@@ -697,9 +695,9 @@ describe("the receipt preview's top block", () => {
     });
     const lines = printedLines(result);
     const name = lines.indexOf("Deli Test SL");
-    expect(lines.slice(name, name + 7)).toEqual([
-      "Deli Test SL",
+    expect(lines.slice(name - 1, name + 6)).toEqual([
       "Desde 1990",
+      "Deli Test SL",
       "Calle Mayor 1",
       "28013 Madrid",
       "Tel. 910 000 000",
