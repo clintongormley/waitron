@@ -2331,7 +2331,9 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   the table actions plan.
   [Detail](backlog/till.md#tables-parties-and-bills--the-tills-table-actions)
 
-- **A four-digit total does not fit a small round table on the till's floor map** (found 2026-10-03
+- **A four-digit total does not fit a small round table on the till's floor map** (the old map,
+  `wt-floor-canvas`, drawn for a zone with no floor plan; a planned zone's map shows no totals since
+  A429 slice 3) (found 2026-10-03
   by looking at the map while making its amounts follow the locale, lane C's W15). **Next action:**
   the owner decides whether this changes "wait on this"; a fix that lets a small token hold what it
   shows would cover both.
@@ -2532,10 +2534,12 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   product folders work. The plan has no such count; adding one needs another value from
   `listTablesWithState`.
 
-- **Refresh the floor without a staff action — OPEN (3d, W16).** — left open by the product folders
-  work. `till-floor-screen.ts` reads on events handled by `till-app.ts`'s `floor-refresh`, not on a
-  timer. Polling would read `listTablesWithState` every few seconds on every till; choose the
-  interval and cost first.
+- **Refresh the floor without a staff action, for a zone with no floor plan or a planned zone's
+  list view — OPEN (3d, W16).** — left open by the product folders work. Since A429 slice 3 the
+  floor screen re-reads the floor every 15 seconds while a planned zone's map is on screen
+  (`#watchFloor`, `apps/till/src/screens/till-floor-screen.ts`). Elsewhere it still reads only on
+  events handled by `till-app.ts`'s `floor-refresh`. Polling would read `listTablesWithState` every
+  few seconds on every till; choose the interval and cost first.
 
 - **The station dialog's own guard has no test** — left open by A438 (#1472).
   `till-station-choice-dialog` refuses to send a choice while busy, with no station chosen, or with

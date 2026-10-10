@@ -256,7 +256,7 @@ screen is designed.
   slices, each its own pull request; only slice 5 (removing the old floor screen tabs, placement
   routes and columns) needs a venue reset. [Spec](../superpowers/specs/2026-10-08-floor-plan-design.md),
   [plan](../superpowers/plans/2026-10-08-floor-plan.md). Overlaps: A182 (canvases retired) touches the till's floor
-  screen that slice 3 replaces.
+  screen, where slice 3 added the map for planned zones and slice 5 removes the old pieces.
 
 ## A466 — floor plan editor follow-ups
 
@@ -761,7 +761,9 @@ screen is designed.
 
 ## A four-digit total does not fit a small round table on the till's floor map
 
-- **A four-digit total does not fit a small round table on the till's floor map** (found
+- **A four-digit total does not fit a small round table on the till's floor map** (the old map,
+  `wt-floor-canvas`, drawn for a zone with no floor plan; a planned zone's map shows no totals since
+  A429 slice 3) (found
   2026-10-03 by looking at the map while making its amounts follow the locale, lane C's W15). On a
   four-seat round table at 1280 wide, dark theme, `1234,50 €` (the locale form, kept on one line by
   the formatter's no-break space before `€`) runs past the token's right edge; with the form before

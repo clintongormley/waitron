@@ -2609,9 +2609,9 @@ if it is wrong.
 
 **As built (2026-10-10).** The controller's rulings during the build; where one differs from a
 decision above or a task's text, the ruling is what was built. Line numbers checked at the slice's
-head: the till's idle listeners are at `till-app.ts:1406-1407` (`#onInteraction` at `:1384`);
-design-system.md → "Adding a primitive" is at `:3120`, its item 4's `delegatesFocus` at
-`:3127-3129`; the backlog's "Nothing has carried that out" is at `docs/backlog.md:2405`.
+head: the till's idle listeners are at `till-app.ts:1408-1409` (`#onInteraction` at `:1386`);
+design-system.md → "Adding a primitive" is at `:3127`, its item 4's `delegatesFocus` at
+`:3134-3135`; the backlog's "Nothing has carried that out" is at `docs/backlog.md:2396`.
 
 - Decision 2 reads "reachability wins": a taken-off table a party holds, with a delivery on its way
   or needing clearing is listed, not drawn.
