@@ -39,11 +39,11 @@ async function seatsOf(c: Context): Promise<number> {
 
 type TableWrite = (tx: Transaction, tableId: string) => Promise<void>;
 
-/** Today's changes to one table, and the zone reset: each answers 204 and the till re-reads. */
+/** Today's changes to one table, and the zone reset; each answers 204. */
 export function mountFloorTodayApi(app: Hono, deps: TillApiDeps, log: Logger, run: Run): void {
   const removals = deps.tableRemovals ?? [];
 
-  const tableRoute = (change: string, read: (c: Context) => Promise<TableWrite>) =>
+  const tableRoute = (change: string, read: (c: Context) => TableWrite | Promise<TableWrite>) =>
     app.post(`/api/tables/:id/today/${change}`, (c) =>
       run(c, log, async () => {
         const session = await requireSession(deps, c, { action: "take-orders" });
@@ -64,13 +64,9 @@ export function mountFloorTodayApi(app: Hono, deps: TillApiDeps, log: Logger, ru
     const at = await corner(c);
     return (tx, tableId) => moveToday(tx, deps.cfg, tableId, at);
   });
-  tableRoute("rotate", () => Promise.resolve((tx, tableId) => rotateToday(tx, deps.cfg, tableId)));
-  tableRoute("take-off", () =>
-    Promise.resolve((tx, tableId) => takeOffToday(tx, deps.cfg, tableId)),
-  );
-  tableRoute("put-back", () =>
-    Promise.resolve((tx, tableId) => putBackToday(tx, deps.cfg, tableId)),
-  );
+  tableRoute("rotate", () => (tx, tableId) => rotateToday(tx, deps.cfg, tableId));
+  tableRoute("take-off", () => (tx, tableId) => takeOffToday(tx, deps.cfg, tableId));
+  tableRoute("put-back", () => (tx, tableId) => putBackToday(tx, deps.cfg, tableId));
   tableRoute("place", async (c) => {
     const at = await corner(c);
     return (tx, tableId) => placeSpareToday(tx, deps.cfg, tableId, at);
@@ -79,7 +75,7 @@ export function mountFloorTodayApi(app: Hono, deps: TillApiDeps, log: Logger, ru
     const seats = await seatsOf(c);
     return (tx, tableId) => seatsToday(tx, deps.cfg, tableId, seats);
   });
-  tableRoute("back", () => Promise.resolve((tx, tableId) => backToSaved(tx, deps.cfg, tableId)));
+  tableRoute("back", () => (tx, tableId) => backToSaved(tx, deps.cfg, tableId));
 
   app.post("/api/zones/:id/today/reset", (c) =>
     run(c, log, async () => {
