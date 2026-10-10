@@ -68,6 +68,17 @@ function shown(el: StaffScreen): PersonSummary[] {
   return el.shadowRoot!.querySelector<StaffList>("dashboard-staff-list")!.people;
 }
 
+/** The people the staff table draws, in the order it draws them. */
+async function drawn(el: StaffScreen): Promise<string[]> {
+  const list = el.shadowRoot!.querySelector<StaffList>("dashboard-staff-list")!;
+  await list.updateComplete;
+  const table = list.shadowRoot!.querySelector("wt-data-table")!;
+  await table.updateComplete;
+  return [...table.shadowRoot!.querySelectorAll("tbody tr[data-row-key]")].map((row) =>
+    row.getAttribute("data-row-key")!,
+  );
+}
+
 it("searches names, email and phone as the administrator types", async () => {
   const el = await screen();
   expect(shown(el).map((person) => person.displayName)).toEqual(["Ada", "Grace"]);
@@ -79,7 +90,7 @@ it("searches names, email and phone as the administrator types", async () => {
     new CustomEvent("wt-change", { detail: { value: "222" }, bubbles: true, composed: true }),
   );
   await el.updateComplete;
-  expect(shown(el).map((person) => person.displayName)).toEqual(["Grace"]);
+  expect(await drawn(el)).toEqual(["2"]);
 });
 
 it("combines role and status filters and can include inactive users", async () => {
