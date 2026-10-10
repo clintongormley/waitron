@@ -4715,6 +4715,13 @@ _Formerly B9, and the old Track C's development-stack and house-rules items; par
   second full run green. A463 (#1508) does not touch that screen. **Next action:** reproduce it
   under load and fix at the root (standing rule: a flaky test is fixed, never re-run to green).
 
+- **A printers-screen test failed once during A435 step 2's review fixes and was not reproduced**:
+  "a press after one edit sends the edit and the field as it was read"
+  (`apps/dashboard/src/screens/printers-screen.save-state.test.ts`), once in eight runs of the
+  printers-screen files on 2026-10-10, then passing alone and in the seven later runs; its error was
+  not captured. **Next action:** reproduce it under load and fix at the root (standing rule: a flaky
+  test is fixed, never re-run to green).
+
 - **The test-shape half of #339's lesson is unwritten.** #339 passed review and CI and the first
   person to open the screen got a 500; the "open it and look" half is CLAUDE.md §4's rule. The
   other half — a matrix that varies two things separately and never crosses them proves less than
@@ -4866,6 +4873,18 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
   Disable with Delete, and drop each list's Status column and Status filter as in step 5 (owner, 2026-10-10).
   Printers, card readers and devices keep both, because they keep Disable. Each remaining step follows the
   linked spec and preserves recorded history.
+- **Printer delete wording for the owner to choose (left open by A435 step 2).** The till's status
+  for an original whose printer was deleted shows the error code's sentence ("…this job will not be
+  retried."), where its neighbours speak of "the original"; the Spanish for `printer.deleted` reads
+  "por lo que no se volverá a intentar este trabajo" where `printer.unpaired` says "así que este
+  trabajo no se volverá a intentar"; and shorter copy was offered for the till sentence, "Trabajo
+  que finalizará" and the per-default lines of the delete dialog.
+- **Printer delete code health (left open by A435 step 2).** `refuseDeletedPrinters` lives in
+  `@waitron/layouts` though `@waitron/printing` owns printers and `printer.not_found`;
+  `deletePrinter` writes the device choices, profile lists and holders that layouts owns, where one
+  layouts function could clear them; and several queries that already require an active printer or
+  a live job also filter `deleted_at`, where one test pinning "deleted means switched off with no
+  live jobs" could replace the copies.
 
 
 - **`modules.json` has no flow-down channel** from a primary to its standby (matters under
