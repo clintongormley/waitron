@@ -708,3 +708,24 @@ describe("A4 current optional source matrix", () => {
     }
   });
 });
+
+describe("A4 recorded null department", () => {
+  it("prints venue-only fields without a stray trading name in an explicit null header", async () => {
+    const backend = none();
+    const issued = await issue(backend);
+    await suite.db.insert(saleReceiptHeaders).values({
+      saleId: issued.saleId,
+      departmentId: null,
+      tradingName: "Stray department name",
+      printTradingName: true,
+    });
+    const document = await read(backend, issued.saleId);
+    expect(document.receiptHeader).toBeUndefined();
+    expect(document.venueAddress).toEqual([]);
+    const text = buildReceiptDocument(document)
+      .elements.flatMap((element) => (element.kind === "text" ? [element.text] : []))
+      .join("\n");
+    expect(text).not.toContain("Stray department name");
+    expect(text).toContain("Saved domicile");
+  });
+});
