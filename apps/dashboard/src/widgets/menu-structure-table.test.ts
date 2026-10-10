@@ -224,7 +224,7 @@ it("draws a row for the menu itself first, by its name, then its members a level
     "Drinks",
     "Favourites",
   ]);
-  // The old menu row's wording.
+  // No row reads "Menu: <name>".
   expect(table(el).shadowRoot!.textContent!).not.toContain(menuLabel("Lunch Menu"));
   // A top-level section has its arrow; a product has none.
   for (const key of ["m-drinks", "m-fav"])
@@ -3597,7 +3597,6 @@ describe("the menu's own row", () => {
       const el = await mount({ menuName: LONG_MENU_NAME });
       const name = inTable(el, '[data-test="root-name"]')!;
       expect(name.textContent!.trim()).toBe(LONG_MENU_NAME);
-      expect(getComputedStyle(name).overflowWrap).toBe("anywhere");
       const text = document.createRange();
       text.selectNodeContents(name);
       const cell = name.closest("td")!.getBoundingClientRect();

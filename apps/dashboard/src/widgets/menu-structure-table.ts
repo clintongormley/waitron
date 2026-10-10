@@ -175,9 +175,6 @@ export class MenuStructureTable extends LitElement {
         min-height: var(--wt-tap-min);
         visibility: hidden;
       }
-      wt-data-table::part(root-name) {
-        overflow-wrap: anywhere;
-      }
       wt-data-table::part(current) {
         font-weight: var(--wt-font-weight-bold);
         text-decoration: underline;

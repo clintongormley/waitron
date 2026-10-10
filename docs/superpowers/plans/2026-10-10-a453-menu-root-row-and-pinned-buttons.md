@@ -78,9 +78,9 @@ A454 (search everywhere, #1491) has landed on main (`fe5d1ba24`); this branch st
    `product-list.ts:1272-1274`), counts after it in the muted small style, no expand arrow because
    it cannot close (`rowCollapsible` false, as `product-list.ts:1520`), and every member one full
    indent step further in (aria-level 1 for the root, 2 for top-level members). The old A337-era
-   row's "Menu: <name>" wording (`menus.menu_prefix`) is NOT used. A long menu name wraps
-   (`overflow-wrap: anywhere` on the root name: the table wraps cell text only in locked columns,
-   `wt-data-table.ts:216-218`).
+   row's "Menu: <name>" wording (`menus.menu_prefix`) is NOT used. A long unbroken menu name
+   makes the table scroll sideways, as any long name in this table does today; its ⋮ stays on
+   screen (ruling 2026-10-10; a width bound like Products' `--name-room` would be a follow-up).
    The root row is **never marked current** (no bold-underline, no `aria-current`): at the top
    level, as today, no row is marked. The Name heading sits over the root's name, the first name
    in the tree.
@@ -236,7 +236,7 @@ Each entry names the task that changes it: the one at whose commit it would othe
   (`:2534-2542`): level 2, root row present.
 - [Task 1] "keeps every row's menu on a phone's screen" (`:777-800`): the row-menu count includes
   the root's ⋮ (trim the fixture if nine rows do not fit 844px), and the mount gets a long
-  `menuName` so the root's ⋮ is shown on screen beside a wrapping name. [Task 3] its toolbar block
+  `menuName` so the root's ⋮ is shown on screen beside a long name. [Task 3] its toolbar block
   goes.
 - [Task 3] "names a new section's add Add section, in English and Spanish" (`:301-311`): reads
   `new-section-top` in the root's ⋮ (table shadow root) instead of the toolbar.
@@ -338,9 +338,9 @@ The toolbar "+" stays in this task, so the branch is green at its commit.
     DOES send a move. ArrowLeft on a grip inside a section DOES send `wt-member-move-into`. So the
     quiet results above come from the root, not from a broken drag.
   - the root's name never carries `aria-current` or the `current` part, at the top level or with a
-    section current; a long `menuName` (60 characters, no spaces) wraps inside the name column at
-    390 wide and the root's ⋮ stays on screen.
-- Name cell: the root name carries `overflow-wrap: anywhere` (decision 3).
+    section current; a long `menuName` (60 characters, no spaces) is drawn whole inside its own
+    cell at 390 wide and the root's ⋮ stays on screen.
+- Name cell: A long unbroken menu name makes the table scroll sideways, as any long name in this table does today; its ⋮ stays on screen (ruling 2026-10-10; a width bound like Products' `--name-room` would be a follow-up).
 - Update every check tagged [Task 1] under "Changed test checks". Run each touched file in full.
 - Commit: "Menu Structure tab: a root row for the menu itself, holding the top-level adds (A453)".
 
@@ -579,7 +579,7 @@ Screenshots in `~/waitron-campaign-b/a453-shots/`, each EN and ES, light and dar
    (`min(depth, 4)`, `wt-data-table.ts:755`), and the root now uses one of them, so the deepest
    rows line up with their parents one level sooner than before. Say in the PR whether it still
    reads.
-10. A menu with a 60-character name: the root's name wraps and its ⋮ stays in view, at 390.
+10. A menu with a 60-character name, at 390: A long unbroken menu name makes the table scroll sideways, as any long name in this table does today; its ⋮ stays on screen (ruling 2026-10-10; a width bound like Products' `--name-room` would be a follow-up).
 
 Compare 1 with the Products tree's All products row side by side and say in the PR how the two
 match and where they differ (colour button vs chip; filter behaviour).
