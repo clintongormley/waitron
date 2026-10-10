@@ -87,6 +87,14 @@ const collator = new Intl.Collator(undefined, { numeric: true });
 
 export const mapLabel = (labels: readonly string[]): string => partyTablesName(labels, "+");
 
+/** By the top of each box, then its left. */
+const readingOrder = (groups: Group[]): Group[] =>
+  groups.sort((a, b) => a.box.y - b.box.y || a.box.x - b.box.x);
+
+/** How far a span from `start` to `end` must move to lie within 0 to `size`, the least distance. */
+const intoView = (start: number, end: number, size: number): number =>
+  start < 0 ? -start : end > size ? size - end : 0;
+
 function groupsOf(tables: readonly FloorMapTable[]): Group[] {
   const byKey = new Map<string, FloorMapTable[]>();
   for (const table of tables) {
@@ -144,6 +152,10 @@ export class WtFloorMap extends LitElement {
         pointer-events: none;
       }
 
+      button[part="table"]:focus-visible {
+        z-index: 1;
+      }
+
       [part="shape"] {
         position: absolute;
         border: 1px solid var(--wt-color-field-line);
@@ -170,7 +182,7 @@ export class WtFloorMap extends LitElement {
 
       [part="dot"] {
         position: absolute;
-        z-index: 1;
+        z-index: 2;
         top: 0;
         right: 0;
         width: var(--wt-space-3);
@@ -247,6 +259,9 @@ export class WtFloorMap extends LitElement {
 
   #held: HTMLElement | null = null;
 
+  /** The table last focused; the tab stop while the map draws it. */
+  #focusedId: string | null = null;
+
   /** Set by a Shift+F10 keydown, in case the platform follows it with a contextmenu. */
   #swallowContextMenu = false;
 
@@ -254,6 +269,7 @@ export class WtFloorMap extends LitElement {
     super();
     this.addEventListener("click", this.#onClick);
     this.addEventListener("contextmenu", this.#onContextMenu);
+    this.addEventListener("focusin", this.#onFocusIn);
     this.addEventListener("keydown", this.#onKeyDown);
     this.addEventListener("pointerdown", this.#onPointerDown);
     this.addEventListener("wheel", this.#onWheel);
@@ -445,10 +461,57 @@ export class WtFloorMap extends LitElement {
       return;
     }
     this.#swallowContextMenu = false;
+    if (id !== null && this.#moveFocus(id, e.key)) {
+      e.preventDefault();
+      return;
+    }
     if (!shiftF10 || id === null) return;
     e.preventDefault();
     this.#swallowContextMenu = true;
     this.#send("wt-table-details", id);
+  };
+
+  /** Focuses the table `key` moves to from `id`; false when `key` is not a move. */
+  #moveFocus(id: string, key: string): boolean {
+    const ids = readingOrder(groupsOf(this.tables)).map((g) => g.members[0]!.id);
+    const at = ids.indexOf(id);
+    const last = ids.length - 1;
+    const to = {
+      ArrowRight: at + 1,
+      ArrowDown: at + 1,
+      ArrowLeft: at - 1,
+      ArrowUp: at - 1,
+      Home: 0,
+      End: last,
+    }[key];
+    if (to === undefined) return false;
+    const target = ids[Math.min(last, Math.max(0, to))]!;
+    this.#panTo(target);
+    this.#focusedId = target;
+    this.requestUpdate();
+    // The map cannot scroll, so a focus left to scroll would scroll the till's tab shell instead.
+    this.#buttonOf(target).focus({ preventScroll: true });
+    return true;
+  }
+
+  #panTo(id: string): void {
+    const view = this.#view!;
+    const size = this.#size!;
+    const box = groupsOf(this.tables).find((g) => g.members[0]!.id === id)!.box;
+    const left = view.x + box.x * view.scale;
+    const top = view.y + box.y * view.scale;
+    const dx = intoView(left, left + box.width * view.scale, size.width);
+    const dy = intoView(top, top + box.height * view.scale, size.height);
+    if (dx !== 0 || dy !== 0) this.#moveView(1, 0, 0, dx, dy);
+  }
+
+  #buttonOf(id: string): HTMLElement {
+    return this.shadowRoot!.querySelector<HTMLElement>(`[part="table"][data-table-id="${id}"]`)!;
+  }
+
+  readonly #onFocusIn = (e: FocusEvent): void => {
+    this.#focusedId = idOf(e.composedPath()[0]!);
+    this.requestUpdate();
   };
 
   /** Never stopped: the till's idle logout listens for pointerdown at its host. */
@@ -490,19 +553,24 @@ export class WtFloorMap extends LitElement {
     const view = this.#view;
     const still = this.reducedMotion ?? matchMedia("(prefers-reduced-motion: reduce)").matches;
     return html`<div role="group" aria-label=${{ ...DEFAULT_COPY, ...this.copy }.label}>
-      ${
-        view === null
-          ? nothing
-          : repeat(
-              groupsOf(this.tables),
-              (g) => g.key,
-              (g) => this.#renderGroup(g, view, still),
-            )
-      }
+      ${view === null ? nothing : this.#renderGroups(view, still)}
     </div>`;
   }
 
-  #renderGroup(group: Group, view: View, still: boolean): TemplateResult {
+  #renderGroups(view: View, still: boolean): TemplateResult {
+    const groups = groupsOf(this.tables);
+    const ids = groups.map((g) => g.members[0]!.id);
+    const tabStop = ids.includes(this.#focusedId!)
+      ? this.#focusedId
+      : readingOrder([...groups])[0]?.members[0]!.id;
+    return html`${repeat(
+      groups,
+      (g) => g.key,
+      (g) => this.#renderGroup(g, view, still, g.members[0]!.id === tabStop),
+    )}`;
+  }
+
+  #renderGroup(group: Group, view: View, still: boolean, tabStop: boolean): TemplateResult {
     const { box, members } = group;
     const [first] = members as [FloorMapTable, ...FloorMapTable[]];
     const label = mapLabel(members.map((m) => m.label));
@@ -514,6 +582,7 @@ export class WtFloorMap extends LitElement {
       part="table"
       data-table-id=${first.id}
       data-fill=${first.fill}
+      tabindex=${tabStop ? 0 : -1}
       aria-label=${`${label}, ${first.description}`}
       style=${styleMap({
         left: px(view.x + (box.x + (drag?.dx ?? 0)) * view.scale),

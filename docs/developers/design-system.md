@@ -653,7 +653,16 @@ null; the table is then drawn back where `tables` puts it. A right-click, a macO
 handled on its `keydown`, which the map prevents, and the next `contextmenu` is ignored unless a
 `keydown` or `pointerdown` comes first. On a table, a repeated `keydown` of Shift+F10 or of the
 ContextMenu key (the key held down) is prevented and sends nothing. The map stops the `click` or `contextmenu` it turns into one
-of its events and never stops a `pointerdown` or `keydown`. The host has no
+of its events and never stops a `pointerdown` or `keydown`. One table is in the Tab order
+(`tabindex="0"`, every other `-1`): the one last focused, by key or by press, while the map still
+draws it, else the first in reading order (by the top of its box, then its left). On a focused
+table, ArrowRight and ArrowDown move to the next table in reading order, ArrowLeft and ArrowUp to
+the previous, Home and End to the first and last, stopping at the ends; each is prevented, pans
+the target into view by the least distance (within the pan limit, and counting as a pan, so a
+resize then keeps the view) and focuses it with `focus({ preventScroll: true })`, because the map
+cannot scroll and a focus left to scroll moves the page around it instead (the "arrowing to a
+table below the edge…" case in `wt-floor-map.keys.test.ts`). A focused table is drawn above the
+tables beside it, so its ring is not covered, and a dot above that. The host has no
 `delegatesFocus`, unlike "Adding a primitive" item 4, and clips its overflow (`overflow: clip`)
 rather than hiding it. Probed in headless Chromium 153: a click on empty space in a `delegatesFocus`
 host focused its first button, and with `overflow: hidden` the browser scrolled the host when an

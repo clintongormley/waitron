@@ -1,4 +1,5 @@
-import { afterEach, describe, test } from "vitest";
+import { afterEach, describe, expect, test } from "vitest";
+import { userEvent } from "vitest/browser";
 import { cleanup, host } from "../test-helpers.js";
 import { expectNoA11yViolations, mountThemed } from "../a11y-helpers.js";
 import { FLOOR_MAP_FILLS } from "../floor-map-fills.js";
@@ -69,6 +70,15 @@ describe.each(["light", "dark"] as const)("wt-floor-map a11y (%s theme)", (theme
       .querySelector("wt-floor-map")!
       .shadowRoot!.querySelector('[data-table-id="T1"]')!
       .setAttribute("data-held", "");
+    await expectNoA11yViolations(host);
+  });
+
+  test("focus on the second table after an arrow key", async () => {
+    await mountMap(theme, [t("T1", { x: 0 }), t("T2", { x: 8 })]);
+    const root = host.querySelector("wt-floor-map")!.shadowRoot!;
+    root.querySelector<HTMLElement>('[data-table-id="T1"]')!.focus();
+    await userEvent.keyboard("{ArrowRight}");
+    expect(root.activeElement?.getAttribute("tabindex")).toBe("0");
     await expectNoA11yViolations(host);
   });
 
