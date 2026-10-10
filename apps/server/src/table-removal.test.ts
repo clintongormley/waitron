@@ -25,7 +25,7 @@ import { AppError } from "@waitron/shared";
 import { zoneSalePolicies, zoneServicePolicies } from "@waitron/venue-service";
 import { catchUpZone, resetZone } from "./floor-today-store.js";
 import { finishTable, leaveTables } from "./parties.js";
-import { removeLiveTable, tablesTied } from "./table-removal.js";
+import { removeLiveTables, tablesTied } from "./table-removal.js";
 import {
   billRow,
   commandFor,
@@ -203,6 +203,15 @@ const reset = (zoneId: string, removals: readonly TableRemoval[] = NONE) =>
   inTx(v, (tx) => resetZone(tx, v.cfg, removals, zoneId, NOW));
 const catchUp = (zoneId: string, removals: readonly TableRemoval[] = NONE) =>
   inTx(v, (tx) => catchUpZone(tx, v.cfg, removals, zoneId, NOW));
+
+/** Whether `removeLiveTables` removed the one table it was given. */
+async function removeLiveTable(
+  tx: Transaction,
+  removals: readonly TableRemoval[],
+  tableId: string,
+): Promise<boolean> {
+  return !(await removeLiveTables(tx, v.cfg, removals, [tableId], NOW)).has(tableId);
+}
 
 describe("removing a live table the master no longer has", () => {
   it("removes a free table the master lost, keeping its name on the history", async () => {
@@ -391,7 +400,40 @@ describe("a catch-up that changes nothing", () => {
   });
 });
 
-describe("removeLiveTable", () => {
+describe("a catch-up that removes two tables", () => {
+  it("asks the modules once for both tables", async () => {
+    const {
+      zoneId,
+      ids: [t1, t2],
+    } = await plannedZone("Two gone 1", "Two gone 2");
+    const orders = [await delivery(t1!, "Agua"), await delivery(t2!, "Agua")];
+    await deleteFromMaster(t1!);
+    await deleteFromMaster(t2!);
+    await reset(zoneId, [BOOKINGS_TABLE_REMOVAL]);
+    expect(await pendingOf(zoneId)).toHaveLength(2);
+    for (const order of orders) {
+      await pay(v, order, "2.00");
+      await madeHereOnly(order);
+    }
+
+    const statements = await inTx(v, async (tx) => {
+      const prepare = vi.spyOn(DatabaseSync.prototype, "prepare");
+      try {
+        await catchUpZone(tx, v.cfg, [BOOKINGS_TABLE_REMOVAL], zoneId, NOW);
+        return prepare.mock.calls.length;
+      } finally {
+        prepare.mockRestore();
+      }
+    });
+
+    expect(await tableExists(t1!)).toBe(false);
+    expect(await tableExists(t2!)).toBe(false);
+    expect(await pendingOf(zoneId)).toEqual([]);
+    expect(statements).toBe(27);
+  });
+});
+
+describe("removeLiveTables", () => {
   it("gives the last table of a merge its place back", async () => {
     const {
       zoneId,
@@ -413,7 +455,7 @@ describe("removeLiveTable", () => {
       }
     });
 
-    expect(await inTx(v, (tx) => removeLiveTable(tx, v.cfg, NONE, t1!, NOW))).toBe(true);
+    expect(await inTx(v, (tx) => removeLiveTable(tx, NONE, t1!))).toBe(true);
 
     expect(await tableExists(t1!)).toBe(false);
     const merges = await inTx(v, (tx) =>
@@ -442,7 +484,7 @@ describe("removeLiveTable", () => {
     };
     const order = await delivery(t1!);
 
-    const removed = await inTx(v, (tx) => removeLiveTable(tx, v.cfg, [bookings], t1!, NOW));
+    const removed = await inTx(v, (tx) => removeLiveTable(tx, [bookings], t1!));
 
     expect(removed).toBe(false);
     expect(released).toEqual([`refuse ${v.cfg.locationId} ${NOW.toISOString()}`]);
@@ -450,6 +492,33 @@ describe("removeLiveTable", () => {
     expect(await todayRow(t1!)).toBeDefined();
     expect(await resetRowOf(t1!)).toBeDefined();
     expect((await billRow(v, order)).deliveryTableId).toBe(t1);
+  });
+
+  it("removes the tables no module refuses, keeping the refused one untouched", async () => {
+    const {
+      ids: [t1, t2],
+    } = await plannedZone("Split 1", "Split 2");
+    const asked: string[][] = [];
+    const released: string[] = [];
+    const bookings: TableRemoval = {
+      refuse: (_tx, _cfg, tableIds) => {
+        asked.push([...tableIds]);
+        return Promise.resolve(new Map([[t1!, new AppError("table.booked", { tableId: t1! })]]));
+      },
+      release: (_tx, _cfg, tableId) => {
+        released.push(tableId);
+        return Promise.resolve();
+      },
+    };
+
+    const kept = await inTx(v, (tx) => removeLiveTables(tx, v.cfg, [bookings], [t1!, t2!], NOW));
+
+    expect(kept).toEqual(new Set([t1!]));
+    expect(asked).toEqual([[t1!, t2!]]);
+    expect(released).toEqual([t2!]);
+    expect(await tableExists(t1!)).toBe(true);
+    expect(await todayRow(t1!)).toBeDefined();
+    expect(await tableExists(t2!)).toBe(false);
   });
 
   it("does not swallow a module's failure that is not a refusal", async () => {
@@ -461,7 +530,7 @@ describe("removeLiveTable", () => {
       release: () => Promise.resolve(),
     };
 
-    await expect(inTx(v, (tx) => removeLiveTable(tx, v.cfg, [broken], t1!, NOW))).rejects.toThrow(
+    await expect(inTx(v, (tx) => removeLiveTable(tx, [broken], t1!))).rejects.toThrow(
       "disk on fire",
     );
   });
@@ -472,7 +541,7 @@ describe("removeLiveTable", () => {
     await finish(partyId);
     await strayPartyRow(partyId, t1);
 
-    expect(await inTx(v, (tx) => removeLiveTable(tx, v.cfg, NONE, t1, NOW))).toBe(false);
+    expect(await inTx(v, (tx) => removeLiveTable(tx, NONE, t1))).toBe(false);
     expect(await tableExists(t1)).toBe(true);
     expect(await resetRowOf(t1)).toBeUndefined();
   });
@@ -489,7 +558,7 @@ describe("removeLiveTable", () => {
             `create temp trigger guard_delete before delete on dining_tables begin select raise(abort, 'guarded'); end`,
           ),
         );
-        return removeLiveTable(tx, v.cfg, NONE, t1!, NOW);
+        return removeLiveTable(tx, NONE, t1!);
       }),
     ).rejects.toThrow("guarded");
     expect(await tableExists(t1!)).toBe(true);

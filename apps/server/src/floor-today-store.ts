@@ -21,7 +21,7 @@ import {
   type Target,
 } from "./floor-reset-plan.js";
 import { leaveMerges } from "./floor-today-merges.js";
-import { refusedByAModule, removeLiveTable, tablesTied } from "./table-removal.js";
+import { refusedByAModule, removeLiveTables, tablesTied } from "./table-removal.js";
 import type { TillConfig } from "./till-config.js";
 
 type Placed = {
@@ -246,10 +246,7 @@ async function catchUpPass(
 
   const plan = planReset({ targets, live, takenElsewhere });
 
-  const kept = new Set<string>();
-  for (const tableId of plan.remove) {
-    if (!(await removeLiveTable(tx, cfg, removals, tableId, now))) kept.add(tableId);
-  }
+  const kept = await removeLiveTables(tx, cfg, removals, plan.remove, now);
   const activeIds = new Set(inZone.filter((table) => table.active).map((table) => table.id));
   // A table already hidden is skipped; a kept one was changed by its failed removal, so is not.
   for (const tableId of plan.hide) {

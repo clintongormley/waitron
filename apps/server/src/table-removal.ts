@@ -65,38 +65,46 @@ export async function refusedByAModule(
 }
 
 /**
- * Removes the live table for good. Returns false when a module refuses, having changed nothing, or
- * when something unknown still names it, having kept its reset row and the table itself.
+ * Removes the live tables for good, returning those it kept: each a module refuses, having changed
+ * nothing, and each something unknown still names, having kept its reset row and the table itself.
  */
-export async function removeLiveTable(
+export async function removeLiveTables(
   tx: Transaction,
   cfg: Pick<TillConfig, "locationId">,
   removals: readonly TableRemoval[],
-  tableId: string,
+  tableIds: readonly string[],
   now: Date,
-): Promise<boolean> {
-  if ((await refusedByAModule(tx, cfg, removals, [tableId], now)).size > 0) return false;
+): Promise<Set<string>> {
+  const kept = new Set((await refusedByAModule(tx, cfg, removals, tableIds, now)).keys());
+  const rest = tableIds.filter((id) => !kept.has(id));
+  if (rest.length === 0) return kept;
   const { locationId } = cfg;
-  const [table] = await tx
-    .select({ label: diningTables.label })
-    .from(diningTables)
-    .where(eq(diningTables.id, tableId));
-  const { label } = table!;
-  for (const removal of removals) await removal.release(tx, { locationId }, tableId, label);
-  await releaseDeliveries(tx, tableId, label);
-  await leaveMerges(tx, [tableId]);
-  await tx.delete(floorTodayTables).where(eq(floorTodayTables.tableId, tableId));
-  const resetRows = await tx
-    .delete(floorResetTables)
-    .where(eq(floorResetTables.tableId, tableId))
-    .returning();
-  try {
-    await tx.delete(diningTables).where(eq(diningTables.id, tableId));
-  } catch (error) {
-    if (!isRefusal(error, FOREIGN_KEY_VIOLATION)) throw error;
-    // A refused statement backs out only itself, so the reset row goes back for the next catch-up.
-    if (resetRows.length > 0) await tx.insert(floorResetTables).values(resetRows);
-    return false;
+  const labels = new Map(
+    (
+      await tx
+        .select({ id: diningTables.id, label: diningTables.label })
+        .from(diningTables)
+        .where(inArray(diningTables.id, rest))
+    ).map((row) => [row.id, row.label]),
+  );
+  for (const tableId of rest) {
+    const label = labels.get(tableId)!;
+    for (const removal of removals) await removal.release(tx, { locationId }, tableId, label);
+    await releaseDeliveries(tx, tableId, label);
+    await leaveMerges(tx, [tableId]);
+    await tx.delete(floorTodayTables).where(eq(floorTodayTables.tableId, tableId));
+    const resetRows = await tx
+      .delete(floorResetTables)
+      .where(eq(floorResetTables.tableId, tableId))
+      .returning();
+    try {
+      await tx.delete(diningTables).where(eq(diningTables.id, tableId));
+    } catch (error) {
+      if (!isRefusal(error, FOREIGN_KEY_VIOLATION)) throw error;
+      // A refused statement backs out only itself, so the reset row goes back for the next catch-up.
+      if (resetRows.length > 0) await tx.insert(floorResetTables).values(resetRows);
+      kept.add(tableId);
+    }
   }
-  return true;
+  return kept;
 }
