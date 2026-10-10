@@ -3,48 +3,6 @@
 The open entries are listed in [the backlog](../backlog.md), under "Service periods, opening hours and departments". This file holds
 their full text.
 
-## Service times, departments, zones and prep stations (A366, owner 2026-10-07) — SPEC APPROVED 2026-10-07
-
-- **Service times, departments, zones and prep stations (A366, owner 2026-10-07) — SPEC
-  APPROVED 2026-10-07; remaining work is slice 6 Part C, planned
-  then built without stopping for the owner**
-  ([slice 1 plan](../superpowers/plans/2026-10-07-a366-slice-1-service-periods.md); slice 2 plan
-  written ahead: [slice 2 plan](../superpowers/plans/2026-10-08-a366-slice-2-zone-closed-times-and-named-days.md)). Opening hours and the menu timetable become one idea: a period is
-  a name with one customer menu plus staff-only menus, a department's day is time ranges each given
-  a period, with last-order and leftover windows set by its signed end offset. Zones can be closed for part of
-  their department's time; prep stations lose their hours and fallbacks; routing cells can name
-  periods; a printer shared by stations prints one combined ticket; watchers become kitchen
-  screens and monitors on device profiles; receipts gain department overrides/translated text with
-  live venue defaults.
-  [Spec](../superpowers/specs/2026-10-07-service-times-departments-and-stations-design.md); §13 is
-  the seven-slice build order and §15 the defaults the owner accepted. It replaces A254 §4, A261
-  §4–§7 in part, and §2 of the devices, menus and service zones spec; it folds in S11.
-  Slice 5's plan is written ahead of lane D (A366-5p, 2026-10-08): [slice 5 plan](../superpowers/plans/2026-10-08-a366-slice-5-monitors.md),
-  in two pull requests — kitchen screens and monitors after slice 1 (Part A, #1479), and watchers
-  retired after slice 4 (Part B, #1502): watcher copies
-  and slips, the watcher routes and refusals, the Prep stations Watchers tab and the four watcher
-  tables are gone, and a pass printer is a printer listed on every station. A venue's existing
-  watchers and their printer settings are deleted with the tables, so its pass printer prints
-  nothing until a manager lists it on every station (decision P5; pre-live, no data migration). Revised 2026-10-08 to the owner's answers (any device may run a station or pass
-  screen; a kitchen display's screen has buttons; a monitor has none), with the decisions the
-  revision added listed at its end.
-  Slice 7 Part A is built: department receipt storage, translated subtitle/footer, live venue
-  defaults, independent saves and draft previews, thermal/A4 composition, till presentation
-  and department/default email contacts. Part B hosts the reusable editor on the
-  department page's Receipt tab; Venue settings keeps the globals. [Slice 7 plan](../superpowers/plans/2026-10-08-a366-slice-7-receipts-per-department.md),
-  revised 2026-10-10 to the owner's later receipt overrides. The separate core delivery
-  rewrite is [one backlog entry](printers.md#remove-the-consent-step-from-emailed-receipts).
-  Slice 4's plan is written ahead of lane D (A366-4p, 2026-10-08): [slice 4 plan](../superpowers/plans/2026-10-08-a366-slice-4-prep-stations.md),
-  revised 2026-10-09 to the owner's answers to its 28 decisions and re-read on main, in two pull
-  requests. Part A is built: combined tickets on shared printers, period choices in routing cells,
-  the station editor, and the "Where is this made?" tester and the Stations tab's live kitchen
-  numbers removed. Part B (#1497) is built: it removes station hours and fallbacks, asks what to do with unfinished
-  dishes at closure or Disable, and shows each station's computed times in Opening hours.
-  The owner answered its decisions 29–37 on 2026-10-09; the changes
-  to 29, 33 and 35 are built (A455), and 32 needed nothing.
-  Slice 6's remaining work is Part C's floor-plan preview and "Add a floor plan",
-  in Lane D after A429. [Slice 6 plan](../superpowers/plans/2026-10-08-a366-slice-6-departments.md).
-
 ## Refresh service settings on an open till
 
 A till already signed in keeps its loaded payment flow when a department or zone policy changes.

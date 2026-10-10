@@ -3563,9 +3563,11 @@ inherit the stored global phone or email. The Zones tab shows the selected zone'
 that opens that zone in Opening hours. Identical ranges share a day group; more than two groups
 show a day count. A week without closed ranges says the zone opens with its department. Named-day
 exceptions stay in Opening hours. Disabled zones have no hours summary or link.
-Under it, Edit floor plan opens the zone's floor plan editor, whose Close returns to the zone; a
-disabled zone has no such link, and the zone's ⋮ menu does not offer it.
-Floor-plan previews remain separate work.
+Under it, a zone whose master floor plan has placed tables shows a small read-only preview
+(`wt-floor-plan-preview`, refreshed live) above Edit floor plan, which opens the zone's floor plan
+editor, whose Close returns to the zone. A zone with no placed tables shows Add a floor plan to the
+same editor instead, and a failed read adds an alert line above the link. A disabled zone has
+neither, and the zone's ⋮ menu does not offer the link.
 
 How orders start chooses Table service or Counter service. Counter service has a separate
 paid-when choice and collection-ticket choice. Print a receipt offers Always (`auto`) or

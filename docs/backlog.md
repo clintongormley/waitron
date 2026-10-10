@@ -1350,12 +1350,6 @@ _Formerly entries spread across the old sections, A261's venue-operations steps 
   reporting; batched readiness and offer queries; a replication smoke test. Same legal seller is the
   working assumption, to confirm before go-live. Hours moved to A254.
 
-- **Service times, departments, zones and prep stations (A366, owner 2026-10-07) —
-  remaining work is slice 6 Part C.**
-  Add the zone panel's floor-plan preview and "Add a floor plan".
-  Core email consent removal stays separate.
-  [Detail](backlog/service-periods.md#service-times-departments-zones-and-prep-stations-a366-owner-2026-10-07--spec-approved-2026-10-07)
-
 - **Refresh service settings on an open till** — decide how changed department/zone policy
   reaches an empty till and preserves an existing basket's facts, then carry it through polling.
   Fresh sign-in reads changed settings; the open till keeps its loaded flow.
