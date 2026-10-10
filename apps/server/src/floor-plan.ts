@@ -5,13 +5,15 @@ import {
   floorPlanJoinTables,
   floorPlans,
   floorPlanTables,
+  floorResetTables,
+  floorTodayZones,
   floorZones,
 } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import type { TableRemoval } from "@waitron/module";
 import { AppError } from "@waitron/shared";
 import type { Placement } from "./floor-reset-plan.js";
-import { placementOf } from "./floor-today-store.js";
+import { placementOf, resetZone } from "./floor-today-store.js";
 import type { TillConfig } from "./till-config.js";
 import "./errors.js";
 
@@ -310,4 +312,126 @@ export async function checkZonePlanSave(
       await removal.refuse(tx, { locationId: cfg.locationId }, liveId, now);
     }
   }
+}
+
+function masterColumns(table: ZonePlanSave["tables"][number]) {
+  const placement = table.placement ?? {
+    x: null,
+    y: null,
+    width: null,
+    height: null,
+    shape: null,
+    rotation: null,
+  };
+  return { seats: table.seats, fixed: table.fixed, ...placement };
+}
+
+/**
+ * Writes a checked save to the master plan; nothing live changes until the zone's next reset,
+ * except on the zone's first save, which builds today's plan at once (decision 16).
+ */
+export async function saveZonePlan(
+  tx: Transaction,
+  cfg: TillConfig,
+  removals: readonly TableRemoval[],
+  zoneId: string,
+  input: ZonePlanSave,
+  now: Date = new Date(),
+): Promise<{ revision: number; ids: Record<string, string> }> {
+  await checkZonePlanSave(tx, cfg, removals, zoneId, input, now);
+  const savedAt = now.toISOString();
+  let plan = await planOf(tx, zoneId);
+  if (plan === undefined) {
+    [plan] = await tx
+      .insert(floorPlans)
+      .values({ zoneId, revision: 0, savedAt })
+      .returning({ id: floorPlans.id, revision: floorPlans.revision, savedAt: floorPlans.savedAt });
+  }
+  const planId = plan!.id;
+
+  // A member row points at a master table, so the joins go before any master table can.
+  const joins = await tx
+    .select({ id: floorPlanJoins.id })
+    .from(floorPlanJoins)
+    .where(eq(floorPlanJoins.planId, planId));
+  const joinIds = joins.map((j) => j.id);
+  if (joinIds.length > 0) {
+    await tx.delete(floorPlanJoinTables).where(inArray(floorPlanJoinTables.joinId, joinIds));
+    await tx.delete(floorPlanJoins).where(inArray(floorPlanJoins.id, joinIds));
+  }
+
+  const masters = await mastersOf(tx, planId);
+  const kept = new Set(input.tables.flatMap((t) => (t.id === undefined ? [] : [t.id])));
+  for (const master of masters) {
+    if (kept.has(master.id)) continue;
+    // `planned` stays true, so the next reset removes the live table.
+    await tx
+      .update(diningTables)
+      .set({ planTableId: null })
+      .where(eq(diningTables.planTableId, master.id));
+    await tx
+      .update(floorResetTables)
+      .set({ planTableId: null })
+      .where(eq(floorResetTables.planTableId, master.id));
+    await tx.delete(floorPlanTables).where(eq(floorPlanTables.id, master.id));
+  }
+
+  // Two passes, so a swap or a rename onto a name another row is giving up never meets the
+  // (plan_id, label) unique key mid-way: each renamed row first takes its own id as its label.
+  const labelOf = new Map(masters.map((m) => [m.id, m.label]));
+  for (const table of input.tables) {
+    if (table.id !== undefined && labelOf.get(table.id) !== table.label.trim()) {
+      await tx
+        .update(floorPlanTables)
+        .set({ label: table.id })
+        .where(eq(floorPlanTables.id, table.id));
+    }
+  }
+  const ids: Record<string, string> = {};
+  for (const table of input.tables) {
+    if (table.id !== undefined) {
+      ids[table.key] = table.id;
+      continue;
+    }
+    const [row] = await tx
+      .insert(floorPlanTables)
+      .values({ planId, label: table.label.trim(), ...masterColumns(table) })
+      .returning({ id: floorPlanTables.id });
+    ids[table.key] = row!.id;
+  }
+  for (const table of input.tables) {
+    if (table.id === undefined) continue;
+    await tx
+      .update(floorPlanTables)
+      .set({ label: table.label.trim(), ...masterColumns(table) })
+      .where(eq(floorPlanTables.id, table.id));
+  }
+
+  for (const join of input.joins) {
+    const [row] = await tx
+      .insert(floorPlanJoins)
+      .values({ planId, seats: join.seats })
+      .returning({ id: floorPlanJoins.id });
+    for (const key of join.tableKeys) {
+      await tx.insert(floorPlanJoinTables).values({ joinId: row!.id, planTableId: ids[key]! });
+    }
+  }
+
+  for (const table of input.tables) {
+    if (table.liveTableId === undefined) continue;
+    await tx
+      .update(diningTables)
+      .set({ planTableId: ids[table.key]!, planned: true })
+      .where(eq(diningTables.id, table.liveTableId));
+  }
+
+  const revision = plan!.revision + 1;
+  await tx.update(floorPlans).set({ revision, savedAt }).where(eq(floorPlans.id, planId));
+
+  const [today] = await tx
+    .select({ id: floorTodayZones.id })
+    .from(floorTodayZones)
+    .where(eq(floorTodayZones.zoneId, zoneId));
+  if (today === undefined) await resetZone(tx, cfg, removals, zoneId, now);
+  return { revision, ids };
 }

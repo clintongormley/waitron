@@ -9,13 +9,23 @@ import {
   floorPlanJoinTables,
   floorPlans,
   floorPlanTables,
+  floorTodayTables,
+  floorTodayZones,
   floorZones,
 } from "@waitron/db";
 import type { TableRemoval } from "@waitron/module";
 import { AppError } from "@waitron/shared";
 import { zoneSalePolicies, zoneServicePolicies } from "@waitron/venue-service";
-import { checkZonePlanSave, readZonePlan, type ZonePlanSave } from "./floor-plan.js";
-import { inTx, seat, setupPartyVenue, type PartyVenue } from "./testing/party-venue.js";
+import { checkZonePlanSave, readZonePlan, saveZonePlan, type ZonePlanSave } from "./floor-plan.js";
+import { resetZone } from "./floor-today-store.js";
+import {
+  inTx,
+  partyAt,
+  seat,
+  setupPartyVenue,
+  tableRow,
+  type PartyVenue,
+} from "./testing/party-venue.js";
 import "./errors.js";
 
 let v: PartyVenue;
@@ -564,5 +574,227 @@ describe("checkZonePlanSave", () => {
     );
     expect(error.code).toBe("table.label_taken");
     expect(error.params).toEqual({ label: p });
+  });
+});
+
+describe("saveZonePlan", () => {
+  type Entry = ZonePlanSave["tables"][number];
+
+  function save(zoneId: string, input: ZonePlanSave) {
+    return inTx(v, (tx) => saveZonePlan(tx, v.cfg, NONE, zoneId, input, NOW));
+  }
+
+  function entry(key: string, label: string, extra: Partial<Entry> = {}): Entry {
+    return { key, label, seats: 4, fixed: false, placement: PLACE, ...extra };
+  }
+
+  async function todayOf(tableId: string) {
+    const [row] = await inTx(v, (tx) =>
+      tx.select().from(floorTodayTables).where(eq(floorTodayTables.tableId, tableId)),
+    );
+    return row;
+  }
+
+  async function liveOf(masterId: string) {
+    const [row] = await inTx(v, (tx) =>
+      tx.select().from(diningTables).where(eq(diningTables.planTableId, masterId)),
+    );
+    return row;
+  }
+
+  async function labelsOf(zoneId: string): Promise<Record<string, string>> {
+    const plan = await inTx(v, (tx) => readZonePlan(tx, v.cfg, zoneId));
+    return Object.fromEntries(plan.tables.map((t) => [t.id!, t.label]));
+  }
+
+  /** A zone with live T1 saved as its first plan, plus a new fixed "Bar 1". */
+  async function firstSaved() {
+    const z = await zone();
+    const t1 = fresh("T1");
+    const bar = fresh("Bar 1");
+    const live = await liveTable(z, t1);
+    const result = await save(z, {
+      revision: 0,
+      tables: [
+        entry("t1", t1, { liveTableId: live }),
+        entry("bar", bar, {
+          seats: null,
+          fixed: true,
+          placement: { ...PLACE, x: 20 },
+        }),
+      ],
+      joins: [],
+    });
+    return { z, t1, bar, live, result };
+  }
+
+  it("saves a first plan, links the live tables and builds today's plan", async () => {
+    const { z, t1, bar, live, result } = await firstSaved();
+
+    expect(result.revision).toBe(1);
+    expect(Object.keys(result.ids).sort()).toEqual(["bar", "t1"]);
+    const t1Row = await tableRow(v, live);
+    expect(t1Row).toMatchObject({ planTableId: result.ids.t1, planned: true, label: t1 });
+    const barRow = await liveOf(result.ids.bar!);
+    expect(barRow).toMatchObject({ zoneId: z, label: bar, planned: true, active: true });
+    expect(await todayOf(live)).toMatchObject({ x: 0, seats: 4, fixed: false });
+    expect(await todayOf(barRow!.id)).toMatchObject({ x: 20, seats: null, fixed: true });
+    const [today] = await inTx(v, (tx) =>
+      tx.select().from(floorTodayZones).where(eq(floorTodayZones.zoneId, z)),
+    );
+    expect(today).toBeDefined();
+    const plan = await inTx(v, (tx) => readZonePlan(tx, v.cfg, z));
+    expect(plan.revision).toBe(1);
+    expect(plan.savedAt).toBe(NOW.toISOString());
+  });
+
+  it("changes nothing live when a later save moves, renames or deletes a table", async () => {
+    const { z, t1, live, result } = await firstSaved();
+    const barLive = (await liveOf(result.ids.bar!))!.id;
+    const patio = fresh("Patio 1");
+    const today = await inTx(v, (tx) =>
+      tx.select().from(floorTodayZones).where(eq(floorTodayZones.zoneId, z)),
+    );
+
+    const second = await save(z, {
+      revision: 1,
+      tables: [entry("t1", patio, { id: result.ids.t1!, placement: { ...PLACE, x: 30 } })],
+      joins: [],
+    });
+
+    expect(second).toEqual({ revision: 2, ids: { t1: result.ids.t1 } });
+    expect(await tableRow(v, live)).toMatchObject({ label: t1, planTableId: result.ids.t1 });
+    expect(await todayOf(live)).toMatchObject({ x: 0 });
+    expect(await tableRow(v, barLive)).toMatchObject({
+      active: true,
+      planned: true,
+      planTableId: null,
+    });
+    expect(await todayOf(barLive)).toBeDefined();
+    expect(
+      await inTx(v, (tx) => tx.select().from(floorTodayZones).where(eq(floorTodayZones.zoneId, z))),
+    ).toEqual(today);
+
+    await inTx(v, (tx) => resetZone(tx, v.cfg, NONE, z, NOW));
+
+    expect(await tableRow(v, live)).toMatchObject({ label: patio });
+    expect(await todayOf(live)).toMatchObject({ x: 30 });
+    const gone = await inTx(v, (tx) =>
+      tx.select().from(diningTables).where(eq(diningTables.id, barLive)),
+    );
+    expect(gone).toEqual([]);
+  });
+
+  it("deletes a table that is in a saved join", async () => {
+    const z = await zone();
+    const [l1, l2, l3] = [fresh("T1"), fresh("T2"), fresh("T3")];
+    const first = await save(z, {
+      revision: 0,
+      tables: [entry("1", l1), entry("2", l2), entry("3", l3)],
+      joins: [{ seats: 12, tableKeys: ["1", "2", "3"] }],
+    });
+    const { ids } = first;
+
+    await save(z, {
+      revision: 1,
+      tables: [entry("1", l1, { id: ids["1"] }), entry("2", l2, { id: ids["2"] })],
+      joins: [{ seats: 8, tableKeys: ["1", "2"] }],
+    });
+
+    const plan = await inTx(v, (tx) => readZonePlan(tx, v.cfg, z));
+    expect(plan.tables.map((t) => t.id).sort()).toEqual([ids["1"], ids["2"]].sort());
+    expect(plan.joins).toEqual([
+      { id: expect.any(String) as string, seats: 8, tableIds: [ids["1"], ids["2"]].sort() },
+    ]);
+    const members = await inTx(v, (tx) =>
+      tx.select().from(floorPlanJoinTables).where(eq(floorPlanJoinTables.planTableId, ids["3"]!)),
+    );
+    expect(members).toEqual([]);
+  });
+
+  it("swaps two tables' names in one save", async () => {
+    const z = await zone();
+    const [l1, l2] = [fresh("T1"), fresh("T2")];
+    const { ids } = await save(z, {
+      revision: 0,
+      tables: [entry("1", l1), entry("2", l2)],
+      joins: [],
+    });
+
+    await save(z, {
+      revision: 1,
+      tables: [entry("1", l2, { id: ids["1"] }), entry("2", l1, { id: ids["2"] })],
+      joins: [],
+    });
+
+    expect(await labelsOf(z)).toEqual({ [ids["1"]!]: l2, [ids["2"]!]: l1 });
+  });
+
+  it("renames T1 to T9 and adds a new T1 in one save", async () => {
+    const z = await zone();
+    const [l1, l9] = [fresh("T1"), fresh("T9")];
+    const { ids } = await save(z, { revision: 0, tables: [entry("1", l1)], joins: [] });
+
+    const second = await save(z, {
+      revision: 1,
+      tables: [entry("1", l9, { id: ids["1"] }), entry("new", l1, { seats: 2, placement: null })],
+      joins: [],
+    });
+
+    expect(second.ids["1"]).toBe(ids["1"]);
+    expect(await labelsOf(z)).toEqual({ [ids["1"]!]: l9, [second.ids.new!]: l1 });
+    const plan = await inTx(v, (tx) => readZonePlan(tx, v.cfg, z));
+    expect(plan.tables.find((t) => t.id === second.ids.new)).toMatchObject({
+      seats: 2,
+      placement: null,
+    });
+  });
+
+  it("writes nothing when a check refuses", async () => {
+    const { z, result } = await firstSaved();
+    const before = await inTx(v, (tx) => readZonePlan(tx, v.cfg, z));
+
+    const error = await refusal(
+      save(z, { revision: 0, tables: [entry("t1", fresh("X"), { id: result.ids.t1 })], joins: [] }),
+    );
+
+    expect(error.code).toBe("floor_plan.changed");
+    expect(await inTx(v, (tx) => readZonePlan(tx, v.cfg, z))).toEqual(before);
+  });
+
+  it("deletes a table a party sits at, and the party stays", async () => {
+    const { z, t1, bar, live, result } = await firstSaved();
+    const { partyId } = await seat(v, live);
+    const before = await tableRow(v, live);
+
+    const second = await save(z, {
+      revision: 1,
+      tables: [entry("bar", bar, { id: result.ids.bar })],
+      joins: [],
+    });
+
+    expect(second.revision).toBe(2);
+    expect(await tableRow(v, live)).toEqual({ ...before, planTableId: null });
+    expect(before).toMatchObject({ label: t1, planned: true });
+    expect(await partyAt(v, live)).toBe(partyId);
+  });
+
+  it("lets a plan that deleted a table and added one by its name be saved again", async () => {
+    const { z, t1, live, result } = await firstSaved();
+    const { ids } = await save(z, {
+      revision: 1,
+      tables: [entry("again", t1, { seats: 6 })],
+      joins: [],
+    });
+
+    const third = await save(z, {
+      revision: 2,
+      tables: [entry("again", t1, { id: ids.again, seats: 8 })],
+      joins: [],
+    });
+
+    expect(third).toEqual({ revision: 3, ids: { again: ids.again } });
+    expect(await tableRow(v, live)).toMatchObject({ label: t1, planTableId: null, planned: true });
+    expect(ids.again).not.toBe(result.ids.t1);
   });
 });
