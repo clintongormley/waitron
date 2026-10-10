@@ -331,6 +331,17 @@ it("an older copy offers the newer plan, keeping Save available", async () => {
   expectSave(el, "awake");
 });
 
+it("offers the newer plan in Spanish", async () => {
+  setLocale("es-ES");
+  const saveFloorPlan = vi
+    .fn()
+    .mockRejectedValue({ code: "floor_plan.out_of_date", params: { zoneId: "z1", revision: 4 } });
+  const el = await open(stubApi({ saveFloorPlan }));
+  await move(el, "m1", 5);
+  await press(el, "save");
+  expect(button(el, "load-newer")!.textContent!.trim()).toBe("Cargar el plano nuevo");
+});
+
 it("Load newer plan replaces the draft and writes nothing", async () => {
   const saveFloorPlan = vi
     .fn()

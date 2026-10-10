@@ -142,7 +142,8 @@ export class WtFloorPlanCanvas extends LitElement {
       }
 
       .table[data-refused] {
-        outline: 2px solid var(--wt-color-danger);
+        outline: var(--wt-focus-ring);
+        outline-color: var(--wt-color-danger);
       }
 
       .refused-reason {

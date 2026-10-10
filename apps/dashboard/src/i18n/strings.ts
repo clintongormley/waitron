@@ -3528,7 +3528,7 @@ export const es: Record<StringKey, string> = {
   "floor_plan_editor.redo": "Rehacer",
   "floor_plan_editor.tables": "Mesas",
   "floor_plan_editor.unnamed": "Sin nombre",
-  "floor_plan_editor.load_newer": "Cargar el plano más reciente",
+  "floor_plan_editor.load_newer": "Cargar el plano nuevo",
   "floor_plan_editor.fixed": "Fija",
   "floor_plan_editor.rotate": "Girar {name}",
   "floor_plan_editor.name_missing": "Escribe un nombre.",

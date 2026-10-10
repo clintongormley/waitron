@@ -595,6 +595,13 @@ it("follows the zone the page names", async () => {
     "/manage/floor-plan/zone/z1?back=%2Fmanage%2Fvenue-operations%2Fdepartment%2Fd1%2Fview%2Fzones%2Fzone%2Fz1",
   );
 });
+it("keeps the floor plan link a token's space below the opening hours link", async () => {
+  await mount("z2");
+  el.style.setProperty("--wt-space-2", "9px");
+  const hours = el.shadowRoot!.querySelector("[data-test=zone-opening-hours]")!.parentElement!;
+  const floor = floorPlanLink()!.parentElement!;
+  expect(floor.getBoundingClientRect().top - hours.getBoundingClientRect().bottom).toBeCloseTo(9);
+});
 it("a disabled zone shows no floor plan link", async () => {
   await mount();
   el.model = { ...el.model!, zones: el.model!.zones.map((z) => ({ ...z, active: false })) };

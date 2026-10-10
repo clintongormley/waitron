@@ -64,6 +64,9 @@ export class DepartmentZones extends LitElement {
       .muted {
         color: var(--wt-color-text-muted);
       }
+      .floor-plan-link {
+        margin-block-start: var(--wt-space-2);
+      }
       .form {
         display: grid;
         gap: var(--wt-space-4);
@@ -400,7 +403,7 @@ export class DepartmentZones extends LitElement {
                           >${t("venue.zone_opening_hours")}</a
                         >
                       </p>
-                      <p>
+                      <p class="floor-plan-link">
                         <a
                           data-test="zone-floor-plan"
                           href=${`/manage/floor-plan/zone/${encodeURIComponent(row.id)}?back=${encodeURIComponent(`/manage/venue-operations/department/${encodeURIComponent(department.id)}/view/zones/zone/${encodeURIComponent(row.id)}`)}`}
