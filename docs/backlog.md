@@ -1679,6 +1679,21 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
 
 _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
 
+- **`PUT /api/device/equipment` checks the sign-in, then writes in a second transaction**
+  (`apps/server/src/device-api.ts:345-355`), and `selectDevicePrinter`
+  (`packages/layouts/src/device-equipment.ts:307-310`) does not re-check the device, so a Disable or
+  Delete committing between them can leave a printer choice or hold on the row. Believed to predate
+  A435 step 4 (the route came with W100, #1332). Left open by A435 step 4.
+
+- **The devices screen has two device-list refreshers with near-identical names**:
+  `#reloadDevices` reads the list once and writes it, `#rereadDevices` subscribes the live list
+  again (`apps/dashboard/src/screens/devices-screen.ts:1035`, `:1677`). Route the first through
+  `#watchDevices` or rename one. Left open by A435 step 4.
+
+- **The device delete dialog's sign-in count is not live**: `sessions` is not a declared live
+  table (`apps/dashboard/src/api/live-queries.ts:75-92`), so a sign-in or sign-out while the
+  dialog is open does not change its count; the delete itself recomputes. Left open by A435 step 4.
+
 - **The till's find-bill pay shows the generic sale error for an over-limit refusal**: the
   find-bill dialog (`apps/till/src/widgets/find-bill-dialog.ts`) takes its error as a plain
   string key, so it cannot carry the amount the collect and table-bill paths now show. Left open by A230 (`@waitron/verifactu` 0.2.1, #1099).
@@ -3010,6 +3025,13 @@ _Formerly A3, A8 and B6; part of A9._ Detail: [backlog/printers.md](backlog/prin
 ### Payments and card readers
 
 _Formerly A6, and the old Track C's payments items; part of A9._ Detail: [backlog/payments.md](backlog/payments.md).
+
+- **Re-check the device inside payment write transactions.** A till's sign-in is checked in its
+  own transaction (`requireSession`, `apps/server/src/till-session.ts:92-117`) and a payment is
+  written in a later one that does not re-read the device (`beginBillPayment`,
+  `apps/server/src/bill-payments.ts:1002`; `insertAttempting`, `packages/payments/src/store.ts:146`),
+  so a device disabled or deleted between the two can still have a cash or hand-keyed payment
+  recorded on it. Re-read the device's `active` inside each payment write. Left open by A435 step 4.
 
 - **Two concurrent passes over `listAttempting` (`packages/payments/src/store.ts`; its one caller is
   the SumUp provider's `resolvePending`) do not both succeed**: #558's review measured
@@ -4852,13 +4874,12 @@ _Formerly parts of B9 and Track C._ Detail: [backlog/dependencies.md](backlog/de
 
 _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._ Detail: [backlog/architecture.md](backlog/architecture.md).
 
-- **A435 — permanent delete for hardware and venue setup (owner, 2026-10-08; steps 3–6 open).**
+- **A435 — permanent delete for hardware and venue setup (owner, 2026-10-08; steps 3, 5 and 6 open).**
   Card readers are next. Each point below is a separate remaining step.
   [Spec](superpowers/specs/2026-10-08-delete-and-archive-design.md),
   [product archive plan](superpowers/plans/2026-10-08-a435-1-product-archive.md).
 - **A435 step 3 — card readers: open, next.** Add permanent Delete beside Disable.
-- **A435 step 4 — devices: open, following card readers in the build order.** Add permanent Delete beside Disable.
-- **A435 step 5 — courses and kitchen stations: open, following devices in the build order.** Replace Disable with Delete,
+- **A435 step 5 — courses and kitchen stations: open, following card readers in the build order.** Replace Disable with Delete,
   and drop the list's Status column and Status filter, which no longer have anything to show (owner,
   2026-10-10); first check what else the Status cell shows, as Products' carried its Unavailable badge (A463).
 - **A435 step 6 — tables, zones and departments: open, following courses and stations in the build order.** Replace
