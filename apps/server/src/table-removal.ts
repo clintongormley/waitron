@@ -12,27 +12,33 @@ import {
 } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import type { TableRemoval } from "@waitron/module";
-import { AppError } from "@waitron/shared";
+import type { AppError } from "@waitron/shared";
 import { releaseDeliveries } from "./delivery-release.js";
 import { leaveMerges } from "./floor-today-merges.js";
 import type { TillConfig } from "./till-config.js";
 
-/** An open party holds the table or used it earlier in its meal, or an order to it is unpaid or has food on its way. */
-export async function tableTied(tx: Transaction, tableId: string): Promise<boolean> {
-  const [party] = await tx
-    .select({ id: partyTables.id })
+/** Those of `tableIds` an open party holds or used earlier in its meal, or that an unpaid order, or one with food on its way, is delivered to. */
+export async function tablesTied(
+  tx: Transaction,
+  tableIds: readonly string[],
+): Promise<Set<string>> {
+  if (tableIds.length === 0) return new Set();
+  const ids = [...tableIds];
+  const parted = await tx
+    .selectDistinct({ tableId: partyTables.tableId })
     .from(partyTables)
     .innerJoin(parties, eq(parties.id, partyTables.partyId))
-    .where(and(eq(partyTables.tableId, tableId), eq(parties.state, "open")))
-    .limit(1);
-  if (party !== undefined) return true;
+    .where(and(inArray(partyTables.tableId, ids), eq(parties.state, "open")));
+  const tied = new Set(parted.map((row) => row.tableId));
+  const rest = ids.filter((id) => !tied.has(id));
+  if (rest.length === 0) return tied;
   // The floor's pending-delivery test (`listTablesWithState`), or an order not yet paid.
-  const [order] = await tx
-    .select({ id: workingOrders.id })
+  const ordered = await tx
+    .selectDistinct({ tableId: workingOrders.deliveryTableId })
     .from(workingOrders)
     .where(
       and(
-        eq(workingOrders.deliveryTableId, tableId),
+        inArray(workingOrders.deliveryTableId, rest),
         or(
           inArray(workingOrders.status, ["open", "placed"]),
           and(
@@ -52,28 +58,29 @@ export async function tableTied(tx: Transaction, tableId: string): Promise<boole
           ),
         ),
       ),
-    )
-    .limit(1);
-  return order !== undefined;
+    );
+  for (const row of ordered) tied.add(row.tableId!);
+  return tied;
 }
 
-/** Whether any module refuses to let go of the table; a failure that is not an AppError is rethrown. */
+/** Each of `tableIds` some module refuses to let go of, with the first module's refusal. */
 export async function refusedByAModule(
   tx: Transaction,
   cfg: Pick<TillConfig, "locationId">,
   removals: readonly TableRemoval[],
-  tableId: string,
+  tableIds: readonly string[],
   now: Date,
-): Promise<boolean> {
+): Promise<Map<string, AppError>> {
+  const refused = new Map<string, AppError>();
+  if (tableIds.length === 0) return refused;
   for (const removal of removals) {
-    try {
-      await removal.refuse(tx, { locationId: cfg.locationId }, tableId, now);
-    } catch (error) {
-      if (error instanceof AppError) return true;
-      throw error;
+    const refusals = await removal.refuse(tx, { locationId: cfg.locationId }, tableIds, now);
+    for (const id of tableIds) {
+      const refusal = refusals.get(id);
+      if (refusal !== undefined && !refused.has(id)) refused.set(id, refusal);
     }
   }
-  return false;
+  return refused;
 }
 
 /**
@@ -87,7 +94,7 @@ export async function removeLiveTable(
   tableId: string,
   now: Date,
 ): Promise<boolean> {
-  if (await refusedByAModule(tx, cfg, removals, tableId, now)) return false;
+  if ((await refusedByAModule(tx, cfg, removals, [tableId], now)).size > 0) return false;
   const { locationId } = cfg;
   const [table] = await tx
     .select({ label: diningTables.label })

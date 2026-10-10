@@ -498,16 +498,16 @@ describe("checkZonePlanSave", () => {
 
   it("refuses deleting a table a module still needs", async () => {
     const { z, live, input } = await planned();
-    const refuse = vi.fn<TableRemoval["refuse"]>(() => {
-      throw new AppError("table.booked", { tableId: live });
-    });
+    const refuse = vi.fn<TableRemoval["refuse"]>(() =>
+      Promise.resolve(new Map([[live, new AppError("table.booked", { tableId: live })]])),
+    );
     const removals: TableRemoval[] = [{ refuse, release: vi.fn() }];
     const error = await refusal(check(z, { ...input, tables: [] }, removals));
     expect(error.code).toBe("table.booked");
     expect(refuse).toHaveBeenCalledWith(
       expect.anything(),
       { locationId: v.cfg.locationId },
-      live,
+      [live],
       NOW,
     );
   });

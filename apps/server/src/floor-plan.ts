@@ -14,6 +14,7 @@ import type { TableRemoval } from "@waitron/module";
 import { AppError } from "@waitron/shared";
 import type { Placement } from "./floor-reset-plan.js";
 import { placementColumns, placementOf, resetZone, spareLabels } from "./floor-today-store.js";
+import { refusedByAModule } from "./table-removal.js";
 import type { TillConfig } from "./till-config.js";
 import "./errors.js";
 
@@ -309,12 +310,11 @@ export async function checkZonePlanSave(
   const kept = new Set(input.tables.map((t) => t.id));
   const deleted = [...masterIds].filter((id) => !kept.has(id));
   const followers = await followersOf(tx, deleted);
-  for (const masterId of deleted) {
-    const liveId = followers.get(masterId);
-    if (liveId === undefined) continue;
-    for (const removal of removals) {
-      await removal.refuse(tx, { locationId: cfg.locationId }, liveId, now);
-    }
+  const liveIds = deleted.flatMap((masterId) => followers.get(masterId) ?? []);
+  const refusals = await refusedByAModule(tx, cfg, removals, liveIds, now);
+  for (const liveId of liveIds) {
+    const refusal = refusals.get(liveId);
+    if (refusal !== undefined) throw refusal;
   }
 }
 

@@ -61,6 +61,10 @@ function inTx<T>(fn: (tx: Transaction) => Promise<T>): Promise<T> {
   return withTransaction(db, fn);
 }
 
+function refusalsOf(v: Venue, tableIds: string[]) {
+  return inTx((tx) => BOOKINGS_TABLE_REMOVAL.refuse(tx, v, tableIds, AFTER_MADRID_MIDNIGHT));
+}
+
 // 2026-09-15T22:30:00Z is 00:30 on 2026-09-16 in Madrid (CEST, UTC+2): the venue's today is the
 // 16th while the UTC date is still the 15th.
 const AFTER_MADRID_MIDNIGHT = new Date("2026-09-15T22:30:00Z");
@@ -74,12 +78,26 @@ describe("BOOKINGS_TABLE_REMOVAL.refuse", () => {
     await insertBooking(v, { tableId: later, date: "2026-10-01" });
 
     for (const tableId of [today, later]) {
-      const err = await inTx((tx) =>
-        BOOKINGS_TABLE_REMOVAL.refuse(tx, v, tableId, AFTER_MADRID_MIDNIGHT),
-      ).catch((e: unknown) => e);
+      const err = (await refusalsOf(v, [tableId])).get(tableId);
       expect(err).toBeInstanceOf(AppError);
       expect(err).toMatchObject({ code: "table.booked", params: { tableId } });
     }
+  });
+
+  it("answers for several tables in one call, refusing only the booked ones", async () => {
+    const v = await setupVenue();
+    const booked = await makeTable(v, "T7");
+    const free = await makeTable(v, "T8");
+    const twice = await makeTable(v, "T9");
+    await insertBooking(v, { tableId: booked, date: "2026-09-16" });
+    await insertBooking(v, { tableId: twice, date: "2026-09-16" });
+    await insertBooking(v, { tableId: twice, date: "2026-09-20" });
+
+    const refusals = await refusalsOf(v, [booked, free, twice]);
+
+    expect([...refusals.keys()].sort()).toEqual([booked, twice].sort());
+    expect(refusals.get(twice)).toMatchObject({ code: "table.booked", params: { tableId: twice } });
+    expect((await refusalsOf(v, [])).size).toBe(0);
   });
 
   it("does not refuse for the venue's yesterday, a cancelled or completed booking today, or another table", async () => {
@@ -92,9 +110,7 @@ describe("BOOKINGS_TABLE_REMOVAL.refuse", () => {
     await insertBooking(v, { tableId: t, date: "2026-09-16", status: "completed" });
     await insertBooking(v, { tableId: other, date: "2026-09-16" });
 
-    await expect(
-      inTx((tx) => BOOKINGS_TABLE_REMOVAL.refuse(tx, v, t, AFTER_MADRID_MIDNIGHT)),
-    ).resolves.toBeUndefined();
+    expect((await refusalsOf(v, [t])).size).toBe(0);
   });
 
   it("does not refuse for a seated or no-show booking today", async () => {
@@ -103,9 +119,7 @@ describe("BOOKINGS_TABLE_REMOVAL.refuse", () => {
     await insertBooking(v, { tableId: t, date: "2026-09-16", status: "seated" });
     await insertBooking(v, { tableId: t, date: "2026-09-16", status: "no_show" });
 
-    await expect(
-      inTx((tx) => BOOKINGS_TABLE_REMOVAL.refuse(tx, v, t, AFTER_MADRID_MIDNIGHT)),
-    ).resolves.toBeUndefined();
+    expect((await refusalsOf(v, [t])).size).toBe(0);
   });
 
   it("reads today in the default zone when the venue's zone is one Intl rejects", async () => {
@@ -113,9 +127,10 @@ describe("BOOKINGS_TABLE_REMOVAL.refuse", () => {
     const t = await makeTable(v, "T5");
     await insertBooking(v, { tableId: t, date: "2026-09-16" });
 
-    await expect(
-      inTx((tx) => BOOKINGS_TABLE_REMOVAL.refuse(tx, v, t, AFTER_MADRID_MIDNIGHT)),
-    ).rejects.toMatchObject({ code: "table.booked", params: { tableId: t } });
+    expect((await refusalsOf(v, [t])).get(t)).toMatchObject({
+      code: "table.booked",
+      params: { tableId: t },
+    });
   });
 });
 

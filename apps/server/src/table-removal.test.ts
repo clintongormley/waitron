@@ -1,6 +1,8 @@
 import { randomUUID } from "node:crypto";
+import { DatabaseSync } from "node:sqlite";
 import { and, eq, sql } from "drizzle-orm";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+import { BOOKINGS_TABLE_REMOVAL, bookings } from "@waitron/bookings";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
@@ -16,13 +18,14 @@ import {
   ticketItems,
   withTransaction,
   workingOrders,
+  type Transaction,
 } from "@waitron/db";
 import type { TableRemoval } from "@waitron/module";
 import { AppError } from "@waitron/shared";
 import { zoneSalePolicies, zoneServicePolicies } from "@waitron/venue-service";
 import { catchUpZone, resetZone } from "./floor-today-store.js";
 import { finishTable, leaveTables } from "./parties.js";
-import { removeLiveTable, tableTied } from "./table-removal.js";
+import { removeLiveTable, tablesTied } from "./table-removal.js";
 import {
   billRow,
   commandFor,
@@ -123,6 +126,16 @@ async function renameInMaster(tableId: string, label: string): Promise<void> {
   const { planTableId } = await tableRow(v, tableId);
   await inTx(v, (tx) =>
     tx.update(floorPlanTables).set({ label }).where(eq(floorPlanTables.id, planTableId!)),
+  );
+}
+
+async function pendingOf(zoneId: string) {
+  return inTx(v, (tx) =>
+    tx
+      .select()
+      .from(floorResetTables)
+      .where(and(eq(floorResetTables.zoneId, zoneId), eq(floorResetTables.pending, true)))
+      .orderBy(floorResetTables.id),
   );
 }
 
@@ -289,7 +302,7 @@ describe("removing a live table the master no longer has", () => {
     await deleteFromMaster(t1!);
     const released: string[] = [];
     const bookings: TableRemoval = {
-      refuse: () => Promise.resolve(),
+      refuse: () => Promise.resolve(new Map()),
       release: (_tx, cfg, tableId, label) => {
         released.push(`${cfg.locationId}:${tableId}:${label}`);
         return Promise.resolve();
@@ -332,6 +345,52 @@ describe("removing a live table the master no longer has", () => {
   });
 });
 
+describe("a catch-up that changes nothing", () => {
+  it("reads each of its checks once for all the zone's tables, and rewrites nothing", async () => {
+    const {
+      zoneId,
+      ids: [held, booked, tied],
+    } = await plannedZone("Cost held", "Cost booked", "Cost tied");
+    await seat(v, held!);
+    await renameInMaster(held!, "Cost held b");
+    await inTx(v, (tx) =>
+      tx.insert(bookings).values({
+        locationId: v.cfg.locationId,
+        tableId: booked!,
+        bookingDate: "2026-10-10",
+        bookingTime: "20:00",
+        partySize: 2,
+        contactName: "Ana",
+        createdBy: randomUUID(),
+        status: "booked",
+      }),
+    );
+    await delivery(tied!, "Agua");
+    await deleteFromMaster(booked!);
+    await deleteFromMaster(tied!);
+    await reset(zoneId, [BOOKINGS_TABLE_REMOVAL]);
+    const before = await pendingOf(zoneId);
+    expect(before).toHaveLength(3);
+
+    const statements = await inTx(v, async (tx) => {
+      const prepare = vi.spyOn(DatabaseSync.prototype, "prepare");
+      try {
+        await catchUpZone(tx, v.cfg, [BOOKINGS_TABLE_REMOVAL], zoneId, NOW);
+        return prepare.mock.calls.length;
+      } finally {
+        prepare.mockRestore();
+      }
+    });
+
+    // The pending rows, the venue's tables, who sits, today's rows, the venue's day, the bookings,
+    // today's merges, and the two tie checks.
+    expect(statements).toBe(9);
+    expect(await pendingOf(zoneId)).toEqual(before);
+    expect(await tableRow(v, tied!)).toMatchObject({ active: false });
+    expect(await todayRow(tied!)).toBeUndefined();
+  });
+});
+
 describe("removeLiveTable", () => {
   it("gives the last table of a merge its place back", async () => {
     const {
@@ -370,9 +429,11 @@ describe("removeLiveTable", () => {
     } = await plannedZone("Refused 1");
     const released: string[] = [];
     const bookings: TableRemoval = {
-      refuse: (_tx, cfg, tableId, now) => {
+      refuse: (_tx, cfg, tableIds, now) => {
         released.push(`refuse ${cfg.locationId} ${now.toISOString()}`);
-        return Promise.reject(new AppError("table.booked", { tableId }));
+        return Promise.resolve(
+          new Map(tableIds.map((tableId) => [tableId, new AppError("table.booked", { tableId })])),
+        );
       },
       release: () => {
         released.push("release");
@@ -435,7 +496,27 @@ describe("removeLiveTable", () => {
   });
 });
 
-describe("tableTied", () => {
+async function tableTied(tx: Transaction, tableId: string): Promise<boolean> {
+  return (await tablesTied(tx, [tableId])).has(tableId);
+}
+
+describe("tablesTied", () => {
+  it("answers for several tables in one call", async () => {
+    const z = await zone();
+    const [held, ordered, free] = [
+      await v.table("Several held", z),
+      await v.table("Several ordered", z),
+      await v.table("Several free", z),
+    ];
+    await seat(v, held);
+    await delivery(ordered, "Agua");
+
+    const tied = await inTx(v, (tx) => tablesTied(tx, [held, ordered, free]));
+
+    expect([...tied].sort()).toEqual([held, ordered].sort());
+    expect((await inTx(v, (tx) => tablesTied(tx, []))).size).toBe(0);
+  });
+
   it("is false for a table nothing ties", async () => {
     const t1 = await v.table("Untied 1", await zone());
 

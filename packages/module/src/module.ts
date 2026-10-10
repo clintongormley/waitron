@@ -70,13 +70,13 @@ export interface FloorAnnotator {
 
 /** A module's part in removing a live table. */
 export interface TableRemoval {
-  /** Throws an AppError while this module still needs the table. */
+  /** The refusal for each of `tableIds` this module still needs; a table it lets go of has no entry. */
   refuse(
     tx: Transaction,
     cfg: { locationId: LocationId },
-    tableId: string,
+    tableIds: readonly string[],
     now: Date,
-  ): Promise<void>;
+  ): Promise<ReadonlyMap<string, AppError>>;
   /** Lets go of every row naming the table, keeping `label` as text where history needs it. */
   release(
     tx: Transaction,

@@ -21,7 +21,7 @@ import {
   type Target,
 } from "./floor-reset-plan.js";
 import { leaveMerges } from "./floor-today-merges.js";
-import { refusedByAModule, removeLiveTable, tableTied } from "./table-removal.js";
+import { refusedByAModule, removeLiveTable, tablesTied } from "./table-removal.js";
 import type { TillConfig } from "./till-config.js";
 
 type Placed = {
@@ -182,7 +182,12 @@ async function catchUpPass(
   const targets = [...rowOf.keys()];
 
   const venueTables = await tx
-    .select({ id: diningTables.id, label: diningTables.label, zoneId: diningTables.zoneId })
+    .select({
+      id: diningTables.id,
+      label: diningTables.label,
+      zoneId: diningTables.zoneId,
+      active: diningTables.active,
+    })
     .from(diningTables)
     .where(eq(diningTables.locationId, cfg.locationId));
   const inZone = venueTables.filter((table) => table.zoneId === zoneId);
@@ -208,27 +213,37 @@ async function catchUpPass(
     ).map((row) => row.tableId),
   );
   // A refused table waits whole: held, and counted as having its today's row so nothing seeds it.
-  const refused = new Set<string>();
-  for (const target of targets) {
-    const id = target.tableId;
-    if (!target.remove || id === null || held.has(id) || !inZoneIds.has(id)) continue;
-    if (await refusedByAModule(tx, cfg, removals, id, now)) refused.add(id);
-  }
+  const refused = new Set(
+    (
+      await refusedByAModule(
+        tx,
+        cfg,
+        removals,
+        targets.flatMap(({ remove, tableId: id }) =>
+          remove && id !== null && !held.has(id) && inZoneIds.has(id) ? [id] : [],
+        ),
+        now,
+      )
+    ).keys(),
+  );
   const waiting = new Set([...held, ...refused]);
-  const mergedWithHeld = await mergedWithAny(tx, ids, waiting);
+  const { merged, mergedWithHeld } = await mergesOf(tx, ids, waiting);
   const removing = new Set(targets.filter((target) => target.remove).map((t) => t.tableId));
-  const live: LiveTable[] = [];
-  for (const table of inZone) {
+  const tied = await tablesTied(
+    tx,
+    ids.filter((id) => removing.has(id) && !waiting.has(id)),
+  );
+  const live: LiveTable[] = inZone.map((table) => {
     const held = waiting.has(table.id);
-    live.push({
+    return {
       id: table.id,
       label: table.label,
       held,
-      tied: held || (removing.has(table.id) && (await tableTied(tx, table.id))),
+      tied: held || tied.has(table.id),
       hasToday: withToday.has(table.id) || refused.has(table.id),
       mergedWithHeld: mergedWithHeld.has(table.id),
-    });
-  }
+    };
+  });
 
   const plan = planReset({ targets, live, takenElsewhere });
 
@@ -236,7 +251,14 @@ async function catchUpPass(
   for (const tableId of plan.remove) {
     if (!(await removeLiveTable(tx, cfg, removals, tableId, now))) kept.add(tableId);
   }
-  for (const tableId of [...plan.hide, ...kept]) await hideTable(tx, tableId);
+  const activeIds = new Set(inZone.filter((table) => table.active).map((table) => table.id));
+  // A table already hidden is skipped; a kept one was changed by its failed removal, so is not.
+  for (const tableId of plan.hide) {
+    if (activeIds.has(tableId) || withToday.has(tableId) || merged.has(tableId)) {
+      await hideTable(tx, tableId);
+    }
+  }
+  for (const tableId of kept) await hideTable(tx, tableId);
   // Each renamed table first steps aside under a spare name, so a swap never meets the unique
   // (location, label) key halfway.
   const labelOf = new Map(inZone.map((table) => [table.id, table.label]));
@@ -342,18 +364,21 @@ async function setLabel(tx: Transaction, tableId: string, label: string): Promis
   await tx.update(diningTables).set({ label }).where(eq(diningTables.id, tableId));
 }
 
-/** Tables in a today's merge with any of `tables`, those tables included. */
-async function mergedWithAny(
+/** The zone's tables in a today's merge, and those in one with any of `tables`, those included. */
+async function mergesOf(
   tx: Transaction,
   zoneTableIds: readonly string[],
   tables: ReadonlySet<string>,
-): Promise<Set<string>> {
+): Promise<{ merged: Set<string>; mergedWithHeld: Set<string> }> {
   const members = await tx
     .select({ joinId: floorTodayJoinTables.joinId, tableId: floorTodayJoinTables.tableId })
     .from(floorTodayJoinTables)
     .where(inArray(floorTodayJoinTables.tableId, [...zoneTableIds]));
   const joins = new Set(members.filter((m) => tables.has(m.tableId)).map((m) => m.joinId));
-  return new Set(members.filter((m) => joins.has(m.joinId)).map((m) => m.tableId));
+  return {
+    merged: new Set(members.map((m) => m.tableId)),
+    mergedWithHeld: new Set(members.filter((m) => joins.has(m.joinId)).map((m) => m.tableId)),
+  };
 }
 
 /** For each zone with a master plan: resetZone when its today's plan is for an earlier business day (or it has none), else catchUpZone when it has pending rows; one query finds those zones. */

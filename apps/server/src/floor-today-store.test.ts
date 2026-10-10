@@ -690,10 +690,12 @@ describe("building today's plan from a zone's master plan", () => {
     let booked = true;
     const asked: string[] = [];
     const bookings: TableRemoval = {
-      refuse: (_tx, cfg, tableId, now) => {
+      refuse: (_tx, cfg, tableIds, now) => {
         asked.push(`${cfg.locationId}:${now.toISOString()}`);
-        if (booked && tableId === t1) throw new AppError("table.booked", { tableId });
-        return Promise.resolve();
+        const refused = booked && tableIds.includes(t1) ? [t1] : [];
+        return Promise.resolve(
+          new Map(refused.map((tableId) => [tableId, new AppError("table.booked", { tableId })])),
+        );
       },
       release: () => Promise.resolve(),
     };
@@ -721,7 +723,10 @@ describe("building today's plan from a zone's master plan", () => {
     const master = await masterOf(z, [{ label: "Unseeded 1", live: t1 }]);
     await deleteFromMaster(master.get("Unseeded 1")!);
     const bookings: TableRemoval = {
-      refuse: (_tx, _cfg, tableId) => Promise.reject(new AppError("table.booked", { tableId })),
+      refuse: (_tx, _cfg, tableIds) =>
+        Promise.resolve(
+          new Map(tableIds.map((tableId) => [tableId, new AppError("table.booked", { tableId })])),
+        ),
       release: () => Promise.resolve(),
     };
 

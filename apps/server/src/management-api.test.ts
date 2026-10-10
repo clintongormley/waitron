@@ -189,10 +189,14 @@ function tillConfigFromVenue(venue: VenueResult): TillConfig {
 /** Live tables the fake bookings removal refuses to let go of. */
 const bookedTables = new Set<string>();
 const fakeBookings: TableRemoval = {
-  refuse: (_tx, _cfg, tableId) =>
-    bookedTables.has(tableId)
-      ? Promise.reject(new AppError("table.booked", { tableId }))
-      : Promise.resolve(),
+  refuse: (_tx, _cfg, tableIds) =>
+    Promise.resolve(
+      new Map(
+        tableIds
+          .filter((tableId) => bookedTables.has(tableId))
+          .map((tableId) => [tableId, new AppError("table.booked", { tableId })]),
+      ),
+    ),
   release: () => Promise.resolve(),
 };
 
