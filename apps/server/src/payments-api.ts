@@ -4,7 +4,7 @@ import "./errors.js";
 import "@waitron/layouts";
 import type { Hono } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
-import { and, eq, inArray, isNotNull, ne, sql } from "drizzle-orm";
+import { and, eq, inArray, isNotNull, isNull, ne, sql } from "drizzle-orm";
 import { AppError, centsToDecimal, isAppError } from "@waitron/shared";
 import {
   billPaymentRefunds,
@@ -150,6 +150,15 @@ async function requireKnownReader(tx: Transaction, readerId: string): Promise<vo
   if (reader === undefined || readerId === DEMO_READER_ID) {
     throw new AppError("reader.not_found", { id: readerId });
   }
+}
+
+/** Refuses an id naming no device, or a deleted one. */
+async function requireKnownDevice(tx: Transaction, deviceId: string): Promise<void> {
+  const [device] = await tx
+    .select({ id: devices.id })
+    .from(devices)
+    .where(and(eq(devices.id, deviceId), isNull(devices.deletedAt)));
+  if (device === undefined) throw new AppError("device.not_found", { deviceId });
 }
 
 async function requireDeviceProfile(tx: Transaction, profileId: string): Promise<void> {
@@ -694,12 +703,13 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
       const deviceId = requireUuidParam(c.req.param("id"), "DeviceId");
-      const rows = await gated(sessionId, (tx) =>
-        tx
+      const rows = await gated(sessionId, async (tx) => {
+        await requireKnownDevice(tx, deviceId);
+        return tx
           .select({ readerId: deviceCardReaders.readerId })
           .from(deviceCardReaders)
-          .where(eq(deviceCardReaders.deviceId, deviceId)),
-      );
+          .where(eq(deviceCardReaders.deviceId, deviceId));
+      });
       return c.json({ readerId: rows[0]?.readerId ?? null });
     }),
   );
@@ -716,12 +726,7 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
       }
       const readerId = body.readerId === null ? null : requireBodyUuid(body.readerId, "readerId");
       await gated(sessionId, async (tx) => {
-        // So an unknown device is `device.not_found`, not a foreign-key refusal (a 500).
-        const [device] = await tx
-          .select({ id: devices.id })
-          .from(devices)
-          .where(eq(devices.id, deviceId));
-        if (device === undefined) throw new AppError("device.not_found", { deviceId });
+        await requireKnownDevice(tx, deviceId);
         if (readerId !== null) await requireKnownReader(tx, readerId);
         await selectDeviceEquipment(tx, {
           deviceId,

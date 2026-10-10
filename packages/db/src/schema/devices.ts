@@ -9,8 +9,8 @@ import { locations } from "./tenants.js";
  * An always-on trusted device: a screen that joins and then authenticates with an httpOnly
  * cookie, with no per-person login.
  *
- * Revoke by setting `active = false`, never a hard DELETE: a device is a durable identity other
- * tables reference. No trigger refuses the DELETE; the rule lives in code.
+ * Disable clears `active`; Delete also sets `deleted_at` and keeps the row, which other tables
+ * reference.
  */
 export const devices = table(
   "devices",
@@ -43,9 +43,10 @@ export const devices = table(
     }),
     /* v8 ignore stop */
     label: label("label").notNull(),
-    // `hashSecret` of the device token, never the plaintext.
+    // `hashSecret` of the device token, never the plaintext; "" once the device is deleted.
     tokenHash: label("token_hash").notNull(),
     active: flag("active").notNull().default(true),
+    deletedAt: tsString("deleted_at"),
     lastSeenAt: tsString("last_seen_at"),
     // A whole percent, 0 to 100, not basis points like the `rate()` columns. The range is held by
     // `PUT /api/device/battery`: a CHECK would make drizzle-kit rebuild `devices` (add-a-device

@@ -20,6 +20,7 @@ import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import { mountDeviceApi } from "./device-api.js";
 import type { EquipmentRole, RoleEquipment, RoleSummary } from "./device-equipment.js";
 import type { Logger } from "./logger.js";
+import { mountJoinApi } from "./join-api.js";
 import { createPairingMode } from "./pairing-mode.js";
 import { deletePrinter } from "./printer-delete.js";
 import { provisionBillVenue, send, tabWith, type BillVenue } from "./testing/bill-venue.js";
@@ -625,6 +626,188 @@ describe("what a device may newly choose", () => {
     const anonymous = await send(deviceApp, "", "GET", "/api/device/equipment");
     expect(anonymous.status).toBe(401);
   });
+
+  async function aState() {
+    return {
+      columns: await columns(a),
+      printerHolds: await suite.db
+        .select({ printerId: printerHolders.printerId })
+        .from(printerHolders)
+        .where(eq(printerHolders.deviceId, a)),
+      readerHolds: await suite.db
+        .select({ readerId: cardReaderHolders.readerId })
+        .from(cardReaderHolders)
+        .where(eq(cardReaderHolders.deviceId, a)),
+      readerChoice: await suite.db
+        .select({ readerId: deviceCardReaders.readerId })
+        .from(deviceCardReaders)
+        .where(eq(deviceCardReaders.deviceId, a)),
+    };
+  }
+
+  /** A's choice of `item` for `role`, with `between` landing while the till's request is reading
+   * its body, after requireSession has passed it. */
+  async function racedChoice(
+    role: EquipmentRole,
+    item: string,
+    between: () => Promise<void>,
+    app: Hono = deviceApp,
+  ) {
+    let afterManagement: Awaited<ReturnType<typeof aState>> | undefined;
+    const racing = new Hono();
+    racing.use("/api/device/equipment", async (c, next) => {
+      const parse = c.req.json.bind(c.req);
+      c.req.json = async () => {
+        await between();
+        afterManagement = await aState();
+        return parse();
+      };
+      await next();
+    });
+    racing.route("/", app);
+    const res = await send(racing, venue.cookie, "PUT", "/api/device/equipment", {
+      role,
+      selection: { id: item },
+      via: "list",
+    });
+    return { res, afterManagement, after: await aState() };
+  }
+
+  describe.each([
+    ["Delete", "DELETE", ""],
+    ["Disable", "POST", "/revoke"],
+  ] as const)("a %s committed after the session check", (_name, method, suffix) => {
+    it.each([
+      ["receipt", () => pp],
+      ["card_terminal", () => r3],
+    ] as const)("refuses a %s choice and writes nothing for the device", async (role, item) => {
+      const { res, afterManagement, after } = await racedChoice(role, item(), async () => {
+        const res = await send(
+          deviceApp,
+          managerCookie,
+          method,
+          `/management-api/devices/${a}${suffix}`,
+        );
+        expect(res.status, JSON.stringify(res.json)).toBeLessThan(300);
+      });
+
+      expect(afterManagement).toBeDefined();
+      expect(res.status).toBe(401);
+      expect(res.json).toMatchObject({ code: "device.unauthorized" });
+      expect(after).toEqual(afterManagement);
+      expect(after).toMatchObject({
+        columns: { receipt: null, slip: null, drawer: null },
+        printerHolds: [],
+        readerHolds: [],
+      });
+      if (method === "DELETE") expect(after.readerChoice).toEqual([]);
+    });
+  });
+
+  /** Nothing of `item` reached A: the receipt column, a printer hold, a reader hold or choice. */
+  function expectNothingOf(
+    after: Awaited<ReturnType<typeof aState>>,
+    afterManagement: Awaited<ReturnType<typeof aState>> | undefined,
+    item: string,
+  ) {
+    expect(afterManagement).toBeDefined();
+    expect(after).toEqual(afterManagement);
+    expect(after.columns.receipt).not.toBe(item);
+    expect(after.printerHolds.map((row) => row.printerId)).not.toContain(item);
+    expect(after.readerHolds.map((row) => row.readerId)).not.toContain(item);
+    expect(after.readerChoice.map((row) => row.readerId)).not.toContain(item);
+  }
+
+  it.each([
+    ["receipt", () => pp],
+    ["card_terminal", () => r3],
+  ] as const)(
+    "refuses a %s choice whose person signed out after the session check",
+    async (role, item) => {
+      const { res, afterManagement, after } = await racedChoice(role, item(), async () => {
+        const out = await send(venue.app, venue.cookie, "DELETE", "/api/session");
+        expect(out.status).toBe(200);
+      });
+
+      expect(res.status).toBe(401);
+      expect(res.json).toMatchObject({ code: "session.required" });
+      expectNothingOf(after, afterManagement, item());
+    },
+  );
+
+  it.each([
+    ["receipt", () => pp],
+    ["card_terminal", () => r3],
+  ] as const)(
+    "refuses a %s choice when a Disable and then an Enable both land after the session check",
+    async (role, item) => {
+      // Join-api beside device-api on one pairing window, as boot wires them, so Pair can enable A.
+      const pairingMode = createPairingMode();
+      const app = new Hono();
+      mountDeviceApi(
+        app,
+        { db: suite.db, cfg: venue.cfg, secureCookies: false, pairingMode },
+        quiet,
+      );
+      mountJoinApi(
+        app,
+        { db: suite.db, cfg: venue.cfg, pairingMode, deviceAddress: "https://waitron.local" },
+        quiet,
+      );
+      const hold = await send(app, managerCookie, "POST", "/management-api/pairing-mode/holds");
+      expect(hold.status).toBe(200);
+      const holdId = hold.json.holdId as string;
+
+      const { res, afterManagement, after } = await racedChoice(
+        role,
+        item(),
+        async () => {
+          const off = await send(app, managerCookie, "POST", `/management-api/devices/${a}/revoke`);
+          expect(off.status, JSON.stringify(off.json)).toBeLessThan(300);
+          const knock = await send(app, venue.cookie, "POST", "/api/device/join", {
+            name: "Barra",
+          });
+          expect(knock.status, JSON.stringify(knock.json)).toBe(200);
+          expect(knock.json.joinId).toBe(a);
+          const asks = await send(
+            app,
+            managerCookie,
+            "GET",
+            "/management-api/join-requests?kind=device",
+          );
+          const ask = (asks.json as unknown as { id: string; createdAt: string }[]).find(
+            (row) => row.id === a,
+          )!;
+          const checked = await send(
+            app,
+            managerCookie,
+            "POST",
+            `/management-api/device-join-requests/${a}/check`,
+            { choice: knock.json.verificationNumber, holdId, createdAt: ask.createdAt },
+          );
+          expect(checked.status, JSON.stringify(checked.json)).toBe(204);
+          const paired = await send(
+            app,
+            managerCookie,
+            "POST",
+            `/management-api/device-join-requests/${a}/accept`,
+            { name: "Barra", profileId },
+          );
+          expect(paired.status, JSON.stringify(paired.json)).toBe(200);
+          const [row] = await suite.db
+            .select({ active: devices.active })
+            .from(devices)
+            .where(eq(devices.id, a));
+          expect(row!.active).toBe(true);
+        },
+        app,
+      );
+
+      expect(res.status).toBe(401);
+      expect(res.json).toMatchObject({ code: "session.required" });
+      expectNothingOf(after, afterManagement, item());
+    },
+  );
 
   it("no longer answers the old printers route, and stores nothing through it", async () => {
     const gone = await send(deviceApp, venue.cookie, "PUT", "/api/device/printers", {

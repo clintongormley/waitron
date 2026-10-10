@@ -2,7 +2,7 @@
 import "./errors.js";
 import type { Context, Hono } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
-import { and, asc, desc, eq } from "drizzle-orm";
+import { and, asc, desc, eq, isNull } from "drizzle-orm";
 import { AppError } from "@waitron/shared";
 import {
   deviceProfiles,
@@ -16,6 +16,7 @@ import {
   authorizeManager,
   endDeviceSessions,
   profilesAdmitting,
+  sessions,
   type Permission,
 } from "@waitron/identity";
 import {
@@ -29,6 +30,7 @@ import { createErrorBoundary } from "@waitron/server-kit";
 import { readJsonBody } from "@waitron/server-kit";
 import { requireManagementSession } from "@waitron/server-kit";
 import {
+  assertDeviceStillProven,
   assertProfileAction,
   parseDeviceCookie,
   readDeviceCookie,
@@ -58,6 +60,7 @@ import {
   selectDeviceEquipment,
   type EquipmentRole,
 } from "./device-equipment.js";
+import { deleteDevice, readDeviceDeleteImpact } from "./device-delete.js";
 import { requestCfg } from "./request-config.js";
 import {
   acceptDeviceJoinRequest,
@@ -343,9 +346,16 @@ export function mountDeviceApi(app: Hono, deps: DeviceApiDeps, log: Logger): voi
   // Any signed-in staff member may choose; a held item is taken by a scan or a confirmed list choice.
   app.put("/api/device/equipment", (c) =>
     run(c, log, async () => {
-      const { device } = await requireSession({ db: deps.db }, c);
+      const { device, sessionId } = await requireSession({ db: deps.db }, c);
       const choice = parseEquipmentChoice(await readJsonBody<Record<string, unknown>>(c));
       const equipment = await withTransaction(deps.db, async (tx) => {
+        // The device and the session may both have changed since requireSession's own transaction.
+        await assertDeviceStillProven(tx, { device, tokenHash: null });
+        const [open] = await tx
+          .select({ id: sessions.id })
+          .from(sessions)
+          .where(and(eq(sessions.id, sessionId), isNull(sessions.endedAt)));
+        if (open === undefined) throw new AppError("session.required", {});
         await selectDeviceEquipment(tx, { deviceId: device.deviceId, ...choice });
         return readDeviceEquipment(tx, device.deviceId);
       });
@@ -395,7 +405,7 @@ export function mountDeviceApi(app: Hono, deps: DeviceApiDeps, log: Logger): voi
         await tx
           .update(devices)
           .set({ batteryLevel: level, batteryCharging: charging, batteryReportedAt: at })
-          .where(ownDeviceById(device.deviceId));
+          .where(and(ownDeviceById(device.deviceId), isNull(devices.deletedAt)));
       });
       return c.body(null, 204);
     }),
@@ -632,6 +642,7 @@ export function mountDeviceApi(app: Hono, deps: DeviceApiDeps, log: Logger): voi
             })
             .from(devices)
             .innerJoin(deviceProfiles, eq(deviceProfiles.id, devices.deviceProfileId))
+            .where(isNull(devices.deletedAt))
             .orderBy(desc(devices.enrolledAt));
           return {
             rows,
@@ -678,13 +689,40 @@ export function mountDeviceApi(app: Hono, deps: DeviceApiDeps, log: Logger): voi
         const updated = await tx
           .update(devices)
           .set({ active: false })
-          .where(ownDeviceById(id))
+          .where(and(ownDeviceById(id), isNull(devices.deletedAt)))
           .returning({ id: devices.id });
         if (updated.length === 0) throw new AppError("device.not_found", { deviceId: id });
         await endDeviceSessions(tx, id);
         await releaseDevice(tx, id);
       });
       return c.body(null, 204);
+    }),
+  );
+
+  // ── Delete a device (device.manage) ─────────────────────────────────────────────────────────────────
+  app.get("/management-api/devices/:id/delete-impact", (c) =>
+    run(c, log, async () => {
+      const sessionId = requireManagementSession(c);
+      const id = c.req.param("id");
+      return c.json(
+        await gated(sessionId, (tx) => {
+          if (!isUuid(id)) throw new AppError("device.not_found", { deviceId: id });
+          return readDeviceDeleteImpact(tx, deps.cfg, id);
+        }),
+      );
+    }),
+  );
+
+  app.delete("/management-api/devices/:id", (c) =>
+    run(c, log, async () => {
+      const sessionId = requireManagementSession(c);
+      const id = c.req.param("id");
+      const impact = await gated(sessionId, (tx) => {
+        if (!isUuid(id)) throw new AppError("device.not_found", { deviceId: id });
+        return deleteDevice(tx, deps.cfg, id, deps.now?.());
+      });
+      deps.pairingMode.dropClaim(id);
+      return c.json(impact);
     }),
   );
 

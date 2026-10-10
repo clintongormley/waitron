@@ -1,4 +1,4 @@
-import { and, asc, eq, inArray, isNull } from "drizzle-orm";
+import { and, asc, eq, inArray, isNull, sql } from "drizzle-orm";
 import { deviceProfiles, devices, floorZones, kitchenStations } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import type {
@@ -160,7 +160,7 @@ export async function setProfileKitchenScreens(
   const onProfile = await tx
     .select({ id: devices.id, label: devices.label, locationId: devices.locationId })
     .from(devices)
-    .where(eq(devices.deviceProfileId, profileId))
+    .where(and(eq(devices.deviceProfileId, profileId), isNull(devices.deletedAt)))
     .orderBy(asc(devices.label), asc(devices.id));
   const locations = [...new Set(onProfile.map((device) => device.locationId))];
   const before = new Map<string, MutableScreens>();
@@ -568,6 +568,31 @@ export async function setDeviceKitchenScreens(
         .values(zoneIds.map((zoneId) => ({ deviceId, screen: screen.kind, zoneId })));
     }
   }
+}
+
+/** How many kitchen screens the device has chosen. */
+export async function countDeviceKitchenScreens(
+  tx: Transaction,
+  deviceId: string,
+): Promise<number> {
+  const [{ count }] = await tx
+    .select({ count: sql<number>`count(*)` })
+    .from(deviceKitchenScreens)
+    .where(eq(deviceKitchenScreens.deviceId, deviceId));
+  return count;
+}
+
+/** Removes the device's kitchen screens, their stations and zones, and what narrowings took from it.
+ * The children go explicitly, not by cascade, so this holds with foreign keys off. */
+export async function removeDeviceKitchenScreens(tx: Transaction, deviceId: string): Promise<void> {
+  await tx
+    .delete(deviceKitchenScreenStations)
+    .where(eq(deviceKitchenScreenStations.deviceId, deviceId));
+  await tx.delete(deviceKitchenScreenZones).where(eq(deviceKitchenScreenZones.deviceId, deviceId));
+  await tx.delete(deviceKitchenScreens).where(eq(deviceKitchenScreens.deviceId, deviceId));
+  await tx
+    .delete(deviceKitchenScreenRemovals)
+    .where(eq(deviceKitchenScreenRemovals.deviceId, deviceId));
 }
 
 /**

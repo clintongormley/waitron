@@ -3,6 +3,7 @@ import { page, userEvent } from "vitest/browser";
 import { chooseOption } from "@waitron/ui/src/test-helpers.js";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "../widgets/test-helpers.js";
 import { t } from "../i18n/t.js";
+import type { DeleteImpact } from "@waitron/shared";
 import "./devices-screen.js";
 import type { DevicesScreen } from "./devices-screen.js";
 import type {
@@ -955,6 +956,67 @@ describe.each(["light", "dark"] as const)("devices-screen a11y (%s theme)", (the
       await page.viewport(1280, 900);
     },
   );
+
+  it("renders a disabled device's open menu, holding only Delete, accessibly", async () => {
+    const { el, host } = await mountWidget<DevicesScreen>(
+      "dashboard-devices-screen",
+      { api: stubApi() },
+      theme,
+    );
+    await flush(el);
+    const del = deep(el.shadowRoot!, "[data-test=delete-device-d2]")!;
+    const menu = del.closest("dashboard-row-actions")!;
+    expect(menu.querySelectorAll("wt-button")).toHaveLength(1);
+    menu.shadowRoot!.querySelector<HTMLElement>("button")!.click();
+    await vi.waitFor(() =>
+      expect(menu.shadowRoot!.querySelector("[popover]")!.matches(":popover-open")).toBe(true),
+    );
+    await expectNoA11yViolations(host);
+  });
+
+  describe("the delete dialog", () => {
+    const named = { id: "d1", name: "Pantalla Cocina" };
+    const ready: DeleteImpact = {
+      target: named,
+      refusals: [],
+      ends: [{ key: "sessions", count: 2, targets: [] }],
+      removes: [{ key: "printer_choices", count: 1, targets: [{ id: "p1", name: "Barra" }] }],
+    };
+    const refused: DeleteImpact = {
+      ...ready,
+      refusals: [
+        {
+          code: "device.payment_in_progress",
+          params: {},
+          targets: [{ id: "o1", name: "Mesa 4" }],
+        },
+      ],
+    };
+
+    it.each([
+      ["ready", () => Promise.resolve(ready)],
+      ["refused", () => Promise.resolve(refused)],
+      ["loading", () => new Promise<DeleteImpact>(() => {})],
+    ] as const)("renders it %s accessibly", async (state, read) => {
+      const { el, host } = await mountWidget<DevicesScreen>(
+        "dashboard-devices-screen",
+        { api: stubApi({ getDeviceDeleteImpact: vi.fn(read) }) },
+        theme,
+      );
+      await flush(el);
+      deep(el.shadowRoot!, "[data-test=delete-device-d1]")!.click();
+      await flush(el);
+      const dialog = el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-delete-dialog"]>(
+        "[data-test=delete-device-dialog]",
+      )!;
+      expect(dialog.open).toBe(true);
+      expect(dialog.loading).toBe(state === "loading");
+      expect(dialog.impact?.refusals.length ?? null).toBe(
+        state === "loading" ? null : state === "refused" ? 1 : 0,
+      );
+      await expectNoA11yViolations(host);
+    });
+  });
 });
 
 describe("devices-screen a11y — the numeric match", () => {

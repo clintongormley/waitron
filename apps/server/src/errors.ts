@@ -726,6 +726,8 @@ declare module "@waitron/shared" {
     /**
      * A device's active profile cannot change while a card payment it started is still unresolved
      * (`payments.state` `attempting` or `initiated`): the payment finishes or is cancelled first.
+     * A device cannot be deleted while such a payment, or a pending bill payment or bill refund it
+     * started, is unresolved (`deleteDevice`).
      */
     "device.payment_in_progress": Record<string, never>;
     /**
@@ -738,9 +740,8 @@ declare module "@waitron/shared" {
     /** A manager approved, for a device, a profile of another form factor than its active one. */
     "device_profile.incompatible": { field: "approvedProfileIds" };
     /**
-     * The device-management surface named a device id that matches nothing, or, on
-     * `PATCH /management-api/devices/:id` alone, a disabled device (`active = false`). Unlike
-     * `device.unauthorized`, this surface is for an authenticated manager, so the id is echoed.
+     * A device id matched no device. The management routes answer it for a deleted device too
+     * (`deleted_at` set), and `PATCH /management-api/devices/:id` for a disabled one.
      */
     "device.not_found": { deviceId: string };
     /**

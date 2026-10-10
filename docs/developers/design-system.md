@@ -3552,6 +3552,11 @@ back. **Delete** is permanent: it ends the printer's waiting work and removes th
 it, and the row is kept only as history, so its old print jobs still show its name. Nothing brings a
 deleted printer back; found again, it is added as a new printer.
 
+A device offers both too. **Disable** switches it off and keeps its id; its browser can knock again
+and come back as the same device. **Delete** is permanent: it signs the device out, ends what it
+holds, removes its settings, and keeps the row only as history. A deleted device's browser comes
+back only as a new device. A disabled row's menu offers Delete alone.
+
 Products use **Archive**, with **Archived** in the Availability column, and **View** for an archived
 row. In Spanish these are **Archivar**, **Archivado** for a product, **Archivada** for a variant,
 and **Ver**. Archive is permanent; it has no Enable action.

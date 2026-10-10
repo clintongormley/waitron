@@ -32,6 +32,7 @@ import {
 } from "@waitron/shared";
 import { FakeFiscalBackend } from "@waitron/fiscal/src/testing/fake-backend.js";
 import { mountPaymentsApi } from "./payments-api.js";
+import { deleteDevice } from "./device-delete.js";
 import { systemClock } from "./till-backend.js";
 import type { CardProviderPool } from "./card-provider-pool.js";
 import type { TillConfig } from "./till-config.js";
@@ -519,6 +520,51 @@ describe("device and profile readers", () => {
         await send(app, "GET", `/management-api/payments/devices/${second}/reader`, opts)
       ).json(),
     ).toEqual({ readerId: null });
+  });
+
+  it("a deleted device's reader choice is device.not_found, for a reader and for the default, and nothing moves", async () => {
+    const venue = await seedVenue();
+    const app = mountApp(venue);
+    const [reader] = await seedReaders("Barra");
+    const device = await seedDevice(venue);
+    await listOnProfile(device, reader!);
+    await withTransaction(suite.db, (tx) => deleteDevice(tx, cfgOf(venue), device));
+    const choices = () => suite.db.select().from(deviceCardReaders);
+    const before = { choices: await choices(), holder: await readerHolder(reader!) };
+
+    for (const readerId of [reader!, null]) {
+      const res = await send(app, "PUT", `/management-api/payments/devices/${device}/reader`, {
+        cookie: venue.managerCookie,
+        body: { readerId },
+      });
+      expect(res.status).toBe(404);
+      expect(await res.json()).toMatchObject({
+        error: { code: "device.not_found", params: { deviceId: device } },
+      });
+    }
+    expect({ choices: await choices(), holder: await readerHolder(reader!) }).toEqual(before);
+  });
+
+  it("reading a deleted or unknown device's reader choice is device.not_found, as the PUT answers", async () => {
+    const venue = await seedVenue();
+    const app = mountApp(venue);
+    const [reader] = await seedReaders("Barra");
+    const device = await seedDevice(venue);
+    await listOnProfile(device, reader!);
+    const opts = { cookie: venue.managerCookie };
+    const path = (id: string) => `/management-api/payments/devices/${id}/reader`;
+    expect(
+      (await send(app, "PUT", path(device), { ...opts, body: { readerId: reader } })).status,
+    ).toBe(204);
+    await withTransaction(suite.db, (tx) => deleteDevice(tx, cfgOf(venue), device));
+
+    for (const id of [device, randomUUID()]) {
+      const res = await send(app, "GET", path(id), opts);
+      expect(res.status).toBe(404);
+      expect(await res.json()).toMatchObject({
+        error: { code: "device.not_found", params: { deviceId: id } },
+      });
+    }
   });
 
   it("profile readers: stores the list and default, and refuses a default not in the list", async () => {

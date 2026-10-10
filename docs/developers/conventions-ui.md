@@ -594,6 +594,13 @@ Guards: the "a disabled device comes back as the same device" cases in
 same file, and "a returning disabled device" in
 `apps/server/src/join-requests.test.ts`. Built in W105b.
 
+A deleted device is different: its knock is not matched, because `provenDisabledDevice` reads only
+rows with no `deleted_at`, so its browser arrives as a new device under a new id. Delete
+(`deleteDevice`, `apps/server/src/device-delete.ts`) signs the device out, ends its hold on printers
+and card readers and its request to come back, removes its settings and clears its token and
+printer choices; the row stays only so its history still names it. Guard: "a deleted device's
+browser comes back as a new device" in `apps/server/src/join-e2e.test.ts`. Built in A435 step 4.
+
 ## Native centring starts inside the configured paper width
 
 Set the ESC/POS left margin to zero and the print area to the width the job's pictures are drawn to

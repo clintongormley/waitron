@@ -868,6 +868,10 @@ export interface VenueServiceContribution {
     cfg: { locationId: LocationId },
     input: { deviceId: string; profileId: string; screens: readonly DeviceKitchenScreen[] },
   ): Promise<void>;
+  /** How many kitchen screens the device has chosen. */
+  countDeviceKitchenScreens(tx: Transaction, deviceId: string): Promise<number>;
+  /** Removes the device's kitchen screens, their stations and zones, and what narrowings took. */
+  removeDeviceKitchenScreens(tx: Transaction, deviceId: string): Promise<void>;
   /** A kitchen display takes exactly one kitchen screen (`kitchen_screen.required`, or
    *  `kitchen_screen.invalid` `one_only`), each kind at most once and never both a pass screen and
    *  a pass monitor (`one_only`), of a kind its profile offers (`kitchen_screen.not_allowed`; on

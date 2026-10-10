@@ -13,7 +13,9 @@ import {
   checkDeviceJoinNumber,
   createJoinRequest,
   denyJoinRequest,
+  endReturningRequest,
   findJoinRequest,
+  hasReturningRequest,
   listPendingJoinRequests,
   provenDisabledDevice,
   readAgentJoinStatus,
@@ -34,7 +36,7 @@ import {
   type Database,
   type Transaction,
 } from "@waitron/db";
-import { verifySecretAsync } from "@waitron/identity";
+import { hashSecret, verifySecretAsync } from "@waitron/identity";
 import {
   deleteDeviceProfile,
   emptyPrinterLists,
@@ -50,6 +52,7 @@ import { VENUE_SERVICE } from "./modules.js";
 import { createStation } from "./kitchen.js";
 import type { TillConfig } from "./till-config.js";
 import { offerOnProfile } from "./testing/enrol.js";
+import { deleteDevice } from "./device-delete.js";
 import type { DeviceKitchenScreen } from "@waitron/module";
 
 const stationScreen = (stationId: string): DeviceKitchenScreen => ({
@@ -1282,6 +1285,116 @@ describe("a returning disabled device", () => {
     );
   });
 
+  /** A disabled till's knock, so a pending request carries the device's own id. */
+  async function returningKnock(venue: { cfg: TillConfig }): Promise<string> {
+    const deviceId = await disabledDevice(venue, await seedProfile("till"));
+    const tokenHash = await storedHash(deviceId);
+    await withTransaction(suite.db, (tx) =>
+      createJoinRequest(tx, venue.cfg, {
+        kind: "device",
+        label: "Bar till",
+        returning: { deviceId, tokenHash },
+      }),
+    );
+    return deviceId;
+  }
+
+  it("finds and ends this node's request to come back, by the device's id, and nothing else", async () => {
+    const venue = await setupVenue(suite.db);
+    const cfg = venue.cfg;
+    const deviceId = await returningKnock(venue);
+    const otherNode = brandNodeId(randomUUID());
+    const [otherNodes] = await suite.db
+      .insert(joinRequests)
+      .values({
+        nodeId: otherNode,
+        locationId: cfg.locationId,
+        kind: "device",
+        label: "Elsewhere",
+        tokenHash: "x",
+        verificationNumber: "41",
+        decoyNumbers: ["42", "43"],
+      })
+      .returning({ id: joinRequests.id });
+    const otherNodesId = otherNodes!.id;
+    const unrelatedId = (
+      await withTransaction(suite.db, (tx) =>
+        createJoinRequest(tx, cfg, { kind: "device", label: "New till" }),
+      )
+    ).joinId;
+
+    expect(await asApp((tx) => hasReturningRequest(tx, cfg, deviceId))).toBe(true);
+    expect(await asApp((tx) => endReturningRequest(tx, cfg, deviceId))).toBe(true);
+    expect(await asApp((tx) => hasReturningRequest(tx, cfg, deviceId))).toBe(false);
+    expect(await asApp((tx) => endReturningRequest(tx, cfg, deviceId))).toBe(false);
+    const rows = await suite.db
+      .select({ id: joinRequests.id, nodeId: joinRequests.nodeId })
+      .from(joinRequests);
+    expect(rows).toEqual(
+      expect.arrayContaining([
+        { id: otherNodesId, nodeId: otherNode },
+        { id: unrelatedId, nodeId: cfg.nodeId },
+      ]),
+    );
+    expect(rows).toHaveLength(2);
+  });
+
+  it("does not see or end the device's request once it belongs to another node", async () => {
+    const venue = await setupVenue(suite.db);
+    const cfg = venue.cfg;
+    const deviceId = await returningKnock(venue);
+    const otherNode = brandNodeId(randomUUID());
+    await suite.db
+      .update(joinRequests)
+      .set({ nodeId: otherNode })
+      .where(eq(joinRequests.id, deviceId));
+    const before = await suite.db.select().from(joinRequests);
+    expect(before.map((row) => [row.id, row.nodeId])).toEqual([[deviceId, otherNode]]);
+
+    expect(await asApp((tx) => hasReturningRequest(tx, cfg, deviceId))).toBe(false);
+    expect(await asApp((tx) => endReturningRequest(tx, cfg, deviceId))).toBe(false);
+    expect(await suite.db.select().from(joinRequests)).toEqual(before);
+  });
+
+  it("does not see or end the device's request once it has lapsed from the pending list", async () => {
+    const venue = await setupVenue(suite.db);
+    const cfg = venue.cfg;
+    const deviceId = await returningKnock(venue);
+    const lapsed = new Date(Date.now() - JOIN_TTL_MS - 60_000).toISOString();
+    await suite.db
+      .update(joinRequests)
+      .set({ createdAt: lapsed })
+      .where(eq(joinRequests.id, deviceId));
+    const before = await suite.db.select().from(joinRequests);
+    expect(before.map((row) => row.id)).toEqual([deviceId]);
+
+    expect(await asApp((tx) => hasReturningRequest(tx, cfg, deviceId))).toBe(false);
+    expect(await asApp((tx) => endReturningRequest(tx, cfg, deviceId))).toBe(false);
+    expect(await suite.db.select().from(joinRequests)).toEqual(before);
+  });
+
+  it("neither counts nor ends a print agent's request that carries the device's id", async () => {
+    const venue = await setupVenue(suite.db);
+    const cfg = venue.cfg;
+    const deviceId = await disabledDevice(venue, await seedProfile("till"));
+    await suite.db.insert(joinRequests).values({
+      id: deviceId,
+      nodeId: cfg.nodeId,
+      locationId: cfg.locationId,
+      kind: "print_agent",
+      label: "Agent",
+      tokenHash: "x",
+      verificationNumber: "41",
+      decoyNumbers: ["42", "43"],
+    });
+    const before = await suite.db.select().from(joinRequests);
+    expect(before.map((row) => [row.id, row.kind])).toEqual([[deviceId, "print_agent"]]);
+
+    expect(await asApp((tx) => hasReturningRequest(tx, cfg, deviceId))).toBe(false);
+    expect(await asApp((tx) => endReturningRequest(tx, cfg, deviceId))).toBe(false);
+    expect(await suite.db.select().from(joinRequests)).toEqual(before);
+  });
+
   it("proves a cookie only for a disabled device whose token it holds", async () => {
     const venue = await setupVenue(suite.db);
     const profileId = await seedProfile("till");
@@ -1302,6 +1415,56 @@ describe("a returning disabled device", () => {
     expect(await proven(null)).toBeNull();
     expect(await proven("no-dot")).toBeNull();
     expect(await proven(`not-a-uuid.${made.token}`)).toBeNull();
+  });
+
+  /** A till enrolled and then deleted through `deleteDevice`, with a REAL hash of its token written
+   * back onto the row. The delete itself blanks the hash, which refuses every proof on its own; the
+   * write puts the conditions on `deleted_at` alone between a deleted row and a match. */
+  async function deletedWithRealHash(venue: { cfg: TillConfig }, profileId: string) {
+    const made = await withTransaction(suite.db, async (tx) => {
+      const made = await createJoinRequest(tx, venue.cfg, { kind: "device", label: "Bar till" });
+      await acceptDeviceJoinRequest(tx, venue.cfg, made.joinId, { label: "Bar till", profileId });
+      return made;
+    });
+    await withTransaction(suite.db, (tx) => deleteDevice(tx, venue.cfg, made.joinId));
+    const tokenHash = hashSecret(made.token);
+    await suite.db.update(devices).set({ tokenHash }).where(eq(devices.id, made.joinId));
+    return { deviceId: made.joinId, tokenHash };
+  }
+
+  it("backstop: createJoinRequest with a proof matching a deleted row's real hash answers device.join_stale and leaves the row", async () => {
+    const venue = await setupVenue(suite.db);
+    const profileId = await seedProfile("till");
+    const { deviceId, tokenHash } = await deletedWithRealHash(venue, profileId);
+    const before = await suite.db.select().from(devices).where(eq(devices.id, deviceId));
+    expect(before[0]!.deletedAt).not.toBeNull();
+
+    const code = await codeOf(() =>
+      withTransaction(suite.db, (tx) =>
+        createJoinRequest(tx, venue.cfg, {
+          kind: "device",
+          label: "Tablet",
+          returning: { deviceId, tokenHash },
+        }),
+      ),
+    );
+
+    expect(code).toBe("device.join_stale");
+    expect(await pendingRows()).toBe(0);
+    expect(await suite.db.select().from(devices).where(eq(devices.id, deviceId))).toEqual(before);
+  });
+
+  it("backstop: returningDevicesOf does not report a deleted device, even with a real hash on its row", async () => {
+    const venue = await setupVenue(suite.db);
+    const profileId = await seedProfile("till");
+    const { deviceId: deletedId } = await deletedWithRealHash(venue, profileId);
+    const disabledId = await disabledDevice(venue, profileId);
+
+    const returning = await withTransaction(suite.db, (tx) =>
+      returningDevicesOf(tx, venue.cfg, [deletedId, disabledId]),
+    );
+
+    expect([...returning.keys()]).toEqual([disabledId]);
   });
 });
 

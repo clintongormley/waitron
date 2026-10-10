@@ -1,7 +1,9 @@
 import { LiveData } from "@waitron/dashboard-kit";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
-import { html } from "lit";
+import { LitElement, html } from "lit";
+import type { DeleteImpact } from "@waitron/shared";
+import { LeaveController } from "@waitron/ui";
 import { registerCatalogue, type CardProviderPanel } from "@waitron/dashboard-kit";
 import {
   chooseOption,
@@ -821,7 +823,7 @@ describe("the device table", () => {
     );
   });
 
-  it("a disabled device's row opens nothing, and it has no Edit or Disable", async () => {
+  it("a disabled device's row opens nothing, and its menu offers only Delete, no Edit or Disable", async () => {
     const { el } = await mountWidget<DevicesScreen>("dashboard-devices-screen", {
       api: stubApi(),
     });
@@ -830,7 +832,12 @@ describe("the device table", () => {
     const row = table.shadowRoot!.querySelector<HTMLElement>('tr[data-row-key="d2"]')!;
     expect(row.querySelector(".row-activate")).toBeNull();
     expect(row.classList.contains("clickable")).toBe(false);
-    expect(row.querySelector("dashboard-row-actions")).toBeNull();
+    const menus = row.querySelectorAll<Menu>("dashboard-row-actions");
+    expect(menus).toHaveLength(1);
+    expect(menus[0]!.label).toBe(`${t("devices.actions")}: Pase revocado`);
+    const items = [...menus[0]!.querySelectorAll("wt-button")];
+    expect(items.map((b) => b.getAttribute("data-test"))).toEqual(["delete-device-d2"]);
+    expect(items.map((b) => b.textContent?.trim())).toEqual([t("action.delete")]);
     await userEvent.click(row.querySelector("td")!);
     await flush(el);
     expect(q(el, "[data-test=edit-device-modal]")).toBeNull();
@@ -838,7 +845,7 @@ describe("the device table", () => {
     expect(dq(el.shadowRoot!, "[data-test=remove-d2]")).toBeNull();
   });
 
-  it("an active device's menu, named for it, offers Edit and Disable", async () => {
+  it("an active device's menu, named for it, offers Edit, Disable and Delete", async () => {
     const { el } = await mountWidget<DevicesScreen>("dashboard-devices-screen", {
       api: stubApi(),
     });
@@ -847,8 +854,17 @@ describe("the device table", () => {
     const menu = row.querySelector<Menu>("dashboard-row-actions")!;
     expect(menu.label).toBe(`${t("devices.actions")}: Pantalla Cocina`);
     const items = [...menu.querySelectorAll("wt-button")];
-    expect(items.map((b) => b.getAttribute("data-test"))).toEqual(["edit-device-d1", "remove-d1"]);
-    expect(items.map((b) => b.textContent?.trim())).toEqual([t("action.edit"), "Deshabilitar"]);
+    expect(items.map((b) => b.getAttribute("data-test"))).toEqual([
+      "edit-device-d1",
+      "remove-d1",
+      "delete-device-d1",
+    ]);
+    expect(items.map((b) => b.textContent?.trim())).toEqual([
+      t("action.edit"),
+      "Deshabilitar",
+      t("action.delete"),
+    ]);
+    expect(items[2]!.getAttribute("variant")).toBe("danger");
     // Disable's first press only arms it, so the menu stays open for the second.
     expect(items[1]!.hasAttribute("data-keep-open")).toBe(true);
     (items[0] as HTMLElement).click();
@@ -991,7 +1007,7 @@ describe("the device table", () => {
     expect(api.listReaders).not.toHaveBeenCalled();
   });
 
-  it("keeps every active row's menu on screen and uncovered at 390 px", async () => {
+  it("keeps every row's menu, a disabled one's too, on screen and uncovered at 390 px", async () => {
     const width = window.innerWidth,
       height = window.innerHeight;
     try {
@@ -1006,7 +1022,7 @@ describe("the device table", () => {
       await flush(el);
       const table = devicesTable(el);
       await table.updateComplete;
-      expectRowMenusOnScreen(table, 2, "dashboard-row-actions");
+      expectRowMenusOnScreen(table, 3, "dashboard-row-actions");
     } finally {
       await page.viewport(width, height);
     }
@@ -5281,4 +5297,531 @@ describe("a device's kitchen screens", () => {
       }
     });
   }
+});
+
+class DeleteLeaveFixture extends LitElement {
+  readonly leave = new LeaveController(this);
+  override render() {
+    return html`<slot></slot>${this.leave.render({
+        heading: t("unsaved.heading"),
+        message: t("unsaved.message"),
+        keepLabel: t("unsaved.keep"),
+        discardLabel: t("unsaved.discard"),
+      })}`;
+  }
+}
+customElements.define("devices-delete-leave-fixture", DeleteLeaveFixture);
+
+describe("Delete", () => {
+  type Dialog = HTMLElementTagNameMap["wt-delete-dialog"];
+  type Deferred<T> = {
+    promise: Promise<T>;
+    resolve: (value: T) => void;
+    reject: (error: unknown) => void;
+  };
+  function deferred<T>(): Deferred<T> {
+    let resolve!: (value: T) => void;
+    let reject!: (error: unknown) => void;
+    const promise = new Promise<T>((yes, no) => {
+      resolve = yes;
+      reject = no;
+    });
+    return { promise, resolve, reject };
+  }
+  const coded = (code: string) => Object.assign(new Error(code), { code });
+  const impactOf = (id: string, name: string, extra: Partial<DeleteImpact> = {}): DeleteImpact => ({
+    target: { id, name },
+    refusals: [],
+    ends: [],
+    removes: [],
+    ...extra,
+  });
+  // The shape `deviceDeleteRules` (apps/server/src/device-delete.ts) answers for a till with people
+  // signed in, a handheld printer it carries and settings of its own.
+  const cocinaImpact = impactOf("d1", "Pantalla Cocina", {
+    ends: [
+      { key: "sessions", count: 2, targets: [] },
+      { key: "held_printers", count: 1, targets: [{ id: "pr1", name: "Mano" }] },
+    ],
+    removes: [
+      { key: "printer_choices", count: 1, targets: [{ id: "pr1", name: "Mano" }] },
+      { key: "approved_profiles", count: 1, targets: [{ id: "dp1", name: "Counter till" }] },
+      { key: "kitchen_screens", count: 1, targets: [] },
+    ],
+  });
+  const refusedImpact: DeleteImpact = {
+    ...cocinaImpact,
+    refusals: [
+      {
+        code: "device.payment_in_progress",
+        params: {},
+        targets: [
+          { id: "o1", name: "Mesa 4" },
+          { id: "o2", name: "Mesa 7" },
+        ],
+      },
+    ],
+  };
+
+  const dialogOf = (el: DevicesScreen) =>
+    el.shadowRoot!.querySelector<Dialog>("wt-delete-dialog[data-test=delete-device-dialog]");
+  const confirmOf = (el: DevicesScreen) =>
+    dialogOf(el)!.shadowRoot!.querySelector<HTMLElement>("[data-test=delete-confirm]")!;
+  /** The confirm button's look and whether its native button can be pressed. */
+  const confirmState = (el: DevicesScreen) => ({
+    variant: confirmOf(el).getAttribute("variant"),
+    disabled: confirmOf(el).shadowRoot!.querySelector("button")!.disabled,
+  });
+  const quiet = { variant: "secondary", disabled: true };
+  const red = { variant: "danger", disabled: false };
+  const linesOf = (el: DevicesScreen) =>
+    [...dialogOf(el)!.shadowRoot!.querySelectorAll("li")].map((li) => li.textContent!.trim());
+  /** The dialog's groups and closing sentence, in the order they are drawn. */
+  const orderOf = (el: DevicesScreen) =>
+    [
+      ...dialogOf(el)!.shadowRoot!.querySelectorAll<HTMLElement>(
+        "[data-group], [data-irreversible]",
+      ),
+    ].map((node) => node.dataset.group ?? "irreversible");
+  const pageError = (el: DevicesScreen) => q(el, "[data-test=page-error]")?.textContent?.trim();
+  const rowOf = (el: DevicesScreen, id: string) =>
+    devicesTable(el).shadowRoot!.querySelector(`tr[data-row-key="${id}"]`);
+
+  async function mounted(overrides: Partial<DashboardApi> = {}) {
+    const api = stubApi({
+      getDeviceDeleteImpact: vi.fn(async (id: string) =>
+        id === "d1" ? cocinaImpact : impactOf(id, devices.find((d) => d.id === id)!.label),
+      ),
+      deleteDevice: vi.fn(async (id: string) => impactOf(id, "")),
+      ...overrides,
+    });
+    const { el } = await mountWidget<DevicesScreen>("dashboard-devices-screen", { api });
+    await flush(el);
+    return { api, el };
+  }
+
+  async function openDelete(el: DevicesScreen, id: string): Promise<void> {
+    dq(el.shadowRoot!, `[data-test="delete-device-${id}"]`)!.click();
+    await flush(el);
+  }
+
+  async function cancelDelete(el: DevicesScreen): Promise<void> {
+    const closed = dialogClosed(dialogOf(el)!);
+    dialogOf(el)!.shadowRoot!.querySelector<HTMLElement>("[data-test=delete-cancel]")!.click();
+    await closed;
+    await flush(el);
+  }
+
+  function focused(): Element | null {
+    let at = document.activeElement;
+    while (at?.shadowRoot?.activeElement) at = at.shadowRoot.activeElement;
+    return at;
+  }
+
+  it("an active device's menu offers Edit, Disable and Delete; a disabled one's offers Delete only, and its row still opens nothing", async () => {
+    const { el } = await mounted();
+    const menuOf = (id: string) => rowOf(el, id)!.querySelector("dashboard-row-actions")!;
+    expect(
+      [...menuOf("d1").querySelectorAll("wt-button")].map((b) => b.getAttribute("data-test")),
+    ).toEqual(["edit-device-d1", "remove-d1", "delete-device-d1"]);
+    expect(
+      [...menuOf("d2").querySelectorAll("wt-button")].map((b) => b.getAttribute("data-test")),
+    ).toEqual(["delete-device-d2"]);
+    for (const id of ["d1", "d2"]) {
+      const del = dq(el.shadowRoot!, `[data-test="delete-device-${id}"]`)!;
+      expect(del.getAttribute("variant")).toBe("danger");
+      expect(del.hasAttribute("disabled")).toBe(false);
+    }
+    expect(rowOf(el, "d2")!.querySelector(".row-activate")).toBeNull();
+    await userEvent.click(rowOf(el, "d2")!.querySelector("td")!);
+    await flush(el);
+    expect(q(el, "[data-test=edit-device-modal]")).toBeNull();
+    expect(dialogOf(el)?.open ?? false).toBe(false);
+  });
+
+  it("Delete opens the dialog, quiet and disabled while it loads, then red with the device named and its impact listed in order", async () => {
+    const read = deferred<DeleteImpact>();
+    const { api, el } = await mounted({ getDeviceDeleteImpact: vi.fn(() => read.promise) });
+    await openDelete(el, "d1");
+
+    expect(api.getDeviceDeleteImpact).toHaveBeenCalledExactlyOnceWith("d1");
+    expect(dialogOf(el)!.open).toBe(true);
+    expect(dialogOf(el)!.loading).toBe(true);
+    expect(confirmState(el)).toEqual(quiet);
+    expect(api.deleteDevice).not.toHaveBeenCalled();
+
+    read.resolve(cocinaImpact);
+    await flush(el);
+    expect(dialogOf(el)!.loading).toBe(false);
+    expect(confirmState(el)).toEqual(red);
+    expect(dialogOf(el)!.shadowRoot!.querySelector("[data-target]")!.textContent!.trim()).toBe(
+      "Pantalla Cocina",
+    );
+    expect(orderOf(el)).toEqual(["ends", "removes", "irreversible"]);
+    expect(linesOf(el)).toEqual([
+      "Cierra la sesión de 2 personas",
+      "Deja de llevar Mano",
+      "Impresoras: Mano",
+      "Puede cambiar a: Counter till",
+      "Pantalla de cocina",
+    ]);
+  });
+
+  it("a refusal lists the orders and keeps Delete disabled", async () => {
+    const { api, el } = await mounted({
+      getDeviceDeleteImpact: vi.fn().mockResolvedValue(refusedImpact),
+    });
+    await openDelete(el, "d1");
+    expect(orderOf(el)).toEqual(["refusals", "ends", "removes", "irreversible"]);
+    expect(linesOf(el)[0]).toBe("Pago en curso: Mesa 4, Mesa 7");
+    expect(confirmState(el)).toEqual(quiet);
+    confirmOf(el).click();
+    await flush(el);
+    expect(api.deleteDevice).not.toHaveBeenCalled();
+  });
+
+  it("a double press sends one DELETE; success closes the dialog, drops the row and reads the list again", async () => {
+    const sent = deferred<DeleteImpact>();
+    const { api, el } = await mounted({ deleteDevice: vi.fn(() => sent.promise) });
+    await openDelete(el, "d1");
+    vi.mocked(api.listDevices).mockResolvedValue([devices[1]!]);
+    const reads = vi.mocked(api.listDevices).mock.calls.length;
+    confirmOf(el).click();
+    confirmOf(el).click();
+    await flush(el);
+    confirmOf(el).click();
+    expect(api.deleteDevice).toHaveBeenCalledExactlyOnceWith("d1");
+
+    sent.resolve(cocinaImpact);
+    await flush(el);
+    await flush(el);
+    expect(dialogOf(el)!.open).toBe(false);
+    expect(rowOf(el, "d1")).toBeNull();
+    expect(api.listDevices).toHaveBeenCalledTimes(reads + 1);
+    expect(pageError(el)).toBeUndefined();
+    // What opened the dialog went with the row, so focus lands on Add a device.
+    await expect
+      .poll(focused)
+      .toBe(q(el, "[data-test=open-add-device]")!.shadowRoot!.querySelector("button"));
+  });
+
+  it("a refresh that fails after the delete shows the failed read, not a refused delete", async () => {
+    const { api, el } = await mounted();
+    await openDelete(el, "d1");
+    vi.mocked(api.listDevices).mockRejectedValue(coded("connection.failed"));
+    confirmOf(el).click();
+    await flush(el);
+    await flush(el);
+    expect(dialogOf(el)!.open).toBe(false);
+    expect(rowOf(el, "d1")).toBeNull();
+    expect(pageError(el)).toBe(codeMessage("connection.failed"));
+    expect(api.deleteDevice).toHaveBeenCalledTimes(1);
+  });
+
+  it("a refused delete keeps the dialog with the reason and Delete pressable", async () => {
+    const deleteDevice = vi
+      .fn()
+      .mockRejectedValueOnce(coded("connection.failed"))
+      .mockResolvedValueOnce(cocinaImpact);
+    const { el } = await mounted({ deleteDevice });
+    await openDelete(el, "d1");
+    confirmOf(el).click();
+    await flush(el);
+
+    expect(dialogOf(el)!.open).toBe(true);
+    expect(dialogOf(el)!.actionError).toBe(codeMessage("connection.failed"));
+    expect(dialogOf(el)!.submitting).toBe(false);
+    expect(confirmState(el)).toEqual(red);
+    expect(rowOf(el, "d1")).not.toBeNull();
+    confirmOf(el).click();
+    await flush(el);
+    expect(deleteDevice).toHaveBeenCalledTimes(2);
+    expect(dialogOf(el)!.open).toBe(false);
+  });
+
+  it("a failed read offers Try again, and a later good read clears only the read's message", async () => {
+    const liveData = new LiveData();
+    const getDeviceDeleteImpact = vi
+      .fn()
+      .mockRejectedValueOnce(coded("connection.failed"))
+      .mockResolvedValue(cocinaImpact);
+    const { el } = await mounted({
+      liveData,
+      getDeviceDeleteImpact,
+      deleteDevice: vi.fn().mockRejectedValue(coded("server.unavailable")),
+    } as Partial<DashboardApi>);
+    await openDelete(el, "d1");
+    expect(dialogOf(el)!.readError).toBe(codeMessage("connection.failed"));
+    expect(confirmState(el)).toEqual(quiet);
+
+    const retry = dialogOf(el)!.shadowRoot!.querySelector<HTMLElement>("[data-test=delete-retry]")!;
+    expect(retry.textContent!.trim()).toBe(t("devices.delete_retry"));
+    retry.click();
+    await flush(el);
+    expect(getDeviceDeleteImpact).toHaveBeenCalledTimes(2);
+    expect(dialogOf(el)!.readError).toBe("");
+    expect(confirmState(el)).toEqual(red);
+
+    confirmOf(el).click();
+    await flush(el);
+    expect(dialogOf(el)!.actionError).toBe(codeMessage("server.unavailable"));
+
+    getDeviceDeleteImpact.mockRejectedValueOnce(coded("connection.failed"));
+    liveData.invalidate([{ type: "payments", id: "x1" }]);
+    await vi.waitFor(() => expect(dialogOf(el)!.readError).toBe(codeMessage("connection.failed")));
+    expect(dialogOf(el)!.actionError).toBe(codeMessage("server.unavailable"));
+
+    liveData.invalidate([{ type: "payments", id: "x1" }]);
+    await vi.waitFor(() => expect(dialogOf(el)!.readError).toBe(""));
+    expect(dialogOf(el)!.actionError).toBe(codeMessage("server.unavailable"));
+  });
+
+  it("an answer for an earlier opening is never applied to the next one", async () => {
+    const reads = new Map<string, Deferred<DeleteImpact>>();
+    const { api, el } = await mounted({
+      getDeviceDeleteImpact: vi.fn((id: string) => {
+        const read = deferred<DeleteImpact>();
+        reads.set(id, read);
+        return read.promise;
+      }),
+    });
+    await openDelete(el, "d1");
+    await cancelDelete(el);
+    await openDelete(el, "d2");
+    expect(dialogOf(el)!.loading).toBe(true);
+
+    reads.get("d1")!.resolve(cocinaImpact);
+    await flush(el);
+    expect(dialogOf(el)!.impact).toBeNull();
+    expect(dialogOf(el)!.loading).toBe(true);
+    expect(confirmState(el)).toEqual(quiet);
+
+    reads.get("d2")!.resolve(impactOf("d2", "Pase revocado"));
+    await flush(el);
+    expect(dialogOf(el)!.impact?.target.id).toBe("d2");
+    confirmOf(el).click();
+    await flush(el);
+    expect(api.deleteDevice).toHaveBeenCalledExactlyOnceWith("d2");
+  });
+
+  it("a failed read for an earlier opening leaves the next one alone", async () => {
+    const first = deferred<DeleteImpact>();
+    const { el } = await mounted({
+      getDeviceDeleteImpact: vi
+        .fn()
+        .mockReturnValueOnce(first.promise)
+        .mockResolvedValueOnce(impactOf("d2", "Pase revocado")),
+    });
+    await openDelete(el, "d1");
+    await cancelDelete(el);
+    await openDelete(el, "d2");
+    first.reject(coded("device.not_found"));
+    await flush(el);
+    expect(dialogOf(el)!.open).toBe(true);
+    expect(dialogOf(el)!.readError).toBe("");
+    expect(pageError(el)).toBeUndefined();
+    expect(rowOf(el, "d1")).not.toBeNull();
+    expect(confirmState(el)).toEqual(red);
+  });
+
+  it("device.not_found from the read or the delete closes the dialog and says the device no longer exists", async () => {
+    for (const from of ["read", "delete"] as const) {
+      const { api, el } = await mounted(
+        from === "read"
+          ? { getDeviceDeleteImpact: vi.fn().mockRejectedValue(coded("device.not_found")) }
+          : { deleteDevice: vi.fn().mockRejectedValue(coded("device.not_found")) },
+      );
+      vi.mocked(api.listDevices).mockResolvedValue([devices[1]!]);
+      await openDelete(el, "d1");
+      if (from === "delete") {
+        confirmOf(el).click();
+        await flush(el);
+        await flush(el);
+      }
+      expect(dialogOf(el)!.open, from).toBe(false);
+      expect(pageError(el), from).toBe(codeMessage("device.not_found"));
+      expect(rowOf(el, "d1"), from).toBeNull();
+      expect(api.deleteDevice).toHaveBeenCalledTimes(from === "read" ? 0 : 1);
+      cleanupWidgets();
+    }
+  });
+
+  it("a device deleted in another tab closes its open edit without asking about drafts", async () => {
+    const liveData = new LiveData();
+    const { el: app } = await mountWidget<DeleteLeaveFixture>("devices-delete-leave-fixture", {});
+    const api = stubApi({
+      liveData,
+      getDeviceDeleteImpact: vi.fn().mockResolvedValue(impactOf("d2", "Pase revocado")),
+      deleteDevice: vi.fn(),
+    } as Partial<DashboardApi>);
+    const el = document.createElement("dashboard-devices-screen");
+    el.api = api;
+    el.panels = PANELS;
+    app.append(el);
+    await flush(el);
+
+    // An Edit with a change not saved.
+    dq(el.shadowRoot!, "[data-test=edit-device-d1]")!.click();
+    await vi.waitFor(() => expect(q(el, "[data-test=edit-name]")).not.toBeNull());
+    const field = q(el, "[data-test=edit-name]") as HTMLElementTagNameMap["wt-input"];
+    await field.updateComplete;
+    await userEvent.fill(page.elementLocator(field.shadowRoot!.querySelector("input")!), "Otra");
+    await flush(el);
+    expect(app.leave.coordinator.isDirty()).toBe(true);
+
+    vi.mocked(api.listDevices).mockResolvedValue([devices[1]!]);
+    liveData.invalidate([{ type: "devices", id: "d1" }]);
+    await vi.waitFor(() => expect(q(el, "[data-test=edit-device-modal]")).toBeNull());
+    expect(app.leave.coordinator.isDirty()).toBe(false);
+    expect(pageError(el)).toBe(codeMessage("device.not_found"));
+    expect(rowOf(el, "d1")).toBeNull();
+    expect(api.deleteDevice).not.toHaveBeenCalled();
+  });
+
+  it("a confirmation naming another device than the dialog's sends nothing", async () => {
+    const { api, el } = await mounted();
+    await openDelete(el, "d1");
+    dialogOf(el)!.dispatchEvent(
+      new CustomEvent("wt-delete-confirm", {
+        detail: { id: "d2" },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+    await flush(el);
+    expect(api.deleteDevice).not.toHaveBeenCalled();
+    expect(dialogOf(el)!.submitting).toBe(false);
+  });
+
+  it("a delete still out when its dialog was torn down does not touch the next device's dialog", async () => {
+    const liveData = new LiveData();
+    const sent = deferred<DeleteImpact>();
+    const { api, el } = await mounted({
+      liveData,
+      deleteDevice: vi
+        .fn()
+        .mockReturnValueOnce(sent.promise)
+        .mockResolvedValue(impactOf("d2", "Pase revocado")),
+    } as Partial<DashboardApi>);
+    await openDelete(el, "d1");
+    confirmOf(el).click();
+    await flush(el);
+    vi.mocked(api.listDevices).mockResolvedValue([devices[1]!]);
+    liveData.invalidate([{ type: "devices", id: "d1" }]);
+    await vi.waitFor(() => expect(dialogOf(el)?.open ?? false).toBe(false));
+    await flush(el);
+    expect(pageError(el)).toBeUndefined();
+
+    await openDelete(el, "d2");
+    sent.reject(coded("connection.failed"));
+    await flush(el);
+    expect(dialogOf(el)!.impact?.target.id).toBe("d2");
+    expect(dialogOf(el)!.actionError).toBe("");
+    expect(dialogOf(el)!.submitting).toBe(false);
+    confirmOf(el).click();
+    await flush(el);
+    expect(api.deleteDevice).toHaveBeenLastCalledWith("d2");
+  });
+
+  it("a live read answering not-found while the delete is out leaves the answer to the delete", async () => {
+    const liveData = new LiveData();
+    const sent = deferred<DeleteImpact>();
+    const getDeviceDeleteImpact = vi.fn().mockResolvedValue(cocinaImpact);
+    const { el } = await mounted({
+      liveData,
+      getDeviceDeleteImpact,
+      deleteDevice: vi.fn(() => sent.promise),
+    } as Partial<DashboardApi>);
+    await openDelete(el, "d1");
+    confirmOf(el).click();
+    await flush(el);
+    getDeviceDeleteImpact.mockRejectedValue(coded("device.not_found"));
+    liveData.invalidate([{ type: "payments", id: "pay9" }]);
+    await vi.waitFor(() => expect(getDeviceDeleteImpact).toHaveBeenCalledTimes(2));
+    await flush(el);
+    expect(dialogOf(el)!.open).toBe(true);
+    expect(dialogOf(el)!.submitting).toBe(true);
+
+    sent.resolve(cocinaImpact);
+    await flush(el);
+    expect(dialogOf(el)?.open ?? false).toBe(false);
+    expect(pageError(el)).toBeUndefined();
+  });
+
+  it("a device deleted in another tab closes the delete dialog open on it and says so", async () => {
+    const liveData = new LiveData();
+    const { api, el } = await mounted({ liveData, deleteDevice: vi.fn() } as Partial<DashboardApi>);
+    await openDelete(el, "d2");
+    expect(dialogOf(el)!.open).toBe(true);
+    expect(pageError(el)).toBeUndefined();
+    vi.mocked(api.listDevices).mockResolvedValue([devices[0]!]);
+    liveData.invalidate([{ type: "devices", id: "d2" }]);
+    await vi.waitFor(() => expect(dialogOf(el)!.open).toBe(false));
+    expect(pageError(el)).toBe(codeMessage("device.not_found"));
+    expect(rowOf(el, "d2")).toBeNull();
+    expect(api.deleteDevice).not.toHaveBeenCalled();
+  });
+
+  it("words the menu and the dialog in English and Spanish", async () => {
+    const before = currentLocale();
+    try {
+      for (const [locale, del, heading, ends, irreversible, cancel] of [
+        ["en", "Delete", "Delete device?", "Work that will end", "This can't be undone.", "Cancel"],
+        [
+          "es-ES",
+          "Eliminar",
+          "¿Eliminar el dispositivo?",
+          "Trabajo que finalizará",
+          "Esta acción no se puede deshacer.",
+          "Cancelar",
+        ],
+      ] as const) {
+        setLocale(locale);
+        const { el } = await mounted();
+        expect(deepText(el, "[data-test=delete-device-d1]")).toBe(del);
+        expect(deepText(el, "[data-test=delete-device-d2]")).toBe(del);
+        await openDelete(el, "d1");
+        const root = dialogOf(el)!.shadowRoot!;
+        expect((root.querySelector("wt-modal") as unknown as { heading: string }).heading).toBe(
+          heading,
+        );
+        expect(root.querySelector('[data-group="ends"] h3')!.textContent!.trim()).toBe(ends);
+        expect(root.querySelector("[data-irreversible]")!.textContent!.trim()).toBe(irreversible);
+        expect(root.querySelector("[data-test=delete-cancel]")!.textContent!.trim()).toBe(cancel);
+        expect(confirmOf(el).textContent!.trim()).toBe(del);
+        cleanupWidgets();
+      }
+    } finally {
+      setLocale(before);
+    }
+  });
+
+  it("a render of the screen hands the closed dialog the same words, so it does not redraw", async () => {
+    const { el } = await mounted();
+    const copy = dialogOf(el)!.copy;
+    expect(copy).toBeDefined();
+
+    el.requestUpdate();
+    await flush(el);
+
+    expect(dialogOf(el)!.copy).toBe(copy);
+  });
+
+  it("a language switch while the dialog is open redraws it in the new language", async () => {
+    const before = currentLocale();
+    try {
+      setLocale("es-ES");
+      const { el } = await mounted();
+      await openDelete(el, "d1");
+      expect(linesOf(el)[0]).toBe("Cierra la sesión de 2 personas");
+
+      setLocale("en");
+      el.requestUpdate();
+      await flush(el);
+
+      expect(linesOf(el)[0]).toBe("Signs out 2 people");
+    } finally {
+      setLocale(before);
+    }
+  });
 });

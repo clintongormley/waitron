@@ -12,6 +12,7 @@ import {
   submitOnEnter,
   visuallyHiddenStyles,
   type DataTableColumn,
+  type DeleteDialogCopy,
   type WtModal,
   type DraftScope,
   type LeaveCoordinator,
@@ -25,9 +26,12 @@ import "@waitron/ui/src/components/wt-data-table.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import "@waitron/ui/src/components/wt-spinner.js";
 import "@waitron/ui/src/components/wt-switch.js";
+import "@waitron/ui/src/components/wt-delete-dialog.js";
+import type { DeleteImpact } from "@waitron/shared";
 import { PairingHold, type PairingHoldStatus } from "../api/pairing-hold.js";
 import { bottomMessage, refusal } from "../i18n/form-message.js";
 import { holdNotice, holdNoticeStyles } from "../widgets/hold-notice.js";
+import { deviceDeleteCopy } from "../widgets/device-delete-copy.js";
 import { relativeTime } from "../widgets/relative-time.js";
 import "../widgets/row-actions.js";
 import { CARD_PROVIDER_PANELS } from "@waitron/dashboard-modules";
@@ -37,7 +41,7 @@ import {
   type CardProviderPanel,
   t as tRaw,
 } from "@waitron/dashboard-kit";
-import { t } from "../i18n/t.js";
+import { currentLocale, t } from "../i18n/t.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
 import { formatIsoMinute } from "../date-utils.js";
 import { printerLabel } from "../i18n/domain.js";
@@ -526,6 +530,24 @@ export class DevicesScreen extends LitElement {
   #readErrorShown = false;
 
   @state() private editing: DeviceRow | null = null;
+
+  /** The id of the device the delete dialog is open on. Each opening and close is a new generation,
+   * so a delete's answer for an earlier one is never applied; an impact read for an earlier one is
+   * dropped by its query slot, which the next `watch` or `release` replaces. */
+  @state() private deleteTarget: string | null = null;
+  @state() private deleteImpact: DeleteImpact | null = null;
+  @state() private deleteLoading = false;
+  @state() private deleteSubmitting = false;
+  @state() private deleteReadError = "";
+  @state() private deleteActionError = "";
+  #deleteGeneration = 0;
+  #deleteOpener: HTMLElement | null = null;
+  #deleteCopy: { locale: string; copy: DeleteDialogCopy } | null = null;
+  readonly #impactQueries = new DashboardQueries(
+    this,
+    () => this.api,
+    (error) => this.#impactFailed(error),
+  );
   @state() private editForm: EditForm = {
     name: "",
     profileId: "",
@@ -653,9 +675,7 @@ export class DevicesScreen extends LitElement {
     this.armedRemoveId = null;
     try {
       await Promise.all([
-        this.#queries.watch("listDevices", [], (value) => {
-          this.devices = value;
-        }),
+        this.#watchDevices(),
         this.#queries.watch("listStations", [], (value) => {
           this.stations = value;
         }),
@@ -681,6 +701,15 @@ export class DevicesScreen extends LitElement {
     } catch (error) {
       this.#showReadError(error);
     }
+  }
+
+  #watchDevices(): Promise<void> {
+    return this.#queries.watch("listDevices", [], (value) => {
+      const listed = new Set(value.map(({ id }) => id));
+      const gone = this.devices.filter(({ id }) => !listed.has(id));
+      this.devices = value;
+      for (const { id } of gone) this.#deviceGone(id, true);
+    });
   }
 
   #showError(code: string | null, fromRead = false): void {
@@ -725,6 +754,7 @@ export class DevicesScreen extends LitElement {
   override disconnectedCallback(): void {
     clearTimeout(this.#staleTimer);
     this.#staleTimer = undefined;
+    this.#closeDelete();
     this.#endAdding();
     this.#endEdit();
     super.disconnectedCallback();
@@ -1518,22 +1548,186 @@ export class DevicesScreen extends LitElement {
     this.#endEdit();
   }
 
-  #deviceActions(device: DeviceRow): TemplateResult | typeof nothing {
-    if (!device.active) return nothing;
+  #deviceActions(device: DeviceRow): TemplateResult {
     const armed = this.armedRemoveId === device.id;
     return html`<dashboard-row-actions .label=${`${t("devices.actions")}: ${device.label}`}>
-      <wt-button data-test=${`edit-device-${device.id}`} @click=${() => this.#openEdit(device)}
-        >${t("action.edit")}</wt-button
-      >
+      ${
+        device.active
+          ? html`<wt-button
+                data-test=${`edit-device-${device.id}`}
+                @click=${() => this.#openEdit(device)}
+                >${t("action.edit")}</wt-button
+              >
+              <wt-button
+                variant="danger"
+                data-keep-open
+                data-test=${`remove-${device.id}`}
+                data-armed=${armed ? "true" : nothing}
+                @click=${() => this.#onRemove(device.id)}
+                >${armed ? t("devices.disable_confirm") : t("devices.disable")}</wt-button
+              >`
+          : nothing
+      }
       <wt-button
         variant="danger"
-        data-keep-open
-        data-test=${`remove-${device.id}`}
-        data-armed=${armed ? "true" : nothing}
-        @click=${() => this.#onRemove(device.id)}
-        >${armed ? t("devices.disable_confirm") : t("devices.disable")}</wt-button
+        data-test=${`delete-device-${device.id}`}
+        @click=${(event: Event) => {
+          const button = event.currentTarget as HTMLElement;
+          this.#openDelete(device, this.#rowMenuButton(button) ?? button);
+        }}
+        >${t("action.delete")}</wt-button
       >
     </dashboard-row-actions>`;
+  }
+
+  /** The button that opens the row menu `action` sits in. */
+  #rowMenuButton(action: HTMLElement): HTMLButtonElement | undefined {
+    return (
+      action
+        .closest("dashboard-row-actions")
+        ?.shadowRoot?.querySelector<HTMLButtonElement>("button") ?? undefined
+    );
+  }
+
+  // ── Delete ───────────────────────────────────────────────────────────────────────────────────────
+
+  #openDelete(device: DeviceRow, opener: HTMLElement): void {
+    this.#deleteGeneration++;
+    this.#deleteOpener = opener;
+    this.deleteTarget = device.id;
+    this.deleteImpact = null;
+    this.deleteLoading = true;
+    this.deleteSubmitting = false;
+    this.deleteReadError = "";
+    this.deleteActionError = "";
+    this.#readImpact(device.id);
+  }
+
+  #readImpact(id: string): void {
+    this.#impactQueries
+      .watch("getDeviceDeleteImpact", [id], (impact) => {
+        this.deleteImpact = impact;
+        this.deleteLoading = false;
+        this.deleteReadError = "";
+      })
+      // A failure has already reached `#impactFailed`.
+      .catch(() => undefined);
+  }
+
+  #impactFailed(error: unknown): void {
+    const target = this.deleteTarget;
+    if (target === null) return;
+    const code = codeOf(error);
+    if (code === "device.not_found") {
+      // The delete in flight may be what removed it; its own answer decides what is shown.
+      if (!this.deleteSubmitting) this.#deviceGone(target, true);
+      return;
+    }
+    this.deleteLoading = false;
+    this.deleteReadError = codeMessage(code);
+  }
+
+  #retryImpact(): void {
+    const target = this.deleteTarget;
+    if (target === null || this.deleteSubmitting) return;
+    this.deleteLoading = true;
+    this.deleteReadError = "";
+    this.#readImpact(target);
+  }
+
+  #closeDelete(): void {
+    this.#deleteGeneration++;
+    this.#impactQueries.release("getDeviceDeleteImpact");
+    this.deleteTarget = null;
+    this.deleteImpact = null;
+    this.deleteLoading = false;
+    this.deleteSubmitting = false;
+    this.deleteReadError = "";
+    this.deleteActionError = "";
+  }
+
+  async #confirmDelete(id: string): Promise<void> {
+    const target = this.deleteTarget;
+    if (target === null || id !== target || this.deleteSubmitting) return;
+    const generation = this.#deleteGeneration;
+    this.deleteSubmitting = true;
+    this.deleteActionError = "";
+    try {
+      await this.api.deleteDevice(id);
+    } catch (error) {
+      if (generation !== this.#deleteGeneration) return;
+      this.deleteSubmitting = false;
+      const code = codeOf(error);
+      if (code !== "device.not_found") {
+        this.deleteActionError = codeMessage(code);
+        return;
+      }
+      this.#deviceGone(id, true);
+      await this.#rewatchDevices();
+      return;
+    }
+    if (generation !== this.#deleteGeneration) return;
+    // What opened the dialog goes with the row, and the dialog hands focus to its opener as it closes.
+    this.#deleteOpener =
+      this.renderRoot.querySelector<HTMLElement>(".heading [data-test=open-add-device]") ??
+      this.#deleteOpener;
+    this.#deviceGone(id, false);
+    await this.#rewatchDevices();
+  }
+
+  /** Not `#load`, which would clear a message this screen has just shown. A failure is a read's. */
+  async #rewatchDevices(): Promise<void> {
+    if (!this.isConnected) return;
+    this.armedRemoveId = null;
+    // A failure has already reached `#showReadError`.
+    await this.#watchDevices().catch(() => undefined);
+  }
+
+  /**
+   * Ends everything still open on a device that no longer exists — its delete dialog and its Edit,
+   * without asking to keep Edit's drafts — and drops its row. `refuse` says so where something was
+   * open on it.
+   */
+  #deviceGone(id: string, refuse: boolean): void {
+    const ours = this.deleteSubmitting && this.deleteTarget === id;
+    let open = false;
+    if (this.deleteTarget === id) {
+      open = true;
+      this.#closeDelete();
+    }
+    if (this.editing?.id === id) {
+      open = true;
+      this.#endEdit();
+    }
+    if (this.armedRemoveId === id) this.armedRemoveId = null;
+    this.devices = this.devices.filter((d) => d.id !== id);
+    if (refuse && open && !ours) this.#showError("device.not_found");
+  }
+
+  /** A new object on every render would redraw the dialog on every live list update. */
+  #deleteDialogCopy(): DeleteDialogCopy {
+    const locale = currentLocale();
+    if (this.#deleteCopy?.locale !== locale)
+      this.#deleteCopy = { locale, copy: deviceDeleteCopy() };
+    return this.#deleteCopy.copy;
+  }
+
+  #renderDeleteDialog(): TemplateResult {
+    return html`<wt-delete-dialog
+      data-test="delete-device-dialog"
+      .open=${this.deleteTarget !== null}
+      .impact=${this.deleteImpact}
+      .loading=${this.deleteLoading}
+      .submitting=${this.deleteSubmitting}
+      .readError=${this.deleteReadError}
+      .actionError=${this.deleteActionError}
+      .copy=${this.#deleteDialogCopy()}
+      .opener=${this.#deleteOpener}
+      @wt-delete-confirm=${(event: CustomEvent<{ id: string }>) =>
+        void this.#confirmDelete(event.detail.id)}
+      @wt-delete-retry=${() => this.#retryImpact()}
+      @wt-close=${() => this.#closeDelete()}
+    ></wt-delete-dialog>`;
   }
 
   #renderDevicesTable(): TemplateResult {
@@ -2551,7 +2745,7 @@ export class DevicesScreen extends LitElement {
           : nothing
       }
       ${this.#renderAddDialog()} ${this.#renderJoinedDialog()} ${this.#renderPairDialog()}
-      ${this.#renderEditDialog()}
+      ${this.#renderEditDialog()} ${this.#renderDeleteDialog()}
     `;
   }
 }

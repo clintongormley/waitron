@@ -39,6 +39,28 @@ it("reads a printer's delete impact passively after the first read, and sends it
   expect(active).toHaveBeenCalledTimes(2);
 });
 
+it("reads a device's delete impact passively after the first read, and sends its delete as activity", async () => {
+  const impact = { target: { id: "d1", name: "Bar till" }, refusals: [], ends: [], removes: [] };
+  const fetchImpl = vi.fn<(path: string, init: RequestInit) => Promise<Response>>(
+    async () => new Response(JSON.stringify(impact), { status: 200 }),
+  );
+  const active = vi.fn();
+  const api = new DashboardApi("", fetchImpl, undefined, active);
+  const query = dashboardQuery(api, "getDeviceDeleteImpact", ["d1"]);
+  expect(await query.read()).toEqual(impact);
+  await query.read();
+  expect(fetchImpl.mock.calls[1]![0]).toBe("/management-api/devices/d1/delete-impact");
+  expect(fetchImpl.mock.calls[1]![1].method).toBe("GET");
+  expect(new Headers(fetchImpl.mock.calls[1]![1].headers).get("x-waitron-live")).toBe("1");
+  expect(active).toHaveBeenCalledOnce();
+
+  expect(await api.deleteDevice("d1")).toEqual(impact);
+  expect(fetchImpl.mock.calls[2]![0]).toBe("/management-api/devices/d1");
+  expect(fetchImpl.mock.calls[2]![1].method).toBe("DELETE");
+  expect(new Headers(fetchImpl.mock.calls[2]![1].headers).has("x-waitron-live")).toBe(false);
+  expect(active).toHaveBeenCalledTimes(2);
+});
+
 it.each([
   ["listOrderPages", [{ status: "all", anyDate: false, credited: false }, 1], "working_orders"],
   ["listOrderPages", [{ status: "all", anyDate: false, credited: false }, 1], "bill_payments"],
@@ -163,6 +185,32 @@ it.each([
       "device_profile_printers",
       "kitchen_stations",
       "station_printers",
+    ],
+  ],
+  // `deviceDeleteRules` (apps/server/src/device-delete.ts): the device, its pending payments and
+  // their orders, the printers and readers it holds, its join request, and the printers,
+  // stations, profiles, reader and kitchen screens it names. Not `sessions`, which no module
+  // declares as a live resource.
+  [
+    "getDeviceDeleteImpact",
+    ["d1"],
+    [
+      "devices",
+      "payments",
+      "bill_payments",
+      "bill_payment_refunds",
+      "working_orders",
+      "printer_holders",
+      "printers",
+      "card_reader_holders",
+      "card_readers",
+      "join_requests",
+      "device_made_here_stations",
+      "kitchen_stations",
+      "device_approved_profiles",
+      "device_profiles",
+      "device_card_readers",
+      "device_kitchen_screens",
     ],
   ],
   // `readProfileKitchenScreens` (packages/venue-service/src/kitchen-screens.ts): each profile's

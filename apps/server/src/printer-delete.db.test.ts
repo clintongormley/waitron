@@ -3,7 +3,6 @@ import { eq, sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import {
   CORE_CHANGE_SOURCES,
-  CORE_MIGRATIONS,
   deviceProfilePrinters,
   deviceProfiles,
   devices,
@@ -18,11 +17,13 @@ import {
   printers,
   printJobs,
   receiptReprints,
+  removeChangeFeed,
   stationPrinters,
   subscribeToChanges,
   withTransaction,
   workingOrders,
 } from "@waitron/db";
+import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
 import {
@@ -47,8 +48,10 @@ import { venueModuleConfig } from "./provision.js";
 import { endDeactivatedInvoicePrintDeliveries } from "./invoice-print.js";
 import { resolveDevicePrinterId } from "@waitron/layouts";
 import { deletePrinter, readPrinterDeleteImpact } from "./printer-delete.js";
+import { deleteDevice } from "./device-delete.js";
+import type { TillConfig } from "./till-config.js";
 
-const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
+const suite = useVenueDb({ migrations: migrationOptionsFor(manifestSets(), null) });
 
 const NOW = new Date("2026-10-10T10:00:00.000Z");
 const clock: TrustedClock = {
@@ -578,6 +581,61 @@ describe("the printer delete impact", () => {
       ).rejects.toMatchObject({ code: "printer.not_found", params: { id } });
     }
   });
+
+  it("names a disabled device inheriting the printer as its profile's default, and not a deleted one", async () => {
+    const v = await seedVenue();
+    const [series] = await suite.db.select().from(invoiceSeries);
+    const tillCfg: TillConfig = {
+      nodeId: brandNodeId(series!.nodeId),
+      seriesId: seriesId(series!.id),
+      locationId: brandLocationId(v.cfg.locationId),
+      locale: "es-ES",
+      invoiceLocales: ["es-ES"],
+      tipsEnabled: false,
+      simplifiedInvoiceLimit: null,
+    };
+    const [deli] = await suite.db
+      .insert(deviceProfiles)
+      .values({ name: "Deli", formFactor: "till" })
+      .returning({ id: deviceProfiles.id });
+    await suite.db.insert(deviceProfilePrinters).values({
+      deviceProfileId: deli!.id,
+      printerId: v.Z,
+      role: "receipt",
+      position: 0,
+      isDefault: true,
+    });
+    const deliDevice = async (label: string) =>
+      (
+        await suite.db
+          .insert(devices)
+          .values({
+            locationId: v.cfg.locationId,
+            deviceProfileId: deli!.id,
+            label,
+            tokenHash: randomUUID(),
+            active: false,
+          })
+          .returning({ id: devices.id })
+      )[0]!.id;
+    const gone = await deliDevice("Deli till");
+    const spare = await deliDevice("Deli spare");
+    await withTransaction(suite.db, (tx) => deleteDevice(tx, tillCfg, gone, NOW));
+
+    const impact = await withTransaction(suite.db, (tx) => readPrinterDeleteImpact(tx, v.cfg, v.Z));
+
+    expect(impact.removes.find((item) => item.key === "device_receipt_default")).toEqual({
+      key: "device_receipt_default",
+      count: 1,
+      targets: [{ id: spare, name: "Deli spare" }],
+    });
+    const goneRow = async () =>
+      (await suite.db.execute(sql`select * from devices where id = ${gone}`)).rows;
+    const kept = await goneRow();
+    expect(kept).toHaveLength(1);
+    await withTransaction(suite.db, (tx) => deletePrinter(tx, v.cfg, v.Z, NOW));
+    expect(await goneRow()).toEqual(kept);
+  });
 });
 
 describe("deleting a printer", () => {
@@ -776,28 +834,34 @@ describe("deleting a printer", () => {
     await installChangeFeed(suite.db, CORE_CHANGE_SOURCES);
     const heard: ResourceIdentity[] = [];
     const unsubscribe = subscribeToChanges((change) => heard.push(...change.resources));
-    if (!/^[0-9a-f-]{36}$/.test(v.P)) throw new Error(`unexpected printer id ${v.P}`);
-    const before = await snapshot();
-    // Trigger bodies take no bound value; the id is checked to be a plain uuid above.
-    await suite.db.execute(
-      sql.raw(`create trigger test_delete_failure before update on printers
-        when old.id = '${v.P}' and new.deleted_at is not null
-        begin select raise(abort, 'test_delete_failure'); end`),
-    );
+    // The reset between cases does not remove the feed's triggers, so this case does.
     try {
-      await expect(
-        withTransaction(suite.db, (tx) => deletePrinter(tx, v.cfg, v.P, NOW)),
-      ).rejects.toThrow(/test_delete_failure/);
-      expect(await snapshot()).toEqual(before);
-      expect(heard).toEqual([]);
-    } finally {
-      await suite.db.execute(sql`drop trigger test_delete_failure`);
-    }
+      if (!/^[0-9a-f-]{36}$/.test(v.P)) throw new Error(`unexpected printer id ${v.P}`);
+      const before = await snapshot();
+      // Trigger bodies take no bound value; the id is checked to be a plain uuid above.
+      await suite.db.execute(
+        sql.raw(`create trigger test_delete_failure before update on printers
+          when old.id = '${v.P}' and new.deleted_at is not null
+          begin select raise(abort, 'test_delete_failure'); end`),
+      );
+      try {
+        await expect(
+          withTransaction(suite.db, (tx) => deletePrinter(tx, v.cfg, v.P, NOW)),
+        ).rejects.toThrow(/test_delete_failure/);
+        expect(await snapshot()).toEqual(before);
+        expect(heard).toEqual([]);
+      } finally {
+        await suite.db.execute(sql`drop trigger test_delete_failure`);
+      }
 
-    // Control: the same subscription hears the delete once the trigger is gone.
-    await withTransaction(suite.db, (tx) => deletePrinter(tx, v.cfg, v.P, NOW));
-    unsubscribe();
-    expect(heard).toContainEqual(expect.objectContaining({ type: "printers", id: v.P }));
+      // Control: the same subscription hears the delete once the trigger is gone.
+      await withTransaction(suite.db, (tx) => deletePrinter(tx, v.cfg, v.P, NOW));
+      expect(heard).toContainEqual(expect.objectContaining({ type: "printers", id: v.P }));
+    } finally {
+      unsubscribe();
+      removeChangeFeed(suite.db);
+      await suite.db.execute(sql`delete from change_log`);
+    }
   });
 
   it("is unlike Disable, which keeps ordinary waiting jobs, settings and holder, and can be undone by Enable", async () => {
