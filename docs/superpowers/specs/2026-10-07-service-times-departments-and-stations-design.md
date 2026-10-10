@@ -1,5 +1,11 @@
 # Service times, departments, zones and prep stations
 
+> 2026-10-10: A435 step 5 replaces course/station Disable and Enable with permanent
+> Delete. The [current deletion contract](../../developers/conventions-data.md#permanent-course-and-station-deletion)
+> governs retained history, routing cleanup and empty screen scopes. Earlier station/course
+> lifecycle wording below is a dated record, not the current operation.
+
+
 > 2026-10-10, A366 slice 7 Part B: Edit the receipt and image usage links now open
 > `/manage/venue-operations/department/:id/view/receipt`. Venue settings keeps global
 > defaults, language and sales description; the intermediate picker below is retired.

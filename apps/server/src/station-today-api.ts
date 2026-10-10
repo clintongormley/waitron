@@ -18,6 +18,7 @@ import { requestCfg } from "./request-config.js";
 import { overridePinAttempts, parseOverrideField, type Run, type TillApiDeps } from "./till-api.js";
 import { requireSession } from "./till-session.js";
 import { openDishCount, openDishesChoice, withStationDishes } from "./station-closing.js";
+import { requireLiveStation } from "./kitchen.js";
 import "./errors.js";
 
 function stationId(value: string): string {
@@ -28,10 +29,11 @@ function stationId(value: string): string {
 /** Refuses a station the device's station screen does not show now. */
 async function assertScreenShowsStation(
   tx: Transaction,
-  cfg: Pick<TillApiDeps["cfg"], "locationId">,
+  cfg: TillApiDeps["cfg"],
   deviceId: string,
   id: string,
 ): Promise<void> {
+  await requireLiveStation(tx, cfg, id);
   const screen = (await VENUE_SERVICE.readDeviceKitchenScreens(tx, cfg, deviceId)).find(
     (candidate) => candidate.kind === "station",
   );

@@ -216,8 +216,7 @@ describe("VENUE_SERVICE_DASHBOARD", () => {
       Promise.resolve({
         ok: true,
         status: 200,
-        text: async () =>
-          JSON.stringify(path === "/management-api/stations?includeDisabled=true" ? [] : model),
+        text: async () => JSON.stringify(path === "/management-api/stations" ? [] : model),
       } as Response),
     );
     history.replaceState(null, "", "/manage/opening-hours/view/periods/department/d1");

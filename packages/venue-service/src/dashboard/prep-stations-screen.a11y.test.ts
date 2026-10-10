@@ -232,14 +232,14 @@ describe.each(["light", "dark"] as const)("prep stations accessibility (%s)", (t
 describe.each(["light", "dark"] as const)("station timing accessibility (%s)", (theme) => {
   it.each([
     "closed",
-    "switch-off",
+    "delete",
     "inactive",
     "clock-unreadable",
     "opened-by-hand",
     "closed-by-hand",
     "no-replacement",
     "refused-rest",
-    "refused-switch-off",
+    "refused-delete",
   ] as const)("checks %s", async (state) => {
     setLocale("en");
     await mountThemed("<div></div>", theme);
@@ -328,8 +328,13 @@ describe.each(["light", "dark"] as const)("station timing accessibility (%s)", (
         code: "management.request_invalid",
         params: { field: "showsRestOfOrder" },
       }),
-      readStationClosing: vi.fn().mockResolvedValue({ openDishCount: 0, destinations: [] }),
-      deactivateStation: vi.fn().mockRejectedValue({ code: "station.not_found" }),
+      getStationDeleteImpact: vi.fn().mockResolvedValue({
+        target: { id: "bar", name: "Upstairs bar" },
+        refusals: [],
+        ends: [],
+        removes: [],
+      }),
+      deleteStation: vi.fn().mockRejectedValue({ code: "connection.failed" }),
     } as unknown as PrepStationsApi;
     host.append(el);
     await new Promise((r) => setTimeout(r, 0));
@@ -352,7 +357,7 @@ describe.each(["light", "dark"] as const)("station timing accessibility (%s)", (
         )!;
       await restEditor.updateComplete;
     }
-    const action = state === "switch-off" || state === "refused-switch-off" ? "disable" : null;
+    const action = state === "delete" || state === "refused-delete" ? "delete" : null;
     if (action) {
       const selector = `[data-test="${action}-bar"]`;
       const summary = el
@@ -374,16 +379,16 @@ describe.each(["light", "dark"] as const)("station timing accessibility (%s)", (
       } else {
         const dialog = el.shadowRoot!.querySelector<
           HTMLElement & { updateComplete: Promise<boolean> }
-        >("station-disable-dialog")!;
+        >("wt-delete-dialog")!;
         await dialog.updateComplete;
         await expect
           .poll(() =>
             dialog
-              .shadowRoot!.querySelector("[data-test=disable-confirm]")
+              .shadowRoot!.querySelector("[data-test=delete-confirm]")
               ?.hasAttribute("disabled"),
           )
           .toBe(false);
-        dialog.shadowRoot!.querySelector<HTMLElement>("[data-test=disable-confirm]")!.click();
+        dialog.shadowRoot!.querySelector<HTMLElement>("[data-test=delete-confirm]")!.click();
       }
       await new Promise((r) => setTimeout(r, 0));
       await el.updateComplete;
@@ -407,9 +412,10 @@ describe.each(["light", "dark"] as const)("station timing accessibility (%s)", (
       } else {
         expect(
           el
-            .shadowRoot!.querySelector("station-disable-dialog")!
-            .shadowRoot!.querySelector('[role="alert"]'),
-        ).not.toBeNull();
+            .shadowRoot!.querySelector("wt-delete-dialog")!
+            .shadowRoot!.querySelector("wt-modal")!
+            .shadowRoot!.querySelector('[role="alert"]')?.textContent,
+        ).toContain("could not be saved");
       }
     }
     await expectNoA11yViolations(host);

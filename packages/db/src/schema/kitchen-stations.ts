@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { check, foreignKey, unique, uniqueIndex } from "drizzle-orm/sqlite-core";
+import { check, foreignKey, uniqueIndex } from "drizzle-orm/sqlite-core";
 import { count, flag, id, label, newId, nowIso, table, tsString } from "./columns.js";
 import { locations } from "./tenants.js";
 
@@ -25,7 +25,9 @@ export const kitchenStations = table(
     createdAt: tsString("created_at").notNull().$defaultFn(nowIso),
   },
   (t) => [
-    unique("kitchen_stations_name_key").on(t.locationId, t.name),
+    uniqueIndex("kitchen_stations_name_key")
+      .on(t.locationId, t.name)
+      .where(sql`${t.active} = 1`),
     uniqueIndex("kitchen_stations_default_key")
       .on(t.locationId)
       .where(sql`${t.isDefault}`),

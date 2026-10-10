@@ -50,13 +50,13 @@ A red asterisk beside a category means the route the Made at column shows for it
 active station, so it reads No replacement or Nowhere. That route is the category's baseline:
 Made at reads only the routing grid's Every zone column, on the category's own row or the nearest
 parent's, so a cell in one service zone's column, or on a product's row, can still send some of a
-marked category's dishes somewhere else. A cell naming a disabled station uses the active default
-station, or reads No replacement when there is no active default. This baseline ignores today's
-station closures. A category with no Every zone cell on its own row or a parent's is made
-at the default station while that station is active, and reads Nowhere when it is disabled or
-none is set. A route to No preparation carries no asterisk. The asterisk's tooltip explains the
+marked category's dishes somewhere else. Deleting a station removes the cells that name it, so
+this baseline follows the surviving category rule or the active default. The baseline ignores
+today's station closures. A category with no Every zone cell on its own row or a parent's is made
+at the active default station, and reads Nowhere when none is set. A route to No preparation
+carries no asterisk. The asterisk's tooltip explains the
 warning. To clear it, set the Every zone cell of the category or one of its parents on Prep
-stations' Routing tab; or enable the station that cell names or the default station.
+stations' Routing tab; or choose an active station for that cell.
 If no active default is set, use Make default on Prep stations.
 
 A variant is always in its product's reporting category. Its effective category

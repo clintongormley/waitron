@@ -17,7 +17,7 @@ import type { Decimal, OptionSelection, OptionSnapshot } from "@waitron/shared";
 import { lineGross } from "./order-line.js";
 import { orderLineMergeKey } from "./draft-lines.js";
 import type { BlockReason } from "./menu-refresh.js";
-import type { HeldExtra, TillProduct } from "../api/client.js";
+import type { HeldExtra, TillCourse, TillProduct } from "../api/client.js";
 import { productUnit, soldByTheUnit, toPresentation } from "../widgets/product-name.js";
 
 /**
@@ -81,6 +81,8 @@ export interface OrderLine {
   note?: string;
   /** The waiter's course override on a table draft; ABSENT means the product's default course. */
   courseId?: string;
+  /** Read-only course metadata from a restored draft, never sent on a write. */
+  course?: TillCourse;
   /** The chosen making station on a table draft line. */
   makeAt?: string;
   /** Never merged with another line, either way; Split quantity's rows carry it. */
@@ -486,6 +488,7 @@ export class WorkingOrderStore {
     if (this.#refusesEdits) return;
     const line = this.#lines[index];
     if (line === undefined) return;
+    delete line.course;
     if (courseId === undefined) delete line.courseId;
     else line.courseId = courseId;
     this.#markDirty();

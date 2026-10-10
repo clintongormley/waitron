@@ -648,6 +648,9 @@ declare module "@waitron/shared" {
     "zone.name_taken": { name: string };
     /** A kitchen-station name already exists in this venue. `name` is the operator's own text. */
     "station.name_taken": { name: string };
+    "station.is_default": { stationId: string };
+    "station.screen_in_use": { stationId: string; count: number };
+    "station.work_in_progress": { stationId: string; count: number };
     /** The effective late thresholds would be unordered for this station. */
     "station.thresholds_invalid": { field: string; stationId?: string; name: string };
     // `station.not_found` is declared in @waitron/db's errors.ts.
@@ -707,7 +710,7 @@ declare module "@waitron/shared" {
     "course.name_taken": { name: string };
     /**
      * No kitchen course with this id in this venue; where only an active course will do
-     * (`requireLiveCourse`, `moveCourse`), also a disabled one.
+     * (`requireLiveCourse`, `moveCourse`), also a deleted one.
      */
     "course.not_found": { courseId: string };
     /**

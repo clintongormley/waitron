@@ -157,8 +157,16 @@ describe("paper for a move to another station", () => {
         const grill = await createStation(tx, cfg, { name: "Grill", isDefault: false });
         const barPrinter = await makePrinter(tx, cfg, "Bar printer");
         const grillPrinter = await makePrinter(tx, cfg, "Grill printer");
-        await attachPrinterToStation(tx, { stationId: bar.id, printerId: barPrinter });
-        await attachPrinterToStation(tx, { stationId: grill.id, printerId: grillPrinter });
+        await attachPrinterToStation(tx, {
+          locationId: cfg.locationId,
+          stationId: bar.id,
+          printerId: barPrinter,
+        });
+        await attachPrinterToStation(tx, {
+          locationId: cfg.locationId,
+          stationId: grill.id,
+          printerId: grillPrinter,
+        });
         const dish = await makeProduct(tx, cfg, catalogueId, "Steak", { stationId: bar.id });
         const orderId = await fireNewOrder(tx, cfg, [line(dish)]);
         const [fired] = await tx
@@ -208,7 +216,11 @@ describe("paper for a move to another station", () => {
     const result = await asApp(cfg, async (tx) => {
       const grill = await createStation(tx, cfg, { name: "Grill", isDefault: true });
       const printerId = await makePrinter(tx, cfg, "Grill printer");
-      await attachPrinterToStation(tx, { stationId: grill.id, printerId });
+      await attachPrinterToStation(tx, {
+        locationId: cfg.locationId,
+        stationId: grill.id,
+        printerId,
+      });
       const dish = await makeProduct(tx, cfg, catalogueId, "Steak", { stationId: grill.id });
       const orderId = randomUUID();
       await createOfferedOrder(tx, cfg, orderId, [line(dish)]);
@@ -255,8 +267,16 @@ describe("show the rest of the order", () => {
       const grillPrinter = await makePrinter(tx, cfg, "Grill printer");
       const fryerPrinter = await makePrinter(tx, cfg, "Fryer printer");
       const passPrinter = await makeSharedPrinter(tx, cfg, "Pase", [grill.id, fryer.id]);
-      await attachPrinterToStation(tx, { stationId: grill.id, printerId: grillPrinter });
-      await attachPrinterToStation(tx, { stationId: fryer.id, printerId: fryerPrinter });
+      await attachPrinterToStation(tx, {
+        locationId: cfg.locationId,
+        stationId: grill.id,
+        printerId: grillPrinter,
+      });
+      await attachPrinterToStation(tx, {
+        locationId: cfg.locationId,
+        stationId: fryer.id,
+        printerId: fryerPrinter,
+      });
       const burger = await makeProduct(tx, cfg, catalogueId, "Burger", { stationId: grill.id });
       const chips = await makeProduct(tx, cfg, catalogueId, "Chips", { stationId: fryer.id });
       const salad = await makeProduct(tx, cfg, catalogueId, "Salad", { stationId: cold.id });
@@ -431,7 +451,8 @@ async function makeSharedPrinter(
   stationIds: string[],
 ): Promise<string> {
   const printerId = await makePrinter(tx, cfg, name);
-  for (const stationId of stationIds) await attachPrinterToStation(tx, { stationId, printerId });
+  for (const stationId of stationIds)
+    await attachPrinterToStation(tx, { locationId: cfg.locationId, stationId, printerId });
   return printerId;
 }
 
@@ -500,7 +521,11 @@ describe("print-on-fire (enqueueKitchenTickets wired into fireLines / fireCourse
       const cocina = await createStation(tx, cfg, { name: "Cocina", isDefault: true });
       const pCocina = await makePrinter(tx, cfg, "Cocina printer");
       const pGroup = await makeSharedPrinter(tx, cfg, "Pase", [cocina.id]);
-      await attachPrinterToStation(tx, { stationId: cocina.id, printerId: pCocina });
+      await attachPrinterToStation(tx, {
+        locationId: cfg.locationId,
+        stationId: cocina.id,
+        printerId: pCocina,
+      });
       const steak = await makeProduct(tx, cfg, catalogueId, "Chuleton", { stationId: cocina.id });
 
       await fireNewOrder(tx, cfg, [line(steak)]);
@@ -523,8 +548,16 @@ describe("print-on-fire (enqueueKitchenTickets wired into fireLines / fireCourse
       const barra = await createStation(tx, cfg, { name: "Barra" });
       const pActive = await makePrinter(tx, cfg, "Cocina printer");
       const pDead = await makePrinter(tx, cfg, "Barra printer");
-      await attachPrinterToStation(tx, { stationId: cocina.id, printerId: pActive });
-      await attachPrinterToStation(tx, { stationId: barra.id, printerId: pDead });
+      await attachPrinterToStation(tx, {
+        locationId: cfg.locationId,
+        stationId: cocina.id,
+        printerId: pActive,
+      });
+      await attachPrinterToStation(tx, {
+        locationId: cfg.locationId,
+        stationId: barra.id,
+        printerId: pDead,
+      });
       // Deactivated after attaching (attach requires a live printer): `enqueuePrintJob` would throw
       // `printer.not_found` for it, so it must never be handed this id.
       await deactivatePrinter(tx, printCfg(cfg), pDead);
@@ -548,7 +581,11 @@ describe("print-on-fire (enqueueKitchenTickets wired into fireLines / fireCourse
     const { printerId, afterRound1, afterRound2, afterRefire } = await asApp(cfg, async (tx) => {
       const cocina = await createStation(tx, cfg, { name: "Cocina", isDefault: true });
       const printerId = await makePrinter(tx, cfg, "Cocina printer");
-      await attachPrinterToStation(tx, { stationId: cocina.id, printerId });
+      await attachPrinterToStation(tx, {
+        locationId: cfg.locationId,
+        stationId: cocina.id,
+        printerId,
+      });
       const ent = await createCourse(tx, cfg, { name: "Entrantes", displayOrder: 0 });
       const pri = await createCourse(tx, cfg, { name: "Principales", displayOrder: 1 });
       const soup = await makeProduct(tx, cfg, catalogueId, "Sopa", {
@@ -600,7 +637,11 @@ describe("print-on-fire (enqueueKitchenTickets wired into fireLines / fireCourse
     const { printerId, jobs } = await asApp(cfg, async (tx) => {
       const cocina = await createStation(tx, cfg, { name: "Cocina", isDefault: true });
       const printerId = await makePrinter(tx, cfg, "Cocina printer");
-      await attachPrinterToStation(tx, { stationId: cocina.id, printerId });
+      await attachPrinterToStation(tx, {
+        locationId: cfg.locationId,
+        stationId: cocina.id,
+        printerId,
+      });
       const drink = await makeProduct(tx, cfg, catalogueId, "Cafe con leche", {
         stationId: cocina.id,
       });
@@ -627,7 +668,11 @@ describe("print-on-fire (enqueueKitchenTickets wired into fireLines / fireCourse
     const setup = await asApp(cfg, async (tx) => {
       const cocina = await createStation(tx, cfg, { name: "Cocina", isDefault: true });
       const printerId = await makePrinter(tx, cfg, "Cocina printer");
-      await attachPrinterToStation(tx, { stationId: cocina.id, printerId });
+      await attachPrinterToStation(tx, {
+        locationId: cfg.locationId,
+        stationId: cocina.id,
+        printerId,
+      });
       const steak = await makeProduct(tx, cfg, catalogueId, "Chuleton", { stationId: cocina.id });
       return { printerId, steak };
     });
@@ -650,7 +695,11 @@ describe("print-on-fire (enqueueKitchenTickets wired into fireLines / fireCourse
     const { printerId, jobs } = await asApp(cfg, async (tx) => {
       const cocina = await createStation(tx, cfg, { name: "Cocina", isDefault: true });
       const printerId = await makePrinter(tx, cfg, "Cocina printer");
-      await attachPrinterToStation(tx, { stationId: cocina.id, printerId });
+      await attachPrinterToStation(tx, {
+        locationId: cfg.locationId,
+        stationId: cocina.id,
+        printerId,
+      });
       const drink = await makeProduct(tx, cfg, catalogueId, "Zumo", { stationId: cocina.id });
       const orderId = randomUUID();
       await createOfferedOrder(tx, cfg, orderId, [line(drink)]);
@@ -713,7 +762,11 @@ describe("print-on-fire (enqueueKitchenTickets wired into fireLines / fireCourse
       const pass203 = await makeSharedPrinter(tx, cfg, "Pase 203", [cocina.id]);
       await updatePrinter(tx, printCfg(cfg), pass203, { resolution: "203dpi" });
       for (const printerId of [wide, wideTwin, narrow]) {
-        await attachPrinterToStation(tx, { stationId: cocina.id, printerId });
+        await attachPrinterToStation(tx, {
+          locationId: cfg.locationId,
+          stationId: cocina.id,
+          printerId,
+        });
       }
       const steak = await makeProduct(
         tx,
@@ -756,7 +809,11 @@ describe("print-on-fire (enqueueKitchenTickets wired into fireLines / fireCourse
     const widths = await asApp(cfg, async (tx) => {
       const cocina = await createStation(tx, cfg, { name: "Cocina", isDefault: true });
       const printerId = await makePrinter(tx, cfg, "Cocina");
-      await attachPrinterToStation(tx, { stationId: cocina.id, printerId });
+      await attachPrinterToStation(tx, {
+        locationId: cfg.locationId,
+        stationId: cocina.id,
+        printerId,
+      });
       const steak = await makeProduct(tx, cfg, catalogueId, "Steak", { stationId: cocina.id });
       const seen = new Set<string>();
       const nextTicketWidths = async (): Promise<number[]> => {
@@ -784,7 +841,11 @@ describe("print-on-fire (enqueueKitchenTickets wired into fireLines / fireCourse
       const narrow = await makePrinter(tx, cfg, "Cocina 58");
       await updatePrinter(tx, printCfg(cfg), narrow, { paperWidth: "58mm" });
       for (const printerId of [wide, narrow]) {
-        await attachPrinterToStation(tx, { stationId: cocina.id, printerId });
+        await attachPrinterToStation(tx, {
+          locationId: cfg.locationId,
+          stationId: cocina.id,
+          printerId,
+        });
       }
       const steak = await makeProduct(
         tx,
@@ -834,7 +895,11 @@ describe("correction slips for a station with no printer", () => {
       const cocina = await createStation(tx, cfg, { name: "Cocina", isDefault: true });
       const barra = await createStation(tx, cfg, { name: "Barra", isDefault: false });
       const printerId = await makePrinter(tx, cfg, "Cocina printer");
-      await attachPrinterToStation(tx, { stationId: cocina.id, printerId });
+      await attachPrinterToStation(tx, {
+        locationId: cfg.locationId,
+        stationId: cocina.id,
+        printerId,
+      });
       const steak = await makeProduct(tx, cfg, catalogueId, "Chuleton", { stationId: cocina.id });
       const beer = await makeProduct(tx, cfg, catalogueId, "Cerveza", { stationId: barra.id });
       const orderId = await fireNewOrder(tx, cfg, [line(steak), line(beer)]);
@@ -904,7 +969,11 @@ describe("every correction reaches the station as a notice, printer or not", () 
     const { printerId, notices, slips } = await asApp(cfg, async (tx) => {
       const cocina = await createStation(tx, cfg, { name: "Cocina", isDefault: true });
       const printerId = await makePrinter(tx, cfg, "Cocina printer");
-      await attachPrinterToStation(tx, { stationId: cocina.id, printerId });
+      await attachPrinterToStation(tx, {
+        locationId: cfg.locationId,
+        stationId: cocina.id,
+        printerId,
+      });
       const steak = await makeProduct(tx, cfg, catalogueId, "Chuleton", { stationId: cocina.id });
       const orderId = await fireNewOrder(tx, cfg, [line(steak)]);
       const [fired] = await tx
@@ -939,7 +1008,11 @@ describe("every correction reaches the station as a notice, printer or not", () 
     const slips = await asApp(cfg, async (tx) => {
       const cocina = await createStation(tx, cfg, { name: "Cocina", isDefault: true });
       const printerId = await makePrinter(tx, cfg, "Cocina printer");
-      await attachPrinterToStation(tx, { stationId: cocina.id, printerId });
+      await attachPrinterToStation(tx, {
+        locationId: cfg.locationId,
+        stationId: cocina.id,
+        printerId,
+      });
       const steak = await makeProduct(tx, cfg, catalogueId, "Chuleton", { stationId: cocina.id });
       const offers = await offerProducts(tx, cfg, { zone: "tables" });
       const [table] = await tx
@@ -969,7 +1042,11 @@ describe("a dish sold by the piece prints no unit", () => {
   async function sellInEveryUnit(tx: Transaction, cfg: OriginConfig, catalogueId: string) {
     const cocina = await createStation(tx, cfg, { name: "Cocina", isDefault: true });
     const printerId = await makePrinter(tx, cfg, "Cocina printer");
-    await attachPrinterToStation(tx, { stationId: cocina.id, printerId });
+    await attachPrinterToStation(tx, {
+      locationId: cfg.locationId,
+      stationId: cocina.id,
+      printerId,
+    });
     const [seededEach] = await tx
       .select({ id: units.id })
       .from(units)
@@ -1163,7 +1240,11 @@ describe("dish extras on kitchen tickets", () => {
     const { printerId, jobs } = await asApp(cfg, async (tx) => {
       const station = await createStation(tx, cfg, { name: "Cocina", isDefault: true });
       const printerId = await makePrinter(tx, cfg, "Cocina printer");
-      await attachPrinterToStation(tx, { stationId: station.id, printerId });
+      await attachPrinterToStation(tx, {
+        locationId: cfg.locationId,
+        stationId: station.id,
+        printerId,
+      });
       const dish = await makeProduct(tx, cfg, catalogueId, "Cortado", { stationId: station.id });
       const { listId, productIds } = await addExtras(tx, cfg, catalogueId, dish, [
         { name: "Jamón", customerName: "Jamón cliente", kitchenName: "JAMÓN" },
@@ -1416,7 +1497,11 @@ describe("dish extras on kitchen tickets", () => {
     const { orderId, parentLineId, ticketItemRows } = await asApp(cfg, async (tx) => {
       const cocina = await createStation(tx, cfg, { name: "Cocina", isDefault: true });
       const printerId = await makePrinter(tx, cfg, "Cocina printer");
-      await attachPrinterToStation(tx, { stationId: cocina.id, printerId });
+      await attachPrinterToStation(tx, {
+        locationId: cfg.locationId,
+        stationId: cocina.id,
+        printerId,
+      });
       // No cell decides for either extra, so both follow their dish instead of the default.
       const cortado = await makeProduct(tx, cfg, catalogueId, "Cortado", { stationId: cocina.id });
       const { listId, productIds } = await addExtras(
@@ -1462,7 +1547,11 @@ describe("dish extras on kitchen tickets", () => {
     const { printerId, jobs } = await asApp(cfg, async (tx) => {
       const cocina = await createStation(tx, cfg, { name: "Cocina", isDefault: true });
       const printerId = await makePrinter(tx, cfg, "Cocina printer");
-      await attachPrinterToStation(tx, { stationId: cocina.id, printerId });
+      await attachPrinterToStation(tx, {
+        locationId: cfg.locationId,
+        stationId: cocina.id,
+        printerId,
+      });
       const cortado = await makeProduct(tx, cfg, catalogueId, "Cortado", { stationId: cocina.id });
       // Each extra carries three DIFFERENT names, so a sub-line that read the customer-facing text
       // instead of the staff name the child line froze reads differently (CLAUDE.md §3).
@@ -1498,7 +1587,11 @@ describe("dish extras on kitchen tickets", () => {
     const { printerId, jobs } = await asApp(cfg, async (tx) => {
       const cocina = await createStation(tx, cfg, { name: "Cocina", isDefault: true });
       const printerId = await makePrinter(tx, cfg, "Cocina printer");
-      await attachPrinterToStation(tx, { stationId: cocina.id, printerId });
+      await attachPrinterToStation(tx, {
+        locationId: cfg.locationId,
+        stationId: cocina.id,
+        printerId,
+      });
       const chuleton = await makeProduct(tx, cfg, catalogueId, "Chuleton", {
         stationId: cocina.id,
       });
@@ -1520,7 +1613,11 @@ describe("dish extras on kitchen tickets", () => {
     const { printerId, jobs } = await asApp(cfg, async (tx) => {
       const cocina = await createStation(tx, cfg, { name: "Cocina", isDefault: true });
       const printerId = await makePrinter(tx, cfg, "Cocina printer");
-      await attachPrinterToStation(tx, { stationId: cocina.id, printerId });
+      await attachPrinterToStation(tx, {
+        locationId: cfg.locationId,
+        stationId: cocina.id,
+        printerId,
+      });
       const cortado = await makeProduct(tx, cfg, catalogueId, "Cortado", { stationId: cocina.id });
       const { listId, productIds } = await addExtras(
         tx,
@@ -1596,6 +1693,7 @@ describe("reprintOrderTickets (re-enqueue the WHOLE current ticket for an order)
       const pStation = await makePrinter(tx, cfg, "Cocina printer");
       const pGroup = await makeSharedPrinter(tx, cfg, "Pase", [cocina.id]);
       await attachPrinterToStation(tx, {
+        locationId: cfg.locationId,
         stationId: cocina.id,
         printerId: pStation,
       });
@@ -1646,7 +1744,11 @@ describe("reprintOrderTickets (re-enqueue the WHOLE current ticket for an order)
     const { released, reprinted } = await asApp(cfg, async (tx) => {
       const cocina = await createStation(tx, cfg, { name: "Cocina", isDefault: true });
       const printerId = await makePrinter(tx, cfg, "Cocina printer");
-      await attachPrinterToStation(tx, { stationId: cocina.id, printerId });
+      await attachPrinterToStation(tx, {
+        locationId: cfg.locationId,
+        stationId: cocina.id,
+        printerId,
+      });
       const ent = await createCourse(tx, cfg, { name: "Entrantes", displayOrder: 0 });
       const pri = await createCourse(tx, cfg, { name: "Principales", displayOrder: 1 });
       const soup = await makeProduct(tx, cfg, catalogueId, "Sopa", {
@@ -1689,7 +1791,11 @@ describe("reprintOrderTickets (re-enqueue the WHOLE current ticket for an order)
     const jobs = await asApp(cfg, async (tx) => {
       const cocina = await createStation(tx, cfg, { name: "Cocina", isDefault: true });
       const printerId = await makePrinter(tx, cfg, "Cocina printer");
-      await attachPrinterToStation(tx, { stationId: cocina.id, printerId });
+      await attachPrinterToStation(tx, {
+        locationId: cfg.locationId,
+        stationId: cocina.id,
+        printerId,
+      });
       await makeProduct(tx, cfg, catalogueId, "Chuleton", { stationId: cocina.id });
 
       await reprintOrderTickets(tx, cfg, randomUUID());
@@ -1708,7 +1814,11 @@ it("prints a line's stored options answers, each side taking its KITCHEN name", 
   const jobs = await asApp(cfg, async (tx) => {
     const station = await createStation(tx, cfg, { name: "Kitchen", isDefault: true });
     const printerId = await makePrinter(tx, cfg, "Kitchen printer");
-    await attachPrinterToStation(tx, { stationId: station.id, printerId });
+    await attachPrinterToStation(tx, {
+      locationId: cfg.locationId,
+      stationId: station.id,
+      printerId,
+    });
     const productId = await makeProduct(tx, cfg, catalogueId, "Coffee", { stationId: station.id });
     const orderId = randomUUID();
     const { lineRows } = await createOfferedOrder(tx, cfg, orderId, [line(productId)]);
@@ -1767,7 +1877,11 @@ async function ticketWithNames(frozen: {
   const jobs = await asApp(cfg, async (tx) => {
     const station = await createStation(tx, cfg, { name: "Kitchen", isDefault: true });
     const printerId = await makePrinter(tx, cfg, "Kitchen printer");
-    await attachPrinterToStation(tx, { stationId: station.id, printerId });
+    await attachPrinterToStation(tx, {
+      locationId: cfg.locationId,
+      stationId: station.id,
+      printerId,
+    });
     const { id: productId } = await createProduct(tx, {
       catalogueId,
       categoryId: null,
@@ -1896,8 +2010,16 @@ describe("a station printer that was deleted", () => {
     const cocina = await createStation(tx, cfg, { name: "Cocina", isDefault: true });
     const p = await makePrinter(tx, cfg, "Old kitchen");
     const q = await makePrinter(tx, cfg, "Cocina Q");
-    await attachPrinterToStation(tx, { stationId: cocina.id, printerId: p });
-    await attachPrinterToStation(tx, { stationId: cocina.id, printerId: q });
+    await attachPrinterToStation(tx, {
+      locationId: cfg.locationId,
+      stationId: cocina.id,
+      printerId: p,
+    });
+    await attachPrinterToStation(tx, {
+      locationId: cfg.locationId,
+      stationId: cocina.id,
+      printerId: q,
+    });
     const steak = await makeProduct(tx, cfg, catalogueId, "Chuleton", { stationId: cocina.id });
     const orderId = await fireNewOrder(tx, cfg, [line(steak)]);
     return { cocina, p, q, steak, orderId };
@@ -1955,7 +2077,11 @@ describe("a station printer that was deleted", () => {
       async (tx) => {
         const cocina = await createStation(tx, cfg, { name: "Cocina", isDefault: true });
         const p = await makePrinter(tx, cfg, "Old kitchen");
-        await attachPrinterToStation(tx, { stationId: cocina.id, printerId: p });
+        await attachPrinterToStation(tx, {
+          locationId: cfg.locationId,
+          stationId: cocina.id,
+          printerId: p,
+        });
         const steak = await makeProduct(tx, cfg, catalogueId, "Chuleton", {
           stationId: cocina.id,
         });
@@ -2001,7 +2127,12 @@ describe("a station printer that was deleted", () => {
     } = await setupSplitExtrasVenue();
     const { added, q } = await asApp(cfg, async (tx) => {
       const q = withOther ? await makePrinter(tx, cfg, "Grill Q") : null;
-      if (q !== null) await attachPrinterToStation(tx, { stationId: stations.grill, printerId: q });
+      if (q !== null)
+        await attachPrinterToStation(tx, {
+          locationId: cfg.locationId,
+          stationId: stations.grill,
+          printerId: q,
+        });
       await deletePrinter(tx, printCfg(cfg), venuePrinters.grill);
       await writePrintHeldWork(tx, true);
       const known = new Set((await printJobsFor(tx)).map((job) => job.id));

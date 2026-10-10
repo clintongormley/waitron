@@ -948,7 +948,7 @@ describe("a returning disabled device", () => {
     ]);
   });
 
-  it("refuses to enable a kitchen screen on the station it held once that station is switched off", async () => {
+  it("refuses to enable a kitchen screen on its deleted station and retains the empty bound", async () => {
     const venue = await setupVenue(suite.db);
     const kds = await seedProfile("kds");
     const station = await withTransaction(suite.db, (tx) =>
@@ -994,7 +994,7 @@ describe("a returning disabled device", () => {
       .where(eq(devices.id, deviceId));
     expect(row).toEqual({ active: false });
     expect(await shownOn(venue, deviceId)).toMatchObject([
-      { kind: "station", stations: [{ id: station.id, available: false }] },
+      { kind: "station", stations: [], everyStation: false },
     ]);
   });
 

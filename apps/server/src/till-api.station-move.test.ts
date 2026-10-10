@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { and, eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import {
+  kitchenStations,
   devices,
   ticketItemMoves,
   ticketItems,
@@ -12,7 +13,7 @@ import { persons } from "@waitron/identity";
 import { listStationQueues } from "./working-order.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { createStation, deactivateStation } from "./kitchen.js";
+import { createStation } from "./kitchen.js";
 import {
   inTx,
   provisionBillVenue,
@@ -201,7 +202,7 @@ describe("POST /api/working-orders/:id/lines/move-station", () => {
     expect(answer.json).toMatchObject({ code: "ticket.not_sent" });
   });
 
-  it("maps unowned lines, unknown and inactive stations, and closed orders", async () => {
+  it("maps unowned lines, unknown and deleted stations, and closed orders", async () => {
     const first = await seatedWith(venue, "Paella");
     const second = await seatedWith(venue, "Paella");
     const [firstItem] = await inTx(venue, (tx) =>
@@ -224,12 +225,15 @@ describe("POST /api/working-orders/:id/lines/move-station", () => {
     expect(unknownStation.json).toMatchObject({ code: "station.not_found" });
     const inactive = await inTx(venue, async (tx) => {
       const station = await createStation(tx, venue.cfg, { name: `Off ${randomUUID()}` });
-      await deactivateStation(tx, venue.cfg, station.id);
+      await tx
+        .update(kitchenStations)
+        .set({ active: false })
+        .where(eq(kitchenStations.id, station.id));
       return station.id;
     });
     const off = await request(firstItem!.workingOrderLineId, inactive);
-    expect(off.status).toBe(409);
-    expect(off.json).toMatchObject({ code: "route.station_inactive" });
+    expect(off.status).toBe(404);
+    expect(off.json).toMatchObject({ code: "station.not_found", params: { stationId: inactive } });
     await inTx(venue, (tx) =>
       tx
         .update(workingOrders)

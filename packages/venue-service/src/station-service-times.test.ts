@@ -220,14 +220,20 @@ it("keeps separate surviving segments around a zone closure", async () =>
       ]),
     );
   }));
-it.each(["default", "switched_off"] as const)("answers %s without a grid", async (kind) =>
+it("answers default without a grid", async () =>
   tx(async (db) => {
     const f = await fixture(db);
-    expect(
-      await stationServiceTimes(db, f.cfg, kind === "default" ? f.defaultStation : f.off, day, day),
-    ).toEqual({ always: kind, days: [] });
-  }),
-);
+    expect(await stationServiceTimes(db, f.cfg, f.defaultStation, day, day)).toEqual({
+      always: "default",
+      days: [],
+    });
+  }));
+it("refuses a deleted station instead of showing a switched-off grid", async () => {
+  const f = await tx(fixture);
+  await expect(tx((db) => stationServiceTimes(db, f.cfg, f.off, day, day))).rejects.toMatchObject({
+    code: "station.not_found",
+  });
+});
 it.each([
   "unrouted",
   "inactive zone",

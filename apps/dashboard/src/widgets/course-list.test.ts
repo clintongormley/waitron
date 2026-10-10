@@ -2,7 +2,7 @@ import { LiveData } from "@waitron/dashboard-kit";
 import { page, userEvent } from "vitest/browser";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { middleWithin, textLines } from "@waitron/ui/src/test-helpers.js";
-import type { WtInput, WtRowActions } from "@waitron/ui";
+import type { WtInput } from "@waitron/ui";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import { codeMessage } from "../i18n/codes.js";
 import { currentLocale, setLocale, t } from "../i18n/t.js";
@@ -17,13 +17,13 @@ const COURSES: Course[] = [
   { id: "c3", name: "Desserts", displayOrder: 5, active: true, inUse: false },
 ];
 
-/** Disabled courses, which the server lists in firing order among the active ones. */
+/** Deleted rows supplied to check that configuration choices omit them. */
 const DISABLED: Course[] = [
   { id: "d1", name: "Brunch", displayOrder: 1, active: false, inUse: true },
   { id: "d2", name: "Tapas", displayOrder: 3, active: false, inUse: false },
 ];
 
-/** Every course in the server's order: by `displayOrder`, disabled ones mixed in. */
+/** A fixture mixing live and deleted rows in display order. */
 const ALL: Course[] = [COURSES[0]!, DISABLED[0]!, COURSES[1]!, DISABLED[1]!, COURSES[2]!];
 
 const copy = (courses: Course[]): Course[] => courses.map((course) => ({ ...course }));
@@ -42,11 +42,10 @@ function moved(courses: Course[], id: string, to: number): Course[] {
 function stubApi(overrides: Partial<DashboardApi> = {}, courses: Course[] = COURSES): DashboardApi {
   return {
     listCourses: vi.fn().mockResolvedValue(copy(courses.filter((course) => course.active))),
-    listCoursesWithDisabled: vi.fn().mockResolvedValue(copy(courses)),
     createCourse: vi.fn().mockResolvedValue({ id: "c9" }),
     updateCourse: vi.fn().mockResolvedValue(undefined),
-    removeCourse: vi.fn().mockResolvedValue(undefined),
-    enableCourse: vi.fn().mockResolvedValue(undefined),
+    getCourseDeleteImpact: vi.fn((id: string) => Promise.resolve(impactFor(id))),
+    deleteCourse: vi.fn((id: string) => Promise.resolve(impactFor(id))),
     moveCourse: vi.fn((id: string, to: number) =>
       Promise.resolve(
         moved(
@@ -117,12 +116,23 @@ async function openNew(el: CourseList): Promise<void> {
   await field(el)!.updateComplete;
 }
 
-const deleteDialog = (el: CourseList) => q(el, '[data-test="delete-course-modal"]');
+const deleteDialog = (el: CourseList) => q(el, "wt-delete-dialog");
+const inDelete = (el: CourseList, selector: string) =>
+  deleteDialog(el)?.shadowRoot?.querySelector<HTMLElement>(selector) ?? null;
+const deleteControl = (el: CourseList, name: string) =>
+  inDelete(el, `wt-button[data-test="delete-${name}"]`)?.shadowRoot?.querySelector("button") ??
+  null;
+const impactFor = (id: string) => ({
+  target: { id, name: COURSES.find((c) => c.id === id)?.name ?? id },
+  refusals: [],
+  ends: [],
+  removes: [],
+});
 
 /** Confirms the Delete dialog a course's Delete opened. */
 async function confirmDelete(el: CourseList): Promise<void> {
-  await vi.waitFor(() => expect(q(el, '[data-test="confirm-delete-course"]')).not.toBeNull());
-  q(el, '[data-test="confirm-delete-course"]')!.click();
+  await vi.waitFor(() => expect(deleteControl(el, "confirm")?.disabled).toBe(false));
+  deleteControl(el, "confirm")!.click();
 }
 
 function capture<T>(target: EventTarget, type: string): T[] {
@@ -135,7 +145,7 @@ describe("loading", () => {
   it("lists every course in the server's order, each name drawn as a button", async () => {
     const api = stubApi();
     const { el } = await mount(api);
-    expect(api.listCoursesWithDisabled).toHaveBeenCalledTimes(1);
+    expect(api.listCourses).toHaveBeenCalledTimes(1);
     expect(rowIds(el)).toEqual(["c1", "c2", "c3"]);
     expect(nameButton(el, "c2")!.tagName).toBe("BUTTON");
     expect(nameButton(el, "c2")!.textContent!.trim()).toBe("Mains");
@@ -156,7 +166,7 @@ describe("loading", () => {
     const liveData = new LiveData();
     const api = Object.assign(
       stubApi({
-        listCoursesWithDisabled: vi
+        listCourses: vi
           .fn()
           .mockRejectedValueOnce({ code: "connection.failed" })
           .mockResolvedValue(copy(COURSES)),
@@ -175,45 +185,49 @@ describe("loading", () => {
   it("keeps a later refusal when a failed load recovers", async () => {
     const liveData = new LiveData();
     const api = Object.assign(
-      stubApi({ removeCourse: vi.fn().mockRejectedValue({ code: "course.not_found" }) }),
+      stubApi({ updateCourse: vi.fn().mockRejectedValue({ code: "course.not_found" }) }),
       { liveData },
     );
     const { el } = await mount(api);
-    vi.mocked(api.listCoursesWithDisabled).mockRejectedValueOnce({ code: "connection.failed" });
+    vi.mocked(api.listCourses).mockRejectedValueOnce({ code: "connection.failed" });
     liveData.refresh();
     await vi.waitFor(() =>
       expect(alertLine(el)?.textContent?.trim()).toBe(codeMessage("connection.failed")),
     );
-    q(el, '[data-test="remove-c2"]')!.click();
+    await openRename(el, "c2");
+    await typeName(el, "Main dishes");
+    await press(el, "Enter");
     await vi.waitFor(() =>
       expect(alertLine(el)?.textContent?.trim()).toBe(codeMessage("course.not_found")),
     );
     liveData.refresh();
     await settle(el);
-    expect(api.listCoursesWithDisabled).toHaveBeenCalledTimes(3);
+    expect(api.listCourses).toHaveBeenCalledTimes(3);
     expect(alertLine(el)!.textContent!.trim()).toBe(codeMessage("course.not_found"));
   });
 
-  it("keeps a removal's connection failure through a failed re-read and the reads' recovery", async () => {
+  it("keeps a rename's connection failure through a failed re-read and the reads' recovery", async () => {
     const liveData = new LiveData();
     const api = Object.assign(
-      stubApi({ removeCourse: vi.fn().mockRejectedValue({ code: "connection.failed" }) }),
+      stubApi({ updateCourse: vi.fn().mockRejectedValue({ code: "connection.failed" }) }),
       { liveData },
     );
     const { el } = await mount(api);
-    vi.mocked(api.listCoursesWithDisabled).mockRejectedValue({ code: "connection.failed" });
+    vi.mocked(api.listCourses).mockRejectedValue({ code: "connection.failed" });
     liveData.refresh();
     await vi.waitFor(() =>
       expect(alertLine(el)?.textContent?.trim()).toBe(codeMessage("connection.failed")),
     );
-    q(el, '[data-test="remove-c2"]')!.click();
-    await vi.waitFor(() => expect(api.removeCourse).toHaveBeenCalledTimes(1));
+    await openRename(el, "c2");
+    await typeName(el, "Main dishes");
+    await press(el, "Enter");
+    await vi.waitFor(() => expect(api.updateCourse).toHaveBeenCalledTimes(1));
     await settle(el);
     liveData.refresh();
-    await vi.waitFor(() => expect(api.listCoursesWithDisabled).toHaveBeenCalledTimes(3));
+    await vi.waitFor(() => expect(api.listCourses).toHaveBeenCalledTimes(3));
     await settle(el);
 
-    vi.mocked(api.listCoursesWithDisabled).mockResolvedValue(
+    vi.mocked(api.listCourses).mockResolvedValue(
       copy(COURSES.filter((course) => course.id !== "c2")),
     );
     liveData.refresh();
@@ -253,7 +267,7 @@ describe("renaming", () => {
     await settle(el);
     expect(api.updateCourse).toHaveBeenCalledTimes(1);
     expect(api.updateCourse).toHaveBeenCalledWith("c1", { name: "Entrées" });
-    expect(api.listCoursesWithDisabled).toHaveBeenCalledTimes(2);
+    expect(api.listCourses).toHaveBeenCalledTimes(2);
     expect(field(el)).toBeNull();
     expect(el.shadowRoot!.activeElement).toBe(nameButton(el, "c1"));
   });
@@ -461,9 +475,7 @@ describe("renaming", () => {
     const { el } = await mount(api);
     await openRename(el, "c2");
     await typeName(el, "Gone");
-    vi.mocked(api.listCoursesWithDisabled).mockResolvedValue(
-      copy(COURSES.filter((c) => c.id !== "c2")),
-    );
+    vi.mocked(api.listCourses).mockResolvedValue(copy(COURSES.filter((c) => c.id !== "c2")));
     liveData.invalidate([{ type: "kitchen_courses", id: "c2" }]);
     await vi.waitFor(() => expect(rowIds(el)).toEqual(["c1", "c3"]));
     expect(field(el)).toBeNull();
@@ -531,7 +543,7 @@ describe("adding", () => {
     expect(api.createCourse).toHaveBeenCalledWith({ name: "Sharing plates", displayOrder: 6 });
     expect(added).toEqual([{ id: "c9" }]);
     expect(composed).toBe(true);
-    expect(api.listCoursesWithDisabled).toHaveBeenCalledTimes(2);
+    expect(api.listCourses).toHaveBeenCalledTimes(2);
     expect(field(el)).toBeNull();
     expect(el.shadowRoot!.activeElement).toBe(q(el, '[data-test="add-course"]'));
   });
@@ -622,7 +634,7 @@ describe("adding", () => {
 
   it("closes the new row when the create succeeds, showing a failed refresh as a load failure", async () => {
     const api = stubApi({
-      listCoursesWithDisabled: vi
+      listCourses: vi
         .fn()
         .mockResolvedValueOnce(copy(COURSES))
         .mockRejectedValue({ code: "connection.failed" }),
@@ -663,7 +675,12 @@ describe("settling", () => {
     let answerRemoval!: () => void;
     const api = stubApi({
       createCourse: vi.fn(() => new Promise<{ id: string }>((resolve) => (answerCreate = resolve))),
-      removeCourse: vi.fn(() => new Promise<void>((resolve) => (answerRemoval = resolve))),
+      deleteCourse: vi.fn(
+        (id: string) =>
+          new Promise<ReturnType<typeof impactFor>>(
+            (resolve) => (answerRemoval = () => resolve(impactFor(id))),
+          ),
+      ),
     });
     const { el } = await mount(api);
     await openNew(el);
@@ -672,13 +689,11 @@ describe("settling", () => {
     let settled = false;
     void el.settled().then(() => (settled = true));
     q(el, '[data-test="remove-c2"]')!.click();
+    await confirmDelete(el);
     await settle(el);
     answerCreate({ id: "c9" });
     await settle(el);
-    expect([settled, vi.mocked(api.removeCourse).mock.calls]).toEqual([
-      false,
-      [["c2", { disable: true }]],
-    ]);
+    expect([settled, vi.mocked(api.deleteCourse).mock.calls]).toEqual([false, [["c2"]]]);
     answerRemoval();
     await settle(el);
     expect(settled).toBe(true);
@@ -704,16 +719,21 @@ describe("settling", () => {
     void el.settled().then(() => (settled = true));
     await settle(el);
     expect(settled).toBe(false);
-    deleteDialog(el)!.querySelector<HTMLElement>('wt-button[slot="cancel"]')!.click();
+    deleteControl(el, "cancel")!.click();
     await settle(el);
     expect([settled, el.unsaved]).toEqual([true, false]);
-    expect(api.removeCourse).not.toHaveBeenCalled();
+    expect(api.deleteCourse).not.toHaveBeenCalled();
   });
 
   it("settles once a confirmed Delete is answered, with nothing left open", async () => {
     let answerRemoval!: () => void;
     const api = stubApi({
-      removeCourse: vi.fn(() => new Promise<void>((resolve) => (answerRemoval = resolve))),
+      deleteCourse: vi.fn(
+        (id: string) =>
+          new Promise<ReturnType<typeof impactFor>>(
+            (resolve) => (answerRemoval = () => resolve(impactFor(id))),
+          ),
+      ),
     });
     const { el } = await mount(api);
     q(el, '[data-test="remove-c1"]')!.click();
@@ -722,10 +742,7 @@ describe("settling", () => {
     void el.settled().then(() => (settled = true));
     await confirmDelete(el);
     await settle(el);
-    expect([settled, vi.mocked(api.removeCourse).mock.calls]).toEqual([
-      false,
-      [["c1", { disable: false }]],
-    ]);
+    expect([settled, vi.mocked(api.deleteCourse).mock.calls]).toEqual([false, [["c1"]]]);
     answerRemoval();
     await settle(el);
     expect([settled, el.unsaved]).toEqual([true, false]);
@@ -734,7 +751,9 @@ describe("settling", () => {
   it("settles with the confirmation still open when its Delete is refused", async () => {
     let refuse!: (reason: unknown) => void;
     const api = stubApi({
-      removeCourse: vi.fn(() => new Promise<void>((_, fail) => (refuse = fail))),
+      deleteCourse: vi.fn(
+        () => new Promise<ReturnType<typeof impactFor>>((_, fail) => (refuse = fail)),
+      ),
     });
     const { el } = await mount(api);
     q(el, '[data-test="remove-c1"]')!.click();
@@ -763,378 +782,7 @@ describe("settling", () => {
     answer();
     await el.settled();
     await settle(el);
-    expect(api.listCoursesWithDisabled).toHaveBeenCalledTimes(1);
-  });
-});
-
-describe("removing", () => {
-  it("offers Delete in an unreferenced course's menu, which asks first, then removes the course and refreshes", async () => {
-    const before = currentLocale();
-    setLocale("en-GB");
-    try {
-      const api = stubApi();
-      const { el } = await mount(api);
-      const menu = q<WtRowActions>(el, 'tr[data-course="c1"] td:last-child wt-row-actions')!;
-      expect(menu.label).toBe(`${t("kitchen.course_actions")}: Starters`);
-      const remove = q(el, '[data-test="remove-c1"]')!;
-      expect(remove.textContent!.trim()).toBe(t("action.delete"));
-      remove.click();
-      await settle(el);
-      expect(api.removeCourse).not.toHaveBeenCalled();
-      const dialog = deleteDialog(el)! as HTMLElement & { heading: string };
-      expect(dialog.getAttribute("size")).toBe("compact");
-      expect(dialog.heading).toBe("Delete course");
-      expect(dialog.querySelector("p")!.textContent!.trim()).toBe(
-        "Delete Starters? This cannot be undone.",
-      );
-      const confirm = q(el, '[data-test="confirm-delete-course"]')!;
-      expect(confirm.getAttribute("variant")).toBe("danger");
-      expect(confirm.textContent!.trim()).toBe("Delete");
-      confirm.click();
-      await settle(el);
-      expect(vi.mocked(api.removeCourse).mock.calls).toEqual([["c1", { disable: false }]]);
-      expect(api.listCoursesWithDisabled).toHaveBeenCalledTimes(2);
-      expect(deleteDialog(el)).toBeNull();
-    } finally {
-      setLocale(before);
-    }
-  });
-
-  it("words the Delete dialog in Spanish", async () => {
-    const before = currentLocale();
-    setLocale("es-ES");
-    try {
-      const { el } = await mount(stubApi());
-      q(el, '[data-test="remove-c1"]')!.click();
-      await settle(el);
-      const dialog = deleteDialog(el)! as HTMLElement & { heading: string };
-      expect(dialog.heading).toBe("Eliminar curso");
-      expect(dialog.querySelector("p")!.textContent!.trim()).toBe(
-        "¿Eliminar Starters? Esta acción no se puede deshacer.",
-      );
-      expect(q(el, '[data-test="confirm-delete-course"]')!.textContent!.trim()).toBe("Eliminar");
-    } finally {
-      setLocale(before);
-    }
-  });
-
-  it.each(["cancel", "dismiss"])("%s on the Delete dialog removes nothing", async (how) => {
-    const api = stubApi();
-    const { el } = await mount(api);
-    q(el, '[data-test="remove-c1"]')!.click();
-    await settle(el);
-    const dialog = deleteDialog(el)!;
-    if (how === "dismiss") dialog.dispatchEvent(new CustomEvent("wt-close"));
-    else dialog.querySelector<HTMLElement>('wt-button[slot="cancel"]')!.click();
-    await settle(el);
-    expect(deleteDialog(el)).toBeNull();
-    expect(api.removeCourse).not.toHaveBeenCalled();
-    expect(api.listCoursesWithDisabled).toHaveBeenCalledTimes(1);
-  });
-
-  it("keeps a refused Delete in its dialog, localised, and sends it again on confirm", async () => {
-    const api = stubApi({
-      removeCourse: vi
-        .fn()
-        .mockRejectedValueOnce({ code: "connection.failed" })
-        .mockResolvedValue(undefined),
-    });
-    const { el } = await mount(api);
-    q(el, '[data-test="remove-c1"]')!.click();
-    await confirmDelete(el);
-    await settle(el);
-    const actions = deleteDialog(el)!.querySelector<HTMLElement & { error: string }>(
-      "wt-form-actions",
-    )!;
-    expect(actions.error).toBe(codeMessage("connection.failed"));
-    expect(alertLine(el)).toBeNull();
-    expect(api.listCoursesWithDisabled).toHaveBeenCalledTimes(1);
-    expect(q(el, '[data-test="confirm-delete-course"]')!.hasAttribute("disabled")).toBe(false);
-    await confirmDelete(el);
-    await settle(el);
-    expect(vi.mocked(api.removeCourse).mock.calls).toEqual([
-      ["c1", { disable: false }],
-      ["c1", { disable: false }],
-    ]);
-    expect(deleteDialog(el)).toBeNull();
-    expect(api.listCoursesWithDisabled).toHaveBeenCalledTimes(2);
-  });
-
-  it("offers Disable in a referenced course's menu, which removes the course and refreshes", async () => {
-    const api = stubApi();
-    const { el } = await mount(api);
-    const remove = q(el, '[data-test="remove-c2"]')!;
-    expect(remove.textContent!.trim()).toBe(t("action.disable"));
-    remove.click();
-    await settle(el);
-    expect(deleteDialog(el)).toBeNull();
-    expect(vi.mocked(api.removeCourse).mock.calls).toEqual([["c2", { disable: true }]]);
-    expect(api.listCoursesWithDisabled).toHaveBeenCalledTimes(2);
-  });
-
-  it("offers no Enable on an active course", async () => {
-    const { el } = await mount(stubApi({}, ALL));
-    for (const id of ["c1", "c2", "c3"]) expect(q(el, `[data-test="enable-${id}"]`)).toBeNull();
-    expect(
-      [...q(el, 'tr[data-course="c2"] wt-row-actions')!.querySelectorAll("wt-button")].map(
-        (button) => button.textContent!.trim(),
-      ),
-    ).toEqual([t("action.disable")]);
-  });
-
-  it("moves focus after a removal to the next course's name, else the previous, else Add course", async () => {
-    const left = (ids: string[]) => copy(COURSES.filter((course) => ids.includes(course.id)));
-    const api = stubApi({
-      listCoursesWithDisabled: vi
-        .fn()
-        .mockResolvedValueOnce(copy(COURSES))
-        .mockResolvedValueOnce(left(["c1", "c3"]))
-        .mockResolvedValueOnce(left(["c1"]))
-        .mockResolvedValueOnce([]),
-    });
-    const { el } = await mount(api);
-    q(el, '[data-test="remove-c2"]')!.click();
-    await vi.waitFor(() => expect(el.shadowRoot!.activeElement).toBe(nameButton(el, "c3")));
-    q(el, '[data-test="remove-c3"]')!.click();
-    await confirmDelete(el);
-    await vi.waitFor(() => expect(el.shadowRoot!.activeElement).toBe(nameButton(el, "c1")));
-    q(el, '[data-test="remove-c1"]')!.click();
-    await confirmDelete(el);
-    await vi.waitFor(() =>
-      expect(el.shadowRoot!.activeElement).toBe(q(el, '[data-test="add-course"]')),
-    );
-  });
-
-  it("closes a Delete confirmation when the list turns read-only, sending nothing", async () => {
-    const api = stubApi();
-    const { el } = await mount(api);
-    q(el, '[data-test="remove-c1"]')!.click();
-    await settle(el);
-    const confirm = q(el, '[data-test="confirm-delete-course"]')!;
-    el.readOnly = true;
-    await settle(el);
-    expect(deleteDialog(el)).toBeNull();
-    expect(el.unsaved).toBe(false);
-    confirm.click();
-    await settle(el);
-    expect(api.removeCourse).not.toHaveBeenCalled();
-  });
-
-  it("shows a refused Disable in the alert line, localised", async () => {
-    const api = stubApi({
-      removeCourse: vi.fn().mockRejectedValue({ code: "connection.failed" }),
-    });
-    const { el } = await mount(api);
-    q(el, '[data-test="remove-c2"]')!.click();
-    await vi.waitFor(() =>
-      expect(alertLine(el)?.textContent?.trim()).toBe(codeMessage("connection.failed")),
-    );
-    expect(api.listCoursesWithDisabled).toHaveBeenCalledTimes(1);
-  });
-});
-
-describe("disabled courses", () => {
-  const menuLabels = (el: CourseList, id: string) =>
-    [...q(el, `tr[data-course="${id}"] wt-row-actions`)!.querySelectorAll("wt-button")].map(
-      (button) => button.textContent!.trim(),
-    );
-  const statusOf = (el: CourseList, id: string) => q(el, `[data-test="status-${id}"]`);
-
-  it("lists disabled courses after the active ones, each named and marked Disabled", async () => {
-    const api = stubApi({}, ALL);
-    const { el } = await mount(api);
-    expect(rowIds(el)).toEqual(["c1", "c2", "c3", "d1", "d2"]);
-    const cell = q(el, 'tr[data-course="d1"] td:nth-child(2)')!;
-    expect(cell.textContent!.replace(/\s+/g, " ").trim()).toBe(`Brunch ${t("status.disabled")}`);
-    expect(statusOf(el, "d1")!.textContent!.trim()).toBe(t("status.disabled"));
-    for (const id of ["c1", "c2", "c3"]) expect(statusOf(el, id)).toBeNull();
-  });
-
-  it("lists the disabled courses rather than the empty state when no course is active", async () => {
-    const { el } = await mount(stubApi({}, DISABLED));
-    expect(rowIds(el)).toEqual(["d1", "d2"]);
-    expect(q(el, '[data-test="empty"]')).toBeNull();
-  });
-
-  it("draws a disabled course's name muted, with a gap before its status", async () => {
-    const { el } = await mount(stubApi({}, ALL));
-    const name = q(el, '[data-test="disabled-name-d1"]')!;
-    const status = statusOf(el, "d1")!;
-    const probe = document.createElement("span");
-    probe.style.color = "var(--wt-color-text-muted)";
-    el.shadowRoot!.appendChild(probe);
-    const muted = getComputedStyle(probe).color;
-    probe.remove();
-    expect(getComputedStyle(name).color).toBe(muted);
-    expect(getComputedStyle(nameButton(el, "c1")!).color).not.toBe(muted);
-    expect(
-      status.getBoundingClientRect().left - name.getBoundingClientRect().right,
-    ).toBeGreaterThan(2);
-  });
-
-  it("gives a disabled course no grip and no rename", async () => {
-    const { el } = await mount(stubApi({}, ALL));
-    for (const id of ["c1", "c2", "c3"]) expect(q(el, `[data-test="drag-${id}"]`)).not.toBeNull();
-    for (const id of ["d1", "d2"]) {
-      expect(q(el, `[data-test="drag-${id}"]`)).toBeNull();
-      expect(nameButton(el, id)).toBeNull();
-      expect(q(el, `tr[data-course="${id}"] button`)).toBeNull();
-    }
-  });
-
-  it("offers Enable on a disabled course, and Delete as well only when nothing refers to it", async () => {
-    const { el } = await mount(stubApi({}, ALL));
-    expect(menuLabels(el, "d1")).toEqual([t("action.enable")]);
-    expect(menuLabels(el, "d2")).toEqual([t("action.enable"), t("action.delete")]);
-    expect(q<WtRowActions>(el, 'tr[data-course="d1"] wt-row-actions')!.label).toBe(
-      `${t("kitchen.course_actions")}: Brunch`,
-    );
-  });
-
-  it("enables a disabled course as itself, refreshes, and puts focus on its name", async () => {
-    const enabled = ALL.map((course) =>
-      course.id === "d1" ? { ...course, active: true } : course,
-    );
-    const api = stubApi({
-      listCoursesWithDisabled: vi
-        .fn()
-        .mockResolvedValueOnce(copy(ALL))
-        .mockResolvedValue(copy(enabled)),
-    });
-    const { el } = await mount(api);
-    q(el, '[data-test="enable-d1"]')!.click();
-    await vi.waitFor(() => expect(nameButton(el, "d1")).not.toBeNull());
-    await vi.waitFor(() => expect(el.shadowRoot!.activeElement).toBe(nameButton(el, "d1")));
-    expect(vi.mocked(api.enableCourse).mock.calls).toEqual([["d1"]]);
-    expect(api.removeCourse).not.toHaveBeenCalled();
-    expect(api.listCoursesWithDisabled).toHaveBeenCalledTimes(2);
-    expect(rowIds(el)).toEqual(["c1", "d1", "c2", "c3", "d2"]);
-    expect(statusOf(el, "d1")).toBeNull();
-  });
-
-  it("deletes a disabled course nothing refers to through the same removal", async () => {
-    const api = stubApi({}, ALL);
-    const { el } = await mount(api);
-    q(el, '[data-test="remove-d2"]')!.click();
-    await confirmDelete(el);
-    await settle(el);
-    expect(vi.mocked(api.removeCourse).mock.calls).toEqual([["d2", { disable: false }]]);
-    expect(api.enableCourse).not.toHaveBeenCalled();
-    expect(api.listCoursesWithDisabled).toHaveBeenCalledTimes(2);
-  });
-
-  it("moves focus after deleting a disabled course to the next disabled course's menu", async () => {
-    const api = stubApi({
-      listCoursesWithDisabled: vi
-        .fn()
-        .mockResolvedValueOnce(copy(ALL))
-        .mockResolvedValue(copy(ALL.filter((course) => course.id !== "d2"))),
-    });
-    const { el } = await mount(api);
-    q(el, '[data-test="remove-d2"]')!.click();
-    await confirmDelete(el);
-    const menu = () => q(el, 'tr[data-course="d1"] wt-row-actions');
-    await vi.waitFor(() => expect(rowIds(el)).toEqual(["c1", "c2", "c3", "d1"]));
-    await vi.waitFor(() => expect(el.shadowRoot!.activeElement).toBe(menu()));
-  });
-
-  it("shows a refused Enable in the alert line, localised", async () => {
-    const api = stubApi(
-      { enableCourse: vi.fn().mockRejectedValue({ code: "course.not_found" }) },
-      ALL,
-    );
-    const { el } = await mount(api);
-    q(el, '[data-test="enable-d1"]')!.click();
-    await vi.waitFor(() =>
-      expect(alertLine(el)?.textContent?.trim()).toBe(codeMessage("course.not_found")),
-    );
-    expect(api.listCoursesWithDisabled).toHaveBeenCalledTimes(1);
-  });
-
-  it("moves only the active courses and keeps the disabled ones listed after them", async () => {
-    const api = stubApi({}, ALL);
-    const { el } = await mount(api);
-    q(el, '[data-test="drag-c3"]')!.dispatchEvent(
-      new KeyboardEvent("keydown", { key: "ArrowUp", bubbles: true }),
-    );
-    await el.updateComplete;
-    expect(rowIds(el)).toEqual(["c1", "c3", "c2", "d1", "d2"]);
-    await settle(el);
-    expect(vi.mocked(api.moveCourse).mock.calls).toEqual([["c3", 1]]);
-    expect(rowIds(el)).toEqual(["c1", "c3", "c2", "d1", "d2"]);
-  });
-
-  it.each([
-    ["en-GB", ["Delete", "Disable", "Enable", "Disabled"]],
-    ["es-ES", ["Eliminar", "Deshabilitar", "Habilitar", "Deshabilitado"]],
-  ] as const)("reads Delete, Disable, Enable and Disabled in %s", async (locale, words) => {
-    const [remove, disable, enable, status] = words;
-    const before = currentLocale();
-    setLocale(locale);
-    try {
-      const { el } = await mount(stubApi({}, ALL));
-      expect(menuLabels(el, "c1")).toEqual([remove]);
-      expect(menuLabels(el, "c2")).toEqual([disable]);
-      expect(menuLabels(el, "d1")).toEqual([enable]);
-      expect(menuLabels(el, "d2")).toEqual([enable, remove]);
-      expect(statusOf(el, "d1")!.textContent!.trim()).toBe(status);
-    } finally {
-      setLocale(before);
-    }
-  });
-
-  const listed = (el: CourseList) =>
-    [...el.shadowRoot!.querySelectorAll("li")].map((item) => item.getAttribute("data-course"));
-
-  it("reads and shows only the active courses when read-only", async () => {
-    const api = stubApi({}, ALL);
-    const { el } = await mountWidget<CourseList>("dashboard-course-list", { api, readOnly: true });
-    await vi.waitFor(() => expect(listed(el)).toEqual(["c1", "c2", "c3"]));
-    expect(el.shadowRoot!.textContent).not.toContain("Brunch");
     expect(api.listCourses).toHaveBeenCalledTimes(1);
-    expect(api.listCoursesWithDisabled).not.toHaveBeenCalled();
-  });
-
-  it("reads the list again when it turns read-only, or editable, once shown", async () => {
-    const api = stubApi({}, ALL);
-    const { el } = await mount(api);
-    el.readOnly = true;
-    await vi.waitFor(() => expect(listed(el)).toEqual(["c1", "c2", "c3"]));
-    expect(api.listCourses).toHaveBeenCalledTimes(1);
-    el.readOnly = false;
-    await vi.waitFor(() => expect(rowIds(el)).toEqual(["c1", "c2", "c3", "d1", "d2"]));
-    expect(api.listCoursesWithDisabled).toHaveBeenCalledTimes(2);
-  });
-
-  it("offers no Delete or Disable on a row the read-only read left, until the full read arrives", async () => {
-    let answer!: (courses: Course[]) => void;
-    const api = stubApi(
-      {
-        listCourses: vi.fn().mockResolvedValue(
-          COURSES.map(({ id, name, displayOrder, active }) => ({
-            id,
-            name,
-            displayOrder,
-            active,
-          })),
-        ),
-        listCoursesWithDisabled: vi.fn(
-          () => new Promise<Course[]>((resolve) => (answer = resolve)),
-        ),
-      },
-      ALL,
-    );
-    const { el } = await mountWidget<CourseList>("dashboard-course-list", { api, readOnly: true });
-    await vi.waitFor(() => expect(listed(el)).toEqual(["c1", "c2", "c3"]));
-    el.readOnly = false;
-    await vi.waitFor(() => expect(api.listCoursesWithDisabled).toHaveBeenCalledTimes(1));
-    await el.updateComplete;
-    expect(rowIds(el)).toEqual(["c1", "c2", "c3"]);
-    for (const id of ["c1", "c2", "c3"]) expect(menuLabels(el, id)).toEqual([]);
-    answer(copy(ALL));
-    await vi.waitFor(() => expect(rowIds(el)).toEqual(["c1", "c2", "c3", "d1", "d2"]));
-    expect(menuLabels(el, "c1")).toEqual([t("action.delete")]);
-    expect(menuLabels(el, "c2")).toEqual([t("action.disable")]);
   });
 });
 
@@ -1184,7 +832,7 @@ describe("reordering", () => {
     expect(rowIds(el)).toEqual(["c2", "c3", "c1"]);
   });
 
-  it("reads the disabled courses again once a move is answered, when a read arrived while it was out", async () => {
+  it("reads the current courses again once a move is answered, when a read arrived while it was out", async () => {
     const liveData = new LiveData();
     let answer!: (courses: Course[]) => void;
     const api = Object.assign(
@@ -1200,13 +848,21 @@ describe("reordering", () => {
     );
     await el.updateComplete;
     const after = moved(COURSES, "c1", 1);
-    vi.mocked(api.listCoursesWithDisabled).mockResolvedValue(copy([...after, DISABLED[0]!]));
+    const refreshed = after.map((course) =>
+      course.id === "c3" ? { ...course, name: "Updated desserts" } : course,
+    );
+    vi.mocked(api.listCourses).mockResolvedValue(copy([...refreshed, DISABLED[0]!]));
     liveData.invalidate([{ type: "kitchen_courses", id: "d2" }]);
-    await vi.waitFor(() => expect(api.listCoursesWithDisabled).toHaveBeenCalledTimes(2));
+    await vi.waitFor(() => expect(api.listCourses).toHaveBeenCalledTimes(2));
     await settle(el);
-    expect(rowIds(el)).toEqual(["c2", "c1", "c3", "d1", "d2"]);
+    expect(rowIds(el)).toEqual(["c2", "c1", "c3"]);
+    expect(nameButton(el, "c3")!.textContent!.trim()).toBe("Desserts");
     answer(copy(after));
-    await vi.waitFor(() => expect(rowIds(el)).toEqual(["c2", "c1", "c3", "d1"]));
+    await vi.waitFor(() =>
+      expect(nameButton(el, "c3")!.textContent!.trim()).toBe("Updated desserts"),
+    );
+    expect(rowIds(el)).toEqual(["c2", "c1", "c3"]);
+    expect(api.listCourses).toHaveBeenCalledTimes(3);
   });
 
   it("puts quick key moves back in the server's order when the first is refused", async () => {
@@ -1248,7 +904,7 @@ describe("reordering", () => {
       )
       .mockRejectedValueOnce({ code: "connection.failed" });
     const api = stubApi({
-      listCoursesWithDisabled: vi.fn(() => Promise.resolve(copy(server))),
+      listCourses: vi.fn(() => Promise.resolve(copy(server))),
       updateCourse,
       moveCourse: vi.fn(
         (id: string, to: number) =>
@@ -1285,7 +941,7 @@ describe("reordering", () => {
     let answerRename!: () => void;
     const answers: (() => void)[] = [];
     const api = stubApi({
-      listCoursesWithDisabled: vi.fn(() => Promise.resolve(copy(server))),
+      listCourses: vi.fn(() => Promise.resolve(copy(server))),
       updateCourse: vi.fn(
         (id: string, { name }: { name: string }) =>
           new Promise<void>((resolve) => {
@@ -1381,9 +1037,7 @@ describe("reordering", () => {
     q(el, '[data-test="drag-c1"]')!.dispatchEvent(
       new PointerEvent("pointerdown", { bubbles: true, pointerId: 7 }),
     );
-    vi.mocked(api.listCoursesWithDisabled).mockResolvedValue(
-      copy(COURSES.filter((c) => c.id !== "c1")),
-    );
+    vi.mocked(api.listCourses).mockResolvedValue(copy(COURSES.filter((c) => c.id !== "c1")));
     liveData.invalidate([{ type: "kitchen_courses", id: "c1" }]);
     await vi.waitFor(() => expect(rowIds(el)).toEqual(["c2", "c3"]));
     const box = q(el, 'tr[data-course="c3"]')!.getBoundingClientRect();
@@ -1409,7 +1063,7 @@ describe("reordering", () => {
     await el.updateComplete;
     expect(rowIds(el)).toEqual(["c2", "c1", "c3"]);
     await settle(el);
-    expect(api.listCoursesWithDisabled).toHaveBeenCalledTimes(2);
+    expect(api.listCourses).toHaveBeenCalledTimes(2);
     expect(rowIds(el)).toEqual(["c1", "c2", "c3"]);
     expect(alertLine(el)!.textContent!.trim()).toBe(codeMessage("course.not_found"));
   });
@@ -1504,4 +1158,460 @@ describe("layout", () => {
       }
     },
   );
+});
+
+describe("permanent delete", () => {
+  it("offers confirmation for a referenced course and reads its full current impact", async () => {
+    const before = currentLocale();
+    setLocale("en-GB");
+    try {
+      const impact = {
+        target: { id: "c2", name: "Current Mains" },
+        refusals: [],
+        ends: [],
+        removes: [{ key: "course_products", count: 3, targets: [] }],
+      };
+      const api = stubApi({
+        getCourseDeleteImpact: vi.fn().mockResolvedValue(impact),
+        deleteCourse: vi.fn().mockResolvedValue(impact),
+      });
+      const { el } = await mount(api);
+      expect(
+        q<HTMLElement & { label: string }>(el, 'tr[data-course="c1"] wt-row-actions')!.label,
+      ).toBe("Course actions: Starters");
+      expect(
+        q<HTMLElement & { label: string }>(el, 'tr[data-course="c2"] wt-row-actions')!.label,
+      ).toBe("Course actions: Mains");
+      const remove = q(el, '[data-test="remove-c2"]')!;
+      expect(remove.textContent!.trim()).toBe("Delete");
+      remove.click();
+      await vi.waitFor(() =>
+        expect(
+          el
+            .shadowRoot!.querySelector("wt-delete-dialog")
+            ?.shadowRoot?.querySelector("[data-target]")?.textContent,
+        ).toBe("Current Mains"),
+      );
+      const root = el.shadowRoot!.querySelector("wt-delete-dialog")!.shadowRoot!;
+      expect(root.querySelector("li")!.textContent).toBe("3 products will fire earliest.");
+      expect(root.querySelector('[data-group="ends"]')).toBeNull();
+      expect(root.querySelector("[data-irreversible]")!.textContent).toBe("This can't be undone.");
+      expect(api.deleteCourse).not.toHaveBeenCalled();
+      root
+        .querySelector('wt-button[data-test="delete-confirm"]')!
+        .shadowRoot!.querySelector("button")!
+        .click();
+      await vi.waitFor(() => expect(api.deleteCourse).toHaveBeenCalledExactlyOnceWith("c2"));
+      await vi.waitFor(() => expect(el.unsaved).toBe(false));
+    } finally {
+      setLocale(before);
+    }
+  });
+});
+
+describe("permanent delete lifecycle", () => {
+  it("omits deleted rows, Status columns and filters and keeps only Delete on every active menu", async () => {
+    const { el } = await mount(stubApi({}, ALL));
+    expect(rowIds(el)).toEqual(["c1", "c2", "c3"]);
+    expect(el.shadowRoot!.textContent).not.toContain("Brunch");
+    expect(q(el, '[data-test^="status-"]')).toBeNull();
+    expect(q(el, "wt-select,wt-filter-bar")).toBeNull();
+    for (const id of ["c1", "c2", "c3"])
+      expect(
+        [...q(el, `tr[data-course="${id}"] wt-row-actions`)!.querySelectorAll("wt-button")].map(
+          (b) => b.textContent!.trim(),
+        ),
+      ).toEqual([t("action.delete")]);
+    expect([...el.shadowRoot!.querySelectorAll("th")].map((h) => h.textContent!.trim())).toEqual([
+      t("kitchen.reorder_course"),
+      t("kitchen.course_name"),
+      t("kitchen.course_actions"),
+    ]);
+  });
+
+  it("shows an empty state when no live course remains", async () => {
+    const { el } = await mount(stubApi({}, DISABLED), false);
+    await vi.waitFor(() => expect(q(el, '[data-test="empty"]')).not.toBeNull());
+    expect(rowIds(el)).toEqual([]);
+  });
+
+  it("uses the same active list across read-only transitions and closes stale Confirm", async () => {
+    const api = stubApi();
+    const { el } = await mount(api);
+    q(el, '[data-test="remove-c1"]')!.click();
+    await settle(el);
+    const stale = deleteControl(el, "confirm")!;
+    el.readOnly = true;
+    await settle(el);
+    expect(deleteDialog(el)).toBeNull();
+    expect(el.unsaved).toBe(false);
+    expect(
+      [...el.shadowRoot!.querySelectorAll("li")].map((li) => li.getAttribute("data-course")),
+    ).toEqual(["c1", "c2", "c3"]);
+    stale.click();
+    expect(api.deleteCourse).not.toHaveBeenCalled();
+    el.readOnly = false;
+    await settle(el);
+    expect(rowIds(el)).toEqual(["c1", "c2", "c3"]);
+    expect(api.listCourses).toHaveBeenCalledTimes(1);
+    expect(q(el, '[data-test="remove-c2"]')!.textContent!.trim()).toBe(t("action.delete"));
+  });
+
+  it("waits for impact before allowing native confirmation", async () => {
+    let answer!: (value: ReturnType<typeof impactFor>) => void;
+    const api = stubApi({
+      getCourseDeleteImpact: vi.fn(
+        () => new Promise<ReturnType<typeof impactFor>>((resolve) => (answer = resolve)),
+      ),
+    });
+    const { el } = await mount(api);
+    q(el, '[data-test="remove-c1"]')!.click();
+    await settle(el);
+    expect(deleteControl(el, "confirm")!.disabled).toBe(true);
+    expect(inDelete(el, '[role="status"]')).not.toBeNull();
+    deleteControl(el, "confirm")!.click();
+    expect(api.deleteCourse).not.toHaveBeenCalled();
+    answer(impactFor("c1"));
+    await vi.waitFor(() => expect(deleteControl(el, "confirm")!.disabled).toBe(false));
+  });
+
+  it("retries an impact failure and leaves zero-impact groups absent", async () => {
+    const api = stubApi({
+      getCourseDeleteImpact: vi
+        .fn()
+        .mockRejectedValueOnce({ code: "connection.failed" })
+        .mockResolvedValue(impactFor("c1")),
+    });
+    const { el } = await mount(api);
+    q(el, '[data-test="remove-c1"]')!.click();
+    await vi.waitFor(() => expect(deleteControl(el, "retry")).not.toBeNull());
+    expect(inDelete(el, "wt-form-actions")!.textContent).toContain(t("action.delete"));
+    expect(deleteControl(el, "confirm")!.disabled).toBe(true);
+    deleteControl(el, "retry")!.click();
+    await vi.waitFor(() => expect(deleteControl(el, "confirm")!.disabled).toBe(false));
+    expect(inDelete(el, "[data-group]")).toBeNull();
+    expect(api.getCourseDeleteImpact).toHaveBeenCalledTimes(2);
+  });
+
+  it("keeps a request refusal retryable through background impact recovery", async () => {
+    const liveData = new LiveData();
+    const api = Object.assign(
+      stubApi({
+        deleteCourse: vi
+          .fn()
+          .mockRejectedValueOnce({ code: "connection.failed" })
+          .mockResolvedValue(impactFor("c1")),
+      }),
+      { liveData },
+    );
+    const { el } = await mount(api);
+    q(el, '[data-test="remove-c1"]')!.click();
+    await confirmDelete(el);
+    await el.settled();
+    await settle(el);
+    const message = () =>
+      (inDelete(el, "wt-form-actions") as HTMLElement & { error: string }).error;
+    expect(message()).toBe(codeMessage("connection.failed"));
+    expect(deleteControl(el, "confirm")!.disabled).toBe(false);
+    vi.mocked(api.getCourseDeleteImpact).mockRejectedValueOnce({ code: "connection.failed" });
+    liveData.refresh();
+    await vi.waitFor(() => expect(deleteControl(el, "retry")).not.toBeNull());
+    liveData.refresh();
+    await vi.waitFor(() => expect(deleteControl(el, "retry")).toBeNull());
+    expect(message()).toBe(codeMessage("connection.failed"));
+    await confirmDelete(el);
+    await el.settled();
+    expect(api.deleteCourse).toHaveBeenCalledTimes(2);
+    expect(el.unsaved).toBe(false);
+  });
+
+  it("disables confirmation when a fresh impact contains a refusal", async () => {
+    const liveData = new LiveData();
+    const api = Object.assign(stubApi(), { liveData });
+    const { el } = await mount(api);
+    q(el, '[data-test="remove-c1"]')!.click();
+    await settle(el);
+    vi.mocked(api.getCourseDeleteImpact).mockResolvedValue({
+      ...impactFor("c1"),
+      refusals: [
+        {
+          code: "course.not_found",
+          params: { courseId: "c1" },
+          targets: [{ id: "c1", name: "Starters" }],
+        },
+      ],
+    });
+    liveData.refresh();
+    await vi.waitFor(() => expect(deleteControl(el, "confirm")!.disabled).toBe(true));
+    expect(inDelete(el, '[data-group="refusals"]')).not.toBeNull();
+    deleteControl(el, "confirm")!.click();
+    expect(api.deleteCourse).not.toHaveBeenCalled();
+  });
+
+  it("ignores an impact carrying another target id", async () => {
+    const api = stubApi({ getCourseDeleteImpact: vi.fn().mockResolvedValue(impactFor("c2")) });
+    const { el } = await mount(api);
+    q(el, '[data-test="remove-c1"]')!.click();
+    await settle(el);
+    expect(deleteControl(el, "confirm")!.disabled).toBe(true);
+    expect(deleteControl(el, "retry")).not.toBeNull();
+    expect(api.deleteCourse).not.toHaveBeenCalled();
+  });
+
+  it.each(["cancel", "escape"])(
+    "%s closes without deletion and stops the close reaching a surrounding window",
+    async (how) => {
+      const api = stubApi();
+      const { el, host } = await mount(api);
+      const outside = vi.fn();
+      host.addEventListener("wt-close", outside);
+      q(el, '[data-test="remove-c1"]')!.click();
+      await settle(el);
+      const dialog = deleteDialog(el)!;
+      const closed = new Promise((resolve) =>
+        dialog.addEventListener("wt-close", resolve, { once: true }),
+      );
+      if (how === "cancel") deleteControl(el, "cancel")!.click();
+      else await userEvent.keyboard("{Escape}");
+      await closed;
+      await settle(el);
+      expect(deleteDialog(el)).toBeNull();
+      expect(api.deleteCourse).not.toHaveBeenCalled();
+      expect(outside).not.toHaveBeenCalled();
+    },
+  );
+
+  it("protects pending delete against double confirmation, Cancel and Escape", async () => {
+    let answer!: (value: ReturnType<typeof impactFor>) => void;
+    const api = stubApi({
+      deleteCourse: vi.fn(
+        () => new Promise<ReturnType<typeof impactFor>>((resolve) => (answer = resolve)),
+      ),
+    });
+    const { el } = await mount(api);
+    q(el, '[data-test="remove-c1"]')!.click();
+    await confirmDelete(el);
+    await settle(el);
+    expect(deleteControl(el, "confirm")!.disabled).toBe(true);
+    expect(deleteControl(el, "cancel")!.disabled).toBe(true);
+    deleteControl(el, "confirm")!.click();
+    deleteControl(el, "cancel")!.click();
+    await userEvent.keyboard("{Escape}");
+    await settle(el);
+    expect(api.deleteCourse).toHaveBeenCalledExactlyOnceWith("c1");
+    expect(deleteDialog(el)).not.toBeNull();
+    answer(impactFor("c1"));
+    await el.settled();
+    expect(el.unsaved).toBe(false);
+  });
+
+  it("closes before a failed refresh and leaves focus safely on the neighbouring course", async () => {
+    const api = stubApi();
+    const { el } = await mount(api);
+    vi.mocked(api.listCourses).mockRejectedValue({ code: "connection.failed" });
+    q(el, '[data-test="remove-c1"]')!.click();
+    await confirmDelete(el);
+    await el.settled();
+    await settle(el);
+    expect(deleteDialog(el)).toBeNull();
+    expect(rowIds(el)).toEqual(["c2", "c3"]);
+    expect(alertLine(el)!.textContent!.trim()).toBe(codeMessage("connection.failed"));
+    expect(el.shadowRoot!.activeElement).toBe(nameButton(el, "c2"));
+    expect(api.deleteCourse).toHaveBeenCalledExactlyOnceWith("c1");
+  });
+
+  it("puts focus on previous course, then Add when the last course is removed", async () => {
+    let rows = copy(COURSES);
+    const api = stubApi({
+      listCourses: vi.fn(() => Promise.resolve(copy(rows))),
+      deleteCourse: vi.fn(async (id: string) => {
+        rows = rows.filter((c) => c.id !== id);
+        return impactFor(id);
+      }),
+    });
+    const { el } = await mount(api);
+    for (const [id, next] of [
+      ["c3", "c2"],
+      ["c2", "c1"],
+      ["c1", "new"],
+    ]) {
+      q(el, `[data-test="remove-${id}"]`)!.click();
+      await confirmDelete(el);
+      await el.settled();
+      await settle(el);
+      expect(el.shadowRoot!.activeElement).toBe(
+        next === "new" ? q(el, '[data-test="add-course"]') : nameButton(el, next!),
+      );
+    }
+  });
+
+  it("ignores old Confirm and Retry controls and a late read after another opening", async () => {
+    let answer!: (value: ReturnType<typeof impactFor>) => void;
+    const api = stubApi({
+      getCourseDeleteImpact: vi
+        .fn()
+        .mockResolvedValueOnce(impactFor("c1"))
+        .mockImplementationOnce(
+          () => new Promise<ReturnType<typeof impactFor>>((resolve) => (answer = resolve)),
+        )
+        .mockResolvedValue(impactFor("c2")),
+    });
+    const { el } = await mount(api);
+    q(el, '[data-test="remove-c1"]')!.click();
+    await settle(el);
+    const old = deleteDialog(el)!;
+    const confirm = deleteControl(el, "confirm")!;
+    old.dispatchEvent(
+      new CustomEvent("wt-delete-retry", { detail: {}, bubbles: true, composed: true }),
+    );
+    await settle(el);
+    deleteControl(el, "cancel")!.click();
+    await settle(el);
+    q(el, '[data-test="remove-c2"]')!.click();
+    await settle(el);
+    confirm.click();
+    old.dispatchEvent(
+      new CustomEvent("wt-delete-retry", { detail: {}, bubbles: true, composed: true }),
+    );
+    answer(impactFor("c1"));
+    await settle(el);
+    expect(inDelete(el, "[data-target]")!.textContent).toBe("Mains");
+    expect(api.deleteCourse).not.toHaveBeenCalled();
+    expect(api.getCourseDeleteImpact).toHaveBeenCalledTimes(3);
+  });
+
+  it("ignores a detached native Retry after replacing the course dialog in the same render", async () => {
+    const api = stubApi({
+      getCourseDeleteImpact: vi
+        .fn()
+        .mockRejectedValueOnce({ code: "connection.failed" })
+        .mockResolvedValue(impactFor("c2")),
+    });
+    const { el } = await mount(api);
+    q(el, '[data-test="remove-c1"]')!.click();
+    await settle(el);
+    const old = deleteDialog(el)! as HTMLElementTagNameMap["wt-delete-dialog"];
+    await expect.poll(() => old.readError).not.toBe("");
+    await old.updateComplete;
+    const retryHost = old.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>(
+      '[data-test="delete-retry"]',
+    )!;
+    await retryHost.updateComplete;
+    const retry = retryHost.shadowRoot!.querySelector<HTMLButtonElement>("button")!;
+    expect(retry.disabled).toBe(false);
+    old.dispatchEvent(new CustomEvent("wt-close"));
+    q(el, '[data-test="remove-c2"]')!.click();
+    await settle(el);
+    const next = deleteDialog(el)! as HTMLElementTagNameMap["wt-delete-dialog"];
+    retry.click();
+    await settle(el);
+    expect(deleteDialog(el)).toBe(next);
+    expect(next.open).toBe(true);
+    expect(next.impact).toEqual(impactFor("c2"));
+    expect(inDelete(el, "[data-target]")!.textContent).toBe("Mains");
+    expect(api.deleteCourse).not.toHaveBeenCalled();
+    expect(api.getCourseDeleteImpact).toHaveBeenCalledTimes(2);
+    expect(vi.mocked(api.getCourseDeleteImpact).mock.calls).toEqual([["c1"], ["c2"]]);
+    expect(next).not.toBe(old);
+    expect(retry.isConnected).toBe(false);
+  });
+
+  it("not-found impact removes the departed target without applying a late result to its replacement", async () => {
+    let fail!: (value: unknown) => void;
+    const api = stubApi({
+      getCourseDeleteImpact: vi
+        .fn()
+        .mockImplementationOnce(() => new Promise((_, reject) => (fail = reject)))
+        .mockResolvedValue(impactFor("c2")),
+    });
+    const { el } = await mount(api);
+    q(el, '[data-test="remove-c1"]')!.click();
+    await settle(el);
+    deleteControl(el, "cancel")!.click();
+    await settle(el);
+    q(el, '[data-test="remove-c2"]')!.click();
+    await settle(el);
+    fail({ code: "course.not_found" });
+    await settle(el);
+    expect(inDelete(el, "[data-target]")!.textContent).toBe("Mains");
+    expect(alertLine(el)).toBeNull();
+    vi.mocked(api.getCourseDeleteImpact).mockRejectedValue({ code: "course.not_found" });
+    deleteDialog(el)!.dispatchEvent(new CustomEvent("wt-delete-retry", { detail: {} }));
+    await settle(el);
+    expect(deleteDialog(el)).toBeNull();
+    expect(rowIds(el)).toEqual(["c1", "c3"]);
+    expect(alertLine(el)!.textContent!.trim()).toBe(codeMessage("course.not_found"));
+  });
+
+  it("does not treat own in-flight deletion's not-found impact as a failed action", async () => {
+    const liveData = new LiveData();
+    let answer!: (value: ReturnType<typeof impactFor>) => void;
+    const api = Object.assign(
+      stubApi({
+        deleteCourse: vi.fn(
+          () => new Promise<ReturnType<typeof impactFor>>((resolve) => (answer = resolve)),
+        ),
+      }),
+      { liveData },
+    );
+    const { el } = await mount(api);
+    q(el, '[data-test="remove-c1"]')!.click();
+    await confirmDelete(el);
+    await settle(el);
+    vi.mocked(api.getCourseDeleteImpact).mockRejectedValue({ code: "course.not_found" });
+    liveData.refresh();
+    await settle(el);
+    expect(deleteDialog(el)).not.toBeNull();
+    answer(impactFor("c1"));
+    await el.settled();
+    expect(alertLine(el)).toBeNull();
+    expect(el.unsaved).toBe(false);
+  });
+
+  it("releases impact subscriptions on close and disconnect", async () => {
+    const liveData = new LiveData();
+    const api = Object.assign(stubApi(), { liveData });
+    const { el } = await mount(api);
+    q(el, '[data-test="remove-c1"]')!.click();
+    await settle(el);
+    deleteControl(el, "cancel")!.click();
+    await settle(el);
+    liveData.refresh();
+    await settle(el);
+    expect(api.getCourseDeleteImpact).toHaveBeenCalledTimes(1);
+    q(el, '[data-test="remove-c2"]')!.click();
+    await settle(el);
+    el.remove();
+    liveData.refresh();
+    await settle(el);
+    expect(api.getCourseDeleteImpact).toHaveBeenCalledTimes(2);
+    expect(el.unsaved).toBe(false);
+  });
+});
+
+it("permanent delete replaces its controls even when a replacement opens before rendering the close", async () => {
+  const api = stubApi();
+  const { el } = await mount(api);
+  q(el, '[data-test="remove-c1"]')!.click();
+  await settle(el);
+  const stale = deleteControl(el, "confirm")!;
+  q(el, '[data-test="remove-c2"]')!.click();
+  await settle(el);
+  stale.click();
+  await settle(el);
+  expect(api.deleteCourse).not.toHaveBeenCalled();
+  expect(inDelete(el, "[data-target]")!.textContent).toBe("Mains");
+});
+
+it("reorders only active courses when a fixture includes deleted rows", async () => {
+  const api = stubApi({}, ALL);
+  const { el } = await mount(api);
+  q(el, '[data-test="drag-c3"]')!.dispatchEvent(
+    new KeyboardEvent("keydown", { key: "ArrowUp", bubbles: true }),
+  );
+  await el.updateComplete;
+  expect(rowIds(el)).toEqual(["c1", "c3", "c2"]);
+  await settle(el);
+  expect(vi.mocked(api.moveCourse).mock.calls).toEqual([["c3", 1]]);
+  expect(rowIds(el)).toEqual(["c1", "c3", "c2"]);
 });

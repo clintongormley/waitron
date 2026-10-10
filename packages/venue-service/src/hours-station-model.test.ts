@@ -78,8 +78,11 @@ describe("Calendar without a station-hours page model", () => {
     expect(routing.stations).toEqual([
       { id: ids.bar, name: "Bar", active: true },
       { id: ids.kitchen, name: "Kitchen", active: true },
-      { id: ids.prep, name: "Prep", active: false },
     ]);
+    expect(
+      (await suite.db.select().from(kitchenStations)).find((row) => row.id === ids.prep),
+    ).toMatchObject({ id: ids.prep, name: "Prep", active: false, locationId: f.cfg.locationId });
+    expect(routing.stationTimes.map((row) => row.stationId)).not.toContain(ids.prep);
     expect(model.days[0]!.namedDay).toEqual({
       kind: "working_day",
       repeats: false,

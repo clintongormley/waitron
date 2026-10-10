@@ -87,7 +87,6 @@ function api(overrides: Partial<ScreenApi> = {}): ScreenApi {
     preview: vi.fn().mockResolvedValue([]),
     createStation: vi.fn(),
     updateStation: vi.fn(),
-    deactivateStation: vi.fn(),
     setDefaultStation: vi.fn(),
     ...overrides,
   } as unknown as ScreenApi;
@@ -176,27 +175,37 @@ it.each(["cancel", "escape"])("%s discards a Settings draft without writing", as
 it.each([
   ["management.request_invalid", { field: "warmAfterMinutes" }, true],
   ["station.not_found", {}, false],
-] as const)("retains a retryable Settings draft after %s", async (code, params, field) => {
-  const a = api({
-    updateStation: vi.fn().mockRejectedValueOnce({ code, params }).mockResolvedValue(undefined),
-  });
-  const el = await mount(a);
-  await openWarm(el);
-  typeMinutes(el, "8");
-  await settle(el);
-  q(el, "[data-test=save-settings-cell]")!.click();
-  await settle(el);
-  expect(minutesField(el).value).toBe("8");
-  expect(!!minutesField(el).error).toBe(field);
-  expect(q(el, "wt-form-actions")?.shadowRoot?.textContent).toContain(
-    field ? "Correct the highlighted fields to continue." : "could not be saved",
-  );
-  expect(q(el, "[data-test=save-settings-cell]")!.hasAttribute("disabled")).toBe(false);
-  q(el, "[data-test=save-settings-cell]")!.click();
-  await settle(el);
-  expect(a.updateStation).toHaveBeenCalledTimes(2);
-  expect(q(el, "[data-test=settings-minutes]")).toBeNull();
-});
+] as const)(
+  "handles a Settings refusal of %s without changing saved timing",
+  async (code, params, field) => {
+    const a = api({
+      updateStation: vi.fn().mockRejectedValueOnce({ code, params }).mockResolvedValue(undefined),
+    });
+    const el = await mount(a);
+    await openWarm(el);
+    typeMinutes(el, "8");
+    await settle(el);
+    q(el, "[data-test=save-settings-cell]")!.click();
+    await settle(el);
+    if (code === "station.not_found") {
+      await vi.waitFor(() => expect(q(el, "[data-test=settings-minutes]")).toBeNull());
+      expect(el.shadowRoot!.textContent).toContain("This station could not be found.");
+      expect(el.shadowRoot!.textContent).not.toContain("station.not_found");
+      expect(a.updateStation).toHaveBeenCalledExactlyOnceWith("bar", { warmAfterMinutes: 8 });
+      return;
+    }
+    expect(minutesField(el).value).toBe("8");
+    expect(!!minutesField(el).error).toBe(field);
+    expect(q(el, "wt-form-actions")?.shadowRoot?.textContent).toContain(
+      field ? "Correct the highlighted fields to continue." : "could not be saved",
+    );
+    expect(q(el, "[data-test=save-settings-cell]")!.hasAttribute("disabled")).toBe(false);
+    q(el, "[data-test=save-settings-cell]")!.click();
+    await settle(el);
+    expect(a.updateStation).toHaveBeenCalledTimes(2);
+    expect(q(el, "[data-test=settings-minutes]")).toBeNull();
+  },
+);
 it("keeps the cell closed when refresh fails after a successful write", async () => {
   const a = api({
     load: vi.fn().mockResolvedValueOnce(view).mockRejectedValue(new Error("offline")),
@@ -696,6 +705,13 @@ it.each([
     const table = el
       .shadowRoot!.querySelector("prep-station-table")!
       .shadowRoot!.querySelector("wt-data-table")!.shadowRoot!;
+    if (!active) {
+      expect(table.querySelector("[data-test=edit-grill]")).toBeNull();
+      expect(update).not.toHaveBeenCalled();
+      expect(fallback).not.toHaveBeenCalled();
+      expect(initial.routing.stationTimes[1]!.fallbackStationId).toBe(stored);
+      return;
+    }
     table.querySelector<HTMLElement>("[data-test=edit-grill]")!.click();
     await settle(el);
     const editor =

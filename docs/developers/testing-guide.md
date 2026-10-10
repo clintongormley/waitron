@@ -1560,3 +1560,19 @@ was true. Detaching the CDP session and waiting 500ms did not restore them. A se
 page in the same context retained its fine pointer and hover throughout. The macOS
 focused suites passed while Linux CI failed the later mouse assertions, so a local
 pass was not evidence of restored input devices on Linux.
+
+
+## Kitchen deletion history and queued writes
+
+The integrated deletion case in `apps/server/src/kitchen-delete.integration.test.ts` creates a
+real course, saved draft and held dish, then deletes through authenticated management routes.
+It checks held and preparing refusal, fired-ready history, an off explicit KDS binding and its
+removal, base/period cleanup, Made at, same-name new ids, and a fresh course-free choice firing
+through surviving routing. Full snapshots compare the old tickets, order lines, draft events,
+groups, tab, pass and rest-of-order reads before and after station deletion.
+
+Its two queued-write cases hold the first transaction on a promise barrier, wait until the next
+write requests `withWriteLock`, then release the first. The course response must include the
+new product default and clear it; the station write must refuse newly preparing food. These
+cases use no timed sleep to arrange the writes. The separate course-retention suite checks a
+new course-free product choice firing earliest after its default clears.

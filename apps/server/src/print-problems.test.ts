@@ -152,8 +152,16 @@ async function setupVenue(): Promise<Venue> {
     const cocinaPrinter = await printer("Cocina");
     const barraPrinter = await printer("Barra");
     const receiptPrinter = await printer("Recibos");
-    await attachPrinterToStation(tx, { stationId: cocina, printerId: cocinaPrinter });
-    await attachPrinterToStation(tx, { stationId: barra, printerId: barraPrinter });
+    await attachPrinterToStation(tx, {
+      locationId: cfg.locationId,
+      stationId: cocina,
+      printerId: cocinaPrinter,
+    });
+    await attachPrinterToStation(tx, {
+      locationId: cfg.locationId,
+      stationId: barra,
+      printerId: barraPrinter,
+    });
     return {
       cfg,
       cocina,
@@ -1498,8 +1506,16 @@ describe("a printing problem on a printer two stations share (A366)", () => {
         { locationId: v.cfg.locationId },
         { name: "Compartida", transport: "cloud_poll", pollId: `poll-${randomUUID()}` },
       );
-      await attachPrinterToStation(tx, { stationId: v.cocina, printerId: id });
-      await attachPrinterToStation(tx, { stationId: v.barra, printerId: id });
+      await attachPrinterToStation(tx, {
+        locationId: v.cfg.locationId,
+        stationId: v.cocina,
+        printerId: id,
+      });
+      await attachPrinterToStation(tx, {
+        locationId: v.cfg.locationId,
+        stationId: v.barra,
+        printerId: id,
+      });
       return id;
     });
   }

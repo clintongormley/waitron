@@ -33,7 +33,7 @@ import {
   writeEditSentLines,
   writePrintHeldWork,
 } from "@waitron/venue-service";
-import { createCourse, createStation, deactivateStation, setProductCourse } from "./kitchen.js";
+import { createCourse, createStation, setProductCourse } from "./kitchen.js";
 import { splitBill } from "./bill-actions.js";
 import { VENUE_SERVICE } from "./modules.js";
 import { fireGroup, readCurrentOrders, submitGroups } from "./order-groups.js";
@@ -93,8 +93,16 @@ useVenueDb({
           { name: "Grill printer", transport: "cloud_poll", pollId: randomUUID() },
         )
       ).id;
-      await attachPrinterToStation(tx, { stationId: bar, printerId: barPrinter });
-      await attachPrinterToStation(tx, { stationId: grill, printerId: grillPrinter });
+      await attachPrinterToStation(tx, {
+        locationId: venue.cfg.locationId,
+        stationId: bar,
+        printerId: barPrinter,
+      });
+      await attachPrinterToStation(tx, {
+        locationId: venue.cfg.locationId,
+        stationId: grill,
+        printerId: grillPrinter,
+      });
       await routeProductTo(tx, venue.cfg, venue.productId("Burger"), bar);
     });
   },
@@ -179,7 +187,11 @@ async function stationPrinter(tx: Transaction, name: string, stationIds: readonl
   );
   await tx.update(printers).set({ hasCashDrawer: true }).where(eq(printers.id, id));
   for (const stationId of stationIds)
-    await attachPrinterToStation(tx, { stationId, printerId: id });
+    await attachPrinterToStation(tx, {
+      locationId: venue.cfg.locationId,
+      stationId,
+      printerId: id,
+    });
   return id;
 }
 
@@ -938,7 +950,11 @@ describe("release", () => {
         },
       );
       for (const stationId of [bar, grill])
-        await attachPrinterToStation(tx, { stationId, printerId: printer.id });
+        await attachPrinterToStation(tx, {
+          locationId: venue.cfg.locationId,
+          stationId,
+          printerId: printer.id,
+        });
       await writePrintHeldWork(tx, true);
       return { deviceId: device!.id, cell, passPrinter: printer.id };
     });
@@ -2224,11 +2240,14 @@ describe("moveDishesToStation", () => {
     expect(await snapshot(one.tabId, one.item.id)).toEqual(before);
   });
 
-  it("refuses a switched-off station but accepts one closed for today", async () => {
+  it("refuses a deleted station but accepts one closed for today", async () => {
     const { tabId, item } = await burger();
     const inactive = await inTx(venue, async (tx) => {
       const station = await createStation(tx, venue.cfg, { name: `Off ${randomUUID()}` });
-      await deactivateStation(tx, venue.cfg, station.id);
+      await tx
+        .update(kitchenStations)
+        .set({ active: false })
+        .where(eq(kitchenStations.id, station.id));
       return station.id;
     });
     const before = await snapshot(tabId, item.id);
@@ -2246,7 +2265,7 @@ describe("moveDishesToStation", () => {
           mover(),
         ),
       ),
-    ).rejects.toMatchObject({ code: "route.station_inactive" });
+    ).rejects.toMatchObject({ code: "station.not_found", params: { stationId: inactive } });
     expect(await snapshot(tabId, item.id)).toEqual(before);
     await inTx(venue, (tx) => setStationToday(tx, venue.cfg, grill, "closed", new Date()));
     try {
@@ -2770,7 +2789,11 @@ describe("moveDishesToStation", () => {
         { locationId: split.cfg.locationId },
         { name: "Downstairs printer", transport: "cloud_poll", pollId: randomUUID() },
       );
-      await attachPrinterToStation(tx, { stationId: station.id, printerId: printer.id });
+      await attachPrinterToStation(tx, {
+        locationId: split.cfg.locationId,
+        stationId: station.id,
+        printerId: printer.id,
+      });
       return { stationId: station.id, printerId: printer.id };
     });
     await splitTx((tx) =>
@@ -2877,7 +2900,11 @@ describe("moveDishesToStation", () => {
         { locationId: venue.cfg.locationId },
         { name: "Fryer printer", transport: "cloud_poll", pollId: randomUUID() },
       );
-      await attachPrinterToStation(tx, { stationId: station.id, printerId: printer.id });
+      await attachPrinterToStation(tx, {
+        locationId: venue.cfg.locationId,
+        stationId: station.id,
+        printerId: printer.id,
+      });
       return station.id;
     });
     const tableId = await venue.table(`T-${randomUUID().slice(0, 8)}`);

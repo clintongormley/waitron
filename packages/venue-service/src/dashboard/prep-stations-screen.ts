@@ -70,9 +70,18 @@ import {
   type StationEditorSave,
   type StationRefusal,
 } from "./station-editor.js";
-import { StationDisableDialog } from "./station-disable-dialog.js";
+import "@waitron/ui/src/components/wt-delete-dialog.js";
+import type { DeleteImpact } from "@waitron/shared";
+import { stationDeleteCopy, stationDeleteError } from "./station-delete-copy.js";
 
-type StationAction = { kind: "switch_off" | "switch_on"; stationId: string };
+type StationAction = {
+  stationId: string;
+  impact: DeleteImpact | null;
+  loading: boolean;
+  readError: string;
+  actionError: string;
+  busy: boolean;
+};
 
 type Editor = { kind: "station" };
 type NewStation = StationInput & { printerIds: string[] };
@@ -217,7 +226,6 @@ export class PrepStationsScreen extends LitElement {
   @state() private busy = false;
   @state() private stationAttempted = false;
   @state() private stationAction?: StationAction;
-  @state() private stationActionError = "";
   @state() private tab: PrepTab = "stations";
   @state() private stationOrder?: string[];
   @state() private stationAnnouncement = "";
@@ -279,6 +287,19 @@ export class PrepStationsScreen extends LitElement {
   #stationBaseline?: NewStation;
   #stationIdentity?: object;
   #stationActionIdentity?: object;
+  readonly #impactQueries = new QueryController(
+    this,
+    () => this.api.liveData,
+    (error) => {
+      const action = this.stationAction;
+      if (!action) return;
+      if (codeOf(error) === "station.not_found" && !action.busy) {
+        this.#stationGone(action.stationId);
+        return;
+      }
+      this.stationAction = { ...action, loading: false, readError: t("prep.delete_load_error") };
+    },
+  );
   #settingsScope?: DraftScope<string>;
   #settingsIdentity?: object;
   #leave?: LeaveCoordinator;
@@ -476,8 +497,7 @@ export class PrepStationsScreen extends LitElement {
       this.stationAction !== undefined
     )
       this.busy = false;
-    this.stationAction = undefined;
-    this.#stationActionIdentity = undefined;
+    this.#closeStationAction();
     this.settingsEditor = undefined;
     this.settingsBusy = false;
     this.#settingsScope?.dispose();
@@ -517,6 +537,27 @@ export class PrepStationsScreen extends LitElement {
         },
         (value) => {
           this.view = value;
+          if (
+            this.stationEdit &&
+            !value.stations.some(
+              (station) => station.active && station.id === this.stationEdit!.station.id,
+            )
+          ) {
+            this.stationEdit = undefined;
+            this.stationEditBusy = false;
+            this.#stationEditRun++;
+          }
+          if (
+            this.settingsEditor &&
+            this.settingsEditor.stationId !== "defaults" &&
+            !value.stations.some(
+              (station) => station.active && station.id === this.settingsEditor!.stationId,
+            )
+          ) {
+            this.settingsEditor = undefined;
+            this.settingsBusy = false;
+            this.#syncSettingsDraft();
+          }
           if (
             this.cellRefusal !== null &&
             this.cellRefusal === this.#droppedRefusal &&
@@ -913,10 +954,10 @@ export class PrepStationsScreen extends LitElement {
         }
         <wt-button
           align="start"
-          data-test=${`${station.active ? "disable" : "enable"}-${station.id}`}
+          data-test=${`delete-${station.id}`}
           ?disabled=${this.busy}
-          @click=${() => this.#openStationAction({ kind: station.active ? "switch_off" : "switch_on", stationId: station.id })}
-          >${t(station.active ? "prep.disable" : "prep.enable")}</wt-button
+          @click=${() => void this.#openStationAction(station.id)}
+          >${t("prep.delete")}</wt-button
         >
       </wt-row-actions>`;
   }
@@ -965,6 +1006,13 @@ export class PrepStationsScreen extends LitElement {
       await this.api.updateStation(edit.station.id, detail);
     } catch (error) {
       if (!current()) return;
+      if (codeOf(error) === "station.not_found") {
+        this.#stationGone(edit.station.id);
+        this.stationEditBusy = false;
+        this.#showError(t("prep.station_not_found"));
+        void this.#load();
+        return;
+      }
       this.stationEditRefusal = refusalOf(error);
       this.stationEditBusy = false;
       if (this.stationEditRefusal?.code === "printer.not_found") void this.#load();
@@ -1122,7 +1170,6 @@ export class PrepStationsScreen extends LitElement {
     return this.view?.routing.stationTimes.find((row) => row.stationId === id);
   }
   #stationNote(station: PrepStation) {
-    if (!station.active) return t("prep.station_switched_off");
     const times = this.#times(station.id);
     if (!times) return nothing;
     if (!this.view?.routing.clockReadable) return t("prep.station_clock_unreadable");
@@ -1133,67 +1180,123 @@ export class PrepStationsScreen extends LitElement {
         : t("prep.station_no_replacement"),
     });
   }
-  async #openStationAction(action: StationAction) {
-    if (this.busy) return;
-    const previous = this.#stationActionIdentity;
-    const dialog = this.renderRoot.querySelector<StationDisableDialog>("station-disable-dialog");
-    if (dialog && !(await dialog.allowReplacement())) return;
-    if (!this.isConnected || previous !== this.#stationActionIdentity) return;
-    this.#stationActionIdentity = {};
-    this.stationAction = action;
-    this.stationActionError = "";
+  #closeStationAction() {
+    this.#impactQueries.release("delete-impact");
+    this.stationAction = undefined;
+    this.#stationActionIdentity = undefined;
   }
-  #cancelStationAction() {
-    if (!this.busy) this.stationAction = undefined;
-  }
-  #stationNamingCells(id: string): string[] {
-    const model = this.view!.routing;
-    return model.cells
-      .filter((cell) => cell.target.kind === "station" && cell.target.stationId === id)
-      .map(({ row, zoneId }) => {
-        const product =
-          row.kind === "product"
-            ? model.products.find((product) => product.id === row.productId)
-            : undefined;
-        const name =
-          row.kind === "all"
-            ? t("routing.all_categories")
-            : row.kind === "no_category"
-              ? t("routing.no_category")
-              : row.kind === "category"
-                ? this.#path(row.categoryId)
-                : [
-                    product?.categoryId ? `${this.#path(product.categoryId)} › ` : "",
-                    product?.name ?? row.productId,
-                  ].join("");
-        const zone =
-          zoneId === null
-            ? t("routing.every_zone")
-            : (model.zones.find((zone) => zone.id === zoneId)?.name ?? zoneId);
-        return `${name} · ${zone}`;
-      });
-  }
-  async #saveStationAction() {
-    const action = this.stationAction;
-    if (!action || action.kind !== "switch_on" || this.busy) return;
-    const identity = this.#stationActionIdentity;
-    const current = () => this.isConnected && identity === this.#stationActionIdentity;
-    this.busy = true;
-    this.stationActionError = "";
-    try {
-      await this.api.activateStation(action.stationId);
-      if (!current()) return;
-      this.stationAction = undefined;
-      await this.#load();
-    } catch (error) {
-      if (!current()) return;
-      this.stationActionError =
-        codeOf(error) === "station.not_found"
-          ? `${t("prep.save_error")} ${t("prep.station_not_found")}`
-          : t("prep.save_error");
-    } finally {
-      if (current()) this.busy = false;
+  #stationGone(id: string) {
+    if (this.stationEdit?.station.id === id) this.stationEdit = undefined;
+    if (this.settingsEditor?.stationId === id) {
+      this.settingsEditor = undefined;
+      this.#syncSettingsDraft();
     }
+    if (this.view)
+      this.view = {
+        ...this.view,
+        stations: this.view.stations.filter((station) => station.id !== id),
+      };
+    if (this.stationAction?.stationId === id) this.#closeStationAction();
+  }
+  async #openStationAction(id: string) {
+    if (this.busy || this.stationAction?.busy) return;
+    const previous = this.#stationActionIdentity;
+    if (this.stationEdit?.station.id === id) {
+      const opening = this.stationEdit.token;
+      const modal = this.renderRoot
+        .querySelector("prep-station-editor")
+        ?.shadowRoot?.querySelector("wt-modal");
+      if (modal && !(await modal.requestClose("navigation"))) return;
+      if (this.stationEdit && this.stationEdit.token !== opening) return;
+      this.stationEdit = undefined;
+    }
+    if (this.settingsEditor?.stationId === id && this.#settingsScope && this.#leave) {
+      const outcome = await this.#leave.request({
+        scopes: [this.#settingsScope.id],
+        reason: "navigation",
+        proceed() {},
+      });
+      if (outcome !== "proceeded") return;
+      this.settingsEditor = undefined;
+      this.#syncSettingsDraft();
+    }
+    if (!this.isConnected || previous !== this.#stationActionIdentity) return;
+    this.#closeStationAction();
+    this.#stationActionIdentity = {};
+    this.stationAction = {
+      stationId: id,
+      impact: null,
+      loading: true,
+      readError: "",
+      actionError: "",
+      busy: false,
+    };
+    this.#readStationImpact(this.#stationActionIdentity);
+  }
+  #readStationImpact(identity: object | undefined) {
+    const action = this.stationAction;
+    if (!action || action.busy || identity !== this.#stationActionIdentity) return;
+    this.stationAction = { ...action, loading: true, readError: "" };
+    void this.#impactQueries
+      .watch(
+        "delete-impact",
+        {
+          key: `venue-service:station-delete-impact:${action.stationId}`,
+          dependencies: QUERY_DEPENDENCIES["station-delete-impact"].map((type) => ({ type })),
+          read: () => this.api.getStationDeleteImpact(action.stationId),
+        },
+        (impact) => {
+          if (!this.isConnected || identity !== this.#stationActionIdentity || !this.stationAction)
+            return;
+          if (impact.target.id !== action.stationId) throw new Error("Unexpected station");
+          this.stationAction = { ...this.stationAction, impact, loading: false, readError: "" };
+        },
+      )
+      .catch(() => undefined);
+  }
+  async #deleteStation(id: string, identity: object | undefined) {
+    const action = this.stationAction;
+    if (
+      !this.isConnected ||
+      identity !== this.#stationActionIdentity ||
+      !action ||
+      action.stationId !== id ||
+      action.busy ||
+      action.loading ||
+      action.readError ||
+      !action.impact ||
+      action.impact.target.id !== id ||
+      action.impact.refusals.length
+    )
+      return;
+    this.stationAction = { ...action, busy: true, actionError: "" };
+    try {
+      await this.api.deleteStation(id);
+    } catch (error) {
+      if (!this.isConnected || identity !== this.#stationActionIdentity || !this.stationAction)
+        return;
+      if (codeOf(error) === "station.not_found") {
+        this.#stationGone(id);
+        this.#showError(t("prep.station_not_found"));
+        void this.#load();
+      } else {
+        this.stationAction = {
+          ...this.stationAction,
+          busy: false,
+          actionError: stationDeleteError(error),
+        };
+        if (
+          ["station.is_default", "station.screen_in_use", "station.work_in_progress"].includes(
+            codeOf(error),
+          )
+        )
+          this.#readStationImpact(identity);
+      }
+      return;
+    }
+    if (!this.isConnected || identity !== this.#stationActionIdentity) return;
+    this.#stationGone(id);
+    await this.#load();
   }
   #stationCard(s: PrepStation) {
     return html`<wt-card data-test=${`station-${s.id}`}
@@ -1231,6 +1334,13 @@ export class PrepStationsScreen extends LitElement {
     } catch (error) {
       if (!this.#settingsCurrent(identity)) return;
       const code = codeOf(error);
+      if (code === "station.not_found") {
+        this.settingsBusy = false;
+        this.#stationGone(editor.stationId);
+        this.#showError(t("prep.station_not_found"));
+        void this.#load();
+        return;
+      }
       const field = (error as { params?: { field?: string } })?.params?.field;
       const fieldError = TIMING_FIELDS.includes(editor.field as TimingField)
         ? code === "station.thresholds_invalid" ||
@@ -1354,20 +1464,14 @@ export class PrepStationsScreen extends LitElement {
     </div>`;
   }
   #settings() {
-    const stations = [...this.view!.stations].sort(
-      (a, b) =>
-        Number(b.active) - Number(a.active) ||
-        a.displayOrder - b.displayOrder ||
-        a.name.localeCompare(b.name),
+    const stations = this.view!.stations.filter((station) => station.active).sort(
+      (a, b) => a.displayOrder - b.displayOrder || a.name.localeCompare(b.name),
     );
     const columns: DataTableColumn<PrepStation>[] = [
       {
         key: "name",
         label: t("prep.name"),
-        cell: (station) =>
-          html`<span part=${station.active ? "station-name" : "inherited"}
-            >${station.name}${station.active ? "" : ` (${t("prep.health.disabled")})`}</span
-          >`,
+        cell: (station) => html`<span part="station-name">${station.name}</span>`,
       },
       ...TIMING_FIELDS.map((field) => ({
         key: field,
@@ -1589,77 +1693,45 @@ export class PrepStationsScreen extends LitElement {
   #stationActionDialog() {
     const action = this.stationAction;
     if (!action) return nothing;
-    const station = this.view?.stations.find((row) => row.id === action.stationId);
     const identity = this.#stationActionIdentity;
-    const current = () =>
-      this.isConnected &&
-      this.stationAction !== undefined &&
-      identity === this.#stationActionIdentity;
-    if (action.kind === "switch_off")
-      return keyed(
-        identity,
-        html`<station-disable-dialog
-          .api=${this.api}
-          .stationId=${action.stationId}
-          .stationName=${station?.name ?? action.stationId}
-          .namingCells=${this.#stationNamingCells(action.stationId)}
-          @cancel=${(event: Event) => {
-            event.stopPropagation();
-            if (current()) this.stationAction = undefined;
-          }}
-          @disabled=${(event: Event) => {
-            event.stopPropagation();
-            if (!current()) return;
-            this.stationAction = undefined;
-            void this.#load();
-          }}
-        ></station-disable-dialog>`,
-      );
     return keyed(
       identity,
-      html`<wt-modal
-        size="compact"
-        open
-        data-test="station-action-modal"
-        heading=${t("prep.enable")}
-        .dismissible=${!this.busy}
+      html`<wt-delete-dialog
+        data-test="delete-station-dialog"
+        .open=${true}
+        .impact=${action.impact}
+        .loading=${action.loading}
+        .submitting=${action.busy}
+        .readError=${action.readError}
+        .actionError=${action.actionError}
+        .copy=${stationDeleteCopy()}
+        @wt-delete-confirm=${(event: CustomEvent<{ id: string }>) => {
+          event.stopPropagation();
+          void this.#deleteStation(event.detail.id, identity);
+        }}
+        @wt-delete-retry=${(event: Event) => {
+          event.stopPropagation();
+          this.#readStationImpact(identity);
+        }}
         @wt-close=${(event: Event) => {
           event.stopPropagation();
-          if (current() && event.target === event.currentTarget) this.#cancelStationAction();
+          if (identity === this.#stationActionIdentity && !this.stationAction?.busy)
+            this.#closeStationAction();
         }}
-      >
-        ${this.stationActionError ? html`<p class="error" role="alert">${this.stationActionError}</p>` : nothing}
-        ${html`<wt-form-actions slot="footer"
-          ><wt-button
-            slot="cancel"
-            variant="secondary"
-            ?disabled=${this.busy}
-            @click=${() => {
-              if (!current()) return;
-              this.#cancelStationAction();
-            }}
-            >${t("prep.cancel")}</wt-button
-          ><wt-button
-            data-test="confirm-station-action"
-            ?disabled=${this.busy}
-            @click=${() => {
-              if (this.busy || !current()) return;
-              void this.#saveStationAction();
-            }}
-            >${t("prep.confirm")}</wt-button
-          ></wt-form-actions
-        >`}
-      </wt-modal>`,
+      ></wt-delete-dialog>`,
     );
   }
   override render() {
     if (!this.isConnected) return nothing;
-    const view = this.view;
+    const source = this.view;
+    const view = source && {
+      ...source,
+      stations: source.stations.filter((station) => station.active),
+    };
     const active =
       view?.stations
         .filter((s) => s.active)
         .sort((a, b) => a.displayOrder - b.displayOrder || a.name.localeCompare(b.name)) ?? [];
-    const inactive = view?.stations.filter((station) => !station.active) ?? [];
     return html`<div class="toolbar">
         <h1>${t("prep.title")}</h1>
       </div>
@@ -1732,25 +1804,6 @@ export class PrepStationsScreen extends LitElement {
                     this.#dropDraft(event.detail.address)}
                 ></venue-routing-grid>
                 <div class="cards">${active.map((s) => this.#stationCard(s))}</div>
-                ${
-                  inactive.length
-                    ? html`<section>
-                        <h2>${t("prep.disabled")}</h2>
-                        ${inactive.map(
-                          (station) =>
-                            html`<wt-card data-test=${`inactive-${station.id}`}
-                              ><h3>${station.name}</h3>
-                              <p>
-                                ${this.#times(station.id)?.closedSendsTo ? format("prep.off_goes_to", { station: this.#stationName(this.#times(station.id)!.closedSendsTo!) }) : t("prep.off_asks")}
-                              </p>
-                              <p>
-                                ${this.#times(station.id)?.closedSendsTo ? t("prep.disabled_hint") : t("prep.disabled_no_replacement")}
-                              </p>
-                            </wt-card>`,
-                        )}
-                      </section>`
-                    : nothing
-                }
               </div>
               <div slot="settings">${this.#settings()}</div>
             </wt-tabs>`

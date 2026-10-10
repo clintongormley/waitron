@@ -108,7 +108,11 @@ describe("corrections through order actions on a station's printers", () => {
           pollId: randomUUID(),
         },
       );
-      await attachPrinterToStation(tx, { stationId: venue.stationId, printerId: printer.id });
+      await attachPrinterToStation(tx, {
+        locationId: venue.cfg.locationId,
+        stationId: venue.stationId,
+        printerId: printer.id,
+      });
       return printer.id;
     });
     try {
@@ -194,7 +198,11 @@ describe("corrections through order actions on a station's printers", () => {
           },
         );
         for (const stationId of stationIds)
-          await attachPrinterToStation(tx, { stationId, printerId: printer.id });
+          await attachPrinterToStation(tx, {
+            locationId: venue.cfg.locationId,
+            stationId,
+            printerId: printer.id,
+          });
         ids.push(printer.id);
         listed.push([printer.id, stationIds]);
       }

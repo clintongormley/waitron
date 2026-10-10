@@ -97,7 +97,7 @@ interface GoneEntry {
 }
 
 /** What a narrowing took, as the read marks it, each kind's after it, a kind taken whole alone.
- * A station or zone switched off on its own page is not among them: it stays in the choice. */
+ * An off zone is not among them: it stays in the choice. */
 function goneFromRead(read: readonly ResolvedKitchenScreen[]): GoneEntry[] {
   return read.flatMap((screen): GoneEntry[] =>
     screen.available
@@ -352,9 +352,11 @@ export class DevicesScreen extends LitElement {
       .pair-fields,
       .edit-fields {
         display: grid;
+        grid-template-columns: minmax(0, 1fr);
         gap: var(--wt-space-3);
       }
       .made-here {
+        min-inline-size: 0;
         max-width: var(--wt-form-max-width);
         margin: 0;
         padding: var(--wt-space-3);
@@ -1290,7 +1292,13 @@ export class DevicesScreen extends LitElement {
   }
 
   #editOwnErrors(): IdentityErrors {
-    return this.#identityErrors(this.editAttempted, this.editForm);
+    const errors = this.#identityErrors(this.editAttempted, this.editForm);
+    const emptyStationBound = Object.values(this.editForm.screens).some(
+      (screen) => screen.stationIds?.length === 0,
+    );
+    return !this.#sendScreens() && emptyStationBound
+      ? { ...errors, stations: "", kitchenStations: "" }
+      : errors;
   }
 
   #editErrors(): Record<EditField, string> {
@@ -1436,7 +1444,6 @@ export class DevicesScreen extends LitElement {
     ];
   }
 
-  /** Only switched-on stations can be saved, so a stored one since switched off is dropped. */
   #madeHereToSend(): string[] {
     return this.stations
       .filter((station) => station.active && this.editForm.madeHere.includes(station.id))
@@ -2169,9 +2176,8 @@ export class DevicesScreen extends LitElement {
   }
 
   /**
-   * The draft a device's read gives, "every" exactly where the read says so, never what a narrowing
-   * took. Edit keeps a station or zone switched off on its own page, which the server lets the
-   * device keep; Pair, re-enabling a device, starts without them.
+   * A surviving explicit station bound stays explicit when its last station disappears. A missing
+   * screen parent stays a removal marker; switched-off zones remain keepable only in Edit.
    */
   #draftFromRead(
     read: readonly ResolvedKitchenScreen[],
@@ -2185,19 +2191,26 @@ export class DevicesScreen extends LitElement {
         .map((slot) => slot.id);
     for (const screen of read) {
       if (!screen.available) continue;
-      const stationIds = screen.everyStation ? null : kept(screen.stations);
+      const stationIds = screen.everyStation
+        ? null
+        : screen.stations
+            .filter(
+              (slot) =>
+                slot.available &&
+                this.stations.some((station) => station.active && station.id === slot.id),
+            )
+            .map((slot) => slot.id);
       const zoneIds =
         screen.kind === "station" || screen.everyZone ? null : kept(screen.zones ?? []);
-      if (stationIds?.length === 0 || zoneIds?.length === 0) continue;
+      if (stationIds?.length !== 0 && zoneIds?.length === 0) continue;
       draft[screen.kind] = { stationIds, zoneIds };
     }
     return this.#fitted(draft, profileId);
   }
 
   /**
-   * The draft within what `profileId` offers: a kind it does not offer goes, lists lose what it does
-   * not allow, and a list left empty takes its kind with it. A kitchen display keeps one kind, a till
-   * one pass kind. A switched-off entry stays while the profile's list allows it.
+   * Empty station bounds retain their kind so fitting to a profile cannot widen them to Every.
+   * The existing empty-zone rule applies when the station bound is not empty.
    */
   #fitted(screens: KitchenDraft, profileId: string): KitchenDraft {
     const shared = this.#sharedDisplay(profileId);
@@ -2219,9 +2232,13 @@ export class DevicesScreen extends LitElement {
                 places.some((place) => place.id === id) &&
                 (allowed === null || allowed.includes(id)),
             );
-      const stationIds = within(scope.stationIds, this.stations, bound.stationIds);
+      const stationIds = within(
+        scope.stationIds,
+        this.stations.filter((station) => station.active),
+        bound.stationIds,
+      );
       const zoneIds = within(scope.zoneIds, this.zones, bound.zoneIds);
-      if (stationIds?.length === 0 || zoneIds?.length === 0) continue;
+      if (stationIds?.length !== 0 && zoneIds?.length === 0) continue;
       out[kind] = { stationIds, zoneIds };
     }
     return out;
@@ -2273,11 +2290,14 @@ export class DevicesScreen extends LitElement {
     /** What a switched-off entry's label adds, as the profile editor marks it. */
     mark: string;
     disabled: boolean;
+    emptyProfile?: boolean;
     set(ids: string[] | null): void;
   }): TemplateResult {
     const { ids } = list;
     const switchedOff =
-      ids === null ? [] : list.all.filter((place) => !place.active && ids.includes(place.id));
+      ids === null || list.name === "screenStations" || list.name === "kitchenStations"
+        ? []
+        : list.all.filter((place) => !place.active && ids.includes(place.id));
     return this.#switchGroup(list.test, list.heading, list.error, [
       html`<wt-switch
         data-test=${list.everyTest}
@@ -2290,6 +2310,19 @@ export class DevicesScreen extends LitElement {
           list.set(e.detail.checked ? null : list.allowed.map((place) => place.id));
         }}
       ></wt-switch>`,
+      ...(list.emptyProfile
+        ? [
+            html`<p class="hint" data-test="empty-profile-stations">
+              ${t("devices.empty_profile_stations")}
+            </p>`,
+          ]
+        : ids?.length === 0 && (list.name === "screenStations" || list.name === "kitchenStations")
+          ? [
+              html`<p class="hint" data-test="empty-station-selection">
+                ${t("devices.empty_station_selection")}
+              </p>`,
+            ]
+          : []),
       ...(ids === null
         ? []
         : list.allowed.map(
@@ -2413,6 +2446,7 @@ export class DevicesScreen extends LitElement {
             heading: t("devices.station_screen_shows"),
             error: errors.kitchenStations,
             name: "kitchenStations",
+            emptyProfile: this.#bound(profileId, "station")?.stationIds?.length === 0,
             everyTest: `${prefix}-station-every`,
             // With no choice a till's Station screen lists all `/api/stations` returns, which reads
             // no profile.
@@ -2446,6 +2480,7 @@ export class DevicesScreen extends LitElement {
               heading: t("device_profiles.kitchen_stations"),
               error: errors.stations,
               name: "screenStations",
+              emptyProfile: this.#bound(profileId, main)?.stationIds?.length === 0,
               everyTest: `${prefix}-screen-every-station`,
               everyLabel: t("device_profiles.every_station"),
               itemTest: `${prefix}-screen-station`,

@@ -397,7 +397,7 @@ export function parseProfileKitchenScreens(value: unknown): ProfileKitchenScreen
 
 /**
  * Checks the kitchen screens a device on this profile is given, writing nothing; `deviceId` names a
- * device whose stored, since switched-off stations and zones it may keep.
+ * device whose stored off zones it may keep.
  */
 export async function resolveDeviceKitchenScreens(
   tx: Transaction,

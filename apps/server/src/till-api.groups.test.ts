@@ -1,3 +1,4 @@
+import { deleteCourse } from "./course-delete.js";
 import { clearRoutingCell, setRoutingCell } from "@waitron/venue-service";
 import { randomUUID } from "node:crypto";
 import { and, asc, eq, isNull } from "drizzle-orm";
@@ -13,7 +14,7 @@ import {
 } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { createCourse, removeCourse, setProductCourse } from "./kitchen.js";
+import { createCourse, setProductCourse } from "./kitchen.js";
 import { createTable } from "./tables.js";
 import { inTx, provisionBillVenue, send, tabWith, type BillVenue } from "./testing/bill-venue.js";
 import { addTabRound } from "./working-order.js";
@@ -928,7 +929,7 @@ describe("the tab routes that release lines, on a party with groups", () => {
       // The venue is shared by the whole file.
       await inTx(venue, async (tx) => {
         await setProductCourse(tx, venue.cfg, tarta!.id, tarta!.courseId);
-        await removeCourse(tx, venue.cfg, courseId);
+        await deleteCourse(tx, venue.cfg, courseId);
       });
     }
   });

@@ -573,6 +573,42 @@ describe("till-table-order-screen", () => {
     return [...el.shadowRoot!.querySelectorAll<WtCombobox>("[data-round-course]")];
   }
 
+  it.each([[courses], [[]]])(
+    "shows retained draft course wording and rank without offering it for new selection (%j)",
+    async (activeCourses) => {
+      const course = { id: "retired", name: "Recorded dessert", displayOrder: 3 };
+      const draftStore = new WorkingOrderStore();
+      draftStore.loadFrom("draft", [{ product: cafe, quantity: "1", courseId: course.id, course }]);
+      const { el } = await mount({ courses: activeCourses, draftStore });
+      const picker = el.shadowRoot!.querySelector<WtCombobox>('[data-round-course="0"]')!;
+      await picker.updateComplete;
+      expect(el.shadowRoot!.querySelector('[data-draft-section="retired"] h3')?.textContent).toBe(
+        course.name,
+      );
+      expect(picker.options.map((option) => option.value)).toEqual([
+        "",
+        ...activeCourses.map((choice) => choice.id),
+      ]);
+      expect(picker.shadowRoot!.querySelector("button .value")!.textContent).toBe(course.name);
+      const sent = await submitDraft(el, "send-all");
+      expect(sent!.detail.lines).toEqual([
+        { menuItemId: "menu-item-cafe", quantity: "1", courseId: course.id },
+      ]);
+    },
+  );
+
+  it("shows the authoritative course label of a fired line when all active courses are gone", async () => {
+    const course = { id: "retired", name: "Recorded dessert", displayOrder: 3 };
+    const { el } = await mount({
+      courses: [],
+      lines: [{ ...pendingLine, courseId: course.id, course, firedAt: "2026-10-10T20:00:00Z" }],
+    });
+    await openDrawer(el);
+    expect(el.shadowRoot!.querySelector('[data-line-course-static="1"]')?.textContent?.trim()).toBe(
+      course.name,
+    );
+  });
+
   it("renders a per-line course picker per round line, pre-selecting the product's default course", async () => {
     const { el } = await mount({ courses });
     // No round yet ⇒ no picker.

@@ -70,7 +70,11 @@ useVenueDb({
         { name: "Bar", transport: "cloud_poll", pollId: randomUUID() },
       );
       barPrinterId = printer.id;
-      await attachPrinterToStation(tx, { stationId, printerId: printer.id });
+      await attachPrinterToStation(tx, {
+        locationId: venue.cfg.locationId,
+        stationId,
+        printerId: printer.id,
+      });
       const grill = await createStation(tx, venue.cfg, { name: "Grill" });
       grillStationId = grill.id;
       const [paella] = await tx
@@ -88,7 +92,11 @@ useVenueDb({
         },
       );
       grillPrinterId = grillPrinter.id;
-      await attachPrinterToStation(tx, { stationId: grill.id, printerId: grillPrinter.id });
+      await attachPrinterToStation(tx, {
+        locationId: venue.cfg.locationId,
+        stationId: grill.id,
+        printerId: grillPrinter.id,
+      });
       const [lager] = await tx
         .select({ id: products.id })
         .from(products)

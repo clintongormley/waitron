@@ -1,5 +1,11 @@
 # A435 step 2: Printer Delete Implementation Plan
 
+> 2026-10-10: A435 step 5 replaces course/station Disable and Enable with permanent
+> Delete. The [current deletion contract](../../developers/conventions-data.md#permanent-course-and-station-deletion)
+> governs retained history, routing cleanup and empty screen scopes. Earlier station/course
+> lifecycle wording below is a dated record, not the current operation.
+
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking. Owner authorised autonomous execution and review; no approval pause at handoff. The campaign controller owns campaign state, publication and landing.
 
 **Goal:** Add permanent Delete beside printer Disable, end its live work, clear its settings and retain history, with a reusable impact contract and confirmation dialog.

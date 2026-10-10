@@ -479,7 +479,7 @@ async function printerAt(cfg: OriginConfig, stationId: string): Promise<string> 
         pollId: `poll-${randomUUID()}`,
       },
     );
-    await attachPrinterToStation(tx, { stationId, printerId: id });
+    await attachPrinterToStation(tx, { locationId: cfg.locationId, stationId, printerId: id });
     return id;
   });
 }

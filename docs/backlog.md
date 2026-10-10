@@ -1125,15 +1125,10 @@ _Formerly the catalogue and menus entries in the opening part of the old Track A
   "specified"). Whether the Pricing fold should also name an empty base price or VAT is a question
   for the owner.
 
-- **A disabled course keeps its name** — left open by A212 (#1087), raised in its review and not
-  changed there: because `kitchen_courses_name_key` covers disabled rows too, so adding a course
-  with a disabled course's name is refused as taken; a deleted course frees its name (read, not
-  run). [Detail](backlog/catalogue.md#a-disabled-course-keeps-its-name)
-
 - **The catalogue-screen test "ignores the closed window's late close…" catches its guard's
   removal only through an unhandled error** — left open by A212 (#1087): because the late close
   throws before it changes anything a state assertion could see.
-  [Detail](backlog/catalogue.md#a-disabled-course-keeps-its-name)
+  [Detail](backlog/catalogue.md#catalogue-course-window-late-close-guard)
 
 - **On a variant's page an empty line reads "None specified" while the grey hint under it gives
   the parent's values** — left open by A213 (#1079), raised in its review: which reads as a
@@ -1515,6 +1510,10 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   switched-off course the send path and the move path can file a dish with no course under different
   courses (owner, 2026-09-29: not queued). Left open by the table actions plan's Task 9 (#874,
   dishes arriving in a party get a kitchen group).
+
+  **2026-10-10 update:** A435 step 5 now shows saved drafts in their recorded course section and
+  fired lines with their recorded label, even with no active courses. The C80 reading above is
+  historical; its move/send comparison remains unverified here.
 
 - **Is a `+` sub-line enough for a doneness answer on the kitchen ticket?** **Open, and worth a
   cook's eye before a real service:** whether that is enough for something a cook must not miss, or
@@ -1947,8 +1946,8 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
 
 - The server's own `unavailable` flag (`apps/server/src/order-drafts.ts`) does not flag a line whose
   options list is unanswered (refused at submission `options.label_required`), a fractional quantity
-  of a dish sold whole (`quantity.invalid`), a course switched off since the save
-  (`course.not_found`), or a menu version no longer live (`menu.version_changed`). Left open by
+  of a dish sold whole (`quantity.invalid`), or a menu version no longer live
+  (`menu.version_changed`). Left open by
   service Task 7 (#789). [Detail](backlog/till.md#task-7-789-each-persons-draft-kept-on-the-server)
 
 - Only the draft routes fold the ids in the path to lower case (`requireDraftPartyParam`,
@@ -2628,6 +2627,11 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
 - **Synthetic phone captures also showed a clipped Counter total and padded-looking Spanish
   quantities** — left open by W69 (#1325). Cause and real-venue reproduction remain unverified.
   Inspect the real till before attributing them to W69 or changing quantity/money handling.
+
+- **A retained-course phone fixture clips the Back button's outline at the right edge.**
+  A435 step 5's 390 px captures show it with the real till app and icons. Reproduce it through
+  a normal till boot before changing layout; the fixture's cause and the base version are
+  unverified. The retained course label and active-only picker are visible in the same captures.
 
 - **The canvas Add and Duplicate dialogs have no Cancel, and Duplicate's name field is too narrow
   to show "A331 look canvas (copy)" whole** — seen and not changed. Left open by A331 batch 3b
@@ -4862,17 +4866,20 @@ _Formerly parts of B9 and Track C._ Detail: [backlog/dependencies.md](backlog/de
 
 _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._ Detail: [backlog/architecture.md](backlog/architecture.md).
 
-- **A435 — permanent delete for hardware and venue setup (owner, 2026-10-08; steps 5 and 6 open).**
-  Courses and kitchen stations are next. Each point below is a separate remaining step.
+- **A435 — permanent delete for hardware and venue setup (owner, 2026-10-08; step 6 open).**
+  Tables, zones and departments are next.
   [Spec](superpowers/specs/2026-10-08-delete-and-archive-design.md),
   [product archive plan](superpowers/plans/2026-10-08-a435-1-product-archive.md).
-- **A435 step 5 — courses and kitchen stations: open, next.** Replace Disable with Delete,
-  and drop the list's Status column and Status filter, which no longer have anything to show (owner,
-  2026-10-10); first check what else the Status cell shows, as Products' carried its Unavailable badge (A463).
 - **A435 step 6 — tables, zones and departments: open, following courses and stations in the build order.** Replace
   Disable with Delete, and drop each list's Status column and Status filter as in step 5 (owner, 2026-10-10).
   Printers, card readers and devices keep both, because they keep Disable. Each remaining step follows the
   linked spec and preserves recorded history.
+
+- **Station deletion's draft-location filter needs a discriminating test.** In A435 step 5's
+  second run-it review, deleting the `working_orders` location `exists` clause in
+  `apps/server/src/station-delete.ts` left all 47 station-delete and management-delete cases
+  passing. Add a second-location draft case that fails without the clause, or establish by running
+  the real writers that it is redundant before removing it. Its necessity remains unverified.
 
 - **The till's status for an original whose printer was deleted uses the error code's sentence**
   ("…this job will not be retried."), where its neighbours speak of "the original". Owner to choose

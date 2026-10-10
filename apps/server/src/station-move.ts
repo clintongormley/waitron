@@ -16,8 +16,7 @@ import "./errors.js";
 
 export type Rerouted = ReadonlyMap<string, { stationId: string; stationName: string }>;
 
-/** Explicitly retained work stays through Disable; a manual choice alone protects only an active
- * station. Rerouting a paid bill changes the ticket, not the line's make-at choice. */
+/** Rerouting a paid bill changes the ticket, not the line's make-at choice. */
 export async function rerouteHeldAtRelease(
   tx: Transaction,
   cfg: OriginConfig,

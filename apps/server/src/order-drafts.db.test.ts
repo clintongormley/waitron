@@ -1,3 +1,4 @@
+import { deleteCourse } from "./course-delete.js";
 import { randomUUID } from "node:crypto";
 import { and, asc, eq, sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it, vi } from "vitest";
@@ -494,6 +495,7 @@ describe("saving a draft", () => {
     expect(draft.lines).toEqual([
       {
         ...sent,
+        course: { id: v.courseId, name: "Mains", displayOrder: 1 },
         id: draft.lines[0]!.id,
         quantity: "1.500",
         note: "no salt",
@@ -532,6 +534,7 @@ describe("saving a draft", () => {
     expect(draft.lines).toEqual([
       {
         ...item(v, "burger", lower),
+        course: { id: v.courseId, name: "Mains", displayOrder: 1 },
         id: draft.lines[0]!.id,
         quantity: "2.000",
         makeAt: null,
@@ -990,18 +993,37 @@ describe("a refused save writes nothing", () => {
     );
   });
 
-  it("keeps a line of an inactive course, which is refused only when it is sent", async () => {
+  it("reads authoritative retained course metadata and ignores spoofed read metadata on new selections", async () => {
+    const v = await setupVenue();
+    const { partyId } = await seated(v);
+    const draft = await save(v, partyId, ALEX, null, 0, [
+      item(v, "beer", { courseId: v.courseId }),
+    ]);
+    const [course] = await db
+      .select({
+        id: kitchenCourses.id,
+        name: kitchenCourses.name,
+        displayOrder: kitchenCourses.displayOrder,
+      })
+      .from(kitchenCourses)
+      .where(eq(kitchenCourses.id, v.courseId));
+    await inTx((tx) => deleteCourse(tx, v.cfg, v.courseId));
+    const [retained] = await draftsOf(v, partyId);
+    expect(retained!.lines[0]).toEqual({ ...draft.lines[0], course });
+    await refusedWritingNothing(
+      () =>
+        save(v, partyId, SAM, null, 0, [{ ...item(v, "beer", { courseId: v.courseId }), course }]),
+      { code: "course.not_found", params: { courseId: v.courseId } },
+    );
+  });
+
+  it("refuses a fresh selection of an inactive course without writing anything", async () => {
     const v = await setupVenue();
     const { partyId } = await seated(v);
     await db.update(kitchenCourses).set({ active: false }).where(eq(kitchenCourses.id, v.courseId));
 
-    const draft = await save(v, partyId, ALEX, null, 0, [
-      item(v, "beer", { courseId: v.courseId }),
-    ]);
-
-    expect(draft.lines.map((line) => line.courseId)).toEqual([v.courseId]);
     await refusedWritingNothing(
-      () => submit(v, partyId, draft, ALEX, [{ lineIds: lineIds(draft), release: "hold" }]),
+      () => save(v, partyId, ALEX, null, 0, [item(v, "beer", { courseId: v.courseId })]),
       { code: "course.not_found", params: { courseId: v.courseId } },
     );
   });

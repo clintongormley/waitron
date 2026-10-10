@@ -1,5 +1,11 @@
 # A455 — Prep stations: the owner's answers 29, 33 and 35 on slice 4 Part A
 
+> 2026-10-10: A435 step 5 replaces course/station Disable and Enable with permanent
+> Delete. The [current deletion contract](../../developers/conventions-data.md#permanent-course-and-station-deletion)
+> governs retained history, routing cleanup and empty screen scopes. Earlier station/course
+> lifecycle wording below is a dated record, not the current operation.
+
+
 Queue item A455 (lane B). Slice 4 Part A (#1489, main 0f0a6fc0e) landed on the defaults of
 decisions 29, 33 and 35 in `docs/superpowers/plans/2026-10-08-a366-slice-4-prep-stations.md`; the
 owner had overridden all three on 2026-10-09 ~16:35 (lane B `questions.md`, "OWNER ANSWERS … to

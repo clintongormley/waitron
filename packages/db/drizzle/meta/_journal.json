@@ -946,6 +946,13 @@
       "when": 1791653997924,
       "tag": "0134_device_delete",
       "breakpoints": true
+    },
+    {
+      "idx": 135,
+      "version": "6",
+      "when": 1791665687130,
+      "tag": "0135_course_station_delete",
+      "breakpoints": true
     }
   ]
 }

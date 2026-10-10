@@ -10,6 +10,10 @@ export function validateCoreConfiguration(
   for (const row of tables.table_service_statuses ?? [])
     if (!isStatusColor(row.color))
       throw new AppError("setup.request_invalid", { field: "table_service_statuses.color" });
+  for (const table of ["kitchen_courses", "kitchen_stations"])
+    for (const row of tables[table] ?? [])
+      if (row.active === 0 || row.active === false)
+        throw new AppError("setup.request_invalid", { field: `${table}.active` });
   for (const row of tables.printers ?? [])
     if (row.deleted_at !== undefined && row.deleted_at !== null)
       throw new AppError("setup.request_invalid", { field: "printers.deleted_at" });
@@ -21,12 +25,13 @@ export const CORE_CONFIGURATION_TRANSFER = {
     { name: "catalogues" },
     {
       name: "kitchen_stations",
+      leaveBehindWhenFalse: "active",
       locationColumns: ["location_id"],
       omit: ["warm_after_minutes", "overdue_after_minutes", "forgotten_after_minutes"],
     },
     { name: "kitchen_timing_defaults", locationColumns: ["location_id"] },
     { name: "kitchen_station_timing" },
-    { name: "kitchen_courses", locationColumns: ["location_id"] },
+    { name: "kitchen_courses", locationColumns: ["location_id"], leaveBehindWhenFalse: "active" },
     { name: "categories" },
     // The catalogue module's `afterImport` sets `name_key` from the name.
     { name: "products", omit: ["name_key"] },

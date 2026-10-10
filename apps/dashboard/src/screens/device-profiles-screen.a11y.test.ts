@@ -376,18 +376,22 @@ describe.each(["light", "dark"] as const)("device-profiles-screen a11y (%s theme
       await flush(el);
       expect(
         el.shadowRoot!.querySelector("[data-test=profile-station-screen-station-s-off]"),
+      ).toBeNull();
+      expect(
+        el.shadowRoot!.querySelector("[data-test=profile-station-screen-station-s1]"),
       ).not.toBeNull();
       expect(
         el.shadowRoot!.querySelector("[data-test=profile-pass-monitor-zone-z1]"),
       ).not.toBeNull();
       expect(el.scrollWidth).toBeLessThanOrEqual(width);
       await expectNoA11yViolations(host);
-      el.shadowRoot!.querySelector("[data-test=profile-station-screen-station-s1]")!.dispatchEvent(
-        new CustomEvent("wt-change", { detail: { checked: false }, bubbles: true, composed: true }),
+      el.shadowRoot!.querySelector("[data-test=profile-station-screen-station-s2]")!.dispatchEvent(
+        new CustomEvent("wt-change", { detail: { checked: true }, bubbles: true, composed: true }),
       );
       await el.updateComplete;
       el.shadowRoot!.querySelector<HTMLElement>("[data-test=profile-save]")!.click();
       await flush(el);
+      expect(api.updateDeviceProfile).toHaveBeenCalledTimes(1);
       expect(
         el.shadowRoot!.querySelector("[data-test=profile-station-screen-stations-error]"),
       ).not.toBeNull();

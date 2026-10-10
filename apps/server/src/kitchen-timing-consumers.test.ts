@@ -4,7 +4,7 @@ import { kitchenStations, kitchenTimingDefaults, ticketItems, workingOrders } fr
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { computeOverdueOrders } from "@waitron/reporting";
-import { createStation, deactivateStation, updateStation } from "./kitchen.js";
+import { createStation, updateStation } from "./kitchen.js";
 import { getKitchenTimingDefaults, setKitchenTimingDefaults } from "./kitchen-timing.js";
 import { readBillSignals } from "./table-signals.js";
 import { floorRow, inTx, order, seat, setupPartyVenue } from "./testing/party-venue.js";
@@ -27,7 +27,7 @@ describe("effective kitchen timing across consumers", () => {
     [6, "forgotten", "overdue"],
     [7, "forgotten", "forgotten"],
   ] as const)(
-    "classifies age %i consistently, including retained disabled-station work",
+    "classifies age %i consistently, including historical inactive-station work",
     async (age, inheritedBand, overriddenBand) => {
       const v = await setupPartyVenue(suite.db);
       const now = Date.now();
@@ -57,7 +57,10 @@ describe("effective kitchen timing across consumers", () => {
       await order(v, b.tabId, "Caña");
       await inTx(v, async (tx) => {
         await tx.update(ticketItems).set({ queuedAt: new Date(now - age * 60_000).toISOString() });
-        await deactivateStation(tx, v.cfg, overridden);
+        await tx
+          .update(kitchenStations)
+          .set({ active: false })
+          .where(eq(kitchenStations.id, overridden));
         for (const [stationId, billId, band, thresholds] of [
           [
             inherited,

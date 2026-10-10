@@ -4,6 +4,7 @@ import type { GroupRelease, TillCourse } from "../api/client.js";
 export interface DraftEntry {
   /** The waiter's course override, else the product's default; null for none. */
   courseId: string | null;
+  course?: TillCourse;
   quantity: string;
   /** Sold by the whole unit. A weighed or fractional line is one item, whatever it weighs. */
   wholeUnits: boolean;
@@ -11,7 +12,7 @@ export interface DraftEntry {
   flagged?: boolean;
 }
 
-/** One section of the draft: its course (null when no line has a course the till lists) and the
+/** One section of the draft: its course (null when no line has a live or recorded course) and the
  * positions of its lines in the draft, in draft order. */
 export interface DraftSection {
   course: TillCourse | null;
@@ -53,14 +54,20 @@ export interface DraftPreview {
 
 /**
  * Sorts the draft into one section per course present, in the venue's course order. A line with no
- * course, or one the till does not list, goes in the first section.
+ * course, or one with neither a live choice nor matching read metadata, goes in the first section.
  */
 export function draftSections(
-  entries: readonly Pick<DraftEntry, "courseId">[],
+  entries: readonly Pick<DraftEntry, "courseId" | "course">[],
   courses: readonly TillCourse[],
 ): DraftSection[] {
   if (entries.length === 0) return [];
-  const ordered = [...courses].sort((a, b) => a.displayOrder - b.displayOrder);
+  const known = new Map(courses.map((course) => [course.id, course]));
+  for (const entry of entries) {
+    if (entry.course?.id === entry.courseId && !known.has(entry.course.id)) {
+      known.set(entry.course.id, entry.course);
+    }
+  }
+  const ordered = [...known.values()].sort((a, b) => a.displayOrder - b.displayOrder);
   const rank = new Map(ordered.map((course, index) => [course.id, index]));
   const ranked = entries.map((entry) =>
     entry.courseId === null ? undefined : rank.get(entry.courseId),

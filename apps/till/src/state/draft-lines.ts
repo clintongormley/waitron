@@ -94,6 +94,7 @@ export function fromDraftLine(
     ...(snapshots.length === 0 ? {} : { optionSnapshots: snapshots }),
     ...(line.note === null ? {} : { note: line.note }),
     ...(line.courseId === null ? {} : { courseId: line.courseId }),
+    ...(line.course?.id === line.courseId ? { course: line.course } : {}),
     ...(line.makeAt == null ? {} : { makeAt: line.makeAt }),
     ...(line.noMerge ? { noMerge: true as const } : {}),
     ...(line.unavailable ? { unavailableOnServer: true as const } : {}),
@@ -118,7 +119,11 @@ export function rebuildReturned(
     if (line.notOffered !== true) return;
     const saved = toDraftLineInput(line);
     if (!offers.has(saved.menuItemId)) return;
-    const returned = { ...saved, unavailable: line.unavailableOnServer === true };
+    const returned = {
+      ...saved,
+      ...(line.course === undefined ? {} : { course: line.course }),
+      unavailable: line.unavailableOnServer === true,
+    };
     rebuilt.set(index, fromDraftLine(returned, offers, liveVersions));
   });
   return rebuilt;

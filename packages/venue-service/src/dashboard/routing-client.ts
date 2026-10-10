@@ -1,4 +1,4 @@
-import type { StationThresholds } from "@waitron/shared";
+import type { DeleteImpact, StationThresholds } from "@waitron/shared";
 import type { DashboardRequest, LiveData } from "@waitron/dashboard-kit";
 import type { ResolvedKitchenScreen } from "@waitron/module";
 import type { RouteTarget } from "../routing.js";
@@ -9,13 +9,6 @@ import type {
   RoutingMove,
   RoutingView,
 } from "../routing-types.js";
-
-export interface StationClosing {
-  openDishCount: number;
-  destinations: readonly { id: string; name: string; isDefault: boolean }[];
-}
-export type StationDisableChoice =
-  { openDishes: "send"; sendsToStationId: string } | { openDishes: "leave" };
 
 export interface OutputsDown {
   printersDown: {
@@ -80,7 +73,7 @@ export class PrepStationsApi {
   async load(): Promise<PrepStationsView> {
     const [routing, stations, categories, zones, products, printers, devices] = await Promise.all([
       this.#read<RoutingView>("/management-api/venue-service/routing"),
-      this.#read<PrepStation[]>("/management-api/stations?includeDisabled=true"),
+      this.#read<PrepStation[]>("/management-api/stations"),
       this.#read<PrepStationsView["categories"]>("/management-api/categories"),
       this.#read<PrepStationsView["zones"]>("/management-api/zones"),
       this.#read<PrepStationsView["products"]>("/management-api/products"),
@@ -137,20 +130,17 @@ export class PrepStationsApi {
   reorderStations(ids: readonly string[]): Promise<void> {
     return this.request("/management-api/stations/order", "PUT", { ids });
   }
-  readStationClosing(id: string): Promise<StationClosing> {
-    return this.request(`/management-api/stations/${id}/closing`, "GET", undefined, {
-      passive: true,
-    });
+  getStationDeleteImpact(id: string): Promise<DeleteImpact> {
+    return this.#read<DeleteImpact>(
+      `/management-api/stations/${encodeURIComponent(id)}/delete-impact`,
+    );
   }
-  deactivateStation(id: string, choice?: StationDisableChoice): Promise<void> {
-    return choice === undefined
-      ? this.request(`/management-api/stations/${id}`, "DELETE")
-      : this.request(`/management-api/stations/${id}`, "DELETE", choice);
+  deleteStation(id: string): Promise<DeleteImpact> {
+    return this.request<DeleteImpact>(
+      `/management-api/stations/${encodeURIComponent(id)}`,
+      "DELETE",
+    );
   }
-  activateStation(id: string): Promise<void> {
-    return this.request(`/management-api/stations/${id}`, "PATCH", { active: true });
-  }
-
   listOutputsDown(): Promise<OutputsDown> {
     return this.request<OutputsDown>("/management-api/stations/outputs-down", "GET", undefined, {
       passive: true,

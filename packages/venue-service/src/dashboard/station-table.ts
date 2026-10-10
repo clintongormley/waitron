@@ -27,9 +27,6 @@ export class StationTable extends LitElement {
         cursor: var(--reorder-drag-cursor, grab);
         touch-action: none;
       }
-      wt-data-table::part(disabled) {
-        color: var(--wt-color-text-muted);
-      }
       wt-data-table::part(screens) {
         display: grid;
         gap: var(--wt-space-2);
@@ -75,10 +72,10 @@ export class StationTable extends LitElement {
     return html`<span part="station-name-content"
       ><span part="station-name-actions">${this.actions[station.id] ?? nothing}</span
       ><span part="station-name-details"
-        ><span part=${station.active ? "name" : "disabled"}>${station.name}</span>
+        ><span part="name">${station.name}</span>
         ${station.isDefault ? html`<span part="badge">${t("prep.default")}</span>` : nothing}
         ${this.statusNotes[station.id] ? html`<span part="station-status">${this.statusNotes[station.id]}</span>` : nothing}
-        ${station.active && !station.isDefault ? html`<a part="service-times" aria-label=${`${station.name}: ${t("prep.when_gets_orders")}`} href=${`/manage/opening-hours?view=week&station=${encodeURIComponent(station.id)}`}>${t("prep.when_gets_orders")}</a>` : nothing}</span
+        ${!station.isDefault ? html`<a part="service-times" aria-label=${`${station.name}: ${t("prep.when_gets_orders")}`} href=${`/manage/opening-hours?view=week&station=${encodeURIComponent(station.id)}`}>${t("prep.when_gets_orders")}</a>` : nothing}</span
       ></span
     >`;
   }
@@ -109,12 +106,9 @@ export class StationTable extends LitElement {
     ];
   }
   override render() {
-    const rows = [...this.stations].sort(
-      (a, b) =>
-        Number(!a.active) - Number(!b.active) ||
-        a.displayOrder - b.displayOrder ||
-        a.name.localeCompare(b.name),
-    );
+    const rows = this.stations
+      .filter((station) => station.active)
+      .sort((a, b) => a.displayOrder - b.displayOrder || a.name.localeCompare(b.name));
     return html`<wt-data-table
       aria-label=${t("prep.title")}
       data-test="station-table"

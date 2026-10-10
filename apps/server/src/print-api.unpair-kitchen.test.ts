@@ -41,7 +41,11 @@ useVenueDb({
         { locationId: venue.cfg.locationId },
         { name: "Cocina", transport: "bluetooth", localKey: MAC },
       );
-      await attachPrinterToStation(tx, { stationId: station!.id, printerId });
+      await attachPrinterToStation(tx, {
+        locationId: venue.cfg.locationId,
+        stationId: station!.id,
+        printerId,
+      });
       return station!.id;
     });
     const session = await inTx(venue, (tx) =>

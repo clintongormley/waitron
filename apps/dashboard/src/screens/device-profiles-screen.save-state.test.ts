@@ -443,9 +443,11 @@ describe("the device profile editor's Save", () => {
     },
   );
 
-  it("opens a kitchen profile holding a switched-off station quiet, and a press sends nothing", async () => {
+  it("opens a kitchen profile with a deleted station hidden and its live choice quiet, and a press sends nothing", async () => {
     const { el, api } = await openEdit("p2");
-    expect(checked(el, "profile-station-screen-station-s-off")).toBe(true);
+    expect(q(el, "profile-station-screen-station-s-off")).toBeNull();
+    expect(checked(el, "profile-station-screen-station-s1")).toBe(true);
+    expect(checked(el, "profile-station-screen-every-station")).toBe(false);
     expect(checked(el, "profile-pass-monitor")).toBe(true);
     expect(await state(el)).toEqual(quiet);
     await press(el);

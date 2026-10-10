@@ -25,6 +25,8 @@ import type { Placement } from "./floor-reset-plan.js";
 import { placementOf } from "./floor-today-store.js";
 import { readRestOfOrder, type RestOfOrderItem } from "./rest-of-order.js";
 import { requireMakeAtStation } from "./dead-ends.js";
+import { RETAINED_COURSE } from "./retained-course.js";
+import type { RetainedCourseLine } from "./retained-course.js";
 // Side-effect only: keeps this host's error registry (errors.ts) reachable from a file that throws
 // its codes.
 import "./errors.js";
@@ -431,7 +433,8 @@ export async function priceOrderLines(
     frozenExtras?: ExtraChild[];
     [ADDED_EXTRAS_ONLY]?: true;
     [REQUIRES_PERIOD_SELECTION]?: true;
-  } & LineExtras)[],
+  } & LineExtras &
+    RetainedCourseLine)[],
   zoneId?: string,
   /** The zone's offers, when the caller has already read them with {@link readBasketOffers}. */
   snapshot?: ZoneOffers,
@@ -683,18 +686,14 @@ export async function priceOrderLines(
     }
   }
 
-  // Only an OVERRIDE is screened: the product's default course is already a stored key, and
-  // re-validating it would refuse a product whose default course was since deactivated.
-  const overrideCourseIds = new Set(
-    lines
-      .map((line) => line.courseId)
-      .filter((courseId): courseId is string => courseId !== null && courseId !== undefined),
-  );
-  for (const courseId of overrideCourseIds) {
+  for (const line of lines) {
+    const courseId = line.courseId;
+    if (courseId === null || courseId === undefined) continue;
     if (!isUuid(courseId)) {
       throw new AppError("course.not_found", { courseId });
     }
-    await requireLiveCourse(tx, cfg, courseId);
+    if (line[RETAINED_COURSE] === true) await requireCourse(tx, cfg, courseId);
+    else await requireLiveCourse(tx, cfg, courseId);
   }
 
   const gross = grossBasketWithOptions(items);
@@ -1885,7 +1884,7 @@ export async function isOpenOrder(tx: Transaction, orderId: string): Promise<boo
 
 /**
  * Release held items of a course by stamping fired_at. Require the course to exist
- * in this venue, including a deactivated course whose food still needs release.
+ * in this venue, including a deleted course whose food still needs release.
  * Already-fired items retain their timestamps; an empty held set is a no-op.
  *
  * On a party's order, the held groups holding the course's dishes fire whole first
@@ -2251,7 +2250,7 @@ export async function bumpCourseReady(
 
 /**
  * Dispatch ready items of a course by stamping away_at once. Require an existing
- * course in this venue, including deactivated courses with plated food remaining.
+ * course in this venue, including deleted courses with plated food remaining.
  * Items still cooking and items already away are unchanged.
  */
 export async function markCourseAway(
@@ -2285,7 +2284,8 @@ export type TabRoundLine = {
   options?: OptionSelection[];
   hold?: boolean;
   release?: boolean;
-} & LineExtras;
+} & LineExtras &
+  RetainedCourseLine;
 
 /**
  * APPEND a priced round to an OPEN tab, locking each new line's gross unit price at add time, WITHOUT
@@ -2721,7 +2721,7 @@ export function quantityOfLine(
 
 /**
  * Move ONE not-yet-fired line of an OPEN tab into another kitchen course, or clear its course to null.
- * A deactivated course is not a valid new target. A line that has already FIRED is refused
+ * A deleted course is not a valid new target. A line that has already FIRED is refused
  * `ticket.already_fired`: once the kitchen has been told to cook it, it is corrected by a recall,
  * never re-coursed underneath the pass.
  */
@@ -3261,6 +3261,7 @@ export interface TabLine {
   listUnitPriceGross?: string;
   servedAt: string | null;
   courseId: string | null;
+  course?: { id: string; name: string; displayOrder: number };
   /** When the line was first released: fired, or for a no-preparation line, when it would have
    * fired. A recall clears `firedAt` and keeps this. */
   sentAt: string | null;
@@ -3310,6 +3311,11 @@ export async function readTabLines(
       servedAt: workingOrderLines.servedAt,
       servedQuantity: workingOrderLines.servedQuantity,
       courseId: workingOrderLines.courseId,
+      course: {
+        id: kitchenCourses.id,
+        name: kitchenCourses.name,
+        displayOrder: kitchenCourses.displayOrder,
+      },
       sentAt: workingOrderLines.sentAt,
       firedAt: ticketItems.firedAt,
       state: ticketItems.state,
@@ -3324,6 +3330,7 @@ export async function readTabLines(
     .from(workingOrderLines)
     .leftJoin(ticketItems, eq(ticketItems.workingOrderLineId, workingOrderLines.id))
     .leftJoin(products, eq(products.id, workingOrderLines.productId))
+    .leftJoin(kitchenCourses, eq(kitchenCourses.id, workingOrderLines.courseId))
     .where(eq(workingOrderLines.workingOrderId, tabId))
     .orderBy(workingOrderLines.lineNo);
   const menuItemByLine = new Map(
@@ -3352,6 +3359,7 @@ export async function readTabLines(
         : { listUnitPriceGross: centsToDecimal(row.listUnitPriceGross) }),
       servedAt: row.servedAt,
       courseId: row.courseId,
+      ...(row.course === null ? {} : { course: row.course }),
       sentAt: row.sentAt,
       firedAt: row.firedAt,
       state: row.state,
@@ -4827,6 +4835,8 @@ async function applyLineEdits(
       intent.makeAt === undefined ||
       (intent.makeAt === null && parent.ticket?.stationChosenAt != null);
     const asOffered = (quantity: string): RequestedLine => ({
+      [RETAINED_COURSE]: true,
+      courseId: parent.courseId,
       menuItemId: menuItemOf(parent),
       ...variantOf(parent),
       quantity,
@@ -6166,7 +6176,7 @@ export async function advanceTicket(
 }
 
 /** The LIVE course row an item's snapshotted `course_id` names. Not filtered by `active`, so a course
- *  deactivated after the item was fired still names its header. */
+ *  deleted after the item was fired still names its header. */
 export interface StationQueueCourse {
   id: string;
   name: string;
@@ -6507,7 +6517,7 @@ export async function listStationQueues(
       kitchenTimingDefaults,
       eq(kitchenTimingDefaults.locationId, kitchenStations.locationId),
     )
-    // Not filtered by `active`: a course deactivated after the item was fired still names its header.
+    // Not filtered by `active`: a course deleted after the item was fired still names its header.
     .leftJoin(kitchenCourses, eq(ticketItems.courseId, kitchenCourses.id))
     .leftJoin(parties, eq(parties.id, workingOrders.partyId))
     .leftJoin(orderGroups, eq(orderGroups.id, workingOrderLines.groupId))

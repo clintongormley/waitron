@@ -12,7 +12,8 @@ afterEach(() => {
 
 const stations = [
   { id: "bar", name: "Bar", active: true, isDefault: true, displayOrder: 0 },
-  { id: "old", name: "Old kitchen", active: false, isDefault: false, displayOrder: 1 },
+  { id: "grill", name: "Grill", active: true, isDefault: false, displayOrder: 1 },
+  { id: "old", name: "Old kitchen", active: false, isDefault: false, displayOrder: 2 },
 ] as PrepStation[];
 
 describe.each(["light", "dark"] as const)("station table (%s)", (theme) => {
@@ -38,6 +39,7 @@ describe.each(["light", "dark"] as const)("station table (%s)", (theme) => {
           shownOn: html`<span>Pantalla Cocina — station screen</span>
             <a href="/manage/devices">Devices</a>`,
         },
+        grill: { printedOn: "No printer", shownOn: "None" },
         old: { printedOn: "No printer", shownOn: "None" },
       };
     host.append(el);
@@ -47,6 +49,13 @@ describe.each(["light", "dark"] as const)("station table (%s)", (theme) => {
       .shadowRoot!.querySelector("wt-data-table")!
       .shadowRoot!.querySelectorAll("tbody tr");
     expect(rows).toHaveLength(state === "empty" ? 0 : 2);
+    const rowText = [...rows].map((row) => row.textContent ?? "");
+    expect(rowText.join(" ")).not.toContain("Old kitchen");
+    expect(rowText.join(" ")).not.toContain("Switched off");
+    if (state !== "empty") {
+      expect(rowText[0]).toContain("Bar");
+      expect(rowText[1]).toContain("Grill");
+    }
     if (state === "manager")
       expect(rows[0]!.querySelector('[data-test="printed-on-bar"]')?.textContent).toBe("Epson");
     await expectNoA11yViolations(host);

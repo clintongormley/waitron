@@ -1,4 +1,5 @@
-import { openDishCount, disableWithDishes } from "./station-closing.js";
+import { readStationDeleteImpact, deleteStation } from "./station-delete.js";
+import { readCourseDeleteImpact, deleteCourse } from "./course-delete.js";
 import { mountDepartmentReceiptApi } from "./department-receipt-api.js";
 // Side-effect only: registers host codes this file throws (`zone.not_found`, …).
 import "./errors.js";
@@ -107,15 +108,12 @@ import {
   updateZone,
 } from "./tables.js";
 import {
-  COURSE_REFERENCES,
   createCourse,
   createStation,
-  deactivateStation,
   getBumpMode,
   getFireControl,
   listCourses,
   moveCourse,
-  removeCourse,
   reorderStations,
   listStations,
   setBumpMode,
@@ -131,8 +129,6 @@ import { parseProfileKitchenScreens } from "./device.js";
 import type { NarrowedDevice, TableRemoval } from "@waitron/module";
 import { readZonePlan, saveZonePlan, type ZonePlanSave } from "./floor-plan.js";
 import type { TillConfig } from "./till-config.js";
-import { withInUse } from "./in-use.js";
-import { queryFlag } from "./report-api.js";
 import { codeOf, createErrorBoundary } from "@waitron/server-kit";
 import { readJsonBody, readRawJsonBody } from "@waitron/server-kit";
 import {
@@ -307,6 +303,9 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "placement.invalid": 400,
   "station.not_found": 404,
   "station.name_taken": 409,
+  "station.is_default": 409,
+  "station.screen_in_use": 409,
+  "station.work_in_progress": 409,
   "station.thresholds_invalid": 400,
   "course.not_found": 404,
   "course.name_taken": 409,
@@ -2000,10 +1999,7 @@ export function mountManagementApi(
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
       const cfg = requireVenueCfg(deps);
-      const includeDisabled = c.req.query("includeDisabled") === "true";
-      const stations = await withVenueReadAuth(deps, sessionId, (tx) =>
-        listStations(tx, cfg, includeDisabled),
-      );
+      const stations = await withVenueReadAuth(deps, sessionId, (tx) => listStations(tx, cfg));
       return c.json(stations);
     }),
   );
@@ -2043,7 +2039,6 @@ export function mountManagementApi(
       const body = await readJsonBody<{
         name?: unknown;
         displayOrder?: unknown;
-        active?: unknown;
         showsRestOfOrder?: unknown;
         warmAfterMinutes?: unknown;
         overdueAfterMinutes?: unknown;
@@ -2053,10 +2048,11 @@ export function mountManagementApi(
       if (typeof body !== "object" || body === null || Array.isArray(body)) {
         throw new AppError("management.request_invalid", { field: "body" });
       }
+      if (Object.hasOwn(body, "active"))
+        throw new AppError("management.request_invalid", { field: "active" });
       const patch: {
         name?: string;
         displayOrder?: number;
-        active?: boolean;
         showsRestOfOrder?: boolean;
         warmAfterMinutes?: number | null;
         overdueAfterMinutes?: number | null;
@@ -2071,11 +2067,6 @@ export function mountManagementApi(
       if (body.displayOrder !== undefined) {
         patch.displayOrder = parseDisplayOrder(body.displayOrder);
       }
-      if (body.active !== undefined) {
-        if (typeof body.active !== "boolean")
-          throw new AppError("management.request_invalid", { field: "active" });
-        patch.active = body.active;
-      }
       if (body.showsRestOfOrder !== undefined) {
         if (typeof body.showsRestOfOrder !== "boolean")
           throw new AppError("management.request_invalid", { field: "showsRestOfOrder" });
@@ -2084,41 +2075,21 @@ export function mountManagementApi(
       Object.assign(patch, parseStationTimingPatch(body));
       const printerIds = parseStationPrinterIds(body.printerIds);
       if (printerIds !== undefined) patch.printerIds = printerIds;
-      if (
-        patch.printerIds === undefined &&
-        patch.name === undefined &&
-        patch.displayOrder === undefined &&
-        patch.active === undefined &&
-        patch.showsRestOfOrder === undefined &&
-        patch.warmAfterMinutes === undefined &&
-        patch.overdueAfterMinutes === undefined &&
-        patch.forgottenAfterMinutes === undefined
-      ) {
-        return c.body(null, 204);
-      }
-      await withVenueAuth(deps, sessionId, async (tx, authorizedBy) => {
+      await withVenueAuth(deps, sessionId, async (tx) => {
         await authorizeStationPrinters(tx, sessionId, patch.printerIds);
-        if (patch.active === false)
-          await disableWithDishes(tx, cfg, id, body, () => updateStation(tx, cfg, id, patch), {
-            deviceId: null,
-            personId: authorizedBy,
-          });
-        else await updateStation(tx, cfg, id, patch);
+        await updateStation(tx, cfg, id, patch);
       });
       return c.body(null, 204);
     }),
   );
 
-  app.get("/management-api/stations/:id/closing", (c) =>
+  app.get("/management-api/stations/:id/delete-impact", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
       const id = requireStationId(c.req.param("id"));
       const cfg = requireVenueCfg(deps);
       return c.json(
-        await withVenueAuth(deps, sessionId, async (tx) => ({
-          destinations: await VENUE_SERVICE.stationDestinations(tx, cfg, id, new Date()),
-          openDishCount: await openDishCount(tx, cfg.locationId, id),
-        })),
+        await withVenueAuth(deps, sessionId, (tx) => readStationDeleteImpact(tx, cfg, id)),
       );
     }),
   );
@@ -2128,17 +2099,9 @@ export function mountManagementApi(
       const sessionId = requireManagementSession(c);
       const id = requireStationId(c.req.param("id"));
       const cfg = requireVenueCfg(deps);
-      const raw = await c.req.text();
-      const body = raw === "" ? {} : await readRawJsonBody<Record<string, unknown>>(c);
-      if (body === null || typeof body !== "object" || Array.isArray(body))
+      if ((await c.req.text()) !== "")
         throw new AppError("management.request_invalid", { field: "body" });
-      await withVenueAuth(deps, sessionId, (tx, authorizedBy) =>
-        disableWithDishes(tx, cfg, id, body, () => deactivateStation(tx, cfg, id), {
-          deviceId: null,
-          personId: authorizedBy,
-        }),
-      );
-      return c.body(null, 204);
+      return c.json(await withVenueAuth(deps, sessionId, (tx) => deleteStation(tx, cfg, id)));
     }),
   );
 
@@ -2199,11 +2162,7 @@ export function mountManagementApi(
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
       const cfg = requireVenueCfg(deps);
-      const includeDisabled = c.req.query("includeDisabled") === "true";
-      const courses = await withVenueReadAuth(deps, sessionId, async (tx) => {
-        const rows = await listCourses(tx, cfg, includeDisabled);
-        return includeDisabled ? withInUse(tx, COURSE_REFERENCES, rows) : rows;
-      });
+      const courses = await withVenueReadAuth(deps, sessionId, (tx) => listCourses(tx, cfg));
       return c.json(courses);
     }),
   );
@@ -2219,7 +2178,9 @@ export function mountManagementApi(
       if (typeof body !== "object" || body === null || Array.isArray(body)) {
         throw new AppError("management.request_invalid", { field: "body" });
       }
-      const patch: { name?: string; displayOrder?: number; active?: boolean } = {};
+      if (Object.hasOwn(body, "active"))
+        throw new AppError("management.request_invalid", { field: "active" });
+      const patch: { name?: string; displayOrder?: number } = {};
       if (body.name !== undefined) {
         if (typeof body.name !== "string")
           throw new AppError("management.request_invalid", { field: "name" });
@@ -2228,20 +2189,19 @@ export function mountManagementApi(
       if (body.displayOrder !== undefined) {
         patch.displayOrder = parseDisplayOrder(body.displayOrder);
       }
-      if (body.active !== undefined) {
-        if (typeof body.active !== "boolean")
-          throw new AppError("management.request_invalid", { field: "active" });
-        patch.active = body.active;
-      }
-      if (
-        patch.name === undefined &&
-        patch.displayOrder === undefined &&
-        patch.active === undefined
-      ) {
-        return c.body(null, 204);
-      }
       await withVenueAuth(deps, sessionId, (tx) => updateCourse(tx, cfg, id, patch));
       return c.body(null, 204);
+    }),
+  );
+
+  app.get("/management-api/courses/:id/delete-impact", (c) =>
+    run(c, log, async () => {
+      const sessionId = requireManagementSession(c);
+      const id = requireCourseId(c.req.param("id"));
+      const cfg = requireVenueCfg(deps);
+      return c.json(
+        await withVenueAuth(deps, sessionId, (tx) => readCourseDeleteImpact(tx, cfg, id)),
+      );
     }),
   );
 
@@ -2250,9 +2210,9 @@ export function mountManagementApi(
       const sessionId = requireManagementSession(c);
       const id = requireCourseId(c.req.param("id"));
       const cfg = requireVenueCfg(deps);
-      const disable = queryFlag(c.req.query("disable"), "disable");
-      await withVenueAuth(deps, sessionId, (tx) => removeCourse(tx, cfg, id, disable));
-      return c.body(null, 204);
+      if (c.req.query("disable") !== undefined)
+        throw new AppError("management.request_invalid", { field: "disable" });
+      return c.json(await withVenueAuth(deps, sessionId, (tx) => deleteCourse(tx, cfg, id)));
     }),
   );
 
@@ -2269,11 +2229,7 @@ export function mountManagementApi(
       if (typeof to !== "number" || !Number.isInteger(to) || to < 0) {
         throw new AppError("management.request_invalid", { field: "to" });
       }
-      return c.json(
-        await withVenueAuth(deps, sessionId, async (tx) =>
-          withInUse(tx, COURSE_REFERENCES, await moveCourse(tx, cfg, id, to)),
-        ),
-      );
+      return c.json(await withVenueAuth(deps, sessionId, (tx) => moveCourse(tx, cfg, id, to)));
     }),
   );
 

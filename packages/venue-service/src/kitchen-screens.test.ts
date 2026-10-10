@@ -200,7 +200,7 @@ describe("a profile's kitchen screens", () => {
     });
   });
 
-  it("reads a station or zone switched off since, in its place", async () => {
+  it("omits a deleted station and retains a switched-off zone", async () => {
     const venue = await seedVenue();
     await set(venue, venue.kds, {
       pass: { stationIds: [venue.grill, venue.cold], zoneIds: [venue.dining, venue.terrace] },
@@ -211,7 +211,7 @@ describe("a profile's kitchen screens", () => {
       .where(eq(kitchenStations.id, venue.cold));
     await db.update(floorZones).set({ active: false }).where(eq(floorZones.id, venue.terrace));
     await expect(screensOf(venue, venue.kds)).resolves.toEqual({
-      pass: { stationIds: [venue.cold, venue.grill], zoneIds: [venue.terrace, venue.dining] },
+      pass: { stationIds: [venue.grill], zoneIds: [venue.terrace, venue.dining] },
     });
   });
 
@@ -295,7 +295,7 @@ describe("a profile's kitchen screens", () => {
     await expect(screensOf(venue, venue.kds)).resolves.toEqual({});
   });
 
-  it("keeps a station or zone switched off since it was stored, and still refuses adding one", async () => {
+  it("refuses a deleted station but permits keeping its switched-off zone", async () => {
     const venue = await seedVenue();
     await set(venue, venue.kds, {
       pass: { stationIds: [venue.grill, venue.cold], zoneIds: [venue.dining] },
@@ -308,11 +308,16 @@ describe("a profile's kitchen screens", () => {
       .update(floorZones)
       .set({ active: false })
       .where(inArray(floorZones.id, [venue.dining, venue.counter]));
-    await set(venue, venue.kds, {
-      pass: { stationIds: [venue.grill, venue.cold], zoneIds: [venue.dining] },
-    });
+    await expect(
+      outcome(
+        set(venue, venue.kds, {
+          pass: { stationIds: [venue.grill, venue.cold], zoneIds: [venue.dining] },
+        }),
+      ),
+    ).resolves.toEqual(refused("passScreenStations", "not_found"));
+    await set(venue, venue.kds, { pass: { stationIds: [venue.cold], zoneIds: [venue.dining] } });
     await expect(screensOf(venue, venue.kds)).resolves.toEqual({
-      pass: { stationIds: [venue.cold, venue.grill], zoneIds: [venue.dining] },
+      pass: { stationIds: [venue.cold], zoneIds: [venue.dining] },
     });
     await expect(
       outcome(
@@ -324,7 +329,7 @@ describe("a profile's kitchen screens", () => {
     await expect(
       outcome(
         set(venue, venue.kds, {
-          pass: { stationIds: [venue.grill], zoneIds: [venue.dining, venue.counter] },
+          pass: { stationIds: [venue.cold], zoneIds: [venue.dining, venue.counter] },
         }),
       ),
     ).resolves.toEqual(refused("passScreenZones", "not_found"));
@@ -679,7 +684,7 @@ describe("the kitchen screens a device chooses", () => {
     expect(await storedKindsOf(till)).toEqual([]);
   });
 
-  it("keeps a station or zone switched off since the device stored it for the same screen", async () => {
+  it("refuses a deleted station while keeping a stored switched-off zone", async () => {
     const { venue, till } = await kitchen();
     const pass = { kind: "pass", stationIds: [venue.cold], zoneIds: [venue.terrace] } as const;
     await choose(venue, till, venue.till, [pass]);
@@ -688,13 +693,16 @@ describe("the kitchen screens a device chooses", () => {
       .set({ active: false })
       .where(eq(kitchenStations.id, venue.cold));
     await db.update(floorZones).set({ active: false }).where(eq(floorZones.id, venue.terrace));
-    await expect(outcome(choose(venue, till, venue.till, [pass]))).resolves.toEqual({
-      resolved: undefined,
-    });
+    await expect(outcome(choose(venue, till, venue.till, [pass]))).resolves.toEqual(
+      invalid("stationIds", "not_found", "pass"),
+    );
+    await expect(
+      outcome(choose(venue, till, venue.till, [{ ...pass, stationIds: [venue.grill] }])),
+    ).resolves.toEqual({ resolved: undefined });
     await expect(
       outcome(
         choose(venue, till, venue.till, [
-          pass,
+          { ...pass, stationIds: [venue.grill] },
           { kind: "station", stationIds: [venue.cold], zoneIds: null },
         ]),
       ),
@@ -773,7 +781,7 @@ describe("the kitchen screens a device chooses", () => {
     expect(await storedKindsOf(screen)).toEqual([]);
   });
 
-  it("checks a choice keeping a switched-off station only for the device that stores it", async () => {
+  it("refuses deleted stations even for the device that stored them", async () => {
     const { venue, screen } = await kitchen();
     const other = await seedDevice(venue, venue.kds, "Other");
     const cold = { kind: "station", stationIds: [venue.cold], zoneIds: null } as const;
@@ -786,10 +794,10 @@ describe("the kitchen screens a device chooses", () => {
       outcome(
         scoped((tx) => assertDeviceKitchenScreens(tx, venue.cfg, venue.kds, [cold], deviceId)),
       );
-    await expect(assert(screen)).resolves.toEqual({ resolved: undefined });
-    await expect(outcome(choose(venue, screen, venue.kds, [cold]))).resolves.toEqual({
-      resolved: undefined,
-    });
+    await expect(assert(screen)).resolves.toEqual(invalid("stationIds", "not_found", "station"));
+    await expect(outcome(choose(venue, screen, venue.kds, [cold]))).resolves.toEqual(
+      invalid("stationIds", "not_found", "station"),
+    );
     await expect(assert()).resolves.toEqual(invalid("stationIds", "not_found", "station"));
     await expect(assert(other)).resolves.toEqual(invalid("stationIds", "not_found", "station"));
   });
@@ -889,7 +897,7 @@ describe("what a device's kitchen screens show", () => {
     ]);
   });
 
-  it("shows a station or zone switched off since as no longer available, and again once back on", async () => {
+  it("omits a deleted station, retains the switched-off zone and reads restored fixtures", async () => {
     const venue = await seedVenue();
     const till = await seedDevice(venue, venue.till, "Till");
     await choose(venue, till, venue.till, [
@@ -907,7 +915,7 @@ describe("what a device's kitchen screens show", () => {
         everyStation: false,
         everyZone: false,
         profileEveryStation: true,
-        stations: [slot(venue.cold, "Cold", false, true), slot(venue.grill, "Grill")],
+        stations: [slot(venue.grill, "Grill")],
         zones: [slot(venue.dining, "Dining room", false, true)],
       },
     ]);
@@ -925,7 +933,7 @@ describe("what a device's kitchen screens show", () => {
     ]);
   });
 
-  it("tells a station or zone switched off on its own page from one a narrowing took", async () => {
+  it("omits deleted stations while retaining narrowed stations and switched-off zones", async () => {
     const venue = await seedVenue();
     const till = await seedDevice(venue, venue.till, "Till");
     await choose(venue, till, venue.till, [
@@ -954,11 +962,7 @@ describe("what a device's kitchen screens show", () => {
         everyStation: false,
         everyZone: false,
         profileEveryStation: true,
-        stations: [
-          slot(venue.cold, "Cold", false, true),
-          slot(venue.grill, "Grill", false),
-          slot(venue.pastry, "Pastry", false),
-        ],
+        stations: [slot(venue.grill, "Grill", false)],
         zones: [
           slot(venue.terrace, "Terrace", false),
           slot(venue.dining, "Dining room", false, true),
@@ -1359,7 +1363,7 @@ describe("the station screens of several kitchen displays", () => {
       ].sort((a, b) => (a.deviceId < b.deviceId ? -1 : 1)),
     );
   });
-  it('keeps a switched-off station a display\'s list names, but not one a narrowing took or one only "every" covers', async () => {
+  it("omits a deleted station even from an explicit display list", async () => {
     const venue = await seedVenue();
     await set(venue, venue.kds, { station: every });
     const listed = await seedDevice(venue, venue.kds, "Listed");
@@ -1390,7 +1394,7 @@ describe("the station screens of several kitchen displays", () => {
     );
     expect(await read(true)).toEqual(
       new Map([
-        [listed, [venue.cold, venue.grill]],
+        [listed, [venue.grill]],
         [open, [venue.grill]],
       ]),
     );

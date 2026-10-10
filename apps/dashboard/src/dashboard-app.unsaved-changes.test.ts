@@ -923,7 +923,7 @@ it.each([
             todayEnds: { timeOfDay: "06:00", tomorrow: true },
             clockReadable: true,
           } as never;
-        if (url === "/management-api/stations?includeDisabled=true")
+        if (url === "/management-api/stations")
           return [
             {
               id: "bar",

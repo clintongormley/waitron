@@ -53,6 +53,34 @@ describe("draftSections (pre-sorting the draft)", () => {
     ]);
   });
 
+  it("keeps a retained course section in historical order without replacing live labels", () => {
+    const retained = { id: "retired", name: "Dessert recorded", displayOrder: 3 };
+    expect(
+      draftSections(
+        [
+          { ...entry("retired"), course: retained },
+          { ...entry("starters"), course: { ...starters, name: "Stale label" } },
+          { ...entry("mains"), course: retained },
+        ],
+        courses,
+      ),
+    ).toEqual([
+      { course: starters, lineIndexes: [1] },
+      { course: mains, lineIndexes: [2] },
+      { course: retained, lineIndexes: [0] },
+    ]);
+  });
+
+  it("keeps a reused name on a different course id in its own position", () => {
+    const retained = { id: "retired", name: mains.name, displayOrder: 3 };
+    expect(
+      draftSections([{ ...entry(retained.id), course: retained }, entry(mains.id)], [mains]),
+    ).toEqual([
+      { course: mains, lineIndexes: [1] },
+      { course: retained, lineIndexes: [0] },
+    ]);
+  });
+
   it("makes no section for an empty draft", () => {
     expect(draftSections([], courses)).toEqual([]);
   });

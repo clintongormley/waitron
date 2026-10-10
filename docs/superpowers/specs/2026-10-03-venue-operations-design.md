@@ -4,6 +4,11 @@
 > [the current station contract](../../developers/conventions-data.md#prep-stations-without-authored-hours)
 > and [the slice 4 plan](../plans/2026-10-08-a366-slice-4-prep-stations.md).
 
+> 2026-10-10: A435 step 5 replaces course/station Disable and Enable with permanent
+> Delete. The [current deletion contract](../../developers/conventions-data.md#permanent-course-and-station-deletion)
+> governs retained history, routing cleanup and empty screen scopes. Earlier station/course
+> lifecycle wording below is a dated record, not the current operation.
+
 > **2026-10-08 update:** A366 slice 3 removes the dashboard's today controls and write route.
 > The Today column keeps status and destination text. See the
 > [slice 3 plan](../plans/2026-10-08-a366-slice-3-station-controls.md#task-a8-dashboard--the-prep-stations-screen-loses-its-today-buttons).

@@ -1,5 +1,11 @@
 # Product folders, menus that include menus, and prep station routing
 
+> 2026-10-10: A435 step 5 replaces course/station Disable and Enable with permanent
+> Delete. The [current deletion contract](../../developers/conventions-data.md#permanent-course-and-station-deletion)
+> governs retained history, routing cleanup and empty screen scopes. Earlier station/course
+> lifecycle wording below is a dated record, not the current operation.
+
+
 > **2026-10-10, A366 slice 4 Part B:** authored station hours and configured fallback chains
 > below are historical. Stations use daily closure destinations and the active default;
 > Opening hours shows their worked-out times without a station-hours editor. See

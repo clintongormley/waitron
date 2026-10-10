@@ -118,7 +118,11 @@ describe("print-on-fire concurrency — the write queue around the mapping read"
         transport: "cloud_poll",
         pollId: `poll-${randomUUID()}`,
       });
-      await attachPrinterToStation(tx, { stationId: cocina.id, printerId });
+      await attachPrinterToStation(tx, {
+        locationId: cfg.locationId,
+        stationId: cocina.id,
+        printerId,
+      });
       const { id: product } = await createProduct(tx, {
         catalogueId: cat.id,
         categoryId: null,

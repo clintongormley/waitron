@@ -6,17 +6,14 @@ import {
   fireControlMode,
   isUniqueViolation,
   kitchenCourses,
-  orderDraftLines,
   products,
   kitchenStations,
   kitchenStationTiming,
-  ticketItems,
-  workingOrderLines,
 } from "@waitron/db";
 import type { StationThresholds } from "@waitron/shared";
 import type { Transaction } from "@waitron/db";
 import { assertProductWritable, productWithId, type ProductScope } from "@waitron/catalogue";
-import { idsInUse, type Reference } from "./in-use.js";
+export { COURSE_REFERENCES, coursesInUse } from "./course-delete.js";
 import { VENUE_SERVICE } from "./modules.js";
 import { replaceStationPrinters } from "./station-printers.js";
 import type { TillConfig } from "./till-config.js";
@@ -122,11 +119,7 @@ export async function createStation(
   }
 }
 
-export async function listStations(
-  tx: Transaction,
-  cfg: TillConfig,
-  includeDisabled = false,
-): Promise<Station[]> {
+export async function listStations(tx: Transaction, cfg: TillConfig): Promise<Station[]> {
   const defaults = await getKitchenTimingDefaults(tx, cfg);
   const stations = await tx
     .select({
@@ -142,12 +135,7 @@ export async function listStations(
     })
     .from(kitchenStations)
     .leftJoin(kitchenStationTiming, eq(kitchenStationTiming.stationId, kitchenStations.id))
-    .where(
-      and(
-        eq(kitchenStations.locationId, cfg.locationId),
-        includeDisabled ? undefined : eq(kitchenStations.active, true),
-      ),
-    )
+    .where(and(eq(kitchenStations.locationId, cfg.locationId), eq(kitchenStations.active, true)))
     .orderBy(kitchenStations.displayOrder, kitchenStations.name);
   return stations.map((station) => ({
     ...station,
@@ -205,11 +193,13 @@ export async function updateStation(
   patch: {
     name?: string;
     displayOrder?: number;
-    active?: boolean;
     showsRestOfOrder?: boolean;
     printerIds?: readonly string[];
   } & StationTimingPatch,
 ): Promise<void> {
+  if (Object.hasOwn(patch, "active"))
+    throw new AppError("management.request_invalid", { field: "active" });
+  await requireLiveStation(tx, cfg, id);
   const { warmAfterMinutes, overdueAfterMinutes, forgottenAfterMinutes, printerIds, ...set } =
     patch;
   const timingPatch: StationTimingPatch = {};
@@ -231,9 +221,6 @@ export async function updateStation(
       { id, name: station.name },
     );
   }
-  // Printers are replaced only on a switched-on station, so they go in before a switch-off.
-  const printersFirst = printerIds !== undefined && set.active === false;
-  if (printersFirst) await replaceStationPrinters(tx, cfg, id, printerIds);
   try {
     if (Object.keys(set).length > 0) {
       await tx.update(kitchenStations).set(set).where(eq(kitchenStations.id, id));
@@ -250,25 +237,7 @@ export async function updateStation(
       .values({ stationId: id, ...timingPatch })
       .onConflictDoUpdate({ target: kitchenStationTiming.stationId, set: timingPatch });
   }
-  if (printerIds !== undefined && !printersFirst)
-    await replaceStationPrinters(tx, cfg, id, printerIds);
-}
-
-/** Deactivate a station — never a hard delete, since a `ticket_items.station_id` snapshot may
- *  reference it. */
-export async function deactivateStation(
-  tx: Transaction,
-  _cfg: TillConfig,
-  id: string,
-): Promise<void> {
-  const updated = await tx
-    .update(kitchenStations)
-    .set({ active: false })
-    .where(eq(kitchenStations.id, id))
-    .returning({ id: kitchenStations.id });
-  if (updated.length === 0) {
-    throw new AppError("station.not_found", { stationId: id });
-  }
+  if (printerIds !== undefined) await replaceStationPrinters(tx, cfg, id, printerIds);
 }
 
 export async function setDefaultStation(
@@ -346,7 +315,7 @@ export async function requireLiveCourse(
 
 /**
  * Assert `courseId` names a course of this venue, active or not; otherwise `course.not_found`.
- * A course deactivated while it holds items must stay fireable: its held food already carries the
+ * A course deleted while it holds items must stay fireable: its held food already carries the
  * course, so releasing it needs the course to exist, not to be offered. A NEW routing target uses
  * {@link requireLiveCourse}.
  */
@@ -365,7 +334,7 @@ export async function requireCourse(
   }
 }
 
-/** Create a kitchen course in `cfg.locationId`. A duplicate `(location, name)` is `course.name_taken`. */
+/** Create a kitchen course in `cfg.locationId`. A duplicate live `(location, name)` is `course.name_taken`. */
 export async function createCourse(
   tx: Transaction,
   cfg: TillConfig,
@@ -389,13 +358,8 @@ export async function createCourse(
   }
 }
 
-/** The venue's courses in firing order: lowest `display_order` first, then `name`. Active ones
- *  only, unless `includeDisabled`. */
-export async function listCourses(
-  tx: Transaction,
-  cfg: TillConfig,
-  includeDisabled = false,
-): Promise<Course[]> {
+/** Active courses in firing order: lowest `display_order` first, then `name`. */
+export async function listCourses(tx: Transaction, cfg: TillConfig): Promise<Course[]> {
   return tx
     .select({
       id: kitchenCourses.id,
@@ -404,12 +368,7 @@ export async function listCourses(
       active: kitchenCourses.active,
     })
     .from(kitchenCourses)
-    .where(
-      and(
-        eq(kitchenCourses.locationId, cfg.locationId),
-        includeDisabled ? undefined : eq(kitchenCourses.active, true),
-      ),
-    )
+    .where(and(eq(kitchenCourses.locationId, cfg.locationId), eq(kitchenCourses.active, true)))
     .orderBy(kitchenCourses.displayOrder, kitchenCourses.name);
 }
 
@@ -444,19 +403,22 @@ export async function moveCourse(
 }
 
 /**
- * Edit any subset of a course's `name`/`displayOrder`/`active`. An absent or another venue's id
- * throws `course.not_found`; a name collision throws `course.name_taken`.
+ * Edit a live course's name or firing order; a live name collision is `course.name_taken`.
  */
 export async function updateCourse(
   tx: Transaction,
   cfg: TillConfig,
   id: string,
-  patch: { name?: string; displayOrder?: number; active?: boolean },
+  patch: { name?: string; displayOrder?: number },
 ): Promise<void> {
-  const set: { name?: string; displayOrder?: number; active?: boolean } = {};
+  if (Object.hasOwn(patch, "active")) {
+    throw new AppError("management.request_invalid", { field: "active" });
+  }
+  await requireLiveCourse(tx, cfg, id);
+  const set: { name?: string; displayOrder?: number } = {};
   if (patch.name !== undefined) set.name = patch.name;
   if (patch.displayOrder !== undefined) set.displayOrder = patch.displayOrder;
-  if (patch.active !== undefined) set.active = patch.active;
+  if (Object.keys(set).length === 0) return;
 
   let updated: { id: string }[];
   try {
@@ -474,38 +436,6 @@ export async function updateCourse(
   }
   if (updated.length === 0) {
     throw new AppError("course.not_found", { courseId: id });
-  }
-}
-
-/** What keeps a course from being deleted. `in-use-references.test.ts` checks it against declared foreign keys only. */
-export const COURSE_REFERENCES: readonly Reference[] = [
-  { table: products, column: products.courseId },
-  { table: orderDraftLines, column: orderDraftLines.courseId },
-  { table: workingOrderLines, column: workingOrderLines.courseId },
-  { table: ticketItems, column: ticketItems.courseId },
-];
-
-export function coursesInUse(tx: Transaction, ids: readonly string[]): Promise<Set<string>> {
-  return idsInUse(tx, COURSE_REFERENCES, ids);
-}
-
-/** Delete a course nothing refers to and disable one something still names; with `disable`, only
- *  ever disable it. */
-export async function removeCourse(
-  tx: Transaction,
-  cfg: TillConfig,
-  id: string,
-  disable = false,
-): Promise<void> {
-  const [found] = await tx
-    .select({ active: kitchenCourses.active })
-    .from(kitchenCourses)
-    .where(and(eq(kitchenCourses.id, id), eq(kitchenCourses.locationId, cfg.locationId)));
-  if (!found) throw new AppError("course.not_found", { courseId: id });
-  if (!disable && (await coursesInUse(tx, [id])).size === 0) {
-    await tx.delete(kitchenCourses).where(eq(kitchenCourses.id, id));
-  } else if (found.active) {
-    await tx.update(kitchenCourses).set({ active: false }).where(eq(kitchenCourses.id, id));
   }
 }
 

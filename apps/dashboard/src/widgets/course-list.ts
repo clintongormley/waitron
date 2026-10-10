@@ -2,10 +2,13 @@ import { ReorderController, baseStyles, reorder, type ReorderModel } from "@wait
 import { LitElement, css, html, nothing, type PropertyValues, type TemplateResult } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { repeat } from "lit/directives/repeat.js";
+import { keyed } from "lit/directives/keyed.js";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import "@waitron/ui/src/components/wt-input.js";
-import "@waitron/ui/src/components/wt-modal.js";
+import "@waitron/ui/src/components/wt-delete-dialog.js";
+import type { DeleteImpact } from "@waitron/shared";
+import { courseDeleteCopy } from "./course-delete-copy.js";
 import "@waitron/ui/src/components/wt-row-actions.js";
 import { DashboardQueries } from "../api/query-controller.js";
 import type { Course, DashboardApi } from "../api/client.js";
@@ -29,8 +32,12 @@ interface Edit {
 
 interface Deleting {
   course: Course;
-  errorKey: string | null;
+  impact: DeleteImpact | null;
+  readError: string;
+  actionError: string;
+  loading: boolean;
   busy: boolean;
+  opener: HTMLElement | null;
 }
 
 function namesTheName(error: unknown): boolean {
@@ -38,11 +45,6 @@ function namesTheName(error: unknown): boolean {
   return codeOf(error) === "course.name_taken" || field === "name";
 }
 
-/**
- * Every course of the venue: the active ones in firing order, then the disabled ones. Each change is
- * saved as it is made: a move, a rename, a removal, an Enable or a new course. Read-only, it lists
- * the active ones alone. Emits `course-added` with the new course's id.
- */
 @customElement("dashboard-course-list")
 export class CourseList extends LitElement {
   static override styles = [
@@ -90,15 +92,6 @@ export class CourseList extends LitElement {
       .open-name:hover {
         opacity: var(--wt-opacity-hover);
       }
-      .disabled-name {
-        display: flex;
-        flex-wrap: wrap;
-        column-gap: var(--wt-space-2);
-        min-height: var(--wt-tap-min);
-        padding: calc((var(--wt-tap-min) - 1lh) / 2) 0;
-        color: var(--wt-color-text-muted);
-        overflow-wrap: anywhere;
-      }
       .empty {
         margin: 0;
         color: var(--wt-color-text-muted);
@@ -117,7 +110,6 @@ export class CourseList extends LitElement {
   @property({ attribute: false }) readOnly = false;
   /** The active courses, in firing order: the only ones a move reorders. */
   @state() private courses: Course[] = [];
-  @state() private disabled: Course[] = [];
   @state() private edit: Edit | null = null;
   @state() private errorKey: string | null = null;
   /** A Delete waiting for its confirmation; a refused one stays open with its refusal. */
@@ -132,7 +124,12 @@ export class CourseList extends LitElement {
   /** A list read arrived while moves were out, so what it carried has not been shown yet. */
   #readDropped = false;
   #dragFrom: number | null = null;
-  #watching: "listCourses" | "listCoursesWithDisabled" | null = null;
+  #deleteGeneration = 0;
+  readonly #impactQueries = new DashboardQueries(
+    this,
+    () => this.api,
+    (error) => this.#impactFailed(error),
+  );
 
   readonly #queries = new DashboardQueries(
     this,
@@ -171,15 +168,6 @@ export class CourseList extends LitElement {
 
   override willUpdate(changed: PropertyValues<this>): void {
     if (changed.has("readOnly") && this.readOnly) this.#setDeleting(null);
-    if (changed.has("readOnly") && this.#watching !== null && this.#watching !== this.#read()) {
-      this.#queries.release(this.#watching);
-      void this.#load();
-    }
-  }
-
-  /** A read-only list shows the active courses alone, so it asks for nothing more. */
-  #read(): "listCourses" | "listCoursesWithDisabled" {
-    return this.readOnly ? "listCourses" : "listCoursesWithDisabled";
   }
 
   /** Settles once no change is left unanswered and no Delete confirmation waits for an answer,
@@ -188,7 +176,7 @@ export class CourseList extends LitElement {
     for (;;) {
       await this.#writes.idle;
       const open = this.deleting;
-      if (open === null || open.errorKey !== null) return;
+      if (open === null || open.actionError !== "" || open.readError !== "") return;
       await new Promise<void>((resolve) => this.#deletingWaiters.push(resolve));
     }
   }
@@ -202,10 +190,7 @@ export class CourseList extends LitElement {
     // A watch started after the host disconnected is never released.
     if (!this.isConnected) return;
     // A failed read is reported through the query controller's error callback.
-    this.#watching = this.#read();
-    await this.#queries
-      .watch(this.#watching, [], (rows) => this.#show(rows))
-      .catch(() => undefined);
+    await this.#queries.watch("listCourses", [], (rows) => this.#show(rows)).catch(() => undefined);
   }
 
   #showError(code: string | null, fromRead = false): void {
@@ -218,12 +203,10 @@ export class CourseList extends LitElement {
     if (this.errorKey === null || this.#readErrorShown) this.#showError(codeOf(error), true);
   }
 
-  /** A move answers with the active courses alone, so it leaves the disabled ones as they are. */
-  #show(rows: Course[], withDisabled = true): void {
+  #show(rows: Course[]): void {
     this.#readDropped = this.#movesOut > 0;
     if (this.#readDropped) return;
     this.courses = rows.filter((course) => course.active);
-    if (withDisabled) this.disabled = rows.filter((course) => !course.active);
     const edit = this.edit;
     if (edit !== null && edit.id !== NEW && !this.courses.some((course) => course.id === edit.id))
       this.#close(edit, false);
@@ -266,9 +249,8 @@ export class CourseList extends LitElement {
       () => this.api.moveCourse(id, to),
       async (courses, last) => {
         this.#movesOut -= 1;
-        // An earlier answer would pull rows back under a keyboard that has moved on, and a read
-        // dropped meanwhile carried disabled courses a move's answer does not.
-        if (last && !this.#readDropped) this.#show(courses, false);
+        // An earlier answer would pull rows back under a keyboard that has moved on.
+        if (last && !this.#readDropped) this.#show(courses);
         else if (this.#movesOut === 0 && this.#readDropped) await this.#load();
       },
       async (error) => {
@@ -374,111 +356,126 @@ export class CourseList extends LitElement {
     ></wt-input>`;
   }
 
-  // ── Removal and Enable ─────────────────────────────────────────────────────────────────────────
-
   #setDeleting(next: Deleting | null): void {
+    if (next === null) {
+      this.#deleteGeneration++;
+      this.#impactQueries.release("getCourseDeleteImpact");
+    }
     this.deleting = next;
-    const waiters = this.#deletingWaiters;
-    this.#deletingWaiters = [];
-    for (const wake of waiters) wake();
+    for (const wake of this.#deletingWaiters.splice(0)) wake();
   }
 
-  /** A Delete asks first. A Disable only ever disables, even if nothing names the course by now. */
-  #remove(course: Course): void {
-    if (!course.inUse) {
-      this.#setDeleting({ course, errorKey: null, busy: false });
+  #remove(course: Course, opener: HTMLElement): void {
+    if (this.readOnly) return;
+    this.#setDeleting(null);
+    this.#setDeleting({
+      course,
+      impact: null,
+      loading: true,
+      readError: "",
+      actionError: "",
+      busy: false,
+      opener,
+    });
+    this.#readImpact();
+  }
+
+  #readImpact(): void {
+    const target = this.deleting;
+    if (!target || target.busy) return;
+    const generation = this.#deleteGeneration;
+    this.#setDeleting({ ...target, loading: true, readError: "" });
+    void this.#impactQueries
+      .watch("getCourseDeleteImpact", [target.course.id], (impact) => {
+        if (generation !== this.#deleteGeneration || !this.deleting) return;
+        if (impact.target.id !== target.course.id) {
+          this.#impactFailed({ code: "connection.failed" });
+          return;
+        }
+        this.#setDeleting({ ...this.deleting, impact, loading: false, readError: "" });
+      })
+      .catch(() => undefined);
+  }
+
+  #impactFailed(error: unknown): void {
+    const target = this.deleting;
+    if (!target) return;
+    if (codeOf(error) === "course.not_found") {
+      if (!target.busy) this.#courseGone(target.course.id, true);
       return;
     }
-    this.#change(
-      () => this.api.removeCourse(course.id, { disable: true }),
-      this.#neighbour(course),
-    );
+    this.#setDeleting({ ...target, loading: false, readError: codeMessage(codeOf(error)) });
   }
 
-  /** The server disables rather than deletes a course something has come to name since the read. */
-  #confirmDelete(): void {
+  #courseGone(id: string, refused: boolean): void {
+    this.courses = this.courses.filter((course) => course.id !== id);
+    if (this.edit?.id === id) this.#close(this.edit, false);
+    if (this.deleting?.course.id === id) this.#setDeleting(null);
+    if (refused) this.#showError("course.not_found");
+  }
+
+  #confirmDelete(id: string, generation: number): void {
     const target = this.deleting;
-    if (target === null || target.busy || this.readOnly) return;
-    const sending = { ...target, errorKey: null, busy: true };
-    this.#setDeleting(sending);
-    this.#change(
-      () => this.api.removeCourse(target.course.id, { disable: false }),
-      this.#neighbour(target.course),
-      {
-        refused: (error) => {
-          if (this.deleting === sending)
-            this.#setDeleting({ ...target, errorKey: codeOf(error), busy: false });
-          else this.#showError(codeOf(error));
-        },
-        sent: () => {
-          if (this.deleting === sending) this.#setDeleting(null);
-        },
-      },
-    );
-  }
-
-  #neighbour(course: Course): string | undefined {
-    const rows = course.active ? this.courses : this.disabled;
-    const at = rows.indexOf(course);
-    return (rows[at + 1] ?? rows[at - 1])?.id;
-  }
-
-  #enable(course: Course): void {
-    this.#change(() => this.api.enableCourse(course.id), course.id);
-  }
-
-  /** Sends one row's change, then puts focus on the row `focusId` names if it is still listed. */
-  #change(
-    send: () => Promise<void>,
-    focusId: string | undefined,
-    report: { refused?: (error: unknown) => void; sent?: () => void } = {},
-  ): void {
+    if (
+      generation !== this.#deleteGeneration ||
+      !target ||
+      target.course.id !== id ||
+      target.busy ||
+      this.readOnly ||
+      target.loading ||
+      target.readError ||
+      !target.impact ||
+      target.impact.target.id !== id ||
+      target.impact.refusals.length
+    )
+      return;
     this.#showError(null);
+    this.#setDeleting({ ...target, busy: true, actionError: "" });
     this.#writes.run(SCOPE, async () => {
       try {
-        await send();
+        await this.api.deleteCourse(id);
       } catch (error) {
-        if (report.refused) report.refused(error);
-        else this.#showError(codeOf(error));
+        if (generation !== this.#deleteGeneration || !this.deleting) return;
+        if (codeOf(error) === "course.not_found") {
+          this.#courseGone(id, true);
+          await this.#load();
+        } else
+          this.#setDeleting({
+            ...this.deleting,
+            busy: false,
+            actionError: codeMessage(codeOf(error)),
+          });
         return;
       }
-      report.sent?.();
+      if (generation !== this.#deleteGeneration) return;
+      const at = this.courses.findIndex((row) => row.id === id);
+      const focusId = (this.courses[at + 1] ?? this.courses[at - 1])?.id ?? NEW;
+      this.#courseGone(id, false);
+      await this.#focusName(focusId);
       await this.#load();
-      if (this.courses.some((row) => row.id === focusId)) await this.#focusName(focusId!);
-      else if (this.disabled.some((row) => row.id === focusId))
-        await this.#focus(`tr[data-course="${focusId}"] wt-row-actions`);
-      else await this.#focusName(NEW);
+      if (!this.courses.some((row) => row.id === focusId)) await this.#focusName(NEW);
     });
   }
 
-  #action(course: Course, kind: "remove" | "enable", label: string): TemplateResult {
-    return html`<wt-button
-      align="start"
-      variant="ghost"
-      data-test=${`${kind}-${course.id}`}
-      @click=${(event: Event) => {
-        event.stopPropagation();
-        if (kind === "remove") this.#remove(course);
-        else this.#enable(course);
-      }}
-      >${label}</wt-button
-    >`;
-  }
-
   #actions(course: Course): TemplateResult {
-    // A row from the read-only read does not say whether it is in use, so it offers neither.
-    const remove =
-      course.inUse === undefined
-        ? nothing
-        : course.inUse
-          ? course.active
-            ? this.#action(course, "remove", t("action.disable"))
-            : nothing
-          : this.#action(course, "remove", t("action.delete"));
     return html`<td class="actions-cell">
-      <wt-row-actions align="end" label=${`${t("kitchen.course_actions")}: ${course.name}`}
-        >${course.active ? nothing : this.#action(course, "enable", t("action.enable"))}${remove}</wt-row-actions
-      >
+      <wt-row-actions align="end" label=${`${t("kitchen.course_actions")}: ${course.name}`}>
+        <wt-button
+          align="start"
+          variant="ghost"
+          data-test=${`remove-${course.id}`}
+          @click=${(event: Event) => {
+            event.stopPropagation();
+            const menu = (event.currentTarget as HTMLElement).closest("wt-row-actions");
+            this.#remove(
+              course,
+              menu?.shadowRoot?.querySelector<HTMLElement>("button") ??
+                (event.currentTarget as HTMLElement),
+            );
+          }}
+          >${t("action.delete")}</wt-button
+        >
+      </wt-row-actions>
     </td>`;
   }
 
@@ -507,53 +504,37 @@ export class CourseList extends LitElement {
     </tr>`;
   }
 
-  #disabledRow(course: Course): TemplateResult {
-    return html`<tr data-course=${course.id}>
-      <td class="handle-cell"></td>
-      <td>
-        <div class="disabled-name">
-          <span data-test=${`disabled-name-${course.id}`}>${course.name}</span>
-          <span data-test=${`status-${course.id}`}>${t("status.disabled")}</span>
-        </div>
-      </td>
-      ${this.#actions(course)}
-    </tr>`;
-  }
-
   #deleteDialog(): TemplateResult | typeof nothing {
     const target = this.deleting;
-    if (target === null) return nothing;
-    return html`<wt-modal
-      open
-      size="compact"
-      data-test="delete-course-modal"
-      heading=${t("kitchen.delete_course")}
-      .dismissible=${!target.busy}
-      @wt-close=${(event: Event) => {
-        // Kept from the window this list may sit in, which would close too.
-        event.stopPropagation();
-        this.#setDeleting(null);
-      }}
-    >
-      <p>${t("kitchen.delete_course_confirm").replace("{name}", target.course.name)}</p>
-      <wt-form-actions
-        slot="footer"
-        .error=${target.errorKey === null ? "" : codeMessage(target.errorKey)}
-        ><wt-button
-          slot="cancel"
-          variant="secondary"
-          ?disabled=${target.busy}
-          @click=${() => this.#setDeleting(null)}
-          >${t("action.cancel")}</wt-button
-        ><wt-button
-          data-test="confirm-delete-course"
-          variant="danger"
-          ?disabled=${target.busy}
-          @click=${() => this.#confirmDelete()}
-          >${t("action.delete")}</wt-button
-        ></wt-form-actions
-      >
-    </wt-modal>`;
+    if (!target) return nothing;
+    const generation = this.#deleteGeneration;
+    return html`${keyed(
+      generation,
+      html`<wt-delete-dialog
+        data-test="delete-course-dialog"
+        .open=${true}
+        .impact=${target.impact}
+        .loading=${target.loading}
+        .submitting=${target.busy}
+        .readError=${target.readError}
+        .actionError=${target.actionError}
+        .copy=${courseDeleteCopy()}
+        .opener=${target.opener}
+        @wt-delete-confirm=${(event: CustomEvent<{ id: string }>) => {
+          event.stopPropagation();
+          this.#confirmDelete(event.detail.id, generation);
+        }}
+        @wt-delete-retry=${(event: Event) => {
+          event.stopPropagation();
+          if (generation === this.#deleteGeneration) this.#readImpact();
+        }}
+        @wt-close=${(event: Event) => {
+          event.stopPropagation();
+          if (generation === this.#deleteGeneration && !this.deleting?.busy)
+            this.#setDeleting(null);
+        }}
+      ></wt-delete-dialog>`,
+    )}`;
   }
 
   #table(adding: Edit | null): TemplateResult {
@@ -580,10 +561,6 @@ export class CourseList extends LitElement {
             this.courses,
             (course) => course.id,
             (course) => this.#row(course),
-          )}${repeat(
-            this.disabled,
-            (course) => course.id,
-            (course) => this.#disabledRow(course),
           )}
         </tbody>
         ${
@@ -605,7 +582,7 @@ export class CourseList extends LitElement {
     const adding = this.edit?.id === NEW ? this.edit : null;
     return html`${this.readOnly ? nothing : this.#reorder.liveRegion()}
     ${
-      this.courses.length === 0 && this.disabled.length === 0 && adding === null
+      this.courses.length === 0 && adding === null
         ? html`<p class="empty" data-test="empty">${t("kitchen.no_courses")}</p>`
         : this.#table(adding)
     }

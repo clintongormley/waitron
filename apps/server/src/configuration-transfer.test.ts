@@ -1,3 +1,6 @@
+import { deleteCourse } from "./course-delete.js";
+import { deleteStation } from "./station-delete.js";
+import { createCourse, createStation, setProductCourse } from "./kitchen.js";
 import { locationId as brandLocationId } from "@waitron/shared";
 import {
   addMember,
@@ -10,6 +13,7 @@ import {
   addProductToMenu,
   createOptionList,
   createProduct,
+  updateProduct,
   createSectionIn,
   listExtraLists,
   listMenuOffers,
@@ -49,6 +53,7 @@ import {
   diningTables,
   floorZones,
   kitchenStations,
+  kitchenCourses,
   kitchenStationTiming,
   kitchenTimingDefaults,
   locations,
@@ -3756,11 +3761,6 @@ it("exports and imports all seven cell classes into another venue, remapping eve
       { row: noCategoryRow, zoneId: terraza.id },
       atStation(barra!.id),
     );
-    // A disabled station keeps its cells.
-    await tx
-      .update(kitchenStations)
-      .set({ active: false })
-      .where(eq(kitchenStations.id, plancha!.id));
     return [
       source.locationId,
       department.id,
@@ -5600,4 +5600,161 @@ describe("a deleted printer in a configuration transfer", () => {
     ).rejects.toMatchObject(refusal);
     expect(await counts()).toEqual(before);
   });
+});
+
+it("refuses an absent leaveBehindWhenFalse column before exporting", async () => {
+  const source = await applyVenue(planVenue(venue("B55558888"), ALL_MODULES), {
+    db: suite.db,
+    modules: ALL_MODULES,
+  });
+  expect(source.locationId).toBeDefined();
+  const module = {
+    name: "probe",
+    configurationTransfer: {
+      kind: "tables",
+      tables: [{ name: "device_profiles", leaveBehindWhenFalse: "missing_active" }],
+    },
+  } as unknown as WaitronModule;
+  await expect(exportConfigurationTables(suite.db, [module])).rejects.toMatchObject({
+    code: "setup.request_invalid",
+    params: { field: "device_profiles.missing_active" },
+  });
+});
+
+it("round-trips deleted kitchen configuration and preserves archived products and empty profile bounds", async () => {
+  const source = await applyVenue(planVenue(venue("B12348765"), ALL_MODULES), {
+    db: suite.db,
+    modules: ALL_MODULES,
+  });
+  const cfg: TillConfig = {
+    locationId: locationId(source.locationId),
+    nodeId: nodeId(source.nodeId),
+    seriesId: seriesId(randomUUID()),
+    locale: "es-ES",
+    invoiceLocales: ["es-ES"],
+    tipsEnabled: false,
+    simplifiedInvoiceLimit: null,
+  };
+  const ids = await withTransaction(suite.db, async (tx) => {
+    const course = await createCourse(tx, cfg, { name: "Retired dessert", displayOrder: 2 });
+    const station = await createStation(tx, cfg, { name: "Retired pastry" });
+    const catalogue = await createCatalogue(tx, { name: "Archive menu" });
+    const product = await createProduct(tx, {
+      catalogueId: catalogue.id,
+      name: "Archived flan",
+      categoryId: null,
+      pricingUnit: "each",
+      unitPrice: "5.00",
+      vatClass: "general",
+    });
+    await setProductCourse(tx, cfg, product.id, course.id);
+    await updateProduct(tx, product.id, { active: false });
+    const [profile] = await tx
+      .insert(deviceProfiles)
+      .values({ name: "Bound till", formFactor: "till" })
+      .returning();
+    await VENUE_SERVICE.setProfileKitchenScreens(tx, cfg, profile!.id, {
+      station: { stationIds: [station.id], zoneIds: null },
+    });
+    await setRoutingCell(
+      tx,
+      cfg,
+      { row: { kind: "product", productId: product.id }, zoneId: null },
+      { kind: "station", stationId: station.id },
+    );
+    await deleteCourse(tx, cfg, course.id);
+    await deleteStation(tx, cfg, station.id);
+    const live = await createCourse(tx, cfg, { name: "Live starters", displayOrder: 0 });
+    return {
+      course: course.id,
+      station: station.id,
+      product: product.id,
+      profile: profile!.id,
+      live: live.id,
+    };
+  });
+  const versions = await schemaVersionsByModule(suite.db, ALL_MODULES);
+  const transferred = await buildConfigurationBundle(
+    suite.db,
+    source,
+    ALL_MODULES,
+    new Date("2026-10-10T12:00:00Z"),
+    versions,
+  );
+  expect(
+    transferred.tables.kitchen_courses!.map(({ id, name, active }) => ({ id, name, active })),
+  ).toEqual([{ id: ids.live, name: "Live starters", active: 1 }]);
+  expect(transferred.tables.kitchen_stations!.some((row) => row.id === ids.station)).toBe(false);
+  const archived = transferred.tables.products!.find((row) => row.id === ids.product)!;
+  expect(archived).toBeDefined();
+  expect(archived.active).toBe(0);
+  expect(archived.course_id).toBeNull();
+  expect(transferred.tables.device_profile_kitchen_screen_stations).toEqual([]);
+  expect(
+    transferred.tables.device_profile_kitchen_screens!.filter(
+      (row) => row.device_profile_id === ids.profile,
+    ),
+  ).toEqual([
+    { device_profile_id: ids.profile, screen: "station", every_station: 0, every_zone: 0 },
+  ]);
+  for (const table of ["kitchen_courses", "kitchen_stations"]) {
+    const forged = {
+      ...transferred,
+      tables: {
+        ...transferred.tables,
+        [table]: transferred.tables[table]!.map((row) => ({ ...row, active: 0 })),
+      },
+    };
+    const refusal = { code: "setup.request_invalid", params: { field: `${table}.active` } };
+    expect(() => validateConfigurationBundle(forged, ALL_MODULES, versions)).toThrowError(
+      expect.objectContaining(refusal),
+    );
+    await expect(
+      applyVenue(planVenue(venue("B98765431"), ALL_MODULES), {
+        db: targetSuite.db,
+        modules: ALL_MODULES,
+        beforeCommit: (tx, result) =>
+          importConfigurationTables(tx, forged, result, ALL_MODULES, versions),
+      }),
+    ).rejects.toMatchObject(refusal);
+    const rows = await targetSuite.db.execute(sql`select count(*) as count from tenants`);
+    expect(rows.rows).toEqual([{ count: 0 }]);
+  }
+  const target = await applyVenue(planVenue(venue("B98765431"), ALL_MODULES), {
+    db: targetSuite.db,
+    modules: ALL_MODULES,
+    beforeCommit: (tx, result) =>
+      importConfigurationTables(tx, transferred, result, ALL_MODULES, versions),
+  });
+  const imported = await withTransaction(targetSuite.db, async (tx) => ({
+    courses: await tx.select().from(kitchenCourses),
+    stations: await tx.select({ name: kitchenStations.name }).from(kitchenStations),
+    products: await tx
+      .select({
+        id: products.id,
+        name: products.name,
+        active: products.active,
+        courseId: products.courseId,
+      })
+      .from(products)
+      .where(eq(products.name, "Archived flan")),
+    screens: (
+      await VENUE_SERVICE.readProfileKitchenScreens(tx, {
+        locationId: locationId(target.locationId),
+      })
+    ).filter((row) => row.screens.station !== undefined),
+  }));
+  expect(imported.courses.map(({ id, name, active }) => ({ id, name, active }))).toEqual([
+    { id: imported.courses[0]!.id, name: "Live starters", active: true },
+  ]);
+  expect(imported.courses[0]!.id).not.toBe(ids.live);
+  expect(imported.stations.some((row) => row.name === "Retired pastry")).toBe(false);
+  expect(imported.products).toEqual([
+    { id: imported.products[0]!.id, name: "Archived flan", active: false, courseId: null },
+  ]);
+  expect(imported.products[0]!.id).not.toBe(ids.product);
+  const [bound] = imported.screens;
+  expect(bound).toBeDefined();
+  expect(bound!.profileId).not.toBe(ids.profile);
+  expect(bound!.screens).toEqual({ station: { stationIds: [], zoneIds: null } });
 });

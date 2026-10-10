@@ -48,7 +48,7 @@ async function stationPrinter(
     { locationId },
     { name: `Printer ${randomUUID()}`, transport: "cloud_poll", pollId: randomUUID() },
   );
-  await attachPrinterToStation(tx, { stationId, printerId: id });
+  await attachPrinterToStation(tx, { locationId, stationId, printerId: id });
   return id;
 }
 

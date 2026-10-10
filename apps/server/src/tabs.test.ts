@@ -1,3 +1,4 @@
+import { deleteCourse } from "./course-delete.js";
 import { offerMenuThroughZone } from "@waitron/venue-service/testing/zone-menus.js";
 import { createZone } from "./testing/service-zone.js";
 import { setRoutingCell } from "@waitron/venue-service";
@@ -668,6 +669,7 @@ describe("readTabLines", () => {
       ]),
     );
 
+    await asApp(cfg, (tx) => deleteCourse(tx, cfg, postres.id));
     const lines = await asApp(cfg, (tx) => readTabLines(tx, cfg, tabId));
     const cafe = lines.find((l) => l.productId === cafeId)!;
     const agua = lines.find((l) => l.productId === aguaId)!;
@@ -675,6 +677,7 @@ describe("readTabLines", () => {
     expect(cafe.courseId).toBe(entrantes.id);
     expect(cafe.firedAt).not.toBeNull();
     expect(agua.courseId).toBe(postres.id);
+    expect(agua.course).toEqual({ id: postres.id, name: "Postres", displayOrder: 1 });
     expect(agua.firedAt).toBeNull();
     // Held versus fired is `firedAt`: a held line has a ticket item too, still "queued".
     expect(cafe.state).toBe("queued");

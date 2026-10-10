@@ -203,12 +203,7 @@ function comparableScreens(
   return out;
 }
 
-/**
- * A copy of the screens with only switched-on stations and zones. A kind whose explicit list would
- * be left empty is not copied where no row offers less (a kitchen display's kinds, a pass monitor);
- * on a till or handheld a station or pass screen with no row bounds nothing, so that kind is kept
- * with its emptied list, which the server refuses rather than the copy offering every station.
- */
+/** Empty explicit station bounds survive copying so the copy cannot widen them to Every. */
 function switchedOnScreens(
   screens: ProfileKitchenScreens,
   sharedDisplay: boolean,
@@ -222,7 +217,7 @@ function switchedOnScreens(
     const stationIds = scope.stationIds === null ? null : scope.stationIds.filter(stationOn);
     const zoneIds = scope.zoneIds === null ? null : scope.zoneIds.filter(zoneOn);
     const noRowBoundsNothing = !sharedDisplay && kind !== "pass_monitor";
-    if ((stationIds?.length === 0 || zoneIds?.length === 0) && !noRowBoundsNothing) continue;
+    if (stationIds?.length !== 0 && zoneIds?.length === 0 && !noRowBoundsNothing) continue;
     out[kind] = { stationIds, zoneIds };
   }
   return out;
@@ -1340,7 +1335,14 @@ export class DeviceProfilesScreen extends LitElement {
       )
     )
       return undefined;
-    return { kitchenScreens: structuredClone(this.draftKitchenScreens) };
+    const screens = structuredClone(this.draftKitchenScreens);
+    for (const scope of Object.values(screens)) {
+      if (scope.stationIds !== null)
+        scope.stationIds = scope.stationIds.filter((id) =>
+          this.stations.some((station) => station.active && station.id === id),
+        );
+    }
+    return { kitchenScreens: screens };
   }
 
   #extrasToSend(formFactor: FormFactor): ProfileSaveExtras | undefined {
@@ -1542,12 +1544,6 @@ export class DeviceProfilesScreen extends LitElement {
 
   // ── Duplicate ────────────────────────────────────────────────────────────────────────────────────
 
-  /**
-   * A copy keeps where the profile serves and who signs in on it, less the zones switched off since.
-   * With its department off, or none of its zones left, the copy carries no department, and the
-   * server refuses it. The copy's kitchen screens hold only the stations and zones still switched on,
-   * and the server refuses it too when that would let it offer more than the profile does.
-   */
   #duplicate(profile: DeviceProfile): void {
     const name = `${profile.name}${t("device_profiles.copy_suffix")}`;
     let readersFailed: { error: unknown } | null = null;
@@ -1954,6 +1950,13 @@ export class DeviceProfilesScreen extends LitElement {
             .checked=${listed === null}
             @wt-change=${every.handler}
           ></wt-switch>`,
+          ...(key === "stationIds" && listed?.length === 0
+            ? [
+                html`<p class="hint" data-test="empty-station-selection">
+                  ${t("devices.empty_station_selection")}
+                </p>`,
+              ]
+            : []),
           ...(listed === null
             ? []
             : this.#listChoices(all, listed, mark).map(
@@ -1979,7 +1982,7 @@ export class DeviceProfilesScreen extends LitElement {
           label: t("device_profiles.every_station"),
           handler: (e) => this.#onScreenEveryStation(e, kind),
         },
-        this.stations,
+        this.stations.filter((station) => station.active),
         t("devices.station_disabled_mark"),
         "station",
         t("device_profiles.kitchen_stations"),
