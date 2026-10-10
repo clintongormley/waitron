@@ -1386,6 +1386,17 @@ _Formerly entries spread across the old sections, A261's venue-operations steps 
 
 _Formerly the kitchen entries in the opening part of the old Track A (before A1), and kitchen entries elsewhere; part of A9._ Detail: [backlog/kitchen.md](backlog/kitchen.md).
 
+- **A routing period line naming another location's period is flagged but never drawn** (left open
+  by A455, #1492): the server marks it `notOffered`, but the grid (`routing-grid-model.ts`) and the
+  cell editor (`routing-cell-editor.ts`) drop a line whose period is not in the model's periods, so
+  an unrelated save of that cell removes it silently. Reachable only by a hand-made database insert.
+  Fix: show the line and make removing it an explicit choice.
+
+- **The Prep stations station table still accepts no printers or screens** (left open by A455,
+  #1492): nothing draws it without them now that supervisors are not offered the page, and its
+  accessibility test still checks a "supervisor" state no page can draw. Require both inputs and
+  drop that state.
+
 - KDS-4 follow-ups: device-mode reprint behind `requireDevice`; the mirrored station-side read (a
   `DashboardApi.listStationPrinters` and a UI line); the reprint timestamp.
 
