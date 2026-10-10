@@ -1238,19 +1238,192 @@ it("drops the room for a turned corner table once it is turned back, moved or re
   expect(viewportOf(el).scrollHeight).toBe(viewportOf(el).clientHeight);
 });
 
-it("a turned table dragged off the corner stays under the pointer, and its room goes on release", async () => {
-  const el = await canvas([table("t1", "T1", { y: 10, rotation: 45 })]);
+/**
+ * Applies each move and turn, as the floor plan editor does: in its own next update, so the canvas
+ * draws once with the drag ended and the old tables first.
+ */
+function applyChanges(el: WtFloorPlanCanvas): void {
+  const change = (key: string, over: Partial<PlanPlacement>) => {
+    queueMicrotask(() => {
+      el.tables = el.tables.map((t) =>
+        t.key === key ? { ...t, placement: { ...t.placement, ...over } } : t,
+      );
+    });
+  };
+  el.addEventListener("wt-table-move", (e) => {
+    const { key, x, y } = (e as CustomEvent<TableMove>).detail;
+    change(key, { x, y });
+  });
+  el.addEventListener("wt-table-rotate", (e) => {
+    const { key, rotation } = (e as CustomEvent<TableRotate>).detail;
+    change(key, { rotation });
+  });
+}
+
+/** Where each table is on screen, from the viewport's corner. */
+function onScreen(el: WtFloorPlanCanvas): Record<string, { left: number; top: number }> {
+  const view = viewportOf(el).getBoundingClientRect();
+  const seen: Record<string, { left: number; top: number }> = {};
+  for (const t of el.tables) {
+    const box = button(el, t.key).getBoundingClientRect();
+    seen[t.key] = { left: box.left - view.left, top: box.top - view.top };
+  }
+  return seen;
+}
+
+/** Drags `key` by (dx, dy) px, then releases it, and returns where the tables were on screen
+ *  just before the release and once the canvas has settled after it. */
+async function dropAndCompare(el: WtFloorPlanCanvas, key: string, dx: number, dy: number) {
+  const at = dragBy(el, key, dx, dy);
   await settled(el);
-  const before = button(el, "t1").getBoundingClientRect();
-  const at = dragBy(el, "t1", 60, 0);
-  await el.updateComplete;
-  const during = button(el, "t1").getBoundingClientRect();
-  expect(during.left).toBeCloseTo(before.left + 60, 1);
+  const during = onScreen(el);
   await release(el, at);
-  el.tables = [table("t1", "T1", { x: 5, y: 10, rotation: 45 })];
   await settled(el);
-  expect(offset(el, "t1").left).toBeCloseTo(60 + 48 - 48 * Math.SQRT2, 1);
-  expect(viewportOf(el).scrollWidth).toBe(viewportOf(el).clientWidth);
+  await settled(el);
+  return { during, after: onScreen(el) };
+}
+
+it.each([
+  ["a plan that fits", [] as PlanCanvasTable[]],
+  ["a plan wider and taller than the box", [table("far", "Far", { x: 100, y: 60 })]],
+])(
+  "in %s, a turned corner table dragged away is let go where it is drawn, and nothing else moves",
+  async (_, more) => {
+    const el = await canvas([
+      table("t1", "T1", { rotation: 45 }),
+      table("t2", "T2", { x: 20 }),
+      ...more,
+    ]);
+    applyChanges(el);
+    await settled(el);
+    const seen = moves(el);
+    const { during, after } = await dropAndCompare(el, "t1", 60, 60);
+    expect(seen).toEqual([{ key: "t1", x: 5, y: 5 }]);
+    expect(after).toEqual(during);
+  },
+);
+
+it("a turned table dropped at the corner is let go where it is drawn; its scroll room goes at the next change", async () => {
+  const el = await canvas([
+    table("t1", "T1", { x: 10, y: 10, rotation: 45 }),
+    table("t2", "T2", { x: 30 }),
+  ]);
+  applyChanges(el);
+  await settled(el);
+  const { during, after } = await dropAndCompare(el, "t1", -120, -120);
+  expect(el.tables[0]!.placement).toMatchObject({ x: 0, y: 0 });
+  expect(after).toEqual(during);
+  // The kept room cannot go without moving what was under the pointer, so it waits.
+  expect(viewportOf(el).scrollLeft).toBe(24);
+  button(el, "t2").focus();
+  await userEvent.keyboard("{ArrowDown}");
+  await settled(el);
+  const viewport = viewportOf(el);
+  expect(viewport.scrollWidth).toBe(viewport.clientWidth);
+  expect(viewport.scrollHeight).toBe(viewport.clientHeight);
+  const box = button(el, "t1").getBoundingClientRect();
+  expect(box.left).toBeGreaterThanOrEqual(viewport.getBoundingClientRect().left);
+  expect(box.top).toBeGreaterThanOrEqual(viewport.getBoundingClientRect().top);
+});
+
+it("an unturned table is let go where it is drawn", async () => {
+  const el = await canvas([table("t1", "T1", { x: 5, y: 5 }), table("t2", "T2", { x: 30 })]);
+  applyChanges(el);
+  await settled(el);
+  const { during, after } = await dropAndCompare(el, "t1", 60, 24);
+  expect(el.tables[0]!.placement).toMatchObject({ x: 10, y: 7 });
+  expect(after).toEqual(during);
+});
+
+it("a corner table turned straight by its handle is let go where it is drawn", async () => {
+  const el = await canvas([table("t1", "T1", { rotation: 45 }), table("t2", "T2", { x: 20 })], {
+    selected: "t1",
+  });
+  applyChanges(el);
+  await settled(el);
+  const box = button(el, "t1").getBoundingClientRect();
+  const cx = box.left + box.width / 2;
+  const cy = box.top + box.height / 2;
+  const at = { x: cx + 80, y: cy - 80 };
+  pointer(handles(el)[0]!, "pointerdown", 1, cx + 80, cy);
+  pointer(window, "pointermove", 1, at.x, at.y);
+  await settled(el);
+  const during = onScreen(el);
+  await release(el, at);
+  await settled(el);
+  await settled(el);
+  expect(el.tables[0]!.placement.rotation).toBe(0);
+  expect(onScreen(el)).toEqual(during);
+});
+
+it("follows a box made smaller after a drop", async () => {
+  const el = await canvas([table("t1", "T1", { x: 5, y: 5 })]);
+  applyChanges(el);
+  await settled(el);
+  await dropAndCompare(el, "t1", 60, 0);
+  el.style.width = "400px";
+  el.style.height = "300px";
+  await settled(el);
+  await settled(el);
+  const viewport = viewportOf(el);
+  expect(viewport.scrollWidth).toBe(viewport.clientWidth);
+  expect(viewport.scrollHeight).toBe(viewport.clientHeight);
+});
+
+it("a turned table dragged to the top keeps a steady height in a box that takes its height from the plan", async () => {
+  const errors: string[] = [];
+  const onError = (e: ErrorEvent) => errors.push(e.message);
+  window.addEventListener("error", onError);
+  onTestFinished(() => window.removeEventListener("error", onError));
+  const el = (await mount(
+    '<wt-floor-plan-canvas style="width: 600px"></wt-floor-plan-canvas>',
+  )) as WtFloorPlanCanvas;
+  el.tables = [table("t1", "T1", { x: 20, y: 10, rotation: 45 })];
+  applyChanges(el);
+  await settled(el);
+  await settled(el);
+  const start = part(el, "grid").getBoundingClientRect().height;
+  const box = button(el, "t1").getBoundingClientRect();
+  const x = box.left + box.width / 2;
+  const y = box.top + box.height / 2;
+  pointer(button(el, "t1"), "pointerdown", 1, x, y);
+  const heights: number[] = [];
+  const below: number[] = [];
+  for (let frame = 1; frame <= 10; frame++) {
+    pointer(window, "pointermove", 1, x, y - frame * 12);
+    await settled(el);
+    heights.push(part(el, "grid").getBoundingClientRect().height);
+    const now = button(el, "t1").getBoundingClientRect();
+    // "+ 0" turns a rounded -0 into 0.
+    below.push(Math.round(now.top + now.height / 2 - (y - frame * 12)) + 0);
+  }
+  await release(el, { x, y: y - 120 });
+  for (let frame = 0; frame < 4; frame++) {
+    await settled(el);
+    heights.push(part(el, "grid").getBoundingClientRect().height);
+  }
+  expect(el.tables[0]!.placement).toMatchObject({ x: 20, y: 0 });
+  // Only the two squares of room the turned table's corner needs above it are added.
+  expect(heights.at(-1)).toBe(start + 24);
+  expect(Math.max(...heights)).toBe(start + 24);
+  // With no height of its own the box cannot scroll that room away, so the table drops below the
+  // pointer by the square each corner square of room takes.
+  expect(below).toEqual([0, 0, 0, 0, 0, 0, 0, 0, 12, 24]);
+  expect(errors).toEqual([]);
+});
+
+it("the first tables drawn after an empty plan show a turned corner table unscrolled", async () => {
+  const el = await canvas([]);
+  await settled(el);
+  el.tables = [table("t1", "T1", { rotation: 45 }), table("far", "Far", { x: 100, y: 60 })];
+  await settled(el);
+  const viewport = viewportOf(el);
+  expect(viewport.scrollLeft).toBe(0);
+  expect(viewport.scrollTop).toBe(0);
+  const view = viewport.getBoundingClientRect();
+  const box = button(el, "t1").getBoundingClientRect();
+  expect(box.left).toBeGreaterThanOrEqual(view.left);
+  expect(box.top).toBeGreaterThanOrEqual(view.top);
 });
 
 it("names the rotate handle with a table name holding replacement patterns", async () => {

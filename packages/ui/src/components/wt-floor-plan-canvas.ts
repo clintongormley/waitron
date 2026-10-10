@@ -236,15 +236,21 @@ export class WtFloorPlanCanvas extends LitElement {
 
   #room: number | null = null;
 
-  /**
-   * Squares drawn left of and above the plan's (0, 0), so a turned table's corners past it can be
-   * scrolled to. During a drag it only grows, and the grid grows with it so the growth can be
-   * scrolled away: a shrink at scroll 0 cannot be, so tables would jump under the pointer.
-   */
+  /** Squares drawn left of and above the plan's (0, 0), so a turned table's corners past it can be
+   *  scrolled to. */
   #origin = { x: 0, y: 0 };
 
-  /** `#origin` when the drag began. */
-  #dragOrigin = { x: 0, y: 0 };
+  /** Squares the grid is drawn, before `bottomInset`. */
+  #size = { columns: 0, rows: 0 };
+
+  /**
+   * After a drag, the plan's layout before its drop and with it, and the box's size. Until the
+   * tables show another layout or the box is resized, the room and the grid only grow, as during
+   * the drag: less room at scroll 0, or a grid too short for its scroll, cannot be scrolled away,
+   * so what was under the pointer would jump when it let go.
+   */
+  #hold: { before: string; after: string; visible: { columns: number; rows: number } } | null =
+    null;
 
   /** Squares `#origin` changed by in this update, scrolled away in `updated` so nothing drawn moves
    *  where the scroll allows. */
@@ -284,13 +290,23 @@ export class WtFloorPlanCanvas extends LitElement {
   }
 
   override willUpdate(): void {
-    const box = bounds(this.tables.map((t) => this.#placementOf(t)));
+    const placements = this.tables.map((t) => this.#placementOf(t));
+    const box = bounds(placements);
+    const plan = gridExtent(placements, { columns: 0, rows: 0 });
     // Tolerates float error in a corner computed to land exactly on the edge.
     let x = box === null ? 0 : Math.max(0, Math.ceil(-box.x - 1e-9));
     let y = box === null ? 0 : Math.max(0, Math.ceil(-box.y - 1e-9));
-    if (this.#drag !== null) {
+    let columns: number;
+    let rows: number;
+    if (this.#holds()) {
+      // Only grows, and the grid by as much again, so `updated` can scroll the growth away.
       x = Math.max(this.#origin.x, x);
       y = Math.max(this.#origin.y, y);
+      columns = Math.max(this.#size.columns + x - this.#origin.x, x + plan.columns);
+      rows = Math.max(this.#size.rows + y - this.#origin.y, y + plan.rows);
+    } else {
+      columns = Math.max(this.visible.columns, x + plan.columns);
+      rows = Math.max(this.visible.rows, y + plan.rows);
     }
     // The first tables drawn take their room unscrolled, so their corners show from the start.
     if (this.#drewTables) {
@@ -298,22 +314,33 @@ export class WtFloorPlanCanvas extends LitElement {
     }
     this.#drewTables ||= box !== null;
     this.#origin = { x, y };
+    this.#size = { columns, rows };
+  }
+
+  #holds(): boolean {
+    if (this.#drag !== null) return true;
+    if (this.#hold === null) return false;
+    const { before, after, visible } = this.#hold;
+    const now = this.#layout(null);
+    const resized = visible.columns !== this.visible.columns || visible.rows !== this.visible.rows;
+    if (resized || (now !== before && now !== after)) this.#hold = null;
+    return this.#hold !== null;
+  }
+
+  #layout(drop: Draft | null): string {
+    return this.tables
+      .map((t) => {
+        const p = drop?.key === t.key ? drop.placement : t.placement;
+        return `${t.key} ${p.x} ${p.y} ${p.width} ${p.height} ${p.rotation} ${p.shape}`;
+      })
+      .join("\n");
   }
 
   override render(): TemplateResult {
     const copy = this.#copy;
-    const origin = this.#origin;
-    const plan = gridExtent(
-      this.tables.map((t) => this.#placementOf(t)),
-      { columns: 0, rows: 0 },
-    );
-    // Room grown during a drag is added on top, so it can be scrolled away under the pointer.
-    const grown = this.#drag === null ? { x: 0, y: 0 } : this.#dragGrowth();
-    const columns = Math.max(this.visible.columns + grown.x, origin.x + plan.columns);
-    const rows = Math.max(this.visible.rows + grown.y, origin.y + plan.rows);
     const gridStyle = styleMap({
-      width: px(columns),
-      height: `${rows * GRID_SQUARE_PX + this.bottomInset}px`,
+      width: px(this.#size.columns),
+      height: `${this.#size.rows * GRID_SQUARE_PX + this.bottomInset}px`,
       backgroundSize: `${px(1)} ${px(1)}`,
     });
     return html`
@@ -415,10 +442,6 @@ export class WtFloorPlanCanvas extends LitElement {
     `;
   }
 
-  #dragGrowth(): { x: number; y: number } {
-    return { x: this.#origin.x - this.#dragOrigin.x, y: this.#origin.y - this.#dragOrigin.y };
-  }
-
   /** `p`'s turned box in squares from the drawn grid's corner. */
   #drawnBox(p: PlanPlacement): PlanRect {
     const box = rotatedRect(p);
@@ -518,7 +541,6 @@ export class WtFloorPlanCanvas extends LitElement {
     const p = t.placement;
     const centreX = grid.left + (this.#origin.x + p.x + p.width / 2) * GRID_SQUARE_PX;
     const centreY = grid.top + (this.#origin.y + p.y + p.height / 2) * GRID_SQUARE_PX;
-    this.#dragOrigin = this.#origin;
     this.#drag = {
       kind,
       table: t,
@@ -558,30 +580,29 @@ export class WtFloorPlanCanvas extends LitElement {
   readonly #onPointerUp = (e: PointerEvent): void => {
     const drag = this.#drag!;
     if (e.pointerId !== drag.pointerId) return;
-    const draft = this.draft;
-    this.#endDrag();
+    const from = drag.table.placement;
+    const to = this.draft?.placement ?? from;
+    const turned = drag.kind === "rotate" && to.rotation !== from.rotation;
+    const moved = drag.kind === "move" && (to.x !== from.x || to.y !== from.y);
+    const drop = turned || moved ? this.draft : null;
+    this.#endDrag(drop);
     // A release away from where the press began sends its click to the grid, which would clear
     // the selection. That click comes in the same task as this pointerup. A tap's click goes to
     // the pressed button instead, which stops it.
     this.#ignoreGridClick = true;
     setTimeout(() => (this.#ignoreGridClick = false));
-    if (draft === null) return;
-    const from = drag.table.placement;
-    const to = draft.placement;
-    if (drag.kind === "rotate") {
-      if (to.rotation === from.rotation) return;
-      this.#rotate(draft.key, to.rotation);
-    } else {
-      if (to.x === from.x && to.y === from.y) return;
-      this.#move(draft.key, to.x, to.y);
-    }
+    if (turned) this.#rotate(drag.table.key, to.rotation);
+    if (moved) this.#move(drag.table.key, to.x, to.y);
   };
 
   readonly #onPointerCancel = (e: PointerEvent): void => {
     if (e.pointerId === this.#drag!.pointerId) this.#endDrag();
   };
 
-  #endDrag(): void {
+  #endDrag(drop: Draft | null = null): void {
+    if (this.#drag !== null) {
+      this.#hold = { before: this.#layout(null), after: this.#layout(drop), visible: this.visible };
+    }
     this.#drag = null;
     this.draft = null;
     window.removeEventListener("pointermove", this.#onPointerMove);
