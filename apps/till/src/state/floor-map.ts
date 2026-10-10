@@ -134,32 +134,51 @@ function lookOf(from: Sources): Look {
   return { fill: from.status.fill, dot: from.status.dot, description: wordsOf(from) };
 }
 
-/** Every member of a merge carries the same fill, dot and description, as `wt-floor-map` requires. */
+const groupKey = (table: TableState): string =>
+  table.today?.joinId == null ? `table:${table.id}` : `join:${table.today.joinId}`;
+
+/**
+ * Every member of a merge, and every table of a party drawn as two or more groups, carries the same
+ * fill, dot and description, as `wt-floor-map` requires; the party's tables also carry its id as
+ * `linkId`.
+ */
 export function mapTables(zoneTables: readonly TableState[]): FloorMapTable[] {
-  const merges = new Map<string, TableState[]>();
-  for (const table of zoneTables) {
-    const joinId = table.today?.joinId;
-    if (joinId == null) continue;
-    const members = merges.get(joinId);
+  const drawn = zoneTables.filter(
+    (table) => table.today !== null && table.today.placement !== null && !table.today.takenOff,
+  );
+  const groupsOfParty = new Map<string, Set<string>>();
+  for (const table of drawn) {
+    if (table.party === null) continue;
+    const groups = groupsOfParty.get(table.party.id);
+    if (groups) groups.add(groupKey(table));
+    else groupsOfParty.set(table.party.id, new Set([groupKey(table)]));
+  }
+  const linkOf = (table: TableState): string | null =>
+    table.party !== null && groupsOfParty.get(table.party.id)!.size > 1 ? table.party.id : null;
+  const lookKey = (table: TableState): string => {
+    const linkId = linkOf(table);
+    return linkId === null ? groupKey(table) : `link:${linkId}`;
+  };
+  const together = new Map<string, TableState[]>();
+  for (const table of drawn) {
+    const members = together.get(lookKey(table));
     if (members) members.push(table);
-    else merges.set(joinId, [table]);
+    else together.set(lookKey(table), [table]);
   }
   const looks = new Map<string, Look>();
-  for (const [joinId, members] of merges) looks.set(joinId, lookOf(sources(members)));
-  const mapped: FloorMapTable[] = [];
-  for (const table of zoneTables) {
-    const today = table.today;
-    if (today === null || today.placement === null || today.takenOff) continue;
-    const look = today.joinId === null ? lookOf(sources(table)) : looks.get(today.joinId)!;
-    mapped.push({
+  for (const [key, members] of together) looks.set(key, lookOf(sources(members)));
+  return drawn.map((table) => {
+    const today = table.today!;
+    return {
       id: table.id,
       label: table.label,
-      placement: today.placement,
-      ...look,
+      placement: today.placement!,
+      ...looks.get(lookKey(table))!,
       joinId: today.joinId,
-    });
-  }
-  return mapped;
+      fixed: today.fixed,
+      linkId: linkOf(table),
+    };
+  });
 }
 
 const mustStayReachable = (table: TableState): boolean =>

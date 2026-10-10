@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { currentLocale, setLocale } from "../i18n/t.js";
-import type { TableState, TableToday } from "../api/client.js";
+import type { TableParty, TableState, TableToday } from "../api/client.js";
 import {
   combinedStatus,
   isPlannedZone,
@@ -193,6 +193,8 @@ describe("zones and their tables", () => {
         fill: "free",
         dot: null,
         joinId: null,
+        fixed: false,
+        linkId: null,
         description: "Free",
       },
     ]);
@@ -208,7 +210,14 @@ describe("zones and their tables", () => {
     });
     const t5 = table({ id: "t5", label: "5", today: today({ joinId: "j1" }) });
     const t6 = table({ id: "t6", label: "6", ...seated, today: today() });
-    const shared = { fill: "seated", dot: "ready", joinId: "j1", description: "Seated, 2 ready" };
+    const shared = {
+      fill: "seated",
+      dot: "ready",
+      joinId: "j1",
+      fixed: false,
+      linkId: null,
+      description: "Seated, 2 ready",
+    };
     expect(mapTables([t5, t4, t6])).toEqual([
       { id: "t5", label: "5", placement, ...shared },
       { id: "t4", label: "4", placement, ...shared },
@@ -219,9 +228,55 @@ describe("zones and their tables", () => {
         fill: "seated",
         dot: null,
         joinId: null,
+        fixed: false,
+        linkId: null,
         description: "Seated",
       },
     ]);
+  });
+
+  it("links a party's tables on the map and gives them one status", () => {
+    const p = { id: "P" } as TableParty;
+    const t1 = table({
+      id: "t1",
+      label: "1",
+      ...seated,
+      party: p,
+      readyToServe: 2,
+      today: today(),
+    });
+    const t2 = table({ id: "t2", label: "2", ...seated, party: p, today: today() });
+    const t3 = table({ id: "t3", label: "3", ...seated, party: p, today: today({ joinId: "j" }) });
+    const t4 = table({ id: "t4", label: "4", ...seated, party: p, today: today({ joinId: "j" }) });
+    const off = table({
+      id: "t5",
+      label: "5",
+      ...seated,
+      party: p,
+      today: today({ takenOff: true }),
+    });
+    const linked = mapTables([t1, t2, t3, t4, off]);
+    expect(linked.map((row) => [row.id, row.linkId, row.fill, row.dot, row.description])).toEqual([
+      ["t1", "P", "seated", "ready", "Seated, 2 ready"],
+      ["t2", "P", "seated", "ready", "Seated, 2 ready"],
+      ["t3", "P", "seated", "ready", "Seated, 2 ready"],
+      ["t4", "P", "seated", "ready", "Seated, 2 ready"],
+    ]);
+
+    const q = { id: "Q" } as TableParty;
+    const alone = table({ id: "t6", label: "6", ...seated, party: q, today: today() });
+    const merged = [t3, t4].map((each) => ({ ...each, party: q }));
+    expect(mapTables([alone, t2]).map((row) => row.linkId)).toEqual([null, null]);
+    expect(mapTables(merged).map((row) => [row.linkId, row.description])).toEqual([
+      [null, "Seated"],
+      [null, "Seated"],
+    ]);
+    expect(mapTables([...merged, alone]).map((row) => row.linkId)).toEqual(["Q", "Q", "Q"]);
+  });
+
+  it("marks a fixed table fixed", () => {
+    const fixed = table({ id: "t1", today: today({ fixed: true }) });
+    expect(mapTables([fixed])[0]!.fixed).toBe(true);
   });
 
   it("lists what is on today's plan and what must stay reachable", () => {
