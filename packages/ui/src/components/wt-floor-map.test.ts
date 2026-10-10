@@ -233,6 +233,20 @@ it("draws a dot above a touching table listed after it", async () => {
   expect(hit).toBe(dot);
 });
 
+it("keeps the dot under a later sibling that covers the map", async () => {
+  const outer = await mount(
+    '<div style="position: relative"><wt-floor-map style="width: 600px; height: 300px"></wt-floor-map><div style="position: absolute; inset: 0"></div></div>',
+  );
+  const el = outer.firstElementChild as WtFloorMap;
+  const cover = outer.lastElementChild!;
+  el.tables = [t("r", "R", {}, { dot: "ready" })];
+  await settled(el);
+  const dot = within(el, "dot", "r")!;
+  dot.style.pointerEvents = "auto";
+  const box = dot.getBoundingClientRect();
+  expect(document.elementFromPoint(box.left + box.width / 2, box.top + box.height / 2)).toBe(cover);
+});
+
 it("flashes the dot unless motion is reduced", async () => {
   const el = await map([t("r", "R", {}, { dot: "ready" })], { reducedMotion: false });
   expect(getComputedStyle(within(el, "dot", "r")!).animationName).not.toBe("none");

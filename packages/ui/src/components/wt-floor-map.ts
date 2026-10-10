@@ -4,6 +4,7 @@ import { repeat } from "lit/directives/repeat.js";
 import { styleMap } from "lit/directives/style-map.js";
 import { partyTablesName } from "@waitron/shared";
 import { baseStyles } from "../base-styles.js";
+import { DOUBLE_TAP_MS, type GesturePoint, Gestures } from "../gestures.js";
 import { type FloorMapDot, type FloorMapFill, floorMapFillStyles } from "../floor-map-fills.js";
 import {
   type PlanPlacement,
@@ -80,6 +81,12 @@ function groupsOf(tables: readonly FloorMapTable[]): Group[] {
 
 const px = (value: number): string => `${value}px`;
 
+const tableOf = (target: EventTarget | null): HTMLElement | null =>
+  (target as Element).closest<HTMLElement>("[part=table]");
+
+const idOf = (target: EventTarget | null): string | null =>
+  tableOf(target)?.dataset["tableId"] ?? null;
+
 /**
  * Draws the placed tables fitted to its box. A merge (tables sharing a `joinId`) is one button,
  * named by `mapLabel`, whose id is its first member's in label order.
@@ -93,6 +100,7 @@ export class WtFloorMap extends LitElement {
       :host {
         display: block;
         position: relative;
+        isolation: isolate;
         overflow: clip;
         touch-action: none;
         user-select: none;
@@ -119,6 +127,11 @@ export class WtFloorMap extends LitElement {
         border: 1px solid var(--wt-color-field-line);
         border-radius: var(--wt-radius-sm);
         pointer-events: auto;
+      }
+
+      [part="table"][data-held] [part="shape"] {
+        border-color: var(--wt-color-primary);
+        box-shadow: inset 0 0 0 1px var(--wt-color-primary);
       }
 
       [part="shape"][data-shape="round"] {
@@ -196,14 +209,136 @@ export class WtFloorMap extends LitElement {
     this.requestUpdate();
   });
 
+  #gestures: Gestures | null = null;
+
+  /** A mouse click on a table, held back DOUBLE_TAP_MS in case a second click makes it a double. */
+  #pendingTap: { tableId: string; timer: ReturnType<typeof setTimeout> } | null = null;
+
+  #lastTapId: string | null = null;
+
+  #held: HTMLElement | null = null;
+
+  /** Set by a Shift+F10 keydown, in case the platform follows it with a contextmenu. */
+  #swallowContextMenu = false;
+
+  constructor() {
+    super();
+    this.addEventListener("click", this.#onClick);
+    this.addEventListener("contextmenu", this.#onContextMenu);
+    this.addEventListener("keydown", this.#onKeyDown);
+    this.addEventListener("pointerdown", this.#onPointerDown);
+  }
+
   override connectedCallback(): void {
     super.connectedCallback();
     this.#observer.observe(this);
+    this.#gestures = new Gestures(this, {
+      tap: this.#onTap,
+      doubleTap: this.#onDoubleTap,
+      holdStart: (at) => {
+        this.#held = tableOf(at.target);
+        this.#held?.setAttribute("data-held", "");
+      },
+      longPress: (at) => {
+        this.#clearHeld();
+        const id = idOf(at.target);
+        if (id !== null) this.#send("wt-table-details", id);
+      },
+      cancel: () => this.#clearHeld(),
+    });
   }
 
   override disconnectedCallback(): void {
     super.disconnectedCallback();
     this.#observer.disconnect();
+    this.#gestures!.disconnect();
+    this.#gestures = null;
+    this.#dropPendingTap();
+    this.#clearHeld();
+  }
+
+  readonly #onTap = (at: GesturePoint): void => {
+    this.#flushPendingTap();
+    const id = idOf(at.target);
+    this.#lastTapId = id;
+    if (id === null) return;
+    if (at.pointerType !== "mouse") {
+      this.#send("wt-table-tap", id);
+      return;
+    }
+    this.#pendingTap = { tableId: id, timer: setTimeout(this.#flushPendingTap, DOUBLE_TAP_MS) };
+  };
+
+  readonly #onDoubleTap = (at: GesturePoint): void => {
+    const id = idOf(at.target);
+    if (id !== this.#lastTapId) {
+      this.#onTap(at);
+      return;
+    }
+    // A touch or pen tap already opened this table; only a mouse's first click is still waiting.
+    const pending = this.#pendingTap;
+    if (pending === null) return;
+    this.#dropPendingTap();
+    this.#send("wt-table-details", pending.tableId);
+  };
+
+  readonly #flushPendingTap = (): void => {
+    const pending = this.#pendingTap;
+    this.#dropPendingTap();
+    if (pending !== null) this.#send("wt-table-tap", pending.tableId);
+  };
+
+  #dropPendingTap(): void {
+    clearTimeout(this.#pendingTap?.timer);
+    this.#pendingTap = null;
+  }
+
+  #clearHeld(): void {
+    this.#held?.removeAttribute("data-held");
+    this.#held = null;
+  }
+
+  /** Enter or Space on a focused table; a pointer's own click is left to the gesture. */
+  readonly #onClick = (e: MouseEvent): void => {
+    const id = idOf(e.composedPath()[0]!);
+    if (e.detail !== 0 || id === null) return;
+    e.stopPropagation();
+    this.#send("wt-table-tap", id);
+  };
+
+  readonly #onContextMenu = (e: MouseEvent): void => {
+    e.preventDefault();
+    const swallow = this.#swallowContextMenu;
+    this.#swallowContextMenu = false;
+    const id = idOf(e.composedPath()[0]!);
+    if (swallow || this.#gestures!.active || id === null) return;
+    e.stopPropagation();
+    this.#send("wt-table-details", id);
+  };
+
+  /** Never stopped: the till's idle logout listens for keydown at its host. */
+  readonly #onKeyDown = (e: KeyboardEvent): void => {
+    this.#swallowContextMenu = false;
+    const id = idOf(e.composedPath()[0]!);
+    if (e.key !== "F10" || !e.shiftKey || id === null) return;
+    e.preventDefault();
+    this.#swallowContextMenu = true;
+    this.#send("wt-table-details", id);
+  };
+
+  /** Never stopped: the till's idle logout listens for pointerdown at its host. */
+  readonly #onPointerDown = (): void => {
+    this.#swallowContextMenu = false;
+  };
+
+  #send(type: "wt-table-tap" | "wt-table-details", tableId: string): void {
+    this.dispatchEvent(
+      new CustomEvent<FloorMapTap | FloorMapDetails>(type, {
+        detail: { tableId },
+        bubbles: true,
+        composed: true,
+      }),
+    );
   }
 
   protected override willUpdate(changed: Map<PropertyKey, unknown>): void {

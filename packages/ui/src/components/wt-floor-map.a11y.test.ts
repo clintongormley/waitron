@@ -63,6 +63,15 @@ describe.each(["light", "dark"] as const)("wt-floor-map a11y (%s theme)", (theme
     await expectNoA11yViolations(host);
   });
 
+  test("a table held", async () => {
+    await mountMap(theme, [t("T1", { x: 0 }), t("T2", { x: 8 })]);
+    host
+      .querySelector("wt-floor-map")!
+      .shadowRoot!.querySelector('[data-table-id="T1"]')!
+      .setAttribute("data-held", "");
+    await expectNoA11yViolations(host);
+  });
+
   test("no tables", async () => {
     await mountMap(theme, []);
     await expectNoA11yViolations(host);
