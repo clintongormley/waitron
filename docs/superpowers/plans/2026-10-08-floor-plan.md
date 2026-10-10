@@ -3816,7 +3816,10 @@ if it is wrong.
 3. **What each route refuses, in this order, with existing codes where one fits.** A malformed path
    id is `table.not_found` (as the seat route, `till-api.ts:2249`); a malformed body field is
    `management.request_invalid { field }`; a table in another venue or none is `table.not_found`;
-   then, for the table the change names, in the order listed here, every route alike:
+   then, for the table the change names, in the order listed here, on every today route and the
+   merge route (on the join route carrying `merge`, `joinTables`' own refusals come first —
+   `service_zone.join_mismatch`, `table.needs_clearing`, `table-actions.ts:123-132` — and
+   `writeMerge`'s follow in this order):
    - **`table.not_in_floor_plan { tableId }`** (new): it has no today's row; or, for a move, turn or
      merge, it has no place (a spare); or, for Back to its saved place, its reset row is missing or
      says the table goes (its master table was deleted).
@@ -3884,7 +3887,7 @@ if it is wrong.
    `table.needs_clearing`. A table joined to a party (the join route, and the seat route's
    `withTableIds`) brings every free member of its merge into the party too. Cost: none expected.
 9. **A join involving a fixed table moves nothing and writes no merge** (spec §6.1). Two free tables,
-   one fixed: the seat dialog opens for the dragged table, headed with both names as `mergeLabel` names them ("Bar 1+2", `packages/shared/src/party-name.ts:16-17`),
+   one fixed: the seat dialog opens for the dragged table, headed with both names as `mergeLabel` names them ("Bar 1+2", `packages/ui/src/components/wt-floor-map.ts:96-97`; "Bar" is shown once by the shared-first-word rule, `packages/shared/src/party-name.ts:16-17`),
    and its confirm seats the party at the dragged table with `withTableIds` naming the target's
    members, in one request. One seated: the join route without `merge`. Both seated: the bill choice,
    then the join route. Cost: none expected; the plan's Task 4.3 had two requests (seat, then join),
@@ -4095,7 +4098,7 @@ export async function seatsToday(tx: Transaction, cfg: TillConfig, tableId: stri
 export async function backToSaved(tx: Transaction, cfg: TillConfig, tableId: string): Promise<void>;
 ```
 
-Behaviour (decisions 2, 3, 12): `takeOffToday` refuses in decision 3's order: `table.merged`, then
+Behaviour (decisions 2, 3, 12): `takeOffToday` refuses in decision 3's order: `table.not_in_floor_plan` (no today's row), `table.merged`, then
 `tab.already_open` (an open `party_tables` row), `table.needs_clearing` (`needs_clearing_since` set),
 `table.delivery_pending` (an order delivered to it matching `foodOnItsWay()`); an already taken-off
 table is left as it is; else `taken_off = true`, keeping its place. `putBackToday` sets `taken_off = false`.
@@ -4179,7 +4182,7 @@ it("catches today's plan up before a change, so the change survives the next rea
      GET /api/tables/state (which catches up too, till-api.ts:2190) → T still at x 30. Control: delete the route's ensureToday call and watch T come back at the master's place */
 });
 it("leaves a disabled planned zone's tables off on a reset", async () => {
-  /* a planned zone switched off (deactivateZone): POST …/today/reset → 204; its tables' dining_tables.active stays false (a reset switches tables on, floor-today-store.ts:295)
+  /* a planned zone switched off (deactivateZone): POST …/today/reset → 204; its tables' dining_tables.active stays false (a reset switches tables on: `resetZoneFor` ends with `catchUpZone`, floor-today-store.ts:132, :295)
      and its floor_today_zones generation is unchanged (its first save wrote the row, so the row itself exists) */
 });
 it("answers a refusal with its code and status", async () => {
@@ -4564,7 +4567,8 @@ it("a linked table is dragged alone", async () => { /* hold t1 and move → only
 ```
 
 - [ ] **Step 2: Run and watch them fail** — the Task 4.4a command. Expected: the link cases fail;
-  "a linked table is dragged alone" passes before the change (a guard).
+  "a linked table is dragged alone" and "draws no link for a party at one table" pass before the
+  change (guards).
 - [ ] **Step 3: Implement**, with the design-system row and paragraph (the key, the part, one name).
 - [ ] **Step 4: Run** Task 4.4a's Step 4 list.
 - [ ] **Step 5: Mutation** — the bounded run on `src/components/wt-floor-map.ts`.
@@ -4624,8 +4628,9 @@ it("holds every table of a merge it seats", async () => { /* t9 and t11 share a 
 
 - [ ] **Step 2: Run and watch them fail** —
   `pnpm --filter @waitron/till exec vitest run src/api/client.test.ts -t "today|merge only|seatAtTables"`
-  and `pnpm --filter @waitron/till exec vitest run src/till-app-parties.test.ts -t "two tables"`.
-  Expected: the methods do not exist.
+  and `pnpm --filter @waitron/till exec vitest run src/till-app-parties.test.ts -t "two tables|merge it seats"`.
+  Expected: the methods do not exist; "holds every table of a merge it seats" fails because
+  `tableIds` is `["t9"]` (`till-app.ts:5223`).
 - [ ] **Step 3: Implement**, moving `otherPartyRead` with no change to what it answers.
 - [ ] **Step 4: Run** both files without `-t`, `src/till-app-table-service.test.ts`, the till's
   typecheck and lint, `prettier --check`. Expected: pass, the pins named at the top unchanged.
