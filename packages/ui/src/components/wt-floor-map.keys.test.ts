@@ -156,6 +156,14 @@ it("a table pressed becomes the tab stop", async () => {
   expect(tabStops(el)).toEqual(["t1:-1", "t2:0"]);
 });
 
+it("a press on another table while one is focused moves the tab stop", async () => {
+  const el = await map([t1, t2]);
+  button(el, "t1").focus();
+  await userEvent.click(button(el, "t2").querySelector('[part="shape"]')!);
+  await el.updateComplete;
+  expect([focused(el), ...tabStops(el)]).toEqual(["t2", "t1:-1", "t2:0"]);
+});
+
 it("arrowing to a table below the edge pans it in without scrolling the map or its parent", async () => {
   const el = await map(
     [t1, t2, t3],
@@ -238,6 +246,58 @@ it("a map whose tables all go has no tab stop", async () => {
   el.tables = [];
   await el.updateComplete;
   expect(tabStops(el)).toEqual([]);
+});
+
+it("an arrow, Home or End key with Alt, Ctrl or Meta held passes through", async () => {
+  const el = await map([t1, t2, t3]);
+  button(el, "t2").focus();
+  for (const init of [
+    { key: "ArrowLeft", altKey: true },
+    { key: "Home", ctrlKey: true },
+    { key: "End", metaKey: true },
+  ]) {
+    // Dispatched, not typed: a real Alt+ArrowLeft would take the test page back.
+    const event = new KeyboardEvent("keydown", {
+      ...init,
+      bubbles: true,
+      composed: true,
+      cancelable: true,
+    });
+    button(el, "t2").dispatchEvent(event);
+    expect([init.key, focused(el), event.defaultPrevented]).toEqual([init.key, "t2", false]);
+  }
+});
+
+it("a focused table that joins a merge keeps the merge as the tab stop", async () => {
+  const el = await map([t1, t2, t3]);
+  button(el, "t3").focus();
+  await el.updateComplete;
+  el.tables = [t1, { ...t2, joinId: "j" }, { ...t3, joinId: "j" }];
+  await el.updateComplete;
+  expect(tabStops(el)).toEqual(["t1:-1", "t2:0"]);
+});
+
+it("an arrow key pans by the zoomed scale", async () => {
+  const el = await map([t1, t2]);
+  // Ctrl+wheel at the map's top-left corner doubles the scale to 200/3 px a square: t1 at left
+  // 133.3, top 166.7, its lower part below the edge; t2 at left 800, off the right edge.
+  const corner = el.getBoundingClientRect();
+  el.dispatchEvent(
+    new WheelEvent("wheel", {
+      bubbles: true,
+      composed: true,
+      cancelable: true,
+      clientX: corner.left,
+      clientY: corner.top,
+      deltaY: -100,
+      ctrlKey: true,
+    }),
+  );
+  expect(await boxOf(el, "t2")).toMatchObject({ left: expect.closeTo(800, 1) });
+  button(el, "t1").focus();
+  await press("ArrowRight");
+  const box = await boxOf(el, "t2");
+  expect([box.left, box.top, box.right, box.bottom].map(Math.round)).toEqual([333, 33, 600, 300]);
 });
 
 it("a keydown on a table still reaches the page", async () => {

@@ -655,9 +655,10 @@ handled on its `keydown`, which the map prevents, and the next `contextmenu` is 
 ContextMenu key (the key held down) is prevented and sends nothing. The map stops the `click` or `contextmenu` it turns into one
 of its events and never stops a `pointerdown` or `keydown`. One table is in the Tab order
 (`tabindex="0"`, every other `-1`): the one last focused, by key or by press, while the map still
-draws it, else the first in reading order (by the top of its box, then its left). On a focused
+draws it (a merge it has joined is the tab stop then), else the first in reading order (by the top of its box, then its left). On a focused
 table, ArrowRight and ArrowDown move to the next table in reading order, ArrowLeft and ArrowUp to
-the previous, Home and End to the first and last, stopping at the ends; each is prevented, pans
+the previous, Home and End to the first and last, stopping at the ends, unless Alt, Ctrl or Meta is held, which the map leaves to the browser; each
+is prevented, pans
 the target into view by the least distance (within the pan limit, and counting as a pan, so a
 resize then keeps the view) and focuses it with `focus({ preventScroll: true })`, because the map
 cannot scroll and a focus left to scroll moves the page around it instead (the "arrowing to a

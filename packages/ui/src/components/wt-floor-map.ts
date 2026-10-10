@@ -269,10 +269,17 @@ export class WtFloorMap extends LitElement {
     super();
     this.addEventListener("click", this.#onClick);
     this.addEventListener("contextmenu", this.#onContextMenu);
-    this.addEventListener("focusin", this.#onFocusIn);
     this.addEventListener("keydown", this.#onKeyDown);
     this.addEventListener("pointerdown", this.#onPointerDown);
     this.addEventListener("wheel", this.#onWheel);
+  }
+
+  protected override createRenderRoot(): HTMLElement | DocumentFragment {
+    const root = super.createRenderRoot();
+    // A listener on the host missed a press moving focus between two tables (the "a press on
+    // another table while one is focused" case).
+    root.addEventListener("focusin", this.#onFocusIn);
+    return root;
   }
 
   override connectedCallback(): void {
@@ -461,7 +468,7 @@ export class WtFloorMap extends LitElement {
       return;
     }
     this.#swallowContextMenu = false;
-    if (id !== null && this.#moveFocus(id, e.key)) {
+    if (id !== null && this.#moveFocus(id, e)) {
       e.preventDefault();
       return;
     }
@@ -472,7 +479,9 @@ export class WtFloorMap extends LitElement {
   };
 
   /** Focuses the table `key` moves to from `id`; false when `key` is not a move. */
-  #moveFocus(id: string, key: string): boolean {
+  #moveFocus(id: string, { key, altKey, ctrlKey, metaKey }: KeyboardEvent): boolean {
+    // Alt+ArrowLeft is the browser's Back, and Ctrl or Meta with Home or End its own moves.
+    if (altKey || ctrlKey || metaKey) return false;
     const ids = readingOrder(groupsOf(this.tables)).map((g) => g.members[0]!.id);
     const at = ids.indexOf(id);
     const last = ids.length - 1;
@@ -487,8 +496,6 @@ export class WtFloorMap extends LitElement {
     if (to === undefined) return false;
     const target = ids[Math.min(last, Math.max(0, to))]!;
     this.#panTo(target);
-    this.#focusedId = target;
-    this.requestUpdate();
     // The map cannot scroll, so a focus left to scroll would scroll the till's tab shell instead.
     this.#buttonOf(target).focus({ preventScroll: true });
     return true;
@@ -509,7 +516,7 @@ export class WtFloorMap extends LitElement {
     return this.shadowRoot!.querySelector<HTMLElement>(`[part="table"][data-table-id="${id}"]`)!;
   }
 
-  readonly #onFocusIn = (e: FocusEvent): void => {
+  readonly #onFocusIn = (e: Event): void => {
     this.#focusedId = idOf(e.composedPath()[0]!);
     this.requestUpdate();
   };
@@ -559,14 +566,13 @@ export class WtFloorMap extends LitElement {
 
   #renderGroups(view: View, still: boolean): TemplateResult {
     const groups = groupsOf(this.tables);
-    const ids = groups.map((g) => g.members[0]!.id);
-    const tabStop = ids.includes(this.#focusedId!)
-      ? this.#focusedId
-      : readingOrder([...groups])[0]?.members[0]!.id;
+    const tabStop =
+      groups.find((g) => g.members.some((m) => m.id === this.#focusedId)) ??
+      readingOrder([...groups])[0];
     return html`${repeat(
       groups,
       (g) => g.key,
-      (g) => this.#renderGroup(g, view, still, g.members[0]!.id === tabStop),
+      (g) => this.#renderGroup(g, view, still, g === tabStop),
     )}`;
   }
 
