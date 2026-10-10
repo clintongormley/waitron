@@ -1892,8 +1892,7 @@ re-read shows its sentence as a read's message, which the next change or the nex
 read's failure never replaces an action's message; and a read's success clears only a read's
 message. Save stays quiet after a failed re-read, since the write succeeded.
 
-New strings: `floor_plan_editor.load_newer` "Load newer plan" / "Cargar el plano más reciente". (Note 2026-10-10: shipped as `floor_plan_editor.reload`, "Reload" / "Recargar".)
-_Note 2026-10-10: shipped as "Reload" / "Recargar" (Task 2.8's look pass)._
+New strings: `floor_plan_editor.load_newer` "Load newer plan" / "Cargar el plano más reciente". (Note 2026-10-10: shipped as `floor_plan_editor.reload`, "Reload" / "Recargar", in Task 2.8's look pass.)
 
 - [ ] **Step 1: Write the failing tests** in `floor-plan-editor.save.test.ts` (Task 2.4a's fixture
   plan; a change is made by dispatching `floor-plan-change` from inside the page):
