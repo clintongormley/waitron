@@ -1582,10 +1582,6 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   moved a station's printers into the station save; `parseStationPrinterIds`
   (`apps/server/src/management-api.ts`) repeats its checks. Decide whether to remove the route.
 
-- **The Settings fallback's native Escape test does not always catch a missing `preventDefault`**:
-  with the call deleted it failed 5 runs out of 6 (2026-10-10, `docs/developers/testing-guide.md`).
-  Make it fail every time.
-
 - **Prep stations' Settings cell saves have the shape A261-4 changed for routing cells** — left open
   by A261-4 (#1363). `#saveSettingsCell`
   (`packages/venue-service/src/dashboard/prep-stations-screen.ts`) marks the change saved and
