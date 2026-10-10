@@ -1,15 +1,8 @@
 import { css, type CSSResult } from "lit";
 
-export type FloorMapFill = "free" | "seated" | "bill" | "clearing" | "reserved";
+export const FLOOR_MAP_FILLS = ["free", "seated", "bill", "clearing", "reserved"] as const;
+export type FloorMapFill = (typeof FLOOR_MAP_FILLS)[number];
 export type FloorMapDot = "ready" | "forgotten";
-
-export const FLOOR_MAP_FILLS: readonly FloorMapFill[] = [
-  "free",
-  "seated",
-  "bill",
-  "clearing",
-  "reserved",
-];
 
 /** `[data-fill="<fill>"]` paints background `--wt-color-table-<fill>` and colour `--wt-color-on-table-<fill>`. */
 export const floorMapFillStyles: CSSResult = css`
