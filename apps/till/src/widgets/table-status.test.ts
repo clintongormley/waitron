@@ -325,6 +325,31 @@ describe("till-table-status", () => {
     expect(toast(el)!.message).toBe("Forgotten order");
   });
 
+  it("closes the notice when the next party has nothing to flash", async () => {
+    const p = party();
+    const { el } = await mount({ party: p, tables: [row(p, { readyToServe: 2 })] });
+    await settled(el);
+    expect(toast(el)!.message).toBe("2 ready");
+    expect(toast(el)!.open).toBe(true);
+
+    const quiet = party({ id: "p2" });
+    el.party = quiet;
+    el.tables = [row(quiet)];
+    await settled(el);
+    expect(toast(el)!.open).toBe(false);
+  });
+
+  it("closes the notice when a re-read leaves the party nothing to flash", async () => {
+    const p = party();
+    const { el } = await mount({ party: p, tables: [row(p, { readyToServe: 2 })] });
+    await settled(el);
+    expect(toast(el)!.open).toBe(true);
+
+    el.tables = [row(p, { pendingToServe: 2 })];
+    await settled(el);
+    expect(toast(el)!.open).toBe(false);
+  });
+
   it("flashes a party whose table arrives in a later read", async () => {
     const p = party();
     const { el } = await mount({ party: p, tables: [] });

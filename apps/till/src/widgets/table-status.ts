@@ -105,11 +105,13 @@ export class TillTableStatus extends LitElement {
   }
 
   override updated(): void {
-    const party = this.party;
-    if (party === null || this.#partyRows.length === 0 || party.id === this.#judgedPartyId) return;
-    this.#judgedPartyId = party.id;
-    if (this.#message !== "")
-      this.renderRoot.querySelector<WtToast>("wt-toast[data-flash-notice]")!.show();
+    const notice = this.renderRoot.querySelector<WtToast>("wt-toast[data-flash-notice]");
+    if (notice === null) return;
+    if (this.#message === "") notice.open = false;
+    const partyId = this.party!.id;
+    if (partyId === this.#judgedPartyId) return;
+    this.#judgedPartyId = partyId;
+    if (this.#message !== "") notice.show();
   }
 
   override render() {
