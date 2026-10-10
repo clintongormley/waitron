@@ -2423,8 +2423,10 @@ What the slice builds: a gesture recogniser and a map primitive in `packages/ui`
 (`gestures.ts`, `wt-floor-map`), the table fill colours as tokens, and, on the till, the floor screen
 drawing a planned zone on the new map, the seat dialog's seats placeholder, a 15-second re-read, a
 details sheet, and on the order screen a flash notice and a status pin. A zone with no today's plan
-keeps the old map, tray and Edit plan (the plan's decision 2); two changes reach every zone: the seat
-dialog's new placeholder (decision 12) and the app's rule for which table read wins (decision 13).
+keeps the old map, tray and Edit plan (the plan's decision 2); three changes reach every zone: the
+seat dialog's new placeholder (decision 12), the app's rule for which table read wins (decision 13),
+and the order screen's status pin and flash notice, which show for any party the floor read lists
+(decision 16).
 Nothing on the server changes.
 
 **A182** (retire canvases) had not started at `f18ff0767`: the backlog says "Nothing has carried
@@ -2467,9 +2469,11 @@ file (Task 3.3b), so the case stays where it is.
   the floor screen's `floor-refresh` event (`:5014-5027`, listener `:9026`); `#refreshFloor` assigns
   whatever answer comes back, in any order. The station and expo screens already re-read every 15
   seconds from their own `setInterval` (`till-station-screen.ts:55`, `:332`; `till-expo-screen.ts:63`).
-- The till's idle logout restarts only on a `pointerdown` or `keydown` that reaches the app's host
+- The till's idle logout restarts on a `pointerdown` or `keydown` that reaches the app's host
   (`#onInteraction`, `till-app.ts:1380`, listened for at `:1401-1402`, calling
-  `SessionActivity.noteInteraction`, `apps/till/src/session-activity.ts:93-95`); no request restarts
+  `SessionActivity.noteInteraction`, `apps/till/src/session-activity.ts:93-95`), and when
+  `SessionActivity.configure` re-arms it (`session-activity.ts:72-78`, called through
+  `#configureSessionActivity` at `till-app.ts:2428`, `:2566` and `:8619`); no table read restarts
   it. On the server, the till's session lookup has no idle expiry (it matches the token and an
   unended session, `apps/server/src/till-session.ts:113`), and a request not marked passive records
   a device sighting at most once a minute (`:117-118`; `sightingDue` and `recordSighting`,
@@ -2517,17 +2521,18 @@ if it is wrong.
    it started. Once two fingers have pinched, nothing else happens until every finger lifts.
    Right-click, the ContextMenu key and Shift+F10 also open details (the keyboard's way; slice 4's
    Join with… is in that sheet), each exactly once: Shift+F10 is handled on `keydown`, because macOS
-   sends no `contextmenu` for it (the review's probe; Linux does), and a `contextmenu` straight after
-   it is swallowed. A mouse press with Ctrl held starts no gesture, so on macOS, where Ctrl+click
+   sends no `contextmenu` for it (the review's probe). Whether a `contextmenu` still follows a
+   prevented Shift+F10 `keydown` on Linux was not measured (the review saw a prevented ContextMenu
+   key suppress it on macOS), so swallowing the next `contextmenu` after Shift+F10 is a safeguard. A mouse press with Ctrl held starts no gesture, so on macOS, where Ctrl+click
    sends `contextmenu`, it opens details; elsewhere a Ctrl+click does nothing. Cost: mouse users wait
    300 ms for a table to open.
 8. **The view.** The map fits the zone's crop when it first draws tables, when `fitKey` (the zone)
    changes, on a double tap on empty space, and on a resize unless the person has panned or zoomed
    since. A re-read keeps the view. Zoom runs from half to four times the fitted size; a pan stops
    with the crop's centre at the map's edge. The mouse wheel pans; Ctrl+wheel, which is also what a
-   laptop trackpad's pinch sends, zooms ×2 per 100 of `deltaY` about the pointer. Focusing a table
-   outside the map pans it into view when the focus came from the keyboard (the table matches
-   `:focus-visible`), never after a press. There is no Fit button. Cost: a keyboard user cannot zoom.
+   laptop trackpad's pinch sends, zooms ×2 per 100 of `deltaY` about the pointer. A focus a press
+   gives pans nothing; keyboard movement between tables is decision 18's. There is no Fit button.
+   Cost: a keyboard user cannot zoom.
 9. **Drawing.** No grid lines on the till's map. A single table shows its name when its own
    shorter side (width or height, before turning) is 28 px or more, the plan's decision 11. A merge
    is one button covering its members' turned boxes, its name shown when that union box's shorter
@@ -2557,8 +2562,9 @@ if it is wrong.
     old map, not the list), and it asks through the existing `floor-refresh` event. In the app every
     table read takes a number as it starts, and an answer is applied only when its number is higher
     than the last applied one; `#refreshFloor` answers true when its own answer or a newer one was
-    applied, because its callers read `this.tables` straight after (`#retakePartyFromFloor`,
-    `till-app.ts:5305-5309`; Move a bill, `:7074-7076`). So a poll that answers late never replaces
+    applied, because the two callers that use its answer read `this.tables` straight after
+    (`#retakePartyFromFloor`, `till-app.ts:5308`; Move a bill, `:7074-7076`); its other seven calls
+    (`:4907`, `:4998`, `:5015`, `:5172`, `:7401`, `:7973`, `:8595`) ignore the answer. So a poll that answers late never replaces
     an action's newer read, and an action's read is never dropped because an older poll answered
     first. Cost: a list view and the old map go on reading only on tab select and after actions.
 14. **The details sheet is a `wt-dialog`** (the till's dialogs all are; `wt-sheet` is an in-flow bar),
@@ -2585,6 +2591,19 @@ if it is wrong.
     made ready) shows only after the next action.
 17. **The look pass photographs from Vitest browser files that are never committed**, with fixtures,
     as slice 2 decision 19 did.
+18. **One table is in the Tab order; the arrow keys move between tables** (a roving tab stop, the
+    controller's ruling on the re-check). The tab stop is the table last focused, while the map still
+    draws it, else the first in reading order (by the top of its box, then its left). ArrowRight and
+    ArrowDown move to the next table in reading order, ArrowLeft and ArrowUp to the previous one,
+    Home and End to the first and last; each move pans the target into view by the least distance
+    and then focuses it with `focus({ preventScroll: true })`. The reason: with `overflow: clip` the
+    map cannot scroll, so Tab-focusing an off-edge table scrolled the nearest scrolling parent
+    instead (the review's probe in Chromium 153: the map's box stayed at 0 and the outer div moved
+    300; panning inside `focusin` did not undo it), and the till's tab shell body is such a parent
+    (`overflow: auto`, `apps/till/src/widgets/tab-shell.ts:190-194`). Cost if wrong: keyboard users
+    move between tables with the arrow keys, not Tab; and Tab into the map lands on the tab-stop
+    table wherever the view has left it, so after a pan that put it off-screen, Tab can still scroll
+    the parent, which an arrow key never does.
 
 **Mutation runs.** As slice 2: each task that adds a `packages/ui` file runs
 `gtimeout 900 pnpm --filter @waitron/ui exec stryker run --mutate <file>` once, and a survivor gets
@@ -2690,7 +2709,7 @@ it("a third pointer is ignored", () => { /* pinching with 1, 2; down 3 and move 
 it("pointercancel ends the press", () => { /* down; pointercancel → cancel once; up → no tap; active false */ });
 it("a mouse's right button starts nothing", () => { /* mouse down/up with button 2 → no tap; active false throughout */ });
 it("a mouse press with Ctrl held starts nothing", () => { /* mouse button 0, ctrlKey true, down/up → no tap; active false */ });
-it("never stops or prevents a press", () => { /* a document pointerdown listener hears the press on #b; its defaultPrevented false */ });
+it("never stops or prevents a press", () => { /* dispatch the press on #b with cancelable: true → a document pointerdown listener hears it, and defaultPrevented is false */ });
 it("another pointer's moves do not move a one-finger press", () => { /* down 1; move pointerId 9 by 50 → no pan */ });
 it("disconnect stops listening and clears the hold", () => { /* down; disconnect(); advance 500 → no holdStart; down/up → no tap */ });
 ```
@@ -2875,7 +2894,8 @@ test("one table in each fill", …); test("a ready dot and a forgotten dot", …
 - [ ] **Step 3: Implement** (design-system.md → "Adding a primitive", `:3046`: `baseStyles` first,
   tokens only; not its `delegatesFocus`, slice 3 decision 9), the workbench entry and the design-system row and paragraph (what
   it draws, its three events, names below 28 px, the dot and reduced motion, that `fitKey` refits,
-  and why it has no `delegatesFocus` and clips rather than hides its overflow).
+  and why it has no `delegatesFocus` and clips rather than hides its overflow; Task 3.2e adds its
+  one tab stop and arrow keys).
   Before trusting the a11y file, drop the buttons' `aria-label` and watch it fail, then restore it.
 - [ ] **Step 4: Run** the same command, `pnpm --filter @waitron/ui exec vitest run src/no-hardcoded-chrome.test.ts`,
   `pnpm exec vitest run scripts/style-token-names.test.ts`, typecheck, lint, `prettier --check`.
@@ -2906,7 +2926,7 @@ its composed path holds a `[part=table]` button; its id is that button's `data-t
   right button, a macOS Ctrl+click, the ContextMenu key), it sends `wt-table-details`, unless a
   Shift+F10 `keydown` came just before it.
 - `keydown` of Shift+F10 on a table is prevented and sends `wt-table-details` (macOS sends no
-  `contextmenu` for it), and notes that the next `contextmenu` (Linux sends one) is swallowed; the
+  `contextmenu` for it), and, as a safeguard (decision 7), notes that the next `contextmenu` is swallowed; the
   note is cleared by the next `keydown` or `pointerdown`, so a macOS right-click after it still
   works.
 - A `click` on a table with `detail === 0` (Enter or Space on a focused button) sends
@@ -2930,7 +2950,7 @@ it("a right-click asks for details once and stops the browser's menu", async () 
   /* dispatch a cancelable contextmenu on t1's shape → defaultPrevented true; exactly one wt-table-details { tableId: "t1" } */
 });
 it("Shift+F10 asks for details exactly once, whether or not the platform sends a contextmenu", async () => {
-  /* focus t1; userEvent.keyboard("{Shift>}{F10}{/Shift}") → one wt-table-details (macOS sends no contextmenu, Linux CI does; the count is one on both);
+  /* focus t1; userEvent.keyboard("{Shift>}{F10}{/Shift}") → one wt-table-details, whether or not the platform follows it with a contextmenu;
      then dispatch keydown Shift+F10 followed by a synthetic contextmenu on t1 → one more, not two */
 });
 it("a right-click after a Shift+F10 that sent no contextmenu still works", async () => {
@@ -2974,8 +2994,6 @@ Behaviour (slice 3 decisions 8 and 11):
   `−deltaY`; prevented either way.
 - A pan, pinch or wheel marks the view touched; a resize then keeps it (narrowing Task 3.2b's
   "every resize"), and a fit clears the mark.
-- `focusin` on a table that matches `:focus-visible` (focus from the keyboard) and whose box lies
-  outside the host pans the least distance that brings it in; focus a press gives pans nothing.
 - `holdDrag` draws the held group moved by `snapToSquare(d, scale)` squares, its first member
   clamped by `clampToGrid`; `holdDrop` sends `wt-table-drag-end` with that member's new `x`, `y`,
   and `targetId`: the `data-table-id` of the first other table under the release point
@@ -3000,10 +3018,6 @@ it("the wheel pans, and Ctrl+wheel zooms about the pointer", async () => {
 });
 it("a resize after a pan keeps the person's view, and one after a fit fits", async () => {
   /* pan +50; host width 500, two real animation frames → t1 still 300 wide; double tap empty; host width 300, two frames → t1 200 wide */
-});
-it("tabbing to a table off the right edge brings it into view without scrolling the map", async () => {
-  /* t1 and t2 (t2 at the right); pan so t2 lies past the right edge; focus t1, then userEvent.keyboard("{Tab}") to t2 →
-     t2's box within the host's; host scrollLeft 0 and scrollTop 0 (overflow: clip; with hidden the review's probe saw 332) */
 });
 it("a real click on empty space after a pan moves nothing and focuses nothing", async () => {
   /* real timers; pan +50; note document.activeElement; userEvent.click on the host at an empty point → t1 left unchanged; document.activeElement unchanged
@@ -3030,6 +3044,59 @@ it("the drop event bubbles out of a shadow root", async () => { /* mountInShadow
 - [ ] **Step 5: Mutation** — the bounded run on `src/components/wt-floor-map.ts`.
 - [ ] **Step 6: Commit** — e.g. "Floor map: pinch, drag and the wheel to look around, and a held
   table's drop (A429 slice 3)".
+
+### Task 3.2e: `wt-floor-map` — one tab stop and the arrow keys
+
+**Files:**
+- Modify: `packages/ui/src/components/wt-floor-map.ts`, `wt-floor-map.a11y.test.ts`, the
+  design-system paragraph from Task 3.2b
+- Create: `packages/ui/src/components/wt-floor-map.keys.test.ts`
+
+**Interfaces:**
+- Consumes: Task 3.2d's view and its least-distance pan.
+- Produces: nothing new for other tasks; keyboard behaviour only (slice 3 decision 18).
+
+Behaviour: every table button has `tabindex="-1"` except the tab stop, which has `tabindex="0"`:
+the table last focused (by key or by press) while the map still draws it, else the first in reading
+order (sorted by the top of its box, then its left). On a focused table, ArrowRight and ArrowDown
+move to the next table in reading order, ArrowLeft and ArrowUp to the previous, Home and End to the
+first and last, stopping at the ends; each is prevented (never stopped: the idle logout listens for
+`keydown`), pans the target into view by the least distance, makes it the tab stop, and focuses it
+with `focus({ preventScroll: true })`. Other keys pass through, so Task 3.2c's Enter, Space and
+Shift+F10 still work.
+
+- [ ] **Step 1: Write the failing tests** in `wt-floor-map.keys.test.ts` (real timers; t1, t2 and
+  t3 in reading order, t3 placed so that the fitted view, zoomed by a pinch, leaves it below the
+  bottom edge):
+
+```ts
+it("puts exactly one table in the Tab order, the first in reading order", async () => { /* tabindex 0 on t1 only; -1 on t2, t3 */ });
+it("Tab enters the map once and leaves it on the next Tab", async () => {
+  /* a button before and after the map; focus the first, userEvent.keyboard("{Tab}") → t1 focused; "{Tab}" again → the button after the map */
+});
+it("the arrow keys move between tables in reading order, Home and End to the ends", async () => {
+  /* focus t1; ArrowRight → t2; ArrowDown → t3; ArrowDown → t3 still; ArrowLeft → t2; Home → t1; End → t3; each keydown defaultPrevented */
+});
+it("the table last focused is the tab stop", async () => { /* arrow to t2 → tabindex 0 on t2 only; tables re-set without t2 → t1 again */ });
+it("arrowing to a table below the edge pans it in without scrolling the map or its parent", async () => {
+  /* the map inside <div style="height: 200px; overflow: auto"> with 400 px of content after the map; zoom so t3 is below the map's bottom edge;
+     focus t2, ArrowDown → t3 focused; t3's box inside the map's; the parent's scrollTop unchanged (0); the map's scrollLeft and scrollTop 0 */
+});
+it("a keydown on a table still reaches the page", async () => { /* a document keydown listener hears ArrowRight from t1 */ });
+// wt-floor-map.a11y.test.ts: the existing states now carry one tab stop; add "focus on the second table after an arrow key" in both themes
+```
+
+- [ ] **Step 2: Run and watch them fail** —
+  `pnpm --filter @waitron/ui exec vitest run src/components/wt-floor-map.keys.test.ts src/components/wt-floor-map.a11y.test.ts`.
+  Expected: the new cases fail (every table is in the Tab order; arrows do nothing), except "a
+  keydown on a table still reaches the page", a guard that passes before the change.
+- [ ] **Step 3: Implement.** Then replace `preventScroll: true` with a plain `focus()` and watch the
+  parent's `scrollTop` case fail, then restore it.
+- [ ] **Step 4: Run** every `wt-floor-map` test file and Task 3.2b's guards. Expected: pass.
+- [ ] **Step 5: Mutation** — the bounded run on `src/components/wt-floor-map.ts` (Task 3.2d's run,
+  repeated now that the file has grown).
+- [ ] **Step 6: Commit** — e.g. "Floor map: one tab stop, and the arrow keys move between tables
+  without scrolling the page (A429 slice 3)".
 
 ### Task 3.3a: The till's stand-in statuses and map tables
 
@@ -3114,7 +3181,7 @@ it("reads a table's seats for today, a merge's for the merge, and the old capaci
 - Create: `apps/till/src/screens/till-floor-screen.map.test.ts`
 
 **Interfaces:**
-- Consumes: Task 3.3a's functions; `wt-floor-map` and its `wt-table-tap` (Tasks 3.2b–3.2d).
+- Consumes: Task 3.3a's functions; `wt-floor-map` and its `wt-table-tap` (Tasks 3.2b–3.2e).
 
 Behaviour: after the zone filter (`visible`, `:646-648`), when `isPlannedZone(visible)` the screen
 uses `listedTables(visible)` for the list, `mapTables(visible)` for the map, and the listed tables
@@ -3199,7 +3266,7 @@ Behaviour: the dialog's hint is `countText(seats, "floor.seats", "floor.seats_on
 is a number, else `t("seat.covers")` ("Covers" / "Cubiertos"). The floor passes
 `seatsFor(table)`. The floor's re-read is a `setInterval(15_000)` started in `updated` when the map
 view of a planned zone is drawn and cleared when it is not, and in `disconnectedCallback`; each tick
-sends `floor-refresh`, as the placement writes do (`:576-578`). In the app, every write of
+sends `floor-refresh`, as the placement writes do (`:576-578`).
 The interval is started only when none is running, so a render while the map stays up leaves the
 running one alone. In the app (slice 3 decision 13), every table read takes a number as it starts
 (`const read = ++this.#tablesRead`), at each place that reads and writes `this.tables` (`:1321-1323`,
@@ -3230,21 +3297,24 @@ it("starts again when the map comes back, and stops when the screen leaves", asy
 it("an older poll that answers after the action's refresh began does not replace it", async () => {
   /* two floor-refresh events, A then B, both deferred; resolve B with [tableB], then A with [tableA] → floor(el).tables toEqual [tableB] */
 });
+// A guard that passes before the change too (today assigns every answer); Step 3 uses it:
 it("an action's refresh is applied when an older poll answers first", async () => {
   /* A then B deferred; resolve A with [tableA] → tables [tableA]; resolve B with [tableB] → tables [tableB] (a "drop when the counter moved" rule would drop B here) */
 });
 // till-app-parties.test.ts, with its Move a bill stubs (its api fixture stubs moveBill at :295):
-it("Move a bill keeps the party its own floor read found when an older poll answers later", async () => {
-  /* a floor-refresh poll deferred; move a bill (till-app.ts:7068-7076), whose floor read answers with the party at its new revision; then the poll answers with the old revision → the order screen's party is the new revision */
+it("Move a bill's floor read is not replaced by an older poll that answers later", async () => {
+  /* a floor-refresh poll deferred; move a bill (till-app.ts:7068-7076), whose floor read answers with the party at its new revision; then the poll answers with the old revision →
+     the order screen's `tables` row for the moved table (it is given the app's this.tables, :8851) holds the new revision. (Its `party` would pass today too:
+     #rememberOrderParty, :5388-5394, copies the party from the move's own read into orderParty, which the screen reads, :8856; the table row is what the late poll overwrites today.) */
 });
 ```
 
 - [ ] **Step 2: Run and watch them fail** —
-  `pnpm --filter @waitron/till exec vitest run src/widgets/seat-dialog.test.ts src/screens/till-floor-screen.refresh.test.ts src/till-app.test.ts -t "seats|Covers|15 s|map stays up|map comes back|older poll"`
+  `pnpm --filter @waitron/till exec vitest run src/widgets/seat-dialog.test.ts src/screens/till-floor-screen.refresh.test.ts src/till-app.test.ts -t "seats|Covers|15 s|list shows|map stays up|map comes back|older poll"`
   and `pnpm --filter @waitron/till exec vitest run src/till-app-parties.test.ts -t "older poll"`.
   Expected: each new case fails (the old hint shows; no `floor-refresh` is sent; the late answer
-  wins), except "does not ask while the list shows, or for the old map", a guard that passes
-  before the change.
+  wins), except two guards that pass before the change: "does not ask while the list shows, or for
+  the old map" and "an action's refresh is applied when an older poll answers first".
 - [ ] **Step 3: Implement.** With the app cases passing, replace "higher than the last applied" by
   "no read started since" and watch "an action's refresh is applied when an older poll answers
   first" fail, then restore it.
@@ -3291,7 +3361,12 @@ the signal chips; "Time to fire" (`floor.fire_due`) when the party's held group 
 floor's card judges it (`reminderDueAt(table.party?.reminder) <= now`, `#fireDue`,
 `till-floor-screen.ts:467-469`, shown on the card at `:921-925`), so a planned zone, whose map has no
 room for it, keeps it one press away; "Reserved 20:30"; "2 to deliver" (`floor.pending_delivery`);
-"Free" when none of these apply. The floor passes its own `now`. Footer: Close (`floor.details_close`, secondary) and, for a table needing clearing,
+"Free" when none of these apply. The floor passes the clock it last drew with (`#drawnAt`, set in
+`willUpdate`, `till-floor-screen.ts:459-461`), so when its reminder timer redraws the floor at the
+due time (`#watchReminders`, `:471-482`) the open sheet is drawn again with the later clock and
+shows Time to fire. Opened from the order screen's pin (Task 3.5) it is given no clock and reads
+`Date.now()` when it draws, which happens when its `table` changes, so there it shows Time to fire
+only after the next table read one of the order screen's actions brings. Footer: Close (`floor.details_close`, secondary) and, for a table needing clearing,
 Mark cleared (`floor.mark_cleared`, primary), which sends `mark-cleared` and then `details-close`.
 The floor screen opens it on the map's `wt-table-details`, with the heading of the map group the
 table belongs to, and closes it on `details-close`. It reads the table by id from `tables` on each
@@ -3324,6 +3399,9 @@ it("Escape asks to close", async () => { /* keyboard Escape; await the wt-dialog
 
 // till-floor-screen.details.test.ts
 it("opens the sheet on the map's request, headed as the map draws the table", async () => { /* wt-table-details { tableId: "t4" } on a merge of "Terrace 4" and "Terrace 5" → sheet.table.id "t4", heading "Terrace 4+5" */ });
+it("the open sheet shows Time to fire when the floor redraws at the due time", async () => {
+  /* floor now 11:59:59Z, t4's reminder due 12:00:00Z, sheet open → no [data-fire-due]; set the floor's now to 12:00:00Z → the sheet shows "Time to fire" */
+});
 it("a re-read updates the open sheet", async () => { /* set tables with t4's readyToServe 2 → sheet shows "2 ready" */ });
 it("a re-read without the table closes the sheet", async () => { /* open for t4; set tables without t4 → no open till-table-details-sheet (table null) */ });
 it("Mark cleared in the sheet reaches the app and closes the sheet", async () => { /* document hears mark-cleared { tableId }; sheet closed */ });
