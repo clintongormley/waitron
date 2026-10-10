@@ -1825,7 +1825,7 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   change was queued. Left open by A413 (#1436, the Devices screen and Add a device).
 
 - **A429 — floor plans: a master plan per zone, today's plan on the till (owner, 2026-10-08; slices
-  1 (#1493), 2 (#1506) and 3 built; slices 4–5 open).** Slice 1 is the
+  1 (#1493), 2 (#1506) and 3 (#1517) built; slices 4–5 open).** Slice 1 is the
   storage and reads: each zone's master plan (the layout the owner edits), today's plan (the copy
   the till works from), kept table names, the till's table-state answer, the dashboard's read and
   save routes, and the demo seed. Slice 2 is the dashboard editor. Slice 3 is the till's map: a
