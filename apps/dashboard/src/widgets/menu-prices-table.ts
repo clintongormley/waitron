@@ -336,6 +336,7 @@ export class MenuPricesTable extends LitElement {
   /** Each row's sections, every placement's together, for the section filter. */
   #reached: ReadonlyMap<MenuPriceRow, string[]> = new Map();
   #categoryPaths: ReadonlyMap<string, string> = new Map();
+  #categoryLabels: ReadonlyMap<string, string> = new Map();
   /** Each category with the categories above it, so a filter on a category keeps those inside it. */
   #categoryChains: ReadonlyMap<string, string[]> = new Map();
   #variants: ReadonlyMap<string, Product["variants"][number]> = new Map();
@@ -673,6 +674,13 @@ export class MenuPricesTable extends LitElement {
   #readCategories(): void {
     this.#categoryPaths = new Map(
       this.categories.map((category) => [category.id, categoryPath(category, this.categories)]),
+    );
+    this.#categoryLabels = new Map(
+      this.categories.map((category) => {
+        const chain = categoryAncestors(category, this.categories).reverse();
+        if (chain[0]?.parentId === null) chain.shift();
+        return [category.id, chain.map(({ name }) => name).join(PATH_SEPARATOR)];
+      }),
     );
     this.#categoryChains = new Map(
       this.categories.map((category) => [
@@ -1018,7 +1026,7 @@ export class MenuPricesTable extends LitElement {
 
   #categoryName(row: MenuPriceRow): string {
     if (row.categoryId === null) return t("categories.none");
-    return this.#categoryPaths.get(row.categoryId) ?? t("editor.missing_choice");
+    return this.#categoryLabels.get(row.categoryId) ?? t("editor.missing_choice");
   }
 
   #emit(name: string, detail: object): void {
