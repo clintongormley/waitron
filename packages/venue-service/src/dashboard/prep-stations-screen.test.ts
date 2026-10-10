@@ -6167,7 +6167,7 @@ describe.each([
   ["en", "When it gets orders"],
   ["es", "Cuándo recibe pedidos"],
 ] as const)("station service-times links (%s)", (locale, label) => {
-  it.each([false, true])("links active non-default stations for readOnly=%s", async (readOnly) => {
+  it("links active non-default stations", async () => {
     setLocale(locale);
     const loaded = withUpstairs({ open: false, why: "closed_by_hand" });
     loaded.stations.push(
@@ -6175,7 +6175,6 @@ describe.each([
       { ...upstairs, id: "disabled", name: "Disabled bar", active: false, displayOrder: 4 },
     );
     const el = await mount(api({ load: vi.fn().mockResolvedValue(loaded) }));
-    el.readOnly = readOnly;
     await settle(el);
     const links = [
       ...stationTable(el)!.querySelectorAll<HTMLAnchorElement>('a[href^="/manage/opening-hours"]'),

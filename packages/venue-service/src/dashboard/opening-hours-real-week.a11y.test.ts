@@ -1,3 +1,4 @@
+import { withOpeningStations } from "../testing/opening-hours-stations-request.js";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { registerIcons, DROPDOWN_ICONS } from "@waitron/ui";
 import { page } from "vitest/browser";
@@ -27,10 +28,12 @@ describe.each(["en", "es"] as const)("Real weeks %s", (locale) => {
       const wrapper = await mountThemed("<div></div>", theme);
       const model = realWeekModel();
       const screen = document.createElement("dashboard-opening-hours-screen");
-      screen.api = new OpeningHoursApi((async (path) =>
-        path.includes("named-days?")
-          ? namedWeekModel()
-          : structuredClone(model)) as DashboardRequest);
+      screen.api = new OpeningHoursApi(
+        withOpeningStations((async (path) =>
+          path.includes("named-days?")
+            ? namedWeekModel()
+            : structuredClone(model)) as DashboardRequest),
+      );
       wrapper.appendChild(screen);
       await expect
         .poll(() => screen.shadowRoot?.querySelector("opening-hours-week"))
@@ -89,8 +92,10 @@ it.each([390, 1280])("shows effective dated blocks at %i CSS pixels", async (wid
   const wrapper = await mountThemed("<div></div>", "dark");
   setLocale("en");
   const screen = document.createElement("dashboard-opening-hours-screen");
-  screen.api = new OpeningHoursApi((async (path) =>
-    path.includes("named-days?") ? namedWeekModel() : realWeekModel()) as DashboardRequest);
+  screen.api = new OpeningHoursApi(
+    withOpeningStations((async (path) =>
+      path.includes("named-days?") ? namedWeekModel() : realWeekModel()) as DashboardRequest),
+  );
   wrapper.appendChild(screen);
   for (const surface of ["department", "zone"] as const) {
     if (surface === "zone") {

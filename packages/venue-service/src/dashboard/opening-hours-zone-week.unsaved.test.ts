@@ -1,3 +1,4 @@
+import { withOpeningStations } from "../testing/opening-hours-stations-request.js";
 import { LitElement, html } from "lit";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { applyTokens, LeaveController, NavigationGuard } from "@waitron/ui";
@@ -32,64 +33,66 @@ class ZoneWeekLeaveApp extends LitElement {
   writes: unknown[][] = [];
   failRead = false;
   failWrite = false;
-  readonly api = new OpeningHoursApi((async (path, method, body) => {
-    if (method !== "GET") {
-      this.writes.push([path, method, body]);
-      if (this.failWrite) throw new Error("offline");
-      return;
-    }
-    if (this.failRead) throw new Error("offline");
-    return {
-      timeZone: "Europe/Madrid",
-      clockReadable: true,
-      dayCutover: "06:00",
-      menus: [],
-      namedDays: this.realWeek
-        ? [1, 2].map((day) => ({
-            id: `s${day}`,
-            date: `2026-10-${day + 11}`,
-            name: `Own ${day}`,
-            kind: "working_day",
-            repeats: false,
-            ownHours: true,
-            closeWholeVenue: false,
-          }))
-        : [],
-      departments: [
-        {
-          id: "d1",
-          name: "Restaurant",
-          active: true,
-          zones: [
-            {
-              id: "z1",
-              name: "Terrace",
-              week: [{ weekday: 1, ranges: [{ startsAt: "10:00", endsAt: "14:00" }] }],
-              dates: this.realWeek
-                ? [1, 2].map((day) => ({
-                    specialDateId: `s${day}`,
-                    ranges: [{ startsAt: "10:00", endsAt: "14:00" }],
-                  }))
-                : [],
-            },
-          ],
-          periods: [
-            {
-              id: "p1",
-              name: "Lunch",
-              colour: "blue",
-              menuId: "m1",
-              staffMenuIds: [],
-              endOffsetMinutes: 0,
-              weekdays: [1],
-            },
-          ],
-          week: [{ weekday: 1, slots: [{ periodId: "p1", startsAt: "10:00", endsAt: "14:00" }] }],
-          dates: [],
-        },
-      ],
-    };
-  }) as DashboardRequest);
+  readonly api = new OpeningHoursApi(
+    withOpeningStations((async (path, method, body) => {
+      if (method !== "GET") {
+        this.writes.push([path, method, body]);
+        if (this.failWrite) throw new Error("offline");
+        return;
+      }
+      if (this.failRead) throw new Error("offline");
+      return {
+        timeZone: "Europe/Madrid",
+        clockReadable: true,
+        dayCutover: "06:00",
+        menus: [],
+        namedDays: this.realWeek
+          ? [1, 2].map((day) => ({
+              id: `s${day}`,
+              date: `2026-10-${day + 11}`,
+              name: `Own ${day}`,
+              kind: "working_day",
+              repeats: false,
+              ownHours: true,
+              closeWholeVenue: false,
+            }))
+          : [],
+        departments: [
+          {
+            id: "d1",
+            name: "Restaurant",
+            active: true,
+            zones: [
+              {
+                id: "z1",
+                name: "Terrace",
+                week: [{ weekday: 1, ranges: [{ startsAt: "10:00", endsAt: "14:00" }] }],
+                dates: this.realWeek
+                  ? [1, 2].map((day) => ({
+                      specialDateId: `s${day}`,
+                      ranges: [{ startsAt: "10:00", endsAt: "14:00" }],
+                    }))
+                  : [],
+              },
+            ],
+            periods: [
+              {
+                id: "p1",
+                name: "Lunch",
+                colour: "blue",
+                menuId: "m1",
+                staffMenuIds: [],
+                endOffsetMinutes: 0,
+                weekdays: [1],
+              },
+            ],
+            week: [{ weekday: 1, slots: [{ periodId: "p1", startsAt: "10:00", endsAt: "14:00" }] }],
+            dates: [],
+          },
+        ],
+      };
+    }) as DashboardRequest),
+  );
   override render() {
     return html`<dashboard-opening-hours-screen .api=${this.api}></dashboard-opening-hours-screen
       >${this.leave.render({ heading: "Unsaved changes", message: "Discard unsaved changes?", keepLabel: "Keep editing", discardLabel: "Discard changes" })}`;

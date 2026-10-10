@@ -40,6 +40,7 @@ const en = {
   "venue.zone_closed_from": "from {time}",
   "venue.zone_opening_hours": "Opening hours (normal week)",
   "opening.title": "Opening hours",
+  "opening.show": "Show",
   "opening.all_departments": "All departments",
   "opening.zone_placeholder": "{name}: closed times",
   "opening.clock_unreadable":
@@ -750,6 +751,7 @@ const es: Record<keyof typeof en, string> = {
   "venue.zone_closed_from": "desde {time}",
   "venue.zone_opening_hours": "Horario de apertura (semana normal)",
   "opening.title": "Horario de apertura",
+  "opening.show": "Mostrar",
   "opening.all_departments": "Todos los departamentos",
   "opening.zone_placeholder": "{name}: horarios de cierre",
   "opening.clock_unreadable":

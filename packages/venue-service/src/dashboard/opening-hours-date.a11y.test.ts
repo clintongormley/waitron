@@ -1,3 +1,4 @@
+import { withOpeningStations } from "../testing/opening-hours-stations-request.js";
 import { afterEach, describe, expect, test, vi } from "vitest";
 import { setLocale, type DashboardRequest } from "@waitron/dashboard-kit";
 import { cleanup, host } from "@waitron/ui/src/test-helpers.js";
@@ -67,10 +68,12 @@ describe.each(["light", "dark"] as const)("Opening special date (%s)", (theme) =
         },
       ],
     };
-    screen.api = new OpeningHoursApi((async (_url, method) => {
-      if (method === "GET") return model;
-      throw { code: "menu_timetable.invalid", params: { field: "slots.0.endsAt" } };
-    }) as DashboardRequest);
+    screen.api = new OpeningHoursApi(
+      withOpeningStations((async (_url, method) => {
+        if (method === "GET") return model;
+        throw { code: "menu_timetable.invalid", params: { field: "slots.0.endsAt" } };
+      }) as DashboardRequest),
+    );
     wrapper.appendChild(screen);
     await expect.poll(() => screen.shadowRoot?.querySelector("opening-hours-week")).not.toBeNull();
     await screen.updateComplete;

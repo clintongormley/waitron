@@ -437,3 +437,26 @@ it("reads the last valid calendar date without stepping beyond its requested ran
       days: [{ date: "9999-12-31", departments: [] }],
     });
   }));
+
+it("the normal week ignores a named-day closure while the dated week applies it", async () =>
+  tx(async (db) => {
+    const f = await fixture(db);
+    await saveSpecialDate(
+      db,
+      f.cfg,
+      null,
+      {
+        date: day,
+        name: "Closed Monday",
+        closeWholeVenue: true,
+        ownHours: false,
+        repeats: false,
+      },
+      at,
+    );
+    expect(await stationServiceTimes(db, f.cfg, f.station, day, day)).toEqual({
+      always: null,
+      days: [{ date: day, departments: [] }],
+    });
+    expect(await stationServiceTimes(db, f.cfg, f.station, day, day, "normal")).toEqual(planned(f));
+  }));

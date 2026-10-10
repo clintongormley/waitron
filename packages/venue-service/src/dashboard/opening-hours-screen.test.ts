@@ -1,3 +1,4 @@
+import { withOpeningStations } from "../testing/opening-hours-stations-request.js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { LitElement } from "lit";
 import { page, userEvent } from "vitest/browser";
@@ -70,7 +71,7 @@ async function mount(request?: DashboardRequest, readOnly = false) {
   ).toBeDefined();
   const el = document.createElement("dashboard-opening-hours-screen") as Screen;
   el.api = new OpeningHoursApi(
-    request ?? ((async () => structuredClone(model())) as DashboardRequest),
+    withOpeningStations(request ?? ((async () => structuredClone(model())) as DashboardRequest)),
   );
   el.readOnly = readOnly;
   applyTokens(el);
@@ -617,13 +618,15 @@ it("recovers a failed initial load and ignores model reads that settle after rem
   let reads = 0;
   let resolve!: (data: OpeningHoursModel) => void;
   const el = document.createElement("dashboard-opening-hours-screen");
-  el.api = new OpeningHoursApi((async () => {
-    if (++reads === 1) throw new Error("offline");
-    if (reads === 2) return model();
-    return new Promise<OpeningHoursModel>((done) => {
-      resolve = done;
-    });
-  }) as DashboardRequest);
+  el.api = new OpeningHoursApi(
+    withOpeningStations((async () => {
+      if (++reads === 1) throw new Error("offline");
+      if (reads === 2) return model();
+      return new Promise<OpeningHoursModel>((done) => {
+        resolve = done;
+      });
+    }) as DashboardRequest),
+  );
   hosts.push(el);
   document.body.append(el);
   await expect.poll(() => el.shadowRoot!.querySelector("[data-test=read-error]")).not.toBeNull();

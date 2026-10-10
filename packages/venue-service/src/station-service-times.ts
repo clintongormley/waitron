@@ -58,6 +58,7 @@ export async function stationServiceTimes(
   stationId: string,
   from: LocalDate,
   to: LocalDate,
+  week: "normal" | "dated" = "dated",
 ): Promise<StationServiceTimes> {
   if (!isLocalDate(from)) throw new AppError("management.request_invalid", { field: "from" });
   if (!isLocalDate(to) || to < from)
@@ -124,7 +125,8 @@ export async function stationServiceTimes(
   const days: StationServiceDay[] = [];
   for (let index = 0; index < dayCount; index++) {
     const date = addDays(from, index);
-    const named = model.namedDays.find((day) => occursOn(day, date));
+    const named =
+      week === "normal" ? undefined : model.namedDays.find((day) => occursOn(day, date));
     const weekday = weekdayOf(date);
     const results: StationServiceDay["departments"][number][] = [];
     if (!named?.closeWholeVenue)

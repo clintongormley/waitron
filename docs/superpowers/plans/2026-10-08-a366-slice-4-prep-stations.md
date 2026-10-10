@@ -1925,7 +1925,7 @@ days per call (`management.request_invalid` beyond).
 **Behaviour:** decision 25. Read-only; the default station and a switched-off one show their
 sentence instead of a grid.
 
-- [ ] Steps: failing tests (the picker's Prep stations group lists active stations; choosing one
+- [x] Steps: failing tests (the picker's Prep stations group lists active stations; choosing one
   writes `station=` and shows its columns; the real week's ‹ › reloads; the default's sentence;
   axe in both themes); watch them fail; implement; LOOK in EN and ES, both themes, 1280 and 390;
   commit `feat(venue-service): Opening hours shows when each prep station gets orders (A366)`.
@@ -2110,3 +2110,18 @@ campaign's controversial-test-change rule. It must be approved or revised before
 Remaining: B9, B12's full prose audit, B1/B2 cross-package qualification, final visual inspection,
 two whole-branch Claude reviews, normal push hook and current-head CI. This checkpoint is not
 ready for finish-branch.
+
+
+### Part B station view checkpoint — 2026-10-10
+
+B9 adds the read-only station picker and department/day grid. The planning reader accepts
+`week=normal` to ignore named-day overrides for a normal week; dated requests retain their
+previous behavior. This closes the normal-week half of decision 25, which B8's dated interface
+did not represent. Station reads use the shared passive live/timed watcher. Changing the station
+or week detaches the preceding read; default and switched-off stations show their status sentence.
+
+The owner approved person-only dashboard move audits on 2026-10-10. Reconciliation with main's
+core 0126–0130 regenerated the candidate as core 0131; it retains A455's hidden supervisor page
+and removal of extras notes. Lane D's local `receipts/a366-4b/resume-owner/` holds the red/green
+logs, fixture inventory, schema upgrade run and presentation captures. B12, B1/B2 qualification,
+whole-branch review and current-head CI remain; this checkpoint is not branch readiness.

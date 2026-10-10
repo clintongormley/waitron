@@ -1,3 +1,4 @@
+import { withOpeningStations } from "../testing/opening-hours-stations-request.js";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { LitElement } from "lit";
 import { applyTokens } from "@waitron/ui";
@@ -60,8 +61,10 @@ async function mount(
 ) {
   screen = document.createElement("dashboard-opening-hours-screen");
   screen.readOnly = readOnly;
-  screen.api = new OpeningHoursApi((async (path, method, body) =>
-    method === "GET" ? structuredClone(model) : write?.(path, method, body)) as DashboardRequest);
+  screen.api = new OpeningHoursApi(
+    withOpeningStations((async (path, method, body) =>
+      method === "GET" ? structuredClone(model) : write?.(path, method, body)) as DashboardRequest),
+  );
   applyTokens(screen);
   document.body.append(screen);
   await expect.poll(() => screen.shadowRoot?.querySelector("wt-tabs")).not.toBeNull();

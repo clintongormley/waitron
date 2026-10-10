@@ -1,3 +1,4 @@
+import { withOpeningStations } from "../testing/opening-hours-stations-request.js";
 import { afterEach, describe, expect, test, vi } from "vitest";
 import { setLocale, type DashboardRequest } from "@waitron/dashboard-kit";
 import { cleanup, host } from "@waitron/ui/src/test-helpers.js";
@@ -31,67 +32,69 @@ describe.each(["light", "dark"] as const)("Opening Day (%s)", (theme) => {
     const wrapper = await mountThemed("<div></div>", theme);
     const screen = document.createElement("dashboard-opening-hours-screen");
     screen.readOnly = state === "viewer";
-    screen.api = new OpeningHoursApi((async (_, method) => {
-      if (method !== "GET")
-        throw { code: "menu_timetable.invalid", params: { field: "days.1.slots" } };
-      return {
-        timeZone: "Europe/Madrid",
-        clockReadable: state !== "clock",
-        dayCutover: "06:00",
-        menus: [{ id: "m1", name: "Lunch menu", active: true, includes: [] }],
-        namedDays:
-          state === "special" || state === "closed"
-            ? [
-                {
-                  id: "s1",
-                  date: "2026-10-12",
-                  name: "Holiday",
-                  kind: "working_day" as const,
-                  repeats: false,
-                  ownHours: true,
-                  closeWholeVenue: state === "closed",
-                },
-              ]
-            : [],
-        departments:
-          state === "empty"
-            ? []
-            : ["Restaurant", "Deli"].map((name, i) => ({
-                id: `d${i + 1}`,
-                name,
-                active: true,
-                zones: i
-                  ? []
-                  : [
-                      {
-                        id: "z1",
-                        name: "Terrace",
-                        week: [{ weekday: 1, ranges: [{ startsAt: "23:00", endsAt: "06:00" }] }],
-                        dates: [],
-                      },
-                    ],
-                periods: [
+    screen.api = new OpeningHoursApi(
+      withOpeningStations((async (_, method) => {
+        if (method !== "GET")
+          throw { code: "menu_timetable.invalid", params: { field: "days.1.slots" } };
+        return {
+          timeZone: "Europe/Madrid",
+          clockReadable: state !== "clock",
+          dayCutover: "06:00",
+          menus: [{ id: "m1", name: "Lunch menu", active: true, includes: [] }],
+          namedDays:
+            state === "special" || state === "closed"
+              ? [
                   {
-                    id: `p${i + 1}`,
-                    name: "Lunch",
-                    colour: i ? "blue" : "green",
-                    menuId: "m1",
-                    staffMenuIds: [],
-                    endOffsetMinutes: 0,
-                    weekdays: [1],
-                    routingUses: [],
+                    id: "s1",
+                    date: "2026-10-12",
+                    name: "Holiday",
+                    kind: "working_day" as const,
+                    repeats: false,
+                    ownHours: true,
+                    closeWholeVenue: state === "closed",
                   },
-                ],
-                week: [
-                  {
-                    weekday: 1,
-                    slots: [{ periodId: `p${i + 1}`, startsAt: "10:00", endsAt: "14:00" }],
-                  },
-                ],
-                dates: [],
-              })),
-      };
-    }) as DashboardRequest);
+                ]
+              : [],
+          departments:
+            state === "empty"
+              ? []
+              : ["Restaurant", "Deli"].map((name, i) => ({
+                  id: `d${i + 1}`,
+                  name,
+                  active: true,
+                  zones: i
+                    ? []
+                    : [
+                        {
+                          id: "z1",
+                          name: "Terrace",
+                          week: [{ weekday: 1, ranges: [{ startsAt: "23:00", endsAt: "06:00" }] }],
+                          dates: [],
+                        },
+                      ],
+                  periods: [
+                    {
+                      id: `p${i + 1}`,
+                      name: "Lunch",
+                      colour: i ? "blue" : "green",
+                      menuId: "m1",
+                      staffMenuIds: [],
+                      endOffsetMinutes: 0,
+                      weekdays: [1],
+                      routingUses: [],
+                    },
+                  ],
+                  week: [
+                    {
+                      weekday: 1,
+                      slots: [{ periodId: `p${i + 1}`, startsAt: "10:00", endsAt: "14:00" }],
+                    },
+                  ],
+                  dates: [],
+                })),
+        };
+      }) as DashboardRequest),
+    );
     wrapper.appendChild(screen);
     await expect.poll(() => screen.shadowRoot?.querySelector("opening-hours-day")).not.toBeNull();
     const day =

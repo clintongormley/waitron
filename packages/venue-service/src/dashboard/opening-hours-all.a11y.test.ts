@@ -1,3 +1,4 @@
+import { withOpeningStations } from "../testing/opening-hours-stations-request.js";
 import { afterEach, describe, expect, test } from "vitest";
 import { page } from "vitest/browser";
 import { setLocale, type DashboardRequest } from "@waitron/dashboard-kit";
@@ -83,8 +84,9 @@ describe.each(["en", "es"] as const)("Opening hours choices (%s)", (locale) => {
         const screen = document.createElement(
           "dashboard-opening-hours-screen",
         ) as OpeningHoursScreen;
-        screen.api = new OpeningHoursApi((async () =>
-          structuredClone(model())) as DashboardRequest);
+        screen.api = new OpeningHoursApi(
+          withOpeningStations((async () => structuredClone(model())) as DashboardRequest),
+        );
         wrapper.append(screen);
         window.scrollTo(0, 0);
         await expect.poll(() => screen.shadowRoot!.querySelector("wt-tabs")).not.toBeNull();

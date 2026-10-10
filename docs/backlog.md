@@ -1333,8 +1333,8 @@ _Formerly entries spread across the old sections, A261's venue-operations steps 
   Keep live venue defaults, omit optional current address on A4, and add no consent step.
   Part B is in progress on its unlanded branch: station-hours and fallback retirement,
   daily closure notes, Disable and the worked-out station-times reader are implemented; their
-  Opening hours view and final qualification remain. The dashboard move-audit representation
-  waits for an owner decision.
+  Opening hours station view is implemented; final qualification and branch review remain.
+  The owner approved person-only dashboard move audits on 2026-10-10.
   [Detail](backlog/service-periods.md#service-times-departments-zones-and-prep-stations-a366-owner-2026-10-07--spec-approved-2026-10-07)
 
 - **Refresh service settings on an open till** — decide how changed department/zone policy

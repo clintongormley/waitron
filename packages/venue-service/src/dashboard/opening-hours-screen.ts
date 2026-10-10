@@ -21,6 +21,7 @@ import "./opening-hours-week.js";
 import "./opening-hours-zone-week.js";
 import "./opening-hours-day.js";
 import "./opening-hours-all.js";
+import "./opening-hours-station.js";
 import "./hours-calendar.js";
 import "./named-day-editor.js";
 import "./named-day-copy.js";
@@ -34,7 +35,7 @@ import type {
   OpeningHoursModel,
   PeriodRoutingUse,
 } from "../menu-timetable-types.js";
-import type { OpeningHoursApi } from "./opening-hours-client.js";
+import type { OpeningHoursApi, OpeningStation } from "./opening-hours-client.js";
 import { businessDateToday } from "./opening-hours-day.js";
 import { addDays, isLocalDate, weekdayOf } from "../hours-rules.js";
 import type { NamedDaysModel } from "../holiday-types.js";
@@ -93,6 +94,10 @@ export class OpeningHoursScreen extends LitElement {
   @state() private model?: OpeningHoursModel;
   @state() private departmentId = "";
   @state() private zoneId = "";
+  @state() private stationId = "";
+  @state() private stations: OpeningStation[] = [];
+  @state() private stationReadError = "";
+  private stationsDetach?: () => void;
   @state() private view: View = "week";
   @state() private month = "";
   @state() private weekStart = "";
@@ -113,7 +118,13 @@ export class OpeningHoursScreen extends LitElement {
     basePath: "/manage",
     primary: "dashboard",
     children: {
-      "opening-hours": { view: "view", department: "department", zone: "zone", month: "month" },
+      "opening-hours": {
+        view: "view",
+        department: "department",
+        zone: "zone",
+        station: "station",
+        month: "month",
+      },
     },
   });
   private followUrl() {
@@ -122,6 +133,10 @@ export class OpeningHoursScreen extends LitElement {
     this.view = view === "periods" || view === "day" || view === "calendar" ? view : "week";
     this.departmentId = this.url.read("department") ?? "";
     this.zoneId = this.url.read("zone") ?? "";
+    this.stationId =
+      this.url.read("station") ??
+      new URL(navigationGuardFor(window)?.href ?? location.href).searchParams.get("station") ??
+      "";
     const month = this.url.read("month") ?? "";
     this.month = /^\d{4}-(0[1-9]|1[0-2])$/.test(month) ? month : "";
     const week =
@@ -130,6 +145,18 @@ export class OpeningHoursScreen extends LitElement {
   }
   override connectedCallback() {
     super.connectedCallback();
+    this.stationsDetach = this.api.watchStations(
+      (stations) => {
+        this.stations = stations;
+        this.stationReadError = "";
+      },
+      () => {
+        this.stationReadError = t("opening.load_error");
+      },
+      () => {
+        this.stationReadError = "";
+      },
+    );
     this.detach = this.api.watchOpeningHours(
       (model) => {
         this.model = model;
@@ -144,6 +171,7 @@ export class OpeningHoursScreen extends LitElement {
     );
   }
   override disconnectedCallback() {
+    this.stationsDetach?.();
     this.detach?.();
     this.weekDetach?.();
     this.watchedWeek = "";
@@ -174,29 +202,73 @@ export class OpeningHoursScreen extends LitElement {
               label: `${department.name} › ${zone.name}`,
             })),
           ]),
+          ...this.stations
+            .filter((station) => station.active)
+            .map((station) => ({
+              value: `station:${station.id}`,
+              label: station.name,
+              group: t("nav.prep_stations"),
+            })),
         ]
       : departments.map((department) => ({ value: department.id, label: department.name }));
   }
   private pickerValue() {
+    if (this.view === "week" && this.stationId) return `station:${this.stationId}`;
     if (this.view === "week" && this.departmentId === "all") return "all";
     const zone = this.view === "week" ? this.zone() : undefined;
     return zone ? `zone:${zone.id}` : (this.department()?.id ?? "");
   }
   private async chooseDepartment(value: string) {
     if (!this.isConnected) return;
-    if (value === "all" && this.view === "week") {
-      await this.url.write({ dashboard: "opening-hours", department: "all", zone: null });
+    if (value.startsWith("station:") && this.view === "week") {
+      const stationId = value.slice(8);
+      if (!this.stations.some((station) => station.active && station.id === stationId)) return;
+      const url = new URL(navigationGuardFor(window)?.href ?? location.href);
+      url.pathname = "/manage/opening-hours/view/week";
+      url.searchParams.set("station", stationId);
+      url.searchParams.delete("department");
+      url.searchParams.delete("zone");
+      await this.writeAddress(url);
+    } else if (value === "all" && this.view === "week") {
+      await this.url.write(
+        {
+          dashboard: "opening-hours",
+          department: "all",
+          zone: null,
+          station: null,
+        },
+        false,
+        ["station"],
+      );
     } else if (value.startsWith("zone:") && this.view === "week") {
       const zoneId = value.slice(5);
       const department = this.model?.departments.find(
         (d) => d.active && d.zones?.some((z) => z.id === zoneId),
       );
       if (!department) return;
-      await this.url.write({ dashboard: "opening-hours", department: department.id, zone: zoneId });
+      await this.url.write(
+        {
+          dashboard: "opening-hours",
+          department: department.id,
+          zone: zoneId,
+          station: null,
+        },
+        false,
+        ["station"],
+      );
     } else {
       const department = this.model?.departments.find((d) => d.id === value);
       if (!department) return;
-      await this.url.write({ dashboard: "opening-hours", department: department.id, zone: null });
+      await this.url.write(
+        {
+          dashboard: "opening-hours",
+          department: department.id,
+          zone: null,
+          station: null,
+        },
+        false,
+        ["station"],
+      );
     }
     this.followUrl();
   }
@@ -245,10 +317,13 @@ export class OpeningHoursScreen extends LitElement {
   }
   private async writeWeek(week: string, replace = false) {
     if (!this.isConnected || this.view !== "week") return;
-    const generation = this.generation;
     const url = new URL(navigationGuardFor(window)?.href ?? location.href);
     if (week) url.searchParams.set("week", week);
     else url.searchParams.delete("week");
+    await this.writeAddress(url, replace);
+  }
+  private async writeAddress(url: URL, replace = false) {
+    const generation = this.generation;
     const guard = navigationGuardFor(window);
     if (guard) {
       await guard.write(url, replace);
@@ -700,7 +775,7 @@ export class OpeningHoursScreen extends LitElement {
                   ? html`<div class="chooser">
                       <wt-combobox
                         name="departmentId"
-                        label=${t("menu.department")}
+                        label=${t("opening.show")}
                         search="never"
                         .options=${this.pickerOptions()}
                         .value=${this.pickerValue()}
@@ -717,6 +792,7 @@ export class OpeningHoursScreen extends LitElement {
                           void this.chooseDepartment(event.detail.value);
                         }}
                       ></wt-combobox>
+                      ${this.stationReadError ? html`<p role="alert">${this.stationReadError}</p>` : nothing}
                     </div>`
                   : this.view === "day" || this.view === "calendar"
                     ? nothing
@@ -742,49 +818,57 @@ export class OpeningHoursScreen extends LitElement {
                   ${this.view === "week" && !department ? html`<p>${t("menu.no_departments")}</p>` : nothing}
                   ${this.view === "week" ? this.weekChooser() : nothing}
                   ${
-                    this.view === "week" && this.departmentId === "all"
-                      ? html`<opening-hours-all
-                          .departments=${this.model.departments}
-                          .dayCutover=${this.model.dayCutover}
-                          .weekStart=${this.weekStart}
-                          .namedDays=${this.model.namedDays}
-                          @department-open=${(event: CustomEvent<{ departmentId: string }>) => {
-                            event.stopPropagation();
-                            void this.chooseDepartment(event.detail.departmentId);
-                          }}
-                        ></opening-hours-all>`
-                      : this.view === "week" && this.zone()
-                        ? keyed(
-                            `${this.zone()!.id}:${this.weekStart}`,
-                            html`<opening-hours-zone-week
-                              .api=${this.api}
-                              .department=${department!}
-                              .zone=${this.zone()!}
-                              .dayCutover=${this.model.dayCutover}
-                              .readOnly=${this.readOnly}
-                              .weekStart=${this.weekStart}
-                              .namedDays=${this.model.namedDays}
-                              .dateActionsReady=${!!this.namedWeek && !this.namedReadError}
-                              @named-calendar-action=${this.openNamedDay}
-                            ></opening-hours-zone-week>`,
-                          )
-                        : this.view === "week" && department
+                    this.view === "week" && this.stationId
+                      ? html`<opening-hours-station
+                          .api=${this.api}
+                          .model=${this.model}
+                          .stationId=${this.stationId}
+                          .weekStart=${this.weekStart || this.currentWeek() || "2026-01-05"}
+                          .normal=${!this.weekStart}
+                        ></opening-hours-station>`
+                      : this.view === "week" && this.departmentId === "all"
+                        ? html`<opening-hours-all
+                            .departments=${this.model.departments}
+                            .dayCutover=${this.model.dayCutover}
+                            .weekStart=${this.weekStart}
+                            .namedDays=${this.model.namedDays}
+                            @department-open=${(event: CustomEvent<{ departmentId: string }>) => {
+                              event.stopPropagation();
+                              void this.chooseDepartment(event.detail.departmentId);
+                            }}
+                          ></opening-hours-all>`
+                        : this.view === "week" && this.zone()
                           ? keyed(
-                              `${department.id}:${this.weekStart}`,
-                              html`<opening-hours-week
+                              `${this.zone()!.id}:${this.weekStart}`,
+                              html`<opening-hours-zone-week
                                 .api=${this.api}
-                                .department=${department}
-                                .menus=${this.model!.menus}
-                                .dayCutover=${this.model!.dayCutover}
-                                .timeZone=${this.model!.clockReadable ? this.model!.timeZone : undefined}
+                                .department=${department!}
+                                .zone=${this.zone()!}
+                                .dayCutover=${this.model.dayCutover}
+                                .readOnly=${this.readOnly}
                                 .weekStart=${this.weekStart}
                                 .namedDays=${this.model.namedDays}
                                 .dateActionsReady=${!!this.namedWeek && !this.namedReadError}
-                                .readOnly=${this.readOnly}
                                 @named-calendar-action=${this.openNamedDay}
-                              ></opening-hours-week>`,
+                              ></opening-hours-zone-week>`,
                             )
-                          : nothing
+                          : this.view === "week" && department
+                            ? keyed(
+                                `${department.id}:${this.weekStart}`,
+                                html`<opening-hours-week
+                                  .api=${this.api}
+                                  .department=${department}
+                                  .menus=${this.model!.menus}
+                                  .dayCutover=${this.model!.dayCutover}
+                                  .timeZone=${this.model!.clockReadable ? this.model!.timeZone : undefined}
+                                  .weekStart=${this.weekStart}
+                                  .namedDays=${this.model.namedDays}
+                                  .dateActionsReady=${!!this.namedWeek && !this.namedReadError}
+                                  .readOnly=${this.readOnly}
+                                  @named-calendar-action=${this.openNamedDay}
+                                ></opening-hours-week>`,
+                              )
+                            : nothing
                   }
                 </div>
                 <div slot="periods">
