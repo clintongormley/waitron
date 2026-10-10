@@ -338,8 +338,10 @@ declare module "@waitron/shared" {
     "table.taken_off": { tableId: string };
     /** A change to today's plan would move, turn or place a fixed table. */
     "table.fixed": { tableId: string };
-    /** A change to today's plan would turn a table in one of today's merges. */
+    /** A change to today's plan would turn or take off a table in one of today's merges. */
     "table.merged": { tableId: string };
+    /** Taking a table off for today found an order with food on its way to it. */
+    "table.delivery_pending": { tableId: string };
     /**
      * The table still needs clearing (`dining_tables.needs_clearing_since` is set), so
      * no party may be seated at it, moved to it or joined to it until Mark cleared.

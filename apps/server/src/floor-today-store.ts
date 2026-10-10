@@ -4,11 +4,13 @@ import {
   floorPlans,
   floorPlanTables,
   floorResetTables,
+  floorTodayJoins,
   floorTodayJoinTables,
   floorTodayTables,
   floorTodayZones,
   floorZones,
   partyTables,
+  workingOrders,
 } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import type { TableRemoval } from "@waitron/module";
@@ -21,6 +23,7 @@ import {
   type Placement,
   type Target,
 } from "./floor-reset-plan.js";
+import { foodOnItsWay } from "./delivery-release.js";
 import { leaveMerges } from "./floor-today-merges.js";
 import { refusedByAModule, removeLiveTables, tablesTied } from "./table-removal.js";
 import type { TillConfig } from "./till-config.js";
@@ -519,5 +522,92 @@ export async function placeSpareToday(
   await tx
     .update(floorTodayTables)
     .set({ x: at.x, y: at.y, width: 8, height: 8, shape: "rect", rotation: 0 })
+    .where(eq(floorTodayTables.id, row.id));
+}
+
+/** Takes a free table off today's plan, keeping its place; one already taken off is left as it is. */
+export async function takeOffToday(
+  tx: Transaction,
+  cfg: TillConfig,
+  tableId: string,
+): Promise<void> {
+  const today = await todayOf(tx, cfg, tableId);
+  if (today.row.takenOff) return;
+  if (today.merge !== null) throw new AppError("table.merged", { tableId });
+  const [held] = await tx
+    .select({ id: partyTables.id })
+    .from(partyTables)
+    .where(and(eq(partyTables.tableId, tableId), isNull(partyTables.leftAt)));
+  if (held !== undefined) throw new AppError("tab.already_open", { tableId });
+  const [table] = await tx
+    .select({ needsClearingSince: diningTables.needsClearingSince })
+    .from(diningTables)
+    .where(eq(diningTables.id, tableId));
+  if (table!.needsClearingSince !== null) throw new AppError("table.needs_clearing", { tableId });
+  const [delivery] = await tx
+    .select({ id: workingOrders.id })
+    .from(workingOrders)
+    .where(and(eq(workingOrders.deliveryTableId, tableId), foodOnItsWay()));
+  if (delivery !== undefined) throw new AppError("table.delivery_pending", { tableId });
+  await tx
+    .update(floorTodayTables)
+    .set({ takenOff: true })
+    .where(eq(floorTodayTables.id, today.row.id));
+}
+
+export async function putBackToday(
+  tx: Transaction,
+  cfg: TillConfig,
+  tableId: string,
+): Promise<void> {
+  const { row } = await todayOf(tx, cfg, tableId);
+  await tx.update(floorTodayTables).set({ takenOff: false }).where(eq(floorTodayTables.id, row.id));
+}
+
+/** Today's seats for the table, or for its merge when it is in one. */
+export async function seatsToday(
+  tx: Transaction,
+  cfg: TillConfig,
+  tableId: string,
+  seats: number,
+): Promise<void> {
+  const today = await todayOf(tx, cfg, tableId);
+  if (today.row.takenOff) throw new AppError("table.taken_off", { tableId });
+  if (today.merge !== null) {
+    await tx
+      .update(floorTodayJoins)
+      .set({ seats })
+      .where(eq(floorTodayJoins.id, today.merge.joinId));
+    return;
+  }
+  await tx.update(floorTodayTables).set({ seats }).where(eq(floorTodayTables.id, today.row.id));
+}
+
+/**
+ * Sets the table's today's row from what the last reset copied for it, after it leaves any merge.
+ * Its name is left alone: names change only at a reset or a catch-up.
+ */
+export async function backToSaved(
+  tx: Transaction,
+  cfg: TillConfig,
+  tableId: string,
+): Promise<void> {
+  const { row } = await todayOf(tx, cfg, tableId);
+  const [saved] = await tx
+    .select()
+    .from(floorResetTables)
+    .where(eq(floorResetTables.tableId, tableId));
+  if (saved === undefined || saved.remove) {
+    throw new AppError("table.not_in_floor_plan", { tableId });
+  }
+  await leaveMerges(tx, [tableId]);
+  await tx
+    .update(floorTodayTables)
+    .set({
+      seats: saved.seats,
+      fixed: saved.fixed,
+      ...placementColumns(placementOf(saved)),
+      takenOff: false,
+    })
     .where(eq(floorTodayTables.id, row.id));
 }
