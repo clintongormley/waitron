@@ -521,7 +521,7 @@ export class TillFloorScreen extends LitElement {
   }
 
   override willUpdate(changed: PropertyValues<this>): void {
-    if (changed.has("tables")) this.#pending = null;
+    if (changed.has("tables") && this.askingSeats === null) this.#pending = null;
     this.#drawnAt = this.now ?? Date.now();
     if (this.details !== null && !this.tables.some((table) => table.id === this.details!.tableId))
       this.details = null;

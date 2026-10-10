@@ -193,6 +193,25 @@ describe("till-floor-screen: dragging on today's plan", () => {
     expect(refreshes.count).toBe(1);
   });
 
+  it("a re-read while the seats are asked keeps the table where it was dropped", async () => {
+    const api = stubApi();
+    api.mergeToday.mockRejectedValueOnce({
+      code: "floor_plan.invalid",
+      status: 400,
+      field: "seats",
+    });
+    const el = await mount([planned("t1", 2), planned("t2", 20)], api);
+    await drop(el, { tableId: "t2", x: 5, y: 3, targetId: "t1" });
+    await settle(el);
+    expect(el.shadowRoot!.querySelector("till-today-seats-dialog")).not.toBeNull();
+
+    el.tables = [planned("t1", 2), planned("t2", 20)];
+    await el.updateComplete;
+
+    expect(el.shadowRoot!.querySelector("till-today-seats-dialog")).not.toBeNull();
+    expect(drawnAt(el, "t2")).toBe(4);
+  });
+
   it("cancelling the seats puts the table back", async () => {
     const api = stubApi();
     api.mergeToday.mockRejectedValueOnce({
