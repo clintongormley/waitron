@@ -120,11 +120,7 @@ export async function createStation(
   }
 }
 
-export async function listStations(
-  tx: Transaction,
-  cfg: TillConfig,
-  includeDisabled = false,
-): Promise<Station[]> {
+export async function listStations(tx: Transaction, cfg: TillConfig): Promise<Station[]> {
   const defaults = await getKitchenTimingDefaults(tx, cfg);
   const stations = await tx
     .select({
@@ -140,12 +136,7 @@ export async function listStations(
     })
     .from(kitchenStations)
     .leftJoin(kitchenStationTiming, eq(kitchenStationTiming.stationId, kitchenStations.id))
-    .where(
-      and(
-        eq(kitchenStations.locationId, cfg.locationId),
-        includeDisabled ? undefined : eq(kitchenStations.active, true),
-      ),
-    )
+    .where(and(eq(kitchenStations.locationId, cfg.locationId), eq(kitchenStations.active, true)))
     .orderBy(kitchenStations.displayOrder, kitchenStations.name);
   return stations.map((station) => ({
     ...station,
@@ -203,11 +194,13 @@ export async function updateStation(
   patch: {
     name?: string;
     displayOrder?: number;
-    active?: boolean;
     showsRestOfOrder?: boolean;
     printerIds?: readonly string[];
   } & StationTimingPatch,
 ): Promise<void> {
+  if (Object.hasOwn(patch, "active"))
+    throw new AppError("management.request_invalid", { field: "active" });
+  await requireLiveStation(tx, cfg, id);
   const { warmAfterMinutes, overdueAfterMinutes, forgottenAfterMinutes, printerIds, ...set } =
     patch;
   const timingPatch: StationTimingPatch = {};
@@ -229,9 +222,6 @@ export async function updateStation(
       { id, name: station.name },
     );
   }
-  // Printers are replaced only on a switched-on station, so they go in before a switch-off.
-  const printersFirst = printerIds !== undefined && set.active === false;
-  if (printersFirst) await replaceStationPrinters(tx, cfg, id, printerIds);
   try {
     if (Object.keys(set).length > 0) {
       await tx.update(kitchenStations).set(set).where(eq(kitchenStations.id, id));
@@ -248,8 +238,7 @@ export async function updateStation(
       .values({ stationId: id, ...timingPatch })
       .onConflictDoUpdate({ target: kitchenStationTiming.stationId, set: timingPatch });
   }
-  if (printerIds !== undefined && !printersFirst)
-    await replaceStationPrinters(tx, cfg, id, printerIds);
+  if (printerIds !== undefined) await replaceStationPrinters(tx, cfg, id, printerIds);
 }
 
 /** Deactivate a station — never a hard delete, since a `ticket_items.station_id` snapshot may

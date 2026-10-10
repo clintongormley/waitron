@@ -402,7 +402,11 @@ describe("sending split-off extras", () => {
         { locationId: cfg.locationId },
         { name: "Fryer printer", transport: "cloud_poll", pollId: `poll-${randomUUID()}` },
       );
-      await attachPrinterToStation(tx, { stationId: fryer.id, printerId: printer.id });
+      await attachPrinterToStation(tx, {
+        locationId: cfg.locationId,
+        stationId: fryer.id,
+        printerId: printer.id,
+      });
       const water = await createProduct(tx, {
         catalogueId,
         categoryId: drinks.id,
@@ -512,7 +516,11 @@ describe("sending split-off extras", () => {
         { locationId: cfg.locationId },
         { name: "Fryer printer", transport: "cloud_poll", pollId: `poll-${randomUUID()}` },
       );
-      await attachPrinterToStation(tx, { stationId: fryer.id, printerId: printer.id });
+      await attachPrinterToStation(tx, {
+        locationId: cfg.locationId,
+        stationId: fryer.id,
+        printerId: printer.id,
+      });
       const drinks = await createCategory(tx, { name: "Drinks" });
       const sides = await createCategory(tx, { name: "Sides" });
       await setRoutingCell(

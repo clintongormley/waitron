@@ -1257,7 +1257,9 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
       const sessionId = requireManagementSession(c);
       const stationId = requireUuidParam(c.req.param("sid"), "StationId");
       const printerId = requireUuidParam(c.req.param("pid"), "PrinterId");
-      await gated(sessionId, (tx) => attachPrinterToStation(tx, { stationId, printerId }));
+      await gated(sessionId, (tx) =>
+        attachPrinterToStation(tx, { locationId: deps.cfg.locationId, stationId, printerId }),
+      );
       return c.body(null, 204);
     }),
   );

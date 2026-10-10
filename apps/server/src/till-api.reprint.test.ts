@@ -190,7 +190,7 @@ async function attachPrinterToDefaultStation(): Promise<string> {
       transport: "cloud_poll",
       pollId: `poll-${randomUUID()}`,
     });
-    await attachPrinterToStation(tx, { stationId, printerId: id });
+    await attachPrinterToStation(tx, { locationId: cfg.locationId, stationId, printerId: id });
     return id;
   });
 }

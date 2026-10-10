@@ -325,7 +325,11 @@ export async function provisionAdjustmentVenue(db: Database): Promise<Adjustment
       { locationId: cfg.locationId },
       { name: "Cocina", transport: "cloud_poll", pollId: `poll-${randomUUID()}` },
     );
-    await attachPrinterToStation(tx, { stationId: station!.id, printerId: printer.id });
+    await attachPrinterToStation(tx, {
+      locationId: cfg.locationId,
+      stationId: station!.id,
+      printerId: printer.id,
+    });
     const cat = await createCatalogue(tx, { name: "Carta" });
     const platos = await createCategory(tx, { name: "Platos" });
     const productIds = new Map<string, string>();

@@ -2376,7 +2376,11 @@ async function kitchenPrinter(cfg: DeviceRequestConfig): Promise<string> {
         pollId: `poll-${randomUUID()}`,
       },
     );
-    await attachPrinterToStation(tx, { stationId: station, printerId: id });
+    await attachPrinterToStation(tx, {
+      locationId: cfg.locationId,
+      stationId: station,
+      printerId: id,
+    });
     return id;
   });
 }
@@ -2764,7 +2768,11 @@ describe("coursing editing verbs — sendLines racing recallLines (Task B1, two 
         transport: "cloud_poll",
         pollId: `poll-${randomUUID()}`,
       });
-      await attachPrinterToStation(tx, { stationId: station, printerId });
+      await attachPrinterToStation(tx, {
+        locationId: cfg.locationId,
+        stationId: station,
+        printerId,
+      });
     });
 
     // Open a tab whose ONE line is HELD (`hold: true`) — fired_at null, state queued, routed to the
@@ -2837,7 +2845,11 @@ describe("coursing editing verbs — setLineCourse racing fireCourse (Copilot #1
         transport: "cloud_poll",
         pollId: `poll-${randomUUID()}`,
       });
-      await attachPrinterToStation(tx, { stationId: station, printerId });
+      await attachPrinterToStation(tx, {
+        locationId: cfg.locationId,
+        stationId: station,
+        printerId,
+      });
     });
 
     // Two live courses. `café` is routed to `postres`, so its HELD line 1 sits in `postres`; the racer
@@ -2926,7 +2938,11 @@ describe("coursing editing verbs — recallLines racing fireCourse (Copilot #191
         transport: "cloud_poll",
         pollId: `poll-${randomUUID()}`,
       });
-      await attachPrinterToStation(tx, { stationId: station, printerId });
+      await attachPrinterToStation(tx, {
+        locationId: cfg.locationId,
+        stationId: station,
+        printerId,
+      });
     });
 
     // `café` routed to `postres`, added HELD (line 1) — so `fireCourse(postres)` fires exactly that line

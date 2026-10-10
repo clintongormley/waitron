@@ -217,7 +217,7 @@ async function setupVenue(): Promise<Venue> {
       { locationId: cfg.locationId },
       { name: "Cocina", transport: "cloud_poll", pollId: `poll-${randomUUID()}` },
     );
-    await attachPrinterToStation(tx, { stationId, printerId });
+    await attachPrinterToStation(tx, { locationId: cfg.locationId, stationId, printerId });
     return {
       cfg,
       productId,
@@ -3859,7 +3859,11 @@ describe("advance HOLD tickets (Task 6)", () => {
             pollId: `poll-${randomUUID()}`,
           },
         );
-        await attachPrinterToStation(tx, { stationId: v.stationId, printerId: printer.id });
+        await attachPrinterToStation(tx, {
+          locationId: v.cfg.locationId,
+          stationId: v.stationId,
+          printerId: printer.id,
+        });
         return printer.id;
       });
       const s = await specExample(v);

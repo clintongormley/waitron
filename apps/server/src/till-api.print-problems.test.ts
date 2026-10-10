@@ -31,7 +31,11 @@ useVenueDb({
         { locationId: venue.cfg.locationId },
         { name: "Cocina", transport: "cloud_poll", pollId: `poll-${randomUUID()}` },
       );
-      await attachPrinterToStation(tx, { stationId: station!.id, printerId });
+      await attachPrinterToStation(tx, {
+        locationId: venue.cfg.locationId,
+        stationId: station!.id,
+        printerId,
+      });
       return station!.id;
     });
   },

@@ -1476,7 +1476,7 @@ describe("kitchen routing follows the period running when a dish goes on the ord
             { name: `${name} printer`, transport: "cloud_poll", pollId: randomUUID() },
           )
         ).id;
-        await attachPrinterToStation(tx, { stationId, printerId });
+        await attachPrinterToStation(tx, { locationId: v.cfg.locationId, stationId, printerId });
         return { stationId, printerId };
       };
       const upstairs = await stationWithPrinter("Upstairs bar");

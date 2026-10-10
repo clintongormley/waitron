@@ -9,7 +9,6 @@ import type { Transaction } from "@waitron/db";
 import type { PrintConfig } from "@waitron/printing";
 
 // The station → printer mapping verbs. The `printer.manage` gate is applied at the route, not here.
-// One taxpayer per database and the mapping carries no location, so nothing in `cfg` narrows these.
 
 export interface StationPrinter {
   stationId: string;
@@ -23,12 +22,18 @@ export interface StationPrinter {
  */
 export async function attachPrinterToStation(
   tx: Transaction,
-  { stationId, printerId }: StationPrinter,
+  { stationId, printerId, locationId }: StationPrinter & Pick<PrintConfig, "locationId">,
 ): Promise<void> {
   const [live] = await tx
     .select({ id: kitchenStations.id })
     .from(kitchenStations)
-    .where(and(eq(kitchenStations.id, stationId), eq(kitchenStations.active, true)));
+    .where(
+      and(
+        eq(kitchenStations.id, stationId),
+        eq(kitchenStations.active, true),
+        eq(kitchenStations.locationId, locationId),
+      ),
+    );
   if (live === undefined) throw new AppError("station.not_found", { stationId });
 
   const [printer] = await tx
@@ -40,17 +45,12 @@ export async function attachPrinterToStation(
   await tx.insert(stationPrinters).values({ stationId, printerId }).onConflictDoNothing();
 }
 
-/**
- * Deliberately does not check that either end is still active: a mapping to a retired station or
- * switched-off printer must stay detachable so the config can be cleaned up. A deleted printer has
- * no mappings left, so naming it is `printer.not_found`.
- */
 export async function detachPrinterFromStation(
   tx: Transaction,
   cfg: PrintConfig,
   { stationId, printerId }: StationPrinter,
 ): Promise<void> {
-  void cfg;
+  await requireStation(tx, cfg, stationId);
   await refuseDeletedPrinters(tx, [printerId]);
   await removeMapping(tx, { stationId, printerId });
 }
@@ -67,16 +67,12 @@ export async function replaceStationPrinters(
   stationId: string,
   printerIds: readonly string[],
 ): Promise<void> {
-  const [station] = await tx
-    .select({ id: kitchenStations.id })
-    .from(kitchenStations)
-    .where(and(eq(kitchenStations.id, stationId), eq(kitchenStations.active, true)));
-  if (!station) throw new AppError("station.not_found", { stationId });
+  await requireStation(tx, cfg, stationId);
   await refuseDeletedPrinters(tx, printerIds);
   const current = await listStationPrinters(tx, cfg, { stationId });
   for (const printerId of printerIds) {
     if (!current.some((row) => row.printerId === printerId)) {
-      await attachPrinterToStation(tx, { stationId, printerId });
+      await attachPrinterToStation(tx, { stationId, printerId, locationId: cfg.locationId });
     }
   }
   for (const row of current) {
@@ -89,9 +85,12 @@ export async function listStationPrinters(
   cfg: PrintConfig,
   filter?: { stationId?: string; printerId?: string },
 ): Promise<StationPrinter[]> {
-  void cfg;
+  if (filter?.stationId !== undefined) await requireStation(tx, cfg, filter.stationId);
   if (filter?.printerId !== undefined) await refuseDeletedPrinters(tx, [filter.printerId]);
-  const conditions: SQL[] = [];
+  const conditions: SQL[] = [
+    eq(kitchenStations.locationId, cfg.locationId),
+    eq(kitchenStations.active, true),
+  ];
   if (filter?.stationId !== undefined) {
     conditions.push(eq(stationPrinters.stationId, filter.stationId));
   }
@@ -101,6 +100,21 @@ export async function listStationPrinters(
   return tx
     .select({ stationId: stationPrinters.stationId, printerId: stationPrinters.printerId })
     .from(stationPrinters)
+    .innerJoin(kitchenStations, eq(kitchenStations.id, stationPrinters.stationId))
     .where(and(...conditions))
     .orderBy(stationPrinters.stationId, stationPrinters.printerId);
+}
+
+async function requireStation(tx: Transaction, cfg: PrintConfig, stationId: string): Promise<void> {
+  const [row] = await tx
+    .select({ id: kitchenStations.id })
+    .from(kitchenStations)
+    .where(
+      and(
+        eq(kitchenStations.id, stationId),
+        eq(kitchenStations.locationId, cfg.locationId),
+        eq(kitchenStations.active, true),
+      ),
+    );
+  if (!row) throw new AppError("station.not_found", { stationId });
 }

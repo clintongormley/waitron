@@ -240,7 +240,11 @@ describe("cancelling an extra of a dish the kitchen has fired (B11g)", () => {
           pollId: randomUUID(),
         },
       );
-      await attachPrinterToStation(tx, { stationId: venue.stationId, printerId: printer.id });
+      await attachPrinterToStation(tx, {
+        locationId: venue.cfg.locationId,
+        stationId: venue.stationId,
+        printerId: printer.id,
+      });
       return printer.id;
     });
     try {

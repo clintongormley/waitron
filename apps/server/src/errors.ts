@@ -648,6 +648,9 @@ declare module "@waitron/shared" {
     "zone.name_taken": { name: string };
     /** A kitchen-station name already exists in this venue. `name` is the operator's own text. */
     "station.name_taken": { name: string };
+    "station.is_default": { stationId: string };
+    "station.screen_in_use": { stationId: string; count: number };
+    "station.work_in_progress": { stationId: string; count: number };
     /** The effective late thresholds would be unordered for this station. */
     "station.thresholds_invalid": { field: string; stationId?: string; name: string };
     // `station.not_found` is declared in @waitron/db's errors.ts.

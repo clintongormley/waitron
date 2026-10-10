@@ -160,7 +160,7 @@ describe("kitchen-station config", () => {
     expect(list.filter((s) => s.isDefault)).toHaveLength(1);
   });
 
-  it("updateStation renames, reorders and reactivates (the name/displayOrder/active patch branches)", async () => {
+  it("updateStation renames and reorders but cannot reactivate a removed station", async () => {
     const cfg = await setupVenue();
     const { id } = await asApp(cfg, (tx) =>
       createStation(tx, cfg, { name: "Plancha", displayOrder: 5 }),
@@ -169,9 +169,6 @@ describe("kitchen-station config", () => {
     expect((await asApp(cfg, (tx) => listStations(tx, cfg))).map((s) => s.name)).toEqual([
       "Parrilla",
     ]);
-    await asApp(cfg, (tx) => deactivateStation(tx, cfg, id));
-    expect(await asApp(cfg, (tx) => listStations(tx, cfg))).toEqual([]);
-    await asApp(cfg, (tx) => updateStation(tx, cfg, id, { active: true, displayOrder: 9 }));
     expect(await asApp(cfg, (tx) => listStations(tx, cfg))).toEqual([
       {
         id,
@@ -182,7 +179,7 @@ describe("kitchen-station config", () => {
           overdueAfterMinutes: null,
           forgottenAfterMinutes: null,
         },
-        displayOrder: 9,
+        displayOrder: 2,
         isDefault: false,
         active: true,
         showsRestOfOrder: false,
@@ -191,6 +188,15 @@ describe("kitchen-station config", () => {
         forgottenAfterMinutes: 15,
       },
     ]);
+    await asApp(cfg, (tx) => deactivateStation(tx, cfg, id));
+    expect(await asApp(cfg, (tx) => listStations(tx, cfg))).toEqual([]);
+    await expect(
+      asApp(cfg, (tx) => updateStation(tx, cfg, id, { active: true, displayOrder: 9 } as never)),
+    ).rejects.toMatchObject({ code: "management.request_invalid", params: { field: "active" } });
+    await expect(asApp(cfg, (tx) => updateStation(tx, cfg, id, {}))).rejects.toMatchObject({
+      code: "station.not_found",
+      params: { stationId: id },
+    });
   });
 
   it("updateStation surfaces a name collision as station.name_taken", async () => {

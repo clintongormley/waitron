@@ -330,7 +330,11 @@ async function kitchenPrinter(v: PartyVenue): Promise<string> {
       { locationId: v.cfg.locationId },
       { name: "Cocina", transport: "cloud_poll", pollId: `poll-${randomUUID()}` },
     );
-    await attachPrinterToStation(tx, { stationId: station!.id, printerId: id });
+    await attachPrinterToStation(tx, {
+      locationId: v.cfg.locationId,
+      stationId: station!.id,
+      printerId: id,
+    });
     return id;
   });
 }

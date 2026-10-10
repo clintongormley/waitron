@@ -2672,7 +2672,11 @@ async function attachedPrinter(
     transport: "cloud_poll",
     pollId: `poll-${randomUUID()}`,
   });
-  await attachPrinterToStation(tx, { stationId: created.id, printerId });
+  await attachPrinterToStation(tx, {
+    locationId: cfg.locationId,
+    stationId: created.id,
+    printerId,
+  });
   return { station: created, printerId };
 }
 
