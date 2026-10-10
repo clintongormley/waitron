@@ -645,8 +645,9 @@ the map. A table's id in an event is its button's `data-table-id`, so a merge se
 member's. A touch or pen tap on a table, and Enter or Space on a focused one, send `wt-table-tap` at
 once; a mouse click waits 300 ms and sends it unless a second click on the same table makes a
 double-click, which sends `wt-table-details`. A second tap on a different table counts as a tap on
-it. A press held 500 ms marks its table (`data-held`, outlined in `--wt-color-primary`) and its
-release sends `wt-table-details`; a second finger or a cancelled pointer clears the mark and sends
+it. A press held 500 ms marks its table (`data-held`: each shape's edge in `--wt-color-primary`,
+plus `--wt-selected-ring` outside a single table's edge, or once around a merge's whole box, which
+is then raised above a table touching it) and its release sends `wt-table-details`; a second finger or a cancelled pointer clears the mark and sends
 nothing. A held table that is dragged is drawn moved by whole squares, its first member kept at 0 or
 more, and its release clears the mark and sends `wt-table-drag-end` instead: that member's new `x`
 and `y` and `targetId`, the `data-table-id` of the first other table under the release point, else
