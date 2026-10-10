@@ -4,7 +4,13 @@ import { and, eq, isNull } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { diningTables, floorTodayTables, locations, partyTables } from "@waitron/db";
+import {
+  diningTables,
+  floorTodayTables,
+  kitchenTimingDefaults,
+  locations,
+  partyTables,
+} from "@waitron/db";
 import { hashPin, loginWithPin, persons } from "@waitron/identity";
 import { ALL_MODULES, enabledTableRemovals } from "./modules.js";
 import { mountTillApi } from "./till-api.js";
@@ -140,15 +146,16 @@ describe("seating at a merge", () => {
 describe("seating at a merge, which table a refusal names", () => {
   it("names the first member by id when two need clearing", async () => {
     const { a, b, c } = await threeTables();
-    await merge(a, b, "right");
-    await merge(c, b, "left");
-    await needsClearing(b);
-    await needsClearing(c);
-    const [first] = [b, c].sort();
+    // Merged larger id first, so the members' rows are written out of id order.
+    const [lo, hi] = [a, c].sort();
+    await merge(hi!, b, "right");
+    await merge(lo!, b, "left");
+    await needsClearing(lo!);
+    await needsClearing(hi!);
 
-    expect(await refusal(post(`/api/tables/${a}/seat`, { guestCount: 2 }))).toEqual({
+    expect(await refusal(post(`/api/tables/${b}/seat`, { guestCount: 2 }))).toEqual({
       status: 409,
-      body: { error: { code: "table.needs_clearing", params: { tableId: first } } },
+      body: { error: { code: "table.needs_clearing", params: { tableId: lo } } },
     });
   });
 });
@@ -204,6 +211,7 @@ describe("seating one party at several tables", () => {
         invoiceLocales: ["es-ES"],
         operationDescription: "Restaurant",
       });
+      await tx.insert(kitchenTimingDefaults).values({ locationId: elsewhere });
       await tx
         .insert(diningTables)
         .values({ id, locationId: elsewhere, label: `Elsewhere ${id.slice(0, 6)}` });
@@ -227,13 +235,6 @@ describe("seating one party at several tables", () => {
     });
     expect(await heldRows(f1)).toBe(0);
     expect(await heldRows(id)).toBe(0);
-
-    // A second location makes later floor reads in this file refuse `station.timing_missing`.
-    await inTx(v, async (tx) => {
-      await tx.delete(floorTodayTables).where(eq(floorTodayTables.tableId, id));
-      await tx.delete(diningTables).where(eq(diningTables.id, id));
-      await tx.delete(locations).where(eq(locations.id, elsewhere));
-    });
   });
 
   it("seats one party at two tables in one request", async () => {
