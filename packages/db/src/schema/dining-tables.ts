@@ -1,3 +1,4 @@
+import type { AnySQLiteColumn } from "drizzle-orm/sqlite-core";
 import { check, foreignKey, unique } from "drizzle-orm/sqlite-core";
 import {
   count,
@@ -12,6 +13,7 @@ import {
   table,
   tsString,
 } from "./columns.js";
+import { floorPlanTables } from "./floor-plans.js";
 import { floorZones } from "./floor-zones.js";
 import { tableServiceStatuses } from "./table-service-statuses.js";
 import { locations } from "./tenants.js";
@@ -45,6 +47,11 @@ export const diningTables = table(
     shape: floorTableShape("shape"),
     rotation: smallCount("rotation"),
     needsClearingSince: tsString("needs_clearing_since"),
+    // The master table this live table follows.
+    planTableId: id("plan_table_id").references((): AnySQLiteColumn => floorPlanTables.id),
+    // True once the table has followed a master table, so a reset knows to remove it when that
+    // master table is deleted.
+    planned: flag("planned").notNull().default(false),
   },
   (t) => [
     unique("dining_tables_location_label_key").on(t.locationId, t.label),
