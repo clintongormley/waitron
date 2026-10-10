@@ -402,6 +402,19 @@ describe("floor plan draft", () => {
     expect(sameDraft(onlyM2, opened)).toBe(true);
   });
 
+  it("replaces a join of three that kept its key when the table left it with the saved one", () => {
+    const m3 = { key: "m3", id: "m3", liveTableId: "l3", label: "T3", seats: 2, fixed: false };
+    const saved: FloorPlanDraft = {
+      tables: [...open().tables, { ...m3, placement: null }],
+      joins: [{ key: "j1", seats: 8, tableKeys: ["m1", "m2", "m3"] }],
+    };
+    const deleted = deleteTable(saved, "m2");
+    expect(deleted.joins).toEqual([{ key: "j1", seats: 8, tableKeys: ["m1", "m3"] }]);
+    const restored = restoreTable(deleted, table(saved, "m2"), saved.joins);
+    expect(restored.joins).toEqual(saved.joins);
+    expect(sameDraft(restored, saved)).toBe(true);
+  });
+
   it("returns the draft itself when the key is already in it", () => {
     const d = open();
     expect(restoreTable(d, { ...table(d, "m2"), label: "Other" })).toBe(d);

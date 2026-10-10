@@ -200,7 +200,8 @@ export function deleteTable(draft: FloorPlanDraft, key: string): FloorPlanDraft 
 }
 
 /** Puts a table back, as given, after the others, with each of `joins` through it whose other
- *  tables the draft still holds. A join through the table cannot already be in the draft. */
+ *  tables the draft still holds. A join of three or more keeps its key when the table leaves it,
+ *  so a draft join with that key is replaced by the given one, in place. */
 export function restoreTable(
   draft: FloorPlanDraft,
   table: DraftTable,
@@ -210,13 +211,17 @@ export function restoreTable(
   const placement = table.placement === null ? null : { ...table.placement };
   const tables = [...draft.tables, { ...table, placement }];
   const present = new Set(tables.map((t) => t.key));
-  const back = joins.filter(
-    (j) => j.tableKeys.includes(table.key) && j.tableKeys.every((k) => present.has(k)),
+  const back = new Map(
+    joins
+      .filter((j) => j.tableKeys.includes(table.key) && j.tableKeys.every((k) => present.has(k)))
+      .map((j) => [j.key, { ...j, tableKeys: [...j.tableKeys] }]),
   );
-  return {
-    tables,
-    joins: [...draft.joins, ...back.map((j) => ({ ...j, tableKeys: [...j.tableKeys] }))],
-  };
+  const kept = draft.joins.map((j) => {
+    const saved = back.get(j.key);
+    back.delete(j.key);
+    return saved ?? j;
+  });
+  return { tables, joins: [...kept, ...back.values()] };
 }
 
 export function addTables(

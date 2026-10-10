@@ -325,6 +325,31 @@ it("a booked table whose delete was the only change comes back with its join, le
   expect(button(el, "save").disabled).toBe(true);
 });
 
+it("a booked table taken out of a join of three, as the only change, leaves Save quiet when it comes back", async () => {
+  const three: FloorPlan = {
+    ...placedM2(),
+    tables: [
+      ...placedM2().tables,
+      { id: "m3", liveTableId: "l3", label: "T3", seats: 2, fixed: false, placement: null },
+    ],
+    joins: [{ id: "j1", seats: 8, tableIds: ["m1", "m2", "m3"] }],
+  };
+  const el = await open(
+    stubApi({
+      getFloorPlan: vi.fn().mockResolvedValue(three),
+      saveFloorPlan: vi
+        .fn()
+        .mockRejectedValue(booked({ tableId: "l2", date: "2026-10-12", time: "21:00" })),
+    }),
+  );
+  await change(el, deleteTable(draftFromPlan(three), "m2"));
+  expect(el["draft"]!.joins).toEqual([{ key: "j1", seats: 8, tableKeys: ["m1", "m3"] }]);
+  await press(el, "save");
+  expect(drawn(el, "m2")?.refused).toBe("Booked 12 Oct, 21:00");
+  expect(el["draft"]!.joins).toEqual([{ key: "j1", seats: 8, tableKeys: ["m1", "m2", "m3"] }]);
+  expect(button(el, "save").disabled).toBe(true);
+});
+
 it("a booked table comes back as last saved when the re-read after that save failed", async () => {
   const saveFloorPlan = vi
     .fn()
