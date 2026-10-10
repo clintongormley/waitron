@@ -628,7 +628,7 @@ request per batch: [plan](../superpowers/plans/2026-10-07-a331-save-follows-chan
     confirmation, Add and Edit on the options screen until languages load, Print on an equipment
     label and on a reprint, and two on the till. Owner, 2026-10-08: "b", draw them all quiet the
     same way. A416 did the dashboard ones, and also the profile window's Edit and the backup key's
-    Change the key. **Landed as #1440.** A417 did the till's: eight buttons, listed in design-system.md → Forms. **Left open by
+    Change the key. **Landed as #1440.** A417 did the till's: eight buttons, listed in design-system.md → Forms. **Landed as #1496.** **Left open by
     A416, for the owner — decided:** buttons disabled because their row's own state rules them out
     still kept their colour — Disable on an already-disabled printer and on an inactive service
     status, Publish on a menu's Preview while it has clashes, and the product editor's modifier

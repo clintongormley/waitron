@@ -2609,6 +2609,13 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   `setLineModifiers` has to carry the product.
   [Detail](backlog/till.md#reopening-the-picker-on-a-line-whose-dish-has-variants-_and_-at-least-one-offered-list-loses-the-variant-and-says-it-saved)
 
+- **On a tab other than the counter, the pay card's Cash and Card could turn grey while an order is
+  being placed**, if a basket line becomes held mid-send: that tab's card grid gets
+  `.busy=${this.submitting}` (`apps/till/src/till-app.ts`, the second `till-card-grid` binding)
+  where the counter's gets `submitting || placing`, and A417 (#1496) greys them on
+  `payHeld && !busy`. Found by reading in #1496's review, not run; it needs a stored layout that
+  puts the pay card on another tab. Decide whether that tab's `busy` should include `placing`.
+
 - **Both of the modifier picker's LIST inputs carry a generated id as their `name`**
   (`extras-${list.id}`, `options-${list.id}`, `apps/till/src/widgets/modifier-picker.ts`), against
   `docs/developers/conventions-ui.md` and CLAUDE.md §3. The offered-list wire carries no stable
