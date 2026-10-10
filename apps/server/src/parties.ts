@@ -639,7 +639,25 @@ export async function closeParty(
     .set({ state: "closed", closedAt: at, closedBy: operatorId })
     .where(eq(parties.id, partyId));
   await leaveForClearing(tx, tables, at);
+  await closePartyTables(tx, partyId);
   return { state: "closed" };
+}
+
+/**
+ * A closing party keeps the names of every table it ever held, in the order it joined them, and lets
+ * go of its `party_tables` rows, so a table it held can later be removed. Run after the party's
+ * state changes: `parties_clear_table_status` reads the rows then.
+ */
+export async function closePartyTables(tx: Transaction, partyId: string): Promise<void> {
+  const held = await tx
+    .select({ label: diningTables.label })
+    .from(partyTables)
+    .innerJoin(diningTables, eq(diningTables.id, partyTables.tableId))
+    .where(eq(partyTables.partyId, partyId))
+    .orderBy(partyTables.joinedAt, partyTables.id);
+  const tableNames = [...new Set(held.map((row) => row.label))];
+  await tx.update(parties).set({ tableNames }).where(eq(parties.id, partyId));
+  await tx.delete(partyTables).where(eq(partyTables.partyId, partyId));
 }
 
 /** Each bill of these parties with how many lines it holds. */

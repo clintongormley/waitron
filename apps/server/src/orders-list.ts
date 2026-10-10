@@ -266,7 +266,9 @@ function staffClause(staffId: string): SQL {
 function tableClause(table: string): SQL {
   return sql`(r.delivery_label = ${table} collate nocase
     or exists (select 1 from party_tables pt join dining_tables dt on dt.id = pt.table_id
-               where pt.party_id = r.party_id and dt.label = ${table} collate nocase))`;
+               where pt.party_id = r.party_id and dt.label = ${table} collate nocase)
+    or exists (select 1 from parties tp, json_each(tp.table_names) n
+               where tp.id = r.party_id and n.value = ${table} collate nocase))`;
 }
 
 function filterClauses(filter: OrderListFilter): SQL[] {
@@ -355,8 +357,11 @@ export function ordersPageSql(filter: OrderListFilter): SQL {
     with base as (${rowsSql(filter)}),
     ranked as materialized (
       select r.*, waitron_search_rank(${words}, r.party_name, r.delivery_label,
-        (select group_concat(dt.label, ' ') from party_tables pt join dining_tables dt on dt.id = pt.table_id
-         where pt.party_id = r.party_id)) as search_rank
+        coalesce(
+          (select group_concat(dt.label, ' ') from party_tables pt join dining_tables dt on dt.id = pt.table_id
+           where pt.party_id = r.party_id),
+          (select group_concat(n.value, ' ') from parties tp, json_each(tp.table_names) n
+           where tp.id = r.party_id))) as search_rank
       from base r where ${whereOf(clauses)}
     )
     select r.*, exists (select 1 from sales c where c.corrects_sale_id = r.sale_id) as credited
@@ -469,13 +474,21 @@ export async function readCreditNotes(
   return notes;
 }
 
-/** Every table each party ever held, once each, in the order they joined it. */
+/**
+ * Every table each party ever held, once each, in the order they joined it: a closed party's kept
+ * names, an open party's live tables.
+ */
 async function readPartyTables(
   tx: Transaction,
   partyIds: readonly string[],
 ): Promise<Map<string, string[]>> {
   const tables = new Map<string, string[]>();
   if (partyIds.length === 0) return tables;
+  const kept = await tx
+    .select({ id: parties.id, tableNames: parties.tableNames })
+    .from(parties)
+    .where(and(inArray(parties.id, [...partyIds]), isNotNull(parties.tableNames)));
+  for (const party of kept) tables.set(party.id, party.tableNames!);
   const rows = await tx
     .select({ partyId: partyTables.partyId, label: diningTables.label })
     .from(partyTables)
