@@ -1504,8 +1504,7 @@ export interface EquipmentChange {
   takeOver?: boolean;
 }
 
-/** A station the display works: available, or switched off on its own page and still holding the
- * dishes waiting there (owner 2026-10-09). */
+/** A station the display works, including recorded work on a historical station. */
 export interface DeviceWorkedStation {
   id: string;
   name: string;
@@ -1523,8 +1522,7 @@ export interface DeviceWorkedStation {
   printersDown: StationPrinterDown[];
 }
 
-/** `GET /api/device/station-screen` success — the display's stations in display order. A station a
- * narrowing took comes back with no queue; one switched off on its own page keeps its queue. */
+/** `GET /api/device/station-screen` success: the display's station slots and queues. */
 export interface DeviceStationScreen {
   stations: (
     | (DeviceWorkedStation & { available: true })

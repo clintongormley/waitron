@@ -510,7 +510,6 @@ async function planKitchenTickets(
 
   // Group-less items first, then group by group: the ticket heads each group's run of items.
   const groupOrder = (item: KitchenTicketItem) => item.group ?? 0;
-  // Station names are unique per location, so the name alone orders them.
   const stations = [...stationNames.entries()]
     .map(([id, station]) => ({
       id,

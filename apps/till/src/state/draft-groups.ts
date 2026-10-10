@@ -12,7 +12,7 @@ export interface DraftEntry {
   flagged?: boolean;
 }
 
-/** One section of the draft: its course (null when no line has a course the till lists) and the
+/** One section of the draft: its course (null when no line has a live or recorded course) and the
  * positions of its lines in the draft, in draft order. */
 export interface DraftSection {
   course: TillCourse | null;

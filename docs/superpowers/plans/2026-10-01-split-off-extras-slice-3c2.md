@@ -1,5 +1,11 @@
 # Extras made at their own station, and tickets that name each other (slice 3c-2) Implementation Plan
 
+> 2026-10-10: A435 step 5 replaces course/station Disable and Enable with permanent
+> Delete. The [current deletion contract](../../developers/conventions-data.md#permanent-course-and-station-deletion)
+> governs retained history, routing cleanup and empty screen scopes. Earlier station/course
+> lifecycle wording below is a dated record, not the current operation.
+
+
 > **2026-10-10, A366 slice 4 Part B:** station-hours and configured-fallback contracts below
 > describe the earlier implementation. The Station hours page, its editors and storage are
 > retired. A closed station follows today's destination, then the active default; a disabled

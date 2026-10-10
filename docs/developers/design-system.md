@@ -2843,7 +2843,7 @@ Every row has a pinned Actions menu; the default has no Make default or Delete, 
 enabled for the venue's area has no Delete and shows "Required". Add language opens its own dialog.
 Edit translations opens the existing grouped report in a read-only dialog with its Kind and Why
 filters and links to the relevant editors. Direct text entry is pending A420 part 2's spec approval. A second exception (A212): the course
-list, on Venue settings' Kitchen tab and in the product editor's Courses window, adds, renames and disables
+list, on Venue settings' Kitchen tab and in the product editor's Courses window, adds and renames
 courses in place without a modal, saving each change as it is made, and asks in a dialog before a Delete; the Courses window has one Done
 button. A third exception (W89, owner 2026-10-04): a menu's Price overrides tab sets each product's
 and each size's price in its own row, saving each change as it is made (Forms → "A value saved from
@@ -3267,8 +3267,9 @@ Choose a prep station in Opening hours' picker to see its read-only Week view. T
 shows department columns and period ranges derived from routed products and the zones that can
 order them. Browse dated weeks to include named-day hours and closures. These are planned times;
 today's station closures and service extensions do not change them. A default station shows
-"Always open: this is the default station", and a disabled station shows "Switched off", without
-a grid (`opening-hours-station.ts`). Named days are edited in Opening hours' Calendar.
+"Always open: this is the default station", without a grid (`opening-hours-station.ts`).
+Deleted stations are absent from the picker, and their old configuration id is not found. Named
+days are edited in Opening hours' Calendar.
 The separate Station hours page and its station-cell editors are retired.
 
 ### Tabbed management pages
@@ -3322,14 +3323,14 @@ Prep stations uses `stations`, `routing` and `settings` at
 opens Stations. Stations shows no live kitchen numbers: each station's name with its Default mark,
 Printed on (its printers, or "No printer") and Shown on (the devices whose kitchen screens show it,
 and a link to Devices).
-A closure note beside its name reads Closed for today and its destination, or Switched off;
-open and default stations need no status note (`packages/venue-service/src/dashboard/station-table.ts`).
+A closure note beside its name reads Closed for today and its destination;
+open and default stations need no closure note (`packages/venue-service/src/dashboard/station-table.ts`).
 Each active non-default station links to Opening hours with its station id.
 Use the till's Station screen or the kitchen display for Close for today and Open for today.
 Closing asks where new work goes and offers the default station first. With unfinished dishes,
 the same dialog asks whether waiting dishes move there or stay to finish; started dishes stay.
-A manager PIN step keeps the draft after a refused PIN. Disable on Prep stations also asks about
-unfinished dishes, while new dishes use the active default. Reopening moves no dishes back.
+A manager PIN step keeps the draft after a refused PIN. Delete on Prep stations uses the shared
+deletion dialog and refuses unfinished dishes. Reopening moves no dishes back.
 The counter and table order screens show the
 period's end beside Keep open later. Its dialog offers server-provided times, explains the next
 period's delay and allows ending an existing extension. Both destination and endpoint dialogs
@@ -3355,12 +3356,11 @@ products opens a preview listing each one with its old and new destination ("…
 period's move) before anything is saved; a choice that moves nothing saves at once. Edit, in a
 Stations row's menu, opens the station editor (`station-editor.ts`): name, Printers and "Show the
 rest of the order", saved in one request. Printers offers every active printer, shows a
-disabled one as Disabled and lets it stay chosen only where the station already has it, and is a
-read-out for a switched-off station; the editor also has
+disabled one as Disabled and lets it stay chosen only where the station already has it. The editor has
 a read-out for a person without `printer.manage`, which the screen cannot yet select. Add station
 also sets Printers. Settings edits each station value in
 its own cell, with blank late-flag overrides inheriting the venue's Kitchen defaults. Station Edit, Make default and
-Disable/Enable actions belong to the Stations row menu; Routing's All categories × Every zone cell
+Delete actions belong to the Stations row menu; Routing's All categories × Every zone cell
 also sets the default station, for someone with `venue.configure`. The page is offered only to
 someone with `venue_service.manage`; a supervisor is not offered it.
 
@@ -3517,8 +3517,8 @@ removing a product from a menu removes that offer.
 ### Switching off versus deleting
 
 Something switched off but kept — an options or extras list, a zone, a
-department, a station, a table, a table status, an adjustment reason, a user, a printer, a print
-agent, a device, a card reader, and a kitchen course that something refers to — is switched off with **Disable** (options and extras lists and
+department, a table, a table status, an adjustment reason, a user, a printer, a print
+agent, a device or a card reader — is switched off with **Disable** (options and extras lists and
 table statuses are switched back on with an **Active** switch in their form), and where a screen has
 an action that brings it back, that action is **Enable**. Its status reads **Active**
 or **Disabled**; there is no "Enabled" status. **Delete** is only for something really deleted, and **Remove** for taking a row out of a list or a link off a record,
@@ -3527,12 +3527,20 @@ which may delete that row (Remove from this list, Remove image, a passkey). "Res
 
 In Spanish the action is **Deshabilitar** and **Habilitar**, and the status agrees with the noun the
 screen uses: **Activo** or **Deshabilitado** for a departamento, estado, motivo, usuario,
-lector, agente, dispositivo or curso; **Activa** or **Deshabilitada** for a lista, zona,
-estación, mesa or impresora. "Desactivar", "Reactivar", "Restaurar", "Volver a añadir" and
+lector, agente or dispositivo; **Activa** or **Deshabilitada** for a lista, zona,
+mesa or impresora. "Desactivar", "Reactivar", "Restaurar", "Volver a añadir" and
 "Inactivo" are not used for a record that is kept. A setting turned off (backups, a toggle) is not a record and keeps its own
 words.
 
-Where a screen has both, the action follows what the code does: a kitchen course's row offers Delete when nothing refers to it and Disable when something does; Disable only switches it off, and a confirmed Delete switches it off instead when something refers to it by then.
+Courses and kitchen stations offer **Delete** on every active row, with no Status column or
+Status filter. The shared dialog reads the current impact before enabling Delete. A course
+clears product defaults and retains any row needed by recorded work. A station refuses deletion
+while it is the default, an explicit effective KDS screen binding names it, or unfinished food
+remains. An off device still binds; an Every-stations scope alone does not. Once deletion is
+allowed, the dialog lists the settings and unsent choices that will be removed. Deleted rows
+never return to these lists or become selectable again. Recorded names stay with historical
+work, and adding the same name creates a different id. Station Default, Closed today/destination
+and clock warnings stay because they describe current configuration.
 
 **A confirmed Delete asks with `wt-delete-dialog`.** The screen reads the record's `DeleteImpact`
 and hands it over with its own `DeleteDialogCopy`. The dialog first names the record, in bold,

@@ -635,15 +635,11 @@ decision about the naming policy; this change adds no such restriction.
   remains for the Price column at phone width. (2026-10-04: W75 added a Portion column and widened
   the table; not re-measured.)
 
-## A disabled course keeps its name
+## Catalogue course window late-close guard
 
-**An Add course button beside the course dropdown (A212) — DONE (#1087); left open:** a disabled course keeps its name, because `kitchen_courses_name_key` covers disabled
-rows too, so adding a course with a disabled course's name is refused as taken (measured
-2026-10-03 with a throwaway case in `apps/server/src/kitchen.test.ts`: create "Mains", deactivate
-it, create "Mains" again → `course.name_taken`); a deleted course frees its name (read, not run). Raised in #1087's review and not changed there
-(its other point, `wt-combobox`'s `stable-width` missing from `docs/developers/design-system.md`,
-A342 documented): the catalogue-screen test "ignores the closed window's late close…" catches its guard's removal only through an unhandled error, because the late close throws
-before it changes anything a state assertion could see.
+The catalogue-screen test "ignores the closed window's late close…" catches its guard's
+removal only through an unhandled error, because the late close throws before it changes
+anything a state assertion could see. Left open by A212 (#1087).
 
 ## Allergens and dietary preferences are edited in place (A213): what #1079 left open
 
@@ -800,6 +796,12 @@ are trimmed. The till mixes products and displayed sections by closeness with tr
 ties, disables diet-empty sections, and opens a section without changing the basket.
 [Implementation plan](../superpowers/plans/2026-10-10-a461-product-search.md).
 
+- **Courses and stations use permanent Delete (A435 step 5, owner, 2026-10-10).**
+  Neither kind offers Disable, Enable or a Status filter/column. You may reuse a deleted name
+  with a new id. Deleting a course clears product defaults, including archived products;
+  recorded draft and order choices keep the original course. Courses and stations left as
+  history are excluded from configuration exports; archived products still travel.
+
 **Products: the tree's Name column lines up, and the Main category column goes — DONE (W84, #1199, owner
 2026-10-04).** Seven existing test assertions that pinned the column changed, for the owner to
 review (listed in the PR). A product whose category the dashboard's category list does not hold
@@ -821,6 +823,9 @@ categorised dietary origin from the product's recipe, or a Vegan, Vegetarian, Ha
 ticked dietary declaration. Made at offers only the stations the column names for some product, not
 every kitchen station, and matches the station the column shows, including a switched-off station a
 product has no replacement for; the backlog entry marked that matching "assumed, not asked".
+**2026-10-10 update:** A435 step 5 removes deleted stations from current routing settings and
+choices. The switched-off-station example above records A463's earlier decision; Task 9's
+integrated Made at check follows the surviving rule after deletion.
 
 - **Task 13 (#903, standalone ordering).** A product's `ordering` is Public, Staff only or Not
   sold separately; Staff only behaves exactly as Public until guest ordering exists.

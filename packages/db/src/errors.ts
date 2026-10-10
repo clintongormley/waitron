@@ -24,7 +24,7 @@ declare module "@waitron/shared" {
     "working_order.not_found": { workingOrderId: string };
     /**
      * No kitchen station with this id in this venue, or, for a caller picking a routing or default
-     * target, one that is DEACTIVATED: to that caller absent and retired are the same fact.
+     * target, one that is deleted: to that caller absent and deleted are the same fact.
      * Declared here, as `table.not_found` is, because it has throwers in more than one package.
      */
     "station.not_found": { stationId: string };

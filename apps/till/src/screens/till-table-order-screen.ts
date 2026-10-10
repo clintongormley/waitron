@@ -512,8 +512,7 @@ export class TillTableOrderScreen extends LitElement {
 
       .line {
         display: grid;
-        /* A line's first row: name, qty, line-total and #lineCourse (nothing when the venue has no
-           courses; its track then collapses). */
+
         grid-template-columns: 1fr auto auto auto;
         align-items: center;
         gap: var(--wt-space-3);
@@ -2947,10 +2946,6 @@ export class TillTableOrderScreen extends LitElement {
     </div>`;
   }
 
-  /** One section per course present, in the venue's course order. Each line shows once, as the
-   * basket shows it (quantity, note, remove, answers), with its selection toggle in place of its
-   * name and, under it, its course picker when the venue has courses (whose `""` placeholder means
-   * "use the product default", not "no course": no such option) and Split quantity. */
   #draftSections(store: WorkingOrderStore, entries: readonly DraftEntry[]): TemplateResult {
     const lines = store.lines;
     const sections = draftSections(entries, this.courses);

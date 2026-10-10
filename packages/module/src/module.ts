@@ -477,8 +477,7 @@ export interface ScreenSlot {
   readonly id: string;
   readonly name: string;
   readonly available: boolean;
-  /** Unavailable only because it was switched off on its own page, not taken by a narrowing: a
-   *  station screen still shows its waiting dishes (owner 2026-10-09). */
+  /** The stored active flag is false, rather than a recorded profile removal. */
   readonly switchedOff: boolean;
 }
 
@@ -806,15 +805,14 @@ export interface VenueServiceContribution {
     allowedZoneIds: string[] | null;
     startingZoneId: string | null;
   }>;
-  /** Each live profile's kitchen screens, switched-off stations and zones included, in display
-   *  order. */
+  /** Each live profile's kitchen screens in display order. */
   readProfileKitchenScreens(
     tx: Transaction,
     cfg: { locationId: LocationId },
   ): Promise<{ profileId: string; screens: ProfileKitchenScreens }[]>;
   /** Replaces all of a profile's kitchen screens. Refused `device_profile.access_invalid`, naming
-   *  the field, for zones on a station screen, an explicit empty list, or a station or zone
-   *  unknown here or switched off and not already stored for that screen. Narrows every device on the profile, switched off or not, at
+   *  the field, for zones on a station screen, an explicit empty list, a deleted station,
+   *  or an unknown zone or an off zone not already stored for that screen. Narrows every device on the profile, switched off or not, at
    *  every location, in the same transaction, recording what each lost, and gives each back what
    *  the profile allows again of what it had lost; answers the devices it narrowed. */
   setProfileKitchenScreens(
@@ -876,8 +874,8 @@ export interface VenueServiceContribution {
    *  `kitchen_screen.invalid` `one_only`), each kind at most once and never both a pass screen and
    *  a pass monitor (`one_only`), of a kind its profile offers (`kitchen_screen.not_allowed`; on
    *  any form factor a pass monitor needs a profile row); stations and zones within the profile's
-   *  lists (`station.not_allowed`, `kitchen_screen.zone_not_allowed`) and switched on here unless
-   *  `deviceId` names a device already storing them for the same kind (`kitchen_screen.invalid`).
+   *  lists (`station.not_allowed`, `kitchen_screen.zone_not_allowed`). A stored off zone may stay
+   *  on the same device's kind; deleted stations are not new choices (`kitchen_screen.invalid`).
    *  Writes nothing. */
   assertDeviceKitchenScreens(
     tx: Transaction,

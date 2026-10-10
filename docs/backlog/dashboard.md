@@ -915,6 +915,8 @@ From **Variants as products (#511–#556) — what is left open.** How the model
   across the dashboard"): a Delete label can be stale, because the course list does not re-read on
   draft lines, order lines or kitchen items, in which
   case a confirmed Delete switches the row off instead.
+  **2026-10-10 update:** A435 step 5 replaces the conditional label with permanent Delete and
+  a fresh impact read. The dated W110 decision above describes the earlier behavior.
 
 - **The sidebar's page search (C46, #836) — left open:** its accessibility case checks the search
   box and its message only; the sidebar's headers and current page have their own case since A306

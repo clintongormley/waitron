@@ -75,12 +75,9 @@ interface DishMove {
   refusal: string | null;
 }
 
-/** A station whose queue the display works: available, or switched off on its own page. */
 const worked = (station: DeviceStation): station is WorkedStation =>
   station.available || station.switchedOff;
 
-/** Whether a station's section draws its queue: available, or switched off with work still waiting
- *  there (owner 2026-10-09). */
 const drawsQueue = (station: DeviceStation): station is WorkedStation =>
   station.available ||
   (worked(station) && (station.queue.length > 0 || station.notices.length > 0));

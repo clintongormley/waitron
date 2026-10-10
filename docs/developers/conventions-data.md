@@ -429,15 +429,32 @@ were deleted, while the weekday timetable and its slot remained. The `local_holi
 absent afterwards. These losses are part of the reset requirement too.
 
 
+### Permanent course and station deletion
+
+You delete these kinds through management after reading their `DeleteImpact`. The write reads
+that impact again inside its transaction, so a preview does not grant permission to delete.
+Courses clear every product default; a course referenced before cleanup remains as history.
+Stations refuse the default, explicit effective KDS bindings (including off devices), and
+unfinished food. Fired ready food may remain. A permitted station delete removes its base
+routing rules and all their period children, clears incoming daily destinations without
+reopening those stations, and clears only eligible unsent/open-draft choices. Recorded tickets, sent
+order lines, draft events and groups stay unchanged.
+
+An empty screen scope keeps its parent: `stationIds: []` means no stations, never Every. The
+resolved device read has `available: true` and `stations: []` for that retained parent. A
+removed screen kind has `available: false`; its removal marker is a different state.
+`kitchen-delete.integration.test.ts` checks the management/history/routing path, and the
+station and configuration-transfer suites check empty parents and exports.
+
 ### Prep stations without authored hours
 
 **2026-10-10, A366 slice 4 Part B:** prep stations have no authored hours or configured
 fallbacks. Routing uses an active station unless it is closed for today's business date.
-A closed station follows its chosen daily destination; a disabled station uses the active default.
+A closed station follows its chosen daily destination. Deleted stations are not new routing targets.
 A missing destination or a cycle also ends at the active default. With none, the route has no
 replacement (`routing.ts`). Reopening deletes the daily state; it does not move sent work back.
 
-Closing or disabling with unfinished dishes requires a Send or Leave choice. Send moves waiting
+Closing with unfinished dishes requires a Send or Leave choice. Send moves waiting
 unserved queued or held dishes; started dishes stay. Leave keeps unfinished dishes at their station,
 including held dishes when released (`apps/server/src/station-closing.ts`). The dashboard records
 moves with the authenticated person's id and no device; till and device closures record their
@@ -446,8 +463,8 @@ actors in `ticket_item_moves`.
 Opening hours' prep-station view is read-only. `stationServiceTimes` combines routed products on
 period menus with department hours, subtracts zone closed times, and joins overlapping shares of
 the same period. Its normal week ignores named days; its dated week applies them. Planning ignores
-today's station closures and kept-open extensions. Default and disabled stations return a status
-sentence without a grid.
+today's station closures and kept-open extensions. The default station returns a status sentence
+without a grid; a deleted station id is refused.
 
 Venue-service migration `0047_retire_station_hours_fallbacks.sql` drops `hours_week_cells`,
 `hours_week_periods`, `special_date_hours`, `special_date_hours_periods` and `station_fallbacks`.
@@ -1343,7 +1360,7 @@ These experiments are not a complete-slice result.
 
 A station's by-hand state and chosen destination belong to one business date. A closed station
 follows that destination, then the active venue default if the destination is missing or the walk
-cycles. A disabled station uses the active default directly. With no active default, a failed walk
+cycles. A deleted station is not offered as a destination. With no active default, a failed walk
 has no replacement. Opening the station does not move already sent work back.
 Period extensions also belong to one business date: the resolver overlays the stored range
 before choosing the running and ended menus. The extension read offers future quarter-hours

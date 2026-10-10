@@ -1884,7 +1884,7 @@ export async function isOpenOrder(tx: Transaction, orderId: string): Promise<boo
 
 /**
  * Release held items of a course by stamping fired_at. Require the course to exist
- * in this venue, including a deactivated course whose food still needs release.
+ * in this venue, including a deleted course whose food still needs release.
  * Already-fired items retain their timestamps; an empty held set is a no-op.
  *
  * On a party's order, the held groups holding the course's dishes fire whole first
@@ -2250,7 +2250,7 @@ export async function bumpCourseReady(
 
 /**
  * Dispatch ready items of a course by stamping away_at once. Require an existing
- * course in this venue, including deactivated courses with plated food remaining.
+ * course in this venue, including deleted courses with plated food remaining.
  * Items still cooking and items already away are unchanged.
  */
 export async function markCourseAway(
@@ -2721,7 +2721,7 @@ export function quantityOfLine(
 
 /**
  * Move ONE not-yet-fired line of an OPEN tab into another kitchen course, or clear its course to null.
- * A deactivated course is not a valid new target. A line that has already FIRED is refused
+ * A deleted course is not a valid new target. A line that has already FIRED is refused
  * `ticket.already_fired`: once the kitchen has been told to cook it, it is corrected by a recall,
  * never re-coursed underneath the pass.
  */
@@ -6176,7 +6176,7 @@ export async function advanceTicket(
 }
 
 /** The LIVE course row an item's snapshotted `course_id` names. Not filtered by `active`, so a course
- *  deactivated after the item was fired still names its header. */
+ *  deleted after the item was fired still names its header. */
 export interface StationQueueCourse {
   id: string;
   name: string;
@@ -6517,7 +6517,7 @@ export async function listStationQueues(
       kitchenTimingDefaults,
       eq(kitchenTimingDefaults.locationId, kitchenStations.locationId),
     )
-    // Not filtered by `active`: a course deactivated after the item was fired still names its header.
+    // Not filtered by `active`: a course deleted after the item was fired still names its header.
     .leftJoin(kitchenCourses, eq(ticketItems.courseId, kitchenCourses.id))
     .leftJoin(parties, eq(parties.id, workingOrders.partyId))
     .leftJoin(orderGroups, eq(orderGroups.id, workingOrderLines.groupId))

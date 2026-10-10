@@ -98,7 +98,7 @@ export interface MadeAt {
   stationName: string | null;
   noPreparation: boolean;
   noReplacement: boolean;
-  /** The switched-off station the routing names for a product with no replacement; null otherwise. */
+  /** The station the routing names for a product with no replacement; null otherwise. */
   unavailableStationId: string | null;
   variesByZone: boolean;
 }
@@ -3073,7 +3073,7 @@ export class DashboardApi {
     return this.#request<DeviceProfile>(`/management-api/device-profiles/${id}`, "GET");
   }
 
-  /** Every live profile's kitchen screens, switched-off stations and zones included. */
+  /** Every live profile's kitchen screens. */
   listProfileKitchenScreens(): Promise<{ profileId: string; screens: ProfileKitchenScreens }[]> {
     return this.#request<{ profiles: { profileId: string; screens: ProfileKitchenScreens }[] }>(
       "/management-api/device-profile-kitchen-screens",

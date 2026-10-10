@@ -1,5 +1,11 @@
 # Prep stations, slice 4 — combined tickets, period choices in routing, and no station hours (A366)
 
+> 2026-10-10: A435 step 5 replaces course/station Disable and Enable with permanent
+> Delete. The [current deletion contract](../../developers/conventions-data.md#permanent-course-and-station-deletion)
+> governs retained history, routing cleanup and empty screen scopes. Earlier station/course
+> lifecycle wording below is a dated record, not the current operation.
+
+
 > **Revised 2026-10-09.** The owner answered all 28 decisions on 2026-10-09
 > (`~/waitron-campaign-d/questions.md`, "OWNER ANSWERS … slice 4 decisions"). Every default stands
 > except four, and this revision applies them: the server also refuses a period line whose

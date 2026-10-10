@@ -117,7 +117,6 @@ export async function assertKitchenTimingStations(
     .leftJoin(kitchenStationTiming, eq(kitchenStationTiming.stationId, kitchenStations.id))
     .where(eq(kitchenStations.locationId, cfg.locationId))
     .orderBy(kitchenStations.displayOrder, kitchenStations.name);
-  // Disabled stations retain work and can be enabled again, so their overrides must remain valid.
   for (const station of stations) {
     assertStationTiming(station, defaults, station);
   }

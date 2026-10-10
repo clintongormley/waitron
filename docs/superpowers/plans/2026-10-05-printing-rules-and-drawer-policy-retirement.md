@@ -1,5 +1,11 @@
 # Printing rules and drawer policy retirement implementation plan (A261 step 8)
 
+> 2026-10-10: A435 step 5 replaces course/station Disable and Enable with permanent
+> Delete. The [current deletion contract](../../developers/conventions-data.md#permanent-course-and-station-deletion)
+> governs retained history, routing cleanup and empty screen scopes. Earlier station/course
+> lifecycle wording below is a dated record, not the current operation.
+
+
 > **2026-10-06, A261-2c:** The owner retired the invoice-first service style and the
 > venue-wide `locations.order_flow` setting. Quick sales use the zone's `prepay` or
 > `ticket_then_pay` policy; placement files no invoice. References below to

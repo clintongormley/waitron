@@ -378,8 +378,8 @@ screen is designed.
     no history event: the event kinds have no "moved".
   - The server's own `unavailable` flag (`apps/server/src/order-drafts.ts`) does not flag a line
     whose options list is unanswered (refused at submission `options.label_required`), a
-    fractional quantity of a dish sold whole (`quantity.invalid`), a course switched off since
-    the save (`course.not_found`), or a menu version no longer live (`menu.version_changed`).
+    fractional quantity of a dish sold whole (`quantity.invalid`), or a menu version no longer
+    live (`menu.version_changed`).
     For the first two, since Task 8 the till marks such a line `unit_changed` once the table's
     offers are read (`lineBlock`, `apps/till/src/state/menu-refresh.ts`); it moves a line saved
     against an older version to the live one.
@@ -736,6 +736,9 @@ screen is designed.
     `working-order.ts` picks its earliest course without checking whether it is active, so with a
     switched-off course the send path and the move path can file a dish with no course under
     different courses (owner, 2026-09-29: not queued).
+    **2026-10-10 update:** A435 step 5's retained metadata now gives saved drafts their recorded
+    course section and fired lines their recorded label, including when the active list is empty.
+    The earlier C80 reading above is historical; the move/send comparison remains unverified here.
   - **Task 10 (#875).** Unchecked Send to radios are Chromium's own dark-theme control, dim grey on
     the dark dialog (seen in the 390 px Spanish dark screenshot).
   - **Task 11 (#881).** Open (found by #905's review, by reading, not reproduced): on a handheld, a

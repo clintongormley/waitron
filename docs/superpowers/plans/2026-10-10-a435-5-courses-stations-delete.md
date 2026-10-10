@@ -1,5 +1,11 @@
 # Courses and kitchen stations deletion implementation plan
 
+> 2026-10-10 implementation pointer: course and station permanent deletion, retained
+> historical course labels and configuration export rules are documented in
+> [the current data contract](../../developers/conventions-data.md#permanent-course-and-station-deletion).
+> This document keeps its original design/planning record.
+
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** You can permanently delete a course or prep station after seeing its impact, reuse its name, and keep recorded orders and kitchen work intact.

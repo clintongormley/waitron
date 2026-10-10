@@ -276,10 +276,6 @@ export class StationEditor extends LitElement {
     this.scope?.changed();
   }
 
-  /**
-   * What a save would send. Printers chosen before the station was switched off, or before the
-   * read-out took their field away, cannot be sent, so they are left out.
-   */
   private sendable(): StationEditorSave {
     const base = this.baseline!;
     const draft = this.draft;

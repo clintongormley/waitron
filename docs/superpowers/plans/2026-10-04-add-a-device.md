@@ -1,5 +1,11 @@
 # Adding and editing devices — implementation plan
 
+> 2026-10-10: A435 step 5 replaces course/station Disable and Enable with permanent
+> Delete. The [current deletion contract](../../developers/conventions-data.md#permanent-course-and-station-deletion)
+> governs retained history, routing cleanup and empty screen scopes. Earlier station/course
+> lifecycle wording below is a dated record, not the current operation.
+
+
 **2026-10-08 update:** [A413](../../backlog.md) replaces the two Add buttons with one in the page
 heading and replaces the completed-join line with a compact confirmation asking whether to add
 another device (owner revision at 14:05). Close ends adding; Add another device resumes waiting

@@ -107,6 +107,13 @@ and hours proposals; the historical spec keeps its dated pointers.
 
 ## Decisions and deliberate limits
 
+- **Permanent station Delete is separate from Close for today (A435 step 5, 2026-10-10).**
+  Close keeps its Send/Leave choice. Delete refuses held, queued or preparing food and explicit
+  effective KDS bindings, including off devices; fired ready food may stay as history. Deleting
+  a base routing rule removes all its period children. Incoming daily destinations clear without
+  reopening the referring stations. A fully Every-stations screen does not block deletion, and
+  an emptied explicit/profile screen scope stays empty rather than widening to Every.
+
 - **Zone and period extensions remain separate (A366 slice 3 Part B, 2026-10-09).** Cancelling
   a department's period extension does not delete its zones' overrides. In the server keep-open
   suite, a retained zone override until 01:30 still leaves the 01:15 dish submission refused

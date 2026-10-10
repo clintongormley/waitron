@@ -315,7 +315,7 @@ export async function requireLiveCourse(
 
 /**
  * Assert `courseId` names a course of this venue, active or not; otherwise `course.not_found`.
- * A course deactivated while it holds items must stay fireable: its held food already carries the
+ * A course deleted while it holds items must stay fireable: its held food already carries the
  * course, so releasing it needs the course to exist, not to be offered. A NEW routing target uses
  * {@link requireLiveCourse}.
  */

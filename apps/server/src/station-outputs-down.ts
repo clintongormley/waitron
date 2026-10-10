@@ -44,8 +44,6 @@ export const WAITING_WINDOW_MS = 60 * 60 * 1000;
 
 const laterDocument = alias(printJobs, "d");
 
-/** With `withSwitchedOff`, a station switched off on its own page keeps its printers, as a
- *  station screen still shows its waiting dishes (owner 2026-10-09). */
 export interface PrintersDownOptions {
   withSwitchedOff?: boolean;
 }

@@ -710,7 +710,7 @@ declare module "@waitron/shared" {
     "course.name_taken": { name: string };
     /**
      * No kitchen course with this id in this venue; where only an active course will do
-     * (`requireLiveCourse`, `moveCourse`), also a disabled one.
+     * (`requireLiveCourse`, `moveCourse`), also a deleted one.
      */
     "course.not_found": { courseId: string };
     /**

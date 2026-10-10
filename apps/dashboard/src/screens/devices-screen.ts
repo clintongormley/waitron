@@ -97,7 +97,7 @@ interface GoneEntry {
 }
 
 /** What a narrowing took, as the read marks it, each kind's after it, a kind taken whole alone.
- * A station or zone switched off on its own page is not among them: it stays in the choice. */
+ * An off zone is not among them: it stays in the choice. */
 function goneFromRead(read: readonly ResolvedKitchenScreen[]): GoneEntry[] {
   return read.flatMap((screen): GoneEntry[] =>
     screen.available
@@ -1444,7 +1444,6 @@ export class DevicesScreen extends LitElement {
     ];
   }
 
-  /** Only switched-on stations can be saved, so a stored one since switched off is dropped. */
   #madeHereToSend(): string[] {
     return this.stations
       .filter((station) => station.active && this.editForm.madeHere.includes(station.id))

@@ -1,5 +1,11 @@
 # Delete hardware and venue setup, archive products for good (design)
 
+> 2026-10-10 implementation pointer: course and station permanent deletion, retained
+> historical course labels and configuration export rules are documented in
+> [the current data contract](../../developers/conventions-data.md#permanent-course-and-station-deletion).
+> This document keeps its original design/planning record.
+
+
 > **2026-10-10, A366 slice 4 Part B:** the station deletion inventory's authored hours and
 > configured-fallback rows are retired. Re-ground that future deletion step against the
 > retained daily state, routing periods and dish-retention field. See

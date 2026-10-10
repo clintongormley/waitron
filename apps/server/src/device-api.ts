@@ -936,12 +936,6 @@ async function kitchenScreenOf(
   return { screen, personId };
 }
 
-/**
- * What a kitchen display's station screen lists, in display order, and the queue of each station
- * it works: an available one, or one switched off on its own page, whose waiting dishes stay until
- * done (owner 2026-10-09). A station a narrowing took is listed with no queue. When the device's
- * list and its profile's are both every, a switched-off station is listed only while dishes wait.
- */
 async function stationScreenSlots(
   tx: Transaction,
   cfg: Pick<TillConfig, "locationId">,
@@ -990,7 +984,7 @@ async function worksStation(
   return (await listStationQueues(tx, [stationId])).get(stationId)!.length > 0;
 }
 
-/** The location's stations, switched off ones too, in display order. */
+/** The location's stations, historical rows included, in display order. */
 function stationsHere(tx: Transaction, cfg: Pick<TillConfig, "locationId">) {
   return tx
     .select({ id: kitchenStations.id, name: kitchenStations.name, active: kitchenStations.active })

@@ -289,10 +289,11 @@ the server checks each at the route, never trusting the till's copy:
   venue's routing. Saving a profile that no longer offers a screen, station or zone a device
   shows is allowed: the save names the devices it changed (`narrowedDevices`), each device records
   what it lost and shows it as no longer available until someone picks again, and adding it back
-  to the profile gives it back to a device nobody has re-picked on since. A station switched off
-  on its own page keeps the dishes still waiting there on a kitchen display's station screen, under
-  its no-longer-available line, until they are done. Done marks on a pass screen belong to the
-  device, with the signed-in person when there is one (`pass_item_marks`).
+  to the profile gives it back to a device nobody has re-picked on since. Permanent station Delete
+  refuses explicit effective KDS bindings, including off devices, and unfinished food. Removing
+  the last station from a profile or device scope keeps its parent with an empty station list;
+  removing the whole screen kind records a different no-longer-available state. Done marks on a
+  pass screen belong to the device, with the signed-in person when there is one (`pass_item_marks`).
 - **Who may sign in.** `GET /api/staff` with a device lists only the people its profile admits
   (`listStaffAdmittedTo`, `@waitron/identity`); a list of colleagues that is not a sign-in list,
   such as the schedule's, asks with `everyone=true`. A switch to another approved profile checks
