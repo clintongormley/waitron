@@ -17791,6 +17791,14 @@ describe("basket native replacement warning", () => {
 });
 
 it("retained basket traverses indexed and unindexed history without a discard warning", async () => {
+  async function traverse(direction: "back" | "forward"): Promise<void> {
+    const arrived = new Promise<void>((resolve) =>
+      window.addEventListener("popstate", () => resolve(), { once: true }),
+    );
+    history[direction]();
+    await arrived;
+    await flush(el);
+  }
   const { el } = await mountApp();
   const c = await toCounter(el);
   c.store.addProduct(cafe, "2");
@@ -17798,20 +17806,20 @@ it("retained basket traverses indexed and unindexed history without a discard wa
   const id = c.store.id;
   selectTab(el, "floor");
   await flush(el);
-  history.back();
+  await traverse("back");
   await expect.poll(() => counter(el)).not.toBeNull();
   expect(counter(el)!.store.id).toBe(id);
   expect(el.shadowRoot!.querySelector("wt-unsaved-changes")!.open).toBe(false);
-  history.forward();
+  await traverse("forward");
   await expect.poll(() => shell(el)!.activeTabKey).toBe("floor");
   expect(el.shadowRoot!.querySelector("wt-unsaved-changes")!.open).toBe(false);
   const accepted = location.href;
   history.pushState({ external: "retained" }, "", accepted);
-  history.back();
-  await flush(el);
+  await traverse("back");
+  expect(history.state.external).toBeUndefined();
   expect(el.shadowRoot!.querySelector("wt-unsaved-changes")!.open).toBe(false);
-  history.forward();
-  await flush(el);
+  await traverse("forward");
+  expect(history.state.external).toBe("retained");
   expect(el.shadowRoot!.querySelector("wt-unsaved-changes")!.open).toBe(false);
   selectTab(el, "counter");
   await flush(el);
