@@ -425,6 +425,21 @@ it.each(
     document.documentElement.style.background = canvas;
     const tabs = el.shadowRoot!.querySelector("wt-tabs")!;
     expect(tabs.value).toBe("routing");
+    await tabs.updateComplete;
+    const tablist = tabs.shadowRoot!.querySelector<HTMLElement>('[role="tablist"]')!;
+    const bounds = tablist.getBoundingClientRect();
+    for (const tab of tablist.querySelectorAll<HTMLElement>('[role="tab"]')) {
+      const box = tab.getBoundingClientRect();
+      expect(box.left).toBeGreaterThanOrEqual(bounds.left);
+      expect(box.right).toBeLessThanOrEqual(bounds.right);
+    }
+
+    expect(tabs.items.find((item) => item.key === "routing")!.label).toBe(
+      locale === "en" ? "Routes" : "Rutas",
+    );
+    expect(
+      (await routingGrid(el))!.shadowRoot!.querySelector("table")!.getAttribute("aria-label"),
+    ).toBe(locale === "en" ? "Routes" : "Rutas");
     const cocktails = gridCombo((await routingGrid(el))!, "c:cocktails", "every")!;
     expect(cocktails.label).toContain("Drinks › Cocktails");
     expect(cocktails.value).toBe("station:bar");
@@ -1410,7 +1425,7 @@ it("opens the default Stations tab and places Add station, the only create actio
   await tabs!.updateComplete;
   expect(tabs!.items).toEqual([
     { key: "stations", label: "Stations" },
-    { key: "routing", label: "Routing" },
+    { key: "routing", label: "Routes" },
     { key: "watchers", label: "Watchers" },
     { key: "settings", label: "Settings" },
   ]);

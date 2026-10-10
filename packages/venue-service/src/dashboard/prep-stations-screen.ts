@@ -138,7 +138,9 @@ export class PrepStationsScreen extends LitElement {
         display: block;
         min-width: 0;
       }
-      /* The tabs keep half the row whatever the font's width (A424). */
+      wt-tabs[data-routes]::part(tablist) {
+        flex-wrap: wrap;
+      }
       wt-tabs::part(tab-actions) {
         max-width: 50%;
       }
@@ -2519,6 +2521,7 @@ export class PrepStationsScreen extends LitElement {
       ${
         view
           ? html`<wt-tabs
+              ?data-routes=${this.tab === "routing"}
               label=${t("prep.title")}
               .value=${this.tab}
               .items=${PREP_TABS.map((key) => ({ key, label: t(`prep.tab.${key}`) }))}

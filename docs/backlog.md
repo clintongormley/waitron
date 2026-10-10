@@ -1561,7 +1561,7 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   open by A366 slice 4 Part A.
 
 - **The period delete warning orders its rows on the server** (`routingRowPlaces`,
-  `packages/venue-service/src/menu-timetable.ts`) **with a copy of the Routing tab's row order**
+  `packages/venue-service/src/menu-timetable.ts`) **with a copy of the Routes tab's row order**
   (`visibleRoutingRows`); a change to one can leave the other behind. Move the order into
   `packages/venue-service/src/routing.ts` and use it from both. Left open by A366 slice 4 Part A.
 
