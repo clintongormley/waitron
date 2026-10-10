@@ -6,6 +6,7 @@ import {
   toDraftLineInput,
 } from "./draft-lines.js";
 import { lineBlock } from "./menu-refresh.js";
+import { draftSections } from "./draft-groups.js";
 import { productAsVariant } from "./order-line.js";
 import { WorkingOrderStore, type OrderLine } from "./working-order.js";
 import {
@@ -464,6 +465,48 @@ describe("rebuildReturned: a line kept while its dish was not offered", () => {
 
     expect([...rebuilt]).toEqual([[0, burgerLine()]]);
     expect(toDraftLineInput(rebuilt.get(0)!)).toEqual(input);
+  });
+
+  it("keeps the recorded course section when an unavailable draft dish is offered again without leaking metadata into saves", () => {
+    const input = { ...toDraftLineInput(burgerLine()), courseId: "retired" };
+    const course = { id: "retired", name: "Recorded dessert", displayOrder: 3 };
+    const missing = fromDraftLine(
+      { ...saved(input, "2.000"), course, unavailable: true },
+      new Map(),
+    );
+    expect(missing.notOffered).toBe(true);
+    const rebuilt = rebuildReturned([missing], offers, live(VERSION)).get(0)!;
+
+    expect(rebuilt.course).toEqual(course);
+    expect(rebuilt.notOffered).toBeUndefined();
+    expect(rebuilt.unavailableOnServer).toBe(true);
+    expect(
+      draftSections([{ courseId: rebuilt.courseId ?? null, course: rebuilt.course }], []),
+    ).toEqual([{ course, lineIndexes: [0] }]);
+    expect(toDraftLineInput(rebuilt)).toEqual(input);
+    expect(missing.course).toEqual(course);
+    expect(missing.notOffered).toBe(true);
+
+    const working = new WorkingOrderStore();
+    working.loadFrom("draft", [rebuilt]);
+    working.setLineCourse(0, "new-course");
+    expect(working.lines[0]!.course).toBeUndefined();
+    expect(toDraftLineInput(working.lines[0]!)).toEqual({ ...input, courseId: "new-course" });
+  });
+
+  it("does not adopt recorded metadata for another course when an unavailable dish returns", () => {
+    const missing = kept({ ...toDraftLineInput(burgerLine()), courseId: "selected" });
+    const rebuilt = rebuildReturned(
+      [{ ...missing, course: { id: "retired", name: "Recorded dessert", displayOrder: 3 } }],
+      offers,
+      live(VERSION),
+    ).get(0)!;
+
+    expect(rebuilt.courseId).toBe("selected");
+    expect(rebuilt.course).toBeUndefined();
+    expect(
+      draftSections([{ courseId: rebuilt.courseId ?? null, course: rebuilt.course }], []),
+    ).toEqual([{ course: null, lineIndexes: [0] }]);
   });
 
   it("marks the line as holding no earlier price when the offer is back under another version", () => {

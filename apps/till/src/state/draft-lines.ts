@@ -119,7 +119,11 @@ export function rebuildReturned(
     if (line.notOffered !== true) return;
     const saved = toDraftLineInput(line);
     if (!offers.has(saved.menuItemId)) return;
-    const returned = { ...saved, unavailable: line.unavailableOnServer === true };
+    const returned = {
+      ...saved,
+      ...(line.course === undefined ? {} : { course: line.course }),
+      unavailable: line.unavailableOnServer === true,
+    };
     rebuilt.set(index, fromDraftLine(returned, offers, liveVersions));
   });
   return rebuilt;
