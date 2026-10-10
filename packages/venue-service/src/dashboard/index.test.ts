@@ -212,11 +212,12 @@ describe("VENUE_SERVICE_DASHBOARD", () => {
       ],
       specialDates: [],
     };
-    const fetchImpl = vi.fn(() =>
+    const fetchImpl = vi.fn((path: string) =>
       Promise.resolve({
         ok: true,
         status: 200,
-        text: async () => JSON.stringify(model),
+        text: async () =>
+          JSON.stringify(path === "/management-api/stations?includeDisabled=true" ? [] : model),
       } as Response),
     );
     history.replaceState(null, "", "/manage/opening-hours/view/periods/department/d1");
@@ -260,7 +261,9 @@ describe("VENUE_SERVICE_DASHBOARD", () => {
     await screen.updateComplete;
     expect(screen.readOnly).toBe(false);
     expect(screen.shadowRoot!.querySelector("[data-test=new-period]")).not.toBeNull();
-    const [[path, init]] = fetchImpl.mock.calls as unknown as [[string, RequestInit]];
+    const [path, init] = (fetchImpl.mock.calls as unknown as [string, RequestInit][]).find(
+      ([path]) => path === "/management-api/venue-service/opening-hours",
+    )!;
     expect(path).toBe("/management-api/venue-service/opening-hours");
     expect(new Headers(init.headers).get("x-waitron-live")).toBe("1");
   });
