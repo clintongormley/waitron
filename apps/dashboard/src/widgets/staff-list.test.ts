@@ -83,6 +83,36 @@ describe("staff-list", () => {
     },
   );
 
+  it("redraws its columns when the signed-in person or the language changes after it is drawn", async () => {
+    const before = currentLocale();
+    setLocale("en-GB");
+    try {
+      const { el } = await mountWidget<StaffList>("dashboard-staff-list", { people });
+      const table = el.shadowRoot!.querySelector("wt-data-table")!;
+      await table.updateComplete;
+      const disable = () =>
+        table.shadowRoot!.querySelector<HTMLElement & { disabled: boolean }>(
+          "[data-test=disable-p1]",
+        )!;
+      expect(disable().disabled).toBe(false);
+      el.currentPersonId = "p1";
+      await el.updateComplete;
+      await table.updateComplete;
+      expect(disable().disabled).toBe(true);
+      setLocale("es-ES");
+      el.requestUpdate();
+      await el.updateComplete;
+      await table.updateComplete;
+      expect(disable().textContent!.trim()).toBe("Deshabilitar");
+      expect(
+        table.shadowRoot!.querySelector('thead th button[data-sort="displayName"]')!.textContent,
+      ).toContain(t("staff.field_display_name"));
+      expect(t("staff.field_display_name")).not.toBe("Display name");
+    } finally {
+      setLocale(before);
+    }
+  });
+
   it("renders one row per person with role and status", async () => {
     const { el } = await mountWidget<StaffList>("dashboard-staff-list", { people });
     const table = el.shadowRoot!.querySelector("wt-data-table")!;

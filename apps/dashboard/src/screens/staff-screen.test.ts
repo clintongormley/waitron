@@ -1346,6 +1346,31 @@ describe("staff-screen filter fields", () => {
     expect(await drawn(el)).toEqual(["p1"]);
   });
 
+  it("finds nobody by a role or status word, since only names, email and telephone are searched", async () => {
+    const { el } = await mountWidget<StaffScreen>("dashboard-staff-screen", { api: stubApi() });
+    await flush(el);
+    expect(await drawn(el)).toEqual(["p1"]);
+    await typeSearch(el, roleName("manager"));
+    expect(await drawn(el)).toEqual([]);
+    await typeSearch(el, statusName("active"));
+    expect(await drawn(el)).toEqual([]);
+  });
+
+  it("hands the table the same rows and columns while a search is typed", async () => {
+    const { el } = await mountWidget<StaffScreen>("dashboard-staff-screen", { api: stubApi() });
+    await flush(el);
+    const table = () => list(el).shadowRoot!.querySelector("wt-data-table")!;
+    await typeSearch(el, "a");
+    await list(el).updateComplete;
+    const rows = table().rows;
+    const columns = table().columns;
+    await typeSearch(el, "ad");
+    await list(el).updateComplete;
+    expect(table().rows).toBe(rows);
+    expect(table().columns).toBe(columns);
+    expect(await drawn(el)).toEqual(["p1"]);
+  });
+
   it("finds a person by every word typed across names, email and telephone, closest first", async () => {
     const person = (overrides: Partial<PersonSummary>): PersonSummary => ({
       ...people[0]!,

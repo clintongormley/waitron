@@ -5,7 +5,7 @@ import { type DataTableColumn } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-data-table.js";
 import "@waitron/ui/src/components/wt-row-actions.js";
-import { t } from "../i18n/t.js";
+import { currentLocale, t } from "../i18n/t.js";
 import { roleName, statusName } from "../i18n/domain.js";
 import type { PersonSummary } from "../api/client.js";
 
@@ -30,8 +30,15 @@ export class StaffList extends LitElement {
     );
   }
 
+  #columnsMemo?: { inputs: readonly unknown[]; columns: DataTableColumn<PersonSummary>[] };
+
+  /** The same array while the language is unchanged, so a typed search does not make the table fold
+   * every row again. Cells read `currentPersonId` when drawn, so it needs no place here. */
   #columns(): DataTableColumn<PersonSummary>[] {
-    return [
+    const inputs = [currentLocale()];
+    if (this.#columnsMemo?.inputs.every((input, index) => input === inputs[index]))
+      return this.#columnsMemo.columns;
+    const columns: DataTableColumn<PersonSummary>[] = [
       {
         key: "displayName",
         label: t("staff.field_display_name"),
@@ -106,6 +113,8 @@ export class StaffList extends LitElement {
         `,
       },
     ];
+    this.#columnsMemo = { inputs, columns };
+    return columns;
   }
 
   #action(person: PersonSummary, action: string, label: string) {

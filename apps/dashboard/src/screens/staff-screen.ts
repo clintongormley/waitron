@@ -149,8 +149,15 @@ export class StaffScreen extends LitElement {
 
   #editing = false;
 
+  #filtered?: { inputs: readonly unknown[]; people: PersonSummary[] };
+
+  /** The same array while the roster and filters are unchanged, so a typed search does not make
+   * the table fold every row again. */
   #filteredPeople(): PersonSummary[] {
-    return this.people.filter((person) => {
+    const inputs = [this.people, this.roleFilter, this.statusFilter];
+    if (this.#filtered?.inputs.every((input, index) => input === inputs[index]))
+      return this.#filtered.people;
+    const people = this.people.filter((person) => {
       if (this.roleFilter !== "all" && person.role !== this.roleFilter) return false;
       if (this.statusFilter === "current" && person.status === "suspended") return false;
       return (
@@ -159,6 +166,8 @@ export class StaffScreen extends LitElement {
         person.status === this.statusFilter
       );
     });
+    this.#filtered = { inputs, people };
+    return people;
   }
 
   override connectedCallback(): void {

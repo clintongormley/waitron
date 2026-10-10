@@ -7,7 +7,8 @@ import { keyed } from "lit/directives/keyed.js";
 import { live } from "lit/directives/live.js";
 import { repeat } from "lit/directives/repeat.js";
 import { baseStyles, UrlStateController, type WtToast } from "@waitron/ui";
-import { foldForSearch, resolveActiveLocale, searchFor } from "@waitron/shared";
+import { resolveActiveLocale } from "@waitron/shared";
+import { navMatches } from "./nav-search.js";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-icon.js";
 import "@waitron/ui/src/components/wt-input.js";
@@ -1758,7 +1759,6 @@ export class DashboardApp extends LitElement {
           ],
         },
       ];
-    const search = searchFor(this.navSearch);
     const shown = (items: NavItem[] = []): NavPage[] =>
       items
         .filter((item) => this.#mayOpen(item))
@@ -1783,10 +1783,8 @@ export class DashboardApp extends LitElement {
         ...among,
         ...shown(group.itemsAfterModules),
       ];
-      const heading = group.headerKey === undefined ? "" : foldForSearch(t(group.headerKey));
-      const pages = search(
-        permitted.map((page) => [page, [foldForSearch(page.label), heading]] as const),
-      );
+      const heading = group.headerKey === undefined ? "" : t(group.headerKey);
+      const pages = navMatches(this.navSearch, permitted, heading);
       return { group, pages: pages.length > 0 ? pages : undefined };
     });
   }
