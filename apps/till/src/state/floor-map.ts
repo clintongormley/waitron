@@ -75,10 +75,13 @@ function fillWords(table: TableState, fill: FloorMapFill): string {
   }
 }
 
+/** "2 ready", or "1 ready" for one. */
+export function readyText(n: number): string {
+  return countText(n, "table.flash_ready", "table.flash_ready_one");
+}
+
 function dotWords(table: TableState, dot: FloorMapDot): string {
-  return dot === "forgotten"
-    ? t("floor.forgotten")
-    : countText(table.readyToServe, "table.flash_ready", "table.flash_ready_one");
+  return dot === "forgotten" ? t("floor.forgotten") : readyText(table.readyToServe);
 }
 
 /** The fill's words, then the dot's: "Seated, 2 ready". Pass a merge's members together. */

@@ -3,8 +3,8 @@ import { customElement, property } from "lit/decorators.js";
 import { type WtToast, baseStyles, floorMapFillStyles } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-toast.js";
 import type { TableParty, TableState } from "../api/client.js";
-import { countText, t } from "../i18n/t.js";
-import { combinedStatus, pinText, standInStatus } from "../state/floor-map.js";
+import { t } from "../i18n/t.js";
+import { combinedStatus, pinText, readyText, standInStatus } from "../state/floor-map.js";
 import { signalOf } from "../state/table-signals.js";
 import "./table-details-sheet.js";
 
@@ -23,7 +23,7 @@ function partyRows(tables: readonly TableState[], party: TableParty): TableState
 function flashMessage(rows: readonly TableState[]): string {
   const ready = Math.max(...rows.map((row) => row.readyToServe));
   const parts: string[] = [];
-  if (ready > 0) parts.push(countText(ready, "table.flash_ready", "table.flash_ready_one"));
+  if (ready > 0) parts.push(readyText(ready));
   if (rows.some((row) => row.timingBand === "forgotten")) parts.push(t("table.flash_forgotten"));
   if (rows.some((row) => signalOf(row.signals, "bill_requested")))
     parts.push(t("signal.bill_requested"));

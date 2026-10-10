@@ -4,7 +4,7 @@ import { baseStyles, renderFloorChips } from "@waitron/ui";
 import { decimal, formatMoney, isZeroDecimal } from "@waitron/shared";
 import type { TableState, UnsentDraft } from "../api/client.js";
 import { countText, currentLocale, named, t } from "../i18n/t.js";
-import { seatsFor } from "../state/floor-map.js";
+import { readyText, seatsFor } from "../state/floor-map.js";
 import { reminderDueAt } from "../state/release-reminder.js";
 import { signalOf } from "../state/table-signals.js";
 import { signalChipStyles, signalChips } from "./signal-chips.js";
@@ -36,7 +36,7 @@ function kitchenProgress(table: TableState): string {
       table.pendingToServe - table.readyToServe,
       (n: number) => `${n} ${t("floor.to_serve")}`,
     ] as const,
-    [ready, (n: number) => countText(n, "table.flash_ready", "table.flash_ready_one")] as const,
+    [ready, readyText] as const,
     [table.enRoute, (n: number) => `${n} ${t("floor.en_route")}`] as const,
   ]
     .filter(([count]) => count > 0)
