@@ -277,6 +277,13 @@ screen is designed.
   - The canvas: a narrow table at x=0 draws part of its rotate handle left of the grid; a table
     dragged into the top rows shows its handle above the grid until it is released; the size
     tokens are read once for the element's whole life.
+  - The canvas's extra squares for a turned table at the top-left corner: after a corner drop, an
+    Undo or a refused move back to the earlier layout keeps the extra room and a scrollbar until
+    another change; a keyboard nudge or turn of a corner table in a plan that fits shifts the whole
+    plan by a square; and on computers whose scrollbars take space, a size reading that arrives just
+    after a drop may shift the plan by the extra room (seen only with a 15 px stand-in for a
+    scrollbar, since headless Chromium's scrollbars take none).
+  - Place on a plan with no free spot does nothing and says nothing.
   - Surviving mutants in `wt-floor-plan-canvas`: the default "Rotate {name}" text,
     `super.disconnectedCallback` and `preventScroll`.
 
