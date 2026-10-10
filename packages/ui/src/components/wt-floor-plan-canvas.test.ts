@@ -584,7 +584,7 @@ it("dragging the handle turns the table in 15° steps", async () => {
   const turnTo = async (x: number, y: number) => {
     const handle = handles(el)[0]!;
     const h = handle.getBoundingClientRect();
-    pointer(handle, "pointerdown", 1, h.left + 5, h.top + 5);
+    pointer(handle, "pointerdown", 1, h.left + h.width / 2, h.top + h.height / 2);
     pointer(window, "pointermove", 1, x, y);
     await release(el, { x, y });
   };
@@ -600,6 +600,145 @@ it("dragging the handle turns the table in 15° steps", async () => {
     { key: "t1", rotation: 45 },
     { key: "t1", rotation: 270 },
   ]);
+});
+
+it("the handle turns from the table's own angle, not from straight up", async () => {
+  const el = await canvas([table("t1", "T1", { x: 10, y: 10, rotation: 90 })], {
+    selected: "t1",
+  });
+  const seen = rotates(el);
+  const box = button(el, "t1").getBoundingClientRect();
+  const cx = box.left + box.width / 2;
+  const cy = box.top + box.height / 2;
+  const h = handles(el)[0]!.getBoundingClientRect();
+  const hx = h.left + h.width / 2;
+  const hy = h.top + h.height / 2;
+  pointer(handles(el)[0]!, "pointerdown", 1, hx, hy);
+  pointer(window, "pointermove", 1, hx + 2, hy + 2);
+  await release(el, { x: hx + 2, y: hy + 2 });
+  expect(seen).toEqual([]);
+  pointer(handles(el)[0]!, "pointerdown", 1, hx, hy);
+  pointer(window, "pointermove", 1, cx + 80, cy);
+  await release(el, { x: cx + 80, y: cy });
+  expect(seen).toEqual([{ key: "t1", rotation: 180 }]);
+});
+
+it("the handle turns by how far the pointer goes round, wherever it was pressed", async () => {
+  const el = await canvas([table("t1", "T1", { x: 10, y: 10 })], { selected: "t1" });
+  const seen = rotates(el);
+  const box = button(el, "t1").getBoundingClientRect();
+  const cx = box.left + box.width / 2;
+  const cy = box.top + box.height / 2;
+  pointer(handles(el)[0]!, "pointerdown", 1, cx + 80, cy);
+  pointer(window, "pointermove", 1, cx, cy + 80);
+  await release(el, { x: cx, y: cy + 80 });
+  expect(seen).toEqual([{ key: "t1", rotation: 90 }]);
+});
+
+it("needs room for the handle's size and its gap to draw it above", async () => {
+  const el = await canvas([table("t1", "T1", { x: 10, y: 4 })]);
+  host.style.setProperty("--wt-space-1", "10px");
+  el.selected = "t1";
+  await el.updateComplete;
+  const h = handles(el)[0]!.getBoundingClientRect();
+  const box = button(el, "t1").getBoundingClientRect();
+  expect(h.top - box.bottom).toBe(10);
+});
+
+it("a real drag of the handle turns the table and keeps the selection", async () => {
+  const el = await canvas([table("t1", "T1", { x: 10, y: 10 })], { selected: "t1" });
+  await settled(el);
+  const seen = rotates(el);
+  const selections = selects(el);
+  await userEvent.dragAndDrop(handles(el)[0]!, part(el, "grid"), {
+    targetPosition: { x: 168 + 80, y: 168 },
+  });
+  expect(seen).toEqual([{ key: "t1", rotation: 90 }]);
+  expect(selections).toEqual([]);
+});
+
+it("a real drag of a table released over empty grid keeps the selection", async () => {
+  const el = await canvas([table("t1", "T1", { x: 2, y: 3 })], { selected: "t1" });
+  await settled(el);
+  const seen = moves(el);
+  const selections = selects(el);
+  // The pointer moves about 15 px left and the table one square (12 px), so the release lands on
+  // the grid just left of the table.
+  await userEvent.dragAndDrop(button(el, "t1"), part(el, "grid"), {
+    sourcePosition: { x: 1, y: 40 },
+    targetPosition: { x: 10, y: 76 },
+  });
+  expect(seen).toEqual([{ key: "t1", x: 1, y: 3 }]);
+  expect(selections).toEqual([]);
+});
+
+it("a click on empty grid after a drag still clears the selection", async () => {
+  const el = await canvas([table("t1", "T1", { x: 2, y: 3 })], { selected: "t1" });
+  await settled(el);
+  const selections = selects(el);
+  await release(el, dragBy(el, "t1", 24, 0));
+  await userEvent.click(part(el, "grid"), { position: { x: 400, y: 300 } });
+  expect(selections.map((e) => e.detail)).toEqual([{ key: null }]);
+});
+
+it("a mouse press focuses the table, so the arrow keys move that one", async () => {
+  const el = await canvas([table("t1", "T1", { x: 2, y: 3 }), table("t2", "T2", { x: 20 })]);
+  const seen = moves(el);
+  button(el, "t1").focus();
+  await userEvent.click(button(el, "t2"));
+  await userEvent.keyboard("{ArrowRight}");
+  expect(seen).toEqual([{ key: "t2", x: 21, y: 0 }]);
+});
+
+it("only the primary button drags", async () => {
+  const el = await canvas([table("t1", "T1", { x: 2, y: 3 })]);
+  const seen = moves(el);
+  const box = button(el, "t1").getBoundingClientRect();
+  button(el, "t1").dispatchEvent(
+    new PointerEvent("pointerdown", {
+      bubbles: true,
+      composed: true,
+      pointerId: 1,
+      button: 2,
+      clientX: box.left + 5,
+      clientY: box.top + 5,
+    }),
+  );
+  pointer(window, "pointermove", 1, box.left + 65, box.top + 5);
+  await release(el, { x: box.left + 65, y: box.top + 5 });
+  expect(seen).toEqual([]);
+});
+
+it("a fixed table moves like any other", async () => {
+  const el = await canvas([table("t1", "T1", { x: 2, y: 3 }, true)]);
+  const seen = moves(el);
+  await release(el, dragBy(el, "t1", 24, 0));
+  button(el, "t1").focus();
+  await userEvent.keyboard("{ArrowDown}");
+  expect(seen).toEqual([
+    { key: "t1", x: 4, y: 3 },
+    { key: "t1", x: 2, y: 4 },
+  ]);
+});
+
+it("draws the handle below a table with no room above it", async () => {
+  for (const y of [0, 2]) {
+    const el = await canvas([table("t1", "T1", { x: 10, y })], { selected: "t1" });
+    const handle = handles(el)[0]!;
+    const h = handle.getBoundingClientRect();
+    const box = button(el, "t1").getBoundingClientRect();
+    expect(h.top - box.bottom, `y ${y}`).toBe(4);
+    const hit = el.shadowRoot!.elementFromPoint(h.left + h.width / 2, h.top + h.height / 2);
+    expect(hit !== null && handle.contains(hit), `y ${y}`).toBe(true);
+    cleanup();
+  }
+});
+
+it("keeps the handle above a table once there is room", async () => {
+  const el = await canvas([table("t1", "T1", { x: 10, y: 4 })], { selected: "t1" });
+  const h = handles(el)[0]!.getBoundingClientRect();
+  const box = button(el, "t1").getBoundingClientRect();
+  expect(box.top - h.bottom).toBe(4);
 });
 
 it("a tap on the handle does not turn the table", async () => {

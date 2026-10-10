@@ -71,6 +71,8 @@ interface Drag {
   pointerId: number;
   startX: number;
   startY: number;
+  /** For a turn: the pointer's angle round the table's centre when it was pressed. */
+  startAngle: number;
 }
 
 interface Draft {
@@ -192,6 +194,8 @@ export class WtFloorPlanCanvas extends LitElement {
 
   #drag: Drag | null = null;
 
+  #ignoreGridClick = false;
+
   #observer = new ResizeObserver(([entry]) => {
     // The content box excludes scrollbars, and rounding down keeps the grid inside it, so the grid
     // never overflows only because a scrollbar appeared; min-width/min-height fill the remainder.
@@ -286,9 +290,16 @@ export class WtFloorPlanCanvas extends LitElement {
 
   #renderHandle(t: PlanCanvasTable, p: PlanPlacement, copy: FloorPlanCanvasCopy): TemplateResult {
     const box = rotatedRect(p);
+    const host = getComputedStyle(this);
+    const room =
+      parseFloat(host.getPropertyValue("--wt-tap-min")) +
+      parseFloat(host.getPropertyValue("--wt-space-1"));
     const style = styleMap({
       left: px(box.x + box.width / 2),
-      top: `calc(${px(box.y)} - var(--wt-tap-min) - var(--wt-space-1))`,
+      top:
+        box.y * GRID_SQUARE_PX >= room
+          ? `calc(${px(box.y)} - var(--wt-tap-min) - var(--wt-space-1))`
+          : `calc(${px(box.y + box.height)} + var(--wt-space-1))`,
     });
     return html`
       <button
@@ -327,9 +338,18 @@ export class WtFloorPlanCanvas extends LitElement {
 
   #onPointerDown(e: PointerEvent, t: PlanCanvasTable, kind: Drag["kind"]): void {
     // Replacing a live drag's owner would leave the first pointer's pointerup unmatched.
-    if (this.#drag !== null) return;
+    if (this.#drag !== null || e.button !== 0) return;
+    // Cancelling the press also cancels the focus it would give, so give it back by hand.
     e.preventDefault();
-    this.#drag = { kind, table: t, pointerId: e.pointerId, startX: e.clientX, startY: e.clientY };
+    (e.currentTarget as HTMLElement).focus({ preventScroll: true });
+    this.#drag = {
+      kind,
+      table: t,
+      pointerId: e.pointerId,
+      startX: e.clientX,
+      startY: e.clientY,
+      startAngle: this.#angleAround(t.placement, e.clientX, e.clientY),
+    };
     window.addEventListener("pointermove", this.#onPointerMove);
     window.addEventListener("pointerup", this.#onPointerUp);
     window.addEventListener("pointercancel", this.#onPointerCancel);
@@ -346,12 +366,18 @@ export class WtFloorPlanCanvas extends LitElement {
       this.draft = { key: drag.table.key, placement: { ...p, x, y } };
       return;
     }
-    const grid = this.renderRoot.querySelector(".grid")!.getBoundingClientRect();
-    const dx = e.clientX - (grid.left + (p.x + p.width / 2) * GRID_SQUARE_PX);
-    const dy = e.clientY - (grid.top + (p.y + p.height / 2) * GRID_SQUARE_PX);
-    const rotation = rotationFromAngle((Math.atan2(dx, -dy) * 180) / Math.PI);
+    const turn = this.#angleAround(p, e.clientX, e.clientY) - drag.startAngle;
+    const rotation = rotationFromAngle(p.rotation + turn);
     this.draft = { key: drag.table.key, placement: { ...p, rotation } };
   };
+
+  /** Degrees clockwise from straight up, round the table's centre. */
+  #angleAround(p: PlanPlacement, clientX: number, clientY: number): number {
+    const grid = this.renderRoot.querySelector(".grid")!.getBoundingClientRect();
+    const dx = clientX - (grid.left + (p.x + p.width / 2) * GRID_SQUARE_PX);
+    const dy = clientY - (grid.top + (p.y + p.height / 2) * GRID_SQUARE_PX);
+    return (Math.atan2(dx, -dy) * 180) / Math.PI;
+  }
 
   readonly #onPointerUp = (e: PointerEvent): void => {
     const drag = this.#drag!;
@@ -362,10 +388,16 @@ export class WtFloorPlanCanvas extends LitElement {
     const from = drag.table.placement;
     const to = draft.placement;
     if (drag.kind === "rotate") {
-      if (to.rotation !== from.rotation) this.#rotate(draft.key, to.rotation);
-    } else if (to.x !== from.x || to.y !== from.y) {
+      if (to.rotation === from.rotation) return;
+      this.#rotate(draft.key, to.rotation);
+    } else {
+      if (to.x === from.x && to.y === from.y) return;
       this.#move(draft.key, to.x, to.y);
     }
+    // A release away from where the press began sends its click to the grid, which would clear
+    // the selection. That click comes in the same task as this pointerup.
+    this.#ignoreGridClick = true;
+    setTimeout(() => (this.#ignoreGridClick = false));
   };
 
   readonly #onPointerCancel = (e: PointerEvent): void => {
@@ -399,7 +431,7 @@ export class WtFloorPlanCanvas extends LitElement {
 
   readonly #onGridClick = (e: Event): void => {
     e.stopPropagation();
-    this.#select(null);
+    if (!this.#ignoreGridClick) this.#select(null);
   };
 
   #select(key: string | null): void {

@@ -570,8 +570,9 @@ is at least 28 px, and is always its accessible name, with ", Fixed" (`copy.fixe
 click on a table or on empty grid sends `wt-table-select`, and the parent decides by setting
 `selected`. Dragging a table, or an arrow key on a focused one, sends `wt-table-move`
 (`{ key, x, y }`) once, in whole squares, never below 0; the grid grows while a table is dragged
-right or down. The selected table has a rotation handle above it, a sibling of its button
-(`copy.rotate`); dragging it round the table's centre, or ArrowRight and ArrowLeft on it, sends
+right or down. The selected table has a rotation handle above it, or below it where the grid
+has no room above, a sibling of its button (`copy.rotate`); dragging it round the table's centre
+turns the table by as much as the pointer went round, or ArrowRight and ArrowLeft on it, sends
 `wt-table-rotate` (`{ key, rotation }`) in 15° steps.
 
 `wt-combobox` works from the keyboard like a select. On the closed trigger, ArrowDown, ArrowUp,
