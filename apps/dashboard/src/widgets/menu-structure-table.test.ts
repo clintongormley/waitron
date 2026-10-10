@@ -948,6 +948,39 @@ it.each([1280, 390].flatMap((width) => [true, false].map((reordering) => ({ widt
   },
 );
 
+it.each(
+  [1280, 390].flatMap((width) =>
+    (["browsing", "reordering", "selecting"] as const).flatMap((mode) =>
+      [null, "#aabbcc"].map((menuColor) => ({ width, mode, menuColor })),
+    ),
+  ),
+)(
+  "draws the menu's own row no taller than a section's, its name level with its ⋮ ($width px, $mode, menu colour: $menuColor)",
+  async ({ width, mode, menuColor }) => {
+    const before = { width: window.innerWidth, height: window.innerHeight };
+    try {
+      await page.viewport(width, 844);
+      const el = await mountDeep({
+        menuColor,
+        reordering: mode === "reordering",
+        selecting: mode === "selecting",
+      });
+      for (let i = 0; i < 3; i += 1) await new Promise(requestAnimationFrame);
+      expect(table(el).hasAttribute("narrow")).toBe(width === 390);
+      const middle = (rect: DOMRect) => rect.top + rect.height / 2;
+      const height = (key: string) => row(el, key)!.getBoundingClientRect().height;
+      const text = document.createRange();
+      text.selectNodeContents(inTable(el, '[data-test="root-name"]')!);
+      const name = middle(text.getBoundingClientRect());
+      const menu = middle(inTable(el, '[data-test="actions-root"]')!.getBoundingClientRect());
+      expect(height("root")).toBeLessThanOrEqual(height("m-drinks") + 1);
+      expect(Math.abs(name - menu)).toBeLessThanOrEqual(2);
+    } finally {
+      await page.viewport(before.width, before.height);
+    }
+  },
+);
+
 it.each([1280, 390])(
   "puts the Name heading over the menu's own name, the first in the tree, also at phone width, where the tree's arrow slot narrows (%ipx)",
   async (width) => {

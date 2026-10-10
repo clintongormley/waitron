@@ -1061,9 +1061,11 @@ export class MenuStructureTable extends LitElement {
             >${swatchChip(row.color)}</span
           >`;
     return html`<span part="folder-cell"
-      >${folderFrame(swatch)}<span part="root-label"
-        ><strong part="root-name" data-test="root-name">${row.name}</strong
-        ><span part="count" data-test="count-root">${row.counts}</span></span
+      >${folderFrame(swatch)}<span part="name-stack folder-stack"
+        ><span part="root-label"
+          ><strong part="root-name" data-test="root-name">${row.name}</strong
+          ><span part="count" data-test="count-root">${row.counts}</span></span
+        ></span
       ></span
     >`;
   }
