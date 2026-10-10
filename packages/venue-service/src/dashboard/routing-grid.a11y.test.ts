@@ -1,4 +1,5 @@
-import { afterEach, describe, test, vi } from "vitest";
+import { afterEach, describe, expect, test, vi } from "vitest";
+import { userEvent } from "vitest/browser";
 import { setLocale } from "@waitron/dashboard-kit";
 import { cleanup, host } from "@waitron/ui/src/test-helpers.js";
 import { expectNoA11yViolations, mountThemed } from "@waitron/ui/src/a11y-helpers.js";
@@ -180,5 +181,49 @@ describe.each(["light", "dark"] as const)("routing grid accessibility (%s)", (th
         throw new Error(`${selector}: not-on-menus mark ${carries ? "missing" : "unexpected"}`);
     }
     await expectNoA11yViolations(host);
+  });
+});
+
+// axe is not asked about a hovered cell, so its small coloured text is measured here.
+function contrastRatio(a: string, b: string): number {
+  const luminance = (rgb: string) => {
+    expect(rgb).toMatch(/^rgba?\(/);
+    const [r, g, bl] = rgb
+      .match(/\d+(\.\d+)?/g)!
+      .slice(0, 3)
+      .map((part) => Number(part) / 255)
+      .map((v) => (v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4));
+    return 0.2126 * r! + 0.7152 * g! + 0.0722 * bl!;
+  };
+  const [light, dark] = [luminance(a), luminance(b)].sort((x, y) => y - x);
+  return (light! + 0.05) / (dark! + 0.05);
+}
+
+describe.each(["light", "dark"] as const)("a hovered routing cell (%s)", (theme) => {
+  test.each([
+    [
+      "the not-on-menus mark",
+      'td[data-row="c:drinks"][data-zone="every"]',
+      '[data-test="period-flag"]',
+    ],
+    ["an inherited line", 'td[data-row="p:mojito"][data-zone="every"]', ".line.inherited"],
+  ])("keeps %s at 4.5:1 against the hover", async (_, cellSelector, textSelector) => {
+    await mountThemed("<div></div>", theme);
+    const el = document.createElement("venue-routing-grid");
+    Object.assign(el, { model: flaggedLine });
+    host.append(el);
+    await el.updateComplete;
+    el.shadowRoot!.querySelector<HTMLElement>('[data-test="expand-all"]')!.click();
+    await el.updateComplete;
+    const cell = el.shadowRoot!.querySelector<HTMLButtonElement>(
+      `${cellSelector} button[data-test="routing-cell"]`,
+    )!;
+    const text = cell.querySelector(textSelector)!;
+    const atRest = getComputedStyle(cell).backgroundColor;
+    await userEvent.hover(cell);
+    expect(cell.matches(":hover")).toBe(true);
+    const hovered = getComputedStyle(cell).backgroundColor;
+    expect(hovered).not.toBe(atRest);
+    expect(contrastRatio(getComputedStyle(text).color, hovered)).toBeGreaterThanOrEqual(4.5);
   });
 });

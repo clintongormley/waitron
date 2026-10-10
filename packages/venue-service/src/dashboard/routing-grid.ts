@@ -216,7 +216,7 @@ export class RoutingGrid extends LitElement {
         cursor: pointer;
       }
       .cell:hover {
-        background: var(--wt-color-surface-sunken);
+        background: var(--wt-color-surface-lifted);
       }
       .cell:focus-visible {
         outline: var(--wt-focus-ring);
