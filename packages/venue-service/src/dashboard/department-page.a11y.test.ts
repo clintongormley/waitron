@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it } from "vitest";
+import { html } from "lit";
 import { page } from "vitest/browser";
 import { setLocale, type DashboardRequest } from "@waitron/dashboard-kit";
 import { cleanup, host, formMessageOf } from "@waitron/ui/src/test-helpers.js";
@@ -270,3 +271,22 @@ describe.each(["light", "dark"] as const)("desktop Opening hours warning (%s)", 
     },
   );
 });
+
+for (const theme of ["light", "dark"] as const) {
+  for (const locale of ["en", "es"] as const) {
+    it(`Receipt policy summary is accessible in ${theme}/${locale}`, async () => {
+      setLocale(locale);
+      const el = (await mountThemed(
+        "<department-page></department-page>",
+        theme,
+      )) as HTMLElementTagNameMap["department-page"];
+      el.model = structuredClone(model);
+      el.departmentId = "d1";
+      el.view = "receipt";
+      el.renderPanel = () => html`<p>Receipt editor</p>`;
+      await el.updateComplete;
+      expect(el.shadowRoot!.querySelector("[data-test=receipt-policy]")).not.toBeNull();
+      await expectNoA11yViolations(host);
+    });
+  }
+}

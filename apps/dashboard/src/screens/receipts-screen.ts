@@ -546,7 +546,8 @@ export class ReceiptsScreen extends LitElement {
   async #loadReceipt(): Promise<void> {
     try {
       await this.#receiptQueries.watch("getReceipt", [], ({ receipt, venueAddress }) => {
-        const changed =
+        const previousDefaults = this.#venueDefaults();
+        const contactChanged =
           this.phone !== (receipt.phone ?? "") || this.email !== (receipt.email ?? "");
         const moved = venueAddress.join("\n") !== this.venueAddress.join("\n");
         this.headerSubtitle = receipt.headerSubtitle ?? "";
@@ -557,6 +558,8 @@ export class ReceiptsScreen extends LitElement {
         this.logo = receipt.logo ?? null;
         this.venueAddress = venueAddress;
         this.receiptLoadError = null;
+        const defaultsChanged = !sameValue(previousDefaults, this.#venueDefaults());
+        if (defaultsChanged) this.#departmentGeneration++;
         if (!this.receiptLoaded) {
           this.receiptLoaded = true;
           this.#previewActive = true;
@@ -565,7 +568,7 @@ export class ReceiptsScreen extends LitElement {
           // The address is not in what a preview asks for, so the same request must be sent again.
           this.#previewRequested = null;
           this.#schedulePreview();
-        } else if (changed) this.#schedulePreview();
+        } else if (contactChanged || defaultsChanged) this.#schedulePreview();
       });
     } catch (error) {
       this.receiptLoadError = codeOf(error);

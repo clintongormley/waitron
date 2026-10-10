@@ -7340,6 +7340,43 @@ describe("mounted public department pages", () => {
       expect(find(app, '[data-test="receipt-language"]')).toBeNull();
     },
   );
+  it.each(["tab", "parent"])(
+    "hosted Receipt %s navigation Keeps then Discards one draft",
+    async (destination) => {
+      const app = await mountDepartments("/manage/venue-operations/department/d1/view/receipt", [
+        "venue_service.manage",
+        "layout.configure",
+      ]);
+      await expect.poll(() => find(app, 'wt-input[name="email"]')).not.toBeNull();
+      const field = find(app, 'wt-input[name="email"]') as WtInput;
+      await field.updateComplete;
+      await userEvent.fill(
+        page.elementLocator(field.shadowRoot!.querySelector("input")!),
+        "draft@example.com",
+      );
+      const target = () =>
+        find(
+          app,
+          destination === "tab" ? 'button[data-key="zones"]' : 'a[href="/manage/venue-operations"]',
+        )!;
+      target().click();
+      await choose(app, "keep");
+      expect(location.pathname).toBe("/manage/venue-operations/department/d1/view/receipt");
+      expect(field.value).toBe("draft@example.com");
+      expect(find(app, 'button[data-key="receipt"]')!.getAttribute("aria-selected")).toBe("true");
+      target().click();
+      await choose(app, "discard");
+      await expect
+        .poll(() => location.pathname)
+        .toBe(
+          destination === "tab"
+            ? "/manage/venue-operations/department/d1/view/zones"
+            : "/manage/venue-operations",
+        );
+      expect(app.shadowRoot!.querySelector("wt-unsaved-changes")!.open).toBe(false);
+      expect(find(app, "dashboard-department-receipt-editor")).toBeNull();
+    },
+  );
   it("a missing department Receipt URL does not borrow another department", async () => {
     const app = await mountDepartments("/manage/venue-operations/department/gone/view/receipt", [
       "venue_service.manage",

@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, expect, it } from "vitest";
+import { html } from "lit";
 import { page } from "vitest/browser";
 import { applyTokens } from "@waitron/ui";
 import { setLocale } from "@waitron/dashboard-kit";
@@ -323,4 +324,39 @@ it("a native field change inside Zones cannot select another tab or change the a
   expect(el.view).toBe("zones");
   expect(tabs.value).toBe("zones");
   expect(changed).toEqual([]);
+});
+
+it("Receipt shows saved print policy and only differing receipt zones from this department", async () => {
+  const view = structuredClone(model);
+  view.salePolicies.zones.push({ ...view.salePolicies.zones[1]!, zoneId: "z4" });
+  await mount(view);
+  el.renderPanel = () => html`<p>Receipt editor</p>`;
+  el.view = "receipt";
+  await el.updateComplete;
+  const summary = el.shadowRoot!.querySelector("[data-test=receipt-policy]");
+  expect(summary).not.toBeNull();
+  expect(summary!.textContent).toContain("Always");
+  expect(summary!.textContent).toContain("Casa");
+  expect(summary!.textContent).toContain("Don't print");
+  expect(summary!.textContent).toContain("Bar");
+  expect(summary!.textContent).toContain("On request");
+  expect(summary!.textContent).not.toContain("Terrace");
+  expect(summary!.textContent).not.toContain("Same");
+  expect(summary!.textContent).not.toContain("Other");
+  expect(summary!.querySelector("a")!.getAttribute("href")).toBe(
+    "/manage/venue-operations/department/d1",
+  );
+  view.salePolicies.departments[0]!.receiptPrintMode = "on_request";
+  view.salePolicies.departments[0]!.printTradingName = true;
+  el.model = structuredClone(view);
+  await el.updateComplete;
+  expect(el.shadowRoot!.querySelector("[data-test=receipt-policy]")!.textContent).toContain(
+    "On request",
+  );
+  expect(el.shadowRoot!.querySelector("[data-test=receipt-policy]")!.textContent).toContain(
+    "Print",
+  );
+  expect(el.shadowRoot!.querySelector("[data-test=receipt-policy]")!.textContent).not.toContain(
+    "Bar",
+  );
 });
