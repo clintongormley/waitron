@@ -964,6 +964,7 @@ describe("the invoice at full payment", () => {
     const looser = await issueTo("Rank Vermutería SL");
     const gin = await issueTo("Gin SL");
     const ginger = await issueTo("Ginger Club SL");
+    const ampersand = await issueTo("Smith & Sons SL");
     const session = await inTx(async (tx) => {
       const [admin] = await tx
         .select({ id: persons.id })
@@ -993,6 +994,8 @@ describe("the invoice at full payment", () => {
     expect(await found("nunez distribuciones")).toEqual([nunez.billId]);
     expect(await found("&")).toEqual([]);
     expect(await found(nunez.invoiceNumber)).toEqual([nunez.billId]);
+    expect(await found(` ${nunez.invoiceNumber} `)).toEqual([nunez.billId]);
+    expect(await found("smith sons")).toEqual([ampersand.billId]);
     expect(await found("rank vermut")).toEqual([closest.billId, looser.billId]);
     const finished = await found("gin ");
     expect(finished).toContain(gin.billId);
