@@ -23,7 +23,10 @@ export const VENUE_SERVICE_DASHBOARD: DashboardContribution = {
     const api = new VenueServiceApi(ctx.request, ctx.liveData);
     return {
       render: () =>
-        html`<dashboard-venue-operations-screen .api=${api}></dashboard-venue-operations-screen>`,
+        html`<dashboard-venue-operations-screen
+          .api=${api}
+          .renderPanel=${ctx.renderPanel}
+        ></dashboard-venue-operations-screen>`,
     };
   },
   moreScreens: [

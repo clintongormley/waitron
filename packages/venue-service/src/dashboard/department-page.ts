@@ -1,3 +1,4 @@
+import type { DashboardPanelRenderer } from "@waitron/dashboard-kit";
 import { LitElement, css, html, nothing } from "lit";
 import { customElement, property } from "lit/decorators.js";
 import { baseStyles, leaveCoordinatorFor } from "@waitron/ui";
@@ -44,16 +45,21 @@ export class DepartmentPage extends LitElement {
       .status {
         color: var(--wt-color-text-muted);
       }
+      .receipt-policy {
+        margin-block-end: var(--wt-space-4);
+        overflow-wrap: anywhere;
+      }
       .setup {
         margin-block: 0 var(--wt-space-4);
         overflow-wrap: anywhere;
       }
     `,
   ];
+  @property({ attribute: false }) renderPanel?: DashboardPanelRenderer;
   @property({ attribute: false }) api?: VenueServiceApi;
   @property({ attribute: false }) model?: VenueServiceView;
   @property() departmentId = "";
-  @property() view: "settings" | "zones" = "settings";
+  @property() view: "settings" | "zones" | "receipt" = "settings";
   private generation = {};
   override disconnectedCallback() {
     this.generation = {};
@@ -62,7 +68,7 @@ export class DepartmentPage extends LitElement {
   private emit(name: string, detail: object) {
     this.dispatchEvent(new CustomEvent(name, { detail, bubbles: true, composed: true }));
   }
-  private async select(view: "settings" | "zones") {
+  private async select(view: "settings" | "zones" | "receipt") {
     const id = this.departmentId,
       generation = this.generation;
     const proceed = () => {
@@ -87,10 +93,40 @@ export class DepartmentPage extends LitElement {
     if (!issues.length) return nothing;
     return html`${issues.map((issue, index) => html`${index ? " " : nothing}${issue.code === "department.no_periods" ? html`${issue.departmentName} ${t("venue.readiness.department_no_periods")} <a href=${`/manage/opening-hours/department/${encodeURIComponent(row.id)}`}>${t("venue.set_up_periods")}</a>` : issue.code === "zone.menu_unpublished" ? html`${issue.zoneName} ${t("venue.readiness.zone_menu_unpublished")}` : issue.code === "zone.menu_empty" ? html`${issue.zoneName}: ${issue.menuName} ${t("venue.readiness.menu_empty")} ${issue.zoneName}.` : nothing}`)}`;
   }
+  private receiptPolicy() {
+    const row = this.model!.departments.find((d) => d.id === this.departmentId)!;
+    const policy = this.model!.salePolicies.departments.find((p) => p.departmentId === row.id);
+    const mode = policy?.receiptPrintMode ?? "auto";
+    const differences = this.model!.zones.filter((zone) => {
+      if (zone.departmentId !== row.id) return false;
+      const override = this.model!.salePolicies.zones.find((p) => p.zoneId === zone.id);
+      return override?.receiptPrintMode != null && override.receiptPrintMode !== mode;
+    });
+    return html`<section
+      class="receipt-policy"
+      data-test="receipt-policy"
+      aria-label=${t("venue.print_receipt")}
+    >
+      <p>
+        ${t("venue.print_receipt")}: ${t(mode === "auto" ? "venue.always" : "venue.on_request")}
+      </p>
+      <p>
+        ${t("venue.trading_name")}: ${row.tradingName}
+        (${t(policy?.printTradingName ? "venue.print" : "venue.dont_print")})
+      </p>
+      ${differences.map((zone) => html`<p>${zone.name}: ${t(mode === "auto" ? "venue.on_request" : "venue.always")}</p>`)}
+      <a href=${`/manage/venue-operations/department/${encodeURIComponent(row.id)}`}
+        >${t("venue.settings_tab")}</a
+      >
+    </section>`;
+  }
   override render() {
     const row = this.model?.departments.find((d) => d.id === this.departmentId);
     if (!row) return nothing;
     const setup = this.setup();
+    const receipt =
+      this.renderPanel?.("department-receipt", { id: row.id, name: row.name }) ?? null;
+    const view = this.view === "receipt" && receipt === null ? "settings" : this.view;
     return html`<nav aria-label=${t("venue.departments")}>
         <a href="/manage/venue-operations">${t("venue.departments")}</a> ›
       </nav>
@@ -103,10 +139,11 @@ export class DepartmentPage extends LitElement {
         .items=${[
           { key: "settings", label: t("venue.settings_tab") },
           { key: "zones", label: t("venue.list_zones") },
+          ...(receipt === null ? [] : [{ key: "receipt", label: t("venue.receipt_tab") }]),
         ]}
-        .value=${this.view}
+        .value=${view}
         label=${row.name}
-        @wt-tab-change=${(e: CustomEvent<{ value: "settings" | "zones" }>) => {
+        @wt-tab-change=${(e: CustomEvent<{ value: "settings" | "zones" | "receipt" }>) => {
           e.stopPropagation();
           void this.select(e.detail.value);
         }}
@@ -117,8 +154,10 @@ export class DepartmentPage extends LitElement {
           .model=${this.model}
           .departmentId=${row.id}
           .showEnable=${false}
+          .showReceipt=${receipt !== null}
         ></department-settings>
         <slot name="zones" slot="zones"></slot>
+        ${view === "receipt" ? html`<section slot="receipt">${this.receiptPolicy()}${receipt}</section>` : nothing}
       </wt-tabs>`;
   }
 }

@@ -48,7 +48,11 @@ function fixture() {
     ]),
     getDepartmentReceipt: vi.fn(async () => ({
       receipt: {},
-      venueDefaults: { headerSubtitle: "Older department query" },
+      venueDefaults: {
+        headerSubtitle: "Current defaults",
+        footerMessage: "Thanks",
+        printAddress: false,
+      },
       languages: ["es-ES", "ca-ES"],
       warningLanguages: [],
       venueAddress: ["Calle Mayor 1"],
@@ -56,7 +60,9 @@ function fixture() {
     putDepartmentReceipt: vi.fn<DashboardApi["putDepartmentReceipt"]>(async () => {}),
     getReceipt: vi.fn(async () => ({
       receipt: {
-        headerSubtitle: "Legacy query",
+        headerSubtitle: "Current defaults",
+        footerMessage: "Thanks",
+        printAddress: false,
         phone: "+34 912 345 678",
         email: "venue@example.com",
       },
@@ -90,17 +96,21 @@ function department(el: Screen) {
     "dashboard-department-receipt-editor",
   )!;
 }
-async function mount(api = fixture(), theme: "light" | "dark" = "light") {
+async function mount(api = fixture(), theme: "light" | "dark" = "light", departmentMode = false) {
   history.replaceState(null, "", "/manage/venue-settings/view/receipts?departmentId=bar");
   const { el, host } = await mountWidget<Screen>(
     "dashboard-receipts-screen",
     {
       api: api as unknown as DashboardApi,
+      departmentId: departmentMode ? "bar" : "",
+      departmentName: "Bar",
     },
     theme,
   );
   await vi.waitFor(() =>
-    expect(defaults(el)?.shadowRoot?.querySelector("wt-input[name=headerSubtitle]")).toBeTruthy(),
+    expect(
+      (departmentMode ? department(el) : defaults(el))?.shadowRoot?.querySelector("wt-input"),
+    ).toBeTruthy(),
   );
   return { el, host, api };
 }
@@ -117,22 +127,17 @@ function save(root: Defaults | ReturnType<typeof department>, kind: "defaults" |
     `[data-test=${kind}-save]`,
   )!;
 }
-function hint(el: Screen) {
-  return department(el).shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>(
-    "wt-input[name=headerSubtitle-es-ES]",
-  )!.hint;
-}
 afterEach(() => {
   cleanupWidgets();
   history.replaceState(null, "", originalUrl);
   setLocale("en-GB");
 });
 
-it("mounts independently queried defaults after the department editor and previews those defaults", async () => {
+it("mounts independently queried venue defaults and previews those defaults", async () => {
   const { el, api } = await mount();
   await vi.waitFor(() =>
     expect(api.previewReceiptDraft).toHaveBeenLastCalledWith({
-      departmentId: "bar",
+      departmentId: null,
       receipt: {},
       settings: {
         headerSubtitle: "Current defaults",
@@ -141,16 +146,11 @@ it("mounts independently queried defaults after the department editor and previe
       },
     }),
   );
-  expect(hint(el)).toBe("Current defaults");
-  expect(
-    department(el).compareDocumentPosition(defaults(el)) & Node.DOCUMENT_POSITION_FOLLOWING,
-  ).toBeTruthy();
   expect(defaults(el).shadowRoot!.querySelector("[name=phone], [name=email]")).toBeNull();
 });
 
-it("previews an unsaved default and updates inherited hints without making the department dirty", async () => {
+it("previews an unsaved venue default without writing department overrides", async () => {
   const { el, api } = await mount();
-  await vi.waitFor(() => expect(hint(el)).toBe("Current defaults"));
   await edit(defaults(el), "headerSubtitle", "Draft defaults");
   await vi.waitFor(() =>
     expect(api.previewReceiptDraft.mock.lastCall?.[0].settings).toEqual({
@@ -159,19 +159,13 @@ it("previews an unsaved default and updates inherited hints without making the d
       printAddress: false,
     }),
   );
-  expect(hint(el)).toBe("Draft defaults");
-  expect(save(department(el), "department").disabled).toBe(true);
   expect(save(defaults(el), "defaults").disabled).toBe(false);
   expect(api.putVenueReceiptSettings).not.toHaveBeenCalled();
   expect(api.putDepartmentReceipt).not.toHaveBeenCalled();
 });
 
-it("saves only defaults while retaining dirty department, language and description controls", async () => {
+it("saves only defaults while retaining dirty language and description controls", async () => {
   const { el, api } = await mount();
-  await vi.waitFor(() =>
-    expect(department(el)?.shadowRoot?.querySelector("wt-input[name=email]")).toBeTruthy(),
-  );
-  await edit(department(el), "email", "bar@example.com");
   await edit(defaults(el), "headerSubtitle", "Saved defaults");
   el.shadowRoot!.querySelector("wt-combobox[name=receiptLanguage]")!.dispatchEvent(
     new CustomEvent("wt-change", { detail: { value: "ca-ES" }, bubbles: true, composed: true }),
@@ -188,7 +182,6 @@ it("saves only defaults while retaining dirty department, language and descripti
     }),
   );
   await vi.waitFor(() => expect(save(defaults(el), "defaults").disabled).toBe(true));
-  expect(save(department(el), "department").disabled).toBe(false);
   expect(
     el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>("[data-test=language-save]")!
       .disabled,
@@ -204,31 +197,28 @@ it("saves only defaults while retaining dirty department, language and descripti
   expect(api.putLocationSettings).not.toHaveBeenCalled();
   await vi.waitFor(() =>
     expect(api.previewReceiptDraft.mock.lastCall?.[0]).toEqual({
-      departmentId: "bar",
-      receipt: { email: "bar@example.com" },
+      departmentId: null,
+      receipt: {},
       settings: { headerSubtitle: "Saved defaults", footerMessage: "Thanks", printAddress: false },
     }),
   );
 });
 
-it("refreshes clean default hints without copying them into department overrides", async () => {
+it("refreshes clean venue defaults without writing department overrides", async () => {
   const { el, api } = await mount();
-  await vi.waitFor(() => expect(hint(el)).toBe("Current defaults"));
   api.getVenueReceiptSettings.mockResolvedValue({ settings: { headerSubtitle: "Live defaults" } });
   api.liveData.invalidate([{ type: "tenant_receipts" }]);
-  await vi.waitFor(() => expect(hint(el)).toBe("Live defaults"));
-  expect(save(department(el), "department").disabled).toBe(true);
   expect(save(defaults(el), "defaults").disabled).toBe(true);
   await vi.waitFor(() =>
     expect(api.previewReceiptDraft.mock.lastCall?.[0]).toEqual({
-      departmentId: "bar",
+      departmentId: null,
       receipt: {},
       settings: { headerSubtitle: "Live defaults" },
     }),
   );
 });
 
-it("keeps a typed default in the preview and hints across live refresh", async () => {
+it("keeps a typed venue default in the preview across live refresh", async () => {
   const { el, api } = await mount();
   await edit(defaults(el), "headerSubtitle", "Typed defaults");
   api.getVenueReceiptSettings.mockResolvedValue({
@@ -241,7 +231,6 @@ it("keeps a typed default in the preview and hints across live refresh", async (
       "Typed defaults",
     ),
   );
-  expect(hint(el)).toBe("Typed defaults");
   expect(save(defaults(el), "defaults").disabled).toBe(false);
 });
 
@@ -253,7 +242,7 @@ it("keeps defaults usable after a department load refusal", async () => {
   save(defaults(el), "defaults").click();
   await vi.waitFor(() => expect(api.putVenueReceiptSettings).toHaveBeenCalledOnce());
   expect(api.putDepartmentReceipt).not.toHaveBeenCalled();
-  expect(api.previewReceiptDraft).not.toHaveBeenCalled();
+  expect(api.getDepartmentReceipt).not.toHaveBeenCalled();
 });
 
 it("uses authored defaults in a venue-only preview without sending stored global contact", async () => {
@@ -331,7 +320,7 @@ for (const failed of ["getReceipt", "getLocationSettings", "getReceiptLanguage"]
     api.previewReceiptDraft.mockImplementation(async (value) =>
       paper(`${value.departmentId}: ${value.receipt.email ?? "empty"}`),
     );
-    const { el } = await mount(api);
+    const { el } = await mount(api, "light", true);
     await vi.waitFor(() =>
       expect(department(el)?.shadowRoot?.querySelector("wt-input[name=email]")).toBeTruthy(),
     );
@@ -373,9 +362,6 @@ for (const locale of ["en-GB", "es-ES"])
         params: { field: "headerSubtitle", maxLength: 500 },
       });
       const { el, host } = await mount(api, theme);
-      await vi.waitFor(() =>
-        expect(department(el)?.shadowRoot?.querySelector("wt-input[name=email]")).toBeTruthy(),
-      );
       await expectNoA11yViolations(host);
       await edit(defaults(el), "headerSubtitle", "Refused defaults");
       save(defaults(el), "defaults").click();
@@ -516,8 +502,13 @@ for (const failed of ["getReceipt", "getLocationSettings", "getReceiptLanguage"]
   it(`keeps the department editable and independently savable when ${failed} refuses`, async () => {
     const api = fixture();
     api[failed].mockRejectedValue({ code: "server.internal" });
-    const { el, host } = await mount(api);
-    await vi.waitFor(() => expect(el.shadowRoot!.querySelector("[role=alert]")).toBeTruthy());
+    const { el, host } = await mount(api, "light", true);
+    if (failed === "getReceipt")
+      await vi.waitFor(() => expect(el.shadowRoot!.querySelector("[role=alert]")).toBeTruthy());
+    else {
+      await vi.waitFor(() => expect(api[failed]).toHaveBeenCalledOnce());
+      expect(el.shadowRoot!.querySelector("[role=alert]")).toBeNull();
+    }
     await vi.waitFor(() =>
       expect(department(el)?.shadowRoot?.querySelector("wt-input[name=email]")).toBeTruthy(),
     );
@@ -553,7 +544,7 @@ for (const failed of ["getReceipt", "getLocationSettings", "getReceiptLanguage"]
     const read = api[failed].getMockImplementation()!;
     api[failed].mockRejectedValue({ code: "server.internal" });
     api.putDepartmentReceipt.mockRejectedValue({ code: "server.internal" });
-    const { el } = await mount(api);
+    const { el } = await mount(api, "light", true);
     await vi.waitFor(() =>
       expect(department(el)?.shadowRoot?.querySelector("wt-input[name=email]")).toBeTruthy(),
     );
@@ -566,8 +557,18 @@ for (const failed of ["getReceipt", "getLocationSettings", "getReceiptLanguage"]
     await vi.waitFor(() => expect(message()).not.toBe(""));
     const refusal = message();
     api[failed].mockImplementation(read as never);
-    el.shadowRoot!.querySelector<HTMLElement>("[data-test=retry]")!.click();
+    const previousReads = api[failed].mock.calls.length;
+    if (failed === "getReceipt")
+      el.shadowRoot!.querySelector<HTMLElement>("[data-test=retry]")!.click();
+    else api.liveData.invalidate([{ type: "locations" }]);
+    await vi.waitFor(() => expect(api[failed].mock.calls.length).toBeGreaterThan(previousReads));
     await vi.waitFor(() => expect(el.shadowRoot!.querySelector("[data-test=retry]")).toBeNull());
+    if (failed === "getReceiptLanguage")
+      await vi.waitFor(() =>
+        expect(form.shadowRoot!.querySelector('h3[lang="es-ES"]')?.textContent).toContain(
+          "(receipts)",
+        ),
+      );
     expect(department(el)).toBe(form);
     expect(message()).toBe(refusal);
     expect(
@@ -597,7 +598,7 @@ it("redraws the department's saved-language fallback after a live change despite
   api.getReceipt.mockRejectedValue({ code: "server.internal" });
   let savedLanguage = "es-ES";
   api.previewReceiptDraft.mockImplementation(async () => paper(savedLanguage));
-  const { el } = await mount(api);
+  const { el } = await mount(api, "light", true);
   await vi.waitFor(() =>
     expect(el.shadowRoot!.querySelector(".paper")?.textContent ?? "").toContain("es-ES"),
   );
@@ -607,6 +608,11 @@ it("redraws the department's saved-language fallback after a live change despite
     choices: ["es-ES", "ca-ES"],
     fixed: null,
   });
+  const departmentRead = api.getDepartmentReceipt.getMockImplementation()!;
+  api.getDepartmentReceipt.mockImplementation(async () => ({
+    ...(await departmentRead()),
+    receiptLanguage: "ca-ES",
+  }));
   api.liveData.invalidate([{ type: "locations" }]);
   await vi.waitFor(() =>
     expect(

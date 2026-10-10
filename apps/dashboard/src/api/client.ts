@@ -33,6 +33,7 @@ import type {
 import type { ExtraOfferUsage } from "@waitron/catalogue/src/extra-usage.js";
 export type { Product, ProductEditorValue, ProductEditorVariant, ProductEditorInput };
 export interface DepartmentReceiptSettings {
+  receiptLanguage: string;
   receipt: DepartmentReceiptConfig;
   venueDefaults: VenueReceiptSettings;
   languages: string[];

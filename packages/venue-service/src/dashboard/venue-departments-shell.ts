@@ -1,3 +1,4 @@
+import type { DashboardPanelRenderer } from "@waitron/dashboard-kit";
 import { LitElement, css, html, nothing, type PropertyValues } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { keyed } from "lit/directives/keyed.js";
@@ -32,10 +33,11 @@ export class VenueDepartmentsShell extends LitElement {
       }
     `,
   ];
+  @property({ attribute: false }) renderPanel?: DashboardPanelRenderer;
   @property({ attribute: false }) api!: VenueServiceApi;
   @property({ attribute: false }) model!: VenueServiceView;
   @state() private departmentId = "";
-  @state() private view: "settings" | "zones" = "settings";
+  @state() private view: "settings" | "zones" | "receipt" = "settings";
   @state() private zone = "";
   @state() private dialog?: DepartmentDialog;
   @state() private busy = false;
@@ -227,7 +229,8 @@ export class VenueDepartmentsShell extends LitElement {
   #restore() {
     if (this.#url.read("dashboard") !== "venue-operations") return;
     this.departmentId = this.#url.read("department") ?? "";
-    this.view = this.#url.read("view") === "zones" ? "zones" : "settings";
+    const view = this.#url.read("view");
+    this.view = view === "zones" || view === "receipt" ? view : "settings";
     this.zone = this.#url.read("zone") ?? "";
     if (!this.departmentId && (this.#url.read("view") || this.#url.read("zone")))
       void this.#url.write({ view: null, zone: null }, true);
@@ -240,9 +243,12 @@ export class VenueDepartmentsShell extends LitElement {
     event.stopPropagation();
     void this.#navigate({ department: event.detail.departmentId, view: null, zone: null });
   }
-  #view(event: CustomEvent<{ view: "settings" | "zones" }>) {
+  #view(event: CustomEvent<{ view: "settings" | "zones" | "receipt" }>) {
     event.stopPropagation();
-    void this.#navigate({ view: event.detail.view === "zones" ? "zones" : null, zone: null });
+    void this.#navigate({
+      view: event.detail.view === "settings" ? null : event.detail.view,
+      zone: null,
+    });
   }
   #zone(event: CustomEvent<{ zoneId: string }>) {
     event.stopPropagation();
@@ -267,6 +273,7 @@ export class VenueDepartmentsShell extends LitElement {
         .api=${this.api}
         .model=${this.model}
         .departmentId=${row.id}
+        .renderPanel=${this.renderPanel}
         .view=${this.view}
         @view-change=${this.#view}
         @zone-change=${this.#zone}

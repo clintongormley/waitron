@@ -185,7 +185,13 @@ export class DepartmentReceiptEditor extends LitElement {
   #publish(): void {
     this.dispatchEvent(
       new CustomEvent("receipt-draft-changed", {
-        detail: { departmentId: this.departmentId, receipt: structuredClone(this.draft) },
+        detail: {
+          departmentId: this.departmentId,
+          receipt: structuredClone(this.draft),
+          venueDefaults: structuredClone(this.settings?.venueDefaults ?? {}),
+          receiptLanguage: this.#receiptLanguage(),
+          languages: [...(this.settings?.languages ?? [])],
+        },
         bubbles: true,
         composed: true,
       }),
@@ -282,6 +288,9 @@ export class DepartmentReceiptEditor extends LitElement {
     this.saving = false;
     await this.#load();
   }
+  #receiptLanguage(): string {
+    return this.settings?.receiptLanguage ?? this.receiptLanguage;
+  }
   #hint(field: "headerSubtitle" | "footerMessage", language: string): string {
     if ((this.draft[field]?.[language] ?? "").trim()) return "";
     return (
@@ -289,7 +298,7 @@ export class DepartmentReceiptEditor extends LitElement {
         this.draft,
         this.venueDefaults ?? this.settings!.venueDefaults,
         language,
-        this.receiptLanguage,
+        this.#receiptLanguage(),
       )[field] ?? ""
     );
   }
@@ -347,7 +356,7 @@ export class DepartmentReceiptEditor extends LitElement {
     const action = saveActionState(this.#scope);
     const defaults = this.venueDefaults ?? settings?.venueDefaults ?? {};
     const languages = settings
-      ? [this.receiptLanguage, ...settings.languages].filter(
+      ? [this.#receiptLanguage(), ...settings.languages].filter(
           (language, index, all) => language && all.indexOf(language) === index,
         )
       : [];
@@ -424,7 +433,7 @@ export class DepartmentReceiptEditor extends LitElement {
                   (language) =>
                     html`<h3 lang=${language}>
                         ${receiptLanguageName(language)}
-                        (${t(language === this.receiptLanguage ? "receipts.language_receipts" : "receipts.language_copies")})
+                        (${t(language === this.#receiptLanguage() ? "receipts.language_receipts" : "receipts.language_copies")})
                         ${warnings.includes(language) ? html`<span aria-label=${t("receipts.translation_warning")}>⚠</span>` : nothing}
                       </h3>
                       ${this.#text("headerSubtitle", language)}${this.#text("footerMessage", language)}`,

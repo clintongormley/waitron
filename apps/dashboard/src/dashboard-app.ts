@@ -1209,7 +1209,18 @@ export class DashboardApp extends LitElement {
         panelIds.add(panel.id);
       }
       registerCatalogue(c.strings);
-      const ctx = { request: this.request, liveData: this.api.liveData };
+      const ctx = {
+        request: this.request,
+        liveData: this.api.liveData,
+        renderPanel: (panel: string, subject: { id: string; name: string }) =>
+          panel === "department-receipt" && this.#sessionPermissions.includes("layout.configure")
+            ? html`<dashboard-receipts-screen
+                .api=${this.api}
+                .departmentId=${subject.id}
+                .departmentName=${subject.name}
+              ></dashboard-receipts-screen>`
+            : null,
+      };
       for (const contributed of screens) {
         const { screen } = contributed;
         this.#activeScreens.set(screen.id, {
@@ -1671,23 +1682,8 @@ export class DashboardApp extends LitElement {
             : this.profileOpen && requested === this.screen && profile
               ? [profile]
               : "all";
-        const accepted = new URL(navigationGuardFor(window)?.href ?? location.href);
-        const next = new URL(destination);
-        const receipt = this.renderRoot
-          .querySelector("dashboard-venue-settings-screen")
-          ?.shadowRoot?.querySelector("dashboard-receipts-screen");
-        accepted.searchParams.delete("departmentId");
-        next.searchParams.delete("departmentId");
-        const except =
-          receipt &&
-          accepted.pathname === "/manage/venue-settings/view/receipts" &&
-          accepted.href === next.href
-            ? [receipt]
-            : [];
-        if (except.length) return receipt!.requestDepartmentNavigation(proceed, signal);
         return this.leave.coordinator.request({
           scopes,
-          except,
           reason: "navigation",
           proceed,
           signal,

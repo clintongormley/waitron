@@ -9,6 +9,7 @@ import "./department-receipt-editor.js";
 
 const languages = ["es-ES", "ca-ES", "gl-ES", "eu-ES"];
 const settings: DepartmentReceiptSettings = {
+  receiptLanguage: "es-ES",
   receipt: { headerSubtitle: { "ca-ES": "Bar català" } },
   venueDefaults: { headerSubtitle: "Venue subtitle", footerMessage: "Venue footer" },
   languages,

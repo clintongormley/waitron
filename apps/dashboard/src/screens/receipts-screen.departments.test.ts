@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, expect, it, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
 import { LiveData } from "@waitron/dashboard-kit";
 import { chooseOption } from "@waitron/ui/src/test-helpers.js";
@@ -16,6 +16,7 @@ const departments = [
   { id: "closed", name: "Closed", active: false, isDefault: false },
 ];
 const settings: DepartmentReceiptSettings = {
+  receiptLanguage: "es-ES",
   receipt: {},
   venueDefaults: { headerSubtitle: "Venue subtitle" },
   languages: ["es-ES", "ca-ES"],
@@ -106,12 +107,12 @@ async function mount(api = apiFixture(), theme: "light" | "dark" = "light") {
     "dashboard-receipts-screen",
     {
       api: api as unknown as DashboardApi,
+      departmentId: new URL(location.href).searchParams.get("departmentId") ?? "",
+      departmentName: "Bar",
     },
     theme,
   );
-  await vi.waitFor(() =>
-    expect(el.shadowRoot!.querySelector("[data-test=description-save]")).not.toBeNull(),
-  );
+  await vi.waitFor(() => expect(el.shadowRoot!.querySelector(".form-column")).not.toBeNull());
   return { el, api };
 }
 function editor(el: ReceiptsScreen) {
@@ -124,11 +125,6 @@ async function loadedEditor(el: ReceiptsScreen) {
     expect(editor(el)?.shadowRoot?.querySelector("wt-input[name=email]")).toBeTruthy(),
   );
   return editor(el)!;
-}
-function picker(el: ReceiptsScreen) {
-  return el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-combobox"]>(
-    "wt-combobox[name=departmentId]",
-  )!;
 }
 async function fill(el: ReceiptsScreen | DepartmentReceiptEditor, name: string, value: string) {
   const root =
@@ -144,124 +140,6 @@ afterEach(() => {
   cleanupWidgets();
   history.replaceState(null, "", originalUrl);
   setLocale("en-GB");
-});
-
-describe("the receipt page's department context", () => {
-  it("edits the active default even when another department is first, and previews its authored values", async () => {
-    url();
-    const { el, api } = await mount();
-    const child = await loadedEditor(el);
-    expect(child.departmentId).toBe("bar");
-    expect(picker(el).value).toBe("bar");
-    expect(new URL(location.href).searchParams.get("departmentId")).toBe("bar");
-    await vi.waitFor(() =>
-      expect(api.previewReceiptDraft).toHaveBeenCalledWith({
-        departmentId: "bar",
-        receipt: { phone: "+34 912 345 678" },
-        settings: { headerSubtitle: "Venue subtitle" },
-      }),
-    );
-    expect(
-      api.previewReceiptDraft.mock.calls.every(([draft]) => draft.departmentId === "bar"),
-    ).toBe(true);
-  });
-  it("selects the first active department when the designated default is disabled", async () => {
-    url();
-    const { el } = await mount(
-      apiFixture(departments.map((row) => ({ ...row, active: row.id === "deli" }))),
-    );
-    expect((await loadedEditor(el)).departmentId).toBe("deli");
-  });
-  it("edits and previews an explicitly addressed disabled department", async () => {
-    url("closed");
-    const { el, api } = await mount();
-    expect((await loadedEditor(el)).departmentId).toBe("closed");
-    expect(picker(el).options.map((option) => option.value)).toEqual(["deli", "bar", "closed"]);
-    await vi.waitFor(() =>
-      expect(api.previewReceiptDraft.mock.lastCall?.[0].departmentId).toBe("closed"),
-    );
-  });
-  it("mounts the editor for one active department", async () => {
-    url();
-    const { el } = await mount(apiFixture([departments[0]!]));
-    expect((await loadedEditor(el)).departmentId).toBe("deli");
-    expect(picker(el)).not.toBeNull();
-  });
-  it("leaves global settings usable with no active department", async () => {
-    url();
-    const { el, api } = await mount(
-      apiFixture(departments.map((row) => ({ ...row, active: false }))),
-    );
-    expect(editor(el)).toBeNull();
-    expect(el.shadowRoot!.querySelector("[data-test=no-department]")).not.toBeNull();
-    await fill(el, "headerSubtitle", "Updated venue");
-    el.shadowRoot!.querySelector("dashboard-venue-receipt-defaults-editor")!
-      .shadowRoot!.querySelector<HTMLElement>("[data-test=defaults-save]")!
-      .click();
-    await vi.waitFor(() =>
-      expect(api.putVenueReceiptSettings).toHaveBeenCalledExactlyOnceWith({
-        headerSubtitle: "Updated venue",
-      }),
-    );
-    expect(api.getDepartmentReceipt).not.toHaveBeenCalled();
-  });
-  it("keeps global settings usable when the department read refuses", async () => {
-    url("bar");
-    const api = apiFixture();
-    api.getDepartmentReceipt.mockRejectedValue({ code: "department.not_found" });
-    const { el } = await mount(api);
-    await vi.waitFor(() =>
-      expect(
-        editor(el)?.shadowRoot?.querySelector("[data-test=department-load-error]"),
-      ).toBeTruthy(),
-    );
-    await fill(el, "headerSubtitle", "Updated venue");
-    el.shadowRoot!.querySelector("dashboard-venue-receipt-defaults-editor")!
-      .shadowRoot!.querySelector<HTMLElement>("[data-test=defaults-save]")!
-      .click();
-    await vi.waitFor(() => expect(api.putVenueReceiptSettings).toHaveBeenCalledOnce());
-    expect(api.previewReceiptDraft).not.toHaveBeenCalled();
-  });
-  it("uses the same department for picker, editor, draft preview and save without sending an address", async () => {
-    url("bar");
-    const { el, api } = await mount();
-    await loadedEditor(el);
-    await chooseOption(picker(el), "deli");
-    await vi.waitFor(() => expect(editor(el)?.departmentId).toBe("deli"));
-    const child = await loadedEditor(el);
-    await fill(child, "email", "deli@example.com");
-    await vi.waitFor(() =>
-      expect(api.previewReceiptDraft.mock.lastCall?.[0]).toEqual({
-        departmentId: "deli",
-        receipt: { phone: "+34 912 345 679", email: "deli@example.com" },
-        settings: { headerSubtitle: "Venue subtitle" },
-      }),
-    );
-    child.shadowRoot!.querySelector<HTMLElement>("[data-test=department-save]")!.click();
-    await vi.waitFor(() =>
-      expect(api.putDepartmentReceipt).toHaveBeenCalledExactlyOnceWith("deli", {
-        phone: "+34 912 345 679",
-        email: "deli@example.com",
-      }),
-    );
-    expect(api.putReceipt).not.toHaveBeenCalled();
-    await vi.waitFor(() =>
-      expect(
-        child.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>(
-          "[data-test=department-save]",
-        )!.disabled,
-      ).toBe(true),
-    );
-    const email =
-      child.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>("wt-input[name=email]")!;
-    await email.updateComplete;
-    expect(email.shadowRoot!.querySelector("input")!.value).toBe("deli@example.com");
-    await vi.waitFor(() =>
-      expect(el.shadowRoot!.querySelector(".paper")!.textContent).toContain(
-        "deli: deli@example.com",
-      ),
-    );
-  });
 });
 
 it("previews the rest of a department draft while its contact is incomplete", async () => {
@@ -280,33 +158,6 @@ it("previews the rest of a department draft while its contact is incomplete", as
     child.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>("wt-input[name=email]")!
       .value,
   ).toBe("bar@");
-});
-it("global draft edits move inherited hints and preview without waking the department Save", async () => {
-  url("bar");
-  const { el, api } = await mount();
-  const child = await loadedEditor(el);
-  await fill(el, "headerSubtitle", "Unsaved venue subtitle");
-  await vi.waitFor(async () => {
-    const input = child.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>(
-      "wt-input[name=headerSubtitle-es-ES]",
-    )!;
-    await input.updateComplete;
-    expect(input.shadowRoot!.querySelector("input")!.placeholder).toBe("Unsaved venue subtitle");
-  });
-  await vi.waitFor(() =>
-    expect(api.previewReceiptDraft.mock.lastCall?.[0]).toEqual({
-      departmentId: "bar",
-      receipt: { phone: "+34 912 345 678" },
-      settings: { headerSubtitle: "Unsaved venue subtitle" },
-    }),
-  );
-  const action = child.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>(
-    "[data-test=department-save]",
-  )!;
-  await action.updateComplete;
-  expect(action.shadowRoot!.querySelector("button")!.disabled).toBe(true);
-  expect(api.putReceipt).not.toHaveBeenCalled();
-  expect(api.putDepartmentReceipt).not.toHaveBeenCalled();
 });
 
 it("excludes stored venue contact from a department's preview defaults", async () => {
@@ -328,35 +179,6 @@ it("excludes stored venue contact from a department's preview defaults", async (
       receipt: { phone: "+34 912 345 678" },
       settings: { headerSubtitle: "Venue subtitle" },
     }),
-  );
-});
-
-it("a preview completing for the former department cannot replace the selected department's paper", async () => {
-  url("bar");
-  const api = apiFixture();
-  let resolve!: (value: ReceiptPreview) => void;
-  const held = new Promise<ReceiptPreview>((yes) => {
-    resolve = yes;
-  });
-  api.previewReceiptDraft.mockImplementationOnce(() => held);
-  const { el } = await mount(api);
-  await loadedEditor(el);
-  await vi.waitFor(() => expect(api.previewReceiptDraft).toHaveBeenCalledOnce());
-  await chooseOption(picker(el), "deli");
-  await vi.waitFor(() => expect(editor(el)?.departmentId).toBe("deli"));
-  await loadedEditor(el);
-  let resolveNext!: (value: ReceiptPreview) => void;
-  const next = new Promise<ReceiptPreview>((yes) => {
-    resolveNext = yes;
-  });
-  api.previewReceiptDraft.mockImplementationOnce(() => next);
-  resolve(preview("Obsolete Bar"));
-  await vi.waitFor(() => expect(api.previewReceiptDraft).toHaveBeenCalledTimes(2));
-  await el.updateComplete;
-  expect(el.shadowRoot!.querySelector(".paper")).toBeNull();
-  resolveNext(preview("Current Deli"));
-  await vi.waitFor(() =>
-    expect(el.shadowRoot!.querySelector(".paper")?.textContent).toContain("Current Deli"),
   );
 });
 
@@ -411,66 +233,14 @@ it("starts department previews in the saved receipt language and offers an indep
       language: "ca-ES",
     }),
   );
-  expect(
-    el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-combobox"]>(
-      "wt-combobox[name=receiptLanguage]",
-    )!.value,
-  ).toBe("es-ES");
-  for (const action of [
-    el
-      .shadowRoot!.querySelector("dashboard-venue-receipt-defaults-editor")!
-      .shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>("[data-test=defaults-save]")!,
-    editor(el)!.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>(
-      "[data-test=department-save]",
-    )!,
-  ]) {
-    await action.updateComplete;
-    expect(action.shadowRoot!.querySelector("button")!.disabled).toBe(true);
-  }
+  const action = editor(el)!.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>(
+    "[data-test=department-save]",
+  )!;
+  await action.updateComplete;
+  expect(action.shadowRoot!.querySelector("button")!.disabled).toBe(true);
   expect(api.putReceiptLanguage).not.toHaveBeenCalled();
   expect(api.putReceipt).not.toHaveBeenCalled();
   expect(api.putDepartmentReceipt).not.toHaveBeenCalled();
-});
-
-it("a staged receipt-language setting does not choose the department preview language", async () => {
-  url("bar");
-  const { el, api } = await mount();
-  await loadedEditor(el);
-  await vi.waitFor(() => expect(api.previewReceiptDraft).toHaveBeenCalledOnce());
-  const savedLanguage = el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-combobox"]>(
-    "wt-combobox[name=receiptLanguage]",
-  )!;
-  await chooseOption(savedLanguage, "ca-ES");
-  await fill(editor(el)!, "email", "bar@example.com");
-  await vi.waitFor(() =>
-    expect(api.previewReceiptDraft.mock.lastCall?.[0]).toEqual({
-      departmentId: "bar",
-      receipt: { phone: "+34 912 345 678", email: "bar@example.com" },
-      settings: { headerSubtitle: "Venue subtitle" },
-    }),
-  );
-  expect(previewLanguage(el)!.value).toBe("es-ES");
-  expect(api.putReceiptLanguage).not.toHaveBeenCalled();
-});
-
-it("keeps the preview language when selecting another department", async () => {
-  url("bar");
-  const { el, api } = await mount();
-  await loadedEditor(el);
-  expect(previewLanguage(el)).not.toBeNull();
-  await chooseOption(previewLanguage(el)!, "ca-ES");
-  await chooseOption(picker(el), "deli");
-  await vi.waitFor(() => expect(editor(el)?.departmentId).toBe("deli"));
-  await loadedEditor(el);
-  await vi.waitFor(() =>
-    expect(api.previewReceiptDraft.mock.lastCall?.[0]).toEqual({
-      departmentId: "deli",
-      receipt: { phone: "+34 912 345 679" },
-      settings: { headerSubtitle: "Venue subtitle" },
-      language: "ca-ES",
-    }),
-  );
-  expect(previewLanguage(el)!.value).toBe("ca-ES");
 });
 
 it("keeps a venue-only preview independent of an unsaved receipt language", async () => {
@@ -597,6 +367,11 @@ for (const venueOnly of [false, true]) {
           choices: ["es-ES", "ca-ES"],
           fixed: null,
         });
+        const departmentRead = api.getDepartmentReceipt.getMockImplementation()!;
+        api.getDepartmentReceipt.mockImplementation(async (id) => ({
+          ...(await departmentRead(id)),
+          receiptLanguage: "ca-ES",
+        }));
         api.liveData.invalidate([{ type: "locations" }]);
         await vi.waitFor(() => expect(previewLanguage(el)!.value).toBe("ca-ES"));
         if (refused) old.reject({ code: "connection.failed" });
@@ -665,13 +440,7 @@ it("accepts the chosen preview language's paper when a different saved language 
       fixed: null,
     });
     api.liveData.invalidate([{ type: "locations" }]);
-    await vi.waitFor(() =>
-      expect(
-        el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-combobox"]>(
-          "wt-combobox[name=receiptLanguage]",
-        )!.value,
-      ).toBe("gl-ES"),
-    );
+    await vi.waitFor(() => expect(api.getReceiptLanguage).toHaveBeenCalledTimes(2));
     expect(previewLanguage(el)!.value).toBe("ca-ES");
     held.resolve(preview("Chosen Catalan"));
     await vi.waitFor(() => expect(api.previewReceiptDraft).toHaveBeenCalledTimes(3));
@@ -734,4 +503,78 @@ it("makes a venue contact refresh passive without sending contact as an authored
   ]);
   expect(el.shadowRoot!.querySelector(".paper")?.textContent).toContain("Venue only");
   expect(api.putReceipt).not.toHaveBeenCalled();
+});
+
+it.each(["bar", "closed"])(
+  "the explicit %s department is authoritative without a picker",
+  async (id) => {
+    url(id);
+    const { el, api } = await mount();
+    expect((await loadedEditor(el)).departmentId).toBe(id);
+    expect(el.shadowRoot!.querySelector("wt-combobox[name=departmentId]")).toBeNull();
+    expect(el.shadowRoot!.querySelector("dashboard-venue-receipt-defaults-editor")).toBeNull();
+    await fill(editor(el)!, "email", "selected@example.com");
+    editor(el)!.shadowRoot!.querySelector<HTMLElement>("[data-test=department-save]")!.click();
+    await vi.waitFor(() =>
+      expect(api.putDepartmentReceipt).toHaveBeenCalledExactlyOnceWith(id, {
+        phone: id === "bar" ? "+34 912 345 678" : "+34 912 345 679",
+        email: "selected@example.com",
+      }),
+    );
+    expect(api.getVenueDepartments).not.toHaveBeenCalled();
+    expect(api.putReceipt).not.toHaveBeenCalled();
+  },
+);
+
+it("the hosted editor marks the saved receipt language and copy languages", async () => {
+  setLocale("en-GB");
+  url("bar");
+  const { el } = await mount();
+  const child = await loadedEditor(el);
+  await vi.waitFor(() =>
+    expect(child.shadowRoot!.querySelector('h3[lang="es-ES"]')?.textContent).toContain(
+      "(receipts)",
+    ),
+  );
+  expect(child.shadowRoot!.querySelector('h3[lang="ca-ES"]')?.textContent).toContain("(copies)");
+});
+
+it("department mode keeps its editor and preview when unrelated venue reads refuse", async () => {
+  url("bar");
+  const api = apiFixture();
+  api.getLocationSettings.mockRejectedValue(new Error("permission refused"));
+  api.getReceiptLanguage.mockRejectedValue(new Error("permission refused"));
+  const { el } = await mount(api);
+  await loadedEditor(el);
+  await vi.waitFor(() => expect(el.shadowRoot!.querySelector(".paper-viewport")).not.toBeNull());
+  expect(el.shadowRoot!.querySelector('[role="alert"]')).toBeNull();
+  expect(el.shadowRoot!.querySelector('[data-test="retry"]')).toBeNull();
+});
+
+it("the department read supplies receipt language when Venue settings is forbidden", async () => {
+  setLocale("en-GB");
+  url("bar");
+  const api = apiFixture();
+  api.getReceiptLanguage.mockRejectedValue(new Error("permission refused"));
+  api.getDepartmentReceipt.mockImplementation(async () => ({
+    ...settings,
+    receipt: {},
+    receiptLanguage: "ca-ES",
+  }));
+  const { el } = await mount(api);
+  const child = await loadedEditor(el);
+  await vi.waitFor(() =>
+    expect(child.shadowRoot!.querySelector('h3[lang="ca-ES"]')?.textContent).toContain(
+      "(receipts)",
+    ),
+  );
+  expect(child.shadowRoot!.querySelector('h3[lang="es-ES"]')?.textContent).toContain("(copies)");
+  const choice = el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-combobox"]>(
+    'wt-combobox[name="previewLanguage"]',
+  );
+  expect(choice).not.toBeNull();
+  expect(choice!.value).toBe("ca-ES");
+  expect(choice!.options.map(({ value }) => value)).toEqual(["ca-ES", "es-ES"]);
+  await chooseOption(choice!, "es-ES");
+  await vi.waitFor(() => expect(api.previewReceiptDraft.mock.lastCall?.[0].language).toBe("es-ES"));
 });

@@ -6,7 +6,7 @@ their full text.
 ## Service times, departments, zones and prep stations (A366, owner 2026-10-07) — SPEC APPROVED 2026-10-07
 
 - **Service times, departments, zones and prep stations (A366, owner 2026-10-07) — SPEC
-  APPROVED 2026-10-07; remaining work is slice 7 and slice 6 Part C, each planned
+  APPROVED 2026-10-07; remaining work is slice 6 Part C, planned
   then built without stopping for the owner**
   ([slice 1 plan](../superpowers/plans/2026-10-07-a366-slice-1-service-periods.md); slice 2 plan
   written ahead: [slice 2 plan](../superpowers/plans/2026-10-08-a366-slice-2-zone-closed-times-and-named-days.md)). Opening hours and the menu timetable become one idea: a period is
@@ -30,8 +30,8 @@ their full text.
   revision added listed at its end.
   Slice 7 Part A is built: department receipt storage, translated subtitle/footer, live venue
   defaults, independent saves and draft previews, thermal/A4 composition, till presentation
-  and department/default email contacts. Part B remains: host the reusable editor on the
-  department page's Receipt tab. [Slice 7 plan](../superpowers/plans/2026-10-08-a366-slice-7-receipts-per-department.md),
+  and department/default email contacts. Part B hosts the reusable editor on the
+  department page's Receipt tab; Venue settings keeps the globals. [Slice 7 plan](../superpowers/plans/2026-10-08-a366-slice-7-receipts-per-department.md),
   revised 2026-10-10 to the owner's later receipt overrides. The separate core delivery
   rewrite is [one backlog entry](printers.md#remove-the-consent-step-from-emailed-receipts).
   Slice 4's plan is written ahead of lane D (A366-4p, 2026-10-08): [slice 4 plan](../superpowers/plans/2026-10-08-a366-slice-4-prep-stations.md),

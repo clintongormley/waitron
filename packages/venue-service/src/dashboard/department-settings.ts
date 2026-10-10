@@ -119,6 +119,7 @@ export class DepartmentSettings extends LitElement {
   @property({ attribute: false }) model?: VenueServiceView;
   @property() departmentId = "";
   @property({ type: Boolean }) showEnable = true;
+  @property({ type: Boolean }) showReceipt = true;
   @state() private draft?: DepartmentSettingsInput;
   @state() private busy = false;
   @state() private attempted = false;
@@ -570,11 +571,15 @@ export class DepartmentSettings extends LitElement {
           ></wt-switch
           >${errors.printTradingName ? html`<p class="error" data-field-error="printTradingName">${errors.printTradingName}</p>` : nothing}
         </div>
-        <a
-          data-test="edit-receipt"
-          href=${`/manage/venue-settings/view/receipts?departmentId=${encodeURIComponent(row.id)}`}
-          >${t("venue.edit_receipt")}</a
-        >
+        ${
+          this.showReceipt
+            ? html`<a
+                data-test="edit-receipt"
+                href=${`/manage/venue-operations/department/${encodeURIComponent(row.id)}/view/receipt`}
+                >${t("venue.edit_receipt")}</a
+              >`
+            : nothing
+        }
       </section>
       ${
         this.showsTransfers

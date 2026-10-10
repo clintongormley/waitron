@@ -77,6 +77,7 @@ function stubApi(overrides: Partial<DashboardApi> = {}, receipt: ReceiptConfig =
         ...(receipt.phone ? { phone: receipt.phone } : {}),
         ...(receipt.email ? { email: receipt.email } : {}),
       },
+      receiptLanguage: "es-ES",
       venueDefaults: {},
       venueAddress,
       languages: ["es-ES"],
@@ -268,13 +269,18 @@ describe.each(["light", "dark"] as const)("receipts-screen a11y (%s theme)", (th
       getReceipt: vi.fn().mockResolvedValue({ receipt: topBlock, venueAddress: ["Calle Mayor 1"] }),
       putVenueReceiptSettings: vi.fn().mockRejectedValue({ code: "receipt.invalid", params }),
     });
+    const contact = params.field === "phone" || params.field === "email";
     const { el, host } = await mountWidget<ReceiptsScreen>(
       "dashboard-receipts-screen",
-      { api },
+      { api, departmentId: contact ? "bar" : "", departmentName: "Bar" },
       theme,
     );
     await flush(el);
-    const contact = params.field === "phone" || params.field === "email";
+    await vi.waitFor(() =>
+      expect(
+        q(el, contact ? "[data-test=department-save]" : "[data-test=defaults-save]"),
+      ).toBeTruthy(),
+    );
     if (contact) {
       api.putDepartmentReceipt = vi.fn().mockRejectedValue({ code: "receipt.invalid", params });
       const input = q(el, `wt-input[name=${params.field}]`)!;

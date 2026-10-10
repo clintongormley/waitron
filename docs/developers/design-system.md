@@ -2048,9 +2048,9 @@ and downloads keep browser handling. Fragment-only form links keep their target'
 which owns any leave request. The dashboard catches a link click before the link's own handler
 sees it, so a link that handles a plain click itself (the product swatch that opens Edit in
 place) carries `data-own-click` to keep it, and a link with `aria-disabled="true"` is cancelled
-there and goes nowhere. Changing the receipt department asks about that department’s draft
-and retains the venue defaults, receipt language and description drafts. Same-page receipt Back
-uses the same department scope; a tab or management-link departure asks about all outstanding drafts.
+there and goes nowhere. The department Receipt tab protects its authored draft. A tab or
+management-link departure asks about all outstanding drafts; Venue settings keeps its
+defaults, receipt language and description scopes independent.
 
 Each form owns its comparison and successful-write boundary. Compare membership for selected
 ID sets and preserve order for submitted positions. Nested image forms retain File identity;
@@ -3547,10 +3547,13 @@ cases in `apps/till/src/screens/till-counter-screen.layout.test.ts` hold those a
 ### Departments and zones
 
 You open a department from the list, even when the venue has only one. Its page keeps a
-Departments parent link above the name and offers Settings and Zones tabs. Settings holds the
+Departments parent link above the name and offers Settings, Zones and, with `layout.configure`,
+Receipt tabs. Settings holds the
 name, trading name, service settings and transfers. Zones shows the department's zones and the
-selected zone's settings. The Receipt tab belongs to slice 7; Edit the receipt currently opens
-Venue settings' Receipts tab. The Zones tab shows the selected zone's normal-week closed times under its name, with a link
+selected zone's settings. With `layout.configure`, Edit the receipt opens that department's Receipt tab, including an
+explicitly addressed disabled department. Venue settings keeps the global logo, subtitle,
+footer, address switch, receipt language and sales description. Department contacts never
+inherit the stored global phone or email. The Zones tab shows the selected zone's normal-week closed times under its name, with a link
 that opens that zone in Opening hours. Identical ranges share a day group; more than two groups
 show a day count. A week without closed ranges says the zone opens with its department. Named-day
 exceptions stay in Opening hours. Disabled zones have no hours summary or link.

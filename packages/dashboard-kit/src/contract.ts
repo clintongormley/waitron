@@ -14,7 +14,13 @@ export type NavGroupId = string;
 export interface DashboardModuleContext {
   request: DashboardRequest;
   liveData?: LiveData;
+  renderPanel?: DashboardPanelRenderer;
 }
+
+export type DashboardPanelRenderer = (
+  panel: string,
+  subject: { id: string; name: string },
+) => TemplateResult | null;
 
 /** A mounted screen instance: the app calls render() to paint it. */
 export interface DashboardScreenHandle {

@@ -8,10 +8,9 @@ import {
   type DepartmentReceiptConfig,
   type VenueReceiptSettings,
 } from "@waitron/shared";
-import { baseStyles, focusFirstInvalid, submitOnEnter, navigationGuardFor } from "@waitron/ui";
-import { draftScopeFor, leaveCoordinatorFor, saveActionState, type DraftScope } from "@waitron/ui";
+import { baseStyles, focusFirstInvalid, submitOnEnter } from "@waitron/ui";
+import { draftScopeFor, saveActionState, type DraftScope } from "@waitron/ui";
 import { sameValue } from "../widgets/product-editor-model.js";
-import { observeNavigation } from "@waitron/ui/src/navigation-guard.js";
 import "@waitron/ui/src/components/wt-combobox.js";
 import "@waitron/ui/src/components/wt-input.js";
 import "@waitron/ui/src/components/wt-textarea.js";
@@ -189,6 +188,8 @@ export class ReceiptsScreen extends LitElement {
   ];
 
   @property({ attribute: false }) api!: DashboardApi;
+  @property() departmentId = "";
+  @property() departmentName = "";
 
   #connection = 0;
   #languageScope?: DraftScope<string>;
@@ -305,22 +306,17 @@ export class ReceiptsScreen extends LitElement {
   @state() private descriptionAttempted = false;
 
   @state() private preview: ReceiptPreview | null = null;
-  @state() private departments: {
-    id: string;
-    name: string;
-    active: boolean;
-    isDefault: boolean;
-  }[] = [];
-  @state() private departmentLoadError = "";
   @state() private departmentDraft: DepartmentReceiptConfig | null = null;
+  @state() private departmentVenueDefaults: VenueReceiptSettings = {};
   @state() private venueDefaultsDraft: VenueReceiptSettings | null = null;
   #departmentGeneration = 0;
   @state() private previewDepartmentId: string | null = null;
-  #departmentsLoaded = false;
+  #previewContextReady = false;
   @state() private previewFailed = false;
   @state() private focusedTrim: ReceiptMarkName | null = null;
   /** The paper width the person chose, kept for every later preview; never saved. */
   @state() private chosenWidth: PrintPaperWidth | null = null;
+  @state() private departmentLanguage: Pick<ReceiptLanguage, "language" | "choices"> | null = null;
   @state() private chosenPreviewLanguage: string | null = null;
   #previewTimer: ReturnType<typeof setTimeout> | undefined;
   #previewInFlight = false;
@@ -328,22 +324,19 @@ export class ReceiptsScreen extends LitElement {
   #previewRequested: string | null = null;
   #previewActive = false;
 
-  #stopNavigation?: () => void;
-
   override connectedCallback(): void {
     super.connectedCallback();
-    if (this.receiptLanguage !== null) this.#registerLanguage();
-    if (this.locationLoaded) this.#registerDescription();
+    if (!this.departmentId && this.receiptLanguage !== null) this.#registerLanguage();
+    if (!this.departmentId && this.locationLoaded) this.#registerDescription();
     void this.#load();
-    void this.#loadDepartments();
+    this.#setPreviewDepartment();
     void this.#loadContentLanguages();
-    this.#stopNavigation = observeNavigation(window, this.#restorePreviewDepartment);
   }
 
   override disconnectedCallback(): void {
     this.#connection++;
     this.#departmentGeneration++;
-    this.#departmentsLoaded = false;
+    this.#previewContextReady = false;
     this.#languageScope?.dispose();
     this.#languageScope = undefined;
     this.#descriptionScope?.dispose();
@@ -356,67 +349,42 @@ export class ReceiptsScreen extends LitElement {
     super.disconnectedCallback();
     clearTimeout(this.#previewTimer);
     this.#previewAgain = false;
-    this.#stopNavigation?.();
-    this.#stopNavigation = undefined;
   }
 
-  readonly #restorePreviewDepartment = (): void => {
-    if (!this.#departmentsLoaded) return;
-    const guard = navigationGuardFor(window);
-    const url = new URL(guard?.href ?? location.href);
-    if (url.pathname !== "/manage/venue-settings/view/receipts") return;
-    this.#selectDepartment(url.searchParams.get("departmentId"), url);
-  };
-
-  #selectDepartment(requested: string | null, url?: URL): void {
-    const selected =
-      this.departments.find((department) => department.id === requested) ??
-      this.departments.find((department) => department.active && department.isDefault) ??
-      this.departments.find((department) => department.active);
-    const id = selected?.id ?? null;
-    if (url && id !== requested) {
-      if (id === null) url.searchParams.delete("departmentId");
-      else url.searchParams.set("departmentId", id);
-      const guard = navigationGuardFor(window);
-      if (guard) void guard.write(url, true);
-      else history.replaceState(history.state, "", url);
-    }
-    if (id !== this.previewDepartmentId) {
-      this.previewDepartmentId = id;
-      this.departmentDraft = null;
-      this.preview = null;
-      this.#previewRequested = null;
-      this.#departmentGeneration++;
-    }
+  #setPreviewDepartment(): void {
+    this.#previewContextReady = true;
+    this.previewDepartmentId = this.departmentId || null;
+    this.departmentDraft = null;
+    this.preview = null;
+    this.#previewRequested = null;
+    this.#departmentGeneration++;
     if (this.receiptLoaded) void this.#sendPreview();
   }
 
-  async #loadDepartments(): Promise<void> {
-    const connection = this.#connection;
-    try {
-      const departments = await (this.api.background ?? this.api).getVenueDepartments();
-      if (connection !== this.#connection) return;
-      this.departments = departments;
-      this.departmentLoadError = "";
-    } catch (error) {
-      if (connection !== this.#connection) return;
-      this.departments = [];
-      this.departmentLoadError = codeOf(error);
-    }
-    this.#departmentsLoaded = true;
-    const url = new URL(navigationGuardFor(window)?.href ?? location.href);
-    this.#selectDepartment(
-      url.searchParams.get("departmentId"),
-      url.pathname === "/manage/venue-settings/view/receipts" ? url : undefined,
-    );
-  }
-
   #departmentChanged(
-    event: CustomEvent<{ departmentId: string; receipt: DepartmentReceiptConfig }>,
+    event: CustomEvent<{
+      departmentId: string;
+      receipt: DepartmentReceiptConfig;
+      venueDefaults: VenueReceiptSettings;
+      receiptLanguage: string;
+      languages: string[];
+    }>,
   ): void {
     event.stopPropagation();
     if (event.detail.departmentId !== this.previewDepartmentId) return;
-    if (sameValue(this.departmentDraft, event.detail.receipt)) return;
+    const languageChanged = this.departmentLanguage?.language !== event.detail.receiptLanguage;
+    this.departmentLanguage = {
+      language: event.detail.receiptLanguage,
+      choices: [...event.detail.languages],
+    };
+    const defaultsChanged = !sameValue(this.departmentVenueDefaults, event.detail.venueDefaults);
+    this.departmentVenueDefaults = structuredClone(event.detail.venueDefaults);
+    if (
+      !defaultsChanged &&
+      !languageChanged &&
+      sameValue(this.departmentDraft, event.detail.receipt)
+    )
+      return;
     this.departmentDraft = structuredClone(event.detail.receipt);
     this.#departmentGeneration++;
     this.#schedulePreview();
@@ -424,6 +392,7 @@ export class ReceiptsScreen extends LitElement {
 
   #venueDefaults(): VenueReceiptSettings {
     if (this.venueDefaultsDraft !== null) return this.venueDefaultsDraft;
+    if (this.departmentId && !this.receiptLoaded) return this.departmentVenueDefaults;
     const settings = this.#trim();
     delete settings.phone;
     delete settings.email;
@@ -437,39 +406,6 @@ export class ReceiptsScreen extends LitElement {
     if (changed) this.#departmentGeneration++;
     this.#previewActive ||= event.detail.active === true;
     this.#schedulePreview();
-  }
-
-  requestDepartmentNavigation(proceed: () => void, signal?: AbortSignal) {
-    const editor = this.shadowRoot?.querySelector("dashboard-department-receipt-editor");
-    const coordinator = leaveCoordinatorFor(this);
-    if (coordinator) {
-      return coordinator.request({
-        scopes: editor ? [editor.draftOwner] : [],
-        reason: "navigation",
-        proceed,
-        signal,
-      });
-    }
-    proceed();
-    return Promise.resolve("proceeded" as const);
-  }
-
-  #choosePreviewDepartment(departmentId: string): void {
-    const picker = this.shadowRoot?.querySelector<HTMLElementTagNameMap["wt-combobox"]>(
-      "wt-combobox[name=departmentId]",
-    );
-    if (picker) picker.value = this.previewDepartmentId ?? "";
-    if (!this.departments.some((department) => department.id === departmentId)) return;
-    const guard = navigationGuardFor(window);
-    const url = new URL(guard?.href ?? location.href);
-    url.searchParams.set("departmentId", departmentId);
-    if (guard) void guard.write(url);
-    else {
-      void this.requestDepartmentNavigation(() => {
-        history.pushState(history.state, "", url);
-        this.#restorePreviewDepartment();
-      });
-    }
   }
 
   async #load(): Promise<void> {
@@ -508,7 +444,7 @@ export class ReceiptsScreen extends LitElement {
             this.pickedLanguage = null;
             this.languageRefusal = "";
           }
-          this.#registerLanguage();
+          if (!this.departmentId) this.#registerLanguage();
           if (
             (wasClean && previousLanguage !== this.#shownLanguage()) ||
             (value.fixed !== null && this.#languageScope?.isDirty())
@@ -536,7 +472,8 @@ export class ReceiptsScreen extends LitElement {
   async #loadReceipt(): Promise<void> {
     try {
       await this.#receiptQueries.watch("getReceipt", [], ({ receipt, venueAddress }) => {
-        const changed =
+        const previousDefaults = this.#venueDefaults();
+        const contactChanged =
           this.phone !== (receipt.phone ?? "") || this.email !== (receipt.email ?? "");
         const moved = venueAddress.join("\n") !== this.venueAddress.join("\n");
         this.headerSubtitle = receipt.headerSubtitle ?? "";
@@ -547,6 +484,8 @@ export class ReceiptsScreen extends LitElement {
         this.logo = receipt.logo ?? null;
         this.venueAddress = venueAddress;
         this.receiptLoadError = null;
+        const defaultsChanged = !sameValue(previousDefaults, this.#venueDefaults());
+        if (defaultsChanged) this.#departmentGeneration++;
         if (!this.receiptLoaded) {
           this.receiptLoaded = true;
           this.#previewActive = true;
@@ -555,7 +494,7 @@ export class ReceiptsScreen extends LitElement {
           // The address is not in what a preview asks for, so the same request must be sent again.
           this.#previewRequested = null;
           this.#schedulePreview();
-        } else if (changed) this.#schedulePreview();
+        } else if (contactChanged || defaultsChanged) this.#schedulePreview();
       });
     } catch (error) {
       this.receiptLoadError = codeOf(error);
@@ -585,7 +524,7 @@ export class ReceiptsScreen extends LitElement {
             this.description = value.operationDescription;
             this.#savedDescription = this.description;
           }
-          this.#registerDescription();
+          if (!this.departmentId) this.#registerDescription();
           if (adopt && wasClean && previousDescription !== this.description)
             this.#descriptionScope?.commit(this.description);
           this.locationLoaded = true;
@@ -618,7 +557,7 @@ export class ReceiptsScreen extends LitElement {
     if (
       (this.previewDepartmentId === null &&
         (!this.receiptLoaded || this.venueDefaultsDraft === null)) ||
-      !this.#departmentsLoaded ||
+      !this.#previewContextReady ||
       (this.previewDepartmentId !== null && this.departmentDraft === null)
     )
       return;
@@ -682,8 +621,14 @@ export class ReceiptsScreen extends LitElement {
     }
   }
 
+  #previewLanguage(): Pick<ReceiptLanguage, "language" | "choices"> | null {
+    return this.departmentId && this.departmentLanguage?.language
+      ? this.departmentLanguage
+      : this.receiptLanguage;
+  }
+
   #choosePreviewLanguage(language: string): void {
-    this.chosenPreviewLanguage = language === this.receiptLanguage?.language ? null : language;
+    this.chosenPreviewLanguage = language === this.#previewLanguage()?.language ? null : language;
     this.#departmentGeneration++;
     this.#previewActive = true;
     void this.#sendPreview();
@@ -1000,46 +945,18 @@ export class ReceiptsScreen extends LitElement {
     `;
   }
 
-  #renderDepartment(): TemplateResult {
-    const selected = this.departments.find(
-      (department) => department.id === this.previewDepartmentId,
-    );
-    const offered = this.departments.filter(
-      (department) => department.active || department.id === this.previewDepartmentId,
-    );
-    return html`
-      ${
-        this.departmentLoadError
-          ? html`<p role="alert">${codeMessage(this.departmentLoadError)}</p>
-              <wt-button variant="secondary" @click=${() => void this.#loadDepartments()}
-                >${t("location_settings.retry")}</wt-button
-              >`
-          : nothing
-      }
-      ${
-        selected
-          ? html` <wt-combobox
-                name="departmentId"
-                label=${t("receipts.department")}
-                .options=${offered.map((department) => ({ value: department.id, label: department.name }))}
-                .value=${selected.id}
-                @wt-change=${(event: CustomEvent<{ value: string }>) => this.#choosePreviewDepartment(event.detail.value)}
-              ></wt-combobox>
-              <dashboard-department-receipt-editor
-                .api=${this.api}
-                .departmentId=${selected.id}
-                .departmentName=${selected.name}
-                .receiptLanguage=${this.receiptLanguage?.language ?? ""}
-                .venueDefaults=${this.#venueDefaults()}
-                .draftParent=${this}
-                @receipt-field-focus=${(event: CustomEvent<{ field: string | null }>) => this.#focusField(event)}
-                @receipt-draft-changed=${(event: CustomEvent<{ departmentId: string; receipt: DepartmentReceiptConfig }>) => this.#departmentChanged(event)}
-              ></dashboard-department-receipt-editor>`
-          : this.#departmentsLoaded && !this.departmentLoadError
-            ? html`<p data-test="no-department">${t("receipts.no_department")}</p>`
-            : nothing
-      }
-    `;
+  #renderDepartment(): TemplateResult | typeof nothing {
+    if (!this.departmentId) return nothing;
+    return html`<dashboard-department-receipt-editor
+      .api=${this.api}
+      .departmentId=${this.departmentId}
+      .departmentName=${this.departmentName}
+      .receiptLanguage=${this.receiptLanguage?.language ?? ""}
+      .venueDefaults=${this.receiptLoaded ? this.#venueDefaults() : undefined}
+      .draftParent=${this}
+      @receipt-field-focus=${(event: CustomEvent<{ field: string | null }>) => this.#focusField(event)}
+      @receipt-draft-changed=${(event: CustomEvent<{ departmentId: string; receipt: DepartmentReceiptConfig; venueDefaults: VenueReceiptSettings; receiptLanguage: string; languages: string[] }>) => this.#departmentChanged(event)}
+    ></dashboard-department-receipt-editor>`;
   }
 
   #renderWidth(preview: ReceiptPreview): TemplateResult {
@@ -1060,6 +977,7 @@ export class ReceiptsScreen extends LitElement {
   }
 
   #renderPreview(): TemplateResult {
+    const language = this.#previewLanguage();
     const preview = this.preview;
     const marks: PaperMark[] = [];
     for (const name of MARK_NAMES) {
@@ -1069,14 +987,15 @@ export class ReceiptsScreen extends LitElement {
     return html`<div class="preview">
       <h2>${t("receipts.preview")}</h2>
       ${
-        this.receiptLanguage
+        language
           ? html`<wt-combobox
               name="previewLanguage"
               label=${t("receipts.preview_language")}
-              .value=${this.chosenPreviewLanguage ?? this.receiptLanguage.language}
-              .options=${[
-                ...new Set([this.receiptLanguage.language, ...this.receiptLanguage.choices]),
-              ].map((language) => ({ value: language, label: receiptLanguageName(language) }))}
+              .value=${this.chosenPreviewLanguage ?? language.language}
+              .options=${[...new Set([language.language, ...language.choices])].map((language) => ({
+                value: language,
+                label: receiptLanguageName(language),
+              }))}
               @wt-change=${(event: CustomEvent<{ value: string }>) => {
                 event.stopPropagation();
                 this.#choosePreviewLanguage(event.detail.value);
@@ -1120,12 +1039,13 @@ export class ReceiptsScreen extends LitElement {
           : nothing
       }
       ${
-        this.locationLoadFailed || this.languageLoadFailed
+        !this.departmentId && (this.locationLoadFailed || this.languageLoadFailed)
           ? html`<p role="alert">${t("location_settings.load_error")}</p>`
           : nothing
       }
       ${
-        this.locationLoadFailed || this.languageLoadFailed || this.receiptLoadError !== null
+        (!this.departmentId && (this.locationLoadFailed || this.languageLoadFailed)) ||
+        this.receiptLoadError !== null
           ? html`<wt-button data-test="retry" @click=${() => void this.#load()}
               >${t("location_settings.retry")}</wt-button
             >`
@@ -1133,15 +1053,19 @@ export class ReceiptsScreen extends LitElement {
       }
       <div class="layout">
         <div class="form-column">
-          <section class="department-settings">${this.#renderDepartment()}</section>
-          <dashboard-venue-receipt-defaults-editor
-            .api=${this.api}
-            .draftParent=${this}
-            .venueAddress=${this.venueAddress}
-            @receipt-field-focus=${(event: CustomEvent<{ field: string | null }>) => this.#focusField(event)}
-            @venue-receipt-draft-changed=${(event: CustomEvent<{ settings: VenueReceiptSettings }>) => this.#defaultsChanged(event)}
-          ></dashboard-venue-receipt-defaults-editor>
-          ${this.#renderLocation()}
+          ${this.departmentId ? html`<section class="department-settings">${this.#renderDepartment()}</section>` : nothing}
+          ${
+            this.departmentId
+              ? nothing
+              : html`<dashboard-venue-receipt-defaults-editor
+                    .api=${this.api}
+                    .draftParent=${this}
+                    .venueAddress=${this.venueAddress}
+                    @receipt-field-focus=${(event: CustomEvent<{ field: string | null }>) => this.#focusField(event)}
+                    @venue-receipt-draft-changed=${(event: CustomEvent<{ settings: VenueReceiptSettings }>) => this.#defaultsChanged(event)}
+                  ></dashboard-venue-receipt-defaults-editor>
+                  ${this.#renderLocation()}`
+          }
         </div>
         ${locationReady || this.departmentDraft !== null ? this.#renderPreview() : nothing}
       </div>`;

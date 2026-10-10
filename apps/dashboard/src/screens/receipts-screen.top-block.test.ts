@@ -94,6 +94,7 @@ function stubApi(
         ...(receipt.phone ? { phone: receipt.phone } : {}),
         ...(receipt.email ? { email: receipt.email } : {}),
       },
+      receiptLanguage: "es-ES",
       venueDefaults: {},
       venueAddress,
       languages: ["es-ES"],
@@ -113,19 +114,27 @@ async function flush(el: ReceiptsScreen): Promise<void> {
   await el.updateComplete;
 }
 
+const contactScreens = new WeakMap<ReceiptsScreen, ReceiptsScreen>();
 const defaultsRoot = (el: ReceiptsScreen) =>
   el.shadowRoot!.querySelector("dashboard-venue-receipt-defaults-editor")!.shadowRoot!;
 const departmentRoot = (el: ReceiptsScreen) =>
-  el.shadowRoot!.querySelector("dashboard-department-receipt-editor")!.shadowRoot!;
+  contactScreens.get(el)!.shadowRoot!.querySelector("dashboard-department-receipt-editor")!
+    .shadowRoot!;
 const q = <T extends Element = HTMLElement>(el: ReceiptsScreen, selector: string) =>
   (selector.includes("name=phone") ||
   selector.includes("name=email") ||
   selector.includes("department-save")
     ? departmentRoot(el)
     : defaultsRoot(el)
-  ).querySelector<T>(selector) ?? el.shadowRoot!.querySelector<T>(selector);
+  ).querySelector<T>(selector) ??
+  (/data-mark=(phone|email)/.test(selector)
+    ? contactScreens.get(el)!.shadowRoot!
+    : el.shadowRoot!
+  ).querySelector<T>(selector);
 const paperLines = (el: ReceiptsScreen) =>
-  [...el.shadowRoot!.querySelectorAll(".paper pre")].map((pre) => pre.textContent!.trim());
+  [...contactScreens.get(el)!.shadowRoot!.querySelectorAll(".paper pre")].map((pre) =>
+    pre.textContent!.trim(),
+  );
 const previewCalls = (api: DashboardApi) =>
   vi
     .mocked(api.previewReceiptDraft)
@@ -168,6 +177,16 @@ async function save(el: ReceiptsScreen): Promise<void> {
 
 async function mount(api: DashboardApi = stubApi()) {
   const mounted = await mountWidget<ReceiptsScreen>("dashboard-receipts-screen", { api });
+  const paired = await mountWidget<ReceiptsScreen>("dashboard-receipts-screen", {
+    api,
+    departmentId: "bar",
+    departmentName: "Bar",
+  });
+  contactScreens.set(mounted.el, paired.el);
+  await vi.waitFor(() =>
+    expect(departmentRoot(mounted.el)?.querySelector("[name=phone]")).toBeTruthy(),
+  );
+  await vi.waitFor(() => expect(paired.el.shadowRoot!.querySelector(".paper")).toBeTruthy());
   await flush(mounted.el);
   await vi.waitFor(() => expect(q(mounted.el, ".paper")).not.toBeNull());
   return mounted;
@@ -288,15 +307,24 @@ describe("saving the top block", () => {
     toggleAddress(el, false);
     chooseLogo(el, LOGO);
     await vi.waitFor(() =>
-      expect(previewCalls(api).at(-1)).toEqual({
+      expect(
+        vi
+          .mocked(api.previewReceiptDraft)
+          .mock.calls.filter(([draft]) => draft.departmentId !== null)
+          .at(-1)?.[0].receipt,
+      ).toEqual({
         phone: "912 345 678",
         email: "hola@deli.es",
-        printAddress: false,
-        logo: LOGO,
       }),
     );
     await vi.waitFor(() => expect(paperLines(el)).toContain("Tel. 912 345 678"));
-    expect(paperLines(el)).not.toContain(ADDRESS.join(", "));
+    expect(
+      vi
+        .mocked(api.previewReceiptDraft)
+        .mock.calls.filter(([draft]) => draft.departmentId === null)
+        .at(-1)?.[0].settings,
+    ).toEqual({ printAddress: false, logo: LOGO });
+    expect(el.shadowRoot!.querySelector(".paper")?.textContent).not.toContain(ADDRESS.join(", "));
   });
 
   it("previews the rest of the receipt while the phone is not yet a number it would print", async () => {
@@ -320,7 +348,20 @@ describe("saving the top block", () => {
     edit(el, "headerSubtitle", "Desde 1990");
     await new Promise((resolve) => setTimeout(resolve, RECEIPT_PREVIEW_QUIET_MS + 100));
     await flush(el);
-    expect(previewCalls(api).slice(before)).toEqual([{ headerSubtitle: "Desde 1990" }]);
+    expect(
+      vi
+        .mocked(api.previewReceiptDraft)
+        .mock.calls.slice(before)
+        .filter(([draft]) => draft.departmentId === null)
+        .map(([draft]) => draft.settings),
+    ).toEqual([{ headerSubtitle: "Desde 1990" }]);
+    expect(
+      vi
+        .mocked(api.previewReceiptDraft)
+        .mock.calls.slice(before)
+        .filter(([draft]) => draft.departmentId !== null)
+        .map(([draft]) => draft.receipt),
+    ).toEqual([{}]);
     expect(q(el, "[data-test=preview-error]")).toBeNull();
     expect(q<WtInput>(el, "wt-input[name=phone]")!.error).toBe("");
     expect(q<WtInput>(el, "wt-input[name=email]")!.error).toBe("");
@@ -335,7 +376,20 @@ describe("saving the top block", () => {
     edit(el, "headerSubtitle", "Desde 1990");
     await new Promise((resolve) => setTimeout(resolve, RECEIPT_PREVIEW_QUIET_MS + 100));
     await flush(el);
-    expect(previewCalls(api).slice(before)).toEqual([{ headerSubtitle: "Desde 1990" }]);
+    expect(
+      vi
+        .mocked(api.previewReceiptDraft)
+        .mock.calls.slice(before)
+        .filter(([draft]) => draft.departmentId === null)
+        .map(([draft]) => draft.settings),
+    ).toEqual([{ headerSubtitle: "Desde 1990" }]);
+    expect(
+      vi
+        .mocked(api.previewReceiptDraft)
+        .mock.calls.slice(before)
+        .filter(([draft]) => draft.departmentId !== null)
+        .map(([draft]) => draft.receipt),
+    ).toEqual([{}]);
   });
 
   it("outlines the line a focused field adds to the preview", async () => {
@@ -348,6 +402,9 @@ describe("saving the top block", () => {
     );
     await flush(el);
     expect(q(el, "[data-mark=phone]")!.hasAttribute("data-active")).toBe(true);
+    q(el, "wt-input[name=phone]")!.dispatchEvent(
+      new FocusEvent("focusout", { bubbles: true, composed: true }),
+    );
     addressSwitch(el).dispatchEvent(new FocusEvent("focusin", { bubbles: true, composed: true }));
     await flush(el);
     expect(q(el, "[data-mark=address]")!.hasAttribute("data-active")).toBe(true);
@@ -376,6 +433,9 @@ describe("the top block's keyboard and focus", () => {
 
   it("stops outlining the address once focus leaves the switch", async () => {
     const { el } = await mount();
+    q(el, "wt-input[name=phone]")!.dispatchEvent(
+      new FocusEvent("focusout", { bubbles: true, composed: true }),
+    );
     addressSwitch(el).dispatchEvent(new FocusEvent("focusin", { bubbles: true, composed: true }));
     await flush(el);
     expect(q(el, "[data-mark=address]")!.hasAttribute("data-active")).toBe(true);
@@ -731,6 +791,13 @@ describe("refreshes of the top block from elsewhere", () => {
       expect(q(el, "[data-test=venue-address]")!.textContent).toContain("Plaza Nueva 2"),
     );
     await new Promise((resolve) => setTimeout(resolve, RECEIPT_PREVIEW_QUIET_MS + 100));
-    expect(previewCalls(api).length).toBe(before + 1);
+    expect(previewCalls(api).length).toBe(before + 2);
+    expect(
+      vi
+        .mocked(api.previewReceiptDraft)
+        .mock.calls.slice(before)
+        .map(([draft]) => draft.departmentId)
+        .sort(),
+    ).toEqual(["bar", null].sort());
   });
 });

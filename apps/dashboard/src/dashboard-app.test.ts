@@ -7296,6 +7296,7 @@ describe("mounted public department pages", () => {
       "venue_service.manage",
       "venue.view",
       "venue.configure",
+      "layout.configure",
     ]);
     const box = await draft(app);
     find(app, '[data-test="edit-receipt"]')!.click();
@@ -7304,9 +7305,12 @@ describe("mounted public department pages", () => {
     expect(location.pathname).toBe("/manage/venue-operations/department/d1");
     find(app, '[data-test="edit-receipt"]')!.click();
     await choose(app, "discard");
-    await expect.poll(() => location.pathname).toBe("/manage/venue-settings/view/receipts");
-    expect(new URL(location.href).searchParams.get("departmentId")).toBe("d1");
-    expect(box.isConnected).toBe(false);
+    await expect
+      .poll(() => location.pathname)
+      .toBe("/manage/venue-operations/department/d1/view/receipt");
+    expect(box.isConnected).toBe(true);
+    expect(box.value).toBe("Restaurant");
+    await expect.poll(() => find(app, "dashboard-department-receipt-editor")).not.toBeNull();
   });
   it.each([{ permissions: [] }, { permissions: ["venue.view"] }])(
     "a department deep link still requires its own permission: %j",
@@ -7315,6 +7319,118 @@ describe("mounted public department pages", () => {
       expect(location.pathname).toBe("/manage/overview");
       expect(find(app, "department-settings")).toBeNull();
       expect(navItem(app, "venue-operations")).toBeNull();
+    },
+  );
+  it.each(["d1", "d2"])(
+    "Receipt opens the authoritative department %s, including disabled maintenance",
+    async (id) => {
+      const app = await mountDepartments(
+        `/manage/venue-operations/department/${id}/view/receipt?departmentId=d1`,
+        ["venue_service.manage", "layout.configure"],
+      );
+      const screen = find(app, "dashboard-receipts-screen") as HTMLElement & {
+        departmentId: string;
+      };
+      expect(screen).not.toBeNull();
+      expect(screen.departmentId).toBe(id);
+      expect(find(app, 'button[data-key="receipt"]')!.getAttribute("aria-selected")).toBe("true");
+      await expect.poll(() => find(app, "dashboard-department-receipt-editor")).not.toBeNull();
+      expect(
+        (find(app, "dashboard-department-receipt-editor") as HTMLElement & { departmentId: string })
+          .departmentId,
+      ).toBe(id);
+      expect(find(app, 'wt-combobox[name="departmentId"]')).toBeNull();
+      expect(find(app, "dashboard-venue-receipt-defaults-editor")).toBeNull();
+      expect(find(app, '[data-test="receipt-language"]')).toBeNull();
+    },
+  );
+  it.each(["tab", "parent"])(
+    "hosted Receipt %s navigation Keeps then Discards one draft",
+    async (destination) => {
+      const app = await mountDepartments("/manage/venue-operations/department/d1/view/receipt", [
+        "venue_service.manage",
+        "layout.configure",
+      ]);
+      await expect.poll(() => find(app, 'wt-input[name="email"]')).not.toBeNull();
+      const field = find(app, 'wt-input[name="email"]') as WtInput;
+      await field.updateComplete;
+      await userEvent.fill(
+        page.elementLocator(field.shadowRoot!.querySelector("input")!),
+        "draft@example.com",
+      );
+      const target = () =>
+        find(
+          app,
+          destination === "tab" ? 'button[data-key="zones"]' : 'a[href="/manage/venue-operations"]',
+        )!;
+      target().click();
+      await choose(app, "keep");
+      expect(location.pathname).toBe("/manage/venue-operations/department/d1/view/receipt");
+      expect(field.value).toBe("draft@example.com");
+      expect(find(app, 'button[data-key="receipt"]')!.getAttribute("aria-selected")).toBe("true");
+      target().click();
+      await choose(app, "discard");
+      await expect
+        .poll(() => location.pathname)
+        .toBe(
+          destination === "tab"
+            ? "/manage/venue-operations/department/d1/view/zones"
+            : "/manage/venue-operations",
+        );
+      expect(app.shadowRoot!.querySelector("wt-unsaved-changes")!.open).toBe(false);
+      expect(find(app, "dashboard-department-receipt-editor")).toBeNull();
+    },
+  );
+  it("a missing department Receipt URL does not borrow another department", async () => {
+    const app = await mountDepartments("/manage/venue-operations/department/gone/view/receipt", [
+      "venue_service.manage",
+      "layout.configure",
+    ]);
+    expect(find(app, "dashboard-receipts-screen")).toBeNull();
+    expect(
+      find(app, "venue-departments-shell")!.shadowRoot!.querySelector('[role="status"]')!
+        .textContent,
+    ).toBe("This department no longer exists.");
+  });
+  it("the Receipt tab navigates to this department without a picker", async () => {
+    const app = await mountDepartments("/manage/venue-operations/department/d2", [
+      "venue_service.manage",
+      "layout.configure",
+    ]);
+    find(app, 'button[data-key="receipt"]')!.click();
+    await expect
+      .poll(() => location.pathname)
+      .toBe("/manage/venue-operations/department/d2/view/receipt");
+    await expect.poll(() => find(app, "dashboard-department-receipt-editor")).not.toBeNull();
+    expect(
+      (find(app, "dashboard-department-receipt-editor") as HTMLElement & { departmentId: string })
+        .departmentId,
+    ).toBe("d2");
+  });
+  it("Settings hides Edit the receipt when the host cannot offer Receipt", async () => {
+    const app = await mountDepartments("/manage/venue-operations/department/d1", [
+      "venue_service.manage",
+      "venue.view",
+      "venue.configure",
+    ]);
+    expect(find(app, 'button[data-key="settings"]')?.getAttribute("aria-selected")).toBe("true");
+    expect(find(app, '[data-test="edit-receipt"]')).toBeNull();
+  });
+  it.each([["venue_service.manage"], ["layout.configure"], []])(
+    "a Receipt deep link cannot bypass either permission: %j",
+    async (...permissions) => {
+      const app = await mountDepartments(
+        "/manage/venue-operations/department/d1/view/receipt",
+        permissions,
+      );
+      expect(find(app, "dashboard-receipts-screen")).toBeNull();
+      expect(find(app, 'button[data-key="receipt"]')).toBeNull();
+      if (permissions.some((permission: string) => permission === "venue_service.manage")) {
+        expect(find(app, 'button[data-key="settings"]')?.getAttribute("aria-selected")).toBe(
+          "true",
+        );
+        expect((find(app, 'wt-input[name="name"]') as WtInput).value).toBe("Restaurant");
+      }
     },
   );
   it("the real Zones tab asks, keeps the draft, and navigates after Discard", async () => {
