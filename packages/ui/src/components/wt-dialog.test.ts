@@ -789,6 +789,40 @@ test.each(["Escape", "open", "removal"] as const)(
   },
 );
 
+test("names its body as a group after its heading only while the body is a tab stop", async () => {
+  const { el, body } = await openAtPhoneSize("<p>Loading lines</p>");
+  const located = page.elementLocator(body);
+  for (const name of ["role", "aria-labelledby", "aria-label"])
+    expect(body.getAttribute(name), `a short body's ${name}`).toBeNull();
+
+  const long = document.createElement("div");
+  long.style.height = "1800px";
+  el.append(long);
+  await vi.waitFor(() => expect(body.tabIndex, "an overflowing body's tabIndex").toBe(0));
+  await expect.element(located).toHaveRole("group");
+  await expect.element(located).toHaveAccessibleName("Edit order");
+
+  long.remove();
+  await vi.waitFor(() => expect(body.tabIndex, "a body short again: tabIndex").toBe(-1));
+  for (const name of ["role", "aria-labelledby", "aria-label"])
+    expect(body.getAttribute(name), `a body short again: ${name}`).toBeNull();
+});
+
+test("names an overflowing body after the dialog's own label when it has no heading", async () => {
+  const before = [window.innerWidth, window.innerHeight] as const;
+  await page.viewport(390, 700);
+  onTestFinished(() => page.viewport(...before));
+  const el = (await mount(
+    '<wt-dialog aria-label="Edit order"><div style="height: 1800px">Long order</div></wt-dialog>',
+  )) as Openable;
+  el.open = true;
+  await el.updateComplete;
+  const body = el.shadowRoot!.querySelector<HTMLElement>(".body")!;
+  expect(body.tabIndex).toBe(0);
+  await expect.element(page.elementLocator(body)).toHaveRole("group");
+  await expect.element(page.elementLocator(body)).toHaveAccessibleName("Edit order");
+});
+
 test.each(["Escape", "open"] as const)(
   "closed by %s, hands focus back to what had it when it opened, not to the button that opened it",
   async (how) => {

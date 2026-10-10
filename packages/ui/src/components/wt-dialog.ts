@@ -356,8 +356,21 @@ export class WtDialog extends LitElement {
   private syncBodyTabStop(): void {
     const body = this.bodyEl;
     const overflows = this.dialog.open && body.scrollHeight > body.clientHeight;
-    if (this.bodyTabStop === "always" || overflows) body.tabIndex = 0;
-    else body.removeAttribute("tabindex");
+    if (this.bodyTabStop === "always" || overflows) {
+      body.tabIndex = 0;
+      // A tab stop is announced when it takes focus, so it says what it holds. A group rather than
+      // a region: a region is a landmark, and axe's landmark-unique and
+      // landmark-banner-is-top-level rules failed on dashboard dialogs whose content holds regions
+      // or a <header>.
+      body.setAttribute("role", "group");
+      if (this.heading) body.setAttribute("aria-labelledby", this.headingId);
+      else body.removeAttribute("aria-labelledby");
+      if (!this.heading && this.ariaLabel) body.setAttribute("aria-label", this.ariaLabel);
+      else body.removeAttribute("aria-label");
+    } else {
+      for (const name of ["tabindex", "role", "aria-labelledby", "aria-label"])
+        body.removeAttribute(name);
+    }
   }
 
   private focusFirstContent(): void {

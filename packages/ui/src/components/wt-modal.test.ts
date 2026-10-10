@@ -526,6 +526,13 @@ test("keeps the body in the tab order, whether or not there is anything to scrol
   await vi.waitFor(() => expect(longBody.scrollTop).toBeGreaterThan(0));
 });
 
+test("names its body, a tab stop even when short, as a group after its heading", async () => {
+  const modal = await openModal();
+  const body = modal.shadowRoot!.querySelector<HTMLElement>(".body")!;
+  await expect.element(page.elementLocator(body)).toHaveRole("group");
+  await expect.element(page.elementLocator(body)).toHaveAccessibleName("Add printer");
+});
+
 test("opens with focus on its body, not on a field first in a long body", async () => {
   const modal = await openModal(
     '<wt-input name="name" label="Name"></wt-input><div style="height: 1800px">Long form</div>',
