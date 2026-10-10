@@ -38,14 +38,7 @@ import {
 } from "@waitron/catalogue";
 import { VerifactuBackend } from "@waitron/fiscal-verifactu";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
-import {
-  createPinThrottle,
-  endDeviceSessions,
-  hashPassword,
-  hashPin,
-  loginWithPin,
-  persons,
-} from "@waitron/identity";
+import { createPinThrottle, hashPassword, hashPin, loginWithPin, persons } from "@waitron/identity";
 import {
   cardReaderHolders,
   cardReaders,
@@ -75,7 +68,6 @@ import {
   jobOrigin,
 } from "@waitron/shared";
 import { deploymentEnvironment } from "./config.js";
-import { releaseDevice } from "./device-equipment.js";
 import { DEVICE_COOKIE } from "./device-session.js";
 import type { Logger } from "./logger.js";
 import { ALL_MODULES } from "./modules.js";
@@ -91,6 +83,7 @@ import "./errors.js";
 import { openPartyTab } from "./testing/serve-line.js";
 import { cancelBody } from "./testing/cancel-line.js";
 import { watchDerivationsAndLock, watchedOrder } from "./testing/watched-scrypt.js";
+import { disableDevice } from "./device-delete.js";
 
 vi.mock("node:crypto", async (importOriginal) =>
   (await import("./testing/watched-scrypt.js")).watchedCrypto(await importOriginal()),
@@ -3037,12 +3030,7 @@ describe("a Disable committed after the session check", () => {
     racing.use("/api/working-orders/:id/payments", async (c, next) => {
       const parse = c.req.json.bind(c.req);
       c.req.json = async () => {
-        // The Disable route's writes (`POST /management-api/devices/:id/revoke`, device-api.ts).
-        await inTx(async (tx) => {
-          await tx.update(devices).set({ active: false }).where(eq(devices.id, device.deviceId));
-          await endDeviceSessions(tx, device.deviceId);
-          await releaseDevice(tx, device.deviceId);
-        });
+        expect(await inTx((tx) => disableDevice(tx, device.deviceId))).toBe(true);
         disabled = true;
         return parse();
       };

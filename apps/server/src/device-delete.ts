@@ -167,6 +167,20 @@ export async function readDeviceDeleteImpact(
   return deviceDeleteRules(tx, cfg, id);
 }
 
+/** Disable: switches the device off, ends its sign-ins and releases its holds. False when no device
+ * that is not deleted has `id`. */
+export async function disableDevice(tx: Transaction, id: string): Promise<boolean> {
+  const updated = await tx
+    .update(devices)
+    .set({ active: false })
+    .where(and(eq(devices.id, id), isNull(devices.deletedAt)))
+    .returning({ id: devices.id });
+  if (updated.length === 0) return false;
+  await endDeviceSessions(tx, id);
+  await releaseDevice(tx, id);
+  return true;
+}
+
 /**
  * Recomputes the impact on the caller's transaction and, unless a payment is in progress on the
  * device, acts on it: ends its sign-ins, holds and request to come back, removes its settings and

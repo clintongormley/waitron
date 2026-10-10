@@ -21,7 +21,7 @@ import {
 } from "@waitron/catalogue";
 import { VerifactuBackend } from "@waitron/fiscal-verifactu";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
-import { endDeviceSessions, hashPassword, hashPin, sessions } from "@waitron/identity";
+import { hashPassword, hashPin, sessions } from "@waitron/identity";
 import { payments } from "@waitron/payments";
 import { FakePaymentProvider } from "@waitron/payments/src/testing/fake-provider.js";
 import { createPrinter } from "@waitron/printing";
@@ -37,8 +37,7 @@ import {
   type BillPaymentRequest,
 } from "./bill-payments.js";
 import { deploymentEnvironment } from "./config.js";
-import { deleteDevice } from "./device-delete.js";
-import { releaseDevice } from "./device-equipment.js";
+import { deleteDevice, disableDevice } from "./device-delete.js";
 import { ALL_MODULES } from "./modules.js";
 import { createTable } from "./tables.js";
 import { offerProducts, type ZoneOffers } from "./testing/zone-offers.js";
@@ -47,9 +46,8 @@ import { deviceRequestCfg, openTillSession } from "./testing/session-device.js";
 import type { DeviceRequestConfig } from "./till-config.js";
 import "./errors.js";
 
-// A bill payment is written only while, inside its own transaction, the device is still active and
-// not deleted and the operator's sign-in is still open on it. Each case pays from a till of its own,
-// with its own printer, because most of them switch that till off.
+// Each case pays from a till of its own, with its own printer, because most of them switch that
+// till off.
 afterEach(() => yieldTurn());
 
 const LOCALE = "es-ES";
@@ -226,13 +224,8 @@ function wholeBill(method: "cash" | "card"): BillPaymentRequest {
   };
 }
 
-/** The Disable route's writes (`POST /management-api/devices/:id/revoke`, device-api.ts). */
 async function disable(deviceId: string): Promise<void> {
-  await inTx(async (tx) => {
-    await tx.update(devices).set({ active: false }).where(eq(devices.id, deviceId));
-    await endDeviceSessions(tx, deviceId);
-    await releaseDevice(tx, deviceId);
-  });
+  expect(await inTx((tx) => disableDevice(tx, deviceId))).toBe(true);
 }
 
 /** Switched off with no Disable: its sessions stay open. */
@@ -340,7 +333,15 @@ describe("a bill payment re-checks the device and the sign-in inside its write",
     await expect
       .soft(takeBillPayment(fiscal(), till.cfg, billId, wholeBill("card"), till.operator))
       .rejects.toMatchObject({ code: "session.required" });
-    expectNothingWritten(before, await writes(billId, till));
+    // Delete clears the till's printer choices, so no job could be queued either way.
+    const after = await writes(billId, till);
+    expect({ ...after, jobs: undefined }).toEqual({
+      ...before,
+      billPayments: [],
+      payments: [],
+      sales: [],
+      jobs: undefined,
+    });
   });
 
   it("refuses cash session.required once the operator has signed out on an active till, writing nothing", async () => {

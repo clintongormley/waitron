@@ -1243,7 +1243,8 @@ const REFUSED_START: ReadonlySet<string> = new Set([
  *    offline fails it; any other answer leaves it pending, for the loop to settle from the
  *    provider's row. `collect` is never allowed to accept the card offline (design §11.9).
  *
- * A retry of a payment already taken answers its state and never collects again.
+ * While the operator is still signed in, a retry of a payment already taken answers its state and
+ * never collects again.
  */
 export async function takeReaderBillPayment(
   deps: ReaderBillPaymentDeps,
