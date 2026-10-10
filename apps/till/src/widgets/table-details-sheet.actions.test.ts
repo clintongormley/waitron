@@ -122,7 +122,7 @@ describe("till-table-details-sheet's actions for today", () => {
     expect(offered(el)).toEqual(["split", "seats", "back"]);
   });
 
-  it("does not offer Rotate for a fixed table, nor Take off for a seated one or one needing clearing", async () => {
+  it("does not offer Rotate for a fixed table, nor Take off for a seated one or one needing clearing, nor Join with… for one needing clearing", async () => {
     const fixed = await mount({ table: table({ today: today({ fixed: true }) }) });
     expect(offered(fixed)).toEqual(["join-with", "seats", "back", "take-off"]);
     cleanupWidgets();
@@ -134,7 +134,7 @@ describe("till-table-details-sheet's actions for today", () => {
     cleanupWidgets();
 
     const clearing = await mount({ table: table({ condition: "needs_clearing" }) });
-    expect(offered(clearing)).toEqual(["join-with", "rotate", "seats", "back"]);
+    expect(offered(clearing)).toEqual(["rotate", "seats", "back"]);
     expect(clearing.shadowRoot!.querySelector("[data-mark-cleared]")!.getAttribute("slot")).toBe(
       "footer",
     );
@@ -153,9 +153,7 @@ describe("till-table-details-sheet's actions for today", () => {
     expect(offered(spare)).toEqual([]);
     cleanupWidgets();
 
-    const takenOff = await mount({
-      table: table({ today: today({ placement: null, takenOff: true }) }),
-    });
+    const takenOff = await mount({ table: table({ today: today({ takenOff: true }) }) });
     expect(offered(takenOff)).toEqual([]);
   });
 
