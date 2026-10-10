@@ -2,6 +2,9 @@ import { Hono } from "hono";
 import { beforeAll, describe, expect, it } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
+import { diningTables } from "@waitron/db";
+import { writeClearingWorkflow } from "@waitron/venue-service";
+import { eq } from "drizzle-orm";
 import { hashPin, loginWithPin, persons } from "@waitron/identity";
 import { ALL_MODULES, enabledTableRemovals } from "./modules.js";
 import { mountTillApi } from "./till-api.js";
@@ -321,6 +324,26 @@ describe("a fixed table never moves", () => {
     expect(await mergeOf(v, f!)).toBeNull();
   });
 
+  it("a fixed table as the target of a join's merge is refused, and nothing is held or moved", async () => {
+    const { f, n } = await tables({ key: "f", x: 0, fixed: true }, { key: "n", x: 20 });
+    const p = await seat(f!);
+    const before = [await todayRow(v, f!), await todayRow(v, n!)];
+
+    expect(
+      await refusal(
+        join(p, {
+          tableId: n,
+          expectedPartyRevision: await revision(p),
+          otherPartyId: null,
+          merge: { moving: n, target: f, side: "right", seats: 8 },
+        }),
+      ),
+    ).toEqual({ status: 409, body: { error: { code: "table.fixed", params: { tableId: f } } } });
+    expect(await holders(f!, n!)).toEqual([p, null]);
+    expect([await todayRow(v, f!), await todayRow(v, n!)]).toEqual(before);
+    expect(await mergeOf(v, n!)).toBeNull();
+  });
+
   it("joining a fixed table without a merge links the party and moves nothing, and the link ends when it leaves", async () => {
     const { f1, f2 } = await tables(
       { key: "f1", x: 0, fixed: true },
@@ -340,4 +363,93 @@ describe("a fixed table never moves", () => {
     expect(await mergeOf(v, f1!)).toBeNull();
     expect(await mergeOf(v, f2!)).toBeNull();
   });
+});
+
+describe("a join carrying a merge from a stale read", () => {
+  it("answers party.out_of_date when the party moved since the read", async () => {
+    const { a, b, c } = await tables({ key: "a", x: 0 }, { key: "b", x: 20 }, { key: "c", x: 40 });
+    const p = await seat(a!);
+    const old = await revision(p);
+    await ok(
+      post(`/api/parties/${p}/move`, {
+        toTableId: c,
+        expectedPartyRevision: old,
+        otherPartyId: null,
+      }),
+    );
+
+    const answer = await refusal(
+      join(p, {
+        tableId: b,
+        expectedPartyRevision: old,
+        otherPartyId: null,
+        merge: { moving: a, target: b, side: "left", seats: 8 },
+      }),
+    );
+    expect(answer.status).toBe(409);
+    expect((answer.body as { error: { code: string } }).error.code).toBe("party.out_of_date");
+    expect(await holders(a!, b!, c!)).toEqual([null, null, p]);
+  });
+
+  it("answers party.not_open when the party has finished", async () => {
+    const { a, b } = await tables({ key: "a", x: 0 }, { key: "b", x: 20 });
+    const p = await seat(a!);
+    await ok(post(`/api/parties/${p}/finish`, { expectedPartyRevision: await revision(p) }));
+
+    const answer = await refusal(
+      join(p, {
+        tableId: b,
+        expectedPartyRevision: await revision(p),
+        otherPartyId: null,
+        merge: { moving: a, target: b, side: "left", seats: 8 },
+      }),
+    );
+    expect(answer.status).toBe(409);
+    expect((answer.body as { error: { code: string } }).error.code).toBe("party.not_open");
+    expect(await holders(a!, b!)).toEqual([null, null]);
+  });
+});
+
+describe("moving guests to one of their own merged tables", () => {
+  async function needsClearing(tableId: string): Promise<boolean> {
+    const [row] = await inTx(v, (tx) =>
+      tx
+        .select({ since: diningTables.needsClearingSince })
+        .from(diningTables)
+        .where(eq(diningTables.id, tableId)),
+    );
+    return row!.since !== null;
+  }
+
+  for (const clearing of [false, true]) {
+    it(`shrinks the party to that table and ends the merge (clearing ${clearing ? "on" : "off"})`, async () => {
+      await inTx(v, (tx) => writeClearingWorkflow(tx, clearing));
+      try {
+        const { a, b } = await tables({ key: "a", x: 0 }, { key: "b", x: 20 });
+        await freeMerge(a!, b!);
+        expect(await place(a!)).toEqual({ x: 28, y: 0, rotation: 0 });
+        const p = await seat(a!);
+        const old = await revision(p);
+
+        await ok(
+          post(`/api/parties/${p}/move`, {
+            toTableId: b,
+            expectedPartyRevision: old,
+            otherPartyId: null,
+          }),
+        );
+
+        expect(await holders(a!, b!)).toEqual([null, p]);
+        expect(await mergeOf(v, a!)).toBeNull();
+        expect(await mergeOf(v, b!)).toBeNull();
+        expect(await place(a!)).toEqual({ x: 0, y: 0, rotation: 0 });
+        expect(await place(b!)).toEqual({ x: 20, y: 0, rotation: 0 });
+        expect(await needsClearing(a!)).toBe(clearing);
+        expect(await needsClearing(b!)).toBe(false);
+        expect(await revision(p)).toBeGreaterThan(old);
+      } finally {
+        await inTx(v, (tx) => writeClearingWorkflow(tx, false));
+      }
+    });
+  }
 });

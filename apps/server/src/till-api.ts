@@ -2420,13 +2420,18 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
         const result = await withTransaction(deps.db, async (tx) => {
           await catchUpFloor(tx);
           await checkZones(tx, deps.cfg, session, [{ partyId }, { tableId }]);
-          if (merge !== null) {
-            const held = merge.moving === tableId ? merge.target : merge.moving;
-            if (!(await memberTables(tx, partyId)).includes(held)) throw invalid("merge");
-          }
+          const heldBefore = await memberTables(tx, partyId);
           const acted = await act(tx, sendCfg, partyId, tableId, command);
+          if (path === "move") {
+            await leaveMergesRestoring(
+              tx,
+              heldBefore.filter((id) => id !== tableId),
+            );
+          }
           await joinMergeMembers(tx, sendCfg, acted.partyId, tableId, personId);
           if (merge !== null) {
+            const held = merge.moving === tableId ? merge.target : merge.moving;
+            if (!heldBefore.includes(held)) throw invalid("merge");
             await writeMerge(tx, cfg, {
               movingId: merge.moving,
               targetId: merge.target,
