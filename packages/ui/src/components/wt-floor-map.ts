@@ -80,6 +80,7 @@ interface Group {
   key: string;
   members: FloorMapTable[];
   box: PlanRect;
+  label: string;
 }
 
 const DEFAULT_COPY: FloorMapCopy = { label: "Tables" };
@@ -96,8 +97,8 @@ export const mergeLabel = (labels: readonly string[]): string =>
   mapLabel([...labels].sort(inNumberOrder));
 
 /** By the top of each box, then its left. */
-const readingOrder = (groups: Group[]): Group[] =>
-  groups.sort((a, b) => a.box.y - b.box.y || a.box.x - b.box.x);
+const readingOrder = (groups: readonly Group[]): Group[] =>
+  [...groups].sort((a, b) => a.box.y - b.box.y || a.box.x - b.box.x);
 
 /**
  * How far a span from `start` to `end` moves for a view from 0 to `size`, the least distance. A span
@@ -119,7 +120,12 @@ function groupsOf(tables: readonly FloorMapTable[]): Group[] {
   }
   return [...byKey].map(([key, members]) => {
     members.sort((a, b) => inNumberOrder(a.label, b.label));
-    return { key, members, box: bounds(members.map((m) => m.placement))! };
+    return {
+      key,
+      members,
+      box: bounds(members.map((m) => m.placement))!,
+      label: mergeLabel(members.map((m) => m.label)),
+    };
   });
 }
 
@@ -284,6 +290,17 @@ export class WtFloorMap extends LitElement {
 
   #drag: Drag | null = null;
 
+  /** Built from `tables` when it changes: the groups in `tables`' order, in reading order, and by
+   * member id. */
+  #groups: Group[] = [];
+
+  #readingOrder: Group[] = [];
+
+  #groupOf = new Map<string, Group>();
+
+  /** The host's box, read when a pinch's first move needs it; a pointerdown clears it. */
+  #pinchBox: DOMRect | null = null;
+
   #observer = new ResizeObserver(([entry]) => {
     const size = entry!.contentBoxSize[0]!;
     this.#size = { width: size.inlineSize, height: size.blockSize };
@@ -347,7 +364,7 @@ export class WtFloorMap extends LitElement {
       cancel: () => this.#endDrag(),
       pan: ({ dx, dy }) => this.#moveView(1, 0, 0, dx, dy),
       pinch: ({ ratio, x, y, dx, dy }) => {
-        const box = this.getBoundingClientRect();
+        const box = (this.#pinchBox ??= this.getBoundingClientRect());
         this.#moveView(ratio, x - box.left - dx, y - box.top - dy, dx, dy);
       },
     });
@@ -417,12 +434,25 @@ export class WtFloorMap extends LitElement {
 
   readonly #onHoldDrag = ({ dx, dy }: { dx: number; dy: number }): void => {
     const id = this.#held?.dataset["tableId"];
-    const first = this.tables.find((table) => table.id === id);
+    const first =
+      id === undefined ? undefined : this.#groupOf.get(id)?.members.find((m) => m.id === id);
     if (first === undefined) return;
     const scale = this.#view!.scale;
     const x = clampToGrid(first.placement.x + snapToSquare(dx, scale));
     const y = clampToGrid(first.placement.y + snapToSquare(dy, scale));
-    this.#drag = { tableId: first.id, dx: x - first.placement.x, dy: y - first.placement.y, x, y };
+    const movedX = x - first.placement.x;
+    const movedY = y - first.placement.y;
+    const drag = this.#drag;
+    if (
+      drag?.tableId === first.id &&
+      drag.x === x &&
+      drag.y === y &&
+      drag.dx === movedX &&
+      drag.dy === movedY
+    ) {
+      return;
+    }
+    this.#drag = { tableId: first.id, dx: movedX, dy: movedY, x, y };
     this.requestUpdate();
   };
 
@@ -525,9 +555,9 @@ export class WtFloorMap extends LitElement {
   #moveFocus(id: string, { key, altKey, ctrlKey, metaKey }: KeyboardEvent): boolean {
     // Alt+ArrowLeft is the browser's Back, and Ctrl or Meta with Home or End its own moves.
     if (altKey || ctrlKey || metaKey) return false;
-    const ids = readingOrder(groupsOf(this.tables)).map((g) => g.members[0]!.id);
-    const at = ids.indexOf(id);
-    const last = ids.length - 1;
+    const order = this.#readingOrder;
+    const at = order.findIndex((g) => g.members[0]!.id === id);
+    const last = order.length - 1;
     const to = {
       ArrowRight: at + 1,
       ArrowDown: at + 1,
@@ -537,17 +567,16 @@ export class WtFloorMap extends LitElement {
       End: last,
     }[key];
     if (to === undefined) return false;
-    const target = ids[Math.min(last, Math.max(0, to))]!;
-    this.#panTo(target);
+    const target = order[Math.min(last, Math.max(0, to))]!;
+    this.#panTo(target.box);
     // The map cannot scroll, so a focus left to scroll would scroll the till's tab shell instead.
-    this.#buttonOf(target).focus({ preventScroll: true });
+    this.#buttonOf(target.members[0]!.id).focus({ preventScroll: true });
     return true;
   }
 
-  #panTo(id: string): void {
+  #panTo(box: PlanRect): void {
     const view = this.#view!;
     const size = this.#size!;
-    const box = groupsOf(this.tables).find((g) => g.members[0]!.id === id)!.box;
     const left = view.x + box.x * view.scale;
     const top = view.y + box.y * view.scale;
     const dx = intoView(left, left + box.width * view.scale, size.width);
@@ -560,13 +589,16 @@ export class WtFloorMap extends LitElement {
   }
 
   readonly #onFocusIn = (e: Event): void => {
-    this.#focusedId = idOf(e.composedPath()[0]!);
+    const id = idOf(e.composedPath()[0]!);
+    if (id === this.#focusedId) return;
+    this.#focusedId = id;
     this.requestUpdate();
   };
 
   /** Never stopped: the till's idle logout listens for pointerdown at its host. */
   readonly #onPointerDown = (): void => {
     this.#swallowContextMenu = false;
+    this.#pinchBox = null;
   };
 
   #send(type: "wt-table-tap" | "wt-table-details", tableId: string): void {
@@ -580,6 +612,11 @@ export class WtFloorMap extends LitElement {
   }
 
   protected override willUpdate(changed: Map<PropertyKey, unknown>): void {
+    if (changed.has("tables")) {
+      this.#groups = groupsOf(this.tables);
+      this.#readingOrder = readingOrder(this.#groups);
+      this.#groupOf = new Map(this.#groups.flatMap((g) => g.members.map((m) => [m.id, g])));
+    }
     if (changed.has("fitKey")) this.#needsFit = true;
     if (this.#needsFit) this.#fitView();
   }
@@ -608,21 +645,19 @@ export class WtFloorMap extends LitElement {
   }
 
   #renderGroups(view: View, still: boolean): TemplateResult {
-    const groups = groupsOf(this.tables);
     const tabStop =
-      groups.find((g) => g.members.some((m) => m.id === this.#focusedId)) ??
-      readingOrder([...groups])[0];
+      (this.#focusedId === null ? undefined : this.#groupOf.get(this.#focusedId)) ??
+      this.#readingOrder[0];
     return html`${repeat(
-      groups,
+      this.#groups,
       (g) => g.key,
       (g) => this.#renderGroup(g, view, still, g === tabStop),
     )}`;
   }
 
   #renderGroup(group: Group, view: View, still: boolean, tabStop: boolean): TemplateResult {
-    const { box, members } = group;
+    const { box, members, label } = group;
     const [first] = members as [FloorMapTable, ...FloorMapTable[]];
-    const label = mergeLabel(members.map((m) => m.label));
     const merged = members.length > 1;
     const named = showsName(merged ? box : first.placement, view.scale);
     const drag = this.#drag?.tableId === first.id ? this.#drag : null;

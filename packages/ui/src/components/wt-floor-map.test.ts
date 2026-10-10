@@ -150,6 +150,25 @@ it("names a merge in number order whatever order its labels come in, as the map 
   expect(within(el, "name", "t4")!.textContent).toBe(mergeLabel(labels));
 });
 
+it("a re-read's new labels and joins are what the map names", async () => {
+  const el = await map([
+    t("a", "Terrace 4", { x: 10, y: 4, width: 4, height: 4 }, { joinId: "m" }),
+    t("b", "Terrace 5", { x: 14, y: 4, width: 4, height: 4 }, { joinId: "m" }),
+    t("c", "Terrace 6", { x: 18, y: 4, width: 4, height: 4 }),
+  ]);
+  expect(within(el, "name", "a")!.textContent).toBe("Terrace 4+5");
+  el.tables = [
+    t("a", "Terrace 9", { x: 10, y: 4, width: 4, height: 4 }, { joinId: "m" }),
+    t("b", "Terrace 5", { x: 14, y: 4, width: 4, height: 4 }, { joinId: "m" }),
+    t("c", "Terrace 6", { x: 18, y: 4, width: 4, height: 4 }, { joinId: "m" }),
+  ];
+  el.fitKey = "z2";
+  await el.updateComplete;
+  expect(within(el, "name", "b")!.textContent).toBe("Terrace 5+6+9");
+  expect(button(el, "b").getAttribute("aria-label")).toBe("Terrace 5+6+9, Free");
+  expect(el.shadowRoot!.querySelectorAll('[part="table"]')).toHaveLength(1);
+});
+
 const small = [
   t("b1", "B1", { width: 2, height: 2 }),
   t("b2", "B2", { x: 36, y: 16, width: 3, height: 3 }),

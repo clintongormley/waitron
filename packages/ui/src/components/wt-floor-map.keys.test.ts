@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
 import { cleanup, mountInShadowRoot } from "../test-helpers.js";
 import { mountThemed } from "../a11y-helpers.js";
@@ -266,6 +266,44 @@ it("an arrow, Home or End key with Alt, Ctrl or Meta held passes through", async
     button(el, "t2").dispatchEvent(event);
     expect([init.key, focused(el), event.defaultPrevented]).toEqual([init.key, "t2", false]);
   }
+});
+
+it("focus coming back to the table last focused asks for no drawing, and another table does", async () => {
+  const el = await map(
+    [t1, t2],
+    [t1, t2],
+    (m) => `<div><button id="outside">Outside</button>${m}</div>`,
+  );
+  const outside = (el.getRootNode() as ShadowRoot).querySelector<HTMLButtonElement>("#outside")!;
+  button(el, "t1").focus();
+  outside.focus();
+  await el.updateComplete;
+  const update = vi.spyOn(el, "requestUpdate");
+  button(el, "t1").focus();
+  expect(update).not.toHaveBeenCalled();
+  button(el, "t2").focus();
+  expect(update).toHaveBeenCalled();
+  await el.updateComplete;
+  expect(tabStops(el)).toEqual(["t1:-1", "t2:0"]);
+});
+
+it("new tables given with a new fitKey are the ones the arrow keys and the tab stop read", async () => {
+  const el = await map([t1, t2]);
+  button(el, "t1").focus();
+  const t4 = t("t4", { x: 4, y: 0 });
+  el.tables = [t1, t4, t2];
+  el.fitKey = "z2";
+  await el.updateComplete;
+  await press("ArrowRight");
+  expect(focused(el)).toBe("t4");
+  el.tables = [t2, t4];
+  el.fitKey = "z3";
+  await el.updateComplete;
+  expect(tabStops(el)).toEqual(["t2:-1", "t4:0"]);
+  await press("End");
+  expect(focused(el)).toBe("t2");
+  await press("Home");
+  expect(focused(el)).toBe("t4");
 });
 
 it("a focused table that joins a merge keeps the merge as the tab stop", async () => {

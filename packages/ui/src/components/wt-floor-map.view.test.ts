@@ -385,6 +385,64 @@ it("a hold then a drag draws the table under the finger in whole squares, and dr
   expect(button(el, "t1").hasAttribute("data-held")).toBe(false);
 });
 
+it("a hold's drag asks for a drawing only when the table moves to another square", async () => {
+  const el = await map([t1]);
+  hold(el, 300, 150);
+  move(el, 375, 150);
+  await el.updateComplete;
+  const update = vi.spyOn(el, "requestUpdate");
+  move(el, 380, 150);
+  move(el, 392, 152);
+  expect(update).not.toHaveBeenCalled();
+  move(el, 395, 150);
+  expect(update).toHaveBeenCalled();
+  expect((await boxOf(el, "t1")).left).toBe(262.5);
+});
+
+it("a drag after a re-read moves the table from where the re-read put it", async () => {
+  const el = await map([t1]);
+  hold(el, 300, 150);
+  move(el, 375, 150);
+  el.tables = [{ ...t1, placement: { ...t1.placement, x: 11 } }];
+  await el.updateComplete;
+  move(el, 340, 150);
+  expect((await boxOf(el, "t1")).left).toBe(225);
+  up(el, 340, 150);
+  expect(drops).toEqual([{ tableId: "t1", x: 12, y: 5, targetId: null }]);
+});
+
+it("a pinch reads the map's box once, however many moves it has", async () => {
+  const el = await map([t1]);
+  const a = at(el, 200, 150);
+  const b = at(el, 300, 150);
+  const moves = [350, 400, 450].map((x) => at(el, x, 150));
+  const box = vi.spyOn(el, "getBoundingClientRect");
+  pointer(el.shadowRoot!.elementFromPoint(a.clientX, a.clientY)!, "pointerdown", a, {
+    pointerId: 1,
+  });
+  pointer(el.shadowRoot!.elementFromPoint(b.clientX, b.clientY)!, "pointerdown", b, {
+    pointerId: 2,
+  });
+  for (const to of moves) pointer(window, "pointermove", to, { pointerId: 2 });
+  expect(box).toHaveBeenCalledTimes(1);
+  box.mockRestore();
+  pointer(window, "pointerup", moves[2]!, { pointerId: 2 });
+  pointer(window, "pointerup", a, { pointerId: 1 });
+  expect((await boxOf(el, "t1")).width).toBe(750);
+});
+
+it("a second pinch reads the map's box again", async () => {
+  const el = await map([t1], true, "margin-left: 40px");
+  pinch(el, [200, 150], [300, 150], [400, 150]);
+  up(el, 400, 150, { pointerId: 2 });
+  up(el, 200, 150, { pointerId: 1 });
+  el.style.marginLeft = "0px";
+  tapAt(el, 20, 20);
+  tapAt(el, 20, 20);
+  pinch(el, [200, 150], [300, 150], [400, 150]);
+  expect(await boxOf(el, "t1")).toEqual({ left: 100, top: 0, width: 600, height: 300 });
+});
+
 it("a held drag on a zoomed map moves by the zoomed square", async () => {
   const el = await map([t1]);
   pinch(el, [200, 150], [300, 150], [400, 150]);
