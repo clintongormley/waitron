@@ -16,6 +16,7 @@ import {
   authorizeManager,
   endDeviceSessions,
   profilesAdmitting,
+  sessions,
   type Permission,
 } from "@waitron/identity";
 import {
@@ -345,11 +346,16 @@ export function mountDeviceApi(app: Hono, deps: DeviceApiDeps, log: Logger): voi
   // Any signed-in staff member may choose; a held item is taken by a scan or a confirmed list choice.
   app.put("/api/device/equipment", (c) =>
     run(c, log, async () => {
-      const { device } = await requireSession({ db: deps.db }, c);
+      const { device, sessionId } = await requireSession({ db: deps.db }, c);
       const choice = parseEquipmentChoice(await readJsonBody<Record<string, unknown>>(c));
       const equipment = await withTransaction(deps.db, async (tx) => {
-        // A Delete or Disable may have committed since requireSession's own transaction.
+        // A Delete, Disable or sign-out may have committed since requireSession's own transaction.
         await assertDeviceStillProven(tx, { device, tokenHash: null });
+        const [open] = await tx
+          .select({ id: sessions.id })
+          .from(sessions)
+          .where(and(eq(sessions.id, sessionId), isNull(sessions.endedAt)));
+        if (open === undefined) throw new AppError("session.required", {});
         await selectDeviceEquipment(tx, { deviceId: device.deviceId, ...choice });
         return readDeviceEquipment(tx, device.deviceId);
       });
