@@ -126,8 +126,45 @@ function check(zoneId: string, input: ZonePlanSave, removals: readonly TableRemo
   return inTx(v, (tx) => checkZonePlanSave(tx, v.cfg, removals, zoneId, input, NOW));
 }
 
+/** The statements `readZonePlan` takes for a zone whose master has joins of the given sizes. */
+async function readCostWithJoins(sizes: readonly number[]): Promise<number> {
+  const z = await zone();
+  const masters = await masterOf(
+    z,
+    Array.from({ length: sizes.reduce((sum, size) => sum + size, 0) }, (_, i) => ({
+      label: fresh(`j${i}`),
+    })),
+  );
+  await inTx(v, async (tx) => {
+    const [plan] = await tx
+      .select({ id: floorPlans.id })
+      .from(floorPlans)
+      .where(eq(floorPlans.zoneId, z));
+    let next = 0;
+    for (const size of sizes) {
+      const [row] = await tx
+        .insert(floorPlanJoins)
+        .values({ planId: plan!.id, seats: size * 2 })
+        .returning({ id: floorPlanJoins.id });
+      for (const planTableId of masters.slice(next, next + size)) {
+        await tx.insert(floorPlanJoinTables).values({ joinId: row!.id, planTableId });
+      }
+      next += size;
+    }
+  });
+  return inTx(v, async (tx) => {
+    const prepare = vi.spyOn(DatabaseSync.prototype, "prepare");
+    try {
+      await readZonePlan(tx, v.cfg, z);
+      return prepare.mock.calls.length;
+    } finally {
+      prepare.mockRestore();
+    }
+  });
+}
+
 describe("readZonePlan", () => {
-  it("reads every join's tables in one query, whatever the number of joins", async () => {
+  it("reads every join's tables in one query", async () => {
     const z = await zone();
     const masters = await masterOf(
       z,
@@ -174,6 +211,8 @@ describe("readZonePlan", () => {
     // The zone, the plan, its tables, their live tables, the joins, the joins' tables, and the
     // live tables it could adopt.
     expect(statements).toBe(7);
+    expect(await readCostWithJoins([2])).toBe(statements);
+    expect(await readCostWithJoins([2, 2, 3])).toBe(statements);
   });
 
   it("offers a zone's live tables as the first draft", async () => {
