@@ -1556,6 +1556,7 @@ async function bootServer(
       venueLocale,
       privacyNoticeUrl: config.privacyNoticeUrl,
       credentialKeyRing: totpKeyRing,
+      tableRemovals: enabledTableRemovals(setsToMigrate),
       // Resolved on every send, so a newly configured or rotated SMTP gateway takes effect at once.
       sendAccountEmail: async (message) => {
         // Queue both reads before an answered reset can reach shutdown's drain.

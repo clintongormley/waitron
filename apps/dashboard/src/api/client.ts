@@ -596,6 +596,51 @@ export interface DashboardTable {
   rotation?: number | null;
 }
 
+export type PlanShape = "rect" | "round";
+
+/** A table's place on a floor plan, in whole grid squares. */
+export interface PlanPlacement {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  shape: PlanShape;
+  rotation: number;
+}
+
+/** A zone's master plan as the server reads it (`ZonePlan`, apps/server/src/floor-plan.ts). */
+export interface FloorPlan {
+  zoneId: string;
+  /** 0 when the zone has no master plan. */
+  revision: number;
+  savedAt: string | null;
+  tables: {
+    /** null for a live table offered for adoption. */
+    id: string | null;
+    liveTableId: string | null;
+    label: string;
+    seats: number | null;
+    fixed: boolean;
+    placement: PlanPlacement | null;
+  }[];
+  joins: { id: string; seats: number; tableIds: string[] }[];
+}
+
+/** A master-plan save (`ZonePlanSave`); `key` names a table within the save. */
+export interface FloorPlanSave {
+  revision: number;
+  tables: {
+    id?: string;
+    liveTableId?: string;
+    key: string;
+    label: string;
+    seats: number | null;
+    fixed: boolean;
+    placement: PlanPlacement | null;
+  }[];
+  joins: { seats: number; tableKeys: string[] }[];
+}
+
 // ── Kitchen-station + routing types ──────────────────────────────────────────────────────────────
 
 export type KitchenTimingDefaults = StationThresholds;
@@ -2740,6 +2785,22 @@ export class DashboardApi {
 
   deactivateZone(id: string): Promise<void> {
     return this.#request<void>(`/management-api/zones/${id}`, "DELETE");
+  }
+
+  getFloorPlan(zoneId: string): Promise<FloorPlan> {
+    return this.#request<FloorPlan>(`/management-api/zones/${zoneId}/floor-plan`, "GET");
+  }
+
+  /** `ids` maps each saved table's `key` to its master table's id. */
+  saveFloorPlan(
+    zoneId: string,
+    body: FloorPlanSave,
+  ): Promise<{ revision: number; ids: Record<string, string> }> {
+    return this.#request<{ revision: number; ids: Record<string, string> }>(
+      `/management-api/zones/${zoneId}/floor-plan`,
+      "PUT",
+      body,
+    );
   }
 
   listTables(options: { includeDisabled?: true } = {}): Promise<DashboardTable[]> {

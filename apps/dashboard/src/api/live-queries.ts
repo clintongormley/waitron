@@ -321,6 +321,13 @@ export const QUERY_DEPENDENCIES = {
   listCoursesWithDisabled: ["kitchen_courses", "products"],
   listTables: ["dining_tables", "floor_zones", "working_orders", "table_service_statuses"],
   listZones: ["floor_zones"],
+  getFloorPlan: [
+    "floor_plans",
+    "floor_plan_tables",
+    "floor_plan_joins",
+    "floor_plan_join_tables",
+    "dining_tables",
+  ],
   getFireControl: ["locations"],
   getBumpMode: ["locations"],
   getKitchenTimingDefaults: ["kitchen_timing_defaults"],

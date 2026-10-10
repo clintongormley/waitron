@@ -1,4 +1,5 @@
-import type { ModuleRouteContext } from "@waitron/module";
+import type { ModuleRouteContext, TableRemoval } from "@waitron/module";
+import { AppError } from "@waitron/shared";
 import { randomUUID } from "node:crypto";
 import { eq, sql } from "drizzle-orm";
 import { Hono } from "hono";
@@ -185,6 +186,16 @@ function tillConfigFromVenue(venue: VenueResult): TillConfig {
   };
 }
 
+/** Live tables the fake bookings removal refuses to let go of. */
+const bookedTables = new Set<string>();
+const fakeBookings: TableRemoval = {
+  refuse: (_tx, _cfg, tableId) =>
+    bookedTables.has(tableId)
+      ? Promise.reject(new AppError("table.booked", { tableId }))
+      : Promise.resolve(),
+  release: () => Promise.resolve(),
+};
+
 function mountApp(venue: VenueResult): Hono {
   const app = new Hono();
   mountManagementApi(
@@ -197,6 +208,7 @@ function mountApp(venue: VenueResult): Hono {
       rpId: "localhost",
       origin: "http://localhost",
       credentialKeyRing: TOTP_KEY_RING,
+      tableRemovals: [fakeBookings],
     },
     noopLog,
   );
@@ -2251,7 +2263,7 @@ describe("/management-api/stations (KDS-1 config)", () => {
       .map((station) => station.id);
     const before = await listStations();
     for (const [cookie, status] of [
-      [undefined, 401],
+      ["", 401],
       [staffCookie, 403],
       [supervisorCookie, 403],
     ] as const) {
@@ -3904,4 +3916,196 @@ it("renames a disabled zone through the management route without enabling it", a
     await req("/zones?includeInactive=true", { method: "GET" }, managerCookie)
   ).json()) as { id: string; name: string; active: boolean }[];
   expect(rows.find((row) => row.id === id)).toMatchObject({ name, active: false });
+});
+
+describe("floor plans", () => {
+  const PLACE = { x: 0, y: 0, width: 8, height: 8, shape: "rect", rotation: 0 };
+  const entry = (key: string, label: string) => ({
+    key,
+    label,
+    seats: 4,
+    fixed: false,
+    placement: PLACE,
+  });
+  const put = (zoneId: string, body: unknown, cookie: string | undefined = managerCookie) =>
+    req(`/zones/${zoneId}/floor-plan`, { method: "PUT", body: JSON.stringify(body) }, cookie);
+  const get = (zoneId: string, cookie: string | undefined = managerCookie) =>
+    req(`/zones/${zoneId}/floor-plan`, { method: "GET" }, cookie);
+
+  it("reads a zone with no plan as an empty first draft", async () => {
+    const zoneId = await createZone(unique("PlanFirst"));
+    const res = await get(zoneId);
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ zoneId, revision: 0, savedAt: null, tables: [], joins: [] });
+  });
+
+  it("saves a plan and reads it back; a save from an older copy is refused", async () => {
+    const zoneId = await createZone(unique("PlanSave"));
+    const label = unique("P");
+    const saved = await put(zoneId, { revision: 0, tables: [entry("a", label)], joins: [] });
+    expect(saved.status).toBe(200);
+    const { revision, ids } = (await saved.json()) as {
+      revision: number;
+      ids: Record<string, string>;
+    };
+    expect(revision).toBe(1);
+    const read = (await (await get(zoneId)).json()) as {
+      revision: number;
+      tables: { id: string; label: string; seats: number; placement: unknown }[];
+    };
+    expect(read.revision).toBe(1);
+    expect(read.tables).toEqual([
+      expect.objectContaining({ id: ids.a, label, seats: 4, fixed: false, placement: PLACE }),
+    ]);
+
+    const stale = await put(zoneId, { revision: 0, tables: [], joins: [] });
+    expect(stale.status).toBe(409);
+    expect(await stale.json()).toMatchObject({
+      error: { code: "floor_plan.changed", params: { zoneId } },
+    });
+  });
+
+  it("accepts back a plan exactly as read, each table given a key", async () => {
+    const zoneId = await createZone(unique("PlanRoundTrip"));
+    expect(
+      (await put(zoneId, { revision: 0, tables: [entry("a", unique("R"))], joins: [] })).status,
+    ).toBe(200);
+    const spare = unique("S");
+    const created = await req(
+      "/tables",
+      { method: "POST", body: JSON.stringify({ label: spare, capacity: 2, zoneId }) },
+      managerCookie,
+    );
+    expect(created.status).toBe(201);
+    const spareId = ((await created.json()) as { id: string }).id;
+
+    const read = (await (await get(zoneId)).json()) as {
+      revision: number;
+      tables: { id: string | null; liveTableId: string | null }[];
+      joins: unknown[];
+    };
+    // The master entry carries its own live table; the spare is offered with a null id.
+    expect(read.tables.map((t) => [t.id === null, t.liveTableId !== null])).toEqual([
+      [false, true],
+      [true, true],
+    ]);
+    const body = {
+      ...read,
+      tables: read.tables.map((t, i) => ({ ...t, key: `k${i}` })),
+    };
+    const res = await put(zoneId, body);
+    expect(res.status).toBe(200);
+    const after = (await (await get(zoneId)).json()) as {
+      tables: { id: string | null; liveTableId: string | null; label: string }[];
+    };
+    expect(after.tables.find((t) => t.label === spare)).toMatchObject({ liveTableId: spareId });
+    expect(after.tables.every((t) => t.id !== null)).toBe(true);
+  });
+
+  it("refuses a master table whose live table is not its own", async () => {
+    const zoneId = await createZone(unique("PlanOwn"));
+    const first = await put(zoneId, { revision: 0, tables: [entry("a", unique("O"))], joins: [] });
+    const { ids } = (await first.json()) as { ids: Record<string, string> };
+    const other = await req(
+      "/tables",
+      { method: "POST", body: JSON.stringify({ label: unique("X"), zoneId }) },
+      managerCookie,
+    );
+    const otherId = ((await other.json()) as { id: string }).id;
+    const res = await put(zoneId, {
+      revision: 1,
+      tables: [{ ...entry("a", unique("O")), id: ids.a, liveTableId: otherId }],
+      joins: [],
+    });
+    expect(res.status).toBe(400);
+    expect(await res.json()).toMatchObject({
+      error: { code: "floor_plan.invalid", params: { field: "tables.0.id" } },
+    });
+  });
+
+  it("refuses a rotation off the 15-degree steps", async () => {
+    const zoneId = await createZone(unique("PlanRotate"));
+    const res = await put(zoneId, {
+      revision: 0,
+      tables: [{ ...entry("a", unique("T")), placement: { ...PLACE, rotation: 10 } }],
+      joins: [],
+    });
+    expect(res.status).toBe(400);
+    expect(await res.json()).toMatchObject({
+      error: { code: "floor_plan.invalid", params: { field: "tables.0.placement.rotation" } },
+    });
+  });
+
+  it.each([
+    ["body", []],
+    ["revision", { revision: "1", tables: [], joins: [] }],
+    ["tables", { revision: 0, tables: {}, joins: [] }],
+    ["joins", { revision: 0, tables: [], joins: null }],
+    ["tables.0", { revision: 0, tables: [null], joins: [] }],
+    ["tables.0.key", { revision: 0, tables: [{ ...entry("a", "L"), key: 1 }], joins: [] }],
+    ["tables.0.label", { revision: 0, tables: [{ ...entry("a", "L"), label: 1 }], joins: [] }],
+    ["tables.0.fixed", { revision: 0, tables: [{ ...entry("a", "L"), fixed: "no" }], joins: [] }],
+    ["tables.0.id", { revision: 0, tables: [{ ...entry("a", "L"), id: 7 }], joins: [] }],
+    [
+      "tables.0.liveTableId",
+      { revision: 0, tables: [{ ...entry("a", "L"), liveTableId: 7 }], joins: [] },
+    ],
+    [
+      "tables.0.placement",
+      { revision: 0, tables: [{ ...entry("a", "L"), placement: undefined }], joins: [] },
+    ],
+    ["joins.0", { revision: 0, tables: [], joins: [3] }],
+    ["joins.0.tableKeys", { revision: 0, tables: [], joins: [{ seats: 4, tableKeys: "ab" }] }],
+    ["joins.0.tableKeys", { revision: 0, tables: [], joins: [{ seats: 4, tableKeys: [1, 2] }] }],
+  ])("refuses a malformed %s as management.request_invalid", async (field, body) => {
+    const zoneId = await createZone(unique("PlanShape"));
+    const res = await put(zoneId, body);
+    expect(res.status).toBe(400);
+    expect(await res.json()).toMatchObject({
+      error: { code: "management.request_invalid", params: { field } },
+    });
+  });
+
+  it("refuses to remove a table a module still needs, and saves nothing", async () => {
+    const zoneId = await createZone(unique("PlanBooked"));
+    await put(zoneId, { revision: 0, tables: [entry("a", unique("B"))], joins: [] });
+    const read = (await (await get(zoneId)).json()) as {
+      tables: { liveTableId: string }[];
+    };
+    const liveId = read.tables[0]!.liveTableId;
+    bookedTables.add(liveId);
+    try {
+      const res = await put(zoneId, { revision: 1, tables: [], joins: [] });
+      expect(res.status).toBe(409);
+      expect(await res.json()).toMatchObject({
+        error: { code: "table.booked", params: { tableId: liveId } },
+      });
+    } finally {
+      bookedTables.delete(liveId);
+    }
+    expect(((await (await get(zoneId)).json()) as { revision: number }).revision).toBe(1);
+  });
+
+  it("refuses staff (403) and no session (401), on read and save", async () => {
+    const zoneId = await createZone(unique("PlanAuth"));
+    const body = { revision: 0, tables: [], joins: [] };
+    for (const [cookie, status] of [
+      [staffCookie, 403],
+      ["", 401],
+    ] as const) {
+      expect((await get(zoneId, cookie)).status).toBe(status);
+      expect((await put(zoneId, body, cookie)).status).toBe(status);
+    }
+    expect(((await (await get(zoneId)).json()) as { revision: number }).revision).toBe(0);
+  });
+
+  it.each([randomUUID(), "not-a-uuid"])("answers an unknown zone %s with 404", async (zoneId) => {
+    for (const res of [
+      await get(zoneId),
+      await put(zoneId, { revision: 0, tables: [], joins: [] }),
+    ]) {
+      expect(res.status).toBe(404);
+      expect(await res.json()).toMatchObject({ error: { code: "zone.not_found" } });
+    }
+  });
 });

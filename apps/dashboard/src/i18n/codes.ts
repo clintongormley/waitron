@@ -522,6 +522,18 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "This table is in a floor plan; change it in the floor plan editor",
     es: "Esta mesa está en un plano de sala; cámbiala en el editor del plano",
   },
+  "table.booked": {
+    en: "This table has an upcoming booking. Move the booking first",
+    es: "Esta mesa tiene una reserva próxima. Mueve primero la reserva",
+  },
+  "floor_plan.changed": {
+    en: "This floor plan was changed elsewhere. Reload it and try again",
+    es: "Este plano de sala se cambió en otro sitio. Recárgalo y vuelve a intentarlo",
+  },
+  "floor_plan.invalid": {
+    en: "Check the floor plan's tables and try again",
+    es: "Revisa las mesas del plano de sala y vuelve a intentarlo",
+  },
   "tab.already_open": {
     en: "Another party is already seated at this table. Check the floor and try again",
     es: "Ya hay clientes sentados en esta mesa. Revisa la sala e inténtalo de nuevo",

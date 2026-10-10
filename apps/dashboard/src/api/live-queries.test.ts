@@ -43,6 +43,8 @@ it.each([
   ["listServers", [], "nodes"],
   ["getReceiptLanguage", [], "locations"],
   ["getBumpMode", [], "locations"],
+  ["getFloorPlan", ["z1"], "floor_plan_tables"],
+  ["getFloorPlan", ["z1"], "dining_tables"],
 ] as const)(
   "refreshes %s when its contributing %s query changes through %s",
   async (name, args, type) => {
