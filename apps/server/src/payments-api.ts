@@ -5,7 +5,7 @@ import "@waitron/layouts";
 import type { Hono } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
 import { and, eq, inArray, isNotNull, isNull, ne, sql } from "drizzle-orm";
-import { AppError, centsToDecimal, hasCode, isAppError } from "@waitron/shared";
+import { AppError, centsToDecimal, isAppError } from "@waitron/shared";
 import {
   billPaymentRefunds,
   billPayments,
@@ -550,7 +550,7 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
         } catch (error) {
           // A disconnect can land once no reader of this provider is active, which step (a) may
           // have just made true.
-          if (isAppError(error) && hasCode(error, "credentials.missing"))
+          if (isAppError(error) && error.code === "credentials.missing")
             throw new AppError("reader.provider_disconnected", { providerId: plan.provider });
           if (isAppError(error)) throw error;
           throw new AppError(

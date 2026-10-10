@@ -29,7 +29,9 @@ export type CardReaderDeletePlan = {
   impact: DeleteImpact;
   provider: string;
   providerRef: string;
-  /** Still paired at a provider whose seat can unpair: the delete unpairs it there first. */
+  /**
+   * Still paired at a connected provider whose seat can unpair: the delete unpairs it there first.
+   */
   unpairAtProvider: boolean;
 };
 
@@ -50,7 +52,10 @@ function refused<C extends RefusalCode>(
   return { refusal: { code, params, targets }, error: new AppError(code, params) };
 }
 
-/** The impact read, step (a) and the delete all call this, so each acts on exactly what it reports. */
+/**
+ * The impact read, step (a) and the delete all call this. The impact read passes
+ * `acceptRegistrationKept` true, so it reports what a delete sending the flag would do.
+ */
 async function cardReaderDeleteRules(
   tx: Transaction,
   seats: readonly CardProviderContribution[],
