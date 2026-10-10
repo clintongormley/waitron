@@ -5,6 +5,9 @@ import type { TicketIssuer, TillTicketView } from "./till-ticket-view.js";
 import type { OriginalReceiptPrint, TillSaleResult } from "../api/client.js";
 
 const result: TillSaleResult = {
+  receiptTrim: {},
+  venueAddress: [],
+  venueReceiptSettings: {},
   orderLabel: "Mesa 6",
   orderNumber: 41,
   invoiceNumber: "A/1",
@@ -246,12 +249,14 @@ describe.each(["light", "dark"] as const)("till-ticket-view a11y (%s theme)", (t
     const { host } = await mountWidget<TillTicketView>(
       "till-ticket-view",
       {
-        result,
-        issuer,
-        receipt: {
-          headerSubtitle: "Calle Mayor 1, Madrid",
-          footerMessage: "Gracias por su visita",
+        result: {
+          ...result,
+          receiptTrim: {
+            headerSubtitle: "Calle Mayor 1, Madrid",
+            footerMessage: "Gracias por su visita",
+          },
         },
+        issuer,
       },
       theme,
     );
@@ -262,15 +267,17 @@ describe.each(["light", "dark"] as const)("till-ticket-view a11y (%s theme)", (t
     const { host } = await mountWidget<TillTicketView>(
       "till-ticket-view",
       {
-        result,
-        issuer,
-        receipt: {
-          headerSubtitle: "El mejor jamón",
-          phone: "+34 912 345 678",
-          email: "hola@deli.es",
-          logo: `${"d".repeat(64)}.png`,
+        result: {
+          ...result,
+          receiptTrim: {
+            headerSubtitle: "El mejor jamón",
+            phone: "+34 912 345 678",
+            email: "hola@deli.es",
+            logo: `${"d".repeat(64)}.png`,
+          },
+          venueAddress: ["Calle Mayor 1", "28013 Madrid"],
         },
-        venueAddress: ["Calle Mayor 1", "28013 Madrid"],
+        issuer,
       },
       theme,
     );

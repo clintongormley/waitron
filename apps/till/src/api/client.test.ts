@@ -158,6 +158,9 @@ describe("TillApi", () => {
 
   it("recordSale POSTs lines+tender+workingOrderId with credentials and returns the ticket payload", async () => {
     const ticket = {
+      receiptTrim: { headerSubtitle: "Terraza", email: "terraza@example.com" },
+      venueAddress: ["Current Street"],
+      venueReceiptSettings: { printAddress: false },
       orderLabel: null,
       orderNumber: 1,
       invoiceNumber: "A/1",
@@ -455,7 +458,6 @@ describe("TillApi", () => {
         ],
       },
       capabilities: [],
-      receipt: { headerSubtitle: "Calle Mayor 1", footerMessage: "Gracias por su visita" },
     };
     const fetchStub = vi.fn().mockResolvedValue(jsonResponse(info));
     const api = new TillApi("", fetchStub);
@@ -471,12 +473,10 @@ describe("TillApi", () => {
     expect(init.body).toBeUndefined();
     expect(init.headers).toBeUndefined();
     expect(r).toEqual(info);
-    // The canvas + receipt survive the round-trip typed.
+    // The canvas survives the round-trip typed.
     expect(r.canvas.tabs[0].key).toBe("counter");
-    expect(r.receipt).toEqual({
-      headerSubtitle: "Calle Mayor 1",
-      footerMessage: "Gracias por su visita",
-    });
+    expect(r).not.toHaveProperty("receipt");
+    expect(r).not.toHaveProperty("venueAddress");
   });
 
   it("listStaff asks for every colleague, whatever the device's profile admits, when told to", async () => {
@@ -4529,6 +4529,9 @@ describe("TillApi: a bill's payments", () => {
       payment: { ...cashPayment, id: "pay-2", method: "card", tendered: null, change: null },
       balance: { ...balance, received: "20.00", outstanding: "10.00" },
       invoice: {
+        receiptTrim: {},
+        venueAddress: [],
+        venueReceiptSettings: {},
         orderLabel: "Mesa 4",
         orderNumber: 7,
         invoiceNumber: "A/9",

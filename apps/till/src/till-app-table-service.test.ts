@@ -116,6 +116,9 @@ const tabLine: TabLine = {
 };
 
 const saleResult: TillSaleResult = {
+  receiptTrim: {},
+  venueAddress: [],
+  venueReceiptSettings: {},
   orderLabel: null,
   orderNumber: 1,
   invoiceNumber: "F-0001",

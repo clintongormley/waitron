@@ -196,6 +196,9 @@ const smallPartyBill: PartyBill = {
 };
 
 const saleResult: TillSaleResult = {
+  receiptTrim: {},
+  venueAddress: [],
+  venueReceiptSettings: {},
   orderLabel: null,
   orderNumber: 1,
   invoiceNumber: "F-0001",
@@ -9853,56 +9856,114 @@ describe("till-app", () => {
     });
   });
 
-  // ---------------------------------------------------------------------------------------------
-  // Receipt editor: #boot reads `receipt` from GET /api/till and threads it to the ticket view. The
-  // `till` fixture above OMITS it, so it defaults to {}.
-  // ---------------------------------------------------------------------------------------------
-
   describe("receipt trim (design §8)", () => {
-    it("threads the receipt trim from getTill through to the ticket view", async () => {
+    it("shows each successive invoice presentation without boot or previous-answer text", async () => {
+      const presentations = [
+        {
+          receiptTrim: {
+            headerSubtitle: "Terraza",
+            phone: "910001111",
+            footerMessage: "Hasta pronto",
+          },
+          venueAddress: ["Current Street"],
+          venueReceiptSettings: {},
+        },
+        {
+          receiptTrim: { headerSubtitle: "Comedor", email: "comedor@example.com" },
+          venueAddress: ["Edited Street"],
+          venueReceiptSettings: { printAddress: false },
+        },
+        { receiptTrim: {}, venueAddress: [], venueReceiptSettings: {} },
+      ];
+      const recordSale = vi.fn();
+      for (const presentation of presentations)
+        recordSale.mockResolvedValueOnce({ ...saleResult, ...presentation });
+      const { el } = await mountApp({
+        recordSale,
+        getTill: vi.fn().mockResolvedValue({
+          ...till,
+          receipt: { headerSubtitle: "Stale boot" },
+          venueAddress: ["Stale boot street"],
+        }),
+      });
+      await toCounter(el);
+      for (const [index, presentation] of presentations.entries()) {
+        const c = counter(el)!;
+        c.store.addProduct(cafe, "2");
+        await flush(el);
+        emit(c, "confirm-payment", { method: "cash", amount: "5" });
+        await flush(el);
+        const view = ticket(el)!;
+        expect(view.result.receiptTrim).toEqual(presentation.receiptTrim);
+        expect(view.result.venueReceiptSettings).toEqual(presentation.venueReceiptSettings);
+        const printed = view.shadowRoot!.textContent!;
+        expect(printed).not.toContain("Stale boot");
+        expect(printed).not.toContain("Stale boot street");
+        if (index === 0) {
+          expect(printed).toContain("Terraza");
+          expect(printed).toContain("Current Street");
+        } else {
+          expect(printed).not.toContain("Terraza");
+          expect(printed).not.toContain("910001111");
+          expect(printed).not.toContain("Hasta pronto");
+          expect(printed).not.toContain("Current Street");
+          expect(printed).not.toContain("Edited Street");
+          if (index === 1) expect(printed).toContain("Comedor");
+          else {
+            expect(printed).not.toContain("Comedor");
+            expect(printed).not.toContain("comedor@example.com");
+          }
+        }
+        expect(view.result.tender).toEqual(saleResult.tender);
+        emit(view, "new-sale");
+        await flush(el);
+      }
+      expect(recordSale).toHaveBeenCalledTimes(3);
+    });
+    it("threads the invoice answer receipt trim through to the ticket view", async () => {
       const receipt = { headerSubtitle: "Calle Mayor 1", footerMessage: "Gracias por su visita" };
       const { el } = await mountApp({
-        getTill: vi.fn().mockResolvedValue({ ...till, receipt }),
+        recordSale: vi.fn().mockResolvedValue({ ...saleResult, receiptTrim: receipt }),
       });
       const c = await toCounter(el);
       c.store.addProduct(cafe, "2");
       await el.updateComplete;
       emit(c, "confirm-payment", { method: "cash", amount: "5" });
       await flush(el);
-      expect(ticket(el)!.receipt).toEqual(receipt);
+      expect(ticket(el)!.result.receiptTrim).toEqual(receipt);
     });
 
-    it("threads the location's printed address from getTill through to the ticket view", async () => {
+    it("threads the invoice answer current address through to the ticket view", async () => {
       const venueAddress = ["Calle Mayor 1", "28013 Madrid"];
       const { el } = await mountApp({
-        getTill: vi.fn().mockResolvedValue({ ...till, venueAddress }),
+        recordSale: vi.fn().mockResolvedValue({ ...saleResult, venueAddress }),
       });
       const c = await toCounter(el);
       c.store.addProduct(cafe, "2");
       await el.updateComplete;
       emit(c, "confirm-payment", { method: "cash", amount: "5" });
       await flush(el);
-      expect(ticket(el)!.venueAddress).toEqual(venueAddress);
+      expect(ticket(el)!.result.venueAddress).toEqual(venueAddress);
     });
 
-    it("defaults the ticket address to none when GET /api/till omits it", async () => {
+    it("keeps the empty address supplied by the invoice answer", async () => {
       const { el } = await mountApp();
       const c = await toCounter(el);
       c.store.addProduct(cafe, "2");
       await el.updateComplete;
       emit(c, "confirm-payment", { method: "cash", amount: "5" });
       await flush(el);
-      expect(ticket(el)!.venueAddress).toEqual([]);
+      expect(ticket(el)!.result.venueAddress).toEqual([]);
     });
 
-    it("defaults the ticket receipt to {} when GET /api/till omits it (older server)", async () => {
-      const { el } = await mountApp(); // the `till` fixture omits `receipt`
+    it("keeps the empty trim supplied by the invoice answer", async () => {
+      const { el } = await mountApp();
       const c = await toCounter(el);
       c.store.addProduct(cafe, "2");
       await el.updateComplete;
       emit(c, "confirm-payment", { method: "cash", amount: "5" });
       await flush(el);
-      expect(ticket(el)!.receipt).toEqual({});
+      expect(ticket(el)!.result.receiptTrim).toEqual({});
     });
   });
 
