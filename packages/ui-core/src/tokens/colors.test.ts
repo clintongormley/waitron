@@ -364,3 +364,39 @@ describe.each(["light", "dark"] as const)("calendar day colours (%s)", (theme) =
     expect(names.map((name) => token(byPreference, name))).toEqual(fromTheme);
   });
 });
+
+// The till map's table fills; its status dots are drawn on a --wt-color-surface ring.
+const TABLE_FILLS = ["free", "seated", "bill", "clearing", "reserved"].map(
+  (fill) => `--wt-color-table-${fill}`,
+);
+
+describe.each(["light", "dark"] as const)("table fill colours (%s)", (theme) => {
+  test("each fill has its own text colour, readable on it at 4.5:1 or more", () => {
+    const el = mount(theme);
+    for (const fill of TABLE_FILLS)
+      expect(ratio(token(el, onFill(fill)), token(el, fill)), fill).toBeGreaterThanOrEqual(4.5);
+  });
+
+  test("the five fills are different colours", () => {
+    const el = mount(theme);
+    expect(new Set(TABLE_FILLS.map((fill) => token(el, fill))).size).toBe(TABLE_FILLS.length);
+  });
+
+  test("the dots are readable on the surface ring at 3:1 or more", () => {
+    const el = mount(theme);
+    for (const dot of ["--wt-color-success", "--wt-color-danger"])
+      expect(ratio(token(el, dot), token(el, "--wt-color-surface")), dot).toBeGreaterThanOrEqual(3);
+  });
+
+  test("the OS preference gives them the same values as the explicit theme", async () => {
+    const names = TABLE_FILLS.flatMap((fill) => [fill, onFill(fill)]);
+    await commands.emulateColorScheme(theme === "light" ? "dark" : "light");
+    const explicit = mount(theme);
+    const fromTheme = names.map((name) => token(explicit, name));
+    expect(fromTheme).not.toContain("");
+    explicit.remove();
+    await commands.emulateColorScheme(theme);
+    const byPreference = mount();
+    expect(names.map((name) => token(byPreference, name))).toEqual(fromTheme);
+  });
+});
