@@ -1,3 +1,4 @@
+import { page } from "vitest/browser";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { setLocale } from "@waitron/dashboard-kit";
 import { applyTokens } from "@waitron/ui";
@@ -359,7 +360,7 @@ it("words the other refusals of a period under its line", async () => {
     params: { periodId: "bar-lunch", reason: "repeated" },
   };
   await el.updateComplete;
-  expect(linePeriods(el)[0]!.error).toBe("Lunch is in two lines.");
+  expect(linePeriods(el)[0]!.error).toBe("Lunch is in two routes.");
 });
 
 it("puts a refusal naming no shown line at the bottom", async () => {
@@ -479,7 +480,7 @@ it("speaks Spanish", async () => {
   setLocale("es");
   const el = await mount({ inheritedFrom: "Todas las zonas" });
   expect(one<Combobox>(el, "[name=target]")!.label).toBe("El resto del tiempo");
-  expect(button(el, "add-line")!.textContent!.trim()).toBe("+ Otra estación en algunos periodos");
+  expect(button(el, "add-line")!.textContent!.trim()).toBe("+ Añadir ruta");
   expect(one(el, "[data-test=inherited-from]")!.textContent!.trim()).toBe("De Todas las zonas");
 });
 
@@ -567,12 +568,12 @@ it("names each line's Remove by its periods, or by its place while it has none",
   expect(removeNames(el)).toEqual([
     "Remove Breakfast, Lunch (Dining)",
     "Remove Lunch (Bar)",
-    "Remove line 3",
+    "Remove route 3",
   ]);
   setLocale("es");
   const es = await mount({ periods: [{ periodId: "bar-lunch", target: up }] });
   await click(es, "add-line");
-  expect(removeNames(es)).toEqual(["Quitar Lunch (Bar)", "Quitar línea 2"]);
+  expect(removeNames(es)).toEqual(["Quitar Lunch (Bar)", "Quitar ruta 2"]);
 });
 
 it("says in Spanish which inherited periods were not copied", async () => {
@@ -722,3 +723,31 @@ describe("a stored line whose period's menus no longer offer the row", () => {
     expect(notes(el)).toEqual(["No está en los menús de Breakfast"]);
   });
 });
+
+it.each(
+  ([390, 1280] as const).flatMap((width) =>
+    (["en", "es"] as const).flatMap((locale) =>
+      (["light", "dark"] as const).map((theme) => ({ width, locale, theme })),
+    ),
+  ),
+)(
+  "names the add action as a route in $locale $theme at $width px",
+  async ({ locale, theme, width }) => {
+    const previous = { width: window.innerWidth, height: window.innerHeight };
+    try {
+      await page.viewport(width, 900);
+      setLocale(locale);
+      const el = await mount({ periods: [{ periodId: "lunch", target: down }] });
+      el.setAttribute("data-theme", theme);
+      await el.updateComplete;
+      expect(button(el, "add-line")!.textContent!.trim()).toBe(
+        locale === "en" ? "+ Add route" : "+ Añadir ruta",
+      );
+      await page.screenshot({
+        path: `__screenshots__/look/a457-route-editor-${locale}-${theme}-${width}.png`,
+      });
+    } finally {
+      await page.viewport(previous.width, previous.height);
+    }
+  },
+);
