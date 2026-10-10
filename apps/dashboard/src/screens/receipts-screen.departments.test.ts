@@ -496,3 +496,170 @@ it("does not paint an older language response after a new preview language is se
     expect(el.shadowRoot!.querySelector(".paper")?.textContent).toContain("Current Catalan"),
   );
 });
+
+function heldPreview() {
+  let resolve!: (value: ReceiptPreview) => void;
+  let reject!: (error: unknown) => void;
+  const promise = new Promise<ReceiptPreview>((yes, no) => {
+    resolve = yes;
+    reject = no;
+  });
+  return { promise, resolve, reject };
+}
+
+for (const refused of [false, true]) {
+  it(`ignores an older department draft preview's ${refused ? "refusal" : "paper"} after another edit`, async () => {
+    url("bar");
+    const { el, api } = await mount();
+    const child = await loadedEditor(el);
+    await vi.waitFor(() =>
+      expect(el.shadowRoot!.querySelector(".paper")?.textContent).toContain("bar: +34 912 345 678"),
+    );
+    const old = heldPreview();
+    const current = heldPreview();
+    api.previewReceiptDraft
+      .mockImplementationOnce(() => old.promise)
+      .mockImplementationOnce(() => current.promise);
+    try {
+      await fill(child, "email", "before@example.com");
+      await vi.waitFor(() => expect(api.previewReceiptDraft).toHaveBeenCalledTimes(2));
+      await fill(child, "email", "latest@example.com");
+      if (refused) old.reject({ code: "connection.failed" });
+      else old.resolve(preview("Obsolete draft"));
+      await vi.waitFor(() => expect(api.previewReceiptDraft).toHaveBeenCalledTimes(3));
+      await el.updateComplete;
+      expect(el.shadowRoot!.querySelector(".paper")?.textContent).toContain("bar: +34 912 345 678");
+      expect(el.shadowRoot!.querySelector("[data-test=preview-error]")).toBeNull();
+      expect(api.previewReceiptDraft.mock.lastCall?.[0].receipt).toEqual({
+        phone: "+34 912 345 678",
+        email: "latest@example.com",
+      });
+      current.resolve(preview("Latest draft"));
+      await vi.waitFor(() =>
+        expect(el.shadowRoot!.querySelector(".paper")?.textContent).toContain("Latest draft"),
+      );
+      expect(api.putDepartmentReceipt).not.toHaveBeenCalled();
+    } finally {
+      old.resolve(preview("Old settled"));
+      current.resolve(preview("Current settled"));
+    }
+  });
+}
+
+for (const venueOnly of [false, true]) {
+  for (const refused of [false, true]) {
+    it(`ignores an implicit-language ${refused ? "refusal" : "paper"} after saved language changes in a ${venueOnly ? "venue-only" : "department"} preview`, async () => {
+      url(venueOnly ? undefined : "bar");
+      const api = apiFixture(venueOnly ? [] : departments);
+      const { el } = await mount(api);
+      if (!venueOnly) await loadedEditor(el);
+      const request = venueOnly ? api.previewReceipt : api.previewReceiptDraft;
+      const initial = venueOnly ? "Venue only" : "bar: +34 912 345 678";
+      await vi.waitFor(() =>
+        expect(el.shadowRoot!.querySelector(".paper")?.textContent).toContain(initial),
+      );
+      const old = heldPreview();
+      const current = heldPreview();
+      request
+        .mockImplementationOnce(() => old.promise)
+        .mockImplementationOnce(() => current.promise);
+      try {
+        if (venueOnly) await fill(el, "headerSubtitle", "Updated venue");
+        else await fill(editor(el)!, "email", "bar@example.com");
+        await vi.waitFor(() => expect(request).toHaveBeenCalledTimes(2));
+        api.getReceiptLanguage.mockResolvedValue({
+          language: "ca-ES",
+          choices: ["es-ES", "ca-ES"],
+          fixed: null,
+        });
+        api.liveData.invalidate([{ type: "locations" }]);
+        await vi.waitFor(() => expect(previewLanguage(el)!.value).toBe("ca-ES"));
+        if (refused) old.reject({ code: "connection.failed" });
+        else old.resolve(preview("Obsolete Spanish"));
+        await vi.waitFor(() => expect(request).toHaveBeenCalledTimes(3));
+        await el.updateComplete;
+        expect(el.shadowRoot!.querySelector(".paper")?.textContent).toContain(initial);
+        expect(el.shadowRoot!.querySelector("[data-test=preview-error]")).toBeNull();
+        current.reject({ code: "connection.failed" });
+        await vi.waitFor(() =>
+          expect(el.shadowRoot!.querySelector("[data-test=preview-error]")).not.toBeNull(),
+        );
+        expect(el.shadowRoot!.querySelector(".paper")?.textContent).toContain(initial);
+        expect(api.putReceiptLanguage).not.toHaveBeenCalled();
+      } finally {
+        old.resolve(preview("Old settled"));
+        current.resolve(preview("Current settled"));
+      }
+    });
+  }
+}
+
+it("accepts an in-flight draft preview after an unchanged department snapshot", async () => {
+  url("bar");
+  const { el, api } = await mount();
+  const child = await loadedEditor(el);
+  await vi.waitFor(() => expect(api.previewReceiptDraft).toHaveBeenCalledOnce());
+  const held = heldPreview();
+  api.previewReceiptDraft.mockImplementationOnce(() => held.promise);
+  try {
+    await fill(child, "email", "bar@example.com");
+    await vi.waitFor(() => expect(api.previewReceiptDraft).toHaveBeenCalledTimes(2));
+    api.liveData.invalidate([{ type: "department_receipts" }]);
+    await vi.waitFor(() => expect(api.getDepartmentReceipt).toHaveBeenCalledTimes(2));
+    await child.updateComplete;
+    await el.updateComplete;
+    held.resolve(preview("Accepted unchanged draft"));
+    await vi.waitFor(() =>
+      expect(el.shadowRoot!.querySelector(".paper")?.textContent).toContain(
+        "Accepted unchanged draft",
+      ),
+    );
+    expect(api.previewReceiptDraft).toHaveBeenCalledTimes(2);
+    expect(api.putDepartmentReceipt).not.toHaveBeenCalled();
+  } finally {
+    held.resolve(preview("Settled draft"));
+  }
+});
+
+it("accepts the chosen preview language's paper when a different saved language changes", async () => {
+  url("bar");
+  const { el, api } = await mount();
+  await loadedEditor(el);
+  await vi.waitFor(() => expect(api.previewReceiptDraft).toHaveBeenCalledOnce());
+  const held = heldPreview();
+  const next = heldPreview();
+  api.previewReceiptDraft
+    .mockImplementationOnce(() => held.promise)
+    .mockImplementationOnce(() => next.promise);
+  try {
+    await chooseOption(previewLanguage(el)!, "ca-ES");
+    await vi.waitFor(() => expect(api.previewReceiptDraft).toHaveBeenCalledTimes(2));
+    api.getReceiptLanguage.mockResolvedValue({
+      language: "gl-ES",
+      choices: ["es-ES", "ca-ES", "gl-ES"],
+      fixed: null,
+    });
+    api.liveData.invalidate([{ type: "locations" }]);
+    await vi.waitFor(() =>
+      expect(
+        el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-combobox"]>(
+          "wt-combobox[name=receiptLanguage]",
+        )!.value,
+      ).toBe("gl-ES"),
+    );
+    expect(previewLanguage(el)!.value).toBe("ca-ES");
+    held.resolve(preview("Chosen Catalan"));
+    await vi.waitFor(() => expect(api.previewReceiptDraft).toHaveBeenCalledTimes(3));
+    await el.updateComplete;
+    expect(el.shadowRoot!.querySelector(".paper")?.textContent).toContain("Chosen Catalan");
+    expect(api.previewReceiptDraft.mock.lastCall?.[0].language).toBe("ca-ES");
+    next.resolve(preview("Refreshed Catalan"));
+    await vi.waitFor(() =>
+      expect(el.shadowRoot!.querySelector(".paper")?.textContent).toContain("Refreshed Catalan"),
+    );
+    expect(api.putReceiptLanguage).not.toHaveBeenCalled();
+  } finally {
+    held.resolve(preview("Held settled"));
+    next.resolve(preview("Next settled"));
+  }
+});

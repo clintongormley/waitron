@@ -1376,6 +1376,8 @@ _Formerly entries spread across the old sections, A261's venue-operations steps 
   the independent venue defaults editor is mounted and feeds draft previews and inherited hints.
   Its text drafts compare and submit trimmed values, accept untouched fields from live reads
   alongside a dirty field, and keep an outstanding leave choice open on unchanged refreshes.
+  Held-response browser cases now cover older paper/errors after department edits and saved-language
+  refreshes, plus unchanged snapshots and explicit preview-language choices.
   Retiring the legacy combined form, remaining page lifecycle checks and branch review stay
   open after landed 3A/6A. Core email consent removal stays separate.
   Keep live venue defaults, omit optional current address on A4, and add no consent step.

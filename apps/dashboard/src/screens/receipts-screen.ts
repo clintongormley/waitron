@@ -494,7 +494,9 @@ export class ReceiptsScreen extends LitElement {
   ): void {
     event.stopPropagation();
     if (event.detail.departmentId !== this.previewDepartmentId) return;
+    if (sameValue(this.departmentDraft, event.detail.receipt)) return;
     this.departmentDraft = structuredClone(event.detail.receipt);
+    this.#departmentGeneration++;
     this.#schedulePreview();
   }
 
@@ -806,6 +808,7 @@ export class ReceiptsScreen extends LitElement {
   }
 
   #redrawInSavedLanguage(): void {
+    if (this.chosenPreviewLanguage === null) this.#departmentGeneration++;
     this.#previewRequested = null;
     void this.#sendPreview();
   }

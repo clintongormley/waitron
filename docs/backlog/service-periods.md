@@ -46,7 +46,9 @@ their full text.
   previews and a separate preview-language picker. The independent venue defaults editor is
   mounted on that branch with its own query/save scope, refusal and reconnect checks;
   its authored draft feeds preview and inherited department hints. Language/description have
-  separate actions. Remaining page lifecycle checks and caller retirement remain.
+  separate actions. Held-response browser cases cover older paper/errors after department edits
+  and saved-language refreshes, plus unchanged snapshots and explicit preview-language choices.
+  Remaining page lifecycle checks and caller retirement remain.
   This documentation revision is complete: venue logo/subtitle/footer stay live defaults,
   A4 omits optional current address, and slice 7 adds no consent step. The separate core
   delivery rewrite is [one backlog entry](printers.md#remove-the-consent-step-from-emailed-receipts).
