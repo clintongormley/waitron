@@ -119,6 +119,81 @@ it("says fixed in the words its copy gives", async () => {
   expect(button(el, "t2").getAttribute("aria-label")).toBe("T2, Fija");
 });
 
+const refusedTable = (
+  key: string,
+  label: string,
+  refused: string,
+  over: Partial<PlanPlacement> = {},
+) => ({ ...table(key, label, over), refused }) satisfies PlanCanvasTable;
+
+const reasonOf = (el: WtFloorPlanCanvas, key: string) =>
+  el.shadowRoot!.querySelector<HTMLElement>(`[part="refused-reason"][data-key="${key}"]`);
+
+it("outlines a refused table in the error colour from a token, and no other table", async () => {
+  const el = await canvas([
+    refusedTable("t1", "T1", "Booked 12 Oct, 21:00"),
+    table("t2", "T2", { x: 10 }),
+  ]);
+  host.style.setProperty("--wt-color-danger", "rgb(7, 8, 9)");
+  const refused = getComputedStyle(button(el, "t1"));
+  expect(refused.outlineColor).toBe("rgb(7, 8, 9)");
+  expect(refused.outlineStyle).toBe("solid");
+  expect(refused.outlineWidth).toBe("2px");
+  expect(getComputedStyle(reasonOf(el, "t1")!).color).toBe("rgb(7, 8, 9)");
+  expect(getComputedStyle(button(el, "t2")).outlineStyle).toBe("none");
+});
+
+it("writes a refused table's reason below it, outside a round table's clip", async () => {
+  const el = await canvas([
+    refusedTable("r", "R", "Booked 12 Oct, 21:00", {
+      x: 4,
+      y: 2,
+      width: 4,
+      height: 4,
+      shape: "round",
+    }),
+    table("s", "S", { x: 12 }),
+  ]);
+  await settled(el);
+  const reason = reasonOf(el, "r")!;
+  expect(reason.textContent!.trim()).toBe("Booked 12 Oct, 21:00");
+  expect(reason.closest("button")).toBeNull();
+  const label = reason.getBoundingClientRect();
+  const box = button(el, "r").getBoundingClientRect();
+  expect(label.width).toBeGreaterThan(box.width);
+  expect(label.top).toBeGreaterThanOrEqual(box.bottom);
+  expect(reasonOf(el, "s")).toBeNull();
+});
+
+it("writes a selected refused table's reason below its handle when the handle is below", async () => {
+  const el = await canvas([refusedTable("t1", "T1", "Booked at 21:00", { y: 1 })], {
+    selected: "t1",
+  });
+  await settled(el);
+  const handle = part(el, "rotate-handle").getBoundingClientRect();
+  expect(handle.top).toBeGreaterThanOrEqual(button(el, "t1").getBoundingClientRect().bottom);
+  expect(reasonOf(el, "t1")!.getBoundingClientRect().top).toBeGreaterThanOrEqual(handle.bottom);
+});
+
+it("keeps room in the grid for the reason of a refused table at the bottom", async () => {
+  const el = await canvas([refusedTable("t1", "T1", "Booked at 21:00", { y: 22 })]);
+  await settled(el);
+  const grid = part(el, "grid").getBoundingClientRect();
+  const label = reasonOf(el, "t1")!.getBoundingClientRect();
+  expect(label.top).toBeGreaterThanOrEqual(button(el, "t1").getBoundingClientRect().bottom);
+  expect(label.bottom).toBeLessThanOrEqual(grid.bottom);
+});
+
+it("gives a refused table its reason as its accessible description", async () => {
+  const el = await canvas([
+    refusedTable("t1", "T1", "Booked 12 Oct, 21:00"),
+    table("t2", "T2", { x: 10 }),
+  ]);
+  await expect.element(button(el, "t1")).toHaveAccessibleDescription("Booked 12 Oct, 21:00");
+  await expect.element(button(el, "t1")).toHaveAccessibleName("T1");
+  expect(button(el, "t2").hasAttribute("aria-describedby")).toBe(false);
+});
+
 it("hides a name drawn under 28 px and keeps it as the accessible name", async () => {
   const el = await canvas([
     table("small", "Bar 1", { width: 2, height: 2 }),

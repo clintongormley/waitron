@@ -199,6 +199,13 @@ export function deleteTable(draft: FloorPlanDraft, key: string): FloorPlanDraft 
   };
 }
 
+/** Puts a table back, as given, after the others. */
+export function restoreTable(draft: FloorPlanDraft, table: DraftTable): FloorPlanDraft {
+  if (draft.tables.some((t) => t.key === table.key)) return draft;
+  const placement = table.placement === null ? null : { ...table.placement };
+  return { ...draft, tables: [...draft.tables, { ...table, placement }] };
+}
+
 export function addTables(
   draft: FloorPlanDraft,
   tables: { label: string; seats: number | null; fixed: boolean }[],

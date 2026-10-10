@@ -24,6 +24,8 @@ export interface PlanCanvasTable {
   label: string;
   fixed: boolean;
   placement: PlanPlacement;
+  /** Why the last save could not remove this table; drawn beside it and read as its description. */
+  refused?: string;
 }
 
 export interface FloorPlanCanvasCopy {
@@ -137,6 +139,21 @@ export class WtFloorPlanCanvas extends LitElement {
       .table[aria-pressed="true"] {
         border-color: var(--wt-color-primary);
         box-shadow: inset 0 0 0 1px var(--wt-color-primary);
+      }
+
+      .table[data-refused] {
+        outline: 2px solid var(--wt-color-danger);
+      }
+
+      .refused-reason {
+        position: absolute;
+        padding: 0 var(--wt-space-1);
+        border-radius: var(--wt-radius-sm);
+        background: var(--wt-color-surface);
+        color: var(--wt-color-danger);
+        font-size: var(--wt-font-size-sm);
+        text-wrap: nowrap;
+        pointer-events: none;
       }
 
       .name {
@@ -278,6 +295,8 @@ export class WtFloorPlanCanvas extends LitElement {
         data-shape=${p.shape}
         aria-pressed=${t.key === this.selected ? "true" : "false"}
         aria-label=${t.fixed ? `${t.label}, ${copy.fixed}` : t.label}
+        aria-describedby=${t.refused === undefined ? nothing : `reason-${t.key}`}
+        ?data-refused=${t.refused !== undefined}
         style=${style}
         @click=${(e: Event) => this.#onTableClick(e, t.key)}
         @pointerdown=${(e: PointerEvent) => this.#onPointerDown(e, t, "move")}
@@ -286,14 +305,36 @@ export class WtFloorPlanCanvas extends LitElement {
         ${showsName(p, GRID_SQUARE_PX) ? html`<span class="name">${t.label}</span>` : nothing}
         ${t.fixed ? html`<span class="fixed-marker" part="fixed-marker"></span>` : nothing}
       </button>
+      ${t.refused === undefined ? nothing : this.#renderReason(t, p)}
       ${t.key === this.selected ? this.#renderHandle(t, p, copy) : nothing}
     `;
   }
 
+  /** Outside the table's button, so a round table's clip never cuts it. Always below, past the
+   *  handle when that is below too: the grid runs `gridExtent`'s margin past the lowest table. */
+  #renderReason(t: PlanCanvasTable, p: PlanPlacement): TemplateResult {
+    const box = rotatedRect(p);
+    const handleBelow = t.key === this.selected && !this.#handleAbove(t);
+    const style = styleMap({
+      left: px(box.x + box.width / 2),
+      top: handleBelow
+        ? `calc(${px(box.y + box.height)} + var(--wt-tap-min) + 2 * var(--wt-space-1))`
+        : `calc(${px(box.y + box.height)} + var(--wt-space-1))`,
+      transform: "translateX(-50%)",
+    });
+    return html`<span
+      class="refused-reason"
+      part="refused-reason"
+      id="reason-${t.key}"
+      data-key=${t.key}
+      style=${style}
+      >${t.refused}</span
+    >`;
+  }
+
   #renderHandle(t: PlanCanvasTable, p: PlanPlacement, copy: FloorPlanCanvasCopy): TemplateResult {
     const box = rotatedRect(p);
-    // The side follows the table's saved place, so it does not jump while a drag is drawn.
-    const above = rotatedRect(t.placement).y * GRID_SQUARE_PX >= this.#handleRoom();
+    const above = this.#handleAbove(t);
     const style = styleMap({
       left: px(box.x + box.width / 2),
       top: above
@@ -314,6 +355,11 @@ export class WtFloorPlanCanvas extends LitElement {
         <wt-icon name="floor-plan-rotate" size="lg"></wt-icon>
       </button>
     `;
+  }
+
+  /** The side follows the table's saved place, so it does not jump while a drag is drawn. */
+  #handleAbove(t: PlanCanvasTable): boolean {
+    return rotatedRect(t.placement).y * GRID_SQUARE_PX >= this.#handleRoom();
   }
 
   /** The handle's size and its gap in px, read once rather than on every redraw of a drag. */

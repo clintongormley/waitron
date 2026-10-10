@@ -29,6 +29,7 @@ import {
   draftFromPlan,
   moveTable,
   rekeyDraft,
+  restoreTable,
   rotateTable,
   sameDraft,
   saveFromDraft,
@@ -106,6 +107,27 @@ function tableProblem(
 }
 
 const actionMessage = (text: () => string): EditorMessage => ({ text, from: "action" });
+
+/** A table a save could not delete, put back; the mark lasts while the draft holds this object. */
+interface RefusedTable {
+  table: DraftTable;
+  reason: () => string;
+}
+
+/** `date` is read from its parts in UTC, so no time zone moves it to another day. */
+function bookedReason(params: Record<string, unknown>): string {
+  const { date, time } = params;
+  if (typeof date !== "string" || typeof time !== "string") return codeMessage("table.booked");
+  const [year, month, day] = date.split("-").map(Number);
+  const shortDate = new Intl.DateTimeFormat(currentLocale(), {
+    day: "numeric",
+    month: "short",
+    timeZone: "UTC",
+  }).format(new Date(Date.UTC(year!, month! - 1, day)));
+  return t("floor_plan_editor.booked").replace(/\{(date|time)\}/g, (_, slot: string) =>
+    slot === "date" ? shortDate : time,
+  );
+}
 
 /** The server stores labels trimmed; tables sent with a padded label take the trimmed one. */
 function trimLabels(draft: FloorPlanDraft, sent: FloorPlanDraft = draft): FloorPlanDraft {
@@ -229,6 +251,7 @@ export class FloorPlanEditor extends LitElement {
   @state() private loadingNewer = false;
   @state() private narrow = false;
   @state() private sheetOpen = false;
+  @state() private refused: RefusedTable | null = null;
 
   /** The field a refusal or the editor's own check points at, for the side panels. */
   get fieldError(): FloorPlanFieldError | null {
@@ -300,6 +323,7 @@ export class FloorPlanEditor extends LitElement {
         this.draft = value;
         this.#history?.reset(value);
         this.selected = null;
+        this.refused = null;
         this.#clearMark();
       },
     }).scope;
@@ -332,6 +356,7 @@ export class FloorPlanEditor extends LitElement {
     this.message = null;
     this.outOfDate = false;
     this.mark = null;
+    this.refused = null;
     this.sent = null;
     if (zoneId !== null) void this.#load(zoneId, request);
   }
@@ -364,6 +389,7 @@ export class FloorPlanEditor extends LitElement {
     this.draft = next;
     this.#clearReadMessage();
     this.#followMark(next);
+    this.#followRefused(next);
     this.#scope?.changed();
     this.requestUpdate();
   }
@@ -373,6 +399,7 @@ export class FloorPlanEditor extends LitElement {
     this.draft = next;
     this.#clearReadMessage();
     this.#followMark(next);
+    this.#followRefused(next);
     if (this.selected !== null && !next.tables.some((table) => table.key === this.selected)) {
       this.selected = null;
     }
@@ -425,6 +452,19 @@ export class FloorPlanEditor extends LitElement {
     });
   }
 
+  #followRefused(next: FloorPlanDraft): void {
+    const refused = this.refused;
+    if (refused !== null && !next.tables.includes(refused.table)) this.refused = null;
+  }
+
+  /** Puts a table the save could not delete back as opened, one undo step, marked and selected. */
+  #restoreRefused(table: DraftTable, params: Record<string, unknown>): void {
+    this.#change(restoreTable(this.draft!, table));
+    const restored = this.draft!.tables.find((t) => t.key === table.key)!;
+    this.refused = { table: restored, reason: () => bookedReason(params) };
+    this.#selectFlagged(restored.key);
+  }
+
   /** A check's mark follows the draft until it passes; a refusal's goes when its field changes. */
   #followMark(next: FloorPlanDraft): void {
     const mark = this.mark;
@@ -458,13 +498,9 @@ export class FloorPlanEditor extends LitElement {
       serverField = named?.[2];
     } else if (code === "table.booked" && typeof params.tableId === "string") {
       const tableId = params.tableId;
-      const label = this.plan!.tables.find((t) => t.liveTableId === tableId)?.label;
-      if (label !== undefined) {
-        this.message = actionMessage(() =>
-          t("floor_plan_editor.booked").replace(/\{(name|message)\}/g, (_, slot: string) =>
-            slot === "name" ? label : own(),
-          ),
-        );
+      const table = draftFromPlan(this.plan!).tables.find((t) => t.liveTableId === tableId);
+      if (table !== undefined) {
+        this.#restoreRefused(table, params);
         return;
       }
     }
@@ -495,6 +531,7 @@ export class FloorPlanEditor extends LitElement {
     this.saving = true;
     this.message = null;
     this.mark = null;
+    this.refused = null;
     let answer: { revision: number; ids: Record<string, string> };
     try {
       answer = await this.api.saveFloorPlan(zoneId, body);
@@ -550,6 +587,7 @@ export class FloorPlanEditor extends LitElement {
       this.outOfDate = false;
       this.message = null;
       this.mark = null;
+      this.refused = null;
     } else if (!saveActionState(this.#scope).unchanged) {
       return;
     }
@@ -582,11 +620,21 @@ export class FloorPlanEditor extends LitElement {
   };
 
   #tablesFor: FloorPlanDraft | null = null;
+  #tablesRefused: RefusedTable | null = null;
+  #tablesLocale: string | null = null;
   #tables: PlanCanvasTable[] = [];
 
   #canvasTables(draft: FloorPlanDraft): PlanCanvasTable[] {
-    if (draft !== this.#tablesFor) {
+    const refused = this.refused;
+    const locale = currentLocale();
+    if (
+      draft !== this.#tablesFor ||
+      refused !== this.#tablesRefused ||
+      locale !== this.#tablesLocale
+    ) {
       this.#tablesFor = draft;
+      this.#tablesRefused = refused;
+      this.#tablesLocale = locale;
       this.#tables = draft.tables.flatMap((table) =>
         table.placement === null
           ? []
@@ -596,6 +644,7 @@ export class FloorPlanEditor extends LitElement {
                 label: table.label,
                 fixed: table.fixed,
                 placement: table.placement,
+                ...(refused?.table === table ? { refused: refused.reason() } : {}),
               },
             ],
       );
@@ -631,6 +680,11 @@ export class FloorPlanEditor extends LitElement {
     const panel = html`<floor-plan-tables-panel
       .draft=${draft}
       .selected=${this.selected}
+      .refused=${
+        this.refused === null
+          ? null
+          : { key: this.refused.table.key, reason: this.refused.reason() }
+      }
       .inSheet=${this.narrow}
     ></floor-plan-tables-panel>`;
     return html`<div class="layout ${this.narrow ? "narrow" : ""}">

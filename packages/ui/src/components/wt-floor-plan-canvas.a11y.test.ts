@@ -61,6 +61,16 @@ describe.each(["light", "dark"] as const)("wt-floor-plan-canvas a11y (%s theme)"
     await expectNoA11yViolations(host);
   });
 
+  test("refused tables, outlined with their reasons, one selected and one round", async () => {
+    const refused = [
+      { ...tables[0]!, refused: "Booked 12 Oct, 21:00" },
+      { ...tables[1]!, refused: "Booked 13 Oct, 13:30" },
+      tables[2]!,
+    ];
+    await mountCanvas(theme, { tables: refused, selected: "t1" });
+    await expectNoA11yViolations(host);
+  });
+
   test("a selected table at the top with its rotation handle below it", async () => {
     await mountCanvas(theme, { tables, selected: "b1" });
     await expectNoA11yViolations(host);

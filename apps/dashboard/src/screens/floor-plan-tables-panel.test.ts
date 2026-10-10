@@ -126,3 +126,12 @@ it("leaves out its heading inside a sheet, whose toggle already names it", async
   const el = await open({ inSheet: true });
   expect(el.shadowRoot!.querySelector("h2")).toBeNull();
 });
+
+it("writes a refused table's reason after its name in the error colour", async () => {
+  const el = await open({ refused: { key: "m2", reason: "Booked 12 Oct, 21:00" } });
+  el.style.setProperty("--wt-color-danger", "rgb(7, 8, 9)");
+  const refusedRow = rows(el).find((r) => r.dataset.table === "m2")!;
+  expect(refusedRow.textContent!.trim()).toBe("Terrace 10 — Booked 12 Oct, 21:00");
+  expect(getComputedStyle(refusedRow.querySelector(".refused")!).color).toBe("rgb(7, 8, 9)");
+  expect(row(el, "Terrace 2").querySelector(".refused")).toBeNull();
+});

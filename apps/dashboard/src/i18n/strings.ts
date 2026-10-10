@@ -959,7 +959,7 @@ export const en = {
   "floor_plan_editor.fixed": "Fixed",
   "floor_plan_editor.rotate": "Rotate {name}",
   "floor_plan_editor.name_missing": "Enter a name.",
-  "floor_plan_editor.booked": "{name}: {message}",
+  "floor_plan_editor.booked": "Booked {date}, {time}",
   "floor_plan_editor.first_note":
     "Your first save updates the till's tables. After that, saved changes wait for the next business day.",
   "floor_plan_editor.note":
@@ -3507,7 +3507,7 @@ export const es: Record<StringKey, string> = {
   "floor_plan_editor.fixed": "Fija",
   "floor_plan_editor.rotate": "Girar {name}",
   "floor_plan_editor.name_missing": "Escribe un nombre.",
-  "floor_plan_editor.booked": "{name}: {message}",
+  "floor_plan_editor.booked": "Reservada el {date}, {time}",
   "floor_plan_editor.first_note":
     "El primer guardado actualiza las mesas de la caja. Después, los cambios guardados esperan al siguiente día de actividad.",
   "floor_plan_editor.note":

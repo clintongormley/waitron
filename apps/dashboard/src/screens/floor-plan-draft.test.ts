@@ -12,6 +12,7 @@ import {
   placeTable,
   rekeyDraft,
   removeJoin,
+  restoreTable,
   rotateTable,
   sameDraft,
   saveFromDraft,
@@ -369,5 +370,21 @@ describe("floor plan draft", () => {
     expect(table(p, "m1")).toEqual({ ...table(d, "m1"), label: "Bar", seats: null });
     expect(table(p, "m2")).toEqual(table(d, "m2"));
     expect(table(d, "m1").label).toBe("T1");
+  });
+
+  it("restores a deleted table as it was opened, at the end, leaving the rest alone", () => {
+    const opened = open();
+    const moved = moveTable(deleteTable(opened, "m1"), "m2", 0, 0);
+    const restored = restoreTable(moved, table(opened, "m1"));
+    expect(restored.tables.map((t) => t.key)).toEqual(["m2", "live:l9", "m1"]);
+    expect(table(restored, "m1")).toEqual(table(opened, "m1"));
+    expect(table(restored, "m1").placement).not.toBe(table(opened, "m1").placement);
+    expect(restored.joins).toEqual(moved.joins);
+    expect(moved.tables.some((t) => t.key === "m1")).toBe(false);
+  });
+
+  it("returns the draft itself when the key is already in it", () => {
+    const d = open();
+    expect(restoreTable(d, { ...table(d, "m2"), label: "Other" })).toBe(d);
   });
 });

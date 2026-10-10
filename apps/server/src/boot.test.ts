@@ -2395,7 +2395,10 @@ describe("startServer, against a migrated venue directory", () => {
       });
       expect(removal.status).toBe(409);
       expect(await removal.json()).toMatchObject({
-        error: { code: "table.booked", params: { tableId: liveTableId } },
+        error: {
+          code: "table.booked",
+          params: { tableId: liveTableId, date: "2099-01-01", time: "20:00" },
+        },
       });
     } finally {
       await server.close();

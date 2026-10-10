@@ -1954,7 +1954,9 @@ disabled while `checkDraft` still fails. On a refusal from the server: decisions
 `tables.<i>` read through Task 2.4d's `sent` body; a `table.label_taken` whose label no draft table
 carries, and any refusal not named there, shows its own sentence above the buttons. These are
 action messages (Task 2.4d's slot). New strings: `floor_plan_editor.name_missing` "Enter a name." /
-"Escribe un nombre."; `floor_plan_editor.booked` "{name}: {message}" (both languages).
+"Escribe un nombre."; `floor_plan_editor.booked` "{name}: {message}" (both languages). (Owner
+2026-10-10: a `table.booked` refusal now puts the table back, marked, with no message above the
+buttons, and the string is now "Booked {date}, {time}" / "Reservada el {date}, {time}", Task 2.4f.)
 
 - [ ] **Step 1: Write the failing tests** in `floor-plan-editor.refusals.test.ts` (Task 2.4a's
   fixture plan; changes by dispatching `floor-plan-change`). The file imports

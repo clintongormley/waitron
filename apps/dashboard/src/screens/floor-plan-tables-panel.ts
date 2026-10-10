@@ -28,6 +28,9 @@ export class FloorPlanTablesPanel extends LitElement {
       wt-button {
         display: block;
       }
+      .refused {
+        color: var(--wt-color-danger);
+      }
       wt-button[data-placed]::part(button) {
         color: var(--wt-color-text-muted);
         font-weight: var(--wt-font-weight-normal);
@@ -37,6 +40,8 @@ export class FloorPlanTablesPanel extends LitElement {
 
   @property({ attribute: false }) draft!: FloorPlanDraft;
   @property() selected: string | null = null;
+  /** A table a save could not delete, with why. */
+  @property({ attribute: false }) refused: { key: string; reason: string } | null = null;
   /** Inside a `wt-sheet` the toggle names the list, so the panel drops its own heading. */
   @property({ type: Boolean }) inSheet = false;
   @property() zoneName = "";
@@ -88,7 +93,11 @@ export class FloorPlanTablesPanel extends LitElement {
                 data-table=${table.key}
                 ?data-placed=${table.placement !== null}
                 @click=${() => this.#press(table)}
-                >${table.label.trim() || t("floor_plan_editor.unnamed")}</wt-button
+                >${table.label.trim() || t("floor_plan_editor.unnamed")}${
+                  this.refused?.key === table.key
+                    ? html`<span class="refused"> — ${this.refused.reason}</span>`
+                    : nothing
+                }</wt-button
               >
             </li>`,
         )}
