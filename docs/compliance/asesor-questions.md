@@ -1750,13 +1750,15 @@ so there is nothing on the document that says who each *duplicado* belongs to.
   button once one print has been queued (`#onPrintReceipt`, `apps/till/src/till-app.ts`); the server
   does not refuse a second original. A person with `print.resend` can resend a job from the
   dashboard's Printers screen once its automatic delivery has ended, whether it failed or
-  succeeded (`canResendPrintJob`, `packages/printing/src/outbox.ts`) _(2026-10-10, A435-2: not
-  once the job's printer has been deleted; `resendPrintJob` then answers `printer.not_found`)_. A resend sends the same bytes
+  succeeded (`canResendPrintJob`, `packages/printing/src/outbox.ts`). A resend sends the same bytes
   again, so an original that failed to print comes out as an original. That is the case (d) asks
   the advisor to confirm. Resending a print that succeeded also prints another original.
 - **(e)** Staff can print a slip for each card payment on its own: *JUSTIFICANTE DE PAGO — Este
   documento no es una factura*, with no invoice number, series or QR code
   (`apps/server/src/payment-slip.ts`).
+
+**Source update, 2026-10-10 (A435-2):** for (d), a job whose printer was deleted cannot be resent;
+`resendPrintJob` answers `printer.not_found`.
 
 > **(a)** En un establecimiento de hostelería que expide **facturas simplificadas**, cuando varios
 > clientes comparten mesa y desean cada uno su propio justificante, ¿es conforme a derecho expedir una

@@ -4865,7 +4865,7 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
   [Spec](superpowers/specs/2026-10-08-delete-and-archive-design.md),
   [product archive plan](superpowers/plans/2026-10-08-a435-1-product-archive.md).
 - **A435 step 3 — card readers: open, next.** Add permanent Delete beside Disable.
-- **A435 step 4 — devices: open, following printers in the build order.** Add permanent Delete beside Disable.
+- **A435 step 4 — devices: open, following card readers in the build order.** Add permanent Delete beside Disable.
 - **A435 step 5 — courses and kitchen stations: open, following devices in the build order.** Replace Disable with Delete,
   and drop the list's Status column and Status filter, which no longer have anything to show (owner,
   2026-10-10); first check what else the Status cell shows, as Products' carried its Unavailable badge (A463).
@@ -4873,19 +4873,23 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
   Disable with Delete, and drop each list's Status column and Status filter as in step 5 (owner, 2026-10-10).
   Printers, card readers and devices keep both, because they keep Disable. Each remaining step follows the
   linked spec and preserves recorded history.
-- **Printer delete wording for the owner to choose (left open by A435 step 2).** The till's status
-  for an original whose printer was deleted shows the error code's sentence ("…this job will not be
-  retried."), where its neighbours speak of "the original"; the Spanish for `printer.deleted` reads
-  "por lo que no se volverá a intentar este trabajo" where `printer.unpaired` says "así que este
-  trabajo no se volverá a intentar"; and shorter copy was offered for the till sentence, "Trabajo
-  que finalizará" and the per-default lines of the delete dialog.
-- **Printer delete code health (left open by A435 step 2).** `refuseDeletedPrinters` lives in
-  `@waitron/layouts` though `@waitron/printing` owns printers and `printer.not_found`;
-  `deletePrinter` writes the device choices, profile lists and holders that layouts owns, where one
-  layouts function could clear them; and several queries that already require an active printer or
-  a live job also filter `deleted_at`, where one test pinning "deleted means switched off with no
-  live jobs" could replace the copies.
 
+- **The till's status for an original whose printer was deleted uses the error code's sentence**
+  ("…this job will not be retried."), where its neighbours speak of "the original". Owner to choose
+  the wording. Left open by A435 step 2.
+- **The Spanish for `printer.deleted` breaks its twin's pattern**: "por lo que no se volverá a
+  intentar este trabajo" where `printer.unpaired` says "así que este trabajo no se volverá a
+  intentar". Left open by A435 step 2.
+- **Shorter printer-delete copy was offered to the owner during the build**: for the till's
+  deleted-printer sentence, "Trabajo que finalizará", and one dialog line per inherited default.
+  Left open by A435 step 2.
+- **`refuseDeletedPrinters` lives in `@waitron/layouts`** though `@waitron/printing` holds the
+  printer functions and `printer.not_found`'s registry. Left open by A435 step 2.
+- **`deletePrinter` writes the device choices, profile lists and holders that layouts owns**; one
+  layouts function could clear them. Left open by A435 step 2.
+- **Several printer queries that already require an active printer or a live job also filter
+  `deleted_at`**; one test pinning "deleted means switched off with no live jobs" could replace the
+  copies. Left open by A435 step 2.
 
 - **`modules.json` has no flow-down channel** from a primary to its standby (matters under
   _Afterwards_, designed now that bookings is genuinely toggleable), and a toggleable module that is

@@ -9,8 +9,9 @@ import "./wt-button.js";
 import "./wt-form-actions.js";
 import "./wt-spinner.js";
 
-/** Every word the dialog shows, in the screen's language. `item` and `refusal` write one whole line
- * each, names included; the dialog adds no words of its own. */
+/** Every fixed word the dialog shows, in the screen's language; the record's own name comes from the
+ * impact's `target.name`. `item` and `refusal` write one whole line each, names included; the dialog
+ * adds no words of its own. */
 export type DeleteDialogCopy = {
   heading: string;
   refusals: string;

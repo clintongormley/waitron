@@ -1,4 +1,3 @@
-import "./errors.js";
 import { and, eq, inArray, isNull, or } from "drizzle-orm";
 import {
   AppError,
@@ -64,7 +63,7 @@ async function printerDeleteRules(tx: Transaction, cfg: PrintConfig, id: string)
         inArray(invoiceDeliveries.status, ["queued", "sending"]),
       ),
     );
-  const invoiceJobIds = [...new Set(deliveries.map((row) => row.printJobId))];
+  const invoiceJobIds = deliveries.map((row) => row.printJobId);
   const holders = await tx
     .select({ id: devices.id, name: devices.label })
     .from(printerHolders)

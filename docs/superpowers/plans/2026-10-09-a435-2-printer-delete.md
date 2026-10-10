@@ -123,7 +123,7 @@ endDeletedPrinterJobs(tx: Transaction, printerId: string): Promise<string[]>
 
 Both printing functions use one private `printerDeleteJobPredicate(printerId: string): SQL`; the impact rules call the read function, and the update uses the same predicate. The transaction prevents another writer changing the selected set between them.
 
-Produce `endDeletedInvoicePrintDeliveries(tx: Transaction, jobIds: string[], now?: Date): Promise<void>` in server `invoice-print.ts`. Keep `endDeactivatedInvoicePrintDeliveries` and its existing call sites for Disable.
+Produce `endDeletedInvoicePrintDeliveries(tx: Transaction, jobIds: string[], now?: Date): Promise<void>` in server `invoice-print.ts`. Keep `endDeactivatedInvoicePrintDeliveries` and its existing call sites for Disable. _(2026-10-10: removed in the review fixes; the delete calls `endInvoicePrintDeliveries`.)_
 
 Create `packages/ui/src/components/wt-delete-dialog.ts`, export `WtDeleteDialog` and `DeleteDialogCopy` via `packages/ui/src/index.ts`:
 
