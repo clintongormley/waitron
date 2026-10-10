@@ -1176,6 +1176,12 @@ describe("permanent delete", () => {
         deleteCourse: vi.fn().mockResolvedValue(impact),
       });
       const { el } = await mount(api);
+      expect(
+        q<HTMLElement & { label: string }>(el, 'tr[data-course="c1"] wt-row-actions')!.label,
+      ).toBe("Course actions: Starters");
+      expect(
+        q<HTMLElement & { label: string }>(el, 'tr[data-course="c2"] wt-row-actions')!.label,
+      ).toBe("Course actions: Mains");
       const remove = q(el, '[data-test="remove-c2"]')!;
       expect(remove.textContent!.trim()).toBe("Delete");
       remove.click();
