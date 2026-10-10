@@ -1,4 +1,4 @@
-import { and, eq, inArray, isNotNull, isNull } from "drizzle-orm";
+import { and, eq, inArray, isNotNull } from "drizzle-orm";
 import {
   diningTables,
   floorPlanJoins,
@@ -6,11 +6,10 @@ import {
   floorTodayJoins,
   floorTodayJoinTables,
   floorTodayTables,
-  partyTables,
 } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { AppError, touchingPlace, type JoinSide } from "@waitron/shared";
-import { todayOf, type Today } from "./floor-today-store.js";
+import { refuseUnfree, refuseUnmovable, todayOf, type Today } from "./floor-today-table.js";
 import type { TillConfig } from "./till-config.js";
 import "./errors.js";
 
@@ -72,7 +71,7 @@ export async function leaveMergesRestoring(
   await leaveMerges(tx, tableIds);
 }
 
-/** Every member of `tableId`'s merge, `tableId` included, or [] when it is in none. */
+/** Every member of `tableId`'s merge, `tableId` included, or [] when it is in none. Reads by id alone: the caller checks the venue first. */
 export async function mergeMembers(tx: Transaction, tableId: string): Promise<string[]> {
   const [own] = await tx
     .select({ joinId: floorTodayJoinTables.joinId })
@@ -88,7 +87,8 @@ export async function mergeMembers(tx: Transaction, tableId: string): Promise<st
 
 /**
  * The seats of the master's saved join with exactly these tables' master tables, or null. The
- * master is read as it is now: a reset copies no joins.
+ * master is read as it is now: a reset copies no joins. Reads by id alone: the caller checks the
+ * venue first.
  */
 export async function savedJoinSeats(
   tx: Transaction,
@@ -99,50 +99,34 @@ export async function savedJoinSeats(
     .from(diningTables)
     .where(inArray(diningTables.id, [...tableIds]));
   const wanted = new Set(rows.map((row) => row.planTableId));
-  if (rows.length !== tableIds.length || wanted.has(null)) return null;
+  // Nothing makes plan_table_id unique, so two tables on one master table must not count as one.
+  if (rows.length !== tableIds.length || wanted.size !== tableIds.length || wanted.has(null)) {
+    return null;
+  }
   const candidates = await tx
-    .selectDistinct({ joinId: floorPlanJoinTables.joinId })
+    .select({ joinId: floorPlanJoinTables.joinId })
     .from(floorPlanJoinTables)
     .where(inArray(floorPlanJoinTables.planTableId, [...wanted] as string[]));
-  for (const { joinId } of candidates) {
-    const members = await tx
-      .select({ planTableId: floorPlanJoinTables.planTableId })
-      .from(floorPlanJoinTables)
-      .where(eq(floorPlanJoinTables.joinId, joinId));
-    if (members.length !== wanted.size) continue;
-    if (!members.every((m) => wanted.has(m.planTableId))) continue;
-    const [join] = await tx
-      .select({ seats: floorPlanJoins.seats })
-      .from(floorPlanJoins)
-      .where(eq(floorPlanJoins.id, joinId));
-    return join!.seats;
+  const joinIds = [...new Set(candidates.map((c) => c.joinId))];
+  if (joinIds.length === 0) return null;
+  const members = await tx
+    .select({ joinId: floorPlanJoinTables.joinId, planTableId: floorPlanJoinTables.planTableId })
+    .from(floorPlanJoinTables)
+    .where(inArray(floorPlanJoinTables.joinId, joinIds));
+  const byJoin = new Map<string, string[]>();
+  for (const { joinId, planTableId } of members) {
+    byJoin.set(joinId, [...(byJoin.get(joinId) ?? []), planTableId]);
   }
-  return null;
-}
-
-async function refuseUnfree(tx: Transaction, tables: readonly Today[]): Promise<void> {
-  for (const { tableId } of tables) {
-    const [held] = await tx
-      .select({ id: partyTables.id })
-      .from(partyTables)
-      .where(and(eq(partyTables.tableId, tableId), isNull(partyTables.leftAt)));
-    if (held !== undefined) throw new AppError("tab.already_open", { tableId });
-  }
-  for (const { tableId } of tables) {
-    const [table] = await tx
-      .select({ needsClearingSince: diningTables.needsClearingSince })
-      .from(diningTables)
-      .where(eq(diningTables.id, tableId));
-    if (table!.needsClearingSince !== null) throw new AppError("table.needs_clearing", { tableId });
-  }
-}
-
-async function zoneOf(tx: Transaction, tableId: string): Promise<string | null> {
-  const [table] = await tx
-    .select({ zoneId: diningTables.zoneId })
-    .from(diningTables)
-    .where(eq(diningTables.id, tableId));
-  return table!.zoneId;
+  const match = joinIds.find((joinId) => {
+    const ids = byJoin.get(joinId)!;
+    return ids.length === wanted.size && ids.every((id) => wanted.has(id));
+  });
+  if (match === undefined) return null;
+  const [join] = await tx
+    .select({ seats: floorPlanJoins.seats })
+    .from(floorPlanJoins)
+    .where(eq(floorPlanJoins.id, match));
+  return join!.seats;
 }
 
 /** `moving` joins `target`'s merge (or a new one), touching it on `side`; with `free`, neither table may be held or need clearing. */
@@ -156,24 +140,18 @@ export async function writeMerge(
   }
   const moving = await todayOf(tx, cfg, args.movingId);
   const target = await todayOf(tx, cfg, args.targetId);
-  const both = [moving, target];
-  for (const { tableId, row } of both) {
-    if (row.x === null) throw new AppError("table.not_in_floor_plan", { tableId });
-  }
-  for (const { tableId, row } of both) {
-    if (row.takenOff) throw new AppError("table.taken_off", { tableId });
-  }
-  for (const { tableId, row } of both) {
-    if (row.fixed) throw new AppError("table.fixed", { tableId });
-  }
+  refuseUnmovable(moving, target);
   if (moving.merge !== null) throw new AppError("table.merged", { tableId: moving.tableId });
-  if (args.free) await refuseUnfree(tx, both);
-  const zoneId = await zoneOf(tx, target.tableId);
-  const movingZoneId = await zoneOf(tx, moving.tableId);
-  if (zoneId !== movingZoneId) {
+  if (args.free) await refuseUnfree(tx, [moving.tableId, target.tableId]);
+  const { zoneId } = target;
+  if (moving.zoneId === null) {
+    throw new AppError("table.not_in_floor_plan", { tableId: moving.tableId });
+  }
+  if (zoneId === null) throw new AppError("table.not_in_floor_plan", { tableId: target.tableId });
+  if (zoneId !== moving.zoneId) {
     throw new AppError("service_zone.join_mismatch", {
-      orderZoneId: zoneId!,
-      tableZoneId: movingZoneId!,
+      orderZoneId: zoneId,
+      tableZoneId: moving.zoneId,
     });
   }
 
@@ -188,7 +166,7 @@ export async function writeMerge(
   if (joinId === undefined) {
     const [join] = await tx
       .insert(floorTodayJoins)
-      .values({ zoneId: zoneId!, seats })
+      .values({ zoneId, seats })
       .returning({ id: floorTodayJoins.id });
     joinId = join!.id;
     await tx.insert(floorTodayJoinTables).values(beforeRow(joinId, target));

@@ -25,6 +25,7 @@ import {
 } from "./floor-reset-plan.js";
 import { foodOnItsWay } from "./delivery-release.js";
 import { leaveMerges } from "./floor-today-merges.js";
+import { refuseUnfree, refuseUnmovable, todayOf } from "./floor-today-table.js";
 import { refusedByAModule, removeLiveTables, tablesTied } from "./table-removal.js";
 import type { TillConfig } from "./till-config.js";
 import "./errors.js";
@@ -427,45 +428,6 @@ export async function ensureToday(
   }
 }
 
-export interface Today {
-  tableId: string;
-  row: typeof floorTodayTables.$inferSelect;
-  /** Every member's today's row, this table's included; null when the table is in no merge. */
-  merge: { joinId: string; members: (typeof floorTodayTables.$inferSelect)[] } | null;
-}
-
-export async function todayOf(tx: Transaction, cfg: TillConfig, tableId: string): Promise<Today> {
-  const [table] = await tx
-    .select({ id: diningTables.id })
-    .from(diningTables)
-    .where(and(eq(diningTables.id, tableId), eq(diningTables.locationId, cfg.locationId)));
-  if (table === undefined) throw new AppError("table.not_found", { tableId });
-  const [row] = await tx
-    .select()
-    .from(floorTodayTables)
-    .where(eq(floorTodayTables.tableId, tableId));
-  if (row === undefined) throw new AppError("table.not_in_floor_plan", { tableId });
-  const [own] = await tx
-    .select({ joinId: floorTodayJoinTables.joinId })
-    .from(floorTodayJoinTables)
-    .where(eq(floorTodayJoinTables.tableId, tableId));
-  if (own === undefined) return { tableId, row, merge: null };
-  const members = await tx
-    .select({ row: floorTodayTables })
-    .from(floorTodayJoinTables)
-    .innerJoin(floorTodayTables, eq(floorTodayTables.tableId, floorTodayJoinTables.tableId))
-    .where(eq(floorTodayJoinTables.joinId, own.joinId));
-  return { tableId, row, merge: { joinId: own.joinId, members: members.map((m) => m.row) } };
-}
-
-/** The refusals a move or a turn shares, in the order the routes answer them. */
-function refuseUnmovable(today: Today): void {
-  const { tableId, row } = today;
-  if (row.x === null) throw new AppError("table.not_in_floor_plan", { tableId });
-  if (row.takenOff) throw new AppError("table.taken_off", { tableId });
-  if (row.fixed) throw new AppError("table.fixed", { tableId });
-}
-
 /** `low + step` and `high + step` stay within 0–999. */
 function heldStep(step: number, low: number, high: number): number {
   return Math.min(Math.max(step, -low), 999 - high);
@@ -534,16 +496,7 @@ export async function takeOffToday(
   const today = await todayOf(tx, cfg, tableId);
   if (today.row.takenOff) return;
   if (today.merge !== null) throw new AppError("table.merged", { tableId });
-  const [held] = await tx
-    .select({ id: partyTables.id })
-    .from(partyTables)
-    .where(and(eq(partyTables.tableId, tableId), isNull(partyTables.leftAt)));
-  if (held !== undefined) throw new AppError("tab.already_open", { tableId });
-  const [table] = await tx
-    .select({ needsClearingSince: diningTables.needsClearingSince })
-    .from(diningTables)
-    .where(eq(diningTables.id, tableId));
-  if (table!.needsClearingSince !== null) throw new AppError("table.needs_clearing", { tableId });
+  await refuseUnfree(tx, [tableId]);
   const [delivery] = await tx
     .select({ id: workingOrders.id })
     .from(workingOrders)

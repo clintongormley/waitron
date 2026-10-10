@@ -134,6 +134,42 @@ describe("today's merges", () => {
     expect(await inTx(v, (tx) => savedJoinSeats(tx, [table.a!]))).toBeNull();
   });
 
+  it("finds no saved join when two tables stand on one master table", async () => {
+    const { table } = await threeTables([{ seats: 6, keys: ["a", "b"] }]);
+    const [b] = await inTx(v, (tx) =>
+      tx
+        .select({ planTableId: diningTables.planTableId })
+        .from(diningTables)
+        .where(eq(diningTables.id, table.b!)),
+    );
+    await inTx(v, (tx) =>
+      tx
+        .update(diningTables)
+        .set({ planTableId: b!.planTableId })
+        .where(eq(diningTables.id, table.c!)),
+    );
+
+    expect(await inTx(v, (tx) => savedJoinSeats(tx, [table.a!, table.b!, table.c!]))).toBeNull();
+  });
+
+  it("refuses a table with no zone, either way", async () => {
+    const { table } = await threeTables();
+    await inTx(v, (tx) =>
+      tx.update(diningTables).set({ zoneId: null }).where(eq(diningTables.id, table.c!)),
+    );
+
+    for (const [moving, target] of [
+      [table.c!, table.a!],
+      [table.a!, table.c!],
+    ]) {
+      await expect(merge(moving!, target!, "right", 8)).rejects.toMatchObject({
+        code: "table.not_in_floor_plan",
+        params: { tableId: table.c },
+      });
+    }
+    expect(await mergeOf(v, table.a!)).toBeNull();
+  });
+
   it("grows a merge with a third table, working its seats out again", async () => {
     const { table } = await threeTables([{ seats: 6, keys: ["a", "b"] }]);
     await merge(table.b!, table.a!, "right", 8);
