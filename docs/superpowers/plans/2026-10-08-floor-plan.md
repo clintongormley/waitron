@@ -787,7 +787,7 @@ it("leaves a table the master never had untouched", async () => { /* planned fal
 ```ts
 /** An open party holds the table or used it earlier in its meal, or an order to it is unpaid or has food on its way. */
 export async function tableTied(tx: Transaction, tableId: string): Promise<boolean>;
-/** Removes the live table for good. Returns false, having removed nothing, when something unknown still names it. */
+/** Removes the live table for good. Returns false when a module refuses, having changed nothing, or when something unknown still names it, having kept its reset row and the table itself. */
 export async function removeLiveTable(tx: Transaction, cfg: Pick<TillConfig, "locationId">, removals: readonly TableRemoval[], tableId: string, now: Date): Promise<boolean>;
 ```
 
@@ -811,7 +811,8 @@ before slice 1) is caught by `isRefusal(error, FOREIGN_KEY_VIOLATION)`
 refuses with code 787 — measured twice by the plan reviews on Node v26.7.0 `node:sqlite`;
 `restrictRefused` matches only 1811) and answered `false`; `catchUpZone` then hides the table and
 keeps its reset row pending, so it is tried again. A refused statement backs out only itself
-(CLAUDE.md §3), so the releases before it stand, which is harmless: they only copied names. Any
+(CLAUDE.md §3), so the releases before it stand: orders and bookings keep the table's name and no
+longer point at it, and the table is off today's plan, which `catchUpZone` then hides anyway. Any
 other error is rethrown.
 
 - [ ] **Step 1: Write the failing tests:**

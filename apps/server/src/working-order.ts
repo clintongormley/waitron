@@ -7016,7 +7016,7 @@ export interface TableState {
   posY: number | null;
   shape: FloorTableShape | null;
   rotation: number | null;
-  /** `null` when the table has no today's row: its zone has no master plan yet. */
+  /** `null` when the table has no today's row. */
   today: TableToday | null;
   /** Merged from the enabled modules' floor annotators; `null` when none annotates the table. */
   nextReservation: { time: string } | null;

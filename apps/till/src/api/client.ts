@@ -1892,7 +1892,7 @@ export interface TableState {
   posY: number | null;
   shape: TableShape | null;
   rotation: number | null;
-  /** `null` when the table has no today's row: its zone has no master plan yet. */
+  /** `null` when the table has no today's row. */
   today: TableToday | null;
   party: TableParty | null;
   /** What wants attention at the table; several at once. */

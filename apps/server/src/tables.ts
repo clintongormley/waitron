@@ -214,7 +214,6 @@ async function refuseFloorPlanChange(
   return table;
 }
 
-/** Deactivate, never hard-delete, because the table has order history. */
 export async function deactivateTable(
   tx: Transaction,
   _cfg: TillConfig,

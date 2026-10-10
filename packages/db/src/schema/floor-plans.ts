@@ -67,7 +67,7 @@ const placementChecks = (name: string, t: Placed) => {
   ];
 };
 
-/** A zone's master plan, edited by the dashboard only; nothing live reads it. */
+/** A zone's master plan, edited by the dashboard only. */
 export const floorPlans = table(
   "floor_plans",
   {
