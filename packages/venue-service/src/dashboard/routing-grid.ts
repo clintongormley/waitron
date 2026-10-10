@@ -556,8 +556,21 @@ export class RoutingGrid extends LitElement {
       : format("routing.cell_place", { row: this.#rowNameOf(decidedBy.address.row), zone });
   }
 
-  /** The active products the row covers: a category's are those of its whole subtree. */
+  #rowProducts: { model: RoutingView; row: string; ids: string[] } | null = null;
+
+  /** One array per model and row, so the open editor's memo of the row's periods holds. */
   #rowProductIds(row: RoutingRow): string[] {
+    const model = this.model!;
+    const key = rowKey(row);
+    const memo = this.#rowProducts;
+    if (memo?.model === model && memo.row === key) return memo.ids;
+    const ids = this.#productsOfRow(row);
+    this.#rowProducts = { model, row: key, ids };
+    return ids;
+  }
+
+  /** The active products the row covers: a category's are those of its whole subtree. */
+  #productsOfRow(row: RoutingRow): string[] {
     const products = this.model!.products;
     if (row.kind === "all") return products.map((product) => product.id);
     if (row.kind === "product") return [row.productId];

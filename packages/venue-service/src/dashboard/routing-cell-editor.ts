@@ -132,6 +132,11 @@ export class RoutingCellEditor extends LitElement {
   private baseline?: Draft;
   private leftOut: LeftOut[] = [];
   private nextLine = 0;
+  private rowMemo?: {
+    periods: readonly RoutingPeriod[];
+    rowProductIds: readonly string[];
+    meeting: ReadonlySet<RoutingPeriod>;
+  };
   private generation = {};
 
   override connectedCallback() {
@@ -241,7 +246,15 @@ export class RoutingCellEditor extends LitElement {
   }
 
   private meetsRow(period: RoutingPeriod): boolean {
-    return period.productIds.some((id) => this.rowProductIds.includes(id));
+    const memo = this.rowMemo;
+    if (memo?.periods === this.periods && memo.rowProductIds === this.rowProductIds)
+      return memo.meeting.has(period);
+    const row = new Set(this.rowProductIds);
+    const meeting = new Set(
+      this.periods.filter((candidate) => candidate.productIds.some((id) => row.has(id))),
+    );
+    this.rowMemo = { periods: this.periods, rowProductIds: this.rowProductIds, meeting };
+    return meeting.has(period);
   }
 
   private inColumn(period: RoutingPeriod): boolean {
