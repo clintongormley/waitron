@@ -1871,6 +1871,12 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   and reopening Chrome fixed it; what to capture if it recurs is in the detail.
   [Detail](backlog/till.md#a-phones-chrome-drew-a-white-page-for-the-box-watch-not-a-job-yet)
 
+- **Two small phone-width points A414 left (#1495).** On the Order screen at 390 px the Review
+  button stops short of the right edge (seen in a screenshot, not compared with before #1495); and
+  the Schedule and Allergens screens now draw their own copy of the card's border and padding
+  (`apps/till/src/widgets/screen-card-styles.ts`), so a later change to the card's look will not
+  reach them.
+
 - **A436 — a kitchen display with someone signed in, logged out only after a long idle time** (owner,
   2026-10-08, answering the A366 slice 5 plan; open). The owner: "kitchen
   displays can have a login, but i would not expect them to log off automatically, or at least
