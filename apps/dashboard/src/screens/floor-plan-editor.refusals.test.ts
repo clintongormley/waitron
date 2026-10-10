@@ -1,6 +1,7 @@
-import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, expect, it, onTestFinished, vi } from "vitest";
+import { page } from "vitest/browser";
 import "@waitron/dashboard-modules";
-import type { WtButton, WtFloorPlanCanvas } from "@waitron/ui";
+import type { WtButton, WtFloorPlanCanvas, WtSheet } from "@waitron/ui";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import "./floor-plan-editor.js";
 import type { FloorPlanEditor } from "./floor-plan-editor.js";
@@ -428,4 +429,31 @@ it("a save still pending on one zone does not stop Save on the next", async () =
   await press(el, "save");
   expect(saveFloorPlan).toHaveBeenCalledTimes(2);
   expect(saveFloorPlan.mock.calls[1]![0]).toBe("z2");
+});
+
+it("at 390 px a refusal that selects a table opens the sheet", async () => {
+  const before = [window.innerWidth, window.innerHeight] as const;
+  await page.viewport(390, 844);
+  onTestFinished(() => page.viewport(...before));
+  const el = await open(refusing({ code: "table.label_taken", params: { label: "Patio 2" } }));
+  const sheet = () => el.shadowRoot!.querySelector<WtSheet>("wt-sheet");
+  await expect.poll(sheet).not.toBeNull();
+  expect(sheet()!.expanded).toBe(false);
+  await change(el, renamed(opened(), "m2", "Patio 2"));
+  await press(el, "save");
+  expect(canvas(el).selected).toBe("m2");
+  expect(sheet()!.expanded).toBe(true);
+});
+
+it("at 390 px the editor's own name check opens the sheet on the table it selects", async () => {
+  const before = [window.innerWidth, window.innerHeight] as const;
+  await page.viewport(390, 844);
+  onTestFinished(() => page.viewport(...before));
+  const el = await open(stubApi());
+  const sheet = () => el.shadowRoot!.querySelector<WtSheet>("wt-sheet");
+  await expect.poll(sheet).not.toBeNull();
+  await change(el, renamed(opened(), "m2", "T1"));
+  await press(el, "save");
+  expect(canvas(el).selected).toBe("m2");
+  expect(sheet()!.expanded).toBe(true);
 });

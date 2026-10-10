@@ -17,6 +17,8 @@ import {
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import "@waitron/ui/src/components/wt-floor-plan-canvas.js";
+import "@waitron/ui/src/components/wt-sheet.js";
+import "./floor-plan-tables-panel.js";
 import { dashboardPath } from "../navigation.js";
 import { currentLocale, t } from "../i18n/t.js";
 import { LocaleChangeController } from "../state/locale-controller.js";
@@ -44,6 +46,9 @@ export interface FloorPlanSelect {
 }
 
 const HOME = "/manage";
+
+/** Below this width of the page itself, the side panel becomes a bottom sheet. */
+const NARROW_PX = 600;
 
 /** The editor's one message, remembering whether a read or an action set it (CLAUDE.md §3). */
 interface EditorMessage {
@@ -165,6 +170,19 @@ export class FloorPlanEditor extends LitElement {
       wt-floor-plan-canvas {
         height: 70vh;
       }
+      .layout {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) minmax(12rem, 18rem);
+        gap: var(--wt-space-4);
+        align-items: start;
+      }
+      .width-probe {
+        height: 0;
+      }
+      wt-sheet {
+        position: sticky;
+        bottom: 0;
+      }
       /* The same box as a wt-button variant="secondary". */
       a.close {
         box-sizing: border-box;
@@ -206,6 +224,8 @@ export class FloorPlanEditor extends LitElement {
   @state() private saving = false;
   @state() private mark: FieldMark | null = null;
   @state() private loadingNewer = false;
+  @state() private narrow = false;
+  @state() private sheetOpen = false;
 
   /** The field a refusal or the editor's own check points at, for the side panels. */
   get fieldError(): FloorPlanFieldError | null {
@@ -231,6 +251,11 @@ export class FloorPlanEditor extends LitElement {
 
   readonly #url = new UrlStateController(this, () => this.#route(), dashboardPath);
 
+  /** Watches a zero-height probe, not the host: the host's height changes when `narrow` flips. */
+  readonly #resize = new ResizeObserver(([entry]) => {
+    this.narrow = entry!.contentRect.width < NARROW_PX;
+  });
+
   constructor() {
     super();
     new LocaleChangeController(this);
@@ -246,12 +271,16 @@ export class FloorPlanEditor extends LitElement {
   override connectedCallback(): void {
     super.connectedCallback();
     this.requestUpdate();
+    void this.updateComplete.then(() => {
+      if (this.isConnected) this.#resize.observe(this.renderRoot.querySelector(".width-probe")!);
+    });
   }
 
   override disconnectedCallback(): void {
     this.#saveRequest++;
     this.saving = false;
     this.loadingNewer = false;
+    this.#resize.disconnect();
     this.#disposeScope();
     super.disconnectedCallback();
   }
@@ -348,6 +377,12 @@ export class FloorPlanEditor extends LitElement {
     this.requestUpdate();
   }
 
+  /** A table a check or a refusal points at; on a phone the sheet opens so its fields show. */
+  #selectFlagged(key: string): void {
+    this.selected = key;
+    if (this.narrow) this.sheetOpen = true;
+  }
+
   #clearReadMessage(): void {
     if (this.message?.from === "read") this.message = null;
   }
@@ -394,7 +429,7 @@ export class FloorPlanEditor extends LitElement {
     if (mark.from === "check") {
       const own = tableProblem(next, mark.key);
       if (own !== null) this.#markProblem({ key: mark.key, problem: own });
-      else if (this.#markCheck(next)) this.selected = this.mark!.key;
+      else if (this.#markCheck(next)) this.#selectFlagged(this.mark!.key);
       else this.#clearMark();
       return;
     }
@@ -432,7 +467,7 @@ export class FloorPlanEditor extends LitElement {
     }
     this.message = actionMessage(own);
     if (key === undefined) return;
-    this.selected = key;
+    this.#selectFlagged(key);
     const field = serverField === undefined ? undefined : SERVER_FIELDS[serverField];
     if (field === undefined) return;
     const table = draft.tables.find((t) => t.key === key)!;
@@ -443,7 +478,7 @@ export class FloorPlanEditor extends LitElement {
   readonly #save = async (): Promise<void> => {
     if (this.saving || this.loadingNewer || saveActionState(this.#scope).unchanged) return;
     if (this.#markCheck(this.draft!)) {
-      this.selected = this.mark!.key;
+      this.#selectFlagged(this.mark!.key);
       return;
     }
     // A scope exists only once a zone's plan is loaded, so both are set here.
@@ -581,10 +616,43 @@ export class FloorPlanEditor extends LitElement {
     return this.#copy;
   }
 
+  #body(draft: FloorPlanDraft) {
+    const canvas = html`<wt-floor-plan-canvas
+      .tables=${this.#canvasTables(draft)}
+      .selected=${this.selected}
+      .copy=${this.#canvasCopy()}
+      @wt-table-move=${this.#onMove}
+      @wt-table-rotate=${this.#onRotate}
+      @wt-table-select=${this.#onSelect}
+    ></wt-floor-plan-canvas>`;
+    const panel = html`<floor-plan-tables-panel
+      .draft=${draft}
+      .selected=${this.selected}
+    ></floor-plan-tables-panel>`;
+    if (!this.narrow)
+      return html`<div class="layout">
+        ${canvas}
+        <aside>${panel}</aside>
+      </div>`;
+    const heading =
+      draft.tables.find((table) => table.key === this.selected)?.label ??
+      t("floor_plan_editor.tables");
+    return html`${canvas}
+      <wt-sheet
+        .heading=${heading}
+        .expanded=${this.sheetOpen}
+        @wt-sheet-toggle=${(event: CustomEvent<{ expanded: boolean }>) => {
+          this.sheetOpen = event.detail.expanded;
+        }}
+        >${panel}</wt-sheet
+      >`;
+  }
+
   override render() {
     const save = saveActionState(this.#scope);
     const history = this.#history;
     return html`
+      <div class="width-probe"></div>
       <header>
         <h1>${this.zoneName ?? t("floor_plan_editor.title")}</h1>
         <wt-form-actions .error=${this.message === null ? "" : this.message.text()}>
@@ -641,14 +709,7 @@ export class FloorPlanEditor extends LitElement {
             </p>`
           : this.draft === null
             ? nothing
-            : html`<wt-floor-plan-canvas
-                .tables=${this.#canvasTables(this.draft)}
-                .selected=${this.selected}
-                .copy=${this.#canvasCopy()}
-                @wt-table-move=${this.#onMove}
-                @wt-table-rotate=${this.#onRotate}
-                @wt-table-select=${this.#onSelect}
-              ></wt-floor-plan-canvas>`
+            : this.#body(this.draft)
       }
     `;
   }

@@ -1,5 +1,6 @@
-import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import type { WtButton, WtFloorPlanCanvas } from "@waitron/ui";
+import { afterEach, beforeEach, expect, it, onTestFinished, vi } from "vitest";
+import { page } from "vitest/browser";
+import type { WtButton, WtFloorPlanCanvas, WtSheet } from "@waitron/ui";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import "./floor-plan-editor.js";
 import type { FloorPlanEditor } from "./floor-plan-editor.js";
@@ -399,4 +400,35 @@ it("a late failure for the zone it left is dropped", async () => {
   await flush(el);
   expect(el.shadowRoot!.querySelector("[data-load-error]")).toBeNull();
   expect(canvas(el).tables.map((t) => t.key)).toEqual(["b1"]);
+});
+
+async function viewport(width: number, height: number): Promise<void> {
+  const before = [window.innerWidth, window.innerHeight] as const;
+  await page.viewport(width, height);
+  onTestFinished(() => page.viewport(...before));
+}
+
+const sheet = (el: FloorPlanEditor) => el.shadowRoot!.querySelector<WtSheet>("wt-sheet");
+
+it("puts the panel beside the canvas at 1280 px and in a collapsed sheet at 390 px", async () => {
+  await viewport(1280, 800);
+  const el = await open();
+  await expect
+    .poll(() => el.shadowRoot!.querySelector("aside floor-plan-tables-panel"))
+    .not.toBeNull();
+  expect(sheet(el)).toBeNull();
+  await page.viewport(390, 844);
+  await expect.poll(() => sheet(el)).not.toBeNull();
+  expect(sheet(el)!.querySelector("floor-plan-tables-panel")).not.toBeNull();
+  expect(el.shadowRoot!.querySelector("aside")).toBeNull();
+  expect(sheet(el)!.expanded).toBe(false);
+  expect(sheet(el)!.heading).toBe("Tables");
+});
+
+it("the sheet's heading names the selected table", async () => {
+  await viewport(390, 844);
+  const el = await open();
+  await expect.poll(() => sheet(el)).not.toBeNull();
+  await fromCanvas(el, "wt-table-select", { key: "m1" });
+  expect(sheet(el)!.heading).toBe("T1");
 });

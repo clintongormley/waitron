@@ -579,7 +579,7 @@ turns the table by as much as the pointer went round, or ArrowRight and ArrowLef
 `wt-sheet` is a bar with a top border on the surface colour, whose toggle (at least `--wt-tap-min`
 tall, with `aria-expanded` and `aria-controls` naming the body) shows `heading`. Pressing it flips
 `expanded` and sends `wt-sheet-toggle`. Collapsed, the body is hidden; expanded, it scrolls within
-`60dvh`. Where it docks is its parent's choice. The heading is the toggle's accessible name, so
+`60dvh`. Where it docks is its parent's choice; the floor-plan editor docks it at the bottom below 600 px of the page's own width. The heading is the toggle's accessible name, so
 `heading` must be set. The consuming app registers the `chevron-down` icon.
 
 `wt-combobox` works from the keyboard like a select. On the closed trigger, ArrowDown, ArrowUp,
