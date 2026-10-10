@@ -7170,6 +7170,20 @@ describe("mounted public department pages", () => {
     };
     const { el } = await mountWidget<DashboardApp>("dashboard-app", {
       api: stubApi({
+        getVenueDepartments: vi.fn(async () =>
+          model.departments.map((department) => ({
+            ...department,
+            isDefault: department.id === "d1",
+          })),
+        ),
+        getVenueReceiptSettings: vi.fn(async () => ({ settings: {} })),
+        getDepartmentReceipt: vi.fn(async () => ({
+          receipt: {},
+          venueDefaults: {},
+          languages: ["es-ES"],
+          warningLanguages: [],
+          venueAddress: [],
+        })),
         getMe: vi.fn().mockResolvedValue({
           ...meResponse,
           role: "manager",
