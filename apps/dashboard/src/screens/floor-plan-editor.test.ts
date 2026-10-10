@@ -124,12 +124,12 @@ it("says what a first save does, and when a saved plan's changes reach the till"
     }),
   );
   expect(first.shadowRoot!.querySelector("[data-note]")!.textContent!.trim()).toBe(
-    "Your first save updates the till's tables. After that, saved changes wait for the next business day.",
+    "Your first save goes live now; later changes, tomorrow.",
   );
   cleanupWidgets();
   const saved = await open();
   expect(saved.shadowRoot!.querySelector("[data-note]")!.textContent!.trim()).toBe(
-    "Saved changes reach the till's tables when the next business day starts.",
+    "Your changes will go live tomorrow.",
   );
 });
 

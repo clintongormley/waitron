@@ -1285,7 +1285,9 @@ Each is the default this slice builds; the owner may override any at review.
 16. **The line under the header** says when the till's TABLES follow, not where they are drawn (the
     till draws today's places only from slice 3): before a zone's first save, "Your first save
     updates the till's tables. After that, saved changes wait for the next business day."; after,
-    "Saved changes reach the till's tables when the next business day starts." A table a party sits
+    "Saved changes reach the till's tables when the next business day starts." (owner 2026-10-10:
+    now "Your first save goes live now; later changes, tomorrow." and "Your changes will go live
+    tomorrow.", Task 2.4f.) A table a party sits
     at waits for its tab to close either way (the plan's decision 3). The task list's "with Reset on
     the till for sooner" names a till button slice 4 builds; Task 4.5 adds those words when it does
     (noted there).
@@ -1748,7 +1750,10 @@ selection. Strings (EN / ES): `floor_plan_editor.title` "Floor plan" / "Plano de
 changes wait for the next business day." / "El primer guardado actualiza las mesas de la caja.
 Después, los cambios guardados esperan al siguiente día de actividad."; `floor_plan_editor.note`
 "Saved changes reach the till's tables when the next business day starts." / "Los cambios
-guardados llegan a las mesas de la caja al empezar el siguiente día de actividad."; Close and Save
+guardados llegan a las mesas de la caja al empezar el siguiente día de actividad." (owner
+2026-10-10: now "Your first save goes live now; later changes, tomorrow." / "Tu primer guardado se
+aplica ya; los cambios posteriores, mañana." and "Your changes will go live tomorrow." / "Tus
+cambios se aplicarán mañana.", Task 2.4f); Close and Save
 reuse `action.close` and `action.save` (`strings.ts:475`, `:548`).
 
 - [ ] **Step 1: Write the failing tests.** Mount with `mountWidget` and a stubbed API, the URL set

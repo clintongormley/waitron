@@ -960,10 +960,8 @@ export const en = {
   "floor_plan_editor.rotate": "Rotate {name}",
   "floor_plan_editor.name_missing": "Enter a name.",
   "floor_plan_editor.booked": "Booked {date}, {time}",
-  "floor_plan_editor.first_note":
-    "Your first save updates the till's tables. After that, saved changes wait for the next business day.",
-  "floor_plan_editor.note":
-    "Saved changes reach the till's tables when the next business day starts.",
+  "floor_plan_editor.first_note": "Your first save goes live now; later changes, tomorrow.",
+  "floor_plan_editor.note": "Your changes will go live tomorrow.",
   "floor.zones_title": "Zones",
   "floor.tables_title": "Tables",
   "floor.zone_name": "Name",
@@ -3509,9 +3507,8 @@ export const es: Record<StringKey, string> = {
   "floor_plan_editor.name_missing": "Escribe un nombre.",
   "floor_plan_editor.booked": "Reservada el {date}, {time}",
   "floor_plan_editor.first_note":
-    "El primer guardado actualiza las mesas de la caja. Después, los cambios guardados esperan al siguiente día de actividad.",
-  "floor_plan_editor.note":
-    "Los cambios guardados llegan a las mesas de la caja al empezar el siguiente día de actividad.",
+    "Tu primer guardado se aplica ya; los cambios posteriores, mañana.",
+  "floor_plan_editor.note": "Tus cambios se aplicarán mañana.",
   "floor.zones_title": "Zonas",
   "floor.tables_title": "Mesas",
   "floor.zone_name": "Nombre",

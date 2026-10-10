@@ -247,7 +247,7 @@ it("a first save's re-read gives a new table its live table", async () => {
   await fromCanvas(el, "floor-plan-change", { draft: draftFromPlan(after) });
   expectSave(el, "quiet");
   expect(el.shadowRoot!.querySelector("[data-note]")!.textContent!.trim()).toBe(
-    "Saved changes reach the till's tables when the next business day starts.",
+    "Your changes will go live tomorrow.",
   );
 });
 
