@@ -442,6 +442,35 @@ describe("till-card-grid", () => {
     expect(pay.store).toBe(store);
   });
 
+  describe("the pay card's Cash and Card while the basket's pay controls are held", () => {
+    async function mountHeld(busy: boolean) {
+      const store = new WorkingOrderStore();
+      store.addProduct(dish("cafe", "Café", "lunch"), "1");
+      const { el } = await mountWidget<TillCardGrid>("till-card-grid", {
+        tab: counterTab,
+        store,
+        payHeld: true,
+        busy,
+        menus: servedMenus([{ id: "lunch", name: "Lunch", versionId: "v1", isDefault: true }], []),
+      });
+      const pay = el.shadowRoot!.querySelector<HTMLElement & { updateComplete: Promise<unknown> }>(
+        "till-tender-pay",
+      )!;
+      await pay.updateComplete;
+      return ["pay", "pay-card"].map((name) =>
+        pay.shadowRoot!.querySelector(`.${name}`)!.getAttribute("variant"),
+      );
+    }
+
+    it("draws them grey with a line rung up", async () => {
+      expect(await mountHeld(false)).toEqual(["secondary", "secondary"]);
+    });
+
+    it("keeps them blue while a payment is being sent", async () => {
+      expect(await mountHeld(true)).toEqual(["primary", "primary"]);
+    });
+  });
+
   it("threads the product-grid columns config", async () => {
     const store = new WorkingOrderStore();
     const { el } = await mountWidget<TillCardGrid>("till-card-grid", {

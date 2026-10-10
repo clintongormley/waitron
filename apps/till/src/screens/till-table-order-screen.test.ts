@@ -478,6 +478,24 @@ describe("till-table-order-screen", () => {
     expect(widget.shadowRoot!.querySelector(".pay-card")).not.toBeNull();
   });
 
+  it.each([
+    { bill: "no lines", lines: [], variant: "secondary" },
+    { bill: "a line", lines: [pendingLine], variant: "primary" },
+  ])(
+    "draws the pay card's Cash and Card $variant on a bill with $bill",
+    async ({ lines, variant }) => {
+      const { el } = await mount({ lines });
+      await openDrawer(el);
+      const widget = tender(el);
+      await widget.updateComplete;
+      expect(
+        [".pay", ".pay-card"].map((name) =>
+          widget.shadowRoot!.querySelector(name)!.getAttribute("variant"),
+        ),
+      ).toEqual([variant, variant]);
+    },
+  );
+
   it("swallows a Hold (park-order) from the embedded pay widget — a tab cannot be parked", async () => {
     const { el } = await mount({ lines: [pendingLine] });
     await openDrawer(el);

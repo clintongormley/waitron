@@ -1707,3 +1707,82 @@ it("decimal input refuses a grouped card tip beside its field until corrected", 
   click(el, ".pay-card");
   expect(sent).toEqual([{ tip: "2.80" }]);
 });
+
+describe("Cash and Card are drawn quiet while they wait for a basket", () => {
+  const variants = (el: TillTenderPay) => [
+    query(el, ".pay")!.getAttribute("variant"),
+    query(el, ".pay-card")!.getAttribute("variant"),
+  ];
+
+  async function mountPay(
+    lines: number,
+    props: Partial<TillTenderPay> = {},
+    theme?: "light" | "dark",
+  ) {
+    const store = new WorkingOrderStore();
+    if (lines > 0) store.addProduct(cafe, String(lines));
+    const mounted = await mountWidget<TillTenderPay>("till-tender-pay", { store, ...props }, theme);
+    return { ...mounted, store };
+  }
+
+  it("draws both grey on an empty basket", async () => {
+    const { el } = await mountPay(0);
+    expect(variants(el)).toEqual(["secondary", "secondary"]);
+  });
+
+  it("draws both blue once a line is rung up", async () => {
+    const { el } = await mountPay(1);
+    expect(variants(el)).toEqual(["primary", "primary"]);
+  });
+
+  it("keeps both blue while a payment is being sent", async () => {
+    const { el } = await mountPay(1, { busy: true });
+    expect(variants(el)).toEqual(["primary", "primary"]);
+  });
+
+  it("keeps both blue while a payment is being sent, even once the basket has emptied", async () => {
+    const { el, store } = await mountPay(1, { busy: true });
+    store.clear();
+    await el.updateComplete;
+    expect(store.lineCount).toBe(0);
+    expect(variants(el)).toEqual(["primary", "primary"]);
+  });
+
+  it("draws both grey while the pay controls are held, as card-grid sends them", async () => {
+    const { el } = await mountPay(1, { busy: true, held: true });
+    expect(variants(el)).toEqual(["secondary", "secondary"]);
+  });
+
+  it("keeps Card blue when only an invalid tip after a press disables it", async () => {
+    const { el } = await mountPay(1, { cardProvider: "stripe_on_device", tipsEnabled: true });
+    await typeTip(el, "1,234.56");
+    click(el, ".pay-card");
+    await el.updateComplete;
+    const card = query(el, ".pay-card") as HTMLElement & { disabled: boolean };
+    expect(card.disabled).toBe(true);
+    expect(card.getAttribute("variant")).toBe("primary");
+  });
+
+  const buttonFill = (host: Element) =>
+    getComputedStyle(host.shadowRoot!.querySelector("button")!).backgroundColor;
+
+  it.each(["light", "dark"] as const)(
+    "paints grey Cash and Card like Hold until a line is rung up, then blue (%s theme)",
+    async (theme) => {
+      const { el, store } = await mountPay(0, {}, theme);
+      const hold = query(el, ".hold")!;
+      const cash = query(el, ".pay")!;
+      const card = query(el, ".pay-card")!;
+      await (cash as HTMLElement & { updateComplete: Promise<unknown> }).updateComplete;
+      expect(buttonFill(cash)).toBe(buttonFill(hold));
+      expect(buttonFill(card)).toBe(buttonFill(hold));
+      store.addProduct(cafe, "1");
+      await el.updateComplete;
+      await (cash as HTMLElement & { updateComplete: Promise<unknown> }).updateComplete;
+      await (card as HTMLElement & { updateComplete: Promise<unknown> }).updateComplete;
+      await (hold as HTMLElement & { updateComplete: Promise<unknown> }).updateComplete;
+      expect(buttonFill(cash)).not.toBe(buttonFill(hold));
+      expect(buttonFill(card)).not.toBe(buttonFill(hold));
+    },
+  );
+});
