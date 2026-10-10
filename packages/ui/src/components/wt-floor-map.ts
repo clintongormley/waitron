@@ -74,6 +74,7 @@ interface Drag {
 const MIN_ZOOM = 1 / 2;
 const MAX_ZOOM = 4;
 const WHEEL_DOUBLING = 100;
+const WHEEL_LINE_PX = 16;
 
 interface Group {
   key: string;
@@ -116,6 +117,14 @@ function groupsOf(tables: readonly FloorMapTable[]): Group[] {
 }
 
 const px = (value: number): string => `${value}px`;
+
+/** A wheel's delta in px; `page` is the host's size along the delta's axis. */
+const wheelPx = (delta: number, mode: number, page: number): number =>
+  mode === WheelEvent.DOM_DELTA_LINE
+    ? delta * WHEEL_LINE_PX
+    : mode === WheelEvent.DOM_DELTA_PAGE
+      ? delta * page
+      : delta;
 
 const tableOf = (target: EventTarget | null): HTMLElement | null =>
   (target as Element | null)?.closest<HTMLElement>("[part=table]") ?? null;
@@ -451,13 +460,15 @@ export class WtFloorMap extends LitElement {
 
   readonly #onWheel = (e: WheelEvent): void => {
     e.preventDefault();
+    const deltaX = wheelPx(e.deltaX, e.deltaMode, this.clientWidth);
+    const deltaY = wheelPx(e.deltaY, e.deltaMode, this.clientHeight);
     if (!e.ctrlKey) {
-      this.#moveView(1, 0, 0, -e.deltaX, -e.deltaY);
+      this.#moveView(1, 0, 0, -deltaX, -deltaY);
       return;
     }
     const box = this.getBoundingClientRect();
     this.#moveView(
-      2 ** (-e.deltaY / WHEEL_DOUBLING),
+      2 ** (-deltaY / WHEEL_DOUBLING),
       e.clientX - box.left,
       e.clientY - box.top,
       0,

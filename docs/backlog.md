@@ -1840,8 +1840,8 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   [Detail](backlog/till.md#a466--floor-plan-editor-follow-ups)
 
 - **A470 — the till's floor map follow-ups (2026-10-10).** Small gaps the till's map left: an
-  unmeasured screen-reader activation, the wheel's line mode, a drop after a re-read, two wordings,
-  two notes for slice 4 and six look-pass choices built with defaults. Left open by A429 slice 3.
+  unmeasured screen-reader activation, a drop after a re-read, two wordings, two notes for slice 4
+  and six look-pass choices built with defaults. Left open by A429 slice 3.
   [Detail](backlog/till.md#a470--the-tills-floor-map-follow-ups)
 
 - **The bookings list shows no table for any booking, and a past booking's kept table name

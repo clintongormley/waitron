@@ -2641,6 +2641,7 @@ design-system.md → "Adding a primitive" is at `:3120`, its item 4's `delegates
 - When a table is wider or taller than the map, an arrow key's pan moves nothing if the table
   already covers the map that way, else the least distance that leaves no gap.
 - The notice and the pin say "<n> ready", not "<n> ready to serve".
+- Decision 8's wheel reads `deltaMode`: a line is 16 px, a page the map's width or height.
 - Stryker ran on every new `packages/ui` file, `floor-map-fills.ts` included; the ten fill tokens
   were added to design-system.md's colour list; the design-system paragraph for `wt-floor-map` names
   its events `wt-table-tap`, `wt-table-details` and `wt-table-drag-end`.

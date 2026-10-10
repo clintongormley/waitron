@@ -301,9 +301,6 @@ screen is designed.
     pointer's click to the gestures, so a screen reader whose activation sends a `click` with
     `detail` 1 or more and no pointer events would open nothing. Unmeasured; needs a manual
     VoiceOver and TalkBack check.
-  - `wt-floor-map`'s wheel reads `deltaX`/`deltaY` as pixels and ignores `deltaMode`, so a wheel
-    that reports lines or pages pans by the line or page count as if it were pixels (not measured
-    in any browser).
   - A re-read that removes the held table during a drag still lets the drop send that drag's
     coordinates (`wt-table-drag-end`). Slice 4 owns drops.
   - A party with an open tab and nothing owed reads "Owes €0.00" in the details sheet

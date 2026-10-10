@@ -269,6 +269,28 @@ it("the wheel pans, and Ctrl+wheel zooms about the pointer", async () => {
   expect(zoom.defaultPrevented).toBe(true);
 });
 
+it("a wheel in lines moves 16 px a line, and one in pages the map's width or height a page", async () => {
+  const el = await map([t1]);
+  const refit = () => {
+    tapAt(el, 20, 280);
+    tapAt(el, 20, 280);
+  };
+  wheel(el, 20, 20, { deltaY: 1 });
+  expect((await boxOf(el, "t1")).top).toBe(74);
+  refit();
+  wheel(el, 20, 20, { deltaY: 1, deltaMode: WheelEvent.DOM_DELTA_LINE });
+  expect((await boxOf(el, "t1")).top).toBe(59);
+  refit();
+  wheel(el, 20, 20, { deltaX: 2, deltaMode: WheelEvent.DOM_DELTA_LINE });
+  expect((await boxOf(el, "t1")).left).toBe(118);
+  refit();
+  wheel(el, 20, 20, { deltaX: 0.25, deltaY: 0.25, deltaMode: WheelEvent.DOM_DELTA_PAGE });
+  expect(await boxOf(el, "t1")).toMatchObject({ left: 0, top: 0 });
+  refit();
+  wheel(el, 300, 150, { deltaY: -6.25, deltaMode: WheelEvent.DOM_DELTA_LINE, ctrlKey: true });
+  expect(await boxOf(el, "t1")).toEqual({ left: 0, top: 0, width: 600, height: 300 });
+});
+
 it("a resize after a pan keeps the person's view, and one after a fit fits", async () => {
   const el = await map([t1]);
   drag(el, [20, 20], [70, 20]);
