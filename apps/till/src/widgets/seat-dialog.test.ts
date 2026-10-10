@@ -44,6 +44,37 @@ describe("till-seat-dialog", () => {
     expect(field(el).required).toBe(false);
   });
 
+  it("shows the table's seats as the placeholder", async () => {
+    const six = await mountWidget<TillSeatDialog>("till-seat-dialog", {
+      tableLabel: "4",
+      seats: 6,
+    });
+    expect(nativeInput(six.el).placeholder).toBe("6 seats");
+
+    const one = await mountWidget<TillSeatDialog>("till-seat-dialog", {
+      tableLabel: "5",
+      seats: 1,
+    });
+    expect(nativeInput(one.el).placeholder).toBe("1 seat");
+
+    setLocale("es");
+    const es = await mountWidget<TillSeatDialog>("till-seat-dialog", {
+      tableLabel: "6",
+      seats: 6,
+    });
+    expect(nativeInput(es.el).placeholder).toBe("6 plazas");
+  });
+
+  it("says Covers when the table has no seats", async () => {
+    const el = await mountDialog();
+    expect(el.seats).toBeNull();
+    expect(nativeInput(el).placeholder).toBe("Covers");
+
+    setLocale("es");
+    const es = await mountWidget<TillSeatDialog>("till-seat-dialog", { tableLabel: "6" });
+    expect(nativeInput(es.el).placeholder).toBe("Cubiertos");
+  });
+
   it("seats with the whole number typed", async () => {
     const el = await mountDialog();
     const seen = captureConfirm(el);

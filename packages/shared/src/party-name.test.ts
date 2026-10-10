@@ -22,6 +22,12 @@ describe("partyTablesName", () => {
   ])("names %j as %s", (labels, expected) => {
     expect(partyTablesName(labels)).toBe(expected);
   });
+
+  it("joins with the separator it is given", () => {
+    expect(partyTablesName(["Terrace 4", "Terrace 5", "Terrace 7"], "+")).toBe("Terrace 4+5+7");
+    expect(partyTablesName(["4", "10"], "+")).toBe("4+10");
+    expect(partyTablesName(["Bar 1", "Stool 2"], "+")).toBe("Bar 1+Stool 2");
+  });
 });
 
 describe("partyDisplayName and partyReceiptLabel", () => {

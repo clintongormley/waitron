@@ -2501,6 +2501,16 @@ describe("till-app: a table action's answer once the waiter has opened another p
   });
 });
 
+/** A promise the test answers when it chooses. */
+function deferredTables(): {
+  promise: Promise<TableState[]>;
+  resolve: (value: TableState[]) => void;
+} {
+  let resolve!: (value: TableState[]) => void;
+  const promise = new Promise<TableState[]>((done) => (resolve = done));
+  return { promise, resolve };
+}
+
 describe("till-app: moving a bill", () => {
   const heldRows = (el: TillApp) =>
     el.shadowRoot!.querySelector<HTMLElement & { heldOrders: unknown[] }>("till-counter-screen")
@@ -2876,6 +2886,52 @@ describe("till-app: moving a bill", () => {
 
     expect(banner(el)!.textContent).toContain(t("party.changed").replace("{table}", "4"));
     expect(tableOrder(el)!.party!.revision).toBe(5);
+  });
+
+  const movedFloor = () => [seated({}, { revision: 4 }), mesa7, mesa9];
+  /** Mesa 4's row, the table the order was opened from, in the order screen's tables. */
+  const mesa4Row = (el: TillApp) => tableOrder(el)!.tables.find((row) => row.id === "t4")!;
+
+  it("Move a bill's floor read is not replaced by an older poll that answers later", async () => {
+    const poll = deferredTables();
+    const getTablesState = vi.fn().mockResolvedValue([mesa4, mesa7, mesa9]);
+    const { el } = await mountApp({ getTablesState });
+    const order = await openMesa(el);
+    getTablesState.mockReturnValueOnce(poll.promise).mockResolvedValueOnce(movedFloor());
+
+    emit(order, "floor-refresh");
+    await flush(el);
+    emit(order, "move-bill", { to: { tableId: "t9", seated: null }, bills: "merge" });
+    await flush(el);
+    expect(mesa4Row(el).party!.revision).toBe(4);
+    poll.resolve([mesa4, mesa7, mesa9]);
+    await flush(el);
+
+    expect(mesa4Row(el).party!.revision).toBe(4);
+  });
+
+  // Passes on a rule that applies every answer too; it fails a rule that drops an answer once a
+  // newer read has started.
+  it("Move a bill's floor read is applied when a poll starts before it answers", async () => {
+    const moveRead = deferredTables();
+    const poll = deferredTables();
+    const getTablesState = vi.fn().mockResolvedValue([mesa4, mesa7, mesa9]);
+    const { el } = await mountApp({ getTablesState });
+    const order = await openMesa(el);
+    const readsBefore = getTablesState.mock.calls.length;
+    getTablesState.mockReturnValueOnce(moveRead.promise).mockReturnValueOnce(poll.promise);
+
+    emit(order, "move-bill", { to: { tableId: "t9", seated: null }, bills: "merge" });
+    await expect.poll(() => getTablesState.mock.calls.length).toBe(readsBefore + 1);
+    emit(tableOrder(el)!, "floor-refresh");
+    await flush(el);
+    expect(getTablesState).toHaveBeenCalledTimes(readsBefore + 2);
+    moveRead.resolve(movedFloor());
+    await flush(el);
+
+    expect(mesa4Row(el).party!.revision).toBe(4);
+    // #rememberOrderParty runs only when #refreshFloor answers true.
+    expect(tableOrder(el)!.party!.revision).toBe(4);
   });
 });
 

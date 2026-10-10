@@ -3054,6 +3054,64 @@ describe("till-table-order-screen", () => {
       ...over,
     });
 
+    it("shows the table's status in its head actions", async () => {
+      const p1 = { ...anaParty, id: "p1", tableIds: ["t4"] };
+      const tables = [tableState({ id: "t4", state: "open-tab", condition: "held", party: p1 })];
+      const { el } = await mount({ tables, party: p1 });
+      const actions = el.shadowRoot!.querySelector(".head-actions")!;
+      const status = actions.querySelector<
+        HTMLElement & { party: TableParty | null; tables: TableState[] }
+      >("till-table-status");
+      expect(status!.party).toBe(p1);
+      expect(status!.tables).toBe(tables);
+      expect(status!.nextElementSibling!.hasAttribute("data-open-drawer")).toBe(true);
+    });
+
+    it("on a phone-wide screen in Spanish, a long status pin keeps each head button on one line", async () => {
+      const locale = currentLocale();
+      setLocale("es");
+      try {
+        const p1 = { ...anaParty, id: "p1", tableIds: ["t4"] };
+        const tables = [
+          tableState({
+            id: "t4",
+            state: "open-tab",
+            condition: "held",
+            party: p1,
+            signals: [{ kind: "bill_requested", requestedAt: "2026-10-10T12:00:00Z" }],
+          }),
+        ];
+        await page.viewport(390, 844);
+        const { el } = await mount({ tables, party: p1, lines: [pendingLine, servedLine] });
+        const actions = el.shadowRoot!.querySelector(".head-actions")!;
+        const status = actions.querySelector("till-table-status")!;
+        const pin = status.shadowRoot!.querySelector<HTMLElement>("[data-status-pin]")!;
+        expect(pin.textContent!.trim()).toBe("Cuenta pedida");
+        /** The most lines any one run of an element's words is broken over. */
+        const linesOf = (each: Element) => {
+          const walker = document.createTreeWalker(each, NodeFilter.SHOW_TEXT);
+          let most = 0;
+          for (let node = walker.nextNode(); node !== null; node = walker.nextNode()) {
+            if (node.textContent!.trim() === "") continue;
+            const range = document.createRange();
+            range.selectNodeContents(node);
+            const tops = [...range.getClientRects()].map((rect) => Math.round(rect.top));
+            most = Math.max(most, new Set(tops).size);
+          }
+          return most;
+        };
+        const tab = actions.querySelector<HTMLElement>("[data-open-drawer]")!;
+        const back = actions.querySelector<HTMLElement>("[data-back]")!;
+        expect([pin, tab, back].map(linesOf)).toEqual([1, 1, 1]);
+        const pinBox = pin.getBoundingClientRect();
+        const tabBox = tab.getBoundingClientRect();
+        expect(tabBox.top < pinBox.bottom && pinBox.top < tabBox.bottom).toBe(true);
+      } finally {
+        setLocale(locale);
+        await page.viewport(414, 896);
+      }
+    });
+
     async function toMenu(el: TillTableOrderScreen): Promise<void> {
       await openDrawer(el);
       el.shadowRoot!.querySelector<HTMLElement>("[data-move-split]")!.click();

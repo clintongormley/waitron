@@ -51,6 +51,16 @@
   --wt-color-on-day-standard: #16181d;
   --wt-color-day-closed: #3a3b42;
   --wt-color-on-day-closed: #ffffff;
+  --wt-color-table-free: #dff3e8;
+  --wt-color-on-table-free: #16181d;
+  --wt-color-table-seated: #1f6feb;
+  --wt-color-on-table-seated: #ffffff;
+  --wt-color-table-bill: #7e3fb8;
+  --wt-color-on-table-bill: #ffffff;
+  --wt-color-table-clearing: #f5a623;
+  --wt-color-on-table-clearing: #241500;
+  --wt-color-table-reserved: #fde7c8;
+  --wt-color-on-table-reserved: #16181d;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -101,6 +111,16 @@
     --wt-color-on-day-standard: #eceef2;
     --wt-color-day-closed: #d5d7de;
     --wt-color-on-day-closed: #101216;
+    --wt-color-table-free: #183626;
+    --wt-color-on-table-free: #eceef2;
+    --wt-color-table-seated: #4c8dff;
+    --wt-color-on-table-seated: #06101f;
+    --wt-color-table-bill: #c39bf0;
+    --wt-color-on-table-bill: #1d0b33;
+    --wt-color-table-clearing: #f5b34a;
+    --wt-color-on-table-clearing: #241500;
+    --wt-color-table-reserved: #4a3a1c;
+    --wt-color-on-table-reserved: #eceef2;
   }
 }
 
@@ -151,6 +171,16 @@
   --wt-color-on-day-standard: #16181d;
   --wt-color-day-closed: #3a3b42;
   --wt-color-on-day-closed: #ffffff;
+  --wt-color-table-free: #dff3e8;
+  --wt-color-on-table-free: #16181d;
+  --wt-color-table-seated: #1f6feb;
+  --wt-color-on-table-seated: #ffffff;
+  --wt-color-table-bill: #7e3fb8;
+  --wt-color-on-table-bill: #ffffff;
+  --wt-color-table-clearing: #f5a623;
+  --wt-color-on-table-clearing: #241500;
+  --wt-color-table-reserved: #fde7c8;
+  --wt-color-on-table-reserved: #16181d;
 }
 
 :where([data-wt-theme-root][data-theme="dark"]) {
@@ -200,4 +230,14 @@
   --wt-color-on-day-standard: #eceef2;
   --wt-color-day-closed: #d5d7de;
   --wt-color-on-day-closed: #101216;
+  --wt-color-table-free: #183626;
+  --wt-color-on-table-free: #eceef2;
+  --wt-color-table-seated: #4c8dff;
+  --wt-color-on-table-seated: #06101f;
+  --wt-color-table-bill: #c39bf0;
+  --wt-color-on-table-bill: #1d0b33;
+  --wt-color-table-clearing: #f5b34a;
+  --wt-color-on-table-clearing: #241500;
+  --wt-color-table-reserved: #4a3a1c;
+  --wt-color-on-table-reserved: #eceef2;
 }

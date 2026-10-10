@@ -54,6 +54,14 @@ export type {
 } from "./components/wt-floor-plan-canvas.js";
 export { WtFloorPlanPreview } from "./components/wt-floor-plan-preview.js";
 export type { PreviewTable } from "./components/wt-floor-plan-preview.js";
+export { WtFloorMap, mergeLabel } from "./components/wt-floor-map.js";
+export type {
+  FloorMapCopy,
+  FloorMapDetails,
+  FloorMapDrop,
+  FloorMapTable,
+  FloorMapTap,
+} from "./components/wt-floor-map.js";
 export { WtSheet } from "./components/wt-sheet.js";
 export {
   FLOOR_ASPECT,
@@ -99,6 +107,10 @@ export {
   snapToSquare,
 } from "./floor-plan-geometry.js";
 export type { PlanPlacement, PlanRect, PlanShape } from "./floor-plan-geometry.js";
+export { DOUBLE_TAP_MS, DOUBLE_TAP_PX, Gestures, LONG_PRESS_MS, SLOP_PX } from "./gestures.js";
+export type { GestureHandlers, GesturePoint } from "./gestures.js";
+export { FLOOR_MAP_FILLS, floorMapFillStyles } from "./floor-map-fills.js";
+export type { FloorMapDot, FloorMapFill } from "./floor-map-fills.js";
 export { UndoHistory } from "./history.js";
 export { submitOnEnter } from "./submit-on-enter.js";
 export {

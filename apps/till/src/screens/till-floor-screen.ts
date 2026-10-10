@@ -5,8 +5,8 @@ import { PHONE_WIDTH } from "../widgets/language-chooser-styles.js";
 import { customElement, property, state } from "lit/decorators.js";
 import { trackDialog } from "../widgets/track-dialog.js";
 import type { TimingBand } from "@waitron/shared";
-// Importing the `@waitron/ui` barrel also registers `<wt-floor-canvas>` and `<wt-table-token>`, which
-// the map view and the tray use by tag.
+// Importing the `@waitron/ui` barrel also registers `<wt-floor-canvas>`, `<wt-floor-map>` and
+// `<wt-table-token>`, which the map views and the tray use by tag.
 import {
   baseStyles,
   UrlStateController,
@@ -14,36 +14,32 @@ import {
   defaultTraySlot,
   floorTrayStyles,
   isTableZoneless,
+  mergeLabel,
   renderFloorChips,
   resolveActiveTabKey,
   toFloorTable,
 } from "@waitron/ui";
 import type {
   FloorCanvasCopy,
+  FloorMapTable,
   FloorTable,
   PlacementChange,
   PlacementClear,
   ZoneTab,
 } from "@waitron/ui";
 import { decimal, formatMoney, isZeroDecimal } from "@waitron/shared";
-import { countText, currentLocale, named, t } from "../i18n/t.js";
+import { currentLocale, t } from "../i18n/t.js";
 import "../widgets/seat-dialog.js";
+import { partyPaid, unsentText } from "../widgets/table-details-sheet.js";
 import type { SeatConfirmDetail } from "../widgets/seat-dialog.js";
-import type { FloorZone, TableState, TableParty, TillApi, UnsentDraft } from "../api/client.js";
+import { isPlannedZone, listedTables, mapTables, seatsFor } from "../state/floor-map.js";
+import type { FloorZone, TableState, TableParty, TillApi } from "../api/client.js";
 import { delayUntil, reminderDueAt } from "../state/release-reminder.js";
 import { readyByStation, signalOf, type StationReady } from "../state/table-signals.js";
 import { signalChipStyles, signalChips } from "../widgets/signal-chips.js";
 
 function needsClearing(table: TableState): boolean {
   return table.condition === "needs_clearing";
-}
-
-function unsentText({ ownerName, lineCount }: UnsentDraft): string {
-  return named(
-    ownerName,
-    countText(lineCount, "floor.unsent_owner", "floor.unsent_owner_one"),
-    countText(lineCount, "floor.unsent", "floor.unsent_one"),
-  );
 }
 
 /** The party's name when it says more than the table's own label: a name staff gave, or a joined
@@ -58,11 +54,23 @@ function tableChips(table: TableState) {
   return signalChips(table.signals, { forgottenShown: table.timingBand === "forgotten" });
 }
 
-/** Nothing of the party is left to pay, and no tab is open that could still take a round. */
-function partyPaid(table: TableState): boolean {
-  return (
-    table.party !== null && !table.hasOpenTab && isZeroDecimal(decimal(table.party.outstanding))
-  );
+/** Sent by the 15-second re-read; an action's `floor-refresh` carries no detail. */
+export interface FloorRefreshDetail {
+  poll: true;
+}
+
+type PlacedTable = TableState & { posX: number; posY: number };
+
+interface ZoneOnScreen {
+  tabs: ZoneTab[];
+  refusedZone: FloorZone | undefined;
+  activeKey: string | null | undefined;
+  planned: boolean;
+  view: "map" | "list";
+  listed: TableState[];
+  onMap: FloorMapTable[];
+  placed: PlacedTable[];
+  unplaced: TableState[];
 }
 
 @customElement("till-floor-screen")
@@ -126,6 +134,11 @@ export class TillFloorScreen extends LitElement {
         display: flex;
         flex-direction: column;
         gap: var(--wt-space-3);
+      }
+
+      wt-floor-map {
+        height: 65dvh;
+        min-height: calc(var(--wt-tap-min) * 6);
       }
 
       /* A token's unsent-order mark hangs below it, into the row gap and the tray's padding. */
@@ -431,6 +444,8 @@ export class TillFloorScreen extends LitElement {
   @state() private refusedZoneId: string | null = null;
   /** The table tapped on the map that needs clearing. */
   @state() private clearing: TableState | null = null;
+  /** The table whose details sheet is open, read afresh from `tables` on each render. */
+  @state() private details: { tableId: string } | null = null;
 
   readonly #url = new UrlStateController(
     this,
@@ -441,27 +456,59 @@ export class TillFloorScreen extends LitElement {
     tillPath,
   );
 
+  /** The zone on screen, worked out in `willUpdate` when one of `#zoneInputs` changes. */
+  #zone!: ZoneOnScreen;
+  #zoneInputs?: readonly unknown[];
+  #mapCopy = { locale: "", copy: { label: "" } };
+
   /** The clock the last render judged reminders by. */
   #drawnAt = 0;
   #reminderTimer?: ReturnType<typeof setTimeout>;
+  #rereadTimer?: ReturnType<typeof setInterval>;
 
   override connectedCallback(): void {
     super.connectedCallback();
-    // The timer stopped while the screen was off the page; a time already past redraws at once.
-    if (this.hasUpdated) this.#watchReminders();
+    // The timers stopped while the screen was off the page. A reminder that fell due meanwhile
+    // redraws at once; the floor's re-read waits a full 15 s.
+    if (this.hasUpdated) {
+      this.#watchReminders();
+      this.#watchFloor();
+    }
   }
 
   override disconnectedCallback(): void {
     super.disconnectedCallback();
     clearTimeout(this.#reminderTimer);
+    clearInterval(this.#rereadTimer);
+    this.#rereadTimer = undefined;
   }
 
   override willUpdate(): void {
     this.#drawnAt = this.now ?? Date.now();
+    if (this.details !== null && !this.tables.some((table) => table.id === this.details!.tableId))
+      this.details = null;
+    // Edit plan's writes move the old placement columns, which a planned zone's map does not read.
+    this.#zone = this.#zoneOnScreen();
+    if (this.#zone.planned) this.editing = false;
   }
 
   override updated(): void {
     this.#watchReminders();
+    this.#watchFloor();
+  }
+
+  /** A planned map shows statuses other tills change, so it asks for the floor every 15 s. */
+  #watchFloor(): void {
+    const drawsPlannedMap = this.#zone.planned && this.#zone.view === "map";
+    if (!drawsPlannedMap || !this.isConnected) {
+      clearInterval(this.#rereadTimer);
+      this.#rereadTimer = undefined;
+      return;
+    }
+    this.#rereadTimer ??= setInterval(
+      () => this.#emit("floor-refresh", { poll: true } satisfies FloorRefreshDetail),
+      15_000,
+    );
   }
 
   #fireDue(table: TableState): boolean {
@@ -471,7 +518,7 @@ export class TillFloorScreen extends LitElement {
   /** The server's floor does not change when a reminder falls due, so the screen redraws itself then. */
   #watchReminders(): void {
     clearTimeout(this.#reminderTimer);
-    if (this.now !== undefined) return;
+    if (this.now !== undefined || !this.isConnected) return;
     let next = Number.POSITIVE_INFINITY;
     for (const table of this.tables) {
       const dueAt = reminderDueAt(table.party?.reminder);
@@ -507,6 +554,36 @@ export class TillFloorScreen extends LitElement {
     this.#emit("open-table", { tableId: table.id, seated: false, guestCount });
   }
 
+  #onDetails(event: Event): void {
+    event.stopPropagation();
+    const { tableId } = (event as CustomEvent<{ tableId: string }>).detail;
+    if (this.tables.some((table) => table.id === tableId)) this.details = { tableId };
+  }
+
+  /** As the map names the table: a merge by all its drawn members' labels, else its own label. */
+  #detailsHeading(table: TableState): string {
+    const joinId = table.today?.joinId ?? null;
+    const members =
+      joinId === null ? [] : this.#zone.onMap.filter((drawn) => drawn.joinId === joinId);
+    if (!members.some((drawn) => drawn.id === table.id)) return table.label;
+    return mergeLabel(members.map((drawn) => drawn.label));
+  }
+
+  #detailsSheet(): TemplateResult | typeof nothing {
+    const details = this.details;
+    if (details === null) return nothing;
+    const table = this.tables.find((candidate) => candidate.id === details.tableId)!;
+    return html`<till-table-details-sheet
+      .table=${table}
+      .heading=${this.#detailsHeading(table)}
+      .now=${this.#drawnAt}
+      @details-close=${(event: Event) => {
+        event.stopPropagation();
+        this.details = null;
+      }}
+    ></till-table-details-sheet>`;
+  }
+
   #markCleared(table: TableState): void {
     this.clearing = null;
     this.#emit("mark-cleared", { tableId: table.id });
@@ -537,8 +614,8 @@ export class TillFloorScreen extends LitElement {
   }
 
   /**
-   * The shared canvas has no read-model, so it emits `wt-open-table { tableId }` only. The table is
-   * looked up here, so a seated one resumes its party rather than being seated a second time.
+   * Both maps send a table id only (the canvas's `wt-open-table`, the new map's `wt-table-tap`). The
+   * table is looked up here, so a seated one resumes its party rather than being seated a second time.
    */
   #onCanvasOpen(event: Event): void {
     event.stopPropagation();
@@ -630,7 +707,17 @@ export class TillFloorScreen extends LitElement {
     };
   }
 
-  override render() {
+  #zoneOnScreen(): ZoneOnScreen {
+    const inputs = [
+      this.tables,
+      this.zones,
+      this.activeZone,
+      this.refusedZoneId,
+      this.viewOverride,
+      currentLocale(),
+    ];
+    if (this.#zoneInputs?.every((input, i) => input === inputs[i])) return this.#zone;
+    this.#zoneInputs = inputs;
     const knownZoneIds = new Set(this.zones.map((z) => z.id));
     const tabs = buildZoneTabs(
       this.zones.map((zone) => ({
@@ -646,14 +733,34 @@ export class TillFloorScreen extends LitElement {
     const visible = this.tables.filter((table) =>
       activeKey === null ? isTableZoneless(table, knownZoneIds) : table.zoneId === activeKey,
     );
+    const planned = isPlannedZone(visible);
+    const listed = planned ? listedTables(visible) : visible;
+    const onMap = planned ? mapTables(visible) : [];
     // The server writes and nulls the four placement columns together, so `posX` alone tells placed
     // from unplaced.
-    const placed = visible.filter(
-      (table): table is TableState & { posX: number; posY: number } =>
-        table.posX != null && table.posY != null,
-    );
-    const unplaced = visible.filter((table) => table.posX == null);
-    const view: "map" | "list" = this.viewOverride ?? (placed.length > 0 ? "map" : "list");
+    const placed = planned
+      ? []
+      : visible.filter((table): table is PlacedTable => table.posX != null && table.posY != null);
+    const mapIds = new Set(onMap.map((table) => table.id));
+    const unplaced = planned
+      ? listed.filter((table) => !mapIds.has(table.id))
+      : visible.filter((table) => table.posX == null);
+    const drawn = planned ? onMap.length : placed.length;
+    const view = this.viewOverride ?? (drawn > 0 ? "map" : "list");
+    return { tabs, refusedZone, activeKey, planned, view, listed, onMap, placed, unplaced };
+  }
+
+  /** Rebuilt only when the language changes, so a redraw hands the map the same copy. */
+  #floorMapCopy(): { label: string } {
+    const locale = currentLocale();
+    if (this.#mapCopy.locale !== locale)
+      this.#mapCopy = { locale, copy: { label: t("floor.map_label") } };
+    return this.#mapCopy.copy;
+  }
+
+  override render() {
+    const { tabs, refusedZone, activeKey, planned, view, listed, onMap, placed, unplaced } =
+      this.#zone;
     return html`
       <section class="screen" aria-label=${t("floor.title")}>
         ${
@@ -680,7 +787,7 @@ export class TillFloorScreen extends LitElement {
             ${view === "map" ? t("floor.view_list") : t("floor.view_map")}
           </wt-button>
           ${
-            this.canEdit
+            this.canEdit && !planned
               ? html`<wt-button
                   class="edit-toggle"
                   data-edit-toggle
@@ -715,19 +822,18 @@ export class TillFloorScreen extends LitElement {
         })()}
         ${this.#stationSummary()}
         ${
-          view === "map"
-            ? this.#map(placed, unplaced)
-            : html`<div class="grid">${visible.map((table) => this.#card(table))}</div>`
+          view === "list"
+            ? html`<div class="grid">${listed.map((table) => this.#card(table))}</div>`
+            : planned
+              ? this.#plannedMap(onMap, unplaced, activeKey)
+              : this.#map(placed, unplaced)
         }
-        ${this.#seatDialog()} ${this.#clearDialog()}
+        ${this.#seatDialog()} ${this.#clearDialog()} ${this.#detailsSheet()}
       </section>
     `;
   }
 
-  #map(
-    placed: (TableState & { posX: number; posY: number })[],
-    unplaced: TableState[],
-  ): TemplateResult {
+  #map(placed: PlacedTable[], unplaced: TableState[]): TemplateResult {
     return html`
       <div class="map">
         <wt-floor-canvas
@@ -739,16 +845,40 @@ export class TillFloorScreen extends LitElement {
           @wt-placement-change=${(event: Event) => void this.#onPlacementChange(event)}
           @wt-placement-clear=${(event: Event) => void this.#onPlacementClear(event)}
         ></wt-floor-canvas>
-        ${
-          unplaced.length > 0
-            ? html`<div class="tray" aria-label=${t("floor.unplaced")}>
-                <span class="tray-label">${t("floor.unplaced")}</span>
-                ${unplaced.map((table) => this.#trayItem(table, placed))}
-              </div>`
-            : nothing
-        }
+        ${this.#tray(unplaced, placed)}
       </div>
     `;
+  }
+
+  /** `fitKey` and `tables` change in one update, so a new zone is fitted to its own tables. */
+  #plannedMap(
+    onMap: FloorMapTable[],
+    unplaced: TableState[],
+    activeKey: string | null | undefined,
+  ): TemplateResult {
+    return html`
+      <div class="map">
+        <wt-floor-map
+          data-floor-map
+          .tables=${onMap}
+          .fitKey=${activeKey ?? ""}
+          .copy=${this.#floorMapCopy()}
+          .reducedMotion=${this.reducedMotion}
+          @wt-table-tap=${(event: Event) => this.#onCanvasOpen(event)}
+          @wt-table-details=${(event: Event) => this.#onDetails(event)}
+        ></wt-floor-map>
+        ${this.#tray(unplaced, [])}
+      </div>
+    `;
+  }
+
+  #tray(unplaced: TableState[], placed: TableState[]): TemplateResult | typeof nothing {
+    return unplaced.length > 0
+      ? html`<div class="tray" aria-label=${t("floor.unplaced")}>
+          <span class="tray-label">${t("floor.unplaced")}</span>
+          ${unplaced.map((table) => this.#trayItem(table, placed))}
+        </div>`
+      : nothing;
   }
 
   /** `placed` is the active zone's already-placed tables, so the default slot can dodge them. */
@@ -826,6 +956,7 @@ export class TillFloorScreen extends LitElement {
     if (table === null) return nothing;
     return html`<till-seat-dialog
       .tableLabel=${table.label}
+      .seats=${seatsFor(table)}
       @seat-confirm=${(event: Event) => this.#onSeatConfirm(event, table)}
       @seat-cancel=${(event: Event) => {
         event.stopPropagation();
@@ -870,11 +1001,7 @@ export class TillFloorScreen extends LitElement {
     return html`<div class="card state-${table.state} clearing" data-table=${table.id}>
       <span class="card-head">
         <span class="label">${table.label}</span>
-        ${
-          table.capacity !== null
-            ? html`<span class="capacity">${table.capacity} ${t("floor.capacity")}</span>`
-            : nothing
-        }
+        ${this.#seats(table)}
       </span>
       <span class="occupancy" data-needs-clearing>${t("floor.needs_clearing")}</span>
       <wt-button
@@ -888,6 +1015,13 @@ export class TillFloorScreen extends LitElement {
     </div>`;
   }
 
+  #seats(table: TableState): TemplateResult | typeof nothing {
+    const seats = seatsFor(table);
+    return seats !== null
+      ? html`<span class="capacity">${seats} ${t("floor.capacity")}</span>`
+      : nothing;
+  }
+
   #card(table: TableState): TemplateResult {
     if (needsClearing(table)) return this.#clearingCard(table);
     return html`<button
@@ -897,11 +1031,7 @@ export class TillFloorScreen extends LitElement {
     >
       <span class="card-head">
         <span class="label">${table.label}</span>
-        ${
-          table.capacity !== null
-            ? html`<span class="capacity">${table.capacity} ${t("floor.capacity")}</span>`
-            : nothing
-        }
+        ${this.#seats(table)}
       </span>
       ${this.#partyName(table)} ${this.#occupancy(table)} ${this.#unsent(table.party)}
       <span class="badges">

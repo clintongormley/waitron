@@ -267,6 +267,22 @@ const partyTables: TableState[] = [
   })),
 ];
 
+const todayRow = (x: number, placed = true) => ({
+  placement: placed ? { x, y: 3, width: 2, height: 2, shape: "round" as const, rotation: 0 } : null,
+  seats: 4,
+  fixed: false,
+  takenOff: false,
+  joinId: null,
+  joinSeats: null,
+});
+
+/** A planned zone: a seated table and a free one on the plan, and a seated one with no place. */
+const plannedTables: TableState[] = [
+  { ...partyTables[0]!, zoneId: "z1", today: todayRow(2) },
+  { ...tables[2]!, today: todayRow(6) },
+  { ...partyTables[1]!, id: "t4", label: "4", zoneId: "z1", today: todayRow(0, false) },
+];
+
 afterEach(cleanupWidgets);
 
 describe.each(["light", "dark"] as const)("till-floor-screen a11y (%s theme)", (theme) => {
@@ -432,6 +448,35 @@ describe.each(["light", "dark"] as const)("till-floor-screen a11y (%s theme)", (
     expect(token.shadowRoot!.querySelectorAll("[data-chip]").length).toBeGreaterThan(5);
     expect(map.el.shadowRoot!.querySelector("[data-station-summary]")).not.toBeNull();
     await expectNoA11yViolations(map.host);
+  });
+
+  it("has no violations rendering a planned zone's map", async () => {
+    const { el, host } = await mountWidget<TillFloorScreen>(
+      "till-floor-screen",
+      { zones, tables: plannedTables },
+      theme,
+    );
+    const map = el.shadowRoot!.querySelector<HTMLElement & { updateComplete: Promise<unknown> }>(
+      "wt-floor-map",
+    )!;
+    await new Promise(requestAnimationFrame);
+    await new Promise(requestAnimationFrame);
+    await map.updateComplete;
+    expect(map.shadowRoot!.querySelectorAll("[part=table]").length).toBe(2);
+    expect(el.shadowRoot!.querySelector("[data-tray-table]")).not.toBeNull();
+    await expectNoA11yViolations(host);
+  });
+
+  it("has no violations rendering a planned zone's list", async () => {
+    const { el, host } = await mountWidget<TillFloorScreen>(
+      "till-floor-screen",
+      { zones, tables: plannedTables },
+      theme,
+    );
+    el.shadowRoot!.querySelector<HTMLElement>("[data-view-toggle]")!.click();
+    await el.updateComplete;
+    expect(el.shadowRoot!.querySelectorAll("[data-table]").length).toBe(3);
+    await expectNoA11yViolations(host);
   });
 
   it("has no violations with the seat dialog open", async () => {

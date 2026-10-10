@@ -4,16 +4,19 @@ export const TABLE_SEPARATOR = ", ";
 export const PARTY_NAME_MAX = 40;
 
 /** Tables sharing their first word are named once ("Table 4, 5, 7"); otherwise each in full. */
-export function partyTablesName(labels: readonly string[]): string {
+export function partyTablesName(
+  labels: readonly string[],
+  separator: string = TABLE_SEPARATOR,
+): string {
   const words = labels.map((label) => {
     const space = label.indexOf(" ");
     return space <= 0 ? null : { first: label.slice(0, space), rest: label.slice(space + 1) };
   });
   const first = words[0]?.first;
   if (labels.length > 0 && words.every((word) => word !== null && word.first === first)) {
-    return `${first} ${words.map((word) => word!.rest).join(TABLE_SEPARATOR)}`;
+    return `${first} ${words.map((word) => word!.rest).join(separator)}`;
   }
-  return labels.join(TABLE_SEPARATOR);
+  return labels.join(separator);
 }
 
 export function partyDisplayName(name: string | null, labels: readonly string[]): string {
