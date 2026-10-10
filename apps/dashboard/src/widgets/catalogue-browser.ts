@@ -911,7 +911,6 @@ export class CatalogueBrowser extends LitElement {
         }}
         @show-archived-change=${(event: Event) => {
           event.stopPropagation();
-          this.selected = [];
         }}
         @delete-folder=${(event: CustomEvent<{ folderId: string }>) => {
           event.stopPropagation();

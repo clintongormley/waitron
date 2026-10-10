@@ -1005,11 +1005,10 @@ Actions menu offers Edit product at every width.
 The toolbar has a search box ("Search this menu" / "Buscar en esta carta") that matches the names the
 rows show and lists their own matches with inline paths, and the Available column has a Yes / No filter; a
 section or an included menu answers neither, so it stays only on the way to a match. There is no
-filter on Type: its three values are already told apart by the folder frame and the arrow. A search
-draws the closest matches first rather than in the menu's order, so while the search box holds
-anything but spaces, punctuation alone included, Reorder draws no grips and a drag already held ends
-with no move; clearing the search brings the grips back. While the Available filter alone hides rows,
-ArrowUp and ArrowDown move a member past the next sibling that is drawn, never past a hidden one.
+filter on Type: its three values are already told apart by the folder frame and the arrow.
+Dragging remains available during search and carries only visible ticks; hidden ticks remain
+selected. Move and Remove use all ticks. A changed query cancels a held drag. While search or
+the Available filter hides rows, ArrowUp and ArrowDown move past the next drawn sibling.
 The search clears when another menu opens or the menu empties.
 
 Beside Reorder is a Select icon button (the Products tree's, "Select" / "Seleccionar"). In Select

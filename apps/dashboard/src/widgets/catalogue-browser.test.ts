@@ -4504,9 +4504,9 @@ it("A461 gathers Products ticks across searches and only selects shown rows", as
   all.click();
   await tableOf(el);
   expect(count(el)).toBe("2 selected");
-  await chooseFilter(el, "active", "inactive");
+  await chooseFilter(el, "modifiers", "has");
   expect(count(el)).toBe("2 selected");
-  await chooseFilter(el, "active", "");
+  await chooseFilter(el, "modifiers", "");
   await typeSearch(el, "");
   await toggleCategory(el, "d");
   await toggleCategory(el, "f");
