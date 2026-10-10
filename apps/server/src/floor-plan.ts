@@ -143,13 +143,17 @@ export async function readZonePlan(
       .from(floorPlanJoins)
       .where(eq(floorPlanJoins.planId, plan.id))
       .orderBy(asc(floorPlanJoins.id));
-    for (const join of joinRows) {
+    const membersOf = new Map(joinRows.map((join) => [join.id, [] as string[]]));
+    if (joinRows.length > 0) {
       const members = await tx
-        .select({ tableId: floorPlanJoinTables.planTableId })
+        .select({ joinId: floorPlanJoinTables.joinId, tableId: floorPlanJoinTables.planTableId })
         .from(floorPlanJoinTables)
-        .where(eq(floorPlanJoinTables.joinId, join.id))
+        .where(inArray(floorPlanJoinTables.joinId, [...membersOf.keys()]))
         .orderBy(asc(floorPlanJoinTables.planTableId));
-      joins.push({ id: join.id, seats: join.seats, tableIds: members.map((m) => m.tableId) });
+      for (const member of members) membersOf.get(member.joinId)!.push(member.tableId);
+    }
+    for (const join of joinRows) {
+      joins.push({ id: join.id, seats: join.seats, tableIds: membersOf.get(join.id)! });
     }
   }
   for (const live of await adoptableOf(tx, cfg, zoneId)) {

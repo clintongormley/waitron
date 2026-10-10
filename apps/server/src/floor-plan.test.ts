@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { DatabaseSync } from "node:sqlite";
 import { and, asc, eq, inArray, isNull } from "drizzle-orm";
 import { describe, expect, it, vi } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
@@ -126,6 +127,55 @@ function check(zoneId: string, input: ZonePlanSave, removals: readonly TableRemo
 }
 
 describe("readZonePlan", () => {
+  it("reads every join's tables in one query, whatever the number of joins", async () => {
+    const z = await zone();
+    const masters = await masterOf(
+      z,
+      ["a", "b", "c", "d", "e"].map((name) => ({ label: fresh(name) })),
+    );
+    const [m1, m2, m3, m4, m5] = masters;
+    const joinIds = await inTx(v, async (tx) => {
+      const [plan] = await tx
+        .select({ id: floorPlans.id })
+        .from(floorPlans)
+        .where(eq(floorPlans.zoneId, z));
+      const ids: string[] = [];
+      for (const members of [
+        [m3!, m1!],
+        [m5!, m2!, m4!],
+      ]) {
+        const [row] = await tx
+          .insert(floorPlanJoins)
+          .values({ planId: plan!.id, seats: members.length * 2 })
+          .returning({ id: floorPlanJoins.id });
+        ids.push(row!.id);
+        for (const planTableId of members) {
+          await tx.insert(floorPlanJoinTables).values({ joinId: row!.id, planTableId });
+        }
+      }
+      return ids;
+    });
+
+    const { plan, statements } = await inTx(v, async (tx) => {
+      const prepare = vi.spyOn(DatabaseSync.prototype, "prepare");
+      try {
+        return { plan: await readZonePlan(tx, v.cfg, z), statements: prepare.mock.calls.length };
+      } finally {
+        prepare.mockRestore();
+      }
+    });
+
+    expect(plan.joins).toEqual(
+      [
+        { id: joinIds[0]!, seats: 4, tableIds: [m3!, m1!].sort() },
+        { id: joinIds[1]!, seats: 6, tableIds: [m5!, m2!, m4!].sort() },
+      ].sort((a, b) => (a.id < b.id ? -1 : 1)),
+    );
+    // The zone, the plan, its tables, their live tables, the joins, the joins' tables, and the
+    // live tables it could adopt.
+    expect(statements).toBe(7);
+  });
+
   it("offers a zone's live tables as the first draft", async () => {
     const z = await zone();
     const t1 = await liveTable(z, fresh("T1"), 4);
