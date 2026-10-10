@@ -1,7 +1,9 @@
-import { and, eq, inArray, isNotNull } from "drizzle-orm";
+import { and, eq, inArray, isNotNull, isNull } from "drizzle-orm";
 import {
   diningTables,
   floorPlanJoins,
+  parties,
+  partyTables,
   floorPlanJoinTables,
   floorTodayJoins,
   floorTodayJoinTables,
@@ -16,7 +18,8 @@ import {
   todayOf,
   type Today,
 } from "./floor-today-table.js";
-import type { TillConfig } from "./till-config.js";
+import { joinTables } from "./table-actions.js";
+import type { OriginConfig, TillConfig } from "./till-config.js";
 import "./errors.js";
 
 /**
@@ -102,6 +105,54 @@ export async function mergeMembers(tx: Transaction, tableId: string): Promise<st
     .from(floorTodayJoinTables)
     .where(eq(floorTodayJoinTables.joinId, own.joinId));
   return members.map((m) => m.tableId);
+}
+
+/**
+ * The party just seated at `tableId` takes every other member of its merge: refused
+ * `tab.already_open` for a member a party holds, `table.needs_clearing` for one needing clearing.
+ */
+export async function seatMergeMembers(
+  tx: Transaction,
+  partyId: string,
+  tableId: string,
+): Promise<void> {
+  const others = (await mergeMembers(tx, tableId)).filter((id) => id !== tableId);
+  await refuseUnfree(tx, others);
+  for (const other of others) {
+    await tx.insert(partyTables).values({ partyId, tableId: other });
+  }
+}
+
+/** Every member of `tableId`'s merge that no party holds joins the party, as the join route joins a table. */
+export async function joinMergeMembers(
+  tx: Transaction,
+  cfg: OriginConfig,
+  partyId: string,
+  tableId: string,
+  operatorId: string,
+): Promise<void> {
+  for (const member of await mergeMembers(tx, tableId)) {
+    const [held] = await tx
+      .select({ id: partyTables.id })
+      .from(partyTables)
+      .where(and(eq(partyTables.tableId, member), isNull(partyTables.leftAt)));
+    if (held !== undefined) continue;
+    await joinTables(tx, cfg, partyId, member, {
+      bills: "merge",
+      expectedPartyRevision: await partyRevision(tx, partyId),
+      operatorId,
+      otherPartyId: null,
+    });
+  }
+}
+
+/** The party's revision as it stands in the transaction now. */
+export async function partyRevision(tx: Transaction, partyId: string): Promise<number> {
+  const [party] = await tx
+    .select({ revision: parties.revision })
+    .from(parties)
+    .where(eq(parties.id, partyId));
+  return party!.revision;
 }
 
 /**

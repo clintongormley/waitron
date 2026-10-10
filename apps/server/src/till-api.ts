@@ -155,6 +155,7 @@ import type { BillCommand } from "./bill-actions.js";
 import { moveBill, moveWouldSend } from "./move-bill.js";
 import type { MoveBillOptions, MoveTarget, OtherPartyRead } from "./move-bill.js";
 import { joinTables, moveGuests, splitTable } from "./table-actions.js";
+import { joinMergeMembers, partyRevision } from "./floor-today-merges.js";
 import type { TableActionOptions } from "./table-actions.js";
 import {
   bumpGroupReady,
@@ -823,6 +824,15 @@ function requireTargetTable(value: unknown, field: string): string {
     throw new AppError("table.not_found", { tableId: String(value) });
   }
   return value.toLowerCase();
+}
+
+/** The other tables a seat names, absent for none; none may be the path table. */
+function requireOtherTables(value: unknown, pathId: string): string[] {
+  if (value === undefined) return [];
+  if (!Array.isArray(value)) throw invalid("withTableIds");
+  const ids = value.map((item: unknown) => requireTargetTable(item, "withTableIds"));
+  if (ids.includes(pathId.toLowerCase())) throw invalid("withTableIds");
+  return ids;
 }
 
 /**
@@ -2256,12 +2266,28 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       const cfg = requestCfg(deps.cfg, session);
       const id = c.req.param("id");
       if (!isUuid(id)) throw new AppError("table.not_found", { tableId: id });
-      const body = await readJsonBody<{ guestCount?: unknown }>(c);
+      const body = await readJsonBody<{ guestCount?: unknown; withTableIds?: unknown }>(c);
       const guestCount = requireGuestCount(body.guestCount);
+      const withTableIds = requireOtherTables(body.withTableIds, id);
+      const sendCfg = sendingCfg(cfg, c, session.device);
       const result = await withTransaction(deps.db, async (tx) => {
         await catchUpFloor(tx);
-        await checkZones(tx, deps.cfg, session, [{ tableId: id }]);
-        return seatTable(tx, cfg, { tableId: id, guestCount, operatorId: personId });
+        await checkZones(tx, deps.cfg, session, [
+          { tableId: id },
+          ...withTableIds.map((tableId) => ({ tableId })),
+        ]);
+        const seated = await seatTable(tx, cfg, { tableId: id, guestCount, operatorId: personId });
+        if (withTableIds.length === 0) return seated;
+        for (const otherId of withTableIds) {
+          await joinTables(tx, sendCfg, seated.partyId, otherId, {
+            bills: "merge",
+            expectedPartyRevision: await partyRevision(tx, seated.partyId),
+            operatorId: personId,
+            otherPartyId: null,
+          });
+          await joinMergeMembers(tx, sendCfg, seated.partyId, otherId, personId);
+        }
+        return { ...seated, revision: await partyRevision(tx, seated.partyId) };
       });
       return c.json(result);
     }),

@@ -182,7 +182,6 @@ describe("merging and splitting free tables", () => {
       const [moving, target] = flip ? [held.b, held.a] : [held.a, held.b];
       await expect204(today(moving, "merge", { targetId: target, side: "right", seats: 8 }));
       await seat(v, held.b);
-      await seat(v, held.a);
       const before = await todayRow(v, held.a);
       const [first] = [held.a, held.b].sort();
       for (const member of [held.a, held.b]) {

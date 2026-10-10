@@ -26,6 +26,7 @@ import type { OriginConfig, TillConfig } from "./till-config.js";
 import { createOpenOrder, openTab } from "./working-order.js";
 import { outstandingOf, readPaymentsByBill, refuseBillHoldingMoney } from "./bill-payments.js";
 import { discardPartyDrafts } from "./order-drafts.js";
+import { seatMergeMembers } from "./floor-today-merges.js";
 import { readCreditNotes, readPartyTables } from "./orders-list.js";
 import { readIssuedSales } from "./sale-due.js";
 import "./errors.js";
@@ -72,8 +73,9 @@ export interface PartyCommand {
 }
 
 /**
- * Seat a party at a free table: one party, its first table and its tab, in the caller's
- * transaction. A table that already belongs to a party is refused inside `openTab`.
+ * Seat a party at a free table: one party, its first table, every other table of that table's
+ * merge, and its tab, in the caller's transaction. A table that already belongs to a party is
+ * refused inside `openTab`.
  */
 export async function seatTable(
   tx: Transaction,
@@ -93,6 +95,7 @@ export async function seatTable(
     partyId,
   });
   await tx.insert(partyTables).values({ partyId, tableId: args.tableId });
+  await seatMergeMembers(tx, partyId, args.tableId);
   await setMainBill(tx, partyId, tabId);
   return { partyId, tabId, revision, orderNumber };
 }

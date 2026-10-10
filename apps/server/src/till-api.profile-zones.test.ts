@@ -98,6 +98,7 @@ import { offerProducts } from "./testing/zone-offers.js";
  * | POST /api/working-orders/:id/cancel                     | order                  | refuses POST /api/working-orders/:id/cancel          |
  * | GET  /api/tables, /api/tables/state, /api/zones         | list, by table or zone | "lists only the profile's zones, tables and orders"  |
  * | POST /api/tables/:id/seat                               | table                  | refuses POST /api/tables/:id/seat                    |
+ * | POST /api/tables/:id/seat (withTableIds)                | body tables            | refuses POST /api/tables/:id/seat (other tables)     |
  * | POST /api/tables/:id/cleared                            | table                  | refuses POST /api/tables/:id/cleared                 |
  * | POST /api/tables/:id/status                             | table                  | refuses POST /api/tables/:id/status                  |
  * | PUT  /api/tables/:id/placement                          | table; body zone       | refuses PUT .../placement (table), (zone)            |
@@ -662,6 +663,13 @@ const ROUTES: readonly Row[] = [
     "POST",
     (x) => `/api/tables/${x.deliTable}/seat`,
     () => ({}),
+    deliTableZone,
+  ],
+  [
+    "POST /api/tables/:id/seat (other tables)",
+    "POST",
+    (x) => `/api/tables/${x.restFreeTable}/seat`,
+    (x) => ({ withTableIds: [x.deliTable] }),
     deliTableZone,
   ],
   [
