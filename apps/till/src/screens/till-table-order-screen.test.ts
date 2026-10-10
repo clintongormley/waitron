@@ -3056,15 +3056,14 @@ describe("till-table-order-screen", () => {
 
     it("shows the table's status in its head actions", async () => {
       const p1 = { ...anaParty, id: "p1", tableIds: ["t4"] };
-      const { el } = await mount({
-        tables: [tableState({ id: "t4", state: "open-tab", condition: "held", party: p1 })],
-        party: p1,
-      });
+      const tables = [tableState({ id: "t4", state: "open-tab", condition: "held", party: p1 })];
+      const { el } = await mount({ tables, party: p1 });
       const actions = el.shadowRoot!.querySelector(".head-actions")!;
-      const status = actions.querySelector<HTMLElement & { party: TableParty | null }>(
-        "till-table-status",
-      );
+      const status = actions.querySelector<
+        HTMLElement & { party: TableParty | null; tables: TableState[] }
+      >("till-table-status");
       expect(status!.party).toBe(p1);
+      expect(status!.tables).toBe(tables);
       expect(status!.nextElementSibling!.hasAttribute("data-open-drawer")).toBe(true);
     });
 

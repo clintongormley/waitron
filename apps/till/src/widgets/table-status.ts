@@ -76,8 +76,11 @@ export class TillTableStatus extends LitElement {
   @property({ attribute: false }) tables: TableState[] = [];
   @property({ attribute: false }) party: TableParty | null = null;
 
-  #open = false;
+  /** The party the sheet was opened for; it closes once that party or all its tables go. */
+  #openFor: string | null = null;
   #judgedPartyId: string | null = null;
+  #partyRows: TableState[] = [];
+  #message = "";
 
   override connectedCallback(): void {
     super.connectedCallback();
@@ -89,27 +92,29 @@ export class TillTableStatus extends LitElement {
     super.disconnectedCallback();
   }
 
-  #rows(): TableState[] {
-    return this.party === null ? [] : partyRows(this.tables, this.party);
+  #setOpen(partyId: string | null): void {
+    this.#openFor = partyId;
+    this.requestUpdate();
   }
 
-  #setOpen(open: boolean): void {
-    this.#open = open;
-    this.requestUpdate();
+  override willUpdate(): void {
+    const party = this.party;
+    this.#partyRows = party === null ? [] : partyRows(this.tables, party);
+    this.#message = flashMessage(this.#partyRows);
+    if (this.#partyRows.length === 0 || this.#openFor !== party?.id) this.#openFor = null;
   }
 
   override updated(): void {
     const party = this.party;
-    const rows = this.#rows();
-    if (party === null || rows.length === 0 || party.id === this.#judgedPartyId) return;
+    if (party === null || this.#partyRows.length === 0 || party.id === this.#judgedPartyId) return;
     this.#judgedPartyId = party.id;
-    if (flashMessage(rows) !== "")
+    if (this.#message !== "")
       this.renderRoot.querySelector<WtToast>("wt-toast[data-flash-notice]")!.show();
   }
 
   override render() {
     const party = this.party;
-    const rows = this.#rows();
+    const rows = this.#partyRows;
     if (party === null || rows.length === 0) return nothing;
     const fill = combinedStatus(rows.map(standInStatus)).fill;
     const text = pinText(rows);
@@ -118,7 +123,7 @@ export class TillTableStatus extends LitElement {
         class="status-pin"
         data-status-pin
         aria-label=${t("table.status_pin").replace("{status}", () => text)}
-        @click=${() => this.#setOpen(true)}
+        @click=${() => this.#setOpen(party.id)}
       >
         <span class="swatch" data-fill=${fill} aria-hidden="true"></span>
         ${text}
@@ -128,15 +133,15 @@ export class TillTableStatus extends LitElement {
         data-flash-notice
         tone="info"
         .duration=${4000}
-        .message=${flashMessage(rows)}
+        .message=${this.#message}
         close-label=${t("table.flash_close")}
       ></wt-toast>
       <till-table-details-sheet
-        .table=${this.#open ? rows[0]! : null}
+        .table=${this.#openFor === null ? null : rows[0]!}
         .heading=${party.displayName}
         @details-close=${(event: Event) => {
           event.stopPropagation();
-          this.#setOpen(false);
+          this.#setOpen(null);
         }}
       ></till-table-details-sheet>`;
   }

@@ -61,24 +61,25 @@ const forFill: Record<FloorMapFill, TableState> = {
     ...seated,
     signals: [{ kind: "bill_requested", requestedAt: "2026-10-10T11:00:00Z" }],
   }),
+  /** The server sends a row with a party as "held"; kept for the fill's contrast. */
   clearing: table({ condition: "needs_clearing" }),
 };
 
 describe.each(["light", "dark"] as const)("till-table-status a11y (%s theme)", (theme) => {
-  it.each(FLOOR_MAP_FILLS.map((fill) => [fill] as const))(
-    "has no violations for the %s pin",
-    async (fill) => {
-      const { el, host } = await mountWidget<TillTableStatus>(
-        "till-table-status",
-        { party, tables: [forFill[fill]] },
-        theme,
-      );
-      expect(
-        el.shadowRoot!.querySelector(`[data-status-pin] [data-fill="${fill}"]`),
-      ).not.toBeNull();
-      await expectNoA11yViolations(host);
-    },
-  );
+  it.each(
+    FLOOR_MAP_FILLS.map(
+      (fill) =>
+        [fill === "clearing" ? "clearing (a shape the server does not send)" : fill, fill] as const,
+    ),
+  )("has no violations for the %s pin", async (_name, fill) => {
+    const { el, host } = await mountWidget<TillTableStatus>(
+      "till-table-status",
+      { party, tables: [forFill[fill]] },
+      theme,
+    );
+    expect(el.shadowRoot!.querySelector(`[data-status-pin] [data-fill="${fill}"]`)).not.toBeNull();
+    await expectNoA11yViolations(host);
+  });
 
   it("has no violations with the notice open", async () => {
     const { el, host } = await mountWidget<TillTableStatus>(

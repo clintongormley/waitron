@@ -176,6 +176,33 @@ describe("till-table-status", () => {
     expect(escaped).toEqual([]);
   });
 
+  it("does not reopen the sheet for the next party after its table went", async () => {
+    const p = party();
+    const { el } = await mount({ party: p, tables: [row(p)] });
+    pin(el)!.click();
+    await el.updateComplete;
+    expect(sheet(el)!.table).not.toBeNull();
+    el.tables = [];
+    await el.updateComplete;
+    const next = party({ id: "p3", tableIds: ["t-p3"] });
+    el.party = next;
+    el.tables = [row(next, { id: "t-p3" })];
+    await el.updateComplete;
+    expect(sheet(el)!.table).toBeNull();
+  });
+
+  it("does not open the sheet for another party drawn while it is open", async () => {
+    const p = party();
+    const { el } = await mount({ party: p, tables: [row(p)] });
+    pin(el)!.click();
+    await el.updateComplete;
+    const next = party({ id: "p3", tableIds: ["t-p3"] });
+    el.party = next;
+    el.tables = [row(next, { id: "t-p3" })];
+    await el.updateComplete;
+    expect(sheet(el)!.table).toBeNull();
+  });
+
   it("a re-read updates the pin's sheet", async () => {
     const p = party();
     const { el } = await mount({ party: p, tables: [row(p, { readyToServe: 1 })] });
