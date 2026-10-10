@@ -2727,6 +2727,11 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
 
 _Formerly A3, A8 and B6; part of A9._ Detail: [backlog/printers.md](backlog/printers.md).
 
+- **Show a failed automatic invoice copy to staff.** A recoverable email or office-printer
+  reservation refusal commits the sale with no delivery row or paper fallback; the diagnostic
+  is in the server log. Decide how the till should show that outcome and offer another copy.
+  [Receipt-branch observation](backlog/printers.md#show-a-failed-automatic-invoice-copy-to-staff)
+
 - **Remove the consent step from emailed receipts** (owner, 2026-10-09). Giving the email
   address is enough. Slice 7 supplies department/default contact selection; removing current
   consent schema/checks/staging/reservation/client and future F1 consent flow is separate work.

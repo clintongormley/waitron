@@ -2877,7 +2877,7 @@ describe("department receipt presentation on thermal jobs", () => {
     },
   );
 
-  it("drops a corrupt department picture, retaining its text and the usable venue logo", async () => {
+  it("omits a corrupt explicit department picture without substituting the venue logo", async () => {
     const { cfg, departmentId, sell, documents } = await setupReceipt();
     const pair = {
       "58mm": { widthDots: 8, heightDots: 1, data: "gQ==" },
@@ -2902,7 +2902,7 @@ describe("department receipt presentation on thermal jobs", () => {
     const logos = printedCommands(job!.payload)
       .filter((c) => c.name === "GS v 0" && c.text === undefined)
       .slice(1);
-    expect(logos.map((c) => [...c.bytes.subarray(8)])).toEqual([[129]]);
+    expect(logos.map((c) => [...c.bytes.subarray(8)])).toEqual([]);
     expect(await registroCount(cfg)).toBe(1);
     expect(await suite.db.select().from(tenders)).toHaveLength(1);
   });
@@ -3143,6 +3143,33 @@ describe("department receipt presentation on thermal jobs", () => {
     await withTransaction(suite.db, (tx) => enqueueReceiptReprint(tx, cfg, ticket, id));
     expect(decodeTicket((await documents())[2]!.payload)).not.toContain("New current address");
   });
+
+  it.each(["en-GB", "fr-FR"])(
+    "retains the printed %s department text after the current receipt language changes",
+    async (printed) => {
+      const { cfg, departmentId, sell, documents } = await setupReceipt();
+      await suite.db.insert(departmentReceipts).values({
+        departmentId,
+        receipt: {
+          headerSubtitle: { [printed]: "Printed subtitle", "es-ES": "Current subtitle" },
+          footerMessage: { [printed]: "Printed footer", "es-ES": "Current footer" },
+        },
+      });
+      const ticket = await sell();
+      const id = await onlySaleId(cfg);
+      await suite.db
+        .update(locations)
+        .set({ invoiceLocales: ["es-ES"] })
+        .where(eq(locations.id, cfg.locationId));
+      await withTransaction(suite.db, (tx) => enqueueReceiptReprint(tx, cfg, ticket, id, printed));
+      const text = decodeTicket((await documents())[1]!.payload);
+      expect(text).toContain("Printed subtitle");
+      expect(text).toContain("Printed footer");
+      expect(text).not.toContain("Current subtitle");
+      expect(text).not.toContain("Current footer");
+      expect(await registroCount(cfg)).toBe(1);
+    },
+  );
 
   it.each([
     { printed: "ca-ES", current: "es-ES", subtitle: "Catalan subtitle", footer: "Spanish footer" },

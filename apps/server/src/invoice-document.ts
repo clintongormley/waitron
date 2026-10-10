@@ -22,7 +22,6 @@ import {
 } from "@waitron/shared";
 import { getPrintedReceipt } from "@waitron/layouts";
 import { readReceiptLanguage } from "@waitron/catalogue";
-import { readVenueReceiptLanguageRules } from "./venue-locale.js";
 import type { TillConfig } from "./till-config.js";
 import type { ReceiptDocumentInput } from "./receipt-document.js";
 import { receiptLines } from "./receipt-adjustments.js";
@@ -100,7 +99,6 @@ export async function readInvoiceDocument(
   const venue = await getPrintedReceipt(tx, "80mm", diagnostic);
   const header = await VENUE_SERVICE.readSaleReceiptHeader(tx, saleId);
   const current = await readReceiptLanguage(tx, saleCfg.locationId);
-  const languages = await readVenueReceiptLanguageRules(tx, saleCfg);
   const department =
     header?.departmentId == null
       ? null
@@ -108,7 +106,7 @@ export async function readInvoiceDocument(
           tx,
           {
             ...saleCfg,
-            receiptLanguages: [...new Set([current.locale, ...languages.choices])],
+            receiptLanguages: [...new Set([sale.locale, current.locale])],
             receiptDiagnostic: diagnostic,
           },
           header.departmentId,

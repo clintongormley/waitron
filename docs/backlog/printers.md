@@ -3,6 +3,21 @@
 The open entries are listed in [the backlog](../backlog.md), under "Printers, the print agent and receipts". This file holds
 their full text.
 
+## Show a failed automatic invoice copy to staff
+
+Found in A366 slice 7 Part A's two run-it reviews. The plan keeps optional document failures
+from undoing a sale. `reserveStagedInvoiceDelivery` returns `undefined` after its failed
+reservation is rolled back; `enqueueSaleReceipt` then skips the paper original. The case
+“omits a refused staged delivery reservation inside an invoice transaction” in
+`apps/server/src/receipt-print.test.ts` exercises a refused email reservation and
+asserts one fiscal record/sale, no delivery rows and no print jobs. The branch's complete
+receipt-print suite passed this case; it does not exercise a staff-visible warning.
+
+Trace the working-order issuance and bill-payment answers before choosing a till message,
+retry or alternate-copy action. Keep the saved delivery choice, original/duplicate rules,
+operator permissions and sale facts. Do not silently select paper as a substitute for the
+chosen destination. This is separate from the consent-removal work below.
+
 ## Remove the consent step from emailed receipts
 
 **Open, owner answer 2026-10-09; source audit 2026-10-10 on main

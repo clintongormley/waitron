@@ -16,7 +16,6 @@ import type { ProfilePrinterRole } from "@waitron/layouts";
 import { receiptLabelsFor } from "@waitron/country-packs";
 import { readReceiptLanguage } from "@waitron/catalogue";
 import { receiptLogoSource, resolveReceiptTrim } from "@waitron/shared";
-import { readVenueReceiptLanguageRules } from "./venue-locale.js";
 import type { Origin } from "@waitron/shared";
 import { AppError } from "@waitron/shared";
 import "./errors.js";
@@ -168,7 +167,6 @@ async function buildReceiptBytes(
   const header = await VENUE_SERVICE.readSaleReceiptHeader(tx, saleId);
   const departmentId = header?.departmentId ?? null;
   const current = await readReceiptLanguage(tx, cfg.locationId);
-  const languages = await readVenueReceiptLanguageRules(tx, cfg);
   const department =
     departmentId === null
       ? null
@@ -176,18 +174,13 @@ async function buildReceiptBytes(
           tx,
           {
             ...cfg,
-            receiptLanguages: [...new Set([current.locale, ...languages.choices])],
+            receiptLanguages: [...new Set([language ?? ticket.locale, current.locale])],
             receiptDiagnostic: diagnostic,
           },
           departmentId,
           printer.paperWidth,
         );
-  const authored =
-    department === null
-      ? null
-      : department.logo === null
-        ? { ...department.receipt, logo: undefined }
-        : department.receipt;
+  const authored = department?.receipt ?? null;
   const receipt = resolveReceiptTrim(
     authored,
     venue.receipt,

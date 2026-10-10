@@ -729,3 +729,52 @@ describe("A4 recorded null department", () => {
     expect(text).toContain("Saved domicile");
   });
 });
+
+describe("A4 filed language outside the current pack choices", () => {
+  it.each(["en-GB", "fr-FR"])("retains filed %s department text", async (printed) => {
+    const backend = none();
+    const issued = await issue(backend, true, printed);
+    const [department] = await suite.db
+      .insert(departments)
+      .values({
+        locationId: venue.cfg.locationId,
+        name: `Filed ${printed}`,
+        tradingName: "Filed language",
+      })
+      .returning();
+    await suite.db.insert(saleReceiptHeaders).values({
+      saleId: issued.saleId,
+      departmentId: department!.id,
+      tradingName: "Saved language",
+      printTradingName: true,
+    });
+    await suite.db.insert(departmentReceipts).values({
+      departmentId: department!.id,
+      receipt: {
+        headerSubtitle: { [printed]: "Printed subtitle", "es-ES": "Current subtitle" },
+        footerMessage: { [printed]: "Printed footer", "es-ES": "Current footer" },
+      },
+    });
+    const [location] = await suite.db
+      .select()
+      .from(locations)
+      .where(eq(locations.id, venue.cfg.locationId));
+    try {
+      await suite.db
+        .update(locations)
+        .set({ invoiceLocales: ["es-ES"] })
+        .where(eq(locations.id, venue.cfg.locationId));
+      const document = await read(backend, issued.saleId);
+      expect(document.receipt).toEqual({
+        headerSubtitle: "Printed subtitle",
+        footerMessage: "Printed footer",
+      });
+      expect(document.invoiceLocale).toBe(printed);
+    } finally {
+      await suite.db
+        .update(locations)
+        .set({ invoiceLocales: location!.invoiceLocales })
+        .where(eq(locations.id, venue.cfg.locationId));
+    }
+  });
+});
