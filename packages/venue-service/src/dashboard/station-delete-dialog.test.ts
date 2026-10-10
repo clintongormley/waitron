@@ -242,6 +242,38 @@ it.each(["confirm", "retry", "close"])(
     expect(api.deleteStation).not.toHaveBeenCalled();
   },
 );
+it.each(["confirm", "retry"] as const)(
+  "permanent delete ignores a detached native %s control after a same-render replacement",
+  async (kind) => {
+    const read = vi.fn();
+    if (kind === "retry") read.mockRejectedValueOnce({ code: "connection.failed" });
+    else read.mockResolvedValueOnce(allowedImpact);
+    read.mockResolvedValue(allowedImpact);
+    const { screen, api } = await mountDelete({ getStationDeleteImpact: read });
+    const old = await openDelete(screen);
+    await ready(old);
+    if (kind === "retry") await expect.poll(() => old.readError).not.toBe("");
+    const oldHost = button(old, kind);
+    await oldHost.updateComplete;
+    const native = oldHost.shadowRoot!.querySelector<HTMLButtonElement>("button")!;
+    expect(native.disabled).toBe(false);
+    old.dispatchEvent(new CustomEvent("wt-close"));
+    const opening = openDelete(screen);
+    const next = await opening;
+    await ready(next);
+    native.click();
+    await screen.updateComplete;
+    await next.updateComplete;
+    expect(screen.shadowRoot!.querySelector("wt-delete-dialog")).toBe(next);
+    expect(next.open).toBe(true);
+    expect(next.impact).toEqual(allowedImpact);
+    expect(read).toHaveBeenCalledTimes(2);
+    expect(read.mock.calls).toEqual([["bar"], ["bar"]]);
+    expect(api.deleteStation).not.toHaveBeenCalled();
+    expect(next).not.toBe(old);
+    expect(native.isConnected).toBe(false);
+  },
+);
 it.each([false, true])(
   "permanent delete ignores a departed %s write after reconnecting",
   async (refused) => {

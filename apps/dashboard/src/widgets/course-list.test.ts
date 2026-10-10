@@ -1480,6 +1480,42 @@ describe("permanent delete lifecycle", () => {
     expect(api.getCourseDeleteImpact).toHaveBeenCalledTimes(3);
   });
 
+  it("ignores a detached native Retry after replacing the course dialog in the same render", async () => {
+    const api = stubApi({
+      getCourseDeleteImpact: vi
+        .fn()
+        .mockRejectedValueOnce({ code: "connection.failed" })
+        .mockResolvedValue(impactFor("c2")),
+    });
+    const { el } = await mount(api);
+    q(el, '[data-test="remove-c1"]')!.click();
+    await settle(el);
+    const old = deleteDialog(el)! as HTMLElementTagNameMap["wt-delete-dialog"];
+    await expect.poll(() => old.readError).not.toBe("");
+    await old.updateComplete;
+    const retryHost = old.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>(
+      '[data-test="delete-retry"]',
+    )!;
+    await retryHost.updateComplete;
+    const retry = retryHost.shadowRoot!.querySelector<HTMLButtonElement>("button")!;
+    expect(retry.disabled).toBe(false);
+    old.dispatchEvent(new CustomEvent("wt-close"));
+    q(el, '[data-test="remove-c2"]')!.click();
+    await settle(el);
+    const next = deleteDialog(el)! as HTMLElementTagNameMap["wt-delete-dialog"];
+    retry.click();
+    await settle(el);
+    expect(deleteDialog(el)).toBe(next);
+    expect(next.open).toBe(true);
+    expect(next.impact).toEqual(impactFor("c2"));
+    expect(inDelete(el, "[data-target]")!.textContent).toBe("Mains");
+    expect(api.deleteCourse).not.toHaveBeenCalled();
+    expect(api.getCourseDeleteImpact).toHaveBeenCalledTimes(2);
+    expect(vi.mocked(api.getCourseDeleteImpact).mock.calls).toEqual([["c1"], ["c2"]]);
+    expect(next).not.toBe(old);
+    expect(retry.isConnected).toBe(false);
+  });
+
   it("not-found impact removes the departed target without applying a late result to its replacement", async () => {
     let fail!: (value: unknown) => void;
     const api = stubApi({
