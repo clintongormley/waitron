@@ -1374,6 +1374,8 @@ _Formerly entries spread across the old sections, A261's venue-operations steps 
   selector, preview, till answers and media usage are built on Lane E's receipt branch. The
   department editor is now mounted there with department selection and authored-draft previews and a separate preview-language picker;
   the independent venue defaults editor is mounted and feeds draft previews and inherited hints.
+  Its text drafts compare and submit trimmed values, accept untouched fields from live reads
+  alongside a dirty field, and keep an outstanding leave choice open on unchanged refreshes.
   Retiring the legacy combined form, remaining page lifecycle checks and branch review stay
   open after landed 3A/6A. Core email consent removal stays separate.
   Keep live venue defaults, omit optional current address on A4, and add no consent step.

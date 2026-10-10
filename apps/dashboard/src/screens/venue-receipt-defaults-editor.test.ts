@@ -230,3 +230,83 @@ it("publishes authored defaults to its parent without contact or unrelated scope
     settings: { headerSubtitle: "Draft preview", footerMessage: "Gracias", printAddress: false },
   });
 });
+
+it("keeps Save quiet for surrounding whitespace and sends no redundant write", async () => {
+  const { el, api } = await mount();
+  await edit(el, "  Restaurant  ");
+  expect(await state(el)).toEqual({ variant: "secondary", disabled: true });
+  save(el).click();
+  await el.updateComplete;
+  expect(api.putVenueReceiptSettings).not.toHaveBeenCalled();
+});
+
+it("previews and saves trimmed defaults, omitting whitespace-only optional text", async () => {
+  const { el, api } = await mount();
+  let detail: unknown;
+  el.addEventListener("venue-receipt-draft-changed", (event) => {
+    detail = (event as CustomEvent).detail;
+  });
+  await edit(el, "  Dinner  ");
+  const footer = el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-textarea"]>(
+    "wt-textarea[name=footerMessage]",
+  )!;
+  await footer.updateComplete;
+  await userEvent.fill(page.elementLocator(footer.shadowRoot!.querySelector("textarea")!), " \n ");
+  await el.updateComplete;
+  expect(detail).toEqual({ settings: { headerSubtitle: "Dinner", printAddress: false } });
+  save(el).click();
+  await vi.waitFor(() =>
+    expect(api.putVenueReceiptSettings).toHaveBeenCalledExactlyOnceWith({
+      headerSubtitle: "Dinner",
+      printAddress: false,
+    }),
+  );
+  await vi.waitFor(async () =>
+    expect(await state(el)).toEqual({ variant: "secondary", disabled: true }),
+  );
+});
+
+it("adopts untouched live fields while keeping the typed field and its original baseline", async () => {
+  const { el, api } = await mount();
+  await edit(el, "Typed");
+  const logo = `${"b".repeat(64)}.png`;
+  api.getVenueReceiptSettings.mockResolvedValue({
+    settings: {
+      headerSubtitle: "Remote subtitle",
+      footerMessage: "Remote footer",
+      printAddress: true,
+      logo,
+    },
+  });
+  api.liveData.invalidate([{ type: "tenant_receipts" }]);
+  await vi.waitFor(() =>
+    expect(
+      el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-textarea"]>(
+        "wt-textarea[name=footerMessage]",
+      )!.value,
+    ).toBe("Remote footer"),
+  );
+  expect(subtitle(el).value).toBe("Typed");
+  expect(
+    el
+      .shadowRoot!.querySelector<HTMLElementTagNameMap["wt-switch"]>("wt-switch")!
+      .shadowRoot!.querySelector("input")!.checked,
+  ).toBe(true);
+  expect(
+    el.shadowRoot!.querySelector<HTMLElementTagNameMap["dashboard-image-upload"]>(
+      "dashboard-image-upload",
+    )!.image,
+  ).toBe(logo);
+  await edit(el, "Restaurant");
+  expect(await state(el)).toEqual({ variant: "secondary", disabled: true });
+  await edit(el, "Typed again");
+  save(el).click();
+  await vi.waitFor(() =>
+    expect(api.putVenueReceiptSettings).toHaveBeenCalledExactlyOnceWith({
+      headerSubtitle: "Typed again",
+      footerMessage: "Remote footer",
+      printAddress: true,
+      logo,
+    }),
+  );
+});

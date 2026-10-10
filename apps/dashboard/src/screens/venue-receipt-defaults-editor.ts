@@ -25,6 +25,16 @@ import "@waitron/ui/src/components/wt-form-actions.js";
 type Field = keyof VenueReceiptSettings;
 const fields: readonly Field[] = ["logo", "headerSubtitle", "footerMessage", "printAddress"];
 
+function settingsBody(settings: VenueReceiptSettings): VenueReceiptSettings {
+  const body = { ...settings };
+  for (const field of ["headerSubtitle", "footerMessage"] as const) {
+    const value = settings[field]?.trim() ?? "";
+    if (value) body[field] = value;
+    else delete body[field];
+  }
+  return body;
+}
+
 @customElement("dashboard-venue-receipt-defaults-editor")
 export class VenueReceiptDefaultsEditor extends LitElement {
   static override styles = [
@@ -89,7 +99,7 @@ export class VenueReceiptDefaultsEditor extends LitElement {
       parent: this.draftParent ?? this,
       current: () => this.draft,
       snapshot: (value) => structuredClone(value),
-      equal: sameValue,
+      equal: (a, b) => sameValue(settingsBody(a), settingsBody(b)),
       restore: (value) => {
         this.draft = structuredClone(value);
         this.errors = {};
@@ -114,14 +124,32 @@ export class VenueReceiptDefaultsEditor extends LitElement {
         ({ revision: readRevision, value }) => {
           if (epoch !== this.#epoch || readRevision !== this.#revision) return;
           this.loadError = "";
-          if (!this.#scope?.isDirty() && !this.saving) {
-            this.#saved = structuredClone(value.settings);
-            this.draft = structuredClone(value.settings);
+          if (!this.saving) {
+            const saved = { ...this.#saved };
+            const draft = { ...this.draft };
+            const shownBody = settingsBody(this.draft);
+            const savedBody = settingsBody(this.#saved);
+            for (const field of fields) {
+              if (this.loaded && !sameValue(shownBody[field], savedBody[field])) continue;
+              delete saved[field];
+              delete draft[field];
+              Object.assign(
+                saved,
+                field in value.settings ? { [field]: value.settings[field] } : {},
+              );
+              Object.assign(
+                draft,
+                field in value.settings ? { [field]: value.settings[field] } : {},
+              );
+            }
+            const baselineChanged = !sameValue(this.#saved, saved);
+            this.#saved = saved;
+            this.draft = draft;
             this.loaded = true;
             this.#register();
-            this.#scope?.commit(structuredClone(this.#saved));
+            if (baselineChanged) this.#scope?.commit(structuredClone(this.#saved));
           }
-          this.#changed();
+          this.#publish();
         },
       );
     } catch (error) {
@@ -130,9 +158,12 @@ export class VenueReceiptDefaultsEditor extends LitElement {
   }
   #changed(): void {
     this.#scope?.changed();
+    this.#publish();
+  }
+  #publish(): void {
     this.dispatchEvent(
       new CustomEvent("venue-receipt-draft-changed", {
-        detail: { settings: structuredClone(this.draft) },
+        detail: { settings: settingsBody(this.draft) },
         bubbles: true,
         composed: true,
       }),
@@ -161,7 +192,7 @@ export class VenueReceiptDefaultsEditor extends LitElement {
     const scope = this.#scope;
     const submitted = structuredClone(this.draft);
     try {
-      await this.api.putVenueReceiptSettings(submitted);
+      await this.api.putVenueReceiptSettings(settingsBody(submitted));
     } catch (error) {
       if (epoch !== this.#epoch) return;
       const params = (error as { params?: { field?: unknown; maxLength?: unknown } })?.params;
