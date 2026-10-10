@@ -3,6 +3,7 @@ import { customElement, property, state } from "lit/decorators.js";
 import {
   isValidTelephone,
   resolveReceiptTrim,
+  untranslatedLanguages,
   type DepartmentReceiptConfig,
   type VenueReceiptSettings,
 } from "@waitron/shared";
@@ -20,6 +21,7 @@ import { dashboardQuery } from "../api/live-queries.js";
 import { sameValue } from "../widgets/product-editor-model.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
 import { t } from "../i18n/t.js";
+import { receiptLanguageName } from "../widgets/receipt-language.js";
 import "../widgets/image-upload.js";
 import "@waitron/ui/src/components/wt-input.js";
 import "@waitron/ui/src/components/wt-textarea.js";
@@ -266,6 +268,10 @@ export class DepartmentReceiptEditor extends LitElement {
       this.saving = false;
       await this.updateComplete;
       await focusFirstInvalid(this.shadowRoot!);
+      const refused = Array.from(this.shadowRoot!.querySelectorAll<HTMLElement>("[name]")).find(
+        (control) => this.errors[control.getAttribute("name")!] !== undefined,
+      );
+      refused?.scrollIntoView({ block: "center" });
       return;
     }
     if (epoch !== this.#epoch || scope !== this.#scope) return;
@@ -340,6 +346,15 @@ export class DepartmentReceiptEditor extends LitElement {
     const settings = this.settings;
     const action = saveActionState(this.#scope);
     const defaults = this.venueDefaults ?? settings?.venueDefaults ?? {};
+    const languages = settings
+      ? [this.receiptLanguage, ...settings.languages].filter(
+          (language, index, all) => language && all.indexOf(language) === index,
+        )
+      : [];
+    const warnings = untranslatedLanguages(
+      [this.draft.headerSubtitle, this.draft.footerMessage],
+      languages,
+    );
     const marked = Object.keys(this.errors).length > 0;
     const invalidContact =
       this.attempted && (!!this.#contactProblem("phone") || !!this.#contactProblem("email"));
@@ -400,9 +415,18 @@ export class DepartmentReceiptEditor extends LitElement {
                       }}
                     ></wt-input>`,
                 )}
-                ${settings.languages.map(
+                ${
+                  warnings.length
+                    ? html`<p role="note">${t("receipts.translation_warning")}</p>`
+                    : nothing
+                }
+                ${languages.map(
                   (language) =>
-                    html`<h3 lang=${language}>${language}</h3>
+                    html`<h3 lang=${language}>
+                        ${receiptLanguageName(language)}
+                        (${t(language === this.receiptLanguage ? "receipts.language_receipts" : "receipts.language_copies")})
+                        ${warnings.includes(language) ? html`<span aria-label=${t("receipts.translation_warning")}>⚠</span>` : nothing}
+                      </h3>
                       ${this.#text("headerSubtitle", language)}${this.#text("footerMessage", language)}`,
                 )}
               </div>

@@ -50,7 +50,9 @@ their full text.
   and saved-language refreshes, plus unchanged snapshots and explicit preview-language choices.
   Loaded department edits, saves and draft previews on that branch stay usable after unrelated
   receipt/location/language read refusals; read recovery retains a refused department draft.
-  Remaining page lifecycle checks and caller retirement remain.
+  Reconnect preserves scoped drafts; stacked language headings label receipts/copies and
+  warn from authored maps. Known locale refusals focus and scroll to their field; unknown
+  locales stay in the action summary. The complete preview pass and caller audit remain.
   This documentation revision is complete: venue logo/subtitle/footer stay live defaults,
   A4 omits optional current address, and slice 7 adds no consent step. The separate core
   delivery rewrite is [one backlog entry](printers.md#remove-the-consent-step-from-emailed-receipts).

@@ -1382,8 +1382,10 @@ _Formerly entries spread across the old sections, A261's venue-operations steps 
   unrelated receipt/location/language reads refuse; recovery retains refused department drafts.
   The legacy combined form is retired on that branch; department contact, venue defaults,
   receipt language and description each save independently. Department switches retain global
-  drafts; reconnect preserves edits against their saved baselines. Language warnings, refusal
-  placement, the complete preview pass, retained-consumer audit and branch review remain open.
+  drafts; reconnect preserves edits against their saved baselines. Stacked language headings
+  label receipts/copies and warn from authored draft maps; known locale refusals focus and
+  scroll to their field. The complete preview pass, retained-consumer audit and branch review
+  remain open.
   Core email consent removal stays separate.
   Keep live venue defaults, omit optional current address on A4, and add no consent step.
   [Detail](backlog/service-periods.md#service-times-departments-zones-and-prep-stations-a366-owner-2026-10-07--spec-approved-2026-10-07)
