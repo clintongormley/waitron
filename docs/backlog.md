@@ -3205,6 +3205,12 @@ _Formerly A6, and the old Track C's payments items; part of A9._ Detail: [backlo
 
 _Formerly A7, and the dashboard entries in the opening part of the old Track A (before A1); part of A9._ Detail: [backlog/dashboard.md](backlog/dashboard.md).
 
+- **Prep stations' Settings tab's bottom message says "Fix the fields marked above." where every
+  other form says "Correct the highlighted fields to continue."** (`prep.settings_fix_fields`,
+  `packages/venue-service/src/dashboard/strings.ts`, against `form.fix_fields` in
+  `apps/dashboard/src/i18n/strings.ts`). Left open by A366 slice 5 Part B (#1502); owner question
+  pending.
+
 - **A449 — a dashboard tab left open through a box reset keeps retrying every request.** Seen
   2026-10-09 on the owner's box: across `waitron.sh reset`, the setup wizard and a new venue, the
   open tab's console filled with 401s, refused connections, then 404s from every route (the wizard

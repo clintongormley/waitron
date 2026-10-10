@@ -116,9 +116,7 @@ describe("till-station-queue", () => {
       stationId: "st-1",
     });
     const section = el.shadowRoot!.querySelector('[data-elsewhere="wo-1"]')!;
-    expect(section.querySelector("h3")!.textContent).toBe(
-      "Also on this order (not for this station)",
-    );
+    expect(section.querySelector("h3")!.textContent).toBe("Also on this order");
     const burger = section.querySelector('[data-elsewhere-item="other-burger"]')!;
     expect(burger.textContent).toContain("2× Burger");
     expect(burger.textContent).toContain("Grill");
@@ -160,9 +158,7 @@ describe("till-station-queue", () => {
         stationId: "st-1",
       });
       const section = el.shadowRoot!.querySelector(".elsewhere")!;
-      expect(section.querySelector("h3")!.textContent).toBe(
-        "También en este pedido (no para esta estación)",
-      );
+      expect(section.querySelector("h3")!.textContent).toBe("También en este pedido");
       expect(section.querySelector('[data-elsewhere-item="other-burger"]')!.textContent).toContain(
         "Preparando",
       );
