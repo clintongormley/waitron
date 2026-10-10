@@ -5276,15 +5276,13 @@ it("transfers department receipt maps and pictures with remapped ids and unchang
     const empty = await createDepartment(tx, cfg, { name: "Inherited receipt" });
     const imported = await createDepartment(tx, cfg, { name: "Bad optional receipt" });
     await writeDepartmentReceipt(tx, cfg, own.id, authored, pictures);
-    await tx
-      .insert(departmentReceipts)
-      .values({
-        departmentId: imported.id,
-        receipt: {
-          email: "good@example.com",
-          headerSubtitle: { "es-ES": "x".repeat(100_000), "ca-ES": "Good" },
-        },
-      });
+    await tx.insert(departmentReceipts).values({
+      departmentId: imported.id,
+      receipt: {
+        email: "good@example.com",
+        headerSubtitle: { "es-ES": "x".repeat(100_000), "ca-ES": "Good" },
+      },
+    });
     return [own.id, empty.id, imported.id];
   });
   const versions = await schemaVersionsByModule(suite.db, ALL_MODULES);
