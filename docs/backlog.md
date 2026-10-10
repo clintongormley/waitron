@@ -2621,10 +2621,6 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   quantities** — left open by W69 (#1325). Cause and real-venue reproduction remain unverified.
   Inspect the real till before attributing them to W69 or changing quantity/money handling.
 
-- **The two till buttons are A417 (lane A)** — other buttons that are not saves still kept their
-  colour while disabled and waiting — … and two on the till. Owner, 2026-10-08: "b", draw them all
-  quiet the same way. Left open by A416 (#1440), under A331 batch 2a.
-
 - **The canvas Add and Duplicate dialogs have no Cancel, and Duplicate's name field is too narrow
   to show "A331 look canvas (copy)" whole** — seen and not changed. Left open by A331 batch 3b
   (#1415).
