@@ -202,7 +202,8 @@ describe("receipts page: the receipt header and footer", () => {
     await flush(el);
 
     expect(errorKey(el)).toBe("receipt.invalid");
-    const message = (q(el, "wt-form-actions") as HTMLElement & { error: string }).error;
+    const message = (q(el, "[data-test=combined-actions]") as HTMLElement & { error: string })
+      .error;
     expect(message).toContain(codeMessage("receipt.invalid", "es-ES"));
     expect(message).not.toContain("receipt.invalid");
   });

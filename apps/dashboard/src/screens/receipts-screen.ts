@@ -94,10 +94,6 @@ function refusalSentence(error: unknown): string {
   }
 }
 
-/**
- * The venue-wide receipt trim and this location's receipt language and invoice operation
- * description, saved by one Save, beside a live preview the server draws as the receipt will print.
- */
 @customElement("dashboard-receipts-screen")
 export class ReceiptsScreen extends LitElement {
   static override styles = [
@@ -369,6 +365,11 @@ export class ReceiptsScreen extends LitElement {
 
   @state() private attempted = false;
   @state() private saving = false;
+  @state() private languageSaving = false;
+  @state() private descriptionSaving = false;
+  @state() private languageSaved = false;
+  @state() private descriptionSaved = false;
+  @state() private descriptionAttempted = false;
   @state() private saved = false;
 
   @state() private preview: ReceiptPreview | null = null;
@@ -422,6 +423,11 @@ export class ReceiptsScreen extends LitElement {
     this.#draft = new DraftRows<Trim & { id: string }>();
     this.receiptLoaded = false;
     this.saving = false;
+    this.languageSaving = false;
+    this.descriptionSaving = false;
+    this.languageSaved = false;
+    this.descriptionSaved = false;
+    this.descriptionAttempted = false;
     super.disconnectedCallback();
     clearTimeout(this.#previewTimer);
     this.#previewAgain = false;
@@ -634,7 +640,8 @@ export class ReceiptsScreen extends LitElement {
           const wasClean =
             this.#descriptionScope !== undefined && !this.#descriptionScope.isDirty();
           const previousDescription = this.description;
-          const adopt = !this.#dirty && !this.saving && saves === this.#saves;
+          const adopt =
+            !this.#dirty && !this.saving && !this.descriptionSaving && saves === this.#saves;
           if (adopt) this.description = value.operationDescription;
           this.#registerDescription();
           if (adopt && wasClean && previousDescription !== this.description)
@@ -789,6 +796,8 @@ export class ReceiptsScreen extends LitElement {
   #pickLanguage(language: string): void {
     this.pickedLanguage = language === this.receiptLanguage!.language ? null : language;
     this.languageRefusal = "";
+    this.languageError = null;
+    this.languageSaved = false;
     this.saved = false;
     this.#languageScope?.changed();
     this.#previewActive = true;
@@ -833,15 +842,87 @@ export class ReceiptsScreen extends LitElement {
     return true;
   }
 
-  async #useFixedLanguage(locale: string): Promise<void> {
-    if (this.saving) return;
+  async #saveLanguage(): Promise<void> {
+    if (
+      this.saving ||
+      this.languageSaving ||
+      !this.#languageScope ||
+      saveActionState(this.#languageScope).unchanged
+    )
+      return;
     const connection = this.#trimConnection;
-    this.saving = true;
+    const language = this.#shownLanguage();
+    this.languageSaving = true;
+    this.languageSaved = false;
+    this.languageRefusal = "";
+    this.languageError = null;
+    const accepted = await this.#sendLanguage(language);
+    if (connection !== this.#trimConnection) return;
+    this.languageSaving = false;
+    this.languageSaved = accepted;
+    if (!accepted && this.languageRefusal) {
+      await this.updateComplete;
+      await focusFirstInvalid(
+        this.shadowRoot!.querySelector<HTMLElement>("[data-test=language-section]")!,
+      );
+    }
+  }
+
+  async #saveDescription(): Promise<void> {
+    if (
+      this.saving ||
+      this.descriptionSaving ||
+      !this.#descriptionScope ||
+      saveActionState(this.#descriptionScope).unchanged
+    )
+      return;
+    this.descriptionAttempted = true;
+    this.descriptionSaved = false;
+    this.refusal = "";
+    this.saveFailed = false;
+    if (this.#validate()) {
+      await this.updateComplete;
+      await focusFirstInvalid(
+        this.shadowRoot!.querySelector<HTMLElement>("[data-test=description-section]")!,
+      );
+      return;
+    }
+    const connection = this.#trimConnection;
+    const scope = this.#descriptionScope;
+    const submitted = this.description;
+    this.descriptionSaving = true;
+    try {
+      await this.api.putLocationSettings(submitted);
+    } catch (error) {
+      if (connection !== this.#trimConnection || scope !== this.#descriptionScope) return;
+      this.#locationRefused(error);
+      this.descriptionSaving = false;
+      if (this.refusal) {
+        await this.updateComplete;
+        await focusFirstInvalid(
+          this.shadowRoot!.querySelector<HTMLElement>("[data-test=description-section]")!,
+        );
+      }
+      return;
+    }
+    if (connection !== this.#trimConnection || scope !== this.#descriptionScope) return;
+    scope.commit(submitted);
+    this.#dirty = scope.isDirty();
+    this.#saves++;
+    this.descriptionSaving = false;
+    this.descriptionSaved = true;
+    this.descriptionAttempted = false;
+  }
+
+  async #useFixedLanguage(locale: string): Promise<void> {
+    if (this.saving || this.languageSaving) return;
+    const connection = this.#trimConnection;
+    this.languageSaving = true;
     this.saved = false;
     this.languageRefusal = "";
     this.languageError = null;
     await this.#sendLanguage(locale);
-    if (connection === this.#trimConnection) this.saving = false;
+    if (connection === this.#trimConnection) this.languageSaving = false;
   }
 
   #validate(): string {
@@ -864,7 +945,7 @@ export class ReceiptsScreen extends LitElement {
   }
 
   #descriptionError(): string {
-    return (this.attempted ? this.#validate() : "") || this.refusal;
+    return (this.attempted || this.descriptionAttempted ? this.#validate() : "") || this.refusal;
   }
 
   #form(): HTMLElement {
@@ -886,7 +967,8 @@ export class ReceiptsScreen extends LitElement {
   }
 
   async #save(): Promise<void> {
-    if (this.saving || this.#saveState().unchanged) return;
+    if (this.saving || this.languageSaving || this.descriptionSaving || this.#saveState().unchanged)
+      return;
     const trimConnection = this.#trimConnection;
     this.saved = false;
     this.saveFailed = false;
@@ -1075,7 +1157,7 @@ export class ReceiptsScreen extends LitElement {
                   class="use-fixed"
                   data-test="use-fixed-language"
                   variant="secondary"
-                  ?disabled=${this.saving}
+                  ?disabled=${this.saving || this.languageSaving}
                   @click=${() => void this.#useFixedLanguage(fixed.locale)}
                   >${t("receipts.language_use").replace("{fixed}", fixedName)}</wt-button
                 >`
@@ -1099,7 +1181,7 @@ export class ReceiptsScreen extends LitElement {
         }))}
         .value=${chosen}
         error=${error}
-        ?disabled=${this.saving}
+        ?disabled=${this.saving || this.languageSaving}
         @wt-change=${(event: CustomEvent<{ value: string }>) =>
           this.#pickLanguage(event.detail.value)}
       ></wt-combobox>
@@ -1156,34 +1238,67 @@ export class ReceiptsScreen extends LitElement {
       </section>
       <section class="settings" aria-labelledby="location-heading">
         <h2 id="location-heading" data-test="location-name">${this.name}</h2>
-        ${this.#renderLanguage(this.receiptLanguage!)}
-        <wt-input
-          name="operationDescription"
-          autocomplete="off"
-          required
-          label=${t("location_settings.description")}
-          hint=${t("receipts.operation_description_hint")}
-          .value=${this.description}
-          error=${descriptionError}
-          ?invalid=${descriptionError !== ""}
-          ?disabled=${this.saving}
-          @wt-change=${(event: CustomEvent<{ value: string }>) => {
-            event.stopPropagation();
-            this.description = event.detail.value;
-            this.#descriptionScope?.changed();
-            this.#dirty = this.#descriptionScope!.isDirty();
-            this.refusal = "";
-            this.saved = false;
-          }}
-          @keydown=${(event: KeyboardEvent) => this.#enter(event)}
-        >
-          <wt-help-tooltip slot="help" aria-label=${t("location_settings.help_label")}
-            >${t("location_settings.help")}</wt-help-tooltip
+        <div data-test="language-section">
+          ${this.#renderLanguage(this.receiptLanguage!)}
+          ${this.languageSaved ? html`<p role="status">${t("receipts.saved")}</p>` : nothing}
+          <wt-form-actions
+            data-test="language-actions"
+            .error=${[this.languageError ?? "", this.languageRefusal ? t("form.fix_fields") : ""].filter(Boolean).join(" ")}
           >
-        </wt-input>
+            <wt-button
+              data-test="language-save"
+              variant=${saveActionState(this.#languageScope).variant}
+              ?loading=${this.languageSaving}
+              ?disabled=${this.saving || this.languageSaving || saveActionState(this.#languageScope).unchanged}
+              @click=${() => void this.#saveLanguage()}
+              >${t("action.save")}</wt-button
+            >
+          </wt-form-actions>
+        </div>
+        <div data-test="description-section">
+          <wt-input
+            name="operationDescription"
+            autocomplete="off"
+            required
+            label=${t("location_settings.description")}
+            hint=${t("receipts.operation_description_hint")}
+            .value=${this.description}
+            error=${descriptionError}
+            ?invalid=${descriptionError !== ""}
+            ?disabled=${this.saving || this.descriptionSaving}
+            @wt-change=${(event: CustomEvent<{ value: string }>) => {
+              event.stopPropagation();
+              this.description = event.detail.value;
+              this.#descriptionScope?.changed();
+              this.#dirty = this.#descriptionScope!.isDirty();
+              this.refusal = "";
+              this.descriptionSaved = false;
+              this.saved = false;
+            }}
+            @keydown=${(event: KeyboardEvent) => submitOnEnter(event, this.shadowRoot!.querySelector("[data-test=description-save]"))}
+          >
+            <wt-help-tooltip slot="help" aria-label=${t("location_settings.help_label")}
+              >${t("location_settings.help")}</wt-help-tooltip
+            >
+          </wt-input>
+          ${this.descriptionSaved ? html`<p role="status">${t("receipts.saved")}</p>` : nothing}
+          <wt-form-actions
+            data-test="description-actions"
+            .error=${[this.saveFailed ? t("location_settings.save_error") : "", descriptionError ? t("form.fix_fields") : ""].filter(Boolean).join(" ")}
+          >
+            <wt-button
+              data-test="description-save"
+              variant=${saveActionState(this.#descriptionScope).variant}
+              ?loading=${this.descriptionSaving}
+              ?disabled=${this.saving || this.descriptionSaving || saveActionState(this.#descriptionScope).unchanged || (this.descriptionAttempted && this.#validate() !== "")}
+              @click=${() => void this.#saveDescription()}
+              >${t("action.save")}</wt-button
+            >
+          </wt-form-actions>
+        </div>
       </section>
       ${this.saved ? html`<p role="status">${t("receipts.saved")}</p>` : nothing}
-      <wt-form-actions .error=${bottom}
+      <wt-form-actions data-test="combined-actions" .error=${bottom}
         ><wt-button
           data-test="save"
           variant=${saveAction.variant}

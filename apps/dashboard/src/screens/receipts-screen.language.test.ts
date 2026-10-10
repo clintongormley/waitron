@@ -104,7 +104,7 @@ const warning = (el: ReceiptsScreen) => q(el, "[data-test=receipt-language-warni
 const languageError = (el: ReceiptsScreen) =>
   select(el)?.shadowRoot!.querySelector("[data-error]")?.textContent?.trim() ?? "";
 async function bottomOf(el: ReceiptsScreen): Promise<string> {
-  const actions = q(el, "wt-form-actions")! as HTMLElement & { error: string };
+  const actions = q(el, "[data-test=combined-actions]")! as HTMLElement & { error: string };
   return actions.error;
 }
 

@@ -60,7 +60,9 @@ function edit(el: ReceiptsScreen, value: string) {
   );
 }
 async function bottomOf(el: ReceiptsScreen): Promise<string> {
-  const actions = el.shadowRoot!.querySelector("wt-form-actions")!;
+  const actions = el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-form-actions"]>(
+    "[data-test=description-actions]",
+  )!;
   await actions.updateComplete;
   return actions.shadowRoot!.querySelector("[data-error]")?.textContent?.trim() ?? "";
 }
@@ -187,7 +189,9 @@ describe("receipts page: the location's invoice description", () => {
         await el.updateComplete;
         q(el, "[data-test=save]").click();
         await flush(el);
-        const actions = el.shadowRoot!.querySelector("wt-form-actions")!;
+        const actions = el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-form-actions"]>(
+          "[data-test=description-actions]",
+        )!;
         await actions.updateComplete;
         const message = actions.shadowRoot!.querySelector("[data-error]")!;
         expect(message.textContent).toBe(t("location_settings.save_error"));
@@ -211,7 +215,7 @@ describe("receipts page: the location's invoice description", () => {
     await flush(el);
     el.style.setProperty("--wt-space-4", "23px");
     const field = q(el, "[name=operationDescription]").getBoundingClientRect();
-    const actions = q(el, "wt-form-actions").getBoundingClientRect();
+    const actions = q(el, "[data-test=description-actions]").getBoundingClientRect();
     expect(actions.top - field.bottom).toBe(23);
   });
   it("retries a failed read and then shows the form", async () => {

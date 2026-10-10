@@ -547,7 +547,7 @@ describe("the Receipts page's one Save", () => {
     q(el, "[data-test=save]")!.click();
     await flush(el);
     expect(api.putLocationSettings).toHaveBeenCalledTimes(1);
-    const actions = q(el, "wt-form-actions")! as HTMLElement & { error: string };
+    const actions = q(el, "[data-test=combined-actions]")! as HTMLElement & { error: string };
     expect(actions.error).toBe(
       `${t("receipts.trim_save_error")} ${codeMessage("server.internal")}`,
     );
@@ -565,7 +565,7 @@ describe("the Receipts page's one Save", () => {
     await el.updateComplete;
     q(el, "[data-test=save]")!.click();
     await flush(el);
-    const actions = q(el, "wt-form-actions")! as HTMLElement & { error: string };
+    const actions = q(el, "[data-test=combined-actions]")! as HTMLElement & { error: string };
     expect(actions.error).toBe(
       `${t("receipts.trim_save_error")} ${codeMessage("server.internal")} ${t("location_settings.save_error")}`,
     );
@@ -604,7 +604,7 @@ describe("the Receipts page's one Save", () => {
         expect(descriptions).toEqual([t("receipts.footer_message_hint"), expected]);
         await vi.waitFor(() => expect(el.shadowRoot!.activeElement).toBe(footer));
       }
-      const actions = q(el, "wt-form-actions")! as HTMLElement & { error: string };
+      const actions = q(el, "[data-test=combined-actions]")! as HTMLElement & { error: string };
       expect(actions.error).toBe(t("form.fix_fields"));
       expect(q(el, "[data-test=save]")!.hasAttribute("disabled")).toBe(false);
       if (field === "headerSubtitle") edit(el, "headerSubtitle", "short");

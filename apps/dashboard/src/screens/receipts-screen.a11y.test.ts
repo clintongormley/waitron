@@ -136,7 +136,8 @@ describe.each(["light", "dark"] as const)("receipts-screen a11y (%s theme)", (th
     el.shadowRoot!.querySelector<HTMLElement>("[data-test=save]")!.click();
     await flush(el);
     expect(
-      el.shadowRoot!.querySelector<HTMLElement & { error: string }>("wt-form-actions")!.error,
+      el.shadowRoot!.querySelector<HTMLElement & { error: string }>("[data-test=combined-actions]")!
+        .error,
     ).not.toBe("");
     await expectNoA11yViolations(host);
   });

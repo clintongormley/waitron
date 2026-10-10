@@ -94,7 +94,7 @@ const previewCalls = (api: DashboardApi) =>
   vi.mocked(api.previewReceipt).mock.calls.map(([config]) => config);
 const lastPut = (api: DashboardApi) => vi.mocked(api.putReceipt).mock.calls.at(-1)![0];
 const bottom = (el: ReceiptsScreen) =>
-  q<HTMLElement & { error: string }>(el, "wt-form-actions")!.error;
+  q<HTMLElement & { error: string }>(el, "[data-test=combined-actions]")!.error;
 const logoControl = (el: ReceiptsScreen) => q<ImageUpload>(el, "dashboard-image-upload")!;
 const addressSwitch = (el: ReceiptsScreen) => q<WtSwitch>(el, "wt-switch[name=printAddress]")!;
 

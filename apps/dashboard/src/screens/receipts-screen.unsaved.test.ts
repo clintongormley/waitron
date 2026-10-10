@@ -206,8 +206,11 @@ it("a refused appearance write retains protection when the independent location 
   await expect
     .poll(
       () =>
-        (screen.shadowRoot!.querySelector("wt-form-actions") as HTMLElement & { error: string })
-          .error,
+        (
+          screen.shadowRoot!.querySelector("[data-test=combined-actions]") as HTMLElement & {
+            error: string;
+          }
+        ).error,
     )
     .toContain(t("receipts.trim_save_error"));
   expect(unload()).toBe(true);
@@ -754,8 +757,11 @@ for (const accepted of [true, false]) {
     await new Promise((resolve) => setTimeout(resolve, 20));
     expect(field(screen, "receiptLanguage").value).toBe("es-ES");
     expect(
-      (screen.shadowRoot!.querySelector("wt-form-actions")! as HTMLElement & { error: string })
-        .error,
+      (
+        screen.shadowRoot!.querySelector("[data-test=combined-actions]")! as HTMLElement & {
+          error: string;
+        }
+      ).error,
     ).toBe("");
     expect(unload()).toBe(false);
   });
@@ -778,4 +784,51 @@ it("a region fixing an edited language makes that read-only choice exempt withou
   expect(unload()).toBe(false);
   await change(screen, "operationDescription", "Dinner");
   expect(unload()).toBe(true);
+});
+
+it("the independent language action commits only language protection", async () => {
+  const writes: string[] = [];
+  const { screen } = await mount({
+    putReceiptLanguage: async (value) => {
+      writes.push(value);
+    },
+  });
+  await change(screen, "receiptLanguage", "ca-ES");
+  await change(screen, "operationDescription", "Dinner");
+  screen.shadowRoot!.querySelector<HTMLElement>("[data-test=language-save]")!.click();
+  await expect.poll(() => writes).toEqual(["ca-ES"]);
+  await expect
+    .poll(
+      () =>
+        screen.shadowRoot!.querySelector<import("@waitron/ui").WtButton>(
+          "[data-test=language-save]",
+        )!.disabled,
+    )
+    .toBe(true);
+  expect(unload()).toBe(true);
+  await change(screen, "operationDescription", "Restaurant service");
+  expect(unload()).toBe(false);
+});
+it("the independent description action commits only description protection", async () => {
+  const writes: string[] = [];
+  const { screen } = await mount({
+    putLocationSettings: async (value) => {
+      writes.push(value);
+    },
+  });
+  await change(screen, "receiptLanguage", "ca-ES");
+  await change(screen, "operationDescription", "Dinner");
+  screen.shadowRoot!.querySelector<HTMLElement>("[data-test=description-save]")!.click();
+  await expect.poll(() => writes).toEqual(["Dinner"]);
+  await expect
+    .poll(
+      () =>
+        screen.shadowRoot!.querySelector<import("@waitron/ui").WtButton>(
+          "[data-test=description-save]",
+        )!.disabled,
+    )
+    .toBe(true);
+  expect(unload()).toBe(true);
+  await change(screen, "receiptLanguage", "es-ES");
+  expect(unload()).toBe(false);
 });
