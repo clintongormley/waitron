@@ -200,3 +200,22 @@ export function spareSpot(zoneTables: readonly TableState[]): { x: number; y: nu
     y: clampToGrid(crop.y + crop.height / 2 - SPARE_SIZE / 2),
   };
 }
+
+export type SheetAction = "join-with" | "split" | "rotate" | "seats" | "back" | "take-off";
+
+/** Decisions 12 and 16: the details sheet's changes for today that apply to `table`, in order. */
+export function sheetActions(table: TableState): SheetAction[] {
+  const today = table.today;
+  if (today === null || today.placement === null || today.takenOff) return [];
+  const merged = today.joinId !== null;
+  const free = table.party === null && table.condition === "free" && table.pendingDeliveries === 0;
+  const applies: [SheetAction, boolean][] = [
+    ["join-with", !merged],
+    ["split", merged],
+    ["rotate", !today.fixed && !merged],
+    ["seats", true],
+    ["back", true],
+    ["take-off", free && !merged],
+  ];
+  return applies.filter(([, offered]) => offered).map(([action]) => action);
+}

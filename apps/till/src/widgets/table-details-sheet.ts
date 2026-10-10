@@ -5,6 +5,7 @@ import { decimal, formatMoney, isZeroDecimal } from "@waitron/shared";
 import type { TableState, UnsentDraft } from "../api/client.js";
 import { countText, currentLocale, named, t } from "../i18n/t.js";
 import { readyText, seatsFor } from "../state/floor-map.js";
+import { type SheetAction, sheetActions } from "../state/floor-today.js";
 import { reminderDueAt } from "../state/release-reminder.js";
 import { signalOf } from "../state/table-signals.js";
 import { signalChipStyles, signalChips } from "./signal-chips.js";
@@ -44,11 +45,22 @@ function kitchenProgress(table: TableState): string {
     .join(" · ");
 }
 
+const ACTION_LABELS = {
+  "join-with": "floor.join_with",
+  split: "floor.split",
+  rotate: "floor.rotate",
+  seats: "floor.change_seats",
+  back: "floor.back_to_saved",
+  "take-off": "floor.take_off",
+} as const satisfies Record<SheetAction, string>;
+
 /**
  * Everything the floor knows about one table, in a dialog. It saves nothing.
  *
  * `details-close` (no detail) asks the holder to close it; it is sent on Close, on Escape and after
- * Mark cleared, never when the holder closed it by taking its table away.
+ * Mark cleared, never when the holder closed it by taking its table away. With `actions`, it
+ * offers today's changes for the table: each sends `today-action` `{ action, tableId }`, then
+ * `details-close`, except Rotate, which leaves it open to be pressed again.
  */
 @customElement("till-table-details-sheet")
 export class TillTableDetailsSheet extends LitElement {
@@ -75,6 +87,13 @@ export class TillTableDetailsSheet extends LitElement {
         margin-top: var(--wt-space-2);
       }
 
+      .today-actions {
+        display: flex;
+        flex-direction: column;
+        gap: var(--wt-space-2);
+        margin-top: var(--wt-space-3);
+      }
+
       .fire-due {
         font-weight: var(--wt-font-weight-bold);
       }
@@ -87,6 +106,8 @@ export class TillTableDetailsSheet extends LitElement {
   @property() heading = "";
   /** Injectable clock for Time to fire; unset reads `Date.now()` on each render. */
   @property({ attribute: false }) now?: number;
+  /** Today's changes are offered on the floor only; the order screen's status pin leaves this off. */
+  @property({ type: Boolean }) actions = false;
 
   #emit(type: string, detail?: unknown): void {
     this.dispatchEvent(new CustomEvent(type, { detail, bubbles: true, composed: true }));
@@ -100,6 +121,28 @@ export class TillTableDetailsSheet extends LitElement {
   #markCleared(table: TableState): void {
     this.#emit("mark-cleared", { tableId: table.id });
     this.#emit("details-close");
+  }
+
+  #todayAction(table: TableState, action: SheetAction): void {
+    this.#emit("today-action", { action, tableId: table.id });
+    if (action !== "rotate") this.#emit("details-close");
+  }
+
+  #todayActions(table: TableState): TemplateResult | typeof nothing {
+    const offered = this.actions ? sheetActions(table) : [];
+    if (offered.length === 0) return nothing;
+    return html`<div class="today-actions">
+      ${offered.map(
+        (action) =>
+          html`<wt-button
+            data-today-action=${action}
+            variant="secondary"
+            @click=${() => this.#todayAction(table, action)}
+          >
+            ${t(ACTION_LABELS[action])}
+          </wt-button>`,
+      )}
+    </div>`;
   }
 
   #lines(table: TableState, chipCount: number): TemplateResult[] {
@@ -157,6 +200,7 @@ export class TillTableDetailsSheet extends LitElement {
             </ul>`
       }
       ${chips.length === 0 ? nothing : html`<div class="chips">${renderFloorChips(chips)}</div>`}
+      ${this.#todayActions(table)}
       <wt-button
         slot="footer"
         data-details-close
