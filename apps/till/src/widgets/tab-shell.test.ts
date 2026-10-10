@@ -887,25 +887,32 @@ describe("till-tab-shell above phone width", () => {
     loadLocales: full.loadLocales!,
   };
 
-  for (const [fixture, shell, width, locale] of [
-    ["full", full, 1024, "en-GB"],
-    ["full", full, 1024, "es-ES"],
-    ["the demo counter", demoCounter, 1024, "en-GB"],
-    ["the demo counter", demoCounter, 1024, "es-ES"],
-    ["the demo counter", demoCounter, 800, "en-GB"],
-    ["the demo counter", demoCounter, 800, "es-ES"],
+  const service = [".find-bill", ".expo", ".station"] as const;
+
+  // Spanish at 800 has no room for all three, so Kitchen, the lowest of them, leaves first.
+  for (const [fixture, shell, width, locale, onBar] of [
+    ["full", full, 1024, "en-GB", 3],
+    ["full", full, 1024, "es-ES", 3],
+    ["the demo counter", demoCounter, 1024, "en-GB", 3],
+    ["the demo counter", demoCounter, 1024, "es-ES", 3],
+    ["the demo counter", demoCounter, 800, "en-GB", 3],
+    ["the demo counter", demoCounter, 800, "es-ES", 2],
   ] as const) {
-    it(`moves the transfers into More before Find a bill, Kitchen and Pass, with ${fixture} at ${width} wide in ${locale}`, async () => {
+    it(`moves the transfers into More before ${service
+      .slice(0, onBar)
+      .map((selector) => selector.slice(1))
+      .join(", ")}, with ${fixture} at ${width} wide in ${locale}`, async () => {
       await withLocale(locale, () =>
         atViewport(width, async () => {
           const { el } = await mountWidget<TillTabShell>("till-tab-shell", shell);
           await settle(el);
           const menu = menuOf(el);
           expect(menu).not.toBeNull();
-          for (const selector of [".find-bill", ".station", ".expo"]) {
+          for (const [index, selector] of service.entries()) {
             const found = [...el.shadowRoot!.querySelectorAll<HTMLElement>(`header ${selector}`)];
             expect(found, selector).toHaveLength(1);
-            expect(menu!.contains(found[0]!), selector).toBe(false);
+            expect(menu!.contains(found[0]!), selector).toBe(index >= onBar);
+            if (index >= onBar) continue;
             const r = found[0]!.getBoundingClientRect();
             expect(r.width, selector).toBeGreaterThan(0);
             expect(r.left, selector).toBeGreaterThanOrEqual(0);
