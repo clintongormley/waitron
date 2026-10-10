@@ -1864,6 +1864,10 @@ rebuild of `working_orders`),
 `packages/db/drizzle/0122_devices_drop_form_factor_trigger.sql` and
 `packages/db/drizzle/0124_devices_recreate_form_factor_trigger.sql` (the trigger around `0123`'s
 rebuild of `devices`),
+`packages/db/drizzle/0128_delivery_table_release.sql` (re-creates
+`working_orders_enforce_transition` with `delivery_table_label` in the presented-bill and handover
+unchanged-column lists, and an exception letting an order past `open` drop its delivery table and
+keep its name),
 `packages/media/drizzle/0001_image_references.sql`,
 `packages/media/drizzle/0002_section_image_references.sql`,
 `packages/media/drizzle/0003_published_image_references.sql`,
@@ -1888,7 +1892,8 @@ rebuild of `devices`),
 catalogue `0013_drop_category_image_triggers.sql`, `0018_sections_owned_prepare.sql` and
 `0021_sections_owned_restore.sql`, and 2026-10-04 for core `0066`, `0072`, `0080`, `0082`, `0083`,
 `0086`, `0089` and `0091`, and 2026-10-07 for media `0008_queued_edition_image_references.sql` and
-`0009_include_folder_image_references.sql`, and 2026-10-09 for core `0119`, `0122` and `0124`)
+`0009_include_folder_image_references.sql`, and 2026-10-09 for core `0119`, `0122` and `0124`, and
+2026-10-10 for core `0128`)
 each of those files equalled the one before it once `id` and
 `prevId` were removed and keys sorted, except that `0042`'s `_meta.columns` no longer carried
 `0041`'s column rename, so the snapshot chain records none of the hand-written SQL, which is why regenerating from the TypeScript

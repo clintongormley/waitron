@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { withTransaction } from "@waitron/db";
+import { captureError, TRANSITION_REFUSAL, triggerRaised, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { releaseDeliveries } from "./delivery-release.js";
@@ -22,8 +22,6 @@ const suite = useVenueDb({
   migrations: migrationOptionsFor(manifestSets(), null),
   timeoutMs: 60_000,
 });
-
-const TRANSITION_REFUSAL = "working order cannot make that transition";
 
 /**
  * A counter order of one Burger delivered to `tableId`, paid in cash; paying fires the dish. The
@@ -116,16 +114,13 @@ describe("releaseDeliveries", () => {
     const v = await setupPartyVenue(suite.db);
     const id = await settledDelivery(v, await deliveryTable(v, `T-${randomUUID().slice(0, 8)}`));
 
-    let refusal: { cause?: { message?: string } } | undefined;
-    try {
-      await withTransaction(v.db, (tx) =>
+    const refusal = await captureError(() =>
+      withTransaction(v.db, (tx) =>
         tx.run(sql.raw(`update working_orders set ${set} where id = '${id}'`)),
-      );
-    } catch (error) {
-      refusal = error as typeof refusal;
-    }
+      ),
+    );
 
-    expect(refusal?.cause?.message).toContain(TRANSITION_REFUSAL);
+    expect(triggerRaised(refusal, TRANSITION_REFUSAL)).toBe(true);
     const row = await billRow(v, id);
     expect(row.deliveryTableId).not.toBeNull();
     expect(row.deliveryTableLabel).toBeNull();
