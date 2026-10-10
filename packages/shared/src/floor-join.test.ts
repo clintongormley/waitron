@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { JOIN_SIDES, joinSide, touchingPlace, type JoinPlace } from "./floor-join.js";
+import { JOIN_SIDES, heldStep, joinSide, touchingPlace, type JoinPlace } from "./floor-join.js";
 import * as shared from "./index.js";
 
 const place = (x: number, y: number, width = 8, height = 8, rotation = 0): JoinPlace => ({
@@ -111,9 +111,34 @@ describe("touchingPlace", () => {
   });
 });
 
+describe("heldStep", () => {
+  it("keeps a step that stays in the grid", () => {
+    expect(heldStep(5, 10, 10)).toBe(5);
+    expect(heldStep(-10, 10, 10)).toBe(-10);
+    expect(heldStep(989, 10, 10)).toBe(989);
+  });
+
+  it("holds a step that would pass 0", () => {
+    expect(heldStep(-11, 10, 10)).toBe(-10);
+    expect(heldStep(-50, 5, 30)).toBe(-5);
+  });
+
+  it("holds a step that would pass 999", () => {
+    expect(heldStep(990, 10, 10)).toBe(989);
+    expect(heldStep(5, 999, 999)).toBe(0);
+  });
+
+  it("holds a group by its lowest and highest corners", () => {
+    expect(heldStep(-8, 4, 20)).toBe(-4);
+    expect(heldStep(990, 4, 990)).toBe(9);
+    expect(heldStep(3, 4, 990)).toBe(3);
+  });
+});
+
 it("names the four sides and is exported from the package", () => {
   expect(JOIN_SIDES).toEqual(["left", "right", "top", "bottom"]);
   expect(shared.joinSide).toBe(joinSide);
   expect(shared.touchingPlace).toBe(touchingPlace);
   expect(shared.JOIN_SIDES).toBe(JOIN_SIDES);
+  expect(shared.heldStep).toBe(heldStep);
 });

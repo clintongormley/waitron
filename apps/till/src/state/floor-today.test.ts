@@ -278,6 +278,13 @@ describe("dropAction", () => {
     expect(dropAction([m1, m2], { tableId: "m1", x: 1, y: 0, targetId: "gone" })).toEqual({
       kind: "none",
     });
+    const unplanned = table("u", "6", { today: null });
+    const spare = table("s", "7", { today: today({ placement: null }) });
+    for (const target of [unplanned, spare]) {
+      expect(
+        dropAction([m1, m2, target], { tableId: "m1", x: 1, y: 0, targetId: target.id }),
+      ).toEqual({ kind: "none" });
+    }
   });
 });
 

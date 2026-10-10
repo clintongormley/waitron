@@ -33,6 +33,11 @@ export function joinSide(target: JoinPlace, moving: JoinPlace): JoinSide {
   return down < 0 ? "top" : "bottom";
 }
 
+/** The step that keeps `low + step` and `high + step` within 0–999: a group moved as one. */
+export function heldStep(step: number, low: number, high: number): number {
+  return Math.min(Math.max(step, -low), 999 - high);
+}
+
 const held = (value: number): number => Math.min(Math.max(Math.round(value), 0), 999);
 
 /**

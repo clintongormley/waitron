@@ -15,7 +15,7 @@ import {
 import type { Transaction } from "@waitron/db";
 import type { TableRemoval } from "@waitron/module";
 import { readLocationClock, venueMomentAt } from "@waitron/reporting";
-import { AppError } from "@waitron/shared";
+import { AppError, heldStep } from "@waitron/shared";
 import {
   planReset,
   targetsFromMaster,
@@ -426,11 +426,6 @@ export async function ensureToday(
       await catchUpZone(tx, cfg, removals, zoneId, now);
     }
   }
-}
-
-/** `low + step` and `high + step` stay within 0–999. */
-function heldStep(step: number, low: number, high: number): number {
-  return Math.min(Math.max(step, -low), 999 - high);
 }
 
 /** Moves the table's top-left corner to `at`; a merge's members all move by the same distance. */

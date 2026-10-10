@@ -1,4 +1,4 @@
-import { type JoinSide, joinSide, touchingPlace } from "@waitron/shared";
+import { type JoinSide, heldStep, joinSide, touchingPlace } from "@waitron/shared";
 import { type FloorMapDrop, clampToGrid, cropToTables, mergeLabel } from "@waitron/ui";
 import type { TableParty, TableState, TodayPlacement } from "../api/client.js";
 import { codeMessage } from "../i18n/codes.js";
@@ -28,7 +28,6 @@ export type DropAction =
     };
 
 const SPARE_SIZE = 8;
-const GRID_MAX = 999;
 
 interface Group {
   members: TableState[];
@@ -67,7 +66,9 @@ export function dropAction(zoneTables: readonly TableState[], drop: FloorMapDrop
       : { kind: "move", tableId: dragged.id, x: drop.x, y: drop.y };
   }
   const target = zoneTables.find((table) => table.id === drop.targetId);
-  if (target === undefined || draggedGroup.members.includes(target)) return { kind: "none" };
+  if (target?.today?.placement == null || draggedGroup.members.includes(target)) {
+    return { kind: "none" };
+  }
   const targetGroup = groupOf(zoneTables, target);
   if (
     draggedGroup.party !== null &&
@@ -135,10 +136,6 @@ function nearestMember(
   }
   return best;
 }
-
-/** `low + step` and `high + step` stay within the grid, as the server holds a moved merge. */
-const heldStep = (step: number, low: number, high: number): number =>
-  Math.min(Math.max(step, -low), GRID_MAX - high);
 
 /** The placement the floor draws until the next read (decision 14): the moved group's members, or the merged table. */
 export function pendingPlaces(
