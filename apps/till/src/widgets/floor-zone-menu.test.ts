@@ -112,8 +112,15 @@ it("draws nothing without a zone", async () => {
   expect(root(el).querySelector("wt-row-actions")).toBeNull();
 });
 
-it("lists the movable spares, and places the one picked", async () => {
-  const el = await mount([placed, spare, table("t7", { placement: null }), fixedSpare, takenOff]);
+it("lists the movable spares in number order, and places the one picked", async () => {
+  const el = await mount([
+    placed,
+    table("t10", { placement: null }),
+    table("t2", { placement: null }),
+    spare,
+    fixedSpare,
+    takenOff,
+  ]);
   const seen = captured(el);
   await choose(el, "spares");
 
@@ -126,15 +133,16 @@ it("lists the movable spares, and places the one picked", async () => {
       text(row),
     ]),
   ).toEqual([
+    ["t2", "2"],
     ["t9", "9"],
-    ["t7", "7"],
+    ["t10", "10"],
   ]);
 
-  dialog.querySelector<HTMLElement>('[data-spare="t7"]')!.click();
+  dialog.querySelector<HTMLElement>('[data-spare="t10"]')!.click();
   await el.updateComplete;
 
   expect(seen).toEqual([
-    { type: "zone-place-spare", detail: { tableId: "t7" }, bubbles: true, composed: true },
+    { type: "zone-place-spare", detail: { tableId: "t10" }, bubbles: true, composed: true },
   ]);
   expect(dialog.open).toBe(false);
 });
@@ -149,8 +157,14 @@ it("says there are no spares, and where to add them", async () => {
   );
 });
 
-it("lists the tables taken off today, each with Put back", async () => {
-  const el = await mount([placed, spare, takenOff, table("t4", { takenOff: true })]);
+it("lists the tables taken off today in number order, each with Put back", async () => {
+  const el = await mount([
+    placed,
+    spare,
+    table("t10", { takenOff: true }),
+    table("t2", { takenOff: true }),
+    table("x9", { takenOff: true }),
+  ]);
   const seen = captured(el);
   await choose(el, "taken-off");
 
@@ -164,15 +178,16 @@ it("lists the tables taken off today, each with Put back", async () => {
       text(row.querySelector("[data-put-back]")),
     ]),
   ).toEqual([
-    ["t3", "3", "Put back"],
-    ["t4", "4", "Put back"],
+    ["t2", "2", "Put back"],
+    ["x9", "9", "Put back"],
+    ["t10", "10", "Put back"],
   ]);
 
-  dialog.querySelector<HTMLElement>('[data-taken-off="t4"] [data-put-back]')!.click();
+  dialog.querySelector<HTMLElement>('[data-taken-off="t10"] [data-put-back]')!.click();
   await el.updateComplete;
 
   expect(seen).toEqual([
-    { type: "zone-put-back", detail: { tableId: "t4" }, bubbles: true, composed: true },
+    { type: "zone-put-back", detail: { tableId: "t10" }, bubbles: true, composed: true },
   ]);
   expect(dialog.open).toBe(false);
 });
@@ -254,5 +269,24 @@ it("speaks Spanish", async () => {
   ]);
   await choose(el, "reset");
   expect(dialogOf(el, "reset").heading).toBe("¿Restablecer Terrace?");
+  expect(text(dialogOf(el, "reset").querySelector("[data-reset-body]"))).toBe(
+    "Las libres vuelven ya; las ocupadas, al quedar libres.",
+  );
   expect(text(dialogOf(el, "reset").querySelector("[data-reset-confirm]"))).toBe("Restablecer");
+  expect(text(dialogOf(el, "reset").querySelector("[data-cancel]"))).toBe("Cancelar");
+  expect(text(dialogOf(el, "taken-off").querySelector("[data-put-back]"))).toBeUndefined();
+
+  el.tables = [placed];
+  dialogOf(el, "reset").querySelector<HTMLElement>("[data-cancel]")!.click();
+  await choose(el, "spares");
+  expect(text(dialogOf(el, "spares").querySelector("[data-empty]"))).toBe(
+    "No hay mesas de reserva: añádelas en el editor del plano",
+  );
+  dialogOf(el, "spares").querySelector<HTMLElement>("[data-cancel]")!.click();
+  await choose(el, "taken-off");
+  expect(text(dialogOf(el, "taken-off").querySelector("[data-empty]"))).toBe("Ninguna");
+
+  el.tables = [takenOff];
+  await el.updateComplete;
+  expect(text(dialogOf(el, "taken-off").querySelector("[data-put-back]"))).toBe("Volver a poner");
 });

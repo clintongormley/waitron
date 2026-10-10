@@ -1016,28 +1016,23 @@ export class TillFloorScreen extends LitElement {
     return html`<till-floor-zone-menu
       .zone=${zone}
       .tables=${this.#zone.visible}
-      @zone-place-spare=${(event: Event) =>
-        this.#onZoneChange(event, (api, { tableId }) =>
-          api.placeSpareToday(tableId!, spareSpot(this.#zone.visible)),
+      @zone-place-spare=${(event: CustomEvent<{ tableId: string }>) =>
+        this.#onZoneChange(event, (api) =>
+          api.placeSpareToday(event.detail.tableId, spareSpot(this.#zone.visible)),
         )}
-      @zone-put-back=${(event: Event) =>
-        this.#onZoneChange(event, (api, { tableId }) => api.putBackToday(tableId!))}
-      @zone-reset=${(event: Event) =>
-        this.#onZoneChange(event, (api, { zoneId }) => api.resetZoneToday(zoneId!))}
+      @zone-put-back=${(event: CustomEvent<{ tableId: string }>) =>
+        this.#onZoneChange(event, (api) => api.putBackToday(event.detail.tableId))}
+      @zone-reset=${(event: CustomEvent<{ zoneId: string }>) =>
+        this.#onZoneChange(event, (api) => api.resetZoneToday(event.detail.zoneId))}
     ></till-floor-zone-menu>`;
   }
 
-  #onZoneChange(
-    event: Event,
-    call: (api: TillApi, detail: { tableId?: string; zoneId?: string }) => Promise<void>,
-  ): void {
+  #onZoneChange(event: Event, call: (api: TillApi) => Promise<void>): void {
     event.stopPropagation();
     this.refusal = null;
     const api = this.api;
     if (api === undefined) return;
-    void this.#settle(
-      call(api, (event as CustomEvent<{ tableId?: string; zoneId?: string }>).detail),
-    );
+    void this.#settle(call(api));
   }
 
   #requestFloorRefresh(): void {

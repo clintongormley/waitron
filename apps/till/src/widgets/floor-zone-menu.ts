@@ -1,6 +1,6 @@
 import { LitElement, css, html, nothing, type TemplateResult } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
-import { baseStyles } from "@waitron/ui";
+import { baseStyles, inNumberOrder } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-row-actions.js";
 import type { FloorZone, TableState } from "../api/client.js";
 import { t } from "../i18n/t.js";
@@ -9,11 +9,9 @@ import { trackDialog } from "./track-dialog.js";
 
 type Dialog = "spares" | "taken-off" | "reset";
 
-/**
- * Today's plan (⋮) for a planned zone: Add a spare table, Taken off today and Reset to saved plan.
- * A pick sends `zone-place-spare` or `zone-put-back` `{ tableId }`, or `zone-reset` `{ zoneId }`,
- * and closes its dialog.
- */
+const inLabelOrder = (tables: TableState[]): TableState[] =>
+  tables.sort((a, b) => inNumberOrder(a.label, b.label));
+
 @customElement("till-floor-zone-menu")
 export class TillFloorZoneMenu extends LitElement {
   static override styles = [
@@ -39,9 +37,7 @@ export class TillFloorZoneMenu extends LitElement {
     `,
   ];
 
-  /** `null` draws nothing. */
   @property({ attribute: false }) zone: FloorZone | null = null;
-  /** The zone's tables. */
   @property({ attribute: false }) tables: TableState[] = [];
   @state() private open: Dialog | null = null;
 
@@ -77,7 +73,7 @@ export class TillFloorZoneMenu extends LitElement {
   }
 
   #spares(): TemplateResult {
-    const spares = sparesOf(this.tables);
+    const spares = inLabelOrder(sparesOf(this.tables));
     return html`${
       spares.length === 0
         ? html`<p class="empty" data-empty>${t("floor.no_spares")}</p>`
@@ -98,7 +94,7 @@ export class TillFloorZoneMenu extends LitElement {
   }
 
   #takenOff(): TemplateResult {
-    const takenOff = takenOffOf(this.tables);
+    const takenOff = inLabelOrder(takenOffOf(this.tables));
     return html`${
       takenOff.length === 0
         ? html`<p class="empty" data-empty>${t("floor.none_taken_off")}</p>`
