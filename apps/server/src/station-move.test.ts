@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { eq, inArray } from "drizzle-orm";
+import { eq, inArray, sql } from "drizzle-orm";
 import { describe, expect, it, vi } from "vitest";
 import { markIncidentHandled } from "@waitron/core";
 import {
@@ -50,6 +50,7 @@ import {
 import { routeProductTo } from "./testing/zone-offers.js";
 import { openPartyTab } from "./testing/serve-line.js";
 import { setupSplitExtrasVenue, useSplitExtrasDb } from "./testing/split-extras-venue.js";
+import { readStationQueueMoves } from "./station-queue-moves.js";
 import { moveDishesToStation, stillMovable } from "./station-move.js";
 import { createWatcher, setPrinterWatcher } from "./watchers.js";
 import {
@@ -2468,6 +2469,62 @@ describe("moveDishesToStation", () => {
     );
     expect(copied).toMatchObject({ stationId: grill, stationChosenAt: marked!.stationChosenAt });
     expect(copied!.stationChosenAt).not.toBeNull();
+  });
+
+  it("keeps the latest mover when splitting a dish, independent of an unordered read", async () => {
+    const tableId = await venue.table(`Move-${randomUUID().slice(0, 8)}`);
+    const { partyId, tabId } = await seat(venue, tableId);
+    const [order] = await inTx(venue, (tx) =>
+      tx.select().from(workingOrders).where(eq(workingOrders.id, tabId)),
+    );
+    const submitted = await inTx(venue, (tx) =>
+      submitGroups(tx, venue.cfg, partyId, {
+        submissionId: randomUUID(),
+        expectedPartyRevision: order!.revision,
+        operatorId: OPERATOR,
+        billId: tabId,
+        groups: [{ lines: [{ menuItemId: venue.item("Burger"), quantity: "2" }], release: "hold" }],
+      }),
+    );
+    const lineId = submitted.groups[0]!.lineIds[0]!;
+    for (const stationId of [grill, bar])
+      await inTx(venue, (tx) =>
+        moveDishesToStation(
+          tx,
+          venue.cfg,
+          tabId,
+          {
+            submissionId: randomUUID(),
+            lineIds: [lineId],
+            stationId,
+          },
+          mover(),
+        ),
+      );
+    const checkId = randomUUID();
+    await inTx(venue, async (tx) => {
+      await createOpenOrder(tx, venue.cfg, checkId, [], null, { partyId });
+      await VENUE_SERVICE.copyOrderContext(tx, venue.cfg, tabId, checkId);
+      await tx.run(sql`pragma reverse_unordered_selects = on`);
+      try {
+        await carveOffLines(tx, venue.cfg, tabId, checkId, [{ lineNo: 1, quantity: "1" }], {
+          refuseHeld: false,
+        });
+      } finally {
+        await tx.run(sql`pragma reverse_unordered_selects = off`);
+      }
+    });
+    const copied = await inTx(venue, (tx) =>
+      tx.select().from(ticketItems).where(eq(ticketItems.workingOrderId, checkId)),
+    );
+    const moves = await inTx(venue, (tx) =>
+      readStationQueueMoves(tx, [lineId, copied[0]!.workingOrderLineId]),
+    );
+    expect(moves.get(copied[0]!.workingOrderLineId)).toMatchObject({
+      fromStationName: "Grill",
+      toStationId: bar,
+    });
+    expect(moves.get(lineId)).toMatchObject({ fromStationName: "Grill", toStationId: bar });
   });
 
   it("does not repurpose a submission for a different destination", async () => {

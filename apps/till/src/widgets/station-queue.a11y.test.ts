@@ -519,4 +519,32 @@ describe.each(["light", "dark"] as const)("till-station-queue a11y (%s theme)", 
     );
     await expectNoA11yViolations(host);
   });
+  it.each(["rail", "kanban"] as const)("a moved dish in %s has no violations", async (view) => {
+    const { host } = await mountWidget<TillStationQueue>(
+      "till-station-queue",
+      {
+        groups: [
+          {
+            ...groups[0]!,
+            items: [
+              {
+                ...groups[0]!.items[0]!,
+                lastMove: {
+                  fromStationName: "Grill",
+                  personName: "Luis",
+                  deviceName: "Till 2",
+                  movedAt: "2026-10-10T18:12:00.000Z",
+                },
+              },
+            ],
+          },
+        ],
+        stationId: "st-1",
+        view,
+        canMove: true,
+      },
+      theme,
+    );
+    await expectNoA11yViolations(host);
+  });
 });

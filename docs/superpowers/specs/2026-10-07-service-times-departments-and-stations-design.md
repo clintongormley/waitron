@@ -118,6 +118,8 @@ _(2026-10-08: "Monitor" narrowed to view-only screens and the kitchen screen ent
 owner's answers to the slice 5 plan; the earlier entry called every kitchen screen a monitor. See
 §9.4. 2026-10-09: the owner opened the pass monitor to every kind of device.)_
 
+_(2026-10-10, A458: the till’s Station screen also offers Move to station when its profile allows Take orders. Station cards show the latest move’s source station, person when present, device when present, and time.)_
+
 A terrace that closes earlier than the bar is a **zone**, not a department: as a department its
 tabs could only reach the bar's till by transfer, its staff would be walled off, and its periods
 would be set up twice.

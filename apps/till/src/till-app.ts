@@ -8905,6 +8905,7 @@ export class TillApp extends LitElement {
         return html`<till-station-screen
           slot="drill"
           .api=${this.api}
+          .canMoveStation=${this.capabilities.includes("take-orders")}
           .bumpMode=${this.bumpMode}
           .fireControl=${this.fireControl}
           .deviceMode=${this.deviceMode}

@@ -2187,3 +2187,70 @@ describe("till-station-queue — where Move sits", () => {
     expect(move.top - own.bottom).toBeLessThan(next.top - move.bottom);
   });
 });
+
+describe("station move attribution", () => {
+  it.each(["en-GB", "es-ES"] as const)(
+    "shows the mover on rail and kanban cards in %s",
+    async (locale) => {
+      const previous = currentLocale();
+      setLocale(locale);
+      try {
+        for (const view of ["rail", "kanban"] as const) {
+          const movedAt = new Date(2026, 9, 10, 20, 12).toISOString();
+          const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
+            view,
+            stationId: "st-1",
+            canMove: true,
+            groups: [
+              {
+                ...groupA,
+                items: [
+                  {
+                    ...groupA.items[0]!,
+                    lastMove: {
+                      fromStationName: "Grill $&",
+                      personName: "Luis",
+                      deviceName: "Till 2",
+                      movedAt,
+                    },
+                  },
+                  {
+                    ...groupA.items[1]!,
+                    lastMove: {
+                      fromStationName: "Bar",
+                      personName: "Ana",
+                      deviceName: null,
+                      movedAt,
+                    },
+                  },
+                  {
+                    ...groupB.items[0]!,
+                    lastMove: {
+                      fromStationName: "Grill",
+                      personName: null,
+                      deviceName: "Kitchen display",
+                      movedAt,
+                    },
+                  },
+                  { ...groupB.items[0]!, id: "unmoved" },
+                ],
+              },
+            ],
+          });
+          const prefix = locale === "es-ES" ? "Pasado de" : "Moved from";
+          const text = (id: string) =>
+            el
+              .shadowRoot!.querySelector(`[data-item="${id}"] [data-last-move]`)
+              ?.textContent?.trim();
+          const time = "20:12";
+          expect(text("ti-1")).toBe(`${prefix} Grill $& · Luis · Till 2 · ${time}`);
+          expect(text("ti-2")).toBe(`${prefix} Bar · Ana · ${time}`);
+          expect(text("ti-3")).toBe(`${prefix} Grill · Kitchen display · ${time}`);
+          expect(text("unmoved")).toBeUndefined();
+        }
+      } finally {
+        setLocale(previous);
+      }
+    },
+  );
+});

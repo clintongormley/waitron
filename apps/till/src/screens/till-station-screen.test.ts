@@ -4325,8 +4325,30 @@ describe("till-station-screen moves a dish to another station (A439)", () => {
     expect(moveButton(el)).toBeNull();
   });
 
-  it("the till's own Station screen draws no Move, even with Take orders", async () => {
-    const { el, api } = await mountMove({ deviceMode: false });
+  it("the till's own Station screen moves through the signed-in route with Take orders", async () => {
+    const moveDishStation = vi
+      .fn()
+      .mockResolvedValue({ revision: 2, stationId: "st-2", moved: [] });
+    const { el, api } = await mountMove({ deviceMode: false }, { moveDishStation });
+    expect(queueWidget(el)!.canMove).toBe(true);
+    expect(moveButton(el)).not.toBeNull();
+    const target = await open(el);
+    expect(target.stations).toEqual(stations);
+    expect(api.listStations).toHaveBeenCalled();
+    expect(api.deviceStations).not.toHaveBeenCalled();
+    choose(target, "st-2");
+    await expect.poll(() => dialog(el)).toBeUndefined();
+    expect(moveDishStation).toHaveBeenCalledWith(
+      "wo-1",
+      { submissionId: expect.any(String), lineIds: ["wol-1"], stationId: "st-2" },
+      { signal: expect.any(AbortSignal) },
+    );
+    expect(api.deviceMoveDishStation).not.toHaveBeenCalled();
+    await expect.poll(() => vi.mocked(api.getStationQueue).mock.calls.length).toBe(2);
+  });
+
+  it("the till's own Station screen without Take orders draws no Move", async () => {
+    const { el, api } = await mountMove({ deviceMode: false, canMoveStation: false });
     expect(queueWidget(el)!.canMove).toBe(false);
     expect(moveButton(el)).toBeNull();
     const escaped = vi.fn();
@@ -4344,8 +4366,9 @@ describe("till-station-screen moves a dish to another station (A439)", () => {
       document.removeEventListener("move-station", escaped);
     }
     expect(escaped).not.toHaveBeenCalled();
-    expect(api.deviceStations).not.toHaveBeenCalled();
     expect(dialog(el)).toBeUndefined();
+    expect(api.deviceStations).not.toHaveBeenCalled();
+    expect(api.listStations).toHaveBeenCalledOnce();
   });
 
   it("the merged view of several stations draws Move too", async () => {

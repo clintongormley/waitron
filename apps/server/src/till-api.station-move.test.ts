@@ -1,7 +1,15 @@
 import { randomUUID } from "node:crypto";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { ticketItemMoves, ticketItems, workingOrderLines, workingOrders } from "@waitron/db";
+import {
+  devices,
+  ticketItemMoves,
+  ticketItems,
+  workingOrderLines,
+  workingOrders,
+} from "@waitron/db";
+import { persons } from "@waitron/identity";
+import { listStationQueues } from "./working-order.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { createStation, deactivateStation } from "./kitchen.js";
@@ -402,5 +410,84 @@ describe("POST /api/working-orders/:id/lines/move-station", () => {
     );
     expect(records.find((row) => row.lineId === item!.workingOrderLineId)!.stationId).toBe(grill);
     expect(records.find((row) => row.lineId !== item!.workingOrderLineId)!.stationId).toBe(bar);
+  });
+});
+
+describe("station queue move attribution", () => {
+  it("reads the latest move at its receiving station for a till and a dashboard actor", async () => {
+    const { tabId } = await seatedWith(venue, "Paella");
+    const [item] = await inTx(venue, (tx) =>
+      tx.select().from(ticketItems).where(eq(ticketItems.workingOrderId, tabId)),
+    );
+    const before = await send(venue.app, venue.cookie, "GET", `/api/stations/${bar}/queue`);
+    const group = (body: unknown) =>
+      (body as { items: { orderId: string; items: { lastMove?: unknown }[] }[] }).items.find(
+        (g) => g.orderId === tabId,
+      )!;
+    expect(group(before.json).items[0]).not.toHaveProperty("lastMove");
+    const moved = await call(`/api/working-orders/${tabId}/lines/move-station`, {
+      submissionId: randomUUID(),
+      lineIds: [item!.workingOrderLineId],
+      stationId: grill,
+    });
+    expect(moved.status).toBe(200);
+    await inTx(venue, async (tx) => {
+      await tx.update(persons).set({ displayName: "Luis" }).where(eq(persons.id, venue.operatorId));
+      await tx.update(devices).set({ label: "Till 2" }).where(eq(devices.id, venue.deviceId));
+      await tx
+        .update(ticketItemMoves)
+        .set({ movedAt: "2026-10-10T18:12:00.000Z" })
+        .where(eq(ticketItemMoves.workingOrderLineId, item!.workingOrderLineId));
+    });
+    const receiving = await send(venue.app, venue.cookie, "GET", `/api/stations/${grill}/queue`);
+    expect(receiving.status).toBe(200);
+    expect(group(receiving.json).items[0]!.lastMove).toEqual({
+      fromStationName: "Bar",
+      personName: "Luis",
+      deviceName: "Till 2",
+      movedAt: "2026-10-10T18:12:00.000Z",
+    });
+    await inTx(venue, async (tx) => {
+      await tx.insert(ticketItemMoves).values({
+        workingOrderLineId: item!.workingOrderLineId,
+        fromStationId: grill,
+        toStationId: bar,
+        movedByPersonId: venue.operatorId,
+        movedByDeviceId: null,
+        movedAt: "2026-10-10T18:12:00.000Z",
+      });
+      await tx.update(ticketItems).set({ stationId: bar }).where(eq(ticketItems.id, item!.id));
+    });
+    const queues = await inTx(venue, (tx) => listStationQueues(tx, [bar, grill]));
+    expect(queues.get(bar)!.find((g) => g.orderId === tabId)!.items[0]).toHaveProperty("lastMove", {
+      fromStationName: "Grill",
+      personName: "Luis",
+      deviceName: null,
+      movedAt: "2026-10-10T18:12:00.000Z",
+    });
+    expect(queues.get(grill)!.find((g) => g.orderId === tabId)).toBeUndefined();
+    await inTx(venue, (tx) =>
+      tx
+        .update(ticketItemMoves)
+        .set({ movedAt: "2026-10-10T18:11:00.000Z" })
+        .where(
+          and(
+            eq(ticketItemMoves.workingOrderLineId, item!.workingOrderLineId),
+            eq(ticketItemMoves.toStationId, bar),
+          ),
+        ),
+    );
+    const clockWentBack = await send(venue.app, venue.cookie, "GET", `/api/stations/${bar}/queue`);
+    expect(group(clockWentBack.json).items[0]!.lastMove).toEqual({
+      fromStationName: "Grill",
+      personName: "Luis",
+      deviceName: null,
+      movedAt: "2026-10-10T18:11:00.000Z",
+    });
+    await inTx(venue, (tx) =>
+      tx.update(ticketItems).set({ stationId: grill }).where(eq(ticketItems.id, item!.id)),
+    );
+    const rerouted = await send(venue.app, venue.cookie, "GET", `/api/stations/${grill}/queue`);
+    expect(group(rerouted.json).items[0]).not.toHaveProperty("lastMove");
   });
 });
