@@ -312,11 +312,11 @@ describe("building today's plan from a zone's master plan", () => {
     const t3 = (await liveTablesOf(z)).find((t) => t.label === "Mid 3");
     expect(t3).toMatchObject({ planned: true, active: true, locationId: v.cfg.locationId });
     expect(await todayRow(t3!.id)).toMatchObject({ x: 50, y: 50 });
-    expect((await tableRow(v, t2)).active).toBe(false);
+    expect((await liveTablesOf(z)).map((t) => t.id)).not.toContain(t2);
     expect(await todayRow(t2)).toBeUndefined();
   });
 
-  it("adds a table the master gained, and hides one it lost", async () => {
+  it("adds a table the master gained, and removes one it lost", async () => {
     const z = await zone();
     const t1 = await v.table("Gain 1", z);
     const t2 = await v.table("Gain 2", z);
@@ -330,7 +330,7 @@ describe("building today's plan from a zone's master plan", () => {
 
     await reset(z);
 
-    expect(await tableRow(v, t2)).toMatchObject({ active: false, planned: true });
+    expect((await liveTablesOf(z)).map((t) => t.id)).not.toContain(t2);
     expect(await todayRow(t2)).toBeUndefined();
     const t3 = (await liveTablesOf(z)).find((t) => t.label === "Gain 3")!;
     const [planTable] = await inTx(v, (tx) =>
@@ -652,13 +652,15 @@ describe("building today's plan from a zone's master plan", () => {
     expect(await tableRow(v, t1)).toMatchObject({ active: true, label: "Refuse 1" });
     expect(await todayRow(t1)).toMatchObject({ x: 0 });
     expect((await pendingRows(z)).map((row) => row.tableId)).toEqual([t1]);
-    expect((await tableRow(v, t2)).active).toBe(false);
+    expect((await liveTablesOf(z)).map((t) => t.id)).not.toContain(t2);
+    expect(await todayRow(t2)).toBeUndefined();
     expect(asked).toContain(`${v.cfg.locationId}:${NOW.toISOString()}`);
 
     booked = false;
     await catchUp(z, [bookings]);
 
-    expect((await tableRow(v, t1)).active).toBe(false);
+    expect((await liveTablesOf(z)).map((t) => t.id)).not.toContain(t1);
+    expect(await todayRow(t1)).toBeUndefined();
     expect(await pendingRows(z)).toEqual([]);
   });
 
