@@ -198,7 +198,7 @@ function paymentsApp(venue: Venue): Hono {
 async function getJson(app: Hono, path: string, cookie: string) {
   const res = await app.request(path, { headers: { cookie } });
   expect(res.status, path).toBe(200);
-  return (await res.json()) as Record<string, unknown> & Record<string, unknown>[];
+  return (await res.json()) as unknown;
 }
 
 describe("a deleted device's history", () => {
@@ -216,7 +216,7 @@ describe("a deleted device's history", () => {
       app,
       `/management-api/reports/daily-close?businessDay=${BUSINESS_DAY}`,
       venue.managerCookie,
-    )) as unknown as { cash: { byOrigin: { deviceId: string | null; deviceName: string }[] } };
+    )) as { cash: { byOrigin: { deviceId: string | null; deviceName: string }[] } };
     expect(close.cash.byOrigin).toEqual([
       expect.objectContaining({ deviceId: barTill, deviceName: "Bar till" }),
     ]);
@@ -262,13 +262,13 @@ describe("a deleted device's history", () => {
 
     const app = paymentsApp(venue);
     const cookie = venue.managerCookie;
-    const stuck = await getJson(app, "/management-api/payments/stuck", cookie);
+    const stuck = (await getJson(app, "/management-api/payments/stuck", cookie)) as Rows;
     expect(stuck.map((row) => row.paymentId)).toEqual([card!.id]);
     expect(stuck[0]).toMatchObject({ deviceId: barTill, deviceName: "Bar till" });
-    const bills = await getJson(app, "/management-api/payments/bill-payments", cookie);
+    const bills = (await getJson(app, "/management-api/payments/bill-payments", cookie)) as Rows;
     expect(bills.map((row) => row.billPaymentId)).toEqual([pending]);
     expect(bills[0]).toMatchObject({ deviceId: barTill, deviceName: "Bar till" });
-    const refunds = await getJson(app, "/management-api/payments/bill-refunds", cookie);
+    const refunds = (await getJson(app, "/management-api/payments/bill-refunds", cookie)) as Rows;
     expect(refunds.map((row) => row.refundId)).toEqual([refund!.id]);
     expect(refunds[0]).toMatchObject({ deviceId: barTill, deviceName: "Bar till" });
   });

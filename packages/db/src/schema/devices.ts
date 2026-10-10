@@ -46,7 +46,6 @@ export const devices = table(
     // `hashSecret` of the device token, never the plaintext.
     tokenHash: label("token_hash").notNull(),
     active: flag("active").notNull().default(true),
-    // Disable clears `active`; Delete also sets `deleted_at`. Rows elsewhere keep pointing at it.
     deletedAt: tsString("deleted_at"),
     lastSeenAt: tsString("last_seen_at"),
     // A whole percent, 0 to 100, not basis points like the `rate()` columns. The range is held by

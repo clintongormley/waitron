@@ -740,10 +740,8 @@ declare module "@waitron/shared" {
     /** A manager approved, for a device, a profile of another form factor than its active one. */
     "device_profile.incompatible": { field: "approvedProfileIds" };
     /**
-     * The device-management surface named a device id that matches nothing or a deleted device
-     * (`deleted_at` set). On `PATCH /management-api/devices/:id` alone, a disabled device
-     * (`active = false`) answers it too. Unlike `device.unauthorized`, this surface is for an
-     * authenticated manager, so the id is echoed.
+     * A device id matched no device. The management routes answer it for a deleted device too
+     * (`deleted_at` set), and `PATCH /management-api/devices/:id` for a disabled one.
      */
     "device.not_found": { deviceId: string };
     /**

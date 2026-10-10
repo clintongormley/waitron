@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import {
   CORE_MIGRATIONS,
   captureError,
@@ -40,7 +41,7 @@ function inTx<T>(fn: (tx: Transaction) => Promise<T>): Promise<T> {
 async function seedSession(role: PersonRoleValue): Promise<string> {
   const [person] = await suite.db
     .insert(persons)
-    .values({ displayName: "Operator", pinHash: "seed-pin-hash", role })
+    .values({ displayName: `Operator ${randomUUID()}`, pinHash: "seed-pin-hash", role })
     .returning({ id: persons.id });
   const session = await withTransaction(suite.db, (tx) =>
     startManagementSession(tx, { personId: person!.id }),

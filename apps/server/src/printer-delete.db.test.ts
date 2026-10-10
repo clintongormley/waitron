@@ -17,6 +17,7 @@ import {
   printers,
   printJobs,
   receiptReprints,
+  removeChangeFeed,
   stationPrinters,
   subscribeToChanges,
   withTransaction,
@@ -833,28 +834,34 @@ describe("deleting a printer", () => {
     await installChangeFeed(suite.db, CORE_CHANGE_SOURCES);
     const heard: ResourceIdentity[] = [];
     const unsubscribe = subscribeToChanges((change) => heard.push(...change.resources));
-    if (!/^[0-9a-f-]{36}$/.test(v.P)) throw new Error(`unexpected printer id ${v.P}`);
-    const before = await snapshot();
-    // Trigger bodies take no bound value; the id is checked to be a plain uuid above.
-    await suite.db.execute(
-      sql.raw(`create trigger test_delete_failure before update on printers
-        when old.id = '${v.P}' and new.deleted_at is not null
-        begin select raise(abort, 'test_delete_failure'); end`),
-    );
+    // The reset between cases does not remove the feed's triggers, so this case does.
     try {
-      await expect(
-        withTransaction(suite.db, (tx) => deletePrinter(tx, v.cfg, v.P, NOW)),
-      ).rejects.toThrow(/test_delete_failure/);
-      expect(await snapshot()).toEqual(before);
-      expect(heard).toEqual([]);
-    } finally {
-      await suite.db.execute(sql`drop trigger test_delete_failure`);
-    }
+      if (!/^[0-9a-f-]{36}$/.test(v.P)) throw new Error(`unexpected printer id ${v.P}`);
+      const before = await snapshot();
+      // Trigger bodies take no bound value; the id is checked to be a plain uuid above.
+      await suite.db.execute(
+        sql.raw(`create trigger test_delete_failure before update on printers
+          when old.id = '${v.P}' and new.deleted_at is not null
+          begin select raise(abort, 'test_delete_failure'); end`),
+      );
+      try {
+        await expect(
+          withTransaction(suite.db, (tx) => deletePrinter(tx, v.cfg, v.P, NOW)),
+        ).rejects.toThrow(/test_delete_failure/);
+        expect(await snapshot()).toEqual(before);
+        expect(heard).toEqual([]);
+      } finally {
+        await suite.db.execute(sql`drop trigger test_delete_failure`);
+      }
 
-    // Control: the same subscription hears the delete once the trigger is gone.
-    await withTransaction(suite.db, (tx) => deletePrinter(tx, v.cfg, v.P, NOW));
-    unsubscribe();
-    expect(heard).toContainEqual(expect.objectContaining({ type: "printers", id: v.P }));
+      // Control: the same subscription hears the delete once the trigger is gone.
+      await withTransaction(suite.db, (tx) => deletePrinter(tx, v.cfg, v.P, NOW));
+      expect(heard).toContainEqual(expect.objectContaining({ type: "printers", id: v.P }));
+    } finally {
+      unsubscribe();
+      removeChangeFeed(suite.db);
+      await suite.db.execute(sql`delete from change_log`);
+    }
   });
 
   it("is unlike Disable, which keeps ordinary waiting jobs, settings and holder, and can be undone by Enable", async () => {
