@@ -9439,3 +9439,54 @@ test("A462 cascade flat always-open branch reports the expansion it draws", asyn
   expect(treeKeys(el)).toEqual(["drinks", "beer"]);
   expect(el.isExpanded("drinks")).toBe(true);
 });
+
+test.each([390, 1000].flatMap((width) => [false, true].map((chooser) => ({ width, chooser }))))(
+  "A462 no-search trailing controls stay together at the edge ($width, chooser: $chooser)",
+  async ({ width, chooser }) => {
+    await page.viewport(width, 844);
+    onTestFinished(() => page.viewport(1280, 844));
+    const el = await table({
+      rows: [
+        { id: "root", name: "Root", count: 0 },
+        { id: "child", name: "Child", count: 1 },
+      ],
+      rowParent: (row) => (row.id === "root" ? null : "root"),
+      columns: chooser
+        ? [
+            { ...columns[0], choosable: "shown" },
+            { ...columns[1], choosable: "shown" },
+            { key: "id", label: "ID", cell: (row) => row.id, choosable: "shown" },
+          ]
+        : [columns[0]],
+      viewKey: chooser ? "review-no-search" : "",
+      expandAllLabel: "Expand all",
+      collapseAllLabel: "Collapse all",
+    });
+    const end = document.createElement("button");
+    end.slot = "toolbar-end";
+    end.textContent = "Add item";
+    el.append(end);
+    el.style.display = "block";
+    el.style.width = "100%";
+    el.requestUpdate();
+    await el.updateComplete;
+    await new Promise<void>((resolve) =>
+      requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
+    );
+    const bar = el
+      .shadowRoot!.querySelector<HTMLElement>(".table-toolbar")!
+      .getBoundingClientRect();
+    const all = el.shadowRoot!.querySelector<HTMLElement>(".expand-all")!.getBoundingClientRect();
+    const last = chooser ? el.shadowRoot!.querySelector<HTMLElement>(".columns-trigger")! : end;
+    expect(last).not.toBeNull();
+    expect(last.getBoundingClientRect().right).toBeCloseTo(bar.right, 0);
+    expect(end.getBoundingClientRect().left - all.right).toBeLessThanOrEqual(12);
+    if (chooser)
+      expect(
+        last.getBoundingClientRect().left - end.getBoundingClientRect().right,
+      ).toBeLessThanOrEqual(12);
+    await page.screenshot({
+      path: `__screenshots__/a462-review/no-search-${width}-${chooser}.png`,
+    });
+  },
+);

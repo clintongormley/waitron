@@ -4417,3 +4417,15 @@ it("A462 Structure filter permits closing root and resetting current", async () 
   expect(drawn(el)).toEqual(["root"]);
   expect(edits).toEqual([{ path: [] }]);
 });
+
+it("A462 Structure explicit current reveals through a closed root without opening another path", async () => {
+  const el = await mount();
+  await el.setExpanded("root", false);
+  await settle(el);
+  expect(drawn(el)).toEqual(["root"]);
+  el.current = ["m-drinks", "m-beer"];
+  await settle(el);
+  expect(table(el).isExpanded("root")).toBe(true);
+  expect(drawn(el)).toContain("m-drinks/m-beer/m-lager-2");
+  expect(table(el).isExpanded("m-fav")).toBe(false);
+});

@@ -563,6 +563,11 @@ it.each(
     requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
   );
   expect(bulk().textContent).toContain(t("folders.collapse_all"));
+  expect(bulk().getBoundingClientRect().right).toBeCloseTo(
+    table(el).shadowRoot!.querySelector<HTMLElement>(".table-toolbar")!.getBoundingClientRect()
+      .right,
+    0,
+  );
   expect(row(el, "root")!.querySelector(".tree-toggle")).toBeNull();
   expect(document.scrollingElement!.scrollWidth).toBeLessThanOrEqual(width);
   await page.screenshot({

@@ -437,6 +437,14 @@ export class WtDataTable<Row = unknown> extends LitElement {
         margin-inline-start: auto;
       }
 
+      .table-search-end:not([data-search]):not([data-chooser]) {
+        display: contents;
+      }
+
+      .table-end + .table-search-end:not([data-search]) {
+        margin-inline-start: 0;
+      }
+
       .table-search-end[data-search] {
         flex: 1 1 calc(var(--wt-tap-min) * 8);
       }
@@ -2488,7 +2496,11 @@ export class WtDataTable<Row = unknown> extends LitElement {
           ? html`<div class="table-end">${expandAll}<slot name="toolbar-end"></slot></div>`
           : nothing
       }
-      <div class="table-search-end" ?data-search=${this.#hasToolbarSearch()}>
+      <div
+        class="table-search-end"
+        ?data-search=${this.#hasToolbarSearch()}
+        ?data-chooser=${chooser}
+      >
         ${
           this.searchable
             ? html`<input

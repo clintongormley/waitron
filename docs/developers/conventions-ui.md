@@ -973,3 +973,8 @@ adding those styles needs a consistent measurement box. A consumer overriding th
 candidate in the review probes. This fix's warning-free receipts do not cover those arrangements.
 A407 landed as #1432 on 2026-10-08, after the normal push gate and final-head CI, licence
 and CodeQL workflows completed successfully. The measurement limits above remain.
+
+
+### A toolbar without search keeps its trailing controls together
+
+The A462 whole-branch review (2026-10-10) measured Preview's Expand all at 448–540 px in a 1000 px toolbar. Both the retained end group and an empty search group had an automatic leading margin, so they split the free space. The base-file control put the button back at the trailing edge. The final shared table keeps an empty search group out of flex layout, preserving its slot for later assignment; a chooser without search sits beside the end controls rather than taking another automatic margin. The four no-search trailing-control cases in `packages/ui/src/components/wt-data-table.test.ts` check phone/desktop with and without a chooser; the Preview visual cases check its actual trailing edge.
