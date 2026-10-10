@@ -650,6 +650,26 @@ _Formerly the catalogue and menus entries in the opening part of the old Track A
   list and kept ticks.
   [Detail](backlog/catalogue.md#a461--product-search-shows-what-matches-finds-categories-on-the-till-and-keeps-ticks-between-searches)
 
+- **A462 — dashboard table toolbars: column chooser at the end, no Expand all, closing a branch
+  closes everything in it (owner, 2026-10-10; open).** Every table's Customise columns button moves
+  to the right-hand end of its toolbar (seen on Products, a menu's Price overrides and Modifiers →
+  Extras). Products and a menu's Structure tab lose Expand all; their top row ("All products", the
+  menu's own name) opens and closes everything instead. Closing a branch on Products closes every
+  branch inside it. The Structure tab's Reorder and Select buttons become one, as on Products.
+  [Detail](backlog/catalogue.md#a462--dashboard-table-toolbars-column-chooser-at-the-end-no-expand-all-closing-a-branch-closes-everything-in-it)
+
+- **A463 — Products list filters: Made at, Modifiers, Allergens and Dietary info; "Show archived"
+  replaces Status (owner, 2026-10-10; open).** New filters, in the order of the default columns.
+  The Status filter becomes a "Show archived" switch, and the Status column becomes Availability,
+  showing only Unavailable and Archived. Changes A435's decision 4.
+  [Detail](backlog/catalogue.md#a463--products-list-filters-made-at-modifiers-allergens-and-dietary-info-show-archived-replaces-status)
+
+- **A464 — a menu's Price overrides tab: a "Section" column, and Main category without the
+  department (owner, 2026-10-10; open).** Rename "Appears under" to "Section". Main category reads
+  "ALL DAY MENU", not "Santet Deli Co › ALL DAY MENU", and is blank for a product placed straight in
+  the department.
+  [Detail](backlog/catalogue.md#a464--a-menus-price-overrides-tab-a-section-column-and-main-category-without-the-department)
+
 - **The Products list builds a new list of rows on every redraw, so its table prepares every
   product's search text again on each keystroke.** Found by A454's review (#1491); I believe it
   predates that branch (not checked with `git blame`). **Next action:** keep the rows array stable
@@ -4858,9 +4878,13 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
   `station-table.ts` without the down-printer notes; re-ground those rows before building.
 - **A435 step 3 — card readers: open, following printers in the build order.** Add permanent Delete beside Disable.
 - **A435 step 4 — devices: open, following printers in the build order.** Add permanent Delete beside Disable.
-- **A435 step 5 — courses and kitchen stations: open, following devices in the build order.** Replace Disable with Delete.
+- **A435 step 5 — courses and kitchen stations: open, following devices in the build order.** Replace Disable with Delete,
+  and drop the list's Status column and Status filter, which no longer have anything to show (owner,
+  2026-10-10); first check what else the Status cell shows, as Products' carried its Unavailable badge (A463).
 - **A435 step 6 — tables, zones and departments: open, following courses and stations in the build order.** Replace
-  Disable with Delete. Each remaining step follows the linked spec and preserves recorded history.
+  Disable with Delete, and drop each list's Status column and Status filter as in step 5 (owner, 2026-10-10).
+  Printers, card readers and devices keep both, because they keep Disable. Each remaining step follows the
+  linked spec and preserves recorded history.
 
 
 - **`modules.json` has no flow-down channel** from a primary to its standby (matters under

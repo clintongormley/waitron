@@ -58,6 +58,81 @@ only the rows shown; the selected count already shown in select mode is how the 
 the current search hides; leaving select mode, Done, and a finished move or delete still clear
 them as today.
 
+## A462 — dashboard table toolbars: column chooser at the end, no Expand all, closing a branch closes everything in it
+
+Owner, 2026-10-10, from screenshots of Products, a menu's Structure and Price overrides tabs, and
+Modifiers → Extras. Four changes.
+
+**1. The Customise columns button sits at the right-hand end of every table's toolbar**, after the
+search field. Today `wt-data-table` draws Filters, `toolbar-start`, Expand all, `toolbar-end`,
+Customise, then search, and design-system.md (Tables, the toolbar-order paragraph) puts search last
+on purpose, so Tab crosses the buttons on the first line before reaching search on its own line
+when the table is narrow. Moving Customise after search changes that rule: at each width, the order
+Tab follows must still match what is drawn, and the "Tab follows" cases in
+`packages/ui/src/components/wt-data-table.test.ts` and
+`apps/dashboard/src/widgets/catalogue-browser.test.ts` change with it. Not decided: where Customise
+goes when search takes its own line (at the end of the button line, or after search on the line
+below).
+
+**2. No Expand all or Collapse all on Products or a menu's Structure tab.** The top row ("All
+products"; the menu's own name on Structure) opens and closes everything instead. Today that row
+cannot be closed at all: both tables pass `rowCollapsible` returning false for the root row
+(`apps/dashboard/src/widgets/product-list.ts`, `apps/dashboard/src/widgets/menu-structure-table.ts`),
+so the top row needs a chevron. Assumed, not asked: opening the top row opens every level, as Expand
+all does today, and closing it closes every level. A menu's Preview tab
+(`apps/dashboard/src/widgets/menu-document-tree.ts`) also shows Expand all; the owner was asked on
+2026-10-10 whether it goes too and has not answered, so leave it until they do. If Preview loses it
+too, nothing passes `expandAllLabel` to `wt-data-table` any more, and the table's Expand all can be
+removed. The entry "The Menus Structure tree notices Collapse all only by watching its table
+redraw" below then needs revisiting: closing the top row still closes many branches at once.
+
+**3. Closing a branch on Products closes every branch inside it**, so opening it again shows its
+categories closed rather than as they were left.
+
+**4. A menu's Structure tab has one button for Reorder and Select.** Pressing it shows the
+checkboxes and the drag handles together, as Products already does (`catalogue-browser.ts` passes
+one `selecting` state to both `.selecting` and `.reordering`); today `menus-screen.ts` keeps
+`structureReordering` and `structureSelecting` apart.
+
+## A463 — Products list filters: Made at, Modifiers, Allergens and Dietary info; "Show archived" replaces Status
+
+Owner, 2026-10-10. Products list only (`apps/dashboard/src/widgets/product-list.ts`); every
+filter there is a column's `filter`.
+
+**1. New filters**, each on its own column:
+
+- **Made at**: one choice per kitchen station. Assumed, not asked: it matches the station the
+  column shows for the row.
+- **Modifiers**: Has modifiers / No modifiers.
+- **Allergens**, on the existing Allergens column: Pending / None / Declared, the column's own three
+  states (`allergenState`, `apps/dashboard/src/i18n/domain.ts`). The owner first asked for one
+  "nutritional info" filter (has dietary info / has allergens / has none) and chose this split on
+  2026-10-10, so that a product never checked stays apart from one checked and allergen-free.
+- **Dietary info**: Has / None. Assumed, not asked: "has" means a dietary origin other than Not
+  categorised, or any diet override (Vegan, Vegetarian, Halal, Kosher) set.
+
+**2. The filters appear in the order of the default columns**: Made at, Modifiers, Standalone
+ordering, Allergens, Dietary info. Pin it in a test.
+
+**3. "Show archived" replaces the Status filter.** Off by default, which lists active products as
+the Status filter's `initial: "active"` does today. On, it lists the archived ones too, read-only as
+now. This changes the delete-and-archive spec's decision 4 ("a read-only Archived filter";
+`docs/superpowers/specs/2026-10-08-delete-and-archive-design.md`).
+
+**4. The Status column becomes "Availability"**, showing only Unavailable (the sold-out switch is
+off) or Archived, and blank for an ordinary product. Today the Status cell shows Active or Archived
+and carries the Unavailable badge beside it; the owner chose this column over badges beside the
+name on 2026-10-10.
+
+## A464 — a menu's Price overrides tab: a "Section" column, and Main category without the department
+
+Owner, 2026-10-10. A menu's Price overrides tab (`apps/dashboard/src/widgets/menu-prices-table.ts`).
+
+- Rename the "Appears under" column "Section".
+- Main category leaves out the department: "Santet Deli Co › ALL DAY MENU" reads "ALL DAY MENU",
+  and a product placed straight in the department shows nothing.
+- Its Customise columns button moves to the end of the toolbar with every other table's (A462).
+
 ## `mergeAllergenMaps` (`src/derivation.ts`) can list a source twice and order sources differently from run to run
 
 - Found by #603 (`packages/catalogue`). **`mergeAllergenMaps` (`src/derivation.ts`) can list a

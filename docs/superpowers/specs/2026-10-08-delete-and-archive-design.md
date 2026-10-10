@@ -26,6 +26,8 @@ Decisions taken while designing, all by the owner on 2026-10-08:
 3. **Products are archived for good.** No way back. A new product may take an archived product's
    name.
 4. **Archived products appear in a read-only Archived filter** in the product list.
+   _2026-10-10, owner (backlog A463): replaced by a "Show archived" switch, and the Status column by
+   an Availability column._
 5. **Deleting a printer cancels the jobs waiting on it**, after the person confirms.
 6. **Archiving a product that a live or scheduled menu includes is refused** until the menu is
    republished without it.
@@ -263,7 +265,7 @@ sits, so one dialog shows the whole picture.
 - **The sold-out switch** is left as it was. Every reader that sells a product requires it to be on
   AND available, so an archived product never sells whatever the switch says; the read-only view does
   not show the switch.
-- **Dashboard:** the Status filter offers Active and Archived; an archived product opens
+- **Dashboard:** _(2026-10-10: the filter becomes a "Show archived" switch, backlog A463)_ the Status filter offers Active and Archived; an archived product opens
   in a read-only details panel when you choose View, with no Save, Archive or availability control.
   View does not open the editor. The editor shows no variants archived before it opened and has no
   "Show disabled" toggle. Archiving a saved variant in the editor keeps its row visible with
