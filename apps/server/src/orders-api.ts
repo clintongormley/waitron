@@ -23,6 +23,7 @@ import {
   listOrderStaff,
   isNumberSearch,
   listOrders,
+  optionalSearch,
   readOrderDetail,
   type OrderCursor,
   type OrderListFilter,
@@ -55,11 +56,6 @@ function optionalText(raw: string | undefined, field: string): string | undefine
   const trimmed = raw.trim();
   if (trimmed.length > TEXT_MAX) throw invalid(field);
   return trimmed === "" ? undefined : trimmed;
-}
-
-/** Untrimmed, because a trailing space finishes the last word; blank and length are judged trimmed. */
-function optionalSearch(raw: string | undefined): string | undefined {
-  return optionalText(raw, "q") === undefined ? undefined : raw;
 }
 
 /** A ranked cursor belongs to a word search, and a word search takes only a ranked cursor. */

@@ -1,9 +1,10 @@
+import { DatabaseSync } from "node:sqlite";
 import { sql } from "drizzle-orm";
 import { describe, expect, it, vi } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { withTransaction } from "@waitron/db";
-import { seatedWith } from "./testing/bill-venue.js";
+import { seatedWith, send } from "./testing/bill-venue.js";
 import {
   contribute,
   credit,
@@ -13,6 +14,22 @@ import {
   type OrderVenue,
 } from "./testing/order-venue.js";
 import { listOrders, ordersPageSql, type OrderListFilter } from "./orders-list.js";
+
+// Wrapped before the store opens its connections, so every registration of the matcher counts.
+let rankCalls = 0;
+const register = DatabaseSync.prototype.function;
+vi.spyOn(DatabaseSync.prototype, "function").mockImplementation(function (
+  this: DatabaseSync,
+  ...args: unknown[]
+) {
+  const callback = args.at(-1) as (...values: unknown[]) => unknown;
+  if (args[0] === "waitron_search_rank")
+    args[args.length - 1] = (...values: unknown[]) => {
+      rankCalls++;
+      return callback(...values);
+    };
+  return Reflect.apply(register, this, args) as void;
+} as typeof register);
 
 let venue: OrderVenue;
 useVenueDb({
@@ -70,6 +87,44 @@ describe("reads per page", () => {
     expect(fifty.statuses).toHaveLength(50);
     expect(fifty.reads).toBe(7);
     expect((await readsFor(1)).reads).toBeLessThanOrEqual(7);
+  });
+});
+
+describe("ranking work", () => {
+  it("a word search ranks only the orders its other filters keep", async () => {
+    for (const day of ["01", "02", "03", "04"]) {
+      vi.useFakeTimers({ toFake: ["Date"], now: new Date(`2026-04-${day}T12:00:00.000Z`) });
+      try {
+        const party = await seatedWith(venue);
+        const named = await send(
+          venue.app,
+          venue.cookie,
+          "PUT",
+          `/api/parties/${party.partyId}/name`,
+          { name: "Quokka", expectedPartyRevision: party.revision },
+        );
+        expect(named.status).toBe(200);
+      } finally {
+        vi.useRealTimers();
+      }
+    }
+    async function ranked(dates: OrderListFilter["dates"]) {
+      rankCalls = 0;
+      const page = await withTransaction(venue.db, (tx) =>
+        listOrders(tx, { ...ANY, dates, search: "quokka" }),
+      );
+      return { rows: page.rows.length, calls: rankCalls };
+    }
+    const oneDay = {
+      from: "2026-04-04",
+      to: "2026-04-04",
+      timeZone: "Europe/Madrid",
+      dayCutover: "05:00",
+    };
+    expect(await ranked(oneDay)).toEqual({ rows: 1, calls: 1 });
+    // The control: unfiltered by date, all four are ranked, so the count above is the filter's doing.
+    expect((await ranked("any")).rows).toBe(4);
+    expect((await ranked("any")).calls).toBeGreaterThanOrEqual(4);
   });
 });
 

@@ -205,8 +205,24 @@ interface RawRow extends Record<string, unknown> {
   search_rank?: number;
 }
 
-const INVOICE_SEARCH = /^([^/\s]+)\s*\/\s*(\d{1,9})$/;
+/** A series code and an invoice number, as in `A/12`. */
+export const INVOICE_SEARCH = /^([^/\s]+)\s*\/\s*(\d{1,9})$/;
 const BARE_NUMBER = /^\d{1,9}$/;
+const SEARCH_MAX = 100;
+
+/** Untrimmed, because a trailing space finishes the last word; blank and length are judged trimmed. */
+export function optionalSearch(raw: string | undefined): string | undefined {
+  const typed = raw?.trim().length ?? 0;
+  if (typed > SEARCH_MAX) throw new AppError("management.request_invalid", { field: "q" });
+  return typed === 0 ? undefined : raw;
+}
+
+/** As `optionalSearch`, refusing a missing or blank search. */
+export function requiredSearch(raw: string | undefined): string {
+  const search = optionalSearch(raw);
+  if (search === undefined) throw new AppError("management.request_invalid", { field: "q" });
+  return search;
+}
 
 /** `A/12` or a bare number: searched as that number exactly, not as words. */
 export function isNumberSearch(search: string): boolean {
@@ -284,9 +300,7 @@ function filterClauses(filter: OrderListFilter): SQL[] {
     clauses.push(sql`exists (select 1 from sales c where c.corrects_sale_id = r.sale_id)`);
   if (filter.staffId !== undefined) clauses.push(staffClause(filter.staffId));
   if (filter.table !== undefined) clauses.push(tableClause(filter.table));
-  const words = wordSearch(filter);
-  if (words !== undefined) clauses.push(sql`r.search_rank is not null`);
-  else if (filter.search !== undefined && isNumberSearch(filter.search))
+  if (filter.search !== undefined && isNumberSearch(filter.search))
     clauses.push(numberClause(filter.search));
   if (filter.collectable === true) {
     clauses.push(sql`r.kind = 'bill'
@@ -297,19 +311,22 @@ function filterClauses(filter: OrderListFilter): SQL[] {
                       where bp.working_order_id = r.id and bp.state in ('pending', 'received'))`);
   }
   if (filter.orderIn !== undefined) clauses.push(filter.orderIn(sql`r.id`));
-  if (filter.after !== undefined) {
-    const { at, id } = filter.after;
-    const newer = sql`(r.at < ${at} or (r.at = ${at} and r.id < ${id}))`;
-    if (words === undefined) clauses.push(newer);
-    else {
-      const { rank } = filter.after;
-      // Bound as a number: SQLite sorts every number below every text.
-      if (typeof rank !== "number")
-        throw new AppError("management.request_invalid", { field: "after" });
-      clauses.push(sql`(r.search_rank > ${rank} or (r.search_rank = ${rank} and ${newer}))`);
-    }
-  }
   return clauses;
+}
+
+function cursorClause(after: OrderCursor, ranked: boolean): SQL {
+  const { at, id } = after;
+  const newer = sql`(r.at < ${at} or (r.at = ${at} and r.id < ${id}))`;
+  if (!ranked) return newer;
+  const { rank } = after;
+  // Bound as a number: SQLite sorts every number below every text.
+  if (typeof rank !== "number")
+    throw new AppError("management.request_invalid", { field: "after" });
+  return sql`(r.search_rank > ${rank} or (r.search_rank = ${rank} and ${newer}))`;
+}
+
+function whereOf(clauses: SQL[]): SQL {
+  return clauses.length === 0 ? sql`1` : sql.join(clauses, sql` and `);
 }
 
 /**
@@ -320,25 +337,30 @@ function filterClauses(filter: OrderListFilter): SQL[] {
  */
 export function ordersPageSql(filter: OrderListFilter): SQL {
   const clauses = filterClauses(filter);
-  const where = clauses.length === 0 ? sql`1` : sql.join(clauses, sql` and `);
   const words = wordSearch(filter);
-  if (words === undefined)
+  if (words === undefined) {
+    if (filter.after !== undefined) clauses.push(cursorClause(filter.after, false));
     return sql`
     with r as (${rowsSql(filter)})
     select r.*, exists (select 1 from sales c where c.corrects_sale_id = r.sale_id) as credited
-    from r where ${where}
+    from r where ${whereOf(clauses)}
     order by r.at desc, r.id desc
     limit ${filter.limit + 1}`;
+  }
+  // The other filters run before the matcher, so it ranks only the rows they keep; `ranked` is
+  // materialized so each kept row is ranked once.
+  const rankedClauses = [sql`r.search_rank is not null`];
+  if (filter.after !== undefined) rankedClauses.push(cursorClause(filter.after, true));
   return sql`
     with base as (${rowsSql(filter)}),
-    r as materialized (
-      select base.*, waitron_search_rank(${words}, base.party_name, base.delivery_label,
+    ranked as materialized (
+      select r.*, waitron_search_rank(${words}, r.party_name, r.delivery_label,
         (select group_concat(dt.label, ' ') from party_tables pt join dining_tables dt on dt.id = pt.table_id
-         where pt.party_id = base.party_id)) as search_rank
-      from base
+         where pt.party_id = r.party_id)) as search_rank
+      from base r where ${whereOf(clauses)}
     )
     select r.*, exists (select 1 from sales c where c.corrects_sale_id = r.sale_id) as credited
-    from r where ${where}
+    from ranked r where ${whereOf(rankedClauses)}
     order by r.search_rank, r.at desc, r.id desc
     limit ${filter.limit + 1}`;
 }

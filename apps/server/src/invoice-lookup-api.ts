@@ -9,8 +9,9 @@ import {
   withTransaction,
   type Transaction,
 } from "@waitron/db";
-import { AppError, centsToDecimal, rawCentsToDecimal } from "@waitron/shared";
+import { centsToDecimal, rawCentsToDecimal } from "@waitron/shared";
 import type { Logger } from "./logger.js";
+import { INVOICE_SEARCH, requiredSearch } from "./orders-list.js";
 import type { Run, TillApiDeps } from "./till-api.js";
 import { requireSession } from "./till-session.js";
 import { orderZoneCondition, type OrderZoneCondition } from "./zone-access.js";
@@ -50,7 +51,7 @@ export async function lookUpInvoices(
       search,
       inZones?.(sql`${workingOrders.id}`),
     );
-  const invoice = /^([^/\s]+)\s*\/\s*(\d{1,9})$/.exec(q.trim());
+  const invoice = INVOICE_SEARCH.exec(q.trim());
   if (invoice) {
     const rows = await tx
       .select({
@@ -117,10 +118,7 @@ export function mountInvoiceLookupApi(app: Hono, deps: TillApiDeps, log: Logger,
   app.get("/api/invoices/lookup", (c) =>
     run(c, log, async () => {
       const session = await requireSession(deps, c);
-      const q = c.req.query("q") ?? "";
-      const typed = q.trim().length;
-      if (typed === 0 || typed > 100)
-        throw new AppError("management.request_invalid", { field: "q" });
+      const q = requiredSearch(c.req.query("q"));
       const invoices = await withTransaction(deps.db, async (tx) =>
         lookUpInvoices(
           tx,
