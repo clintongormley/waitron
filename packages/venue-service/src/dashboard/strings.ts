@@ -679,7 +679,7 @@ const en = {
   "routing.period_other_department": "{period} is another department's.",
   "routing.period_repeated": "{period} is in two lines.",
   "routing.not_copied": "Not copied: {periods}",
-  "routing.periods_removed": "Removed from your choice because it was deleted: {periods}",
+  "routing.periods_removed": "Periods deleted: {periods}",
   "routing.not_copied_department": "{period} ({department}) — another department's",
   "routing.not_copied_products": "{period} — offers none of these products",
 } as const;
@@ -1386,7 +1386,7 @@ const es: Record<keyof typeof en, string> = {
   "routing.period_other_department": "{period} es de otro departamento.",
   "routing.period_repeated": "{period} está en dos líneas.",
   "routing.not_copied": "Sin copiar: {periods}",
-  "routing.periods_removed": "Quitado de tu elección porque se ha eliminado: {periods}",
+  "routing.periods_removed": "Periodos eliminados: {periods}",
   "routing.not_copied_department": "{period} ({department}) — de otro departamento",
   "routing.not_copied_products": "{period} — no ofrece ninguno de estos productos",
 };

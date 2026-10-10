@@ -605,7 +605,7 @@ it("takes a period deleted live out of the draft, keeps the other edits, and say
   expect(linePeriods(el).map((field) => field.values)).toEqual([["breakfast"]]);
   expect(one<Combobox>(el, "[name=target]")!.value).toBe("station:down");
   expect(one(el, "[data-test=periods-removed]")!.textContent!.trim()).toBe(
-    "Removed from your choice because it was deleted: Lunch (Dining), Brunch",
+    "Periods deleted: Lunch (Dining), Brunch",
   );
   const saves = events(el, "routing-cell-save");
   await click(el, "save-cell");
@@ -636,7 +636,7 @@ it("drops a refusal naming a period deleted live and still draws", async () => {
   expect(linePeriods(el)).toEqual([]);
   expect(bottom(el)).toBe("");
   expect(one(el, "[data-test=periods-removed]")!.textContent!.trim()).toBe(
-    "Removed from your choice because it was deleted: Brunch",
+    "Periods deleted: Brunch",
   );
 });
 
@@ -646,6 +646,6 @@ it("says in Spanish which deleted periods were taken out", async () => {
   el.periods = PERIODS.filter((period) => period.id !== "bar-lunch");
   await el.updateComplete;
   expect(one(el, "[data-test=periods-removed]")!.textContent!.trim()).toBe(
-    "Quitado de tu elección porque se ha eliminado: Lunch (Bar)",
+    "Periodos eliminados: Lunch (Bar)",
   );
 });
