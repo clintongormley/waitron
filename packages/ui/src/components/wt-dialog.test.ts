@@ -596,8 +596,6 @@ function expectFooterInView(dialog: HTMLDialogElement, cancel: HTMLElement, save
   expect(dialog.scrollHeight, "the dialog itself scrolls").toBe(dialog.clientHeight);
 }
 
-// The field is there on purpose: opening focus lands on it, at the top. With nothing focusable in
-// the body, focus lands on Cancel and the browser scrolls the whole dialog down to show it.
 test.each([
   ["a field", '<label>Note <input name="note" /></label>'],
   ["a wt-input", '<wt-input name="note" label="Note"></wt-input>'],

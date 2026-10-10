@@ -665,12 +665,6 @@ _Formerly the catalogue and menus entries in the opening part of the old Track A
   level 5 all start at the same x. **Next action:** the owner decides whether the phone indent
   should go deeper (a shared table rule, so the Products tree changes too).
 
-- **A menu member whose id is literally `root` would share a key with the Structure tab's root row**
-  — left open by A453, stated rather than guarded. Minted member ids are UUIDs, but a configuration
-  import keeps the file's ids, and no UUID check on them was found (A453 plan, decision 1), so a
-  hand-written import could carry `root`. **Next action:** decide whether an import should refuse a
-  member id that is not a UUID.
-
 - **Menu-root default fallback when content languages are unset (A420 review).**
   `updateMenuDetails` validates against English; section and include-folder writers use
   their supplied venue fallback. Decide whether the menu-root writer should take that

@@ -1290,7 +1290,7 @@ Its side margins (`--wt-modal-inline-margin`) and the inline padding of its body
 width goes to the content. They are fluid `clamp()` values rather than a breakpoint because a media
 query cannot read a custom property, and the no-hardcoded-chrome guard
 (`packages/ui/src/no-hardcoded-chrome.test.ts`) refuses a literal `px` or `rem` breakpoint in a
-`packages/ui` primitive. Unlike `wt-dialog`, it is not held to 90% of the viewport. As in `wt-dialog`, the body scrolls
+`packages/ui` primitive. Unlike `wt-dialog`, its width is not held to 90% of the viewport. As in `wt-dialog`, the body scrolls
 independently, so your footer actions stay visible; unlike it, the body is a Tab stop even when it
 does not scroll, and the modal opens with focus on its body. It uses the raised surface and shadow tokens:
 white in the light theme, with the matching dark surface in the dark theme. Put `wt-form-actions` in
@@ -1316,10 +1316,10 @@ its buttons:
 
 Save opens quiet and disabled; bind it with `saveActionState` as shown under Forms.
 
-A window whose body is one long list, such as a section's Add products
-(`apps/dashboard/src/widgets/section-add-products.ts`), keeps its count and buttons in a block stuck
-to the bottom of the scrolling body (`position: sticky`) instead, because the widget draws them
-itself and cannot reach the footer slot.
+A widget in a window's body that draws its own buttons, such as a section's Add products
+(`apps/dashboard/src/widgets/section-add-products.ts`), cannot reach the footer slot, so it keeps
+its count and buttons in a block stuck to the bottom of the scrolling body (`position: sticky`)
+instead.
 
 The setup wizard is not a modal: its screens sit in a raised column centred on the page, with the
 Waitron logo at the top of every screen (owner decision 2026-09-28, C39).

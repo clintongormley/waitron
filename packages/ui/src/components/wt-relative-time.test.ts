@@ -365,7 +365,7 @@ describe("the exact time", () => {
     await vi.waitFor(() => expect(tip.matches(":popover-open")).toBe(false));
   });
 
-  test("closes when a dialog it is slotted into scrolls", async () => {
+  test("closes when the body of a dialog it is slotted into scrolls", async () => {
     const dialogHost = await mount(
       `<wt-dialog open heading="Devices"><wt-relative-time datetime="${AT}" locale="en-GB"></wt-relative-time><div style="height: ${innerHeight * 2}px"></div></wt-dialog>`,
     );

@@ -36,12 +36,12 @@ A454 (search everywhere, #1491) has landed on main (`fe5d1ba24`); this branch st
      row keyed `""` would be drawn as its own child and never counted as an ancestor of a match.
    - The same key as Products' root (`product-list.ts:60`) and the Preview tree's root
      (`menu-document-tree.ts:155`).
-   - Residual, stated rather than guarded: a member whose id is literally `root` would collide.
-     Minted member ids are UUIDs (`section_members.id` defaults to `newId`,
-     `packages/catalogue/src/schema/sections.ts:57`, `packages/db/src/schema/columns.ts:178`). A
-     configuration import carries the file's ids; I found no UUID check on them (`grep isUuid`
-     matches no configuration-transfer file), so a hand-written import could in principle carry
-     `root`. Say so in the PR; no guard is added.
+   - Minted member ids are UUIDs (`section_members.id` defaults to `newId`,
+     `packages/catalogue/src/schema/sections.ts:57`, `packages/db/src/schema/columns.ts:178`).
+     _Correction, finish-branch review 2026-10-10:_ this plan said a configuration import keeps the
+     file's ids; it does not — every imported row with an id gets a fresh UUID
+     (`apps/server/src/configuration-transfer.ts:673`), and a review probe importing a member whose
+     id was `root` read back a UUID.
 2. **Counts: the whole menu as a guest sees it, each thing once.** Like Products' root, which counts
    the whole catalogue (`#count`, `product-list.ts:882-896`; `#contents` `:898-903`):
    - **sections**: the distinct section ids of every section node in the tree that is not an
