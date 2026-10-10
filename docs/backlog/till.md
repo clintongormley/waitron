@@ -235,7 +235,7 @@ screen is designed.
 ## A429 — floor plans: a master plan per zone, today's plan on the till
 
 - **A429 — floor plans: a master plan per zone, today's plan on the till (owner, 2026-10-08; slice
-  1 built on branch `feat/floor-plan-storage`, not yet merged; slices 2–5 open).** Slice 1 is the
+  1 landed, #1493; slices 2–5 open).** Slice 1 is the
   storage and reads: the master plan's tables, today's plan, table names kept as text when a party
   closes or a table is removed, today's plan in the till's table-state answer, the dashboard's
   read and save routes for a zone's master plan, today's plan caught up on every floor read and
@@ -257,14 +257,11 @@ screen is designed.
 
 ## Small floor-plan refusals still missing
 
-- **Small floor-plan refusals still missing.** Left open by A429 slice 1.
+- **Small floor-plan refusals still missing.** Left open by A429 slice 1 (#1493).
   - `dining_tables.plan_table_id` has no unique index; no writer makes two live tables follow one
     master table today.
   - A saved join's seats have no upper bound, and two saved joins of the same tables are accepted.
   - The delivery-release trigger accepts an empty label.
-  - During the two-step rename (a table first takes its own internal id as its name, then the new
-    name), a new name equal to another table's internal id answers a raw unique-key error instead
-    of `table.label_taken`.
 
 ## A414 — device screens on a phone
 
