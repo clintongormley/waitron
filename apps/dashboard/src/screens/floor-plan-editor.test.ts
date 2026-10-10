@@ -332,6 +332,25 @@ it("names the canvas's fixed tables and turn handle in the dashboard's language"
   expect(root.querySelector(".rotate-handle")!.getAttribute("aria-label")).toBe("Girar T1");
 });
 
+it("a live language switch renames the canvas's fixed tables and turn handle", async () => {
+  const plan = terrace();
+  plan.tables[0] = { ...plan.tables[0]!, fixed: true };
+  const el = await open(
+    stubApi({ getFloorPlan: vi.fn().mockResolvedValue(plan) as DashboardApi["getFloorPlan"] }),
+  );
+  await fromCanvas(el, "wt-table-select", { key: "m1" });
+  await canvas(el).updateComplete;
+  const root = canvas(el).shadowRoot!;
+  const marker = () => root.querySelector(".table[data-key=m1]")!.getAttribute("aria-label");
+  const handle = () => root.querySelector(".rotate-handle")!.getAttribute("aria-label");
+  expect([marker(), handle()]).toEqual(["T1, Fixed", "Rotate T1"]);
+  setLocale("es-ES");
+  await el.updateComplete;
+  await canvas(el).updateComplete;
+  expect(marker()).toBe("T1, Fija");
+  expect(handle()).toBe("Girar T1");
+});
+
 it("a change of selection hands the canvas the same tables and copy", async () => {
   const el = await open();
   const tables = canvas(el).tables;

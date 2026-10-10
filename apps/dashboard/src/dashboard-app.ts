@@ -68,6 +68,7 @@ import "./screens/purchases-screen.js";
 import "./screens/devices-screen.js";
 import "./screens/printers-screen.js";
 import "./screens/canvas-editor-screen.js";
+import "./screens/floor-plan-editor.js";
 import "./screens/device-profiles-screen.js";
 import "./screens/diagnostics-screen.js";
 import "./screens/backup-screen.js";
@@ -117,6 +118,7 @@ const CORE_SCREENS = [
   "devices",
   "printers",
   "canvas-editor",
+  "floor-plan",
   "device-profiles",
   "diagnostics",
   "backup",
@@ -244,6 +246,7 @@ const UNLISTED_SCREENS: ScreenRule[] = [
   { screen: "email", requiresManager: true },
   { screen: "demo-printer", requiresManager: true },
   { screen: "demo-reader", requiresManager: true },
+  { screen: "floor-plan", requiresPermission: "venue.configure" },
 ];
 
 type CoreSettingsPanel = AccessRule & {
@@ -1403,7 +1406,7 @@ export class DashboardApp extends LitElement {
             <!-- keyed on the active locale: a switch changes the key, so Lit discards and rebuilds the
                  screen subtree, repainting every child in the new language (screens hold no controller). -->
             <div
-              class=${classMap({ body: true, fill: this.screen === "catalogue" })}
+              class=${classMap({ body: true, fill: this.screen === "catalogue" || this.screen === "floor-plan" })}
               @wt-edit-product=${this.#onEditProduct}
             >
               ${
@@ -2018,6 +2021,8 @@ export class DashboardApp extends LitElement {
         return html`<dashboard-canvas-editor-screen
           .api=${this.api}
         ></dashboard-canvas-editor-screen>`;
+      case "floor-plan":
+        return html`<dashboard-floor-plan-editor .api=${this.api}></dashboard-floor-plan-editor>`;
       case "device-profiles":
         return html`<dashboard-device-profiles-screen
           .api=${this.api}
