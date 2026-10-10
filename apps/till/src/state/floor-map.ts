@@ -40,6 +40,8 @@ export function combinedStatus(statuses: readonly StandInStatus[]): StandInStatu
 
 interface Sources {
   members: readonly TableState[];
+  /** One per member, in the same order. */
+  statuses: readonly StandInStatus[];
   status: StandInStatus;
   fillFrom: TableState;
   dotFrom: TableState | undefined;
@@ -53,11 +55,14 @@ interface Sources {
  */
 function sources(tables: TableState | readonly TableState[]): Sources {
   const members: readonly TableState[] = Array.isArray(tables) ? tables : [tables as TableState];
-  const status = combinedStatus(members.map(standInStatus));
-  const fillFrom = members.find((member) => fillOf(member) === status.fill)!;
+  const statuses = members.map(standInStatus);
+  const status = combinedStatus(statuses);
+  const fillFrom = members[statuses.findIndex((each) => each.fill === status.fill)]!;
   const dotFrom =
-    status.dot === null ? undefined : members.find((member) => dotOf(member) === status.dot);
-  return { members, status, fillFrom, dotFrom };
+    status.dot === null
+      ? undefined
+      : members[statuses.findIndex((each) => each.dot === status.dot)];
+  return { members, statuses, status, fillFrom, dotFrom };
 }
 
 function fillWords(table: TableState, fill: FloorMapFill): string {
@@ -94,13 +99,24 @@ function wordsOf({ status, fillFrom, dotFrom }: Sources): string {
   return dotFrom === undefined ? fill : `${fill}, ${dotWords(dotFrom, status.dot!)}`;
 }
 
-/** The status pin's shortest word. Pass a merge's members together. */
+/** The status pin's fill and shortest word. Pass a merge's members together. */
+export function statusPin(tables: TableState | readonly TableState[]): {
+  fill: FloorMapFill;
+  text: string;
+} {
+  const from = sources(tables);
+  return { fill: from.status.fill, text: pinWords(from) };
+}
+
 export function pinText(tables: TableState | readonly TableState[]): string {
-  const { members, status, fillFrom, dotFrom } = sources(tables);
+  return statusPin(tables).text;
+}
+
+function pinWords({ members, statuses, status, fillFrom, dotFrom }: Sources): string {
   if (dotFrom !== undefined) return dotWords(dotFrom, status.dot!);
   if (status.fill === "seated") {
     const toServe = Math.max(
-      ...members.filter((member) => fillOf(member) === "seated").map((m) => m.pendingToServe),
+      ...members.filter((_, i) => statuses[i]!.fill === "seated").map((m) => m.pendingToServe),
     );
     if (toServe > 0) return `${toServe} ${t("floor.to_serve")}`;
   }
@@ -109,6 +125,12 @@ export function pinText(tables: TableState | readonly TableState[]): string {
 
 export function isPlannedZone(zoneTables: readonly TableState[]): boolean {
   return zoneTables.some((table) => table.today !== null);
+}
+
+type Look = Pick<FloorMapTable, "fill" | "dot" | "description">;
+
+function lookOf(from: Sources): Look {
+  return { fill: from.status.fill, dot: from.status.dot, description: wordsOf(from) };
 }
 
 /** Every member of a merge carries the same fill, dot and description, as `wt-floor-map` requires. */
@@ -121,20 +143,19 @@ export function mapTables(zoneTables: readonly TableState[]): FloorMapTable[] {
     if (members) members.push(table);
     else merges.set(joinId, [table]);
   }
+  const looks = new Map<string, Look>();
+  for (const [joinId, members] of merges) looks.set(joinId, lookOf(sources(members)));
   const mapped: FloorMapTable[] = [];
   for (const table of zoneTables) {
     const today = table.today;
     if (today === null || today.placement === null || today.takenOff) continue;
-    const members = today.joinId === null ? [table] : merges.get(today.joinId)!;
-    const from = sources(members);
+    const look = today.joinId === null ? lookOf(sources(table)) : looks.get(today.joinId)!;
     mapped.push({
       id: table.id,
       label: table.label,
       placement: today.placement,
-      fill: from.status.fill,
-      dot: from.status.dot,
+      ...look,
       joinId: today.joinId,
-      description: wordsOf(from),
     });
   }
   return mapped;

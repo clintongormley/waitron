@@ -4,7 +4,7 @@ import { type WtToast, baseStyles, floorMapFillStyles } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-toast.js";
 import type { TableParty, TableState } from "../api/client.js";
 import { t } from "../i18n/t.js";
-import { combinedStatus, pinText, readyText, standInStatus } from "../state/floor-map.js";
+import { readyText, statusPin } from "../state/floor-map.js";
 import { signalOf } from "../state/table-signals.js";
 import "./table-details-sheet.js";
 
@@ -118,8 +118,7 @@ export class TillTableStatus extends LitElement {
     const party = this.party;
     const rows = this.#partyRows;
     if (party === null || rows.length === 0) return nothing;
-    const fill = combinedStatus(rows.map(standInStatus)).fill;
-    const text = pinText(rows);
+    const { fill, text } = statusPin(rows);
     return html`<button
         type="button"
         class="status-pin"
