@@ -523,7 +523,14 @@ export class ProductList extends LitElement {
       }
       drag.active = true;
       holdPageCursor();
-      this.#dragged = this.selected.includes(drag.key) ? [...this.selected] : [drag.key];
+      const visible = new Set(
+        [...this.#table()!.shadowRoot!.querySelectorAll<HTMLElement>("tr[data-row-key]")].map(
+          (row) => row.dataset.rowKey!,
+        ),
+      );
+      this.#dragged = this.selected.includes(drag.key)
+        ? this.selected.filter((key) => visible.has(key))
+        : [drag.key];
       this.ghost = this.#ghostOf(this.#dragged);
       this.#send("drag-items", { keys: this.#dragged });
       void this.updateComplete.then(() => placeDragGhost(this.renderRoot, this.#pointer));

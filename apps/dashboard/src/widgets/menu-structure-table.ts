@@ -269,7 +269,10 @@ export class MenuStructureTable extends LitElement {
   @property({ type: Boolean }) selecting = false;
   /** The ticked rows' keys. */
   @property({ attribute: false }) selected: string[] = [];
-  @property({ attribute: false }) dragSelection?: (pressedKey: string) => readonly string[];
+  @property({ attribute: false }) dragSelection?: (
+    pressedKey: string,
+    visibleKeys: ReadonlySet<string>,
+  ) => readonly string[];
 
   #rowByKey = new Map<string, Row>();
   #productById = new Map<string, Product>();
@@ -356,8 +359,8 @@ export class MenuStructureTable extends LitElement {
 
   protected override willUpdate(changed: PropertyValues<this>): void {
     if (
-      (changed.has("reordering") || changed.has("selecting") || changed.has("search")) &&
-      !this.#reorderable &&
+      (((changed.has("reordering") || changed.has("selecting")) && !this.#reorderable) ||
+        changed.has("search")) &&
       this.#drag
     ) {
       const active = this.#drag.active;
@@ -540,7 +543,14 @@ export class MenuStructureTable extends LitElement {
         return;
       }
       if (this.selected.includes(drag.key) && this.dragSelection) {
-        drag.keys = [...this.dragSelection(drag.key)];
+        const visible = new Set(
+          [...this.#table()!.shadowRoot!.querySelectorAll<HTMLElement>("tr[data-row-key]")].map(
+            (row) => row.dataset.rowKey!,
+          ),
+        );
+        drag.keys = [...new Set(this.dragSelection(drag.key, visible))].filter((key) =>
+          visible.has(key),
+        );
         if (!this.#dragRows(drag.keys)) {
           this.#finishDrag();
           return;
@@ -1066,10 +1076,8 @@ export class MenuStructureTable extends LitElement {
     >`;
   }
 
-  /** A search draws closest matches first, not the menu's order, so nothing is reordered during
-   * one. */
   get #reorderable(): boolean {
-    return (this.reordering || this.selecting) && this.search.trim() === "";
+    return this.reordering || this.selecting;
   }
 
   #grip(row: Row) {

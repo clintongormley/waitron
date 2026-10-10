@@ -1602,7 +1602,9 @@ export class MenusScreen extends LitElement {
         this.busy = false;
         return;
       }
-      this.structureSelected = [];
+      this.structureSelected = this.structureSelected.filter(
+        (key) => !canonical.includes(key) && this.#sentKeys([...canonical, key]).includes(key),
+      );
       await this.#refresh();
       if (destination.menuId === this.menuId && this.#holds(destination)) this.#edit(to);
       else this.#reportSavedToLost(destination);
@@ -2432,9 +2434,11 @@ export class MenusScreen extends LitElement {
         .search=${this.structureSearch}
         .selecting=${this.structureSelecting}
         .selected=${this.structureSelected}
-        .dragSelection=${(key: string) =>
+        .dragSelection=${(key: string, visible: ReadonlySet<string>) =>
           this.structureSelected.includes(key)
-            ? this.#sentKeys(this.#inTreeOrder(this.structureSelected))
+            ? this.#sentKeys(
+                this.#inTreeOrder(this.structureSelected.filter((each) => visible.has(each))),
+              )
             : [key]}
         menuName=${this.#menuName()}
         @wt-selection-change=${(event: CustomEvent<{ selected: string[] }>) => {

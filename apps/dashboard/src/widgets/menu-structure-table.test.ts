@@ -2995,8 +2995,9 @@ describe("A461 Structure search", () => {
       "m-drinks/m-coffee/m-iced",
       "m-drinks/m-coffee/m-ice",
       "m-fav/m-cake",
+      "m-drinks/m-coffee/m-iced",
     ]);
-    expect(all(el, 'tr[data-row-key="m-drinks/m-coffee/m-iced"]')).toHaveLength(1);
+    expect(all(el, 'tr[data-row-key="m-drinks/m-coffee/m-iced"]')).toHaveLength(2);
     expect(row(el, "m-drinks/m-coffee/m-iced")!.getAttribute("aria-level")).toBe("2");
 
     el.nodes = [
@@ -3206,7 +3207,13 @@ describe("search and the Available filter", () => {
     await search(el, "gin ");
     expect(shown(el)).toEqual(["m-bar", "m-gt", "m-bar/m-bar-pink"]);
     await toggle(el, "m-bar");
-    expect(shown(el)).toEqual(["m-bar", "m-bar/m-bar-ginger", "m-bar/m-bar-pink", "m-gt"]);
+    expect(shown(el)).toEqual([
+      "m-bar",
+      "m-bar/m-bar-ginger",
+      "m-bar/m-bar-pink",
+      "m-gt",
+      "m-bar/m-bar-pink",
+    ]);
   });
 
   it("says nothing matches when the search finds no row", async () => {
@@ -3281,19 +3288,23 @@ describe("search and the Available filter", () => {
     expect(box.getBoundingClientRect().width).toBeGreaterThan(0);
   });
 
-  it("draws no reorder grip while a search is typed, and draws them again once it is cleared", async () => {
+  it("draws reorder grips during search and removes them when reordering is off", async () => {
     const el = await mount();
     await search(el, "u");
     expect(shown(el)).toEqual(["m-burger", "m-fav"]);
-    expect(all(el, '[part~="drag-grip"]')).toEqual([]);
+    expect(all(el, '[part~="drag-grip"]').map((each) => each.dataset.test)).toEqual([
+      "drag-m-burger",
+      "drag-m-fav",
+    ]);
     expect(all(el, '[part~="grip-space"]')).toEqual([]);
     const nameLefts = () => shown(el).map((key) => nameAt(el, key).getBoundingClientRect().left);
     const searchingLefts = nameLefts();
     el.reordering = false;
     await settle(el);
     expect(shown(el)).toEqual(["m-burger", "m-fav"]);
+    expect(all(el, '[part~="drag-grip"]')).toEqual([]);
     for (const [index, left] of nameLefts().entries())
-      expect(Math.abs(left - searchingLefts[index]!)).toBeLessThanOrEqual(1);
+      expect(left).toBeLessThan(searchingLefts[index]!);
     el.reordering = true;
     await settle(el);
     await search(el, "");
@@ -3874,7 +3885,7 @@ describe("A461 selected pointer drag", () => {
     });
   }
 
-  it("A461 drag carries hidden selected rows and one full-count ghost", async () => {
+  it("A461 drag carries visible ticks while leaving hidden ticks alone", async () => {
     const el = await gathered();
     const batches = listen(el, "wt-members-drop");
     const singles = listen(el, "wt-member-move-into");
@@ -3883,9 +3894,9 @@ describe("A461 selected pointer drag", () => {
     expect(from).not.toBeNull();
     pointer(from, "pointerdown");
     await dragOver(el, from, "m-fav", "middle");
-    expect(ghost(el)!.textContent).toContain("2");
+    expect(ghost(el)!.textContent).toContain("Burger");
     pointer(from, "pointerup", nameAt(el, "m-fav"));
-    expect(batches).toEqual([{ keys: ["m-drinks/m-lager", "m-burger"], to: ["m-fav"] }]);
+    expect(batches).toEqual([{ keys: ["m-burger"], to: ["m-fav"] }]);
     expect(singles).toEqual([]);
   });
 
@@ -3904,6 +3915,7 @@ describe("A461 selected pointer drag", () => {
 
   it("A461 drop rejects a duplicate ref carried by a hidden tick", async () => {
     const el = await gathered(["m-drinks/m-lemonade", "m-burger"]);
+    await toggle(el, "m-drinks");
     const batches = listen(el, "wt-members-drop");
     const from = grip(el, "m-burger");
     expect(from).not.toBeNull();
@@ -3925,8 +3937,9 @@ describe("A461 selected pointer drag", () => {
     expect(batches).toEqual([{ keys: ["m-burger", "m-drinks"], to: [], position: 1 }]);
   });
 
-  it("A461 drop sends nothing when a dragged hidden key disappears", async () => {
+  it("A461 drop sends nothing when a dragged visible key disappears", async () => {
     const el = await gathered();
+    await toggle(el, "m-drinks");
     const batches = listen(el, "wt-members-drop");
     const from = grip(el, "m-burger");
     expect(from).not.toBeNull();
@@ -3938,7 +3951,7 @@ describe("A461 selected pointer drag", () => {
     expect(batches).toEqual([]);
   });
 
-  it("A461 drag stays unavailable during search and cancels on a new query", async () => {
+  it("A461 changing the query cancels an in-flight drag while keeping search grips", async () => {
     const el = await gathered();
     const batches = listen(el, "wt-members-drop");
     const from = grip(el, "m-burger");
@@ -3947,10 +3960,29 @@ describe("A461 selected pointer drag", () => {
     await dragOver(el, from, "m-fav", "middle");
     el.search = "Burger";
     await settle(el);
-    expect(all(el, '[part~="drag-grip"]')).toEqual([]);
+    expect(all(el, '[part~="drag-grip"]')).toHaveLength(1);
     expect(ghost(el)).toBeNull();
     document.dispatchEvent(new PointerEvent("pointerup", { pointerId: 1 }));
     expect(batches).toEqual([]);
+  });
+
+  it("A461 search drag carries visible ticks in one batch", async () => {
+    const el = await gathered();
+    el.nodes = [
+      productNode("m-burger", "p-burger"),
+      { ...favourites(), internalName: "Burger destination" },
+      drinksNode("m-drinks"),
+    ];
+    el.search = "burger";
+    await settle(el);
+    const batches = listen(el, "wt-members-drop");
+    const from = grip(el, "m-burger");
+    expect(from).not.toBeNull();
+    pointer(from, "pointerdown");
+    await dragOver(el, from, "m-fav", "middle");
+    pointer(from, "pointerup", nameAt(el, "m-fav"));
+    expect(batches).toEqual([{ keys: ["m-burger"], to: ["m-fav"] }]);
+    expect(el.selected).toEqual(["m-drinks/m-lager", "m-burger"]);
   });
 });
 

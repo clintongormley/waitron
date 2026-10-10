@@ -301,7 +301,6 @@ describe("product-list", () => {
       ],
     });
     await openRow(el, "folder:d");
-    const before = rowKeys(root);
     const toggles = vi.fn();
     el.addEventListener("category-toggle", toggles);
     el.search = "coffee";
@@ -311,17 +310,17 @@ describe("product-list", () => {
       root.querySelector('tr[data-row-key="folder:coffee"]')!.getAttribute("aria-expanded"),
     ).toBe("false");
     await openRow(el, "folder:coffee");
-    expect(rowKeys(root)).toEqual(["folder:coffee", "ice", "iced"]);
-    expect(root.querySelectorAll('tr[data-row-key="iced"]')).toHaveLength(1);
+    expect(rowKeys(root)).toEqual(["folder:coffee", "ice", "iced", "iced"]);
+    expect(root.querySelectorAll('tr[data-row-key="iced"]')).toHaveLength(2);
     expect(toggles).not.toHaveBeenCalled();
     el.search = "";
     await el.updateComplete;
     await table.updateComplete;
-    expect(rowKeys(root)).toEqual(before);
+    expect(rowKeys(root)).toEqual(["folder:d", "folder:coffee", "ice", "iced"]);
     expect(root.querySelector('[part~="search-path"]')).toBeNull();
     await openRow(el, "folder:coffee");
     expect(toggles).toHaveBeenCalledOnce();
-    expect(toggles.mock.calls[0]![0].detail).toEqual({ categoryId: "coffee", open: true });
+    expect(toggles.mock.calls[0]![0].detail).toEqual({ categoryId: "coffee", open: false });
   });
 
   it("A461 Products paths stop at missing parents and cycles", async () => {
@@ -2648,7 +2647,7 @@ describe("the product list as a tree", () => {
     expect(rowKeys(root)).toEqual(["folder:d", "folder:b", "lager", "cola", "folder:f", "bread"]);
   });
 
-  it("a search finds the product by a variant's name with its path, and clearing it restores what was open", async () => {
+  it("a search finds the product by a variant's name with its path, and clearing keeps that product and its category path open", async () => {
     const { el, root, table } = await mountTree({
       products: [
         ...treeProducts(),
@@ -2672,7 +2671,16 @@ describe("the product list as a tree", () => {
     el.search = "";
     await el.updateComplete;
     await table.updateComplete;
-    expect(rowKeys(root)).toEqual(["folder:d", "folder:b", "cola", "folder:f", "bread"]);
+    expect(rowKeys(root)).toEqual([
+      "folder:d",
+      "folder:b",
+      "bun",
+      "bun:small",
+      "lager",
+      "cola",
+      "folder:f",
+      "bread",
+    ]);
   });
 
   const menuItems = (menu: Element) =>
@@ -4585,6 +4593,7 @@ describe("a refresh during a drag", () => {
 
   it("offers no category, and sends nothing when released, after a refresh removed another selected product being dragged", async () => {
     const { el, root } = await mountTree({ selected: ["bread", "cola"] });
+    await openRow(el, "folder:d");
     const { offered, drops } = watch(el);
     press(nameOf(root, "bread"), "pointerdown");
     press(nameOf(root, "folder:d"), "pointermove");
@@ -6076,7 +6085,7 @@ describe("product-list filters (A463)", () => {
   );
 });
 
-it("A461 pointer drop payload includes a selected product inside a collapsed category", async () => {
+it("A461 pointer drop carries visible ticks and preserves hidden ticks", async () => {
   const { el, root } = await mountTree({
     selecting: true,
     selected: ["iced", "cake"],
@@ -6114,7 +6123,8 @@ it("A461 pointer drop payload includes a selected product inside a collapsed cat
   send("pointerdown", from);
   send("pointermove", to);
   send("pointerup", to);
-  expect(drops).toEqual([{ keys: ["iced", "cake"], folderId: "storage" }]);
+  expect(drops).toEqual([{ keys: ["cake"], folderId: "storage" }]);
+  expect(el.selected).toEqual(["iced", "cake"]);
 });
 
 it.each([390, 1280])(

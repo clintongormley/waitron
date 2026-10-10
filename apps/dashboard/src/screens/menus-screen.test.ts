@@ -4541,7 +4541,7 @@ describe("the Structure tree", () => {
       type(q(el, 'wt-input[name="structure-search"]')!, "cake");
       await settleStructure(el);
       await tick(el, "m-desserts/m-cake");
-      expect(allInStructure(el, '[part~="drag-grip"]')).toEqual([]);
+      expect(allInStructure(el, '[part~="drag-grip"]').length).toBeGreaterThan(0);
       type(q(el, 'wt-input[name="structure-search"]')!, "");
       await settleStructure(el);
       structure(el).shadowRoot!.querySelector("wt-data-table")!.setExpanded("m-desserts", true);
@@ -4575,7 +4575,7 @@ describe("the Structure tree", () => {
       await settleStructure(el);
       send("pointerup", to);
     }
-    it("A461 Structure drags gathered hidden ticks after clearing", async () => {
+    it("A461 Structure drag sends visible ticks and leaves hidden ticks selected", async () => {
       const client = api();
       const el = await a461Gather(client);
       const drops: unknown[] = [];
@@ -4584,20 +4584,47 @@ describe("the Structure tree", () => {
       );
       await a461PointerDrop(el);
       await vi.waitFor(() => expect(client.moveSectionMembersInto).toHaveBeenCalledOnce());
-      expect(drops).toEqual([
-        { keys: ["m-coffee/m-iced", "m-desserts/m-cake"], to: ["m-storage"] },
-      ]);
+      expect(drops).toEqual([{ keys: ["m-desserts/m-cake"], to: ["m-storage"] }]);
       expect(client.moveSectionMembersInto).toHaveBeenCalledExactlyOnceWith(
         "s-storage",
-        [
-          { listId: "s-coffee", memberId: "m-iced" },
-          { listId: "s-desserts", memberId: "m-cake" },
-        ],
+        [{ listId: "s-desserts", memberId: "m-cake" }],
         undefined,
       );
       expect(client.moveSectionMember).not.toHaveBeenCalled();
-      await vi.waitFor(() => expect(structure(el).selected).toEqual([]));
+      await vi.waitFor(() => expect(structure(el).selected).toEqual(["m-coffee/m-iced"]));
     });
+    it("A461 search drag ignores a hidden selected parent before grouping the visible child", async () => {
+      const client = api();
+      client.getMenuStructure.mockResolvedValue(
+        lunchWith([
+          ...a461Nodes().slice(0, 2),
+          a461Section("m-storage", "s-storage", "Iced storage", []),
+        ]),
+      );
+      client.listLibraryProducts.mockResolvedValue([
+        product("iced", "Iced coffee"),
+        product("cake", "Coffee cake"),
+      ]);
+      const el = await mountLunch(client);
+      await pressSelect(el);
+      type(q(el, 'wt-input[name="structure-search"]')!, "coffee");
+      await settleStructure(el);
+      await tick(el, "m-coffee");
+      type(q(el, 'wt-input[name="structure-search"]')!, "iced");
+      await settleStructure(el);
+      await tick(el, "m-coffee/m-iced");
+      expect(rowOf(el, "m-coffee")).toBeNull();
+      await a461PointerDrop(el, "m-coffee/m-iced");
+      await vi.waitFor(() =>
+        expect(client.moveSectionMembersInto).toHaveBeenCalledExactlyOnceWith(
+          "s-storage",
+          [{ listId: "s-coffee", memberId: "m-iced" }],
+          undefined,
+        ),
+      );
+      await vi.waitFor(() => expect(structure(el).selected).toEqual(["m-coffee"]));
+    });
+
     it("A461 batch drop keeps every tick on the exact domain refusal", async () => {
       const client = api({
         moveSectionMembersInto: vi

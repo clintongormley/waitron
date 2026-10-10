@@ -231,7 +231,7 @@ describe.each(["light", "dark"] as const)("product-list a11y (%s theme)", (theme
       )!
       .click();
     await table.updateComplete;
-    expect(keys()).toEqual(["folder:coffee", "p1"]);
+    expect(keys()).toEqual(["folder:coffee", "p1", "p1"]);
     expect(
       table.shadowRoot!.querySelector('tr[data-row-key="p1"]')!.getAttribute("aria-level"),
     ).toBe("2");

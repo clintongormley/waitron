@@ -46,7 +46,11 @@ describe.each(["light", "dark"] as const)("wt-data-table a11y (%s theme)", (them
       await el.updateComplete;
     }
     expect(el.shownKeys()).toEqual(
-      state === "empty" ? [] : state === "opened" ? ["coffee", "iced", "ice"] : ["coffee", "iced"],
+      state === "empty"
+        ? []
+        : state === "opened"
+          ? ["coffee", "iced", "ice", "iced"]
+          : ["coffee", "iced"],
     );
     await expectNoA11yViolations(host);
   });

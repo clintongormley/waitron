@@ -1614,7 +1614,7 @@ export class WtDataTable<Row = unknown> extends LitElement {
     }
     this.dispatchEvent(
       new CustomEvent("wt-selection-change", {
-        detail: { selected },
+        detail: { selected: [...new Set(selected)] },
         bubbles: true,
         composed: true,
       }),
@@ -1856,39 +1856,20 @@ export class WtDataTable<Row = unknown> extends LitElement {
     const isOpen = (row: Row) =>
       expandAll || !this.rowCollapsible(row) || this.searchExpanded.has(keyOf(row));
     const matched = this.#searched().visible;
-    const covered = new Set<string>();
-    const cover = (row: Row, seen: Set<string>) => {
-      const key = keyOf(row);
-      if (seen.has(key) || !isOpen(row)) return;
-      const next = new Set(seen).add(key);
-      for (const child of children.get(key) ?? []) {
-        if (next.has(keyOf(child))) continue;
-        covered.add(keyOf(child));
-        cover(child, next);
-      }
-    };
-    for (const row of matched) cover(row, new Set());
     const column = this.#sortColumn(this.#shownColumns());
-    const roots = this.#sortByColumn(
-      matched.filter((row) => !covered.has(keyOf(row))),
-      column,
-      indexOf,
-      this.#searched().ranks,
-      true,
-    );
+    const roots = this.#sortByColumn(matched, column, indexOf, this.#searched().ranks, true);
     const out: TreeEntry<Row>[] = [];
-    const emitted = new Set<string>();
-    const walk = (row: Row, depth: number) => {
+    const walk = (row: Row, depth: number, ancestors = new Set<string>()) => {
       const key = keyOf(row);
-      if (emitted.has(key)) return;
-      emitted.add(key);
+      if (ancestors.has(key)) return;
+      const next = new Set(ancestors).add(key);
       const below = children.get(key) ?? [];
       out.push({ row, key, depth, hasChildren: below.length > 0 });
       if (!isOpen(row)) return;
       const ordered = this.rowKeepsChildOrder(row)
         ? below
         : this.#sortByColumn(below, column, indexOf, undefined);
-      for (const child of ordered) walk(child, depth + 1);
+      for (const child of ordered) walk(child, depth + 1, next);
     };
     for (const row of roots) walk(row, 0);
     return out;
@@ -2034,7 +2015,19 @@ export class WtDataTable<Row = unknown> extends LitElement {
         else next.delete(key);
       }
       this.searchExpanded = next;
-      return;
+      if (!open) return;
+      const byKey = this.#rowsByKey();
+      const persistent = new Set(keys);
+      for (const key of keys) {
+        let row = byKey.get(key);
+        while (row) {
+          const parent = this.rowParent!(row);
+          if (parent === null || persistent.has(parent)) break;
+          persistent.add(parent);
+          row = byKey.get(parent);
+        }
+      }
+      keys = [...persistent];
     }
     const next = new Set(this.collapsed);
     const remembered = this.#rememberedOpen();

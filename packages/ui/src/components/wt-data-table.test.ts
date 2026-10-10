@@ -8508,23 +8508,21 @@ test("A461 flat roots rank by own names ahead of grouping", async () => {
   expect(el.shownKeys()).toEqual(["coffee", "cake", "iced"]);
 });
 
-test("A461 expands once and restores the saved tree", async () => {
+test("A461 opened matches coexist and openings persist in the saved tree", async () => {
   const el = await a461Table({ searchTerm: "", rememberExpanded: true, viewKey: "a461-expansion" });
   el.setExpanded("drinks", true);
   await el.updateComplete;
-  const before = treeKeys(el);
-  const stored = localStorage.getItem("a461-expansion:expanded");
   el.searchTerm = "coffee";
   await el.updateComplete;
   a461Toggle(el, "coffee");
   await el.updateComplete;
-  expect(treeKeys(el)).toEqual(["coffee", "ice", "espresso", "ginger", "iced", "cake"]);
+  expect(treeKeys(el)).toEqual(["coffee", "ice", "espresso", "ginger", "iced", "cake", "iced"]);
   expect(el.shadowRoot!.querySelector('tr[data-row-key="iced"]')!.getAttribute("aria-level")).toBe(
     "2",
   );
-  expect(el.shownKeys()).toEqual(["coffee", "ice", "espresso", "ginger", "iced", "cake"]);
+  expect(el.shownKeys()).toEqual(["coffee", "ice", "espresso", "ginger", "iced", "cake", "iced"]);
   expect(el.isExpanded("coffee")).toBe(true);
-  expect(localStorage.getItem("a461-expansion:expanded")).toBe(stored);
+  expect(JSON.parse(localStorage.getItem("a461-expansion:expanded")!)).toContain("coffee");
   a461Toggle(el, "coffee");
   await el.updateComplete;
   expect(treeKeys(el)).toEqual(["coffee", "cake", "iced"]);
@@ -8536,17 +8534,27 @@ test("A461 expands once and restores the saved tree", async () => {
   expect(el.isExpanded("coffee")).toBe(false);
   el.searchTerm = "   ";
   await el.updateComplete;
-  expect(treeKeys(el)).toEqual(before);
-  expect(localStorage.getItem("a461-expansion:expanded")).toBe(stored);
+  expect(treeKeys(el)).toEqual([
+    "desserts",
+    "drinks",
+    "coffee",
+    "ice",
+    "espresso",
+    "ginger",
+    "iced",
+  ]);
+  expect(JSON.parse(localStorage.getItem("a461-expansion:expanded")!)).toEqual(
+    expect.arrayContaining(["drinks", "coffee"]),
+  );
   expect(el.isExpanded("drinks")).toBe(true);
-  expect(el.isExpanded("coffee")).toBe(false);
+  expect(el.isExpanded("coffee")).toBe(true);
 });
 
 test("A461 Expand all only reaches matching roots and supports reveal and refresh", async () => {
   const el = await a461Table();
   el.shadowRoot!.querySelector<HTMLButtonElement>(".expand-all")!.click();
   await el.updateComplete;
-  expect(treeKeys(el)).toEqual(["coffee", "ice", "espresso", "ginger", "iced", "cake"]);
+  expect(treeKeys(el)).toEqual(["coffee", "ice", "espresso", "ginger", "iced", "cake", "iced"]);
   expect(el.isExpanded("drinks")).toBe(false);
   el.shadowRoot!.querySelector<HTMLButtonElement>(".expand-all")!.click();
   await el.updateComplete;
@@ -8561,7 +8569,7 @@ test("A461 Expand all only reaches matching roots and supports reveal and refres
   expect(el.isExpanded("coffee")).toBe(false);
 });
 
-test("A461 expansion suppresses a higher-ranked descendant root exactly once", async () => {
+test("A461 higher-ranked descendant keeps its flat row beside its branch copy", async () => {
   const el = await a461Table({
     rows: [
       { id: "parent", parent: null, name: "Coffee collection" },
@@ -8571,7 +8579,7 @@ test("A461 expansion suppresses a higher-ranked descendant root exactly once", a
   expect(treeKeys(el)).toEqual(["child", "parent"]);
   el.setExpanded("parent", true);
   await el.updateComplete;
-  expect(treeKeys(el)).toEqual(["parent", "child"]);
+  expect(treeKeys(el)).toEqual(["child", "parent", "child"]);
 });
 
 test("A461 flat search preserves query boundaries, filters and visible select all", async () => {
@@ -8606,7 +8614,7 @@ test("A461 flat search preserves query boundaries, filters and visible select al
   await el.updateComplete;
   el.setExpanded("coffee", true);
   await el.updateComplete;
-  expect(treeKeys(el)).toEqual(["coffee", "espresso", "ginger", "iced", "cake"]);
+  expect(treeKeys(el)).toEqual(["coffee", "espresso", "ginger", "iced", "cake", "iced"]);
 });
 
 test("A461 roots tied on closeness use the chosen column sort", async () => {
@@ -8759,4 +8767,57 @@ test("A461 retaining selection never admits a newly ticked domain-ineligible row
   el.addEventListener("wt-selection-change", selected);
   el.shadowRoot!.querySelector<HTMLInputElement>('[data-test="select-cake"]')!.click();
   expect(selected.mock.calls[0]![0].detail.selected).toEqual([]);
+});
+
+test("A461 duplicate matches share native ticks and select all deduplicates", async () => {
+  const el = await a461Table({ selectable: true, rowSelectionAllowed: () => true });
+  el.addEventListener("wt-selection-change", ((event: CustomEvent<{ selected: string[] }>) => {
+    el.selected = event.detail.selected;
+  }) as EventListener);
+  el.setExpanded("coffee", true);
+  await el.updateComplete;
+  const copies = () => [
+    ...el.shadowRoot!.querySelectorAll<HTMLInputElement>(
+      'tr[data-row-key="iced"] input[type="checkbox"]',
+    ),
+  ];
+  expect(copies()).toHaveLength(2);
+  copies()[0]!.click();
+  await el.updateComplete;
+  expect(copies().map((input) => input.checked)).toEqual([true, true]);
+  copies()[1]!.click();
+  await el.updateComplete;
+  expect(el.selected).toEqual([]);
+  el.shadowRoot!.querySelector<HTMLInputElement>('[data-test="select-all"]')!.click();
+  await el.updateComplete;
+  expect(el.selected).toEqual(["coffee", "ice", "espresso", "ginger", "iced", "cake"]);
+});
+
+test("A461 opening a search child remembers its ancestors for the next visit", async () => {
+  localStorage.removeItem("a461-ancestors:expanded");
+  const el = await a461Table({ rememberExpanded: true, viewKey: "a461-ancestors" });
+  el.setExpanded("coffee", true);
+  await el.updateComplete;
+  el.searchTerm = "cake";
+  await el.updateComplete;
+  expect(el.isExpanded("coffee")).toBe(false);
+  el.searchTerm = "";
+  await el.updateComplete;
+  expect(treeKeys(el)).toEqual([
+    "desserts",
+    "drinks",
+    "coffee",
+    "ice",
+    "espresso",
+    "ginger",
+    "iced",
+  ]);
+  const nextVisit = await a461Table({
+    searchTerm: "",
+    rememberExpanded: true,
+    viewKey: "a461-ancestors",
+  });
+  expect(nextVisit.isExpanded("drinks")).toBe(true);
+  expect(nextVisit.isExpanded("coffee")).toBe(true);
+  expect(treeKeys(nextVisit)).toEqual(treeKeys(el));
 });

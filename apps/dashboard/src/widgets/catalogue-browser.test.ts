@@ -4591,7 +4591,7 @@ it("A461 deleting a selected category during its summary read keeps the operatio
 });
 
 it.each([false, true])(
-  "A461 pointer drag carries the hidden Products tick (clear search: %s)",
+  "A461 pointer drag sends visible Products ticks and retains hidden ticks (clear search: %s)",
   async (clear) => {
     const el = await mountBrowser({
       products: [product("iced", "Iced coffee", "d"), product("cake", "Coffee cake", "f")],
@@ -4613,10 +4613,13 @@ it.each([false, true])(
     list.addEventListener("drop-items", (event) => drops.push((event as CustomEvent).detail));
     drag(await nameCell(el, "cake"), await nameCell(el, "folder:storage"));
     await vi.waitFor(() => expect(el.api.moveCatalogueItems).toHaveBeenCalledOnce());
-    expect(drops).toEqual([{ keys: ["iced", "cake"], folderId: "storage" }]);
+    expect(drops).toEqual([{ keys: ["cake"], folderId: "storage" }]);
     expect(el.api.moveCatalogueItems).toHaveBeenCalledExactlyOnceWith(
-      { productIds: ["iced", "cake"], categoryIds: [] },
+      { productIds: ["cake"], categoryIds: [] },
       "storage",
+    );
+    await vi.waitFor(() =>
+      expect(el.shadowRoot!.querySelector("dashboard-product-list")!.selected).toEqual(["iced"]),
     );
   },
 );
