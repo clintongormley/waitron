@@ -1038,7 +1038,8 @@ table never planned, all four succeed as today.
   Task 1.10's, and `getFloorPlan(zoneId)`, `saveFloorPlan(zoneId, body)`),
   `apps/dashboard/src/api/live-queries.ts` (`getFloorPlan: ["floor_plans", "floor_plan_tables",
   "floor_plan_joins", "floor_plan_join_tables", "dining_tables"]`), `apps/dashboard/src/i18n/codes.ts`
-  (`floor_plan.out_of_date`, `floor_plan.invalid`, `table.booked`, EN and ES)
+  (`floor_plan.out_of_date`, `floor_plan.invalid`, EN and ES; `table.booked`'s in bookings'
+  `BOOKINGS_CODE_MESSAGES`, `packages/bookings/src/dashboard/strings.ts`)
 - Test: `apps/server/src/management-api.test.ts` (a new `describe("floor plans")`), the dashboard
   client test file
 
