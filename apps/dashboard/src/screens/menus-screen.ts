@@ -830,7 +830,6 @@ export class MenusScreen extends LitElement {
    * name order. */
   protected override updated(changed: PropertyValues): void {
     this.#returnFocus();
-    if (changed.has("structure") || changed.has("products")) void this.#keepSelectionShown();
     if (!changed.has("layout") || this.layout !== "narrow") return;
     const table = this.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-data-table"]>(
       'wt-data-table[data-test="menus"]',
@@ -2389,7 +2388,6 @@ export class MenusScreen extends LitElement {
         }}
         @wt-filter-change=${(event: Event) => {
           event.stopPropagation();
-          this.structureSelected = [];
         }}
         @wt-structure-edit=${(event: CustomEvent<{ path: string[] }>) => {
           event.stopPropagation();
@@ -2497,7 +2495,6 @@ export class MenusScreen extends LitElement {
           @wt-change=${(event: CustomEvent<{ value: string }>) => {
             event.stopPropagation();
             this.structureSearch = event.detail.value;
-            this.structureSelected = [];
           }}
         ></wt-input>
         ${this.structureSelecting ? this.#renderSelectionBar() : nothing}
@@ -2588,19 +2585,6 @@ export class MenusScreen extends LitElement {
     }
     const owned = new Set(ownedKeys(this.structure?.nodes ?? []));
     this.#keepSelection((key) => owned.has(key));
-  }
-
-  /** Keeps the selection, and an open Remove confirm or Move dialog, to the rows the search and the
-   * Available filter still show (a closed section hides none), once the tree has drawn a change: a
-   * row renamed out of the search, or a product the filter now hides, can no longer be unticked. */
-  async #keepSelectionShown(): Promise<void> {
-    if (this.structureSelected.length === 0 && !this.removingSelected && !this.movingSelected)
-      return;
-    const tree = this.renderRoot.querySelector("dashboard-menu-structure-table");
-    if (!tree) return;
-    await tree.updateComplete;
-    const shown = tree.shownSelectableKeys();
-    this.#keepSelection((key) => shown.has(key));
   }
 
   #keepSelection(keep: (key: string) => boolean): void {

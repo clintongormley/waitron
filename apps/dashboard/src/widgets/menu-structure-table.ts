@@ -1243,6 +1243,7 @@ export class MenuStructureTable extends LitElement {
         selectAllLabel=${t("menus.select_all")}
         .selected=${this.selected}
         .rowSelectable=${(row: TableRow) => this.#rowSelectable(row)}
+        .rowSelectionAllowed=${(row: TableRow) => row.kind !== "root" && !row.readOnly}
         .selectionLabel=${(row: TableRow) =>
           row.kind === "root"
             ? row.name
