@@ -27,8 +27,15 @@ const placementColumns = () => ({
   rotation: smallCount("rotation"),
 });
 
-const between = (column: SQLiteColumn, low: number, high: number): SQL =>
-  sql`${column} is null or ${column} between ${sql.raw(String(low))} and ${sql.raw(String(high))}`;
+/** The bounds are pasted into the SQL, so anything but a whole number is refused. */
+export const rangeCheck = (column: SQLiteColumn, low: number, high: number): SQL => {
+  if (!Number.isInteger(low) || !Number.isInteger(high)) {
+    throw new Error(
+      `rangeCheck: bounds must be whole numbers, got ${String(low)} and ${String(high)}`,
+    );
+  }
+  return sql`${column} is null or ${column} between ${sql.raw(String(low))} and ${sql.raw(String(high))}`;
+};
 
 const rotationCheck = (column: SQLiteColumn): SQL =>
   sql`${column} is null or (${column} between 0 and 345 and ${column} % 15 = 0)`;
@@ -47,11 +54,11 @@ type Placed = {
 const placementChecks = (name: string, t: Placed) => {
   const six = [t.x, t.y, t.width, t.height, t.shape, t.rotation];
   return [
-    check(`${name}_seats_ck`, between(t.seats, 0, 999)),
-    check(`${name}_x_ck`, between(t.x, 0, 999)),
-    check(`${name}_y_ck`, between(t.y, 0, 999)),
-    check(`${name}_width_ck`, between(t.width, 1, 99)),
-    check(`${name}_height_ck`, between(t.height, 1, 99)),
+    check(`${name}_seats_ck`, rangeCheck(t.seats, 0, 999)),
+    check(`${name}_x_ck`, rangeCheck(t.x, 0, 999)),
+    check(`${name}_y_ck`, rangeCheck(t.y, 0, 999)),
+    check(`${name}_width_ck`, rangeCheck(t.width, 1, 99)),
+    check(`${name}_height_ck`, rangeCheck(t.height, 1, 99)),
     check(`${name}_rotation_ck`, rotationCheck(t.rotation)),
     check(`${name}_shape_ck`, enumCheck(t.shape)),
     check(
@@ -267,8 +274,8 @@ export const floorTodayJoinTables = table(
       foreignColumns: [diningTables.id],
       name: "floor_today_join_tables_table_fk",
     }),
-    check("floor_today_join_tables_before_x_ck", between(t.beforeX, 0, 999)),
-    check("floor_today_join_tables_before_y_ck", between(t.beforeY, 0, 999)),
+    check("floor_today_join_tables_before_x_ck", rangeCheck(t.beforeX, 0, 999)),
+    check("floor_today_join_tables_before_y_ck", rangeCheck(t.beforeY, 0, 999)),
     check("floor_today_join_tables_before_rotation_ck", rotationCheck(t.beforeRotation)),
   ],
 );

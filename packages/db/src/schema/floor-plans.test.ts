@@ -1,5 +1,6 @@
 import { eq } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
+import { SQLiteSyncDialect } from "drizzle-orm/sqlite-core";
 import type { Transaction } from "../client.js";
 import { checkFailed, refusalOn } from "../constraint-target.js";
 import { CORE_MIGRATIONS } from "../migrations.js";
@@ -18,6 +19,7 @@ import {
   floorTodayJoins,
   floorTodayTables,
   floorTodayZones,
+  rangeCheck,
 } from "./floor-plans.js";
 import { floorZones } from "./floor-zones.js";
 import { parties } from "./parties.js";
@@ -427,5 +429,24 @@ describe("floor plan tables", () => {
       tx.select().from(floorTodayZones).where(eq(floorTodayZones.zoneId, zone)),
     );
     expect(row!.generation).toBe(0);
+  });
+});
+
+describe("rangeCheck", () => {
+  const render = (fragment: ReturnType<typeof rangeCheck>) =>
+    new SQLiteSyncDialect().sqlToQuery(fragment).sql;
+
+  it("writes whole-number bounds into the check as they are", () => {
+    expect(render(rangeCheck(floorPlanTables.x, 0, 999))).toBe(
+      '"floor_plan_tables"."x" is null or "floor_plan_tables"."x" between 0 and 999',
+    );
+  });
+
+  it("refuses a bound that is not a whole number, since it is pasted into the SQL", () => {
+    expect(() => rangeCheck(floorPlanTables.x, 0.5, 999)).toThrow(/whole/);
+    expect(() => rangeCheck(floorPlanTables.x, 0, Number.NaN)).toThrow(/whole/);
+    expect(() => rangeCheck(floorPlanTables.x, 0, "1) or (1" as unknown as number)).toThrow(
+      /whole/,
+    );
   });
 });
