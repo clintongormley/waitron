@@ -117,14 +117,8 @@ describe("combinedStatus", () => {
 });
 
 describe("words", () => {
-  const words = (over: Partial<TableState>): string => {
-    const one = table(over);
-    return statusWords(one, standInStatus(one));
-  };
-  const pin = (over: Partial<TableState>): string => {
-    const one = table(over);
-    return pinText(one, standInStatus(one));
-  };
+  const words = (over: Partial<TableState>): string => statusWords(table(over));
+  const pin = (over: Partial<TableState>): string => pinText(table(over));
 
   it("says the status in words", () => {
     expect(words({})).toBe("Free");
@@ -154,13 +148,20 @@ describe("words", () => {
     const party = table({ id: "c", ...seated, readyToServe: 2, pendingToServe: 5 });
     const sameParty = table({ id: "d", ...seated, readyToServe: 2, pendingToServe: 5 });
     const members = [free, booked];
-    expect(statusWords(members, combinedStatus(members.map(standInStatus)))).toBe("Reserved 21:00");
+    expect(statusWords(members)).toBe("Reserved 21:00");
     const merged = [free, party, sameParty];
-    const status = combinedStatus(merged.map(standInStatus));
-    expect(statusWords(merged, status)).toBe("Seated, 2 ready");
-    expect(pinText(merged, status)).toBe("2 ready");
-    const noDot = [free, table({ id: "e", ...seated, pendingToServe: 5 })];
-    expect(pinText(noDot, combinedStatus(noDot.map(standInStatus)))).toBe("5 to serve");
+    expect(statusWords(merged)).toBe("Seated, 2 ready");
+    expect(pinText(merged)).toBe("2 ready");
+    expect(pinText([free, table({ id: "e", ...seated, pendingToServe: 5 })])).toBe("5 to serve");
+  });
+
+  it("reads a merge's to-serve count from its seated member with the most, in either order", () => {
+    const delivery = table({ id: "a", state: "delivery-pending", pendingToServe: 0 });
+    const party = table({ id: "b", ...seated, pendingToServe: 3 });
+    const other = table({ id: "c", ...seated, pendingToServe: 2 });
+    expect(pinText([delivery, party])).toBe("3 to serve");
+    expect(pinText([party, delivery])).toBe("3 to serve");
+    expect(pinText([other, party, delivery])).toBe("3 to serve");
   });
 });
 
@@ -223,6 +224,16 @@ describe("zones and their tables", () => {
     const t6 = table({ id: "t6", state: "delivery-pending", today: today({ placement: null }) });
     const t7 = table({ id: "t7" });
     expect(listedTables([t1, t2, t3, t4, t5, t6, t7])).toEqual([t1, t4, t5, t6, t7]);
+  });
+
+  it("lists a taken-off table that needs clearing, and does not draw it", () => {
+    const off = table({
+      id: "t8",
+      condition: "needs_clearing",
+      today: today({ placement: null, takenOff: true }),
+    });
+    expect(listedTables([off])).toEqual([off]);
+    expect(mapTables([off])).toEqual([]);
   });
 
   it("reads a table's seats for today, a merge's for the merge, and the old capacity without a plan", () => {

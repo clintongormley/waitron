@@ -39,19 +39,25 @@ export function combinedStatus(statuses: readonly StandInStatus[]): StandInStatu
 }
 
 /**
- * The member that gave the merge its fill, and the one that gave its dot. The server repeats a
- * party's counts on every table it sits at (`packages/shared/src/table-signals.ts`), so a count is
- * read from one member, never summed. `status` is the members' `combinedStatus`.
+ * A merge's words read each count from one member, never a sum: the server repeats a party's
+ * signals on every table it sits at (`packages/shared/src/table-signals.ts`) and its counts too,
+ * because the `tab` subquery of the floor read groups by `pt.table_id`
+ * (`apps/server/src/working-order.ts`).
  */
-function sources(
-  tables: TableState | readonly TableState[],
-  status: StandInStatus,
-): { fillFrom: TableState; dotFrom: TableState | undefined } {
+interface Sources {
+  members: readonly TableState[];
+  status: StandInStatus;
+  fillFrom: TableState;
+  dotFrom: TableState | undefined;
+}
+
+function sources(tables: TableState | readonly TableState[]): Sources {
   const members: readonly TableState[] = Array.isArray(tables) ? tables : [tables as TableState];
+  const status = combinedStatus(members.map(standInStatus));
   const fillFrom = members.find((member) => fillOf(member) === status.fill)!;
   const dotFrom =
     status.dot === null ? undefined : members.find((member) => dotOf(member) === status.dot);
-  return { fillFrom, dotFrom };
+  return { members, status, fillFrom, dotFrom };
 }
 
 function fillWords(table: TableState, fill: FloorMapFill): string {
@@ -74,21 +80,21 @@ function dotWords(table: TableState, dot: FloorMapDot): string {
 }
 
 /** The fill's words, then the dot's: "Seated, 2 ready". Pass a merge's members together. */
-export function statusWords(
-  tables: TableState | readonly TableState[],
-  status: StandInStatus,
-): string {
-  const { fillFrom, dotFrom } = sources(tables, status);
+export function statusWords(tables: TableState | readonly TableState[]): string {
+  const { status, fillFrom, dotFrom } = sources(tables);
   const fill = fillWords(fillFrom, status.fill);
   return dotFrom === undefined ? fill : `${fill}, ${dotWords(dotFrom, status.dot!)}`;
 }
 
 /** The status pin's shortest word. Pass a merge's members together. */
-export function pinText(tables: TableState | readonly TableState[], status: StandInStatus): string {
-  const { fillFrom, dotFrom } = sources(tables, status);
+export function pinText(tables: TableState | readonly TableState[]): string {
+  const { members, status, fillFrom, dotFrom } = sources(tables);
   if (dotFrom !== undefined) return dotWords(dotFrom, status.dot!);
-  if (status.fill === "seated" && fillFrom.pendingToServe > 0) {
-    return `${fillFrom.pendingToServe} ${t("floor.to_serve")}`;
+  if (status.fill === "seated") {
+    const toServe = Math.max(
+      ...members.filter((member) => fillOf(member) === "seated").map((m) => m.pendingToServe),
+    );
+    if (toServe > 0) return `${toServe} ${t("floor.to_serve")}`;
   }
   return fillWords(fillFrom, status.fill);
 }
@@ -120,7 +126,7 @@ export function mapTables(zoneTables: readonly TableState[]): FloorMapTable[] {
       fill: status.fill,
       dot: status.dot,
       joinId: today.joinId,
-      description: statusWords(members, status),
+      description: statusWords(members),
     });
   }
   return mapped;
