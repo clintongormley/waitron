@@ -1830,9 +1830,7 @@ for each provider call path.
 Preparation stations' Save editors follow the rule too (A331 batch 4d; A366 slice 4 for the
 station and routing cell editors): Add station, the station editor, the routing cell editor,
 watcher Rename/follows/zones/pass/printers, and Settings fallback/timing. An unchanged Settings
-fallback opens no confirmation; an edited fallback keeps its two presses. Routing Confirm and station service operations remain actions;
-[the inventory](../superpowers/plans/2026-10-07-a331-save-follows-changes.md#batch-4d--prep-stations-lane-e-a331-4d)
-names their handlers.
+fallback opens no confirmation; an edited fallback keeps its two presses. Routing Confirm and station service operations remain actions.
 
 The setup audit (A331 batch 6, 2026-10-08) found no stored-setting editor to adopt this gate.
 Admin, venue and certificate Next buttons continue the wizard; Connect adopts a primary with
@@ -3145,7 +3143,7 @@ preparation — as an extra, follows its dish"). It opens the routing cell edito
 (`routing-cell-editor.ts`): "Any other time" holds the cell's own station, and "+ Different station
 during some periods" adds a line of periods with a station. A zone column offers only its
 department's periods, and none when the zone has no department; a line offers only periods whose
-menus include the row's products, or one the cell already stores. An inherited cell opens holding
+menus include the row's products, or one the cell already stores with that line's station. An inherited cell opens holding
 what it inherits, with Save ready so it can be pinned, and names the inherited periods it did not
 copy. The default cell (All categories × Every zone) takes no period lines. A choice that moves
 products opens a preview listing each one with its old and new destination ("… during Lunch" for a

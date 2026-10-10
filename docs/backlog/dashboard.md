@@ -500,7 +500,7 @@ Still to do, roughly in the order a venue meets them. As each one lands, add the
    hangs over it: the existing zero-rate class is shown as **No tax (0%)**, and asesor Q20 asks
    whether any intended case legally needs N1 or N2 instead — to be answered before the first live
    filing (the #345 entry below).
-3. **Printing** — `printers-screen.ts` with its agent tabs, Prep stations' station editor, New
+3. **Printing** — `printers-screen.ts` with its agent tabs, Prep stations' station editor, Add
    station dialog and Watchers, and department/zone Receipt cells. A261 step 8 retired Printing rules; review the surviving
    screens against the rules before changing them.
 4. **Payments** — `payments-screen.ts` and the provider panels in `packages/payments-stripe` and
@@ -776,6 +776,8 @@ request per batch: [plan](../superpowers/plans/2026-10-07-a331-save-follows-chan
   The review left detached `readOnly` changes and a retained table's scroll/sort unverified;
   no defect was reproduced for either. Before changing screen caching, exercise those transitions.
   The validation-message finding was reproduced and fixed before landing.
+  (2026-10-10: A366 slice 4 Part A replaced the station's Rename, its printer choices and
+  Settings' rest-of-order choice with the station editor.)
 - **Batch 4c — LANDED in #1418 (A331-4c, 2026-10-08).** The local holiday Add and Edit and the watcher form
   (New and Edit) in `packages/venue-service`, and the till's profile dialog, whose Switch now waits
   until another profile is chosen — this closes the profile-dialog point left open by batch 5. A

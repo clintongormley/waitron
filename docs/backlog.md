@@ -1516,6 +1516,31 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   no active zone serves** (`folderMadeAt`, `apps/dashboard/src/widgets/folder-made-at.ts`). Left
   open by A366 slice 4 Part A.
 
+- **The period delete warning orders its rows on the server** (`routingRowPlaces`,
+  `packages/venue-service/src/menu-timetable.ts`) **with a copy of the Routing tab's row order**
+  (`visibleRoutingRows`); a change to one can leave the other behind. Move the order into
+  `packages/venue-service/src/routing.ts` and use it from both. Left open by A366 slice 4 Part A.
+
+- **Routing reads do work only one screen uses** — left open by A366 slice 4 Part A's review:
+  every read of the routing model works out each period's products (`readRoutingPeriods`,
+  `packages/venue-service/src/routing-periods.ts`), which only the routing cell editor needs, so the
+  catalogue's folder read pays for it too; and the Opening hours model reads every period's routing
+  uses (`readRoutingUses`, `packages/venue-service/src/menu-timetable.ts`), re-read on any product
+  or category change, for the period delete warning alone. Work each out only where it is used.
+
+- **`wt-tabs` measures its layout on every scroll event** (`packages/ui/src/components/wt-tabs.ts`,
+  the fade added by A366 slice 4 Part A): two computed-style reads and two bounding boxes per
+  event. Batch it to one run per animation frame and work out the fade width only on resize or a
+  change of tabs.
+
+- **`PUT /management-api/stations/:sid/printers` (`apps/server/src/print-api.ts`) has no dashboard caller** since A366 slice 4 Part A
+  moved a station's printers into the station save; `parseStationPrinterIds`
+  (`apps/server/src/management-api.ts`) repeats its checks. Decide whether to remove the route.
+
+- **The Settings fallback's native Escape test does not always catch a missing `preventDefault`**:
+  with the call deleted it failed 5 runs out of 6 (2026-10-10, `docs/developers/testing-guide.md`).
+  Make it fail every time.
+
 - **Prep stations' Settings cell saves have the shape A261-4 changed for routing cells** — left open
   by A261-4 (#1363). `#saveSettingsCell`
   (`packages/venue-service/src/dashboard/prep-stations-screen.ts`) marks the change saved and
@@ -5046,7 +5071,7 @@ _Formerly the "Later and parked" paragraph under What's built._
 generic CSV menu import · accounting export (SP17) · opening hours and channel sync (SP19) · tip
 payroll (SP13) · online ordering (SP15) · per-seat ordering and multiple tabs per table (each reopens a
 settled decision — specced with the owner, never landed unattended) · KDS ops polish (routing
-read-back and audit view, station kind, definable kitchen statuses) · recipes depth (nested
+audit view, station kind, definable kitchen statuses) · recipes depth (nested
 sub-recipes, plate costing, stock depletion, variants, customer-facing browse) · inventory and
 procurement (SP20; the AI forecast waits for the deterministic system) ·
 **Bizum** (research in
