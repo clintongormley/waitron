@@ -275,7 +275,7 @@ and today's state.
 
 ```ts
 export const floorPlanShape = enumType(["rect", "round"]);
-// The master plan — edited by the dashboard only; nothing live reads it.
+// The master plan — edited by the dashboard only.
 export const floorPlans;          // floor_plans: id, zone_id (unique, FK floor_zones), revision count not null default 0, saved_at ts not null
 export const floorPlanTables;     // floor_plan_tables: id, plan_id (FK), label not null, seats count (nullable), fixed flag not null default false, x, y, width, height, shape, rotation (nullable; all null = a spare); unique (plan_id, label)
 export const floorPlanJoins;      // floor_plan_joins: id, plan_id (FK), seats count not null
@@ -626,7 +626,7 @@ without the table.
 ```ts
 // packages/module/src/module.ts
 export interface TableRemoval {
-  /** The refusal for each of `tableIds` this module still needs; a table it lets go of has no entry. */
+  /** The refusal for each of `tableIds` this module still needs; a table it lets go of has no entry. A throw is not a refusal: it fails the caller, the till's floor read included. */
   refuse(tx: Transaction, cfg: { locationId: LocationId }, tableIds: readonly string[], now: Date): Promise<ReadonlyMap<string, AppError>>;
   /** Lets go of every row naming the table, keeping `label` as text where history needs it. */
   release(tx: Transaction, cfg: { locationId: LocationId }, tableId: string, label: string): Promise<void>;
@@ -723,7 +723,8 @@ apply it in this order:
    its members), its today's row is deleted, and `active` is set false, so every existing reader
    that skips an inactive table skips it (`openTab`, `working-order.ts:1201`; `readTargetTable`,
    `move-bill.ts:225`; the floor read, `:7027`; `listTables`) until slice 5;
-3. every `apply` whose label changes, to the row's own id (first pass);
+3. every `apply` whose label changes, to a spare name from `spareLabels` (the id, numbered until no
+   current or final name in the location holds it) (first pass; amended 2026-10-10);
 4. `create`: a `dining_tables` row (`location_id` = `cfg.locationId`, `zone_id`, label,
    `plan_table_id` = the target's `planTableId`, so a new table links to its master by id, not by
    name, `planned` true) and its today's row (amended 2026-10-10, as built in slice 1);
@@ -795,13 +796,14 @@ export async function removeLiveTable(tx: Transaction, cfg: Pick<TillConfig, "lo
 
 `tablesTied` (amended 2026-10-10: one call answers for every candidate table): a `party_tables` row of an OPEN party names the table (held, or left earlier while
 the party is still open); or an order names it in `delivery_table_id` and either its `status` is
-`open` or `placed`, or the floor's pending-delivery test holds — the conditions at
-`working-order.ts:7015-7023` exactly (not abandoned, `collected_at` null, and a ticket item with
+`open` or `placed`, or the floor's pending-delivery test holds — the floor's own condition,
+`foodOnItsWay` (`apps/server/src/delivery-release.ts`), which both queries read (not abandoned, `collected_at` null, and a ticket item with
 `made_here = 0`).
 
 (amended 2026-10-10, as built in slice 1) `removeLiveTable` first asks every module's `refuse`; if
 any refuses (bookings: an upcoming booking), it changes nothing and answers `false`. `catchUpZone`
-asks the same before planning, and treats a refused table as held: it waits whole, on today's plan
+asks the same before planning, and treats a refused table as it treats a held one, except that it
+never seeds it (the planner's `refused` flag): it waits whole, on today's plan
 with its reset row pending, until the refusal clears.
 
 `removeLiveTable`: each removal's `release`; `releaseDeliveries(tx, id, label)`; delete its
@@ -879,7 +881,8 @@ plan reads `revision: 0, savedAt: null` and only those (decision 16).
 `checkZonePlanSave`, in order: zone exists (`zone.not_found`); `input.revision` equals the stored
 revision (else `floor_plan.out_of_date`); each entry, naming the field as `tables.<index>.<name>`
 or `joins.<index>.<name>` (`floor_plan.invalid`): label trimmed and non-empty, seats null or a whole
-number 0–999, placement ranges as Task 1.1's checks, not both `id` and `liveTableId`, a join has
+number 0–999, placement ranges as Task 1.1's checks, not both `id` and `liveTableId` (unless the `liveTableId` is that master table's own live table, as
+`readZonePlan` sends it; amended 2026-10-10), a join has
 two or more distinct keys all in `tables` and seats ≥ 1; an `id` that is not a master table of
 this zone, or a `liveTableId` that is not an adoptable live table of this zone, is
 `table.not_found`; a duplicate label within the input, one used by a master table of another zone,
@@ -904,7 +907,7 @@ it.each([
   ["tables.0.id", { id: "<a master id>", liveTableId: "<a live id>" }],
 ])("refuses %s", async (field, patch) => { /* floor_plan.invalid {field} */ });
 it("refuses a join of one table", async () => { /* joins.0.tableKeys */ });
-it("refuses deleting a table a module still needs", async () => { /* a fake TableRemoval whose refuse throws table.booked */ });
+it("refuses deleting a table a module still needs", async () => { /* a fake TableRemoval whose refuse answers table.booked for the table */ });
 it("accepts deleting a table a party sits at", async () => { /* seat at T1; a save without T1 passes the checks */ });
 ```
 
@@ -1087,7 +1090,7 @@ today: {
   takenOff: boolean;
   joinId: string | null;
   joinSeats: number | null;
-} | null; // null: the table has no today's row (its zone has no master plan yet)
+} | null; // null: the table has no today's row
 ```
 
 `listTablesWithState` reads today's rows and merges; it never writes (Task 1.12's route runs

@@ -70,7 +70,10 @@ export interface FloorAnnotator {
 
 /** A module's part in removing a live table. */
 export interface TableRemoval {
-  /** The refusal for each of `tableIds` this module still needs; a table it lets go of has no entry. */
+  /**
+   * The refusal for each of `tableIds` this module still needs; a table it lets go of has no entry.
+   * A throw is not a refusal: it fails the caller, the till's floor read included.
+   */
   refuse(
     tx: Transaction,
     cfg: { locationId: LocationId },
