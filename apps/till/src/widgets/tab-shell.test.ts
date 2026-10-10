@@ -876,22 +876,33 @@ describe("till-tab-shell above phone width", () => {
     },
   );
 
-  // At 800 the `full` bar keeps Find a bill in English and nothing in Spanish, so there the
-  // Spanish case holds only the leaving order.
-  for (const [width, locale, onBar] of [
-    [1024, "en-GB", [".find-bill", ".station", ".expo"]],
-    [1024, "es-ES", [".find-bill", ".station", ".expo"]],
-    [800, "en-GB", [".find-bill"]],
-    [800, "es-ES", []],
+  /** The demo counter's bar, as the owner saw it in A395's screenshots. */
+  const demoCounter: Partial<TillTabShell> = {
+    tabs,
+    activeTabKey: "counter",
+    operatorName: "Ana",
+    affordances: ["find-bill", "station", "expo", "schedule"],
+    transferAvailable: true,
+    transferCount: 1,
+    loadLocales: full.loadLocales!,
+  };
+
+  for (const [fixture, shell, width, locale] of [
+    ["full", full, 1024, "en-GB"],
+    ["full", full, 1024, "es-ES"],
+    ["the demo counter", demoCounter, 1024, "en-GB"],
+    ["the demo counter", demoCounter, 1024, "es-ES"],
+    ["the demo counter", demoCounter, 800, "en-GB"],
+    ["the demo counter", demoCounter, 800, "es-ES"],
   ] as const) {
-    it(`moves the transfers into More before Find a bill, Kitchen and Pass, at ${width} wide in ${locale}`, async () => {
+    it(`moves the transfers into More before Find a bill, Kitchen and Pass, with ${fixture} at ${width} wide in ${locale}`, async () => {
       await withLocale(locale, () =>
         atViewport(width, async () => {
-          const { el } = await mountWidget<TillTabShell>("till-tab-shell", full);
+          const { el } = await mountWidget<TillTabShell>("till-tab-shell", shell);
           await settle(el);
           const menu = menuOf(el);
           expect(menu).not.toBeNull();
-          for (const selector of onBar) {
+          for (const selector of [".find-bill", ".station", ".expo"]) {
             const found = [...el.shadowRoot!.querySelectorAll<HTMLElement>(`header ${selector}`)];
             expect(found, selector).toHaveLength(1);
             expect(menu!.contains(found[0]!), selector).toBe(false);
@@ -901,8 +912,11 @@ describe("till-tab-shell above phone width", () => {
             expect(r.right, selector).toBeLessThanOrEqual(window.innerWidth);
           }
           expect(menu!.querySelector("[data-open-transfers]")).not.toBeNull();
+          const present = leaveOrder
+            .filter(([, selector]) => el.shadowRoot!.querySelector(`header ${selector}`) !== null)
+            .map(([k]) => k);
           const now = inMore(el);
-          expect(now).toEqual(leaveOrder.slice(0, now.length).map(([k]) => k));
+          expect(now).toEqual(present.slice(0, now.length));
           expectOneRow(el);
         }),
       );
