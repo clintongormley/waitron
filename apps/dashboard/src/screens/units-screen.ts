@@ -27,6 +27,7 @@ type UnitError = { code?: string; params?: { products?: ProductUsingUnit[] } };
 /** The reassign target that means "no unit" (Each). Distinct from a uuid and from the placeholder
  * "", so the disabled guard treats it as a real choice; `#changeUnit` maps it to a null target. */
 const REASSIGN_EACH = "__each__";
+const productKey = (product: ProductUsingUnit) => product.id;
 
 const decimalMarkers = new Map<string, string>();
 function decimalMarker(locale: string): string {
@@ -392,7 +393,18 @@ export class UnitsScreen extends LitElement {
     );
   }
 
+  #productColumnsMemo?: { locale: string; columns: DataTableColumn<ProductUsingUnit>[] };
+
+  /** The same array while the language is unchanged, so a typed search does not make the table
+   * fold every row again. */
   #productColumns(): DataTableColumn<ProductUsingUnit>[] {
+    const locale = currentLocale();
+    if (this.#productColumnsMemo?.locale !== locale)
+      this.#productColumnsMemo = { locale, columns: this.#buildProductColumns() };
+    return this.#productColumnsMemo.columns;
+  }
+
+  #buildProductColumns(): DataTableColumn<ProductUsingUnit>[] {
     return [
       {
         key: "name",
@@ -682,7 +694,7 @@ export class UnitsScreen extends LitElement {
                   .rows=${this.inUseProducts}
                   .searchTerm=${this.inUseSearch}
                   .columns=${this.#productColumns()}
-                  .rowKey=${(product: ProductUsingUnit) => product.id}
+                  .rowKey=${productKey}
                   .selectable=${this.selectingProducts && !this.busy}
                   .selected=${this.selectedProducts}
                   .selectionLabel=${(product: ProductUsingUnit) =>

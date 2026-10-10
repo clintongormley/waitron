@@ -638,6 +638,34 @@ describe("units-screen", () => {
     expect(drawn()).toEqual(["p-pink", "p-ginger", "p-gt"]);
   });
 
+  it("keeps the modal table's columns through a typed search, and draws new ones when the language changes", async () => {
+    setLocale("es-ES");
+    const el = await mount(inUseApi());
+    const dialog = await openInUseModal(el);
+    const productTable = dialog.querySelector("wt-data-table")!;
+    await productTable.updateComplete;
+    const columns = productTable.columns;
+    const rowKey = productTable.rowKey;
+    dialog
+      .querySelector("[data-test=in-use-search]")!
+      .dispatchEvent(
+        new CustomEvent("wt-change", { detail: { value: "caf" }, bubbles: true, composed: true }),
+      );
+    await el.updateComplete;
+    await productTable.updateComplete;
+    expect(productTable.columns).toBe(columns);
+    expect(productTable.rowKey).toBe(rowKey);
+    setLocale("en-GB");
+    el.requestUpdate();
+    await el.updateComplete;
+    await productTable.updateComplete;
+    expect(productTable.columns).not.toBe(columns);
+    expect(
+      productTable.shadowRoot!.querySelector('[data-sort="status"]')!.textContent!.trim(),
+    ).toBe(t("units.status"));
+    expect(t("units.status")).not.toBe("Estado");
+  });
+
   it("says the dashboard's one no-matches sentence when the modal's search hides every product", async () => {
     const el = await mount(inUseApi());
     const dialog = await openInUseModal(el);

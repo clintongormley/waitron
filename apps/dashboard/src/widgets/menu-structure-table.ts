@@ -38,7 +38,7 @@ import {
 } from "@waitron/catalogue/src/include-folder-presentation.js";
 import type { Presentation } from "@waitron/catalogue/src/section-types.js";
 import type { CategorySummary, MenuStructureNode, Product } from "../api/client.js";
-import { t } from "../i18n/t.js";
+import { currentLocale, t } from "../i18n/t.js";
 import { leftToBrowser } from "../navigation.js";
 
 /** A section node's own customer-facing presentation, before any include's folder applies. */
@@ -93,6 +93,9 @@ interface Row {
   /** Inside an included menu, which is edited only from its own page. */
   readOnly: boolean;
 }
+
+const rowKey = (row: Row) => row.key;
+const rowParent = (row: Row) => row.parentKey;
 
 export type StructureAddAction = "new-section" | "include-menu" | "add-products";
 
@@ -577,7 +580,11 @@ export class MenuStructureTable extends LitElement {
   #move(row: Row, to: number): void {
     const siblings = this.#siblings(row);
     const memberId = row.node.memberId;
-    this.#order.set(row.list, reorder(siblings, siblings.indexOf(memberId), to));
+    // A new map, so the rows built from the old order are built again.
+    this.#order = new Map(this.#order).set(
+      row.list,
+      reorder(siblings, siblings.indexOf(memberId), to),
+    );
     this.#send("wt-member-move", { path: row.path.slice(0, -1), memberId, to });
     this.requestUpdate();
   }
@@ -740,7 +747,28 @@ export class MenuStructureTable extends LitElement {
       ?.focus();
   }
 
+  #rowsMemo?: { inputs: readonly unknown[]; rows: Row[] };
+
+  /** The same array while what the rows are built from is unchanged, so a typed search does not
+   * make the table fold every row again. */
   #rows(): Row[] {
+    const inputs = [
+      currentLocale(),
+      this.nodes,
+      this.menuName,
+      this.#order,
+      this.#productNames,
+      this.#sectionNames,
+    ];
+    if (this.#rowsMemo?.inputs.every((input, index) => input === inputs[index]))
+      return this.#rowsMemo.rows;
+    const rows = this.#buildRows();
+    this.#rowsMemo = { inputs, rows };
+    this.#rowByKey = new Map(rows.map((row) => [row.key, row]));
+    return rows;
+  }
+
+  #buildRows(): Row[] {
     const rows: Row[] = [];
     const walk = (
       nodes: MenuStructureNode[],
@@ -968,7 +996,30 @@ export class MenuStructureTable extends LitElement {
     >`;
   }
 
+  #columnsMemo?: { inputs: readonly unknown[]; columns: DataTableColumn<Row>[] };
+
+  /** The same array while everything a cell reads is unchanged, so a typed search does not make
+   * the table fold every row again. The table redraws its cells only when one of its own
+   * properties changes, so each of those has to be one of the inputs. */
   #columns(): DataTableColumn<Row>[] {
+    const inputs = [
+      currentLocale(),
+      this.busy,
+      this.current,
+      this.defaultColor,
+      this.#productById,
+      this.#productNames,
+      this.#categoryById,
+      this.#sectionNames,
+    ];
+    if (this.#columnsMemo?.inputs.every((input, index) => input === inputs[index]))
+      return this.#columnsMemo.columns;
+    const columns = this.#buildColumns();
+    this.#columnsMemo = { inputs, columns };
+    return columns;
+  }
+
+  #buildColumns(): DataTableColumn<Row>[] {
     return [
       {
         key: "name",
@@ -1026,7 +1077,6 @@ export class MenuStructureTable extends LitElement {
 
   override render() {
     const rows = this.#rows();
-    this.#rowByKey = new Map(rows.map((row) => [row.key, row]));
     const empty = this.nodes.length === 0;
     return html`<wt-data-table
         aria-label=${t("menus.tree_heading")}
@@ -1051,8 +1101,8 @@ export class MenuStructureTable extends LitElement {
           t(expanded ? "menus.collapse" : "menus.expand").replace("{name}", row.name)}
         .rows=${rows}
         .columns=${this.#columns()}
-        .rowKey=${(row: Row) => row.key}
-        .rowParent=${(row: Row) => row.parentKey}
+        .rowKey=${rowKey}
+        .rowParent=${rowParent}
         .selectable=${this.selecting}
         selectAllLabel=${t("menus.select_all")}
         .selected=${this.selected}

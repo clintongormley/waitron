@@ -2947,6 +2947,49 @@ describe("search and the Available filter", () => {
     await settle(el);
   }
 
+  it("keeps its rows and columns through a typed search, and builds them again when the language changes", async () => {
+    const before = currentLocale();
+    onTestFinished(() => setLocale(before));
+    setLocale("en");
+    const el = await mount({ nodes: [...lunchNodes(), wines()] });
+    const held = table(el);
+    const { rows, columns, rowKey, rowParent } = held;
+    const englishName = menuLabel("Wines");
+    expect(nameOf(el, "included-wine")).toBe(englishName);
+    await search(el, "lem");
+    expect(held.rows).toBe(rows);
+    expect(held.columns).toBe(columns);
+    expect(held.rowKey).toBe(rowKey);
+    expect(held.rowParent).toBe(rowParent);
+    await search(el, "");
+    setLocale("es");
+    el.requestUpdate();
+    await settle(el);
+    expect(held.rows).not.toBe(rows);
+    expect(held.columns).not.toBe(columns);
+    expect(menuLabel("Wines")).not.toBe(englishName);
+    expect(nameOf(el, "included-wine")).toBe(menuLabel("Wines"));
+    expect(all(el, "thead th").map((th) => th.textContent!.trim())).toContain(t("members.name"));
+  });
+
+  it("builds its columns again when anything a cell reads changes", async () => {
+    const el = await mount();
+    const changes: [string, () => void][] = [
+      ["busy", () => (el.busy = true)],
+      ["current", () => (el.current = ["m-drinks"])],
+      ["products", () => (el.products = [...products])],
+      ["categories", () => (el.categories = [])],
+      ["defaultColor", () => (el.defaultColor = "#123456")],
+      ["nodes", () => (el.nodes = lunchNodes())],
+    ];
+    for (const [name, change] of changes) {
+      const columns = table(el).columns;
+      change();
+      await settle(el);
+      expect(table(el).columns, name).not.toBe(columns);
+    }
+  });
+
   it("finds a product inside a closed section by its staff name, opening the way to it", async () => {
     const el = await mount();
     expect(shown(el)).toEqual(["m-burger", "m-drinks", "m-fav"]);
