@@ -1169,6 +1169,9 @@ export class TillApp extends LitElement {
   #departmentTransfers?: DepartmentTransferMonitor;
   #transferApi?: TillApi;
   #transferViewRead = 0;
+  /** Each table read takes the next number as it starts; see {@link #applyTables}. */
+  #tablesRead = 0;
+  #tablesApplied = 0;
   #counterRetrievals = new Map<object, string>();
   @state() private transferSnapshot?: TransferSnapshot;
   @state() private transferQueueOpen = false;
@@ -1317,10 +1320,11 @@ export class TillApp extends LitElement {
     const replaced = () =>
       read !== this.#transferViewRead || session !== this.#operatorSession || api !== this.api;
     const limit = limited(TABLE_REQUEST_LIMIT_MS);
+    const tablesRead = ++this.#tablesRead;
     try {
       const tables = await api.getTablesState({ signal: limit.signal });
       if (replaced()) return;
-      this.tables = tables;
+      this.#applyTables(tablesRead, tables);
     } catch {
       if (replaced()) return;
     } finally {
@@ -4931,6 +4935,7 @@ export class TillApp extends LitElement {
    */
   async #loadFloorData(replaced: () => boolean = () => false): Promise<void> {
     const zonesRead = ++this.#floorZonesRead;
+    const tablesRead = ++this.#tablesRead;
     try {
       const [tables, zones, statuses] = await Promise.all([
         this.api.getTablesState(),
@@ -4938,7 +4943,7 @@ export class TillApp extends LitElement {
         this.api.listStatuses(),
       ]);
       if (replaced()) return;
-      this.tables = tables;
+      this.#applyTables(tablesRead, tables);
       if (zonesRead === this.#floorZonesRead) this.zones = zones;
       this.statuses = statuses;
       this.#floorLoaded = true;
@@ -5018,14 +5023,24 @@ export class TillApp extends LitElement {
   }
 
   /** Tables only: a placement write changes neither the zones nor the statuses. A failed read keeps
-   * the last-known floor. */
+   * the last-known floor. Answers whether `this.tables` now holds this read's answer or a newer
+   * one's. */
   async #refreshFloor(): Promise<boolean> {
+    const read = ++this.#tablesRead;
     try {
-      this.tables = await this.api.getTablesState();
-      return true;
+      this.#applyTables(read, await this.api.getTablesState());
     } catch {
-      return false;
+      // The last-known floor stays.
     }
+    return this.#tablesApplied >= read;
+  }
+
+  /** A read's answer replaces the tables unless a read that started after it was applied first, so
+   * a poll answering late never undoes an action's newer read. */
+  #applyTables(read: number, tables: TableState[]): void {
+    if (read <= this.#tablesApplied) return;
+    this.tables = tables;
+    this.#tablesApplied = read;
   }
 
   /** A free table seats a party with the guest count given; a seated one resumes its party
@@ -6978,10 +6993,11 @@ export class TillApp extends LitElement {
   /** Re-reads occupancy without leaving the screen. Unlike {@link #refreshFloor}, a failed read
    * empties the floor. */
   async #reloadTables(): Promise<void> {
+    const read = ++this.#tablesRead;
     try {
-      this.tables = await this.api.getTablesState();
+      this.#applyTables(read, await this.api.getTablesState());
     } catch {
-      this.tables = [];
+      this.#applyTables(read, []);
     }
   }
 

@@ -7,7 +7,7 @@ import type { DraftScope, LeaveCoordinator, LeaveReason, WtDialog } from "@waitr
 import "@waitron/ui/src/components/wt-form-actions.js";
 import "@waitron/ui/src/components/wt-input.js";
 import { isValidGuestCount } from "@waitron/shared";
-import { t } from "../i18n/t.js";
+import { countText, t } from "../i18n/t.js";
 
 export interface SeatConfirmDetail {
   guestCount: number | null;
@@ -36,6 +36,7 @@ export class TillSeatDialog extends LitElement {
   ];
 
   @property() tableLabel = "";
+  @property({ attribute: false }) seats: number | null = null;
 
   @state() private value = "";
   @state() private attempted = false;
@@ -148,7 +149,11 @@ export class TillSeatDialog extends LitElement {
           name="guestCount"
           autocomplete="off"
           .label=${t("seat.guest_count")}
-          .hint=${t("seat.guest_count_hint")}
+          .hint=${
+            this.seats === null
+              ? t("seat.covers")
+              : countText(this.seats, "floor.seats", "floor.seats_one")
+          }
           .value=${live(this.value)}
           .error=${error}
           @wt-change=${(event: CustomEvent<{ value: string }>) => this.#change(event)}

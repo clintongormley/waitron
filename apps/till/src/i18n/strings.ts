@@ -548,7 +548,7 @@ export const en = {
   "signal.bill_requested": "Bill requested",
   "seat.title": "Seat table {table}",
   "seat.guest_count": "Guests",
-  "seat.guest_count_hint": "Optional. Leave it empty if you don't know yet.",
+  "seat.covers": "Covers",
   "seat.guest_count_invalid": "Enter a whole number of guests from 1 to 999, or leave it empty",
   "seat.confirm": "Seat",
   // Table-ordering screen
@@ -1686,7 +1686,7 @@ export const es: Record<StringKey, string> = {
   "signal.bill_requested": "Cuenta pedida",
   "seat.title": "Sentar en la mesa {table}",
   "seat.guest_count": "Comensales",
-  "seat.guest_count_hint": "Opcional. Déjalo vacío si aún no lo sabes.",
+  "seat.covers": "Cubiertos",
   "seat.guest_count_invalid":
     "Escribe un número entero de comensales entre 1 y 999, o déjalo vacío",
   "seat.confirm": "Sentar",

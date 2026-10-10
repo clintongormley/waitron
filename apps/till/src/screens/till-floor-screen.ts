@@ -462,16 +462,24 @@ export class TillFloorScreen extends LitElement {
   /** The clock the last render judged reminders by. */
   #drawnAt = 0;
   #reminderTimer?: ReturnType<typeof setTimeout>;
+  /** The last render drew a planned zone's map, so the screen re-reads the floor. */
+  #drawsPlannedMap = false;
+  #rereadTimer?: ReturnType<typeof setInterval>;
 
   override connectedCallback(): void {
     super.connectedCallback();
-    // The timer stopped while the screen was off the page; a time already past redraws at once.
-    if (this.hasUpdated) this.#watchReminders();
+    // The timers stopped while the screen was off the page; a time already past redraws at once.
+    if (this.hasUpdated) {
+      this.#watchReminders();
+      this.#watchFloor();
+    }
   }
 
   override disconnectedCallback(): void {
     super.disconnectedCallback();
     clearTimeout(this.#reminderTimer);
+    clearInterval(this.#rereadTimer);
+    this.#rereadTimer = undefined;
   }
 
   override willUpdate(): void {
@@ -483,6 +491,17 @@ export class TillFloorScreen extends LitElement {
 
   override updated(): void {
     this.#watchReminders();
+    this.#watchFloor();
+  }
+
+  /** A planned map shows statuses other tills change, so it asks for the floor every 15 s. */
+  #watchFloor(): void {
+    if (!this.#drawsPlannedMap) {
+      clearInterval(this.#rereadTimer);
+      this.#rereadTimer = undefined;
+      return;
+    }
+    this.#rereadTimer ??= setInterval(() => this.#requestFloorRefresh(), 15_000);
   }
 
   #fireDue(table: TableState): boolean {
@@ -688,6 +707,7 @@ export class TillFloorScreen extends LitElement {
       : visible.filter((table) => table.posX == null);
     const drawn = planned ? onMap.length : placed.length;
     const view: "map" | "list" = this.viewOverride ?? (drawn > 0 ? "map" : "list");
+    this.#drawsPlannedMap = planned && view === "map";
     return html`
       <section class="screen" aria-label=${t("floor.title")}>
         ${
@@ -884,6 +904,7 @@ export class TillFloorScreen extends LitElement {
     if (table === null) return nothing;
     return html`<till-seat-dialog
       .tableLabel=${table.label}
+      .seats=${seatsFor(table)}
       @seat-confirm=${(event: Event) => this.#onSeatConfirm(event, table)}
       @seat-cancel=${(event: Event) => {
         event.stopPropagation();

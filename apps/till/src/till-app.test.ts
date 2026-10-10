@@ -731,6 +731,16 @@ afterEach(() => {
   history.replaceState(null, "", initialUrl);
 });
 
+/** A promise the test answers when it chooses. */
+function deferredTables(): {
+  promise: Promise<TableState[]>;
+  resolve: (value: TableState[]) => void;
+} {
+  let resolve!: (value: TableState[]) => void;
+  const promise = new Promise<TableState[]>((done) => (resolve = done));
+  return { promise, resolve };
+}
+
 describe("till-app", () => {
   it("asks before counter Pay, saves a chosen station, then takes payment", async () => {
     const order: string[] = [];
@@ -6524,6 +6534,54 @@ describe("till-app", () => {
 
       expect(floor(el)).not.toBeNull();
       expect(floor(el)!.tables).toEqual([freeTable]);
+    });
+
+    async function twoDeferredRefreshes() {
+      const answerA = deferredTables();
+      const answerB = deferredTables();
+      const { el } = await mountApp({
+        getTablesState: vi
+          .fn()
+          .mockResolvedValueOnce([freeTable])
+          .mockReturnValueOnce(answerA.promise)
+          .mockReturnValueOnce(answerB.promise),
+        listZones: vi.fn().mockResolvedValue([floorZone]),
+      });
+      await toCounter(el);
+      selectTab(el, "floor");
+      await flush(el);
+      emit(floor(el)!, "floor-refresh");
+      emit(floor(el)!, "floor-refresh");
+      await flush(el);
+      return { el, answerA, answerB };
+    }
+
+    const tableA: TableState = { ...freeTable, id: "tA", label: "A" };
+    const tableB: TableState = { ...freeTable, id: "tB", label: "B" };
+
+    it("an older poll that answers after the action's refresh began does not replace it", async () => {
+      const { el, answerA, answerB } = await twoDeferredRefreshes();
+
+      answerB.resolve([tableB]);
+      await flush(el);
+      answerA.resolve([tableA]);
+      await flush(el);
+
+      expect(floor(el)!.tables).toEqual([tableB]);
+    });
+
+    // Passes on a rule that applies every answer too; it fails a rule that drops an answer once a
+    // newer read has started.
+    it("an action's refresh is applied when an older poll answers first", async () => {
+      const { el, answerA, answerB } = await twoDeferredRefreshes();
+
+      answerA.resolve([tableA]);
+      await flush(el);
+      expect(floor(el)!.tables).toEqual([tableA]);
+      answerB.resolve([tableB]);
+      await flush(el);
+
+      expect(floor(el)!.tables).toEqual([tableB]);
     });
 
     it("open-table on a FREE table opens a fresh tab and moves to the table-ordering screen", async () => {
