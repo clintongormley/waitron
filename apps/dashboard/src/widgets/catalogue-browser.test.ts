@@ -228,7 +228,10 @@ async function unroutedMarker(el: CatalogueBrowser, key: string) {
   expect(row).not.toBeNull();
   return row!.querySelector('[data-test="unrouted-folder"]');
 }
-const routingWith = (overrides: Partial<RoutingModel> = {}): RoutingModel => ({
+type RoutingFixture = Omit<RoutingModel, "stationTimes"> & {
+  stationTimes: (RoutingModel["stationTimes"][number] & { fallbackStationId?: string | null })[];
+};
+const routingWith = (overrides: Partial<RoutingFixture> = {}): RoutingModel => ({
   stationTimes: [],
   periods: [],
   todayEnds: null,
