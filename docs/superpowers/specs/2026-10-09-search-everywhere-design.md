@@ -124,7 +124,9 @@ Each moves to the matcher, with match order:
 - the dashboard's navigation search (`dashboard-app.ts`): each page is searched on two parts, its
   label and its group's heading, so "menu prices" finds Prices under a Menu heading and a group
   whose heading matches still shows its whole group; groups keep their place in the navigation,
-  and the pages inside a group are listed in match order, those matching on their own label first.
+  and the pages inside a group are listed in match order, those matching on their own label first;
+  the pages matching only with the heading leave out the length tie-break, so pages tied on the
+  heading alone keep nav order.
 
 ### Image library (`packages/media`)
 

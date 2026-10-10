@@ -1,8 +1,8 @@
 import { foldForSearch, searchFor, textSearch } from "@waitron/shared";
 
 /** A group's pages for a nav search: those whose own label matches, closest first, then those that
- * match only with the group's heading, closest first and in nav order where equally close. A blank
- * search keeps every page. */
+ * match only with the group's heading, by match kind, part and position (not length), then in nav
+ * order. A blank search keeps every page. */
 export function navMatches<Page extends { label: string }>(
   query: string,
   pages: readonly Page[],
@@ -19,7 +19,7 @@ export function navMatches<Page extends { label: string }>(
       const rank = found.has(page) ? undefined : search.rank([label, foldedHeading]);
       return rank === undefined ? [] : [{ page, rank }];
     })
-    // Not by length, as compareSearchRanks would: a shorter label is no closer a match.
+    // Length is left out so pages tied on the heading alone keep nav order.
     .sort(
       (left, right) =>
         left.rank.kind - right.rank.kind ||

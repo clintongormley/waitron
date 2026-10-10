@@ -35,7 +35,7 @@ export interface DataTableColumn<Row> {
   group?: string;
   cell: (row: Row, context: { ancestorOnly: boolean }) => unknown;
   sortValue?: (row: Row) => string | number | null | undefined;
-  /** Read again only when `rows` or `columns` change. */
+  /** Read again only when `rows`, `columns` or the column order change. */
   searchValue?: (row: Row) => string;
   filter?: {
     label: string;

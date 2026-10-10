@@ -999,8 +999,7 @@ export class MenuStructureTable extends LitElement {
   #columnsMemo?: { inputs: readonly unknown[]; columns: DataTableColumn<Row>[] };
 
   /** The same array while everything a cell reads is unchanged, so a typed search does not make
-   * the table fold every row again. The table redraws its cells only when one of its own
-   * properties changes, so each of those has to be one of the inputs. */
+   * the table fold every row again. */
   #columns(): DataTableColumn<Row>[] {
     const inputs = [
       currentLocale(),

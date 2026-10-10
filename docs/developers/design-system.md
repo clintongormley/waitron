@@ -2449,8 +2449,8 @@ While the box holds anything but spaces (a trailing space finishes the last word
 shows only the pages whose label in the current language matches it by the one search rule (see
 Remembered, searchable, filterable tables), so "categorias" finds "Categorías", plus each page that
 matches only with its group's header read beside its label. Within a group the pages whose own label
-matches come first, closest first, then the others, closest first and in nav order where equally
-close. The search narrows the rows the nav would already show, so a page this person may not open never appears,
+matches come first, closest first, then the others by how closely their words match, leaving out label
+length, then in nav order. The search narrows the rows the nav would already show, so a page this person may not open never appears,
 however exactly its name is typed. A group with no match is hidden, header and all. A group with a
 match shows open whatever its collapsed state. While a term is typed each shown header stops being a
 collapse control: it is a plain `<div>` with no `aria-expanded`, no click handler and no chevron (an
