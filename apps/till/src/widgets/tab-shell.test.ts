@@ -1012,18 +1012,22 @@ describe("till-tab-shell above phone width", () => {
   );
 
   it.each([
-    ["en-GB", "Log out"],
-    ["es-ES", "Salir"],
+    ["en-GB", "Log out", "Log out"],
+    ["es-ES", "Salir", "Cerrar sesión"],
   ] as const)(
-    "labels Log out %s's short word, on the bar and inside More",
-    async (locale, label) => {
+    "labels Log out %s's short word, on the bar and inside More, keeping the counter header's full name",
+    async (locale, label, headerName) => {
       await withLocale(locale, async () => {
+        expect(t("action.logout")).toBe(headerName);
         await atViewport(ROOMY_WIDTH, async () => {
           const { el, host } = await mountWidget<TillTabShell>("till-tab-shell", full);
           await settle(el);
           expect(menuOf(el)).toBeNull();
           const onBar = el.shadowRoot!.querySelector<HTMLElement>("header .session > .logout")!;
           expect(onBar.textContent!.trim()).toBe(label);
+          await expect
+            .element(page.getByRole("button", { name: label, exact: true }))
+            .toBeVisible();
           host.remove();
         });
         await atViewport(390, async () => {
@@ -1031,6 +1035,10 @@ describe("till-tab-shell above phone width", () => {
           await settle(el);
           const inMenu = menuOf(el)!.querySelector<HTMLElement>(".logout")!;
           expect(inMenu.textContent!.trim()).toBe(label);
+          await userEvent.click(triggerOf(el));
+          await expect
+            .element(page.getByRole("button", { name: label, exact: true }))
+            .toBeVisible();
         });
       });
     },
