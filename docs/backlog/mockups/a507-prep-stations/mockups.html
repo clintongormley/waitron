@@ -1,0 +1,117 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>Routes grid mockups</title>
+<style>
+:root{--text:#1d1d1f;--muted:#6b6b70;--line:#e3e3e6;--blue:#1f5fd6;--bg:#fff;--page:#f6f6f7;--hit:#fff3b0;--note:#8a5a00;--notebg:#fff8e6}
+*{box-sizing:border-box}
+body{margin:0;background:var(--page);font:15px/1.35 -apple-system,"Helvetica Neue",Arial,sans-serif;color:var(--text)}
+.board{width:1240px;background:var(--bg);padding:28px 32px 32px;margin:24px}
+.board h2{margin:0 0 4px;font-size:13px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+.board .sub{margin:0 0 18px;color:var(--muted);font-size:14px}
+h1{font-size:30px;margin:0 0 14px}
+.tabs{display:flex;gap:28px;border-bottom:1px solid var(--line);margin-bottom:16px}
+.tabs span{padding:10px 2px;color:var(--muted)}
+.tabs .on{color:var(--text);font-weight:600;border-bottom:3px solid var(--blue)}
+.toolbar{display:flex;gap:10px;margin-bottom:14px;align-items:center}
+.search{flex:0 0 340px;border:1px solid #c9c9ce;border-radius:8px;padding:9px 12px;color:var(--muted);display:flex;gap:8px;align-items:center}
+.search.filled{color:var(--text);border-color:var(--blue);box-shadow:0 0 0 2px #1f5fd633}
+.btn{border:1px solid #c9c9ce;border-radius:8px;padding:9px 14px;font-weight:600;background:#fff}
+.count{color:var(--muted);font-size:14px;margin-left:6px}
+table{border-collapse:collapse;width:100%}
+th{font-weight:600;font-size:14px;text-align:left;padding:10px 12px;border-bottom:1px solid var(--line);white-space:nowrap}
+td{padding:9px 12px;border-bottom:1px solid var(--line);vertical-align:middle;white-space:nowrap}
+th:first-child,td:first-child{width:300px;border-right:1px solid var(--line)}
+td.c{cursor:default}
+tr:hover td{background:#fafafa}
+.name{display:flex;align-items:center;gap:6px}
+.tw{display:inline-block;width:14px;color:var(--muted);font-size:11px}
+.prod .tw{visibility:hidden}
+.prod .label{font-weight:400}
+.label{font-weight:500}
+.cust{color:var(--blue);font-weight:700}
+.inh{color:var(--muted)}
+.inh.diff{color:var(--muted);font-style:italic}
+.hit{background:var(--hit);border-radius:2px}
+.dim .label{color:var(--muted)}
+.notes{margin-top:18px;background:var(--notebg);border:1px solid #f0d9a8;border-radius:8px;padding:12px 16px;color:var(--note);font-size:14px}
+.notes ol{margin:4px 0 0;padding-left:20px}
+.notes li{margin:3px 0}
+.key{display:flex;gap:22px;font-size:13px;color:var(--muted);margin:10px 0 0}
+.tag{font-size:12px;color:var(--muted);font-weight:400;margin-left:6px}
+</style></head><body>
+
+<!-- ============ BOARD 1 ============ -->
+<div class="board" id="b1">
+<h2>Option A — default view</h2>
+<p class="sub">Inherited values show only where they differ from the row's own Every zone. Rows with their own routing, and every category above them, are always shown.</p>
+<h1>Prep stations</h1>
+<div class="tabs"><span>Stations</span><span class="on">Routes</span><span>Settings</span></div>
+<div class="toolbar"><div class="search">🔍 Search categories and products</div><span class="btn">Expand all</span><span class="btn">Collapse all</span></div>
+<table>
+<tr><th>Category or product</th><th>Every zone</th><th>Counter</th><th>Front Bar</th><th>Main Bar</th><th>Saloon</th><th>Terrace</th></tr>
+<tr><td><div class="name" style="padding-left:0"><span class="label">All categories</span></div></td><td class="cust">Kitchen</td><td></td><td></td><td></td><td></td><td></td></tr>
+<tr><td><div class="name" style="padding-left:12px"><span class="tw">▾</span><span class="label">Santet Deli Co</span></div></td><td class="inh">Kitchen</td><td></td><td class="cust">Bar</td><td></td><td></td><td></td></tr>
+<tr><td><div class="name" style="padding-left:32px"><span class="tw">▸</span><span class="label">AGAVE</span></div></td><td class="inh">Kitchen</td><td></td><td class="inh diff">Bar</td><td></td><td></td><td></td></tr>
+<tr class="prod"><td><div class="name" style="padding-left:52px"><span class="tw">·</span><span class="label">CLANDESTINA</span></div></td><td class="cust">Kitchen</td><td></td><td></td><td></td><td></td><td></td></tr>
+<tr><td><div class="name" style="padding-left:32px"><span class="tw">▸</span><span class="label">ALL DAY MENU</span></div></td><td class="cust">Kitchen</td><td></td><td></td><td></td><td></td><td></td></tr>
+<tr><td><div class="name" style="padding-left:32px"><span class="tw">▸</span><span class="label">APERITIVOS</span></div></td><td class="cust">Bar</td><td></td><td></td><td></td><td></td><td></td></tr>
+<tr><td><div class="name" style="padding-left:32px"><span class="tw">▸</span><span class="label">BAR EXTRAS</span></div></td><td class="cust">Bar</td><td></td><td></td><td></td><td></td><td></td></tr>
+<tr><td><div class="name" style="padding-left:32px"><span class="tw">▸</span><span class="label">BOCADILLOS</span></div></td><td class="inh">Kitchen</td><td></td><td class="inh diff">Bar</td><td></td><td></td><td></td></tr>
+<tr><td><div class="name" style="padding-left:32px"><span class="tw">▸</span><span class="label">CAFÉS</span></div></td><td class="cust">Bar</td><td></td><td></td><td class="cust">Coffee</td><td></td><td></td></tr>
+<tr class="prod"><td><div class="name" style="padding-left:52px"><span class="tw">·</span><span class="label">Café con leche</span></div></td><td class="inh">Bar</td><td></td><td></td><td class="inh diff">Coffee</td><td class="cust">Kitchen</td><td></td></tr>
+</table>
+<div class="key"><span><b class="cust">Bar</b> set on this row</span><span><span class="inh">Kitchen</span> Every zone, inherited</span><span><i class="inh">Bar</i> inherited, differs from this row's Every zone</span><span>blank = same as this row's Every zone</span></div>
+<div class="notes"><b>What to look at</b><ol>
+<li>AGAVE is closed (▸) but CLANDESTINA still shows beneath it, because CLANDESTINA has its own routing. That tree replaces the old "Santet Deli Co › AGAVE ›" path.</li>
+<li>AGAVE and BOCADILLOS set nothing, but Santet Deli Co sends Front Bar to Bar — so their Front Bar shows a grey italic <i>Bar</i>. Under option B that cell would be blank.</li>
+<li>CLANDESTINA's own Every zone (Kitchen) beats its parent's Front Bar (Bar), so its Front Bar is blank: it really does go to Kitchen.</li>
+</ol></div>
+</div>
+
+<!-- ============ BOARD 2 ============ -->
+<div class="board" id="b2">
+<h2>Option B — default view, inherited zone cells always blank</h2>
+<p class="sub">Only Every zone shows an inherited value. Same data as option A.</p>
+<h1>Prep stations</h1>
+<div class="tabs"><span>Stations</span><span class="on">Routes</span><span>Settings</span></div>
+<div class="toolbar"><div class="search">🔍 Search categories and products</div><span class="btn">Expand all</span><span class="btn">Collapse all</span></div>
+<table>
+<tr><th>Category or product</th><th>Every zone</th><th>Counter</th><th>Front Bar</th><th>Main Bar</th><th>Saloon</th><th>Terrace</th></tr>
+<tr><td><div class="name"><span class="label">All categories</span></div></td><td class="cust">Kitchen</td><td></td><td></td><td></td><td></td><td></td></tr>
+<tr><td><div class="name" style="padding-left:12px"><span class="tw">▾</span><span class="label">Santet Deli Co</span></div></td><td class="inh">Kitchen</td><td></td><td class="cust">Bar</td><td></td><td></td><td></td></tr>
+<tr><td><div class="name" style="padding-left:32px"><span class="tw">▸</span><span class="label">AGAVE</span></div></td><td class="inh">Kitchen</td><td></td><td></td><td></td><td></td><td></td></tr>
+<tr class="prod"><td><div class="name" style="padding-left:52px"><span class="tw">·</span><span class="label">CLANDESTINA</span></div></td><td class="cust">Kitchen</td><td></td><td></td><td></td><td></td><td></td></tr>
+<tr><td><div class="name" style="padding-left:32px"><span class="tw">▸</span><span class="label">ALL DAY MENU</span></div></td><td class="cust">Kitchen</td><td></td><td></td><td></td><td></td><td></td></tr>
+<tr><td><div class="name" style="padding-left:32px"><span class="tw">▸</span><span class="label">APERITIVOS</span></div></td><td class="cust">Bar</td><td></td><td></td><td></td><td></td><td></td></tr>
+<tr><td><div class="name" style="padding-left:32px"><span class="tw">▸</span><span class="label">BAR EXTRAS</span></div></td><td class="cust">Bar</td><td></td><td></td><td></td><td></td><td></td></tr>
+<tr><td><div class="name" style="padding-left:32px"><span class="tw">▸</span><span class="label">BOCADILLOS</span></div></td><td class="inh">Kitchen</td><td></td><td></td><td></td><td></td><td></td></tr>
+<tr><td><div class="name" style="padding-left:32px"><span class="tw">▸</span><span class="label">CAFÉS</span></div></td><td class="cust">Bar</td><td></td><td></td><td class="cust">Coffee</td><td></td><td></td></tr>
+<tr class="prod"><td><div class="name" style="padding-left:52px"><span class="tw">·</span><span class="label">Café con leche</span></div></td><td class="inh">Bar</td><td></td><td></td><td></td><td class="cust">Kitchen</td><td></td></tr>
+</table>
+<div class="notes"><b>The catch</b><ol>
+<li>BOCADILLOS reads as "Kitchen everywhere", but an order from Front Bar actually goes to <b>Bar</b> (inherited from Santet Deli Co).</li>
+<li>Café con leche reads as "Bar everywhere except Saloon", but Main Bar actually goes to <b>Coffee</b> (inherited from CAFÉS).</li>
+</ol></div>
+</div>
+
+<!-- ============ BOARD 3 ============ -->
+<div class="board" id="b3">
+<h2>Search</h2>
+<p class="sub">Matches show with every category above them, so you can see where each one sits and what it inherits. Shown with option A's cells.</p>
+<h1>Prep stations</h1>
+<div class="tabs"><span>Stations</span><span class="on">Routes</span><span>Settings</span></div>
+<div class="toolbar"><div class="search filled">🔍 clan</div><span class="btn">Expand all</span><span class="btn">Collapse all</span><span class="count">2 matches</span></div>
+<table>
+<tr><th>Category or product</th><th>Every zone</th><th>Counter</th><th>Front Bar</th><th>Main Bar</th><th>Saloon</th><th>Terrace</th></tr>
+<tr class="dim"><td><div class="name"><span class="label">All categories</span></div></td><td class="cust">Kitchen</td><td></td><td></td><td></td><td></td><td></td></tr>
+<tr class="dim"><td><div class="name" style="padding-left:12px"><span class="tw">▾</span><span class="label">Santet Deli Co</span></div></td><td class="inh">Kitchen</td><td></td><td class="cust">Bar</td><td></td><td></td><td></td></tr>
+<tr class="dim"><td><div class="name" style="padding-left:32px"><span class="tw">▾</span><span class="label">AGAVE</span></div></td><td class="inh">Kitchen</td><td></td><td class="inh diff">Bar</td><td></td><td></td><td></td></tr>
+<tr class="prod"><td><div class="name" style="padding-left:52px"><span class="tw">·</span><span class="label"><span class="hit">CLAN</span>DESTINA</span></div></td><td class="cust">Kitchen</td><td></td><td></td><td></td><td></td><td></td></tr>
+<tr class="prod"><td><div class="name" style="padding-left:52px"><span class="tw">·</span><span class="label"><span class="hit">Clan</span>destina Reposado</span></div></td><td class="inh">Kitchen</td><td></td><td class="inh diff">Bar</td><td></td><td></td><td></td></tr>
+</table>
+<div class="notes"><b>What to look at</b><ol>
+<li>Rows that are only there as parents are drawn in grey; matching text is highlighted.</li>
+<li>Clandestina Reposado has no routing of its own, so it would be hidden in the default view — search finds every product, not only the ones with their own routing.</li>
+<li>Clearing the search returns to the tree as it was open before.</li>
+</ol></div>
+</div>
+</body></html>

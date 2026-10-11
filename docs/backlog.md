@@ -1428,16 +1428,23 @@ _Formerly entries spread across the old sections, A261's venue-operations steps 
 
 _Formerly the kitchen entries in the opening part of the old Track A (before A1), and kitchen entries elsewhere; part of A9._ Detail: [backlog/kitchen.md](backlog/kitchen.md).
 
+- **A507. Prep stations made lighter: a Routes grid you can scan and search, the row menu on the
+  right, timings in the station dialog (owner, 2026-10-11).** The Routes grid loses its cell boxes,
+  its "N more products" counts and its parent paths; a routing set on a row is bold blue, an
+  inherited one grey, and a zone cell is blank unless what it inherits differs from the row's own
+  Every zone. Rows with their own routing show with every category above them, even inside a
+  closed category, and a search bar finds any category or product. The Stations table's row menu
+  moves to its own column on the right; the Settings tab's three timings move into each station's
+  edit dialog and the tab goes; the empty station cards under the grid go. Takes in two older
+  Prep stations entries. Mockups:
+  [docs/backlog/mockups/a507-prep-stations/](backlog/mockups/a507-prep-stations/).
+  [Detail](backlog/kitchen.md#a507-prep-stations-made-lighter)
+
 - **A routing period line naming another location's period is flagged but never drawn** (left open
   by A455, #1492): the server marks it `notOffered`, but the grid (`routing-grid-model.ts`) and the
   cell editor (`routing-cell-editor.ts`) drop a line whose period is not in the model's periods, so
   an unrelated save of that cell removes it silently. Reachable only by a hand-made database insert.
   Fix: show the line and make removing it an explicit choice.
-
-- **The Prep stations station table still accepts no printers or screens** (left open by A455,
-  #1492): nothing draws it without them now that supervisors are not offered the page, and its
-  accessibility test still checks a "supervisor" state no page can draw. Require both inputs and
-  drop that state.
 
 - KDS-4 follow-ups: device-mode reprint behind `requireDevice`; the mirrored station-side read (a
   `DashboardApi.listStationPrinters` and a UI line); the reprint timestamp.
@@ -1598,13 +1605,6 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
 - **`PUT /management-api/stations/:sid/printers` (`apps/server/src/print-api.ts`) has no dashboard caller** since A366 slice 4 Part A
   moved a station's printers into the station save; `parseStationPrinterIds`
   (`apps/server/src/management-api.ts`) repeats its checks. Decide whether to remove the route.
-
-- **Prep stations' Settings cell saves have the shape A261-4 changed for routing cells** — left open
-  by A261-4 (#1363). `#saveSettingsCell`
-  (`packages/venue-service/src/dashboard/prep-stations-screen.ts`) marks the change saved and
-  releases its unsaved-changes registration as soon as the save succeeds, before the refresh that
-  follows has settled.
-  [Detail](backlog/kitchen.md#prep-stations-settings-cell-saves-have-the-shape-a261-4-changed-for-routing-cells)
 
 - **A routing choice a refresh drops names one reason, chosen when it is dropped** — left open by
   A375 (#1382, its review, 2026-10-07): if its zone and its category both go and only the zone comes

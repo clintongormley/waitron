@@ -84,15 +84,6 @@ list does not exist.
   service:** whether that is enough for something a cook must not miss, or whether an options answer
   deserves its own prominent form on the ticket. Nobody has watched a real kitchen read one.
 
-## Prep stations' Settings cell saves have the shape A261-4 changed for routing cells
-
-- **Prep stations' Settings cell saves have the shape A261-4 changed for routing cells.**
-  `#saveSettingsCell`
-  (`packages/venue-service/src/dashboard/prep-stations-screen.ts`) marks the change saved and
-  releases its unsaved-changes registration as soon as the save succeeds, before the refresh
-  that follows has settled. A routing cell now keeps its registration until that refresh
-  settles. Not changed in A261-4.
-
 ## KDS corrections deferred from #191
 
 - **KDS corrections deferred from #191** (owner, 2026-09-01): a moved dish must keep its kitchen
@@ -161,6 +152,63 @@ list does not exist.
   **Kept as they are, by the owner's choice (2026-09-28):** the printed receipt
   (`apps/server/src/receipt-ticket.ts`) and the till's ticket view
   (`apps/till/src/screens/till-ticket-view.ts`) still show the Each unit.
+
+## A507. Prep stations made lighter
+
+**A507 (owner, 2026-10-11) — OPEN.** Four changes to the Prep stations page
+(`packages/venue-service/src/dashboard/prep-stations-screen.ts`), bundled because they share the
+screen. Mockups in [mockups/a507-prep-stations/](mockups/a507-prep-stations/): `0-routes-today.png`
+is the grid before, `1-routes-option-a-chosen.png` the chosen default view, `3-routes-search.png`
+search, and `2-routes-option-b-not-chosen.png` the alternative the owner turned down.
+`mockups.html` is their source.
+
+**1. The Routes grid** (`routing-grid.ts`, `routing-grid-model.ts`).
+
+- Remove the boxes around each cell, the "384 more products, 1 more category" counts under a
+  category, and the parent path above a name ("Santet Deli Co › AGAVE ›"). Rows become one line.
+- A station set on that row is bold blue. Every zone always shows its station: bold blue when set
+  here, grey when inherited.
+- A zone cell with nothing set on the row is **blank when the station it inherits is the row's own
+  Every zone**, and otherwise shows the inherited station in grey italics (option A). The owner
+  turned down blanking every inherited zone cell (option B): a category under one that sends Front
+  Bar to Bar would then read as going to Kitchen from Front Bar.
+- A row's own Every zone beats a parent's setting for one zone: CLANDESTINA sets Every zone to
+  Kitchen, so its Front Bar goes to Kitchen although Santet Deli Co sends Front Bar to Bar. That is
+  how the grid resolves it today (the owner's screenshot); the owner accepted it because the new
+  layout makes it visible.
+- A row with its own routing is always shown, with every category above it as a row of its own,
+  even inside a closed category (CLANDESTINA under a closed AGAVE). That tree replaces the parent
+  path. Expand all and Collapse all stay.
+- A search bar finds any category or product, including ones with no routing of their own. Each
+  match shows with every category above it; rows shown only as parents are grey, and the matching
+  text is highlighted. Clearing the search returns to the tree as it was open. This differs on
+  purpose from the Products and Menu Structure search (A461, `catalogue.md` → _Decisions_), which
+  lists matches flat with inline paths: here the parent rows carry the stations being inherited.
+- Not decided: how a cell's period lines (A455) look in the new style; the mockups show none.
+  Ask the owner before building them.
+
+**2. The Stations table's row menu** (`station-table.ts`). The ⋮ menu is drawn inside the name
+cell beside the drag handle. Move it to its own `actions` column pinned to the end, like every other
+`wt-data-table` (CLAUDE.md §3, A155). `scripts/pinned-actions-column.test.ts` did not catch this
+because it only recognises a column keyed `actions`.
+
+**3. The Settings tab goes.** It holds three numbers per active station — minutes until a ticket is
+warm, overdue and forgotten (`warmAfterMinutes`, `overdueAfterMinutes`, `forgottenAfterMinutes`;
+`TIMING_FIELDS`). They move into each station's edit dialog (`station-editor.ts`), saved with the
+rest of the station, and the tab is removed, leaving Stations and Routes. This retires
+`#saveSettingsCell` and the old follow-up that its save released its unsaved-changes registration
+before the refresh after it settled (left open by A261-4, #1363); the dialog's save follows the
+form rules instead.
+
+**4. The empty station cards under the grid go.** `#stationCard` draws one card per active station
+below the Routes grid holding only its name. Until A261-4 (#1363) each card also held the station's
+folder claims and a "Claim folder" button; that change moved routing into the grid and left the
+cards empty.
+
+**Taken in:** the station table still accepts no printers or screens (left open by A455, #1492) —
+nothing draws it without them now that supervisors are not offered the page, and its accessibility
+test still checks a "supervisor" state no page can draw. Require both inputs and drop that state
+while moving the menu.
 
 ## Decisions and deliberate limits
 
