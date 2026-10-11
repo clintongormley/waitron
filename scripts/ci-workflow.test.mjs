@@ -27,12 +27,12 @@ import {
 //     `pnpm --filter` selection and never be tested, or land in two and be tested twice.
 //
 // EVERYTHING HERE IS EXTRACTED FROM THE WORKFLOWS, never transcribed — from ci.yml, except one
-// case reading mutation.yml, and a token-permissions case, two apt cases and a `--with-deps` case
-// reading every .yml file in .github/workflows/. A transcription tests this file's copy of a
-// workflow rather than the workflow. Each extraction carries a guard that it found something,
-// because a silently-empty extraction makes every assertion below pass against nothing. Nor are the
-// SELECTIONS modelled: each shard's filters are handed to the real `pnpm ls` and the answer is read
-// back.
+// case reading mutation.yml, two reading codeql.yml, and a token-permissions case, a time-limit
+// case, two apt cases and a `--with-deps` case reading every .yml file in .github/workflows/. A
+// transcription tests this file's copy of a workflow rather than the workflow. Each extraction
+// carries a guard that it found something, because a silently-empty extraction makes every
+// assertion below pass against nothing. Nor are the SELECTIONS modelled: each shard's filters are
+// handed to the real `pnpm ls` and the answer is read back.
 //
 // Line matching rather than a YAML parser, because there is no YAML library in this workspace.
 // Compare the extractions with a real YAML parser's rather than reasoning about the regexes if this
@@ -2218,5 +2218,65 @@ describe("the workflows' playwright --with-deps waits", () => {
       ),
       '--with-deps runs apt-get: run it under `timeout <seconds>` (docs/developers/ci-and-gates.md, "Every apt wait is bounded")',
     ).toEqual([]);
+  });
+});
+
+/**
+ * The top-level keys of a workflow's `on:` block, read as TEXT: the two-space keys after an `on:`
+ * line, up to the next unindented line other than a comment. A one-line `on: push` or
+ * `on: [push, pull_request]` is returned as its words. Weaker than its name: a flow-style block
+ * spread over several lines, or a trigger spelled through an anchor, is not read.
+ */
+function workflowTriggers(text) {
+  const lines = text.split("\n");
+  const at = lines.findIndex((line) => /^on:/.test(line));
+  if (at === -1) return [];
+  const inline = lines[at]
+    .replace(/^on:/, "")
+    .replace(/\s#.*$/, "")
+    .trim();
+  if (inline !== "") return inline.match(/[A-Za-z_]+/g) ?? [];
+  const keys = [];
+  for (const line of lines.slice(at + 1)) {
+    if (line.startsWith("#")) continue;
+    if (/^\S/.test(line)) break;
+    const key = /^ {2}([A-Za-z_]+):/.exec(line);
+    if (key !== null) keys.push(key[1]);
+  }
+  return keys;
+}
+
+/**
+ * CodeQL scans `main` nightly and on request, never on a push or a pull request (owner,
+ * 2026-10-11, A488), and stores nothing in the repository's shared Actions cache
+ * (docs/developers/ci-and-gates.md, "CodeQL scans `main` nightly, and nothing waits for it").
+ * Weaker than its name: it reads codeql.yml as TEXT, so it sees the two cache switches only as
+ * lines in the file, not what the action does with them.
+ */
+describe("CodeQL's workflow", () => {
+  it("reads a block of triggers and a one-line trigger", () => {
+    expect(
+      workflowTriggers("on:\n  schedule:\n    - cron: x\n  workflow_dispatch:\njobs:\n"),
+    ).toEqual(["schedule", "workflow_dispatch"]);
+    expect(workflowTriggers("on:\n  schedule:\n# note\n  push:\njobs:\n")).toEqual([
+      "schedule",
+      "push",
+    ]);
+    expect(workflowTriggers("on: [push, pull_request] # both\njobs:\n")).toEqual([
+      "push",
+      "pull_request",
+    ]);
+  });
+
+  const codeql = () => readFileSync(join(workflowsDir, "codeql.yml"), "utf8");
+
+  it("runs only on its nightly schedule and by hand", () => {
+    expect(workflowTriggers(codeql()).sort()).toEqual(["schedule", "workflow_dispatch"]);
+    expect(codeql()).toMatch(/^ {4}- cron: "\d+ \d+ \* \* \*"/m);
+  });
+
+  it("saves no database and no extraction cache", () => {
+    expect(codeql()).toMatch(/^ {2}CODEQL_OVERLAY_DATABASE_MODE: none$/m);
+    expect(codeql()).toMatch(/^ {10}trap-caching: false$/m);
   });
 });
