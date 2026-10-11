@@ -849,14 +849,16 @@ lines in runs 38177927525, 38171667214 and 38170124439: `src/bill-payments.test.
   `Uint8Array`, and Vitest compares a typed array one element at a time. `apps/server` now registers
   an equality tester for byte arrays (`apps/server/src/testing/byte-equality.ts`, through the
   config's `setupFiles`) that compares two arrays of one constructor with `Buffer.compare`, and
-  leaves equal bytes to Vitest when either array has an own property besides its indices. Measured
-  locally with coverage: the file fell from 44.3 s to 5.8 s; `print-api.test.ts`,
-  `receipt-print.test.ts` and `till-api.receipt.test.ts` together from 46.5 s to 24.2–25.8 s.
+  leaves equal bytes to Vitest when either array has an enumerable own key besides its indices,
+  string or symbol. Measured locally with coverage: the file fell from 44.3 s to 6.4–7.3 s; with
+  the tester, `print-api.test.ts`, `receipt-print.test.ts` and `till-api.receipt.test.ts` together
+  took 24.2–29.6 s.
 - `boot.test.ts` is real work — a CPU profile put about half of a local run in migrating fresh
   databases and about a sixth in deriving and generating keys — so it was split, test for test, into
   `boot.test.ts`, `boot.restore.test.ts` and `boot.setup-routes.test.ts` (17.9, 14.4 and 23.4 s
-  locally, each file run alone, without coverage), with their shared helpers in `apps/server/src/testing/boot-harness.ts`. Vitest runs one
-  file on one worker, so a file of that size set a floor under its shard.
+  locally, each file run alone, without coverage), with their shared helpers in
+  `apps/server/src/testing/boot-harness.ts`. Vitest runs one file on one worker, so a file of that
+  size set a floor under its shard.
 - `test-server` went from six shards to eight. Vitest 4.1.11 assigns files to shards by the sha1 of
   each file's path, sorted and cut into equal COUNTS (`BaseSequencer.shard`), so which files share a
   shard is luck. A simulation of that split over the three runs' per-file times, with the two fixes

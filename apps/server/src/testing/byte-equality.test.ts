@@ -45,6 +45,27 @@ describe("equalBytes", () => {
     ).toBeUndefined();
     expect(equalBytes(Buffer.from([1, 2]), Buffer.from([1, 2]))).toBe(true);
   });
+
+  it("answers for a subclass whose constructor takes other arguments", () => {
+    class Sized extends Uint8Array {
+      constructor(size: number, fill: number) {
+        super(size);
+        this.fill(fill);
+      }
+    }
+    expect(equalBytes(new Sized(3, 7), new Sized(3, 7))).toBe(true);
+    expect(
+      equalBytes(Object.assign(new Sized(3, 7), { extra: 1 }), new Sized(3, 7)),
+    ).toBeUndefined();
+  });
+
+  it("answers for a byte array whose memory was transferred away", () => {
+    const memory = new ArrayBuffer(2);
+    const detached = new Uint8Array(memory);
+    structuredClone(memory, { transfer: [memory] });
+    expect(equalBytes(detached, new Uint8Array(0))).toBe(true);
+    expect(equalBytes(Object.assign(detached, { extra: 1 }), new Uint8Array(0))).toBeUndefined();
+  });
 });
 
 describe("the registered tester", () => {
