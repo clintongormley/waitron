@@ -217,13 +217,13 @@ describe("Disable and optional provider unpairing", () => {
   });
 
   it.each([
-    ["en", "Unpairing at the provider failed. The reader is unchanged; try again."],
+    ["en", "The provider did not confirm the unpairing. The reader is still enabled; try again."],
     [
       "es",
-      "No se pudo desvincular el lector en el proveedor. El lector no ha cambiado; inténtalo de nuevo.",
+      "El proveedor no confirmó la desvinculación. El lector sigue habilitado; inténtalo de nuevo.",
     ],
   ] as const)(
-    "says in %s that a reader whose unpair failed while disabling it is unchanged",
+    "says in %s that a reader whose unpair failed while disabling it is still enabled",
     async (locale, text) => {
       setLocale(locale);
       const api = client([reader], true, {

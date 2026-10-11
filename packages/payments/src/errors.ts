@@ -99,7 +99,7 @@ declare module "@waitron/shared" {
     "reader.payment_in_progress": { readerId: string };
     /**
      * The provider's unpair call failed. `providerId` is the public provider token, never a
-     * credential.
+     * credential. Registered here because both the server and the SumUp client throw it.
      */
     "reader.unpair_failed": { providerId: string };
   }

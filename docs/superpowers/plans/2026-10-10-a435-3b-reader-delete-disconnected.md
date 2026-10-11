@@ -1074,7 +1074,9 @@ from the backlog, the decision recorded, and the fiscal guards green unedited.
   not tell a rejected key from an outage (backlog: "A failed SumUp unpair is logged with reason
   `unknown`"). Plan:
   `docs/superpowers/plans/2026-10-10-a435-3b-reader-delete-disconnected.md`." Keep the
-  "reason `unknown`" entry; this branch does not change it.
+  "reason `unknown`" entry; this branch does not change it. _2026-10-11 (A518): that backlog entry
+  is gone; docs/backlog/payments.md now says a rejected key and an outage are told apart in the
+  log._
 - [ ] **Step 4: Guards still owed.** The fiscal tests must pass unedited:
   `pnpm --filter @waitron/fiscal-verifactu exec vitest run src/write-path.e2e.test.ts src/sale-amount.huella.test.ts src/correction-amount.huella.test.ts src/money-conversion.huella.test.ts`
   and `pnpm --filter @waitron/fiscal-verifactu exec vitest run inmutabilidad`, all files unedited

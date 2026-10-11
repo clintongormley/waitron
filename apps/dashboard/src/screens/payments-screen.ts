@@ -1998,7 +1998,7 @@ export class PaymentsScreen extends LitElement {
       mode === "edit"
         ? saveActionState(this.#editScope)
         : { variant: "danger" as const, unchanged: false };
-    // Disabling with Unpair ticked calls only Unpair, which changes nothing when the provider fails.
+    // Disabling with Unpair ticked calls only Unpair, which changes nothing in Waitron when the provider call fails.
     const dialogMessage =
       mode === "disable" && this.dialogError === "reader.unpair_failed"
         ? t("payments.unpair_failed_unchanged")

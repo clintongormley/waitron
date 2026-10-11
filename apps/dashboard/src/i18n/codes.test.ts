@@ -518,10 +518,10 @@ it.each([
 
 it("says a card reader the provider could not unpair is left disabled, in English and Spanish", () => {
   expect(codeMessage("reader.unpair_failed", "en")).toBe(
-    "Unpairing at the provider failed. The reader is disabled; try again.",
+    "The provider did not confirm the unpairing. The reader is disabled; try again.",
   );
   expect(codeMessage("reader.unpair_failed", "es")).toBe(
-    "No se pudo desvincular el lector en el proveedor. Queda deshabilitado; inténtalo de nuevo.",
+    "El proveedor no confirmó la desvinculación. Queda deshabilitado; inténtalo de nuevo.",
   );
 });
 

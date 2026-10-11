@@ -2033,7 +2033,7 @@ export const en = {
   "payments.edit_reader": "Edit card reader",
   "payments.unpair": "Unpair from {provider}",
   "payments.unpair_failed_unchanged":
-    "Unpairing at the provider failed. The reader is unchanged; try again.",
+    "The provider did not confirm the unpairing. The reader is still enabled; try again.",
   "payments.unpair_warning":
     "Unpairing cannot be undone here. This reader returns to standalone use. Adding it back will need a pairing code.",
   "payments.delete_heading": "Delete reader?",
@@ -4674,7 +4674,7 @@ export const es: Record<StringKey, string> = {
   "payments.edit_reader": "Editar lector de tarjetas",
   "payments.unpair": "Desvincular de {provider}",
   "payments.unpair_failed_unchanged":
-    "No se pudo desvincular el lector en el proveedor. El lector no ha cambiado; inténtalo de nuevo.",
+    "El proveedor no confirmó la desvinculación. El lector sigue habilitado; inténtalo de nuevo.",
   "payments.unpair_warning":
     "La desvinculación no se puede deshacer aquí. Este lector volverá a funcionar de forma independiente. Para añadirlo de nuevo necesitarás un código de vinculación.",
   "payments.delete_heading": "¿Eliminar el lector?",
