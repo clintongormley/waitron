@@ -9,7 +9,7 @@ import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import type { TableRemoval } from "@waitron/module";
 import { AppError, locationId } from "@waitron/shared";
 import { ALL_MODULES, enabledTableRemovals } from "./modules.js";
-import { tableDeleteRefusals } from "./table-removal.js";
+import { removeLiveTables, tableDeleteRefusals } from "./table-removal.js";
 
 const now = new Date("2026-10-11T12:00:00Z");
 for (const enabled of [true, false]) {
@@ -84,7 +84,7 @@ for (const enabled of [true, false]) {
         else {
           await withTransaction(suite.db, async (tx) => {
             expect(await tableDeleteRefusals(tx, cfg, removals, [table!.id], now)).toEqual([]);
-            await tx.run(sql`delete from dining_tables where id = ${table!.id}`);
+            expect(await removeLiveTables(tx, cfg, removals, [table!.id], now)).toEqual(new Set());
           });
           expect(await suite.db.select().from(diningTables)).toEqual([]);
         }
