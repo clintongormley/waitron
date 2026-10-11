@@ -115,3 +115,12 @@ Only this plan and its spec were written. Existing tests passed: reporting clock
 ## Execution checkpoint — 2026-10-11
 
 Task 1 is complete. Shared resolver tests passed 31 cases after an interface-only shell failed 29 assertions. In an installed disposable checkout, the wrong next-date boundary failed 3 cases and wall-clock day classification failed the repeated-hour case; unchanged UTC/New York controls passed 2 cases in each experiment, and restoring the resolver passed all 31. The existing reporting clock suite passed 53 cases unchanged. Shared typecheck, focused ESLint and `git diff --check` passed. Tasks 2–7 remain pending; no runtime consumer or storage is wired yet. Campaign receipts and the execution ledger contain the commands and full outputs.
+
+
+## Execution checkpoint — 2026-10-11 17:57:11
+
+Tasks 2–3 are complete at signed checkpoint `1150a4d5e34b771b1a23add160ce5dc4204d197d`. The approved additive migration fixture values passed the upgrade test (1 case, 53.30s). Task3's final four server suites passed 173 cases; server types/lint and 2405 registry/seam checks passed, as did 20 unedited fiscal cases. Installed revision, acquisition-time and six separate future-history deletion experiments failed their intended assertions, passed legitimate controls and passed after restoration; the candidate was removed.
+
+The pre-change real scalar PATCH already refused both quoted problematic ranges with `venue.detail_invalid/end_offset`; the dated-edit refusal is now uniform. Existing changed checks are isolated in commit `1150a4d5e34b771b1a23add160ce5dc4204d197d`; frozen sales, closes and workforce assertions remain.
+
+Next is whole Task4. Its compatibility seat and temporal schedule guards remain unfinished, so this intermediate writer must not be published. Tasks4–7, the editor/LOOK, schedulers/transfer, final review and current-head CI remain. Landing still needs the owner's explicit approval.
