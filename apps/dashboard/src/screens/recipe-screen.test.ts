@@ -4,7 +4,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import { chooseOption, formMessageOf } from "@waitron/ui/src/test-helpers.js";
 import { codeMessage } from "../i18n/codes.js";
-import { t } from "../i18n/t.js";
+import { setLocale, t } from "../i18n/t.js";
 import type {
   CatalogueSummary,
   DashboardApi,
@@ -553,6 +553,27 @@ describe("recipe-screen", () => {
     expect(errorKey(el)).toBe("server.internal");
     expect(editor(el).product).toEqual(products[0]);
     expect(api.getProductRecipe).toHaveBeenCalledTimes(1);
+  });
+
+  it("says the product no longer exists when saving its recipe is refused with product.not_found", async () => {
+    setLocale("en-GB");
+    try {
+      const api = stubApi({
+        setProductRecipe: vi.fn().mockRejectedValue({ code: "product.not_found" }),
+      });
+      const { el } = await mountWidget<RecipeScreen>("dashboard-recipe-screen", { api });
+      await flush(el);
+      await chooseProduct(el);
+
+      emit(editor(el), "save-recipe", { productId: "p1", ingredientIds: ["i1"] });
+      await flush(el);
+
+      expect(el.shadowRoot!.querySelector("[role=alert]")?.textContent?.trim()).toBe(
+        "This product no longer exists. Refresh the page and try again.",
+      );
+    } finally {
+      setLocale("es-ES");
+    }
   });
 
   it("files at most one recipe save when save-recipe fires twice (single-flight)", async () => {

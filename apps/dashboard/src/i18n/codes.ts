@@ -739,6 +739,10 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "Another active product or variant already has this name.",
     es: "Ya hay otro producto o variante activo con este nombre.",
   },
+  "product.not_found": {
+    en: "This product no longer exists. Refresh the page and try again.",
+    es: "Este producto ya no existe. Actualiza la página y vuelve a intentarlo.",
+  },
   "product.variant_not_found": {
     en: "This variant can no longer be used here. Refresh the page and try again.",
     es: "Esta variante ya no se puede usar aquí. Actualiza la página y vuelve a intentarlo.",

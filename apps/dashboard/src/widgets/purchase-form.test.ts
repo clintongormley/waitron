@@ -924,3 +924,44 @@ for (const locale of ["en", "es"]) {
     });
   });
 }
+
+describe("purchase-form — a VAT line's layout", () => {
+  const fieldBoxOf = (el: PurchaseForm, testId: string): DOMRect =>
+    el
+      .shadowRoot!.querySelector(`[data-test=${testId}]`)!
+      .shadowRoot!.querySelector("[part=field]")!
+      .getBoundingClientRect();
+
+  it("floors the rate field at the price field width token", async () => {
+    const { el } = await mountWidget<PurchaseForm>("dashboard-purchase-form", baseProps());
+    const rate = el.shadowRoot!.querySelector<HTMLElement>("[data-test=line-rate-0]")!;
+    const token = getComputedStyle(rate).getPropertyValue("--wt-price-field-width").trim();
+    expect(token).not.toBe("");
+    expect(getComputedStyle(rate).minWidth).toBe(token);
+  });
+
+  it("keeps the VAT-kind dropdown level with its neighbours while they show errors", async () => {
+    const width = window.innerWidth,
+      height = window.innerHeight;
+    try {
+      await page.viewport(1280, 800);
+      const { el } = await mountWidget<PurchaseForm>("dashboard-purchase-form", baseProps());
+      await fillHeaderOnly(el);
+      await click(el, "confirm");
+      for (const field of ["line-rate-0", "line-base-0", "line-tax-0"])
+        expect(errorOf(el, field), field).not.toBe("");
+      await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+      const rate = fieldBoxOf(el, "line-rate-0");
+      for (const id of ["line-base-0", "line-tax-0", "line-kind-0"])
+        expect(Math.abs(fieldBoxOf(el, id).top - rate.top), id).toBeLessThanOrEqual(1);
+      const remove = el
+        .shadowRoot!.querySelector("[data-test=remove-line-0]")!
+        .shadowRoot!.querySelector("button")!
+        .getBoundingClientRect();
+      const middle = (box: DOMRect): number => box.top + box.height / 2;
+      expect(Math.abs(middle(remove) - middle(rate))).toBeLessThanOrEqual(1);
+    } finally {
+      await page.viewport(width, height);
+    }
+  });
+});
