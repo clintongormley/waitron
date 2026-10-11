@@ -65,7 +65,11 @@ else if (request.command === "schedule") {
         },
       },
       isPrimary: () => true,
-      readClock: async () => ({ timeZone: "Europe/Madrid", dayCutover: "04:00" }),
+      readClock: async () => ({
+        timeZone: "Europe/Madrid",
+        dayCutover: "04:00",
+        cutoverChanges: [],
+      }),
       createArchive: async (grant, at, signal) => {
         created++;
         return createCloudSnapshotArchive(

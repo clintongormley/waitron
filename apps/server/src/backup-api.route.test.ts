@@ -110,7 +110,7 @@ function makeSupervisor(sc: Scenario): BackupSupervisor {
     environment: "production",
     stateDir: sc.stateDir,
     jitterSeed: "seed",
-    readClock: async () => ({ timeZone: "UTC", dayCutover: "00:00" }),
+    readClock: async () => ({ timeZone: "UTC", dayCutover: "00:00", cutoverChanges: [] }),
     log: () => {},
   });
   cleanup.push(() => sup.stop());
@@ -572,7 +572,7 @@ describe("backup admin routes", () => {
       environment: "production",
       stateDir,
       jitterSeed: "seed",
-      readClock: async () => ({ timeZone: "UTC", dayCutover: "00:00" }),
+      readClock: async () => ({ timeZone: "UTC", dayCutover: "00:00", cutoverChanges: [] }),
       log: () => {},
     });
     cleanup.push(() => sup.stop());
@@ -616,7 +616,7 @@ describe("backup admin routes", () => {
       environment: "production",
       stateDir,
       jitterSeed: "seed",
-      readClock: async () => ({ timeZone: "UTC", dayCutover: "00:00" }),
+      readClock: async () => ({ timeZone: "UTC", dayCutover: "00:00", cutoverChanges: [] }),
       log: () => {},
     });
     cleanup.push(() => sup.stop());
@@ -1085,7 +1085,7 @@ describe("backup admin routes", () => {
       environment: "production",
       stateDir,
       jitterSeed: "seed",
-      readClock: async () => ({ timeZone: "UTC", dayCutover: "00:00" }),
+      readClock: async () => ({ timeZone: "UTC", dayCutover: "00:00", cutoverChanges: [] }),
       log: () => {},
     });
     cleanup.push(() => sup.stop());

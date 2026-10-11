@@ -1,10 +1,11 @@
 import { randomUUID } from "node:crypto";
-import { and, eq } from "drizzle-orm";
+import { and, asc, eq } from "drizzle-orm";
 import {
   invoiceSeries,
   kitchenStations,
   kitchenTimingDefaults,
   locations,
+  locationDayCutoverChanges,
   nodes,
   tenants,
   withTransaction,
@@ -13,7 +14,13 @@ import {
 } from "@waitron/db";
 import { foldForUniqueness, persons, startManagementSession } from "@waitron/identity";
 import { createDeviceProfile, listDeviceProfiles } from "@waitron/layouts";
-import { AppError, locationId as brandLocationId, nodeId as brandNodeId } from "@waitron/shared";
+import {
+  AppError,
+  businessDayAt,
+  cutoverForBusinessDay,
+  locationId as brandLocationId,
+  nodeId as brandNodeId,
+} from "@waitron/shared";
 import type { CapabilityFlag, FormFactor } from "@waitron/layouts";
 import type { SeedReport, WaitronModule } from "@waitron/module";
 import type { VenueAction } from "./venue-plan.js";
@@ -148,6 +155,23 @@ export async function applyVenue(
           }
           if (existing.length === 1) {
             const row = existing[0]!;
+            const changes = await tx
+              .select({
+                effectiveBusinessDay: locationDayCutoverChanges.effectiveBusinessDay,
+                dayCutover: locationDayCutoverChanges.dayCutover,
+              })
+              .from(locationDayCutoverChanges)
+              .where(eq(locationDayCutoverChanges.locationId, row.id))
+              .orderBy(asc(locationDayCutoverChanges.effectiveBusinessDay));
+            const clock = {
+              timeZone: row.timeZone,
+              dayCutover: normalizeDayCutover(row.dayCutover).slice(0, 5),
+              cutoverChanges: changes.map((change) => ({
+                ...change,
+                dayCutover: normalizeDayCutover(change.dayCutover).slice(0, 5),
+              })),
+            };
+            const currentCutover = cutoverForBusinessDay(clock, businessDayAt(clock, new Date()));
             const matches =
               row.name === action.name &&
               JSON.stringify(row.invoiceLocales) === JSON.stringify(action.invoiceLocales) &&
@@ -159,7 +183,7 @@ export async function applyVenue(
               row.city === action.city &&
               row.province === action.province &&
               row.timeZone === action.timeZone &&
-              normalizeDayCutover(row.dayCutover) === normalizeDayCutover(action.dayCutover);
+              currentCutover === normalizeDayCutover(action.dayCutover).slice(0, 5);
             if (!matches) {
               throw new AppError("provisioning.second_venue", {});
             }

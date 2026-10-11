@@ -10,6 +10,8 @@ import {
   stampDeployment,
   kitchenStations,
   floorZones,
+  locationDayCutoverChanges,
+  locationBusinessDaySettings,
   withTransaction,
   type Database,
 } from "@waitron/db";
@@ -583,4 +585,42 @@ describe("recoverProvisionedVenue — refusals", () => {
       }),
     ).rejects.toMatchObject({ code: "setup.already_provisioned" });
   });
+});
+
+it("refuses setup/configuration replacement of a venue with dated history without clearing its timeline", async () => {
+  const db = ownerDb();
+  const request = { environment: "preproduction" as const, venue: venueRequest(nextNif()) };
+  const first = await provisionVenue(
+    { ownerDb: db, moduleConfig: ES_CONFIG, database: "waitron", stateDir },
+    request,
+  );
+  await db.insert(locationDayCutoverChanges).values([
+    { locationId: first.locationId, effectiveBusinessDay: "2000-01-01", dayCutover: "03:00:00" },
+    { locationId: first.locationId, effectiveBusinessDay: "2099-01-01", dayCutover: "07:00:00" },
+  ]);
+  await db
+    .insert(locationBusinessDaySettings)
+    .values({ locationId: first.locationId, revision: 4 });
+  const rows = await db.select().from(locationDayCutoverChanges);
+  const settings = await db.select().from(locationBusinessDaySettings);
+  const fiscal = await fiscalCounts(db);
+  let imported = false;
+  await expect(
+    provisionVenue(
+      {
+        ownerDb: db,
+        moduleConfig: ES_CONFIG,
+        database: "waitron",
+        stateDir,
+        beforeCommit: async () => {
+          imported = true;
+        },
+      },
+      { ...request, configurationImport: true },
+    ),
+  ).rejects.toMatchObject({ code: "setup.already_provisioned" });
+  expect(imported).toBe(false);
+  expect(await db.select().from(locationDayCutoverChanges)).toEqual(rows);
+  expect(await db.select().from(locationBusinessDaySettings)).toEqual(settings);
+  expect(await fiscalCounts(db)).toEqual(fiscal);
 });

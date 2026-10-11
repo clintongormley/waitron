@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { createHash, randomUUID } from "node:crypto";
 import type { CloudConnectionStatus } from "./cloud-client.js";
 import type { CloudCaptureGrant, CloudCaptureMetadata, CloudCapturePoint } from "./cloud-backup.js";
+import type { ScheduleClock } from "./backup-schedule.js";
 import { createCloudSnapshotWorker } from "./cloud-snapshot-worker.js";
 import { withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -106,7 +107,11 @@ async function fixture() {
     sourceNodeId: randomUUID(),
     isPrimary: () => primary,
     now: () => new Date(now),
-    readClock: async () => ({ timeZone: "Europe/Madrid", dayCutover: "04:00" }),
+    readClock: async (): Promise<ScheduleClock> => ({
+      timeZone: "Europe/Madrid",
+      dayCutover: "04:00",
+      cutoverChanges: [],
+    }),
     async createArchive(_grant: CloudCaptureGrant, at: Date) {
       captures++;
       return { bytes: Buffer.from("encrypted archive " + at.toISOString()), modules: { core: 1 } };
@@ -450,7 +455,7 @@ describe("cloud snapshot venue clock edits", () => {
     await withTransaction(suite.db, (tx) =>
       writeVenueDetails(tx, venue.cfg, {
         expected: initial.details,
-        changes: { timeZone: "UTC", dayCutover: "04:30" },
+        changes: { timeZone: "UTC" },
       }),
     );
     await worker.tick(signal());
@@ -459,11 +464,11 @@ describe("cloud snapshot venue clock edits", () => {
     f.advance(Date.parse("2026-09-25T03:32:00Z") - f.deps.now().getTime());
     await worker.tick(signal());
     expect(f.captures()).toBe(2);
-    expect(new Date((await state()).nextAt).toISOString()).toBe("2026-09-25T05:02:00.000Z");
-    f.advance(90 * 60000);
+    expect(new Date((await state()).nextAt).toISOString()).toBe("2026-09-25T05:32:00.000Z");
+    f.advance(120 * 60000);
     await worker.tick(signal());
     expect(f.captures()).toBe(3);
-    expect(new Date((await state()).nextAt).toISOString()).toBe("2026-09-26T05:02:00.000Z");
+    expect(new Date((await state()).nextAt).toISOString()).toBe("2026-09-26T05:32:00.000Z");
     expect(f.points.size).toBe(3);
   });
 });
@@ -529,4 +534,37 @@ it("clears the observed deadline when a tick is aborted before status", async ()
   controller.abort();
   await worker.tick(controller.signal);
   expect(observed).toBeNull();
+});
+
+it("retains a persisted deadline across dated replacements, cancellation and restart, then uses the activated start", async () => {
+  const f = await fixture();
+  f.deps.sourceNodeId = "11111111-1111-4111-8111-111111111111";
+  let changes = [{ effectiveBusinessDay: "2026-09-25", dayCutover: "07:00" }];
+  f.deps.readClock = async () => ({
+    timeZone: "Europe/Madrid",
+    dayCutover: "05:00",
+    cutoverChanges: changes,
+  });
+  const observed: Array<number | null> = [];
+  const worker = createCloudSnapshotWorker({ ...f.deps, onScheduled: (at) => observed.push(at) });
+  await worker.tick(signal());
+  const retained = Date.parse("2026-09-25T05:32:00Z");
+  expect(observed.at(-1)).toBe(retained);
+  changes = [{ effectiveBusinessDay: "2026-09-25", dayCutover: "03:00" }];
+  await worker.tick(signal());
+  expect(observed.at(-1)).toBe(retained);
+  expect(f.captures()).toBe(1);
+  changes = [];
+  const restarted = createCloudSnapshotWorker({
+    ...f.deps,
+    onScheduled: (at) => observed.push(at),
+  });
+  await restarted.tick(signal());
+  expect(observed.at(-1)).toBe(retained);
+  expect(f.captures()).toBe(1);
+  changes = [{ effectiveBusinessDay: "2026-09-25", dayCutover: "03:00" }];
+  f.advance(retained - f.deps.now().getTime());
+  await restarted.tick(signal());
+  expect(f.captures()).toBe(2);
+  expect(new Date(observed.at(-1)!).toISOString()).toBe("2026-09-26T01:32:00.000Z");
 });
