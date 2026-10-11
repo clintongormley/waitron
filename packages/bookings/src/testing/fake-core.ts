@@ -39,16 +39,10 @@ let nextOrderNumber = 0;
 export function fakeCore(cfg: FakeCoreConfig): CoreServices {
   return {
     floorDeletion: {
-      readZoneImpact: async () => {
+      readImpact: async () => {
         throw new Error("unused floor deletion");
       },
-      deleteZone: async () => {
-        throw new Error("unused floor deletion");
-      },
-      readDepartmentImpact: async () => {
-        throw new Error("unused floor deletion");
-      },
-      deleteDepartment: async () => {
+      clear: async () => {
         throw new Error("unused floor deletion");
       },
     },

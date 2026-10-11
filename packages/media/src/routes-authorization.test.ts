@@ -75,17 +75,11 @@ function mount(db: Database): Hono {
       maxUploadBytes: 1000,
       core: {
         floorDeletion: {
-          readZoneImpact: async () => {
-            throw new Error("unused");
+          readImpact: async () => {
+            throw new Error("unused floor deletion");
           },
-          deleteZone: async () => {
-            throw new Error("unused");
-          },
-          readDepartmentImpact: async () => {
-            throw new Error("unused");
-          },
-          deleteDepartment: async () => {
-            throw new Error("unused");
+          clear: async () => {
+            throw new Error("unused floor deletion");
           },
         },
         seatTable: async () => {

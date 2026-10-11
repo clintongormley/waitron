@@ -23,12 +23,6 @@ import {
 } from "@waitron/shared";
 import { VENUE_SERVICE } from "./modules.js";
 import { floorDeletionFor } from "./floor-delete.js";
-import {
-  readZoneDeleteImpact,
-  deleteZone,
-  readDepartmentDeleteImpact,
-  deleteDepartment,
-} from "@waitron/venue-service";
 import type { OriginConfig, TillConfig } from "./till-config.js";
 import { createOpenOrder, openTab } from "./working-order.js";
 import { outstandingOf, readPaymentsByBill, refuseBillHoldingMoney } from "./bill-payments.js";
@@ -113,15 +107,9 @@ export function moduleCoreServices(
   removals: readonly TableRemoval[],
 ): CoreServices {
   const dashboard: OriginConfig = { ...cfg, origin: jobOrigin("dashboard") };
-  const floor = floorDeletionFor(cfg, removals);
   return {
     seatTable: (tx, req) => seatTable(tx, dashboard, req),
-    floorDeletion: {
-      readZoneImpact: (tx, id, now) => readZoneDeleteImpact(tx, cfg, floor, id, now),
-      deleteZone: (tx, id, now) => deleteZone(tx, cfg, floor, id, now),
-      readDepartmentImpact: (tx, id, now) => readDepartmentDeleteImpact(tx, cfg, floor, id, now),
-      deleteDepartment: (tx, id, now) => deleteDepartment(tx, cfg, floor, id, now),
-    },
+    floorDeletion: floorDeletionFor(cfg, removals),
   };
 }
 

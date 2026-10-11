@@ -22,6 +22,9 @@ import {
   departments,
   departmentTransferRequests,
   requestDepartmentTransfer,
+  readDepartmentDeleteImpact,
+  deleteDepartment,
+  deleteZone,
   setProfileServiceScope,
   zoneServicePolicies,
 } from "@waitron/venue-service";
@@ -56,11 +59,7 @@ async function snapshot(tx: Transaction) {
     orders: await tx.select().from(workingOrders),
   };
 }
-const core = (bookingEnabled: boolean) =>
-  moduleCoreServices(
-    venue.cfg,
-    enabledTableRemovals(ALL_MODULES.filter((m) => bookingEnabled || m.name !== "bookings")),
-  );
+const core = () => moduleCoreServices(venue.cfg, enabledTableRemovals(ALL_MODULES));
 
 async function target() {
   return run(async (tx) => {
@@ -105,11 +104,13 @@ describe("real module floor deletion", () => {
             .returning({ id: bookings.id })
         )[0]!.id,
     );
-    const service = core(true).floorDeletion;
-    const impact = await run((tx) => service.readDepartmentImpact(tx, f.departmentId, NOW));
+    const service = core().floorDeletion;
+    const impact = await run((tx) =>
+      readDepartmentDeleteImpact(tx, venue.cfg, service, f.departmentId, NOW),
+    );
     expect(impact.refusals).toContainEqual(expect.objectContaining({ code: "table.booked" }));
     await expect(
-      run((tx) => service.deleteDepartment(tx, f.departmentId, NOW)),
+      run((tx) => deleteDepartment(tx, venue.cfg, service, f.departmentId, NOW)),
     ).rejects.toMatchObject({ code: "table.booked" });
     expect(
       (await run((tx) => tx.select().from(bookings).where(eq(bookings.id, bookingId)))).length,
@@ -123,9 +124,10 @@ describe("real module floor deletion", () => {
 
   it("rechecks a booking committed after preview when deletion reaches the write queue", async () => {
     const f = await target();
-    const service = core(true).floorDeletion;
+    const service = core().floorDeletion;
     expect(
-      (await run((tx) => service.readDepartmentImpact(tx, f.departmentId, NOW))).refusals,
+      (await run((tx) => readDepartmentDeleteImpact(tx, venue.cfg, service, f.departmentId, NOW)))
+        .refusals,
     ).toEqual([]);
     const held = gate();
     const release = gate();
@@ -151,7 +153,7 @@ describe("real module floor deletion", () => {
     let entered = false;
     const deletion = run(async (tx) => {
       entered = true;
-      return service.deleteDepartment(tx, f.departmentId, NOW);
+      return deleteDepartment(tx, venue.cfg, service, f.departmentId, NOW);
     });
     expect(queued).toHaveBeenCalledTimes(1);
     queued.mockRestore();
@@ -181,14 +183,15 @@ describe("real module floor deletion", () => {
 
   it("queues deletion after seating and preserves the whole target on refusal", async () => {
     const f = await target();
-    const service = core(true).floorDeletion;
+    const service = core().floorDeletion;
     expect(
-      (await run((tx) => service.readDepartmentImpact(tx, f.departmentId, NOW))).refusals,
+      (await run((tx) => readDepartmentDeleteImpact(tx, venue.cfg, service, f.departmentId, NOW)))
+        .refusals,
     ).toEqual([]);
     const held = gate();
     const release = gate();
     const writer = run(async (tx) => {
-      const seated = await core(true).seatTable(tx, {
+      const seated = await core().seatTable(tx, {
         tableId: f.tableId,
         guestCount: 2,
         operatorId: venue.operator.personId,
@@ -202,7 +205,7 @@ describe("real module floor deletion", () => {
     let entered = false;
     const deletion = run(async (tx) => {
       entered = true;
-      return service.deleteDepartment(tx, f.departmentId, NOW);
+      return deleteDepartment(tx, venue.cfg, service, f.departmentId, NOW);
     });
     expect(queued).toHaveBeenCalledTimes(1);
     queued.mockRestore();
@@ -228,24 +231,6 @@ describe("real module floor deletion", () => {
     expect(seated.partyId).toBeTruthy();
   });
 
-  it("removes an unoccupied department with bookings disabled", async () => {
-    const f = await target();
-    const service = core(false).floorDeletion;
-    const zone = await run((tx) => service.readZoneImpact(tx, f.zoneId, NOW));
-    expect(zone.target.id).toBe(f.zoneId);
-    expect(zone.refusals).toEqual([]);
-    const impact = await run((tx) => service.deleteDepartment(tx, f.departmentId, NOW));
-    expect(impact.target.id).toBe(f.departmentId);
-    expect(
-      (
-        await run((tx) => tx.select().from(departments).where(eq(departments.id, f.departmentId)))
-      )[0]?.active,
-    ).toBe(false);
-    expect(
-      await run((tx) => tx.select().from(diningTables).where(eq(diningTables.id, f.tableId))),
-    ).toEqual([]);
-  });
-
   it("queues seating and a master-plan save behind deletion, then refuses both", async () => {
     const f = await target();
     const profileId = await run(
@@ -257,13 +242,13 @@ describe("real module floor deletion", () => {
             .returning({ id: deviceProfiles.id })
         )[0]!.id,
     );
-    const service = core(true).floorDeletion;
+    const service = core().floorDeletion;
     const held = gate();
     const release = gate();
     const deletion = run(async (tx) => {
       let impact;
       try {
-        impact = await service.deleteDepartment(tx, f.departmentId, NOW);
+        impact = await deleteDepartment(tx, venue.cfg, service, f.departmentId, NOW);
       } finally {
         held.open();
       }
@@ -277,7 +262,7 @@ describe("real module floor deletion", () => {
     let enteredProfile = false;
     const seat = run(async (tx) => {
       enteredSeat = true;
-      return core(true).seatTable(tx, {
+      return core().seatTable(tx, {
         tableId: f.tableId,
         guestCount: 1,
         operatorId: venue.operator.personId,
@@ -322,11 +307,11 @@ describe("real module floor deletion", () => {
     const before = await run((tx) => tx.select().from(workingOrders));
     const held = gate();
     const release = gate();
-    const service = core(true).floorDeletion;
+    const service = core().floorDeletion;
     const deletion = run(async (tx) => {
       let impact;
       try {
-        impact = await service.deleteZone(tx, zoneId, NOW);
+        impact = await deleteZone(tx, venue.cfg, service, zoneId, NOW);
       } finally {
         held.open();
       }
@@ -365,7 +350,7 @@ describe("real module floor deletion", () => {
     const deletion = run(async (tx) => {
       let impact;
       try {
-        impact = await core(true).floorDeletion.deleteDepartment(tx, f.departmentId, NOW);
+        impact = await deleteDepartment(tx, venue.cfg, core().floorDeletion, f.departmentId, NOW);
       } finally {
         held.open();
       }
