@@ -9,7 +9,7 @@ import { createErrorBoundary } from "@waitron/server-kit";
 import "./errors.js";
 import { createRotatingFileSink, tee } from "./log-file.js";
 import { createLogger } from "./logger.js";
-import { FRESH, afterFailure, type RecoveryState } from "./recovery-state.js";
+import { FRESH, afterFailure, refusedWhileRunning, type RecoveryState } from "./recovery-state.js";
 import { GENERIC_TEXT, OPERATOR_TEXT, escapeHtml, recoveryApp } from "./recovery-surface.js";
 
 const state = afterFailure(
@@ -48,6 +48,7 @@ describe("recoveryApp", () => {
       level: "recovery",
       lastErrorCode: "module.config_invalid",
       lastFailureAt: state.lastFailureAt,
+      refused: false,
     });
   });
 
@@ -398,7 +399,9 @@ describe("curated operator text", () => {
   // A hand-kept list, and NOT every code that can reach the page: a code with no entry falls to the
   // generic line. `deployment.environment_mismatch` is listed because the generic line fails it
   // worst (CLAUDE.md §5); `restore.membership_invalid` because the page's Retry reads the same copy
-  // again, which the generic line does not say.
+  // again, which the generic line does not say; `append_only.triggers_changed` because a box that
+  // stopped itself reaches the page at once, and the generic line says only that Waitron could not
+  // start.
   it("has an entry for every code classifyBootFailure produces and each persisted code listed here", () => {
     const classified = [
       "provisioning.database_unreachable",
@@ -415,7 +418,11 @@ describe("curated operator text", () => {
       "server.boot_incomplete",
       "provisioning.database_holder_stalled",
     ];
-    const fromBootByHand = ["deployment.environment_mismatch", "restore.membership_invalid"];
+    const fromBootByHand = [
+      "deployment.environment_mismatch",
+      "restore.membership_invalid",
+      "append_only.triggers_changed",
+    ];
     const missing = [...classified, ...persistedByRunEntry, ...fromBootByHand].filter(
       (code) => code !== "unknown" && !(code in OPERATOR_TEXT),
     );
@@ -438,6 +445,19 @@ describe("curated operator text", () => {
     expect(spanish).toContain(
       "El equipo no arrancará con esta copia. Antes de nada, pide a quien instaló este equipo que lo revise.",
     );
+  });
+
+  it("names a removed or changed safeguard on the permanent records, in both languages", async () => {
+    const english = await pageFor("append_only.triggers_changed");
+    expect(english).toContain(
+      escapeHtml("A safeguard on the box's permanent records was removed or changed."),
+    );
+    expect(english).toContain("Ask whoever installed this box to look at it before anything else.");
+    const spanish = await pageFor("append_only.triggers_changed", undefined, SPANISH);
+    expect(spanish).toContain(
+      "Se ha quitado o cambiado una protección de los registros permanentes del equipo.",
+    );
+    expect(spanish).toContain("Antes de nada, pide a quien instaló este equipo que lo revise.");
   });
 
   // A retry or restart can fix a volume that did not come up; nothing else at the box can.
@@ -587,6 +607,7 @@ describe("a start refused by a holder that stopped", () => {
       lastErrorCode: code,
       lastFailureAt: state.lastFailureAt,
       holderKind: "rejoin",
+      refused: false,
     });
   });
 });
@@ -763,5 +784,42 @@ describe("a migration the engine refused", () => {
     expect(text!["es-ES"].action).not.toMatch(
       /restáurala desde una copia de seguridad, o reinstala/i,
     );
+  });
+});
+
+describe("a box the running server stopped", () => {
+  const refused = refusedWhileRunning(
+    afterFailure(FRESH, "x", new Date()),
+    "append_only.triggers_changed",
+    new Date("2026-10-11T10:00:00Z"),
+  );
+  const appFor = (current: RecoveryState) =>
+    recoveryApp({ state: current, logDir: "/nonexistent", onRetry: vi.fn() });
+
+  it.each([
+    ["en-GB", "Level: recovery. Stopped while running.", /Failed \d+ times/],
+    [SPANISH, "Nivel: recovery. Se detuvo mientras funcionaba.", /Intentos fallidos/],
+  ])("says it stopped while running, in place of the count (%s)", async (language, line, count) => {
+    const body = await (
+      await appFor(refused).request("/", { headers: { "Accept-Language": language } })
+    ).text();
+    expect(body).toContain(`<p>${escapeHtml(line)}</p>`);
+    expect(body).not.toMatch(count);
+  });
+
+  it("still shows the count for a box that failed to start", async () => {
+    const body = await (await appFor(state).request("/")).text();
+    expect(body).toContain("Level: recovery. Failed 3 times.");
+    expect(body).not.toContain("Stopped while running.");
+  });
+
+  it("reports the refusal in the status JSON", async () => {
+    expect(await (await appFor(refused).request("/recovery-api/status")).json()).toEqual({
+      failures: 1,
+      level: "recovery",
+      lastErrorCode: "append_only.triggers_changed",
+      lastFailureAt: "2026-10-11T10:00:00.000Z",
+      refused: true,
+    });
   });
 });

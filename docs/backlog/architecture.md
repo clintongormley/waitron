@@ -303,26 +303,20 @@ sharp), the fixture scripts `apps/server/scripts/cloud-backup-fixture.ts` and
 of their own. #757's checks do not cover `migrations.lock`, Litestream's `.venue.db-litestream/`
 folder, or the restore's `venue.db.incoming` file and `.venue.db-replaced-*` folder.
 
-## An append-only trigger can be dropped, or quietly replaced, from the application's own database handle
+## A switched-off module's append-only tables are neither re-protected nor checked
 
-**An append-only trigger can be dropped, or quietly replaced, from the application's own database
-handle — OPEN (found 2026-09-22, task F1).** SQLite has no roles, so only the trigger protects an
-append-only table — every connection is the owner-equivalent, and a `DROP TRIGGER` on the
-application's own handle succeeds (recorded in `packages/db/src/immutability.test.ts`'s header).
-Data mutations are still refused while the triggers are in place, so this is defence in depth rather
-than a live hole.
-
-**The defence to build:** at boot, and then on a repeating check while the box runs, read
-`sqlite_master` and refuse to trade if any append-only trigger that should be there is missing, or
-its stored text is not the text `installAppendOnlyTriggers` writes
-(`packages/store/src/append-only.ts`). The set to compare against is already known — the tables a
-module declared with `appendOnly()`, carried set by set as `MigrationSet.appendOnlyTables`.
-**Re-installing the triggers is not that check** (measured 2026-09-22 on `node:sqlite`): the
-installer writes `create trigger if not exists`, so a trigger that was simply DROPPED is put back by
-the next migrating path, but one dropped and re-created under the SAME NAME with a permissive body is
-not. For whoever writes the comparison: SQLite stores a trigger with `IF NOT EXISTS` removed and
-`CREATE TRIGGER` upper-cased, so the stored text is not byte-identical to the string the installer
-sent.
+**Left open by A483.** Boot hands `applyMigrations` the sets of the modules this start migrates
+(`setsToMigrate` in `apps/server/src/boot.ts`: every module in setup mode, the enabled ones when
+trading), and the append-only check and the 10-second watch read the same list
+(`appendOnlyTables`). A module switched off after its tables exist keeps those tables, but no start
+re-installs or checks their triggers. From `packages/composition/src/modules.ts` and each module's
+classification, read 2026-10-11 and not measured on a box: `time_entries` (workforce, `toggleable`,
+the legal working-time record), `payment_resolutions` (payments, `toggleable`), and
+`registros_facturacion`, `filing_cases` and `filing_case_events` (fiscal-verifactu,
+`provision-only`) on a box later moved to `fiscal-none`. The alternative is to check every known
+module's tables that exist; its cost is a box that refuses to start after a release marks an
+existing table of a switched-off module `appendOnly()`, because no migration of that module would
+run to install the new trigger. Owner question Q5 of A483.
 
 ## `apps/server` → `apps/print-agent` is the first app-to-app workspace edge in the tree
 

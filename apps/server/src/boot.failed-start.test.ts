@@ -2,7 +2,9 @@ import { connect, createServer as createNetServer, type AddressInfo, type Socket
 import { cp, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { DatabaseSync } from "node:sqlite";
 import { setTimeout as delay } from "node:timers/promises";
+import { Agent } from "undici";
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import {
   invoiceSeries,
@@ -15,7 +17,9 @@ import {
   tenants,
 } from "@waitron/db";
 import { applyMigrations, manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { startServer } from "./boot.js";
+import { appendOnlyTriggerFaults } from "@waitron/store";
+import { startAppendOnlyWatch } from "./append-only-watch.js";
+import { startServer, type StartedServer } from "./boot.js";
 import { listBoxIpv4 } from "./box-reach.js";
 import { ensureBoxSecrets } from "./box-secrets.js";
 import { runCloudSnapshotLoop } from "./cloud-snapshot-loop.js";
@@ -64,6 +68,11 @@ vi.mock("./menu-activation.js", async (importOriginal) => {
   return { ...actual, startMenuActivation: vi.fn(actual.startMenuActivation) };
 });
 
+vi.mock("./append-only-watch.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("./append-only-watch.js")>();
+  return { ...actual, startAppendOnlyWatch: vi.fn(actual.startAppendOnlyWatch) };
+});
+
 const TILL_ENV = {
   WAITRON_TILL_NODE_ID: "33333333-3333-4333-8333-333333333333",
   WAITRON_TILL_SERIES_ID: "44444444-4444-4444-8444-444444444444",
@@ -101,6 +110,7 @@ afterEach(async () => {
   vi.mocked(runCloudWorker).mockClear();
   vi.mocked(runCloudSnapshotLoop).mockClear();
   vi.mocked(startMenuActivation).mockClear();
+  vi.mocked(startAppendOnlyWatch).mockClear();
   for (const dir of cleanup.splice(0)) await rm(dir, { recursive: true, force: true });
 });
 
@@ -118,6 +128,19 @@ async function spyOnMenuActivationStop() {
   vi.mocked(startMenuActivation).mockImplementationOnce((deps) => {
     const duty = realStart(deps);
     stop.mockImplementation(() => duty.stop());
+    return { stop };
+  });
+  return stop;
+}
+
+/** Spies on the stop of the next append-only watch boot starts. */
+async function spyOnAppendOnlyWatchStop() {
+  const { startAppendOnlyWatch: realStart } =
+    await vi.importActual<typeof import("./append-only-watch.js")>("./append-only-watch.js");
+  const stop = vi.fn<() => void>();
+  vi.mocked(startAppendOnlyWatch).mockImplementationOnce((deps) => {
+    const watch = realStart(deps);
+    stop.mockImplementation(() => watch.stop());
     return { stop };
   });
   return stop;
@@ -164,6 +187,50 @@ async function seedVenue(directory: string): Promise<void> {
   expect(readVenueHolder(directory)).toBeNull();
 }
 
+/** Runs `statements` on `venueDir`'s database through a raw handle closed before it returns. */
+function tamper(venueDir: string, statements: string): void {
+  const raw = new DatabaseSync(join(venueDir, "venue.db"), { timeout: 5000 });
+  try {
+    raw.exec(statements);
+  } finally {
+    raw.close();
+  }
+}
+
+/** Whichever of `tables`' append-only triggers are missing or altered, read with no handle left open. */
+async function triggerFaults(venueDir: string, tables: readonly string[]) {
+  const store = await openVenueDatabase(venueDir);
+  try {
+    return appendOnlyTriggerFaults(store.venue, tables);
+  } finally {
+    await store.close();
+  }
+}
+
+/**
+ * Resolves once something accepts a connection on `port`. `startServer` resolves before its listener
+ * binds, and closing an unbound listener rejects.
+ */
+async function listening(port: number): Promise<void> {
+  await vi.waitFor(
+    () =>
+      new Promise<void>((resolve, reject) => {
+        const socket = connect(port, "127.0.0.1", () => {
+          socket.destroy();
+          resolve();
+        });
+        socket.once("error", reject);
+      }),
+    { timeout: 10_000 },
+  );
+}
+
+function isStartedServer(value: unknown): value is StartedServer {
+  return (
+    typeof value === "object" && value !== null && !(value instanceof Error) && "close" in value
+  );
+}
+
 /** A copy of the seeded template that nobody holds. */
 async function seededVenueDir(): Promise<string> {
   const directory = await tempDir("waitron-failed-start-venue-");
@@ -197,14 +264,16 @@ async function bindAndRelease(port: number): Promise<void> {
   await new Promise<void>((resolve) => probe.close(() => resolve()));
 }
 
-/** The `event` of every line boot logs to stdout while `fn` runs; each chunk still reaches stdout. */
-async function withLoggedEvents(fn: () => Promise<void>): Promise<string[]> {
+/** Every line boot logs to stdout while `fn` runs, parsed; each chunk still reaches stdout. */
+async function withLoggedLines(
+  fn: () => Promise<void>,
+): Promise<{ event: string; [field: string]: unknown }[]> {
   const original = process.stdout.write.bind(process.stdout);
-  const events: string[] = [];
+  const lines: { event: string; [field: string]: unknown }[] = [];
   process.stdout.write = ((chunk: unknown, ...rest: unknown[]) => {
     for (const line of String(chunk).split("\n").filter(Boolean)) {
       try {
-        events.push((JSON.parse(line) as { event: string }).event);
+        lines.push(JSON.parse(line) as { event: string });
       } catch {
         // Not a log line.
       }
@@ -216,7 +285,12 @@ async function withLoggedEvents(fn: () => Promise<void>): Promise<string[]> {
   } finally {
     process.stdout.write = original;
   }
-  return events;
+  return lines;
+}
+
+/** The `event` of every line boot logs to stdout while `fn` runs. */
+async function withLoggedEvents(fn: () => Promise<void>): Promise<string[]> {
+  return (await withLoggedLines(fn)).map((line) => line.event);
 }
 
 /**
@@ -262,6 +336,35 @@ describe("a start that fails after the venue folder is opened gives the folder b
 
     await expect(startServer(await tradingEnv(venueDir, state))).rejects.toThrow(SyntaxError);
     expect(readVenueHolder(venueDir)).toBeNull();
+  }, 60_000);
+
+  it("when an append-only trigger was replaced", async () => {
+    const venueDir = await seededVenueDir();
+    const state = await stateDir();
+    tamper(
+      venueDir,
+      `drop trigger sales_append_only_update;
+       create trigger sales_append_only_update before update on sales for each row begin select 1; end;`,
+    );
+    const env = await tradingEnv(venueDir, state);
+
+    const outcome = await startServer(env).then(
+      (server) => server,
+      (error: unknown) => error,
+    );
+    try {
+      expect(outcome).toMatchObject({
+        code: "append_only.triggers_changed",
+        params: { missing: [], altered: ["sales_append_only_update"] },
+      });
+      expect(readVenueHolder(venueDir)).toBeNull();
+      await expect(bindAndRelease(Number(env.WAITRON_HTTP_PORT))).resolves.toBeUndefined();
+    } finally {
+      if (isStartedServer(outcome)) {
+        await listening(Number(env.WAITRON_HTTP_PORT));
+        await outcome.close();
+      }
+    }
   }, 60_000);
 
   it("when an adoption-pending start cannot read its certificate", async () => {
@@ -415,6 +518,19 @@ describe("a start that fails after the venue folder is opened gives the folder b
     expect(readVenueHolder(venueDir)).toBeNull();
   }, 60_000);
 
+  it("in trading mode, when a step after the listener is started throws, stopping the append-only watch", async () => {
+    const venueDir = await seededVenueDir();
+    const state = await stateDir(undefined, { leaf: true });
+    const env = await tradingEnv(venueDir, state, { landing: true });
+    const failure = new Error("interfaces unreadable");
+    failLandingAfterMdns(failure);
+    const stop = await spyOnAppendOnlyWatchStop();
+
+    await expect(startServer(env)).rejects.toBe(failure);
+    expect(stop).toHaveBeenCalledOnce();
+    expect(readVenueHolder(venueDir)).toBeNull();
+  }, 60_000);
+
   it("waits for the cloud snapshot loop when the cloud worker refuses to stop", async () => {
     const venueDir = await seededVenueDir();
     const state = await stateDir(undefined, { leaf: true });
@@ -558,6 +674,104 @@ describe("a start that fails after the venue folder is opened gives the folder b
   });
 });
 
+describe("append-only triggers at boot", () => {
+  it("a seeded venue starts, serves /health and closes", async () => {
+    const venueDir = await seededVenueDir();
+    const state = await stateDir(undefined, { leaf: true });
+    const env = await tradingEnv(venueDir, state);
+    // The box's own self-signed leaf: what is under test is that the start was not refused.
+    const dispatcher = new Agent({ connect: { rejectUnauthorized: false } });
+    let events: string[];
+    try {
+      events = await withLoggedEvents(async () => {
+        const server = await startServer(env);
+        try {
+          const response = await vi.waitFor(
+            () =>
+              fetch(`https://127.0.0.1:${env.WAITRON_HTTP_PORT}/health`, {
+                dispatcher,
+              } as RequestInit),
+            { timeout: 10_000 },
+          );
+          await response.body?.cancel();
+          expect([200, 503]).toContain(response.status);
+        } finally {
+          await server.close();
+        }
+      });
+    } finally {
+      await dispatcher.close();
+    }
+    expect(readVenueHolder(venueDir)).toBeNull();
+    // The control: the start's own lines were captured.
+    expect(events).toContain("stream.stopped");
+    expect(events).not.toContain("append_only.triggers_restored");
+  }, 60_000);
+
+  it("a trigger dropped while the box was off is put back and the start goes on", async () => {
+    const venueDir = await seededVenueDir();
+    const state = await stateDir(undefined, { leaf: true });
+    tamper(venueDir, "drop trigger sales_append_only_delete;");
+    // The control: the drop took.
+    expect(await triggerFaults(venueDir, ["sales"])).toEqual({
+      missing: ["sales_append_only_delete"],
+      altered: [],
+    });
+
+    const env = await tradingEnv(venueDir, state);
+    const lines = await withLoggedLines(async () => {
+      const server = await startServer(env);
+      try {
+        await listening(Number(env.WAITRON_HTTP_PORT));
+      } finally {
+        await server.close();
+      }
+    });
+    expect(await triggerFaults(venueDir, ["sales"])).toEqual({ missing: [], altered: [] });
+    expect(lines.filter((line) => line.event === "append_only.triggers_restored")).toEqual([
+      expect.objectContaining({ level: "warn", triggers: ["sales_append_only_delete"] }),
+    ]);
+  }, 60_000);
+});
+
+describe("which starts watch the append-only triggers", () => {
+  async function startAndClose(env: Record<string, string>) {
+    const server = await startServer(env);
+    try {
+      await listening(Number(env.WAITRON_HTTP_PORT));
+    } finally {
+      await server.close();
+    }
+  }
+
+  it("a trading start does", async () => {
+    const venueDir = await seededVenueDir();
+    await startAndClose(await tradingEnv(venueDir, await stateDir(undefined, { leaf: true })));
+    expect(startAppendOnlyWatch).toHaveBeenCalledOnce();
+  }, 60_000);
+
+  it("a start waiting on an adoption does not", async () => {
+    const venueDir = await seededVenueDir();
+    const state = await stateDir(undefined, { leaf: true });
+    await writeFile(join(state, PENDING_ADOPTION_FILE), "{}");
+    await startAndClose(await tradingEnv(venueDir, state));
+    expect(startAppendOnlyWatch).not.toHaveBeenCalled();
+  }, 60_000);
+
+  it("a setup start does not", async () => {
+    const [httpPort] = await freePorts(1);
+    await startAndClose({
+      WAITRON_VENUE_DIR: await tempDir("waitron-failed-start-setup-venue-"),
+      WAITRON_STATE_DIR: await tempDir("waitron-failed-start-setup-state-"),
+      WAITRON_MIGRATIONS_DIR: migrationsRoot,
+      WAITRON_ENV: "preproduction",
+      WAITRON_HTTP_PORT: String(httpPort),
+      WAITRON_HTTP_LANDING_PORT: "0",
+    });
+    expect(startAppendOnlyWatch).not.toHaveBeenCalled();
+  }, 60_000);
+});
+
 describe("closing a started server", () => {
   it("when stopping one background task fails, still stops the rest and gives the folder back", async () => {
     const venueDir = await seededVenueDir();
@@ -593,18 +807,7 @@ describe("closing a started server", () => {
     const env = await tradingEnv(venueDir, state);
     const stop = await spyOnMenuActivationStop();
     const server = await startServer(env);
-    // `startServer` resolves before its listener binds, and closing an unbound listener rejects.
-    await vi.waitFor(
-      () =>
-        new Promise<void>((resolve, reject) => {
-          const socket = connect(Number(env.WAITRON_HTTP_PORT), "127.0.0.1", () => {
-            socket.destroy();
-            resolve();
-          });
-          socket.once("error", reject);
-        }),
-      { timeout: 10_000 },
-    );
+    await listening(Number(env.WAITRON_HTTP_PORT));
     expect(stop).not.toHaveBeenCalled();
 
     await server.close();

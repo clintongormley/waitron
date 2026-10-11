@@ -1,7 +1,7 @@
 import { DatabaseSync } from "node:sqlite";
-import { sql } from "drizzle-orm";
 import { afterEach, describe, expect, it } from "vitest";
-import { installAppendOnlyTriggers } from "./append-only.js";
+import { type SQL, sql } from "drizzle-orm";
+import { appendOnlyTriggerFaults, installAppendOnlyTriggers } from "./append-only.js";
 import { drizzleNodeSqlite, type NodeSqliteDatabase } from "./node-sqlite-adapter.js";
 import { connectionPair } from "./connections.js";
 
@@ -136,11 +136,141 @@ describe("installAppendOnlyTriggers", () => {
     );
   });
 
+  it("stores what the installer sent, as `CREATE TRIGGER` plus the rest", () => {
+    const db = open();
+    installAppendOnlyTriggers(db, ["immutable_records"]);
+
+    expect(
+      db.get(
+        sql`select sql from sqlite_master where name = 'immutable_records_append_only_update'`,
+      ),
+    ).toEqual({
+      sql: `CREATE TRIGGER "immutable_records_append_only_update" before update on "immutable_records" for each row begin select raise(abort, 'immutable_records is append-only'); end`,
+    });
+  });
+
   it("refuses a table name that is not a plain identifier", () => {
     const db = open();
     expect(() => installAppendOnlyTriggers(db, ['x"; drop table tables_; --'])).toThrow(
       /not a plain table name/,
     );
     expect(db.all(sql`select name from sqlite_master where type = 'table'`)).toHaveLength(2);
+  });
+
+  it("refuses a bad name anywhere in the list before sending any statement", () => {
+    const sent: SQL[] = [];
+    expect(() =>
+      installAppendOnlyTriggers({ run: (query) => sent.push(query) }, [
+        "immutable_records",
+        'x"; drop table tables_; --',
+      ]),
+    ).toThrow('append-only trigger: x"; drop table tables_; -- is not a plain table name');
+    expect(sent).toEqual([]);
+  });
+});
+
+describe("appendOnlyTriggerFaults", () => {
+  const both = ["immutable_records", "tables_"] as const;
+
+  it("finds nothing wrong with what the installer wrote", () => {
+    const db = open();
+    installAppendOnlyTriggers(db, both);
+
+    expect(appendOnlyTriggerFaults(db, both)).toEqual({ missing: [], altered: [] });
+  });
+
+  it("reports a dropped trigger as missing", () => {
+    const db = open();
+    installAppendOnlyTriggers(db, both);
+    db.run(sql`drop trigger "tables__append_only_delete"`);
+
+    expect(appendOnlyTriggerFaults(db, both)).toEqual({
+      missing: ["tables__append_only_delete"],
+      altered: [],
+    });
+  });
+
+  it("reports a same-name trigger with another body as altered, even after the installer runs again", () => {
+    const db = open();
+    installAppendOnlyTriggers(db, both);
+    db.run(sql`drop trigger "immutable_records_append_only_update"`);
+    db.run(
+      sql`create trigger "immutable_records_append_only_update" before update on "immutable_records" for each row begin select 1; end`,
+    );
+
+    const expected = { missing: [], altered: ["immutable_records_append_only_update"] };
+    expect(appendOnlyTriggerFaults(db, both)).toEqual(expected);
+    installAppendOnlyTriggers(db, both);
+    expect(appendOnlyTriggerFaults(db, both)).toEqual(expected);
+  });
+
+  it("reports a same-name, same-body trigger on another table as altered", () => {
+    const db = open();
+    installAppendOnlyTriggers(db, both);
+    db.run(sql`drop trigger "immutable_records_append_only_delete"`);
+    db.run(
+      sql.raw(
+        `create trigger "immutable_records_append_only_delete" before delete on "tables_" for each row begin select raise(abort, 'immutable_records is append-only'); end`,
+      ),
+    );
+
+    expect(appendOnlyTriggerFaults(db, both)).toEqual({
+      missing: [],
+      altered: ["immutable_records_append_only_delete"],
+    });
+  });
+
+  it("reports an upper-case replacement as altered, not missing", () => {
+    const db = open();
+    installAppendOnlyTriggers(db, both);
+    db.run(sql`drop trigger "immutable_records_append_only_update"`);
+    db.run(
+      sql`create trigger "IMMUTABLE_RECORDS_APPEND_ONLY_UPDATE" before update on "immutable_records" for each row begin select 1; end`,
+    );
+
+    expect(appendOnlyTriggerFaults(db, both)).toEqual({
+      missing: [],
+      altered: ["immutable_records_append_only_update"],
+    });
+  });
+
+  it("ignores triggers it does not expect", () => {
+    const db = open();
+    db.run(sql`create table unlisted (id integer primary key)`);
+    installAppendOnlyTriggers(db, ["immutable_records"]);
+    db.run(
+      sql`create trigger "waitron_change_immutable_records" after insert on "immutable_records" begin select 1; end`,
+    );
+    db.run(
+      sql`create trigger "unlisted_append_only_update" before update on "unlisted" begin select 1; end`,
+    );
+
+    expect(appendOnlyTriggerFaults(db, ["immutable_records"])).toEqual({
+      missing: [],
+      altered: [],
+    });
+  });
+
+  it("reports both triggers of a table that was never installed, in list order", () => {
+    const db = open();
+    installAppendOnlyTriggers(db, ["immutable_records"]);
+
+    expect(appendOnlyTriggerFaults(db, both)).toEqual({
+      missing: ["tables__append_only_update", "tables__append_only_delete"],
+      altered: [],
+    });
+  });
+
+  it("reads nothing for an empty list", () => {
+    const read: SQL[] = [];
+    const target = {
+      execute: <TRow extends Record<string, unknown>>(query: SQL) => {
+        read.push(query);
+        return { rows: [] as TRow[] };
+      },
+    };
+
+    expect(appendOnlyTriggerFaults(target, [])).toEqual({ missing: [], altered: [] });
+    expect(read).toEqual([]);
   });
 });

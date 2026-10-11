@@ -27,10 +27,11 @@ import {
   FRESH,
   levelFor,
   readRecoveryState,
+  refusedWhileRunning,
   writeRecoveryState,
   type RecoveryState,
 } from "./recovery-state.js";
-import { recoveryApp } from "./recovery-surface.js";
+import { OPERATOR_TEXT, escapeHtml, recoveryApp } from "./recovery-surface.js";
 import { ensureBoxSecrets, tightenTlsDir } from "./box-secrets.js";
 import { assertNotAhead, recoveryTlsFiles, runEntry, serveRecovery } from "./node-entry.js";
 
@@ -492,6 +493,45 @@ describe("runEntry", () => {
         "/state",
         expect.objectContaining({ failures: 0 }),
       ),
+    );
+  });
+
+  it("leaves a refusal the running server wrote alone when the stayed-up callback fires", async () => {
+    const scheduleStayedUp = vi.fn<(ms: number, onStayedUp: () => void) => void>(() => {});
+    const volume = recoveryVolume(FRESH);
+    const d = deps({ ...volume.deps, scheduleStayedUp });
+    await runEntry(d);
+    const refused = refusedWhileRunning(
+      volume.current(),
+      "append_only.triggers_changed",
+      new Date("2026-10-11T10:00:00Z"),
+    );
+    await volume.deps.writeRecoveryState("/state", refused);
+    const writes = volume.deps.writeRecoveryState.mock.calls.length;
+    scheduleStayedUp.mock.calls[0]![1]();
+    await vi.waitFor(() =>
+      expect(volume.deps.writeRecoveryState.mock.calls.length).toBeGreaterThan(writes),
+    );
+    expect(volume.current()).toStrictEqual(refused);
+  });
+
+  it("serves the page at once for a start that reads a refusal, with that refusal's wording", async () => {
+    const stateDir = await mkdtemp(join(tmpdir(), "wt-entry-refused-"));
+    await writeRecoveryState(
+      stateDir,
+      refusedWhileRunning(
+        { ...FRESH, failures: 1 },
+        "append_only.triggers_changed",
+        new Date("2026-10-11T10:00:00Z"),
+      ),
+    );
+    const serveRecovery = vi.fn<(app: Hono) => Promise<void>>(() => Promise.resolve());
+    const d = deps({ stateDir, readRecoveryState, serveRecovery });
+    await runEntry(d);
+    expect(d.startServer).not.toHaveBeenCalled();
+    const page = await (await serveRecovery.mock.calls[0]![0].request("/")).text();
+    expect(page).toContain(
+      escapeHtml(OPERATOR_TEXT["append_only.triggers_changed"]!["en-GB"].title),
     );
   });
 

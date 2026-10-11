@@ -1,3 +1,10 @@
+import {
+  APPEND_ONLY_CHECK_MS,
+  assertAppendOnlyIntact,
+  missingBeforeMigration,
+  refuseTrading,
+  startAppendOnlyWatch,
+} from "./append-only-watch.js";
 import { createAuthorityClockStatus, authorityClockAlertSource } from "./time-health.js";
 import { createCloudSnapshotWorker } from "./cloud-snapshot-worker.js";
 import { createCloudSnapshotArchive } from "./cloud-snapshot-archive.js";
@@ -92,6 +99,7 @@ import { mountDiagnosticsApi } from "./diagnostics-api.js";
 import { mountAlertsApi } from "./alerts-api.js";
 import { createAlertRegistry } from "./alerts.js";
 import {
+  appendOnlyRestoredAlertSource,
   awaitingCertAlertSource,
   backupAlertSource,
   sealedStateAlertSource,
@@ -207,6 +215,8 @@ import { closeListener } from "./close-listener.js";
 import { mountBoxStatusApi } from "./box-status.js";
 import { mountBoxRetireApi } from "./box-retire.js";
 import { mountRecoveryBundleApi } from "./recovery-bundle-api.js";
+import { withRecoveryLock } from "./recovery-lock.js";
+import { readRecoveryState, writeRecoveryState } from "./recovery-state.js";
 import { mountBackupApi } from "./backup-api.js";
 import { createSealedStateRefresher, type SealedStateStatus } from "./sealed-state.js";
 import { loadBackupConfig, loadRecoveryKey } from "./backup-config.js";
@@ -692,6 +702,7 @@ function makeStartedServer(
 /** Test seams; production leaves them unset. */
 export interface StartServerSeams {
   stream?: Pick<StreamHostDeps, "walLimitBytes">;
+  appendOnlyWatch?: { intervalMs?: number };
 }
 
 /**
@@ -803,17 +814,32 @@ async function bootServer(
   const moduleConfig = await readModuleConfig(config.stateDir);
   const setsToMigrate =
     config.till === undefined ? ALL_MODULES : enabledModules(ALL_MODULES, moduleConfig);
+  const migrationOptions = migrationOptionsFor(
+    orderedMigrationSets(setsToMigrate),
+    config.migrationsRoot,
+  );
+  const appendOnlyTables = migrationOptions.flatMap((set) => set.appendOnlyTables ?? []);
+  // A short-lived open, closed before `applyMigrations`, which puts any of these back.
+  const restoredTriggers = await missingBeforeMigration(config.venueDir, appendOnlyTables);
   await withDevMigrationHint(log, config.devMode, () =>
-    applyMigrations(
-      config.venueDir,
-      migrationOptionsFor(orderedMigrationSets(setsToMigrate), config.migrationsRoot),
-    ),
+    applyMigrations(config.venueDir, migrationOptions),
   );
   // The long-lived open. On a primary with a backup configured, the backup supervisor opens its own
   // beside it.
   const store = await openVenueDatabase(config.venueDir);
   undoOnFailure.push(() => store.close());
   const db = store.venue;
+  // After migrating, which reinstalls a missing trigger but leaves a same-name altered one in place.
+  assertAppendOnlyIntact(db, appendOnlyTables);
+  // A missing trigger also shows up after a crash between a set's migration and its trigger
+  // install, or on the first start of a release that marks an existing table append-only, so this
+  // is a warning, not a refusal.
+  const appendOnlyRestored = {
+    restoredAt: restoredTriggers.length > 0 ? now().toISOString() : null,
+  };
+  if (restoredTriggers.length > 0) {
+    log("warn", "append_only.triggers_restored", { triggers: restoredTriggers });
+  }
 
   // Drift visibility: log the enabled set against what the database has actually migrated. A
   // soft-disabled module's data is kept; it is simply not migrated.
@@ -1758,6 +1784,7 @@ async function bootServer(
     backupSource,
     sealedStateAlertSource(sealedStateStatus),
     firstStartAlertSource(firstStart),
+    appendOnlyRestoredAlertSource(appendOnlyRestored),
     awaitingCertAlertSource(awaitingFiscalCert),
     authorityClockAlertSource(authorityClock.read),
     printingAlertSource(),
@@ -2009,6 +2036,21 @@ async function bootServer(
     mountSpa(app, { root: config.tillAppDir, basePath: "", navigationPath: "/tabs" }, log);
   }
 
+  const appendOnlyWatch = startAppendOnlyWatch({
+    db,
+    tables: appendOnlyTables,
+    intervalMs: seams.appendOnlyWatch?.intervalMs ?? APPEND_ONLY_CHECK_MS,
+    refuse: refuseTrading({
+      stateDir: config.stateDir,
+      now,
+      log,
+      kill: () => process.kill(process.pid, "SIGTERM"),
+      store: { lock: withRecoveryLock, read: readRecoveryState, write: writeRecoveryState },
+    }),
+    log,
+  });
+  undoOnFailure.push(async () => appendOnlyWatch.stop());
+
   // After every mount above, so the app is complete before it binds.
   const server = startTradingListener(config, app, now, log);
   undoOnFailure.push(() => closeListener(server));
@@ -2194,6 +2236,7 @@ async function bootServer(
           () => cloudSnapshots,
           unsubscribeFromChanges,
           () => menuActivation.stop(),
+          () => appendOnlyWatch.stop(),
           () => liveEvents.close(),
           () => tunnelController.abort(),
           () => loop,

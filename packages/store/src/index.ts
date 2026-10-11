@@ -8,8 +8,12 @@ import { registerSearchFunction } from "./search-function.js";
 import { closeQuietly, isLocked, lockVenueDirectory, type VenueLock } from "./venue-lock.js";
 import { watchdogStopped } from "./venue-liveness.js";
 
-export { installAppendOnlyTriggers } from "./append-only.js";
-export type { StatementTarget } from "./append-only.js";
+export {
+  appendOnlyTriggerFaults,
+  appendOnlyTriggers,
+  installAppendOnlyTriggers,
+} from "./append-only.js";
+export type { AppendOnlyTrigger, CatalogueTarget, StatementTarget } from "./append-only.js";
 export { archiveTo } from "./archive.js";
 export type { CommitListener } from "./connections.js";
 export { drizzleNodeSqlite } from "./node-sqlite-adapter.js";

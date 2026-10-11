@@ -714,7 +714,11 @@ operator cannot read. So every start counted as an attempt writes `server.boot_s
 error's name and message, the stack, each `caused by` in its cause chain up to five levels in all and an `AppError`'s params, through
 `redactSecrets` (`runEntry`, `apps/server/src/node-entry.ts`). The page shows the latest start's `detail` in full,
 read from the whole file so the tail's line cap cannot cut it off, and only when no later start
-began; in the tail each failure's `detail` is laid out on its own lines.
+began; in the tail each failure's `detail` is laid out on its own lines. A box the append-only
+check stopped while trading (`refused` in `recovery.json`, `apps/server/src/append-only-watch.ts`)
+shows "Stopped while running." where the count would be, and no failed start's detail, because the
+start before it did not fail: the trigger names are in the tail. `/recovery-api/status` reports
+`refused`.
 
 Strings on the page that come from outside the image: the error CODE, `lastFailureAt`, the LOG TAIL
 and the last failure's detail, all HTML-escaped. The failure count also does, read as a number, and

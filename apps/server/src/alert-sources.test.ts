@@ -38,6 +38,7 @@ import {
   batteryAlertSource,
   BATTERY_ERROR,
   BATTERY_WARN,
+  appendOnlyRestoredAlertSource,
   firstStartAlertSource,
   printingAlertSource,
   stationOutputAlertSource,
@@ -92,6 +93,25 @@ describe("firstStartAlertSource", () => {
       },
     ]);
     expect(await firstStartAlertSource({ failedSince: null }).read(ctx)).toEqual([]);
+  });
+});
+
+describe("appendOnlyRestoredAlertSource", () => {
+  it("raises append_only.triggers_restored, since the start, only when a start put a trigger back", async () => {
+    const at = "2026-10-11T10:00:00.000Z";
+    const source = appendOnlyRestoredAlertSource({ restoredAt: at });
+    expect(source.area).toBe("fiscal");
+    expect(source.permission).toBe("fiscal.view");
+    expect(await source.read(ctx)).toStrictEqual([
+      {
+        key: "append_only.triggers_restored",
+        code: "append_only.triggers_restored",
+        params: {},
+        severity: "warning",
+        since: at,
+      },
+    ]);
+    expect(await appendOnlyRestoredAlertSource({ restoredAt: null }).read(ctx)).toEqual([]);
   });
 });
 

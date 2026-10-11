@@ -42,6 +42,7 @@ import {
   afterFailure,
   cleared,
   readRecoveryState,
+  stayedUpClear,
   updateRecoveryState,
   withFailureCode,
   withoutAttempt,
@@ -516,7 +517,7 @@ export async function runEntry(deps: EntryDeps): Promise<void> {
   }
 
   deps.installShutdownHandlers(server);
-  deps.scheduleStayedUp(STAYED_UP_MS, () => void persistState(deps, cleared));
+  deps.scheduleStayedUp(STAYED_UP_MS, () => void persistState(deps, stayedUpClear));
 }
 
 /**

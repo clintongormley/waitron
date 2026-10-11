@@ -8,6 +8,8 @@ import {
   cleared,
   levelFor,
   readRecoveryState,
+  refusedWhileRunning,
+  stayedUpClear,
   updateRecoveryState,
   withFailureCode,
   withoutAttempt,
@@ -286,5 +288,86 @@ describe("updateRecoveryState", () => {
       ),
     ).rejects.toThrow("no");
     expect(write).not.toHaveBeenCalled();
+  });
+});
+
+describe("a refusal while running", () => {
+  const at = new Date("2026-10-11T10:00:00Z");
+  const code = "append_only.triggers_changed";
+  const once = afterFailure(FRESH, "x", new Date("2026-10-10T10:00:00Z"));
+  const refused = refusedWhileRunning(once, code, at);
+
+  it("keeps the count, records the code and time, and is at recovery", () => {
+    expect(refused).toStrictEqual({
+      failures: 1,
+      level: "recovery",
+      lastErrorCode: code,
+      lastFailureAt: at.toISOString(),
+      clears: 0,
+      refused: true,
+    });
+  });
+
+  it("is read back refused, at recovery", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "wt-rec-"));
+    await writeRecoveryState(dir, refused);
+    const read = await readRecoveryState(dir);
+    expect(read.level).toBe("recovery");
+    expect(read).toStrictEqual(refused);
+  });
+
+  it("reads a flag that is not exactly true as not refused", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "wt-rec-"));
+    await writeFile(join(dir, "recovery.json"), JSON.stringify({ failures: 1, refused: "yes" }));
+    expect(await readRecoveryState(dir)).toStrictEqual({ ...FRESH, failures: 1 });
+  });
+
+  it("is dropped by a clear", () => {
+    expect(cleared(refused)).toStrictEqual({ ...FRESH, clears: 1 });
+  });
+
+  it("stays at recovery when an attempt takes its failure back", () => {
+    const wrote = afterFailure(once, "server.boot_incomplete", at);
+    const later = refusedWhileRunning(wrote, code, at);
+    expect(withoutAttempt(later, once, wrote)).toStrictEqual({
+      ...later,
+      failures: 1,
+      level: "recovery",
+    });
+  });
+
+  it("treats a refusal as a change since the attempt, even with every other field the same", () => {
+    const wrote = afterFailure(once, "server.boot_incomplete", at);
+    const flagged: RecoveryState = { ...wrote, refused: true };
+    expect(withoutAttempt(flagged, once, wrote)).toStrictEqual({
+      ...flagged,
+      failures: 1,
+      level: "recovery",
+    });
+  });
+
+  it("is kept by the stayed-up clear, which still clears an ordinary state", () => {
+    expect(stayedUpClear(refused)).toBe(refused);
+    expect(stayedUpClear(once)).toStrictEqual(cleared(once));
+  });
+
+  it("stands through a later failure and a later failure code, which replace the code", () => {
+    const later = new Date("2026-10-11T10:05:00Z");
+    expect(afterFailure(refused, "server.boot_incomplete", later)).toStrictEqual({
+      failures: 2,
+      level: "recovery",
+      lastErrorCode: "server.boot_incomplete",
+      lastFailureAt: later.toISOString(),
+      clears: 0,
+      refused: true,
+    });
+    expect(withFailureCode(refused, "provisioning.database_in_use", later)).toStrictEqual({
+      failures: 1,
+      level: "recovery",
+      lastErrorCode: "provisioning.database_in_use",
+      lastFailureAt: later.toISOString(),
+      clears: 0,
+      refused: true,
+    });
   });
 });

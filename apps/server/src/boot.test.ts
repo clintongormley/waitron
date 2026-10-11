@@ -31,6 +31,7 @@ import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:
 import { tmpdir } from "node:os";
 import { basename, dirname, isAbsolute, join } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
+import { DatabaseSync } from "node:sqlite";
 import { eq, sql } from "drizzle-orm";
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { Agent } from "undici";
@@ -121,6 +122,7 @@ import { offerProducts } from "./testing/zone-offers.js";
 import type { Turns } from "./backup-turns.js";
 import { MIN_PASSPHRASE_LENGTH } from "./recovery-bundle.js";
 import { freePort, freePorts } from "./testing/free-ports.js";
+import { readRecoveryState } from "./recovery-state.js";
 import { seedDevice } from "@waitron/db/testing/seed.js";
 
 /**
@@ -1540,6 +1542,85 @@ describe("startServer, against a migrated venue directory", () => {
       await rm(stateDir, { recursive: true, force: true });
     }
   }, 60_000);
+
+  for (const [what, drop] of [
+    ["raises append_only.triggers_restored when a start put back a dropped trigger", true],
+    ["raises no append_only.triggers_restored for an untouched venue", false],
+  ] as const) {
+    it(
+      what,
+      async () => {
+        const venue = await freshVenue();
+        const stateDir = await mkdtemp(join(tmpdir(), "waitron-boot-triggers-restored-"));
+        let server: StartedServer | undefined;
+        let close = async () => {};
+        try {
+          const db = venue.store.venue;
+          await seedTradingVenue(db);
+          const [admin] = await db
+            .insert(persons)
+            .values({
+              displayName: "Restored Trigger Admin",
+              pinHash: hashPin("1234"),
+              passwordHash: hashPassword("dashPass123"),
+              email: "restored-trigger-admin@example.test",
+              role: "admin",
+            })
+            .returning({ id: persons.id });
+          const session = await withTransaction(db, (tx) =>
+            startManagementSession(tx, { personId: admin!.id }),
+          );
+          await venue.store.close();
+          if (drop) {
+            const raw = new DatabaseSync(join(venue.directory, "venue.db"), { timeout: 5000 });
+            try {
+              raw.exec("drop trigger sales_append_only_delete");
+            } finally {
+              raw.close();
+            }
+          }
+          await writeFile(
+            join(stateDir, "modules.json"),
+            JSON.stringify({ modules: { "fiscal-none": false } }),
+          );
+          await ensureBoxSecrets({
+            stateDir,
+            hostnames: ["waitron.local", "localhost"],
+            now: () => new Date(),
+          });
+          const port = await freePort();
+          server = await startServer({
+            ...KEY_ENV,
+            WAITRON_STATE_DIR: stateDir,
+            WAITRON_VENUE_DIR: venue.directory,
+            WAITRON_HTTP_PORT: String(port),
+            WAITRON_MIGRATIONS_DIR: migrationsRoot,
+            WAITRON_ENV: "preproduction",
+          });
+          const https = httpsVia(await readFile(join(stateDir, "tls", "ca.crt")));
+          close = https.close;
+          await (await fetchHealthOk(`https://127.0.0.1:${port}/health`, https.via)).body?.cancel();
+          const response = await fetch(`https://127.0.0.1:${port}/management-api/alerts`, {
+            ...https.via,
+            headers: { cookie: `${MANAGEMENT_COOKIE}=${session.token}` },
+          });
+          expect(response.status).toBe(200);
+          const body = (await response.json()) as { alerts: { code: string; severity: string }[] };
+          const restored = body.alerts.filter(
+            (alert) => alert.code === "append_only.triggers_restored",
+          );
+          expect(restored).toEqual(drop ? [expect.objectContaining({ severity: "warning" })] : []);
+        } finally {
+          await server?.close().catch(() => {});
+          await close();
+          await venue.store.close();
+          await rm(venue.directory, { recursive: true, force: true });
+          await rm(stateDir, { recursive: true, force: true });
+        }
+      },
+      60_000,
+    );
+  }
 
   // The only suite that observes boot's own wiring of the advertised addresses
   // (`box-secrets.test.ts` injects its own `listIpv4`): the override must reach both the leaf on disk
@@ -4636,4 +4717,120 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
       await rm(sourceStateDir, { recursive: true, force: true });
     }
   }, 120_000);
+});
+
+describe("startServer — the append-only watch in trading mode", () => {
+  const INTERVAL_MS = 50;
+  const UPDATE = "sales_append_only_update";
+
+  /** A seeded trading venue of its own, so a tampered trigger reaches no other test. */
+  async function startWatched() {
+    const venue = await freshVenue();
+    const stateDir = await mkdtemp(join(tmpdir(), "waitron-boot-append-only-state-"));
+    const cleanup = async () => {
+      await rm(venue.directory, { recursive: true, force: true });
+      await rm(stateDir, { recursive: true, force: true });
+    };
+    let server: StartedServer | undefined;
+    try {
+      await seedTradingVenue(venue.store.venue);
+      await venue.store.close();
+      await writeFile(
+        join(stateDir, "modules.json"),
+        JSON.stringify({ modules: { "fiscal-none": false } }),
+      );
+      const port = await freePort();
+      server = await startServer(
+        {
+          ...KEY_ENV,
+          WAITRON_STATE_DIR: stateDir,
+          WAITRON_VENUE_DIR: venue.directory,
+          WAITRON_HTTP_PORT: String(port),
+          WAITRON_MIGRATIONS_DIR: migrationsRoot,
+          WAITRON_ENV: "preproduction",
+        },
+        {},
+        { appendOnlyWatch: { intervalMs: INTERVAL_MS } },
+      );
+      await awaitListening(port);
+    } catch (error) {
+      // A listener that never bound rejects its close; the original error is the one to report.
+      await server?.close().catch(() => {});
+      await venue.store.close();
+      await cleanup();
+      throw error;
+    }
+    return {
+      server,
+      stateDir,
+      cleanup,
+      /** The timeout lets the DDL wait out a boot duty's write rather than fail SQLITE_BUSY. */
+      tamper: (statements: string) => {
+        const raw = new DatabaseSync(join(venue.directory, "venue.db"), { timeout: 5_000 });
+        try {
+          raw.exec(statements);
+        } finally {
+          raw.close();
+        }
+      },
+    };
+  }
+
+  for (const [what, statements] of [
+    [
+      "replaced",
+      `drop trigger ${UPDATE}; create trigger ${UPDATE} before update on sales begin select 1; end;`,
+    ],
+    ["dropped", `drop trigger ${UPDATE};`],
+  ] as const) {
+    it(`keeps an untouched box trading, then stops it and records the refusal for the next start when a trigger is ${what}`, async () => {
+      await withMockedKill(async (kills) => {
+        const box = await startWatched();
+        try {
+          await delay(INTERVAL_MS * 5);
+          expect(kills).toEqual([]);
+
+          box.tamper(statements);
+          await vi.waitFor(() => expect(kills).toEqual([{ pid: process.pid, signal: "SIGTERM" }]), {
+            timeout: 5_000,
+          });
+          expect(await readRecoveryState(box.stateDir)).toMatchObject({
+            refused: true,
+            level: "recovery",
+            lastErrorCode: "append_only.triggers_changed",
+          });
+          // The file the recovery page's log tail reads (`resolveLogDir`, beside the state folder).
+          const logged = (await readFile(join(box.stateDir, "logs", "waitron.log"), "utf8"))
+            .split("\n")
+            .filter(Boolean)
+            .map((line) => JSON.parse(line) as LogLine & Record<string, unknown>);
+          expect(logged).toContainEqual(
+            expect.objectContaining({ level: "error", event: "append_only.triggers_changed" }),
+          );
+        } finally {
+          await box.server.close();
+          await box.cleanup();
+        }
+      });
+    }, 60_000);
+  }
+
+  it("stops watching once the server is closed", async () => {
+    await withMockedKill(async (kills) => {
+      const box = await startWatched();
+      try {
+        await box.server.close();
+        // A watch left running reads the closed store, which throws, so it logs and never refuses.
+        const lines = await withCapturedStdout(async (captured) => {
+          box.tamper(`drop trigger ${UPDATE};`);
+          await delay(INTERVAL_MS * 5);
+          return captured;
+        });
+        expect(kills).toEqual([]);
+        expect(lines.filter((line) => line.includes('"event":"append_only.'))).toEqual([]);
+      } finally {
+        await box.cleanup();
+      }
+    });
+  }, 60_000);
 });

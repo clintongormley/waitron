@@ -229,6 +229,26 @@ export function firstStartAlertSource(holder: { failedSince: string | null }): A
   };
 }
 
+/** Raised for the rest of this start when it found an append-only trigger missing and put it back. */
+export function appendOnlyRestoredAlertSource(holder: { restoredAt: string | null }): AlertSource {
+  return {
+    area: "fiscal",
+    permission: "fiscal.view",
+    async read(): Promise<readonly OngoingAlert[]> {
+      if (holder.restoredAt === null) return [];
+      return [
+        {
+          key: "append_only.triggers_restored",
+          code: "append_only.triggers_restored",
+          params: {},
+          severity: "warning",
+          since: holder.restoredAt,
+        },
+      ];
+    },
+  };
+}
+
 /**
  * `holder` is the in-memory cell the fiscal pass flips (`apps/server/src/pass.ts`) when a drain pass
  * is skipped for a missing AEAT certificate.
