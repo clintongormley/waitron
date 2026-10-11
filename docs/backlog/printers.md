@@ -501,6 +501,38 @@ returns `null`. This checks those readers, not every sale path.
   puts each price far from its name (which adds to the "prices are not a column" item in the till
   layout pass, under A4). _2026-10-05 (W70): the picker is now the standard size, 672px wide at 1280._
 
+## A497. Receipt language chosen at the till, and the printed layout
+
+**A497 (owner, 2026-10-11) — OPEN.** It amends decisions C113 and C114 (below, under _Decisions
+and deliberate limits_).
+
+1. **Staff choose the receipt's own language at the till.** The default is the location's receipt
+   language, which is Catalan in Catalonia. This replaces C113's "no choice when the original
+   prints". The owner's reading, which the compliance research supports:
+   - the Catalan Consumer Code (art. 128-1.2) gives customers a right to receive invoices in
+     Catalan; it is not a rule that receipts default to Catalan;
+   - the Catalan consumer agency's guidance is stricter, "at least in Catalan";
+   - both are set out in [regional-language-rules.md](../compliance/regional-language-rules.md),
+     Catalonia.
+
+   The owner chose this knowing the agency reads it differently, and asked for no advisor
+   question. Before building, trace which language a sale is filed in (`namesLocale`,
+   [modifiers.md](../developers/modifiers.md)) against the language its receipt prints in.
+2. **Which languages are offered.** Both that choice and a copy in another language are offered
+   only in the venue's content languages that have receipt wording (Spanish, Catalan, Galician and
+   Basque today, `packages/country-es/src/receipt-labels.ts`), plus the receipt language. Spanish
+   stays offered in Catalonia (Spain's Constitutional Court, ruling 88/2017). This narrows C114,
+   which offered every language the country pack has. No English receipts (owner, 2026-10-11).
+   A493's receipt editor lists the same languages.
+3. **The printed layout:**
+   - space above and below the logo;
+   - a shorter contact block: the legal name and tax ID on one line, the address on two, phone and
+     email on one (A493's mockup preview);
+   - a line above TOTAL.
+
+   That the legal name and tax ID may share one line is not yet checked against what a receipt
+   must show.
+
 ## Decisions and deliberate limits
 
 - **Optional receipt formatting (A366 slice 7).** The `receipt-print.test.ts` case that throws
@@ -537,8 +569,13 @@ returns `null`. This checks those readers, not every sale path.
   were saved. The language is the first entry of the location's saved list
   (`locations.invoice_locales`); **in Catalonia it is fixed to Catalan**
   ([regional-language-rules.md](../compliance/regional-language-rules.md), Catalonia).
+  **Amended by the owner, 2026-10-11 (A497, not built yet):** staff choose the receipt's own
+  language at the till, and the location's language (Catalan in Catalonia) is only the default.
 
 - **A copy can be printed in another receipt language (C114, #1022).** A copy is offered
   in every receipt language the pack has, even in Catalonia: a product choice, which includes
   Spanish, the customer's right there on request (Spain's Constitutional Court, ruling 88/2017;
   [regional-language-rules.md](../compliance/regional-language-rules.md), Catalonia).
+  **Amended by the owner, 2026-10-11 (A497, not built yet):** copies are offered only in the
+  venue's content languages that have receipt wording, plus the receipt language; Spanish stays
+  offered in Catalonia.

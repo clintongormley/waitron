@@ -105,6 +105,114 @@ and hours proposals; the historical spec keeps its dated pointers.
   checks the name before the date's id, so a blank name for another venue's date answers
   `hours.invalid` rather than not found.
 
+## A493. Departments and zones as one list, edited in dialogs
+
+**A493 (owner, 2026-10-11) — OPEN. Starts after A435 step 6 lands** (lane E, in progress). That step
+changes the same screens and replaces a zone's and a department's Disable with Delete
+([plan](../superpowers/plans/2026-10-11-a435-6-tables-zones-departments-delete.md)). The owner's
+mockup is the private canvas https://claude.ai/artifact/Tya5FcmK39ESBkQ2hTaA7s, which has four
+boards: the list, Edit department, Edit zone and Edit receipt.
+
+**The list.** "Departments and zones" becomes one list. Each department is a row, and its zones are
+indented beneath it. The columns are name, service style (how orders start), counter service (when
+counter service is used) and print receipt. The row menu is the last column, keyed `actions` and
+`pinned: "end"`:
+- a department's menu: Edit, Add a zone, Edit receipt, Delete;
+- a zone's menu: Edit, Add floor plan (Edit floor plan once it has one), Delete.
+
+Clicking a row opens its edit dialog, as products do. The department page and its Settings, Zones
+and Receipt tabs go away. With them goes a fault the owner hit: the menu link "Departments and
+zones" reopened the last department instead of the list, and showed "This department no longer
+exists." when that department was gone. The cause is that the shell reads the department from the
+page address (`packages/venue-service/src/dashboard/venue-departments-shell.ts`, `#restore` and
+`#content`).
+
+**Zones.** A zone can set its own service settings (`zone_sale_policies`,
+`packages/venue-service/src/schema/service.ts`). In the list, a value the zone takes from its
+department is shown in grey italic, and a value it sets itself in normal text. The zone dialog
+offers "Same as department (…)" as a choice for each setting. Each zone row has a drag handle, and
+dropping a zone on another department moves it there, replacing today's "Move to department". The
+row being dragged must stay visible while it moves, which is the same fault as A499's column
+chooser.
+
+**Edit department dialog.** Department name, then trading name (moved up from "On the receipt"),
+how orders start, when counter service is used, and the collection-ticket switch. "Print a receipt"
+and "Print the trading name above the legal name" move to the receipt dialog. The "On the receipt"
+heading and the "Edit the receipt" link go.
+
+**Edit receipt dialog.** A wide dialog with the form beside the printed preview. It holds:
+- print a receipt;
+- the trading-name switch;
+- print the venue's address;
+- logo, phone and email;
+- the description sent to the tax agency (today the venue-wide "Sent to the tax agency (not
+  printed)" field on `apps/dashboard/src/screens/receipts-screen.ts`);
+- subtitle and footer per language.
+
+Each fiscal record carries its own description, but how a sale picks today's venue-wide value has
+not been traced: trace it before moving the field. The languages listed are the venue's content
+languages that have receipt wording (Spanish, Catalan, Galician and Basque today,
+`packages/country-es/src/receipt-labels.ts`), plus the venue's receipt language, which comes first.
+Headings carry the language name alone, with one line saying the others print as copies on request.
+That replaces "Catalan (receipts)" and "Spanish (copies)"
+(`apps/dashboard/src/screens/department-receipt-editor.ts`). The language rule is A497's.
+
+**The venue receipt page goes.** There are no venue-wide receipt defaults any more
+(`apps/dashboard/src/screens/venue-receipt-defaults-editor.ts`). Each department holds its own
+logo, subtitle, footer, address switch and tax-agency description. A new department starts with an
+empty receipt. The venue's receipt language moves to Venue settings. Nothing is live, so stored
+venue defaults may be dropped rather than carried over (CLAUDE.md §3, last rule).
+
+## A494. The Venue settings page: layout, editing and the legal name
+
+**A494 (owner, 2026-10-11) — OPEN.**
+
+- **Scrolling.** The page scrolls the header bar away but is cut off where the left menu ends, so
+  its foot cannot be reached.
+- **Layout.** It uses a lot of space. Show the address as one block of text, with no label per
+  line.
+- **Fixed identity.** At the top, show the legal name, tax ID and country as one compact, read-only
+  line. They never appear on the edit form: no screen can change them (`apps/server/src/venue-details.ts`
+  edits name, address, province, time zone and business-day start only).
+- **The locked note.** In edit mode, "The venue has recorded sales; this value is locked." appears
+  under each of the three locked fields. Say it once.
+- **"?" buttons.** The address fields' "?" buttons (`wt-help-tooltip`,
+  `apps/dashboard/src/screens/venue-details-panel.ts`) fall under A237's rule and are listed there.
+- **Switching tabs.** Edit mode survives a switch to another Venue settings tab and back. With
+  nothing changed, a switch leaves edit mode. With changes, it brings up the unsaved-changes prompt.
+  The panel has a draft scope (`draftScopeFor`), but whether a switch with real changes prompts
+  today was not tried.
+- **VAT class for new products** (A356, #1371). It moves to Products and menus under its own
+  heading. Today it is a second, unheaded panel on the venue details tab ("catalogue-defaults" in
+  `apps/dashboard/src/dashboard-app.ts`), shown only to people with `person.manage`, the
+  staff-management permission. Give it a products permission.
+- **Changing the legal name, keeping the tax ID.** Add a guarded "Change legal name" action on
+  venue details. It applies from the next sale; receipts already issued and records already filed
+  keep the old name. The Veri\*Factu hash does not include the name: `buildCadenaAlta` in
+  `@waitron/verifactu` 0.2.1 (`dist/huella.js`) hashes the tax ID, invoice number, date, invoice
+  type, tax and total amounts, the previous hash and the record's time. So the chain still verifies
+  across the change; prove that with a test. `tenants` is a write-path table that only
+  `packages/provisioning/src/venue-apply.ts` may write (`scripts/write-path-tables.json`), so this
+  adds a writer and changes that list. Fiscal-adjacent: the owner lands it.
+
+## A495. Change the business-day start from a future date
+
+**A495 (owner, 2026-10-11) — OPEN.** Fiscal-adjacent: the owner lands it.
+
+Today the time zone and the business-day start cannot be changed once the venue has a sale, an
+order or a daily close (`apps/server/src/venue-details.ts`, A261 step 7, #1281). The reason is in
+[the venue details plan](../superpowers/plans/2026-10-05-venue-details.md), items C4 and C5:
+- reports work out each day's window from the CURRENT time zone and start, so a change would
+  regroup old sales;
+- a daily close is append-only and hash-chained, and it stores its business day but not the start
+  used to work it out, so recomputed reports would disagree with recorded closes.
+
+The owner wants the start to be changeable. Store it with the date it takes effect, so earlier days
+keep the start they had, and have reports, closes and anything else keyed by business day read the
+start in force on each day. The same plan lists those other readers: station overrides (C6), and
+backups and email (C8). Whether the time zone takes the same route is part of the design. Related
+open entry: "Changing the business-day start after saving service hours" (A366-1 follow-up).
+
 ## Decisions and deliberate limits
 
 - **Permanent station Delete is separate from Close for today (A435 step 5, 2026-10-10).**

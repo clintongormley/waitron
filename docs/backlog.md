@@ -426,6 +426,11 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
 
 _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
 
+- **A496. A new taxpayer moves to a new venue by configuration export and import (owner,
+  2026-10-11).** The export exists, but its bundle carries the old tax ID, legal name and invoice
+  series into the new venue.
+  [Detail](backlog/setup.md#a496-a-new-taxpayer-moves-to-a-new-venue-by-configuration-export-and-import)
+
 - **`#onGoto` in `setup-app.ts` keeps `fiscalTestStatus`** — found by #567 while pruning comments.
   The done screen treats a non-network status refusal as ready, so an HTTP 503 can announce "The
   server is ready" early. [Detail](backlog/setup.md#ongoto-in-setup-appts-keeps-fiscalteststatus)
@@ -621,6 +626,11 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
   was the separate A434 ruling.
 
 _Formerly the catalogue and menus entries in the opening part of the old Track A (before A1), and the catalogue entries filed under A2; part of A9._ Detail: [backlog/catalogue.md](backlog/catalogue.md).
+
+- **A498. Menu screens: colour picker, menu preview and the Preview tab (owner, 2026-10-11).**
+  Shorter notes, fewer columns and a tighter Preview tab, "Publish now" and "Publish later", and a
+  narrower schedule dialog.
+  [Detail](backlog/catalogue.md#a498-menu-screens-colour-picker-menu-preview-and-the-preview-tab)
 
 - **A product in more than one category (owner 2026-10-10, A461 amendment 4).** Define the
   storage, editor and what Move/Remove do to memberships. Products currently has one category;
@@ -1275,6 +1285,21 @@ _Formerly the catalogue and menus entries in the opening part of the old Track A
 ### Service periods, opening hours and departments
 
 _Formerly entries spread across the old sections, A261's venue-operations steps among them; part of A9._ Detail: [backlog/service-periods.md](backlog/service-periods.md).
+
+- **A493. Departments and zones as one list, edited in dialogs (owner, 2026-10-11).** Zones
+  indented under their departments, a row menu on each, a dialog to edit, and the venue receipt
+  page folded into each department's receipt. Starts after A435 step 6 lands.
+  [Detail](backlog/service-periods.md#a493-departments-and-zones-as-one-list-edited-in-dialogs)
+
+- **A494. The Venue settings page: layout, editing and the legal name (owner, 2026-10-11).** The
+  page is cut off when scrolled, edit mode survives a tab switch, the VAT default is in the wrong
+  place, and the legal name cannot be changed. Fiscal-adjacent: the owner lands it.
+  [Detail](backlog/service-periods.md#a494-the-venue-settings-page-layout-editing-and-the-legal-name)
+
+- **A495. Change the business-day start from a future date (owner, 2026-10-11).** Refused today once
+  a venue has sales, because reports would regroup old days. Store the start with the date it takes
+  effect. Fiscal-adjacent: the owner lands it.
+  [Detail](backlog/service-periods.md#a495-change-the-business-day-start-from-a-future-date)
 
 - **Enabling a department leaves its zones disabled; enabling a zone leaves routing exceptions removed.**
   Found along the way by W110e (#1290). A zone's tables on today's plan come back with the zone
@@ -2639,6 +2664,11 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
 
 _Formerly A3, A8 and B6; part of A9._ Detail: [backlog/printers.md](backlog/printers.md).
 
+- **A497. Receipt language chosen at the till, and the printed layout (owner, 2026-10-11).** Catalan
+  becomes the default rather than fixed, the languages offered narrow to the venue's content
+  languages, and the printed receipt is tidied. Amends decisions C113 and C114.
+  [Detail](backlog/printers.md#a497-receipt-language-chosen-at-the-till-and-the-printed-layout)
+
 - **Show a failed automatic invoice copy to staff.** A recoverable email or office-printer
   reservation refusal commits the sale with no delivery row or paper fallback; the diagnostic
   is in the server log. Decide how the till should show that outcome and offer another copy.
@@ -3123,6 +3153,10 @@ _Formerly A6, and the old Track C's payments items; part of A9._ Detail: [backlo
 ### Users, sign-in and the dashboard shell
 
 _Formerly A7, and the dashboard entries in the opening part of the old Track A (before A1); part of A9._ Detail: [backlog/dashboard.md](backlog/dashboard.md).
+
+- **A499. Dragging in the column chooser, and leaving a sign-in screen (owner, 2026-10-11).** The
+  column being dragged is invisible while it moves, and a typed PIN brings up the unsaved-changes
+  question. [Detail](backlog/dashboard.md#a499-dragging-in-the-column-chooser-and-leaving-a-sign-in-screen)
 
 - **A449 — a dashboard tab left open through a box reset keeps retrying every request.** Seen
   2026-10-09 on the owner's box: across `waitron.sh reset`, the setup wizard and a new venue, the
