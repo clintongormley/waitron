@@ -1,7 +1,14 @@
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it, vi } from "vitest";
-import { DEFAULT_TIME_ZONE, newId, nowIso, withTransaction } from "@waitron/db";
+import {
+  DEFAULT_TIME_ZONE,
+  floorTodayTables,
+  floorZones,
+  newId,
+  nowIso,
+  withTransaction,
+} from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
@@ -37,12 +44,15 @@ async function setupVenue(opts: { timeZone?: string } = {}): Promise<Venue> {
 }
 
 async function makeTable(v: Venue, label: string): Promise<string> {
-  // `id` and `created_at` supplied for the reason `setupVenue` gives. `active` is 1 because
-  // `node:sqlite` refuses to bind a JavaScript boolean.
+  const [zone] = await db
+    .insert(floorZones)
+    .values({ locationId: v.locationId, name: label })
+    .returning({ id: floorZones.id });
   const row = await db.execute<{ id: string }>(sql`
-    insert into dining_tables (id, created_at, location_id, label, active)
-    values (${newId()}, ${nowIso()}, ${v.locationId}, ${label}, 1)
+    insert into dining_tables (id, created_at, location_id, zone_id, label)
+    values (${newId()}, ${nowIso()}, ${v.locationId}, ${zone!.id}, ${label})
     returning id`);
+  await db.insert(floorTodayTables).values({ tableId: row.rows[0]!.id });
   return row.rows[0]!.id;
 }
 

@@ -3,7 +3,6 @@ import { currentLocale, setLocale } from "../i18n/t.js";
 import type { TableParty, TableState, TableToday } from "../api/client.js";
 import {
   combinedStatus,
-  isPlannedZone,
   listedTables,
   mapTables,
   pinText,
@@ -17,7 +16,6 @@ function table(over: Partial<TableState> = {}): TableState {
     id: "t1",
     label: "1",
     zoneId: "z1",
-    capacity: 4,
     state: "free",
     condition: "free",
     hasOpenTab: false,
@@ -28,10 +26,6 @@ function table(over: Partial<TableState> = {}): TableState {
     timingBand: "fresh",
     status: null,
     nextReservation: null,
-    posX: null,
-    posY: null,
-    shape: null,
-    rotation: null,
     today: null,
     signals: [],
     party: null,
@@ -175,12 +169,6 @@ describe("words", () => {
 });
 
 describe("zones and their tables", () => {
-  it("calls a zone planned when any of its tables has a today's row", () => {
-    expect(isPlannedZone([table(), table({ id: "t2", today: today() })])).toBe(true);
-    expect(isPlannedZone([table(), table({ id: "t2" })])).toBe(false);
-    expect(isPlannedZone([])).toBe(false);
-  });
-
   it("maps placed tables, leaving out spares and taken-off ones", () => {
     const t1 = table({ id: "t1", label: "1", today: today() });
     const t2 = table({ id: "t2", label: "2", today: today({ placement: null }) });
@@ -300,10 +288,10 @@ describe("zones and their tables", () => {
     expect(mapTables([off])).toEqual([]);
   });
 
-  it("reads a table's seats for today, a merge's for the merge, and the old capacity without a plan", () => {
+  it("reads seats only from today or its merge, with none without a today row", () => {
     expect(seatsFor(table({ today: today({ seats: 6 }) }))).toBe(6);
     expect(seatsFor(table({ today: today({ seats: 6, joinId: "j1", joinSeats: 10 }) }))).toBe(10);
-    expect(seatsFor(table({ capacity: 4 }))).toBe(4);
-    expect(seatsFor(table({ capacity: 4, today: today({ seats: null }) }))).toBeNull();
+    expect(seatsFor(table({}))).toBeNull();
+    expect(seatsFor(table({ today: today({ seats: null }) }))).toBeNull();
   });
 });

@@ -4,7 +4,14 @@ import { eq } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { floorPlans, floorTodayZones, floorZones, locations } from "@waitron/db";
+import {
+  tableInService,
+  diningTables,
+  floorPlans,
+  floorTodayZones,
+  floorZones,
+  locations,
+} from "@waitron/db";
 import { hashPin, loginWithPin, persons } from "@waitron/identity";
 import { saveZonePlan } from "./floor-plan.js";
 import { ALL_MODULES, enabledTableRemovals } from "./modules.js";
@@ -197,7 +204,6 @@ describe("today's routes", () => {
           {
             id: master.t!,
             key: "t",
-            liveTableId: table.t!,
             label,
             seats: 4,
             fixed: false,
@@ -219,13 +225,13 @@ describe("today's routes", () => {
   it("leaves a disabled planned zone's tables off on a reset", async () => {
     const { zoneId, table } = await plannedZone(v, [{ key: "a" }]);
     await inTx(v, (tx) => deactivateZone(tx, v.cfg, zoneId));
-    expect((await tableRow(v, table.a!)).active).toBe(false);
+    expect(await inService(table.a!)).toBe(false);
     const generation = await generationOf(zoneId);
     expect(generation).toBe(1);
 
     await expect204(send("POST", `/api/zones/${zoneId}/today/reset`, {}));
 
-    expect((await tableRow(v, table.a!)).active).toBe(false);
+    expect(await inService(table.a!)).toBe(false);
     expect(await generationOf(zoneId)).toBe(generation);
   });
 
@@ -340,3 +346,13 @@ describe("the till's zone list", () => {
     ]);
   });
 });
+
+async function inService(tableId: string): Promise<boolean> {
+  const [table] = await inTx(v, (tx) =>
+    tx
+      .select({ inService: tableInService(diningTables.id).mapWith(Boolean) })
+      .from(diningTables)
+      .where(eq(diningTables.id, tableId)),
+  );
+  return table!.inService;
+}

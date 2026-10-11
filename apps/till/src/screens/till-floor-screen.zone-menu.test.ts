@@ -20,7 +20,7 @@ function table(
     id,
     label: id.slice(1),
     zoneId,
-    capacity: 4,
+
     state: "free",
     condition: "free",
     hasOpenTab: false,
@@ -31,10 +31,6 @@ function table(
     timingBand: "fresh",
     status: null,
     nextReservation: null,
-    posX: null,
-    posY: null,
-    shape: null,
-    rotation: null,
     today:
       today === null
         ? null
@@ -62,7 +58,7 @@ const terraceTables = [
   table("t9", "z1", { placement: null }),
   table("t3", "z1", { placement: null, takenOff: true }),
 ];
-const barTables = [table("t5", "z2", null, { posX: 400, posY: 400, shape: "round", rotation: 0 })];
+const barTables = [table("t5", "z2", null, {})];
 const patioTables = [
   table("t6", "z3", {
     placement: { x: 300, y: 300, width: 8, height: 8, shape: "rect", rotation: 0 },

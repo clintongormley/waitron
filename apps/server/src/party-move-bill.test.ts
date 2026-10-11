@@ -20,7 +20,7 @@ import { createCourse } from "./kitchen.js";
 import { bumpGroupReady, markGroupAway, placeGroups } from "./order-groups.js";
 import { finishTable } from "./parties.js";
 import { moveGuests } from "./table-actions.js";
-import { createTable, deactivateTable } from "./tables.js";
+import { switchOff } from "./testing/live-table.js";
 import {
   addTabRound,
   createOpenOrder,
@@ -334,23 +334,6 @@ describe("move a bill to another party (after Split a table, or guests joining)"
     expect((await linesOf(v, luis.tabId)).map((l) => l.name)).toEqual(["Paella"]);
   });
 
-  it("gives a bill that has no service zone the receiving party's", async () => {
-    const mesa = await v.table("Mesa 12");
-    const bare = await inTx(v, (tx) => createTable(tx, v.cfg, { label: "Mesa sin zona" }));
-    const ana = await seat(v, bare.id);
-    const luis = await seat(v, mesa);
-    expect(await zoneOf(v, ana.tabId)).toBeNull();
-
-    await move(ana.tabId, { tableId: mesa }, { bills: "separate" });
-    await orderForParty(v, luis.partyId, ["Flan"], ana.tabId);
-
-    expect(await zoneOf(v, ana.tabId)).toBe(v.tables.zoneId);
-    expect((await linesOf(v, ana.tabId)).map((l) => [l.name, l.unitPriceGross])).toEqual([
-      ["Flan", 500],
-    ]);
-    expect((await partyRow(v, ana.partyId)).mainBillId).toBeNull();
-  });
-
   // Two service modes send a dish at different times, so a move merges only bills of one service
   // mode, and never refuses because two bills' modes differ.
   it("keeps both bills when the receiving main bill is in another service mode, though both are untouched", async () => {
@@ -481,10 +464,35 @@ describe("what a move refuses, changing nothing", () => {
     expect(error).toMatchObject({ code: "table.needs_clearing", params: { tableId: dirty } });
   });
 
+  it.each(["missing today", "disabled zone"])(
+    "refuses moving a bill to %s with table.inactive",
+    async (state) => {
+      const p = await twoParties(`Service ${state}`);
+      const target = await v.table(`Target ${state}`);
+      await inTx(v, async (tx) =>
+        tx.execute(
+          state === "missing today"
+            ? sql`delete from floor_today_tables where table_id = ${target}`
+            : sql`update floor_zones set active = false where id = (select zone_id from dining_tables where id = ${target})`,
+        ),
+      );
+      const error = await refused(p, [p.second], () => move(p.second, { tableId: target }), [
+        target,
+      ]);
+      expect(error).toMatchObject({ code: "table.inactive", params: { tableId: target } });
+      if (state === "disabled zone")
+        await inTx(v, async (tx) =>
+          tx.execute(
+            sql`update floor_zones set active = true where id = (select zone_id from dining_tables where id = ${target})`,
+          ),
+        );
+    },
+  );
+
   it("refuses a table taken out of use, and one that does not exist", async () => {
     const p = await twoParties("Mesa fuera");
     const retired = await v.table("Mesa fuera R");
-    await inTx(v, (tx) => deactivateTable(tx, v.cfg, retired));
+    await switchOff(v, retired);
     const missing = randomUUID();
 
     const inactive = await refused(p, [p.second], () => move(p.second, { tableId: retired }), [
@@ -795,21 +803,6 @@ describe("move a bill to a free table (A81, from a party)", () => {
   });
 });
 
-describe("move a bill to a free table with no service zone", () => {
-  it("opens a new party there, and the bill keeps the zone it had", async () => {
-    const ana = await seat(v, await v.table("Mesa libre B"));
-    const bare = await inTx(v, (tx) => createTable(tx, v.cfg, { label: "Mesa libre sin zona" }));
-    await order(v, ana.tabId, "Burger", "Vino");
-    const second = await splitOff(ana.partyId, ana.tabId, [2]);
-
-    const result = await move(second, { tableId: bare.id });
-
-    expect(await partyAt(v, bare.id)).toBe(result.partyId);
-    expect((await partyRow(v, result.partyId!)).mainBillId).toBe(second);
-    expect(await zoneOf(v, second)).toBe(v.tables.zoneId);
-  });
-});
-
 describe("move a bill to the counter (A82)", () => {
   it("leaves the party, is labelled with the party's display name, and is listed at the counter in the zone sent", async () => {
     const mesa = await v.table("Mesa C4");
@@ -1049,90 +1042,6 @@ describe("the dishes of an open bill moved between service modes", () => {
     const tickets = await ticketsOf(orderId);
     expect(tickets).toHaveLength(1);
     expect(tickets[0]!.firedAt).not.toBeNull();
-  });
-
-  it("leaves a counter order's dish for its payment to send when it keeps its pay-first zone at a table with no zone", async () => {
-    const bare = await inTx(v, (tx) => createTable(tx, v.cfg, { label: "Mesa envío sin zona" }));
-    const orderId = await counterOrder(v, "Tarta");
-
-    await move(orderId, { tableId: bare.id });
-    const atMove = await ticketsOf(orderId);
-    await cashContribution(v, orderId, "15.00");
-
-    expect(await zoneOf(v, orderId)).toBe(v.counter.zoneId);
-    expect(atMove).toEqual([]);
-    expect((await billRow(v, orderId)).status).toBe("settled");
-    const tickets = await ticketsOf(orderId);
-    expect(tickets).toHaveLength(1);
-    expect(tickets[0]!.firedAt).not.toBeNull();
-  });
-
-  /** An unsent Tarta parked in a ticket_then_pay counter zone, then moved to a party at a table
-   *  with no zone, so the bill keeps the counter zone; and `walkUp`, the same dish parked in the
-   *  same zone with no party, whose payment shows the dish could have been sent. */
-  async function partyBillInTicketZone(name: string) {
-    const ticketZone = await inTx(v, async (tx) => {
-      const [zone] = await tx
-        .insert(floorZones)
-        .values({ locationId: v.cfg.locationId, name: `Barra ${name}` })
-        .returning({ id: floorZones.id });
-      // Offering Tarta here writes no prep-station rule; the suite's other rules remain.
-      const offered = await offerProducts(tx, v.cfg, {
-        zone: { zoneId: zone!.id },
-        orderStart: "counter",
-        productIds: [v.productId("Tarta")],
-      });
-      await tx.execute(sql`
-        update zone_sale_policies set paid_when = 'ticket_then_pay'
-        where zone_id = ${offered.zoneId}`);
-      return offered;
-    });
-    const [orderId, walkUp] = [randomUUID(), randomUUID()];
-    for (const id of [orderId, walkUp]) {
-      await parkOrder({ db: v.db }, v.cfg, {
-        id,
-        zoneId: ticketZone.zoneId,
-        lines: [{ menuItemId: ticketZone.offerFor(v.productId("Tarta")), quantity: "1" }],
-        operatorId: OPERATOR,
-      });
-    }
-    const bare = await inTx(v, (tx) => createTable(tx, v.cfg, { label: `Mesa ${name}` }));
-
-    await move(orderId, { tableId: bare.id });
-    return { orderId, walkUp, zoneId: ticketZone.zoneId };
-  }
-
-  async function expectSentOnce(billId: string) {
-    expect((await billRow(v, billId)).status).toBe("settled");
-    const tickets = await ticketsOf(billId);
-    expect(tickets).toHaveLength(1);
-    expect(tickets[0]!.firedAt).not.toBeNull();
-  }
-
-  it("sends nothing when it pays a party's bill that keeps its send-before-payment counter zone at a table with no zone", async () => {
-    const { orderId, walkUp, zoneId } = await partyBillInTicketZone("ticket sin zona");
-    expect(await zoneOf(v, orderId)).toBe(zoneId);
-    expect((await billRow(v, orderId)).partyId).not.toBeNull();
-    expect(await ticketsOf(orderId)).toEqual([]);
-    await cashContribution(v, orderId, "15.00");
-    await cashContribution(v, walkUp, "15.00");
-
-    expect((await billRow(v, orderId)).status).toBe("settled");
-    expect(await ticketsOf(orderId)).toEqual([]);
-    await expectSentOnce(walkUp);
-  });
-
-  it("sends nothing when it pays, in full at the till, a party's bill that keeps its ticket_then_pay counter zone at a table with no zone", async () => {
-    const { orderId, walkUp, zoneId } = await partyBillInTicketZone("ticket sin zona, pago entero");
-    expect(await zoneOf(v, orderId)).toBe(zoneId);
-    expect((await billRow(v, orderId)).partyId).not.toBeNull();
-
-    await pay(v, orderId, "15.00");
-    await pay(v, walkUp, "15.00");
-
-    expect((await billRow(v, orderId)).status).toBe("settled");
-    expect(await ticketsOf(orderId)).toEqual([]);
-    await expectSentOnce(walkUp);
   });
 
   it("does not send a table bill's sent dish again when it is paid at a pay-first counter", async () => {

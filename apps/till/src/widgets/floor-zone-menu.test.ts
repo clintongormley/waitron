@@ -24,7 +24,6 @@ function table(id: string, over: Partial<TableToday> = {}): TableState {
     id,
     label: id.slice(1),
     zoneId: "z1",
-    capacity: 4,
     state: "free",
     condition: "free",
     hasOpenTab: false,
@@ -35,10 +34,6 @@ function table(id: string, over: Partial<TableToday> = {}): TableState {
     timingBand: "fresh",
     status: null,
     nextReservation: null,
-    posX: null,
-    posY: null,
-    shape: null,
-    rotation: null,
     today: {
       placement: { x: 2, y: 2, width: 8, height: 8, shape: "rect", rotation: 0 },
       seats: 4,

@@ -6,6 +6,8 @@ import { randomUUID } from "node:crypto";
 import { and, eq, inArray, sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
 import {
+  diningTables,
+  tableInService,
   locations,
   kitchenTimingDefaults,
   nowIso,
@@ -45,7 +47,7 @@ import { seedLegacySellingUnits } from "./testing/seed-units.js";
 import { offerProducts } from "./testing/zone-offers.js";
 import { fireAll, openPartyTab, serveLine, unserveLine } from "./testing/serve-line.js";
 import { publishWorkingMenu, republishMenus } from "./testing/publish-menu.js";
-import { createTable, updateTable } from "./tables.js";
+import { createTable } from "./testing/live-table.js";
 import {
   addTabRound,
   advanceTicketItem,
@@ -296,7 +298,7 @@ describe("openTab", () => {
       code: "table.not_found",
       params: { tableId: missing },
     });
-    await db.execute(sql`update dining_tables set active = false where id = ${tableId}`);
+    await db.execute(sql`delete from floor_today_tables where table_id = ${tableId}`);
     await expect(asApp(cfg, (tx) => openPartyTab(tx, cfg, { tableId }))).rejects.toMatchObject({
       code: "table.inactive",
       params: { tableId },
@@ -315,6 +317,34 @@ async function bareOpenOrder(cfg: OriginConfig, id: string): Promise<void> {
     status: "open",
   });
 }
+
+describe("opening only tables in service", () => {
+  it.each(["missing today", "disabled zone"])(
+    "refuses %s with table.inactive while the table row remains",
+    async (state) => {
+      const { cfg, tableId } = await setupVenue();
+      if (state === "missing today") {
+        await db.execute(sql`delete from floor_today_tables where table_id = ${tableId}`);
+      } else {
+        await db.execute(
+          sql`update floor_zones set active = false where id = (select zone_id from dining_tables where id = ${tableId})`,
+        );
+      }
+      await expect(asApp(cfg, (tx) => openPartyTab(tx, cfg, { tableId }))).rejects.toMatchObject({
+        code: "table.inactive",
+        params: { tableId },
+      });
+      const [row] = await db
+        .select({
+          id: diningTables.id,
+          inService: tableInService(diningTables.id).mapWith(Boolean),
+        })
+        .from(diningTables)
+        .where(eq(diningTables.id, tableId));
+      expect(row).toEqual({ id: tableId, inService: false });
+    },
+  );
+});
 
 describe("addTabRound (append-only, no re-price)", () => {
   it("appends a round with the NEXT line_no, without deleting or re-pricing existing lines", async () => {
@@ -1022,8 +1052,12 @@ describe("listTablesWithState (occupancy)", () => {
         { kind: "no_preparation" },
       );
     });
-    const freeTable = await asApp(cfg, (tx) => createTable(tx, cfg, { label: "T2" }));
-    await asApp(cfg, (tx) => updateTable(tx, cfg, tableId, { zoneId: zone.id }));
+    const freeTable = await asApp(cfg, (tx) =>
+      createTable(tx, cfg, { label: "T2", zoneId: zone.id }),
+    );
+    await asApp(cfg, (tx) =>
+      tx.update(diningTables).set({ zoneId: zone.id }).where(eq(diningTables.id, tableId)),
+    );
 
     const { tabId } = await asApp(cfg, (tx) =>
       openPartyTab(tx, cfg, {

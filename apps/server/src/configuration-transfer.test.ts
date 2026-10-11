@@ -1,3 +1,4 @@
+import { floorTodayTables } from "@waitron/db";
 import { deleteCourse } from "./course-delete.js";
 import { deleteStation } from "./station-delete.js";
 import { createCourse, createStation, setProductCourse } from "./kitchen.js";
@@ -493,10 +494,17 @@ describe("configuration transfer database path", () => {
         label: "Practice tab",
       });
       await tx.insert(diningTables).values({
+        zoneId: (
+          await tx
+            .insert(floorZones)
+            .values({ locationId: source.locationId, name: "Practice tables" })
+            .returning({ id: floorZones.id })
+        )[0]!.id,
         id: "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb",
         locationId: source.locationId,
         label: "T1",
       });
+      await tx.insert(floorTodayTables).values({ tableId: "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb" });
       await tx.insert(payments).values({
         id: "cccccccc-bbbb-bbbb-bbbb-cccccccccccc",
         workingOrderId: "aaaaaaaa-bbbb-bbbb-bbbb-aaaaaaaaaaaa",
@@ -1837,10 +1845,17 @@ it("leaves a table's clearing state behind", async () => {
   });
   await withTransaction(suite.db, async (tx) => {
     await tx.insert(diningTables).values({
+      zoneId: (
+        await tx
+          .insert(floorZones)
+          .values({ locationId: source.locationId, name: "Clearing tables" })
+          .returning({ id: floorZones.id })
+      )[0]!.id,
       id: "eeeeeeee-bbbb-bbbb-bbbb-eeeeeeeeeeee",
       locationId: source.locationId,
       label: "T9",
     });
+    await tx.insert(floorTodayTables).values({ tableId: "eeeeeeee-bbbb-bbbb-bbbb-eeeeeeeeeeee" });
     await tx.execute(sql`
       update dining_tables set needs_clearing_since = '2026-09-29T10:00:00.000Z'
       where id = 'eeeeeeee-bbbb-bbbb-bbbb-eeeeeeeeeeee'`);

@@ -1,3 +1,4 @@
+import { tableInService } from "@waitron/db";
 // Registers `management.request_invalid`, which the query screens below throw.
 import "./errors.js";
 import type { Hono } from "hono";
@@ -169,7 +170,7 @@ async function countOpenTables(
            )) as text) as open
     from dining_tables dt
     join nodes n on n.location_id = dt.location_id
-    where n.id = ${nodeId} and dt.active = true
+    where n.id = ${nodeId} and ${tableInService(sql`dt.id`)}
   `);
   return { open: Number(rows[0]!.open), total: Number(rows[0]!.total) };
 }

@@ -23,12 +23,7 @@ function tableData(overrides: Partial<FloorTable> = {}): FloorTable {
   return {
     id: "t1",
     label: "4",
-    capacity: 4,
-    posX: 500,
-    posY: 500,
-    shape: "round",
-    rotation: 0,
-    zoneId: null,
+    seats: 4,
     state: "free",
     pendingToServe: 0,
     status: null,
@@ -60,8 +55,8 @@ describe.each(["light", "dark"] as const)("wt-table-token a11y (%s theme)", (the
     await expectNoA11yViolations(host);
   });
 
-  test("a free token with no capacity and no badges is accessible", async () => {
-    await mountToken(tableData({ state: "free", capacity: null }), theme);
+  test("a free token with no seats and no badges is accessible", async () => {
+    await mountToken(tableData({ state: "free", seats: null }), theme);
     await expectNoA11yViolations(host);
   });
 

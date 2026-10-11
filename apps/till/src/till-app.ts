@@ -4996,9 +4996,7 @@ export class TillApp extends LitElement {
   /** Station and expo cards fetch their own data and table-order loads on the open-table drill, so only
    * the floor cards need app-loaded data. */
   #tabNeedsFloorData(tab: TabDef): boolean {
-    return tab.cards.some(
-      (card) => card.type === "floor-plan" || card.type === "table-layout-editor",
-    );
+    return tab.cards.some((card) => card.type === "floor-plan");
   }
 
   /** Select a validated canvas tab and load its floor data when needed. Explicit selection closes the
@@ -8835,7 +8833,6 @@ export class TillApp extends LitElement {
       .stations=${this.stations}
       .orderInFlight=${this.#counterOrderInFlight()}
       .capabilities=${this.capabilities}
-      .permissions=${this.permissions}
       .products=${tableTab ? this.tableProducts : this.products}
       .heldOrders=${this.heldOrders}
       .counterWaiting=${this.counterWaiting}

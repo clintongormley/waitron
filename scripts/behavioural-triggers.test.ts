@@ -268,8 +268,8 @@ function party(id) {
 /** A dining table carrying the `status-busy` status. */
 function table(id, label) {
   return (
-    `insert into dining_tables (id, location_id, label, status_id, created_at) ` +
-    `values ('${id}', 'loc', '${label}', 'status-busy', '${STAMP}')`
+    `insert into dining_tables (id, location_id, zone_id, label, status_id, created_at) ` +
+    `values ('${id}', 'loc', 'zone', '${label}', 'status-busy', '${STAMP}')`
   );
 }
 

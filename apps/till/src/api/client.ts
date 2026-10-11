@@ -1876,7 +1876,6 @@ export interface TableState {
   id: string;
   label: string;
   zoneId: string | null;
-  capacity: number | null;
   state: "free" | "open-tab" | "delivery-pending";
   hasOpenTab: boolean;
   /** `held` while a party holds the table; `needs_clearing` after Finish table with the clearing
@@ -1902,35 +1901,11 @@ export interface TableState {
    * is projected, so the party size and contact name are deliberately kept off every till device.
    */
   nextReservation: { time: string } | null;
-  /**
-   * Placement on the floor-plan canvas — coordinates in 0..1000 permille, `rotation` in degrees — or
-   * `null` for an unplaced table.
-   */
-  posX: number | null;
-  posY: number | null;
-  shape: TableShape | null;
-  rotation: number | null;
   /** `null` when the table has no today's row. */
   today: TableToday | null;
   party: TableParty | null;
   /** What wants attention at the table; several at once. */
   signals: TableSignal[];
-}
-
-/** The rendered shape of a placed table; a server round-trip re-validates against the real vocabulary. */
-export type TableShape = "round" | "square" | "rect";
-
-/**
- * The body of a `PUT /api/tables/:id/placement`; the server re-validates every field. `zoneId` is
- * `| null` because the canvas can emit a placement for a still-zoneless table — the server refuses it,
- * so a `null` never silently persists.
- */
-export interface TablePlacement {
-  posX: number;
-  posY: number;
-  shape: TableShape;
-  rotation: number;
-  zoneId: string | null;
 }
 
 /** One ACTIVE table service status from `GET /api/statuses`, for the Estado picker. */
@@ -3717,25 +3692,6 @@ export class TillApi {
       transfers,
       ...revisions,
     });
-  }
-
-  /**
-   * Place a table on the floor plan → `PUT /api/tables/:tableId/placement`, gated by the operator's OWN
-   * `venue.configure` permission. The server re-checks the gate (client hiding is convenience only) and
-   * re-validates the values: `placement.invalid`, `zone.not_found` and `table.not_found` surface as a
-   * rejected `{ code }`.
-   */
-  async setTablePlacement(tableId: string, placement: TablePlacement): Promise<void> {
-    await this.#request<void>(`/api/tables/${tableId}/placement`, "PUT", placement);
-  }
-
-  /**
-   * Un-place a table (its four placement columns become null; its zone stays) →
-   * `DELETE /api/tables/:tableId/placement`. Same gate as {@link setTablePlacement}; an unknown id
-   * rejects `table.not_found`.
-   */
-  async clearPlacement(tableId: string): Promise<void> {
-    await this.#request<void>(`/api/tables/${tableId}/placement`, "DELETE");
   }
 
   // --- Staff schedule (`apps/server/src/schedule-api.ts`). The server takes the requester from the

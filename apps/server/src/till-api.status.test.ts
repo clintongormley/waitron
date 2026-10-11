@@ -1,3 +1,4 @@
+import { createZone } from "./testing/service-zone.js";
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { beforeAll, describe, expect, it } from "vitest";
@@ -18,7 +19,7 @@ import {
   seriesId as brandSeriesId,
 } from "@waitron/shared";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
-import { createTable } from "./tables.js";
+import { createTable } from "./testing/live-table.js";
 import type { Logger, LogLevel } from "./logger.js";
 import { mountTillApi } from "./till-api.js";
 import type { TillApiDeps } from "./till-api.js";
@@ -64,7 +65,10 @@ const suite = useVenueDb({
     ana = { id: person!.id };
     cfg = makeCfg(locationId, nodeId);
     const seeded = await withTransaction(db, async (tx) => {
-      const { id: tableId } = await createTable(tx, cfg, { label: "T1" });
+      const { id: tableId } = await createTable(tx, cfg, {
+        label: "T1",
+        zoneId: (await createZone(tx, cfg, { name: "Tables" })).id,
+      });
       const [active] = await tx
         .insert(tableServiceStatuses)
         .values({ label: "Bill requested", color: "#ef4444" })

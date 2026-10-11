@@ -46,9 +46,8 @@ export interface BookingPatch {
 export interface DashboardTable {
   id: string;
   label: string;
-  zoneId: string | null;
-  capacity: number | null;
-  active: boolean;
+  zoneId: string;
+  planTableId: string | null;
   createdAt: string;
 }
 

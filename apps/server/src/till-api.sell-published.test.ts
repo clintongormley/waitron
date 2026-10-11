@@ -63,7 +63,7 @@ import { enrolDeviceForTest } from "./testing/enrol.js";
 import { publishWorkingMenu } from "./testing/publish-menu.js";
 import { offerProducts } from "./testing/zone-offers.js";
 import { configureZone, createDepartment, workingLineContexts } from "@waitron/venue-service";
-import { createTable } from "./tables.js";
+import { createTable } from "./testing/live-table.js";
 import { DEVICE_COOKIE } from "./device-session.js";
 import { SESSION_COOKIE } from "./till-session.js";
 import { nifWithControlLetter } from "@waitron/fiscal-verifactu/src/testing/seed.js";

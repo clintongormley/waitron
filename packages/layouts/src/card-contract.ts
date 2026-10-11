@@ -1,4 +1,3 @@
-import type { Permission } from "@waitron/identity";
 import type { CapabilityFlag, CardType } from "./canvas.js";
 import type { ConfigValidator, WidgetConfigSchema } from "./widget-config.js";
 
@@ -11,7 +10,6 @@ function intInRange(min: number, max: number): ConfigValidator {
 
 export interface CardContract {
   configSchema: WidgetConfigSchema;
-  requiredPermission?: Permission;
   requiredCapability?: CapabilityFlag;
   visibilityStates: readonly string[];
   defaultColSpan: number;
@@ -72,14 +70,6 @@ export const CARD_CONTRACTS: Record<CardType, CardContract> = {
   },
   "floor-plan": {
     configSchema: {},
-    visibilityStates: [],
-    defaultColSpan: GRID_MAX_COLUMNS,
-    defaultRowSpan: 12,
-    saleCritical: false,
-  },
-  "table-layout-editor": {
-    configSchema: {},
-    requiredPermission: "venue.configure",
     visibilityStates: [],
     defaultColSpan: GRID_MAX_COLUMNS,
     defaultRowSpan: 12,

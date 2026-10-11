@@ -24,7 +24,7 @@ import { createStation } from "../kitchen.js";
 import { createPrinter } from "@waitron/printing";
 import { attachPrinterToStation } from "../station-printers.js";
 import { setRoutingCell } from "@waitron/venue-service";
-import { createTable } from "../tables.js";
+import { createTable } from "./live-table.js";
 import { seatTable } from "../parties.js";
 import { OPERATOR } from "./party-venue.js";
 import { createOpenOrder, fireLines } from "../working-order.js";

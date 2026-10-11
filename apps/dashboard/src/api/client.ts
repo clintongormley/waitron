@@ -585,28 +585,12 @@ export interface FloorZone {
   active: boolean;
 }
 
-export type TableShape = "round" | "square" | "rect";
-
-/** The server refuses a `null` `zoneId` with `management.request_invalid`. */
-export interface TablePlacement {
-  posX: number;
-  posY: number;
-  shape: TableShape;
-  rotation: number;
-  zoneId: string | null;
-}
-
 export interface DashboardTable {
   id: string;
   label: string;
-  zoneId: string | null;
-  capacity: number | null;
-  active: boolean;
+  zoneId: string;
+  planTableId: string | null;
   createdAt: string;
-  posX?: number | null;
-  posY?: number | null;
-  shape?: TableShape | null;
-  rotation?: number | null;
 }
 
 export type { PlanPlacement, PlanShape } from "@waitron/ui";
@@ -618,8 +602,7 @@ export interface FloorPlan {
   revision: number;
   savedAt: string | null;
   tables: {
-    /** null for a live table offered for adoption. */
-    id: string | null;
+    id: string;
     liveTableId: string | null;
     label: string;
     seats: number | null;
@@ -634,7 +617,6 @@ export interface FloorPlanSave {
   revision: number;
   tables: {
     id?: string;
-    liveTableId?: string;
     key: string;
     label: string;
     seats: number | null;
@@ -2818,33 +2800,6 @@ export class DashboardApi {
         : "/management-api/tables",
       "GET",
     );
-  }
-
-  createTable(input: {
-    label: string;
-    capacity?: number;
-    zoneId?: string;
-  }): Promise<{ id: string }> {
-    return this.#request<{ id: string }>("/management-api/tables", "POST", input);
-  }
-
-  updateTable(
-    id: string,
-    patch: { label?: string; zoneId?: string; capacity?: number; active?: boolean },
-  ): Promise<void> {
-    return this.#request<void>(`/management-api/tables/${id}`, "PATCH", patch);
-  }
-
-  deactivateTable(id: string): Promise<void> {
-    return this.#request<void>(`/management-api/tables/${id}`, "DELETE");
-  }
-
-  async setTablePlacement(tableId: string, placement: TablePlacement): Promise<void> {
-    await this.#request<void>(`/management-api/tables/${tableId}/placement`, "PUT", placement);
-  }
-
-  async clearPlacement(tableId: string): Promise<void> {
-    await this.#request<void>(`/management-api/tables/${tableId}/placement`, "DELETE");
   }
 
   // ── Kitchen stations + routing ─────────────────────────────────────────────────────────────────

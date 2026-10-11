@@ -1,3 +1,4 @@
+import { createZone } from "./testing/service-zone.js";
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { eq } from "drizzle-orm";
@@ -36,7 +37,7 @@ import { mountTillApi } from "./till-api.js";
 import type { TillApiDeps } from "./till-api.js";
 import { SESSION_COOKIE } from "./till-session.js";
 import type { TillConfig } from "./till-config.js";
-import { createTable } from "./tables.js";
+import { createTable } from "./testing/live-table.js";
 import { seedLegacySellingUnits } from "./testing/seed-units.js";
 import { offerProducts } from "./testing/zone-offers.js";
 import "./errors.js";
@@ -120,7 +121,10 @@ async function cookie(): Promise<string> {
 
 async function table(): Promise<string> {
   return withTransaction(suite.db, async (tx) => {
-    const { id } = await createTable(tx, cfg, { label: `Mesa ${randomUUID()}` });
+    const { id } = await createTable(tx, cfg, {
+      label: `Mesa ${randomUUID()}`,
+      zoneId: (await createZone(tx, cfg, { name: `Tables ${randomUUID()}` })).id,
+    });
     return id;
   });
 }

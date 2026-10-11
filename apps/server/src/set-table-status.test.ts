@@ -1,3 +1,4 @@
+import { createZone } from "./testing/service-zone.js";
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
@@ -18,7 +19,8 @@ import {
   jobOrigin,
 } from "@waitron/shared";
 import type { OriginConfig, TillConfig } from "./till-config.js";
-import { createTable, setTableStatus } from "./tables.js";
+import { setTableStatus } from "./tables.js";
+import { createTable } from "./testing/live-table.js";
 import { listTablesWithState } from "./working-order.js";
 import "./errors.js";
 import { openPartyTab } from "./testing/serve-line.js";
@@ -68,7 +70,10 @@ async function setupVenue(): Promise<Seeded> {
     simplifiedInvoiceLimit: null,
   };
   const seeded = await withTransaction(db, async (tx) => {
-    const { id: tableId } = await createTable(tx, cfg, { label: "T1" });
+    const { id: tableId } = await createTable(tx, cfg, {
+      label: "T1",
+      zoneId: (await createZone(tx, cfg, { name: "Tables" })).id,
+    });
     // Through the table definition for the same reason as the venue rows above.
     const [active] = await tx
       .insert(tableServiceStatuses)
@@ -98,6 +103,24 @@ async function statusOf(tableId: string): Promise<string | null> {
 }
 
 describe("setTableStatus", () => {
+  it.each(["missing today", "disabled zone"])(
+    "answers table.not_found for %s and preserves the manual status",
+    async (state) => {
+      const { cfg, tableId, activeStatusId } = await setupVenue();
+      await asApp(cfg, (tx) => setTableStatus(tx, cfg, tableId, activeStatusId));
+      if (state === "missing today")
+        await db.execute(sql`delete from floor_today_tables where table_id = ${tableId}`);
+      else
+        await db.execute(
+          sql`update floor_zones set active = false where id = (select zone_id from dining_tables where id = ${tableId})`,
+        );
+      await expect(
+        asApp(cfg, (tx) => setTableStatus(tx, cfg, tableId, null)),
+      ).rejects.toMatchObject({ code: "table.not_found", params: { tableId } });
+      expect(await statusOf(tableId)).toBe(activeStatusId);
+    },
+  );
+
   it("sets a table's manual status, then clears it with null", async () => {
     const { cfg, tableId, activeStatusId } = await setupVenue();
     await asApp(cfg, (tx) => setTableStatus(tx, cfg, tableId, activeStatusId));
@@ -144,7 +167,7 @@ describe("setTableStatus", () => {
       params: { tableId: missing },
     });
     // A deactivated table is not in service — also table.not_found (design §3b lists table.not_found).
-    await db.execute(sql`update dining_tables set active = false where id = ${tableId}`);
+    await db.execute(sql`delete from floor_today_tables where table_id = ${tableId}`);
     await expect(
       asApp(cfg, (tx) => setTableStatus(tx, cfg, tableId, activeStatusId)),
     ).rejects.toMatchObject({

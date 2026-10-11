@@ -44,7 +44,6 @@ function planned(
     id,
     label: id.slice(1),
     zoneId: "z1",
-    capacity: 4,
     state: seated === null ? "free" : "open-tab",
     condition: seated === null ? "free" : "held",
     hasOpenTab: false,
@@ -55,10 +54,6 @@ function planned(
     timingBand: "fresh",
     status: null,
     nextReservation: null,
-    posX: null,
-    posY: null,
-    shape: null,
-    rotation: null,
     today: {
       placement: { x, y: 3, width: 2, height: 2, shape: "round", rotation: 0 },
       seats: 4,

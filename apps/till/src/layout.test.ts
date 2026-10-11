@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { CanvasDef } from "./layout.js";
-import { CARD_REQUIRED_CAPABILITY, CARD_REQUIRED_PERMISSION, kindOfFormFactor } from "./layout.js";
+import { CARD_REQUIRED_CAPABILITY, kindOfFormFactor } from "./layout.js";
 
 describe("CanvasDef mirror", () => {
   it("accepts a canvas literal shaped like the layouts package", () => {
@@ -34,10 +34,6 @@ describe("card-contract mirror", () => {
     expect(CARD_REQUIRED_CAPABILITY["tender-pay"]).toBe("integrated-card-payment");
     expect(CARD_REQUIRED_CAPABILITY["kds-board"]).toBe("act-as-kds");
     expect(CARD_REQUIRED_CAPABILITY["product-grid"]).toBeUndefined();
-  });
-  it("mirrors the required permission per card", () => {
-    expect(CARD_REQUIRED_PERMISSION["table-layout-editor"]).toBe("venue.configure");
-    expect(CARD_REQUIRED_PERMISSION["floor-plan"]).toBeUndefined();
   });
 });
 

@@ -9,6 +9,7 @@ import {
   partyTableLabels,
 } from "./party-table-labels.js";
 import { diningTables } from "./schema/dining-tables.js";
+import { floorZones } from "./schema/floor-zones.js";
 import { parties, partyTables } from "./schema/parties.js";
 import { locations } from "./schema/tenants.js";
 import { seedTenant } from "./testing/seed.js";
@@ -57,9 +58,13 @@ describe("party table labels", () => {
         .values({ openedBy: OPERATOR })
         .returning({ id: parties.id });
       for (const table of tables) {
+        const [zone] = await tx
+          .insert(floorZones)
+          .values({ locationId: LOCATION, name: table.label })
+          .returning({ id: floorZones.id });
         const [created] = await tx
           .insert(diningTables)
-          .values({ id: table.id, locationId: LOCATION, label: table.label })
+          .values({ id: table.id, locationId: LOCATION, label: table.label, zoneId: zone!.id })
           .returning({ id: diningTables.id });
         await tx.insert(partyTables).values({
           id: table.rowId ?? table.id,
@@ -202,9 +207,16 @@ describe("party table labels", () => {
   });
 
   async function table(label: string, locationId = LOCATION): Promise<string> {
-    const [row] = await inTx((tx) =>
-      tx.insert(diningTables).values({ locationId, label }).returning({ id: diningTables.id }),
-    );
+    const [row] = await inTx(async (tx) => {
+      const [zone] = await tx
+        .insert(floorZones)
+        .values({ locationId, name: label })
+        .returning({ id: floorZones.id });
+      return tx
+        .insert(diningTables)
+        .values({ locationId, label, zoneId: zone!.id })
+        .returning({ id: diningTables.id });
+    });
     return row!.id;
   }
 

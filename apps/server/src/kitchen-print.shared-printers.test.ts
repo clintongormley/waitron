@@ -24,7 +24,7 @@ import { createStation, updateStation } from "./kitchen.js";
 import { reprintOrderTickets } from "./kitchen-print.js";
 import { submitGroups } from "./order-groups.js";
 import { seatTable } from "./parties.js";
-import { createTable } from "./tables.js";
+import { createTable } from "./testing/live-table.js";
 import { cancelLine } from "./testing/cancel-line.js";
 import { OPERATOR } from "./testing/party-venue.js";
 import { attachPrinterToStation, replaceStationPrinters } from "./station-printers.js";

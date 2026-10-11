@@ -196,7 +196,6 @@ function zoneTables(tx: Transaction, cfg: TillConfig, zoneId: string) {
       id: diningTables.id,
       label: diningTables.label,
       planTableId: diningTables.planTableId,
-      planned: diningTables.planned,
     })
     .from(diningTables)
     .where(and(eq(diningTables.locationId, cfg.locationId), eq(diningTables.zoneId, zoneId)));
@@ -246,7 +245,6 @@ async function catchUpPass(
       id: diningTables.id,
       label: diningTables.label,
       zoneId: diningTables.zoneId,
-      active: diningTables.active,
     })
     .from(diningTables)
     .where(eq(diningTables.locationId, cfg.locationId));
@@ -298,10 +296,9 @@ async function catchUpPass(
   const plan = planReset({ targets, live, takenElsewhere });
 
   const kept = await removeLiveTables(tx, cfg, removals, plan.remove, now);
-  const activeIds = new Set(inZone.filter((table) => table.active).map((table) => table.id));
   // A table already hidden is skipped; a kept one was changed by its failed removal, so is not.
   for (const tableId of plan.hide) {
-    if (activeIds.has(tableId) || withToday.has(tableId) || merged.has(tableId)) {
+    if (withToday.has(tableId) || merged.has(tableId)) {
       await hideTable(tx, tableId);
     }
   }
@@ -330,7 +327,6 @@ async function catchUpPass(
         zoneId,
         label: target.label,
         planTableId: target.planTableId,
-        planned: true,
       })
       .returning({ id: diningTables.id });
     createdIds.set(target, created!.id);
@@ -343,7 +339,6 @@ async function catchUpPass(
     // Placed once per reset: a row waiting only for its name keeps the day's moves and merges.
     if (rowOf.get(target)!.placed) continue;
     placedNow.add(target);
-    await tx.update(diningTables).set({ active: true }).where(eq(diningTables.id, tableId));
     await leaveMerges(tx, [tableId]);
     await tx
       .insert(floorTodayTables)
@@ -381,11 +376,9 @@ function todayColumns(target: Target) {
   };
 }
 
-/** Takes the table off today's plan; `active` false keeps every reader that skips an inactive table off it. */
 async function hideTable(tx: Transaction, tableId: string): Promise<void> {
   await leaveMerges(tx, [tableId]);
   await tx.delete(floorTodayTables).where(eq(floorTodayTables.tableId, tableId));
-  await tx.update(diningTables).set({ active: false }).where(eq(diningTables.id, tableId));
 }
 
 /**

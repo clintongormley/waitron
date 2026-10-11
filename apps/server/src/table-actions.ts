@@ -78,7 +78,7 @@ export async function moveGuests(
   await checkAndBumpParty(tx, partyId, options.expectedPartyRevision, "open");
   const table = await readTargetTable(tx, cfg, toTableId, partyId, options);
   const zoneBefore = await partyZone(tx, cfg, partyId);
-  if (table.zoneId !== null && table.zoneId !== zoneBefore)
+  if (table.zoneId !== zoneBefore)
     await VENUE_SERVICE.assertZoneTakesNewOrders(tx, cfg, table.zoneId, new Date());
   if (table.holding !== null && table.holding !== partyId) {
     return combineAt(tx, cfg, partyId, table.holding, "leave", options);
@@ -98,7 +98,7 @@ export async function moveGuests(
     await addTable(tx, partyId, toTableId, { clearStatus: true });
   }
   // The table moved to is now the party's only one.
-  if (table.zoneId !== null && table.zoneId !== zoneBefore) {
+  if (table.zoneId !== zoneBefore) {
     await retargetUnsettledBills(tx, cfg, partyId, table.zoneId);
   }
   await enqueueMovedSlipsFor(tx, cfg, before);
@@ -120,7 +120,7 @@ export async function joinTables(
   const table = await readTargetTable(tx, cfg, tableId, partyId, options);
   if (table.holding === partyId) throw new AppError("table.already_in_party", { tableId });
   const zoneId = await partyZone(tx, cfg, partyId);
-  if (zoneId !== null && table.zoneId !== null && zoneId !== table.zoneId) {
+  if (zoneId !== null && zoneId !== table.zoneId) {
     throw new AppError("service_zone.join_mismatch", {
       orderZoneId: zoneId,
       tableZoneId: table.zoneId,

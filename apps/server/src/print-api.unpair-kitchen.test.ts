@@ -12,7 +12,7 @@ import { acceptPrintAgentJoinRequest } from "./join-requests.js";
 import { createPairingMode } from "./pairing-mode.js";
 import { mountPrintApi } from "./print-api.js";
 import { attachPrinterToStation } from "./station-printers.js";
-import { createTable } from "./tables.js";
+import { createTable } from "./testing/live-table.js";
 import { inTx, provisionBillVenue, send, type BillVenue } from "./testing/bill-venue.js";
 import "./errors.js";
 

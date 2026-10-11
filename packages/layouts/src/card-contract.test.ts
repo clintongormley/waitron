@@ -3,6 +3,10 @@ import { CARD_TYPES } from "./canvas.js";
 import { CARD_CONTRACTS, SALE_CRITICAL_CARDS } from "./card-contract.js";
 
 describe("card-contract registry", () => {
+  it("has no table layout editor card, and no card that needs a permission", () => {
+    expect(CARD_TYPES).not.toContain("table-layout-editor");
+    expect(Object.values(CARD_CONTRACTS).some((card) => "requiredPermission" in card)).toBe(false);
+  });
   it("declares a contract for every card type", () => {
     for (const t of CARD_TYPES) expect(CARD_CONTRACTS[t]).toBeDefined();
   });
@@ -18,9 +22,6 @@ describe("card-contract registry", () => {
     expect([...SALE_CRITICAL_CARDS].sort()).toEqual(
       ["basket", "product-grid", "tender-pay", "total"].sort(),
     );
-  });
-  it("gives the table-layout-editor a required permission", () => {
-    expect(CARD_CONTRACTS["table-layout-editor"].requiredPermission).toBe("venue.configure");
   });
   it("requires the integrated-card-payment capability on the pay card", () => {
     expect(CARD_CONTRACTS["tender-pay"].requiredCapability).toBe("integrated-card-payment");

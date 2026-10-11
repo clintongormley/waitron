@@ -1,7 +1,7 @@
 import { createZone } from "./testing/service-zone.js";
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
-import { sql } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
 import { kitchenTimingDefaults, locations, withTransaction } from "@waitron/db";
 import type { Database } from "@waitron/db";
@@ -31,7 +31,7 @@ import { seedLegacySellingUnits } from "./testing/seed-units.js";
 import { offerProducts } from "./testing/zone-offers.js";
 import "./errors.js";
 import { cancelBody } from "./testing/cancel-line.js";
-import { createTable } from "./tables.js";
+import { createTable } from "./testing/live-table.js";
 import { seedSessionDevice } from "./testing/session-device.js";
 
 // The HTTP wiring of the table/tab routes: session guard, isUuid screens and STATUS mapping. The verbs
@@ -233,12 +233,10 @@ describe("table + tab routes", () => {
   it("a signed-in staff session's POST, PATCH and DELETE on /api/tables answer 404 and leave the table unchanged", async () => {
     const label = `K-${randomUUID().slice(0, 6)}`;
     const { id } = await withTransaction(suite.db, (tx) =>
-      createTable(tx, cfg, { label, zoneId: seededZoneId, capacity: 4 }),
+      createTable(tx, cfg, { label, zoneId: seededZoneId }),
     );
     const row = () =>
-      suite.db.all<{ label: string; capacity: number | null; active: number }>(
-        sql`select label, capacity, active from dining_tables where id = ${id}`,
-      );
+      suite.db.all<{ label: string }>(sql`select label from dining_tables where id = ${id}`);
     const before = row();
 
     const answers = [
@@ -255,7 +253,7 @@ describe("table + tab routes", () => {
 
     expect(answers.map((res) => res.status)).toEqual([404, 404, 404]);
     expect(row()).toEqual(before);
-    expect(before).toEqual([{ label, capacity: 4, active: 1 }]);
+    expect(before).toEqual([{ label }]);
     expect(suite.db.all(sql`select id from dining_tables where label = ${`${label}-new`}`)).toEqual(
       [],
     );
@@ -263,12 +261,10 @@ describe("table + tab routes", () => {
 
   it("GET /api/tables lists an active table", async () => {
     const { id } = await withTransaction(suite.db, (tx) =>
-      createTable(tx, cfg, { label: "12", zoneId: seededZoneId, capacity: 4 }),
+      createTable(tx, cfg, { label: "12", zoneId: seededZoneId }),
     );
     const list = (await (await request("/api/tables")).json()) as unknown[];
-    expect(list).toContainEqual(
-      expect.objectContaining({ id, label: "12", zoneId: seededZoneId, active: true }),
-    );
+    expect(list).toContainEqual(expect.objectContaining({ id, label: "12", zoneId: seededZoneId }));
   });
 
   it("POST /api/tables/:id/seat opens a tab; a second → 409 tab.already_open", async () => {
@@ -664,4 +660,53 @@ describe("table + tab routes", () => {
       expect(await res.json()).toMatchObject({ error: { code: "session.required" } });
     }
   });
+});
+
+it.each(["PUT", "DELETE"])(
+  "answers %s /api/tables/:id/placement 404 for a manager and leaves tables unchanged",
+  async (method) => {
+    await suite.db.update(persons).set({ role: "manager" }).where(eq(persons.id, ana.id));
+    try {
+      const managerCookie = `${SESSION_COOKIE}=${await openSession(suite.db)}`;
+      const { id } = await withTransaction(suite.db, (tx) =>
+        createTable(tx, cfg, { label: `Retired ${randomUUID()}`, zoneId: seededZoneId }),
+      );
+      const rows = () =>
+        suite.db.all(sql`
+        select * from dining_tables where location_id = ${cfg.locationId} order by id`);
+      const before = rows();
+      const response = await request(`/api/tables/${id}/placement`, {
+        method,
+        headers: { cookie: managerCookie },
+        body: JSON.stringify({
+          zoneId: seededZoneId,
+          posX: 500,
+          posY: 250,
+          shape: "square",
+          rotation: 15,
+        }),
+      });
+      expect(response.status).toBe(404);
+      expect(rows()).toEqual(before);
+    } finally {
+      await suite.db.update(persons).set({ role: "staff" }).where(eq(persons.id, ana.id));
+    }
+  },
+);
+
+it("answers a table's state and list without the old columns", async () => {
+  const { id } = await withTransaction(suite.db, (tx) =>
+    createTable(tx, cfg, { label: `New shape ${randomUUID()}`, zoneId: seededZoneId }),
+  );
+  for (const path of ["/api/tables/state", "/api/tables"]) {
+    const response = await request(path);
+    expect(response.status).toBe(200);
+    const row = ((await response.json()) as Record<string, unknown>[]).find((t) => t.id === id)!;
+    expect(row).toMatchObject({ id, zoneId: seededZoneId });
+    for (const key of ["capacity", "active", "posX", "posY", "shape", "rotation"]) {
+      expect(row).not.toHaveProperty(key);
+    }
+    if (path.endsWith("/state")) expect(row.today).not.toBeNull();
+    else expect(row).toHaveProperty("planTableId", null);
+  }
 });

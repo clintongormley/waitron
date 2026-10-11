@@ -21,15 +21,6 @@ describe("the zone error codes carry their declared params", () => {
   });
 });
 
-// `placement.invalid` carries the field NAME only, never the offending value.
-describe("the placement error code carries its declared params", () => {
-  it("constructs placement.invalid naming the offending field, never the value", () => {
-    const error = new AppError("placement.invalid", { field: "posX" });
-    expect(error.code).toBe("placement.invalid");
-    expect(error.params).toEqual({ field: "posX" });
-  });
-});
-
 describe("the station error codes carry their declared params", () => {
   it("constructs station.name_taken with the operator-supplied name, matching zone.name_taken's shape", () => {
     const error = new AppError("station.name_taken", { name: "Cocina" });

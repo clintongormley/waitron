@@ -7,6 +7,7 @@ import {
   CORE_CHANGE_SOURCES,
   CORE_MIGRATIONS,
   diningTables,
+  floorZones,
   installChangeFeed,
   locations,
   subscribeToChanges,
@@ -297,6 +298,17 @@ it("delivers a write made outside withTransaction on the next transaction the pr
   // stay on the suite's one database for everything that runs after, so a test appended below would
   // silently write change rows — and pay for them — without asking. Hoisting the call into
   // `fixture()` instead would do that to every test in the file.
+  const { location, zone } = await withTransaction(suite.db, async (tx) => {
+    const [location] = await tx
+      .insert(locations)
+      .values({ name: "Before probe", invoiceLocales: ["es"], operationDescription: "probe" })
+      .returning({ id: locations.id });
+    const [zone] = await tx
+      .insert(floorZones)
+      .values({ locationId: location!.id, name: "Probe tables" })
+      .returning({ id: floorZones.id });
+    return { location: location!, zone: zone! };
+  });
   await installChangeFeed(suite.db, CORE_CHANGE_SOURCES);
   const unsubscribe = subscribeToChanges(changeSubscriber(bus, () => {}));
   const path = `/management-api/events?resources=${encodeURIComponent('[{"type":"dining_tables"}]')}`;
@@ -305,11 +317,12 @@ it("delivers a write made outside withTransaction on the next transaction the pr
   const reader = response.body!.getReader();
   try {
     await reader.read();
-    const [location] = await suite.db
+    await suite.db
       .insert(locations)
-      .values({ name: "Probe", invoiceLocales: ["es"], operationDescription: "probe" })
-      .returning({ id: locations.id });
-    await suite.db.insert(diningTables).values({ locationId: location!.id, label: "T9" });
+      .values({ name: "Probe", invoiceLocales: ["es"], operationDescription: "probe" });
+    await suite.db
+      .insert(diningTables)
+      .values({ locationId: location!.id, zoneId: zone!.id, label: "T9" });
     const waiting = await suite.db.execute<{ n: number }>(
       sql`select count(*) as n from change_log`,
     );

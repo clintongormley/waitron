@@ -207,10 +207,6 @@ export async function writeMerge(
   const moving = await todayOf(tx, cfg, args.movingId);
   const target = await todayOf(tx, cfg, args.targetId);
   const { zoneId } = target;
-  if (moving.zoneId === null) {
-    throw new AppError("table.not_in_floor_plan", { tableId: moving.tableId });
-  }
-  if (zoneId === null) throw new AppError("table.not_in_floor_plan", { tableId: target.tableId });
   refuseUnmovable(moving, target);
   if (moving.merge !== null) throw new AppError("table.merged", { tableId: moving.tableId });
   if (args.free) await refuseUnfree(tx, [moving.tableId, target.tableId]);

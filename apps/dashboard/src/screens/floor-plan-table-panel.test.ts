@@ -27,7 +27,7 @@ const plan: FloorPlan = {
   tables: [
     { id: "m1", liveTableId: "l1", label: "T1", seats: 4, fixed: false, placement: m1Placement },
     { id: "m2", liveTableId: "l2", label: "T2", seats: 2, fixed: true, placement: null },
-    { id: null, liveTableId: "l9", label: "T9", seats: null, fixed: false, placement: null },
+    { id: "m9", liveTableId: "l9", label: "T9", seats: null, fixed: false, placement: null },
   ],
   joins: [{ id: "j1", seats: 6, tableIds: ["m1", "m2"] }],
 };
@@ -275,15 +275,35 @@ it("Delete removes the table and clears the selection", async () => {
   expect(selects).toEqual([null]);
 });
 
-it("a table offered for adoption has Remove from plan but no Delete", async () => {
-  const placed = placeTable(opened(), "live:l9");
-  const el = await open({ draft: placed, tableKey: "live:l9" });
+it("offers Delete for every table, including an unsaved table with a live link", async () => {
+  const draft = opened();
+  draft.tables.push({
+    key: "new:linked",
+    id: null,
+    liveTableId: "linked",
+    label: "New",
+    seats: 3,
+    fixed: false,
+    placement: null,
+  });
+  const el = await open({ draft, tableKey: "new:linked" });
+  const { changes, selects } = listen(el);
+  expect(action(el, "delete")).not.toBeNull();
+  action(el, "delete")!.click();
+  expect(changes).toHaveLength(1);
+  expect(tableOf(changes[0], "new:linked")).toBeUndefined();
+  expect(selects).toEqual([null]);
+});
+
+it("a linked master table offers Delete whether placed or spare", async () => {
+  const placed = placeTable(opened(), "m9");
+  const el = await open({ draft: placed, tableKey: "m9" });
   expect(action(el, "remove")).not.toBeNull();
-  expect(action(el, "delete")).toBeNull();
-  el.draft = patchTable(placed, "live:l9", { placement: null });
+  expect(action(el, "delete")).not.toBeNull();
+  el.draft = patchTable(placed, "m9", { placement: null });
   await el.updateComplete;
   expect(action(el, "place")).not.toBeNull();
-  expect(action(el, "delete")).toBeNull();
+  expect(action(el, "delete")).not.toBeNull();
 });
 
 it("shows a refusal under the field it names", async () => {
@@ -346,7 +366,7 @@ it("lists the table's joins and removes one", async () => {
 
 it("names a join's unnamed table Unnamed and lists several with commas", async () => {
   let draft = patchTable(opened(), "m2", { label: " " });
-  draft = { ...draft, joins: [{ key: "j1", seats: 8, tableKeys: ["m2", "m1", "live:l9"] }] };
+  draft = { ...draft, joins: [{ key: "j1", seats: 8, tableKeys: ["m2", "m1", "m9"] }] };
   const el = await open({ draft });
   expect(joinRows(el)[0]!.querySelector("[data-join-text]")!.textContent!.trim()).toBe(
     "with Unnamed, T9 · seats 8",
@@ -354,7 +374,7 @@ it("names a join's unnamed table Unnamed and lists several with commas", async (
 });
 
 it("shows only the joins the selected table is in", async () => {
-  const el = await open({ tableKey: "live:l9" });
+  const el = await open({ tableKey: "m9" });
   expect(joinRows(el)).toEqual([]);
 });
 
@@ -389,7 +409,7 @@ it("shows a join's table name as typed, even one that looks like a placeholder",
 it("names each Remove after its join's tables", async () => {
   const draft = {
     ...opened(),
-    joins: [...opened().joins, { key: "j2", seats: 8, tableKeys: ["m1", "m2", "live:l9"] }],
+    joins: [...opened().joins, { key: "j2", seats: 8, tableKeys: ["m1", "m2", "m9"] }],
   };
   const el = await open({ draft });
   const labels = joinRows(el).map((row) =>

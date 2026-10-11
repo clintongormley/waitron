@@ -428,3 +428,24 @@ it("updates today's sales cards after a sale elsewhere", async () => {
     expect(el.shadowRoot!.querySelector("[data-test=count-sales]")?.textContent).toContain("101"),
   );
 });
+
+it.each(["floor_today_tables", "floor_zones"])(
+  "refreshes open tables after %s changes",
+  async (type) => {
+    const liveData = new LiveData();
+    const api = Object.assign(stubApi(), { liveData });
+    const { el } = await mountWidget<OverviewScreen>("dashboard-overview-screen", { api });
+    await flush(el);
+    vi.mocked(api.getSalesOverview).mockResolvedValue({
+      ...overview,
+      openTables: { open: 1, total: 5 },
+    });
+    liveData.invalidate([{ type, id: "changed" }]);
+    await vi.waitFor(() =>
+      expect(el.shadowRoot!.querySelector("[data-test=open-tables]")?.textContent).toContain(
+        "1 / 5",
+      ),
+    );
+    expect(api.getSalesOverview).toHaveBeenCalledTimes(2);
+  },
+);

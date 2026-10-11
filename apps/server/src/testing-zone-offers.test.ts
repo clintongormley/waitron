@@ -36,7 +36,7 @@ import {
 } from "@waitron/shared";
 import { addTabRound, parkOrder } from "./working-order.js";
 import { createStation } from "./kitchen.js";
-import { createTable } from "./tables.js";
+import { createTable } from "./testing/live-table.js";
 import type { OriginConfig } from "./till-config.js";
 import { seedLegacySellingUnits } from "./testing/seed-units.js";
 import { routeCategoryTo, routeProductTo, offerProducts } from "./testing/zone-offers.js";

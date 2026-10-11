@@ -39,7 +39,7 @@ import { ALL_MODULES } from "../modules.js";
 import { placeGroups } from "../order-groups.js";
 import { seatTable } from "../parties.js";
 import { attachPrinterToStation } from "../station-printers.js";
-import { createTable } from "../tables.js";
+import { createTable } from "./live-table.js";
 import { mountTillApi } from "../till-api.js";
 import { systemClock } from "../till-backend.js";
 import type { DeviceRequestConfig } from "../till-config.js";

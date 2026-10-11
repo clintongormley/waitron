@@ -16,7 +16,7 @@ import "../screens/till-floor-screen.js";
 import "../screens/till-expo-screen.js";
 import "../screens/till-station-screen.js";
 import "../screens/till-table-order-screen.js";
-import { CARD_REQUIRED_CAPABILITY, CARD_REQUIRED_PERMISSION } from "../layout.js";
+import { CARD_REQUIRED_CAPABILITY } from "../layout.js";
 import { kitchenScreenSwitchedText, type KitchenScreenNotice } from "../kitchen-screen-notice.js";
 import type { CapabilityFlag, CardInstance, CardType, TabDef } from "../layout.js";
 import type {
@@ -68,11 +68,6 @@ export class TillCardGrid extends LitElement {
     .cell {
       min-width: 0;
       min-height: 0;
-    }
-    /* Permission→LOCKED: the card stays visible but dimmed and non-interactive (?inert). The dim uses
-       the shared disabled-opacity token, not a hardcoded number. */
-    .cell.locked {
-      opacity: var(--wt-opacity-disabled);
     }
     /* A phone is too narrow for any card to share a row, so the cards stack full width in the tab's
        order and the page scrolls. !important because the tab's columns and spans are inline. */
@@ -190,7 +185,6 @@ export class TillCardGrid extends LitElement {
   @property() fireControl?: FireControlMode;
   @property({ attribute: false }) zones: FloorZone[] = [];
   @property({ attribute: false }) tables: TableState[] = [];
-  @property({ attribute: false }) permissions: string[] = [];
   @property() bumpMode: BumpMode = "line";
   /** Whether the embedded station screen (kds-board card) runs as an always-on ENROLLED display (no
    * login, the device's own station screen) rather than the session-gated operator path. */
@@ -312,11 +306,6 @@ export class TillCardGrid extends LitElement {
     return required === undefined || this.capabilities.includes(required);
   }
 
-  #locked(card: CardInstance): boolean {
-    const required = CARD_REQUIRED_PERMISSION[card.type];
-    return required !== undefined && !this.permissions.includes(required);
-  }
-
   #cell(
     card: CardInstance,
     saleGrid: boolean,
@@ -324,12 +313,9 @@ export class TillCardGrid extends LitElement {
   ): TemplateResult | typeof nothing {
     const element = this.#element(card);
     if (element === nothing) return nothing;
-    const locked = this.#locked(card);
     return html`<div
-      class="cell ${locked ? "locked" : ""}"
+      class="cell"
       data-card=${card.type}
-      ?inert=${locked}
-      aria-disabled=${locked ? "true" : nothing}
       style="grid-column: span ${card.colSpan}; grid-row: span ${card.rowSpan}"
     >
       ${saleGrid && card.type === "product-grid" ? html`<slot name="menu-controls"></slot>` : nothing}
@@ -476,10 +462,8 @@ export class TillCardGrid extends LitElement {
           .stationId=${this.defaultStationId}
         ></till-station-queue>`;
       case "floor-plan":
-      case "table-layout-editor":
         return html`<till-floor-screen
           embedded
-          .canEdit=${card.type === "table-layout-editor"}
           .zones=${this.zones}
           .tables=${this.tables}
           .api=${this.api}

@@ -29,6 +29,7 @@ export type { SQL } from "drizzle-orm";
 export { runMigrations } from "./migrate.js";
 export { assertKitchenTimingPresent } from "./kitchen-timing-readiness.js";
 export { tableExists } from "./table-exists.js";
+export { tableInService } from "./table-in-service.js";
 export type { MigrationOptions } from "./migrate.js";
 export { claimRows } from "./job-claim.js";
 export type { ClaimSpec } from "./job-claim.js";
@@ -81,7 +82,7 @@ export type {
   AmendmentVerification,
   VerifiableAmendment,
 } from "./order-amendment-hash.js";
-export { diningTables, floorTableShape } from "./schema/dining-tables.js";
+export { diningTables } from "./schema/dining-tables.js";
 export {
   floorPlanJoinTables,
   floorPlanJoins,

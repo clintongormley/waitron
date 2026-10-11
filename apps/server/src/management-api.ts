@@ -92,19 +92,13 @@ import {
 } from "@waitron/layouts";
 import { imageExists, readImageBytes } from "@waitron/media";
 import {
-  clearPlacement,
   createStatus,
-  createTable,
   deactivateStatus,
-  deactivateTable,
   deactivateZone,
-  type FloorTableShape,
   listStatuses,
   listTables,
   listZones,
-  setTablePlacement,
   updateStatus,
-  updateTable,
   updateZone,
 } from "./tables.js";
 import {
@@ -295,12 +289,9 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "zone.department_inactive": 409,
   "table.not_found": 404,
   "table.label_taken": 409,
-  "table.zone_inactive": 409,
-  "table.in_floor_plan": 409,
   "table.booked": 409,
   "floor_plan.out_of_date": 409,
   "floor_plan.invalid": 400,
-  "placement.invalid": 400,
   "station.not_found": 404,
   "station.name_taken": 409,
   "station.is_default": 409,
@@ -340,11 +331,6 @@ function requireStatusId(id: string): string {
 
 function requireZoneId(id: string): string {
   if (!isUuid(id)) throw new AppError("zone.not_found", { zoneId: id });
-  return id;
-}
-
-function requireTableId(id: string): string {
-  if (!isUuid(id)) throw new AppError("table.not_found", { tableId: id });
   return id;
 }
 
@@ -442,10 +428,8 @@ function parseZonePlanSave(body: unknown): ZonePlanSave {
       if (typeof table.fixed !== "boolean") refuse(`${at}.fixed`);
       if (table.placement !== null && !isRecord(table.placement)) refuse(`${at}.placement`);
       const id = optionalId(table.id, `${at}.id`);
-      const liveTableId = optionalId(table.liveTableId, `${at}.liveTableId`);
       return {
         ...(id === undefined ? {} : { id }),
-        ...(liveTableId === undefined ? {} : { liveTableId }),
         key: table.key as string,
         label: table.label as string,
         seats: table.seats as number | null,
@@ -505,14 +489,6 @@ function parseDisplayOrder(value: unknown): number | undefined {
     value > 2_147_483_647
   )
     throw new AppError("management.request_invalid", { field: "displayOrder" });
-  return value;
-}
-
-/** `parseDisplayOrder`'s rule for a table's `capacity`, which must also be non-negative. */
-function parseCapacity(value: unknown): number | undefined {
-  if (value === undefined) return undefined;
-  if (typeof value !== "number" || !Number.isInteger(value) || value < 0 || value > 2_147_483_647)
-    throw new AppError("management.request_invalid", { field: "capacity" });
   return value;
 }
 
@@ -1795,33 +1771,6 @@ export function mountManagementApi(
     }),
   );
 
-  app.post("/management-api/tables", (c) =>
-    run(c, log, async () => {
-      const sessionId = requireManagementSession(c);
-      const cfg = requireVenueCfg(deps);
-      const body = await readJsonBody<{ label?: unknown; zoneId?: unknown; capacity?: unknown }>(c);
-      if (typeof body !== "object" || body === null || Array.isArray(body)) {
-        throw new AppError("management.request_invalid", { field: "body" });
-      }
-      if (typeof body.label !== "string")
-        throw new AppError("management.request_invalid", { field: "label" });
-      let zoneId: string | undefined;
-      if (body.zoneId !== undefined) {
-        if (typeof body.zoneId !== "string")
-          throw new AppError("management.request_invalid", { field: "zoneId" });
-        // A malformed zoneId gets the same `zone.not_found` a well-formed missing one does.
-        if (!isUuid(body.zoneId)) throw new AppError("zone.not_found", { zoneId: body.zoneId });
-        zoneId = body.zoneId;
-      }
-      const capacity = parseCapacity(body.capacity);
-      const { label } = body;
-      const result = await withVenueAuth(deps, sessionId, (tx) =>
-        createTable(tx, cfg, { label, zoneId, capacity }),
-      );
-      return c.json(result, 201);
-    }),
-  );
-
   app.get("/management-api/tables", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
@@ -1830,111 +1779,6 @@ export function mountManagementApi(
         listTables(tx, cfg, { includeDisabled: c.req.query("includeDisabled") === "true" }),
       );
       return c.json(tables);
-    }),
-  );
-
-  app.patch("/management-api/tables/:id", (c) =>
-    run(c, log, async () => {
-      const sessionId = requireManagementSession(c);
-      const id = requireTableId(c.req.param("id"));
-      const cfg = requireVenueCfg(deps);
-      const body = await readJsonBody<{
-        label?: unknown;
-        zoneId?: unknown;
-        capacity?: unknown;
-        active?: unknown;
-      }>(c);
-      if (typeof body !== "object" || body === null || Array.isArray(body)) {
-        throw new AppError("management.request_invalid", { field: "body" });
-      }
-      const patch: { label?: string; zoneId?: string; capacity?: number; active?: boolean } = {};
-      if (body.label !== undefined) {
-        if (typeof body.label !== "string")
-          throw new AppError("management.request_invalid", { field: "label" });
-        patch.label = body.label;
-      }
-      if (body.zoneId !== undefined) {
-        if (typeof body.zoneId !== "string")
-          throw new AppError("management.request_invalid", { field: "zoneId" });
-        if (!isUuid(body.zoneId)) throw new AppError("zone.not_found", { zoneId: body.zoneId });
-        patch.zoneId = body.zoneId;
-      }
-      if (body.capacity !== undefined) {
-        patch.capacity = parseCapacity(body.capacity);
-      }
-      if (body.active !== undefined) {
-        if (typeof body.active !== "boolean")
-          throw new AppError("management.request_invalid", { field: "active" });
-        patch.active = body.active;
-      }
-      if (
-        patch.label === undefined &&
-        patch.zoneId === undefined &&
-        patch.capacity === undefined &&
-        patch.active === undefined
-      ) {
-        return c.body(null, 204);
-      }
-      await withVenueAuth(deps, sessionId, (tx) => updateTable(tx, cfg, id, patch));
-      return c.body(null, 204);
-    }),
-  );
-
-  app.delete("/management-api/tables/:id", (c) =>
-    run(c, log, async () => {
-      const sessionId = requireManagementSession(c);
-      const id = requireTableId(c.req.param("id"));
-      const cfg = requireVenueCfg(deps);
-      await withVenueAuth(deps, sessionId, (tx) => deactivateTable(tx, cfg, id));
-      return c.body(null, 204);
-    }),
-  );
-
-  // ── Table placement ──
-  // The route screens types; the verb owns the value ranges (`placement.invalid`).
-  app.put("/management-api/tables/:id/placement", (c) =>
-    run(c, log, async () => {
-      const sessionId = requireManagementSession(c);
-      const id = requireTableId(c.req.param("id"));
-      const cfg = requireVenueCfg(deps);
-      const body = await readJsonBody<{
-        zoneId?: unknown;
-        posX?: unknown;
-        posY?: unknown;
-        shape?: unknown;
-        rotation?: unknown;
-      }>(c);
-      if (typeof body !== "object" || body === null || Array.isArray(body)) {
-        throw new AppError("management.request_invalid", { field: "body" });
-      }
-      if (typeof body.zoneId !== "string")
-        throw new AppError("management.request_invalid", { field: "zoneId" });
-      if (!isUuid(body.zoneId)) throw new AppError("zone.not_found", { zoneId: body.zoneId });
-      if (typeof body.posX !== "number")
-        throw new AppError("management.request_invalid", { field: "posX" });
-      if (typeof body.posY !== "number")
-        throw new AppError("management.request_invalid", { field: "posY" });
-      if (typeof body.shape !== "string")
-        throw new AppError("management.request_invalid", { field: "shape" });
-      if (typeof body.rotation !== "number")
-        throw new AppError("management.request_invalid", { field: "rotation" });
-      // The verb re-checks `shape`'s membership, so the cast asserts nothing it does not check.
-      const { zoneId, posX, posY, rotation } = body;
-      const shape = body.shape as FloorTableShape;
-      await withVenueAuth(deps, sessionId, (tx) =>
-        setTablePlacement(tx, cfg, id, { zoneId, posX, posY, shape, rotation }),
-      );
-      return c.body(null, 204);
-    }),
-  );
-
-  app.delete("/management-api/tables/:id/placement", (c) =>
-    run(c, log, async () => {
-      const sessionId = requireManagementSession(c);
-      const id = requireTableId(c.req.param("id"));
-      const cfg = requireVenueCfg(deps);
-      await withVenueAuth(deps, sessionId, (tx) => clearPlacement(tx, cfg, id));
-      return c.body(null, 204);
     }),
   );
 

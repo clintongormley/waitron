@@ -28,7 +28,7 @@ import {
 import { deploymentEnvironment } from "./config.js";
 import { ALL_MODULES } from "./modules.js";
 import type { TillConfig, DeviceRequestConfig } from "./till-config.js";
-import { createTable } from "./tables.js";
+import { createTable } from "./testing/live-table.js";
 import { addTabRound, listStationQueue } from "./working-order.js";
 import { createCourse } from "./kitchen.js";
 import { payWorkingOrder, recordTillSaleOrchestration as recordTillSale } from "./till-sale.js";
@@ -161,7 +161,10 @@ async function seedTable(
   zoneId?: string,
 ): Promise<string> {
   return withTransaction(db, async (tx) => {
-    const { id } = await createTable(tx, cfg, { label, zoneId });
+    const { id } = await createTable(tx, cfg, {
+      label,
+      zoneId: zoneId ?? (await offerProducts(tx, cfg, { zone: "tables" })).zoneId,
+    });
     return id;
   });
 }

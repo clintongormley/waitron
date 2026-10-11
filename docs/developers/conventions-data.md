@@ -1457,6 +1457,56 @@ timing — 2026-09-22: two reads and two `create table`s issued with `Promise.al
 preparation-route read-count test count calls and queries; neither can tell whether queries overlap.
 The missing guard is an item in `docs/backlog.md`, under "Modules, data and code health".
 
+## A zone's floor plan: the master plan and today's plan
+
+Edit the master plan on the dashboard; work from today's plan on the till. Saving an existing
+master does not rearrange tables during service. The first save builds today's plan immediately
+(`apps/server/src/floor-plan.ts:390`). Thereafter `ensureToday` resets an enabled zone at the first
+floor read or change that sees a new business day, or catches up its pending reset rows
+(`apps/server/src/floor-today-store.ts:425`). Reset to saved plan takes a fresh copy explicitly.
+
+A reset copies the master's tables into `floor_reset_tables` and its joins into `floor_reset_joins`
+and `floor_reset_join_tables` (`apps/server/src/floor-today-store.ts:92`). Occupied tables wait.
+After their tab closes, the next floor read or change can apply the pending rows; closing the tab
+itself does not run that catch-up. New live tables are created from those reset rows, including
+rows that had to wait for a name (`apps/server/src/floor-today-store.ts:323`). This separation keeps
+a later master edit from changing the copy a reset is still applying.
+
+A closing party keeps its table names as text and releases its `party_tables` rows
+(`apps/server/src/parties.ts:667`). Permanent removal releases order delivery references and calls
+each module's `TableRemoval` seat before deleting the table
+(`apps/server/src/table-removal.ts:74`). Bookings copies the table label and clears its pointer
+(`packages/bookings/src/table-removal.ts:42`); the delivery release copies the label onto referenced orders
+(`apps/server/src/delivery-release.ts:10`). A table is in service through `tableInService`: it has a today's row in an enabled zone.
+That test does not exclude a table taken off today. There is no active column on `dining_tables`
+(`packages/db/src/table-in-service.ts:4`).
+
+Measured on 2026-10-11, Node v26.7.0, after applying every manifest migration to `node:sqlite`:
+`pragma_foreign_key_list` reports six incoming keys, all `ON DELETE NO ACTION`:
+`party_tables.table_id`, `working_orders.delivery_table_id`, `floor_reset_tables.table_id`,
+`floor_today_tables.table_id`, `floor_today_join_tables.table_id` and `bookings.table_id`.
+Cascading here would allow removal to discard the records the release and refusal paths must
+handle. The only trigger whose SQL names `dining_tables` is `parties_clear_table_status`.
+
+Slice 5's rebuild uses `0137_floor_retire_drop_table_triggers.sql`,
+`0138_floor_retire_old_table_columns.sql` and `0139_floor_retire_recreate_table_triggers.sql` in
+`packages/db/drizzle/`. Every venue needs a reset for this change. Running
+`pnpm exec vitest run scripts/migration-upgrade.test.ts` before adding its declared reset failed
+with `NOT NULL constraint failed: __new_dining_tables.zone_id`; the same guard then passed with
+that reset declared. In a disposable checkout, replacing the trigger drop with `SELECT 1;`
+made it fail with `error in trigger parties_clear_table_status: no such table: main.dining_tables`.
+The required zone is not the only reset reason. Measured on 2026-10-11 with Node v26.7.0,
+applying core SQL through `0136` with foreign keys on, then applying `0137`–`0139` inside one
+transaction: a zoned table with a `floor_today_tables` row failed with
+`FOREIGN KEY constraint failed`. A zoned table with no child row upgraded; a separate control
+that switched foreign keys off **before** the transaction upgraded and kept its today's row.
+The generated `PRAGMA foreign_keys=OFF` inside the transaction did not let the first case
+upgrade. Those controls establish the retained today's-row refusal; the six-key metadata
+measurement above is separate. Saving master plans does not remove this reset requirement.
+
+The schema guards passed 497 tests; `packages/db/src/schema/dining-tables.test.ts` also checks
+that a zoneless insert is refused and only the eight kept columns exist.
+
 ## A read taken while ANOTHER caller's write transaction is open sees committed rows only
 
 The store opens two connections per database file: the single writer, and a reader opened
@@ -1895,6 +1945,9 @@ the tree (`packages/db/drizzle/0001_behavioural_triggers.sql`,
 `packages/db/drizzle/0033_line_served_exception.sql`,
 `packages/db/drizzle/0038_main_bill_release.sql` (two triggers on `working_orders` that clear
 `parties.main_bill_id`),
+`packages/db/drizzle/0137_floor_retire_drop_table_triggers.sql` and
+`packages/db/drizzle/0139_floor_retire_recreate_table_triggers.sql` (drop and restore
+`parties_clear_table_status` around the `dining_tables` rebuild),
 `packages/db/drizzle/0042_placed_bill_moves.sql` (a presented bill changing party),
 `packages/db/drizzle/0043_drop_triggers_before_rebuild.sql` and
 `packages/db/drizzle/0045_recreate_triggers_after_rebuild.sql` (the three triggers around `0044`'s
@@ -1960,7 +2013,7 @@ catalogue `0013_drop_category_image_triggers.sql`, `0018_sections_owned_prepare.
 `0021_sections_owned_restore.sql`, and 2026-10-04 for core `0066`, `0072`, `0080`, `0082`, `0083`,
 `0086`, `0089` and `0091`, and 2026-10-07 for media `0008_queued_edition_image_references.sql` and
 `0009_include_folder_image_references.sql`, and 2026-10-09 for core `0119`, `0122` and `0124`, and
-2026-10-10 for core `0128`)
+2026-10-10 for core `0128`, and 2026-10-11 for core `0137` and `0139`)
 each of those files equalled the one before it once `id` and
 `prevId` were removed and keys sorted, except that `0042`'s `_meta.columns` no longer carried
 `0041`'s column rename, so the snapshot chain records none of the hand-written SQL, which is why regenerating from the TypeScript

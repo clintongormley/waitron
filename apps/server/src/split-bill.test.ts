@@ -33,7 +33,7 @@ import {
 } from "@waitron/shared";
 import type { DeviceRequestConfig, OriginConfig, TillConfig } from "./till-config.js";
 import { deviceRequestCfg } from "./testing/session-device.js";
-import { createTable } from "./tables.js";
+import { createTable } from "./testing/live-table.js";
 import {
   addTabRound,
   advanceTicketItem,

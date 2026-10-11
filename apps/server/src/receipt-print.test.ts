@@ -85,7 +85,7 @@ import {
   reprintSale,
 } from "./till-sale.js";
 import { createOpenOrder, parkOrder, placeOrder } from "./working-order.js";
-import { createTable } from "./tables.js";
+import { createTable } from "./testing/live-table.js";
 import { takeBillPayment } from "./bill-payments.js";
 import {
   DRAWER_KICK,
@@ -693,7 +693,10 @@ describe("receipt grouping after table changes", () => {
       // A tab opens only in a table_tab zone, so the order that carries the table here is a counter
       // order in a zone of this flow, delivered to the table.
       const { tableId, orderId } = await withTransaction(suite.db, async (tx) => {
-        const table = await createTable(tx, cfg, { label: "Terrace 6" });
+        const table = await createTable(tx, cfg, {
+          label: "Terrace 6",
+          zoneId: (await offerProducts(tx, cfg, { zone: "tables" })).zoneId,
+        });
         const orderId = randomUUID();
         await createOpenOrder(
           tx,

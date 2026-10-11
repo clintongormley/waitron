@@ -10,8 +10,8 @@ import type { BookingForm } from "./booking-form.js";
 import { BookingsScreen } from "./bookings-screen.js";
 
 const TABLES: DashboardTable[] = [
-  { id: "t-1", label: "Mesa 1", zoneId: null, capacity: 4, active: true, createdAt: "2026-01-01" },
-  { id: "t-2", label: "Mesa 2", zoneId: null, capacity: 2, active: true, createdAt: "2026-01-01" },
+  { id: "t-1", label: "Mesa 1", zoneId: "z1", planTableId: null, createdAt: "2026-01-01" },
+  { id: "t-2", label: "Mesa 2", zoneId: "z1", planTableId: null, createdAt: "2026-01-01" },
 ];
 
 function booking(overrides: Partial<Booking> = {}): Booking {
@@ -709,5 +709,25 @@ it.each([
     vi.mocked(api.listBookings).mockResolvedValue(BOOKINGS);
     liveData.refresh();
     await vi.waitFor(() => expect(el.shadowRoot!.querySelector("[role=alert]")).toBeNull());
+  },
+);
+
+it.each(["floor_today_tables", "floor_zones"])(
+  "refreshes table choices after %s changes",
+  async (type) => {
+    const liveData = new LiveData();
+    const api = Object.assign(stubApi(), { liveData });
+    const { el } = await mountWidget<BookingsScreen>("dashboard-bookings-screen", { api });
+    await flush(el);
+    vi.mocked(api.listTables).mockResolvedValue([]);
+    liveData.invalidate([{ type, id: "changed" }]);
+    await vi.waitFor(() => expect(api.listTables).toHaveBeenCalledTimes(2));
+    await click(el, "seat-bk-late");
+    await flush(el);
+    expect(api.seatBooking).not.toHaveBeenCalled();
+    expect(el.shadowRoot!.querySelector("[data-test=confirm-seat-bk-late]")).toBeNull();
+    expect(el.shadowRoot!.querySelector("[role=alert]")!.textContent).toContain(
+      codeMessage("booking.table_required", "es-ES"),
+    );
   },
 );

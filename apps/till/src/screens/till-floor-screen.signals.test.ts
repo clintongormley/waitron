@@ -3,7 +3,7 @@ import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import { setLocale } from "../i18n/t.js";
 import "./till-floor-screen.js";
 import type { TillFloorScreen } from "./till-floor-screen.js";
-import type { TableParty, TableState } from "../api/client.js";
+import type { TableParty, TableState, TableToday } from "../api/client.js";
 import type { TableSignal } from "@waitron/shared";
 
 const now = Date.parse("2026-09-30T20:00:00.000Z");
@@ -27,12 +27,22 @@ function party(over: Partial<TableParty> = {}): TableParty {
   };
 }
 
+function today(): TableToday {
+  return {
+    placement: { x: 2, y: 3, width: 2, height: 2, shape: "round", rotation: 0 },
+    seats: 4,
+    fixed: false,
+    takenOff: false,
+    joinId: null,
+    joinSeats: null,
+  };
+}
+
 function table(over: Partial<TableState> = {}): TableState {
   return {
     id: "t2",
     label: "Mesa 2",
     zoneId: "z1",
-    capacity: 4,
     state: "open-tab",
     condition: "held",
     hasOpenTab: true,
@@ -45,10 +55,6 @@ function table(over: Partial<TableState> = {}): TableState {
     timingBand: "fresh",
     status: null,
     nextReservation: null,
-    posX: null,
-    posY: null,
-    shape: null,
-    rotation: null,
     today: null,
     party: party(),
     signals: [],
@@ -116,23 +122,8 @@ describe("till-floor-screen: the signals at a table", () => {
     expect(badges.querySelector("[data-fire-due]")!.textContent!.trim()).toBe("Time to fire");
   });
 
-  it("shows the same chips on the table's token on the map", async () => {
-    const onMap = { ...mesa2, posX: 300, posY: 300, shape: "round" as const, rotation: 0 };
-    const el = await mountFloor([onMap]);
-    const canvas = el.shadowRoot!.querySelector("wt-floor-canvas")!;
-    await canvas.updateComplete;
-    const token = canvas.shadowRoot!.querySelector<
-      HTMLElement & { updateComplete: Promise<unknown> }
-    >('[data-table="t2"] wt-table-token')!;
-    await token.updateComplete;
-    expect(chips(token.shadowRoot!)).toEqual(["Bar: 3 ready", "Bill requested"]);
-    expect(token.shadowRoot!.querySelector("[data-fire-due]")!.textContent!.trim()).toBe(
-      "Time to fire",
-    );
-  });
-
   it("shows the same chips on an unplaced table's token in the map's tray", async () => {
-    const placed = table({ id: "t9", label: "9", party: null, posX: 300, posY: 300 });
+    const placed = table({ id: "t9", label: "9", party: null, today: today() });
     const el = await mountFloor([placed, mesa2]);
     const token = el.shadowRoot!.querySelector<HTMLElement & { updateComplete: Promise<unknown> }>(
       '[data-tray-table="t2"] wt-table-token',

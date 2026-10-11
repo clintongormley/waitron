@@ -430,22 +430,6 @@ describe.each(["light", "dark"] as const)("dashboard-app a11y (%s theme)", (them
     await expectNoA11yViolations(host);
   });
 
-  it("the floor-plan screen renders accessibly with a single, well-ordered heading", async () => {
-    const api = stubApi({ listStaff: vi.fn().mockResolvedValue(people) });
-    const { el, host } = await mountWidget<DashboardApp>("dashboard-app", { api }, theme);
-    await flush(el);
-    el.shadowRoot!.querySelector<HTMLElement>("[data-test=nav-floor]")!.click();
-    await flush(el);
-    const floor = el.shadowRoot!.querySelector("dashboard-floor-screen");
-    expect(floor).toBeTruthy();
-    const h1s = [
-      ...el.shadowRoot!.querySelectorAll("h1"),
-      ...(floor!.shadowRoot?.querySelectorAll("h1") ?? []),
-    ];
-    expect(h1s).toHaveLength(1);
-    await expectNoA11yViolations(host);
-  });
-
   it("the banner's alerts bell is accessible closed and open", async () => {
     const api = stubApi({
       listAlerts: vi.fn().mockResolvedValue({

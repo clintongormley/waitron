@@ -1290,16 +1290,15 @@ _Formerly the catalogue and menus entries in the opening part of the old Track A
 
 _Formerly entries spread across the old sections, A261's venue-operations steps among them; part of A9._ Detail: [backlog/service-periods.md](backlog/service-periods.md).
 
-- **Enabling a zone or a department leaves what disabling switched off as it is** — found along the
-  way by W110e (#1290), each left as it is: a department's zones stay disabled, a zone's tables stay
-  disabled (except a floor-plan zone's tables on today's plan, which come back since A429 slice 1),
-  and its routing exceptions stay gone (a profile's starting zone is
+- **Enabling a department leaves its zones disabled; enabling a zone leaves routing exceptions removed.**
+  Found along the way by W110e (#1290). A zone's tables on today's plan come back with the zone
+  (A429 slice 5). A profile's starting zone is
   kept since W97, 2026-10-06: `readProfileZones` falls back to the profile's first usable zone while
-  it is disabled).
+  it is disabled.
 
 - **What a kitchen screen shows after its zone is switched off is unchecked.** Switching a zone off
   (`deactivateServiceZone`, `packages/venue-service/src/operations.ts`) clears its routing cells
-  and disables its tables; it does not clear kitchen screens' zone rows (`device_kitchen_screen_zones`,
+  and takes its tables out of service; it does not clear kitchen screens' zone rows (`device_kitchen_screen_zones`,
   `device_profile_kitchen_screen_zones`). What a pass screen or the device editor shows for that
   zone was read, not run. Left open by A366 slice 5 Part B.
 
@@ -1713,12 +1712,9 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   `packages/payments/src/provider.ts` is not a comments-only change.
   [Detail](backlog/till.md#two-v8-ignore-start-comments-in-till-salets-finalizecapture-finalizesettle-cite-providerts66-83)
 
-- **A table with no shape is drawn as a rectangle and saved as round on its first edit** — found by
-  #604 while pruning comments. `wt-table-token.ts` draws `shape-${t.shape ?? "rect"}`, while
-  `wt-floor-canvas.ts` marks Round as pressed and sends `shape: t.shape ?? "round"` from
-  `#placementOf`, so dragging, nudging or rotating a shapeless table changes it (read from the code,
-  not run).
-  [Detail](backlog/till.md#a-table-with-no-shape-is-drawn-as-a-rectangle-and-saved-as-round-on-its-first-edit)
+- **UI package notes left by the comments sweep** — the remaining image-list and coverage-config
+  observations from #604 need checking against the current tree.
+  [Detail](backlog/till.md#ui-package-notes-left-by-the-comments-sweep)
 
 - **Seating a booking at a table in a zone that is not a table-tab zone has no bookings test** —
   found by #574 while pruning comments (`packages/bookings`). The server accepts an empty contact
@@ -1810,19 +1806,13 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
 - **Unassigned Profile cells stay blank; the None profile filter selects them.** No cell-wording
   change was queued. Left open by A413 (#1436, the Devices screen and Add a device).
 
-- **A429 — floor plans: a master plan per zone, today's plan on the till (owner, 2026-10-08; slices
-  1 (#1493), 2 (#1506), 3 (#1517) and 4 (#1526) built; slice 5 open).** Slice 1 is the
-  storage and reads: each zone's master plan (the layout the owner edits), today's plan (the copy
-  the till works from), kept table names, the till's table-state answer, the dashboard's read and
-  save routes, and the demo seed. Slice 2 is the dashboard editor. Slice 3 is the till's map: a
-  planned zone drawn on a new map with status colours and dots, a details sheet, the seat dialog,
-  a 15-second re-read, and the order screen's status pin and notice. Slice 4 is today's changes
-  on the till: move, join, split, take off and reset tables for today. Left: removing the old
-  pieces, planned to step level on 2026-10-11 with one question for the owner: the Floor plan nav
-  item is removed by default, or could open Departments and zones instead (slice 5 decision 1 in
-  the plan). The map follows the zone's proportions;
-  Bill requested chips share its purple, and Guests has no placeholder.
-  [Detail](backlog/till.md#a429--floor-plans-a-master-plan-per-zone-todays-plan-on-the-till)
+- **Tighten the till's `TableState.today` type** — A429 slice 5 keeps it nullable for now
+  (`apps/till/src/api/client.ts`), even though the floor's in-service read requires today's row.
+  Check all consumers and fixtures before making it required. Left open by A429 slice 5.
+
+- **Retire the till's unused `GET /api/tables` route** — the app reads `/api/tables/state`;
+  `apps/till/src/api/client.ts` has no method for the older list route. Check other callers before
+  removing the route. Left open by A429 slice 5, decision 15.
 
 - **A466 — floor plan editor follow-ups (2026-10-10).** Small gaps the dashboard floor plan editor
   left: a preview not heard on focus, an ungated link, a duplicated address template, list and
@@ -1842,8 +1832,8 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   (`bookings.table_label`) is stored but shown nowhere.** Left open by A429 slice 1 (#1493).
 
 - **Should switching a planned zone back on rebuild today's plan from the master?** Today it
-  switches back on the tables still on today's plan, as today's plan has them (`updateZone`,
-  `apps/server/src/tables.ts`); a table waiting for its removal stays off, and master edits wait
+  switches back on the tables still on today's plan, as today's plan has them (`tableInService`,
+  `packages/db/src/table-in-service.ts`, through the zone's enabled state); a table waiting for its removal stays off, and master edits wait
   for the next day's reset. Left open by A429 slice 1 (#1493).
 
 - **A stray row that blocks a table's final delete keeps that table's reset row waiting forever**,
@@ -2311,27 +2301,11 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
 - On a 390 px phone the bill choice's buttons wrap ("Keep separate bills" on three lines). Left open
   by the table actions plan's Task 11 (#881).
 
-- Seen by C82 at 390 and 1280 px, not measured further: a token for four seats or fewer, or with no
-  seat count set, is so narrow that the party name shows only its first few letters ("T…" at two
-  seats), and the table's label, its covers and its "to serve" chip spill past the token's edge; the
-  map's token sizes (`sizeForCapacity`, `wt-floor-canvas`) decide that (owner, 2026-09-30, on C82's
-  question: "wait on this"; not queued). A tab total does not fit either: see "A four-digit total
-  does not fit a small round table on the till's floor map", below. Left open by the table actions
-  plan's Task 11 (#881).
-
 - **Open, from C84's review (#913):** when a void or line change gets no answer, `#rereadAmounts()`
   can put on screen what the party still owes, taken from its bills after its own floor read failed,
   while the revision on screen stays where it was. Traced in the code, not reproduced. Left open by
   the table actions plan.
   [Detail](backlog/till.md#tables-parties-and-bills--the-tills-table-actions)
-
-- **A four-digit total does not fit a small round table on the till's floor map** (the old map,
-  `wt-floor-canvas`, drawn for a zone with no floor plan; a planned zone's map shows no totals since
-  A429 slice 3) (found 2026-10-03
-  by looking at the map while making its amounts follow the locale, lane C's W15). **Next action:**
-  the owner decides whether this changes "wait on this"; a fix that lets a small token hold what it
-  shows would cover both.
-  [Detail](backlog/till.md#a-four-digit-total-does-not-fit-a-small-round-table-on-the-tills-floor-map)
 
 - **Later: optional seat/guest item assignment (owner, 2026-09-20).** Include shared items when this
   is designed. For now, orders remain at table/tab level and staff select items manually when
@@ -2521,9 +2495,9 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   product folders work. The plan has no such count; adding one needs another value from
   `listTablesWithState`.
 
-- **Refresh the floor without a staff action, for a zone with no floor plan or a planned zone's
+- **Refresh the floor without a staff action in a zone's
   list view — OPEN (3d, W16).** — left open by the product folders work. Since A429 slice 3 the
-  floor screen re-reads the floor every 15 seconds while a planned zone's map is on screen
+  floor screen re-reads the floor every 15 seconds while a zone's map is on screen
   (`#watchFloor`, `apps/till/src/screens/till-floor-screen.ts`). Elsewhere it still reads only on
   events handled by `till-app.ts`'s `floor-refresh`. Polling would read `listTablesWithState` every
   few seconds on every till; choose the interval and cost first.
@@ -2665,12 +2639,6 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   path.** `TillApi.listProducts` (`apps/till/src/api/client.ts`) is kept because the till's tests
   stub it; outside tests `listAvailableProducts` is called by that route and two dev scripts. **Next
   action:** decide whether to retire the route and move the till's tests onto zone-offer fixtures.
-
-- **A table in no zone still opens a tab, and nothing can be added to it** (`seatTable`, and
-  `seatBooking` in `packages/bookings/src/bookings.ts`); every round is refused
-  `order.service_context_missing` (pinned in `apps/server/src/till-api.zone-required.test.ts`).
-  **Next action:** owner to decide whether to refuse opening a tab on a table in no zone, or to
-  require every table to have a zone.
 
 - **Two branches still read a held line that names no menu offer**, which only an order parked
   before B4 should have: `getHeldOrder` (`apps/server/src/working-order.ts`) and the till's retrieve

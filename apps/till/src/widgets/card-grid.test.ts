@@ -379,13 +379,6 @@ const floorTab: TabDef = {
   cards: [{ type: "floor-plan", colSpan: 12, rowSpan: 8, config: {} }],
 };
 
-const editorTab: TabDef = {
-  key: "editor",
-  title: "Editor",
-  columns: 12,
-  cards: [{ type: "table-layout-editor", colSpan: 12, rowSpan: 8, config: {} }],
-};
-
 const expoTab: TabDef = {
   key: "expo",
   title: "Expo",
@@ -636,7 +629,6 @@ describe("till-card-grid", () => {
     >("till-floor-screen")!;
     expect(floor).not.toBeNull();
     expect(floor.embedded).toBe(true);
-    expect(floor.canEdit).toBe(false);
   });
 
   it("tells the floor whether the device can open a station's view", async () => {
@@ -669,46 +661,6 @@ describe("till-card-grid", () => {
       "till-floor-screen",
     )!;
     expect(floor.canChangeToday).toBe(can);
-  });
-
-  it("renders an embedded editable floor screen for a table-layout-editor card", async () => {
-    const store = new WorkingOrderStore();
-    const { el } = await mountWidget<TillCardGrid>("till-card-grid", {
-      tab: editorTab,
-      store,
-      zones: [],
-      tables: [],
-    });
-    const floor = el.shadowRoot!.querySelector<
-      HTMLElement & { embedded?: boolean; canEdit?: boolean }
-    >("till-floor-screen")!;
-    expect(floor).not.toBeNull();
-    expect(floor.embedded).toBe(true);
-    expect(floor.canEdit).toBe(true);
-  });
-
-  it("locks a permission-gated card when the operator lacks the permission", async () => {
-    const store = new WorkingOrderStore();
-    const { el } = await mountWidget<TillCardGrid>("till-card-grid", {
-      tab: editorTab,
-      store,
-      permissions: ["sale.take_payment", "layout.configure"],
-    });
-    const cell = el.shadowRoot!.querySelector<HTMLElement>(".cell.locked")!;
-    expect(cell).not.toBeNull();
-    expect(cell.hasAttribute("inert")).toBe(true);
-    expect(cell.getAttribute("aria-disabled")).toBe("true");
-  });
-
-  it("unlocks a permission-gated card when the operator has the permission", async () => {
-    const store = new WorkingOrderStore();
-    const { el } = await mountWidget<TillCardGrid>("till-card-grid", {
-      tab: editorTab,
-      store,
-      permissions: ["sale.take_payment", "venue.configure"],
-    });
-    expect(el.shadowRoot!.querySelector(".cell.locked")).toBeNull();
-    expect(el.shadowRoot!.querySelector("till-floor-screen")).not.toBeNull();
   });
 
   it("renders an embedded expo screen for an expo card", async () => {

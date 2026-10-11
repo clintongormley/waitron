@@ -654,19 +654,18 @@ async function addTablesHint(el: FloorPlanEditor): Promise<string> {
   return addModal(el).querySelector("[data-preview]")!.textContent!.trim();
 }
 
-const venueTable = (id: string, label: string, zoneId: string | null, active: boolean) => ({
+const venueTable = (id: string, label: string, zoneId: string, planTableId: string | null) => ({
   id,
   label,
   zoneId,
-  capacity: null,
-  active,
+  planTableId,
   createdAt: "2026-10-01T10:00:00.000Z",
 });
 
-it("counts this zone's switched-off tables no draft table follows as taken", async () => {
+it("counts this zone's tables without a master no draft table follows as taken", async () => {
   const el = await open(
     stubApi({
-      listTables: vi.fn().mockResolvedValue([venueTable("l7", "Terrace 30", "z1", false)]),
+      listTables: vi.fn().mockResolvedValue([venueTable("l7", "Terrace 30", "z1", null)]),
     }),
   );
   expect(await addTablesHint(el)).toBe("Terrace 31");
@@ -678,10 +677,10 @@ it("counts other zones' tables as taken, but not this zone's live or followed ta
       listTables: vi
         .fn()
         .mockResolvedValue([
-          venueTable("l1", "Terrace 50", "z1", false),
-          venueTable("l8", "Terrace 60", "z1", true),
-          venueTable("l9", "Terrace 20", "z2", true),
-          venueTable("l10", "Terrace 9", null, false),
+          venueTable("l1", "Terrace 50", "z1", null),
+          venueTable("l8", "Terrace 60", "z1", "m8"),
+          venueTable("l9", "Terrace 20", "z2", "m9"),
+          venueTable("l10", "Terrace 9", "z3", null),
         ]),
     }),
   );
@@ -871,7 +870,7 @@ for (const [from, to] of sizes) {
 }
 
 it("a save answer arriving while Add join is open re-keys its chosen table", async () => {
-  const withT9 = (revision: number, id: string | null): FloorPlan => ({
+  const withT9 = (revision: number, id: string): FloorPlan => ({
     ...terrace(revision),
     tables: [
       ...terrace(revision).tables,
@@ -880,7 +879,7 @@ it("a save answer arriving while Add join is open re-keys its chosen table", asy
   });
   let answer!: (value: { revision: number; ids: Record<string, string> }) => void;
   const api = stubApi({
-    getFloorPlan: vi.fn().mockResolvedValueOnce(withT9(3, null)).mockResolvedValue(withT9(4, "m9")),
+    getFloorPlan: vi.fn().mockResolvedValueOnce(terrace(3)).mockResolvedValue(withT9(4, "m9")),
     saveFloorPlan: vi.fn(
       () =>
         new Promise<{ revision: number; ids: Record<string, string> }>((resolve) => {
@@ -889,13 +888,19 @@ it("a save answer arriving while Add join is open re-keys its chosen table", asy
     ),
   });
   const el = await open(api);
-  await fromCanvas(el, "wt-table-move", { key: "m1", x: 5, y: 4 });
+  await fromCanvas(el, "floor-plan-change", {
+    draft: addTables(
+      draftFromPlan(terrace(3)),
+      [{ label: "T9", seats: null, fixed: false }],
+      () => "new:9",
+    ),
+  });
   button(el, "save").click();
   await el.updateComplete;
   await fromCanvas(el, "wt-table-select", { key: "m1" });
   await openAddJoin(el);
-  await chooseOptions(joinField(el, "join-tables"), ["live:l9"]);
-  answer({ revision: 4, ids: { "live:l9": "m9" } });
+  await chooseOptions(joinField(el, "join-tables"), ["new:9"]);
+  answer({ revision: 4, ids: { "new:9": "m9" } });
   await flush(el);
   await flush(el);
   expect(panelOf(el).draft.tables.map((t) => t.key)).toContain("m9");
@@ -912,4 +917,21 @@ it("a save answer arriving while Add join is open re-keys its chosen table", asy
   expect(tablePanel(el)!.shadowRoot!.querySelector("[data-join-text]")!.textContent!.trim()).toBe(
     "with T9 · seats 4",
   );
+});
+
+it("does not reserve an unfollowed live name backed by this zone's master plan", async () => {
+  const el = await open(
+    stubApi({
+      listTables: vi.fn().mockResolvedValue([
+        {
+          id: "l8",
+          label: "Terrace 30",
+          zoneId: "z1",
+          planTableId: "m8",
+          createdAt: "2026-10-01",
+        },
+      ]),
+    }),
+  );
+  expect(await addTablesHint(el)).toBe("Terrace 1");
 });

@@ -38,7 +38,7 @@ import type { DeviceRequestConfig, TillConfig } from "./till-config.js";
 import { deviceRequestCfg } from "./testing/session-device.js";
 import { createStation } from "./kitchen.js";
 import { attachPrinterToStation, detachPrinterFromStation } from "./station-printers.js";
-import { createTable } from "./tables.js";
+import { createTable } from "./testing/live-table.js";
 import { listPrintProblems, ordersWithPrintProblem, reprintOrderTickets } from "./kitchen-print.js";
 import { seedLegacySellingUnits } from "./testing/seed-units.js";
 import { routeProductTo, offerProducts } from "./testing/zone-offers.js";

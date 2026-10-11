@@ -132,13 +132,12 @@ export function targetsFromMaster(
     fixed: boolean;
     placement: Placement | null;
   }[],
-  live: readonly { id: string; label: string; planTableId: string | null; planned: boolean }[],
+  live: readonly { id: string; label: string; planTableId: string | null }[],
 ): Target[] {
   const byId = new Map(master.map((table) => [table.id, table]));
   const followed = new Set<string>();
   const targets: Target[] = [];
   for (const table of live) {
-    if (!table.planned) continue;
     const source = table.planTableId === null ? undefined : byId.get(table.planTableId);
     if (source) {
       followed.add(source.id);

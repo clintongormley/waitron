@@ -102,8 +102,8 @@ import {
  * Not action-gated, so a signed-in person (or, for a display's reads, the device) is enough: every
  * read, including a display's `GET /api/device/stations`, the POST previews (`/payments/preview`,
  * `/adjustments/preview`) and the dead-end checks (`/api/dead-ends/*`); the session, locale, schedule, profile-switch and device-equipment
- * routes (choosing equipment is not printing, paying or opening the drawer); and table placement,
- * which needs `venue.configure`. Left ungated by decision, each with its reason:
+ * routes (choosing equipment is not printing, paying or opening the drawer). Left ungated by
+ * decision, each with its reason:
  * - `GET /api/service-day/authorizers`, `GET /api/stations/:stationId/today` and
  *   `PUT /api/stations/:stationId/today`: a decision about the venue's day; reads require a session,
  *   writes require `venue_service.manage` or a permitted PIN override;

@@ -27,7 +27,7 @@ import {
   jobOrigin,
 } from "@waitron/shared";
 import type { OriginConfig } from "./till-config.js";
-import { createTable } from "./tables.js";
+import { createTable } from "./testing/live-table.js";
 import { addTabRound, moveOrderLines } from "./working-order.js";
 import { createPrinter } from "@waitron/printing";
 import { kitchenNotices } from "@waitron/venue-service";

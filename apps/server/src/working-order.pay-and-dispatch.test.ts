@@ -1,3 +1,4 @@
+import { floorTodayTables } from "@waitron/db";
 import { randomUUID } from "node:crypto";
 import { asc, eq, sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
@@ -2694,6 +2695,7 @@ async function addTable(
     .insert(diningTables)
     .values({ locationId: cfg.locationId, zoneId, label: `T-${randomUUID().slice(0, 8)}` })
     .returning({ id: diningTables.id });
+  await tx.insert(floorTodayTables).values({ tableId: rows[0]!.id });
   return rows[0]!.id;
 }
 

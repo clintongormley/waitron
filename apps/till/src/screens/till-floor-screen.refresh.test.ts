@@ -23,7 +23,6 @@ function table(over: Partial<TableState> = {}): TableState {
     id: "t1",
     label: "1",
     zoneId: "z1",
-    capacity: 4,
     state: "free",
     condition: "free",
     hasOpenTab: false,
@@ -34,10 +33,6 @@ function table(over: Partial<TableState> = {}): TableState {
     timingBand: "fresh",
     status: null,
     nextReservation: null,
-    posX: null,
-    posY: null,
-    shape: null,
-    rotation: null,
     today: null,
     signals: [],
     party: null,
@@ -60,21 +55,6 @@ function today(over: Partial<TableToday> = {}): TableToday {
 function planned(id: string, over: Partial<TableToday> = {}): TableState {
   return table({ id, label: id.slice(1), today: today(over) });
 }
-
-/** A table on the old canvas, in a zone with no plan. */
-function oldPlaced(id: string): TableState {
-  return table({
-    id,
-    label: id.slice(1),
-    zoneId: "z2",
-    posX: 250,
-    posY: 400,
-    shape: "round",
-    rotation: 0,
-  });
-}
-
-const twoZones = [zone(), zone({ id: "z2", name: "Terraza", displayOrder: 1 })];
 
 async function mount(over: Partial<TillFloorScreen> = {}): Promise<TillFloorScreen> {
   const { el } = await mountWidget<TillFloorScreen>("till-floor-screen", {
@@ -106,10 +86,6 @@ async function tapMap(el: TillFloorScreen, tableId: string): Promise<void> {
 const seatDialog = (el: TillFloorScreen) =>
   el.shadowRoot!.querySelector<TillSeatDialog>("till-seat-dialog");
 
-async function selectZone(el: TillFloorScreen, zoneId: string): Promise<void> {
-  await click(el, `[data-zone="${zoneId}"]`);
-}
-
 beforeEach(() => {
   vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
 });
@@ -120,14 +96,9 @@ afterEach(() => {
 });
 
 describe("till-floor-screen's guest count and re-read", () => {
-  it("leaves the seat dialog's placeholder empty for today's seats, a merge, or old capacity", async () => {
+  it("leaves the seat dialog's placeholder empty for today's seats or a merge", async () => {
     const el = await mount({
-      zones: twoZones,
-      tables: [
-        planned("t1", { seats: 6 }),
-        planned("t2", { joinId: "j1", joinSeats: 10 }),
-        oldPlaced("t3"),
-      ],
+      tables: [planned("t1", { seats: 6 }), planned("t2", { joinId: "j1", joinSeats: 10 })],
     });
 
     await tapMap(el, "t1");
@@ -149,20 +120,6 @@ describe("till-floor-screen's guest count and re-read", () => {
       new CustomEvent("seat-cancel", { bubbles: true, composed: true }),
     );
     await el.updateComplete;
-
-    await selectZone(el, "z2");
-    el.shadowRoot!.querySelector("wt-floor-canvas")!.dispatchEvent(
-      new CustomEvent("wt-open-table", {
-        detail: { tableId: "t3" },
-        bubbles: true,
-        composed: true,
-      }),
-    );
-    await el.updateComplete;
-    await seatDialog(el)!.updateComplete;
-    const field4 = seatDialog(el)!.shadowRoot!.querySelector("wt-input")!;
-    await field4.updateComplete;
-    expect(field4.shadowRoot!.querySelector<HTMLInputElement>("input")!.placeholder).toBe("");
   });
 
   it("asks for the floor every 15 s while a planned zone's map shows", async () => {
@@ -177,6 +134,14 @@ describe("till-floor-screen's guest count and re-read", () => {
     expect(seen.count).toBe(2);
   });
 
+  it("polls an empty map with no today's rows after the view is chosen", async () => {
+    const el = await mount({ tables: [table()] });
+    const seen = countRefreshes(el);
+    await click(el, "[data-view-toggle]");
+    vi.advanceTimersByTime(15_000);
+    expect(seen.count).toBe(1);
+  });
+
   it("marks the 15-second ask as a poll", async () => {
     const el = await mount();
     const details: unknown[] = [];
@@ -186,18 +151,12 @@ describe("till-floor-screen's guest count and re-read", () => {
     expect(details).toEqual([{ poll: true }]);
   });
 
-  it("does not ask while the list shows, or for the old map", async () => {
-    const el = await mount({ zones: twoZones, tables: [planned("t1"), oldPlaced("t3")] });
+  it("does not ask while the list shows", async () => {
+    const el = await mount();
     const seen = countRefreshes(el);
 
     await click(el, "[data-view-toggle]");
     expect(el.shadowRoot!.querySelector("wt-floor-map")).toBeNull();
-    vi.advanceTimersByTime(30_000);
-    expect(seen.count).toBe(0);
-
-    await click(el, "[data-view-toggle]");
-    await selectZone(el, "z2");
-    expect(el.shadowRoot!.querySelector("wt-floor-canvas")).not.toBeNull();
     vi.advanceTimersByTime(30_000);
     expect(seen.count).toBe(0);
   });

@@ -2,7 +2,13 @@
 
 import { randomUUID } from "node:crypto";
 import { and, eq, inArray, sql } from "drizzle-orm";
-import { categories, kitchenStations, tableServiceStatuses, type Transaction } from "@waitron/db";
+import {
+  categories,
+  diningTables,
+  kitchenStations,
+  tableServiceStatuses,
+  type Transaction,
+} from "@waitron/db";
 import {
   createServiceZone,
   departmentSalePolicies,
@@ -20,8 +26,7 @@ import {
   seriesId as brandSeriesId,
 } from "@waitron/shared";
 import type { CountryDemoIdentity } from "@waitron/country";
-import { createTable, setTablePlacement } from "../../src/tables.js";
-import { readZonePlan, saveZonePlan } from "../../src/floor-plan.js";
+import { saveZonePlan } from "../../src/floor-plan.js";
 import type { TillConfig } from "../../src/till-config.js";
 import { SEED_INVOICE_LOCALE, type SeedLocale } from "./menu.js";
 import type { DemoDataSet } from "./data-set.js";
@@ -34,8 +39,6 @@ export interface SeedFloorInput {
   menuIds?: { restaurant: string; lunch: string; deli: string };
 }
 
-/** `createServiceZone`, `createTable` and `setTablePlacement` read only `locationId`; every other field is
- *  a placeholder that satisfies the type. */
 function toTableCfg(locationId: string, locale: SeedLocale): TillConfig {
   return {
     nodeId: brandNodeId(randomUUID()),
@@ -48,8 +51,6 @@ function toTableCfg(locationId: string, locale: SeedLocale): TillConfig {
   };
 }
 
-/** Zones are created before any table: `setTablePlacement` refuses a `zoneId` that is not a live
- *  zone of this location. */
 export async function seedFloor(
   tx: Transaction,
   { locationId, locale, departmentTradingNames, dataSet, menuIds }: SeedFloorInput,
@@ -167,7 +168,7 @@ export async function seedFloor(
     }
   }
 
-  await createServiceZone(tx, cfg, {
+  const deliCounterZone = await createServiceZone(tx, cfg, {
     departmentId: deliDepartmentId,
     name: floor.deliCounterZone[locale],
     displayOrder: 4,
@@ -218,47 +219,35 @@ export async function seedFloor(
   }
 
   for (const table of floor.tables) {
-    const zoneId = zoneIds.get(table.zoneKey);
-    if (zoneId === undefined) {
+    if (!zoneIds.has(table.zoneKey)) {
       throw new Error(`seedFloor: no zone seeded for key "${table.zoneKey}"`);
     }
-    const created = await createTable(tx, cfg, {
-      label: table.label,
-      zoneId,
-      capacity: table.capacity,
-    });
-    await setTablePlacement(tx, cfg, created.id, {
-      zoneId,
-      posX: table.posX,
-      posY: table.posY,
-      shape: table.shape,
-      rotation: table.rotation,
-    });
   }
-
-  const seeded = new Map(floor.tables.map((table) => [table.label, table]));
-  for (const zoneId of zoneIds.values()) {
-    const draft = await readZonePlan(tx, cfg, zoneId);
-    if (draft.tables.length === 0) continue;
-    // No removal seats: a first save that only adopts live tables deletes none.
+  for (const zoneId of [...zoneIds.values(), upstairsBarZone.id, deliCounterZone.id]) {
+    const [existing] = await tx
+      .select({ label: diningTables.label })
+      .from(diningTables)
+      .where(and(eq(diningTables.locationId, locationId), eq(diningTables.zoneId, zoneId)))
+      .orderBy(diningTables.label)
+      .limit(1);
+    if (existing !== undefined) {
+      throw new Error(
+        `seedFloor: zone ${zoneId} holds table "${existing.label}", which the seed did not create`,
+      );
+    }
+  }
+  for (const [zoneKey, zoneId] of zoneIds) {
+    const tables = floor.tables.filter((table) => table.zoneKey === zoneKey);
+    if (tables.length === 0) continue;
     await saveZonePlan(tx, cfg, [], zoneId, {
-      revision: draft.revision,
-      tables: draft.tables.map((table) => {
-        const seed = seeded.get(table.label);
-        if (seed === undefined) {
-          throw new Error(
-            `seedFloor: zone ${zoneId} holds table "${table.label}", which the seed did not create`,
-          );
-        }
-        return {
-          liveTableId: table.liveTableId!,
-          key: table.liveTableId!,
-          label: table.label,
-          seats: table.seats,
-          fixed: seed.fixed,
-          placement: seed.placement,
-        };
-      }),
+      revision: 0,
+      tables: tables.map((table) => ({
+        key: table.label,
+        label: table.label,
+        seats: table.capacity,
+        fixed: table.fixed,
+        placement: table.placement,
+      })),
       joins: [],
     });
   }

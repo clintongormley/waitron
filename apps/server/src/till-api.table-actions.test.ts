@@ -12,7 +12,7 @@ import {
   type BillVenue,
 } from "./testing/bill-venue.js";
 import "./errors.js";
-import { createTable } from "./tables.js";
+import { createTable } from "./testing/live-table.js";
 
 // The routes of Move guests, Join tables and Split a table (table actions plan, Task 8). The
 // actions themselves are tested in `party-table-actions.test.ts`.

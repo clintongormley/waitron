@@ -59,7 +59,6 @@ const openTable: TableState = {
   id: "t2",
   label: "2",
   zoneId: "z1",
-  capacity: 4,
   state: "open-tab",
   condition: "free",
   hasOpenTab: true,
@@ -72,10 +71,6 @@ const openTable: TableState = {
   timingBand: "fresh",
   status: null,
   nextReservation: null,
-  posX: null,
-  posY: null,
-  shape: null,
-  rotation: null,
   today: null,
   signals: [],
   party: {

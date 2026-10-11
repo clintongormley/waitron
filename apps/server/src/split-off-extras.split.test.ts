@@ -19,7 +19,7 @@ import { transferItems } from "./bill-actions.js";
 import { createCourse, setProductCourse } from "./kitchen.js";
 import { partyRevisionOfOrder } from "./parties.js";
 import { joinTables } from "./table-actions.js";
-import { createTable } from "./tables.js";
+import { createTable } from "./testing/live-table.js";
 import { decodeTicket } from "./testing/decode-ticket.js";
 import { splitPartyBill } from "./testing/serve-line.js";
 import { addTabRound, createOpenOrder } from "./working-order.js";

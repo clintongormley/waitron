@@ -20,7 +20,7 @@ import { listStationNotices, writePrintHeldWork } from "@waitron/venue-service";
 import { applyAdjustment } from "./adjustments-apply.js";
 import { placeGroups } from "./order-groups.js";
 import { seatTable } from "./parties.js";
-import { createTable } from "./tables.js";
+import { createTable } from "./testing/live-table.js";
 import type { TillConfig } from "./till-config.js";
 import { listStationQueue, updateHeldOrder } from "./working-order.js";
 import { opensDrawer, printedLines } from "./testing/decode-ticket.js";

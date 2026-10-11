@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
+  tableInService,
   diningTables,
   floorPlans,
   floorPlanTables,
@@ -104,7 +105,7 @@ async function masterOf(zoneId: string, tables: MasterTable[]): Promise<Map<stri
       if (table.live !== undefined) {
         await tx
           .update(diningTables)
-          .set({ planTableId: row!.id, planned: true })
+          .set({ planTableId: row!.id })
           .where(eq(diningTables.id, table.live));
       }
     }
@@ -305,14 +306,14 @@ describe("building today's plan from a zone's master plan", () => {
     expect((await tableRow(v, t1)).label).toBe("Mid 1");
     expect(await todayRow(t1)).toMatchObject({ x: 0 });
     expect((await liveTablesOf(z)).map((t) => t.label).sort()).toEqual(["Mid 1", "Mid 2"]);
-    expect((await tableRow(v, t2)).active).toBe(true);
+    expect(await todayRow(t2)).toBeDefined();
 
     await reset(z);
 
     expect((await tableRow(v, t1)).label).toBe("Mid 1b");
     expect(await todayRow(t1)).toMatchObject({ x: 40 });
     const t3 = (await liveTablesOf(z)).find((t) => t.label === "Mid 3");
-    expect(t3).toMatchObject({ planned: true, active: true, locationId: v.cfg.locationId });
+    expect(t3).toMatchObject({ locationId: v.cfg.locationId });
     expect(await todayRow(t3!.id)).toMatchObject({ x: 50, y: 50 });
     expect((await liveTablesOf(z)).map((t) => t.id)).not.toContain(t2);
     expect(await todayRow(t2)).toBeUndefined();
@@ -338,7 +339,7 @@ describe("building today's plan from a zone's master plan", () => {
     const [planTable] = await inTx(v, (tx) =>
       tx.select().from(floorPlanTables).where(eq(floorPlanTables.label, "Gain 3")),
     );
-    expect(t3).toMatchObject({ planTableId: planTable!.id, planned: true, active: true });
+    expect(t3).toMatchObject({ planTableId: planTable!.id });
     expect(await todayRow(t3.id)).toMatchObject({ seats: 2, x: null });
     const [created] = await inTx(v, (tx) =>
       tx.select().from(floorResetTables).where(eq(floorResetTables.label, "Gain 3")),
@@ -385,13 +386,11 @@ describe("building today's plan from a zone's master plan", () => {
     const z = await zone();
     const t1 = await v.table("Back 1", z);
     await masterOf(z, [{ label: "Back 1", live: t1 }]);
-    await inTx(v, (tx) =>
-      tx.update(diningTables).set({ active: false }).where(eq(diningTables.id, t1)),
-    );
+    await inTx(v, (tx) => tx.delete(floorTodayTables).where(eq(floorTodayTables.tableId, t1)));
 
     await reset(z);
 
-    expect((await tableRow(v, t1)).active).toBe(true);
+    expect(await todayRow(t1)).toBeDefined();
   });
 
   it("seeds a table seated at the first reset, keeping its name until it is free", async () => {
@@ -399,6 +398,7 @@ describe("building today's plan from a zone's master plan", () => {
     const t1 = await v.table("Seed 1", z);
     await masterOf(z, [{ label: "Seed 1b", seats: 6, place: place(5, 5), live: t1 }]);
     const { partyId } = await seat(v, t1);
+    await inTx(v, (tx) => tx.delete(floorTodayTables).where(eq(floorTodayTables.tableId, t1)));
 
     await reset(z);
 
@@ -468,7 +468,7 @@ describe("building today's plan from a zone's master plan", () => {
 
   it("leaves today's plan as it is when the venue's clock cannot be read", async () => {
     const z = await zone();
-    const t1 = await v.table("Clock 1", z);
+    const t1 = await v.table("Clock 1", z, { today: false });
     await masterOf(z, [{ label: "Clock 1", live: t1 }]);
     await inTx(v, (tx) =>
       tx
@@ -492,22 +492,6 @@ describe("building today's plan from a zone's master plan", () => {
     }
   });
 
-  it("leaves a table the master never had untouched", async () => {
-    const z = await zone();
-    const t1 = await v.table("Never 1", z);
-    const t2 = await v.table("Never 2", z);
-    await inTx(v, (tx) =>
-      tx.update(diningTables).set({ active: false }).where(eq(diningTables.id, t2)),
-    );
-    await masterOf(z, [{ label: "Never 3" }]);
-
-    await reset(z);
-
-    expect(await todayRow(t1)).toBeUndefined();
-    expect(await tableRow(v, t1)).toMatchObject({ active: true, planned: false });
-    expect(await tableRow(v, t2)).toMatchObject({ active: false, planned: false });
-  });
-
   it("places a table whose new name is taken in another zone, keeping its old name", async () => {
     const z = await zone();
     const t1 = await v.table("Taken 1", z);
@@ -526,7 +510,12 @@ describe("building today's plan from a zone's master plan", () => {
     const t1 = await v.table("Three 1", z);
     const u1 = await v.table("Three 2", z);
     const u2 = await v.table("Three 3", z);
-    await masterOf(z, [{ label: "Three 1", live: t1 }]);
+    await masterOf(z, [
+      { label: "Three 1", live: t1 },
+      { label: "Three 2", live: u1 },
+      { label: "Three 3", live: u2 },
+    ]);
+    await reset(z);
     const mergeId = await inTx(v, async (tx) => {
       const [merge] = await tx
         .insert(floorTodayJoins)
@@ -540,7 +529,13 @@ describe("building today's plan from a zone's master plan", () => {
       return merge!.id;
     });
 
-    await reset(z);
+    await inTx(v, (tx) =>
+      tx
+        .update(floorResetTables)
+        .set({ pending: true, placed: false, remove: false })
+        .where(eq(floorResetTables.tableId, t1)),
+    );
+    await catchUp(z);
 
     const members = await inTx(v, (tx) =>
       tx.select().from(floorTodayJoinTables).where(eq(floorTodayJoinTables.joinId, mergeId)),
@@ -565,7 +560,7 @@ describe("building today's plan from a zone's master plan", () => {
 
     expect(await tableRow(v, t1)).toMatchObject({ label: "Late 2", planTableId: b });
     const created = (await liveTablesOf(z)).filter((t) => t.id !== t1);
-    expect(created).toMatchObject([{ label: "Late 1", planTableId: a, planned: true }]);
+    expect(created).toMatchObject([{ label: "Late 1", planTableId: a }]);
     expect(await pendingRows(z)).toEqual([]);
   });
 
@@ -605,12 +600,14 @@ describe("building today's plan from a zone's master plan", () => {
   it("puts a merge's last table back where it stood before the merge", async () => {
     const z = await zone();
     const t1 = await v.table("Back merge 1", z);
-    const u1 = await v.table("Back merge 2", z);
-    await masterOf(z, [{ label: "Back merge 1", place: place(0, 0), live: t1 }]);
+    const u1 = await v.table("Back merge 2", z, { today: false });
+    await masterOf(z, [
+      { label: "Back merge 1", place: place(0, 0), live: t1 },
+      { label: "Back merge 2", place: place(9, 0), live: u1 },
+    ]);
+    await reset(z);
     await inTx(v, async (tx) => {
-      await tx
-        .insert(floorTodayTables)
-        .values({ tableId: u1, x: 9, y: 0, width: 8, height: 8, shape: "rect", rotation: 0 });
+      await tx.update(floorTodayTables).set({ x: 9 }).where(eq(floorTodayTables.tableId, u1));
       const [merge] = await tx
         .insert(floorTodayJoins)
         .values({ zoneId: z, seats: 8 })
@@ -623,7 +620,13 @@ describe("building today's plan from a zone's master plan", () => {
         .values({ joinId: merge!.id, tableId: u1, beforeX: 30, beforeY: 40, beforeRotation: 90 });
     });
 
-    await reset(z);
+    await inTx(v, (tx) =>
+      tx
+        .update(floorResetTables)
+        .set({ pending: true, placed: false, remove: false })
+        .where(eq(floorResetTables.tableId, t1)),
+    );
+    await catchUp(z);
 
     expect(await todayRow(u1)).toMatchObject({ x: 30, y: 40, rotation: 90 });
     expect(await mergeMembersIn(z)).toEqual([]);
@@ -632,13 +635,14 @@ describe("building today's plan from a zone's master plan", () => {
   it("ends the merge of a table the master lost, and puts the other table back where it stood", async () => {
     const z = await zone();
     const t1 = await v.table("Lost merge 1", z);
-    const u1 = await v.table("Lost merge 2", z);
-    const master = await masterOf(z, [{ label: "Lost merge 1", place: place(0, 0), live: t1 }]);
+    const u1 = await v.table("Lost merge 2", z, { today: false });
+    const master = await masterOf(z, [
+      { label: "Lost merge 1", place: place(0, 0), live: t1 },
+      { label: "Lost merge 2", place: place(9, 0), live: u1 },
+    ]);
     await reset(z);
     await inTx(v, async (tx) => {
-      await tx
-        .insert(floorTodayTables)
-        .values({ tableId: u1, x: 9, y: 0, width: 8, height: 8, shape: "rect", rotation: 0 });
+      await tx.update(floorTodayTables).set({ x: 9 }).where(eq(floorTodayTables.tableId, u1));
       const [merge] = await tx
         .insert(floorTodayJoins)
         .values({ zoneId: z, seats: 8 })
@@ -652,7 +656,13 @@ describe("building today's plan from a zone's master plan", () => {
     });
     await deleteFromMaster(master.get("Lost merge 1")!);
 
-    await reset(z);
+    await inTx(v, (tx) =>
+      tx
+        .update(floorResetTables)
+        .set({ pending: true, placed: false, remove: true })
+        .where(eq(floorResetTables.tableId, t1)),
+    );
+    await catchUp(z);
 
     expect((await liveTablesOf(z)).map((t) => t.id)).toEqual([u1]);
     expect(await mergeMembersIn(z)).toEqual([]);
@@ -660,20 +670,6 @@ describe("building today's plan from a zone's master plan", () => {
       await inTx(v, (tx) => tx.select().from(floorTodayJoins).where(eq(floorTodayJoins.zoneId, z))),
     ).toEqual([]);
     expect(await todayRow(u1)).toMatchObject({ x: 30, y: 40, rotation: 90 });
-  });
-
-  it("does not hand a name to a new table while a hidden table still holds it", async () => {
-    const z = await zone();
-    const t1 = await v.table("Hold 1", z);
-    await inTx(v, (tx) =>
-      tx.update(diningTables).set({ active: false }).where(eq(diningTables.id, t1)),
-    );
-    await masterOf(z, [{ label: "Hold 1" }]);
-
-    await reset(z);
-
-    expect((await liveTablesOf(z)).map((t) => t.id)).toEqual([t1]);
-    expect(await pendingRows(z)).toMatchObject([{ tableId: null, label: "Hold 1" }]);
   });
 
   it("keeps a table a module refuses to let go, whole, until the module lets it go", async () => {
@@ -702,7 +698,7 @@ describe("building today's plan from a zone's master plan", () => {
 
     await reset(z, [bookings]);
 
-    expect(await tableRow(v, t1)).toMatchObject({ active: true, label: "Refuse 1" });
+    expect(await tableRow(v, t1)).toMatchObject({ label: "Refuse 1" });
     expect(await todayRow(t1)).toMatchObject({ x: 0 });
     expect((await pendingRows(z)).map((row) => row.tableId)).toEqual([t1]);
     expect((await liveTablesOf(z)).map((t) => t.id)).not.toContain(t2);
@@ -719,7 +715,7 @@ describe("building today's plan from a zone's master plan", () => {
 
   it("does not put a refused table without a today's place onto today's plan", async () => {
     const z = await zone();
-    const t1 = await v.table("Unseeded 1", z);
+    const t1 = await v.table("Unseeded 1", z, { today: false });
     const master = await masterOf(z, [{ label: "Unseeded 1", live: t1 }]);
     await deleteFromMaster(master.get("Unseeded 1")!);
     const bookings: TableRemoval = {
@@ -733,7 +729,7 @@ describe("building today's plan from a zone's master plan", () => {
     await reset(z, [bookings]);
 
     expect(await todayRow(t1)).toBeUndefined();
-    expect((await tableRow(v, t1)).active).toBe(true);
+    expect(await tableRow(v, t1)).toMatchObject({ id: t1 });
   });
 
   it("does not swallow a module's failure that is not a refusal", async () => {
@@ -752,6 +748,21 @@ describe("building today's plan from a zone's master plan", () => {
 });
 
 describe("a disabled zone", () => {
+  it("switches a zone off and on without rewriting a table or its today's state", async () => {
+    const z = await zone();
+    const tableId = await v.table("Unchanged", z);
+    await masterOf(z, [{ label: "Unchanged", live: tableId }]);
+    await inTx(v, (tx) => ensureToday(tx, v.cfg, NONE, NOW));
+    const before = await tableRow(v, tableId);
+    const todayBefore = await todayRow(tableId);
+    await inTx(v, (tx) => deactivateZone(tx, v.cfg, z));
+    expect(await tableRow(v, tableId)).toEqual(before);
+    expect(await todayRow(tableId)).toEqual(todayBefore);
+    await inTx(v, (tx) => updateZone(tx, v.cfg, z, { active: true }));
+    expect(await tableRow(v, tableId)).toEqual(before);
+    expect(await todayRow(tableId)).toEqual(todayBefore);
+  });
+
   it("is left out of the next day's reset, so its tables stay off, while an active zone resets", async () => {
     const off = await zone();
     const on = await zone();
@@ -761,12 +772,12 @@ describe("a disabled zone", () => {
     await masterOf(on, [{ label: "On 1", live: onTable }]);
     await inTx(v, (tx) => ensureToday(tx, v.cfg, NONE, NOW));
     await inTx(v, (tx) => deactivateZone(tx, v.cfg, off));
-    expect((await tableRow(v, offTable)).active).toBe(false);
+    expect(await inService(offTable)).toBe(false);
 
     const nextDay = new Date(NOW.getTime() + 24 * 60 * 60 * 1000);
     await inTx(v, (tx) => ensureToday(tx, v.cfg, NONE, nextDay));
 
-    expect((await tableRow(v, offTable)).active).toBe(false);
+    expect(await inService(offTable)).toBe(false);
     expect(await todayZone(off)).toMatchObject({ businessDay: "2026-10-10", generation: 1 });
     expect(await todayZone(on)).toMatchObject({ businessDay: "2026-10-11", generation: 2 });
   });
@@ -775,27 +786,110 @@ describe("a disabled zone", () => {
     const z = await zone();
     const planned = await v.table("Reopen 1", z);
     const hidden = await v.table("Reopen 2", z);
-    const never = await v.table("Reopen 3", z);
     const master = await masterOf(z, [
       { label: "Reopen 1", live: planned },
       { label: "Reopen 2", live: hidden },
     ]);
     await inTx(v, (tx) => ensureToday(tx, v.cfg, NONE, NOW));
-    // The state a removal waiting on its table leaves: off, and off today's plan.
+    const never = await v.table("Reopen 3", z, { today: false });
+    // A pending removal has no row on today's plan.
     await deleteFromMaster(master.get("Reopen 2")!);
     await inTx(v, async (tx) => {
       await tx.delete(floorTodayTables).where(eq(floorTodayTables.tableId, hidden));
-      await tx.update(diningTables).set({ active: false }).where(eq(diningTables.id, hidden));
     });
     await inTx(v, (tx) => deactivateZone(tx, v.cfg, z));
 
     await inTx(v, (tx) => updateZone(tx, v.cfg, z, { active: true }));
 
-    expect((await tableRow(v, planned)).active).toBe(true);
-    expect((await tableRow(v, hidden)).active).toBe(false);
-    expect((await tableRow(v, never)).active).toBe(false);
+    expect(await inService(planned)).toBe(true);
+    expect(await inService(hidden)).toBe(false);
+    expect(await inService(never)).toBe(false);
     await inTx(v, (tx) => ensureToday(tx, v.cfg, NONE, NOW));
     const floor = await inTx(v, (tx) => listTablesWithState(tx, v.cfg, [], undefined, NOW));
     expect(floor.map((t) => t.id)).toContain(planned);
   });
 });
+
+async function inService(tableId: string): Promise<boolean> {
+  const [table] = await inTx(v, (tx) =>
+    tx
+      .select({ inService: tableInService(diningTables.id).mapWith(Boolean) })
+      .from(diningTables)
+      .where(eq(diningTables.id, tableId)),
+  );
+  return table!.inService;
+}
+
+it("removes a free live table of a planned zone that follows no master table, at the next reset", async () => {
+  const z = await zone();
+  const tableId = await v.table("Unlinked free", z);
+  await masterOf(z, [{ label: "Saved new" }]);
+  await reset(z);
+  expect((await liveTablesOf(z)).map((t) => t.id)).not.toContain(tableId);
+  expect(await todayRow(tableId)).toBeUndefined();
+  expect((await liveTablesOf(z)).map((t) => t.label)).toEqual(["Saved new"]);
+  expect(await pendingRows(z)).toEqual([]);
+});
+
+it("keeps an unlinked live table seated until it is free, then removes it", async () => {
+  const z = await zone();
+  const tableId = await v.table("Unlinked seated", z);
+  const { partyId } = await seat(v, tableId);
+  await masterOf(z, [{ label: "Saved beside" }]);
+  await reset(z);
+  expect((await liveTablesOf(z)).map((t) => t.id)).toContain(tableId);
+  expect(await todayRow(tableId)).toBeDefined();
+  expect(await pendingRows(z)).toMatchObject([{ tableId, remove: true }]);
+  await finish(partyId);
+  await catchUp(z);
+  expect((await liveTablesOf(z)).map((t) => t.id)).not.toContain(tableId);
+  expect(await todayRow(tableId)).toBeUndefined();
+  expect(await pendingRows(z)).toEqual([]);
+});
+
+it.each([false, true])(
+  "removes an unlinked merge only once its tables are free (occupied: %s)",
+  async (occupied) => {
+    const z = await zone();
+    const t1 = await v.table("Unlinked merge 1", z);
+    const t2 = await v.table("Unlinked merge 2", z);
+    await masterOf(z, []);
+    const partyId = occupied ? (await seat(v, t1)).partyId : null;
+    if (partyId !== null) await join(v, partyId, t2);
+    await inTx(v, async (tx) => {
+      const [merge] = await tx
+        .insert(floorTodayJoins)
+        .values({ zoneId: z, seats: 8 })
+        .returning({ id: floorTodayJoins.id });
+      for (const tableId of [t1, t2]) {
+        await tx.insert(floorTodayJoinTables).values({
+          joinId: merge!.id,
+          tableId,
+          beforeX: 0,
+          beforeY: 0,
+          beforeRotation: 0,
+        });
+      }
+    });
+
+    await reset(z);
+
+    if (partyId !== null) {
+      expect((await liveTablesOf(z)).map((t) => t.id).sort()).toEqual([t1, t2].sort());
+      expect(await mergeMembersIn(z)).toEqual([t1, t2].sort());
+      expect(await todayRow(t1)).toBeDefined();
+      expect(await todayRow(t2)).toBeDefined();
+      expect((await pendingRows(z)).map((t) => t.tableId).sort()).toEqual([t1, t2].sort());
+      await finish(partyId);
+      await catchUp(z);
+    }
+    expect(await liveTablesOf(z)).toEqual([]);
+    expect(await mergeMembersIn(z)).toEqual([]);
+    expect(
+      await inTx(v, (tx) => tx.select().from(floorTodayJoins).where(eq(floorTodayJoins.zoneId, z))),
+    ).toEqual([]);
+    expect(await todayRow(t1)).toBeUndefined();
+    expect(await todayRow(t2)).toBeUndefined();
+    expect(await pendingRows(z)).toEqual([]);
+  },
+);

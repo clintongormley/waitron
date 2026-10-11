@@ -38,7 +38,7 @@ const plan: FloorPlan = {
       placement: { x: 2, y: 3, width: 8, height: 8, shape: "rect", rotation: 0 },
     },
     { id: "m2", liveTableId: "l2", label: "T2", seats: 2, fixed: true, placement: null },
-    { id: null, liveTableId: "l9", label: "T9", seats: null, fixed: false, placement: null },
+    { id: "m9", liveTableId: "l9", label: "T9", seats: null, fixed: false, placement: null },
   ],
   joins: [{ id: "j1", seats: 6, tableIds: ["m1", "m2"] }],
 };
@@ -105,7 +105,7 @@ it("Add join waits for a table and the seats", async () => {
   await show(el);
   expect(confirm(el).variant).toBe("secondary");
   expect(confirm(el).disabled).toBe(true);
-  await chooseOptions(field(el, "join-tables"), ["live:l9"]);
+  await chooseOptions(field(el, "join-tables"), ["m9"]);
   await el.updateComplete;
   expect(confirm(el).variant).toBe("secondary");
   expect(confirm(el).disabled).toBe(true);
@@ -117,7 +117,7 @@ it("Add join waits for a table and the seats", async () => {
   await el.updateComplete;
   expect(changes).toHaveLength(1);
   expect(changes[0]!.joins.at(-1)).toEqual({
-    tableKeys: ["m1", "live:l9"],
+    tableKeys: ["m1", "m9"],
     seats: 4,
     key: "join:1",
   });
@@ -137,7 +137,7 @@ it("a seat count out of range says nothing until Add is pressed, then holds Add 
   const el = await mount();
   const changes = listen(el);
   await show(el);
-  await chooseOptions(field(el, "join-tables"), ["live:l9"]);
+  await chooseOptions(field(el, "join-tables"), ["m9"]);
   await chooseOption(field(el, "join-seats"), "0");
   await el.updateComplete;
   expect(field(el, "join-seats").error).toBe("");
@@ -170,7 +170,7 @@ it("a refused Add moves focus to the first field it marks", async () => {
   await el.updateComplete;
   confirm(el).click();
   await expect.poll(() => el.shadowRoot!.activeElement).toBe(field(el, "join-tables"));
-  await chooseOptions(field(el, "join-tables"), ["live:l9"]);
+  await chooseOptions(field(el, "join-tables"), ["m9"]);
   await el.updateComplete;
   confirm(el).click();
   await expect.poll(() => el.shadowRoot!.activeElement).toBe(field(el, "join-seats"));
@@ -181,7 +181,7 @@ it("Add join offers the zone's other tables only", async () => {
   await show(el);
   expect(field(el, "join-tables").options).toEqual([
     { value: "m2", label: "T2" },
-    { value: "live:l9", label: "T9" },
+    { value: "m9", label: "T9" },
   ]);
 });
 
@@ -194,7 +194,7 @@ it("offers an unnamed table as Unnamed", async () => {
 it("opens empty again after an add", async () => {
   const el = await mount();
   await show(el);
-  await chooseOptions(field(el, "join-tables"), ["live:l9"]);
+  await chooseOptions(field(el, "join-tables"), ["m9"]);
   await chooseOption(field(el, "join-seats"), "6");
   await el.updateComplete;
   confirm(el).click();
@@ -202,7 +202,7 @@ it("opens empty again after an add", async () => {
   await show(el, "m2");
   expect(field(el, "join-seats").value).toBe("");
   expect((field(el, "join-tables") as Field & { values: string[] }).values).toEqual([]);
-  expect(field(el, "join-tables").options.map((o) => o.value)).toEqual(["m1", "live:l9"]);
+  expect(field(el, "join-tables").options.map((o) => o.value)).toEqual(["m1", "m9"]);
 });
 
 it("is in Spanish", async () => {
@@ -229,7 +229,7 @@ it("holds Add with a reason when the tables are already joined, in any order", a
   expect(field(el, "join-tables").error).toBe("Already joined.");
   expect(formError(el)).toBe("Correct the highlighted fields to continue.");
   expect(confirm(el).disabled).toBe(true);
-  await chooseOptions(field(el, "join-tables"), ["m1", "live:l9"]);
+  await chooseOptions(field(el, "join-tables"), ["m1", "m9"]);
   await el.updateComplete;
   expect(field(el, "join-tables").error).toBe("");
   expect(formError(el)).toBe("");
@@ -272,10 +272,10 @@ it("opens without messages after a refused Add was cancelled", async () => {
 it("re-keys its table and chosen tables when the page re-keys its draft", async () => {
   const el = await mount();
   const changes = listen(el);
-  await show(el, "live:l9");
+  await show(el, "m9");
   await chooseOptions(field(el, "join-tables"), ["m2"]);
-  el.rekey({ "live:l9": "m9", m2: "m2" });
-  el.draft = rekeyDraft(el.draft, { "live:l9": "m9" });
+  el.rekey({ m9: "m9", m2: "m2" });
+  el.draft = rekeyDraft(el.draft, { m9: "m9" });
   await el.updateComplete;
   expect(field(el, "join-tables").options.map((o) => o.value)).toEqual(["m1", "m2"]);
   await chooseOption(field(el, "join-seats"), "4");
@@ -288,12 +288,12 @@ it("adds only the chosen tables the draft still holds", async () => {
   const el = await mount();
   const changes = listen(el);
   await show(el);
-  await chooseOptions(field(el, "join-tables"), ["m2", "live:l9"]);
+  await chooseOptions(field(el, "join-tables"), ["m2", "m9"]);
   await chooseOption(field(el, "join-seats"), "4");
   el.draft = deleteTable(el.draft, "m2");
   await el.updateComplete;
   confirm(el).click();
-  expect(changes[0]!.joins.at(-1)!.tableKeys).toEqual(["m1", "live:l9"]);
+  expect(changes[0]!.joins.at(-1)!.tableKeys).toEqual(["m1", "m9"]);
 });
 
 it("is not ready when every chosen table has gone from the draft", async () => {
@@ -313,7 +313,7 @@ it("closes without adding when its table has gone from the draft", async () => {
   const el = await mount();
   const changes = listen(el);
   await show(el);
-  await chooseOptions(field(el, "join-tables"), ["live:l9"]);
+  await chooseOptions(field(el, "join-tables"), ["m9"]);
   await chooseOption(field(el, "join-seats"), "4");
   await el.updateComplete;
   el.draft = deleteTable(el.draft, "m1");

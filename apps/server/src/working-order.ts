@@ -1,3 +1,4 @@
+import { tableInService } from "@waitron/db";
 import { readStationQueueMoves, type StationQueueMove } from "./station-queue-moves.js";
 import {
   checkedInvoiceChoiceDelivery,
@@ -154,7 +155,6 @@ import type {
 } from "@waitron/module";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
 import { authorize, type Override, type PinAttempts } from "@waitron/identity";
-import type { FloorTableShape } from "./tables.js";
 import { issuancePass } from "./issuance-pass.js";
 import { issueMoment, type IssueMoment } from "./issue-moment.js";
 import { VENUE_SERVICE } from "./modules.js";
@@ -1135,7 +1135,7 @@ export async function createOpenOrder(
     if (table === undefined) {
       throw new AppError("table.not_found", { tableId: deliveryTableId });
     }
-    effectiveZoneId = table.zoneId ?? effectiveZoneId;
+    effectiveZoneId = table.zoneId;
   }
   if (effectiveZoneId !== undefined && placement.existingService !== true) {
     await VENUE_SERVICE.assertZoneTakesNewOrders(tx, cfg, effectiveZoneId, new Date());
@@ -1245,7 +1245,7 @@ export async function openTab(
 ): Promise<{ tabId: string; orderNumber: number }> {
   const [table] = await tx
     .select({
-      active: diningTables.active,
+      inService: tableInService(diningTables.id).mapWith(Boolean),
       zoneId: diningTables.zoneId,
       needsClearingSince: diningTables.needsClearingSince,
     })
@@ -1254,22 +1254,20 @@ export async function openTab(
   if (table === undefined) {
     throw new AppError("table.not_found", { tableId: req.tableId });
   }
-  if (!table.active) {
+  if (!table.inService) {
     throw new AppError("table.inactive", { tableId: req.tableId });
   }
   if (table.needsClearingSince !== null) {
     throw new AppError("table.needs_clearing", { tableId: req.tableId });
   }
 
-  if (table.zoneId !== null) {
-    const context = await VENUE_SERVICE.resolveZoneContext(tx, cfg, table.zoneId);
-    if (context.serviceMode !== "table_tab") {
-      throw new AppError("service_zone.mode_incompatible", {
-        zoneId: table.zoneId,
-        expected: "table_tab",
-        actual: context.serviceMode,
-      });
-    }
+  const context = await VENUE_SERVICE.resolveZoneContext(tx, cfg, table.zoneId);
+  if (context.serviceMode !== "table_tab") {
+    throw new AppError("service_zone.mode_incompatible", {
+      zoneId: table.zoneId,
+      expected: "table_tab",
+      actual: context.serviceMode,
+    });
   }
 
   // A party still holds the table after its bills settle, until Finish table.
@@ -1279,7 +1277,7 @@ export async function openTab(
 
   const tabId = randomUUID();
   const { orderNumber } = await createOpenOrder(tx, cfg, tabId, req.lines ?? [], null, {
-    zoneId: table.zoneId ?? undefined,
+    zoneId: table.zoneId,
     partyId: req.partyId,
     creditedTo: req.operatorId,
   });
@@ -7008,7 +7006,6 @@ export interface TableState {
   id: string;
   label: string;
   zoneId: string | null;
-  capacity: number | null;
   /** `open-tab` while a party holds the table, whether or not it has a bill still open. */
   state: "free" | "open-tab" | "delivery-pending";
   /** The party holding the table has an open bill. */
@@ -7032,13 +7029,7 @@ export interface TableState {
   timingBand: TimingBand;
   /** The MANUAL service status, independent of occupancy: a `free` table may carry one. */
   status: { id: string; label: string; color: string } | null;
-  /** Floor-plan placement, `null` when unplaced. */
-  posX: number | null;
-  posY: number | null;
-  shape: FloorTableShape | null;
-  rotation: number | null;
-  /** `null` when the table has no today's row. */
-  today: TableToday | null;
+  today: TableToday;
   /** Merged from the enabled modules' floor annotators; `null` when none annotates the table. */
   nextReservation: { time: string } | null;
   party: TableParty | null;
@@ -7067,7 +7058,6 @@ export async function listTablesWithState(
     id: string;
     label: string;
     zone_id: string | null;
-    capacity: number | null;
     open_bills: number;
     tab_line_count: number;
     tab_total: string | null;
@@ -7080,10 +7070,6 @@ export async function listTablesWithState(
     status_id: string | null;
     status_label: string | null;
     status_color: string | null;
-    pos_x: number | null;
-    pos_y: number | null;
-    shape: FloorTableShape | null;
-    rotation: number | null;
     needs_clearing_since: string | null;
   }>(sql`
     -- Each seated party and every party merged into it: a bill a merged-in party kept still has its
@@ -7094,8 +7080,7 @@ export async function listTablesWithState(
       select f.root, p.id from parties p join family f on p.merged_into_party_id = f.id
     )
     select
-      dt.id, dt.label, dt.zone_id, dt.capacity,
-      dt.pos_x, dt.pos_y, dt.shape, dt.rotation, dt.needs_clearing_since,
+      dt.id, dt.label, dt.zone_id, dt.needs_clearing_since,
       cast(coalesce(tab.open_bills, 0) as int) as open_bills,
       cast(coalesce(tab.line_count, 0) as int) as tab_line_count,
       tab.tab_total,
@@ -7173,7 +7158,7 @@ export async function listTablesWithState(
     ) del on del.delivery_table_id = dt.id
     left join table_service_statuses tss
       on tss.id = dt.status_id
-    where dt.location_id = ${loc} and dt.active = true
+    where dt.location_id = ${loc} and ${tableInService(sql`dt.id`)}
     order by dt.label
   `);
 
@@ -7202,7 +7187,6 @@ export async function listTablesWithState(
       id: r.id,
       label: r.label,
       zoneId: r.zone_id,
-      capacity: r.capacity,
       state,
       hasOpenTab,
       condition: tableCondition({
@@ -7218,11 +7202,7 @@ export async function listTablesWithState(
         r.status_id !== null
           ? { id: r.status_id, label: r.status_label!, color: r.status_color! }
           : null,
-      posX: r.pos_x,
-      posY: r.pos_y,
-      shape: r.shape,
-      rotation: r.rotation,
-      today: today.get(r.id) ?? null,
+      today: today.get(r.id)!,
       nextReservation: null as { time: string } | null,
       party: party ?? null,
       signals: tableSignals(

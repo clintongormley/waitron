@@ -1,3 +1,4 @@
+import { floorTodayTables } from "@waitron/db";
 import { deleteCourse } from "./course-delete.js";
 import { offerMenuThroughZone } from "@waitron/venue-service/testing/zone-menus.js";
 import { randomUUID } from "node:crypto";
@@ -1027,6 +1028,7 @@ describe("seating from order start", () => {
       await tx.execute(
         sql`insert into dining_tables (id, location_id, label, zone_id, created_at) values (${tableId}, ${cfg.locationId}, 'New table service', ${zoneId}, ${nowIso()})`,
       );
+      await tx.insert(floorTodayTables).values({ tableId });
       const opened = await openPartyTab(tx, cfg, { tableId });
       expect(
         (
@@ -1059,6 +1061,7 @@ describe("seating from order start", () => {
         await tx.execute(
           sql`insert into dining_tables (id, location_id, label, zone_id, created_at) values (${tableId}, ${cfg.locationId}, 'Counter table', ${zoneId}, ${nowIso()})`,
         );
+        await tx.insert(floorTodayTables).values({ tableId });
       });
       await expect(
         withTransaction(db, (tx) => openPartyTab(tx, cfg, { tableId })),
@@ -1080,6 +1083,7 @@ describe("openTab service context", () => {
         insert into dining_tables (id, location_id, label, zone_id, created_at)
         values (${randomUUID()}, ${cfg.locationId}, 'Offer table', ${zoneId}, ${nowIso()})
         returning id`);
+      await tx.insert(floorTodayTables).values({ tableId: table.rows[0]!.id });
 
       const { tabId } = await openPartyTab(tx, cfg, {
         tableId: table.rows[0]!.id,
@@ -1112,6 +1116,7 @@ describe("openTab service context", () => {
         insert into dining_tables (id, location_id, label, zone_id, created_at)
         values (${randomUUID()}, ${cfg.locationId}, 'Round table', ${zoneId}, ${nowIso()})
         returning id`);
+      await tx.insert(floorTodayTables).values({ tableId: table.rows[0]!.id });
       const { tabId } = await openPartyTab(tx, cfg, { tableId: table.rows[0]!.id });
 
       await addTabRound(tx, cfg, tabId, [{ menuItemId: premiumCafeOfferId, quantity: "1" }]);
@@ -1160,11 +1165,13 @@ describe("openTab service context", () => {
         insert into dining_tables (id, location_id, label, zone_id, created_at)
         values (${randomUUID()}, ${cfg.locationId}, 'Upstairs', ${zoneId}, ${nowIso()})
         returning id`);
+      await tx.insert(floorTodayTables).values({ tableId: upstairsTable.rows[0]!.id });
       const downstairsTable = await tx.execute<{ id: string }>(sql`
         insert into dining_tables (id, location_id, label, zone_id, created_at)
         values (${randomUUID()}, ${cfg.locationId}, 'Downstairs', ${downstairsZone.rows[0]!.id},
           ${nowIso()})
         returning id`);
+      await tx.insert(floorTodayTables).values({ tableId: downstairsTable.rows[0]!.id });
       const upstairs = await openPartyTab(tx, cfg, { tableId: upstairsTable.rows[0]!.id });
       const downstairs = await openPartyTab(tx, cfg, { tableId: downstairsTable.rows[0]!.id });
 
@@ -1203,6 +1210,7 @@ describe("openTab service context", () => {
         insert into dining_tables (id, location_id, label, zone_id, created_at)
         values (${randomUUID()}, ${cfg.locationId}, 'Deli shelf', ${zoneId}, ${nowIso()})
         returning id`);
+      await tx.insert(floorTodayTables).values({ tableId: table.rows[0]!.id });
       const { tabId } = await openPartyTab(tx, cfg, { tableId: table.rows[0]!.id });
 
       await addTabRound(tx, cfg, tabId, [{ menuItemId: premiumCafeOfferId, quantity: "1" }]);
@@ -1222,6 +1230,7 @@ describe("openTab service context", () => {
         insert into dining_tables (id, location_id, label, zone_id, created_at)
         values (${randomUUID()}, ${cfg.locationId}, 'Counter table', ${zoneId}, ${nowIso()})
         returning id`);
+      await tx.insert(floorTodayTables).values({ tableId: table.rows[0]!.id });
       await expect(openPartyTab(tx, cfg, { tableId: table.rows[0]!.id })).rejects.toMatchObject({
         code: "service_zone.mode_incompatible",
         params: { zoneId, expected: "table_tab", actual: "prepay" },
@@ -2689,6 +2698,7 @@ async function makeTable(tx: Transaction, cfg: DeviceRequestConfig): Promise<str
     values (${randomUUID()}, ${cfg.locationId}, ${`T-${randomUUID().slice(0, 8)}`}, ${zoneId},
       ${nowIso()})
     returning id`);
+  await tx.insert(floorTodayTables).values({ tableId: rows[0]!.id });
   return rows[0]!.id;
 }
 
@@ -3341,6 +3351,7 @@ describe("fireLines (KDS-1 routing resolver + snapshot)", () => {
         insert into dining_tables (id, location_id, label, zone_id, created_at)
         values (${randomUUID()}, ${cfg.locationId}, 'Two of a kind', ${zoneId}, ${nowIso()})
         returning id`);
+      await tx.insert(floorTodayTables).values({ tableId: table.rows[0]!.id });
       const { tabId } = await openPartyTab(tx, cfg, { tableId: table.rows[0]!.id });
 
       const routingAt = vi.spyOn(VENUE_SERVICE, "routingAt");
@@ -5835,6 +5846,7 @@ describe("listExpoQueue (KDS-3 cross-station expo/pass read)", () => {
         insert into dining_tables (id, location_id, label, zone_id, created_at)
         values (${randomUUID()}, ${cfg.locationId}, 'Mesa 5', ${zoneId}, ${nowIso()})
         returning id`);
+      await tx.insert(floorTodayTables).values({ tableId: rows[0]!.id });
       const tableId = rows[0]!.id;
       const { tabId } = await openPartyTab(tx, cfg, { tableId });
       await addRound(tx, cfg, tabId, [line(cafe)]);
@@ -5857,9 +5869,10 @@ describe("listExpoQueue (KDS-3 cross-station expo/pass read)", () => {
       await createStation(tx, cfg, { name: "Cocina", isDefault: true });
       const cafe = await makeProduct(tx, cfg, catalogueId, {});
       const { rows } = await tx.execute<{ id: string }>(sql`
-        insert into dining_tables (id, location_id, label, created_at)
-        values (${randomUUID()}, ${cfg.locationId}, 'Terraza 8', ${nowIso()})
+        insert into dining_tables (id, location_id, label, zone_id, created_at)
+        values (${randomUUID()}, ${cfg.locationId}, 'Terraza 8', ${(await offerProducts(tx, cfg)).zoneId}, ${nowIso()})
         returning id`);
+      await tx.insert(floorTodayTables).values({ tableId: rows[0]!.id });
       const { id } = await placeOrderWith(tx, cfg, [line(cafe)]);
       await tx
         .update(workingOrders)

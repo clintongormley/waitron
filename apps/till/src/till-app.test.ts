@@ -123,7 +123,6 @@ const freeTable: TableState = {
   id: "t1",
   label: "1",
   zoneId: "z1",
-  capacity: 4,
   state: "free",
   condition: "free",
   hasOpenTab: false,
@@ -134,10 +133,6 @@ const freeTable: TableState = {
   timingBand: "fresh",
   status: null,
   nextReservation: null,
-  posX: null,
-  posY: null,
-  shape: null,
-  rotation: null,
   today: null,
   signals: [],
   party: null,
@@ -147,7 +142,6 @@ const openTable: TableState = {
   id: "t2",
   label: "2",
   zoneId: "z1",
-  capacity: 4,
   state: "open-tab",
   condition: "free",
   hasOpenTab: true,
@@ -160,10 +154,6 @@ const openTable: TableState = {
   timingBand: "fresh",
   status: null,
   nextReservation: null,
-  posX: null,
-  posY: null,
-  shape: null,
-  rotation: null,
   today: null,
   signals: [],
   party: {
@@ -6420,59 +6410,7 @@ describe("till-app", () => {
       selectTab(el, "floor");
       await flush(el);
 
-      // A floor-plan card's floor screen is not editable; the editor card's lock is covered below.
       expect(floor(el)!.api).toBe(currentApi);
-      expect(floor(el)!.canEdit).toBe(false);
-    });
-
-    // The on-till floor editor is a permission-locked `table-layout-editor` card, gated at the CELL by
-    // the grid's `permissions`. So the end-to-end assertion is that the operator's `permissions`
-    // reach the floor tab's card grid. (The card's own lock rendering is covered by card-grid's suite.)
-    const gridPermissions = (el: TillApp) =>
-      (activeTabGrid(el) as unknown as { permissions: string[] }).permissions;
-
-    it("a login WITH venue.configure lights up the on-till floor editor, end-to-end", async () => {
-      const { el } = await mountApp({
-        getTablesState: vi.fn().mockResolvedValue([]),
-        listZones: vi.fn().mockResolvedValue([floorZone]),
-      });
-      await flush(el);
-      // The lock screen sends the server's permission list; a manager holds `venue.configure`.
-      emit(lock(el)!, "logged-in", {
-        personId: "p1",
-        displayName: "Marta",
-        permissions: ["venue.configure"],
-      });
-      await flush(el);
-      selectTab(el, "floor");
-      await flush(el);
-
-      expect(gridPermissions(el)).toEqual(["venue.configure"]);
-
-      // Logging out drops the privilege so the next operator starts un-privileged.
-      emit(floor(el)!, "back-to-counter");
-      await flush(el);
-      emit(counter(el)!, "logout");
-      await flush(el);
-      emit(lock(el)!, "logged-in", { personId: "p2", displayName: "Ana", permissions: [] });
-      await flush(el);
-      selectTab(el, "floor");
-      await flush(el);
-      expect(gridPermissions(el)).toEqual([]);
-    });
-
-    it("a login WITHOUT venue.configure keeps the on-till floor editor hidden, end-to-end", async () => {
-      const { el } = await mountApp({
-        getTablesState: vi.fn().mockResolvedValue([]),
-        listZones: vi.fn().mockResolvedValue([floorZone]),
-      });
-      await flush(el);
-      emit(lock(el)!, "logged-in", { personId: "p1", displayName: "Ana", permissions: [] });
-      await flush(el);
-      selectTab(el, "floor");
-      await flush(el);
-
-      expect(gridPermissions(el)).toEqual([]);
     });
 
     it("a keep-open write refreshes the floor closure without waiting to revisit it", async () => {

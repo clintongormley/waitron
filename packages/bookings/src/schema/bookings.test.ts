@@ -5,6 +5,7 @@ import {
   captureError,
   CHECK_VIOLATION,
   diningTables,
+  floorZones,
   engineErrorMessage,
   FOREIGN_KEY_VIOLATION,
   locations,
@@ -66,7 +67,13 @@ describe("bookings schema (staff reservations — columns, CHECK, FKs)", () => {
       invoiceLocales: ["es"],
       operationDescription: "Hostelería",
     });
-    await suite.db.insert(diningTables).values({ id: TABLE, locationId: LOCATION, label: "A1" });
+    const [zone] = await suite.db
+      .insert(floorZones)
+      .values({ locationId: LOCATION, name: "Booking zone" })
+      .returning({ id: floorZones.id });
+    await suite.db
+      .insert(diningTables)
+      .values({ id: TABLE, locationId: LOCATION, label: "A1", zoneId: zone!.id });
   }
 
   // Raw SQL, deliberately: it is the database's refusal that is under test.

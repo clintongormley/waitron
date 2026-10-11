@@ -1,8 +1,6 @@
 // Demo floor-plan content for the Casa Delgado seed: plausibility rather than accuracy is the bar.
-// Placements must satisfy `setTablePlacement`'s ranges (`apps/server/src/tables.ts`).
 
 import type { SeedLocale } from "./menu.js";
-import type { FloorTableShape } from "../../src/tables.js";
 import type { Placement } from "../../src/floor-reset-plan.js";
 
 /** `key` joins a {@link SeedTable} to its zone; it has no DB counterpart (the real
@@ -19,7 +17,7 @@ export interface SeedTable {
   capacity: number;
   posX: number;
   posY: number;
-  shape: FloorTableShape;
+  shape: "round" | "square" | "rect";
   rotation: number;
   /** The master plan's place, on a 120 × 80 grid. */
   placement: Placement;

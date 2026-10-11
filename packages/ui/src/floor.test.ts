@@ -1,59 +1,14 @@
 import { expect, test } from "vitest";
 import {
-  FLOOR_ASPECT,
-  GRID_STEP,
   ROTATION_STEP,
   buildZoneTabs,
-  clampPermille,
-  defaultTraySlot,
-  isTableZoneless,
   resolveActiveTabKey,
-  sizeForCapacity,
   snapRotation,
-  snapToGrid,
   toFloorTable,
 } from "./floor.js";
 
-test("FLOOR_ASPECT is the single 3:2 canvas ratio", () => {
-  expect(FLOOR_ASPECT).toBe(1.5);
-  expect(FLOOR_ASPECT).toBe(3 / 2);
-});
-
-test.each([
-  [1, "S"],
-  [2, "S"],
-  [3, "M"],
-  [4, "M"],
-  [5, "L"],
-  [6, "L"],
-  [7, "XL"],
-  [8, "XL"],
-  [20, "XL"],
-] as const)("sizeForCapacity(%i) === %s", (capacity, expected) => {
-  expect(sizeForCapacity(capacity)).toBe(expected);
-});
-
-test("sizeForCapacity treats an unknown capacity as medium", () => {
-  expect(sizeForCapacity(undefined)).toBe("M");
-  expect(sizeForCapacity(null as unknown as undefined)).toBe("M");
-});
-
-test("GRID_STEP and ROTATION_STEP are the shared snap increments", () => {
-  expect(GRID_STEP).toBe(50);
+test("ROTATION_STEP is the shared snap increment", () => {
   expect(ROTATION_STEP).toBe(15);
-});
-
-test("snapToGrid rounds to the nearest 50 permille step", () => {
-  expect(snapToGrid(333)).toBe(350);
-  expect(snapToGrid(520)).toBe(500);
-  expect(snapToGrid(0)).toBe(0);
-  expect(snapToGrid(1000)).toBe(1000);
-  // Always lands on a multiple of the step.
-  expect(snapToGrid(333) % GRID_STEP).toBe(0);
-});
-
-test("snapToGrid accepts a custom step", () => {
-  expect(snapToGrid(17, 10)).toBe(20);
 });
 
 test("snapRotation snaps to the nearest 15 degrees and wraps at 360", () => {
@@ -76,65 +31,15 @@ test("snapRotation normalizes a negative rotation into the [0, 360) contract", (
   expect(snapRotation(-360)).toBe(0);
 });
 
-test("clampPermille pins a coordinate into the 0..1000 canvas range", () => {
-  expect(clampPermille(-40)).toBe(0);
-  expect(clampPermille(500)).toBe(500);
-  expect(clampPermille(1400)).toBe(1000);
-});
-
-test("defaultTraySlot centres the first placement and nudges each later one right by a grid step", () => {
-  expect(defaultTraySlot(0)).toEqual({ posX: 500, posY: 500 });
-  expect(defaultTraySlot(1)).toEqual({ posX: 550, posY: 500 });
-  expect(defaultTraySlot(3)).toEqual({ posX: 650, posY: 500 });
-});
-
-test("defaultTraySlot clamps posX into the 0..1000 range once the nudges run off the edge", () => {
-  expect(defaultTraySlot(20)).toEqual({ posX: 1000, posY: 500 });
-});
-
-test("isTableZoneless is true for a null zone and for a zone missing from the known set", () => {
-  const known = new Set(["z1", "z2"]);
-  expect(isTableZoneless({ zoneId: null }, known)).toBe(true);
-  expect(isTableZoneless({ zoneId: "z9" }, known)).toBe(true);
-});
-
-test("isTableZoneless is false for a table whose zone is active", () => {
-  expect(isTableZoneless({ zoneId: "z1" }, new Set(["z1", "z2"]))).toBe(false);
-});
-
 test("buildZoneTabs orders the zone tabs by displayOrder", () => {
   const zones = [
     { id: "z2", name: "Terraza", displayOrder: 2 },
     { id: "z1", name: "Comedor", displayOrder: 1 },
   ];
-  const tabs = buildZoneTabs(zones, [{ zoneId: "z1" }], "Sin zona");
+  const tabs = buildZoneTabs(zones);
   expect(tabs).toEqual([
     { key: "z1", name: "Comedor" },
     { key: "z2", name: "Terraza" },
-  ]);
-});
-
-test("buildZoneTabs omits the no-zone tab when every table has an active zone", () => {
-  const zones = [{ id: "z1", name: "Comedor", displayOrder: 1 }];
-  expect(buildZoneTabs(zones, [{ zoneId: "z1" }], "Sin zona")).toEqual([
-    { key: "z1", name: "Comedor" },
-  ]);
-});
-
-test("buildZoneTabs appends the no-zone tab for a table with a null zone", () => {
-  const zones = [{ id: "z1", name: "Comedor", displayOrder: 1 }];
-  expect(buildZoneTabs(zones, [{ zoneId: "z1" }, { zoneId: null }], "No zone")).toEqual([
-    { key: "z1", name: "Comedor" },
-    { key: null, name: "No zone" },
-  ]);
-});
-
-test("buildZoneTabs appends the no-zone tab for a table pointing at a deactivated zone", () => {
-  // z9 is not among the active zones, so the table that points at it lands under the no-zone tab.
-  const zones = [{ id: "z1", name: "Comedor", displayOrder: 1 }];
-  expect(buildZoneTabs(zones, [{ zoneId: "z9" }], "Sin zona")).toEqual([
-    { key: "z1", name: "Comedor" },
-    { key: null, name: "Sin zona" },
   ]);
 });
 
@@ -150,15 +55,6 @@ test("resolveActiveTabKey returns undefined when nothing is requested and there 
   expect(resolveActiveTabKey(undefined, [])).toBeUndefined();
 });
 
-test("resolveActiveTabKey honours an explicit request, including the null no-zone key", () => {
-  const tabs = [
-    { key: "z1", name: "A" },
-    { key: null, name: "Sin zona" },
-  ];
-  expect(resolveActiveTabKey("z1", tabs)).toBe("z1");
-  expect(resolveActiveTabKey(null, tabs)).toBeNull();
-});
-
 test("resolveActiveTabKey falls back to the first tab when the requested key is no longer present", () => {
   const tabs = [
     { key: "z1", name: "A" },
@@ -167,34 +63,19 @@ test("resolveActiveTabKey falls back to the first tab when the requested key is 
   expect(resolveActiveTabKey("z9", tabs)).toBe("z1");
 });
 
-test("resolveActiveTabKey falls back to the first tab when a null request has no no-zone tab", () => {
-  const tabs = [{ key: "z1", name: "A" }];
-  expect(resolveActiveTabKey(null, tabs)).toBe("z1");
-});
-
-test("toFloorTable maps a placed table's coordinates and occupancy", () => {
+test("toFloorTable maps a table's seats and occupancy", () => {
   const table = toFloorTable(
     {
       id: "t1",
       label: "1",
-      capacity: 4,
-      posX: 200,
-      posY: 300,
-      shape: "rect",
-      rotation: 90,
-      zoneId: "z1",
+      seats: 4,
     },
     { state: "open-tab", tabTotal: "12.50", pendingToServe: 2, status: null },
   );
   expect(table).toEqual({
     id: "t1",
     label: "1",
-    capacity: 4,
-    posX: 200,
-    posY: 300,
-    shape: "rect",
-    rotation: 90,
-    zoneId: "z1",
+    seats: 4,
     state: "open-tab",
     tabTotal: "12.50",
     pendingToServe: 2,
@@ -208,12 +89,7 @@ test("toFloorTable carries the reserved time through the occupancy half", () => 
     {
       id: "t1",
       label: "1",
-      capacity: 4,
-      posX: 200,
-      posY: 300,
-      shape: "rect",
-      rotation: 90,
-      zoneId: "z1",
+      seats: 4,
     },
     {
       state: "open-tab",
@@ -230,12 +106,7 @@ test("toFloorTable carries the party's name through the occupancy half", () => {
   const placement = {
     id: "t1",
     label: "4",
-    capacity: 4,
-    posX: 200,
-    posY: 300,
-    shape: "rect" as const,
-    rotation: 0,
-    zoneId: "z1",
+    seats: 4,
   };
   const named = toFloorTable(placement, {
     state: "open-tab",
@@ -252,12 +123,7 @@ test("toFloorTable carries whether a party's release reminder is due through the
   const placement = {
     id: "t1",
     label: "4",
-    capacity: 4,
-    posX: 200,
-    posY: 300,
-    shape: "rect" as const,
-    rotation: 0,
-    zoneId: "z1",
+    seats: 4,
   };
   const occupancy = { state: "open-tab" as const, pendingToServe: 0, status: null };
   expect(toFloorTable(placement, { ...occupancy, fireDue: true }).fireDue).toBe(true);
@@ -265,22 +131,15 @@ test("toFloorTable carries whether a party's release reminder is due through the
   expect(toFloorTable(placement, occupancy).fireDue).toBeUndefined();
 });
 
-test("toFloorTable defaults null coordinates to 0 and a missing tab total to null", () => {
+test("toFloorTable defaults a missing tab total to null", () => {
   const table = toFloorTable(
     {
       id: "t2",
       label: "2",
-      capacity: null,
-      posX: null,
-      posY: null,
-      shape: null,
-      rotation: null,
-      zoneId: null,
+      seats: null,
     },
     { state: "free", pendingToServe: 0, status: null },
   );
-  expect(table.posX).toBe(0);
-  expect(table.posY).toBe(0);
   expect(table.tabTotal).toBeNull();
   expect(table.state).toBe("free");
 });
@@ -290,12 +149,7 @@ test("toFloorTable threads a supplied timingBand through onto the FloorTable", (
     {
       id: "t1",
       label: "1",
-      capacity: 4,
-      posX: 200,
-      posY: 300,
-      shape: "rect",
-      rotation: 90,
-      zoneId: "z1",
+      seats: 4,
     },
     {
       state: "open-tab",
@@ -313,12 +167,7 @@ test("toFloorTable leaves timingBand undefined when the occupancy input omits it
     {
       id: "t2",
       label: "2",
-      capacity: null,
-      posX: null,
-      posY: null,
-      shape: null,
-      rotation: null,
-      zoneId: null,
+      seats: null,
     },
     { state: "free", pendingToServe: 0, status: null },
   );
@@ -330,12 +179,7 @@ test("toFloorTable carries the names of the people with an unsent order through 
     {
       id: "t4",
       label: "4",
-      capacity: 4,
-      posX: 200,
-      posY: 300,
-      shape: "round",
-      rotation: 0,
-      zoneId: "z1",
+      seats: 4,
     },
     { state: "open-tab", pendingToServe: 0, status: null, unsentDrafts: ["Alex", "Sam"] },
   );
@@ -347,8 +191,29 @@ test("toFloorTable carries the consumer's signal chips through the occupancy hal
     { key: "bill-requested", text: "Bill requested", tone: "primary-filled" as const },
   ];
   const table = toFloorTable(
-    { id: "t1", label: "4", posX: 200, posY: 300 },
+    { id: "t1", label: "4" },
     { state: "open-tab", pendingToServe: 0, chips },
   );
   expect(table.chips).toEqual(chips);
+});
+
+test("buildZoneTabs is the zones in display order, and nothing else", () => {
+  expect(
+    buildZoneTabs([
+      { id: "b", name: "B", displayOrder: 2 },
+      { id: "a", name: "A", displayOrder: 1 },
+    ]),
+  ).toEqual([
+    { key: "a", name: "A" },
+    { key: "b", name: "B" },
+  ]);
+});
+
+test("resolveActiveTabKey honours an explicit zone request", () => {
+  expect(
+    resolveActiveTabKey("z2", [
+      { key: "z1", name: "A" },
+      { key: "z2", name: "B" },
+    ]),
+  ).toBe("z2");
 });

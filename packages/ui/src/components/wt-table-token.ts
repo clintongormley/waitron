@@ -137,23 +137,6 @@ export class WtTableToken extends LitElement {
         font-weight: var(--wt-font-weight-bold);
       }
 
-      /* The stored table SHAPE renders distinctly through the corner radius — a round table reads as a
-         circular/stadium token, a square one as sharp corners, a rect one as the default rounded rect —
-         so the shape control is a live visual, not a dead enum. Token-driven (never a literal px/%) so
-         a deployment can retheme the radii. The base card rule above sets the rect default; these
-         shape classes override it. */
-      .card.shape-round {
-        border-radius: var(--wt-radius-full);
-      }
-
-      .card.shape-square {
-        border-radius: var(--wt-radius-sm);
-      }
-
-      .card.shape-rect {
-        border-radius: var(--wt-radius-md);
-      }
-
       .card-head {
         display: flex;
         align-items: baseline;
@@ -260,7 +243,6 @@ export class WtTableToken extends LitElement {
     return this.reducedMotion ?? window.matchMedia("(prefers-reduced-motion: reduce)").matches;
   }
 
-  /** Space-prefixed, so it interpolates straight after the shape class. */
   #timingAccentClass(band: TimingBand | undefined): string {
     if (band === undefined || band === "fresh") return "";
     const flash = band === "forgotten" && !this.#prefersReducedMotion();
@@ -280,18 +262,14 @@ export class WtTableToken extends LitElement {
     const t = this.table;
     if (t == null) return nothing;
     return html`
-      <div
-        class="card state-${t.state} shape-${t.shape ?? "rect"}${this.#timingAccentClass(
-          t.timingBand,
-        )}"
-      >
+      <div class="card state-${t.state}${this.#timingAccentClass(t.timingBand)}">
         ${this.#forgottenMarker(t)} ${this.#unsentMark(t)}
         <span class="card-head">
           <span class="label">${t.label}</span>
           ${
-            t.capacity != null
+            t.seats != null
               ? html`<span class="capacity"
-                  >${t.capacity}${this.labels.covers ? ` ${this.labels.covers}` : nothing}</span
+                  >${t.seats}${this.labels.covers ? ` ${this.labels.covers}` : nothing}</span
                 >`
               : nothing
           }

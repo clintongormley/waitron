@@ -124,10 +124,6 @@ function pinWords({ members, statuses, status, fillFrom, dotFrom }: Sources): st
   return fillWords(fillFrom, status.fill);
 }
 
-export function isPlannedZone(zoneTables: readonly TableState[]): boolean {
-  return zoneTables.some((table) => table.today !== null);
-}
-
 type Look = Pick<FloorMapTable, "fill" | "dot" | "description">;
 
 function lookOf(from: Sources): Look {
@@ -195,8 +191,8 @@ export function listedTables(zoneTables: readonly TableState[]): TableState[] {
   );
 }
 
-/** Today's seats, a merge's seats for a member of one, or the old capacity with no today's row. */
+/** Today's seats, or the merge's seats for one of its members. */
 export function seatsFor(table: TableState): number | null {
-  if (table.today === null) return table.capacity;
+  if (table.today === null) return null;
   return table.today.joinSeats ?? table.today.seats;
 }

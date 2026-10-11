@@ -28,7 +28,6 @@ const MARKERS: Record<CardType, string> = {
   "prep-queue": ".cp-ticket",
   notifications: ".cp-bell",
   "floor-plan": ".cp-table",
-  "table-layout-editor": ".cp-edit-handle",
   "kds-board": ".cp-column",
   expo: ".cp-expo-ticket",
   "table-order": ".cp-header",

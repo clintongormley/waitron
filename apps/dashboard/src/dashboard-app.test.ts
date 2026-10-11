@@ -319,7 +319,6 @@ const NAV_SCREENS = [
   "sales",
   "catalogue",
   "menus",
-  "floor",
   "bookings",
   "staff",
   "roster",
@@ -5865,6 +5864,21 @@ describe("dashboard-app: remaining faces and shell controls", () => {
     expect(location.pathname).toBe("/manage/overview");
   });
 
+  it.each(["/manage/floor", "/manage/floor/view/plano/zone/z1"])(
+    "handles the retired Floor plan address %s as an unknown screen",
+    async (address) => {
+      history.replaceState(null, "", address);
+      const { el } = await mountWidget<DashboardApp>("dashboard-app", {
+        api: faceApi(),
+        request: stubRequest,
+      });
+      await flush(el);
+      expect(el.shadowRoot!.querySelector("dashboard-floor-screen")).toBeNull();
+      expect(el.shadowRoot!.querySelector("[data-test=nav-floor]")).toBeNull();
+      expect(location.pathname).toBe("/manage/overview");
+    },
+  );
+
   it("hands the payments face the request primitive and the venue's onboarding mode", async () => {
     history.replaceState(null, "", "/manage/payments");
     const { el } = await mountWidget<DashboardApp>("dashboard-app", {
@@ -5931,7 +5945,6 @@ describe("dashboard-app: remaining faces and shell controls", () => {
     expect(items("operations")).toEqual([
       "nav-venue-operations",
       "nav-opening-hours",
-      "nav-floor",
       "nav-prep-stations",
       "nav-venue-settings",
     ]);
@@ -6176,7 +6189,7 @@ describe("the nav search", () => {
     const el = await mountSession(sessionIn("en-GB"));
     await search(el, "venue");
     expect(shownHeaders(el)).toEqual(["nav-group-operations"]);
-    expect(shownItems(el)).toEqual(["nav-venue-settings", "nav-floor"]);
+    expect(shownItems(el)).toEqual(["nav-venue-settings"]);
   });
 
   it("opens a collapsed group holding a match, and clearing the term leaves the nav as it was", async () => {

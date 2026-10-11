@@ -46,7 +46,7 @@ import type { DeviceRequestConfig, TillConfig } from "./till-config.js";
 import { deviceRequestCfg, seedSessionDevice } from "./testing/session-device.js";
 import { createCourse, setProductCourse } from "./kitchen.js";
 import { attachPrinterToStation } from "./station-printers.js";
-import { createTable } from "./tables.js";
+import { createTable } from "./testing/live-table.js";
 import { printedLines } from "./testing/decode-ticket.js";
 import { republishMenus } from "./testing/publish-menu.js";
 import { reprintOrderTickets } from "./kitchen-print.js";

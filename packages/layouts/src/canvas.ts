@@ -24,7 +24,6 @@ export const CARD_TYPES = [
   "prep-queue",
   "notifications",
   "floor-plan",
-  "table-layout-editor",
   "kds-board",
   "expo",
   "table-order",

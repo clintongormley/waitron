@@ -46,13 +46,13 @@ function plan(m1x = 2): FloorPlan {
         placement: { ...m1Placement, x: m1x },
       },
       { id: "m2", liveTableId: "l2", label: "T2", seats: 2, fixed: true, placement: null },
-      { id: null, liveTableId: "l9", label: "T9", seats: null, fixed: false, placement: null },
+      { id: "m9", liveTableId: "l9", label: "T9", seats: null, fixed: false, placement: null },
     ],
     joins: [{ id: "j1", seats: 6, tableIds: ["m1", "m2"] }],
   };
 }
 
-const savedIds = { m1: "m1", m2: "m2", "live:l9": "m9" };
+const savedIds = { m1: "m1", m2: "m2", m9: "m9" };
 
 function deferred<T>() {
   let resolve!: (value: T) => void;

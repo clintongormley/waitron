@@ -13,7 +13,7 @@ import { currentBusinessDay } from "@waitron/reporting";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import { saleId as brandSaleId } from "@waitron/shared";
 import { DEVICE_COOKIE } from "./device-session.js";
-import { createTable } from "./tables.js";
+import { createTable } from "./testing/live-table.js";
 import { send } from "./testing/bill-venue.js";
 import {
   inTx,

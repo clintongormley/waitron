@@ -161,61 +161,6 @@ describe("today's merges", () => {
     expect(await inTx(v, (tx) => savedJoinSeats(tx, [table.a!, table.b!, table.c!]))).toBeNull();
   });
 
-  it("refuses a table with no zone, either way", async () => {
-    const { table } = await threeTables();
-    await inTx(v, (tx) =>
-      tx.update(diningTables).set({ zoneId: null }).where(eq(diningTables.id, table.c!)),
-    );
-
-    for (const [moving, target] of [
-      [table.c!, table.a!],
-      [table.a!, table.c!],
-    ]) {
-      await expect(merge(moving!, target!, "right", 8)).rejects.toMatchObject({
-        code: "table.not_in_floor_plan",
-        params: { tableId: table.c },
-      });
-    }
-    expect(await mergeOf(v, table.a!)).toBeNull();
-  });
-
-  it("refuses a table with no zone before one that is fixed, merged or held", async () => {
-    const { table } = await threeTables();
-    await merge(table.b!, table.a!, "right", 8);
-    await inTx(v, (tx) =>
-      tx.update(diningTables).set({ zoneId: null }).where(eq(diningTables.id, table.b!)),
-    );
-    await expect(merge(table.b!, table.c!, "right", 8)).rejects.toMatchObject({
-      code: "table.not_in_floor_plan",
-      params: { tableId: table.b },
-    });
-
-    const held = await threeTables();
-    await seat(v, held.table.a!);
-    await inTx(v, (tx) =>
-      tx.update(diningTables).set({ zoneId: null }).where(eq(diningTables.id, held.table.a!)),
-    );
-    await expect(merge(held.table.a!, held.table.b!, "right", 8)).rejects.toMatchObject({
-      code: "table.not_in_floor_plan",
-      params: { tableId: held.table.a },
-    });
-
-    const fixed = await threeTables();
-    await setToday(fixed.table.a!, { fixed: true });
-    await inTx(v, (tx) =>
-      tx.update(diningTables).set({ zoneId: null }).where(eq(diningTables.id, fixed.table.a!)),
-    );
-    for (const [moving, target] of [
-      [fixed.table.a!, fixed.table.b!],
-      [fixed.table.b!, fixed.table.a!],
-    ]) {
-      await expect(merge(moving!, target!, "right", 8)).rejects.toMatchObject({
-        code: "table.not_in_floor_plan",
-        params: { tableId: fixed.table.a },
-      });
-    }
-  });
-
   it("grows a merge with a third table, working its seats out again", async () => {
     const { table } = await threeTables([{ seats: 6, keys: ["a", "b"] }]);
     await merge(table.b!, table.a!, "right", 8);

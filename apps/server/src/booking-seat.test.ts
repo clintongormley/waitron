@@ -1,3 +1,4 @@
+import { createZone } from "./testing/service-zone.js";
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { sql } from "drizzle-orm";
@@ -24,7 +25,7 @@ import { MANAGEMENT_COOKIE, type Logger } from "@waitron/server-kit";
 import { writeClearingWorkflow } from "@waitron/venue-service";
 import type { ModuleRouteContext } from "@waitron/module";
 import type { TillConfig } from "./till-config.js";
-import { createTable } from "./tables.js";
+import { createTable } from "./testing/live-table.js";
 import { finishTable, moduleCoreServices, seatTable } from "./parties.js";
 import "./errors.js";
 
@@ -124,7 +125,10 @@ describe("bookings seat route → real seatTable", () => {
 
     // A table to reserve, and a `booked` reservation on it (the seat reuses the booking's own table).
     const tableId = await withTransaction(db, async (tx: Transaction) => {
-      const { id } = await createTable(tx, v.tillCfg, { label: "7" });
+      const { id } = await createTable(tx, v.tillCfg, {
+        label: "7",
+        zoneId: (await createZone(tx, v.tillCfg, { name: "Tables" })).id,
+      });
       return id;
     });
     const created = await post(app, "/management-api/bookings", v.managerCookie, {
@@ -165,7 +169,10 @@ describe("bookings seat route → real seatTable", () => {
     const v = await setupVenue();
     const app = mountApp(v.ctx);
     const tableId = await withTransaction(db, async (tx: Transaction) => {
-      const { id } = await createTable(tx, v.tillCfg, { label: "9" });
+      const { id } = await createTable(tx, v.tillCfg, {
+        label: "9",
+        zoneId: (await createZone(tx, v.tillCfg, { name: "Tables" })).id,
+      });
       return id;
     });
     const created = await post(app, "/management-api/bookings", v.managerCookie, {
@@ -207,7 +214,10 @@ describe("bookings seat route → real seatTable", () => {
     const app = mountApp(v.ctx);
     const tableId = await withTransaction(db, async (tx: Transaction) => {
       await writeClearingWorkflow(tx, true);
-      const { id } = await createTable(tx, v.tillCfg, { label: "8" });
+      const { id } = await createTable(tx, v.tillCfg, {
+        label: "8",
+        zoneId: (await createZone(tx, v.tillCfg, { name: "Tables" })).id,
+      });
       const seated = await seatTable(
         tx,
         { ...v.tillCfg, origin: jobOrigin("dashboard") },

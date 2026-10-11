@@ -10,12 +10,7 @@ function table(overrides: Partial<FloorTable> = {}): FloorTable {
   return {
     id: "t1",
     label: "4",
-    capacity: 4,
-    posX: 500,
-    posY: 500,
-    shape: "square",
-    rotation: 0,
-    zoneId: null,
+    seats: 4,
     state: "free",
     pendingToServe: 0,
     status: null,
@@ -366,17 +361,17 @@ describe("the unsent-order mark", () => {
 });
 
 test("renders the covers count, with an optional localisable suffix", async () => {
-  const bare = await mountToken(table({ capacity: 6 }));
+  const bare = await mountToken(table({ seats: 6 }));
   expect(bare.shadowRoot!.querySelector(".capacity")?.textContent?.trim()).toBe("6");
 
-  const suffixed = await mountToken(table({ capacity: 6 }), { covers: "plazas" });
+  const suffixed = await mountToken(table({ seats: 6 }), { covers: "plazas" });
   expect(
     suffixed.shadowRoot!.querySelector(".capacity")?.textContent?.replace(/\s+/g, " ").trim(),
   ).toBe("6 plazas");
 });
 
-test("omits the covers line when capacity is unknown", async () => {
-  const el = await mountToken(table({ capacity: null }));
+test("omits the covers line when seats are unknown", async () => {
+  const el = await mountToken(table({ seats: null }));
   expect(el.shadowRoot!.querySelector(".capacity")).toBeNull();
 });
 
@@ -385,24 +380,6 @@ test("the state accent paints from the success token for a free table", async ()
   host.style.setProperty("--wt-color-success", "rgb(1, 2, 3)");
   const card = el.shadowRoot!.querySelector(".card")!;
   expect(getComputedStyle(card).borderLeftColor).toBe("rgb(1, 2, 3)");
-});
-
-test("renders each table shape as a distinct class and corner radius", async () => {
-  const round = await mountToken(table({ shape: "round" }));
-  const square = await mountToken(table({ shape: "square" }));
-  const rect = await mountToken(table({ shape: "rect" }));
-  const cardOf = (el: HTMLElement) => el.shadowRoot!.querySelector<HTMLElement>(".card")!;
-  expect(cardOf(round).classList.contains("shape-round")).toBe(true);
-  expect(cardOf(square).classList.contains("shape-square")).toBe(true);
-  expect(cardOf(rect).classList.contains("shape-rect")).toBe(true);
-  // A class alone would pass with no visual difference, so the radii are compared too.
-  const radiusOf = (el: HTMLElement) => getComputedStyle(cardOf(el)).borderTopLeftRadius;
-  expect(new Set([radiusOf(round), radiusOf(square), radiusOf(rect)]).size).toBe(3);
-});
-
-test("an unplaced (shapeless) token falls back to the rounded-rect shape", async () => {
-  const bare = await mountToken(table({ shape: null }));
-  expect(bare.shadowRoot!.querySelector(".card")!.classList.contains("shape-rect")).toBe(true);
 });
 
 /** Returns the undo. */
@@ -511,4 +488,17 @@ describe("order-timing accent (timingBand)", () => {
     expect(await flashesWhenMotionReduced(true)).toBe(false);
     expect(await flashesWhenMotionReduced(false)).toBe(true);
   });
+});
+
+test("shows the table's seats with the covers suffix", async () => {
+  const el = await mountToken({ ...table(), seats: 6 }, { covers: "pax" });
+  expect(el.shadowRoot!.querySelector(".capacity")?.textContent?.replace(/\s+/g, " ").trim()).toBe(
+    "6 pax",
+  );
+});
+
+test("the tray token is a rounded rectangle painted from the medium-radius token", async () => {
+  const el = await mountToken(table({ seats: 6 }));
+  host.style.setProperty("--wt-radius-md", "13px");
+  expect(getComputedStyle(el.shadowRoot!.querySelector(".card")!).borderTopLeftRadius).toBe("13px");
 });

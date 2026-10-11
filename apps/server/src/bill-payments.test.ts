@@ -71,7 +71,7 @@ import { deploymentEnvironment } from "./config.js";
 import { ALL_MODULES } from "./modules.js";
 import { printSalePaymentSlip } from "./payment-slip-print.js";
 import { readReceiptIssuer } from "./receipt-issuer.js";
-import { createTable } from "./tables.js";
+import { createTable } from "./testing/live-table.js";
 import { decodeTicket, opensDrawer } from "./testing/decode-ticket.js";
 import { descendingIds } from "./testing/descending-ids.js";
 import { offerProducts, type ZoneOffers } from "./testing/zone-offers.js";

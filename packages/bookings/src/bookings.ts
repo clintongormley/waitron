@@ -3,7 +3,7 @@
 // own authorization. A by-id read or write needs only the id.
 import "./errors.js";
 import { and, asc, eq, inArray, type InferSelectModel } from "drizzle-orm";
-import { diningTables, type Transaction } from "@waitron/db";
+import { tableInService, diningTables, type Transaction } from "@waitron/db";
 import { AppError } from "@waitron/shared";
 import type { LocationId } from "@waitron/shared";
 import type { CoreServices } from "@waitron/module";
@@ -57,7 +57,7 @@ async function requireActiveTable(
     .where(
       and(
         eq(diningTables.id, tableId),
-        eq(diningTables.active, true),
+        tableInService(diningTables.id),
         eq(diningTables.locationId, locationId),
       ),
     );

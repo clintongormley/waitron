@@ -1,14 +1,17 @@
 import { eq, sql } from "drizzle-orm";
+import { randomUUID } from "node:crypto";
 import { beforeAll, describe, expect, it } from "vitest";
 import type { Transaction } from "../client.js";
 import { CORE_MIGRATIONS } from "../migrations.js";
 import { useVenueDb } from "../testing/venue-db.js";
 import { withTransaction } from "../tenancy.js";
+import { captureError, engineErrorMessage } from "../testing/errors.js";
+import { isRefusal } from "../unique-violation.js";
+import { NOT_NULL_VIOLATION } from "../sql-state.js";
 import { diningTables } from "./dining-tables.js";
+import { floorZones } from "./floor-zones.js";
 import { locations, tenants } from "./tenants.js";
 
-// What is proven is the produced Drizzle export's column mapping (posX -> "pos_x"), the decoding
-// of the four placement columns, and that a dining table has no `tab_id` column.
 const LOCATION_A = "aaaaaaaa-0000-4000-8000-000000000001";
 
 describe("dining_tables columns", () => {
@@ -38,24 +41,57 @@ describe("dining_tables columns", () => {
   // is refused `NOT NULL constraint failed: dining_tables.id`.
   async function seedTable(location: string, label: string): Promise<string> {
     return inTx(async (tx) => {
+      const [zone] = await tx
+        .insert(floorZones)
+        .values({ locationId: location, name: label })
+        .returning({ id: floorZones.id });
       const [row] = await tx
         .insert(diningTables)
-        .values({ locationId: location, label })
+        .values({ locationId: location, label, zoneId: zone!.id })
         .returning({ id: diningTables.id });
       return row!.id;
     });
   }
 
-  it("exposes the four placement columns through the Drizzle export", async () => {
-    const id = await seedTable(LOCATION_A, "T-placement");
-    await inTx((tx) =>
-      tx
-        .update(diningTables)
-        .set({ posX: 500, posY: 250, shape: "square", rotation: 15 })
-        .where(eq(diningTables.id, id)),
-    );
+  it("accepts a dining table in its zone", async () => {
+    const id = await seedTable(LOCATION_A, "T-zoned");
     const [row] = await inTx((tx) => tx.select().from(diningTables).where(eq(diningTables.id, id)));
-    expect(row).toMatchObject({ posX: 500, posY: 250, shape: "square", rotation: 15 });
+    expect(row).toMatchObject({
+      id,
+      locationId: LOCATION_A,
+      label: "T-zoned",
+      zoneId: expect.any(String),
+      planTableId: null,
+    });
+  });
+
+  it("refuses a dining table with no zone", async () => {
+    const id = randomUUID();
+    const error = await captureError(() =>
+      inTx(async (tx) => {
+        tx.run(
+          sql`insert into dining_tables (id, location_id, label, created_at) values (${id}, ${LOCATION_A}, ${"T-no-zone"}, ${"2026-10-11T10:00:00.000Z"})`,
+        );
+      }),
+    );
+    expect(isRefusal(error, NOT_NULL_VIOLATION)).toBe(true);
+    expect(engineErrorMessage(error)).toBe("NOT NULL constraint failed: dining_tables.zone_id");
+  });
+
+  it("has only the columns today's plan needs", () => {
+    const columns = suite.db.all<{ name: string }>(
+      sql`select name from pragma_table_info('dining_tables')`,
+    );
+    expect(columns.map((column) => column.name).sort()).toEqual([
+      "created_at",
+      "id",
+      "label",
+      "location_id",
+      "needs_clearing_since",
+      "plan_table_id",
+      "status_id",
+      "zone_id",
+    ]);
   });
 
   it("gives a dining table no pointer to a bill", () => {

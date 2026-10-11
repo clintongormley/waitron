@@ -1,3 +1,4 @@
+import { floorTodayTables } from "@waitron/db";
 import { Hono } from "hono";
 import { WorkforceBackend, employments } from "@waitron/workforce";
 import { startManagementSession } from "@waitron/identity";
@@ -25,6 +26,7 @@ import {
   nodes,
   kitchenStations,
   diningTables,
+  floorZones,
 } from "@waitron/db";
 import { BOOKINGS_FLOOR_ANNOTATIONS, bookings } from "@waitron/bookings";
 import {
@@ -922,8 +924,15 @@ describe("venue detail consumer reads", () => {
       .values({
         locationId: venue.cfg.locationId,
         label: "Booking clock control",
+        zoneId: (
+          await suite.db
+            .insert(floorZones)
+            .values({ locationId: venue.cfg.locationId, name: "Booking tables" })
+            .returning({ id: floorZones.id })
+        )[0]!.id,
       })
       .returning({ id: diningTables.id });
+    await suite.db.insert(floorTodayTables).values({ tableId: table!.id });
     await suite.db.insert(bookings).values([
       {
         locationId: venue.cfg.locationId,

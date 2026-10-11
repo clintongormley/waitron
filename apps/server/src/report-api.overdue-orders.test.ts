@@ -1,3 +1,4 @@
+import { floorTodayTables } from "@waitron/db";
 import { eq } from "drizzle-orm";
 import { Hono } from "hono";
 import { describe, expect, it } from "vitest";
@@ -5,6 +6,7 @@ import {
   CORE_MIGRATIONS,
   catalogues,
   diningTables,
+  floorZones,
   kitchenStations,
   kitchenTimingDefaults,
   locations,
@@ -97,10 +99,15 @@ async function seedFiredOrder(
     firedAt: firedAt.toISOString(),
   });
   if (opts.tableLabel !== undefined) {
+    const [zone] = await db
+      .insert(floorZones)
+      .values({ locationId, name: `Tables ${orderId}` })
+      .returning({ id: floorZones.id });
     const [table] = await db
       .insert(diningTables)
-      .values({ locationId, label: opts.tableLabel })
+      .values({ locationId, zoneId: zone!.id, label: opts.tableLabel })
       .returning({ id: diningTables.id });
+    await db.insert(floorTodayTables).values({ tableId: table!.id });
     await db
       .update(workingOrders)
       .set({ deliveryTableId: table!.id })

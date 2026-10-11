@@ -21,7 +21,7 @@ import {
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
 import type { Logger, LogLevel } from "./logger.js";
 import { createCourse, setProductCourse } from "./kitchen.js";
-import { createTable } from "./tables.js";
+import { createTable } from "./testing/live-table.js";
 import { mountTillApi } from "./till-api.js";
 import type { TillApiDeps } from "./till-api.js";
 import { enrolDeviceForTest } from "./testing/enrol.js";
