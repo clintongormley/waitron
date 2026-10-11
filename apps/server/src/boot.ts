@@ -1,3 +1,4 @@
+import { assertAppendOnlyIntact } from "./append-only-watch.js";
 import { createAuthorityClockStatus, authorityClockAlertSource } from "./time-health.js";
 import { createCloudSnapshotWorker } from "./cloud-snapshot-worker.js";
 import { createCloudSnapshotArchive } from "./cloud-snapshot-archive.js";
@@ -803,17 +804,21 @@ async function bootServer(
   const moduleConfig = await readModuleConfig(config.stateDir);
   const setsToMigrate =
     config.till === undefined ? ALL_MODULES : enabledModules(ALL_MODULES, moduleConfig);
+  const migrationOptions = migrationOptionsFor(
+    orderedMigrationSets(setsToMigrate),
+    config.migrationsRoot,
+  );
+  const appendOnlyTables = migrationOptions.flatMap((set) => set.appendOnlyTables ?? []);
   await withDevMigrationHint(log, config.devMode, () =>
-    applyMigrations(
-      config.venueDir,
-      migrationOptionsFor(orderedMigrationSets(setsToMigrate), config.migrationsRoot),
-    ),
+    applyMigrations(config.venueDir, migrationOptions),
   );
   // The long-lived open. On a primary with a backup configured, the backup supervisor opens its own
   // beside it.
   const store = await openVenueDatabase(config.venueDir);
   undoOnFailure.push(() => store.close());
   const db = store.venue;
+  // After migrating, which reinstalls a missing trigger but leaves a same-name altered one in place.
+  assertAppendOnlyIntact(db, appendOnlyTables);
 
   // Drift visibility: log the enabled set against what the database has actually migrated. A
   // soft-disabled module's data is kept; it is simply not migrated.

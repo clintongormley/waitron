@@ -180,6 +180,9 @@ declare module "@waitron/shared" {
      * the host's own configuration.
      */
     "deployment.environment_mismatch": { databaseEnvironment: string; hostEnvironment: string };
+    /** After migrating, an append-only trigger is still absent or carries other text; the start is
+     * refused. Both lists hold trigger names, never a secret. */
+    "append_only.triggers_changed": { missing: string[]; altered: string[] };
     /**
      * The demo seed was asked to write sample data — catalogue, staff and back-dated fiscal
      * records — under a production stamp. Refused before anything is written: a production chain

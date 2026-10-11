@@ -341,6 +341,17 @@ export const OPERATOR_TEXT: Readonly<Partial<Record<RecoveryCode, OperatorText>>
         "Antes de nada, pide a quien instaló este equipo que lo revise. La base de datos está en una carpeta dentro de la carpeta del local, cuyo nombre aparece más abajo, en «Por qué falló el último arranque», y en la salida del propio servidor. Hay que devolverla a su sitio, o volver a hacer la restauración, antes de que el equipo pueda arrancar.",
     },
   },
+  "append_only.triggers_changed": {
+    // No retry: migrating cannot replace a same-name trigger, so the next start finds it again.
+    "en-GB": {
+      title: "A safeguard on the box's permanent records was removed or changed.",
+      action: "Ask whoever installed this box to look at it before anything else.",
+    },
+    "es-ES": {
+      title: "Se ha quitado o cambiado una protección de los registros permanentes del equipo.",
+      action: "Antes de nada, pide a quien instaló este equipo que lo revise.",
+    },
+  },
   "restore.membership_invalid": {
     // No retry: the refusal leaves the copy unchanged, so the next start reads it again.
     "en-GB": {

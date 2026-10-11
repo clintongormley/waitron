@@ -415,7 +415,11 @@ describe("curated operator text", () => {
       "server.boot_incomplete",
       "provisioning.database_holder_stalled",
     ];
-    const fromBootByHand = ["deployment.environment_mismatch", "restore.membership_invalid"];
+    const fromBootByHand = [
+      "deployment.environment_mismatch",
+      "restore.membership_invalid",
+      "append_only.triggers_changed",
+    ];
     const missing = [...classified, ...persistedByRunEntry, ...fromBootByHand].filter(
       (code) => code !== "unknown" && !(code in OPERATOR_TEXT),
     );
@@ -438,6 +442,19 @@ describe("curated operator text", () => {
     expect(spanish).toContain(
       "El equipo no arrancará con esta copia. Antes de nada, pide a quien instaló este equipo que lo revise.",
     );
+  });
+
+  it("names a removed or changed safeguard on the permanent records, in both languages", async () => {
+    const english = await pageFor("append_only.triggers_changed");
+    expect(english).toContain(
+      escapeHtml("A safeguard on the box's permanent records was removed or changed."),
+    );
+    expect(english).toContain("Ask whoever installed this box to look at it before anything else.");
+    const spanish = await pageFor("append_only.triggers_changed", undefined, SPANISH);
+    expect(spanish).toContain(
+      "Se ha quitado o cambiado una protección de los registros permanentes del equipo.",
+    );
+    expect(spanish).toContain("Antes de nada, pide a quien instaló este equipo que lo revise.");
   });
 
   // A retry or restart can fix a volume that did not come up; nothing else at the box can.
