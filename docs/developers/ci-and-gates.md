@@ -846,6 +846,7 @@ since the SQLite switch (#489, 2026-09-23), because its earlier shards ran a dif
 | mutation.yml       | mutation-db (matrix shards)       | 8.8 (since the SQLite switch)  | 20    |
 | mutation.yml       | mutation-db-aggregate             | 0.3                            | 5     |
 | stripe-sandbox.yml | stripe-sandbox                    | 0.7                            | 5     |
+| codeql.yml         | analyze (matrix of four languages) | 24.0 (javascript-typescript)  | 50    |
 
 Test jobs and shard legs (10 minutes), `-merge` jobs (5), and `lint` and `root-guards` (8) are set
 from the owner's four-minute bound (2026-10-09), not the doubling rule; the
@@ -853,6 +854,12 @@ from the owner's four-minute bound (2026-10-09), not the doubling rule; the
 
 ui's figure is run `37267389722`; `mutation-db`'s are runs `36380351019` and `37267389722`, the
 two weekly runs since the SQLite switch.
+
+codeql.yml's figure is from GitHub's default setup, before A488 replaced it: the 55 successful
+`main` runs from 2026-10-10 09:16 to 2026-10-11 10:33 UTC, where the `javascript-typescript` job
+took at most 24.0 minutes (run `38065526655`) and the other three at most 1.3. Those runs saved an
+overlay-base database and codeql.yml does not, so its own durations may differ; re-measuring them is
+the backlog entry "CodeQL's `timeout-minutes: 50` rests on the default setup's durations".
 
 The `smoke` figure was measured while the remote layer cache was still in place; its limit is
 checked again without it: the whole `smoke` job took 2.4 and 2.3 minutes in image-nightly runs
@@ -988,13 +995,52 @@ store caches that the test jobs restore to share the remainder. On 2026-10-08 at
 was 11,296 MB, 9,154 MB of it in 941 `buildkit` entries. That was the second reason `publish`
 dropped arm64 (`linux/amd64` alone, ci.yml): an emulated second platform's `mode=max` export put a
 second set of image layers in on every merge to `main`. Since A399 no workflow exports Docker
-layers; the `buildkit` entries already there are left for GitHub to evict, and the pnpm store,
-Playwright and CodeQL entries remain.
+layers; the `buildkit` entries already there are left for GitHub to evict, and the pnpm store and
+Playwright entries remain.
+
+On 2026-10-11 the cache was CodeQL's: `gh api "repos/:owner/:repo/actions/caches?per_page=100"
+--paginate` listed 36 entries and 10,471,063,513 bytes, of which 34 entries and 10,021,766,320 bytes
+were keyed `codeql-overlay-base-database-…`, about 1.2 GB for each JavaScript database. The rest was
+one `playwright-Linux` entry (271 MB) and one `node-cache` entry (158 MB). GitHub's default setup
+saved a database after every push to `main` so that pull-request scans could start from it. Since
+A488 CodeQL runs from `codeql.yml`, nightly, and saves nothing (next section).
 
 The total is `gh api repos/:owner/:repo/actions/cache/usage`, but it answers only "how full" — for
 WHICH entries a new export competes with, list them with sizes and last-access times
 (`gh api "repos/:owner/:repo/actions/caches?per_page=100" --paginate`, or `gh cache list`) and name
 them before adding the export.
+
+### CodeQL scans `main` nightly, and nothing waits for it
+
+`.github/workflows/codeql.yml` runs at 01:37 UTC on the default branch and on request (`gh workflow
+run codeql.yml --ref main`), never on a push or a pull request (owner, 2026-10-11, A488). Until then
+it was GitHub's default setup, a repository setting with no file, which scanned every push to `main`
+and every pull request. It scans the same four languages: `javascript-typescript`; `python`, which
+on 2026-10-11 covered three scripts (`apps/print-agent/src/rfcomm-send.py`,
+`packages/reporting/reference/generate-dr303-layout.py` and `scripts/fake-bluez.py`); `c-cpp`, which
+then covered one file (`apps/server/src/testing/raster-reference/cups-reference.c`); and `actions`,
+the workflows themselves. Each uses `build-mode: none`, as the default setup did, and the default
+query suite. It uploads under the categories the default setup's analyses carry
+(`/language:<language>`, read with `gh api
+"repos/:owner/:repo/code-scanning/analyses?ref=refs/heads/main"`).
+
+While the default setup is switched on, GitHub does not process its analyses and the analyze step
+fails: `github/codeql-action` at tag `v4`, 2026-10-11, treats the processing error "CodeQL analyses
+from advanced configurations cannot be processed when the default setup is enabled" as a
+configuration error (`shouldConsiderConfigurationError`, `src/upload-lib.ts`), and the analyze step
+waits for processing by default (`wait-for-processing`, `analyze/action.yml`). Read from the source,
+not tried on this repository. `gh api repos/:owner/:repo/code-scanning/default-setup --jq .state`
+must print `not-configured`; `gh api -X PATCH repos/:owner/:repo/code-scanning/default-setup -f
+state=not-configured` switches it off.
+
+It saves nothing to the Actions cache. `CODEQL_OVERLAY_DATABASE_MODE: none` stops the overlay-base
+database, which only speeds up a pull-request scan, and `trap-caching: false` stops the TRAP cache,
+which the action turns on by itself on a hosted runner when the overlay is off. Both read from
+`github/codeql-action` at tag `v4`, 2026-10-11: `checkOverlayEnablement` and `isTrapCachingEnabled`
+in `src/config-utils.ts`. Dependency caching is already off for a workflow file
+(`getDependencyCachingEnabled`, `src/caching-utils.ts`). Guard: the "CodeQL's workflow" cases in
+`scripts/ci-workflow.test.mjs`, weaker than their name — they read codeql.yml as text and do not
+check what the action does with either switch.
 
 ### Neither image build uses the remote layer cache
 

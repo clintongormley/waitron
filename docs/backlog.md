@@ -4370,6 +4370,11 @@ the tree. What remains, largest first:
 
 ### CI, tests and developer tooling
 
+- **CodeQL's `timeout-minutes: 50` rests on the default setup's durations (A488).** codeql.yml
+  saves no overlay-base database, which the default setup's runs did, so its own durations may
+  differ. Next: after a week of nightly runs, read their job durations and set the limit from them
+  (docs/developers/ci-and-gates.md, "Every job has a time limit").
+
 - **A419 dashboard CI stall remains unexplained (#1474).** Run `37932573955` left
   `catalogue-screen.test.ts` unfinished; local focused and full-package runs and diagnostic
   CI `37936013331` completed. No repair was established. Next: if it recurs, retain per-test
