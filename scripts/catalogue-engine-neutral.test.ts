@@ -34,6 +34,7 @@ const CATALOGUE_FILES = [
   "packages/catalogue/src/menu-home.ts",
   "packages/catalogue/src/device-home.ts",
   "packages/catalogue/src/menu-structure.ts",
+  "packages/catalogue/src/menu-copy.ts",
   "packages/catalogue/src/menu-document-types.ts",
   "packages/catalogue/src/menu-document.ts",
   "packages/catalogue/src/menu-publication.ts",
