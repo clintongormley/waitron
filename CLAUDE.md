@@ -332,11 +332,6 @@ called weaker than its name, the topic file lists what it does not see.
   to that map and to the zone map atop `apps/server/src/till-api.profile-zones.test.ts`, and a
   refusing case — weaker than that sounds: both route maps are comments. Cost: W97's per-task
   review found a bill refund route checking no action.
-- **A till state that a reload would lose is counted in `#busyForReload()`
-  (`apps/till/src/till-app.ts`), and a request the till resends until answered is held through
-  `#holdingReload`**, or a box update reloads the till over it. Cost: A491's review found a bill
-  payment, a sign-out's draft save and the resent requests missing from it. Nothing guards a new
-  flow. See [conventions-ui.md](docs/developers/conventions-ui.md).
 - **A `wt-data-table` row-menu column is keyed `actions` and declared `pinned: "end"`**, so the
   menu stays on a phone's screen (owner decision, A155). Guard: `scripts/pinned-actions-column.test.ts`,
   weaker than its name — it knows a menu column only by the literal `key: "actions"`, so every
