@@ -3207,6 +3207,18 @@ _Formerly A7, and the dashboard entries in the opening part of the old Track A (
   run: a tab already on sign-in (sent by the shared session deadline, or by a failed check on coming
   back into view) switches to the reset notice only when a later request is answered `node.reset`.
 
+- **A dashboard tab on the Backup screen learns of a box reset late.** Setup mode answers only
+  `/management-api/*` with `node.reset` (`mountSetup`, `apps/server/src/setup-api.ts`); the Backup
+  screen and the content-languages read use `/api/...` paths, which setup mode answers with a 404 with
+  no code (or, without the built wizard, the placeholder page), so such a tab shows the reset notice
+  only at its next management request. Measured by A501's Codex review against setup mode. Options:
+  answer those dashboard `/api` paths with `node.reset` too (the boot test pins `/api/staff` answering
+  the placeholder), or move the reads under `/management-api`. Left open by A501.
+
+- **`reportError`'s HTTP status is now unread.** `apps/dashboard/src/session-signals.ts` no longer
+  uses it, and the status hand-off in `packages/dashboard-kit/src/request.ts` was added only for the
+  check A501 removed; a small cleanup across both packages. Left open by A501.
+
 - **`waitron.sh reset --all` deletes the box's own minted certificate** (`deploy/waitron.sh`, the
   `rm_volume waitron_state` branch; minted by `apps/server/src/box-secrets.ts`), so — by reading,
   not run — a tab left open fails the certificate check, reports `connection.failed` on every request
