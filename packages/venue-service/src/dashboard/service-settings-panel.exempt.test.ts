@@ -233,3 +233,27 @@ it("an immediate setting write cannot clear a different owner's pending draft de
   scope.dispose();
   await leaveWithoutWarning();
 });
+
+it("immediately saved service controls remain exempt while saving and after a refusal", async () => {
+  const { panel, writes, pending } = await mount("kitchen");
+  const control = panel.shadowRoot!.querySelector("wt-switch")!;
+  await control.updateComplete;
+  control.shadowRoot!.querySelector<HTMLInputElement>("input")!.click();
+  await panel.updateComplete;
+  expect(writes).toEqual([{ settings: { editSentLines: false } }]);
+  expect(unload()).toBe(false);
+  pending.reject({ code: "connection.failed" });
+  await expect.poll(() => panel.shadowRoot!.textContent).toContain("could not be saved");
+  expect(control.shadowRoot!.querySelector<HTMLInputElement>("input")!.checked).toBe(true);
+  expect(unload()).toBe(false);
+  let left = false;
+  await app.leave.coordinator.request({
+    scopes: "all",
+    reason: "navigation",
+    proceed: () => {
+      left = true;
+    },
+  });
+  expect(left).toBe(true);
+  expect(app.shadowRoot!.querySelector("wt-unsaved-changes")!.open).toBe(false);
+});

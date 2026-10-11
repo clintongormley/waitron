@@ -752,7 +752,7 @@ it.each([
     expect(q(el, '[role="alert"]')?.textContent?.trim()).toBe("The change could not be saved."),
   );
 });
-it("saves station name, order and thresholds through their individual controls", async () => {
+it("saves station name and order through their own controls and thresholds together through the editor", async () => {
   const next = withUpstairs({ open: true, why: "open" });
   const a = api({ load: vi.fn().mockResolvedValue(next), reorderStations: vi.fn() });
   const el = await mount(a);
@@ -770,23 +770,228 @@ it("saves station name, order and thresholds through their individual controls",
   );
   await settle(el);
   expect(a.reorderStations).toHaveBeenCalledExactlyOnceWith(["upstairs", "bar"]);
-  for (const [field, value, payload] of [
-    ["warmAfterMinutes", "4", { warmAfterMinutes: 4 }],
-    ["overdueAfterMinutes", "11", { overdueAfterMinutes: 11 }],
-    ["forgottenAfterMinutes", "16", { forgottenAfterMinutes: 16 }],
-  ] as const) {
-    settingsQ(el, `[data-test="edit-settings-${field}-bar"]`)!.click();
-    await settle(el);
-    settingsQ(el, '[data-test="settings-minutes"]')!.dispatchEvent(
-      new CustomEvent("wt-change", { detail: { value } }),
+  q(el, '[data-test="edit-bar"]')!.click();
+  await settle(el);
+  for (const [field, value] of [
+    ["warmAfterMinutes", "4"],
+    ["overdueAfterMinutes", "11"],
+    ["forgottenAfterMinutes", "16"],
+  ] as const)
+    await editSaveField(el, q(el, `wt-input[name="${field}"]`)!, value);
+  q(el, '[data-test="save-station-edit"]')!.click();
+  await settle(el);
+  expect(a.updateStation).toHaveBeenLastCalledWith("bar", {
+    warmAfterMinutes: 4,
+    overdueAfterMinutes: 11,
+    forgottenAfterMinutes: 16,
+  });
+  expect(a.updateStation).toHaveBeenCalledTimes(2);
+});
+
+function timingView(): PrepStationsView {
+  return {
+    ...view,
+    stations: [
+      {
+        ...view.stations[0]!,
+        warmAfterMinutes: 3,
+        timingOverrides: { ...view.stations[0]!.timingOverrides, warmAfterMinutes: 3 },
+      },
+    ],
+  };
+}
+const timingField = (el: PrepStationsScreen, field: string) =>
+  q(el, `wt-input[name="${field}"]`) as WtInput;
+it("opens a station's timings in its editor and saves all three in one request", async () => {
+  const a = api({ load: vi.fn().mockResolvedValue(timingView()) });
+  const el = await mount(a);
+  q(el, '[data-test="edit-bar"]')!.click();
+  await settle(el);
+  expect(timingField(el, "warmAfterMinutes").value).toBe("3");
+  expect(timingField(el, "overdueAfterMinutes").value).toBe("");
+  expect(timingField(el, "overdueAfterMinutes").placeholder).toBe("10");
+  expect(timingField(el, "forgottenAfterMinutes").value).toBe("");
+  expect(timingField(el, "forgottenAfterMinutes").placeholder).toBe("15");
+  for (const [field, value] of [
+    ["warmAfterMinutes", "4"],
+    ["overdueAfterMinutes", "11"],
+    ["forgottenAfterMinutes", "16"],
+  ] as const)
+    await editSaveField(el, timingField(el, field), value);
+  const closed = editorClosed(el);
+  q(el, '[data-test="save-station-edit"]')!.click();
+  await closed;
+  await settle(el);
+  expect(a.updateStation).toHaveBeenCalledExactlyOnceWith("bar", {
+    warmAfterMinutes: 4,
+    overdueAfterMinutes: 11,
+    forgottenAfterMinutes: 16,
+  });
+  expect(el.shadowRoot!.querySelector("prep-station-editor")).toBeNull();
+});
+it("puts a timing refusal from the editor's save under the field it names and keeps the editor open", async () => {
+  const a = api({
+    updateStation: vi.fn().mockRejectedValue({
+      code: "station.thresholds_invalid",
+      params: { field: "overdueAfterMinutes" },
+    }),
+  });
+  const el = await mount(a);
+  q(el, '[data-test="edit-bar"]')!.click();
+  await settle(el);
+  await editSaveField(el, timingField(el, "overdueAfterMinutes"), "12");
+  q(el, '[data-test="save-station-edit"]')!.click();
+  await settle(el);
+  expect(a.updateStation).toHaveBeenCalledExactlyOnceWith("bar", { overdueAfterMinutes: 12 });
+  await vi.waitFor(() =>
+    expect(timingField(el, "overdueAfterMinutes").error).toBe(
+      "Use whole minutes with warm < overdue < forgotten.",
+    ),
+  );
+  expect(timingField(el, "warmAfterMinutes").error).toBe("");
+  expect(timingField(el, "forgottenAfterMinutes").error).toBe("");
+  expect(el.shadowRoot!.querySelector("prep-station-editor")).not.toBeNull();
+});
+it("follows new venue defaults in an open editor's placeholders and keeps a typed override", async () => {
+  const liveData = new LiveData();
+  const newDefaults = {
+    ...view,
+    stations: [
+      {
+        ...view.stations[0]!,
+        timingDefaults: { warmAfterMinutes: 7, overdueAfterMinutes: 20, forgottenAfterMinutes: 30 },
+      },
+    ],
+  };
+  const load = vi.fn().mockResolvedValueOnce(view).mockResolvedValue(newDefaults);
+  const el = await mount(api({ liveData, load }));
+  q(el, '[data-test="edit-bar"]')!.click();
+  await settle(el);
+  expect(timingField(el, "warmAfterMinutes").placeholder).toBe("5");
+  await editSaveField(el, timingField(el, "overdueAfterMinutes"), "12");
+  liveData.invalidate([{ type: "kitchen_stations", id: "bar" }]);
+  await vi.waitFor(() => expect(timingField(el, "warmAfterMinutes").placeholder).toBe("7"));
+  await el.shadowRoot!.querySelector("prep-station-editor")!.updateComplete;
+  expect(timingField(el, "overdueAfterMinutes").value).toBe("12");
+  expect(timingField(el, "forgottenAfterMinutes").placeholder).toBe("30");
+  expect(timingField(el, "forgottenAfterMinutes").value).toBe("");
+});
+
+it("edits Show the rest of the order in the station editor and saves only that field", async () => {
+  const a = api();
+  const el = await mount(a);
+  el.shadowRoot!.querySelector("prep-station-table")!
+    .shadowRoot!.querySelector("wt-data-table")!
+    .shadowRoot!.querySelector<HTMLElement>('[data-test="edit-bar"]')!
+    .click();
+  await settle(el);
+  const editor = el.shadowRoot!.querySelector("prep-station-editor")!;
+  await editor.updateComplete;
+  const rest = editor.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-switch"]>(
+    "wt-switch[name=showsRestOfOrder]",
+  )!;
+  expect(rest.checked).toBe(false);
+  rest.dispatchEvent(new CustomEvent("wt-change", { detail: { checked: true } }));
+  await editor.updateComplete;
+  editor.shadowRoot!.querySelector<HTMLElement>("[data-test=save-station-edit]")!.click();
+  await settle(el);
+  expect(a.updateStation).toHaveBeenCalledExactlyOnceWith("bar", { showsRestOfOrder: true });
+  await vi.waitFor(() => expect(el.shadowRoot!.querySelector("prep-station-editor")).toBeNull());
+});
+function fallbackView(): PrepStationsView {
+  return {
+    ...view,
+    stations: [
+      ...view.stations,
+      { ...view.stations[0]!, id: "grill", name: "Grill", isDefault: false, displayOrder: 2 },
+    ],
+    routing: {
+      ...view.routing,
+      stations: [
+        ...view.routing.stations,
+        { id: "grill", name: "Grill", active: true },
+        { id: "disabled", name: "Closed bar", active: false },
+      ],
+      stationTimes: [
+        ...view.routing.stationTimes,
+        {
+          stationId: "grill",
+
+          status: { open: true, why: "open" },
+
+          fallbackStationId: "bar",
+          today: null,
+          closedSendsTo: "grill",
+        },
+      ],
+    },
+  };
+}
+const fallbackField = '[name^="fallback"], [data-test*="fallback"]';
+it.each([
+  ["active", true, "bar"],
+  ["inactive", false, "disabled"],
+  ["unset", true, null],
+  ["self", true, "grill"],
+] as const)(
+  "The station editor keeps the non-default rest choice independent of a %s stored fallback, and offers no fallback field",
+  async (_kind, active, stored) => {
+    const initial = fallbackView();
+    initial.stations[1]!.active = active;
+    initial.routing.stations[1]!.active = active;
+    initial.routing.stationTimes[1]!.fallbackStationId = stored;
+    const fallback = vi.fn();
+    const update = vi.fn(async (id: string, values: { showsRestOfOrder?: boolean }) => {
+      const station = initial.stations.find((row) => row.id === id)!;
+      if (values.showsRestOfOrder !== undefined) station.showsRestOfOrder = values.showsRestOfOrder;
+    });
+    const el = await mount(
+      api({
+        load: vi.fn().mockResolvedValue(initial),
+        updateStation: update,
+        setStationFallback: fallback,
+      }),
     );
     await settle(el);
-    settingsQ(el, '[data-test="save-settings-cell"]')!.click();
+    const table = el
+      .shadowRoot!.querySelector("prep-station-table")!
+      .shadowRoot!.querySelector("wt-data-table")!.shadowRoot!;
+    expect(el.shadowRoot!.querySelector(fallbackField)).toBeNull();
+    expect(table.querySelector(fallbackField)).toBeNull();
+    if (!active) {
+      expect(table.querySelector("[data-test=edit-grill]")).toBeNull();
+      expect(update).not.toHaveBeenCalled();
+      expect(fallback).not.toHaveBeenCalled();
+      expect(initial.routing.stationTimes[1]!.fallbackStationId).toBe(stored);
+      return;
+    }
+    table.querySelector<HTMLElement>("[data-test=edit-grill]")!.click();
     await settle(el);
-    expect(a.updateStation).toHaveBeenLastCalledWith("bar", payload);
-  }
-  expect(a.updateStation).toHaveBeenCalledTimes(4);
-});
+    const editor =
+      el.shadowRoot!.querySelector<HTMLElementTagNameMap["prep-station-editor"]>(
+        "prep-station-editor",
+      )!;
+    await editor.updateComplete;
+    expect(editor.shadowRoot!.querySelector(fallbackField)).toBeNull();
+    const input = editor.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-switch"]>(
+      "wt-switch[name=showsRestOfOrder]",
+    )!;
+    expect(input.checked).toBe(false);
+    const save = editor.shadowRoot!.querySelector<HTMLElement>("[data-test=save-station-edit]")!;
+    expect(save.hasAttribute("disabled")).toBe(true);
+    input.dispatchEvent(new CustomEvent("wt-change", { detail: { checked: true } }));
+    await editor.updateComplete;
+    expect(save.hasAttribute("disabled")).toBe(false);
+    save.click();
+    await vi.waitFor(() =>
+      expect(update).toHaveBeenCalledExactlyOnceWith("grill", { showsRestOfOrder: true }),
+    );
+    await vi.waitFor(() => expect(el.shadowRoot!.querySelector("prep-station-editor")).toBeNull());
+    expect(fallback).not.toHaveBeenCalled();
+    expect(initial.routing.stationTimes[1]!.fallbackStationId).toBe(stored);
+    expect(initial.stations[1]!.active).toBe(active);
+  },
+);
 
 it("places a taken-name refusal below Name", async () => {
   const a = api({ createStation: vi.fn().mockRejectedValue({ code: "station.name_taken" }) });
