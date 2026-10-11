@@ -30,21 +30,6 @@ readers listed in slice 6 decision 4. These are source pointers, not a runtime r
 an exhaustive future implementation plan. Preserve payment, money/VAT, hashes, drawer and
 login behaviour; decide the future schema/contract and test it separately.
 
-## Opening hours dated-save refusal presentation
-
-Reproduce a server refusal with no field on a week with multiple own-hours named days. The slice 2
-Task 22 review reported the same general refusal beside unrelated dates' Save actions
-(`opening-hours-week.ts` / `opening-hours-zone-week.ts`). Keep the failed date's retry and draft
-scope while limiting the message to the action that failed. Receipt: Lane D
-`receipts/a366-2/task22-review.md`; final reviewers did not run this presentation case.
-
-## Opening hours real-week headings
-
-Remove the repeated weekday from a real-week row's heading: it combines the full weekday with a
-formatted date that also names the weekday. Keep the date and Today marker readable in EN/ES,
-both themes, at 1280 and 390. Receipt: Lane D `receipts/a366-2/task22-review.md` and final visual
-captures under `receipts/a366-2/finish-visuals`.
-
 ## Who authorised today's station or period change
 
 The approved [slice 3 plan](../superpowers/plans/2026-10-08-a366-slice-3-station-controls.md)
@@ -212,6 +197,99 @@ keep the start they had, and have reports, closes and anything else keyed by bus
 start in force on each day. The same plan lists those other readers: station overrides (C6), and
 backups and email (C8). Whether the time zone takes the same route is part of the design. Related
 open entry: "Changing the business-day start after saving service hours" (A366-1 follow-up).
+
+## A506. Opening hours rebuilt around seasons and special days
+
+**A506 (owner, 2026-10-11) — OPEN.** Agreed with the owner over mockups; no spec yet. Supersedes
+section 9.2, and the named-day hours of section 7, of
+[the 2026-10-07 service times spec](../superpowers/specs/2026-10-07-service-times-departments-and-stations-design.md).
+Pre-live, so venues reset rather than carry today's hours across (CLAUDE.md §3).
+
+**Why.** One standard week does not fit a venue whose hours change with the season, and copying a
+week into future dates would bury the special days among ordinary ones.
+
+**Seasons.**
+- Every venue has seasons, four by default: Spring, Summer, Autumn, Winter. Repeating every year is
+  what a season is, not an option.
+- A season has a name and a start date only; it ends the day before the next season starts. So the
+  seasons always cover the whole year, with no gaps and no overlaps.
+- Moving a start date moves the neighbouring season's end. The new dates hold for this year and
+  later ones until changed again; there is no one-year-only exception.
+- Each season has its own week for each department, painted as today's normal week is.
+
+**Special days.**
+- Two kinds: public holidays (from the official lists, as today) and the venue's own special days.
+  Today's own-holiday / working-day split goes: a search of non-test code found the kind read only to
+  choose the Calendar's colour (`packages/venue-service/src/named-days.ts`, the `tone` choice).
+- One special day is a name over any number of dates ("Christmas company dinners", 14–23 December),
+  optionally repeating on the same dates every year. Dates are added on a small calendar, singly or
+  as ranges.
+- **The season shows through.** Each date starts with the season's hours; what is painted on top
+  replaces them for that stretch of time, and unpainted time keeps following the season. A
+  special day has no "own hours" or "season's hours" switch. Worked example: under Winter's Dinner
+  20:00–23:30, painting Dinner 19:00–22:00 still leaves the season's Dinner until 23:30; painting
+  Closed over 22:00–23:30 ends the night at 22:00. The editor draws the season faded under the
+  paint so this is visible.
+- Closed is painted over part of a date, or a date's Closed tick shuts all of it. A public holiday
+  works the same way, so closing Christmas Day is one tick.
+- Every change to a single date is a special day. An ordinary date cannot be edited on its own: it
+  says which season it follows and offers "Edit the Winter week", "Make this a special day…" and
+  adding it to an existing special day.
+
+**Venue, department, zone.** The venue holds the seasons and special days and no hours of its own
+(owner's choice). Departments paint periods; a zone follows its department except where it is marked
+closed, as today.
+
+**Screens** (images in `docs/backlog/mockups/a506-opening-hours-seasons/`):
+1. `1-calendar-year.png` — the Opening hours page opens on a year. Days are coloured by season;
+   public holidays, special days and closed days are marked. Season chips show each range and
+   edit its start (✎). "+ Special day".
+2. `2-calendar-month.png` — clicking a month opens it, each day's hours drawn as a bar per
+   department, with "‹ year" back. It replaces the Day tab and the Real week switch.
+3. `3-season-week-editor.png` — a season's week, full screen: no banner and no side menu.
+4. `4-special-day-editor.png` — a special day, in the same full-screen editor, one column per
+   date instead of Monday to Sunday; name, dates and every-year in a side panel.
+5. `5-ordinary-date.png` — clicking an ordinary date.
+
+**The painter (both editors).**
+- Full screen, with one bar holding close, what is being edited, the season or department
+  picker, and Cancel and Save, which stay visible however the grid scrolls. Save stays quiet until
+  the draft changes (CLAUDE.md §3, A331).
+- One row of periods to paint with, plus Closed and "+ New period". Choose one, drag down a column.
+- 15 minutes is a thin row (about 5px in the mockup; the owner's screenshot of today's grid shows
+  under three hours at once), so most of a day fits on a laptop screen; the grid scrolls by itself while a drag passes its top or bottom edge.
+- Dragging over an existing block replaces that stretch; nothing has to be cleared first.
+- Two touching stretches of the same period are stored and drawn as one block.
+- Click a block to select it: change its period from a list, or Delete (Backspace too). Deleting
+  on a special day lets the season show through; in a season's week the time becomes closed.
+- No fallback period (owner): what is painted applies, anything unpainted in a season's week is
+  closed.
+- Each column's ⋮ has "Copy to…", ticking several days or dates at once, and Clear. A special
+  fortnight is painted once, copied across, and the odd dates changed after.
+- The day name and its ⋮ share one line.
+
+**Taken in from older entries.**
+- Real-week headings: a date heading must not repeat the weekday, and the date and Today marker
+  stay readable in EN/ES, both themes, at 1280 and 390. Receipt: Lane D
+  `receipts/a366-2/task22-review.md` and `receipts/a366-2/finish-visuals`.
+- Dated-save refusals: a refusal naming no field, on an editor saving several dates, shows only
+  beside the action that failed and keeps its retry and draft. The slice 2 Task 22 review saw one
+  general refusal beside unrelated dates' Save actions (`opening-hours-week.ts`,
+  `opening-hours-zone-week.ts`). Receipt: Lane D `receipts/a366-2/task22-review.md`.
+
+**For the spec to settle.**
+- What reads hours today and must read seasons and special days instead. A search for the
+  special-days table outside tests found `menu-timetable.ts`, `zone-closed-times.ts`,
+  `holidays.ts`, `hours.ts`, `named-days.ts`, `configuration-transfer.ts`, `routes.ts` and the
+  live queries in `packages/venue-service/src/`, plus `apps/dashboard/src/api/live-queries.ts`;
+  prep station times (`station-times.ts`) read the week. Follow each call chain; a search is not a
+  complete list.
+- Where the Periods list (colour, name, menus) and the read-only prep station times live, now that
+  the tabs go; and whether the month's "All departments" picker is enough of the old All
+  departments view.
+- What the till sells at a moment is decided by these hours, so the sale-path resolver's
+  season-then-special-day layering needs real-database tests across a season boundary and across
+  midnight.
 
 ## Decisions and deliberate limits
 

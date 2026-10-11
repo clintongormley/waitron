@@ -1305,6 +1305,15 @@ _Formerly entries spread across the old sections, A261's venue-operations steps 
   effect. Fiscal-adjacent: the owner lands it.
   [Detail](backlog/service-periods.md#a495-change-the-business-day-start-from-a-future-date)
 
+- **A506. Opening hours rebuilt around seasons and special days (owner, 2026-10-11).** One
+  standard week becomes four seasons that cover the whole year and repeat every year; special days
+  are painted on top of the season, a stretch at a time. The page opens on a year calendar, and
+  seasons and special days are edited in full-screen painters. Supersedes the 2026-10-07 spec's
+  section 9.2 and the named-day hours of its section 7; takes in the two old Opening hours
+  presentation entries. Mockups:
+  [docs/backlog/mockups/a506-opening-hours-seasons/](backlog/mockups/a506-opening-hours-seasons/).
+  [Detail](backlog/service-periods.md#a506-opening-hours-rebuilt-around-seasons-and-special-days)
+
 - **Enabling a department leaves its zones disabled; enabling a zone leaves routing exceptions removed.**
   Found along the way by W110e (#1290). A zone's tables on today's plan come back with the zone
   (A429 slice 5). A profile's starting zone is
@@ -1356,13 +1365,6 @@ _Formerly entries spread across the old sections, A261's venue-operations steps 
 - **Compare computed station weeks with live routing on an own-hours named day without a zone override.**
   The slice 4 review read the planning and zone-week paths but did not compare the real sale
   resolver. Add a real-database comparison before claiming they agree on that case.
-
-- **Opening hours dated-save refusal presentation** — reproduce a general refusal beside multiple
-  own-hours dates and keep it beside only the action that failed, retaining its retry and draft.
-  [Detail](backlog/service-periods.md#opening-hours-dated-save-refusal-presentation)
-- **Opening hours real-week headings** — remove the repeated weekday while keeping the date and
-  Today marker readable in EN/ES, both themes, at 1280 and 390.
-  [Detail](backlog/service-periods.md#opening-hours-real-week-headings)
 
 - **Sending grace after a period extension is replaced or expires** — decide whether a positive
   end offset survives a later period's extension or the business-day changeover; two real-store

@@ -218,6 +218,8 @@ across the week.
 
 ## 7. Named days and the calendar
 
+_(2026-10-11: the hours of named days are superseded by backlog A506 — seasons, with special days painted on top. See `docs/backlog/service-periods.md`.)_
+
 - **Public holidays** come from the country and region lists, as today (A261 §7.1).
 - **The venue's own days are unlimited.** Each has a date, a name, a kind (a holiday or a working
   day), whether it repeats every year, and whether it keeps the normal week's hours or has its own.
@@ -289,6 +291,8 @@ Nothing on them shows live state. Live controls are in section 10.
   provides a department picker there; Part B moves the department editor into this tab.
 
 ### 9.2 Opening hours
+
+_(2026-10-11: superseded by backlog A506 — a year calendar and full-screen season and special-day painters. See `docs/backlog/service-periods.md`.)_
 
 - **Week:** a picker lists All departments, each department with its zones beneath it, and the
   prep stations. A switch shows the normal week or a real week (‹ › steps through weeks, with named
