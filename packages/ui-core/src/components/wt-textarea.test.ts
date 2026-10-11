@@ -331,6 +331,13 @@ test("autocapitalize passes through, and none is set by default", async () => {
   expect(parts(plain).textarea.hasAttribute("autocapitalize")).toBe(false);
 });
 
+test("autocomplete passes through, and none is set by default", async () => {
+  const off = await mount('<wt-textarea label="Kit" autocomplete="off"></wt-textarea>');
+  const plain = await mount('<wt-textarea label="Note"></wt-textarea>');
+  expect(parts(off).textarea.getAttribute("autocomplete")).toBe("off");
+  expect(parts(plain).textarea.hasAttribute("autocomplete")).toBe(false);
+});
+
 test("sends wt-change once per input with the new value, and updates its own value", async () => {
   const el = await mount('<wt-textarea label="Note"></wt-textarea>');
   const received: string[] = [];

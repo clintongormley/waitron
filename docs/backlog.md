@@ -564,10 +564,9 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
   code, not run; whether a real draft can reach that state has not been tested.
   [Detail](backlog/setup.md#in-demo-a-local-check-that-fails-only-on-a-field-demo-hides)
 
-- **A refused backup-file input on the backup restore screen gets no red outline — OPEN.** The
-  screen's own styles have no rule for an invalid input (seen in screenshots of the refused state
-  during A151). The recovery key and recovery kit moved to `wt-input` and `wt-textarea` in A178d,
-  which draw their own invalid state (read, not run), so the backup-file input is what is left.
+- **A missing configuration export on the setup wizard's live-source screen gets no red ring.** The
+  backup restore screen's file input draws one (A523); `live-source-screen.ts` marks its file input
+  `aria-invalid` but has no style for it.
 
 - **A venue's time zone must come from its country pack's list (A166, owner 2026-10-01)** — OPEN.
   Readers then disagree about a bad zone: reporting throws, bookings falls back to Madrid, account
@@ -627,9 +626,6 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
 
 - **The look left a switched-off printer named "A331 look Epson" (the owner's Epson at
   192.168.10.81) in the shared demo venue.** Left open by A331 batch 3b (#1415).
-
-- **Setup's recovery kit lost `autocomplete="off"`, which `wt-textarea` does not offer** — left open
-  by A178 (#1010 to #1019), seen while building, not changed.
 
 ### Menus and the catalogue
 

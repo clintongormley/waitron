@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { userEvent } from "vitest/browser";
 import { chooseOption } from "@waitron/ui/src/test-helpers.js";
 import { setLocale } from "../i18n/t.js";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
@@ -56,6 +57,10 @@ function fieldMessages(el: SetupRestoreScreen): string[] {
   ]
     .map((node) => (node instanceof HTMLParagraphElement ? node.textContent! : node.error!).trim())
     .filter((message) => message !== "");
+}
+
+function expectDangerRing(input: HTMLInputElement): void {
+  expect(getComputedStyle(input).boxShadow).toContain("rgb(4, 5, 6)");
 }
 
 const FIX_FIELDS = "Correct the highlighted fields to continue.";
@@ -383,6 +388,34 @@ describe("SetupRestoreScreen", () => {
       await el.updateComplete;
       expect(await bottomOf(el)).toBe(FIX_FIELDS);
     });
+
+    it("rings a missing backup file only after Restore is pressed, and not once one is chosen", async () => {
+      const { el, host } = await mountWidget<SetupRestoreScreen>("setup-restore-screen", {});
+      host.style.setProperty("--wt-color-danger", "rgb(4, 5, 6)");
+      const file = q<HTMLInputElement>(el, "[data-test=artifact]")!;
+      expect(getComputedStyle(file).boxShadow).toBe("none");
+      q(el, "[data-test=restore]")!.click();
+      await el.updateComplete;
+      expectDangerRing(file);
+      await fill(el, { artifact: true });
+      expect(getComputedStyle(file).boxShadow).toBe("none");
+    });
+
+    it("keeps the keyboard focus ring on a missing backup file, beside the danger ring", async () => {
+      const { el, host } = await mountWidget<SetupRestoreScreen>("setup-restore-screen", {});
+      host.style.setProperty("--wt-color-danger", "rgb(4, 5, 6)");
+      host.style.setProperty("--wt-color-focus", "rgb(7, 8, 9)");
+      q(el, "[data-test=restore]")!.click();
+      await el.updateComplete;
+      const file = q<HTMLInputElement>(el, "[data-test=artifact]")!;
+      await userEvent.keyboard("{Shift}");
+      file.focus();
+      expect(file.matches(":focus-visible")).toBe(true);
+      const style = getComputedStyle(file);
+      expect(style.outlineStyle).toBe("solid");
+      expect(style.outlineColor).toBe("rgb(7, 8, 9)");
+      expectDangerRing(file);
+    });
   });
 
   describe("a refusal about one field", () => {
@@ -448,6 +481,16 @@ describe("SetupRestoreScreen", () => {
       host.style.setProperty("--wt-color-danger", "rgb(4, 5, 6)");
       const box = q(el, "[data-test=environment]")!.shadowRoot!.querySelector("[part=field]")!;
       expect(getComputedStyle(box).boxShadow).toContain("rgb(4, 5, 6)");
+    });
+
+    it("rings the backup file it names in the danger colour", async () => {
+      const { el, host } = await mountWidget<SetupRestoreScreen>("setup-restore-screen", {
+        request: REQUEST,
+        errorMessage: REFUSAL.artifact,
+        invalidField: "artifact",
+      });
+      host.style.setProperty("--wt-color-danger", "rgb(4, 5, 6)");
+      expectDangerRing(q<HTMLInputElement>(el, "[data-test=artifact]")!);
     });
 
     it("drops it when the named field changes", async () => {

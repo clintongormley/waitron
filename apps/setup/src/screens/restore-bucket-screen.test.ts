@@ -143,9 +143,16 @@ describe("SetupRestoreBucketScreen", () => {
     expect({
       spellcheck: control.spellcheck,
       autocapitalize: control.getAttribute("autocapitalize"),
+      autocomplete: control.getAttribute("autocomplete"),
       font: getComputedStyle(control).fontFamily,
       size: getComputedStyle(control).fontSize,
-    }).toEqual({ spellcheck: false, autocapitalize: "off", font: "fantasy", size: "11px" });
+    }).toEqual({
+      spellcheck: false,
+      autocapitalize: "off",
+      autocomplete: "off",
+      font: "fantasy",
+      size: "11px",
+    });
     expect(kit!.querySelector("wt-help-tooltip[slot=help]")!.getAttribute("aria-label")).toBe(
       "Help with the recovery kit",
     );

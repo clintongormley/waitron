@@ -61,6 +61,7 @@ export class WtTextarea extends LitElement {
   @property({ converter: { fromAttribute: (value: string | null) => value !== "false" } })
   override spellcheck = true;
   @property() override autocapitalize = "";
+  @property() autocomplete = "";
 
   private readonly generatedId = uniqueId("wt-textarea");
   private readonly errorId = uniqueId("wt-textarea-error");
@@ -104,6 +105,7 @@ export class WtTextarea extends LitElement {
             maxlength=${this.maxlength ?? nothing}
             spellcheck=${this.spellcheck ? "true" : "false"}
             autocapitalize=${this.autocapitalize || nothing}
+            autocomplete=${this.autocomplete || nothing}
             aria-label=${this.hideLabel && this.label ? this.label : nothing}
             ?required=${this.required}
             ?disabled=${this.disabled}

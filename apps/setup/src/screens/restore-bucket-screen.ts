@@ -316,6 +316,7 @@ export class SetupRestoreBucketScreen extends LitElement {
         required
         rows="6"
         autocapitalize="off"
+        autocomplete="off"
         .spellcheck=${false}
         data-test="kit"
         error=${kitError ?? ""}
