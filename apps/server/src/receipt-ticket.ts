@@ -13,13 +13,12 @@ import {
 } from "@waitron/printing";
 import { qrModules } from "./qr-matrix.js";
 import {
+  PART_SEPARATOR,
   buildReceiptDocument,
   type ReceiptDocumentInput,
   type ReceiptIndent,
 } from "./receipt-document.js";
 export type { ReceiptIssuer, ReceiptTrim } from "./receipt-document.js";
-
-const SEPARATOR = " · ";
 
 export interface FormatReceiptInput extends ReceiptDocumentInput {
   printer: EscSetting;
@@ -36,14 +35,17 @@ export function formatReceipt({ printer, logo = null, ...input }: FormatReceiptI
     const width = prepareText(indent.after).length;
     return width > columns / 2 ? 2 : width;
   };
-  // A line too wide for the roll breaks at its " · " separators first, so no part is split.
-  const textLines = (text: string, indent: number): string[] => {
-    const whole = wrapText(text, columns, indent);
-    if (whole.length === 1 || !text.includes(SEPARATOR)) return whole;
+  const textLines = (
+    text: string,
+    parts: readonly string[] | undefined,
+    indent: number,
+  ): string[] => {
+    const whole = wrapText(prepareText(text), columns, indent);
+    if (whole.length === 1 || parts === undefined) return whole;
     const lines: string[] = [];
     let current = "";
-    for (const part of text.split(SEPARATOR)) {
-      const joined = current === "" ? part : `${current}${SEPARATOR}${part}`;
+    for (const part of parts.map(prepareText)) {
+      const joined = current === "" ? part : `${current}${PART_SEPARATOR}${part}`;
       if (current === "" || joined.length <= columns) {
         current = joined;
         continue;
@@ -62,7 +64,7 @@ export function formatReceipt({ printer, logo = null, ...input }: FormatReceiptI
     if (element.kind !== "align" && element.kind !== "logo") lastBlank = false;
     switch (element.kind) {
       case "text":
-        for (const line of textLines(prepareText(element.text), indentation(element.indent))) {
+        for (const line of textLines(element.text, element.parts, indentation(element.indent))) {
           b.line(line);
         }
         break;

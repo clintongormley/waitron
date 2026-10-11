@@ -125,6 +125,7 @@ describe("the top block (A497)", () => {
     duplicate: true,
   };
   const t = (text: string) => ({ kind: "text", text, indent: 0 });
+  const joined = (...parts: string[]) => ({ ...t(parts.join(" · ")), parts });
 
   it("prints a simplified invoice's block in order, the legal name and tax ID on one line, in the language's own labels", () => {
     expect(
@@ -133,10 +134,10 @@ describe("the top block (A497)", () => {
       { kind: "logo" },
       t("Bar La Buena"),
       t("Desde 1952"),
-      t("Charcutería La Buena SL · IFZ: B12345678"),
+      joined("Charcutería La Buena SL", "IFZ: B12345678"),
       t("Calle Mayor 1, Local 2"),
       t("03001 Alicante, Alicante/Alacant"),
-      t("Tel. 912 345 678 · hola@labuena.es"),
+      joined("Tel. 912 345 678", "hola@labuena.es"),
       t("BIKOIZKARIA"),
     ]);
   });
@@ -148,10 +149,10 @@ describe("the top block (A497)", () => {
       { kind: "logo" },
       t("Bar La Buena"),
       t("Desde 1952"),
-      t("Charcutería La Buena SL · NIF: B12345678"),
+      joined("Charcutería La Buena SL", "NIF: B12345678"),
       t("Calle Mayor 1, Local 2"),
       t("03001 Alicante, Alicante/Alacant"),
-      t("Tel. 912 345 678 · hola@labuena.es"),
+      joined("Tel. 912 345 678", "hola@labuena.es"),
       t("Filed domicile"),
       t("DUPLICADO"),
     ]);
@@ -174,7 +175,7 @@ describe("the top block (A497)", () => {
     );
     expect(block).toEqual([
       { kind: "logo" },
-      t("Charcutería La Buena SL · NIF: B12345678"),
+      joined("Charcutería La Buena SL", "NIF: B12345678"),
       t(want),
     ]);
   });

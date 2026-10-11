@@ -3012,4 +3012,40 @@ describe("a joined top-block line on a roll too narrow for it (A497)", () => {
     );
     expect(lines[0]).toBe(centred(PRINTER_58, "La Buena · NIF: B12345678"));
   });
+
+  it("wraps the owner's own text word by word, keeping every separator the owner typed", () => {
+    const owner = "Bar · Restaurante · Cafetería tradicional desde 1952";
+    const lines = printedLines(
+      formatReceipt({
+        result: NO_QR_SALE,
+        issuer: ISSUER,
+        receipt: { headerSubtitle: owner, footerMessage: owner },
+        invoiceLocale: "es-ES",
+        printer: PRINTER_58,
+      }),
+    );
+    const wrapped = [
+      centred(PRINTER_58, "Bar · Restaurante · Cafetería"),
+      centred(PRINTER_58, "tradicional desde 1952"),
+    ];
+    expect(lines.slice(0, 2)).toEqual(wrapped);
+    const footer = lines.lastIndexOf(wrapped[0]!);
+    expect(footer).toBeGreaterThan(1);
+    expect(lines.slice(footer, footer + 2)).toEqual(wrapped);
+  });
+
+  it("wraps the order line word by word", () => {
+    const lines = printedLines(
+      formatReceipt({
+        result: { ...NO_QR_SALE, orderLabel: "Terraza · Mesa del fondo 6" },
+        issuer: ISSUER,
+        receipt: {},
+        invoiceLocale: "es-ES",
+        printer: PRINTER_58,
+      }),
+    );
+    const at = lines.indexOf("Terraza · Mesa del fondo 6 ·");
+    expect(at).toBeGreaterThan(-1);
+    expect(lines[at + 1]).toBe("Pedido 41");
+  });
 });

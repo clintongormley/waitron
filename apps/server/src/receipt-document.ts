@@ -43,8 +43,10 @@ export interface ReceiptDocumentInput {
 
 // The roll renderer resolves an indent after this prefix against its own column count.
 export type ReceiptIndent = number | { after: string };
+export const PART_SEPARATOR = " · ";
 export type ReceiptElement =
-  | { kind: "text"; text: string; indent: ReceiptIndent }
+  // `parts` is set only on a line the document itself joined from them with PART_SEPARATOR.
+  | { kind: "text"; text: string; indent: ReceiptIndent; parts?: readonly string[] }
   | { kind: "amount"; caption: string; amount: string; indent: ReceiptIndent }
   | { kind: "break" }
   | { kind: "rule" }
@@ -109,6 +111,12 @@ export function buildReceiptDocument({
   const text = (text: string, indent: ReceiptIndent = 0): void => {
     elements.push({ kind: "text", text, indent });
   };
+  const joined = (parts: string[]): void => {
+    if (parts.length === 1) text(parts[0]!);
+    else if (parts.length > 1) {
+      elements.push({ kind: "text", text: parts.join(PART_SEPARATOR), indent: 0, parts });
+    }
+  };
   const row = (caption: string, amount: string, indent: ReceiptIndent = 0): void => {
     elements.push({ kind: "amount", caption, amount, indent });
   };
@@ -158,14 +166,13 @@ export function buildReceiptDocument({
     text(tradingName);
   }
   if (receipt.headerSubtitle) text(receipt.headerSubtitle);
-  text(`${issuer.venueName} · ${label.nif}: ${issuer.nif}`);
+  joined([issuer.venueName, `${label.nif}: ${issuer.nif}`]);
   if (surface === "thermal") {
     for (const line of venueAddress) text(line);
   }
-  const contact = [receipt.phone ? `${label.phone} ${receipt.phone}` : "", receipt.email ?? ""]
-    .filter(Boolean)
-    .join(" · ");
-  if (contact) text(contact);
+  joined(
+    [receipt.phone ? `${label.phone} ${receipt.phone}` : "", receipt.email ?? ""].filter(Boolean),
+  );
   if (result.invoiceType === "F1" && issuer.domicile) text(issuer.domicile);
   if (duplicate) text(label.duplicate);
   line();
