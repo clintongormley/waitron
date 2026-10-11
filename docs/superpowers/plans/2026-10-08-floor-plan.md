@@ -5328,7 +5328,9 @@ Add a spare table, Taken off today, Reset to saved plan. The first two open a `w
 button per table (`sparesOf`, `takenOffOf`; Put back for each taken-off table) or, with none, the
 words `floor.no_spares` / `floor.none_taken_off`; a press sends its event and closes. Reset opens a
 `wt-dialog` headed `floor.reset_title` with `floor.reset_body`, Cancel and Reset (`danger`), which
-sends `zone-reset`. The floor draws the menu in its action row while the active zone is planned, and
+sends `zone-reset`. The floor draws the menu in its action row while the active zone is planned (finish-branch
+review, 2026-10-11: or while the zone has a saved plan, `hasPlan` on `/api/zones`; see decision
+17), and
 answers the events with `api.placeSpareToday(tableId, spareSpot(zone))`, `api.putBackToday` and
 `api.resetZoneToday`, settling through Task 4.4f's `#settle`.
 

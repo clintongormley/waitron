@@ -241,7 +241,7 @@ describe("merging and splitting free tables", () => {
       status: 400,
       body: { error: { code: "management.request_invalid", params: { field: "targetId" } } },
     });
-    // As the join's merge and every other table id a till body carries.
+    // As the join, seat and Move guests routes answer a malformed table id.
     for (const [targetId, tableId] of [
       ["nope", "nope"],
       [7, "7"],
