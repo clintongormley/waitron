@@ -52,6 +52,7 @@ import { openPartyTab } from "./testing/serve-line.js";
 import { setupSplitExtrasVenue, useSplitExtrasDb } from "./testing/split-extras-venue.js";
 import { readStationQueueMoves } from "./station-queue-moves.js";
 import { moveDishesToStation, stillMovable } from "./station-move.js";
+import { withStationDishes } from "./station-closing.js";
 import {
   addTabRound,
   carveOffLines,
@@ -2777,6 +2778,69 @@ describe("moveDishesToStation", () => {
       expect(answer.revision).toBe(before.revision);
     },
   );
+
+  it("closing a station sends its queued split-off extra to the receiving station", async () => {
+    useSplitExtrasDb(splitSuite.db);
+    const split = await setupSplitExtrasVenue();
+    split.cfg.locale = "en-GB";
+    await splitTx((tx) =>
+      addTabRound(tx, split.cfg, split.party.tabId, [
+        {
+          menuItemId: split.tables.offerFor(split.products.burger),
+          quantity: "1",
+          extras: [
+            {
+              listId: split.lists.burger,
+              picks: [{ productId: split.products.chips, quantity: 1 }],
+            },
+          ],
+        },
+      ]),
+    );
+    const [extra] = await splitTx((tx) =>
+      tx
+        .select()
+        .from(workingOrderLines)
+        .where(
+          and(
+            eq(workingOrderLines.workingOrderId, split.party.tabId),
+            eq(workingOrderLines.productId, split.products.chips),
+          ),
+        ),
+    );
+    expect(extra!.parentLineId).not.toBeNull();
+    await splitTx((tx) =>
+      withStationDishes(
+        tx,
+        split.cfg,
+        split.stations.fryer,
+        split.stations.kitchen,
+        "send",
+        (at) =>
+          closeStationForToday(tx, split.cfg, split.stations.fryer, split.stations.kitchen, at),
+        { deviceId: split.cfg.origin.deviceId, personId: null },
+      ),
+    );
+    const [item] = await splitTx((tx) =>
+      tx.select().from(ticketItems).where(eq(ticketItems.workingOrderLineId, extra!.id)),
+    );
+    expect(item!.stationId).toBe(split.stations.kitchen);
+    const moves = await splitTx((tx) =>
+      tx.select().from(ticketItemMoves).where(eq(ticketItemMoves.workingOrderLineId, extra!.id)),
+    );
+    expect(moves).toEqual([
+      expect.objectContaining({
+        fromStationId: split.stations.fryer,
+        toStationId: split.stations.kitchen,
+      }),
+    ]);
+    expect(decodeTicket((await splitJobs(split.printers.fryer)).at(-1)!.payload)).toContain(
+      "MOVED TO KITCHEN",
+    );
+    expect(decodeTicket((await splitJobs(split.printers.kitchen)).at(-1)!.payload)).toContain(
+      "CHIPS",
+    );
+  });
 
   it("moves a dish without moving its split-off chips at another station", async () => {
     useSplitExtrasDb(splitSuite.db);

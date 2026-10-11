@@ -91,6 +91,7 @@ describe("POST /api/working-orders/:id/lines/move-station", () => {
           ? [dish.workingOrderLineId, extra.workingOrderLineId]
           : [extra.workingOrderLineId],
         stationId: grill,
+        ...{ includeExtras: true },
       });
       expect({ status: answer.status, ...answer.json }).toMatchObject({
         status: 400,

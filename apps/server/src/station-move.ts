@@ -178,6 +178,8 @@ export interface StationMover {
 }
 
 export interface StationMoveOptions {
+  /** Closing a station relocates all waiting kitchen work, including split-off extras. */
+  includeExtras?: boolean;
   /** Refuses the named dishes by the station they sit at, asked once per station; runs inside the
    *  command so a replay skips it. */
   assertFrom?: (stationId: string) => void | Promise<void>;
@@ -245,7 +247,7 @@ export async function moveDishesToStation(
         const row = byId.get(lineId);
         if (row === undefined || row.workingOrderId !== orderId)
           throw new AppError("tab.line_not_found", { tabId: orderId, lineId });
-        if (row.parentLineId !== null)
+        if (row.parentLineId !== null && !options.includeExtras)
           throw new AppError("ticket.extra_not_movable", { workingOrderId: orderId, lineId });
         if (row.ticketItemId === null)
           throw new AppError("ticket.not_sent", { workingOrderId: orderId, lineId });
