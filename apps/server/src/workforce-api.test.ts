@@ -30,6 +30,7 @@ const suite = useVenueDb({
         .insert(locations)
         .values({
           name: "Main",
+          timeZone: "Europe/Madrid",
           invoiceLocales: ["es-ES"],
           operationDescription: "Sale on premises",
         })
@@ -97,7 +98,7 @@ describe("mountWorkforceApi — locations + roster read/create", () => {
     const res = await send(mountApp(), "GET", "/management-api/locations");
     expect(res.status).toBe(200);
     const rows = (await res.json()) as { id: string; name: string }[];
-    expect(rows).toContainEqual({ id: locationId, name: "Main" });
+    expect(rows).toContainEqual({ id: locationId, name: "Main", timeZone: "Europe/Madrid" });
   });
 
   it("GET /management-api/roster returns { version: null, shifts: [] } for an empty week", async () => {
@@ -245,6 +246,34 @@ describe("mountWorkforceApi — shift routes", () => {
     expect(
       ((await roster.json()) as { shifts: { id: string }[] }).shifts.map((s) => s.id),
     ).toContain(shiftId);
+  });
+
+  it("accepts and stores an overnight shift across the summer-time change", async () => {
+    const app = mountApp();
+    const versionId = await draftVersion("2026-03-23");
+    const body = {
+      personId,
+      locationId,
+      startsAt: "2026-03-28T21:00:00Z",
+      startsOffsetMinutes: 60,
+      endsAt: "2026-03-29T02:00:00Z",
+      endsOffsetMinutes: 120,
+      role: "bar",
+    };
+    const added = await send(app, "POST", `/management-api/roster/${versionId}/shifts`, { body });
+    expect(added.status).toBe(201);
+    const { shiftId } = (await added.json()) as { shiftId: string };
+    const roster = await send(
+      app,
+      "GET",
+      `/management-api/roster?locationId=${locationId}&period=2026-03-23`,
+    );
+    expect(roster.status).toBe(200);
+    expect(((await roster.json()) as { shifts: unknown[] }).shifts).toContainEqual({
+      id: shiftId,
+      rosterVersionId: versionId,
+      ...body,
+    });
   });
 
   it("PATCH …/roster/shifts/:shiftId edits a shift (204)", async () => {

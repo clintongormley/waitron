@@ -29,7 +29,7 @@ const staff: PersonSummary[] = [
     email: null,
   },
 ];
-const locations = [{ id: "loc-1", name: "Main" }];
+const locations = [{ id: "loc-1", name: "Main", timeZone: "UTC" }];
 const emptySnapshot: RosterSnapshot = { version: null, shifts: [] };
 
 function stubApi(overrides: Partial<DashboardApi> = {}): DashboardApi {
@@ -148,8 +148,8 @@ describe("roster-screen", () => {
   it("clears the advisory-breach banner when the roster context changes (week/location)", async () => {
     const api = stubApi({
       getLocations: vi.fn().mockResolvedValue([
-        { id: "loc-1", name: "Main" },
-        { id: "loc-2", name: "Annex" },
+        { id: "loc-1", name: "Main", timeZone: "UTC" },
+        { id: "loc-2", name: "Annex", timeZone: "UTC" },
       ]),
       getRoster: vi.fn().mockResolvedValue(draftSnapshot()),
       publishRoster: vi.fn().mockResolvedValue({
@@ -348,8 +348,8 @@ describe("roster-screen", () => {
   it("switching location and week reloads the roster", async () => {
     const api = stubApi({
       getLocations: vi.fn().mockResolvedValue([
-        { id: "loc-1", name: "Main" },
-        { id: "loc-2", name: "Annex" },
+        { id: "loc-1", name: "Main", timeZone: "UTC" },
+        { id: "loc-2", name: "Annex", timeZone: "UTC" },
       ]),
     });
     const { el } = await mountWidget<RosterScreen>("dashboard-roster-screen", { api });
@@ -446,8 +446,8 @@ describe("roster-screen — refusals, single-flight and refreshes", () => {
   const errorText = (el: RosterScreen) =>
     el.shadowRoot!.querySelector("[data-test=error]")?.textContent?.trim();
   const twoLocations = [
-    { id: "loc-1", name: "Main" },
-    { id: "loc-2", name: "Annex" },
+    { id: "loc-1", name: "Main", timeZone: "UTC" },
+    { id: "loc-2", name: "Annex", timeZone: "UTC" },
   ];
 
   it("shows the refusal when the roster for a newly selected location cannot load", async () => {
@@ -651,8 +651,8 @@ describe("roster-screen — refusals, single-flight and refreshes", () => {
     await flush(el);
     expect(api.getRoster).toHaveBeenLastCalledWith("loc-2", expect.any(String));
     vi.mocked(api.getLocations).mockResolvedValue([
-      { id: "loc-1", name: "Main" },
-      { id: "loc-3", name: "Terrace" },
+      { id: "loc-1", name: "Main", timeZone: "UTC" },
+      { id: "loc-3", name: "Terrace", timeZone: "UTC" },
     ]);
     liveData.invalidate([{ type: "locations", id: "loc-2" }]);
     await vi.waitFor(() =>
@@ -672,7 +672,7 @@ describe("roster-screen — refusals, single-flight and refreshes", () => {
     const rosterLoads = vi.mocked(api.getRoster).mock.calls.length;
     vi.mocked(api.getLocations).mockResolvedValue([
       ...twoLocations,
-      { id: "loc-3", name: "Terrace" },
+      { id: "loc-3", name: "Terrace", timeZone: "UTC" },
     ]);
     liveData.invalidate([{ type: "locations", id: "loc-3" }]);
     await vi.waitFor(() => expect(api.getLocations).toHaveBeenCalledTimes(2));
@@ -846,4 +846,33 @@ describe("roster-screen — recovery after the server answers again", () => {
     await flush(el);
     expect(errorText(el)).toBe(codeMessage("connection.failed"));
   });
+});
+
+it("uses the selected location's clock for an overnight shift", async () => {
+  const api = stubApi({
+    getLocations: vi
+      .fn()
+      .mockResolvedValue([{ id: "loc-1", name: "Main", timeZone: "Europe/Madrid" }]),
+  });
+  const { el } = await mountWidget<RosterScreen>("dashboard-roster-screen", { api });
+  await flush(el);
+  el.openCell("p1", "2026-03-28", null);
+  await el.updateComplete;
+  const form = dialog(el);
+  await form.updateComplete;
+  emit(form.shadowRoot!.querySelector("[data-test=shift-start]")!, "wt-change", { value: "22:00" });
+  emit(form.shadowRoot!.querySelector("[data-test=shift-end]")!, "wt-change", { value: "04:00" });
+  await form.updateComplete;
+  form.shadowRoot!.querySelector<HTMLElement>("[data-test=confirm]")!.click();
+  await vi.waitFor(() =>
+    expect(api.addShift).toHaveBeenCalledExactlyOnceWith("v1", {
+      personId: "p1",
+      locationId: "loc-1",
+      startsAt: "2026-03-28T21:00:00Z",
+      startsOffsetMinutes: 60,
+      endsAt: "2026-03-29T02:00:00Z",
+      endsOffsetMinutes: 120,
+      role: null,
+    }),
+  );
 });

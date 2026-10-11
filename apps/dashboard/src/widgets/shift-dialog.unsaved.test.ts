@@ -33,6 +33,7 @@ class ShiftLeaveApp extends LitElement {
         .open=${true}
         day="2027-01-04"
         personId="p1"
+        .timeZone=${this.shift ? "Etc/GMT-2" : "UTC"}
         .shift=${this.shift}
         .busy=${this.busy}
         @wt-close=${() => this.closes++}

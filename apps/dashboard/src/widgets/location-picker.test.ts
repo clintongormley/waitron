@@ -7,8 +7,8 @@ import { LocationPicker, resolveLocationSelection } from "./location-picker.js";
 afterEach(cleanupWidgets);
 
 const two: LocationSummary[] = [
-  { id: "loc-1", name: "Main" },
-  { id: "loc-2", name: "Annex" },
+  { id: "loc-1", name: "Main", timeZone: "UTC" },
+  { id: "loc-2", name: "Annex", timeZone: "UTC" },
 ];
 
 type LocationBox = HTMLElement & {

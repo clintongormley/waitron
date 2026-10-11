@@ -9,8 +9,8 @@ import type { LocationSummary } from "../api/client.js";
  * for a single location.
  */
 const locations: LocationSummary[] = [
-  { id: "loc-1", name: "Main" },
-  { id: "loc-2", name: "Annex" },
+  { id: "loc-1", name: "Main", timeZone: "UTC" },
+  { id: "loc-2", name: "Annex", timeZone: "UTC" },
 ];
 
 afterEach(cleanupWidgets);

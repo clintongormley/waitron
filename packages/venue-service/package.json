@@ -8,6 +8,7 @@
     ".": "./src/index.ts",
     "./routing": "./src/routing.ts",
     "./hours-types": "./src/hours-types.ts",
+    "./hours-occurrences": "./src/hours-occurrences.ts",
     "./holiday-types": "./src/holiday-types.ts",
     "./testing/zone-menus.js": "./src/testing/zone-menus.ts",
     "./dashboard": "./src/dashboard/index.ts"

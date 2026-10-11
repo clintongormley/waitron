@@ -26,8 +26,8 @@ const staff: PersonSummary[] = [
 ];
 // Two locations, because `<dashboard-location-picker>` renders nothing for a single one.
 const locations = [
-  { id: "loc-1", name: "Main" },
-  { id: "loc-2", name: "Annex" },
+  { id: "loc-1", name: "Main", timeZone: "UTC" },
+  { id: "loc-2", name: "Annex", timeZone: "UTC" },
 ];
 // In UTC, like the screen's `today()`, so the shift lands in the week the screen opens on.
 const day = new Date().toISOString().slice(0, 10);

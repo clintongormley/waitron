@@ -45,6 +45,32 @@ describe.each(["light", "dark"] as const)("shift-dialog a11y (%s theme)", (theme
     await expectNoA11yViolations(host);
   });
 
+  it("shows a skipped minute's field and form errors accessibly", async () => {
+    const { el, host } = await mountWidget<ShiftDialog>(
+      "dashboard-shift-dialog",
+      {
+        open: true,
+        day: "2026-03-29",
+        personId: "p1",
+        timeZone: "Europe/Madrid",
+      },
+      theme,
+    );
+    await el.shadowRoot!.querySelector("wt-dialog")!.updateComplete;
+    for (const [field, value] of [
+      ["shift-start", "01:00"],
+      ["shift-end", "02:30"],
+    ])
+      el.shadowRoot!.querySelector(`[data-test=${field}]`)!.dispatchEvent(
+        new CustomEvent("wt-change", { detail: { value } }),
+      );
+    await el.updateComplete;
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=confirm]")!.click();
+    await el.updateComplete;
+    expect(el.shadowRoot!.querySelector('[role="alert"]')).not.toBeNull();
+    await expectNoA11yViolations(host);
+  });
+
   it("with Save quiet and then ready", async () => {
     const { el, host } = await mountWidget<ShiftDialog>(
       "dashboard-shift-dialog",
