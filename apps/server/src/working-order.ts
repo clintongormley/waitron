@@ -1104,6 +1104,7 @@ export async function createOpenOrder(
     zoneId?: string;
     partyId?: string | null;
     existingService?: boolean;
+    receiptLocale?: string;
     creditedTo?: string;
     invalidMakeAt?: "ignore";
     invoiceChoice?: {
@@ -1182,6 +1183,7 @@ export async function createOpenOrder(
     // Not a fiscal field.
     deliveryTableId,
     partyId: placement.partyId ?? null,
+    receiptLocale: placement.receiptLocale ?? null,
   });
 
   // An empty tab has no lines, and `tx.insert(...).values([])` throws.

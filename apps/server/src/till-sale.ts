@@ -167,6 +167,9 @@ export interface TillSaleRequest {
    * `table.not_found`.
    */
   deliveryTableId?: string;
+  /** The receipt language staff chose, stored on the order before it is filed when the order is
+   *  new, or open or placed with no sale yet; otherwise ignored. A string by the route's check. */
+  receiptLanguage?: string;
 }
 
 /**
@@ -438,6 +441,9 @@ export interface PayWorkingOrderRequest {
   deliveryTableId?: string;
   /** The selected service zone for a new counter order. Existing orders use their stored context. */
   zoneId?: string;
+  /** The receipt language staff chose, stored on the order before it is filed when the order is
+   *  new, or open or placed with no sale yet; otherwise ignored. A string by the route's check. */
+  receiptLanguage?: string;
 }
 
 function refuseUnavailableInvoiceRequest(invoiceType: unknown, recipient: unknown): void {
@@ -448,6 +454,28 @@ function refuseUnavailableInvoiceRequest(invoiceType: unknown, recipient: unknow
   if (recipient !== undefined && recipient !== null) {
     throw new AppError("management.request_invalid", { field: "recipient" });
   }
+}
+
+/**
+ * Store the receipt language a pay request sent on an existing order that has no sale yet, as its
+ * own update one revision on: `working_orders_enforce_transition` refuses a placed order's language
+ * changing in the update that settles it.
+ */
+async function storeSentReceiptLanguage(
+  tx: Transaction,
+  workingOrderId: string,
+  language: string | undefined,
+): Promise<void> {
+  if (language === undefined) return;
+  const [order] = await tx
+    .select({ revision: workingOrders.revision, receiptLocale: workingOrders.receiptLocale })
+    .from(workingOrders)
+    .where(eq(workingOrders.id, workingOrderId));
+  if (order!.receiptLocale === language) return;
+  await tx
+    .update(workingOrders)
+    .set({ receiptLocale: language, revision: order!.revision + 1 })
+    .where(eq(workingOrders.id, workingOrderId));
 }
 
 /**
@@ -484,6 +512,9 @@ export interface IntegratedPayRequest {
   simulationOutcome?: "captured" | "declined";
   /** One pretend-reader attempt, shared with its cancellation request. */
   demoAttemptId?: string;
+  /** The receipt language staff chose, stored on the order before it is filed when the order is
+   *  new, or open or placed with no sale yet; otherwise ignored. A string by the route's check. */
+  receiptLanguage?: string;
 }
 
 /**
@@ -595,6 +626,7 @@ async function runPayWorkingOrder(
         order = await createOpenOrder(tx, cfg, req.id, req.lines, null, {
           deliveryTableId: req.deliveryTableId,
           zoneId: req.zoneId,
+          receiptLocale: req.receiptLanguage,
           creditedTo: operatorId,
           invalidMakeAt: "ignore",
           invoiceChoice: {
@@ -604,6 +636,7 @@ async function runPayWorkingOrder(
           },
         });
       } else {
+        await storeSentReceiptLanguage(tx, req.id, req.receiptLanguage);
         order = await priceStoredOrderForIssuance(tx, req.id);
       }
 
@@ -1072,10 +1105,12 @@ async function payIntegrated(
       }
     }
 
+    if (locked !== undefined) await storeSentReceiptLanguage(tx, req.id, req.receiptLanguage);
     const order: GrossOrder =
       locked === undefined
         ? await createOpenOrder(tx, cfg, req.id, req.lines, null, {
             zoneId: req.zoneId,
+            receiptLocale: req.receiptLanguage,
             creditedTo: operatorId,
             invalidMakeAt: "ignore",
             invoiceChoice: {
@@ -1919,6 +1954,7 @@ async function runCollectOrder(
     }
 
     await refuseUnavailableFullInvoice(tx, req.id);
+    await storeSentReceiptLanguage(tx, req.id, req.receiptLanguage);
     const order = await priceStoredOrderForIssuance(tx, req.id);
     return fileImmediateSale(tx, deps, cfg, req.id, req.tender, order, operatorId);
   });
@@ -1996,6 +2032,7 @@ async function runTillSale(
       recipient: req.recipient,
       deliveryTableId: req.deliveryTableId,
       zoneId: req.zoneId,
+      receiptLanguage: req.receiptLanguage,
     },
     operatorId,
     admit,

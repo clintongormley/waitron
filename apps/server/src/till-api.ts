@@ -202,7 +202,7 @@ import {
   type DeviceBinding,
   type TenderKind,
 } from "./device-session.js";
-import { requireBodyUuid, requireUuidParam } from "@waitron/server-kit";
+import { requireBodyUuid, requireString, requireUuidParam } from "@waitron/server-kit";
 import { requestBill } from "./bill-request.js";
 import { mountAdjustmentsApi } from "./adjustments-api.js";
 import { mountDepartmentTransferApi } from "./department-transfer-api.js";
@@ -1594,6 +1594,8 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       if (body.workingOrderId !== undefined) {
         requireUuidParam(body.workingOrderId, "WorkingOrderId");
       }
+      if (body.receiptLanguage !== undefined)
+        requireString(body.receiptLanguage, "receiptLanguage");
       if (body.zoneId !== undefined) {
         requireUuidParam(body.zoneId, "ServiceZoneId");
       }
@@ -1644,6 +1646,8 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       if (body.zoneId !== undefined) {
         requireUuidParam(body.zoneId, "ServiceZoneId");
       }
+      if (body.receiptLanguage !== undefined)
+        requireString(body.receiptLanguage, "receiptLanguage");
       const zoneId = await resolveHttpOrderZone(deps, session, body.lines.length, body.zoneId);
       await gateZones(
         deps,
@@ -2202,12 +2206,14 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       const cfg = requestCfg(deps.cfg, session);
       const id = requireUuidId(c.req.param("id"), "working_order.not_placed");
       await gateZones(deps, session, [{ orderId: id }]);
-      const body = await readJsonBody<{ tender: TillTender }>(c);
+      const body = await readJsonBody<{ tender: TillTender; receiptLanguage?: string }>(c);
+      if (body.receiptLanguage !== undefined)
+        requireString(body.receiptLanguage, "receiptLanguage");
       assertTakesTender(session.device, tillTenderKind(body.tender));
       const result = await collectOrder(
         { db: deps.db, backend: deps.backend, clock: deps.clock, log },
         cfg,
-        { id, lines: [], tender: body.tender },
+        { id, lines: [], tender: body.tender, receiptLanguage: body.receiptLanguage },
         { personId, sessionId: session.sessionId },
       );
       return c.json(result);

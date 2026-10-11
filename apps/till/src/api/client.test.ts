@@ -317,6 +317,26 @@ describe("TillApi", () => {
     );
   });
 
+  it("sends the chosen receipt language with a sale, a card payment and a collect", async () => {
+    const fetchStub = vi.fn().mockImplementation(() => Promise.resolve(jsonResponse({})));
+    const api = new TillApi("", fetchStub);
+    const tender = { method: "cash", amount: "5.00" } as const;
+    const lines = [{ menuItemId: "mi-cafe", quantity: "1" }];
+
+    await api.recordSale(lines, tender, "wo1", undefined, undefined, "es-ES");
+    await api.pay({ id: "wo2", lines, receiptLanguage: "es-ES" });
+    await api.collectOrder("wo3", tender, "es-ES");
+
+    const bodies = fetchStub.mock.calls.map(
+      ([, init]) => JSON.parse((init as RequestInit).body as string) as unknown,
+    );
+    expect(bodies).toEqual([
+      { lines, tender, workingOrderId: "wo1", receiptLanguage: "es-ES" },
+      { id: "wo2", lines, receiptLanguage: "es-ES" },
+      { tender, receiptLanguage: "es-ES" },
+    ]);
+  });
+
   it("cancels a pending pretend reader payment for the current order", async () => {
     const fetchStub = vi.fn().mockResolvedValue(jsonResponse({ cancelled: true }));
     const api = new TillApi("", fetchStub);

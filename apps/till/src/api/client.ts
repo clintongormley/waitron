@@ -2326,6 +2326,7 @@ export class TillApi {
       invoiceType: "F1" | "F2";
       recipient: { taxId: string; legalName: string; address: string; countryCode: string } | null;
     },
+    receiptLanguage?: string,
   ): Promise<TillSaleResult> {
     return this.#request<TillSaleResult>("/api/sales", "POST", {
       lines,
@@ -2333,6 +2334,7 @@ export class TillApi {
       workingOrderId,
       zoneId: zoneId ?? this.#serviceZoneId,
       ...invoice,
+      receiptLanguage,
     });
   }
 
@@ -2354,6 +2356,7 @@ export class TillApi {
     simulationOutcome?: "captured" | "declined";
     readerId?: string;
     demoAttemptId?: string;
+    receiptLanguage?: string;
   }): Promise<PayOutcome> {
     return this.#request<PayOutcome>("/api/pay", "POST", {
       ...req,
@@ -2576,8 +2579,11 @@ export class TillApi {
    * order's stored lines — never a client basket. A still-open or absent id rejects with
    * `working_order.not_placed`.
    */
-  collectOrder(id: string, tender: Tender): Promise<TillSaleResult> {
-    return this.#request<TillSaleResult>(`/api/working-orders/${id}/collect`, "POST", { tender });
+  collectOrder(id: string, tender: Tender, receiptLanguage?: string): Promise<TillSaleResult> {
+    return this.#request<TillSaleResult>(`/api/working-orders/${id}/collect`, "POST", {
+      tender,
+      receiptLanguage,
+    });
   }
 
   /** The venue's ACTIVE kitchen stations → `GET /api/stations`, by display order then name. */

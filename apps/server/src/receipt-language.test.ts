@@ -19,7 +19,16 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { createCatalogue, createCategory, createProduct } from "@waitron/catalogue";
 import { VerifactuBackend } from "@waitron/fiscal-verifactu";
 import type { TrustedClock } from "@waitron/fiscal";
-import { hashPassword, hashPin, loginWithPin, persons } from "@waitron/identity";
+import {
+  hashPassword,
+  hashPin,
+  loginWithPin,
+  persons,
+  startManagementSession,
+} from "@waitron/identity";
+import { loadKeyRing, putCredential } from "@waitron/credentials";
+import { createStripeCardProvider, type MakeStripe } from "@waitron/payments-stripe";
+import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { insertCapturedPayment, SimulatorPaymentProvider } from "@waitron/payments";
 import { createPrinter } from "@waitron/printing";
@@ -31,6 +40,7 @@ import { deploymentEnvironment } from "./config.js";
 import { DEVICE_COOKIE } from "./device-session.js";
 import { ALL_MODULES } from "./modules.js";
 import { mountTillApi } from "./till-api.js";
+import { mountPaymentsApi } from "./payments-api.js";
 import { loadTillConfig } from "./till-config.js";
 import type { DeviceRequestConfig } from "./till-config.js";
 import {
@@ -1366,5 +1376,359 @@ describe("a sale files in the receipt language saved on its order", () => {
         sql`select locale, invoice_locales as invoiceLocales from sales where corrects_sale_id = ${original!.id}`,
       ),
     ).toEqual([{ locale: "es-ES", invoiceLocales: '["ca-ES","es-ES"]' }]);
+  });
+
+  describe("the language the counter sends with the sale", () => {
+    const SPANISH_TARTA = { ...SPANISH, lines: [{ "ca-ES": "CA Tarta" }] };
+    const CATALAN_TARTA = { ...CATALAN, lines: [{ "ca-ES": "CA Tarta" }] };
+    const CASH = { method: "cash", amount: "20.00" };
+
+    /** A counter basket of one Tarta, in a counter zone. */
+    async function counterBasket(venue: BillVenue) {
+      const { zoneId } = await inTx(venue, (tx) =>
+        offerProducts(tx, venue.cfg, { zone: "counter", orderStart: "counter" }),
+      );
+      return { zoneId, lines: [{ menuItemId: venue.offerFor("Tarta"), quantity: "1" }] };
+    }
+
+    async function orderRow(venue: BillVenue, id: string) {
+      const [row] = await inTx(venue, (tx) =>
+        tx
+          .select({
+            status: workingOrders.status,
+            revision: workingOrders.revision,
+            receiptLocale: workingOrders.receiptLocale,
+          })
+          .from(workingOrders)
+          .where(eq(workingOrders.id, id)),
+      );
+      return row;
+    }
+
+    function saleCount(venue: BillVenue, id: string): number {
+      return venue.db.all(sql`select id from sales where working_order_id = ${id}`).length;
+    }
+
+    async function placedTarta(venue: BillVenue): Promise<string> {
+      const { id } = await parkedTarta(venue);
+      const deps = { db: venue.db, backend: venue.backend, clock: venue.clock };
+      await placeOrder(deps, venue.cfg, id, venue.operatorId);
+      return id;
+    }
+
+    it("stores and files the language a counter cash sale sends", async () => {
+      const venue = await barcelonaVenue();
+      const id = randomUUID();
+
+      const paid = await send(venue.app, venue.cookie, "POST", "/api/sales", {
+        workingOrderId: id,
+        ...(await counterBasket(venue)),
+        tender: CASH,
+        receiptLanguage: "es-ES",
+      });
+
+      expect(paid.status).toBe(200);
+      expect(paid.json.locale).toBe("es-ES");
+      expect((await orderRow(venue, id))?.receiptLocale).toBe("es-ES");
+      expect(await filed(venue, id)).toEqual(SPANISH_TARTA);
+    });
+
+    it("stores and files the language a counter card payment sends", async () => {
+      const venue = await barcelonaVenue();
+      const id = randomUUID();
+
+      const paid = await send(venue.app, venue.cookie, "POST", "/api/pay", {
+        id,
+        ...(await counterBasket(venue)),
+        receiptLanguage: "es-ES",
+      });
+
+      expect(paid.status).toBe(200);
+      expect(paid.json.outcome).toBe("captured");
+      expect((await orderRow(venue, id))?.receiptLocale).toBe("es-ES");
+      expect(await filed(venue, id)).toEqual(SPANISH_TARTA);
+    });
+
+    it.each([
+      ["/api/sales", (id: string) => ({ workingOrderId: id, lines: [], tender: CASH })],
+      ["/api/pay", (id: string) => ({ id, lines: [] })],
+    ] as const)(
+      "stores the language sent with %s for a parked order, one revision on, and files it",
+      async (path, body) => {
+        const venue = await barcelonaVenue();
+        const { id } = await parkedTarta(venue);
+        const before = await orderRow(venue, id);
+
+        const paid = await send(venue.app, venue.cookie, "POST", path, {
+          ...body(id),
+          receiptLanguage: "es-ES",
+        });
+
+        expect(paid.status).toBe(200);
+        expect(await orderRow(venue, id)).toEqual({
+          status: "settled",
+          revision: before!.revision + 1,
+          receiptLocale: "es-ES",
+        });
+        expect(await filed(venue, id)).toEqual(SPANISH_TARTA);
+      },
+    );
+
+    it.each([
+      ["/api/sales", (id: string) => ({ workingOrderId: id, lines: [], tender: CASH })],
+      ["/api/pay", (id: string) => ({ id, lines: [] })],
+    ] as const)(
+      "writes nothing to a parked order when %s sends no language, or the one already saved",
+      async (path, body) => {
+        const venue = await barcelonaVenue();
+        const bare = (await parkedTarta(venue)).id;
+        const saved = (await parkedTarta(venue)).id;
+        await choose(venue, saved, "es-ES");
+        const bareBefore = await orderRow(venue, bare);
+        const savedBefore = await orderRow(venue, saved);
+
+        expect((await send(venue.app, venue.cookie, "POST", path, body(bare))).status).toBe(200);
+        const again = await send(venue.app, venue.cookie, "POST", path, {
+          ...body(saved),
+          receiptLanguage: "es-ES",
+        });
+
+        expect(again.status).toBe(200);
+        expect(await orderRow(venue, bare)).toEqual({
+          status: "settled",
+          revision: bareBefore!.revision,
+          receiptLocale: null,
+        });
+        expect(await orderRow(venue, saved)).toEqual({
+          status: "settled",
+          revision: savedBefore!.revision,
+          receiptLocale: "es-ES",
+        });
+        expect(await filed(venue, bare)).toEqual(CATALAN_TARTA);
+        expect(await filed(venue, saved)).toEqual(SPANISH_TARTA);
+      },
+    );
+
+    it("stores and files the language sent with the collect of a placed order", async () => {
+      const venue = await barcelonaVenue();
+      const id = await placedTarta(venue);
+
+      const collected = await send(
+        venue.app,
+        venue.cookie,
+        "POST",
+        `/api/working-orders/${id}/collect`,
+        { tender: CASH, receiptLanguage: "es-ES" },
+      );
+
+      expect(collected.status).toBe(200);
+      expect(collected.json.locale).toBe("es-ES");
+      expect((await orderRow(venue, id))?.receiptLocale).toBe("es-ES");
+      expect(await filed(venue, id)).toEqual(SPANISH_TARTA);
+    });
+
+    it.each([
+      ["collect", (id: string) => [`/api/working-orders/${id}/collect`, { tender: CASH }] as const],
+      ["card pay", (id: string) => ["/api/pay", { id, lines: [] }] as const],
+    ] as const)(
+      "ignores the language sent with the %s of a placed order whose invoice is already issued",
+      async (_name, request) => {
+        const venue = await barcelonaVenue();
+        const id = await placedTarta(venue);
+        const deps = { db: venue.db, backend: venue.backend, clock: venue.clock };
+        await issueOrderInvoice(deps, venue.cfg, id, venue.operatorId);
+        const before = await orderRow(venue, id);
+        const [path, body] = request(id);
+
+        const paid = await send(venue.app, venue.cookie, "POST", path, {
+          ...body,
+          receiptLanguage: "es-ES",
+        });
+
+        expect(paid.status).toBe(200);
+        expect(await orderRow(venue, id)).toEqual({
+          status: "settled",
+          revision: before!.revision,
+          receiptLocale: null,
+        });
+        expect(await filed(venue, id)).toEqual(CATALAN_TARTA);
+      },
+    );
+
+    it("files the language sent with a counter card payment a manager recovers after it stuck", async () => {
+      const venue = await barcelonaVenue();
+      const id = randomUUID();
+      venue.card.crashNextCollect("attempting");
+
+      const stuck = await send(venue.app, venue.cookie, "POST", "/api/pay", {
+        id,
+        ...(await counterBasket(venue)),
+        receiptLanguage: "es-ES",
+      });
+      expect(stuck.status).toBe(500);
+      expect(saleCount(venue, id)).toBe(0);
+      expect((await orderRow(venue, id))?.receiptLocale).toBe("es-ES");
+
+      const ring = loadKeyRing({
+        WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 7).toString("base64"),
+        WAITRON_CREDENTIALS_KEY_VERSION: "1",
+      });
+      const managerSid = await inTx(venue, async (tx) => {
+        await putCredential(tx, ring, {
+          purpose: "payments.stripe",
+          value: {
+            secretKey: "sk_test_ok",
+            webhookSecret: "whsec_x",
+            successUrl: "https://x/s",
+            cancelUrl: "https://x/c",
+          },
+        });
+        return (await startManagementSession(tx, { personId: venue.adminId })).token;
+      });
+      const seat = createStripeCardProvider((() => {
+        throw new Error("the seat's own Stripe SDK is never built");
+      }) as unknown as MakeStripe);
+      const management = new Hono();
+      mountPaymentsApi(
+        management,
+        {
+          db: venue.db,
+          backend: venue.backend,
+          clock: venue.clock,
+          cfg: venue.cfg,
+          ring,
+          environment: "preproduction",
+          pool: venue.pool,
+          providers: [{ ...seat, providerId: venue.card.provider }],
+        },
+        () => {},
+      );
+      venue.card.scriptAbandonedAttempt({ outcome: "captured" });
+      const [payment] = venue.db.all<{ id: string }>(
+        sql`select id from payments where working_order_id = ${id}`,
+      );
+
+      const resolved = await send(
+        management,
+        `${MANAGEMENT_COOKIE}=${managerSid}`,
+        "POST",
+        `/management-api/payments/stuck/${payment!.id}/resolve`,
+      );
+
+      expect(resolved.status).toBe(200);
+      expect(resolved.json.outcome).toBe("filed");
+      expect(await filed(venue, id)).toEqual(SPANISH_TARTA);
+    });
+
+    describe.each([7, {}, ["es-ES"], null])("refuses receiptLanguage %j", (language) => {
+      const REFUSED = {
+        code: "management.request_invalid",
+        params: { field: "receiptLanguage" },
+      };
+
+      it("on a counter cash sale, creating and filing nothing", async () => {
+        const venue = await barcelonaVenue();
+        const id = randomUUID();
+
+        const refused = await send(venue.app, venue.cookie, "POST", "/api/sales", {
+          workingOrderId: id,
+          ...(await counterBasket(venue)),
+          tender: CASH,
+          receiptLanguage: language,
+        });
+
+        expect(refused.status).toBe(400);
+        expect(refused.json).toEqual(REFUSED);
+        expect(await orderRow(venue, id)).toBeUndefined();
+        expect(saleCount(venue, id)).toBe(0);
+      });
+
+      it("on a card payment, before any reader is chosen or asked", async () => {
+        const venue = await barcelonaVenue();
+        const id = randomUUID();
+
+        const refused = await send(venue.app, venue.cookie, "POST", "/api/pay", {
+          id,
+          ...(await counterBasket(venue)),
+          // A reader that does not exist: choosing it first would answer `reader.not_found`.
+          readerId: randomUUID(),
+          receiptLanguage: language,
+        });
+
+        expect(refused.status).toBe(400);
+        expect(refused.json).toEqual(REFUSED);
+        expect(venue.card.collectCalls).toEqual([]);
+        expect(await orderRow(venue, id)).toBeUndefined();
+        expect(saleCount(venue, id)).toBe(0);
+      });
+
+      it("on the collect of a placed order, leaving it as it was", async () => {
+        const venue = await barcelonaVenue();
+        const id = await placedTarta(venue);
+        const before = await orderRow(venue, id);
+
+        const refused = await send(
+          venue.app,
+          venue.cookie,
+          "POST",
+          `/api/working-orders/${id}/collect`,
+          { tender: CASH, receiptLanguage: language },
+        );
+
+        expect(refused.status).toBe(400);
+        expect(refused.json).toEqual(REFUSED);
+        expect(await orderRow(venue, id)).toEqual(before);
+        expect(saleCount(venue, id)).toBe(0);
+      });
+    });
+
+    it("stores a language the location does not offer as sent, and files the sale in Catalan", async () => {
+      const venue = await barcelonaVenue();
+      const id = randomUUID();
+
+      const paid = await send(venue.app, venue.cookie, "POST", "/api/sales", {
+        workingOrderId: id,
+        ...(await counterBasket(venue)),
+        tender: CASH,
+        receiptLanguage: "fr-FR",
+      });
+
+      expect(paid.status).toBe(200);
+      expect(paid.json.locale).toBe("ca-ES");
+      expect((await orderRow(venue, id))?.receiptLocale).toBe("fr-FR");
+      expect(await filed(venue, id)).toEqual(CATALAN_TARTA);
+    });
+
+    it.each([
+      ["/api/sales", (id: string) => ({ workingOrderId: id, tender: CASH })],
+      ["/api/pay", (id: string) => ({ id })],
+    ] as const)(
+      "answers a %s retry of a settled sale sending another language with the stored ticket",
+      async (path, body) => {
+        const venue = await barcelonaVenue();
+        const id = randomUUID();
+        const basket = await counterBasket(venue);
+        const first = await send(venue.app, venue.cookie, "POST", path, {
+          ...body(id),
+          ...basket,
+          receiptLanguage: "es-ES",
+        });
+        expect(first.status).toBe(200);
+        const settled = await orderRow(venue, id);
+
+        const retry = await send(venue.app, venue.cookie, "POST", path, {
+          ...body(id),
+          ...basket,
+          receiptLanguage: "ca-ES",
+        });
+
+        expect(retry.status).toBe(200);
+        expect(retry.json).toEqual(first.json);
+        expect(await orderRow(venue, id)).toEqual(settled);
+        expect(settled?.receiptLocale).toBe("es-ES");
+        expect(saleCount(venue, id)).toBe(1);
+        expect(await filed(venue, id)).toEqual(SPANISH_TARTA);
+      },
+    );
   });
 });
