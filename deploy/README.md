@@ -176,6 +176,56 @@ but `docker compose up -d` on a fresh image starts a new container and the previ
 goes with the old one, so read it before pulling a new image. The failed start's report is also in
 `waitron.log` on the `logs` volume, which a new container keeps.
 
+#### When the page names `append_only.triggers_changed`
+
+Some of the venue's records, such as its tax filings and staff clock-ins, must never be changed or
+deleted. The database enforces that with a pair of triggers on each of those tables: small rules
+stored in the database itself that reject every update and every delete. While a trigger is gone or
+changed, the records on its table can be changed too, so Waitron checks the triggers every 10 seconds
+while it is trading, and stops and shows this page when one is missing or its text has changed. A
+start checks them too: it first puts back any that are missing, then refuses to start if one has
+changed. Find out what changed a trigger before you go on.
+
+The page names the triggers, in two lists. `missing` holds the ones that were not there, and
+`altered` the ones whose text is not the text Waitron writes. Where they appear depends on when
+Waitron noticed:
+
+- When a start was refused, they are under "Why the last start failed", on the line that begins
+  `params:`.
+- When Waitron stopped while it was trading, the page says "Stopped while running." instead of a
+  count of failed starts, and has no "Why the last start failed" section. The names are in the log
+  tail, on the line whose `event` is `append_only.triggers_changed`.
+
+A trigger in `missing` needs nothing from you. Press Retry, and the start that follows puts it back
+and carries on trading. That start also shows a warning, `append_only.triggers_restored`, among the
+dashboard's alerts until the next restart, so whoever reads the alerts knows it happened.
+
+A trigger in `altered` stays as it is through every start, so Retry alone brings you back to this
+page. Stop the app, drop each altered trigger by name, and start the app again. The command below
+prints each trigger's current text before it drops it, so keep that output for whoever investigates.
+Replace `sales_append_only_update` with the names from the `altered` list, separated by spaces:
+
+```bash
+cd /opt/waitron
+docker compose stop app
+docker compose run --rm --entrypoint node app -e '
+const { DatabaseSync } = require("node:sqlite");
+const db = new DatabaseSync("/var/lib/waitron/state/venue/venue.db");
+for (const name of process.argv.slice(1)) {
+  if (!/^[a-z0-9_]+_append_only_(update|delete)$/.test(name)) throw new Error(`not an append-only trigger: ${name}`);
+  const row = db.prepare("select sql from sqlite_master where type = ? and name = ? collate nocase").get("trigger", name);
+  console.log(row === undefined ? `${name}: not there` : `dropping: ${row.sql}`);
+  db.exec(`drop trigger if exists "${name}"`);
+}
+db.close();
+' sales_append_only_update
+docker compose start app
+```
+
+The app comes back on this page, because the refusal is still recorded. Press Retry: that start puts
+the dropped triggers back, checks them, carries on trading, and shows the same dashboard warning.
+Never edit rows in the database to repair it.
+
 ### Trying a branch before it merges
 
 CI does not publish an image for a pull request (only pushes to `main` and `v*` tags publish to

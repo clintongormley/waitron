@@ -1084,6 +1084,40 @@ Three things about the replacement that a reader should not have to re-derive:
   or `DELETE` against an EMPTY ledger table succeeds and changes nothing whether the triggers exist
   or not. Any test of this has to seed a row first; the root guard does, and states it.
 
+**A start, and a check every 10 seconds while trading, refuse to trade when an append-only trigger
+is missing or changed** (`apps/server/src/append-only-watch.ts`, A483). The engine still lets any
+connection drop or replace a trigger, and installing again does not undo a replacement: the installer
+writes `create trigger if not exists`, so a trigger dropped and re-created under the same name with
+a permissive body stays. So the check compares each expected trigger's stored text in
+`sqlite_master` with the text `installAppendOnlyTriggers` writes (both built by
+`appendOnlyTriggers`, `packages/store/src/append-only.ts`). Measured 2026-10-11 on `node:sqlite`,
+Node v26.7.0, SQLite 3.53.4: the stored text is the statement sent with everything up to the
+trigger's name rewritten to `CREATE TRIGGER `, and the rest kept byte for byte; after a same-name
+replacement, running the installer again left the permissive body in place; and trigger names
+ignore case, so with an upper-case same-name replacement in place a lookup by the exact lower-case
+name found nothing while the installer ran without error and left the replacement there. The check
+therefore matches names without case, and reads such a replacement as changed. A start runs the
+check after `applyMigrations`, which puts back a trigger that was only dropped, so the start goes on
+and records it as the dashboard warning `append_only.triggers_restored` (`missingBeforeMigration`
+reads which were missing before migrating); a changed one is refused. That warning also appears
+after a crash between a set's migration and its trigger install, and at every box's first start on
+a release that marks an EXISTING table `appendOnly()`. **Such a release says so in its PR
+description**, so the warning is expected. While trading, a fault stops the server, and the next
+start serves the recovery page at once, with no count of failed starts (`refusedWhileRunning`,
+`apps/server/src/recovery-state.ts`). The check does not see:
+
+- a trigger dropped, rows changed and the exact text re-created within one 10-second interval, or
+  the same done while the box is off;
+- the tables of a module that is switched off: it checks the tables the start migrates, so not
+  `time_entries` (workforce), `payment_resolutions` (payments), or `registros_facturacion` and the
+  filing-case tables on a box later moved to `fiscal-none`;
+- `PRAGMA recursive_triggers` turned off, which reopens the `INSERT OR REPLACE` hole above without
+  touching a trigger;
+- anything but the stored text: it reads `sqlite_master.sql` and nothing else;
+- a trigger put back by a staged restore (`placeValidated`, `apps/server/src/restore.ts`) or by
+  `waitron-rejoin` (`apps/server/src/rejoin-command.ts`): both migrate before any start can look,
+  so neither raises the warning.
+
 No policies, no `ROW LEVEL SECURITY`: one tenant per database (owner
 decision 2026-09-05). Two root guards enforce the classification on every non-docs push:
 `scripts/classification-complete.test.ts` (every table in every module's `drizzle/` is classified
@@ -1785,7 +1819,7 @@ line to their own error output only. The recovery page reads only `waitron.log`.
 
 **`recovery.json` has a lock of its own.** Every change to the recovery count (the count before a
 boot, the classified failure, a refused start's undo, the stayed-up clear, the recovery page's
-retry) is one read and one write while holding `recovery.lock` in the state folder
+retry, the append-only check's refusal while trading) is one read and one write while holding `recovery.lock` in the state folder
 (`apps/server/src/recovery-lock.ts`). It is the same `begin immediate` technique, but it polls
 instead of setting a busy timeout, because the engine's busy wait stops the whole thread: a second
 connection in one process with `busy_timeout = 1500` blocked for 4093 ms with a 50 ms timer firing 0

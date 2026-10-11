@@ -783,7 +783,10 @@ browser test** — most of these rules exist because a test passed while proving
   (`packages/fiscal-verifactu/src/classification.ts`, beside the two filing-case tables), so `applyMigrations` puts a `RAISE(ABORT)`
   trigger on its updates and its deletes. Do not work around them; a value written wrong there stays
   wrong. That trigger pair is the WHOLE of the enforcement — the engine has no permissions, and a
-  `DROP TABLE` is refused by nothing at all.
+  `DROP TABLE` is refused by nothing at all. A start (after migrating, which puts back a missing
+  trigger) and a 10 s check while trading refuse to trade on a missing or changed trigger
+  (`apps/server/src/append-only-watch.ts`) — weaker than its name: stored text only, and only the
+  tables the start migrated.
 - **Never put our own metadata into a hash.** `entorno` is ours, not AEAT's; a test pins that two
   records differing only in it hash identically. In `computeHuella` it would make every chain
   unverifiable under the other environment.

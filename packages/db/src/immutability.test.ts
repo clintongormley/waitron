@@ -16,7 +16,8 @@ import { CORE_MIGRATIONS } from "./migrations.js";
  *   the next UPDATE                               => SUCCEEDED, row read back 'tampered'
  *   drop table sales                              => SUCCEEDED, table and triggers both gone
  *
- * Closing it needs a control outside the engine.
+ * The engine still allows all three. `apps/server/src/append-only-watch.ts` refuses to trade once
+ * it sees an append-only trigger missing or changed, judging by its stored text alone.
  */
 
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
