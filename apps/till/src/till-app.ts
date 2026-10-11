@@ -4124,7 +4124,6 @@ export class TillApp extends LitElement {
         await this.api.parkOrder({ id, lines, label });
       }
       if (session !== this.#operatorSession) return;
-      // The order is held either way, so a language that could not be saved is said, not retried.
       try {
         await this.#saveUnsavedReceiptLanguage(id);
       } catch {
@@ -4151,7 +4150,7 @@ export class TillApp extends LitElement {
       this.parking = false;
     }
     if (session !== this.#operatorSession) return;
-    if (languageUnsaved) this.errorKey = "receipt_language.save_error";
+    if (languageUnsaved) this.errorKey = "receipt_language.held_unsaved";
     if (parked) void this.#refreshListsAfterWrite(session, [["held", "refresh.held_after_park"]]);
     if (refreshed !== undefined)
       await this.#afterVersionRefusal(refreshed, retried, () => this.#onParkOrder(event, true));
@@ -4308,7 +4307,13 @@ export class TillApp extends LitElement {
     else if (mustChooseAgain) this.errorKey = "held.options_changed";
     this.#store.loadFrom(order.id, lines, order.label ?? undefined, order.revision);
     this.#unsavedReceiptLanguages.delete(order.id);
-    this.#rememberReceiptLanguage(order.id, order.receiptLanguage);
+    // A stored language no longer offered is filed in the location's (`saleLanguageFor`).
+    this.#rememberReceiptLanguage(
+      order.id,
+      order.receiptLanguage !== undefined && this.receiptLanguages.includes(order.receiptLanguage)
+        ? order.receiptLanguage
+        : undefined,
+    );
     this.#clearUnlistedCounterStations();
     this.counterLines = listed;
     this.cardOutcome = undefined;
@@ -4471,6 +4476,7 @@ export class TillApp extends LitElement {
     const { language } = event.detail;
     const id = this.#store.id;
     if (asking === null || asking.orderId !== id) return;
+    if (language === this.#receiptLanguageShown(id)) return;
     if (!this.#store.persisted) {
       this.#rememberReceiptLanguage(id, language);
       this.#unsavedReceiptLanguages.add(id);

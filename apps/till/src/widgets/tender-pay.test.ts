@@ -205,8 +205,8 @@ describe("till-tender-pay", () => {
       el.addEventListener("confirm-payment", payment);
 
       const button = languageButton(el)!;
-      expect(button.textContent?.trim()).toBe("Catalán");
-      expect(button.getAttribute("aria-label")).toBe("Idioma del recibo: Catalán");
+      expect(button.textContent?.trim()).toBe("Recibo: Catalán");
+      expect(button.hasAttribute("aria-label")).toBe(false);
       expect(button.getAttribute("variant")).toBe("secondary");
       button.click();
 
@@ -225,7 +225,7 @@ describe("till-tender-pay", () => {
         receiptLanguage: "es-ES",
       });
 
-      expect(languageButton(el)!.textContent?.trim()).toBe("Spanish");
+      expect(languageButton(el)!.textContent?.trim()).toBe("Receipt: Spanish");
       expect(query(el, "[data-full-invoice]")).toBeNull();
     });
 

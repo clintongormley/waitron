@@ -810,7 +810,6 @@ export class TillTenderPay extends LitElement {
       class="receipt-language"
       data-receipt-language
       variant="secondary"
-      aria-label=${t("receipt_language.button").replace("{language}", () => name)}
       ?disabled=${disabled}
       @click=${(event: Event) => {
         event.stopPropagation();
@@ -818,7 +817,7 @@ export class TillTenderPay extends LitElement {
           new CustomEvent("choose-receipt-language", { bubbles: true, composed: true }),
         );
       }}
-      >${name}</wt-button
+      >${t("receipt_language.button").replace("{language}", () => name)}</wt-button
     >`;
   }
 

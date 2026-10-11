@@ -3745,7 +3745,7 @@ describe("till-app", () => {
     it("shows the location's language until staff choose another, then sends the chosen one with the sale", async () => {
       const { el, c } = await counterWith();
       const id = c.store.id;
-      expect(languageButton(el)!.textContent!.trim()).toBe("Catalán");
+      expect(languageButton(el)!.textContent!.trim()).toBe("Recibo: Catalán");
 
       languageButton(el)!.click();
       await flush(el);
@@ -3758,7 +3758,7 @@ describe("till-app", () => {
       await flush(el);
 
       expect(languageDialog(el)).toBeNull();
-      expect(languageButton(el)!.textContent!.trim()).toBe("Español");
+      expect(languageButton(el)!.textContent!.trim()).toBe("Recibo: Español");
       expect(currentApi.setOrderReceiptLanguage).not.toHaveBeenCalled();
       emit(c, "confirm-payment", { method: "cash", amount: "5" });
       await flush(el);
@@ -3781,7 +3781,7 @@ describe("till-app", () => {
       await flush(el);
 
       expect(languageDialog(el)).toBeNull();
-      expect(languageButton(el)!.textContent!.trim()).toBe("Catalán");
+      expect(languageButton(el)!.textContent!.trim()).toBe("Recibo: Catalán");
     });
 
     it("sends the chosen language with an integrated card payment", async () => {
@@ -3819,7 +3819,7 @@ describe("till-app", () => {
       expect(
         vi.mocked(currentApi.setOrderReceiptLanguage).mock.invocationCallOrder[0],
       ).toBeLessThan(placeOrder.mock.invocationCallOrder[0]!);
-      expect(languageButton(el)!.textContent!.trim()).toBe("Español");
+      expect(languageButton(el)!.textContent!.trim()).toBe("Recibo: Español");
       emit(c, "collect-order", { method: "cash", amount: "5" });
       await flush(el);
       expect(currentApi.collectOrder).toHaveBeenCalledWith(
@@ -3851,12 +3851,12 @@ describe("till-app", () => {
         language: "es-ES",
       });
       expect(c.store.id).not.toBe(held);
-      expect(languageButton(el)!.textContent!.trim()).toBe("Catalán");
+      expect(languageButton(el)!.textContent!.trim()).toBe("Recibo: Catalán");
 
       emit(c, "retrieve-order", { id: held });
       await flush(el);
       expect(c.store.id).toBe(held);
-      expect(languageButton(el)!.textContent!.trim()).toBe("Español");
+      expect(languageButton(el)!.textContent!.trim()).toBe("Recibo: Español");
     });
 
     it("holds the order, and says so, when its chosen language could not be saved", async () => {
@@ -3872,7 +3872,9 @@ describe("till-app", () => {
       expect(currentApi.parkOrder).toHaveBeenCalledWith(expect.objectContaining({ id: held }));
       expect(c.store.id).not.toBe(held);
       expect(c.store.lineCount).toBe(0);
-      expect(alert(el)!.textContent).toContain(t("receipt_language.save_error"));
+      expect(alert(el)!.textContent).toContain(
+        "Aparcado sin su idioma del recibo: ábrelo y vuelve a elegir",
+      );
     });
 
     it("starts a retrieved order on its stored language, saves a new choice at once, and saves later edits from the revision that answered", async () => {
@@ -3893,7 +3895,7 @@ describe("till-app", () => {
       );
       emit(c, "retrieve-order", { id: "wo-1" });
       await flush(el);
-      expect(languageButton(el)!.textContent!.trim()).toBe("Español");
+      expect(languageButton(el)!.textContent!.trim()).toBe("Recibo: Español");
 
       await choose(el, "ca-ES");
 
@@ -3901,7 +3903,7 @@ describe("till-app", () => {
         revision: 3,
         language: "ca-ES",
       });
-      expect(languageButton(el)!.textContent!.trim()).toBe("Catalán");
+      expect(languageButton(el)!.textContent!.trim()).toBe("Recibo: Catalán");
       expect(c.store.revision).toBe(4);
       c.store.addProduct(cafe, "1");
       await flush(el);
@@ -3919,6 +3921,45 @@ describe("till-app", () => {
         undefined,
         "ca-ES",
       );
+    });
+
+    it("starts a retrieved order on the location's language when its stored one is no longer offered", async () => {
+      const { el, c } = await counterWith(
+        {
+          retrieveWorkingOrder: vi.fn().mockResolvedValue({
+            id: "wo-1",
+            orderNumber: 5,
+            label: null,
+            revision: 3,
+            receiptLanguage: "gl-ES",
+            lines: [{ menuItemId: "menu-item-cafe-0", productId: "cafe", quantity: "2.000" }],
+          }),
+        },
+        false,
+      );
+      emit(c, "retrieve-order", { id: "wo-1" });
+      await flush(el);
+
+      expect(languageButton(el)!.textContent!.trim()).toBe("Recibo: Catalán");
+      emit(c, "confirm-payment", { method: "cash", amount: "5" });
+      await flush(el);
+      expect(currentApi.recordSale).toHaveBeenCalledWith(
+        expect.anything(),
+        { method: "cash", amount: "5" },
+        "wo-1",
+      );
+    });
+
+    it("saves nothing when staff confirm the language already shown", async () => {
+      const { el, c } = await counterWith({}, false);
+      emit(c, "retrieve-order", { id: "wo-1" });
+      await flush(el);
+
+      await choose(el, "ca-ES");
+
+      expect(currentApi.setOrderReceiptLanguage).not.toHaveBeenCalled();
+      expect(c.store.revision).toBe(3);
+      expect(languageButton(el)!.textContent!.trim()).toBe("Recibo: Catalán");
     });
 
     it("reads the order again when its language was saved from a copy changed elsewhere", async () => {
@@ -3952,7 +3993,7 @@ describe("till-app", () => {
       await choose(el, "es-ES");
 
       expect(c.store.revision).toBe(5);
-      expect(languageButton(el)!.textContent!.trim()).toBe("Español");
+      expect(languageButton(el)!.textContent!.trim()).toBe("Recibo: Español");
       expect(alert(el)!.textContent).toContain(t("held.changed_elsewhere"));
     });
 
@@ -3968,9 +4009,11 @@ describe("till-app", () => {
 
       await choose(el, "es-ES");
 
-      expect(languageButton(el)!.textContent!.trim()).toBe("Catalán");
+      expect(languageButton(el)!.textContent!.trim()).toBe("Recibo: Catalán");
       expect(c.store.revision).toBe(3);
-      expect(alert(el)!.textContent).toContain(t("receipt_language.save_error"));
+      expect(alert(el)!.textContent).toContain(
+        "No se pudo guardar el idioma del recibo, inténtalo de nuevo",
+      );
     });
   });
 
@@ -14659,7 +14702,7 @@ describe("the counter's waiting orders (sent and not paid, or paid and not hande
     const button = () =>
       tenderPay(el).shadowRoot!.querySelector<HTMLElement>("[data-receipt-language]")!;
     expect(tenderPay(el).stage).toBe("collect");
-    expect(button().textContent!.trim()).toBe("Catalán");
+    expect(button().textContent!.trim()).toBe("Recibo: Catalán");
 
     button().click();
     await flush(el);
@@ -14673,7 +14716,7 @@ describe("the counter's waiting orders (sent and not paid, or paid and not hande
       language: "es-ES",
     });
     expect(c.store.revision).toBe(3);
-    expect(button().textContent!.trim()).toBe("Español");
+    expect(button().textContent!.trim()).toBe("Recibo: Español");
     emit(counter(el)!, "collect-order", { method: "cash", amount: "5" });
     await flush(el);
     expect(currentApi.collectOrder).toHaveBeenCalledWith(

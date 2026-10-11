@@ -1,10 +1,14 @@
 import { afterEach, describe, it } from "vitest";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "./test-helpers.js";
-import { setLocale } from "../i18n/t.js";
+import { currentLocale, setLocale } from "../i18n/t.js";
 import "./reprint-language-dialog.js";
 import type { TillReprintLanguageDialog } from "./reprint-language-dialog.js";
 
-afterEach(cleanupWidgets);
+const originalLocale = currentLocale();
+afterEach(() => {
+  cleanupWidgets();
+  setLocale(originalLocale);
+});
 
 describe.each(["light", "dark"] as const)(
   "till-reprint-language-dialog a11y (%s theme)",
