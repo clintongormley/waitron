@@ -40,14 +40,15 @@ export type DashboardRequest = <T>(
  * resolves to `undefined`, keyed off the empty body, not the status. A GET other than a blob download
  * is aborted after its time limit and fails as `connection.timed_out`, while a fetch that fails on
  * its own fails as `connection.failed`; it is aborted rather than only abandoned, so it does not keep
- * holding one of the browser's connections to the box. This primitive does NOT redirect on 401 — it
- * only decodes and throws the code.
+ * holding one of the browser's connections to the box. `onError` hears every failure's code, plus the
+ * HTTP status when the box answered; a connection failure or time-out passes the code alone. This
+ * primitive does NOT redirect on 401 — it only decodes and throws the code.
  */
 export function createRequest(
   opts: {
     baseUrl?: string;
     fetchImpl?: FetchLike;
-    onError?: (code: string) => void;
+    onError?: (code: string, status?: number) => void;
     onSuccess?: (path: string) => void;
     passive?: boolean;
   } = {},
@@ -115,7 +116,7 @@ export function createRequest(
         const envelope = isRecord(parsed) && isRecord(parsed.error) ? parsed.error : undefined;
         const rawCode = envelope?.code;
         const code = typeof rawCode === "string" ? rawCode : "server.internal";
-        opts.onError?.(code);
+        opts.onError?.(code, res.status);
         // Carry the envelope's `params` through so a caller that needs a code's structured detail can
         // read it. Attached ONLY when present, so a code-only rejection stays a bare `{ code, status }`.
         const rawParams = envelope?.params;

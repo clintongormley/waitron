@@ -18,6 +18,7 @@ export class LiveConnection {
   #unsubscribe?: () => void;
   #retry?: ReturnType<typeof setTimeout>;
   #retryMs = 1000;
+  #refreshedSinceOpen = false;
 
   constructor(
     private readonly data: LiveData,
@@ -27,6 +28,7 @@ export class LiveConnection {
   start(): void {
     if (this.#active) return;
     this.#active = true;
+    this.#refreshedSinceOpen = false;
     this.#unsubscribe = this.data.subscribeToInterests(() => this.#schedule());
     this.#schedule();
   }
@@ -70,12 +72,20 @@ export class LiveConnection {
       };
       listen("open", () => {
         this.#retryMs = 1000;
+        this.#refreshedSinceOpen = false;
         this.data.refresh();
       });
       listen("error", () => {
-        this.data.refresh();
         // EventSource retries transport interruptions itself, but HTTP failures can leave it CLOSED.
-        if (stream.readyState !== 2) return;
+        if (stream.readyState !== 2) {
+          // Chromium fires `error` on every one of its own retries (about every 3 s while the box is
+          // down), so only the first since the stream last opened re-reads everything.
+          if (this.#refreshedSinceOpen) return;
+          this.#refreshedSinceOpen = true;
+          this.data.refresh();
+          return;
+        }
+        this.data.refresh();
         this.#close();
         this.#retry = setTimeout(() => {
           this.#retry = undefined;

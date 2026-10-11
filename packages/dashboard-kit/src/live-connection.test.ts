@@ -298,6 +298,130 @@ describe("live connection events", () => {
     }
   });
 
+  it("refreshes once, not on every retry, while the browser keeps retrying a refused stream", async () => {
+    vi.useFakeTimers();
+    const data = new LiveData();
+    const open = vi.fn(() => Object.assign(new Stream(), { readyState: 0 }));
+    const connection = new LiveConnection(data, { open });
+    const read = vi.fn(async () => 1);
+    const observed = data.observe(
+      { key: "printers", dependencies: [{ type: "printers" }], read },
+      () => {},
+    );
+    connection.start();
+    try {
+      await vi.advanceTimersByTimeAsync(0);
+      const stream = open.mock.results[0]!.value;
+      stream.dispatchEvent(new Event("error"));
+      await vi.advanceTimersByTimeAsync(0);
+      expect(read).toHaveBeenCalledTimes(2);
+      stream.dispatchEvent(new Event("error"));
+      await vi.advanceTimersByTimeAsync(3000);
+      stream.dispatchEvent(new Event("error"));
+      await vi.advanceTimersByTimeAsync(0);
+      expect(read).toHaveBeenCalledTimes(2);
+      expect(open).toHaveBeenCalledOnce();
+    } finally {
+      observed.unsubscribe();
+      connection.stop();
+      vi.useRealTimers();
+    }
+  });
+
+  it("refreshes again on the first retried error after the stream opened", async () => {
+    vi.useFakeTimers();
+    const data = new LiveData();
+    const open = vi.fn(() => Object.assign(new Stream(), { readyState: 0 }));
+    const connection = new LiveConnection(data, { open });
+    const read = vi.fn(async () => 1);
+    const observed = data.observe(
+      { key: "printers", dependencies: [{ type: "printers" }], read },
+      () => {},
+    );
+    connection.start();
+    try {
+      await vi.advanceTimersByTimeAsync(0);
+      const stream = open.mock.results[0]!.value;
+      stream.dispatchEvent(new Event("error"));
+      stream.dispatchEvent(new Event("error"));
+      await vi.advanceTimersByTimeAsync(0);
+      expect(read).toHaveBeenCalledTimes(2);
+      stream.dispatchEvent(new Event("open"));
+      await vi.advanceTimersByTimeAsync(0);
+      expect(read).toHaveBeenCalledTimes(3);
+      stream.dispatchEvent(new Event("error"));
+      await vi.advanceTimersByTimeAsync(0);
+      expect(read).toHaveBeenCalledTimes(4);
+      stream.dispatchEvent(new Event("error"));
+      await vi.advanceTimersByTimeAsync(0);
+      expect(read).toHaveBeenCalledTimes(4);
+    } finally {
+      observed.unsubscribe();
+      connection.stop();
+      vi.useRealTimers();
+    }
+  });
+
+  it("refreshes on the first retried error after a restart, even mid-outage", async () => {
+    vi.useFakeTimers();
+    const data = new LiveData();
+    const open = vi.fn(() => Object.assign(new Stream(), { readyState: 0 }));
+    const connection = new LiveConnection(data, { open });
+    const read = vi.fn(async () => 1);
+    const observe = () =>
+      data.observe({ key: "printers", dependencies: [{ type: "printers" }], read }, () => {});
+    let observed = observe();
+    connection.start();
+    try {
+      await vi.advanceTimersByTimeAsync(0);
+      open.mock.results[0]!.value.dispatchEvent(new Event("error"));
+      await vi.advanceTimersByTimeAsync(0);
+      expect(read).toHaveBeenCalledTimes(2);
+      connection.stop();
+      observed.unsubscribe();
+      observed = observe();
+      connection.start();
+      await vi.advanceTimersByTimeAsync(0);
+      const reads = read.mock.calls.length;
+      expect(open).toHaveBeenCalledTimes(2);
+      open.mock.results[1]!.value.dispatchEvent(new Event("error"));
+      await vi.advanceTimersByTimeAsync(0);
+      expect(read).toHaveBeenCalledTimes(reads + 1);
+    } finally {
+      observed.unsubscribe();
+      connection.stop();
+      vi.useRealTimers();
+    }
+  });
+
+  it("refreshes on every error of a stream the browser has closed, and retries it", async () => {
+    vi.useFakeTimers();
+    const data = new LiveData();
+    const open = vi.fn(() => Object.assign(new Stream(), { readyState: 2 }));
+    const connection = new LiveConnection(data, { open });
+    const read = vi.fn(async () => 1);
+    const observed = data.observe(
+      { key: "printers", dependencies: [{ type: "printers" }], read },
+      () => {},
+    );
+    connection.start();
+    try {
+      await vi.advanceTimersByTimeAsync(0);
+      open.mock.results[0]!.value.dispatchEvent(new Event("error"));
+      await vi.advanceTimersByTimeAsync(1000);
+      expect(read).toHaveBeenCalledTimes(2);
+      expect(open).toHaveBeenCalledTimes(2);
+      open.mock.results[1]!.value.dispatchEvent(new Event("error"));
+      await vi.advanceTimersByTimeAsync(2000);
+      expect(read).toHaveBeenCalledTimes(3);
+      expect(open).toHaveBeenCalledTimes(3);
+    } finally {
+      observed.unsubscribe();
+      connection.stop();
+      vi.useRealTimers();
+    }
+  });
+
   it("ignores events from a stream it has already replaced", async () => {
     const { data, streams, read, unsubscribe, connection } = await connected();
     const other = data.observe(
