@@ -112,7 +112,7 @@ export interface SetupDeps {
     ReturnType<typeof createCloudRecoveryClient>,
     "replacementIdentity" | "replacementApproval"
   >;
-  /** Validates and stages a prepared configuration archive before live provisioning. */
+  /** Validates and stages a configuration export before live provisioning. */
   stageConfiguration?: (artifact: Uint8Array, passphrase: string) => Promise<ConfigurationPreview>;
   /** Removes any staged archive after the selected venue and its configuration are durable. */
   clearConfiguration?: () => Promise<void>;

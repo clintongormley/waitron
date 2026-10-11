@@ -4718,7 +4718,7 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
     }
   }, 120_000);
 
-  it("imports a prepared configuration into the venue of a new taxpayer, which keeps its own identity and series", async () => {
+  it("imports a configuration export into the venue of a new taxpayer, which keeps its own identity and series", async () => {
     const OLD_TAX_ID = "60000011A";
     const NEW_TAX_ID = "60000012G";
     const PASSPHRASE = "a long enough export passphrase";
@@ -4994,7 +4994,9 @@ describe("startServer — the configuration export route in trading mode", () =>
         );
         expect(response.status).toBe(status);
       } finally {
-        await server?.close();
+        // A listener that never bound rejects its close; the original error is the one to report.
+        await server?.close().catch(() => {});
+        await venue.store.close();
         await rm(venue.directory, { recursive: true, force: true });
         await rm(stateDir, { recursive: true, force: true });
       }
