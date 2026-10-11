@@ -27,9 +27,9 @@ line list, a retrieved order and your sales reports. Use whatever the venue actu
 Two optional names sit beside it, each in its own folded section:
 
 - A **customer-facing name**, under **Descriptors**, with one field per content language. This is
-  what a diner reads: the receipt, the invoice, and the printed allergen sheet. Leave it blank in
-  every language and the receipt shows the staff name instead. Leave it blank in a language other
-  than the default and a receipt in that language shows the default language's customer-facing name.
+  what a diner reads: the receipt, the invoice, and the printed allergen sheet. A receipt and an
+  invoice show the default language's customer-facing name whatever language they print in; leave
+  it blank there and they show another language's, or the staff name when no language has one.
 - A **kitchen name**, under **Kitchen**. This is what the kitchen ticket prints and what the kitchen
   screens show. It is useful when the short label a cook needs differs from the name you sell under.
   Leave it blank and the kitchen sees the staff name instead.

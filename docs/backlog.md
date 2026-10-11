@@ -907,14 +907,16 @@ _Formerly the catalogue and menus entries in the opening part of the old Track A
   behind the subscription. A machine translation needs the venue's review before a diner sees it.
 
 - **`joinCustomerPresentationText` passes the requested language where the default belongs — OPEN
-  (found 2026-10-02 by A172, not measured).** The receipt fills the variant's text per receipt
-  language before it gets there (`apps/server/src/working-order.ts`), so whether any surface shows
-  the difference is unknown; reproduce before fixing. [Detail](backlog/catalogue.md#joincustomerpresentationtext-passes-the-requested-language-where-the-default-belongs--open-found-2026-10-02-by-a172-not-measured)
+  (found 2026-10-02 by A172, not measured).** The order path freezes the variant's text in the
+  default content language, under every receipt-language key, before it gets there
+  (`defaultLanguageDescriptions`, called by `priceOrderLines` in
+  `apps/server/src/working-order.ts`), so whether any surface shows the difference is unknown;
+  reproduce before fixing. [Detail](backlog/catalogue.md#joincustomerpresentationtext-passes-the-requested-language-where-the-default-belongs--open-found-2026-10-02-by-a172-not-measured)
 
 - **Menu draft/published state** and time-of-day / seasonal scheduling.
 
 - **Language resolution follow-ons** — there is still no single shared rule: the receipt's
-  `lineName` (`apps/server/src/receipt-ticket.ts`) and the kitchen ticket's `ticketName`
+  `lineName` (`apps/server/src/receipt-document.ts`) and the kitchen ticket's `ticketName`
   (`apps/server/src/kitchen-print.ts`) try the exact language and then take the first stored one.
   [Detail](backlog/catalogue.md#language-resolution-follow-ons)
 
@@ -3146,6 +3148,12 @@ _Formerly A6, and the old Track C's payments items; part of A9._ Detail: [backlo
   screens' reads are not limited, and it was not measured in a real browser against a real silent
   provider. Left open by A260 (several card readers' status reads at once can use up the browser's
   connections to the box; W18c #1145 and W48 #1162).
+
+- **A placed order can be charged twice while its card is at the reader — OPEN (found 2026-10-11
+  during A497's review, measured at main 126cd3ad2).** A cash collect or a second `/api/pay` on it
+  answers 200, and both payments go through while only one is recorded on a sale. Next: refuse
+  collect and pay on a placed order while a card payment is in flight (`order.payment_in_flight`).
+  [Detail](backlog/payments.md#a-placed-order-can-be-charged-twice-while-its-card-is-at-the-reader)
 
 ### Users, sign-in and the dashboard shell
 

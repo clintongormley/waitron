@@ -324,16 +324,18 @@ test logs it was not looked for.
   (found 2026-10-02 by A172, not measured).** It calls `resolveSnapshotText(variant, locale,
 locale)` (`packages/catalogue/src/product-presentation.ts`), the shape A172 fixed in
   `customerOptionSnapshotLabels`, so a locale blank in a variant's map takes the first stored
-  language alphabetically rather than the default. The receipt fills the variant's text per
-  receipt language before it gets there (`apps/server/src/working-order.ts`), so whether any
-  surface shows the difference is unknown; reproduce before fixing.
+  language alphabetically rather than the default. The order path freezes the variant's text in
+  the default content language, under every receipt-language key, before it gets there
+  (`defaultLanguageDescriptions`, called by `priceOrderLines` in
+  `apps/server/src/working-order.ts`), so whether any surface shows the difference is unknown;
+  reproduce before fixing.
 
 ## Language resolution follow-ons
 
 - **Language resolution follow-ons**
   ([original design](../superpowers/specs/2026-08-30-localization-fallback-negotiation-design.md)):
   there is still no single shared rule: the receipt's `lineName`
-  (`apps/server/src/receipt-ticket.ts`) and the kitchen ticket's `ticketName`
+  (`apps/server/src/receipt-document.ts`) and the kitchen ticket's `ticketName`
   (`apps/server/src/kitchen-print.ts`) try the exact language and then take the first stored one.
   Read in the code and not run: `resolveContentText` moves to another region of the same language
   (es-ES to es-MX), which the design rules out. Adding content translations does not translate

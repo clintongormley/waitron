@@ -25,10 +25,10 @@ Nothing else re-implements either one, with one exception named under _What a so
 below.
 
 **Each name falls back on its own.** A blank customer-facing name falls back to Name; a blank kitchen
-name falls back to Name. A customer-facing name blank in one language but not in the default
-language takes the default language's text in the text frozen for the receipt
-(`defaultLanguageDescriptions`, below), not Name; that per-language step is `resolveContentText`
-(`packages/shared/src/content-languages.ts`), not `product-presentation.ts`. The printed allergen sheet instead requests only its chosen language: the receipt language when
+name falls back to Name. The text frozen for the receipt is the default language's under every
+receipt language, or, where the default is blank, another stored language's
+(`defaultLanguageDescriptions`, below), not Name; that step is `resolveSnapshotText`
+(`packages/shared/src/content-languages.ts`). The printed allergen sheet instead requests only its chosen language: the receipt language when
 the till has a catalogue for it, else English. An absent or disabled customer translation uses
 Name (untagged staff text), rather than substituting a different customer translation (`customerProductName`,
 `apps/till/src/widgets/product-name.ts`). They do not fall back
@@ -120,7 +120,8 @@ comes from the published menu, and the rate from the day the invoice is issued, 
   whatever receipt language staff choose. An order placed before the location's receipt languages
   change and collected after keeps the keys its lines were stored under (the case "accepts a change
   while an order is placed, and the order can still be collected" in
-  `apps/server/src/location-settings-api.orders-open.test.ts`), and prints through that fallback.
+  `apps/server/src/location-settings-api.orders-open.test.ts`), and prints through that fallback
+  (read in the code; the test checks what is filed, not a print).
 - `variant_name`, `variant_descriptions`, `variant_kitchen_name`, `kitchen_name` — the chosen
   variant's own three names (`variant_name` and `variant_kitchen_name` as the variant row holds
   them, `variant_descriptions` resolved and stored like `descriptions` above), plus the product's

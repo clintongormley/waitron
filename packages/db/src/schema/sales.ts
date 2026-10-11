@@ -165,7 +165,8 @@ export const saleLines = table(
     descriptions: json<Record<string, string>>("descriptions").notNull(),
     variantName: label("variant_name"),
     // Keyed like `descriptions`. A sale filed from an order copies both from `working_order_lines`,
-    // where every key holds the text of the default content language when the line was written.
+    // where every key holds the text of the default content language when the line was written, or
+    // another stored language's where the default had none.
     // Nothing in the database checks the locales here: the trigger is on `working_order_lines`, so
     // a caller that builds its own lines keeps the invoice locales right by itself.
     variantDescriptions: json<Record<string, string>>("variant_descriptions"),
