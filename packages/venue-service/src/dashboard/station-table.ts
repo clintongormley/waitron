@@ -38,7 +38,7 @@ export class StationTable extends LitElement {
         grid-template-columns: max-content minmax(0, 1fr);
         align-items: center;
       }
-      wt-data-table::part(station-name-actions) {
+      wt-data-table::part(station-name-handle) {
         display: inline-flex;
         align-items: center;
       }
@@ -71,7 +71,7 @@ export class StationTable extends LitElement {
 
   #name(station: PrepStation) {
     return html`<span part="station-name-content"
-      ><span part="station-name-actions">${this.handles[station.id] ?? nothing}</span
+      ><span part="station-name-handle">${this.handles[station.id] ?? nothing}</span
       ><span part="station-name-details"
         ><span part="name">${station.name}</span>
         ${station.isDefault ? html`<span part="badge">${t("prep.default")}</span>` : nothing}
