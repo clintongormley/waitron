@@ -66,9 +66,18 @@ export class VenueSettingsScreen extends LitElement {
     const requested = this.#url.read("view");
     const tabs = this.#tabs();
     const tab = tabs.find((each) => each === requested) ?? tabs[0];
+    const left = this.tab;
     this.tab = tab;
+    if (left !== undefined && left !== tab) this.#hidden(left);
     if (tab !== undefined && tab !== requested)
       this.#url.write({ dashboard: "venue-settings", view: tab }, true);
+  }
+
+  /** Panels stay mounted across tabs, so the ones left behind are told instead. */
+  #hidden(tab: VenueSettingsTab): void {
+    const slot = this.shadowRoot?.querySelector(`[slot="${tab}"]`);
+    for (const panel of [...(slot?.children ?? [])])
+      panel.dispatchEvent(new Event("venue-settings-hidden"));
   }
 
   override willUpdate(changed: PropertyValues): void {

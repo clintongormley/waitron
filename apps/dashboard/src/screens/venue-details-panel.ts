@@ -153,6 +153,12 @@ export class VenueDetailsPanel extends LitElement {
     },
   );
 
+  constructor() {
+    super();
+    this.addEventListener("venue-settings-hidden", () => {
+      if (this.#scope && saveActionState(this.#scope).unchanged) this.#cancel();
+    });
+  }
   override connectedCallback(): void {
     super.connectedCallback();
     this.#generation += 1;

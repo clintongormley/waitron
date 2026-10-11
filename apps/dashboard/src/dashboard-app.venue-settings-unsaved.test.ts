@@ -315,7 +315,65 @@ it("a real Venue details draft stays visible through its container tab warning",
   await select(app, "tables");
   await choose(app, "discard");
   await expect.poll(() => selected(app)).toBe("tables");
-  expect(street.value).toBe("Calle Mayor 1");
+  await panel.updateComplete;
+  expect(street.isConnected).toBe(false);
+  expect(panel.shadowRoot!.querySelector("wt-input")).toBeNull();
+  expect(
+    panel.shadowRoot!.querySelector("[data-test=saved-addressLine1]")!.textContent!.trim(),
+  ).toBe("Calle Mayor 1");
+});
+
+async function editVenueDetails(app: DashboardApp) {
+  const panel = settings(app).shadowRoot!.querySelector("dashboard-venue-details-panel")!;
+  await expect.poll(() => panel.shadowRoot?.querySelector("[data-test=edit]")).toBeTruthy();
+  panel.shadowRoot!.querySelector<HTMLElement>("[data-test=edit]")!.click();
+  await panel.updateComplete;
+  const street = panel.shadowRoot!.querySelector<WtInput>("[name=addressLine1]")!;
+  await street.updateComplete;
+  return { panel, street };
+}
+function inViewMode(panel: HTMLElementTagNameMap["dashboard-venue-details-panel"]) {
+  return (
+    panel.shadowRoot!.querySelector("[data-test=edit]") !== null &&
+    panel.shadowRoot!.querySelector("wt-input") === null
+  );
+}
+
+it("a Venue details edit with nothing changed ends when its tab is left", async () => {
+  const { app } = await mount("/manage/venue-settings/view/venue-details");
+  const { panel } = await editVenueDetails(app);
+  await select(app, "tables");
+  await expect.poll(() => selected(app)).toBe("tables");
+  expect(app.shadowRoot!.querySelector("wt-unsaved-changes")!.open).toBe(false);
+  await select(app, "venue-details");
+  await expect.poll(() => selected(app)).toBe("venue-details");
+  expect(inViewMode(panel)).toBe(true);
+});
+
+it("a changed Venue details edit survives Keep and ends in view mode after Discard", async () => {
+  const { app } = await mount("/manage/venue-settings/view/venue-details");
+  const { panel, street } = await editVenueDetails(app);
+  await userEvent.fill(
+    page.elementLocator(street.shadowRoot!.querySelector("input")!),
+    "Different street",
+  );
+  await select(app, "tables");
+  await choose(app, "keep");
+  expect(selected(app)).toBe("venue-details");
+  expect(inViewMode(panel)).toBe(false);
+  expect(panel.shadowRoot!.querySelector<WtInput>("[name=addressLine1]")!.value).toBe(
+    "Different street",
+  );
+  await select(app, "tables");
+  await choose(app, "discard");
+  await expect.poll(() => selected(app)).toBe("tables");
+  await select(app, "venue-details");
+  await expect.poll(() => selected(app)).toBe("venue-details");
+  await panel.updateComplete;
+  expect(inViewMode(panel)).toBe(true);
+  expect(
+    panel.shadowRoot!.querySelector("[data-test=saved-addressLine1]")!.textContent!.trim(),
+  ).toBe("Calle Mayor 1");
 });
 
 it("keyboard tab navigation holds the edited panel until Discard", async () => {
