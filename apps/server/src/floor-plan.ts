@@ -57,7 +57,7 @@ export interface ZonePlanSave {
   joins: { seats: number; tableKeys: string[] }[];
 }
 
-async function requireZone(tx: Transaction, cfg: TillConfig, zoneId: string): Promise<void> {
+export async function requireZone(tx: Transaction, cfg: TillConfig, zoneId: string): Promise<void> {
   const [zone] = await tx
     .select({ id: floorZones.id })
     .from(floorZones)

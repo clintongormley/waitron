@@ -75,7 +75,7 @@ export async function listDepartments(
       active: departments.active,
     })
     .from(departments)
-    .where(eq(departments.locationId, cfg.locationId))
+    .where(and(eq(departments.locationId, cfg.locationId), eq(departments.active, true)))
     .orderBy(desc(departments.isDefault), asc(departments.name), asc(departments.id));
   return rows;
 }
@@ -109,13 +109,11 @@ export async function listServiceZones(
     .leftJoin(departmentSalePolicies, eq(departmentSalePolicies.departmentId, departments.id))
     .leftJoin(zoneSalePolicies, eq(zoneSalePolicies.zoneId, zoneServicePolicies.zoneId))
     .where(
-      options.includeInactive
-        ? eq(zoneServicePolicies.locationId, cfg.locationId)
-        : and(
-            eq(zoneServicePolicies.locationId, cfg.locationId),
-            eq(floorZones.active, true),
-            eq(departments.active, true),
-          ),
+      and(
+        eq(zoneServicePolicies.locationId, cfg.locationId),
+        eq(floorZones.active, true),
+        eq(departments.active, true),
+      ),
     )
     .orderBy(floorZones.displayOrder, floorZones.name, floorZones.id);
   return rows.map(
@@ -143,7 +141,13 @@ export async function assertDepartment(tx: Transaction, cfg: VenueScope, departm
   const [row] = await tx
     .select({ id: departments.id })
     .from(departments)
-    .where(and(eq(departments.id, departmentId), eq(departments.locationId, cfg.locationId)));
+    .where(
+      and(
+        eq(departments.id, departmentId),
+        eq(departments.locationId, cfg.locationId),
+        eq(departments.active, true),
+      ),
+    );
   if (row === undefined) throw new AppError("department.not_found", { departmentId });
 }
 
@@ -215,12 +219,8 @@ export async function updateDepartment(
     orderStart?: OrderStart;
   },
 ): Promise<void> {
+  await assertDepartment(tx, cfg, departmentId);
   if (input.name !== undefined) await requireDepartmentName(tx, cfg, input.name, departmentId);
-  const [existing] = await tx
-    .select({ id: departments.id })
-    .from(departments)
-    .where(and(eq(departments.id, departmentId), eq(departments.locationId, cfg.locationId)));
-  if (existing === undefined) throw new AppError("department.not_found", { departmentId });
   if (input.name !== undefined || input.tradingName !== undefined)
     await tx
       .update(departments)
@@ -236,7 +236,6 @@ export async function updateDepartment(
     .where(eq(departmentSalePolicies.departmentId, departmentId));
 }
 
-/** Leaves its zones disabled: disabling the department switched them off. */
 export async function activateDepartment(
   tx: Transaction,
   cfg: VenueScope,
@@ -245,7 +244,13 @@ export async function activateDepartment(
   const [row] = await tx
     .update(departments)
     .set({ active: true })
-    .where(and(eq(departments.id, departmentId), eq(departments.locationId, cfg.locationId)))
+    .where(
+      and(
+        eq(departments.id, departmentId),
+        eq(departments.locationId, cfg.locationId),
+        eq(departments.active, true),
+      ),
+    )
     .returning({ id: departments.id });
   if (row === undefined) throw new AppError("department.not_found", { departmentId });
 }
@@ -258,7 +263,13 @@ export async function departmentRemovalImpact(
   const [department] = await tx
     .select({ id: departments.id })
     .from(departments)
-    .where(and(eq(departments.id, departmentId), eq(departments.locationId, cfg.locationId)));
+    .where(
+      and(
+        eq(departments.id, departmentId),
+        eq(departments.locationId, cfg.locationId),
+        eq(departments.active, true),
+      ),
+    );
   if (department === undefined) throw new AppError("department.not_found", { departmentId });
 
   const zones = await tx
@@ -488,17 +499,26 @@ export async function configureZone(
   const [zone] = await tx
     .select({ id: floorZones.id, active: floorZones.active })
     .from(floorZones)
-    .where(and(eq(floorZones.id, input.zoneId), eq(floorZones.locationId, cfg.locationId)));
+    .where(
+      and(
+        eq(floorZones.id, input.zoneId),
+        eq(floorZones.locationId, cfg.locationId),
+        eq(floorZones.active, true),
+      ),
+    );
   if (zone === undefined) throw new AppError("service_zone.not_found", { zoneId: input.zoneId });
   const [department] = await tx
     .select({ id: departments.id, active: departments.active })
     .from(departments)
-    .where(and(eq(departments.id, input.departmentId), eq(departments.locationId, cfg.locationId)));
+    .where(
+      and(
+        eq(departments.id, input.departmentId),
+        eq(departments.locationId, cfg.locationId),
+        eq(departments.active, true),
+      ),
+    );
   if (department === undefined) {
     throw new AppError("department.not_found", { departmentId: input.departmentId });
-  }
-  if (zone.active && !department.active) {
-    throw new AppError("zone.department_inactive", { zoneId: input.zoneId });
   }
   const [existing] = await tx
     .select({ zoneId: zoneServicePolicies.zoneId })
@@ -620,6 +640,7 @@ export async function resolveZoneContext(
       departmentPaidWhen: departmentSalePolicies.paidWhen,
     })
     .from(zoneServicePolicies)
+    .innerJoin(floorZones, eq(floorZones.id, zoneServicePolicies.zoneId))
     .innerJoin(departments, eq(departments.id, zoneServicePolicies.departmentId))
     .leftJoin(departmentSalePolicies, eq(departmentSalePolicies.departmentId, departments.id))
     .leftJoin(zoneSalePolicies, eq(zoneSalePolicies.zoneId, zoneServicePolicies.zoneId))
@@ -628,6 +649,8 @@ export async function resolveZoneContext(
         eq(zoneServicePolicies.locationId, cfg.locationId),
         eq(zoneServicePolicies.zoneId, zoneId),
         eq(departments.active, true),
+        eq(floorZones.active, true),
+        eq(floorZones.locationId, cfg.locationId),
       ),
     );
   if (row === undefined) throw new AppError("service_zone.not_found", { zoneId });

@@ -1,3 +1,4 @@
+import { requireZone } from "./floor-plan.js";
 import { and, eq, exists, inArray, isNull, lt, or } from "drizzle-orm";
 import {
   diningTables,
@@ -85,6 +86,7 @@ export async function resetZone(
   zoneId: string,
   now: Date,
 ): Promise<void> {
+  await requireZone(tx, cfg, zoneId);
   const day = await todayBusinessDay(tx, cfg, now);
   if (day !== null) await resetZoneFor(tx, cfg, removals, zoneId, day, now);
 }
@@ -209,6 +211,7 @@ export async function catchUpZone(
   zoneId: string,
   now: Date,
 ): Promise<void> {
+  await requireZone(tx, cfg, zoneId);
   while (await catchUpPass(tx, cfg, removals, zoneId, now));
 }
 

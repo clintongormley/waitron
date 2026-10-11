@@ -1,5 +1,5 @@
 import { and, asc, eq, inArray, isNotNull } from "drizzle-orm";
-import { diningTables, floorTodayJoinTables, floorTodayTables } from "@waitron/db";
+import { diningTables, floorZones, floorTodayJoinTables, floorTodayTables } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { AppError } from "@waitron/shared";
 import { holdersOf } from "./parties.js";
@@ -23,9 +23,16 @@ export async function todayOf(tx: Transaction, cfg: TillConfig, tableId: string)
       joinId: floorTodayJoinTables.joinId,
     })
     .from(diningTables)
+    .innerJoin(floorZones, eq(floorZones.id, diningTables.zoneId))
     .leftJoin(floorTodayTables, eq(floorTodayTables.tableId, diningTables.id))
     .leftJoin(floorTodayJoinTables, eq(floorTodayJoinTables.tableId, diningTables.id))
-    .where(and(eq(diningTables.id, tableId), eq(diningTables.locationId, cfg.locationId)));
+    .where(
+      and(
+        eq(diningTables.id, tableId),
+        eq(diningTables.locationId, cfg.locationId),
+        eq(floorZones.active, true),
+      ),
+    );
   if (table === undefined) throw new AppError("table.not_found", { tableId });
   const { zoneId, row, joinId } = table;
   if (row === null) throw new AppError("table.not_on_today_plan", { tableId });

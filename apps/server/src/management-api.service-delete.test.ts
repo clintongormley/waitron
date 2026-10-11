@@ -7,6 +7,8 @@ import {
   deviceProfiles,
   diningTables,
   floorTodayTables,
+  floorPlans,
+  floorPlanTables,
   floorZones,
   locations,
   withTransaction,
@@ -33,6 +35,22 @@ import {
   VENUE_SERVICE_PERMISSIONS,
   zoneServicePolicies,
 } from "@waitron/venue-service";
+import { readZonePlan, saveZonePlan } from "./floor-plan.js";
+import {
+  resetZone,
+  catchUpZone,
+  moveToday,
+  rotateToday,
+  takeOffToday,
+  putBackToday,
+  seatsToday,
+  backToSaved,
+  placeSpareToday,
+  ensureToday,
+} from "./floor-today-store.js";
+import { listTables, listZones, updateZone, setTableStatus } from "./tables.js";
+import { seatTable } from "./parties.js";
+import { jobOrigin } from "@waitron/shared";
 import { mountManagementApi } from "./management-api.js";
 import { ALL_MODULES, enabledTableRemovals } from "./modules.js";
 import { moduleCoreServices } from "./parties.js";
@@ -433,4 +451,139 @@ it.each([
   expect((await preview.json()).refusals).toContainEqual(expect.objectContaining({ code }));
   await error(await send("DELETE", url), 409, code);
   expect(await run(rows)).toEqual(before);
+});
+
+describe("stale floor identifiers", () => {
+  async function floorTarget(deleted = true) {
+    const f = await run(async (tx) => {
+      const department = await createDepartment(tx, v.cfg, {
+        name: randomUUID(),
+        orderStart: "table",
+      });
+      const zone = await createServiceZone(tx, v.cfg, {
+        name: randomUUID(),
+        departmentId: department.id,
+      });
+      return { departmentId: department.id, zoneId: zone.id };
+    });
+    return run(async (tx) => {
+      const [table] = await tx
+        .insert(diningTables)
+        .values({ locationId: v.cfg.locationId, zoneId: f.zoneId, label: randomUUID() })
+        .returning();
+      await tx.insert(floorTodayTables).values({
+        tableId: table!.id,
+        x: 1,
+        y: 1,
+        width: 2,
+        height: 2,
+        shape: "rect",
+        rotation: 0,
+      });
+      const [plan] = await tx
+        .insert(floorPlans)
+        .values({ zoneId: f.zoneId, savedAt: now.toISOString() })
+        .returning();
+      await tx.insert(floorPlanTables).values({
+        planId: plan!.id,
+        label: table!.label,
+        x: 1,
+        y: 1,
+        width: 2,
+        height: 2,
+        shape: "rect",
+        rotation: 0,
+      });
+      if (deleted)
+        await tx.update(floorZones).set({ active: false }).where(eq(floorZones.id, f.zoneId));
+      return { ...f, tableId: table!.id };
+    });
+  }
+  const now = new Date("2026-10-11T12:00:00Z");
+  const actions: [
+    string,
+    string,
+    (tx: Transaction, f: Awaited<ReturnType<typeof floorTarget>>) => Promise<unknown>,
+  ][] = [
+    [
+      "zone rename",
+      "zone.not_found",
+      (tx, f) => updateZone(tx, v.cfg, f.zoneId, { name: "Reborn" }),
+    ],
+    [
+      "zone activate",
+      "zone.not_found",
+      (tx, f) => updateZone(tx, v.cfg, f.zoneId, { active: true }),
+    ],
+    ["floor read", "zone.not_found", (tx, f) => readZonePlan(tx, v.cfg, f.zoneId)],
+    [
+      "floor save",
+      "zone.not_found",
+      (tx, f) => saveZonePlan(tx, v.cfg, [], f.zoneId, { revision: 1, tables: [], joins: [] }, now),
+    ],
+    ["floor reset", "zone.not_found", (tx, f) => resetZone(tx, v.cfg, [], f.zoneId, now)],
+    ["floor catch-up", "zone.not_found", (tx, f) => catchUpZone(tx, v.cfg, [], f.zoneId, now)],
+    ["table move", "table.not_found", (tx, f) => moveToday(tx, v.cfg, f.tableId, { x: 2, y: 2 })],
+    ["table rotate", "table.not_found", (tx, f) => rotateToday(tx, v.cfg, f.tableId)],
+    ["table take off", "table.not_found", (tx, f) => takeOffToday(tx, v.cfg, f.tableId)],
+    ["table put back", "table.not_found", (tx, f) => putBackToday(tx, v.cfg, f.tableId)],
+    ["table seats", "table.not_found", (tx, f) => seatsToday(tx, v.cfg, f.tableId, 4)],
+    ["table back to saved", "table.not_found", (tx, f) => backToSaved(tx, v.cfg, f.tableId)],
+    [
+      "table spare placement",
+      "table.not_found",
+      (tx, f) => placeSpareToday(tx, v.cfg, f.tableId, { x: 2, y: 2 }),
+    ],
+    ["table status", "table.not_found", (tx, f) => setTableStatus(tx, v.cfg, f.tableId, null)],
+    [
+      "table seat",
+      "table.inactive",
+      (tx, f) =>
+        seatTable(
+          tx,
+          { ...v.cfg, origin: jobOrigin("dashboard") },
+          { tableId: f.tableId, guestCount: 2, operatorId: v.operator.personId },
+        ),
+    ],
+  ];
+  it.each(actions)("refuses stale %s without changing rows", async (_name, code, action) => {
+    const f = await floorTarget();
+    const before = await run(rows);
+    await expect(run((tx) => action(tx, f))).rejects.toMatchObject({ code });
+    expect(await run(rows)).toEqual(before);
+  });
+  it("keeps management spare/taken-off tables but hides deleted zones with old list flags", async () => {
+    const deleted = await floorTarget();
+    const live = await floorTarget(false);
+    await run((tx) => takeOffToday(tx, v.cfg, live.tableId));
+    const tables = await run((tx) => listTables(tx, v.cfg, { includeDisabled: true }));
+    expect(tables).not.toContainEqual(expect.objectContaining({ id: deleted.tableId }));
+    expect(tables).toContainEqual(expect.objectContaining({ id: live.tableId }));
+    expect(await run((tx) => listZones(tx, v.cfg, { includeInactive: true }))).not.toContainEqual(
+      expect.objectContaining({ id: deleted.zoneId }),
+    );
+    await expect(
+      run((tx) => moveToday(tx, v.cfg, live.tableId, { x: 3, y: 3 })),
+    ).rejects.toMatchObject({ code: "table.taken_off" });
+    await run((tx) => putBackToday(tx, v.cfg, live.tableId));
+    await run((tx) => moveToday(tx, v.cfg, live.tableId, { x: 3, y: 3 }));
+    expect(
+      (
+        await run((tx) =>
+          tx.select().from(floorTodayTables).where(eq(floorTodayTables.tableId, live.tableId)),
+        )
+      )[0],
+    ).toMatchObject({ x: 3, y: 3, takenOff: false });
+    const before = await run(rows);
+    await run((tx) => ensureToday(tx, v.cfg, [], now));
+    expect(
+      (await run(rows)).allTables.floor_plans.filter(
+        (row: unknown) => (row as { zone_id: string }).zone_id === deleted.zoneId,
+      ),
+    ).toEqual(
+      before.allTables.floor_plans.filter(
+        (row: unknown) => (row as { zone_id: string }).zone_id === deleted.zoneId,
+      ),
+    );
+  });
 });

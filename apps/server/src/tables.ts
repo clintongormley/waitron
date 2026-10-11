@@ -41,9 +41,11 @@ export async function listTables(
       createdAt: diningTables.createdAt,
     })
     .from(diningTables)
+    .innerJoin(floorZones, eq(floorZones.id, diningTables.zoneId))
     .where(
       and(
         eq(diningTables.locationId, cfg.locationId),
+        eq(floorZones.active, true),
         options.includeDisabled ? undefined : tableInService(diningTables.id),
       ),
     )
@@ -60,8 +62,9 @@ export interface FloorZone {
 export async function listZones(
   tx: Transaction,
   cfg: TillConfig,
-  options: { includeInactive?: boolean } = {},
+  _options: { includeInactive?: boolean } = {},
 ): Promise<FloorZone[]> {
+  void _options;
   return tx
     .select({
       id: floorZones.id,
@@ -70,11 +73,7 @@ export async function listZones(
       active: floorZones.active,
     })
     .from(floorZones)
-    .where(
-      options.includeInactive
-        ? eq(floorZones.locationId, cfg.locationId)
-        : and(eq(floorZones.locationId, cfg.locationId), eq(floorZones.active, true)),
-    )
+    .where(and(eq(floorZones.locationId, cfg.locationId), eq(floorZones.active, true)))
     .orderBy(floorZones.displayOrder);
 }
 
@@ -84,6 +83,17 @@ export async function updateZone(
   id: string,
   patch: { name?: string; displayOrder?: number; active?: boolean },
 ): Promise<void> {
+  const [target] = await tx
+    .select({ id: floorZones.id })
+    .from(floorZones)
+    .where(
+      and(
+        eq(floorZones.id, id),
+        eq(floorZones.locationId, cfg.locationId),
+        eq(floorZones.active, true),
+      ),
+    );
+  if (target === undefined) throw new AppError("zone.not_found", { zoneId: id });
   const set: { name?: string; displayOrder?: number; active?: boolean } = {};
   if (patch.name !== undefined) set.name = patch.name;
   if (patch.displayOrder !== undefined) set.displayOrder = patch.displayOrder;
