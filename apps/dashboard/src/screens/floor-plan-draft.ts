@@ -50,14 +50,10 @@ type TablePatch = Partial<Pick<DraftTable, "label" | "seats" | "fixed" | "placem
 
 const MIN_JOIN_TABLES = 2;
 
-function keyOf(table: { id: string | null; liveTableId: string | null }): string {
-  return table.id ?? `live:${table.liveTableId}`;
-}
-
 export function draftFromPlan(plan: FloorPlan): FloorPlanDraft {
   return {
     tables: plan.tables.map((t) => ({
-      key: keyOf(t),
+      key: t.id,
       id: t.id,
       liveTableId: t.liveTableId,
       label: t.label,
@@ -73,11 +69,7 @@ export function saveFromDraft(revision: number, draft: FloorPlanDraft): FloorPla
   return {
     revision,
     tables: draft.tables.map((t) => ({
-      ...(t.id !== null
-        ? { id: t.id }
-        : t.liveTableId !== null
-          ? { liveTableId: t.liveTableId }
-          : {}),
+      ...(t.id !== null ? { id: t.id } : {}),
       key: t.key,
       label: t.label,
       seats: t.seats,
@@ -172,10 +164,6 @@ export function checkDraft(
   return null;
 }
 
-export function isAdoptable(table: DraftTable): boolean {
-  return table.id === null && table.liveTableId !== null;
-}
-
 function mapTable(
   draft: FloorPlanDraft,
   key: string,
@@ -235,7 +223,7 @@ const tableSet = (tableKeys: readonly string[]): string => JSON.stringify([...ta
  *  join the delete did not touch survives, else the first shrunk one. */
 export function deleteTable(draft: FloorPlanDraft, key: string): FloorPlanDraft {
   const target = draft.tables.find((t) => t.key === key);
-  if (target === undefined || isAdoptable(target)) return draft;
+  if (target === undefined) return draft;
   const untouched = new Set(
     draft.joins.filter((j) => !j.tableKeys.includes(key)).map((j) => tableSet(j.tableKeys)),
   );

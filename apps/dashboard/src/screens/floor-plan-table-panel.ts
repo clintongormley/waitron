@@ -14,7 +14,6 @@ import type { PlanPlacement } from "../api/client.js";
 import {
   MAX_SEATS,
   deleteTable,
-  isAdoptable,
   patchTable,
   placeTable,
   removeJoin,
@@ -330,13 +329,9 @@ export class FloorPlanTablePanel extends LitElement {
                 >${t("floor_plan_editor.remove_from_plan")}</wt-button
               >`
         }
-        ${
-          isAdoptable(table)
-            ? nothing
-            : html`<wt-button variant="danger" data-test="delete" @click=${() => this.#delete()}
-                >${t("action.delete")}</wt-button
-              >`
-        }
+        <wt-button variant="danger" data-test="delete" @click=${() => this.#delete()}
+          >${t("action.delete")}</wt-button
+        >
       </div>
       ${this.#joins()}`;
   }

@@ -602,8 +602,7 @@ export interface FloorPlan {
   revision: number;
   savedAt: string | null;
   tables: {
-    /** null for a live table offered for adoption. */
-    id: string | null;
+    id: string;
     liveTableId: string | null;
     label: string;
     seats: number | null;
@@ -618,7 +617,6 @@ export interface FloorPlanSave {
   revision: number;
   tables: {
     id?: string;
-    liveTableId?: string;
     key: string;
     label: string;
     seats: number | null;
