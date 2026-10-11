@@ -312,6 +312,11 @@ On 2026-10-08 A349's six Preview, price-table and navigation suites also logged 
 `menu-preview-top.test.ts`, `menu-preview-navigation.test.ts`, `menu-preview.a11y.test.ts`,
 `menu-prices-table.test.ts` and `src/navigation.test.ts` with the dashboard's Vitest runner.
 That comparison does not establish which observer causes it or its effect on the rendered screen.
+On 2026-10-11 A487a saw it once in every run of
+`pnpm --filter @waitron/ui exec vitest run src/components/wt-tabs` — three plain and three with
+coverage on main `5197ae03599332e540aba80c108c1829c5ae84d9`, and the same on its first candidate,
+`57538cf47aab2038ed2d6e8968da4e51c0de453b`, with every test passing. Which
+test logs it was not looked for.
 
 ## A customer-facing name with no text in the default language prints a blank goods line — OPEN (found 2026-10-01 by C122)
 

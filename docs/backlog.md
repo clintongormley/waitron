@@ -1552,11 +1552,6 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   uses (`readRoutingUses`, `packages/venue-service/src/menu-timetable.ts`), re-read on any product
   or category change, for the period delete warning alone. Work each out only where it is used.
 
-- **`wt-tabs` measures its layout on every scroll event** (`packages/ui/src/components/wt-tabs.ts`,
-  the fade added by A366 slice 4 Part A): two computed-style reads and two bounding boxes per
-  event. Batch it to one run per animation frame and work out the fade width only on resize or a
-  change of tabs.
-
 - **`PUT /management-api/stations/:sid/printers` (`apps/server/src/print-api.ts`) has no dashboard caller** since A366 slice 4 Part A
   moved a station's printers into the station save; `parseStationPrinterIds`
   (`apps/server/src/management-api.ts`) repeats its checks. Decide whether to remove the route.

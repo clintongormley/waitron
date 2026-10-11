@@ -150,25 +150,45 @@ export class WtTabs extends LitElement {
     button.scrollIntoView({ block: "nearest", inline: "nearest" });
   }
 
-  // Only scrolls the strip, never resizes what it watches, so it needs no frame delay.
-  readonly #stripObserver = new ResizeObserver(([entry]) => {
-    const width = entry!.contentRect.width;
-    if (width === this.#observedWidth) return;
-    this.#observedWidth = width;
-    this.#showSelected();
-    this.#showOverflow();
+  // Scrolls the strip and sets its fade width and overflow mark, none of which changes the size of
+  // the strip or the selected tab, so it needs no frame delay. A selected tab that changes size
+  // re-sizes the fade without scrolling, so a strip the reader scrolled stays put.
+  readonly #sizeObserver = new ResizeObserver((entries) => {
+    let stripResized = false;
+    let tabResized = false;
+    for (const entry of entries) {
+      if (entry.target !== this.#observedStrip) tabResized = true;
+      else if (entry.contentRect.width !== this.#observedWidth) {
+        this.#observedWidth = entry.contentRect.width;
+        stripResized = true;
+      }
+    }
+    if (stripResized) this.#showSelected();
+    if (stripResized || tabResized) {
+      this.#sizeFade();
+      this.#showOverflow();
+    }
   });
   #observedStrip: Element | null = null;
   #observedWidth: number | null = null;
+  #observedTab: Element | null = null;
+  #overflowFrame: number | null = null;
 
-  #observeStrip(): void {
+  #observeSizes(): void {
     if (!this.isConnected) return;
     const bar = this.renderRoot.querySelector('[role="tablist"]');
-    if (bar === this.#observedStrip) return;
-    if (this.#observedStrip) this.#stripObserver.unobserve(this.#observedStrip);
-    if (bar) this.#stripObserver.observe(bar);
-    this.#observedStrip = bar;
-    this.#observedWidth = null;
+    if (bar !== this.#observedStrip) {
+      if (this.#observedStrip) this.#sizeObserver.unobserve(this.#observedStrip);
+      if (bar) this.#sizeObserver.observe(bar);
+      this.#observedStrip = bar;
+      this.#observedWidth = null;
+    }
+    const { tabs, index } = this.#selectedTab();
+    const tab = tabs[index] ?? null;
+    if (tab === this.#observedTab) return;
+    if (this.#observedTab) this.#sizeObserver.unobserve(this.#observedTab);
+    if (tab) this.#sizeObserver.observe(tab, { box: "border-box" });
+    this.#observedTab = tab;
   }
 
   #selectedTab(): { tabs: HTMLButtonElement[]; index: number } {
@@ -208,6 +228,21 @@ export class WtTabs extends LitElement {
     else if (rtl ? toLeft < 0 : toRight > 0) bar.scrollLeft += rtl ? toLeft : toRight;
   }
 
+  #sizeFade(): void {
+    const bar = this.renderRoot.querySelector<HTMLElement>('[role="tablist"]');
+    const { tabs, index } = this.#selectedTab();
+    if (bar && tabs[index]) {
+      bar.style.setProperty("--fade-width", `${this.#fadeWidth(bar, tabs[index])}px`);
+    }
+  }
+
+  #scheduleOverflow(): void {
+    this.#overflowFrame ??= requestAnimationFrame(() => {
+      this.#overflowFrame = null;
+      this.#showOverflow();
+    });
+  }
+
   // Scroll offsets are negative right to left, so the distance from the start is their size. The
   // strip's own padding hides no tab, so scrolling past only that is no cut.
   #showOverflow(): void {
@@ -222,25 +257,26 @@ export class WtTabs extends LitElement {
     const end =
       bar.scrollWidth - bar.clientWidth - fromStart - parseFloat(style.paddingInlineEnd) >= 1;
     const overflow = start && end ? "both" : start ? "start" : end ? "end" : undefined;
-    const { tabs, index } = this.#selectedTab();
-    bar.style.setProperty("--fade-width", `${this.#fadeWidth(bar, tabs[index]!)}px`);
     if (overflow) this.dataset.overflow = overflow;
     else delete this.dataset.overflow;
   }
 
   override connectedCallback(): void {
     super.connectedCallback();
-    if (this.hasUpdated) this.#observeStrip();
+    if (this.hasUpdated) this.#observeSizes();
   }
 
   override disconnectedCallback(): void {
     super.disconnectedCallback();
-    this.#stripObserver.disconnect();
+    this.#sizeObserver.disconnect();
     this.#observedStrip = null;
+    this.#observedTab = null;
+    if (this.#overflowFrame !== null) cancelAnimationFrame(this.#overflowFrame);
+    this.#overflowFrame = null;
   }
 
   override updated(changed: PropertyValues<this>): void {
-    this.#observeStrip();
+    this.#observeSizes();
     if (changed.has("items") || changed.has("value")) this.#showSelected();
     this.#showOverflow();
   }
@@ -253,7 +289,7 @@ export class WtTabs extends LitElement {
           role="tablist"
           part="tablist"
           aria-label=${this.label}
-          @scroll=${() => this.#showOverflow()}
+          @scroll=${() => this.#scheduleOverflow()}
         >
           ${repeat(
             this.items,
