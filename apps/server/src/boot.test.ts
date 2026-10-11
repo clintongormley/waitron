@@ -4836,3 +4836,53 @@ describe("startServer — the append-only watch in trading mode", () => {
     });
   }, 60_000);
 });
+
+describe("startServer — the configuration export route in trading mode", () => {
+  it.each([
+    ["prepare", 401],
+    ["live", 401],
+    ["demo", 404],
+    [undefined, 404],
+  ] as const)(
+    "onboarding intent %s answers the export route with %s",
+    async (intent, status) => {
+      const venue = await freshVenue();
+      const stateDir = await mkdtemp(join(tmpdir(), "waitron-boot-export-route-state-"));
+      let server: StartedServer | undefined;
+      try {
+        await seedTradingVenue(venue.store.venue);
+        await venue.store.close();
+        await writeFile(
+          join(stateDir, "modules.json"),
+          JSON.stringify({ modules: { "fiscal-none": false } }),
+        );
+        const port = await freePort();
+        server = await startServer({
+          ...KEY_ENV,
+          WAITRON_STATE_DIR: stateDir,
+          WAITRON_VENUE_DIR: venue.directory,
+          WAITRON_HTTP_PORT: String(port),
+          WAITRON_MIGRATIONS_DIR: migrationsRoot,
+          // A live intent is accepted only on a production or development box (`config.ts`).
+          WAITRON_ENV: intent === "live" ? "dev" : "preproduction",
+          ...(intent === undefined ? {} : { WAITRON_ONBOARDING_INTENT: intent }),
+        });
+        await awaitListening(port);
+        const response = await fetch(
+          `http://127.0.0.1:${port}/management-api/configuration-export`,
+          {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ passphrase: "a long enough export passphrase" }),
+          },
+        );
+        expect(response.status).toBe(status);
+      } finally {
+        await server?.close();
+        await rm(venue.directory, { recursive: true, force: true });
+        await rm(stateDir, { recursive: true, force: true });
+      }
+    },
+    60_000,
+  );
+});

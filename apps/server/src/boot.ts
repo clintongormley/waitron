@@ -1602,7 +1602,7 @@ async function bootServer(
     await withTransaction(db, async () => {});
   };
   undoOnFailure.push(settleManagementRequests);
-  if (config.onboardingIntent === "prepare") {
+  if (config.onboardingIntent === "prepare" || config.onboardingIntent === "live") {
     mountConfigurationExportApi(
       app,
       {
