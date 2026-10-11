@@ -226,7 +226,7 @@ checked word for word against the downloaded text, are in
 [research/2026-10-09-vat-and-corrections.md](research/2026-10-09-vat-and-corrections.md) and
 [research/2026-10-09-operations.md](research/2026-10-09-operations.md). Of the bullets the passes scored,
 about a quarter were answered outright and most of the rest narrowed to a yes or no. What is left for the
-advisor is below: seventeen short questions, S1 to S17, and a review list, R1 to R6, for the advisor to
+advisor is below: eighteen short questions, S1 to S18, and a review list, R1 to R6, for the advisor to
 read and correct only where we are wrong. **This list replaces the 6 October Word copies**; the
 question texts further down this file stay as the background and the record. No enquiry has been
 sent.
