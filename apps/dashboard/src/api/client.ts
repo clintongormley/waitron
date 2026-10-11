@@ -585,19 +585,12 @@ export interface FloorZone {
   active: boolean;
 }
 
-export type TableShape = "round" | "square" | "rect";
-
 export interface DashboardTable {
   id: string;
   label: string;
-  zoneId: string | null;
-  capacity: number | null;
-  active: boolean;
+  zoneId: string;
+  planTableId: string | null;
   createdAt: string;
-  posX?: number | null;
-  posY?: number | null;
-  shape?: TableShape | null;
-  rotation?: number | null;
 }
 
 export type { PlanPlacement, PlanShape } from "@waitron/ui";

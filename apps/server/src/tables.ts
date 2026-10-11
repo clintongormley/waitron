@@ -8,7 +8,6 @@ import { authorizeManager } from "@waitron/identity";
 import {
   tableInService,
   diningTables,
-  floorTableShape,
   floorZones,
   isStatusColor,
   isUniqueViolation,
@@ -19,21 +18,13 @@ import {
 import type { Transaction } from "@waitron/db";
 import type { TillConfig } from "./till-config.js";
 
-export type FloorTableShape = (typeof floorTableShape.enumValues)[number];
-
 /** `createdAt` is an ISO string. */
 export interface DiningTable {
   id: string;
   label: string;
-  zoneId: string | null;
-  capacity: number | null;
-  active: boolean;
+  zoneId: string;
+  planTableId: string | null;
   createdAt: string;
-  /** Placement is `null` for an unplaced table; rotation is in degrees. */
-  posX: number | null;
-  posY: number | null;
-  shape: FloorTableShape | null;
-  rotation: number | null;
 }
 
 export async function listTables(
@@ -45,14 +36,9 @@ export async function listTables(
     .select({
       id: diningTables.id,
       label: diningTables.label,
-      zoneId: diningTables.zoneId,
-      capacity: diningTables.capacity,
-      active: diningTables.active,
+      zoneId: sql<string>`${diningTables.zoneId}`,
+      planTableId: diningTables.planTableId,
       createdAt: diningTables.createdAt,
-      posX: diningTables.posX,
-      posY: diningTables.posY,
-      shape: diningTables.shape,
-      rotation: diningTables.rotation,
     })
     .from(diningTables)
     .where(

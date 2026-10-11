@@ -695,3 +695,20 @@ it.each(["PUT", "DELETE"])(
     }
   },
 );
+
+it("answers a table's state and list without the old columns", async () => {
+  const { id } = await withTransaction(suite.db, (tx) =>
+    createTable(tx, cfg, { label: `New shape ${randomUUID()}`, zoneId: seededZoneId, capacity: 4 }),
+  );
+  for (const path of ["/api/tables/state", "/api/tables"]) {
+    const response = await request(path);
+    expect(response.status).toBe(200);
+    const row = ((await response.json()) as Record<string, unknown>[]).find((t) => t.id === id)!;
+    expect(row).toMatchObject({ id, zoneId: seededZoneId });
+    for (const key of ["capacity", "active", "posX", "posY", "shape", "rotation"]) {
+      expect(row).not.toHaveProperty(key);
+    }
+    if (path.endsWith("/state")) expect(row.today).not.toBeNull();
+    else expect(row).toHaveProperty("planTableId", null);
+  }
+});

@@ -834,7 +834,6 @@ export class FloorPlanEditor extends LitElement {
   #takenTables: DashboardTable[] | null = null;
   #taken: ReadonlySet<string> = new Set();
 
-  /** Another zone's tables, and this zone's switched-off ones no draft table follows. */
   #takenElsewhere(draft: FloorPlanDraft): ReadonlySet<string> {
     if (draft !== this.#takenFor || this.venueTables !== this.#takenTables) {
       this.#takenFor = draft;
@@ -842,7 +841,9 @@ export class FloorPlanEditor extends LitElement {
       const followed = new Set(draft.tables.map((t) => t.liveTableId));
       this.#taken = new Set(
         this.venueTables
-          .filter((t) => (t.zoneId === this.#zoneId ? !t.active && !followed.has(t.id) : true))
+          .filter((t) =>
+            t.zoneId === this.#zoneId ? t.planTableId === null && !followed.has(t.id) : true,
+          )
           .map((t) => t.label),
       );
     }

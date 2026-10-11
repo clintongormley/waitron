@@ -155,7 +155,6 @@ import type {
 } from "@waitron/module";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
 import { authorize, type Override, type PinAttempts } from "@waitron/identity";
-import type { FloorTableShape } from "./tables.js";
 import { issuancePass } from "./issuance-pass.js";
 import { issueMoment, type IssueMoment } from "./issue-moment.js";
 import { VENUE_SERVICE } from "./modules.js";
@@ -7009,7 +7008,6 @@ export interface TableState {
   id: string;
   label: string;
   zoneId: string | null;
-  capacity: number | null;
   /** `open-tab` while a party holds the table, whether or not it has a bill still open. */
   state: "free" | "open-tab" | "delivery-pending";
   /** The party holding the table has an open bill. */
@@ -7033,11 +7031,6 @@ export interface TableState {
   timingBand: TimingBand;
   /** The MANUAL service status, independent of occupancy: a `free` table may carry one. */
   status: { id: string; label: string; color: string } | null;
-  /** Floor-plan placement, `null` when unplaced. */
-  posX: number | null;
-  posY: number | null;
-  shape: FloorTableShape | null;
-  rotation: number | null;
   today: TableToday;
   /** Merged from the enabled modules' floor annotators; `null` when none annotates the table. */
   nextReservation: { time: string } | null;
@@ -7067,7 +7060,6 @@ export async function listTablesWithState(
     id: string;
     label: string;
     zone_id: string | null;
-    capacity: number | null;
     open_bills: number;
     tab_line_count: number;
     tab_total: string | null;
@@ -7080,10 +7072,6 @@ export async function listTablesWithState(
     status_id: string | null;
     status_label: string | null;
     status_color: string | null;
-    pos_x: number | null;
-    pos_y: number | null;
-    shape: FloorTableShape | null;
-    rotation: number | null;
     needs_clearing_since: string | null;
   }>(sql`
     -- Each seated party and every party merged into it: a bill a merged-in party kept still has its
@@ -7094,8 +7082,7 @@ export async function listTablesWithState(
       select f.root, p.id from parties p join family f on p.merged_into_party_id = f.id
     )
     select
-      dt.id, dt.label, dt.zone_id, dt.capacity,
-      dt.pos_x, dt.pos_y, dt.shape, dt.rotation, dt.needs_clearing_since,
+      dt.id, dt.label, dt.zone_id, dt.needs_clearing_since,
       cast(coalesce(tab.open_bills, 0) as int) as open_bills,
       cast(coalesce(tab.line_count, 0) as int) as tab_line_count,
       tab.tab_total,
@@ -7202,7 +7189,6 @@ export async function listTablesWithState(
       id: r.id,
       label: r.label,
       zoneId: r.zone_id,
-      capacity: r.capacity,
       state,
       hasOpenTab,
       condition: tableCondition({
@@ -7218,10 +7204,6 @@ export async function listTablesWithState(
         r.status_id !== null
           ? { id: r.status_id, label: r.status_label!, color: r.status_color! }
           : null,
-      posX: r.pos_x,
-      posY: r.pos_y,
-      shape: r.shape,
-      rotation: r.rotation,
       today: today.get(r.id)!,
       nextReservation: null as { time: string } | null,
       party: party ?? null,
