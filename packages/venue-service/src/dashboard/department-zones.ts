@@ -147,7 +147,7 @@ export class DepartmentZones extends LitElement {
     return this.zones.find((z) => z.id === this.zone) ?? this.zones[0];
   }
   private get readonly() {
-    return !this.department?.active || this.selected?.active === false;
+    return !this.department?.active;
   }
   protected override willUpdate() {
     if (this.isConnected && this.api !== this.hoursApi) {
@@ -169,7 +169,7 @@ export class DepartmentZones extends LitElement {
       );
     }
     const row = this.selected;
-    if (this.isConnected) this.watchPlan(this.api, row?.active === false ? undefined : row?.id);
+    if (this.isConnected) this.watchPlan(this.api, row?.id);
     if (!row) {
       this.scope?.dispose();
       this.scope = undefined;
@@ -425,7 +425,7 @@ export class DepartmentZones extends LitElement {
     const disabled = this.readonly,
       state = saveActionState(this.scope);
     return html`<div class="zones" aria-label=${t("venue.list_zones")}>
-        ${this.zones.map((z) => html`<wt-button variant="secondary" data-zone=${z.id} data-test=${`zone-${z.id}`} aria-pressed=${String(z.id === row?.id)} ?disabled=${this.busy} @click=${() => void this.select(z.id)}>${z.name}${z.active === false ? html` <span class="muted">(${t("venue.zone_disabled")})</span>` : nothing}</wt-button>`)}
+        ${this.zones.map((z) => html`<wt-button variant="secondary" data-zone=${z.id} data-test=${`zone-${z.id}`} aria-pressed=${String(z.id === row?.id)} ?disabled=${this.busy} @click=${() => void this.select(z.id)}>${z.name}</wt-button>`)}
         <wt-button
           variant=${department.active ? "primary" : "secondary"}
           data-test="add-zone"
@@ -463,22 +463,18 @@ export class DepartmentZones extends LitElement {
                   >
                 </wt-row-actions>
               </div>
-              ${
-                row.active === false
-                  ? nothing
-                  : html`<div>
-                      ${this.hoursFailed ? html`<p role="alert">${t("opening.load_error")}</p>` : nothing}
-                      <p class="muted" data-test="closed-week-summary">${this.closedWeek()}</p>
-                      <p>
-                        <a
-                          data-test="zone-opening-hours"
-                          href=${`/manage/opening-hours/view/week/department/${encodeURIComponent(department.id)}/zone/${encodeURIComponent(row.id)}`}
-                          >${t("venue.zone_opening_hours")}</a
-                        >
-                      </p>
-                      ${this.floorPlan(row, department.id)}
-                    </div>`
-              }
+              <div>
+                ${this.hoursFailed ? html`<p role="alert">${t("opening.load_error")}</p>` : nothing}
+                <p class="muted" data-test="closed-week-summary">${this.closedWeek()}</p>
+                <p>
+                  <a
+                    data-test="zone-opening-hours"
+                    href=${`/manage/opening-hours/view/week/department/${encodeURIComponent(department.id)}/zone/${encodeURIComponent(row.id)}`}
+                    >${t("venue.zone_opening_hours")}</a
+                  >
+                </p>
+                ${this.floorPlan(row, department.id)}
+              </div>
               <dashboard-service-settings-fields
                 .value=${this.draft}
                 .follows=${follows}

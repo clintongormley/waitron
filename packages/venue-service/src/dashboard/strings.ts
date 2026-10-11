@@ -310,7 +310,6 @@ const en = {
   "venue.table_in_use":
     "Table {table} belongs to an open party. Finish the party before deleting this department.",
   "venue.department_disabled": "Deleted",
-  "venue.zone_disabled": "Deleted",
   "venue.edit": "Edit",
   "venue.transfers": "Transfers",
   "venue.receiving_profile": "Receiving desk profile",
@@ -1069,7 +1068,6 @@ const es: Record<keyof typeof en, string> = {
   "venue.table_in_use":
     "La mesa {table} pertenece a un grupo con una cuenta abierta. Finaliza el grupo antes de eliminar este departamento.",
   "venue.department_disabled": "Eliminado",
-  "venue.zone_disabled": "Eliminada",
   "venue.edit": "Editar",
   "venue.transfers": "Traslados",
   "venue.receiving_profile": "Perfil del mostrador receptor",

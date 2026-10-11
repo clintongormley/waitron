@@ -224,7 +224,7 @@ export class VenueServiceApi {
   async load(): Promise<VenueServiceView> {
     const [model, floorZones] = await Promise.all([
       this.#read<VenueServiceModel>("/management-api/venue-service"),
-      this.#read<FloorZone[]>("/management-api/zones?includeInactive=true"),
+      this.#read<FloorZone[]>("/management-api/zones"),
     ]);
     return { ...model, floorZones };
   }
