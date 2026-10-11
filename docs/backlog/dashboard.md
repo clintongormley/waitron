@@ -905,9 +905,6 @@ From **Variants as products (#511–#556) — what is left open.** How the model
   - A bar added while the tab is hidden is believed to show only its button until the tab is seen
     again: `wt-banner` puts its message in two animation frames after it joins the page. Not run in
     a hidden tab.
-  - The station screen's dish move resends until answered without being counted, so a reload can
-    land while one is out (read, not run).
-  - No test covers a kitchen display, which has no sign-in, receiving a new build.
 
 - **Sign-in screens never ask about unsaved changes (owner, 2026-10-11, A499).** The dashboard's
   sign-in screen, every step of it, and the account set-up and password-reset form an emailed link opens there, and the

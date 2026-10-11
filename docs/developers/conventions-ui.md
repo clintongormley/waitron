@@ -400,10 +400,12 @@ request. A missing or empty header changes nothing. Another origin's build is ig
 an answer a redirect brought from another origin (`response.url`), because a till's router can
 point at another server whose build says nothing about this page; by reasoning, not by a run,
 comparing it would reload an idle till in a loop. The dashboard adds no request for it: its
-automatic reads and the till router's 5 s probe of `/api/node` carry the header. The till adds at
-most one: before deciding, it waits for the router's probe round in flight, or starts one, because
-the answer naming the new build may be a reset box's setup page, which the router reads after the
-watcher has seen it.
+automatic reads and the till router's 5 s probe of `/api/node` carry the header (read). The till
+adds at most one `/api/node` check per page, when a new build is seen: before deciding, it waits
+for the router's probe round in flight, or starts one, because the answer naming the new build may
+be a reset box's setup page, which the router reads after the watcher has seen it. "At most one"
+is read from the code (the event is sent once per page); a boot-suite case, where only a request
+other than the probe saw the new build, shows the till starting that check.
 
 The dashboard shows the update bar. The till decides only while the box serves it
 (`#boxServesTill()`, `apps/till/src/till-app.ts`): while the router finds no box accepting sales,
@@ -416,8 +418,9 @@ the table-free draft holds a line (`#store`, `#partylessDraft`), any draft is un
 is running (`#cardAttemptsRunning`), a bill payment or refund kept its send for a resend that must
 reuse its id — after no answer, or after a refusal that keeps the id (`#unansweredPayment`,
 `#unansweredRefund`), or a request is held by `#holdingReload`: every request sent again until
-answered (`#resend`, around `resendUnanswered`), a whole bill payment or refund, and a sign-out's
-save of the draft. A signed-in person counts because a reload signs them out. The bar's Reload
+answered (`#resend`, around `resendUnanswered`, and the station screen's dish move, which it
+announces with a `hold-reload` event), a whole bill payment or refund, and a sign-out's save of
+the draft. A signed-in person counts because a reload signs them out. The bar's Reload
 waits only for requests still out (`#requestsOut()`: `submitting`, a card attempt, or a held
 request), then reloads once.
 
@@ -427,9 +430,8 @@ build-header lines in `apps/server/src/boot.test.ts`, the "build updates" cases 
 `apps/till/src/till-app-boot-and-counter.test.ts` and its "box update meets a box reset or a
 refused device" cases, and the box-update cases in `apps/till/src/till-app-bill-payments.test.ts`,
 `apps/till/src/till-app-drafts.test.ts`, `apps/till/src/till-app-adjustments.test.ts`,
-`apps/till/src/till-app-counter-move-station.test.ts` and `apps/till/src/till-app-parties.test.ts`.
-The station screen's dish move (`apps/till/src/screens/till-station-screen.ts`) calls
-`resendUnanswered` itself, so it is not counted (read, not run). No test
+`apps/till/src/till-app-counter-move-station.test.ts`, `apps/till/src/till-app-parties.test.ts`
+and `apps/till/src/till-app.test.ts` (a kitchen display's dish move). No test
 checks the wiring in either app's `main.ts`. It was run once instead, on 2026-10-11, on the demo
 stack (`wa-wt demo`) in Playwright's Chromium, with a route that swapped the header's value for
 another build: the header reached both pages through the Vite dev servers (`0.0.0`, not `null`);
