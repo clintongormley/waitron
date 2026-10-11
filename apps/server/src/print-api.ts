@@ -1176,7 +1176,10 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
           .select({ id: printJobs.id })
           .from(printJobs)
           .where(
-            and(eq(printJobs.status, "failed"), gte(printJobs.attempts, MAX_DELIVERY_ATTEMPTS)),
+            and(
+              eq(printJobs.status, "failed"),
+              or(eq(printJobs.kind, "drawer"), gte(printJobs.attempts, MAX_DELIVERY_ATTEMPTS)),
+            ),
           )
           .orderBy(desc(printJobs.createdAt), desc(printJobs.id))
           .limit(RECENT_JOBS_LIMIT);
@@ -1198,7 +1201,11 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
           .where(
             or(
               and(ne(printJobs.status, "done"), ne(printJobs.status, "failed")),
-              and(eq(printJobs.status, "failed"), lt(printJobs.attempts, MAX_DELIVERY_ATTEMPTS)),
+              and(
+                eq(printJobs.kind, "document"),
+                eq(printJobs.status, "failed"),
+                lt(printJobs.attempts, MAX_DELIVERY_ATTEMPTS),
+              ),
               inArray(printJobs.id, recentCompleted),
               inArray(printJobs.id, recentFailed),
             ),

@@ -541,8 +541,6 @@ export function createAgent(opts: AgentOptions): Agent {
     probeServer = current;
     let anyFailed = false;
     for (const job of pulled.value.jobs) if (await push(job, token, current)) anyFailed = true;
-    // `lastError` is cleared only by a fully clean tick, so a partial-failure batch keeps it
-    // visible.
     report({
       phase: "running",
       serverUrl: config.serverUrl,

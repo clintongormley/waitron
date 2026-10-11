@@ -151,24 +151,35 @@ email delivery or legal requirement was verified at runtime by this documentatio
 ## `runAgentOnce` (`packages/printing/src/runtime.ts`) has no production caller in the tree
 
 - **`runAgentOnce` (`packages/printing/src/runtime.ts`) has no production caller in the tree** (C70, #866). A
-  refused report still rolls back every job of its batch when the caller's transaction rolls back,
-  so all of them print again (measured 2026-09-29 with a scratch probe). A process that holds the
+  refused report still rolls back its job claim when the caller's transaction rolls back,
+  so that job can print again (measured 2026-09-29 with a scratch probe). A process that holds the
   venue database and runs the agent itself, and wants to confine a refused report, should call
   `claimPrintJobs` and then `reportPrintJob` per job, each report in its own transaction, as
   `apps/server/src/print-api.ts` already does, rather than one `runAgentOnce` in one transaction.
 
-## An aged batch can print twice
+## Measure one-job print pulls on the box
 
-- `packages/printing`, found by #572 and not changed (code, not comments): an aged batch can
-  print twice. When a large batch to a slow printer outlives the one-minute lease, another agent
-  in the venue can re-claim the jobs not yet sent while the first agent still sends every job it
-  pulled; the lease comment in `runtime.ts` now says so. Read from the agent's send loop, not
-  run. In `printers.test.ts`, the case named "a driver error that is NEITHER the UNIQUE NOR the
-  CHECK propagates UNCHANGED" uses a value SQLite refuses by the `printers_transport_ck` CHECK.
-  `escpos.ts`'s `qr()` is not what the receipt uses (it is built with `qrRaster`); the legal
-  reason for error-correction level M is stated in `apps/server/src/qr-matrix.ts`.
+A517 uses one job per pull to eliminate unsent leased tails. Every job now repeats the agent's
+inventory cycle. Measure a burst on the box before choosing inventory caching or another
+lease design; the controlled Hono/transport probe is not a hardware throughput measurement.
+
+## Make an unreported drawer outcome explicit without repeating its pulse
+
+A drawer whose claim or done report was lost stays listed as “printing”, without Resend or an
+automatic expiry. Preserve single-attempt delivery while deciding how to show that unknown
+outcome. A517's lost-report route case pins the current row and its non-resendable listing.
+
+## A printer rethrow test calls a different CHECK a non-CHECK error
+
+`packages/printing/src/printers.test.ts`'s “a driver error that is NEITHER the UNIQUE NOR the CHECK”
+case supplies `carrier_pigeon`, which its comment identifies as refused by `printers_transport_ck`.
+Reconcile the case name with the boundary it tests. This is a source reading, not a new probe.
 
 ## Waitron carries two QR encoders; consolidate on `qrcode-generator`
+
+When consolidating, check the receipt's `qrRaster` path separately from `EscBuilder.qr`, and
+retain the error-correction choice documented in `apps/server/src/qr-matrix.ts`. These are the
+two QR audit pointers carried forward from the old aged-batch detail; A517 changes neither.
 
 **Waitron carries two QR encoders; consolidate on `qrcode-generator` — Small.** `apps/server` imports
 `qrcode` (in `qr-matrix.ts`, `print-job-preview.ts`, `discovery-api.ts`) while `apps/till` uses

@@ -1,9 +1,10 @@
 import { randomBytes, randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { eq, sql } from "drizzle-orm";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   CORE_MIGRATIONS,
+  type Database,
   deviceProfiles,
   devices,
   joinRequests,
@@ -16,6 +17,7 @@ import {
   stationPrinters,
   withTransaction,
 } from "@waitron/db";
+import { CATALOGUE_MIGRATIONS } from "@waitron/catalogue";
 import { VENUE_SERVICE_MIGRATIONS } from "@waitron/venue-service";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedDevice, seedTenant } from "@waitron/db/testing/seed.js";
@@ -34,13 +36,20 @@ import {
   enqueuePrintJob,
   esc,
 } from "@waitron/printing";
-import { PIN_WITHHELD, type BluetoothCommand, type NetworkProbe } from "@waitron/print-agent";
+import {
+  PIN_WITHHELD,
+  createAgent,
+  FakeSink,
+  type BluetoothCommand,
+  type NetworkProbe,
+} from "@waitron/print-agent";
 import {
   locationId as brandLocationId,
   nodeId as brandNodeId,
   seriesId as brandSeriesId,
   type SupportedLocale,
 } from "@waitron/shared";
+import { fakeHost } from "@waitron/print-agent/testing/fake-host.js";
 import { printingAlertSource } from "./alert-sources.js";
 import { JOBS_WAITING_MS } from "./print-job-trouble.js";
 import { stationPrintersDown } from "./station-outputs-down.js";
@@ -66,8 +75,7 @@ import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import { readVenueDetails, writeVenueDetails } from "./venue-details.js";
 import "./errors.js";
 
-// The print routes end to end in-process. Tests share the seeded tenant and create their own
-// printers, so assertions about tenant-wide results must account for other tests' jobs.
+// Each case has its own venue rows so a pull cannot pick up another case's waiting work.
 const noopLog: Logger = () => {};
 /** A setting to draw opaque job payloads at; the agent and queue never read them. */
 const WIDE = { paperWidth: "80mm", resolution: "180dpi" } as const;
@@ -90,53 +98,60 @@ let managerCookie: string;
 let staffCookie: string;
 
 const suite = useVenueDb({
-  resetPerTest: false,
-  migrations: [CORE_MIGRATIONS, IDENTITY_MIGRATIONS, VENUE_SERVICE_MIGRATIONS],
+  migrations: [
+    CORE_MIGRATIONS,
+    IDENTITY_MIGRATIONS,
+    CATALOGUE_MIGRATIONS,
+    VENUE_SERVICE_MIGRATIONS,
+  ],
   timeoutMs: 60_000,
-  setup: async (db) => {
-    await seedTenant(db);
-    // Through the table definitions: `locations.id` and `persons.id` are `$defaultFn` generators a
-    // raw insert never reaches.
-    const [loc] = await db
-      .insert(locations)
-      .values({
-        name: "Barra",
-        invoiceLocales: ["es-ES"],
-        operationDescription: "Venta en establecimiento",
-      })
-      .returning({ id: locations.id });
-    locationId = loc!.id;
-    // Knock and accept must share this one cfg: every join-request statement filters by node.
-    cfg = {
-      nodeId: brandNodeId(randomUUID()),
-      seriesId: brandSeriesId(randomUUID()),
-      locationId: brandLocationId(locationId),
-      locale: "es-ES",
-      invoiceLocales: ["es-ES"],
-      tipsEnabled: false,
-      simplifiedInvoiceLimit: null,
-    };
-    const { managerSid, staffSid } = await withTransaction(db, async (tx) => {
-      const [mgr] = await tx
-        .insert(persons)
-        .values({ displayName: "The Manager", pinHash: hashPin("1234"), role: "manager" })
-        .returning({ id: persons.id });
-      const [stf] = await tx
-        .insert(persons)
-        .values({ displayName: "The Clerk", pinHash: hashPin("1234"), role: "staff" })
-        .returning({ id: persons.id });
-      const managerSession = await startManagementSession(tx, {
-        personId: mgr!.id,
-      });
-      const staffSession = await startManagementSession(tx, {
-        personId: stf!.id,
-      });
-      return { managerSid: managerSession.token, staffSid: staffSession.token };
-    });
-    managerCookie = `${MANAGEMENT_COOKIE}=${managerSid}`;
-    staffCookie = `${MANAGEMENT_COOKIE}=${staffSid}`;
-  },
 });
+
+async function seedPrintRouteFixture(db: Database) {
+  await seedTenant(db);
+  // Through the table definitions: `locations.id` and `persons.id` are `$defaultFn` generators a
+  // raw insert never reaches.
+  const [loc] = await db
+    .insert(locations)
+    .values({
+      name: "Barra",
+      invoiceLocales: ["es-ES"],
+      operationDescription: "Venta en establecimiento",
+    })
+    .returning({ id: locations.id });
+  locationId = loc!.id;
+  // Knock and accept must share this one cfg: every join-request statement filters by node.
+  cfg = {
+    nodeId: brandNodeId(randomUUID()),
+    seriesId: brandSeriesId(randomUUID()),
+    locationId: brandLocationId(locationId),
+    locale: "es-ES",
+    invoiceLocales: ["es-ES"],
+    tipsEnabled: false,
+    simplifiedInvoiceLimit: null,
+  };
+  const { managerSid, staffSid } = await withTransaction(db, async (tx) => {
+    const [mgr] = await tx
+      .insert(persons)
+      .values({ displayName: "The Manager", pinHash: hashPin("1234"), role: "manager" })
+      .returning({ id: persons.id });
+    const [stf] = await tx
+      .insert(persons)
+      .values({ displayName: "The Clerk", pinHash: hashPin("1234"), role: "staff" })
+      .returning({ id: persons.id });
+    const managerSession = await startManagementSession(tx, {
+      personId: mgr!.id,
+    });
+    const staffSession = await startManagementSession(tx, {
+      personId: stf!.id,
+    });
+    return { managerSid: managerSession.token, staffSid: staffSession.token };
+  });
+  managerCookie = `${MANAGEMENT_COOKIE}=${managerSid}`;
+  staffCookie = `${MANAGEMENT_COOKIE}=${staffSid}`;
+}
+
+beforeEach(() => seedPrintRouteFixture(suite.db));
 
 function mountApp(
   opts: {
@@ -419,6 +434,311 @@ describe("the deleted enrol/codes routes are gone", () => {
   });
 });
 
+describe("remote agents with an aged print queue", () => {
+  it.each(["document", "drawer"] as const)(
+    "hands the unsent %s to only one of two agents",
+    async (kind) => {
+      const app = mountApp();
+      app.get("/api/node", (c) =>
+        c.json({ nodeId: cfg.nodeId, term: 1, acceptingSales: true, environment: "preproduction" }),
+      );
+      const a = await joinAndAccept(app, "Agent A");
+      const b = await joinAndAccept(app, "Agent B");
+      const printerId = await createPrinterVia(app, a.agentId);
+      const first = await enqueue(printerId, new Uint8Array([1]));
+      const tail = await withTransaction(suite.db, async (tx) => {
+        const queued = await enqueuePrintJob(
+          tx,
+          { locationId },
+          printerId,
+          new Uint8Array([2]),
+          kind,
+        );
+        await tx
+          .update(printJobs)
+          .set({ createdAt: "2026-01-01T00:00:00.000Z" })
+          .where(eq(printJobs.id, first));
+        await tx
+          .update(printJobs)
+          .set({ createdAt: "2026-01-01T00:00:01.000Z" })
+          .where(eq(printJobs.id, queued.jobId));
+        return queued.jobId;
+      });
+      const sink = new FakeSink();
+      let release!: () => void;
+      const gate = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      let entered!: () => void;
+      const sending = new Promise<void>((resolve) => {
+        entered = resolve;
+      });
+      const fetch: typeof globalThis.fetch = async (url, init) => app.request(String(url), init);
+      const serverUrl = "http://box.test";
+      const firstAgent = createAgent({
+        host: fakeHost({
+          token: a.token,
+          fetch,
+          config: { serverUrl, name: "Agent A" },
+          transport: {
+            send: async (target, payload) => {
+              await sink.send(target, payload);
+              if (payload[0] === 1) {
+                entered();
+                await gate;
+              }
+            },
+          },
+        }),
+      });
+      const secondAgent = createAgent({
+        host: fakeHost({
+          token: b.token,
+          fetch,
+          config: { serverUrl, name: "Agent B" },
+          transport: sink,
+        }),
+      });
+      const running = firstAgent.runOnce();
+      try {
+        await sending;
+        await withTransaction(suite.db, (tx) =>
+          tx
+            .update(printJobs)
+            .set({ claimedAt: "2026-01-01T00:00:00.000Z" })
+            .where(eq(printJobs.id, tail)),
+        );
+        await secondAgent.runOnce();
+      } finally {
+        release();
+        await running;
+      }
+      await firstAgent.runOnce();
+      await secondAgent.runOnce();
+      expect(sink.written.map((entry) => [...entry.bytes])).toEqual([[1], [2]]);
+      expect((await jobRow(first)).status).toBe("done");
+      expect((await jobRow(tail)).status).toBe("done");
+    },
+  );
+  it.each([
+    { kind: "document" as const, expected: [[7], [7]], status: "done" },
+    { kind: "drawer" as const, expected: [[7]], status: "printing" },
+  ])("a lost $kind report preserves its recovery policy", async ({ kind, expected, status }) => {
+    const app = mountApp();
+    app.get("/api/node", (c) =>
+      c.json({ nodeId: cfg.nodeId, term: 1, acceptingSales: true, environment: "preproduction" }),
+    );
+    const a = await joinAndAccept(app, "Agent A");
+    const b = await joinAndAccept(app, "Agent B");
+    const printerId = await createPrinterVia(app, a.agentId);
+    const job = await withTransaction(suite.db, (tx) =>
+      enqueuePrintJob(tx, { locationId }, printerId, new Uint8Array([7]), kind),
+    );
+    const sink = new FakeSink();
+    const serverUrl = "http://box.test";
+    const fetchA: typeof globalThis.fetch = async (url, init) => {
+      if (String(url).endsWith("/result"))
+        return Promise.resolve(new Response(null, { status: 503 }));
+      return app.request(String(url), init);
+    };
+    const firstAgent = createAgent({
+      host: fakeHost({
+        token: a.token,
+        fetch: fetchA,
+        config: { serverUrl, name: "Agent A" },
+        transport: sink,
+      }),
+    });
+    await firstAgent.runOnce();
+    expect(sink.written.map((entry) => [...entry.bytes])).toEqual([[7]]);
+    await withTransaction(suite.db, (tx) =>
+      tx
+        .update(printJobs)
+        .set({ claimedAt: "2026-01-01T00:00:00.000Z" })
+        .where(eq(printJobs.id, job.jobId)),
+    );
+    const fetchB: typeof globalThis.fetch = async (url, init) => app.request(String(url), init);
+    const secondAgent = createAgent({
+      host: fakeHost({
+        token: b.token,
+        fetch: fetchB,
+        config: { serverUrl, name: "Agent B" },
+        transport: sink,
+      }),
+    });
+    await secondAgent.runOnce();
+    await secondAgent.runOnce();
+    expect(sink.written.map((entry) => [...entry.bytes])).toEqual(expected);
+    expect((await jobRow(job.jobId)).status).toBe(status);
+    if (kind === "drawer") {
+      const listed = await send(app, "GET", "/management-api/print-jobs", {
+        cookie: managerCookie,
+      });
+      expect(listed.status).toBe(200);
+      const rows = (await listed.json()) as { id: string; status: string; canResend: boolean }[];
+      expect(rows.find((row) => row.id === job.jobId)).toMatchObject({
+        status: "printing",
+        canResend: false,
+      });
+    }
+  });
+  it.each(["lost report", "uncertain write"] as const)(
+    "does not repeat the actual drawer pulse after a %s",
+    async (mode) => {
+      const app = mountApp();
+      app.get("/api/node", (c) =>
+        c.json({ nodeId: cfg.nodeId, term: 1, acceptingSales: true, environment: "preproduction" }),
+      );
+      const a = await joinAndAccept(app, "Agent A");
+      const b = await joinAndAccept(app, "Agent B");
+      const printerId = await createPrinterVia(app, a.agentId);
+      const pulse = await withTransaction(suite.db, (tx) =>
+        enqueuePrintJob(tx, { locationId }, printerId, esc().kick().bytes(), "drawer"),
+      );
+      const sink = new FakeSink();
+      const serverUrl = "http://box.test";
+      const fetchA: typeof globalThis.fetch = async (url, init) => {
+        if (mode === "lost report" && String(url).endsWith("/result"))
+          return new Response(null, { status: 503 });
+        return app.request(String(url), init);
+      };
+      const first = createAgent({
+        host: fakeHost({
+          token: a.token,
+          fetch: fetchA,
+          config: { serverUrl, name: "Agent A" },
+          transport: {
+            send: async (target, bytes) => {
+              await sink.send(target, bytes);
+              if (mode === "uncertain write") throw new Error("connection reset after pulse");
+            },
+          },
+        }),
+      });
+      await first.runOnce();
+      await suite.db
+        .update(printJobs)
+        .set({ claimedAt: "2026-01-01T00:00:00.000Z" })
+        .where(eq(printJobs.id, pulse.jobId));
+      const fetchB: typeof globalThis.fetch = async (url, init) => app.request(String(url), init);
+      const second = createAgent({
+        host: fakeHost({
+          token: b.token,
+          fetch: fetchB,
+          config: { serverUrl, name: "Agent B" },
+          transport: sink,
+        }),
+      });
+      await second.runOnce();
+      await first.runOnce();
+      expect(sink.written.map((entry) => [...entry.bytes])).toEqual([[27, 112, 0, 25, 250]]);
+      expect(await jobRow(pulse.jobId)).toMatchObject(
+        mode === "lost report"
+          ? { status: "printing", attempts: 0 }
+          : { status: "failed", attempts: 1, last_error: "connection reset after pulse" },
+      );
+    },
+  );
+
+  it("preserves failed-ticket order on one printer while another printer proceeds", async () => {
+    const app = mountApp();
+    app.get("/api/node", (c) =>
+      c.json({ nodeId: cfg.nodeId, term: 1, acceptingSales: true, environment: "preproduction" }),
+    );
+    const a = await joinAndAccept(app, "Agent A");
+    const b = await joinAndAccept(app, "Agent B");
+    const printerId = await createPrinterVia(app, a.agentId);
+    const first = await enqueue(printerId, new Uint8Array([1]));
+    const tail = await enqueue(printerId, new Uint8Array([2]));
+    await suite.db
+      .update(printJobs)
+      .set({ createdAt: "2026-01-01T00:00:00.000Z" })
+      .where(eq(printJobs.id, first));
+    await suite.db
+      .update(printJobs)
+      .set({ createdAt: "2026-01-01T00:00:01.000Z" })
+      .where(eq(printJobs.id, tail));
+    const fetch: typeof globalThis.fetch = async (url, init) => app.request(String(url), init);
+    const serverUrl = "http://box.test";
+    const failed = createAgent({
+      host: fakeHost({
+        token: a.token,
+        fetch,
+        config: { serverUrl, name: "Agent A" },
+        transport: {
+          send: async () => {
+            throw new Error("paper out");
+          },
+        },
+      }),
+    });
+    await failed.runOnce();
+    expect(await jobRow(first)).toMatchObject({
+      status: "failed",
+      attempts: 1,
+      last_error: "paper out",
+    });
+    const created = await send(app, "POST", "/management-api/printers", {
+      cookie: managerCookie,
+      body: { name: "Other", transport: "network_tcp", host: "10.0.0.10" },
+    });
+    expect(created.status).toBe(201);
+    const { id } = (await created.json()) as { id: string };
+    const other = await enqueue(id, new Uint8Array([9]));
+    await suite.db
+      .update(printJobs)
+      .set({ createdAt: "2026-01-01T00:00:02.000Z" })
+      .where(eq(printJobs.id, other));
+    const sink = new FakeSink();
+    const recovered = createAgent({
+      host: fakeHost({
+        token: b.token,
+        fetch,
+        config: { serverUrl, name: "Agent B" },
+        transport: sink,
+      }),
+    });
+    for (let tick = 0; tick < 3; tick += 1) await recovered.runOnce();
+    expect(sink.written.map((entry) => [...entry.bytes])).toEqual([[9], [1], [2]]);
+    expect(await jobRow(first)).toMatchObject({ status: "done", attempts: 1 });
+    expect((await jobRow(tail)).status).toBe("done");
+    expect((await jobRow(other)).status).toBe("done");
+  });
+
+  it("bounds failed drawer history without pretending five sends failed", async () => {
+    const app = mountApp();
+    const a = await joinAndAccept(app);
+    const printerId = await createPrinterVia(app, a.agentId);
+    const ids: string[] = [];
+    await withTransaction(suite.db, async (tx) => {
+      for (let i = 0; i < 101; i += 1) {
+        const job = await enqueuePrintJob(
+          tx,
+          { locationId },
+          printerId,
+          new Uint8Array([7]),
+          "drawer",
+        );
+        ids.push(job.jobId);
+        await tx
+          .update(printJobs)
+          .set({
+            status: "failed",
+            attempts: 1,
+            lastError: "uncertain write",
+            createdAt: new Date(Date.UTC(2026, 0, 1, 0, 0, i)).toISOString(),
+          })
+          .where(eq(printJobs.id, job.jobId));
+      }
+    });
+    const reply = await send(app, "GET", "/management-api/print-jobs", { cookie: managerCookie });
+    expect(reply.status).toBe(200);
+    const rows = (await reply.json()) as { id: string; attempts: number; canResend: boolean }[];
+    expect(rows.map((row) => row.id)).toEqual(ids.slice(1).reverse());
+    expect(rows.map((row) => row.attempts)).toEqual(Array.from({ length: 100 }, () => 1));
+  });
+});
+
 describe("POST /print-api/agent/jobs — the pull carries nodeId + servers", () => {
   it("echoes this node's id and the venue's routable servers (primary first) alongside the jobs", async () => {
     const app = mountApp({ pairingOpen: true });
@@ -503,6 +823,7 @@ describe("mountPrintApi — agent claim + report", () => {
     const done = await jobRow(doneJob);
     expect(done.status).toBe("done");
     expect(done.delivered_at).not.toBeNull();
+    expect((await pull(app, token)).jobs.map((job) => job.id)).toEqual([failJob]);
 
     const failRes = await send(app, "POST", `/print-api/agent/jobs/${failJob}/result`, {
       bearer: token,

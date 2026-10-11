@@ -2,26 +2,13 @@ import { sql, type SQL } from "drizzle-orm";
 import { claimRows, nowIso, type Transaction } from "@waitron/db";
 import type { PrintTransport, PrinterTarget, Transport } from "@waitron/print-agent";
 
-/** Jobs claimed per batch. A bound, not a tuning knob — the loop calls again while work remains. */
+/** Jobs handled per bounded Bluetooth failure pass or demo delivery pass. */
 export const PULL_BATCH_LIMIT = 50;
 
-/**
- * Delivery attempts before a `failed` job stops being re-claimed. An attempt bound, not a time
- * backoff: `print_jobs` carries no next-attempt timestamp.
- */
 export const MAX_DELIVERY_ATTEMPTS = 5;
 
-/**
- * The claim lease: a job still `printing` whose `claimed_at` is older than this is a dropped claim
- * (the agent crashed or the box died) and the pull re-claims it. Long enough not to reclaim a live
- * push, which takes seconds.
- *
- * `claimed_at` is stamped once per BATCH, so a large batch to a slow printer can age its unsent
- * tail past the lease. Another agent in the venue can then re-claim a network printer's unsent jobs
- * and print them while the first still sends every job it pulled, so those jobs print twice.
- * Delivery is deliberately at-least-once: a reclaim can also reprint a job that printed but whose
- * `done` report was lost. A double print is accepted over a dropped kitchen ticket.
- */
+/** A lost document report may reprint rather than drop a ticket; an uncertain drawer pulse must
+ * not be repeated automatically. */
 export const PRINT_JOB_LEASE_MS = 60_000;
 
 export interface AgentRuntimeDeps {
@@ -70,25 +57,14 @@ function dueNow(): { claimedAt: string; due: SQL } {
     claimedAt,
     due: sql`(
         j.status = 'queued'
-        or (j.status = 'failed' and j.attempts < ${MAX_DELIVERY_ATTEMPTS})
+        or (j.kind = 'document' and j.status = 'failed' and j.attempts < ${MAX_DELIVERY_ATTEMPTS})
         or (j.status = 'printing'
             and (j.claimed_at is null or j.claimed_at < ${leaseCutoff}))
       )`,
   };
 }
 
-/**
- * Claims a batch of this agent's due jobs and returns each with its printer's connection facts.
- * Separate from `runAgentOnce` so the server can commit the claim in one request and hand the jobs to
- * a remote agent without holding a transaction across that agent's socket write.
- *
- * A job is due when `queued`, `failed` under the attempt cap, or `printing` with no live claim. That
- * last case covers `claimed_at IS NULL` too: every claim stamps it, so a `printing` row without one
- * is stuck, and `<` alone would never select it. A deactivated printer's jobs, stuck ones included,
- * are left unclaimed until it is reactivated.
- *
- * SQLite has no boolean type but reads `true` as 1, which is what the `active` column stores.
- */
+/** Remote callers must commit this claim before sending its payload. */
 export async function claimPrintJobs(
   tx: Transaction,
   agentId: string,
@@ -105,6 +81,16 @@ export async function claimPrintJobs(
     ctx.visibleKeys.length > 0
       ? sql`(p.transport in ('usb','bluetooth') and p.local_key in ${ctx.visibleKeys})`
       : sql`false`;
+  const invoiceDue = (jobId: SQL) => sql`(
+    not exists (select 1 from invoice_deliveries d where d.print_job_id = ${jobId})
+    or ${
+      ctx.invoiceReceiptsAt === undefined
+        ? sql`false`
+        : sql`exists (
+      select 1 from invoice_deliveries d where d.print_job_id = ${jobId}
+        and d.status = 'queued' and d.next_attempt_at <= ${ctx.invoiceReceiptsAt})`
+    }
+  )`;
   return claimRows<ClaimedJob>(tx, {
     table: "print_jobs",
     key: "id",
@@ -112,17 +98,17 @@ export async function claimPrintJobs(
     claimable: sql`p.active = true and p.deleted_at is null
       and ( (p.transport = 'network_tcp' and p.location_id = ${ctx.locationId}) or ${usbBt} )
       ${ctx.printerId === undefined ? sql`` : sql`and p.id = ${ctx.printerId}`}
-      and (not exists (select 1 from invoice_deliveries d where d.print_job_id = j.id)
-        or ${
-          ctx.invoiceReceiptsAt === undefined
-            ? sql`false`
-            : sql`exists (
-          select 1 from invoice_deliveries d where d.print_job_id = j.id
-            and d.status = 'queued' and d.next_attempt_at <= ${ctx.invoiceReceiptsAt})`
-        })
+      and ${invoiceDue(sql`j.id`)}
+      and (j.kind = 'document' or j.status = 'queued')
       and ${due}`,
-    order: sql`j.created_at`,
-    limit: PULL_BATCH_LIMIT,
+    order: sql`case when j.status = 'failed' or exists (
+        select 1 from print_jobs f
+        where f.printer_id = j.printer_id and f.kind = 'document'
+          and f.status = 'failed' and f.attempts < ${MAX_DELIVERY_ATTEMPTS}
+          and (f.created_at < j.created_at or (f.created_at = j.created_at and f.rowid < j.rowid))
+          and ${invoiceDue(sql`f.id`)}
+      ) then 1 else 0 end, j.created_at, j.rowid`,
+    limit: 1,
     set: sql`status = 'printing', claimed_at = ${claimedAt}, claimed_by = ${agentId}`,
     // Correlated subqueries: SQLite refuses a RETURNING column from a table an `UPDATE … FROM` joins.
     returning: sql`print_jobs.id, print_jobs.printer_id, print_jobs.payload,
@@ -200,15 +186,7 @@ export async function endUnpairedPrinterJobs(
   return ended.rows.map(({ id }) => id);
 }
 
-/**
- * Records one job's outcome. Only the agent that claimed the job may report it, and only while it is
- * `printing`, so a retried report on a finished job is a no-op rather than a second `attempts` bump.
- * An unknown job, another agent's and a finished one all return the same `{ updated: false }`.
- *
- * Correlated invoice receipts report through the invoice adapter, which checks their attempt token.
- * For ordinary jobs, a duplicate report after the SAME agent re-claimed the job applies to the new claim:
- * telling the two apart would need a per-claim token the schema does not carry.
- */
+/** Invoice receipts report through their token-checking adapter. */
 export async function reportPrintJob(
   tx: Transaction,
   input: { agentId: string; jobId: string; outcome: JobOutcome },
@@ -233,8 +211,6 @@ export async function runAgentOnce(deps: AgentRuntimeDeps): Promise<AgentRunResu
 
   const claimed = await claimPrintJobs(tx, agentId, { locationId, visibleKeys });
 
-  // The push is serial, so one dead printer blocks the rest of the batch unless each
-  // `transport.send` is bounded — `NetworkTcpTransport` arms a per-send timeout for that.
   let delivered = 0;
   let failed = 0;
   for (const job of claimed) {

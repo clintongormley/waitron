@@ -136,13 +136,30 @@ describe("runAgentOnce (pull → push → report)", () => {
       const { jobId: upJob } = await enqueuePrintJob(tx, cfg, up.id, new Uint8Array([2]));
 
       const sink = new FlakySink(down.id);
-      const result = await runAgentOnce({
-        tx,
-        agentId,
-        locationId: cfg.locationId,
-        visibleKeys: [],
-        transport: sink,
-      });
+      const runs = [];
+      for (let pull = 0; pull < 2; pull += 1) {
+        runs.push(
+          await runAgentOnce({
+            tx,
+            agentId,
+            locationId: cfg.locationId,
+            visibleKeys: [],
+            transport: sink,
+          }),
+        );
+      }
+      expect(runs).toEqual([
+        { claimed: 1, delivered: 0, failed: 1 },
+        { claimed: 1, delivered: 1, failed: 0 },
+      ]);
+      const result = runs.reduce(
+        (sum, run) => ({
+          claimed: sum.claimed + run.claimed,
+          delivered: sum.delivered + run.delivered,
+          failed: sum.failed + run.failed,
+        }),
+        { claimed: 0, delivered: 0, failed: 0 },
+      );
 
       expect(result).toEqual({ claimed: 2, delivered: 1, failed: 1 });
       expect(sink.written).toEqual([{ printerId: up.id, bytes: new Uint8Array([2]) }]);

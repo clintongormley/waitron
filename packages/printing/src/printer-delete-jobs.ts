@@ -10,7 +10,7 @@ export const PRINTER_DELETED = "printer.deleted";
 function printerDeleteJobPredicate(printerId: string): SQL {
   return sql`printer_id = ${printerId} and (
     status in ('queued', 'printing') or
-    (status = 'failed' and attempts < ${MAX_DELIVERY_ATTEMPTS}))`;
+    (kind = 'document' and status = 'failed' and attempts < ${MAX_DELIVERY_ATTEMPTS}))`;
 }
 
 export async function readPrinterDeleteJobIds(

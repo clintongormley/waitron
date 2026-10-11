@@ -115,7 +115,14 @@ describe("generic print runtime's invoice boundary", () => {
         visibleKeys: [],
         invoiceReceiptsAt: now,
       });
-      expect(jobs.map((job) => job.id)).toEqual([ctx.managed, ctx.ordinary]);
+      expect(jobs.map((job) => job.id)).toEqual([ctx.managed]);
+      const next = await claimPrintJobs(tx, ctx.agentId, {
+        locationId: ctx.locationId,
+        visibleKeys: [],
+        invoiceReceiptsAt: now,
+      });
+      expect(next.map((job) => job.id)).toEqual([ctx.ordinary]);
+      expect([...jobs, ...next].map((job) => job.id)).toEqual([ctx.managed, ctx.ordinary]);
       expect(
         await reportPrintJob(tx, {
           agentId: ctx.agentId,
@@ -163,4 +170,52 @@ describe("generic print runtime's invoice boundary", () => {
       (await suite.db.select().from(printJobs).where(eq(printJobs.id, ctx.managed)))[0],
     ).toMatchObject({ status: "queued", claimedBy: null });
   });
+  it.each([undefined, now])(
+    "an ineligible failed invoice does not delay ordinary work (%s)",
+    async (invoiceReceiptsAt) => {
+      const ctx = await setup();
+      await withTransaction(suite.db, async (tx) => {
+        await tx
+          .update(printJobs)
+          .set({ status: "failed", attempts: 1, createdAt: "2026-01-01T00:00:00.000Z" })
+          .where(eq(printJobs.id, ctx.managed));
+        await tx
+          .update(invoiceDeliveries)
+          .set({ nextAttemptAt: "2026-12-01T01:00:00.000Z" })
+          .where(eq(invoiceDeliveries.id, ctx.deliveryId));
+        await tx
+          .update(printJobs)
+          .set({ createdAt: "2026-01-01T00:00:01.000Z" })
+          .where(eq(printJobs.id, ctx.ordinary));
+        const other = await createPrinter(
+          tx,
+          { locationId: ctx.locationId },
+          {
+            name: "Other",
+            transport: "network_tcp",
+            host: "other-printer.test",
+          },
+        );
+        const queued = await enqueuePrintJob(
+          tx,
+          { locationId: ctx.locationId },
+          other.id,
+          new Uint8Array([3]),
+        );
+        await tx
+          .update(printJobs)
+          .set({ createdAt: "2026-01-01T00:00:02.000Z" })
+          .where(eq(printJobs.id, queued.jobId));
+        expect(
+          (
+            await claimPrintJobs(tx, ctx.agentId, {
+              locationId: ctx.locationId,
+              visibleKeys: [],
+              ...(invoiceReceiptsAt === undefined ? {} : { invoiceReceiptsAt }),
+            })
+          ).map((job) => job.id),
+        ).toEqual([ctx.ordinary]);
+      });
+    },
+  );
 });
