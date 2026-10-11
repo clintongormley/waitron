@@ -139,9 +139,8 @@ describe("the kitchen and floor read models on a real migrated venue", () => {
       const all = await listTables(tx, cfg, { includeDisabled: true });
       expect(floor.map((t) => t.id).sort()).toEqual([tableId, takenOff!.id].sort());
       expect(plain.map((t) => t.id).sort()).toEqual([tableId, takenOff!.id].sort());
-      expect(all.map((t) => t.id).sort()).toEqual(
-        [tableId, absent!.id, closed!.id, takenOff!.id].sort(),
-      );
+      expect(all.map((t) => t.id).sort()).toEqual([tableId, absent!.id, takenOff!.id].sort());
+      expect(all.some((t) => t.id === closed!.id)).toBe(false);
       expect(floor.find((t) => t.id === takenOff!.id)?.today?.takenOff).toBe(true);
     });
     await db.delete(floorTodayTables).where(eq(floorTodayTables.tableId, takenOff!.id));
