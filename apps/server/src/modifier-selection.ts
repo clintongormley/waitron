@@ -93,12 +93,12 @@ export function buildLineExtras(
   requested: { extras?: unknown; options?: unknown },
   defaultLanguage: string,
 ): { extraChildren: ExtraChild[]; optionSnapshots: OptionSnapshot[] } {
-  // The validator answers with ids drawn from the lists it was handed, so every lookup below that
-  // re-finds one of those ids resolves.
   const optionSnapshots = answerFreezers(offered.options, requested.options).map((freeze) =>
     freeze(defaultLanguage),
   );
 
+  // `validateExtraSelections` answers with ids drawn from the lists it was handed, so every lookup
+  // below that re-finds one of those ids resolves.
   const extraChildren = validateExtraSelections(offered.extras, requested.extras ?? []).flatMap(
     (selection): ExtraChild[] => {
       const list = offered.extras.find((candidate) => candidate.id === selection.listId)!;

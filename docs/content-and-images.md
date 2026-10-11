@@ -75,8 +75,8 @@ The till offers the location's receipt language and, in Spain, whichever of Span
 Galician and Basque are among your content languages, so adding English content does not add an
 English receipt.
 
-Product names, units and option answers print in your default content language, whatever language
-the receipt is in. They are stored in that language when a dish is added to an order, so changing
+Product names, units and option answers print in your default content language, or another of your
+content languages where a name is blank in it, whatever language the receipt is in. They are stored in that language when a dish is added to an order, so changing
 the content default does not rewrite issued receipts. If the receipt language is not one of your
 content languages, this page and the Receipts tab of Venue settings show a note saying so.
 

@@ -780,7 +780,7 @@ describe("A4 filed language outside the current pack choices", () => {
 });
 
 describe("A4 invoice of a sale filed in a chosen receipt language", () => {
-  it("prints Spanish fixed words and looks the goods up in the language they were saved in", async () => {
+  it("prints Spanish fixed words and looks the goods up under the sale's first receipt language", async () => {
     const backend = none();
     const { saleId } = await withTransaction(suite.db, async (tx) => {
       const [series] = await tx

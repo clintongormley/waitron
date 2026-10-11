@@ -181,17 +181,19 @@ no text at all. The kitchen names are frozen raw and fall back when drawn, throu
 `kitchenPresentationName`.
 
 **An options answer is the exception to that, deliberately.** `buildLineExtras`
-(`apps/server/src/modifier-selection.ts`) narrows the list's and the label's customer-facing map to
-one entry under the venue's default content language, holding another stored language's text where
-the default has none, and leaves a `null` map `null` (`defaultLanguageText`,
+(`apps/server/src/modifier-selection.ts`), or `editLineOptions` when an edit gives a new or changed
+answer, narrows the list's and the label's customer-facing map to one entry under the default
+content language of the time the answer was frozen, holding another stored language's text where
+that language has none, and leaves a `null` map `null` (`defaultLanguageText`,
 `packages/catalogue/src/default-language-text.ts`); it widens each plain staff name into a
 one-entry map under the same language. Nothing has fallen back by the time the
 row is written, so the customer-to-staff fallback for an answer runs at RENDER time instead, in
 `customerOptionSnapshotLabels` (`packages/catalogue/src/option-snapshot-labels.ts`): it takes the customer
 map when `nonBlankTranslations` says that map holds text in some language and the staff map
-otherwise, then resolves whichever it picked against the locale it was asked for, then the venue's
-default content language — read from the staff map's one key, which both builders write under that
-language (`buildLineExtras`, and `optionSnapshotOf` in `apps/till/src/state/held-options.ts`) — then
+otherwise, then resolves whichever it picked against the locale it was asked for, then the
+default content language of the time the answer was frozen — read from the staff map's one key,
+which both builders write under that language (`buildLineExtras` or `editLineOptions`, and
+`optionSnapshotOf` in `apps/till/src/state/held-options.ts`) — then
 any language the map holds. The kitchen half
 (`optionSnapshotLabels`, same file) takes no language step: through `kitchenPresentationName` it
 prints the kitchen name and falls back to the staff map's one value.

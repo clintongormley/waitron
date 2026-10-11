@@ -114,8 +114,8 @@ async function locationLanguageIn(
     .from(locations)
     .where(eq(locations.id, locationId));
   const locale = row?.invoiceLocales[0];
-  // The column's CHECK holds one or two entries, so only a missing row leaves no first entry.
-  if (locale === undefined) throw new Error(`no location ${locationId}`);
+  // As `readReceiptLanguage` (@waitron/catalogue), with the province in the same read.
+  if (locale === undefined) throw new Error(`locationLanguageIn: no location ${locationId}`);
   return { locale, invoiceLocales: row!.invoiceLocales, area: row!.province };
 }
 

@@ -1637,7 +1637,7 @@ describe("till-ticket-view: the sale's own language", () => {
     }
   });
 
-  it("names dishes, units and option answers in the language they were saved in, keeping the fixed words in the sale's", async () => {
+  it("names dishes, units and option answers by the sale's `namesLocale`, keeping the fixed words in the sale's", async () => {
     const { el } = await mount({
       locale: "es-ES",
       namesLocale: "ca-ES",

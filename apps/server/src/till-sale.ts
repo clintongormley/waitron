@@ -250,8 +250,10 @@ export interface TillSaleResult extends ReceiptPresentation {
   receiptHeader?: { tradingName: string; printTradingName: boolean };
   /** The language the sale was filed in (`sales.locale`). */
   locale: string;
-  /** The key the goods' names were stored under (`sales.invoice_locales[0]`); their text is the
-   * default content language's. Absent reads as `locale`. */
+  /** The language the receipt looks the goods' names up by (`sales.invoice_locales[0]`); a line
+   * without that key prints its first entry. The text is the venue's default content language's
+   * when the line was written, or another stored language's where it had none. Absent reads as
+   * `locale`. */
   namesLocale?: string;
   orderLabel: string | null;
   orderNumber: number;
@@ -1309,8 +1311,9 @@ function releasePlacedAttempt(db: Database, workingOrderId: string): void {
  * Which of these orders has a payment that is, or could still become, a capture no sale records:
  * an attempt its provider has not resolved, or a capture not yet filed. This decides whether a
  * mark may be RELEASED, whether Pay may go ahead over one, and whether a placed order's invoice
- * may be credited (`cancelPlacedOrder`); the check of the mark itself (`refuseOrderPaymentMarked`)
- * reads only the mark.
+ * may be credited (`cancelPlacedOrder`), and whether a placed order's invoice choice or receipt
+ * language may change (`refusePlacedPaymentInFlight`); the check of the mark itself
+ * (`refuseOrderPaymentMarked`) reads only the mark.
  */
 export async function ordersWithUnfiledPayment(
   tx: Transaction,

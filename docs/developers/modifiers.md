@@ -437,8 +437,9 @@ hands `recordSale` its own `total`, which a production sale does not — so what
 pinned against is the CALLER's declared total, not the basket.
 
 The paper receipt prints one `<list>: <label>` line indented under its dish. An order line stores
-each side's CUSTOMER text as one entry under the venue's default content language, holding that
-language's text, or another stored language's where the default has none (`buildLineExtras`,
+each side's CUSTOMER text as one entry under the default content language of the time the answer
+was frozen, holding that language's text, or another stored language's where it had none
+(`buildLineExtras`, or `editLineOptions` when an edit gives a new or changed answer, both in
 `apps/server/src/modifier-selection.ts`), so the receipt prints it whatever language it is in. Each
 side falls back to the staff name only when it has no customer text at all, never to the kitchen
 name — `customerOptionSnapshotLabels` (`packages/catalogue/src/option-snapshot-labels.ts`), beside
