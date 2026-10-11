@@ -124,17 +124,15 @@ for (const enabled of [true, false]) {
         expect(bus.subscriberCount).toBe(1);
         if (enabled) {
           await withTransaction(suite.db, (tx) =>
-            tx
-              .insert(bookings)
-              .values({
-                locationId: cfg.locationId,
-                tableId: table!.id,
-                bookingDate: "2026-10-11",
-                bookingTime: "20:00",
-                partySize: 2,
-                contactName: "Ana",
-                createdBy: randomUUID(),
-              }),
+            tx.insert(bookings).values({
+              locationId: cfg.locationId,
+              tableId: table!.id,
+              bookingDate: "2026-10-11",
+              bookingTime: "20:00",
+              partySize: 2,
+              contactName: "Ana",
+              createdBy: randomUUID(),
+            }),
           );
         } else {
           expect(
