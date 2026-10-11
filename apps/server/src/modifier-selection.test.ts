@@ -8,7 +8,7 @@ import {
 import {
   buildLineExtras,
   editLineExtras,
-  sameOptionSelections,
+  editLineOptions,
   type ExtraProductFacts,
 } from "./modifier-selection.js";
 
@@ -418,36 +418,24 @@ const freeze = (
     "en",
   );
 
-describe("sameOptionSelections", () => {
-  it("matches the same two answers whichever order each side lists them in", () => {
-    const stored = freeze(
-      { options: [cooked, sauce] },
-      {
-        options: [
-          { listId: cooked.id, labelId: mediumRare.id },
-          { listId: sauce.id, labelId: "label-pepper" },
-        ],
-      },
-    ).optionSnapshots;
-    // What the SAME answers freeze to after the dish's attachment list is reordered: both
-    // validators answer in the offered order, so the two arrays hold the same entries transposed.
-    const frozen = freeze(
-      { options: [sauce, cooked] },
-      {
-        options: [
-          { listId: cooked.id, labelId: mediumRare.id },
-          { listId: sauce.id, labelId: "label-pepper" },
-        ],
-      },
-    ).optionSnapshots;
+describe("editLineOptions", () => {
+  it("keeps the line's two answers whichever order each side lists them in", () => {
+    const requested = [
+      { listId: cooked.id, labelId: mediumRare.id },
+      { listId: sauce.id, labelId: "label-pepper" },
+    ];
+    const stored = freeze({ options: [cooked, sauce] }, { options: requested }).optionSnapshots;
+    // What the SAME answers freeze to after the dish's attachment list is reordered: the validator
+    // answers in the offered order, so the two arrays hold the same entries transposed. Without
+    // this line the case would pass on a comparison that reads position.
+    expect(
+      freeze({ options: [sauce, cooked] }, { options: requested }).optionSnapshots,
+    ).not.toEqual(stored);
 
-    // Without this line the case would pass on a comparison that reads position, because nothing
-    // else here shows the two arrays actually came back transposed.
-    expect(frozen).not.toEqual(stored);
-    expect(sameOptionSelections(frozen, stored)).toBe(true);
+    expect(editLineOptions([sauce, cooked], requested, stored, "en")).toBeNull();
   });
 
-  it("finds an answer rebuilt from a catalogue with three customer languages equal to the stored one", () => {
+  it("keeps an answer rebuilt from a catalogue with three customer languages equal to the stored one", () => {
     const trilingual: OptionList = {
       ...cooked,
       customerName: { ca: "Punt client", en: "How cooked? diner", es: "Punto cliente" },
@@ -469,30 +457,163 @@ describe("sameOptionSelections", () => {
         labelKitchenName: "MR kitchen",
       },
     ];
-    const rebuilt = buildLineExtras(
-      { extras: [], options: [trilingual] },
+
+    expect(
+      editLineOptions([trilingual], [{ listId: cooked.id, labelId: mediumRare.id }], stored, "es"),
+    ).toBeNull();
+  });
+
+  it("keeps an answer frozen under a former default language when the default has changed", () => {
+    const stored = buildLineExtras(
+      { extras: [], options: [cooked] },
       products,
       { options: [{ listId: cooked.id, labelId: mediumRare.id }] },
       "es",
     ).optionSnapshots;
 
-    expect(sameOptionSelections(rebuilt, stored)).toBe(true);
+    expect(
+      editLineOptions([cooked], [{ listId: cooked.id, labelId: mediumRare.id }], stored, "en"),
+    ).toBeNull();
   });
 
-  it("differs when the label chosen from one list changed", () => {
+  it("freezes a changed answer under today's default and keeps its unchanged neighbour as stored", () => {
+    const stored = buildLineExtras(
+      { extras: [], options: [cooked, sauce] },
+      products,
+      {
+        options: [
+          { listId: cooked.id, labelId: mediumRare.id },
+          { listId: sauce.id, labelId: "label-pepper" },
+        ],
+      },
+      "es",
+    ).optionSnapshots;
+    const extraSauce: OptionList = {
+      ...sauce,
+      labels: [
+        ...sauce.labels,
+        {
+          id: "label-garlic",
+          name: "Garlic staff",
+          customerName: { en: "Garlic diner", es: "Ajo cliente" },
+          kitchenName: "Garlic kitchen",
+          available: true,
+        },
+      ],
+    };
+
+    expect(
+      editLineOptions(
+        [cooked, extraSauce],
+        [
+          { listId: cooked.id, labelId: mediumRare.id },
+          { listId: sauce.id, labelId: "label-garlic" },
+        ],
+        stored,
+        "en",
+      ),
+    ).toEqual([
+      stored[0],
+      {
+        listName: { en: "Sauce staff" },
+        listCustomerName: { en: "Sauce diner" },
+        listKitchenName: "Sauce kitchen",
+        labelName: { en: "Garlic staff" },
+        labelCustomerName: { en: "Garlic diner" },
+        labelKitchenName: "Garlic kitchen",
+      },
+    ]);
+  });
+
+  it("pairs every answer when the first one could also have taken the stored answer the second needs", () => {
+    // Two lists alike in every name but their Catalan wording. Frozen in Spanish the two answers
+    // are identical; frozen in Catalan they differ. The line holds the first list's answer in
+    // Catalan and the second's in Spanish, so the first edit answer, tried first, can take either.
+    const twin = (id: string, catalan: string): OptionList => ({
+      id,
+      name: "Twin staff",
+      customerName: { es: "Gemelo cliente", ca: catalan },
+      kitchenName: "Twin kitchen",
+      defaultLabelId: null,
+      active: true,
+      labels: [
+        {
+          id: `${id}-label`,
+          name: "Twin label staff",
+          customerName: { es: "Etiqueta cliente" },
+          kitchenName: "Twin label kitchen",
+          available: true,
+        },
+      ],
+    });
+    const first = twin("list-first", "Primer client");
+    const second = twin("list-second", "Segon client");
+    const requested = [
+      { listId: first.id, labelId: "list-first-label" },
+      { listId: second.id, labelId: "list-second-label" },
+    ];
+    const [firstInCatalan] = buildLineExtras(
+      { extras: [], options: [first] },
+      products,
+      { options: [requested[0]] },
+      "ca",
+    ).optionSnapshots;
+    const [secondInSpanish] = buildLineExtras(
+      { extras: [], options: [second] },
+      products,
+      { options: [requested[1]] },
+      "es",
+    ).optionSnapshots;
+
+    expect(
+      editLineOptions([first, second], requested, [secondInSpanish!, firstInCatalan!], "en"),
+    ).toBeNull();
+  });
+
+  it("does not keep a stored answer whose staff list name holds no language", () => {
+    const [answer] = freeze(
+      { options: [cooked] },
+      { options: [{ listId: cooked.id, labelId: mediumRare.id }] },
+    ).optionSnapshots;
+
+    expect(
+      editLineOptions(
+        [cooked],
+        [{ listId: cooked.id, labelId: mediumRare.id }],
+        [{ ...answer!, listName: {} }],
+        "en",
+      ),
+    ).toEqual([answer]);
+  });
+
+  it("gives the new answers when the label chosen from one list changed", () => {
     const stored = freeze(
       { options: [cooked] },
       { options: [{ listId: cooked.id, labelId: mediumRare.id }] },
     ).optionSnapshots;
-    const frozen = freeze(
-      { options: [cooked] },
-      { options: [{ listId: cooked.id, labelId: "label-well-done" }] },
-    ).optionSnapshots;
+    const changed = [{ listId: cooked.id, labelId: "label-well-done" }];
 
-    expect(sameOptionSelections(frozen, stored)).toBe(false);
+    expect(editLineOptions([cooked], changed, stored, "en")).toEqual(
+      freeze({ options: [cooked] }, { options: changed }).optionSnapshots,
+    );
   });
 
-  it("differs when one side repeats an answer the other gives once", () => {
+  it("gives the new answers when the line repeats an answer the edit gives once", () => {
+    const requested = [
+      { listId: cooked.id, labelId: mediumRare.id },
+      { listId: sauce.id, labelId: "label-pepper" },
+    ];
+    const [cookedAnswer] = freeze(
+      { options: [cooked] },
+      { options: [requested[0]] },
+    ).optionSnapshots;
+
+    expect(
+      editLineOptions([cooked, sauce], requested, [cookedAnswer!, cookedAnswer!], "en"),
+    ).toEqual(freeze({ options: [cooked, sauce] }, { options: requested }).optionSnapshots);
+  });
+
+  it("gives the new answers when the line froze an answer the edit no longer gives", () => {
     const [cookedAnswer] = freeze(
       { options: [cooked] },
       { options: [{ listId: cooked.id, labelId: mediumRare.id }] },
@@ -503,34 +624,23 @@ describe("sameOptionSelections", () => {
     ).optionSnapshots;
 
     expect(
-      sameOptionSelections([cookedAnswer!, cookedAnswer!], [cookedAnswer!, sauceAnswer!]),
-    ).toBe(false);
+      editLineOptions(
+        [cooked],
+        [{ listId: cooked.id, labelId: mediumRare.id }],
+        [cookedAnswer!, sauceAnswer!],
+        "en",
+      ),
+    ).toEqual([cookedAnswer]);
   });
 
-  it("differs when the line froze an answer the edit no longer gives", () => {
-    const [cookedAnswer] = freeze(
-      { options: [cooked] },
-      { options: [{ listId: cooked.id, labelId: mediumRare.id }] },
-    ).optionSnapshots;
-    const [sauceAnswer] = freeze(
-      { options: [sauce] },
-      { options: [{ listId: sauce.id, labelId: "label-pepper" }] },
-    ).optionSnapshots;
+  it("gives the new answers when a list's own wording changed, the picks being all the line remembers", () => {
+    const requested = [{ listId: cooked.id, labelId: mediumRare.id }];
+    const stored = freeze({ options: [cooked] }, { options: requested }).optionSnapshots;
+    const renamed = { ...cooked, name: "Renamed staff" };
 
-    expect(sameOptionSelections([cookedAnswer!], [cookedAnswer!, sauceAnswer!])).toBe(false);
-  });
-
-  it("differs when a list's own wording changed, the picks being all the line remembers", () => {
-    const stored = freeze(
-      { options: [cooked] },
-      { options: [{ listId: cooked.id, labelId: mediumRare.id }] },
-    ).optionSnapshots;
-    const frozen = freeze(
-      { options: [{ ...cooked, name: "Renamed staff" }] },
-      { options: [{ listId: cooked.id, labelId: mediumRare.id }] },
-    ).optionSnapshots;
-
-    expect(sameOptionSelections(frozen, stored)).toBe(false);
+    expect(editLineOptions([renamed], requested, stored, "en")).toEqual(
+      freeze({ options: [renamed] }, { options: requested }).optionSnapshots,
+    );
   });
 });
 

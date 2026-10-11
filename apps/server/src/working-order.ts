@@ -10,8 +10,8 @@ import { withReceiptListPrices } from "./receipt-lines.js";
 import {
   buildLineExtras,
   editLineExtras,
+  editLineOptions,
   namedPicks,
-  sameOptionSelections,
 } from "./modifier-selection.js";
 import type { ExtraChild, ExtraProductFacts } from "./modifier-selection.js";
 import type {
@@ -4839,14 +4839,13 @@ async function applyLineEdits(
     const modifiers = needsModifiers ? modifiersOf(parent) : NO_MODIFIERS;
     let optionSnapshots = parent.optionSnapshots;
     if (intent.options !== null) {
-      const frozen = buildLineExtras(
-        { extras: [], options: modifiers.options },
-        modifiers.extraProducts,
-        { options: intent.options.set },
-        defaultLanguage,
-      ).optionSnapshots;
-      // By value, never by order: see `docs/developers/modifiers.md`.
-      if (!sameOptionSelections(frozen, parent.optionSnapshots)) optionSnapshots = frozen;
+      optionSnapshots =
+        editLineOptions(
+          modifiers.options,
+          intent.options.set,
+          parent.optionSnapshots,
+          defaultLanguage,
+        ) ?? parent.optionSnapshots;
     }
     const extras =
       intent.extras === null

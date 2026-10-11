@@ -2157,6 +2157,109 @@ describe("updateHeldOrder", () => {
     expect(await itemsOf()).toEqual(firedBefore);
   });
 
+  it.each(["queued", "preparing"] as const)(
+    "keeps a %s fired options line, and its answer's Spanish wording, when a save sends it back unchanged after the default content language became Catalan",
+    async (state) => {
+      const { cfg, cafeId } = await setupVenue();
+      const seeded = await withTransaction(db, async (tx) => {
+        await catalogue.writeContentLanguages(tx, {
+          defaultLanguage: CONTENT_LANGUAGE,
+          languages: [CONTENT_LANGUAGE, "ca"],
+        });
+        await createStation(tx, cfg, { name: "Kitchen", isDefault: true });
+        const list = await catalogue.createOptionList(
+          tx,
+          {
+            name: "Punto list staff",
+            customerName: { [CONTENT_LANGUAGE]: "Punto cliente", ca: "Punt client" },
+            kitchenName: "Punto list kitchen",
+            defaultLabelId: null,
+            active: true,
+            labels: [
+              {
+                name: "Poco staff",
+                customerName: { [CONTENT_LANGUAGE]: "Poco hecho cliente", ca: "Poc fet client" },
+                kitchenName: "Poco kitchen",
+                available: true,
+              },
+            ],
+          },
+          LOCALE,
+        );
+        await attachModifierList(tx, cafeId, { kind: "options", id: list.id });
+        const options = [{ listId: list.id, labelId: list.labels[0]!.id }];
+        const tableId = await makeTable(tx, cfg);
+        const { tabId } = await openPartyTab(tx, cfg, { tableId });
+        await addRound(tx, cfg, tabId, [{ productId: cafeId, quantity: "1", options }]);
+        return { tabId, options, offers: await tableOffers(tx, cfg) };
+      });
+      const linesOf = () =>
+        db
+          .select({
+            id: workingOrderLines.id,
+            optionSnapshots: workingOrderLines.optionSnapshots,
+            descriptions: workingOrderLines.descriptions,
+            unitName: workingOrderLines.unitName,
+          })
+          .from(workingOrderLines)
+          .where(eq(workingOrderLines.workingOrderId, seeded.tabId));
+      const itemsOf = () =>
+        db
+          .select({ id: ticketItems.id, firedAt: ticketItems.firedAt, state: ticketItems.state })
+          .from(ticketItems)
+          .where(eq(ticketItems.workingOrderId, seeded.tabId));
+      if (state === "preparing") {
+        const [item] = await itemsOf();
+        await withTransaction(db, (tx) => advanceTicketItem(tx, cfg, item!.id, "preparing"));
+      }
+      const before = await linesOf();
+      const firedBefore = await itemsOf();
+      expect(before).toHaveLength(1);
+      expect(firedBefore).toEqual([expect.objectContaining({ state })]);
+      expect(firedBefore[0]!.firedAt).not.toBeNull();
+      expect(before[0]!.optionSnapshots).toEqual([
+        {
+          listName: { [CONTENT_LANGUAGE]: "Punto list staff" },
+          listCustomerName: { [CONTENT_LANGUAGE]: "Punto cliente" },
+          listKitchenName: "Punto list kitchen",
+          labelName: { [CONTENT_LANGUAGE]: "Poco staff" },
+          labelCustomerName: { [CONTENT_LANGUAGE]: "Poco hecho cliente" },
+          labelKitchenName: "Poco kitchen",
+        },
+      ]);
+
+      // Catalan text for everything the default-language change asks for, then the change itself.
+      await withTransaction(db, async (tx) => {
+        await tx.execute(sql`update units set name = json_set(name, '$.ca', 'Unitat')`);
+        await tx.execute(sql`update sections set names = json_set(names, '$.ca', 'Secció')`);
+        await tx.execute(
+          sql`update products set customer_name = json_set(customer_name, '$.ca', 'Producte') where customer_name is not null`,
+        );
+        await catalogue.writeContentLanguages(tx, {
+          defaultLanguage: "ca",
+          languages: [CONTENT_LANGUAGE, "ca"],
+        });
+      });
+      expect((await catalogue.readContentLanguages(db, LOCALE)).defaultLanguage).toBe("ca");
+
+      await updateHeldOrder({ db }, cfg, seeded.tabId, {
+        revision: await revisionOf(seeded.tabId),
+        operatorId: OPERATOR,
+        lines: [
+          {
+            workingOrderLineId: before[0]!.id,
+            menuItemId: seeded.offers.offerFor(cafeId),
+            quantity: "1",
+            options: seeded.options,
+          },
+        ],
+      });
+
+      expect(await linesOf()).toEqual(before);
+      expect(await itemsOf()).toEqual(firedBefore);
+    },
+  );
+
   it.each(["dish", "variant", "extras item"] as const)(
     "refuses adding an archived %s and paying its unsent line while it remains available",
     async (kind) => {
