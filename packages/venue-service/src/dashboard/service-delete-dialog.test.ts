@@ -194,6 +194,49 @@ it.each([false, true])(
     expect(api.deleteDepartment).toHaveBeenCalledTimes(1);
   },
 );
+it.each(["resolved", "rejected"] as const)(
+  "permanent delete ignores a %s old write after reconnecting with the same dialog object",
+  async (outcome) => {
+    const write = deferred<DeleteImpact>();
+    const saved = vi.fn();
+    const { screen, host, api } = await mountDelete({
+      deleteDepartment: vi.fn().mockReturnValue(write.promise),
+    });
+    screen.addEventListener("saved", saved);
+    const old = await openDelete(screen);
+    await ready(old);
+    const retained = screen.dialog;
+    button(old).click();
+    await expect.poll(() => old.submitting).toBe(true);
+    screen.remove();
+    host.append(screen);
+    await screen.updateComplete;
+    const next = screen.shadowRoot!.querySelector("wt-delete-dialog")!;
+    expect(next).not.toBe(old);
+    expect(screen.dialog).toBe(retained);
+    await ready(next);
+    const modal = next.shadowRoot!.querySelector("wt-modal")!;
+    await modal.updateComplete;
+    expect(modal.shadowRoot!.querySelector("dialog")!.open).toBe(true);
+    const confirm = button(next);
+    await confirm.updateComplete;
+    expect(confirm.shadowRoot!.querySelector("button")!.disabled).toBe(false);
+    if (outcome === "rejected") write.reject({ code: "connection.failed" });
+    else write.resolve(allowedImpact);
+    await write.promise.catch(() => {});
+    await screen.updateComplete;
+    await next.updateComplete;
+    expect(screen.dialog).toBe(retained);
+    expect(screen.shadowRoot!.querySelector("wt-delete-dialog")).toBe(next);
+    expect(next.open).toBe(true);
+    expect(modal.shadowRoot!.querySelector("dialog")!.open).toBe(true);
+    expect(next.actionError).toBe("");
+    expect(next.readError).toBe("");
+    expect(next.submitting).toBe(false);
+    expect(saved).not.toHaveBeenCalled();
+    expect(api.deleteDepartment).toHaveBeenCalledExactlyOnceWith("d1");
+  },
+);
 it("permanent delete ignores a departed read and not-found closes only that target", async () => {
   const oldRead = deferred<DeleteImpact>();
   const read = vi.fn().mockReturnValueOnce(oldRead.promise).mockResolvedValue(allowedImpact);
