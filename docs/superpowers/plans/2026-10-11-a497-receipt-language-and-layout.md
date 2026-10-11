@@ -96,13 +96,15 @@ cited range before editing it; line numbers drift.
    user-facing reason text (`spain.ts:196-208`, "a copy can be printed in another language") is
    reworded to say staff can choose another language at the till.
 2. **What the chosen language changes: the receipt's fixed words, dates and amounts, and the
-   department's subtitle and footer. Dish names, units and option answers print in the language
-   they were saved in** (C113's "dish names print as they were saved", and today's copy behaviour,
-   `receipt-language.test.ts:587`). Worked example for the owner's FYI: a Barcelona venue (receipt
-   language Catalan, content languages Catalan and Spanish), staff choose Spanish → the receipt
-   reads "Total", "Efectivo", "Factura simplificada", the Spanish date — and "Pa amb tomàquet",
-   the Catalan dish name. Saving names in every offered language would change the working-order
-   trigger and the line snapshot; it is left as an open backlog line, asked in the FYI.
+   department's subtitle and footer. Dish names, units and option answers print in the venue's
+   DEFAULT content language, whatever language staff choose** (amended 2026-10-11 by the owner's
+   answer: "only ever store and print the default language"). A line stores them once, in that
+   language, when it is added (decision 10, Task 5c), so the original, a reprint, a copy, the
+   emailed A4 invoice and a correction all print the same names. Worked example: a Barcelona venue
+   (receipt language Catalan; content languages Spanish, the default, and Catalan), staff choose
+   Catalan or Spanish → the fixed words follow the choice ("Efectiu" or "Efectivo", the date in
+   that language) and the dish reads "Pan con tomate" either way. No backlog line for translated
+   dish names (the owner's answer).
 3. **The choice is stored on the order, on the server.** A new nullable column
    `working_orders.receipt_locale` (core migration; `null` = the location's receipt language). Every
    filing path reads it, so a bill filed by the card-reader loop, a discount, a split or another
@@ -133,7 +135,11 @@ cited range before editing it; line numbers drift.
    location's list when it already holds the chosen language, else `[location's first, chosen]`
    (always 1–2 entries; both CHECKs hold). The names language is `sales.invoice_locales[0]`; for
    every sale filed before this change that equals `sales.locale`, so old sales print, reprint and
-   email exactly as before. The ticket result gains `namesLocale`, set wherever a ticket is built
+   email exactly as before. (Amended 2026-10-11 by the owner's answer: since Task 5c a new line
+   holds the default content language's text under every key and in one-entry unit and answer
+   maps, so for a new sale every key prints the same names; `namesLocale` stays, and is what keeps
+   lines saved before Task 5c printing in the language they were saved in.) The ticket result
+   gains `namesLocale`, set wherever a ticket is built
    (`till-sale.ts:885`, `:1433`, `:1583`; `bill-payments.ts:741`; `readSettledTicket`, through which
    every replay goes; `sample-receipt.ts:12-30`'s `sampleSale`) — optional, defaulting to `locale`, so
    a builder that omits it keeps today's output — and `invoice-document.ts:120-145` selects
@@ -184,6 +190,65 @@ cited range before editing it; line numbers drift.
    (`till-ticket-view.ts:520-560`) keeps its own layout; only its address lines follow
    `addressLines`. Whether the legal name and tax ID may share one line stays unchecked against the
    receipt-content rules: an open backlog line.
+10. **Dish names are stored once, in the venue's default content language, when a line is added;
+    no reader changes** (the owner's answer of 2026-10-11 to decision 2; Task 5c). The trace, read
+    on this branch at `4ffb41731`:
+    - **Where a line's customer text is frozen.** Only in `priceOrderLines`
+      (`apps/server/src/working-order.ts:714-731`); every other `working_order_lines` insert copies
+      a stored row (the bill split, `:3799-3830`; the edit path inserts `priceOrderLines` rows,
+      `:5242`). `descriptions` and `variant_descriptions` are keyed by exactly
+      `locations.invoice_locales` (`toInvoiceLineDescriptions`, triggers
+      `working_order_lines_check_locales_*` and `…_check_variant_locales_*`, latest
+      `packages/db/drizzle/0110_printing_retirement_restore_readers.sql`), each key holding the
+      catalogue text in that key's language. `unit_name` is the unit's WHOLE abbreviation map
+      (`packages/catalogue/src/pricing.ts:221`, `:308`; `modifier-selection.ts:104`). An options
+      answer's `listCustomerName`/`labelCustomerName` are the catalogue's WHOLE maps
+      (`modifier-selection.ts:75`, `:78`); its staff maps hold one entry under the default. Nothing
+      in the database constrains `unit_name` or `option_snapshots`.
+    - **Who reads it for a customer.** The thermal original, reprint and copy
+      (`receipt-document.ts:206-250`, through `readSettledTicket`, `till-sale.ts:716-775`); the A4
+      invoice and its email (`readInvoiceDocument`, `invoice-document.ts:32-150`, from
+      `sale_lines`); the till's on-screen receipt (`till-ticket-view.ts:490-640`, from the sale
+      response's lines); a correction copies the original's `sale_lines` and inherits its
+      `invoice_locales` (`cancel-credit.ts:75-100`, `record-correction.ts:109`, `:275`). The
+      dashboard and reporting read `sale_lines.name` (the staff name) only, and no invoice search
+      reads `descriptions`. Each reader resolves names with `namesLocale` through `lineName`
+      (exact key, else the first stored), `resolveSnapshotText` (that language, then any stored)
+      or `customerOptionSnapshotLabels` — so a map holding one language's text prints that text
+      whatever language it is asked for.
+    - **Who else reads the same rows (staff surfaces).** The kitchen ticket (its lines and its
+      "Also on this order" list, `kitchen-print.ts:226-262`, `:591-593`) and made-here print
+      `unit_name` by `text[locale] ?? first stored` (`kitchen-print.ts:75-81`, `made-here.ts:111`);
+      the kitchen display's and pass's "+ extra" line reads `descriptions`
+      through `snapshotDescriptionFor(…, "")` (`station-queue.ts:1185`,
+      `till-expo-screen.ts:1100`; `dish-format.ts:40-48`), which takes the stored key in the
+      till's display language, then the default's, then any stored; a retrieved basket carries
+      `descriptions` as `customerName` but shows staff names (`readBasketOrder`, `:4265`).
+    - **Nothing fiscal reads them.** Re-checked: `packages/fiscal/src` and
+      `packages/fiscal-verifactu/src` (non-test, outside `testing/`) name neither `locale` nor
+      `descriptions` except `backend.ts:41`'s comment saying descriptions are absent.
+
+    **The rule (Task 5c).** In the `priceOrderLines` loop, with `d = contentConfig.defaultLanguage`
+    (`:545`, already in scope), every gross line gets: `descriptions` and `variant_descriptions`
+    with their keys unchanged, each key holding `resolveSnapshotText(text, d, d)` (the default's
+    text, else any stored language's, so a gap never prints blank; the variant's blank still takes
+    its staff name, `fillBlankLocalesWithStaffName`); `unit_name` as `{ [d]: resolveSnapshotText(
+    unit, d, d) }`; each answer's customer maps as `{ [d]: … }` the same way (`null` stays `null`;
+    staff and kitchen maps untouched). **Why this and not a names language on the sale:** no
+    reader, `sales` column, CHECK, trigger, migration or filing path changes (`saleLanguageFor` and
+    `recordSale`'s inputs other than the line texts are as Task 4b left them); a default with no
+    receipt tag in the pack (`en`) needs no mapping; and the text is frozen when the line is added,
+    so changing the default later moves nothing already saved. Rejected: writing the default into
+    `sales.invoice_locales[0]` — it puts a content code (`en`) into a list of receipt tags, moves
+    every Task 4b list assertion, and lets a unit resolve in a default changed between adding the
+    line and filing it. `toInvoiceLineDescriptions` keeps its behaviour for its one other caller,
+    the demo seed (`apps/server/scripts/demo-seed/seed-sales.ts:255`, outside this plan with its
+    golden test). **Consequence on staff surfaces, listed in the PR:** the kitchen ticket and
+    made-here print the unit's DEFAULT abbreviation (today the one stored under the till's exact
+    locale, else the first stored), and the kitchen display's "+ extra" line shows the default's
+    text (today the key in the till's display language when the line has one). Lines saved before
+    Task 5c in an order filed after it print as they were saved (`namesLocale`); before go-live
+    any installation may be reset (CLAUDE.md §3).
 
 ## Global constraints
 
@@ -219,6 +284,9 @@ cited range before editing it; line numbers drift.
 - That a sale filed before this change prints, reprints and emails exactly as before.
 - That every `recordSale` caller except the two named exclusions reads the stored choice (grep, and a
   test per entry family).
+- Task 5c: that every new line's customer text is frozen in `priceOrderLines` alone, that no
+  reader changed, and the staff-surface consequences decision 10 lists (kitchen units, the kitchen
+  display's extra line).
 
 ---
 
@@ -331,6 +399,82 @@ the subject from `invoiceLocale` (check it follows `sales.locale`).
 - [ ] Implement. Focused runs (`receipt-print`, `receipt-language`, `invoice-document`,
   `invoice-email`); golden + `inmutabilidad` UNEDITED. Commit.
 
+## Task 5c: Dish names stored and printed in the venue's default content language
+
+Decision 10 (the owner's answer of 2026-10-11 to decision 2). No migration, no trigger, no reader,
+no `sales` value and no filing-path change: only the text `priceOrderLines` freezes on a new line.
+
+**Files:** new `packages/catalogue/src/default-language-text.ts` + its test, exported from the
+barrel — `defaultLanguageDescriptions(text, keys, d)` (each key → `resolveSnapshotText(text, d,
+d)`), `defaultLanguageText(map, d)` (`{ [d]: resolveSnapshotText(map, d, d) }`) and
+`defaultLanguageAnswer(snapshot, d)` (the two customer maps through `defaultLanguageText`, `null`
+kept, staff and kitchen maps untouched); `apps/server/src/working-order.ts:714-731` (the snapshot
+loop: descriptions, variant descriptions — still through `fillBlankLocalesWithStaffName` —
+`unitName` and `optionSnapshots` of EVERY gross line; an answer frozen by an edit already holds one
+entry and keeps its text). `toInvoiceLineDescriptions` is not changed (its other caller is the
+demo seed). Cut or correct, in the same commit, the comments this makes false:
+`working-order.ts:714-716`, `venue-locale.ts:123-127` (`saleLanguageFor`: "the language its line
+descriptions were written in"), `packages/catalogue/src/option-snapshot-labels.ts:35-41`,
+`apps/till/src/screens/till-ticket-view.ts:33-40`, `packages/db/src/schema/orders.ts:147-149` and
+`:164`, `packages/db/src/schema/sales.ts:167-169` (schema comments only; confirm no
+`drizzle/*.sql` changed).
+
+- [ ] Failing tests first, each printed red:
+  - **Catalogue unit** (`default-language-text.test.ts`): `{ es: "Café", ca: "Cafè" }` with keys
+    `["ca-ES","es-ES"]`, default `es` → both `"Café"`; no default text → another stored
+    language's; `{}` → `""`; a unit map → one `es` entry; an answer with customer maps in three
+    languages → one `es` entry each, `null` stays `null`, the staff and kitchen maps unchanged.
+  - **`receipt-language.test.ts`**, giving `venueWith` a default-language parameter (today it
+    writes `es`, content `es,ca,gl`, `:158-161`) and reusing `goodsVenue` (`:723`: location
+    `ca-ES`; the dish, its unit and its options answer DIFFERENT in every language):
+    1. chosen `ca-ES`, and nothing chosen: the thermal original prints `2 ES-rac CLIENT-ES
+       Torrada` and `ES Tipo de pan: ES Centeno` with the pack's Catalan fixed words, and no
+       `CA-`/`GL-` goods; the stored `working_order_lines` and `sale_lines` rows hold
+       `descriptions` `{ "ca-ES": "CLIENT-ES Torrada" }`, `unit_name` `{ es: "ES-rac" }` and
+       one-entry `es` customer maps.
+    2. chosen `es-ES`: the same goods with Spanish fixed words; its Galician copy the same goods
+       with Galician words.
+    3. a full invoice (`invoiceType: "F1"` with a `recipient` on `POST /api/sales`) chosen
+       `ca-ES`: `readInvoiceDocument` (what the email attaches) renders the Spanish goods with
+       Catalan words, and the sale response's `lines` — what the till's on-screen receipt draws —
+       hold only the Spanish text.
+    4. after the sale, the content default set to `ca` (SQL, as the fixture writes it): the
+       original reprint and a Spanish copy print the same Spanish goods as before.
+    5. default `ca`, the receipt language's own: nothing chosen and chosen `es-ES` both print the
+       Catalan goods, as Task 5b's cases did.
+    6. default `en` (content `en,es,ca`; the pack has no English receipt tag): nothing chosen and
+       chosen `es-ES` print the English goods with Catalan and Spanish words.
+  - **`kitchen-print.test.ts`**, beside the measured-unit case at `:1062-1121`: a measured extra
+    whose unit stores a non-default language FIRST and under a key that is not the kitchen's
+    `cfg.locale` (e.g. `{ ca: "CA-g", es: "ES-g" }`, default `es`) prints `ES-g` (red today:
+    `CA-g`). This pins decision 10's staff-surface consequence.
+  - **`till-ticket-view.test.ts`**: a result shaped as this task stores it (`namesLocale` and
+    `locale` `ca-ES`, descriptions `{ "ca-ES": "ES name" }`, one-entry `es` unit and answer maps)
+    shows the Spanish goods under Catalan words. The reader is unchanged, so this case is green on
+    arrival; say so in the report.
+  - **Pre-change sales, left UNEDITED as the proof:** `invoice-document.test.ts:782-850` (per-
+    language lines and `invoice_locales ["ca-ES","es-ES"]` still print the Catalan goods on the
+    A4), `receipt-ticket.test.ts:2520-2600`, and Task 6's on-screen case in
+    `till-ticket-view.test.ts`.
+- [ ] Assertions this moves (the owner's 2026-10-05 rule: a check changes only where the spec
+  changes what it checks; list each in the report, with any further one the runs turn up, which
+  may only move to the default's text or a one-entry map):
+  - `receipt-language.test.ts`: `:382` (both keys `CLIENT-ES`); `:645` (the Catalan sale's Spanish
+    copy prints `CLIENT-ES`); the describe at `:720` — its title and the three titles under it
+    (`:818`, `:840`, `:873`), `expectCatalanGoods` (`:784-795`) becoming the Spanish goods,
+    `:837`, `:862` (both keys `CLIENT-ES`), `:869`, `:884`. Its `namesLocale` and
+    `invoice_locales` checks do not move.
+  - `till-sale.test.ts:833-853` ("re-keys a bilingual bare product to both venue locales"): both
+    keys hold the default's text (read `setupBareVenue`'s default first).
+  - `till-api.fiscal-sale-paths.test.ts:2723` and `working-order.pay-and-dispatch.test.ts:112`
+    (read back at `:319-328`): the Each unit's whole map becomes `{ [default]: "ud" }`.
+- [ ] Implement. Focused runs: `pnpm --filter @waitron/catalogue exec vitest run
+  default-language-text`; `pnpm --filter @waitron/server exec vitest run receipt-language
+  receipt-print invoice-document invoice-email kitchen-print made-here till-sale
+  till-api.fiscal-sale-paths working-order.pay-and-dispatch receipt-ticket`; `pnpm --filter
+  @waitron/till exec vitest run till-ticket-view`; golden + `inmutabilidad` UNEDITED (Global
+  constraints). Commit.
+
 ## Task 6: The till — the counter's language button
 
 **Files:** `apps/till/src/till-app.ts`, `apps/till/src/widgets/tender-pay.ts`,
@@ -366,14 +510,21 @@ Its invoice action is emitted by `apps/till/src/screens/till-table-order-screen.
 
 - [ ] `docs/backlog/printers.md`: rewrite C113 and C114 under "Decisions and deliberate limits" as
   they now stand (A497, 2026-10-11), keeping their history to one line; DELETE the A497 detail
-  section and its `docs/backlog.md` entry; add short open entries: the legal-name/tax-ID line check;
-  names saved in one language only (decision 2); Valencian content and Catalan receipts
-  (decision 6).
+  section and its `docs/backlog.md` entry; C113's "dish names print as they were saved" becomes:
+  dish names, units and option answers are stored once, in the venue's default content language,
+  when a line is added, and print in it whatever receipt language is chosen (decisions 2 and 10);
+  add short open entries: the legal-name/tax-ID line check; Valencian content and Catalan receipts
+  (decision 6). No entry for translated dish names (the owner's answer of 2026-10-11).
 - [ ] `docs/backlog/service-periods.md`, A493 section: point its language line at
   `readOfferedReceiptLanguages`, and drop "the others print as copies on request" (staff now
   choose the original's language too) — one sentence each.
-- [ ] Prose that states the old behaviour: `docs/developers/modifiers.md:437-443`,
-  `docs/developers/products.md:113-122`, the comment at `packages/db/src/schema/tenants.ts:56-70`
+- [ ] Prose that states the old behaviour: `docs/developers/modifiers.md:437-443` (an answer's
+  customer text is now one entry, in the default content language),
+  `docs/developers/products.md:113-130` (the `descriptions` and variant bullets: the keys are still
+  the location's receipt languages, and every key holds the default content language's text,
+  decision 10), `:182-194` (an answer's customer maps are narrowed to one entry under the default
+  when the line is priced, no longer frozen "exactly as the catalogue row holds it"), `:225` (the
+  kitchen display's "+ extra" line shows the default's text), the comment at `packages/db/src/schema/tenants.ts:56-70`
   (a schema comment is not a shipped migration; confirm no existing `drizzle/*.sql` changed), the
   setup help string `apps/setup/src/i18n/strings/venue.ts:38-39` if it says receipts print only in
   that language, the dashboard's "(receipts)"/"(copies)" labels are A493's (leave them). Historical
