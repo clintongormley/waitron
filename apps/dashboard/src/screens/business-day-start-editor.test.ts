@@ -106,7 +106,7 @@ it("keeps Save quiet until a matching preview is acknowledged and sends its date
   await change(el, "dayCutover", "03:00");
   expect(save(el).disabled).toBe(true);
   expect(q(el, "[data-test=preview]")!.textContent).toContain("22");
-  expect(q(el, "[data-test=preview]")!.textContent).toContain("2026-11-04T02:00:00.000Z");
+  expect(q(el, '[data-test=preview] time[datetime="2026-11-04T02:00:00.000Z"]')).toBeTruthy();
   await click(el, "acknowledge");
   expect(save(el).disabled).toBe(false);
   await click(el, "save");

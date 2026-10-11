@@ -316,6 +316,8 @@ it.each([
       "products",
       "categories",
       "category_details",
+      "location_business_day_settings",
+      "location_day_cutover_changes",
     ],
   ],
   // At time of sale names each line's category from the snapshot the line recorded, so no
@@ -323,7 +325,15 @@ it.each([
   [
     "getCategorySales",
     ["2026-09-01", "2026-09-11", "at_time_of_sale", false],
-    ["sales", "sale_lines", "sale_voids", "sale_substitutions", "locations"],
+    [
+      "sales",
+      "sale_lines",
+      "sale_voids",
+      "sale_substitutions",
+      "locations",
+      "location_business_day_settings",
+      "location_day_cutover_changes",
+    ],
   ],
   ["getReportPrinters", [], ["printers"]],
   // A device's ask also carries a returning device's own row and whether its profile was retired
@@ -513,6 +523,8 @@ it.each(["locations", "tenants", "sales", "working_orders", "daily_closes"])(
       { type: "sales" },
       { type: "working_orders" },
       { type: "daily_closes" },
+      { type: "location_business_day_settings" },
+      { type: "location_day_cutover_changes" },
     ]);
     const observed = api.liveData.observe(query, () => {});
     try {
