@@ -4,11 +4,17 @@ import { readInvoiceLocales } from "@waitron/catalogue";
 import { locations, withTransaction, type Database, type Transaction } from "@waitron/db";
 import type { FiscalContribution } from "@waitron/fiscal";
 import { authorizeManager } from "@waitron/identity";
-import { AppError, isAppError } from "@waitron/shared";
+import { renameTaxpayer } from "@waitron/provisioning";
+import { AppError, hasCode, isAppError } from "@waitron/shared";
 import { createErrorBoundary, readJsonBody, requireManagementSession } from "@waitron/server-kit";
 import type { Logger } from "./logger.js";
 import { readVenueReceiptLanguageRules } from "./venue-locale.js";
-import { readVenueDetails, writeVenueDetails } from "./venue-details.js";
+import {
+  normalizeVenueText,
+  readOnlyVenueFields,
+  readVenueDetails,
+  writeVenueDetails,
+} from "./venue-details.js";
 import { venueClockPreview } from "./venue-clock-preview.js";
 import type { VenueClockPreview, VenueDetailWrite } from "./venue-detail-types.js";
 import "./errors.js";
@@ -59,6 +65,22 @@ function requestedLanguage(body: unknown): string {
     throw new AppError("management.request_invalid", { field: "receiptLanguage" });
   }
   return language;
+}
+
+function legalNameRequest(body: unknown): { legalName: string; expected: string } {
+  const invalid = (field: string, reason: string) =>
+    new AppError("venue.detail_invalid", { field, reason });
+  if (typeof body !== "object" || body === null || Array.isArray(body))
+    throw invalid("body", "type");
+  for (const key of Object.keys(body))
+    if (key !== "legalName" && readOnlyVenueFields.has(key))
+      throw new AppError("venue.detail_read_only", { field: key });
+  if (Object.keys(body).some((key) => key !== "legalName" && key !== "expected"))
+    throw invalid("body", "unknown_field");
+  const { legalName, expected } = body as Record<string, unknown>;
+  if (typeof legalName !== "string") throw invalid("legalName", "type");
+  if (typeof expected !== "string") throw invalid("expected", "type");
+  return { legalName: normalizeVenueText(legalName), expected: normalizeVenueText(expected) };
 }
 
 export function mountLocationSettingsApi(
@@ -118,6 +140,40 @@ export function mountLocationSettingsApi(
       const result = await gated(sessionId, (tx) =>
         writeVenueDetails(tx, deps.cfg, body as VenueDetailWrite),
       );
+      return c.json(result);
+    }),
+  );
+  app.put("/management-api/venue-details/legal-name", (c) =>
+    run(c, log, async () => {
+      const sessionId = requireManagementSession(c);
+      const body = await readJsonBody<unknown>(c);
+      const result = await gated(sessionId, async (tx) => {
+        const { legalName, expected } = legalNameRequest(body);
+        const refuse = (reason: string) =>
+          new AppError("venue.detail_invalid", { field: "legalName", reason });
+        if (legalName === "") throw refuse("required");
+        try {
+          deps.fiscal.venueFields?.validateLegalName(legalName);
+        } catch (error) {
+          if (
+            !isAppError(error) ||
+            !hasCode(error, "setup.request_invalid") ||
+            error.params.field !== "legalName"
+          )
+            throw error;
+          throw refuse("fiscal_format");
+        }
+        const { issuer } = await readVenueDetails(tx, deps.cfg);
+        const stored = normalizeVenueText(issuer.legalName);
+        if (legalName === stored && expected === stored) throw refuse("unchanged");
+        // A match after normalising stands for the stored spelling, which the write compares exactly.
+        const { renamed } = await renameTaxpayer(tx, {
+          expected: expected === stored ? issuer.legalName : expected,
+          legalName,
+        });
+        if (!renamed) throw new AppError("venue.detail_changed", { field: "legalName" });
+        return { model: await readVenueDetails(tx, deps.cfg) };
+      });
       return c.json(result);
     }),
   );

@@ -30,6 +30,8 @@ import {
   venueDetailPatch,
   venueDetailProblems,
 } from "./venue-details-form.js";
+import "./legal-name-dialog.js";
+import type { VenueIdentityChanged } from "./legal-name-dialog.js";
 
 const LABELS: Record<VenueDetailField, StringKey> = {
   name: "venue_details.name",
@@ -87,6 +89,18 @@ export class VenueDetailsPanel extends LitElement {
         margin: 0 0 var(--wt-space-2);
         overflow-wrap: anywhere;
       }
+      .identity {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: var(--wt-space-2) var(--wt-space-3);
+        margin: 0 0 var(--wt-space-4);
+      }
+      .identity p {
+        margin: 0;
+        font-weight: var(--wt-font-weight-medium);
+        overflow-wrap: anywhere;
+      }
       form {
         display: grid;
         gap: var(--wt-space-3);
@@ -97,6 +111,9 @@ export class VenueDetailsPanel extends LitElement {
       .reason {
         color: var(--wt-color-text-muted);
         max-width: var(--wt-field-max-width);
+      }
+      .reason p {
+        margin: 0;
       }
       .warnings {
         padding: var(--wt-space-3);
@@ -138,6 +155,13 @@ export class VenueDetailsPanel extends LitElement {
     },
   );
 
+  constructor() {
+    super();
+    this.addEventListener("venue-settings-hidden", () => {
+      this.renderRoot.querySelector("dashboard-legal-name-dialog")?.dismiss();
+      if (this.#scope && saveActionState(this.#scope).unchanged) this.#cancel();
+    });
+  }
   override connectedCallback(): void {
     super.connectedCallback();
     this.#generation += 1;
@@ -433,11 +457,27 @@ export class VenueDetailsPanel extends LitElement {
     }
     await this.#load();
   }
-  #reason(field: VenueDetailField): string {
-    return (this.model?.policy[field].reasons ?? [])
-      .map((reason) => (REASONS[reason] ? t(REASONS[reason]!) : ""))
-      .filter(Boolean)
-      .join(" ");
+  #lockedNotes(): TemplateResult | typeof nothing {
+    const keys = new Set<StringKey>();
+    for (const field of VENUE_DETAIL_FIELDS) {
+      const policy = this.model!.policy[field];
+      if (policy.decision !== "refuse") continue;
+      for (const reason of policy.reasons) if (REASONS[reason]) keys.add(REASONS[reason]!);
+    }
+    if (keys.size === 0) return nothing;
+    return html`<div class="reason" data-test="locked-notes">
+      ${[...keys].map((key) => html`<p>${t(key)}</p>`)}
+    </div>`;
+  }
+  #address(details: VenueDetailValues): TemplateResult[] {
+    const place = [details.postalCode, details.city].filter(Boolean).join(" ");
+    const lines: TemplateResult[] = [];
+    if (details.addressLine1)
+      lines.push(html`<div data-test="saved-addressLine1">${details.addressLine1}</div>`);
+    if (details.addressLine2) lines.push(html`<div>${details.addressLine2}</div>`);
+    if (place) lines.push(html`<div>${place}</div>`);
+    if (details.province) lines.push(html`<div>${details.province}</div>`);
+    return lines.length ? lines : [html`<div>${t("venue_details.unset")}</div>`];
   }
   #field(field: VenueDetailField): TemplateResult {
     const expected = this.#expected;
@@ -452,7 +492,6 @@ export class VenueDetailsPanel extends LitElement {
       return html`<div data-test=${`locked-${field}`}>
         <strong>${t(LABELS[field])}</strong>
         <p>${value || t("venue_details.unset")}</p>
-        <p class="reason">${this.#reason(field)}</p>
       </div>`;
     const required =
       field !== "addressLine2" &&
@@ -480,9 +519,8 @@ export class VenueDetailsPanel extends LitElement {
               @wt-change=${change}
             ></wt-input>`
       }
-      ${locked ? html`<p class="reason" data-test=${`lock-${field}`}>${this.#reason(field)}</p>` : nothing}
       <wt-help-tooltip aria-label=${`${t(LABELS[field])}: ${t("venue_details.help")}`}
-        >${this.#reason(field) || t(HELP[field])}</wt-help-tooltip
+        >${t(HELP[field])}</wt-help-tooltip
       >
     </div>`;
   }
@@ -499,14 +537,31 @@ export class VenueDetailsPanel extends LitElement {
         !model
           ? html`<p role="status">${t("venue_details.loading")}</p>`
           : html`
-              <dl data-test="issuer">
-                <dt>${t("venue_details.country")}</dt>
-                <dd>${model.issuer.country}</dd>
-                <dt>${t("venue_details.legal_name")}</dt>
-                <dd>${model.issuer.legalName}</dd>
-                <dt>${t("venue_details.tax_id")}</dt>
-                <dd>${model.issuer.taxId}</dd>
-              </dl>
+              <div class="identity">
+                <p data-test="issuer">
+                  ${model.issuer.legalName} · ${model.issuer.taxId} · ${model.issuer.country}
+                </p>
+                ${
+                  this.readOnly
+                    ? nothing
+                    : html`<wt-button
+                        data-test="change-legal-name"
+                        @click=${() => {
+                          if (current() && this.model)
+                            this.renderRoot
+                              .querySelector("dashboard-legal-name-dialog")
+                              ?.show(this.model.issuer.legalName);
+                        }}
+                        >${t("venue_details.change_legal_name")}</wt-button
+                      >`
+                }
+              </div>
+              <dashboard-legal-name-dialog
+                .api=${this.api}
+                @venue-identity-changed=${(event: CustomEvent<VenueIdentityChanged>) => {
+                  if (generation === this.#generation) this.model = event.detail.model;
+                }}
+              ></dashboard-legal-name-dialog>
               ${
                 this.draft && !this.readOnly
                   ? html`<form
@@ -517,6 +572,7 @@ export class VenueDetailsPanel extends LitElement {
                       @keydown=${(event: KeyboardEvent) => submitOnEnter(event, this.shadowRoot!.querySelector<HTMLElement>("[data-test=save]"))}
                     >
                       ${VENUE_DETAIL_FIELDS.map((field) => this.#field(field))}
+                      ${this.#lockedNotes()}
                       ${
                         ["addressLine1", "addressLine2", "postalCode", "city", "province"].some(
                           (field) => this.#patch()[field as VenueDetailField] !== undefined,
@@ -576,13 +632,14 @@ export class VenueDetailsPanel extends LitElement {
                       </wt-form-actions>
                     </form>`
                   : html`<dl>
-                        ${VENUE_DETAIL_FIELDS.map(
-                          (field) =>
-                            html`<dt>${t(LABELS[field])}</dt>
-                              <dd data-test=${`saved-${field}`}>
-                                ${model.details[field] ?? t("venue_details.unset")}
-                              </dd>`,
-                        )}
+                        <dt>${t(LABELS.name)}</dt>
+                        <dd data-test="saved-name">${model.details.name}</dd>
+                        <dt>${t("venue_details.address")}</dt>
+                        <dd data-test="address">${this.#address(model.details)}</dd>
+                        <dt>${t(LABELS.timeZone)}</dt>
+                        <dd data-test="saved-timeZone">${model.details.timeZone}</dd>
+                        <dt>${t(LABELS.dayCutover)}</dt>
+                        <dd data-test="saved-dayCutover">${model.details.dayCutover}</dd>
                       </dl>
                       ${
                         this.readOnly

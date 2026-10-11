@@ -22,7 +22,13 @@ const fields: readonly VenueDetailField[] = [
   "timeZone",
   "dayCutover",
 ];
-const readOnly = new Set(["country", "legalName", "taxId", "locationId", "fiscalTerritory"]);
+export const readOnlyVenueFields: ReadonlySet<string> = new Set([
+  "country",
+  "legalName",
+  "taxId",
+  "locationId",
+  "fiscalTerritory",
+]);
 const nullable = new Set<VenueDetailField>([
   "addressLine1",
   "addressLine2",
@@ -40,18 +46,18 @@ function object(value: unknown, field: string): Record<string, unknown> {
 }
 function keys(value: Record<string, unknown>, allowed: readonly string[], field: string): void {
   for (const key of Object.keys(value)) {
-    if (readOnly.has(key)) throw new AppError("venue.detail_read_only", { field: key });
+    if (readOnlyVenueFields.has(key)) throw new AppError("venue.detail_read_only", { field: key });
   }
   for (const key of Object.keys(value)) {
     if (!allowed.includes(key)) invalid(field, "unknown_field");
   }
 }
-function text(value: string): string {
+export function normalizeVenueText(value: string): string {
   return value.normalize("NFC").trim();
 }
 function equivalent(field: VenueDetailField, value: string | null, country: string): string | null {
   if (value === null) return null;
-  const normalized = text(value);
+  const normalized = normalizeVenueText(value);
   if (field === "addressLine2" && normalized === "") return null;
   if (field === "province") {
     const pack = getCountryPack(country);
@@ -167,7 +173,7 @@ export async function writeVenueDetails(
       equivalent(field, model.details[field], model.issuer.country)
     )
       continue;
-    let normalized: string | null = typed === null ? null : text(typed);
+    let normalized: string | null = typed === null ? null : normalizeVenueText(typed);
     if (field === "addressLine2" && normalized === "") normalized = null;
     if (field !== "addressLine2" && (normalized === null || normalized === ""))
       invalid(field, "required");

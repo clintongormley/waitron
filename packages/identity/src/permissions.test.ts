@@ -54,6 +54,13 @@ describe("roleHasPermission", () => {
       expect(roleHasPermission("supervisor", p)).toBe(false);
     }
   });
+  it("grants catalogue.manage to manager and admin only", () => {
+    expect(PERMISSIONS).toContain("catalogue.manage");
+    expect(roleHasPermission("manager", "catalogue.manage")).toBe(true);
+    expect(roleHasPermission("admin", "catalogue.manage")).toBe(true);
+    expect(roleHasPermission("supervisor", "catalogue.manage")).toBe(false);
+    expect(roleHasPermission("staff", "catalogue.manage")).toBe(false);
+  });
   it("grants fiscal.view to manager and admin only", () => {
     expect(PERMISSIONS).toContain("fiscal.view");
     expect(roleHasPermission("manager", "fiscal.view")).toBe(true);

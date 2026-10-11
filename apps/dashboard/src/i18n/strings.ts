@@ -543,6 +543,7 @@ export const en = {
   "printers.preview_empty": "This job has no printable content.",
   "printers.discovery_hint": "Searching for network, USB and Bluetooth printers.",
   "printers.seen_on": "Seen on",
+  "catalogue_defaults.title": "Defaults",
   "catalogue_settings.default_vat": "VAT class for new products",
   "catalogue_settings.hint":
     "Only products created afterwards use this default. Existing products keep their class.",
@@ -659,9 +660,15 @@ export const en = {
   "venue_details.province": "Province",
   "venue_details.timeZone": "Time zone",
   "venue_details.dayCutover": "Business day starts at",
-  "venue_details.country": "Country",
+  "venue_details.address": "Address",
   "venue_details.legal_name": "Legal name",
-  "venue_details.tax_id": "Tax ID",
+  "venue_details.change_legal_name": "Change legal name",
+  "venue_details.legal_name_note":
+    "Register the new name with the tax agency first. Fiscal records already issued keep the old name.",
+  "venue_details.legal_name_unchanged": "This is already the legal name.",
+  "venue_details.legal_name_format": "Use at most 120 characters, without control characters.",
+  "venue_details.legal_name_changed":
+    "The legal name changed in another session. Close and try again.",
   "venue_details.unset": "Not set",
   "venue_details.loading": "Loading venue details…",
   "venue_details.required": "Enter a value.",
@@ -697,9 +704,9 @@ export const en = {
     "Department and station opening hours, special dates and booking times keep their wall-clock values. Manual day overrides keep their dates. The next backup time already scheduled stays fixed; later cycles and account email times use the new clock. Stored working-time offsets and historical reporting days are not rewritten.",
   "venue_details.geography_context":
     "This geography cannot be changed here. A different fiscal or language context requires separate setup or a venue reset.",
-  "venue_details.sales": "The venue has recorded sales; this value is locked.",
-  "venue_details.orders": "The venue has order history; the clock is locked.",
-  "venue_details.daily_close": "The venue has a daily close; the clock is locked.",
+  "venue_details.sales": "Locked: the venue has recorded sales.",
+  "venue_details.orders": "Locked: the venue has order history.",
+  "venue_details.daily_close": "Locked: the venue has a daily close.",
   "venue_details.help": "Review what changes before saving this filled-in field.",
   "venue_details.changed":
     "This value changed in another session. Cancel to load the latest saved values, then review your change.",
@@ -723,6 +730,7 @@ export const en = {
   "nav.staff": "Users",
   "nav.catalogue": "Products",
   "nav.units": "Units",
+  "nav.catalogue_defaults": "Defaults",
   "nav.roster": "Shifts",
   "nav.approvals": "Approvals",
   "nav.planned_actual": "Planned vs actual",
@@ -3164,6 +3172,7 @@ export const es: Record<StringKey, string> = {
   "printers.preview_empty": "Este trabajo no contiene contenido imprimible.",
   "printers.discovery_hint": "Buscando impresoras de red, USB y Bluetooth.",
   "printers.seen_on": "Detectada en",
+  "catalogue_defaults.title": "Valores predeterminados",
   "catalogue_settings.default_vat": "Clase de IVA para productos nuevos",
   "catalogue_settings.hint":
     "Solo los productos creados después usan este valor. Los productos existentes conservan su clase.",
@@ -3240,9 +3249,15 @@ export const es: Record<StringKey, string> = {
   "venue_details.province": "Provincia",
   "venue_details.timeZone": "Zona horaria",
   "venue_details.dayCutover": "El día de actividad empieza a las",
-  "venue_details.country": "País",
+  "venue_details.address": "Dirección",
   "venue_details.legal_name": "Razón social",
-  "venue_details.tax_id": "NIF",
+  "venue_details.change_legal_name": "Cambiar razón social",
+  "venue_details.legal_name_note":
+    "Registra antes el nuevo nombre en la Agencia Tributaria. Los registros fiscales ya emitidos conservan el nombre anterior.",
+  "venue_details.legal_name_unchanged": "Ya es la razón social.",
+  "venue_details.legal_name_format": "Usa como máximo 120 caracteres, sin caracteres de control.",
+  "venue_details.legal_name_changed":
+    "La razón social ha cambiado en otra sesión. Cierra e inténtalo de nuevo.",
   "venue_details.unset": "Sin definir",
   "venue_details.loading": "Cargando los datos del local…",
   "venue_details.required": "Introduce un valor.",
@@ -3279,9 +3294,9 @@ export const es: Record<StringKey, string> = {
     "Los horarios de apertura de departamentos y estaciones, las fechas especiales y las horas de las reservas conservan sus horas locales. Las excepciones manuales por día conservan sus fechas. La próxima copia de seguridad ya programada no cambia; los ciclos posteriores y las horas de los correos de cuenta usan el nuevo reloj. No se reescriben los desfases de jornada guardados ni los días históricos de los informes.",
   "venue_details.geography_context":
     "Esta ubicación no se puede cambiar aquí. Otro contexto fiscal o lingüístico requiere una configuración aparte o reiniciar el local.",
-  "venue_details.sales": "El local tiene ventas registradas; este valor está bloqueado.",
-  "venue_details.orders": "El local tiene historial de pedidos; el reloj está bloqueado.",
-  "venue_details.daily_close": "El local tiene un cierre diario; el reloj está bloqueado.",
+  "venue_details.sales": "Bloqueado: el local tiene ventas registradas.",
+  "venue_details.orders": "Bloqueado: el local tiene historial de pedidos.",
+  "venue_details.daily_close": "Bloqueado: el local tiene un cierre diario.",
   "venue_details.help": "Revisa qué cambia antes de guardar este campo ya rellenado.",
   "venue_details.changed":
     "Este valor ha cambiado en otra sesión. Pulsa Cancelar para cargar los valores guardados más recientes y después revisa tu cambio.",
@@ -3344,6 +3359,7 @@ export const es: Record<StringKey, string> = {
   "nav.staff": "Usuarios",
   "nav.catalogue": "Productos",
   "nav.units": "Unidades",
+  "nav.catalogue_defaults": "Valores predeterminados",
   "nav.roster": "Turnos",
   "nav.approvals": "Aprobaciones",
   "nav.planned_actual": "Previsto vs real",

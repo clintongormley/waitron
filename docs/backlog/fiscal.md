@@ -682,3 +682,9 @@ From **The product editor and catalogue (#345, #379, #387) — what is left open
   0.45 + 0.10 reverses to -0.45 - 0.09 (measured 2026-10-02); copied, it is -0.45 - 0.10.
 - **Over-limit invoices (A261-2c, #1285; owner decision, 2026-10-06).** Non-fiscal placement
   accepts an over-limit order; collection refuses the over-limit invoice without taking money.
+- **What a legal-name change leaves reading the current name (A494, 2026-10-11).** On a venue with
+  no tax regime, a reprinted receipt and an emailed invoice show the current name, since none is
+  stored with them (`apps/server/src/receipt-print.ts`, `apps/server/src/invoice-document.ts`). The
+  card payment slip, the Modelo 303 export and the till's start-up read the current name. A
+  reconcile query across a rename takes its header name from whichever of its rows comes first
+  (`packages/fiscal-verifactu/src/reconcile.ts`).

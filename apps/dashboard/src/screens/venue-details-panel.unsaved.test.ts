@@ -122,6 +122,20 @@ it("Cancel keeps the draft and Discard closes without writing", async () => {
   expect(writes).toEqual([]);
   expect(unload()).toBe(false);
 });
+it("being hidden ends an unchanged edit and keeps a changed one", async () => {
+  const { panel } = await mount();
+  await change(panel, "addressLine1", "Different street");
+  panel.dispatchEvent(new Event("venue-settings-hidden"));
+  await panel.updateComplete;
+  expect(field(panel, "addressLine1").value).toBe("Different street");
+  expect(unload()).toBe(true);
+  await change(panel, "addressLine1", " Calle Mayor 1 ");
+  panel.dispatchEvent(new Event("venue-settings-hidden"));
+  await panel.updateComplete;
+  expect(panel.shadowRoot!.querySelector("wt-input")).toBeNull();
+  expect(panel.shadowRoot!.querySelector("[data-test=edit]")).not.toBeNull();
+  expect(unload()).toBe(false);
+});
 it("page discard restores the opening values in a retained editor", async () => {
   const { app, panel } = await mount();
   await change(panel, "addressLine1", "Different street");

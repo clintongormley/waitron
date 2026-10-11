@@ -375,7 +375,9 @@ classification entry — never an enum, CLAUDE.md §2); names (built-ins are tra
 
 ## Review every permission: fewer, coarser, and consistently named
 
-- **Review every permission: fewer, coarser, and consistently named** (owner, 2026-09-26). Input
+- **Review every permission: fewer, coarser, and consistently named** (owner, 2026-09-26). Since
+  A494 (2026-10-11), `catalogue.manage` (manager and above, the roles that hold `person.manage`)
+  gates the catalogue, units, content languages and the "VAT class for new products" default. Input
   since C128 (#1031): `sale.take_payment` gates every till payment route and is held by every role,
   staff included, chosen so nobody lost the ability to take payment; the review decides who keeps
   it, and whether to rename it — it is the only permission whose action is two words (a reviewer

@@ -148,38 +148,6 @@ logo, subtitle, footer, address switch and tax-agency description. A new departm
 empty receipt. The venue's receipt language moves to Venue settings. Nothing is live, so stored
 venue defaults may be dropped rather than carried over (CLAUDE.md §3, last rule).
 
-## A494. The Venue settings page: layout, editing and the legal name
-
-**A494 (owner, 2026-10-11) — OPEN.**
-
-- **Scrolling.** The page scrolls the header bar away but is cut off where the left menu ends, so
-  its foot cannot be reached.
-- **Layout.** It uses a lot of space. Show the address as one block of text, with no label per
-  line.
-- **Fixed identity.** At the top, show the legal name, tax ID and country as one compact, read-only
-  line. They never appear on the edit form: no screen can change them (`apps/server/src/venue-details.ts`
-  edits name, address, province, time zone and business-day start only).
-- **The locked note.** In edit mode, "The venue has recorded sales; this value is locked." appears
-  under each of the three locked fields. Say it once.
-- **"?" buttons.** The address fields' "?" buttons (`wt-help-tooltip`,
-  `apps/dashboard/src/screens/venue-details-panel.ts`) fall under A237's rule and are listed there.
-- **Switching tabs.** Edit mode survives a switch to another Venue settings tab and back. With
-  nothing changed, a switch leaves edit mode. With changes, it brings up the unsaved-changes prompt.
-  The panel has a draft scope (`draftScopeFor`), but whether a switch with real changes prompts
-  today was not tried.
-- **VAT class for new products** (A356, #1371). It moves to Products and menus under its own
-  heading. Today it is a second, unheaded panel on the venue details tab ("catalogue-defaults" in
-  `apps/dashboard/src/dashboard-app.ts`), shown only to people with `person.manage`, the
-  staff-management permission. Give it a products permission.
-- **Changing the legal name, keeping the tax ID.** Add a guarded "Change legal name" action on
-  venue details. It applies from the next sale; receipts already issued and records already filed
-  keep the old name. The Veri\*Factu hash does not include the name: `buildCadenaAlta` in
-  `@waitron/verifactu` 0.2.1 (`dist/huella.js`) hashes the tax ID, invoice number, date, invoice
-  type, tax and total amounts, the previous hash and the record's time. So the chain still verifies
-  across the change; prove that with a test. `tenants` is a write-path table that only
-  `packages/provisioning/src/venue-apply.ts` may write (`scripts/write-path-tables.json`), so this
-  adds a writer and changes that list. Fiscal-adjacent: the owner lands it.
-
 ## A495. Change the business-day start from a future date
 
 **A495 (owner, 2026-10-11) — OPEN.** Fiscal-adjacent: the owner lands it.

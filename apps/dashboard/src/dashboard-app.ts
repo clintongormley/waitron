@@ -54,7 +54,7 @@ import "./screens/menus-screen.js";
 import "./screens/units-screen.js";
 import "./screens/receipts-screen.js";
 import "./screens/venue-details-panel.js";
-import "./screens/catalogue-settings-panel.js";
+import "./screens/catalogue-defaults-screen.js";
 import "./screens/content-languages-screen.js";
 import "./screens/service-status-screen.js";
 import "./screens/kitchen-screen.js";
@@ -107,6 +107,7 @@ const CORE_SCREENS = [
   "modifiers",
   "menus",
   "units",
+  "catalogue-defaults",
   "content-languages",
   "venue-settings",
   "roster",
@@ -189,6 +190,11 @@ const NAV_GROUPS: NavGroup[] = [
       { screen: "menus", labelKey: "nav.menus", requiresManager: true },
       { screen: "modifiers", labelKey: "nav.modifiers", requiresManager: true },
       { screen: "units", labelKey: "nav.units" },
+      {
+        screen: "catalogue-defaults",
+        labelKey: "nav.catalogue_defaults",
+        requiresPermission: "catalogue.manage",
+      },
     ],
   },
   {
@@ -220,7 +226,7 @@ const NAV_GROUPS: NavGroup[] = [
       {
         screen: "content-languages",
         labelKey: "nav.content_languages",
-        requiresPermission: "person.manage",
+        requiresPermission: "catalogue.manage",
       },
       { screen: "devices", labelKey: "nav.devices" },
       { screen: "printers", labelKey: "nav.printers" },
@@ -259,13 +265,6 @@ const CORE_SETTINGS_PANELS: readonly CoreSettingsPanel[] = [
         .api=${api}
         .readOnly=${!canConfigure}
       ></dashboard-venue-details-panel>`,
-  },
-  {
-    key: "catalogue-defaults",
-    tab: "venue-details",
-    requiresPermission: "person.manage",
-    render: (api) =>
-      html`<dashboard-catalogue-settings-panel .api=${api}></dashboard-catalogue-settings-panel>`,
   },
   {
     key: "receipts",
@@ -471,8 +470,10 @@ export class DashboardApp extends LitElement {
 
       /* The content column beside the sidebar — scrolls independently, the same as .sidebar above,
          so a tall screen never grows the outer page past one viewport (that used to leave the
-         shorter sidebar looking cut off next to a taller .main). */
+         shorter sidebar looking cut off next to a taller .main). Positioned so a visually hidden
+         field hint is placed inside this scroll box, not against .layout, where it grows the page. */
       .main {
+        position: relative;
         flex: 1 1 auto;
         min-width: 0;
         min-height: 0;
@@ -925,6 +926,22 @@ export class DashboardApp extends LitElement {
       if (choice === this.#loginLocaleChoice) setLocale(loginDefault);
     } catch {
       // A failed language read must never block sign-in.
+    }
+  }
+
+  #venueNameRead = 0;
+
+  /** The banner's name alone; only the latest read is shown, and a failed read keeps the name it
+   *  shows. */
+  async #rereadVenueName(): Promise<void> {
+    const generation = this.sessionGeneration;
+    const read = ++this.#venueNameRead;
+    try {
+      const { venueName } = await this.api.getMe();
+      if (this.isConnected && generation === this.sessionGeneration && read === this.#venueNameRead)
+        this.venueName = venueName;
+    } catch {
+      // Keeps the name it shows.
     }
   }
 
@@ -1977,6 +1994,10 @@ export class DashboardApp extends LitElement {
         ></dashboard-catalogue-screen>`;
       case "units":
         return html`<dashboard-units-screen .api=${this.api}></dashboard-units-screen>`;
+      case "catalogue-defaults":
+        return html`<dashboard-catalogue-defaults-screen
+          .api=${this.api}
+        ></dashboard-catalogue-defaults-screen>`;
       case "content-languages":
         return html`<dashboard-content-languages-screen
           .api=${this.api}
@@ -1984,6 +2005,7 @@ export class DashboardApp extends LitElement {
       case "venue-settings":
         return html`<dashboard-venue-settings-screen
           .panels=${this.#settingsPanels()}
+          @venue-identity-changed=${() => void this.#rereadVenueName()}
         ></dashboard-venue-settings-screen>`;
       case "roster":
         return html`<dashboard-roster-screen .api=${this.api}></dashboard-roster-screen>`;

@@ -168,6 +168,8 @@ export async function drain(deps: DrainDeps, now: Date): Promise<DrainResult> {
  *   - Otherwise the pass sends its first chunk, and keeps sending full chunks back to back while at
  *     least `maxPorEnvio` rows remain due. A sub-cap tail left after a chunk has gone is neither a
  *     full envío nor past the wait, so it is deferred to a later pass gated on `t`.
+ *   - An envío carries one taxpayer name (see `claimBatch`). Before the wait has passed, and after
+ *     a chunk has gone, a chunk a name change would cut short is not sent; the pass ends there.
  */
 async function drainDue(
   db: Database,
@@ -196,6 +198,8 @@ async function drainDue(
 
   let t = flujo.tiempoEsperaSeg || TIEMPO_ESPERA_INICIAL_SEG;
   let dueCount = dueCount0;
+  // Until AEAT's wait has passed, a name change may not cut an envío short (see `claimBatch`).
+  let waitPending = !gateOpen;
   // Chains the environment guard refused anywhere in this pass, shared across every claim so a
   // later chunk does not re-discover (and re-incident) them. Fresh each pass, so a chain is
   // re-examined next time rather than assumed still blocked.
@@ -205,14 +209,29 @@ async function drainDue(
     // chains the environment guard just blocked, and the growing `blockedSifIds` lets the next
     // SELECT reach past them. Bounded: each empty round either blocks a new chain or moves its rows
     // to `detenido` (`haltOpenChainClaims`), and the next SELECT sees neither.
-    let claimed: { sendable: DueRow[]; rawCount: number };
+    let claimed: { sendable: DueRow[]; rawCount: number; deferred: boolean };
     for (;;) {
       claimed = await countOnCommit(db, result, async (tx, counts) => {
-        const c = await claimBatch(tx, now, environment, counts, blockedSifIds, maxPorEnvio);
+        const c = await claimBatch(
+          tx,
+          now,
+          environment,
+          counts,
+          blockedSifIds,
+          maxPorEnvio,
+          waitPending,
+        );
         const kept = await haltOpenChainClaims(tx, c.sendable, now, counts);
-        return { sendable: kept, rawCount: c.rawCount };
+        return { sendable: kept, rawCount: c.rawCount, deferred: c.deferred };
       });
-      if (claimed.sendable.length > 0 || claimed.rawCount === 0) break;
+      if (claimed.deferred || claimed.sendable.length > 0 || claimed.rawCount === 0) break;
+    }
+    if (claimed.deferred) {
+      if (result.batchesSent === 0) {
+        bumpNextDue(result, flujo.proximoEnvioEn);
+        return;
+      }
+      break;
     }
     const batch = claimed.sendable;
     // Due work can wait for an earlier retry or an unresolved original invoice.
@@ -230,6 +249,7 @@ async function drainDue(
       // Counted as soon as AEAT has answered: the envío was sent whether or not its reply is kept.
       result.batchesSent += 1;
       result.recordsSubmitted += batch.length;
+      waitPending = true;
       const resolved = await resolveLines(client, batch, registros, respuesta);
 
       dueCount = await countOnCommit(db, result, async (tx, counts) => {
@@ -406,6 +426,22 @@ async function requeueClaims(
  *
  * The `sif_id not in (...)` exclusion stops a window filled by refused rows from coming back on
  * every retry, which would starve sendable work sorting behind it.
+ *
+ * **One taxpayer name per envío.** `drainDue` builds the envío's `Cabecera` from its first row, and
+ * a rename leaves rows of the old and the new name due together. A row "leads its name" when no
+ * earlier row of its chain is still waiting under another name. The call claims one name, that of
+ * the earliest-generated candidate row that leads its name (`fecha_hora_huso_gen_registro`, a `ts`
+ * column, so one ISO spelling and text order is time order), and from every chain only the rows of
+ * that name that lead it. Those rows sort first, so the limit fills with them before any other row;
+ * the rest stay `pendiente`, with no incident. Choosing by generation rather than by `sif_id`
+ * keeps an old name's rows, which stop growing at a rename, from waiting behind a chain that keeps
+ * adding rows under the new name. With `fullOnly`, a window in which rows not claimable this time
+ * follow the claimable ones claims nothing and returns `deferred`.
+ *
+ * `drainDue`'s retry loop relies on `target` never being empty when the query returns rows. A
+ * chain's earliest candidate row has no earlier waiting row, since any such row is a candidate
+ * itself or excludes it, so it leads its name. A window then keeps no claimable row only when the
+ * environment guard refused them all, which grows `blockedSifIds` for the next try.
  */
 async function claimBatch(
   tx: Transaction,
@@ -414,53 +450,86 @@ async function claimBatch(
   result: CommittedCounts,
   blockedSifIds: Set<string>,
   maxPorEnvio: number,
-): Promise<{ sendable: DueRow[]; rawCount: number }> {
+  fullOnly: boolean,
+): Promise<{ sendable: DueRow[]; rawCount: number; deferred: boolean }> {
   const alreadyBlocked = blockedSifIds.size > 0 ? [...blockedSifIds] : null;
   const claimed = (
     await tx.execute<Record<string, unknown>>(sql`
-    select r.*, e.intentos from envios e
-    join registros_facturacion r on r.id = e.registro_id
-    where e.estado = 'pendiente' and e.proximo_intento_en <= ${now.toISOString()}
-      ${alreadyBlocked === null ? sql`` : sql`and r.sif_id not in ${alreadyBlocked}`}
-      -- A cancellation can alter the authority's row under this invoice key before our original's
-      -- duplicate reply reveals that the row belongs to someone else.
-      and (r.tipo_registro != 'anulacion' or exists (
-        select 1 from registros_facturacion original
-        join envios original_envio on original_envio.registro_id = original.id
-        where original.tipo_registro = 'alta'
-          and original.sif_id = r.sif_id
-          and original.id_emisor_factura = r.id_emisor_factura
-          and original.num_serie_factura = r.num_serie_factura
-          and original.fecha_expedicion_factura = r.fecha_expedicion_factura
-          and original_envio.estado in ('aceptado', 'aceptado_con_errores', 'rechazado', 'detenido')
-      ))
-      and not exists (
-        select 1 from envios earlier
-        join registros_facturacion prior on prior.id = earlier.registro_id
-        where prior.sif_id = r.sif_id and prior.secuencia < r.secuencia
-          and (earlier.estado = 'enviando'
-            or (earlier.estado = 'pendiente' and (
-              earlier.proximo_intento_en > ${now.toISOString()}
-              or (prior.tipo_registro = 'anulacion' and not exists (
-                select 1 from registros_facturacion prior_original
-                join envios prior_original_envio on prior_original_envio.registro_id = prior_original.id
-                where prior_original.tipo_registro = 'alta'
-                  and prior_original.sif_id = prior.sif_id
-                  and prior_original.id_emisor_factura = prior.id_emisor_factura
-                  and prior_original.num_serie_factura = prior.num_serie_factura
-                  and prior_original.fecha_expedicion_factura = prior.fecha_expedicion_factura
-                  and prior_original_envio.estado in ('aceptado', 'aceptado_con_errores', 'rechazado', 'detenido')
-              )))))
-      )
-    order by r.sif_id, r.secuencia
+    with waiting as materialized (
+      -- True when no earlier row of its chain is still waiting under another name: the names of
+      -- the chain's waiting rows up to this one are all this row's name.
+      select r.id,
+        min(r.nombre_razon_emisor) over chain = r.nombre_razon_emisor
+          and max(r.nombre_razon_emisor) over chain = r.nombre_razon_emisor as leads_its_name
+      from envios e
+      join registros_facturacion r on r.id = e.registro_id
+      where e.estado in ('pendiente', 'enviando')
+      window chain as (partition by r.sif_id order by r.secuencia)
+    ),
+    candidate as materialized (
+      select r.id, r.sif_id, r.secuencia, r.nombre_razon_emisor, r.fecha_hora_huso_gen_registro,
+        e.intentos, w.leads_its_name
+      from envios e
+      join registros_facturacion r on r.id = e.registro_id
+      join waiting w on w.id = r.id
+      where e.estado = 'pendiente' and e.proximo_intento_en <= ${now.toISOString()}
+        ${alreadyBlocked === null ? sql`` : sql`and r.sif_id not in ${alreadyBlocked}`}
+        -- A cancellation can alter the authority's row under this invoice key before our original's
+        -- duplicate reply reveals that the row belongs to someone else.
+        and (r.tipo_registro != 'anulacion' or exists (
+          select 1 from registros_facturacion original
+          join envios original_envio on original_envio.registro_id = original.id
+          where original.tipo_registro = 'alta'
+            and original.sif_id = r.sif_id
+            and original.id_emisor_factura = r.id_emisor_factura
+            and original.num_serie_factura = r.num_serie_factura
+            and original.fecha_expedicion_factura = r.fecha_expedicion_factura
+            and original_envio.estado in ('aceptado', 'aceptado_con_errores', 'rechazado', 'detenido')
+        ))
+        and not exists (
+          select 1 from envios earlier
+          join registros_facturacion prior on prior.id = earlier.registro_id
+          where prior.sif_id = r.sif_id and prior.secuencia < r.secuencia
+            and (earlier.estado = 'enviando'
+              or (earlier.estado = 'pendiente' and (
+                earlier.proximo_intento_en > ${now.toISOString()}
+                or (prior.tipo_registro = 'anulacion' and not exists (
+                  select 1 from registros_facturacion prior_original
+                  join envios prior_original_envio on prior_original_envio.registro_id = prior_original.id
+                  where prior_original.tipo_registro = 'alta'
+                    and prior_original.sif_id = prior.sif_id
+                    and prior_original.id_emisor_factura = prior.id_emisor_factura
+                    and prior_original.num_serie_factura = prior.num_serie_factura
+                    and prior_original.fecha_expedicion_factura = prior.fecha_expedicion_factura
+                    and prior_original_envio.estado in ('aceptado', 'aceptado_con_errores', 'rechazado', 'detenido')
+                )))))
+        )
+    ),
+    target as (
+      select nombre_razon_emisor from candidate
+      where leads_its_name
+      order by fecha_hora_huso_gen_registro, sif_id, secuencia
+      limit 1
+    )
+    select r.*, c.intentos,
+      (c.leads_its_name and c.nombre_razon_emisor = (select nombre_razon_emisor from target))
+        as claimable
+    from candidate c
+    join registros_facturacion r on r.id = c.id
+    order by claimable desc, c.sif_id, c.secuencia
     limit ${maxPorEnvio}`)
   ).rows;
   // `r.*` reaches no drizzle column mapper, so the registro's JSON columns arrive as text and
-  // `primer_registro` as `0`/`1` — see `decodeRegistroRow`. `e.intentos` is not this table's
+  // `primer_registro` as `0`/`1` — see `decodeRegistroRow`. `intentos` is not this table's
   // column and passes through untouched.
-  const rows = claimed.map((row) => decodeRegistroRow<DueRow>(row));
+  const decoded = claimed.map(({ claimable, ...columns }) => ({
+    row: decodeRegistroRow<DueRow>(columns),
+    claimable: claimable === 1,
+  }));
+  const rows = decoded.map(({ row }) => row);
+  const claimableRows = new Set(decoded.filter((entry) => entry.claimable).map(({ row }) => row));
 
-  const sendable: DueRow[] = [];
+  let sendable: DueRow[] = [];
   for (const row of rows) {
     // A successor of a refusal found earlier in this same call; the SQL exclusion covers earlier
     // calls only.
@@ -487,6 +556,12 @@ async function claimBatch(
     }
   }
 
+  const leading = sendable.filter((row) => claimableRows.has(row));
+  if (leading.length > 0 && leading.length < sendable.length && fullOnly) {
+    return { sendable: [], rawCount: rows.length, deferred: true };
+  }
+  sendable = leading;
+
   if (sendable.length > 0) {
     const ids = sendable.map((r) => r.id);
     // drizzle expands an array parameter into an already-parenthesised list, so `in ${ids}` takes
@@ -501,6 +576,7 @@ async function claimBatch(
   return {
     sendable: sendable.map((r) => ({ ...r, intentos: r.intentos + 1 })),
     rawCount: rows.length,
+    deferred: false,
   };
 }
 

@@ -1971,12 +1971,12 @@ These forms follow the rule
 and nothing guards it across screens:
 
 - batch 1: the product editor and the variant form;
-- batch 2a: the "VAT class for new products" default on Venue settings; the recipe editor and the
-  ingredient form; the unit form, new and existing; the options list and its option window; the
-  extras list; Add to menus after a product is created; a section's Add products; a menu's
-  Schedule and Change time on its Preview tab. Units' Change unit, the Products browser's Move and
-  Delete dialog and the image picker act on what is selected rather than save a draft, so they keep
-  their own rules; the reason for each is in
+- batch 2a: the "VAT class for new products" default (now on Products and menus → Defaults); the
+  recipe editor and the ingredient form; the unit form, new and existing; the options list and its
+  option window; the extras list; Add to menus after a product is created; a section's Add products;
+  a menu's Schedule and Change time on its Preview tab. Units' Change unit, the Products browser's
+  Move and Delete dialog and the image picker act on what is selected rather than save a draft, so
+  they keep their own rules; the reason for each is in
   [the Batch 2a notes](../superpowers/plans/2026-10-07-a331-save-follows-changes.md#batch-2a--catalogue-and-menus-forms-outside-lane-ds-preview-bundle-15-files);
 - batch 3a: the service-status rows and Add; the
   kitchen's late flags; the venue details editor; My schedule's cover and time-off requests; the
@@ -1999,6 +1999,8 @@ and nothing guards it across screens:
 - A429 slice 2: the floor plan editor page, whose Save sits in its header, and its Add join
   dialog. Their leave cases are in `apps/dashboard/src/screens/floor-plan-editor.unsaved.test.ts`
   and `apps/dashboard/src/screens/floor-plan-add-join.unsaved.test.ts`;
+- A494: Venue details' Change legal name dialog. Its leave cases are in
+  `apps/dashboard/src/screens/legal-name-dialog.unsaved.test.ts`;
 - batch 4c: the venue-service local holiday Add and Edit (its Remove and Forget stay `danger`
   confirmations, and the holiday area saves on choice); and the
   till's profile dialog, whose Switch waits until another profile is chosen. The profile dialog is

@@ -133,11 +133,8 @@ export interface CatalogueApiDeps {
   venueLocale?: string;
 }
 
-/**
- * The one permission that gates every `/management-api` catalogue route. `person.manage` stands in
- * until a `catalogue.manage` permission exists; realising it is a one-line swap here.
- */
-const CATALOGUE_WRITE_PERMISSION: Permission = "person.manage";
+/** The one permission that gates every `/management-api` catalogue route. */
+const CATALOGUE_WRITE_PERMISSION: Permission = "catalogue.manage";
 
 const NO_CONTENT_LANGUAGE_RULES: ContentLanguageRules = { required: [], official: [] };
 

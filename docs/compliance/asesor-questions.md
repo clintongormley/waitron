@@ -226,13 +226,14 @@ checked word for word against the downloaded text, are in
 [research/2026-10-09-vat-and-corrections.md](research/2026-10-09-vat-and-corrections.md) and
 [research/2026-10-09-operations.md](research/2026-10-09-operations.md). Of the bullets the passes scored,
 about a quarter were answered outright and most of the rest narrowed to a yes or no. What is left for the
-advisor is below: seventeen short questions, S1 to S17, and a review list, R1 to R6, for the advisor to
+advisor is below: eighteen short questions, S1 to S18, and a review list, R1 to R6, for the advisor to
 read and correct only where we are wrong. **This list replaces the 6 October Word copies**; the
 question texts further down this file stay as the background and the record. No enquiry has been
 sent.
 
 Questions not in the 6 October Word copy (Q3, Q4, Q8, Q10, and the lawyer's Q9, Q11, Q12 and Q16)
 are unchanged by this pass. Q46, on selling by weight, was added afterwards the same day as S17.
+Q37(d), on a change of legal name, was added on 2026-10-11 as S18 (A494).
 
 ### What happened to each question sent on 6 October
 
@@ -349,6 +350,10 @@ are unchanged by this pass. Q46, on selling by weight, was added afterwards the 
   of conformity? (b) What Waitron does today, staff typing in the weight read off a certified scale
   and the till pricing it: does it comply, and does it need anything more, such as the total shown
   on the scale or a mention on the ticket? (c) If this is outside your field, whom should we ask?
+- **S18. A change of legal name, same tax ID (Q37(d)).** Each record keeps the name it was written
+  with. Which name must a record written before the change but sent after it carry: the one on the
+  invoice issued, or the one AEAT's census now holds? And a cancellation, written after the change,
+  of an invoice issued before it?
 
 **Review list: read, and correct only where we are wrong.**
 
@@ -483,6 +488,11 @@ are unchanged by this pass. Q46, on selling by weight, was added afterwards the 
 > **(c)** Si estas cuestiones quedan fuera de su ámbito, ¿a quién nos recomienda consultar: un
 > organismo notificado, el Centro Español de Metrología o el órgano de metrología de la comunidad
 > autónoma?
+>
+> **S18. Cambio de razón social con el mismo NIF.** Si el restaurante cambia su razón social, ¿qué
+> nombre debe llevar un registro generado antes del cambio pero remitido después: el que figura en la
+> factura expedida o el que la AEAT tiene ya en el censo? ¿Y una anulación, generada después del
+> cambio, de una factura expedida antes?
 >
 > **Para revisar: corríjanos solo si nos equivocamos.**
 >
@@ -2786,6 +2796,16 @@ Source: [saved protocol evidence](../superpowers/specs/2026-10-05-aeat-protocol-
 and [dated receipt, §7.1](../superpowers/specs/2026-10-04-fiscal-prevention-and-offline-recovery-design.md#71-protocol-receipt-2026-10-05-w41s-1).
 
 This records a question; no enquiry has been sent.
+
+**A change of legal name (added 2026-10-11, A494).** A manager can now change the taxpayer's legal
+name, keeping the tax ID. Each record keeps the name it was written with, so a record written before
+the change but sent after it carries the old name, while a cancellation written after the change
+carries the new one, even for an invoice issued before it. An envío never mixes two names.
+
+> **(d)** Si el restaurante cambia su razón social (mismo NIF), ¿qué nombre debe llevar un registro
+> generado antes del cambio pero remitido después: el que figura en la factura expedida o el que la
+> AEAT tiene ya en el censo? ¿Y una anulación, generada después del cambio, de una factura expedida
+> antes?
 
 ---
 

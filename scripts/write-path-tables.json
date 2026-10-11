@@ -7,5 +7,8 @@
     "packages/db/src/reserved-identity.ts",
     "packages/provisioning/src/venue-apply.ts"
   ],
-  "tenants": ["packages/provisioning/src/venue-apply.ts"]
+  "tenants": [
+    "packages/provisioning/src/taxpayer-name.ts",
+    "packages/provisioning/src/venue-apply.ts"
+  ]
 }

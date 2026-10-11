@@ -1,6 +1,6 @@
-import { afterEach, expect, it } from "vitest";
+import { afterEach, expect, it, vi } from "vitest";
 import { commands, page, userEvent } from "vitest/browser";
-import type { WtInput, WtTabs } from "@waitron/ui";
+import type { WtFormActions, WtInput, WtTabs } from "@waitron/ui";
 import { LiveData } from "@waitron/dashboard-kit";
 import type { DashboardApi } from "./api/client.js";
 import { venueDetailsFixture } from "./testing/venue-details-fixture.js";
@@ -315,7 +315,65 @@ it("a real Venue details draft stays visible through its container tab warning",
   await select(app, "tables");
   await choose(app, "discard");
   await expect.poll(() => selected(app)).toBe("tables");
-  expect(street.value).toBe("Calle Mayor 1");
+  await panel.updateComplete;
+  expect(street.isConnected).toBe(false);
+  expect(panel.shadowRoot!.querySelector("wt-input")).toBeNull();
+  expect(
+    panel.shadowRoot!.querySelector("[data-test=saved-addressLine1]")!.textContent!.trim(),
+  ).toBe("Calle Mayor 1");
+});
+
+async function editVenueDetails(app: DashboardApp) {
+  const panel = settings(app).shadowRoot!.querySelector("dashboard-venue-details-panel")!;
+  await expect.poll(() => panel.shadowRoot?.querySelector("[data-test=edit]")).toBeTruthy();
+  panel.shadowRoot!.querySelector<HTMLElement>("[data-test=edit]")!.click();
+  await panel.updateComplete;
+  const street = panel.shadowRoot!.querySelector<WtInput>("[name=addressLine1]")!;
+  await street.updateComplete;
+  return { panel, street };
+}
+function inViewMode(panel: HTMLElementTagNameMap["dashboard-venue-details-panel"]) {
+  return (
+    panel.shadowRoot!.querySelector("[data-test=edit]") !== null &&
+    panel.shadowRoot!.querySelector("wt-input") === null
+  );
+}
+
+it("a Venue details edit with nothing changed ends when its tab is left", async () => {
+  const { app } = await mount("/manage/venue-settings/view/venue-details");
+  const { panel } = await editVenueDetails(app);
+  await select(app, "tables");
+  await expect.poll(() => selected(app)).toBe("tables");
+  expect(app.shadowRoot!.querySelector("wt-unsaved-changes")!.open).toBe(false);
+  await select(app, "venue-details");
+  await expect.poll(() => selected(app)).toBe("venue-details");
+  expect(inViewMode(panel)).toBe(true);
+});
+
+it("a changed Venue details edit survives Keep and ends in view mode after Discard", async () => {
+  const { app } = await mount("/manage/venue-settings/view/venue-details");
+  const { panel, street } = await editVenueDetails(app);
+  await userEvent.fill(
+    page.elementLocator(street.shadowRoot!.querySelector("input")!),
+    "Different street",
+  );
+  await select(app, "tables");
+  await choose(app, "keep");
+  expect(selected(app)).toBe("venue-details");
+  expect(inViewMode(panel)).toBe(false);
+  expect(panel.shadowRoot!.querySelector<WtInput>("[name=addressLine1]")!.value).toBe(
+    "Different street",
+  );
+  await select(app, "tables");
+  await choose(app, "discard");
+  await expect.poll(() => selected(app)).toBe("tables");
+  await select(app, "venue-details");
+  await expect.poll(() => selected(app)).toBe("venue-details");
+  await panel.updateComplete;
+  expect(inViewMode(panel)).toBe(true);
+  expect(
+    panel.shadowRoot!.querySelector("[data-test=saved-addressLine1]")!.textContent!.trim(),
+  ).toBe("Calle Mayor 1");
 });
 
 it("keyboard tab navigation holds the edited panel until Discard", async () => {
@@ -539,4 +597,251 @@ it("an obsolete department query cannot bypass a venue draft leave decision", as
   await choose(app, "discard");
   await expect.poll(() => selected(app)).toBe("tables");
   expect(subtitle.value).toBe("Venue");
+});
+
+it("a legal-name change on Venue details re-reads the banner's name", async () => {
+  let legalName = "Issuer SL";
+  const getMe = vi.fn(async () => ({
+    personId: "p1",
+    email: "ada@example.com",
+    role: "manager",
+    locale: "en-GB",
+    venueLocale: "en-GB",
+    sessionDefault: "en-GB",
+    venueName: legalName,
+    permissions: ["venue.view", "venue.configure"],
+    modules: [],
+  }));
+  const { app } = await mount("/manage/venue-settings/view/venue-details", "en-GB", "light", {
+    getMe,
+    renameTaxpayer: async (input: { legalName: string }) => {
+      legalName = input.legalName;
+      const model = venueDetailsFixture();
+      return { model: { ...model, issuer: { ...model.issuer, legalName } } };
+    },
+  } as Partial<DashboardApi>);
+  const banner = () => app.shadowRoot!.querySelector("[data-test=venue-name]")!.textContent!.trim();
+  await expect.poll(banner).toBe("Issuer SL");
+  const panel = settings(app).shadowRoot!.querySelector("dashboard-venue-details-panel")!;
+  await expect
+    .poll(() => panel.shadowRoot?.querySelector("[data-test=change-legal-name]"))
+    .toBeTruthy();
+  panel.shadowRoot!.querySelector<HTMLElement>("[data-test=change-legal-name]")!.click();
+  const host = panel.shadowRoot!.querySelector("dashboard-legal-name-dialog")!;
+  await host.updateComplete;
+  const dialog = host.shadowRoot!.querySelector("wt-dialog")!;
+  const input = dialog.querySelector<WtInput>("wt-input[name=legalName]")!;
+  await input.updateComplete;
+  await userEvent.fill(page.elementLocator(input.shadowRoot!.querySelector("input")!), "Nuevo SL");
+  const calls = getMe.mock.calls.length;
+  dialog.querySelector<HTMLElement>("wt-button[data-test=save-legal-name]")!.click();
+  await expect.poll(banner).toBe("Nuevo SL");
+  expect(getMe.mock.calls.length).toBe(calls + 1);
+  expect(location.pathname).toBe("/manage/venue-settings/view/venue-details");
+});
+
+async function openLegalName(app: DashboardApp, typed?: string) {
+  await select(app, "venue-details");
+  await expect.poll(() => selected(app)).toBe("venue-details");
+  const panel = settings(app).shadowRoot!.querySelector("dashboard-venue-details-panel")!;
+  await expect
+    .poll(() => panel.shadowRoot?.querySelector("[data-test=change-legal-name]"))
+    .toBeTruthy();
+  panel.shadowRoot!.querySelector<HTMLElement>("[data-test=change-legal-name]")!.click();
+  const host = panel.shadowRoot!.querySelector("dashboard-legal-name-dialog")!;
+  await host.updateComplete;
+  const dialog = host.shadowRoot!.querySelector("wt-dialog")!;
+  const input = dialog.querySelector<WtInput>("wt-input[name=legalName]")!;
+  await input.updateComplete;
+  if (typed !== undefined)
+    await userEvent.fill(page.elementLocator(input.shadowRoot!.querySelector("input")!), typed);
+  const native = dialog.shadowRoot!.querySelector<HTMLDialogElement>("dialog")!;
+  return { host, dialog, input, native };
+}
+
+async function tabStillClickable(app: DashboardApp, key: string) {
+  try {
+    await userEvent.click(
+      page.elementLocator(tabs(app).shadowRoot!.querySelector(`[role=tab][data-key=${key}]`)!),
+      { timeout: 1000 },
+    );
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+it("leaving Venue details by Back and Discard closes a changed legal-name dialog", async () => {
+  const { app } = await mount();
+  const { host, dialog, native } = await openLegalName(app, "Proposed SL");
+  history.back();
+  await choose(app, "discard");
+  await expect.poll(() => selected(app)).toBe("tables");
+  await host.updateComplete;
+  expect(dialog.open).toBe(false);
+  expect(native.matches(":modal")).toBe(false);
+  expect(await tabStillClickable(app, "tables")).toBe(true);
+  await select(app, "kitchen");
+  await expect.poll(() => selected(app)).toBe("kitchen");
+  expect(app.shadowRoot!.querySelector("wt-unsaved-changes")!.open).toBe(false);
+});
+
+it("a rename answered after Back and Discard closed its dialog still updates the banner", async () => {
+  let legalName = "Venue";
+  const getMe = vi.fn(async () => ({
+    personId: "p1",
+    email: "ada@example.com",
+    role: "manager",
+    locale: "en-GB",
+    venueLocale: "en-GB",
+    sessionDefault: "en-GB",
+    venueName: legalName,
+    permissions: ["venue.view", "venue.configure"],
+    modules: [],
+  }));
+  let answer!: () => void;
+  const { app } = await mount(undefined, "en-GB", "light", {
+    getMe,
+    renameTaxpayer: (input: { legalName: string }) =>
+      new Promise((resolve) => {
+        answer = () => {
+          legalName = input.legalName;
+          const model = venueDetailsFixture();
+          resolve({ model: { ...model, issuer: { ...model.issuer, legalName } } });
+        };
+      }),
+  } as Partial<DashboardApi>);
+  const banner = () => app.shadowRoot!.querySelector("[data-test=venue-name]")!.textContent!.trim();
+  await expect.poll(banner).toBe("Venue");
+  const { host, dialog, native } = await openLegalName(app, "Nuevo SL");
+  dialog.querySelector<HTMLElement>("wt-button[data-test=save-legal-name]")!.click();
+  await expect.poll(() => answer).toBeTypeOf("function");
+  history.back();
+  await choose(app, "discard");
+  await expect.poll(() => selected(app)).toBe("tables");
+  await host.updateComplete;
+  expect(dialog.open).toBe(false);
+  expect(native.matches(":modal")).toBe(false);
+  answer();
+  await expect.poll(banner).toBe("Nuevo SL");
+  await host.updateComplete;
+  expect(dialog.open).toBe(false);
+  expect(native.matches(":modal")).toBe(false);
+  expect(await tabStillClickable(app, "kitchen")).toBe(true);
+});
+
+it("a rename refused after Back and Discard closed its dialog shows nothing", async () => {
+  let refuse!: () => void;
+  const { app } = await mount(undefined, "en-GB", "light", {
+    renameTaxpayer: () =>
+      new Promise((_, reject) => {
+        refuse = () =>
+          reject(Object.assign(new Error("changed"), { code: "venue.detail_changed" }));
+      }),
+  } as Partial<DashboardApi>);
+  const { host, dialog, native } = await openLegalName(app, "Nuevo SL");
+  dialog.querySelector<HTMLElement>("wt-button[data-test=save-legal-name]")!.click();
+  await expect.poll(() => refuse).toBeTypeOf("function");
+  history.back();
+  await choose(app, "discard");
+  await expect.poll(() => selected(app)).toBe("tables");
+  refuse();
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  await host.updateComplete;
+  expect(dialog.open).toBe(false);
+  expect(native.matches(":modal")).toBe(false);
+  expect(dialog.querySelector<WtFormActions>("wt-form-actions")!.error).toBe("");
+  expect(await tabStillClickable(app, "kitchen")).toBe(true);
+});
+
+it("leaving Venue details by Back and Keep leaves the legal-name dialog open with its draft", async () => {
+  const { app } = await mount();
+  const { host, dialog, input, native } = await openLegalName(app, "Proposed SL");
+  history.back();
+  await choose(app, "keep");
+  await host.updateComplete;
+  expect(selected(app)).toBe("venue-details");
+  expect(dialog.open).toBe(true);
+  expect(native.matches(":modal")).toBe(true);
+  expect(native.checkVisibility()).toBe(true);
+  expect(input.value).toBe("Proposed SL");
+});
+
+it("leaving Venue details by Back closes an unchanged legal-name dialog", async () => {
+  const { app } = await mount();
+  const { host, dialog, native } = await openLegalName(app);
+  history.back();
+  await expect.poll(() => selected(app)).toBe("tables");
+  expect(app.shadowRoot!.querySelector("wt-unsaved-changes")!.open).toBe(false);
+  await host.updateComplete;
+  expect(dialog.open).toBe(false);
+  expect(native.matches(":modal")).toBe(false);
+  expect(await tabStillClickable(app, "kitchen")).toBe(true);
+});
+
+it("the newest banner read wins when two reads finish in the opposite order", async () => {
+  const response = (venueName: string) => ({
+    personId: "p1",
+    email: "ada@example.com",
+    role: "manager",
+    locale: "en-GB",
+    venueLocale: "en-GB",
+    sessionDefault: "en-GB",
+    venueName,
+    permissions: ["venue.view", "venue.configure"],
+    modules: [],
+  });
+  const pending: ((value: ReturnType<typeof response>) => void)[] = [];
+  const getMe = vi
+    .fn()
+    .mockResolvedValueOnce(response("Initial SL"))
+    .mockImplementation(() => new Promise((resolve) => pending.push(resolve)));
+  const { app } = await mount("/manage/venue-settings/view/venue-details", "en-GB", "light", {
+    getMe,
+  });
+  const banner = () => app.shadowRoot!.querySelector("[data-test=venue-name]")!.textContent!.trim();
+  await expect.poll(banner).toBe("Initial SL");
+  const changed = () =>
+    settings(app).dispatchEvent(
+      new CustomEvent("venue-identity-changed", { bubbles: true, composed: true }),
+    );
+  changed();
+  changed();
+  await expect.poll(() => pending.length).toBe(2);
+  pending[1]!(response("Newer SL"));
+  await expect.poll(banner).toBe("Newer SL");
+  pending[0]!(response("Older SL"));
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  await app.updateComplete;
+  expect(banner()).toBe("Newer SL");
+});
+
+it("a failed banner read keeps the name the banner shows", async () => {
+  const getMe = vi
+    .fn()
+    .mockResolvedValueOnce({
+      personId: "p1",
+      email: "ada@example.com",
+      role: "manager",
+      locale: "en-GB",
+      venueLocale: "en-GB",
+      sessionDefault: "en-GB",
+      venueName: "Initial SL",
+      permissions: ["venue.view", "venue.configure"],
+      modules: [],
+    })
+    .mockRejectedValue(new Error("network"));
+  const { app } = await mount("/manage/venue-settings/view/venue-details", "en-GB", "light", {
+    getMe,
+  });
+  const banner = () => app.shadowRoot!.querySelector("[data-test=venue-name]")!.textContent!.trim();
+  await expect.poll(banner).toBe("Initial SL");
+  settings(app).dispatchEvent(
+    new CustomEvent("venue-identity-changed", { bubbles: true, composed: true }),
+  );
+  await expect.poll(() => getMe.mock.calls.length).toBe(2);
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  await app.updateComplete;
+  expect(banner()).toBe("Initial SL");
+  expect(app.shadowRoot!.querySelector("dashboard-venue-settings-screen")).not.toBeNull();
 });

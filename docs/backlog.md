@@ -1303,10 +1303,10 @@ _Formerly entries spread across the old sections, A261's venue-operations steps 
   page folded into each department's receipt. Starts after A435 step 6 lands.
   [Detail](backlog/service-periods.md#a493-departments-and-zones-as-one-list-edited-in-dialogs)
 
-- **A494. The Venue settings page: layout, editing and the legal name (owner, 2026-10-11).** The
-  page is cut off when scrolled, edit mode survives a tab switch, the VAT default is in the wrong
-  place, and the legal name cannot be changed. Fiscal-adjacent: the owner lands it.
-  [Detail](backlog/service-periods.md#a494-the-venue-settings-page-layout-editing-and-the-legal-name)
+- **Which name a record sent across a legal-name change carries** (A494 follow-up, 2026-10-11). A
+  record keeps the name it was written with, so one written before the change but sent after it
+  carries the old name, and a later cancellation of an earlier invoice carries the new one. Waits
+  on the asesor's answer to Q37(d), S18 in `docs/compliance/asesor-questions.md`.
 
 - **A495. Change the business-day start from a future date (owner, 2026-10-11).** Refused today once
   a venue has sales, because reports would regroup old days. Store the start with the date it takes
@@ -3482,7 +3482,8 @@ _Formerly A7, and the dashboard entries in the opening part of the old Track A (
 - **Review every permission: fewer, coarser, and consistently named** (owner, 2026-09-26). The
   review should propose the whole list: which permissions to merge, the names, and which role holds
   each, and then rename the call sites in one change. **Do it before the editable-roles item below**
-  (owner, 2026-09-26).
+  (owner, 2026-09-26). Since A494 (2026-10-11), `catalogue.manage` gates the catalogue,
+  units and content languages, and the "VAT class for new products" default.
   [Detail](backlog/dashboard.md#review-every-permission-fewer-coarser-and-consistently-named)
 
 - **Roles are something an admin can add and edit; the four built-ins are only defaults** (owner

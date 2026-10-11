@@ -63,6 +63,7 @@ import type { WtToast } from "@waitron/ui";
 import type { AlertsBell } from "./widgets/alerts-bell.js";
 import type { AlertView, DashboardApi, PersonSummary } from "./api/client.js";
 import type { WtInput } from "@waitron/ui";
+import { venueDetailsFixture } from "./testing/venue-details-fixture.js";
 
 const stubRequest: DashboardRequest = async () => [] as never;
 const adjustmentsRequest: DashboardRequest = async (path, method, body, options) =>
@@ -2788,9 +2789,72 @@ describe("dashboard-app", () => {
     },
   );
 
-  it("offers Content languages first in Settings, to a session holding person.manage, and opens its page", async () => {
+  it("offers Defaults last in Products and menus, to a session holding catalogue.manage, and opens its page", async () => {
     const api = stubApi({
-      getMe: vi.fn().mockResolvedValue({ ...meResponse, permissions: ["person.manage"] }),
+      getMe: vi.fn().mockResolvedValue({ ...meResponse, permissions: ["catalogue.manage"] }),
+    });
+    const { el } = await mountWidget<DashboardApp>("dashboard-app", { api });
+    await flush(el);
+    const item = navItem(el, "catalogue-defaults");
+    expect(item!.textContent!.trim()).toBe(t("nav.catalogue_defaults"));
+    const panel = el.shadowRoot!.querySelector("#nav-group-panel-menu")!;
+    const order = [...panel.querySelectorAll<HTMLElement>(".nav-item")].map((b) => b.dataset.test);
+    expect(order.at(-1)).toBe("nav-catalogue-defaults");
+
+    item!.click();
+    await flush(el);
+    const face = el.shadowRoot!.querySelector<HTMLElement & { api?: DashboardApi }>(
+      "dashboard-catalogue-defaults-screen",
+    );
+    expect(face!.api).toBe(api);
+    expect(location.pathname).toBe("/manage/catalogue-defaults");
+  });
+
+  it.each([
+    ["supervisor", []],
+    ["manager", ["person.manage"]],
+  ])(
+    "does not offer Defaults to a %s session without catalogue.manage",
+    async (role, permissions) => {
+      const { el } = await mountWidget<DashboardApp>("dashboard-app", {
+        api: stubApi({
+          getMe: vi.fn().mockResolvedValue({ ...meResponse, role, permissions }),
+          listStaff: vi.fn().mockResolvedValue([]),
+        }),
+      });
+      await flush(el);
+      expect(navItem(el, "overview")).toBeTruthy();
+      expect(navItem(el, "catalogue-defaults")).toBeNull();
+    },
+  );
+
+  it.each([
+    [
+      "manager",
+      ["catalogue.manage"],
+      "dashboard-catalogue-defaults-screen",
+      "/manage/catalogue-defaults",
+    ],
+    ["manager", ["person.manage"], "dashboard-overview-screen", "/manage/overview"],
+  ])(
+    "opens /manage/catalogue-defaults for a %s session holding %j only when it holds catalogue.manage",
+    async (role, permissions, tag, path) => {
+      history.replaceState(null, "", "/manage/catalogue-defaults");
+      const { el } = await mountWidget<DashboardApp>("dashboard-app", {
+        api: stubApi({
+          getMe: vi.fn().mockResolvedValue({ ...meResponse, role, permissions }),
+          listStaff: vi.fn().mockResolvedValue([]),
+        }),
+      });
+      await flush(el);
+      expect(el.shadowRoot!.querySelector(tag)).not.toBeNull();
+      expect(location.pathname).toBe(path);
+    },
+  );
+
+  it("offers Content languages first in Settings, to a session holding catalogue.manage, and opens its page", async () => {
+    const api = stubApi({
+      getMe: vi.fn().mockResolvedValue({ ...meResponse, permissions: ["catalogue.manage"] }),
       listStaff: vi.fn().mockResolvedValue([]),
     });
     const { el } = await mountWidget<DashboardApp>("dashboard-app", { api });
@@ -2813,8 +2877,9 @@ describe("dashboard-app", () => {
   it.each([
     ["supervisor", []],
     ["manager", ["booking.manage"]],
+    ["manager", ["person.manage"]],
   ])(
-    "does not offer Content languages to a %s session without person.manage",
+    "does not offer Content languages to a %s session without catalogue.manage",
     async (role, permissions) => {
       const { el } = await mountWidget<DashboardApp>("dashboard-app", {
         api: stubApi({
@@ -2831,13 +2896,14 @@ describe("dashboard-app", () => {
   it.each([
     [
       "manager",
-      ["person.manage"],
+      ["catalogue.manage"],
       "dashboard-content-languages-screen",
       "/manage/content-languages",
     ],
+    ["manager", ["person.manage"], "dashboard-overview-screen", "/manage/overview"],
     ["supervisor", [], "dashboard-overview-screen", "/manage/overview"],
   ])(
-    "opens /manage/content-languages for a %s session only when it holds person.manage",
+    "opens /manage/content-languages for a %s session only when it holds catalogue.manage",
     async (role, permissions, tag, path) => {
       history.replaceState(null, "", "/manage/content-languages");
       const { el } = await mountWidget<DashboardApp>("dashboard-app", {
@@ -4328,6 +4394,71 @@ it("keeps the phone drawer within the window inside the real page", async () => 
       el.shadowRoot!.querySelector("[data-test=brand-banner]")!.getBoundingClientRect().bottom - 1,
     );
     expect(sidebar.bottom).toBeLessThanOrEqual(window.innerHeight);
+  } finally {
+    await unmount();
+  }
+});
+
+const nextFrame = () => new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+
+it("keeps Venue settings within the window at desktop width, in view and edit mode, and scrolls to its last panel", async () => {
+  history.replaceState(null, "", "/manage/venue-settings/view/venue-details");
+  const { el, unmount } = await mountInRealPage(
+    stubApi({
+      getMe: vi.fn().mockResolvedValue({
+        ...meResponse,
+        permissions: ["venue.view", "venue.configure", "person.manage"],
+      }),
+      getVenueDetails: vi.fn().mockResolvedValue(venueDetailsFixture()),
+    }),
+    1280,
+    600,
+  );
+  try {
+    const panels = () =>
+      venueSettings(el)!.shadowRoot!.querySelector<HTMLElement>(
+        '[data-test="venue-settings-venue-details"]',
+      )!;
+    await expect.poll(() => panels()?.children.length).toBe(1);
+    const details = panels().querySelector("dashboard-venue-details-panel")!;
+    await expect
+      .poll(() => details.shadowRoot!.querySelector<HTMLElement>('[data-test="edit"]'))
+      .not.toBeNull();
+    const main = el.shadowRoot!.querySelector<HTMLElement>(".main")!;
+    const reachesFoot = async () => {
+      await nextFrame();
+      expect(document.scrollingElement!.scrollHeight).toBeLessThanOrEqual(window.innerHeight);
+      main.scrollTo(0, main.scrollHeight);
+      await nextFrame();
+      const last = panels().lastElementChild!.getBoundingClientRect();
+      expect(last.bottom).toBeLessThanOrEqual(main.getBoundingClientRect().bottom + 1);
+    };
+    await reachesFoot();
+    details.shadowRoot!.querySelector<HTMLElement>('[data-test="edit"]')!.click();
+    await expect.poll(() => details.shadowRoot!.querySelector('[data-test="save"]')).not.toBeNull();
+    await reachesFoot();
+  } finally {
+    await unmount();
+  }
+});
+
+it("keeps a hinted field below the fold from growing the page past the window at desktop width", async () => {
+  const { el, unmount } = await mountInRealPage(stubApi(), 1280, 600);
+  try {
+    const main = el.shadowRoot!.querySelector<HTMLElement>(".main")!;
+    const spacer = document.createElement("div");
+    spacer.style.blockSize = "2000px";
+    spacer.style.flex = "none";
+    const field = document.createElement("wt-input");
+    field.setAttribute("label", "Probe");
+    field.setAttribute("name", "probe");
+    field.setAttribute("hint", "A hint is drawn visually hidden");
+    main.append(spacer, field);
+    await (field as WtInput).updateComplete;
+    await nextFrame();
+    expect(field.shadowRoot!.querySelector("[data-hint]")).not.toBeNull();
+    expect(main.scrollHeight).toBeGreaterThan(2000);
+    expect(document.scrollingElement!.scrollHeight).toBeLessThanOrEqual(window.innerHeight);
   } finally {
     await unmount();
   }
@@ -7053,7 +7184,9 @@ describe("inline translation application leave paths", () => {
         expected: "baseline",
       };
       const api = stubApi({
-        getMe: vi.fn().mockResolvedValue({ ...meResponse, permissions: ["person.manage"] }),
+        getMe: vi
+          .fn()
+          .mockResolvedValue({ ...meResponse, permissions: ["person.manage", "catalogue.manage"] }),
         getContentLanguages: vi.fn().mockResolvedValue(config),
         getContentLanguageRules: vi
           .fn()

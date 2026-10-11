@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { validateVenueFiscalFields } from "./venue-fields.js";
+import { validateLegalName, validateVenueFiscalFields } from "./venue-fields.js";
 
 const GOOD = {
   legalName: "Waitron SL",
@@ -80,5 +80,28 @@ describe("validateVenueFiscalFields", () => {
 
   it("accepts a tab, which XML permits and the validator allows", () => {
     expect(() => validateVenueFiscalFields({ ...GOOD, legalName: "Waitron\tSL" })).not.toThrow();
+  });
+});
+
+describe("validateLegalName", () => {
+  const refused = expect.objectContaining({
+    code: "setup.request_invalid",
+    params: { field: "legalName" },
+  });
+
+  it("accepts a name of exactly 120 characters, counted in code points", () => {
+    expect(() => validateLegalName("😀".repeat(120))).not.toThrow();
+  });
+
+  it("refuses a name of 121 characters", () => {
+    expect(() => validateLegalName("a".repeat(121))).toThrow(refused);
+  });
+
+  it("refuses a control character XML forbids", () => {
+    expect(() => validateLegalName("Deli\u0001 SL")).toThrow(refused);
+  });
+
+  it("accepts a tab, which XML permits", () => {
+    expect(() => validateLegalName("Deli\tSL")).not.toThrow();
   });
 });

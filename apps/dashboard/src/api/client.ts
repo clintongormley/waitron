@@ -2651,6 +2651,13 @@ export class DashboardApi {
     return this.#request("/management-api/venue-details", "PATCH", input);
   }
 
+  renameTaxpayer(input: {
+    legalName: string;
+    expected: string;
+  }): Promise<{ model: VenueDetailsModel }> {
+    return this.#request("/management-api/venue-details/legal-name", "PUT", input);
+  }
+
   getLocationSettings(): Promise<{ name: string; operationDescription: string }> {
     return this.#request("/management-api/location-settings", "GET");
   }

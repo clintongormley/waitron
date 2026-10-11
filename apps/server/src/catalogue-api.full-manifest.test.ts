@@ -192,9 +192,9 @@ interface Venue {
    * location-scoped read behind `GET /api/products` (`listAvailableProducts`).
    */
   locationId: string;
-  /** A live MANAGEMENT session cookie for a `manager` (holds `person.manage`). */
+  /** A live MANAGEMENT session cookie for a `manager` (holds `catalogue.manage`). */
   managerCookie: string;
-  /** A live MANAGEMENT session cookie for a `staff` person (holds no `person.manage`). */
+  /** A live MANAGEMENT session cookie for a `staff` person (holds no `catalogue.manage`). */
   staffCookie: string;
 }
 
@@ -363,7 +363,7 @@ describe("Catalogue API — option groups, gates, by-id FKs", () => {
   });
 
   it("refuses every modifier-list write route to a staff-role session — 403 authorization.not_permitted", async () => {
-    // A `staff` session holds no `person.manage`, so `authorizeManager` inside `gated` throws before
+    // A `staff` session holds no `catalogue.manage`, so `authorizeManager` inside `gated` throws before
     // any list op runs. Both segments, both kinds of write: `mountListSurface` registers one set of
     // handlers per kind
     // and each closes over its own `surface`, so one kind passing says nothing about the other.

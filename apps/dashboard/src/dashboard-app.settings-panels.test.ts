@@ -230,18 +230,12 @@ it("preserves an explicitly selected Receipts link for a manager with venue acce
 });
 
 it.each([
-  ["manager", ["person.manage", "venue.view", "venue.configure"], true],
-  ["supervisor", ["venue.view"], false],
-])(
-  "shows product defaults to %s according to catalogue access",
-  async (role, permissions, visible) => {
-    const el = await mount("/manage/venue-settings/view/venue-details", role, permissions);
-    const panel = page(el).shadowRoot!.querySelector("dashboard-catalogue-settings-panel");
-    expect(panel !== null).toBe(visible);
-    if (panel) {
-      await expect
-        .poll(() => panel.shadowRoot?.querySelector("wt-combobox")?.value)
-        .toBe("reduced");
-    }
-  },
-);
+  ["manager", ["catalogue.manage", "person.manage", "venue.view", "venue.configure"]],
+  ["supervisor", ["venue.view"]],
+])("shows no product defaults on Venue settings to %s", async (role, permissions) => {
+  const el = await mount("/manage/venue-settings/view/venue-details", role, permissions);
+  await expect
+    .poll(() => page(el).shadowRoot!.querySelector("dashboard-venue-details-panel"))
+    .not.toBeNull();
+  expect(page(el).shadowRoot!.querySelector("dashboard-catalogue-settings-panel")).toBeNull();
+});

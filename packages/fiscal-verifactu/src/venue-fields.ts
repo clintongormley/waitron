@@ -75,13 +75,12 @@ export function validateVenueFiscalFields(venue: VenueFiscalFields): void {
     // NumSerieFactura's 60 characters.
     if (code.length > MAX_BASE_CODE_LENGTH) refuse(field);
   }
-  if (
-    CONTROL_CHARS.test(venue.legalName) ||
-    Array.from(venue.legalName).length > NOMBRE_RAZON_MAX
-  ) {
-    refuse("legalName");
-  }
+  validateLegalName(venue.legalName);
   validateOperationDescription(venue.operationDescription);
+}
+
+export function validateLegalName(name: string): void {
+  if (CONTROL_CHARS.test(name) || Array.from(name).length > NOMBRE_RAZON_MAX) refuse("legalName");
 }
 
 export function validateOperationDescription(description: string): void {

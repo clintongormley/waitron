@@ -128,6 +128,43 @@ describe("the Venue settings page", () => {
     expect(kitchen.querySelector("[data-test=panel-first]")!.checkVisibility()).toBe(false);
   });
 
+  it("tells the panels of the tab it left, and only after a switch goes through", async () => {
+    navigate("/manage/venue-settings/view/receipts");
+    const heard: string[] = [];
+    const record = (event: Event) => {
+      expect(event.bubbles).toBe(false);
+      heard.push(`${(event.target as HTMLElement).dataset.test}`);
+    };
+    const el = await mount([
+      panel("r", "receipts"),
+      panel("r2", "receipts"),
+      panel("k", "kitchen"),
+    ]);
+    const listen = () => {
+      for (const node of el.shadowRoot!.querySelectorAll("[data-test^=panel-]"))
+        node.addEventListener("venue-settings-hidden", record);
+    };
+    listen();
+    expect(heard).toEqual([]);
+    await select(el, "receipts");
+    expect(heard).toEqual([]);
+    el.panels = [...el.panels];
+    await el.updateComplete;
+    listen();
+    expect(heard).toEqual([]);
+    await select(el, "kitchen");
+    expect(heard).toEqual(["panel-r", "panel-r2"]);
+    heard.length = 0;
+    const back = new Promise<void>((resolve) =>
+      window.addEventListener("popstate", () => resolve(), { once: true }),
+    );
+    history.back();
+    await back;
+    await el.updateComplete;
+    expect(selected(el)).toBe("receipts");
+    expect(heard).toEqual(["panel-k"]);
+  });
+
   it("draws only its heading when no panel is visible", async () => {
     navigate("/manage/venue-settings");
     const el = await mount([]);
