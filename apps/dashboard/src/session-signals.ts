@@ -1,4 +1,4 @@
-type FetchLike = (path: string, init: RequestInit) => Promise<Response>;
+import { createRequest, type FetchLike } from "@waitron/dashboard-kit";
 
 export interface SessionSignals {
   reportError: (code: string, status?: number) => void;
@@ -37,36 +37,24 @@ export function createSessionSignals({
     target.dispatchEvent(new CustomEvent("waitron-session-invalid", { detail: { code } }));
   };
 
+  // No `onError`: a failed probe must never report into these signals.
+  const request = createRequest({ fetchImpl });
+
   const probe = async (): Promise<void> => {
     probing = true;
     lastProbeAt = now();
-    const limit = new AbortController();
-    let timer: ReturnType<typeof setTimeout> | undefined;
-    // Raced against each wait, so a fetch or body that ignores the signal still settles.
-    const timedOut = new Promise<never>((_resolve, reject) => {
-      timer = setTimeout(() => {
-        limit.abort();
-        reject(new Error("status read time limit"));
-      }, probeTimeLimitMs);
-    });
-    const within = <V>(wait: Promise<V>): Promise<V> => Promise.race([wait, timedOut]);
     try {
-      const response = await within(
-        fetchImpl("/setup-api/status", {
-          method: "GET",
-          credentials: "same-origin",
-          signal: limit.signal,
-        }),
-      );
-      const body: unknown = await within(response.json());
-      if ((body as { provisioned?: unknown } | null)?.provisioned === false) {
+      const body = await request<unknown>("/setup-api/status", "GET", undefined, {
+        passive: true,
+        timeLimitMs: probeTimeLimitMs,
+      });
+      if ((body as { provisioned?: unknown } | null | undefined)?.provisioned === false) {
         resetReported = true;
         invalid("node.reset");
       }
     } catch {
-      // A failed or timed-out probe says nothing about the box; the next 404 asks again.
+      // A refused, failed or timed-out probe says nothing about the box; the next 404 asks again.
     } finally {
-      clearTimeout(timer);
       probing = false;
     }
   };

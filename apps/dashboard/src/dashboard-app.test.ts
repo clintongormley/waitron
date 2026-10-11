@@ -5712,8 +5712,21 @@ describe("dashboard-app: session signals", () => {
     sessionInvalid("node.reset");
     await flush(el);
     expect(overview(el)).toBeNull();
-    expect((login(el) as unknown as { noticeCode?: string }).noticeCode).toBe("node.reset");
+    expect(notice(el)).toBe(codeMessage("node.reset"));
   });
+
+  it.each(["management_session.required", "management_session.expired", "person.suspended"])(
+    "keeps the reset notice when %s arrives after it",
+    async (code) => {
+      const { el } = await signedIn();
+      sessionInvalid("node.reset");
+      await flush(el);
+      sessionInvalid(code);
+      await flush(el);
+      expect(notice(el)).toBe(codeMessage("node.reset"));
+      expect(login(el)!.shadowRoot!.querySelector("[data-test=reload]")).not.toBeNull();
+    },
+  );
 
   it("does not re-check a signed-out tab when it comes back into view", async () => {
     const getMe = vi.fn().mockRejectedValue({ code: "management_session.required" });

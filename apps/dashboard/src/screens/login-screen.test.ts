@@ -3198,6 +3198,28 @@ describe("login-screen: the sign-in card", () => {
       expect(api.passkeyAuthOptions).not.toHaveBeenCalled();
       expect(api.getGoogleConfig).not.toHaveBeenCalled();
     });
+
+    it.each(["management_session.required", "management_session.expired", "person.suspended"])(
+      "keeps the reset view and starts no passkey autofill when %s arrives after it",
+      async (code) => {
+        setLocale("en-GB");
+        conditionalMediationAvailable.mockResolvedValue(true);
+        vi.mocked(navigator.credentials.get).mockImplementation(() => new Promise(() => undefined));
+        const api = stubApi();
+        const { el } = await mountWidget<LoginScreen>("dashboard-login-screen", {
+          api,
+          noticeCode: "node.reset",
+        });
+        await flush(el);
+        window.dispatchEvent(new CustomEvent("waitron-session-invalid", { detail: { code } }));
+        await flush(el);
+        await flush(el);
+        expect(api.passkeyAuthOptions).not.toHaveBeenCalled();
+        expect(navigator.credentials.get).not.toHaveBeenCalled();
+        expect(card(el).querySelector(".notice")!.textContent!.trim()).toBe("This box was reset.");
+        expect(card(el).querySelector("[data-test=reload]")).not.toBeNull();
+      },
+    );
   });
 
   const methodPages = [

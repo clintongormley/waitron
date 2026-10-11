@@ -62,7 +62,7 @@ interface CompletedLogin {
   rememberedEmail?: string;
 }
 
-/** Notices that report a failure; any other notice, such as a completed reset, stays plain. */
+/** Notices that report a failure; any other notice, such as a completed password reset, stays plain. */
 const FAILURE_NOTICES: ReadonlySet<string> = new Set([
   "management_session.expired",
   "person.suspended",
@@ -369,6 +369,9 @@ export class LoginScreen extends LitElement {
 
   readonly #onSessionInvalid = (event: Event): void => {
     const code = (event as CustomEvent<{ code?: unknown }>).detail?.code;
+    // `node.reset` is left out, and ends handling once shown: the reset view offers only Reload, and
+    // resetting the form would start a passkey autofill behind it.
+    if (this.noticeCode === "node.reset") return;
     if (
       code !== "management_session.expired" &&
       code !== "management_session.required" &&

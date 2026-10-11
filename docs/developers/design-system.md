@@ -2728,7 +2728,10 @@ the banner above it carries the Waitron lockup; it starts with any notice, then 
 notice that reports a failure (session expired, account suspended) is drawn as an error: bold
 (`--wt-font-weight-bold`) `--wt-color-danger` text in a box with a 1px `--wt-color-danger` border,
 `--wt-radius-md` corners and `--wt-space-2` `--wt-space-3` padding. A success notice (password reset
-complete) is plain `--wt-color-text`. On the email, password and passkey screens the step's
+complete) is plain `--wt-color-text`. After a box reset the card holds only the plain notice "This
+box was reset." and a `primary` `wt-button` labelled **Reload** in a `wt-form-actions` row, with no
+heading and no way in; when it first opens on that notice it starts no passkey autofill and reads no
+Google sign-in settings, and a later session refusal does not replace it. On the email, password and passkey screens the step's
 own way in is ONE full-width primary `wt-button`, and on the Google screen it is the Google button,
 each with the form's one message on its own line directly above it. When there is any other way
 in, an **or** line follows, then each other way in as a full-width outlined (`secondary`) button

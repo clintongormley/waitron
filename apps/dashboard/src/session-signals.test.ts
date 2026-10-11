@@ -2,10 +2,13 @@ import { describe, expect, it, vi } from "vitest";
 import { createSessionSignals } from "./session-signals.js";
 
 function setupModeAnswer(): Response {
-  return new Response(JSON.stringify({ provisioned: false, phase: "setup" }), {
-    status: 200,
-    headers: { "content-type": "application/json" },
-  });
+  return new Response(
+    JSON.stringify({ provisioned: false, environment: "preproduction", needs: ["venue"] }),
+    {
+      status: 200,
+      headers: { "content-type": "application/json" },
+    },
+  );
 }
 
 function harness(
@@ -70,9 +73,12 @@ describe("session signals", () => {
     await settle();
     expect(h.fetchMock).toHaveBeenCalledExactlyOnceWith("/setup-api/status", {
       method: "GET",
-      credentials: "same-origin",
+      credentials: "include",
+      headers: expect.any(Headers),
       signal: expect.any(AbortSignal),
     });
+    const headers = h.fetchMock.mock.calls[0]![1].headers as Headers;
+    expect(headers.get("x-waitron-live")).toBe("1");
     expect(h.invalid).toEqual([{ code: "node.reset" }]);
   });
 
@@ -88,6 +94,24 @@ describe("session signals", () => {
     "reports nothing when the status answers %j",
     async (body) => {
       const h = harness(() => Promise.resolve(Response.json(body)));
+      h.signals.reportError("server.internal", 404);
+      await settle();
+      expect(h.fetchMock).toHaveBeenCalledOnce();
+      expect(h.invalid).toEqual([]);
+    },
+  );
+
+  it.each([500, 503, 404, 403])(
+    "reports nothing when the status read fails with %i, even carrying provisioned: false",
+    async (status) => {
+      const h = harness(() =>
+        Promise.resolve(
+          new Response(JSON.stringify({ provisioned: false }), {
+            status,
+            headers: { "content-type": "application/json" },
+          }),
+        ),
+      );
       h.signals.reportError("server.internal", 404);
       await settle();
       expect(h.fetchMock).toHaveBeenCalledOnce();

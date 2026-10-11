@@ -3165,10 +3165,12 @@ _Formerly A7, and the dashboard entries in the opening part of the old Track A (
 
 - **A dashboard tab that never meets the box in setup mode gets plain sign-in, not the "box was
   reset" notice** — for example one asleep through the reset and the new venue's setup; there is no
-  venue identity to compare. By reading, not run: a tab already on sign-in (sent by the shared
-  session deadline, or by a failed check on coming back into view) switches to the reset notice only
-  when a later status check finds setup mode, after its passkey autofill and Google settings read
-  have started; the switch stops neither.
+  venue identity to compare.
+
+- **A sign-in screen already showing when a box reset is found has already started its passkey
+  autofill and Google settings read; the switch to the reset notice stops neither.** By reading, not
+  run: a tab already on sign-in (sent by the shared session deadline, or by a failed check on coming
+  back into view) switches to the reset notice only when a later status check finds setup mode.
 
 - **`waitron.sh reset --all` deletes the box's own minted certificate** (`deploy/waitron.sh`, the
   `rm_volume waitron_state` branch; minted by `apps/server/src/box-secrets.ts`), so — by reading,
