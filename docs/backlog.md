@@ -3701,6 +3701,18 @@ _Formerly entries spread across the old sections, C125 among them; part of A9._ 
   `docs/regional-languages` branch holds no commit and no draft.
   [Detail](backlog/languages.md#catalan-valencian-galician-and-basque--the-receipts-words-checked-and-the-whole-app-in-all-four-c125-owner-2026-10-02--parked)
 
+**Left open, for the owner, by A477 (#1530, delete windows in the present tense):**
+
+- **The prep station delete window (#1521) uses its own present-tense words**: "Trabajo que
+  termina", "Settings removed" / "Ajustes eliminados", and a loading line in the conditional
+  ("…would change…" / "…cambiaría…"), where the device, printer and card reader windows say "Work
+  that ends" / "Trabajo que finaliza", "Settings that are removed" / "Configuración que se elimina"
+  and "Checking what changes…". Owner to say whether it should match.
+- **Future-tense lines outside the delete windows were left alone**: the Remove-standby
+  explanation (`servers.remove_explanation`, "It will be marked removed…"), the Spanish variant
+  badge "Se archivará al guardar", and the Spanish PIN reset confirmation
+  (`person.confirm_reset_pin`, "no podrá usar") whose English is present.
+
 **Left open, for the owner, by C113 (#1014, one receipt language per location):**
 
 - **The payment slip was left alone.** Its words («JUSTIFICANTE DE PAGO», «Importe», «Cobrado»)
