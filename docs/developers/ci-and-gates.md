@@ -1652,10 +1652,47 @@ test 2.5 to 6 times, but neither reproduced that range.
 about 14 MiB and the test passed; after a 56 MiB file was written into `/dev/shm` first, leaving
 8 MiB, the test failed with `migrations.apply_failed`. The scratch directory was removed both times.
 
-`useVenueDb` (`packages/db/src/testing/venue-db.ts`) still makes its directories under the system
-temporary directory, and so do the root suites `scripts/append-only-triggers.test.ts` and
-`scripts/behavioural-triggers.test.ts`, so they still pay the disk; whether they would gain is not
-measured (`docs/backlog.md`, B9).
+`useVenueDb` (`packages/db/src/testing/venue-db.ts`) makes its directories under the system
+temporary directory. In CI's venue-service shards that is now `/dev/shm` (next section); every other
+package's `useVenueDb` suites still make theirs on the runner's disk, and so do the root suites
+`scripts/append-only-triggers.test.ts` and `scripts/behavioural-triggers.test.ts`, so they still pay
+the disk; A441, one run each side, saw no job's time move consistently when the packages' suites
+moved, and did not measure the root suites (`docs/backlog/ci.md`, "The package suites' databases
+stay on the runner's disk").
+
+### The venue-service shards keep their test databases in memory
+
+The step that runs each `test-venue-service` shard in `.github/workflows/ci.yml` sets
+`TMPDIR=/dev/shm`. Every test database in `@waitron/venue-service` is made by `useVenueDb`, which
+makes its directory under `os.tmpdir()` (`packages/db/src/testing/venue-db.ts`), and Node's
+`os.tmpdir()` reads `TMPDIR`. So the shard's databases live in memory, and its commits no longer
+wait for the runner's disk (previous section: 300 separate commits took 128 to 709 ms on the disk
+against 8 to 22 ms in memory). It is the CI step's environment, so a local run still uses the system
+temporary directory. How much of `/dev/shm` the shards use, and its size on CI's runners, was not
+measured.
+
+Why. Main run 38142687186's job `test-venue-service (4)` (2026-10-11), in region `westus`, hit its
+10-minute limit. Against two green runs of the same shard that day, 38158202160 and 38156571198, the
+six database-backed test files compared (`routing-store`, `menu-timetable`, `kitchen-screens`,
+`department-transfers`, `routing-cells` and `schema/schema-conformance`) each took about ten times
+as long, among them `routing-store.test.ts` 68.4 s against 7.0 and 7.3 s, `menu-timetable.test.ts`
+118.1 s against 12.0 and 13.1 s, and `kitchen-screens.test.ts` 34.8 s against 3.6 and 3.9 s. In
+eight green CI runs that day (38146965866 to 38158202160) shard 4 took 1m43s to 2m18s in total, and
+every venue-service shard finished within 3m20s. The setup steps on the failing runner were slow too
+(setup-node 72 s against 9 s, the install 44 s against 6 s), so the whole runner was slow, not only
+its disk. That the disk caused the overrun is an inference from the previous section's measurements;
+it was not measured on this job. A441 (#1477) set `TMPDIR=/dev/shm` on every database test job for
+one run each side and no job's time moved consistently (`docs/backlog/ci.md`, "The package suites'
+databases stay on the runner's disk"); this change is aimed at runners as slow as that one, not at a
+typical runner.
+
+The job's time limit stays 10 minutes. The shards' times with this change, against those green
+runs, are in #1553's description, under "Measurement".
+
+Guard: the "venue-service shards' test databases" case in `scripts/ci-workflow.test.mjs`, weaker
+than its name: it reads `ci.yml` as TEXT, so a step an `if:` switches off, or a `run:` that sets
+`TMPDIR` again, still passes, and it never checks that the tests' databases actually land under
+`TMPDIR`.
 
 ## `prettier --check` on an ignored path prints the same line as a clean one
 
