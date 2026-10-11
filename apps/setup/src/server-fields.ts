@@ -5,6 +5,7 @@
 import { t } from "./i18n/t.js";
 
 export type ServerFieldKey =
+  | "taxId"
   | "legalName"
   | "taxpayerDomicile"
   | "seriesCode"
@@ -55,6 +56,12 @@ export const SERVER_FIELDS: Readonly<Record<string, ServerField | undefined>> = 
 /** The shell and form also handle fields refused by the setup API itself. */
 export const VENUE_SERVER_FIELDS: Readonly<Record<string, ServerField | undefined>> = {
   ...SERVER_FIELDS,
+  taxId: {
+    key: "taxId",
+    get message() {
+      return t("server_fields.tax_id");
+    },
+  },
   taxpayerDomicile: {
     key: "taxpayerDomicile",
     get message() {

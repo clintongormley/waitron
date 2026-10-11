@@ -155,6 +155,16 @@ const sayWith =
   () =>
     format(key, params);
 
+/** The fields that belong to the taxpayer rather than the venue: a new tax ID enters them afresh. */
+const TAXPAYER_FIELDS = [
+  "taxId",
+  "legalName",
+  "taxpayerDomicile",
+  "seriesCode",
+  "fullSeriesCode",
+  "rectificativeSeriesCode",
+] as const;
+
 const VENUE_ERROR_MESSAGES: Record<string, StringKey> = {
   "provisioning.territory_country_mismatch": "shell.venue_error.territory_country_mismatch",
   "provisioning.invalid_locales": "shell.venue_error.invalid_locales",
@@ -697,6 +707,7 @@ export class SetupApp extends LitElement {
       delete venue.location.invoiceLocales;
       this.draft = { ...this.draft, venue };
       delete this.draft.configurationImport;
+      delete this.draft.newTaxpayer;
       this.fiscalTestStatus = undefined;
     }
     this.draft = deepMerge(this.draft, event.detail.patch) as DeepPartial<ProvisionBody>;
@@ -1206,6 +1217,7 @@ export class SetupApp extends LitElement {
         configurationImport: true,
         venue: { ...preview.venue, location },
       }) as DeepPartial<ProvisionBody>;
+      delete this.draft.newTaxpayer;
       this.#rootScope?.changed();
       this.configurationPreview = preview;
       if (owner) {
@@ -1218,6 +1230,25 @@ export class SetupApp extends LitElement {
       this.configurationError = describeConfigurationRefusal(error);
       this.screen = "live-source";
     }
+  }
+
+  #onTaxpayerChosen(event: CustomEvent<{ newTaxpayer: boolean }>): void {
+    event.stopPropagation();
+    const preview = this.configurationPreview;
+    if (!this.isConnected || !preview) return;
+    this.#registerRoot();
+    const venue: Record<string, unknown> = { ...this.draft.venue };
+    for (const key of TAXPAYER_FIELDS) {
+      if (event.detail.newTaxpayer) delete venue[key];
+      else venue[key] = preview.venue[key];
+    }
+    const draft = { ...this.draft, venue } as DeepPartial<ProvisionBody>;
+    if (event.detail.newTaxpayer) draft.newTaxpayer = true;
+    else delete draft.newTaxpayer;
+    this.draft = draft;
+    this.fiscalTestStatus = undefined;
+    this.#rootScope?.changed();
+    this.screen = "admin";
   }
 
   async #onFiscalTestRequested(event: CustomEvent): Promise<void> {
@@ -1409,6 +1440,7 @@ export class SetupApp extends LitElement {
         @cloud-restore-action=${(e: CustomEvent<{ action: "start" | "status" | "start-again" | "restore"; pointId?: string; oldBoxGone?: boolean }>) => void this.#onCloudRestoreAction(e)}
         @configuration-requested=${(e: CustomEvent<{ request: ConfigurationRequestDetail }>) =>
           void this.#onConfigurationRequested(e)}
+        @taxpayer-chosen=${(e: CustomEvent<{ newTaxpayer: boolean }>) => this.#onTaxpayerChosen(e)}
         @fiscal-test-requested=${(e: CustomEvent) => void this.#onFiscalTestRequested(e)}
         @reset-requested=${(e: CustomEvent<{ credential: ResetCredential }>) =>
           void this.#onResetRequested(e)}

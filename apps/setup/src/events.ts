@@ -103,3 +103,10 @@ export function dispatchConfigurationRequested(
 export function dispatchFiscalTestRequested(el: EventTarget): void {
   el.dispatchEvent(new CustomEvent("fiscal-test-requested", { bubbles: true, composed: true }));
 }
+
+/** The operator's answer on the configuration preview: a new tax ID, or the export's own. */
+export function dispatchTaxpayerChosen(el: EventTarget, newTaxpayer: boolean): void {
+  el.dispatchEvent(
+    new CustomEvent("taxpayer-chosen", { detail: { newTaxpayer }, bubbles: true, composed: true }),
+  );
+}

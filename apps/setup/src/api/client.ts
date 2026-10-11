@@ -60,6 +60,8 @@ export interface AeatCertDraft {
 export interface ProvisionBody {
   mode: "demo" | "prepare" | "live";
   configurationImport?: boolean;
+  /** Only with `configurationImport`: the venue takes a different tax ID from the export's. */
+  newTaxpayer?: boolean;
   venue: {
     country: string;
     taxId: string;
