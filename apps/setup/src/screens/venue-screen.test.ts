@@ -594,9 +594,10 @@ describe("setup-venue-screen", () => {
 
   it("marks nothing for a field path this form does not recognise", async () => {
     const { el } = await mountWidget<SetupVenueScreen>("setup-venue-screen", {
-      invalidField: "taxId",
+      invalidField: "country",
     });
-    expect(q(el, "[data-test=taxId]")!.hasAttribute("invalid")).toBe(false);
+    expect(q(el, "[data-test=country]")!.hasAttribute("invalid")).toBe(false);
+    expect(el.shadowRoot!.querySelectorAll("[invalid]")).toHaveLength(0);
   });
 
   it("clears the server's mark once the operator edits that field, and Next still advances", async () => {
