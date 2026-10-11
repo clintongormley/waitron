@@ -204,16 +204,15 @@ classification entry — never an enum, CLAUDE.md §2); names (built-ins are tra
 
 ## What C47 part 2 found and did not fix
 
-  Found during C47 part 2 and not fixed (its points (a) and (b), about the Stripe add-reader
-  dialog, were fixed by A519): (c) a refused save of a venue service setting that saves at once shows twice,
+  Found during C47 part 2 and not fixed: (a) a refused save of a venue service setting that saves at once shows twice,
   beside the control and at the top of the panel (`render`,
   `packages/venue-service/src/dashboard/service-settings-panel.ts`), and the cases in
   `packages/venue-service/src/dashboard/service-settings-panel.test.ts` pin both;
-  (d) `wt-switch` cannot be marked invalid, so a server refusal of an adjustment reason's
+  (b) `wt-switch` cannot be marked invalid, so a server refusal of an adjustment reason's
   note-required switch would show its message but move focus nowhere — though the server refuses
   `noteRequired` only when it is not a true/false value (`requireFlag`,
   `packages/adjustments/src/routes.ts`) and the screen always sends one from its switch, so the
-  refusal is not expected from this screen; (e) in a screenshot of a `wt-modal` editor after a
+  refusal is not expected from this screen; (c) in a screenshot of a `wt-modal` editor after a
   refusal that names no field, a blue line runs along the top of the footer, which looks like the
   modal's scrolling body showing a focus ring — not traced, and not checked against `main`; an
   observation from the implementer's session.
@@ -269,8 +268,9 @@ classification entry — never an enum, CLAUDE.md §2); names (built-ins are tra
   field; and the payment-provider forms were not in C54's survey either (read, not run): the
   connect and add-reader forms in `packages/payments-stripe` and `packages/payments-sumup`
   (`stripe-connect-form.ts`, `stripe-add-reader.ts`, `sumup-connect-form.ts`, `sumup-add-reader.ts`)
-  put a refused request's message in the bottom message, except that SumUp's connect form answers a
-  key spanning several merchants by showing a merchant picker, and none of them disables its action
+  put a refused request's message in the bottom message, except that Stripe's add-reader dialog
+  puts `reader.reference_unknown` under its Reader ID field (A519) and SumUp's connect form answers
+  a key spanning several merchants by showing a merchant picker; none of them disables its action
   on a refusal;
   (11) the backup screen's configuration export drops the refusal's code in a catch-all
   (`apps/dashboard/src/screens/backup-screen.ts` `#exportConfiguration`), so a
