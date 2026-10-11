@@ -101,8 +101,6 @@ import { offerProducts } from "./testing/zone-offers.js";
  * | POST /api/tables/:id/seat (withTableIds)                | body tables            | refuses POST /api/tables/:id/seat (other tables)     |
  * | POST /api/tables/:id/cleared                            | table                  | refuses POST /api/tables/:id/cleared                 |
  * | POST /api/tables/:id/status                             | table                  | refuses POST /api/tables/:id/status                  |
- * | PUT  /api/tables/:id/placement                          | table; body zone       | refuses PUT .../placement (table), (zone)            |
- * | DELETE /api/tables/:id/placement                        | table                  | refuses DELETE /api/tables/:id/placement             |
  * | POST /api/tables/:id/today/move                         | table                  | refuses POST /api/tables/:id/today/move              |
  * | POST /api/tables/:id/today/rotate                       | table                  | refuses POST /api/tables/:id/today/rotate            |
  * | POST /api/tables/:id/today/take-off                     | table                  | refuses POST /api/tables/:id/today/take-off          |
@@ -684,27 +682,6 @@ const ROUTES: readonly Row[] = [
     "POST",
     (x) => `/api/tables/${x.deliTable}/status`,
     () => ({ statusId: null }),
-    deliTableZone,
-  ],
-  [
-    "PUT /api/tables/:id/placement (table)",
-    "PUT",
-    (x) => `/api/tables/${x.deliTable}/placement`,
-    (x) => ({ zoneId: x.restTables, posX: 1, posY: 1, shape: "square", rotation: 0 }),
-    deliTableZone,
-  ],
-  [
-    "PUT /api/tables/:id/placement (zone)",
-    "PUT",
-    (x) => `/api/tables/${x.restFreeTable}/placement`,
-    (x) => ({ zoneId: x.deliCounter, posX: 1, posY: 1, shape: "square", rotation: 0 }),
-    deliOrderZone,
-  ],
-  [
-    "DELETE /api/tables/:id/placement",
-    "DELETE",
-    (x) => `/api/tables/${x.deliTable}/placement`,
-    undefined,
     deliTableZone,
   ],
   [

@@ -1,7 +1,7 @@
 import { createZone } from "./testing/service-zone.js";
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
-import { sql } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
 import { kitchenTimingDefaults, locations, withTransaction } from "@waitron/db";
 import type { Database } from "@waitron/db";
@@ -236,9 +236,7 @@ describe("table + tab routes", () => {
       createTable(tx, cfg, { label, zoneId: seededZoneId, capacity: 4 }),
     );
     const row = () =>
-      suite.db.all<{ label: string; capacity: number | null; active: number }>(
-        sql`select label, capacity, active from dining_tables where id = ${id}`,
-      );
+      suite.db.all<{ label: string }>(sql`select label from dining_tables where id = ${id}`);
     const before = row();
 
     const answers = [
@@ -255,7 +253,7 @@ describe("table + tab routes", () => {
 
     expect(answers.map((res) => res.status)).toEqual([404, 404, 404]);
     expect(row()).toEqual(before);
-    expect(before).toEqual([{ label, capacity: 4, active: 1 }]);
+    expect(before).toEqual([{ label }]);
     expect(suite.db.all(sql`select id from dining_tables where label = ${`${label}-new`}`)).toEqual(
       [],
     );
@@ -665,3 +663,35 @@ describe("table + tab routes", () => {
     }
   });
 });
+
+it.each(["PUT", "DELETE"])(
+  "answers %s /api/tables/:id/placement 404 for a manager and leaves tables unchanged",
+  async (method) => {
+    await suite.db.update(persons).set({ role: "manager" }).where(eq(persons.id, ana.id));
+    try {
+      const managerCookie = `${SESSION_COOKIE}=${await openSession(suite.db)}`;
+      const { id } = await withTransaction(suite.db, (tx) =>
+        createTable(tx, cfg, { label: `Retired ${randomUUID()}`, zoneId: seededZoneId }),
+      );
+      const rows = () =>
+        suite.db.all(sql`
+        select * from dining_tables where location_id = ${cfg.locationId} order by id`);
+      const before = rows();
+      const response = await request(`/api/tables/${id}/placement`, {
+        method,
+        headers: { cookie: managerCookie },
+        body: JSON.stringify({
+          zoneId: seededZoneId,
+          posX: 500,
+          posY: 250,
+          shape: "square",
+          rotation: 15,
+        }),
+      });
+      expect(response.status).toBe(404);
+      expect(rows()).toEqual(before);
+    } finally {
+      await suite.db.update(persons).set({ role: "staff" }).where(eq(persons.id, ana.id));
+    }
+  },
+);

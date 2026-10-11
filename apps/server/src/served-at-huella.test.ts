@@ -1,6 +1,5 @@
-import { createZone } from "./testing/service-zone.js";
 import { describe, expect, it } from "vitest";
-import { and, eq, isNotNull, sql } from "drizzle-orm";
+import { and, eq, isNotNull } from "drizzle-orm";
 import {
   saleLines,
   sales,
@@ -27,7 +26,7 @@ import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
 import { hashPassword, hashPin } from "@waitron/identity";
 import { applyVenue, planVenue } from "@waitron/provisioning";
 import type { VenueRequest, VenueResult } from "@waitron/provisioning";
-import { routingCells } from "@waitron/venue-service";
+
 import { offerMenuThroughZone } from "@waitron/venue-service/testing/zone-menus.js";
 import {
   locationId as brandLocationId,
@@ -37,7 +36,7 @@ import {
 import { deploymentEnvironment } from "./config.js";
 import { ALL_MODULES } from "./modules.js";
 import type { TillConfig, DeviceRequestConfig } from "./till-config.js";
-import { listTables, setTablePlacement } from "./tables.js";
+
 import { createTable } from "./testing/live-table.js";
 import { addTabRound, advanceTicketItem, fireLines, type TicketState } from "./working-order.js";
 import { payWorkingOrder } from "./till-sale.js";
@@ -320,99 +319,6 @@ describe("served_at is not part of the huella", () => {
     expect(servedTimes.every((t) => t !== null)).toBe(true);
     expect(unservedTimes).toHaveLength(2);
     expect(unservedTimes.every((t) => t === null)).toBe(true);
-  });
-});
-
-/**
- * Place this shop's table on the floor-plan canvas (`setTablePlacement` needs a live zone) with
- * concrete, non-trivial values the self-check can pin.
- */
-async function placeTable(shop: Shop): Promise<void> {
-  await withTransaction(shop.db, async (tx) => {
-    const zone = await createZone(tx, shop.cfg, { name: "Terraza" });
-    const department = await tx.execute<{ department_id: string }>(sql`
-      select department_id
-      from zone_service_policies
-      where location_id = ${shop.cfg.locationId}
-      limit 1`);
-    const departmentId = department.rows[0]!.department_id;
-    await tx.execute(sql`update zone_service_policies
-      set department_id = ${departmentId}
-      where zone_id = ${zone.id}`);
-    await tx.execute(
-      sql`update zone_sale_policies set order_start = 'table' where zone_id = ${zone.id}`,
-    );
-    await offerMenuThroughZone(tx, shop.cfg, zone.id, shop.menuId, { makeDefault: true });
-    // Through the table definition: `routingCells.id`
-    // (`packages/venue-service/src/schema/routing.ts`) is a `$defaultFn` generator, which a raw
-    // statement never reaches.
-    await tx.insert(routingCells).values({
-      locationId: shop.cfg.locationId,
-      categoryId: shop.categoryId,
-      stationId: null,
-      noPreparation: true,
-    });
-    await setTablePlacement(tx, shop.cfg, shop.tableId, {
-      zoneId: zone.id,
-      posX: 500,
-      posY: 250,
-      shape: "square",
-      rotation: 15,
-    });
-  });
-}
-
-/** A table's four placement columns — `null` on every one for an unplaced walk-up table. */
-interface Placement {
-  posX: number | null;
-  posY: number | null;
-  shape: string | null;
-  rotation: number | null;
-}
-
-/** This shop's table's placement, read back through the real `listTables` projection. */
-async function placementOf(shop: Shop): Promise<Placement> {
-  return withTransaction(shop.db, async (tx) => {
-    const table = (await listTables(tx, shop.cfg)).find((t) => t.id === shop.tableId);
-    expect(table).toBeDefined();
-    return {
-      posX: table!.posX,
-      posY: table!.posY,
-      shape: table!.shape,
-      rotation: table!.rotation,
-    };
-  });
-}
-
-// Placement (`pos_x`/`pos_y`/`shape`/`rotation`) lives on `dining_tables`, which the pay path never
-// reads. Two shops file the IDENTICAL basket, one from a PLACED table and one from an unplaced
-// walk-up, and must file the IDENTICAL huella.
-describe("table placement is not part of the huella", () => {
-  it("files an IDENTICAL huella whether the table is placed on the floor plan or a walk-up — placement never enters the fiscal record", async () => {
-    // Same emisor NIF, basket, chain position and frozen clock: table PLACEMENT is the ONLY
-    // difference.
-    const emisorNif = nextNif();
-    const shopPlaced = await seedShop(suite.db, emisorNif);
-    const shopWalkup = await seedShop(suiteB.db, emisorNif);
-
-    // Place shopPlaced's table on the canvas; shopWalkup's table stays unplaced (a walk-up).
-    await placeTable(shopPlaced);
-
-    // Neither tab served, so serving cannot confound.
-    const placed = await openServeAndPay(shopPlaced, false);
-    const walkup = await openServeAndPay(shopWalkup, false);
-
-    // A FAILURE means a placement field leaked into the filed record: fix the leak, never the test.
-    expect(placed.huella).toBe(walkup.huella);
-    // Not a trivial pass: a real uppercase-hex SHA-256 digest, so "both null/empty → equal" cannot
-    // masquerade as the invariant holding.
-    expect(placed.huella).toMatch(/^[0-9A-F]{64}$/);
-
-    // Self-check: the two tables GENUINELY differ in placement, or this test compares nothing.
-    const placedPlacement = await placementOf(shopPlaced);
-    const walkupPlacement = await placementOf(shopWalkup);
-    expect(placedPlacement).toEqual({ posX: 500, posY: 250, shape: "square", rotation: 15 });
-    expect(walkupPlacement).toEqual({ posX: null, posY: null, shape: null, rotation: null });
   });
 });
 

@@ -5,7 +5,6 @@ import { eq, sql } from "drizzle-orm";
 import { Hono } from "hono";
 import { beforeAll, describe, expect, it, onTestFinished, vi } from "vitest";
 import {
-  diningTables,
   floorZones,
   kitchenCourses,
   kitchenStations,
@@ -44,6 +43,7 @@ import {
 } from "@waitron/shared";
 import type { Logger } from "./logger.js";
 import { ALL_MODULES } from "./modules.js";
+import { createTable, switchOff } from "./testing/live-table.js";
 import type { TillConfig } from "./till-config.js";
 import { mountManagementApi } from "./management-api.js";
 import { generateSync } from "otplib";
@@ -373,26 +373,6 @@ describe("/management-api/zones", () => {
     },
   );
 
-  it("POST creates (201 { id }) + GET lists it (manager)", async () => {
-    const name = unique("Comedor");
-    const create = await req(
-      "/venue-service/zones",
-      { method: "POST", body: JSON.stringify({ name, displayOrder: 2 }) },
-      managerCookie,
-    );
-    expect(create.status).toBe(201);
-    const { id } = (await create.json()) as { id: string };
-    expect(id).toBeDefined();
-
-    const list = (await (await req("/zones", { method: "GET" }, managerCookie)).json()) as {
-      id: string;
-      name: string;
-      displayOrder: number;
-      active: boolean;
-    }[];
-    expect(list.find((z) => z.id === id)).toMatchObject({ name, displayOrder: 2, active: true });
-  });
-
   it("POST without displayOrder defaults it to 0", async () => {
     const name = unique("Terraza");
     const { id } = (await (
@@ -586,13 +566,9 @@ describe("/management-api/zones", () => {
   it("DELETE reports the occupied table's name when a zone has an open party", async () => {
     const zoneId = await createZone(unique("Occupied"));
     const label = unique("T7");
-    const table = (await (
-      await req(
-        "/tables",
-        { method: "POST", body: JSON.stringify({ label, zoneId }) },
-        managerCookie,
-      )
-    ).json()) as { id: string };
+    const table = await withTransaction(suite.db, (tx) =>
+      createTable(tx, tillConfigFromVenue(venue), { label, zoneId }),
+    );
     await withTransaction(suite.db, async (tx) => {
       const [party] = await tx
         .insert(parties)
@@ -623,8 +599,8 @@ describe("/management-api/zones", () => {
   });
 
   it("a STAFF session is refused on every zone route (403 authorization.not_permitted)", async () => {
-    // A staff person can log in but holds no `venue.configure`.
     const someId = randomUUID();
+    // A staff person can log in but holds no `venue.configure`.
     const cases = [
       req("/zones", { method: "GET" }, staffCookie),
       req(
@@ -792,296 +768,12 @@ describe("POST /management-api/session (email login)", () => {
 });
 
 describe("/management-api/tables", () => {
-  it("POST creates (201 { id }) + GET lists it (manager)", async () => {
-    const label = unique("4");
-    const create = await req(
-      "/tables",
-      { method: "POST", body: JSON.stringify({ label, capacity: 4 }) },
-      managerCookie,
-    );
-    expect(create.status).toBe(201);
-    const { id } = (await create.json()) as { id: string };
-    expect(id).toBeDefined();
-
-    const list = (await (await req("/tables", { method: "GET" }, managerCookie)).json()) as {
-      id: string;
-      label: string;
-      capacity: number | null;
-      active: boolean;
-    }[];
-    expect(list.find((t) => t.id === id)).toMatchObject({ label, capacity: 4, active: true });
-  });
-
-  it("GET projects a placed table's FP-2 placement columns (posX/posY/shape/rotation)", async () => {
-    // Real values, so the case cannot pass on nulls.
-    const zoneId = await createZone(unique("GetPlaceZone"));
-    const { id } = (await (
-      await req(
-        "/tables",
-        { method: "POST", body: JSON.stringify({ label: unique("gp") }) },
-        managerCookie,
-      )
-    ).json()) as { id: string };
-    const put = await req(
-      `/tables/${id}/placement`,
-      {
-        method: "PUT",
-        body: JSON.stringify({ zoneId, posX: 500, posY: 250, shape: "square", rotation: 15 }),
-      },
-      managerCookie,
-    );
-    expect(put.status).toBe(204);
-
-    const list = (await (await req("/tables", { method: "GET" }, managerCookie)).json()) as {
-      id: string;
-      posX: number | null;
-      posY: number | null;
-      shape: string | null;
-      rotation: number | null;
-    }[];
-    expect(list.find((t) => t.id === id)).toMatchObject({
-      posX: 500,
-      posY: 250,
-      shape: "square",
-      rotation: 15,
-    });
-  });
-
-  it("POST with a duplicate label → 409 table.label_taken", async () => {
-    const label = unique("dup");
-    await req("/tables", { method: "POST", body: JSON.stringify({ label }) }, managerCookie);
-    const dup = await req(
-      "/tables",
-      { method: "POST", body: JSON.stringify({ label }) },
-      managerCookie,
-    );
-    expect(dup.status).toBe(409);
-    expect(await dup.json()).toMatchObject({ error: { code: "table.label_taken" } });
-  });
-
-  it("POST with a zoneId that names no zone → 404 zone.not_found", async () => {
-    const res = await req(
-      "/tables",
-      {
-        method: "POST",
-        body: JSON.stringify({
-          label: unique("z"),
-          zoneId: "00000000-0000-4000-8000-000000000000",
-        }),
-      },
-      managerCookie,
-    );
-    expect(res.status).toBe(404);
-    expect(await res.json()).toMatchObject({ error: { code: "zone.not_found" } });
-  });
-
-  it("POST with a MALFORMED zoneId → 404 zone.not_found (the isUuid guard)", async () => {
-    const res = await req(
-      "/tables",
-      { method: "POST", body: JSON.stringify({ label: unique("z"), zoneId: "not-a-uuid" }) },
-      managerCookie,
-    );
-    expect(res.status).toBe(404);
-    expect(await res.json()).toMatchObject({ error: { code: "zone.not_found" } });
-  });
-
-  it("POST body screens: null → field label, array → field body, non-string label/zoneId, bad capacity", async () => {
-    // A `null` body is read as `{}`, so the label screen fires, not the "body" one.
-    const nullBody = await req("/tables", { method: "POST", body: "null" }, managerCookie);
-    expect(nullBody.status).toBe(400);
-    expect(await nullBody.json()).toMatchObject({
-      error: { code: "management.request_invalid", params: { field: "label" } },
-    });
-
-    const arrayBody = await req("/tables", { method: "POST", body: "[]" }, managerCookie);
-    expect(arrayBody.status).toBe(400);
-    expect(await arrayBody.json()).toMatchObject({
-      error: { code: "management.request_invalid", params: { field: "body" } },
-    });
-
-    const badLabel = await req(
-      "/tables",
-      { method: "POST", body: JSON.stringify({ label: 123 }) },
-      managerCookie,
-    );
-    expect(badLabel.status).toBe(400);
-    expect(await badLabel.json()).toMatchObject({
-      error: { code: "management.request_invalid", params: { field: "label" } },
-    });
-
-    const badZone = await req(
-      "/tables",
-      { method: "POST", body: JSON.stringify({ label: unique("q"), zoneId: 123 }) },
-      managerCookie,
-    );
-    expect(badZone.status).toBe(400);
-    expect(await badZone.json()).toMatchObject({
-      error: { code: "management.request_invalid", params: { field: "zoneId" } },
-    });
-
-    const badCap = await req(
-      "/tables",
-      { method: "POST", body: JSON.stringify({ label: unique("q"), capacity: 1.5 }) },
-      managerCookie,
-    );
-    expect(badCap.status).toBe(400);
-    expect(await badCap.json()).toMatchObject({
-      error: { code: "management.request_invalid", params: { field: "capacity" } },
-    });
-  });
-
-  it("PATCH edits label/capacity + assigns a zone (204), then GET reflects it", async () => {
-    const { id } = (await (
-      await req(
-        "/tables",
-        { method: "POST", body: JSON.stringify({ label: unique("t") }) },
-        managerCookie,
-      )
-    ).json()) as { id: string };
-    const zoneId = await createZone(unique("PatchZone"));
-
-    const newLabel = unique("t-edited");
-    const patch = await req(
-      `/tables/${id}`,
-      { method: "PATCH", body: JSON.stringify({ label: newLabel, capacity: 6, zoneId }) },
-      managerCookie,
-    );
-    expect(patch.status).toBe(204);
-    expect(await patch.text()).toBe("");
-
-    const list = (await (await req("/tables", { method: "GET" }, managerCookie)).json()) as {
-      id: string;
-      label: string;
-      capacity: number | null;
-      zoneId: string | null;
-    }[];
-    expect(list.find((t) => t.id === id)).toMatchObject({ label: newLabel, capacity: 6, zoneId });
-  });
-
-  it("PATCH an unknown id → 404 table.not_found; a malformed :id → 404 too", async () => {
-    const unknown = await req(
-      "/tables/00000000-0000-4000-8000-000000000000",
-      { method: "PATCH", body: JSON.stringify({ label: unique("X") }) },
-      managerCookie,
-    );
-    expect(unknown.status).toBe(404);
-    expect(await unknown.json()).toMatchObject({ error: { code: "table.not_found" } });
-
-    const malformed = await req(
-      "/tables/not-a-uuid",
-      { method: "PATCH", body: JSON.stringify({ label: unique("X") }) },
-      managerCookie,
-    );
-    expect(malformed.status).toBe(404);
-    expect(await malformed.json()).toMatchObject({ error: { code: "table.not_found" } });
-  });
-
-  it("PATCH with a zoneId that names no zone → 404 zone.not_found", async () => {
-    const { id } = (await (
-      await req(
-        "/tables",
-        { method: "POST", body: JSON.stringify({ label: unique("t") }) },
-        managerCookie,
-      )
-    ).json()) as { id: string };
-    const res = await req(
-      `/tables/${id}`,
-      { method: "PATCH", body: JSON.stringify({ zoneId: "00000000-0000-4000-8000-000000000000" }) },
-      managerCookie,
-    );
-    expect(res.status).toBe(404);
-    expect(await res.json()).toMatchObject({ error: { code: "zone.not_found" } });
-  });
-
-  it("PATCH with a MALFORMED zoneId → 404 zone.not_found (the isUuid guard)", async () => {
-    const { id } = (await (
-      await req(
-        "/tables",
-        { method: "POST", body: JSON.stringify({ label: unique("t") }) },
-        managerCookie,
-      )
-    ).json()) as { id: string };
-    const res = await req(
-      `/tables/${id}`,
-      { method: "PATCH", body: JSON.stringify({ zoneId: "not-a-uuid" }) },
-      managerCookie,
-    );
-    expect(res.status).toBe(404);
-    expect(await res.json()).toMatchObject({ error: { code: "zone.not_found" } });
-  });
-
-  it("PATCH body screens: array → body; non-string label/zoneId; bad capacity; empty → 204 no-op", async () => {
-    const id = randomUUID();
-
-    const arrayBody = await req(`/tables/${id}`, { method: "PATCH", body: "[]" }, managerCookie);
-    expect(arrayBody.status).toBe(400);
-    expect(await arrayBody.json()).toMatchObject({
-      error: { code: "management.request_invalid", params: { field: "body" } },
-    });
-
-    const badLabel = await req(
-      `/tables/${id}`,
-      { method: "PATCH", body: JSON.stringify({ label: 123 }) },
-      managerCookie,
-    );
-    expect(badLabel.status).toBe(400);
-    expect(await badLabel.json()).toMatchObject({
-      error: { code: "management.request_invalid", params: { field: "label" } },
-    });
-
-    const badZone = await req(
-      `/tables/${id}`,
-      { method: "PATCH", body: JSON.stringify({ zoneId: 123 }) },
-      managerCookie,
-    );
-    expect(badZone.status).toBe(400);
-    expect(await badZone.json()).toMatchObject({
-      error: { code: "management.request_invalid", params: { field: "zoneId" } },
-    });
-
-    const badCap = await req(
-      `/tables/${id}`,
-      { method: "PATCH", body: JSON.stringify({ capacity: 1.5 }) },
-      managerCookie,
-    );
-    expect(badCap.status).toBe(400);
-    expect(await badCap.json()).toMatchObject({
-      error: { code: "management.request_invalid", params: { field: "capacity" } },
-    });
-
-    const nullBody = await req(`/tables/${id}`, { method: "PATCH", body: "null" }, managerCookie);
-    expect(nullBody.status).toBe(204);
-    const emptyBody = await req(`/tables/${id}`, { method: "PATCH", body: "{}" }, managerCookie);
-    expect(emptyBody.status).toBe(204);
-  });
-
-  it("DELETE deactivates a table (204), then GET drops it", async () => {
-    const { id } = (await (
-      await req(
-        "/tables",
-        { method: "POST", body: JSON.stringify({ label: unique("gone") }) },
-        managerCookie,
-      )
-    ).json()) as { id: string };
-
-    const del = await req(`/tables/${id}`, { method: "DELETE" }, managerCookie);
-    expect(del.status).toBe(204);
-    expect(await del.text()).toBe("");
-
-    const list = (await (await req("/tables", { method: "GET" }, managerCookie)).json()) as {
-      id: string;
-    }[];
-    expect(list.find((t) => t.id === id)).toBeUndefined();
-  });
-
-  describe("disabled tables: the includeDisabled list and PATCH active", () => {
+  describe("disabled tables: the includeDisabled list", () => {
     async function newTable(): Promise<string> {
-      const res = await req(
-        "/tables",
-        { method: "POST", body: JSON.stringify({ label: unique("en") }) },
-        managerCookie,
+      const { id } = await withTransaction(suite.db, (tx) =>
+        createTable(tx, tillConfigFromVenue(venue), { label: unique("en") }),
       );
-      return ((await res.json()) as { id: string }).id;
+      return id;
     }
     async function listAll(): Promise<{ id: string; label: string; active: boolean }[]> {
       const res = await req("/tables?includeDisabled=true", { method: "GET" }, managerCookie);
@@ -1091,77 +783,12 @@ describe("/management-api/tables", () => {
 
     it("GET ?includeDisabled=true lists a disabled table with active: false; the plain GET still drops it", async () => {
       const id = await newTable();
-      expect((await req(`/tables/${id}`, { method: "DELETE" }, managerCookie)).status).toBe(204);
+      await switchOff(suite, id);
       expect((await listAll()).find((t) => t.id === id)).toMatchObject({ active: false });
       const plain = (await (await req("/tables", { method: "GET" }, managerCookie)).json()) as {
         id: string;
       }[];
       expect(plain.find((t) => t.id === id)).toBeUndefined();
-    });
-
-    it("PATCH active: true enables a disabled table; PATCH active: false disables it again", async () => {
-      const id = await newTable();
-      await req(`/tables/${id}`, { method: "DELETE" }, managerCookie);
-
-      const enable = await req(
-        `/tables/${id}`,
-        { method: "PATCH", body: JSON.stringify({ active: true }) },
-        managerCookie,
-      );
-      expect(enable.status).toBe(204);
-      expect((await listAll()).find((t) => t.id === id)).toMatchObject({ active: true });
-      const plain = (await (await req("/tables", { method: "GET" }, managerCookie)).json()) as {
-        id: string;
-      }[];
-      expect(plain.find((t) => t.id === id)).toBeDefined();
-
-      const disable = await req(
-        `/tables/${id}`,
-        { method: "PATCH", body: JSON.stringify({ active: false }) },
-        managerCookie,
-      );
-      expect(disable.status).toBe(204);
-      expect((await listAll()).find((t) => t.id === id)).toMatchObject({ active: false });
-    });
-
-    it("PATCH active beside an edit applies both", async () => {
-      const id = await newTable();
-      await req(`/tables/${id}`, { method: "DELETE" }, managerCookie);
-      const label = unique("both");
-      const res = await req(
-        `/tables/${id}`,
-        { method: "PATCH", body: JSON.stringify({ label, active: true }) },
-        managerCookie,
-      );
-      expect(res.status).toBe(204);
-      expect((await listAll()).find((t) => t.id === id)).toMatchObject({ label, active: true });
-    });
-
-    it("PATCH refuses an explicit null or a non-boolean active (400, field active) and changes nothing", async () => {
-      const id = await newTable();
-      await req(`/tables/${id}`, { method: "DELETE" }, managerCookie);
-      for (const active of [null, "true", 1]) {
-        const res = await req(
-          `/tables/${id}`,
-          { method: "PATCH", body: JSON.stringify({ active }) },
-          managerCookie,
-        );
-        expect(res.status, String(active)).toBe(400);
-        expect(await res.json()).toMatchObject({
-          error: { code: "management.request_invalid", params: { field: "active" } },
-        });
-      }
-      expect((await listAll()).find((t) => t.id === id)).toMatchObject({ active: false });
-    });
-
-    it("PATCH active: true on an unknown id → 404 table.not_found", async () => {
-      const res = await req(
-        "/tables/00000000-0000-4000-8000-000000000000",
-        { method: "PATCH", body: JSON.stringify({ active: true }) },
-        managerCookie,
-      );
-      expect(res.status).toBe(404);
-      expect(await res.json()).toMatchObject({ error: { code: "table.not_found" } });
     });
 
     async function tableInServiceZone(): Promise<{
@@ -1179,60 +806,11 @@ describe("/management-api/tables", () => {
         await configureZone(tx, cfg, { zoneId, departmentId: department.id });
         return department.id;
       });
-      const res = await req(
-        "/tables",
-        { method: "POST", body: JSON.stringify({ label: unique("zt"), zoneId }) },
-        managerCookie,
+      const { id: tableId } = await withTransaction(suite.db, (tx) =>
+        createTable(tx, cfg, { label: unique("zt"), zoneId }),
       );
-      expect(res.status).toBe(201);
-      return { departmentId, zoneId, tableId: ((await res.json()) as { id: string }).id };
+      return { departmentId, zoneId, tableId };
     }
-    async function enable(tableId: string, extra: Record<string, unknown> = {}) {
-      return req(
-        `/tables/${tableId}`,
-        { method: "PATCH", body: JSON.stringify({ ...extra, active: true }) },
-        managerCookie,
-      );
-    }
-
-    it.each(["zone", "department"])(
-      "refuses moving an active table into a disabled %s without an active patch",
-      async (parent) => {
-        const source = await tableInServiceZone();
-        const destination = await tableInServiceZone();
-        if (parent === "zone") {
-          expect(
-            (await req(`/zones/${destination.zoneId}`, { method: "DELETE" }, managerCookie)).status,
-          ).toBe(204);
-        } else {
-          await withTransaction(suite.db, (tx) =>
-            deactivateDepartment(tx, tillConfigFromVenue(venue), destination.departmentId),
-          );
-          await withTransaction(suite.db, (tx) =>
-            tx
-              .update(floorZones)
-              .set({ active: true })
-              .where(eq(floorZones.id, destination.zoneId)),
-          );
-        }
-        const response = await req(
-          `/tables/${source.tableId}`,
-          { method: "PATCH", body: JSON.stringify({ zoneId: destination.zoneId }) },
-          managerCookie,
-        );
-        expect(response.status).toBe(409);
-        expect(await response.json()).toMatchObject({
-          error: {
-            code: "table.zone_inactive",
-            params: { tableId: source.tableId, zoneId: destination.zoneId },
-          },
-        });
-        expect((await listAll()).find((t) => t.id === source.tableId)).toMatchObject({
-          active: true,
-          zoneId: source.zoneId,
-        });
-      },
-    );
 
     it("refuses enabling a zone whose department is disabled", async () => {
       const { departmentId, zoneId } = await tableInServiceZone();
@@ -1364,289 +942,10 @@ describe("/management-api/tables", () => {
       expect((await listAll()).find((t) => t.id === tableId)).toMatchObject({ active: false });
     });
 
-    it.each(["zone", "department"])(
-      "refuses creating an active table in a disabled %s",
-      async (parent) => {
-        const destination = await tableInServiceZone();
-        if (parent === "zone")
-          await req(`/zones/${destination.zoneId}`, { method: "DELETE" }, managerCookie);
-        else {
-          await withTransaction(suite.db, (tx) =>
-            deactivateDepartment(tx, tillConfigFromVenue(venue), destination.departmentId),
-          );
-          await withTransaction(suite.db, (tx) =>
-            tx
-              .update(floorZones)
-              .set({ active: true })
-              .where(eq(floorZones.id, destination.zoneId)),
-          );
-        }
-        const label = unique("Rejected new table");
-        const response = await req(
-          "/tables",
-          { method: "POST", body: JSON.stringify({ label, zoneId: destination.zoneId }) },
-          managerCookie,
-        );
-        expect(response.status).toBe(409);
-        expect(await response.json()).toMatchObject({
-          error: { code: "table.zone_inactive", params: { zoneId: destination.zoneId } },
-        });
-        expect((await listAll()).some((t) => t.label === label)).toBe(false);
-      },
-    );
-
-    it("refuses placing an active table in a zone whose department is disabled", async () => {
-      const source = await tableInServiceZone();
-      const destination = await tableInServiceZone();
-      await withTransaction(suite.db, (tx) =>
-        deactivateDepartment(tx, tillConfigFromVenue(venue), destination.departmentId),
-      );
-      await withTransaction(suite.db, (tx) =>
-        tx.update(floorZones).set({ active: true }).where(eq(floorZones.id, destination.zoneId)),
-      );
-      const response = await req(
-        `/tables/${source.tableId}/placement`,
-        {
-          method: "PUT",
-          body: JSON.stringify({
-            zoneId: destination.zoneId,
-            posX: 10,
-            posY: 20,
-            shape: "round",
-            rotation: 0,
-          }),
-        },
-        managerCookie,
-      );
-      expect(response.status).toBe(409);
-      expect(await response.json()).toMatchObject({
-        error: {
-          code: "table.zone_inactive",
-          params: { tableId: source.tableId, zoneId: destination.zoneId },
-        },
-      });
-      expect((await listAll()).find((t) => t.id === source.tableId)).toMatchObject({
-        active: true,
-        zoneId: source.zoneId,
-        posX: null,
-      });
-    });
-
-    it.each(["create", "move", "place"])(
-      "refuses an active table's %s into a zone without a department",
-      async (action) => {
-        const source = await tableInServiceZone();
-        const [zone] = await withTransaction(suite.db, (tx) =>
-          tx
-            .insert(floorZones)
-            .values({ locationId: venue.locationId, name: unique("Unassigned") })
-            .returning({ id: floorZones.id }),
-        );
-        const zoneId = zone!.id;
-        const label = unique("Unassigned table");
-        const response =
-          action === "create"
-            ? await req(
-                "/tables",
-                { method: "POST", body: JSON.stringify({ label, zoneId }) },
-                managerCookie,
-              )
-            : action === "move"
-              ? await req(
-                  `/tables/${source.tableId}`,
-                  { method: "PATCH", body: JSON.stringify({ zoneId }) },
-                  managerCookie,
-                )
-              : await req(
-                  `/tables/${source.tableId}/placement`,
-                  {
-                    method: "PUT",
-                    body: JSON.stringify({
-                      zoneId,
-                      posX: 10,
-                      posY: 20,
-                      shape: "round",
-                      rotation: 0,
-                    }),
-                  },
-                  managerCookie,
-                );
-        expect(response.status).toBe(409);
-        expect(await response.json()).toMatchObject({
-          error: { code: "table.zone_inactive", params: { zoneId } },
-        });
-        expect((await listAll()).find((t) => t.id === source.tableId)).toMatchObject({
-          active: true,
-          zoneId: source.zoneId,
-          posX: null,
-        });
-        expect((await listAll()).some((t) => t.label === label)).toBe(false);
-      },
-    );
-
-    it("allows moving a disabled table into a disabled zone", async () => {
-      const source = await tableInServiceZone();
-      const destination = await tableInServiceZone();
-      await req(`/tables/${source.tableId}`, { method: "DELETE" }, managerCookie);
-      await req(`/zones/${destination.zoneId}`, { method: "DELETE" }, managerCookie);
-      const response = await req(
-        `/tables/${source.tableId}`,
-        { method: "PATCH", body: JSON.stringify({ zoneId: destination.zoneId }) },
-        managerCookie,
-      );
-      expect(response.status).toBe(204);
-      expect((await listAll()).find((t) => t.id === source.tableId)).toMatchObject({
-        active: false,
-        zoneId: destination.zoneId,
-      });
-    });
-
-    it("allows moving an active table between active service zones", async () => {
-      const source = await tableInServiceZone();
-      const destination = await tableInServiceZone();
-      const response = await req(
-        `/tables/${source.tableId}`,
-        { method: "PATCH", body: JSON.stringify({ zoneId: destination.zoneId }) },
-        managerCookie,
-      );
-      expect(response.status).toBe(204);
-      expect((await listAll()).find((t) => t.id === source.tableId)).toMatchObject({
-        active: true,
-        zoneId: destination.zoneId,
-      });
-    });
-
-    it("PATCH active: true enables a disabled table whose zone and department are active", async () => {
-      const { tableId } = await tableInServiceZone();
-      expect((await req(`/tables/${tableId}`, { method: "DELETE" }, managerCookie)).status).toBe(
-        204,
-      );
-      expect((await enable(tableId)).status).toBe(204);
-      expect((await listAll()).find((t) => t.id === tableId)).toMatchObject({ active: true });
-    });
-
-    it("PATCH active: true under a disabled zone → 409 table.zone_inactive, and the table stays disabled", async () => {
-      const { zoneId, tableId } = await tableInServiceZone();
-      expect((await req(`/zones/${zoneId}`, { method: "DELETE" }, managerCookie)).status).toBe(204);
-      expect((await listAll()).find((t) => t.id === tableId)).toMatchObject({ active: false });
-
-      const res = await enable(tableId);
-      expect(res.status).toBe(409);
-      expect(await res.json()).toMatchObject({
-        error: { code: "table.zone_inactive", params: { tableId, zoneId } },
-      });
-      expect((await listAll()).find((t) => t.id === tableId)).toMatchObject({ active: false });
-    });
-
-    it("PATCH rename and DELETE on a planned table → 409 table.in_floor_plan, and the table is unchanged", async () => {
-      const { tableId } = await tableInServiceZone();
-      await suite.db
-        .update(diningTables)
-        .set({ planned: true })
-        .where(eq(diningTables.id, tableId));
-      const before = (await listAll()).find((t) => t.id === tableId);
-      const rename = await req(
-        `/tables/${tableId}`,
-        { method: "PATCH", body: JSON.stringify({ label: unique("renamed") }) },
-        managerCookie,
-      );
-      expect(rename.status).toBe(409);
-      expect(await rename.json()).toMatchObject({
-        error: { code: "table.in_floor_plan", params: { tableId } },
-      });
-      const disable = await req(`/tables/${tableId}`, { method: "DELETE" }, managerCookie);
-      expect(disable.status).toBe(409);
-      expect(await disable.json()).toMatchObject({
-        error: { code: "table.in_floor_plan", params: { tableId } },
-      });
-      expect((await listAll()).find((t) => t.id === tableId)).toEqual(before);
-    });
-
-    it("PATCH active: true under a disabled department → 409 table.zone_inactive, even once the zone itself is enabled", async () => {
-      const { departmentId, zoneId, tableId } = await tableInServiceZone();
-      await withTransaction(suite.db, (tx) =>
-        deactivateDepartment(tx, tillConfigFromVenue(venue), departmentId),
-      );
-      expect((await listAll()).find((t) => t.id === tableId)).toMatchObject({ active: false });
-
-      const underDisabledZone = await enable(tableId);
-      expect(underDisabledZone.status).toBe(409);
-      expect(await underDisabledZone.json()).toMatchObject({
-        error: { code: "table.zone_inactive", params: { tableId, zoneId } },
-      });
-
-      await withTransaction(suite.db, (tx) =>
-        tx.update(floorZones).set({ active: true }).where(eq(floorZones.id, zoneId)),
-      );
-      const underDisabledDepartment = await enable(tableId);
-      expect(underDisabledDepartment.status).toBe(409);
-      expect(await underDisabledDepartment.json()).toMatchObject({
-        error: { code: "table.zone_inactive", params: { tableId, zoneId } },
-      });
-      expect((await listAll()).find((t) => t.id === tableId)).toMatchObject({ active: false });
-    });
-
-    it("PATCH active: true with a zoneId judges the zone the table moves to", async () => {
-      const { zoneId, tableId } = await tableInServiceZone();
-      await req(`/zones/${zoneId}`, { method: "DELETE" }, managerCookie);
-      const { zoneId: liveZoneId, tableId: other } = await tableInServiceZone();
-
-      const res = await enable(tableId, { zoneId: liveZoneId });
-      expect(res.status).toBe(204);
-      expect((await listAll()).find((t) => t.id === tableId)).toMatchObject({
-        active: true,
-        zoneId: liveZoneId,
-      });
-
-      await req(`/tables/${other}`, { method: "DELETE" }, managerCookie);
-      const intoDisabled = await enable(other, { zoneId });
-      expect(intoDisabled.status).toBe(409);
-      expect(await intoDisabled.json()).toMatchObject({
-        error: { code: "table.zone_inactive", params: { tableId: other, zoneId } },
-      });
-      expect((await listAll()).find((t) => t.id === other)).toMatchObject({
-        active: false,
-        zoneId: liveZoneId,
-      });
-    });
-
-    it("PATCH active: false and an edit without active still apply under a disabled zone", async () => {
-      const { zoneId, tableId } = await tableInServiceZone();
-      await req(`/zones/${zoneId}`, { method: "DELETE" }, managerCookie);
-      const label = unique("renamed");
-      expect(
-        (
-          await req(
-            `/tables/${tableId}`,
-            { method: "PATCH", body: JSON.stringify({ label }) },
-            managerCookie,
-          )
-        ).status,
-      ).toBe(204);
-      expect(
-        (
-          await req(
-            `/tables/${tableId}`,
-            { method: "PATCH", body: JSON.stringify({ active: false }) },
-            managerCookie,
-          )
-        ).status,
-      ).toBe(204);
-      expect((await listAll()).find((t) => t.id === tableId)).toMatchObject({
-        label,
-        active: false,
-      });
-    });
-
-    it("a STAFF session is refused the includeDisabled list and PATCH active (403)", async () => {
+    it("a STAFF session is refused the includeDisabled list (403)", async () => {
       const id = await newTable();
       for (const res of [
         await req("/tables?includeDisabled=true", { method: "GET" }, staffCookie),
-        await req(
-          `/tables/${id}`,
-          { method: "PATCH", body: JSON.stringify({ active: false }) },
-          staffCookie,
-        ),
       ]) {
         expect(res.status).toBe(403);
         expect(await res.json()).toMatchObject({ error: { code: "authorization.not_permitted" } });
@@ -1655,280 +954,20 @@ describe("/management-api/tables", () => {
     });
   });
 
-  it("DELETE an unknown id → 404 table.not_found; a malformed :id → 404 too", async () => {
-    const unknown = await req(
-      "/tables/00000000-0000-4000-8000-000000000000",
-      { method: "DELETE" },
-      managerCookie,
-    );
-    expect(unknown.status).toBe(404);
-    expect(await unknown.json()).toMatchObject({ error: { code: "table.not_found" } });
-
-    const malformed = await req("/tables/not-a-uuid", { method: "DELETE" }, managerCookie);
-    expect(malformed.status).toBe(404);
-    expect(await malformed.json()).toMatchObject({ error: { code: "table.not_found" } });
-  });
-
-  it("a STAFF session is refused on every table route (403 authorization.not_permitted)", async () => {
-    const someId = randomUUID();
-    const cases = [
-      req("/tables", { method: "GET" }, staffCookie),
-      req(
-        "/tables",
-        { method: "POST", body: JSON.stringify({ label: unique("Nope") }) },
-        staffCookie,
-      ),
-      req(
-        `/tables/${someId}`,
-        { method: "PATCH", body: JSON.stringify({ label: unique("Z") }) },
-        staffCookie,
-      ),
-      req(`/tables/${someId}`, { method: "DELETE" }, staffCookie),
-    ];
+  it("a STAFF session is refused the tables read (403 authorization.not_permitted)", async () => {
+    const cases = [req("/tables", { method: "GET" }, staffCookie)];
     for (const res of await Promise.all(cases)) {
       expect(res.status).toBe(403);
       expect(await res.json()).toMatchObject({ error: { code: "authorization.not_permitted" } });
     }
   });
 
-  it("no session → 401 management_session.required on every table route", async () => {
-    const someId = randomUUID();
-    const cases = [
-      req("/tables", { method: "GET" }, undefined),
-      req("/tables", { method: "POST", body: JSON.stringify({ label: "Nope" }) }, undefined),
-      req(
-        `/tables/${someId}`,
-        { method: "PATCH", body: JSON.stringify({ label: "Z" }) },
-        undefined,
-      ),
-      req(`/tables/${someId}`, { method: "DELETE" }, undefined),
-    ];
+  it("no session → 401 management_session.required on the tables read", async () => {
+    const cases = [req("/tables", { method: "GET" }, undefined)];
     for (const res of await Promise.all(cases)) {
       expect(res.status).toBe(401);
       expect(await res.json()).toMatchObject({ error: { code: "management_session.required" } });
     }
-  });
-});
-
-function place(zoneId: string): {
-  zoneId: string;
-  posX: number;
-  posY: number;
-  shape: string;
-  rotation: number;
-} {
-  return { zoneId, posX: 500, posY: 250, shape: "square", rotation: 0 };
-}
-
-async function readPlacement(tableId: string): Promise<{
-  posX: number | null;
-  posY: number | null;
-  shape: string | null;
-  rotation: number | null;
-}> {
-  return withTransaction(suite.db, async (tx) => {
-    const { rows } = await tx.execute<{
-      pos_x: number | null;
-      pos_y: number | null;
-      shape: string | null;
-      rotation: number | null;
-    }>(sql`select pos_x, pos_y, shape, rotation from dining_tables where id = ${tableId}`);
-    const r = rows[0]!;
-    return { posX: r.pos_x, posY: r.pos_y, shape: r.shape, rotation: r.rotation };
-  });
-}
-
-describe("/management-api/tables/:id/placement", () => {
-  /** `setTablePlacement` requires both the table and the zone live. */
-  async function tableAndZone(): Promise<{ tableId: string; zoneId: string }> {
-    const zoneId = await createZone(unique("PlaceZone"));
-    const { id: tableId } = (await (
-      await req(
-        "/tables",
-        { method: "POST", body: JSON.stringify({ label: unique("p") }) },
-        managerCookie,
-      )
-    ).json()) as { id: string };
-    return { tableId, zoneId };
-  }
-
-  it("manager places a table (204) + read-back shows it; staff is 403; no session is 401", async () => {
-    const { tableId, zoneId } = await tableAndZone();
-
-    const unauth = await req(`/tables/${tableId}/placement`, {
-      method: "PUT",
-      body: JSON.stringify(place(zoneId)),
-    });
-    expect(unauth.status).toBe(401);
-    expect(await unauth.json()).toMatchObject({ error: { code: "management_session.required" } });
-
-    // A staff person can log in but holds no `venue.configure`.
-    const staff = await req(
-      `/tables/${tableId}/placement`,
-      { method: "PUT", body: JSON.stringify(place(zoneId)) },
-      staffCookie,
-    );
-    expect(staff.status).toBe(403);
-    expect(await staff.json()).toMatchObject({ error: { code: "authorization.not_permitted" } });
-    expect(await readPlacement(tableId)).toMatchObject({ posX: null, posY: null, shape: null });
-
-    const ok = await req(
-      `/tables/${tableId}/placement`,
-      { method: "PUT", body: JSON.stringify(place(zoneId)) },
-      managerCookie,
-    );
-    expect(ok.status).toBe(204);
-    expect(await ok.text()).toBe("");
-    expect(await readPlacement(tableId)).toMatchObject({
-      posX: 500,
-      posY: 250,
-      shape: "square",
-      rotation: 0,
-    });
-  });
-
-  it("manager clears a placement (204) + read-back nulls it; staff is 403; no session is 401", async () => {
-    const { tableId, zoneId } = await tableAndZone();
-    await req(
-      `/tables/${tableId}/placement`,
-      { method: "PUT", body: JSON.stringify(place(zoneId)) },
-      managerCookie,
-    );
-
-    const unauth = await req(`/tables/${tableId}/placement`, { method: "DELETE" });
-    expect(unauth.status).toBe(401);
-    expect(await unauth.json()).toMatchObject({ error: { code: "management_session.required" } });
-
-    const staff = await req(`/tables/${tableId}/placement`, { method: "DELETE" }, staffCookie);
-    expect(staff.status).toBe(403);
-    expect(await staff.json()).toMatchObject({ error: { code: "authorization.not_permitted" } });
-    expect(await readPlacement(tableId)).toMatchObject({ posX: 500, posY: 250, shape: "square" });
-
-    const ok = await req(`/tables/${tableId}/placement`, { method: "DELETE" }, managerCookie);
-    expect(ok.status).toBe(204);
-    expect(await ok.text()).toBe("");
-    expect(await readPlacement(tableId)).toMatchObject({
-      posX: null,
-      posY: null,
-      shape: null,
-      rotation: null,
-    });
-  });
-
-  it("PUT a malformed :id → 404 table.not_found; an unknown id → 404 too", async () => {
-    const zoneId = await createZone(unique("PZ"));
-
-    const malformed = await req(
-      "/tables/not-a-uuid/placement",
-      { method: "PUT", body: JSON.stringify(place(zoneId)) },
-      managerCookie,
-    );
-    expect(malformed.status).toBe(404);
-    expect(await malformed.json()).toMatchObject({ error: { code: "table.not_found" } });
-
-    const unknown = await req(
-      "/tables/00000000-0000-4000-8000-000000000000/placement",
-      { method: "PUT", body: JSON.stringify(place(zoneId)) },
-      managerCookie,
-    );
-    expect(unknown.status).toBe(404);
-    expect(await unknown.json()).toMatchObject({ error: { code: "table.not_found" } });
-  });
-
-  it("DELETE a malformed :id → 404 table.not_found; an unknown id → 404 too", async () => {
-    const malformed = await req(
-      "/tables/not-a-uuid/placement",
-      { method: "DELETE" },
-      managerCookie,
-    );
-    expect(malformed.status).toBe(404);
-    expect(await malformed.json()).toMatchObject({ error: { code: "table.not_found" } });
-
-    const unknown = await req(
-      "/tables/00000000-0000-4000-8000-000000000000/placement",
-      { method: "DELETE" },
-      managerCookie,
-    );
-    expect(unknown.status).toBe(404);
-    expect(await unknown.json()).toMatchObject({ error: { code: "table.not_found" } });
-  });
-
-  it("PUT with a zoneId naming no LIVE zone → 404 zone.not_found; a malformed zoneId → 404 too", async () => {
-    const { tableId } = await tableAndZone();
-
-    const missing = await req(
-      `/tables/${tableId}/placement`,
-      { method: "PUT", body: JSON.stringify(place("00000000-0000-4000-8000-000000000000")) },
-      managerCookie,
-    );
-    expect(missing.status).toBe(404);
-    expect(await missing.json()).toMatchObject({ error: { code: "zone.not_found" } });
-
-    const malformed = await req(
-      `/tables/${tableId}/placement`,
-      { method: "PUT", body: JSON.stringify({ ...place("x"), zoneId: "not-a-uuid" }) },
-      managerCookie,
-    );
-    expect(malformed.status).toBe(404);
-    expect(await malformed.json()).toMatchObject({ error: { code: "zone.not_found" } });
-  });
-
-  it("PUT body screens: array → body; non-string zoneId; non-number posX/posY/rotation; non-string shape", async () => {
-    const id = randomUUID();
-    const base = { zoneId: randomUUID(), posX: 500, posY: 250, shape: "square", rotation: 0 };
-
-    // A `null` body is read as `{}`, so the first field screen fires, not the "body" one.
-    const nullBody = await req(
-      `/tables/${id}/placement`,
-      { method: "PUT", body: "null" },
-      managerCookie,
-    );
-    expect(nullBody.status).toBe(400);
-    expect(await nullBody.json()).toMatchObject({
-      error: { code: "management.request_invalid", params: { field: "zoneId" } },
-    });
-
-    const arrayBody = await req(
-      `/tables/${id}/placement`,
-      { method: "PUT", body: "[]" },
-      managerCookie,
-    );
-    expect(arrayBody.status).toBe(400);
-    expect(await arrayBody.json()).toMatchObject({
-      error: { code: "management.request_invalid", params: { field: "body" } },
-    });
-
-    const cases: readonly [string, Record<string, unknown>][] = [
-      ["zoneId", { ...base, zoneId: 123 }],
-      ["posX", { ...base, posX: "500" }],
-      ["posY", { ...base, posY: "250" }],
-      ["shape", { ...base, shape: 1 }],
-      ["rotation", { ...base, rotation: "0" }],
-    ];
-    for (const [field, body] of cases) {
-      const res = await req(
-        `/tables/${id}/placement`,
-        { method: "PUT", body: JSON.stringify(body) },
-        managerCookie,
-      );
-      expect(res.status).toBe(400);
-      expect(await res.json()).toMatchObject({
-        error: { code: "management.request_invalid", params: { field } },
-      });
-    }
-  });
-
-  it("PUT with an out-of-range coordinate → 400 placement.invalid (the verb's field guard, mapped here)", async () => {
-    const { tableId, zoneId } = await tableAndZone();
-    const res = await req(
-      `/tables/${tableId}/placement`,
-      { method: "PUT", body: JSON.stringify({ ...place(zoneId), posX: 1001 }) },
-      managerCookie,
-    );
-    expect(res.status).toBe(400);
-    expect(await res.json()).toMatchObject({
-      error: { code: "placement.invalid", params: { field: "posX" } },
-    });
   });
 });
 
@@ -2732,8 +1771,8 @@ describe("/management-api/stations (KDS-1 config)", () => {
   });
 
   it("a STAFF session is refused on every station/routing route (403 authorization.not_permitted)", async () => {
-    // A staff person can log in but holds no `venue.configure`.
     const someId = randomUUID();
+    // A staff person can log in but holds no `venue.configure`.
     const cases = [
       req("/stations", { method: "GET" }, staffCookie),
       req("/stations/outputs-down", { method: "GET" }, staffCookie),
@@ -3520,8 +2559,8 @@ describe("/management-api/courses + product course + fire-control (KDS-2 config)
   });
 
   it("a STAFF session is refused on every course/product-course/fire-control route (403 authorization.not_permitted)", async () => {
-    // A staff person can log in but holds no `venue.configure`.
     const someId = randomUUID();
+    // A staff person can log in but holds no `venue.configure`.
     const cases = [
       req("/courses", { method: "GET" }, staffCookie),
       req("/courses", { method: "POST", body: JSON.stringify({ name: unique("N") }) }, staffCookie),
@@ -3785,13 +2824,9 @@ describe("floor plans", () => {
       (await put(zoneId, { revision: 0, tables: [entry("a", unique("R"))], joins: [] })).status,
     ).toBe(200);
     const spare = unique("S");
-    const created = await req(
-      "/tables",
-      { method: "POST", body: JSON.stringify({ label: spare, capacity: 2, zoneId }) },
-      managerCookie,
+    const { id: spareId } = await withTransaction(suite.db, (tx) =>
+      createTable(tx, tillConfigFromVenue(venue), { label: spare, capacity: 2, zoneId }),
     );
-    expect(created.status).toBe(201);
-    const spareId = ((await created.json()) as { id: string }).id;
 
     const read = (await (await get(zoneId)).json()) as {
       revision: number;
@@ -3820,12 +2855,9 @@ describe("floor plans", () => {
     const zoneId = await createZone(unique("PlanOwn"));
     const first = await put(zoneId, { revision: 0, tables: [entry("a", unique("O"))], joins: [] });
     const { ids } = (await first.json()) as { ids: Record<string, string> };
-    const other = await req(
-      "/tables",
-      { method: "POST", body: JSON.stringify({ label: unique("X"), zoneId }) },
-      managerCookie,
+    const { id: otherId } = await withTransaction(suite.db, (tx) =>
+      createTable(tx, tillConfigFromVenue(venue), { label: unique("X"), zoneId }),
     );
-    const otherId = ((await other.json()) as { id: string }).id;
     const res = await put(zoneId, {
       revision: 1,
       tables: [{ ...entry("a", unique("O")), id: ids.a, liveTableId: otherId }],
@@ -3921,5 +2953,43 @@ describe("floor plans", () => {
       expect(res.status).toBe(404);
       expect(await res.json()).toMatchObject({ error: { code: "zone.not_found" } });
     }
+  });
+});
+
+describe("retired table writes", () => {
+  it.each([
+    ["POST", "/tables"],
+    ["PATCH", "/tables/:id"],
+    ["DELETE", "/tables/:id"],
+    ["PUT", "/tables/:id/placement"],
+    ["DELETE", "/tables/:id/placement"],
+  ])("answers %s %s 404 for a manager and leaves tables unchanged", async (method, path) => {
+    const zoneId = await createZone(unique("Retired"));
+    const label = unique("Retired table");
+    const { id } = await withTransaction(suite.db, (tx) =>
+      createTable(tx, tillConfigFromVenue(venue), { label, zoneId, capacity: 4 }),
+    );
+    const rows = () =>
+      suite.db.all(sql`
+      select * from dining_tables where location_id = ${venue.locationId} order by id`);
+    const before = rows();
+    const response = await req(
+      path.replace(":id", id),
+      {
+        method,
+        body: JSON.stringify({
+          label: `${label} changed`,
+          zoneId,
+          capacity: 9,
+          posX: 500,
+          posY: 250,
+          shape: "square",
+          rotation: 15,
+        }),
+      },
+      managerCookie,
+    );
+    expect(response.status).toBe(404);
+    expect(rows()).toEqual(before);
   });
 });
