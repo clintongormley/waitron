@@ -376,7 +376,7 @@ sample values for the new tables (owner rule of 2026-10-11 in lane A's queue).
 
 | Reader today | After |
 | --- | --- |
-| `departmentDay`, `resolveDepartmentService`, `resolveDefaultMenu`, `routingAt` (the sale path: pricing a basket in `apps/server/src/working-order.ts`, a zone's offers and the till's menu state in `operations.ts`) | The day resolver (section 6). |
+| `departmentDay`, `resolveDepartmentService`, `resolveDefaultMenu`, `routingAt` (the sale path: whether a basket's dishes may be ordered now in `apps/server/src/working-order.ts`, a zone's offers and the till's menu state in `operations.ts`) | The day resolver (section 6). |
 | `zoneClosureDay`, `closedZoneIdsAt`, `assertZoneTakesNewOrders`, `readZoneKeepOpenState` (starting, moving and transferring orders; `GET /api/zones`) | The day resolver's zone answer. |
 | `keep-open.ts` (`readKeepOpen`, `keepPeriodOpen`, `keepZoneOpen`) | The resolved day; extensions unchanged. |
 | `findScheduleEndOffsetClash`, `endOffsetClash`, `assertPeriodEndOffsets` (`apps/server/src/venue-details.ts:244`) | Resolved days, the set in section 6. |
@@ -429,8 +429,12 @@ change runs `scripts/alert-codes.test.ts` and `scripts/errors-reachable.test.ts`
   year and before its first; 29 February; a season start moved while a special date lies under it;
   and the owner's worked example (Dinner 19:00–22:00 over Winter's 20:00–23:30, then Closed over
   22:00–23:30).
-- **Through the till routes**, not only the function: a sale priced at 00:15 on that night is
-  priced from Autumn's Dinner menu.
+- **Through the till routes**, not only the function. Pricing reads no hours (it passes
+  `withDefault: false` to `listZoneOffers`, `apps/server/src/working-order.ts`); what the hours decide
+  at the till is whether a dish may be ordered now, refused with `menu_period.not_running`
+  (`apps/server/src/till-api.service-periods.test.ts` pins it today). So at 00:15 on that night a
+  dish from Autumn's Dinner menu is accepted, and a dish only Winter's Late bar offers is refused
+  with that code.
 - Saving a special day that edited only Restaurant leaves Bar's paint on every date unchanged.
 - Deleting a period, with and without a replacement: painted ranges, special-day paint, routing
   lines and today's extension afterwards, each asserted by value; refusals asserted by code.
