@@ -53,8 +53,7 @@ describe.each(["light", "dark"] as const)("frozen menu tree (%s)", (theme) => {
         table.setExpanded("drinks", true);
         await table.updateComplete;
       }
-      if (state === "fallback")
-        expect(table.shadowRoot!.textContent).toContain("Staff name fallback");
+      if (state === "fallback") expect(table.shadowRoot!.textContent).toContain("No English name");
       if (state === "revealed") {
         expect(
           await el.reveal({

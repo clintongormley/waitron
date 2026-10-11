@@ -225,7 +225,7 @@ it("names the no-colour choice Use default colour when the colour it takes is th
   await expect.element(page.elementLocator(none)).toHaveAccessibleDescription("#25b125");
 });
 
-it("says inside the no-colour choice, as its description, that the category has no colour", async () => {
+it("keeps the category inheritance choice on one line when the category has no colour", async () => {
   const plain = await mount(null);
   const plainLines = fieldLines(plain.el);
   cleanupWidgets();
@@ -234,35 +234,25 @@ it("says inside the no-colour choice, as its description, that the category has 
   await expect
     .element(page.elementLocator(none))
     .toHaveAccessibleName(t("editor.color_use_category"));
-  await expect
-    .element(page.elementLocator(none))
-    .toHaveAccessibleDescription(t("editor.color_category_none"));
-  const note = none.querySelector<HTMLElement>(".note")!;
-  expect(note.textContent!.trim()).toBe(t("editor.color_category_none"));
-  expect(none.querySelector(".chip")).toBeNull();
-  // The note is the button's second line, not a line drawn under the field.
-  expect(note.getBoundingClientRect().top).toBeGreaterThanOrEqual(
-    none
-      .querySelector<HTMLElement>(`#${CSS.escape("test-color-none-label")}`)!
-      .getBoundingClientRect().bottom,
-  );
+  await expect.element(page.elementLocator(none)).toHaveAccessibleDescription("");
+  expect(none.querySelector(".note, .chip")).toBeNull();
   expect(fieldLines(el)).toEqual(plainLines);
 });
 
-it("says the category has no colour when the colour it would take is not lowercase #rrggbb", async () => {
+it("does not paint or describe an invalid inherited colour", async () => {
   const { el } = await mount(null, undefined, { categoryColor: "#256bb1;position:fixed;inset:0" });
   const none = noneButton(el);
   expect(none.querySelector(".chip")).toBeNull();
-  expect(none.querySelector(".note")!.textContent!.trim()).toBe(t("editor.color_category_none"));
+  expect(none.querySelector(".note")).toBeNull();
+  expect(none.hasAttribute("aria-describedby")).toBe(false);
 });
 
-it("keeps a two-line no-colour choice's text clear of its border", async () => {
+it("keeps the inheritance choice's label clear of its border", async () => {
   const { el } = await mount(null, undefined, { categoryColor: null });
   const none = noneButton(el).getBoundingClientRect();
   const label = el.shadowRoot!.querySelector("#test-color-none-label")!.getBoundingClientRect();
-  const note = noneButton(el).querySelector(".note")!.getBoundingClientRect();
   expect(label.top - none.top).toBeGreaterThanOrEqual(3);
-  expect(none.bottom - note.bottom).toBeGreaterThanOrEqual(3);
+  expect(none.bottom - label.bottom).toBeGreaterThanOrEqual(3);
 });
 
 it("draws today's No colour choice when given neither setting", async () => {
@@ -271,4 +261,18 @@ it("draws today's No colour choice when given neither setting", async () => {
   await expect.element(page.elementLocator(none)).toHaveAccessibleName(t("editor.color_none"));
   await expect.element(page.elementLocator(none)).toHaveAccessibleDescription("");
   expect(none.querySelector(".chip, .note")).toBeNull();
+});
+
+it("A498 keeps category inheritance selectable without an empty-colour note", async () => {
+  const { el } = await mount(null, undefined, { categoryColor: null });
+  const none = noneButton(el);
+  await expect
+    .element(page.elementLocator(none))
+    .toHaveAccessibleName(t("editor.color_use_category"));
+  expect(none.querySelector(".note")).toBeNull();
+  expect(none.hasAttribute("aria-describedby")).toBe(false);
+  await click(el, "#b12525");
+  none.click();
+  await el.updateComplete;
+  expect(el.color).toBeNull();
 });

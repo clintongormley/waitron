@@ -8248,7 +8248,7 @@ describe("publishing", () => {
   it("publishes the hash it previewed, names the one menu, and says the new version is live", async () => {
     const client = api();
     const el = await mountPreview(client);
-    expect(text(inPanel(el, "publish"))).toBe("Publish Lunch Menu");
+    expect(text(inPanel(el, "publish"))).toBe("Publish now");
     const previews = client.getMenuPreview.mock.calls.length;
     client.getMenuPreview.mockResolvedValue({
       ...lunchPreview(),
@@ -8374,7 +8374,7 @@ describe("publishing", () => {
     );
     expect(writeCalls(client)).toEqual(["publishMenu"]);
     expect(inPanel(el, "changes")).not.toBeNull();
-    expect(text(inPanel(el, "publish"))).toBe("Publish Lunch Menu");
+    expect(text(inPanel(el, "publish"))).toBe("Publish now");
   });
 
   describe("a publish refused because a scheduled version would go live out of order", () => {
@@ -8577,7 +8577,7 @@ describe("publishing", () => {
     expect(button()!.loading).toBe(true);
     history.pushState(null, "", "/manage/menus/menu/menu-dinner/view/preview");
     window.dispatchEvent(new PopStateEvent("popstate"));
-    await vi.waitFor(() => expect(text(inPanel(el, "publish"))).toBe("Publish Dinner Menu"));
+    await vi.waitFor(() => expect(text(inPanel(el, "publish"))).toBe("Publish now"));
     expect(button()!.loading).toBe(false);
     await publish(el);
     expect(client.publishMenu).toHaveBeenLastCalledWith("menu-dinner", "c".repeat(64));
@@ -8612,7 +8612,7 @@ describe("publishing", () => {
     await el.updateComplete;
     expect(inPanel(el, "changes")).toBeNull();
     expect(inPanel(el, "warnings")).toBeNull();
-    expect(text(inPanel(el, "publish"))).toBe("Publish Dinner Menu");
+    expect(text(inPanel(el, "publish"))).toBe("Publish now");
   });
 
   it("says there is nothing to publish when the menu matches its live version", async () => {

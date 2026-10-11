@@ -133,8 +133,7 @@ export const colorFieldStyles = css`
 export interface ColorFieldOptions {
   /** A hex colour, or null for none. */
   color: string | null;
-  /** Given, the no-colour choice shows it in a chip read as its description, or, for null, says as
-   * its second line that there is none. Absent, it reads "No colour" and says nothing more. */
+  /** Given, the no-colour choice inherits it; a stored colour also supplies a chip and description. */
   categoryColor?: string | null;
   /** Where `categoryColor` comes from; "default" names the choice "Use default colour". */
   inheritedFrom?: "category" | "default";
@@ -163,25 +162,17 @@ export function colorField(options: ColorFieldOptions): TemplateResult {
       : null;
   const labelId = `${name}-none-label`;
   const fallback =
-    inherited === undefined
+    inherited === undefined || inherited === null
       ? null
-      : inherited !== null
-        ? {
-            id: `${name}-none-value`,
-            before: html`<span
-              class="chip"
-              aria-hidden="true"
-              style=${`background:${inherited}`}
-            ></span>`,
-            after: html`<span id=${`${name}-none-value`} hidden>${inherited}</span>`,
-          }
-        : {
-            id: `${name}-none-note`,
-            before: nothing,
-            after: html`<span class="note" id=${`${name}-none-note`}
-              >${t("editor.color_category_none")}</span
-            >`,
-          };
+      : {
+          id: `${name}-none-value`,
+          before: html`<span
+            class="chip"
+            aria-hidden="true"
+            style=${`background:${inherited}`}
+          ></span>`,
+          after: html`<span id=${`${name}-none-value`} hidden>${inherited}</span>`,
+        };
   const swatch = (value: string) =>
     html`<button
       type="button"

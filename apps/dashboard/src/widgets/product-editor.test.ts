@@ -2200,13 +2200,8 @@ it("describes Use category colour by the draft category's colour, and follows a 
   await pickIn(el, "primary", { value: "snacks" });
   await describes("#256bb1");
   await pickIn(el, "primary", { value: "plates" });
-  await describes(t("editor.color_category_none"));
-  const note = useCategory(el).querySelector(".note")!;
-  expect(note.textContent!.trim()).toBe(t("editor.color_category_none"));
-  expect(useCategory(el).querySelector(".chip")).toBeNull();
-  expect(note.getBoundingClientRect().top).toBeGreaterThanOrEqual(
-    el.shadowRoot!.querySelector("#product-color-none-label")!.getBoundingClientRect().bottom,
-  );
+  await describes("");
+  expect(useCategory(el).querySelector(".note, .chip")).toBeNull();
   // A category recoloured while the editor is open arrives as a new list.
   el.categories = colouredCategories.map((category) =>
     category.id === "plates" ? { ...category, color: "#7a25b1" } : category,

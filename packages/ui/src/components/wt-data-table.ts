@@ -2364,7 +2364,7 @@ export class WtDataTable<Row = unknown> extends LitElement {
     }
     const hasGroups = groups.some((group) => group.label !== "");
     return html`
-      <thead role="rowgroup">
+      <thead role="rowgroup" part="table-head">
         ${
           hasGroups
             ? html`<tr role="row" class="column-groups">
@@ -3038,6 +3038,7 @@ export class WtDataTable<Row = unknown> extends LitElement {
                                       : nothing
                                 }<span
                                   class="tree-cell"
+                                  part="tree-cell"
                                   style=${`--tree-depth: ${joined ? depth - 1 : depth}`}
                                 >
                                   ${

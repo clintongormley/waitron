@@ -104,13 +104,13 @@ it("switches the frozen names with requested, default and staff fallbacks visibl
   await settle(el);
   expect(row(el, "drinks/beer/mi")!.textContent).toContain("Cold beer");
   expect(row(el, "drinks")!.textContent).toContain("Counter drinks para clientes");
-  expect(row(el, "drinks")!.textContent).toContain("Missing translation: en");
+  expect(row(el, "drinks")!.textContent).toContain("No English name");
   expect(row(el, "juice")!.textContent).toContain("Counter juice");
-  expect(row(el, "juice")!.textContent).toContain("Staff name fallback");
+  expect(row(el, "juice")!.textContent).toContain("No English name");
   el.view = { kind: "customer", language: "es" };
   await settle(el);
   expect(row(el, "drinks/beer/mi")!.textContent).toContain("Cerveza fría");
-  expect(row(el, "drinks")!.textContent).not.toContain("Missing translation");
+  expect(row(el, "drinks")!.textContent).not.toContain("No Spanish name");
 });
 
 it("keeps the per-mount snapshot when its caller mutates it and resets expansion for a replacement document", async () => {
@@ -157,8 +157,8 @@ it("updates interface words with the locale while preserving the chosen content 
   await el.updateComplete;
   await settle(el);
   expect(row(el, "drinks/beer/mi")!.textContent).toContain("Cold beer");
-  expect(row(el, "drinks/beer/mi")!.textContent).toContain("Producto");
-  expect(row(el, "drinks")!.textContent).toContain("Falta traducción: en");
+  expect(row(el, "drinks/beer/mi")!.querySelectorAll("td")).toHaveLength(1);
+  expect(row(el, "drinks")!.textContent).toContain("Sin nombre en inglés");
 });
 
 it("names section toggles with the content language drawn in their row", async () => {
@@ -242,12 +242,8 @@ it("uses the Structure row's indentation, row height and swatch slot for photos 
   expect(getComputedStyle(colour).backgroundColor).toBe("rgb(170, 187, 204)");
   expect(colour.getBoundingClientRect().width).toBe(photo.getBoundingClientRect().width);
   expect(colour.getBoundingClientRect().height).toBe(photo.getBoundingClientRect().height);
-  expect(table(el).columns.map((column) => column.label)).toEqual([
-    t("members.name"),
-    t("members.kind"),
-    t("editor.available"),
-  ]);
-  expect(row(el, "juice")!.querySelector('[data-test="available"]')!.textContent).toBe("—");
+  expect(table(el).columns.map((column) => column.label)).toEqual([t("members.name")]);
+  expect(row(el, "juice")!.querySelector('[data-test="available"]')).toBeNull();
 });
 
 it("puts a section's photo at the same size and position as Structure's section swatch", async () => {
@@ -574,4 +570,30 @@ it.each(
     element: el,
     path: `__screenshots__/a462-task5/preview-${width}-${language}-${theme}.png`,
   });
+});
+
+it("A498 draws one column without headings and centres a multiline section's arrow on its media", async () => {
+  const el = await mount();
+  el.view = { kind: "customer", language: "ca" };
+  await settle(el);
+  expect(table(el).columns.map((column) => column.key)).toEqual(["name"]);
+  const header = table(el).shadowRoot!.querySelector("thead")!;
+  expect(header.getBoundingClientRect().height).toBe(0);
+  const section = row(el, "drinks")!;
+  expect(section.querySelectorAll('[part~="note"]')).toHaveLength(1);
+  expect(section.textContent).toContain("No Catalan name");
+  const arrow = section.querySelector(".tree-arrow")!.getBoundingClientRect();
+  const frame = section.querySelector('[part~="folder-frame"]')!.getBoundingClientRect();
+  expect(Math.abs((arrow.top + arrow.bottom) / 2 - (frame.top + frame.bottom) / 2)).toBeLessThan(1);
+});
+
+it("A498 gives the single phone column room for a short customer name", async () => {
+  await page.viewport(390, 844);
+  const doc = fixture();
+  doc.offers.juice!.name = "Fresh orange juice";
+  const el = await mount(doc);
+  el.style.width = "310px";
+  await expect.poll(() => table(el).hasAttribute("narrow")).toBe(true);
+  const name = row(el, "juice")!.querySelector('[data-test="name"]')!;
+  expect(name.getBoundingClientRect().width).toBeGreaterThan(100);
 });

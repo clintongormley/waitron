@@ -166,6 +166,15 @@ export class MenuPreviewPanel extends LitElement {
         container-type: inline-size;
         overflow-wrap: anywhere;
       }
+      wt-combobox[slot="view"] {
+        inline-size: calc(var(--wt-tap-min) * 4);
+      }
+      .heading-line {
+        display: flex;
+        align-items: center;
+        gap: var(--wt-space-3);
+        justify-content: space-between;
+      }
       .panes {
         display: grid;
         grid-template-columns: minmax(0, 1fr);
@@ -610,16 +619,6 @@ export class MenuPreviewPanel extends LitElement {
       body = keyed(
         preview,
         html`<div>
-            <wt-button
-              variant="secondary"
-              data-test="show-all-changes"
-              .disabled=${this.hiddenChangeIds.size === 0}
-              @click=${(event: Event) => {
-                event.stopPropagation();
-                this.hiddenChangeIds = new Set();
-              }}
-              >${t("menu_preview.show_all_changes")}</wt-button
-            >
             ${this.hiddenChangeIds.size === 0 ? nothing : html`<span data-test="hidden-count">${fill(this.hiddenChangeIds.size === 1 ? "menu_preview.hidden_count_one" : "menu_preview.hidden_count", { count: String(this.hiddenChangeIds.size) })}</span>`}
             <p class="help">${t("menu_preview.hidden_hint")}</p>
           </div>
@@ -664,7 +663,23 @@ export class MenuPreviewPanel extends LitElement {
           </div>`,
       );
     return html`<section>
-      <h2 id="changes-heading">${t("menu_preview.changes_heading")}</h2>
+      <div class="heading-line">
+        <h2 id="changes-heading">${t("menu_preview.changes_heading")}</h2>
+        ${
+          preview !== null && !this.failed && preview.changes.length > 0
+            ? html`<wt-button
+                variant="secondary"
+                data-test="show-all-changes"
+                .disabled=${this.hiddenChangeIds.size === 0}
+                @click=${(event: Event) => {
+                  event.stopPropagation();
+                  this.hiddenChangeIds = new Set();
+                }}
+                >${t("menu_preview.show_all_changes")}</wt-button
+              >`
+            : nothing
+        }
+      </div>
       ${body}
     </section>`;
   }
@@ -695,24 +710,6 @@ export class MenuPreviewPanel extends LitElement {
     const config = currentContentLanguages();
     return html`<section data-test="document">
       <h2 id="document-heading">${heading}</h2>
-      <wt-combobox
-        name="menu-preview-view"
-        label=${t("customer_menu.view")}
-        .value=${view.kind === "internal" ? "internal" : view.language}
-        .options=${[
-          { value: "internal", label: t("customer_menu.internal") },
-          ...config.languages.map((language) => ({
-            value: language,
-            label:
-              new Intl.DisplayNames([currentLocale()], { type: "language" }).of(language) ??
-              language,
-          })),
-        ]}
-        @wt-change=${(event: CustomEvent<{ value: string }>) => {
-          event.stopPropagation();
-          this.selectedView = event.detail.value;
-        }}
-      ></wt-combobox>
       <p class="note">${t("customer_menu.frozen_content")}</p>
       ${this.navigationUnavailable ? html`<p role="status" data-test="navigation-unavailable">${t("customer_menu.unavailable_target")}</p>` : nothing}
       <dashboard-menu-document-tree
@@ -720,7 +717,27 @@ export class MenuPreviewPanel extends LitElement {
         .inspectionKey=${preview}
         .view=${view}
         .languages=${config}
-      ></dashboard-menu-document-tree>
+      >
+        <wt-combobox
+          slot="view"
+          name="menu-preview-view"
+          label=${t("customer_menu.view")}
+          .value=${view.kind === "internal" ? "internal" : view.language}
+          .options=${[
+            { value: "internal", label: t("customer_menu.internal") },
+            ...config.languages.map((language) => ({
+              value: language,
+              label:
+                new Intl.DisplayNames([currentLocale()], { type: "language" }).of(language) ??
+                language,
+            })),
+          ]}
+          @wt-change=${(event: CustomEvent<{ value: string }>) => {
+            event.stopPropagation();
+            this.selectedView = event.detail.value;
+          }}
+        ></wt-combobox>
+      </dashboard-menu-document-tree>
     </section>`;
   }
 
@@ -816,7 +833,6 @@ export class MenuPreviewPanel extends LitElement {
   override render() {
     return html`${this.#renderResult()} ${this.#renderWarnings()} ${this.#renderClashes()}
       ${this.#renderPublish()}
-      <slot name="schedule"></slot>
       <div class="panes">
         <div
           class="pane"
@@ -825,6 +841,7 @@ export class MenuPreviewPanel extends LitElement {
           role="region"
           aria-labelledby="changes-heading"
         >
+          <slot name="schedule"></slot>
           ${this.#renderChanges()}
         </div>
         <div
