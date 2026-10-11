@@ -1,5 +1,5 @@
 import { requireZone } from "./floor-plan.js";
-import { and, eq, exists, inArray, isNull, lt, or } from "drizzle-orm";
+import { and, eq, exists, getTableColumns, inArray, isNull, lt, or } from "drizzle-orm";
 import {
   diningTables,
   floorPlanJoins,
@@ -211,7 +211,6 @@ export async function catchUpZone(
   zoneId: string,
   now: Date,
 ): Promise<void> {
-  await requireZone(tx, cfg, zoneId);
   while (await catchUpPass(tx, cfg, removals, zoneId, now));
 }
 
@@ -223,10 +222,22 @@ async function catchUpPass(
   zoneId: string,
   now: Date,
 ): Promise<boolean> {
-  const rows = await tx
-    .select()
-    .from(floorResetTables)
-    .where(and(eq(floorResetTables.zoneId, zoneId), eq(floorResetTables.pending, true)));
+  const zoneRows = await tx
+    .select({ zoneId: floorZones.id, row: getTableColumns(floorResetTables) })
+    .from(floorZones)
+    .leftJoin(
+      floorResetTables,
+      and(eq(floorResetTables.zoneId, floorZones.id), eq(floorResetTables.pending, true)),
+    )
+    .where(
+      and(
+        eq(floorZones.id, zoneId),
+        eq(floorZones.locationId, cfg.locationId),
+        eq(floorZones.active, true),
+      ),
+    );
+  if (zoneRows.length === 0) throw new AppError("zone.not_found", { zoneId });
+  const rows = zoneRows.flatMap(({ row }) => (row === null ? [] : [row]));
   if (rows.length === 0) return false;
   const rowOf = new Map<Target, (typeof rows)[number]>();
   for (const row of rows) {

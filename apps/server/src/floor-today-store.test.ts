@@ -897,3 +897,35 @@ it.each([false, true])(
     expect(await pendingRows(z)).toEqual([]);
   },
 );
+
+describe("catch-up containing-zone validation", () => {
+  it("accepts an empty live zone without creating floor rows", async () => {
+    const z = await zone();
+    await catchUp(z);
+    expect(await liveTablesOf(z)).toEqual([]);
+    expect(await pendingRows(z)).toEqual([]);
+    expect(await todayZone(z)).toBeUndefined();
+  });
+
+  it.each(["missing", "deleted", "other-location"] as const)(
+    "refuses an empty %s zone without creating floor rows",
+    async (kind) => {
+      const z = kind === "missing" ? randomUUID() : await zone();
+      if (kind === "deleted")
+        await inTx(v, (tx) =>
+          tx.update(floorZones).set({ active: false }).where(eq(floorZones.id, z)),
+        );
+      const cfg =
+        kind === "other-location"
+          ? { ...v.cfg, locationId: randomUUID() as typeof v.cfg.locationId }
+          : v.cfg;
+      await expect(inTx(v, (tx) => catchUpZone(tx, cfg, NONE, z, NOW))).rejects.toMatchObject({
+        code: "zone.not_found",
+        params: { zoneId: z },
+      });
+      expect(await liveTablesOf(z)).toEqual([]);
+      expect(await pendingRows(z)).toEqual([]);
+      expect(await todayZone(z)).toBeUndefined();
+    },
+  );
+});
