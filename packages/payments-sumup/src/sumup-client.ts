@@ -76,9 +76,7 @@ function refundEventsOf(t: { transaction_events?: RawEvent[]; events?: RawEvent[
 /**
  * `SumUpClient` over SumUp's REST API (paths and shapes from SumUp's OpenAPI file —
  * docs/research/2026-09-10-sumup-solo-experiments.md, Provenance). Every request is
- * a bearer-keyed JSON call; a 5xx or a transport failure THROWS (the caller does not know whether
- * the operation happened), a 4xx is a definite refusal and is returned as data. Error bodies are
- * never included in a thrown message: they can echo request fields.
+ * bearer-keyed. Error bodies are never included in a thrown message: they can echo request fields.
  */
 export function sumupClient(opts: SumUpClientOptions): SumUpClient {
   const base = (opts.baseUrl ?? "https://api.sumup.com").replace(/\/$/, "");
@@ -131,7 +129,6 @@ export function sumupClient(opts: SumUpClientOptions): SumUpClient {
     const timer = setTimeout(() => controller.abort(), timeoutMs);
     try {
       const res = await send(method, path, controller.signal);
-      // Cancelling the unread body hands the connection back; its rejection carries nothing we use.
       res.body?.cancel().catch(() => undefined);
       return res.status;
     } finally {
