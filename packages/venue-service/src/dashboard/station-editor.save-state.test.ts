@@ -18,6 +18,12 @@ async function mount(printerIds = ["epson"]) {
     active: true,
     showsRestOfOrder: false,
     printerIds,
+    timingOverrides: {
+      warmAfterMinutes: null,
+      overdueAfterMinutes: 5,
+      forgottenAfterMinutes: null,
+    },
+    timingDefaults: { warmAfterMinutes: 3, overdueAfterMinutes: 10, forgottenAfterMinutes: 15 },
   };
   el.printers = [
     { id: "epson", name: "Epson" },
@@ -100,4 +106,15 @@ it("keeps Save working after a refusal and disabled while saving", async () => {
   expect(await saveState(el)).toEqual(ready);
   el.busy = true;
   expect((await saveState(el)).disabled).toBe(true);
+});
+
+it("compares a timing as its number: 05 over an override of 5 stays quiet, abc wakes Save, undo quiets", async () => {
+  const el = await mount();
+  const overdue = "wt-input[name=overdueAfterMinutes]";
+  await change(el, overdue, { value: "05" });
+  expect(await saveState(el)).toEqual(quiet);
+  await change(el, overdue, { value: "abc" });
+  expect(await saveState(el)).toEqual(ready);
+  await change(el, overdue, { value: "5" });
+  expect(await saveState(el)).toEqual(quiet);
 });

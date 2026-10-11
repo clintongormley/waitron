@@ -1049,6 +1049,8 @@ export class PrepStationsScreen extends LitElement {
           active: station.active,
           showsRestOfOrder: station.showsRestOfOrder,
           printerIds: this.#printersOf(station.id),
+          timingOverrides: station.timingOverrides,
+          timingDefaults: station.timingDefaults,
         }}
         .printers=${this.view.printers}
         .canManagePrinters=${canManagePrinters}

@@ -18,6 +18,7 @@ import "@waitron/ui/src/components/wt-switch.js";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import { codeOf } from "@waitron/dashboard-kit";
+import type { StationThresholds } from "@waitron/shared";
 import { t } from "./strings.js";
 
 export interface StationEditorStation {
@@ -26,6 +27,9 @@ export interface StationEditorStation {
   active: boolean;
   showsRestOfOrder: boolean;
   printerIds: readonly string[];
+  /** A null timing follows the venue default. */
+  timingOverrides: { [K in TimingField]: number | null };
+  timingDefaults: StationThresholds;
 }
 export interface StationEditorPrinter {
   id: string;
@@ -37,9 +41,24 @@ export type StationEditorSave = {
   name?: string;
   printerIds?: string[];
   showsRestOfOrder?: boolean;
-};
+} & { [K in TimingField]?: number | null };
 
-type Draft = { name: string; printerIds: string[]; showsRestOfOrder: boolean };
+const TIMING_FIELDS = ["warmAfterMinutes", "overdueAfterMinutes", "forgottenAfterMinutes"] as const;
+type TimingField = (typeof TIMING_FIELDS)[number];
+const TIMING_LABELS = {
+  warmAfterMinutes: "prep.warm",
+  overdueAfterMinutes: "prep.overdue",
+  forgottenAfterMinutes: "prep.forgotten",
+} as const;
+const isTimingField = (value: unknown): value is TimingField =>
+  (TIMING_FIELDS as readonly unknown[]).includes(value);
+type Field = "name" | "printers" | TimingField;
+
+type Draft = {
+  name: string;
+  printerIds: string[];
+  showsRestOfOrder: boolean;
+} & { [K in TimingField]: string };
 export type StationRefusal = { code: string; params?: Record<string, unknown> };
 type Refusal = StationRefusal;
 
@@ -60,10 +79,42 @@ export function refusalOf(error: unknown): StationRefusal {
 const sameSet = (a: readonly string[], b: readonly string[]) =>
   a.length === b.length && a.every((id) => b.includes(id));
 const copy = (draft: Draft): Draft => ({ ...draft, printerIds: [...draft.printerIds] });
+/** "05" reads as "5"; text that is not a number stays as typed, so it counts as a change. */
+const timingText = (value: string) => {
+  const text = value.trim();
+  return text === "" || !Number.isFinite(Number(text)) ? text : String(Number(text));
+};
 const equal = (a: Draft, b: Draft) =>
   a.name.trim() === b.name.trim() &&
   a.showsRestOfOrder === b.showsRestOfOrder &&
-  sameSet(a.printerIds, b.printerIds);
+  sameSet(a.printerIds, b.printerIds) &&
+  TIMING_FIELDS.every((field) => timingText(a[field]) === timingText(b[field]));
+
+/** Each timing's own check, then the order with a blank read as its venue default. */
+function timingErrors(
+  draft: Draft,
+  defaults: StationThresholds,
+): Partial<Record<TimingField, string>> {
+  const errors: Partial<Record<TimingField, string>> = {};
+  const minutes: Partial<Record<TimingField, number>> = {};
+  for (const field of TIMING_FIELDS) {
+    const text = draft[field].trim();
+    const value = text === "" ? defaults[field] : Number(text);
+    if (text !== "" && !(Number.isInteger(value) && value >= 1 && value <= 2_147_483_647))
+      errors[field] = t("prep.threshold_invalid");
+    else minutes[field] = value;
+  }
+  const {
+    warmAfterMinutes: warm,
+    overdueAfterMinutes: overdue,
+    forgottenAfterMinutes: forgotten,
+  } = minutes;
+  if (warm !== undefined && overdue !== undefined && overdue <= warm)
+    errors.overdueAfterMinutes = t("prep.threshold_invalid");
+  if (overdue !== undefined && forgotten !== undefined && forgotten <= overdue)
+    errors.forgottenAfterMinutes = t("prep.threshold_invalid");
+  return errors;
+}
 
 /** The printers a station may print on: active ones, plus any it already has. */
 export function stationPrinterOptions(
@@ -90,9 +141,15 @@ export function listedPrinterIds(
 }
 
 /** Where a station-write refusal belongs: a field it names, or the line above the buttons. */
-export function stationRefusalField(refusal: Refusal | undefined): "name" | "printers" | undefined {
+export function stationRefusalField(refusal: Refusal | undefined): Field | undefined {
   if (refusal === undefined) return undefined;
   if (refusal.code === "station.name_taken") return "name";
+  if (
+    (refusal.code === "station.thresholds_invalid" ||
+      refusal.code === "management.request_invalid") &&
+    isTimingField(refusal.params?.field)
+  )
+    return refusal.params.field;
   if (
     refusal.code === "printer.not_found" ||
     (refusal.code === "management.request_invalid" && refusal.params?.field === "printerIds") ||
@@ -111,11 +168,22 @@ function refusalText(refusal: Refusal): string {
       return refusal.code === "authorization.not_permitted"
         ? t("prep.printers_not_permitted")
         : t("prep.printers_refused");
-    default:
+    case undefined:
       return refusal.code === "station.not_found"
         ? `${t("prep.save_error")} ${t("prep.station_not_found")}`
         : t("prep.save_error");
+    default:
+      return t("prep.threshold_invalid");
   }
+}
+
+function timingDraft(overrides: StationEditorStation["timingOverrides"]) {
+  return Object.fromEntries(
+    TIMING_FIELDS.map((field) => [
+      field,
+      overrides[field] === null ? "" : String(overrides[field]),
+    ]),
+  ) as { [K in TimingField]: string };
 }
 
 @customElement("prep-station-editor")
@@ -157,7 +225,14 @@ export class StationEditor extends LitElement {
   @property({ type: Boolean }) canManagePrinters = false;
   @property({ attribute: false }) refusal?: Refusal;
 
-  @state() private draft: Draft = { name: "", printerIds: [], showsRestOfOrder: false };
+  @state() private draft: Draft = {
+    name: "",
+    printerIds: [],
+    showsRestOfOrder: false,
+    warmAfterMinutes: "",
+    overdueAfterMinutes: "",
+    forgottenAfterMinutes: "",
+  };
   @state() private attempted = false;
   /** A chosen printer left the printer list, so the draft lost it. */
   @state() private printerDropped = false;
@@ -204,6 +279,7 @@ export class StationEditor extends LitElement {
         name: station.name,
         printerIds: [...station.printerIds],
         showsRestOfOrder: station.showsRestOfOrder,
+        ...timingDraft(station.timingOverrides),
       };
       this.baseline = copy(this.draft);
       this.attempted = false;
@@ -265,11 +341,14 @@ export class StationEditor extends LitElement {
     return this.canManagePrinters && this.station?.active === true;
   }
 
-  private nameError(): string {
-    return this.draft.name.trim() === "" ? t("prep.name_required") : "";
+  private fieldErrors(): Partial<Record<"name" | TimingField, string>> {
+    return {
+      ...(this.draft.name.trim() === "" ? { name: t("prep.name_required") } : {}),
+      ...timingErrors(this.draft, this.station!.timingDefaults),
+    };
   }
 
-  private changed(draft: Draft, field: "name" | "printers" | "rest") {
+  private changed(draft: Draft, field: Field | "rest") {
     this.draft = draft;
     this.printerDropped = false;
     if (stationRefusalField(this.refusal) === field) this.refusal = undefined;
@@ -287,6 +366,11 @@ export class StationEditor extends LitElement {
       ...(draft.showsRestOfOrder !== base.showsRestOfOrder
         ? { showsRestOfOrder: draft.showsRestOfOrder }
         : {}),
+      ...Object.fromEntries(
+        TIMING_FIELDS.filter((field) => timingText(draft[field]) !== timingText(base[field])).map(
+          (field) => [field, draft[field].trim() === "" ? null : Number(draft[field].trim())],
+        ),
+      ),
     };
   }
 
@@ -306,7 +390,7 @@ export class StationEditor extends LitElement {
     this.attempted = true;
     this.refusal = undefined;
     this.printerDropped = false;
-    if (this.nameError()) {
+    if (Object.keys(this.fieldErrors()).length > 0) {
       void this.updateComplete.then(() => focusFirstInvalid(this.shadowRoot!));
       return;
     }
@@ -361,11 +445,13 @@ export class StationEditor extends LitElement {
   override render(): unknown {
     if (!this.open || this.station === undefined) return nothing;
     const s = saveActionState(this.scope);
-    const nameError = this.attempted ? this.nameError() : "";
+    const errors = this.attempted ? this.fieldErrors() : {};
+    const invalid = Object.keys(errors).length > 0;
+    const nameError = errors.name ?? "";
     const refusal = this.refusal;
     const refusedField = stationRefusalField(refusal);
     const fieldMessage = refusal && refusedField ? refusalText(refusal) : "";
-    const marked = nameError !== "" || refusedField !== undefined;
+    const marked = invalid || refusedField !== undefined;
     const unplaced = refusal && !refusedField ? refusalText(refusal) : "";
     const generation = this.generation;
     // Fields stay editable while a save is sent: a newer edit stays as the draft once it is written.
@@ -406,6 +492,28 @@ export class StationEditor extends LitElement {
               ? html`<p class="note">${t("prep.printers_need_active")}</p>`
               : nothing
           }
+          ${TIMING_FIELDS.map(
+            (field) =>
+              html`<wt-input
+                name=${field}
+                label=${t(TIMING_LABELS[field])}
+                type="number"
+                placeholder=${String(this.station!.timingDefaults[field])}
+                hint=${t("prep.inherit_minutes")}
+                .value=${this.draft[field]}
+                .error=${errors[field] || (refusedField === field ? fieldMessage : "")}
+                @wt-change=${(event: CustomEvent<{ value: string }>) => {
+                  event.stopPropagation();
+                  if (current())
+                    this.changed({ ...this.draft, [field]: event.detail.value }, field);
+                }}
+                @keydown=${(event: KeyboardEvent) =>
+                  submitOnEnter(
+                    event,
+                    this.shadowRoot!.querySelector("[data-test=save-station-edit]"),
+                  )}
+              ></wt-input>`,
+          )}
           <wt-switch
             name="showsRestOfOrder"
             label=${t("prep.shows_rest_of_order")}
@@ -442,7 +550,7 @@ export class StationEditor extends LitElement {
           <wt-button
             data-test="save-station-edit"
             variant=${this.nothingToSend ? "secondary" : s.variant}
-            ?disabled=${s.unchanged || this.nothingToSend || this.busy || nameError !== ""}
+            ?disabled=${s.unchanged || this.nothingToSend || this.busy || invalid}
             ?loading=${this.busy}
             @click=${() => {
               if (current()) this.save();
