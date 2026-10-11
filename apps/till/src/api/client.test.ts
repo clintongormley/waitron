@@ -1880,15 +1880,11 @@ describe("TillApi", () => {
   });
 
   it("getTablesState GETs the occupancy read-model, decoding zoneId + pendingToServe + readyToServe + enRoute + timingBand and the tab fields", async () => {
-    // Typed `TableState[]` so `tsc` checks the client mirror carries every field. An open-tab row
-    // carries the optional tab fields and a manual `status`; a free row omits the tab fields and nulls
-    // zone/capacity/status.
     const rows: TableState[] = [
       {
         id: "t1",
         label: "Mesa 1",
         zoneId: "z1",
-        capacity: 4,
         state: "open-tab",
         condition: "free",
         hasOpenTab: true,
@@ -1901,12 +1897,14 @@ describe("TillApi", () => {
         timingBand: "forgotten",
         status: { id: "s1", label: "Reservada", color: "#ff0000" },
         nextReservation: { time: "20:30" },
-        // A PLACED table carries its coordinates, shape and rotation…
-        posX: 250,
-        posY: 400,
-        shape: "round",
-        rotation: 15,
-        today: null,
+        today: {
+          placement: { x: 2, y: 3, width: 8, height: 8, shape: "round", rotation: 15 },
+          seats: 4,
+          fixed: false,
+          takenOff: false,
+          joinId: null,
+          joinSeats: null,
+        },
         signals: [],
         party: null,
       },
@@ -1914,7 +1912,6 @@ describe("TillApi", () => {
         id: "t2",
         label: "Mesa 2",
         zoneId: null,
-        capacity: null,
         state: "free",
         condition: "needs_clearing",
         hasOpenTab: false,
@@ -1925,11 +1922,6 @@ describe("TillApi", () => {
         timingBand: "fresh",
         status: null,
         nextReservation: null,
-        // …while an UNPLACED table nulls all four (it belongs in the tray, not on the map).
-        posX: null,
-        posY: null,
-        shape: null,
-        rotation: null,
         today: null,
         signals: [],
         party: null,
@@ -1949,10 +1941,16 @@ describe("TillApi", () => {
       pendingToServe: 2,
       readyToServe: 3,
       enRoute: 1,
-      posX: 250,
-      shape: "round",
+      today: {
+        placement: { x: 2, y: 3, width: 8, height: 8, shape: "round", rotation: 15 },
+        seats: 4,
+        fixed: false,
+        takenOff: false,
+        joinId: null,
+        joinSeats: null,
+      },
     });
-    expect(r[1]).toMatchObject({ posX: null, shape: null });
+    expect(r[1]).toMatchObject({ today: null });
   });
 
   it("getTabLines GETs the open tab's lines, decoding the locked price + served state per line", async () => {

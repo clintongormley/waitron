@@ -16,7 +16,6 @@ function table(over: Partial<TableState> = {}): TableState {
     id: "t1",
     label: "1",
     zoneId: "z1",
-    capacity: 4,
     state: "free",
     condition: "free",
     hasOpenTab: false,
@@ -27,10 +26,6 @@ function table(over: Partial<TableState> = {}): TableState {
     timingBand: "fresh",
     status: null,
     nextReservation: null,
-    posX: null,
-    posY: null,
-    shape: null,
-    rotation: null,
     today: null,
     signals: [],
     party: null,
@@ -296,7 +291,7 @@ describe("zones and their tables", () => {
   it("reads seats only from today or its merge, with none without a today row", () => {
     expect(seatsFor(table({ today: today({ seats: 6 }) }))).toBe(6);
     expect(seatsFor(table({ today: today({ seats: 6, joinId: "j1", joinSeats: 10 }) }))).toBe(10);
-    expect(seatsFor(table({ capacity: 4 }))).toBeNull();
-    expect(seatsFor(table({ capacity: 4, today: today({ seats: null }) }))).toBeNull();
+    expect(seatsFor(table({}))).toBeNull();
+    expect(seatsFor(table({ today: today({ seats: null }) }))).toBeNull();
   });
 });
