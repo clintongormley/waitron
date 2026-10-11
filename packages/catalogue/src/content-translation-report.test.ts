@@ -5,7 +5,11 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 import type { ContentLanguages } from "@waitron/shared";
 import { CATALOGUE_MIGRATIONS } from "./migrations.js";
-import { listContentTranslationGaps, writeContentLanguages } from "./content-languages.js";
+import {
+  listContentTranslationGaps,
+  readContentLanguages,
+  writeContentLanguages,
+} from "./content-languages.js";
 import { listTranslationGapReport } from "./content-translation-report.js";
 import {
   createCatalogue,
@@ -401,7 +405,7 @@ describe("the missing-translations report", () => {
   });
 
   describe("leaves out what nobody can order", () => {
-    it("a deleted product, which the default-change check still counts", async () => {
+    it("a deleted product in both the report and the default-change check", async () => {
       await seedTenant(suite.db);
       await withTransaction(suite.db, async (tx) => {
         const menu = await venue(tx);
@@ -409,9 +413,9 @@ describe("the missing-translations report", () => {
         expect((await report(tx))("ca")).toHaveLength(1);
         await deactivateProduct(tx, product.id);
         expect((await report(tx))("ca")).toEqual([]);
-        expect(await listContentTranslationGaps(tx, "ca")).toEqual([
-          { kind: "product", id: product.id },
-        ]);
+        expect(await listContentTranslationGaps(tx, "ca")).toEqual([]);
+        await writeContentLanguages(tx, CATALAN_DEFAULT);
+        expect(await readContentLanguages(tx, "es")).toEqual(CATALAN_DEFAULT);
       });
     });
 
@@ -438,6 +442,40 @@ describe("the missing-translations report", () => {
         expect((await report(tx))("ca")).toHaveLength(2);
         await deactivateProduct(tx, product.id);
         expect((await report(tx))("ca")).toEqual([]);
+        expect(await listContentTranslationGaps(tx, "ca")).toEqual([]);
+        await writeContentLanguages(tx, CATALAN_DEFAULT);
+        expect(await readContentLanguages(tx, "es")).toEqual(CATALAN_DEFAULT);
+      });
+    });
+
+    it("an active variant retained under an archived product", async () => {
+      await seedTenant(suite.db);
+      await withTransaction(suite.db, async (tx) => {
+        const menu = await venue(tx);
+        const product = await bread(tx, menu.id, null);
+        const [variant] = await setProductVariants(
+          tx,
+          product.id,
+          [
+            {
+              name: "STAFF Small",
+              customerName: { es: "CLIENT-ES Pequeño" },
+              kitchenName: "KITCHEN Small",
+              image: null,
+              unitPrice: "2.00",
+              available: true,
+            },
+          ],
+          "es",
+        );
+        expect(await listContentTranslationGaps(tx, "ca")).toEqual([
+          { kind: "variant", id: variant!.id, productId: product.id },
+        ]);
+        await tx.update(products).set({ active: false }).where(eq(products.id, product.id));
+        expect((await report(tx))("ca")).toEqual([]);
+        expect(await listContentTranslationGaps(tx, "ca")).toEqual([]);
+        await writeContentLanguages(tx, CATALAN_DEFAULT);
+        expect(await readContentLanguages(tx, "es")).toEqual(CATALAN_DEFAULT);
       });
     });
 
@@ -457,6 +495,9 @@ describe("the missing-translations report", () => {
           .values({ listId: list!.id, name: "STAFF Rare", customerName: { es: "CLIENT-ES Poco" } });
         await tx.insert(optionLabels).values({ listId: list!.id, name: "STAFF Well done" });
         expect((await report(tx))("ca")).toEqual([]);
+        expect(await listContentTranslationGaps(tx, "ca")).toEqual([]);
+        await writeContentLanguages(tx, CATALAN_DEFAULT);
+        expect(await readContentLanguages(tx, "es")).toEqual(CATALAN_DEFAULT);
         await tx.update(optionLists).set({ active: true }).where(eq(optionLists.id, list!.id));
         expect((await report(tx))("ca")).toHaveLength(3);
       });
@@ -471,6 +512,9 @@ describe("the missing-translations report", () => {
           active: false,
         });
         expect((await report(tx))("ca")).toEqual([]);
+        expect(await listContentTranslationGaps(tx, "ca")).toEqual([]);
+        await writeContentLanguages(tx, CATALAN_DEFAULT);
+        expect(await readContentLanguages(tx, "es")).toEqual(CATALAN_DEFAULT);
         await tx.update(extraLists).set({ active: true });
         expect((await report(tx))("ca")).toHaveLength(1);
       });
@@ -488,6 +532,9 @@ describe("the missing-translations report", () => {
         expect((await report(tx))("ca")).toHaveLength(1);
         await deactivateCatalogue(tx, lunch.id);
         expect((await report(tx))("ca")).toEqual([]);
+        expect(await listContentTranslationGaps(tx, "ca")).toEqual([]);
+        await writeContentLanguages(tx, CATALAN_DEFAULT);
+        expect(await readContentLanguages(tx, "es")).toEqual(CATALAN_DEFAULT);
       });
     });
 
@@ -509,6 +556,9 @@ describe("the missing-translations report", () => {
         expect((await report(tx))("ca")).toHaveLength(3);
         await deactivateCatalogue(tx, menu.id);
         expect((await report(tx))("ca")).toEqual([]);
+        expect(await listContentTranslationGaps(tx, "ca")).toEqual([]);
+        await writeContentLanguages(tx, CATALAN_DEFAULT);
+        expect(await readContentLanguages(tx, "es")).toEqual(CATALAN_DEFAULT);
       });
     });
   });

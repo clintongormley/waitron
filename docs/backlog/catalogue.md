@@ -333,16 +333,6 @@ locale)` (`packages/catalogue/src/product-presentation.ts`), the shape A172 fixe
   receipt language before it gets there (`apps/server/src/working-order.ts`), so whether any
   surface shows the difference is unknown; reproduce before fixing.
 
-## The default-change check counts deleted and switched-off things — OPEN (noted 2026-10-01 by C122; I believe this predates the branch)
-
-- **The default-change check counts deleted and switched-off things — OPEN (noted 2026-10-01 by
-  C122; I believe this predates the branch).** `listContentTranslationGaps`
-  (`packages/catalogue/src/content-languages.ts`) has no `active` filter on top-level products,
-  options lists, extras lists or a menu's sections, and keeps a variant whose product is deleted, so
-  a deleted product's partly translated name blocks a change of default while the Missing
-  translations list leaves it out. The case "a deleted product, which the default-change check
-  still counts" in `packages/catalogue/src/content-translation-report.test.ts` pins today's answer.
-
 ## Language resolution follow-ons
 
 - **Language resolution follow-ons**
