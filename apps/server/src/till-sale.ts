@@ -250,6 +250,9 @@ export interface TillSaleResult extends ReceiptPresentation {
   receiptHeader?: { tradingName: string; printTradingName: boolean };
   /** The language the sale was filed in (`sales.locale`). */
   locale: string;
+  /** The language its goods' names, units and options answers were saved in
+   * (`sales.invoice_locales[0]`); absent reads as `locale`. */
+  namesLocale?: string;
   orderLabel: string | null;
   orderNumber: number;
   /** `NumSerieFactura`-shaped "A/1", read back from the sale row + its series after filing. */
@@ -726,6 +729,7 @@ export async function readSettledTicket(
       issuedAt: sales.issuedAt,
       total: sales.total,
       locale: sales.locale,
+      invoiceLocales: sales.invoiceLocales,
     })
     .from(sales)
     .innerJoin(invoiceSeries, eq(invoiceSeries.id, sales.seriesId))
@@ -765,6 +769,7 @@ export async function readSettledTicket(
     ...(await readReceiptOrder(tx, cfg, workingOrderId)),
     ...(await readReceiptPresentation(tx, cfg, issued.saleId, issued.locale)),
     locale: issued.locale,
+    namesLocale: issued.invoiceLocales[0]!,
     invoiceNumber: formatInvoiceNumber(issued.code, issued.number),
     // So a replay's `issuedAt` reads identically to the original's `fiscal.issuedAt.toISOString()`.
     issuedAt: new Date(issued.issuedAt).toISOString(),
@@ -917,6 +922,7 @@ async function fileImmediateSale(
     ...(await readReceiptPresentation(tx, cfg, saleId, language.locale)),
     ...(await readReceiptOrder(tx, cfg, workingOrderId)),
     locale: language.locale,
+    namesLocale: language.invoiceLocales[0]!,
     invoiceNumber: await readInvoiceNumber(tx, saleId),
     issuedAt: fiscal.issuedAt.toISOString(),
     total: priced.total,
@@ -1470,6 +1476,7 @@ async function finalizeCapture(
         ...(await readReceiptPresentation(tx, cfg, saleId, language.locale)),
         ...(await readReceiptOrder(tx, cfg, req.id)),
         locale: language.locale,
+        namesLocale: language.invoiceLocales[0]!,
         invoiceNumber: await readInvoiceNumber(tx, saleId),
         issuedAt: fiscal.issuedAt.toISOString(),
         total: priced.total,
@@ -1623,6 +1630,7 @@ async function finalizeRecovery(
       ...(await readReceiptPresentation(tx, cfg, saleId, language.locale)),
       ...(await readReceiptOrder(tx, cfg, req.id)),
       locale: language.locale,
+      namesLocale: language.invoiceLocales[0]!,
       invoiceNumber: await readInvoiceNumber(tx, saleId),
       issuedAt: fiscal.issuedAt.toISOString(),
       total: priced.total,

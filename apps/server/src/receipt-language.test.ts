@@ -16,7 +16,14 @@ import {
   type Database,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { createCatalogue, createCategory, createProduct } from "@waitron/catalogue";
+import {
+  createCatalogue,
+  createCategory,
+  createOptionList,
+  createProduct,
+  createUnit,
+  writeProductModifiers,
+} from "@waitron/catalogue";
 import { VerifactuBackend } from "@waitron/fiscal-verifactu";
 import type { TrustedClock } from "@waitron/fiscal";
 import {
@@ -710,6 +717,146 @@ describe("an issued receipt reprinted in another receipt language", () => {
   });
 });
 
+describe("a sale in a chosen receipt language prints its goods in the language they were saved in", () => {
+  /** A Barcelona venue saved as Catalan, offering Catalan, Spanish and Galician, selling a dish
+   *  whose customer name, unit and options answer differ in every language. */
+  async function goodsVenue() {
+    const v = await venueWith(suite.db, ["ca-ES"], BARCELONA);
+    expect(await tillReceiptLanguages(v)).toEqual(["ca-ES", "es-ES", "gl-ES"]);
+    const goods = await withTransaction(suite.db, async (tx) => {
+      const menu = await createCatalogue(tx, { name: "Racions" });
+      const unit = await createUnit(
+        tx,
+        {
+          name: { es: "ES ración", ca: "CA ració", gl: "GL ración" },
+          precision: 0,
+          abbreviation: { es: "ES-rac", ca: "CA-rac", gl: "GL-rac" },
+        },
+        "es",
+      );
+      const product = await createProduct(tx, {
+        catalogueId: menu.id,
+        categoryId: null,
+        name: "STAFF Torrada",
+        customerName: {
+          es: "CLIENT-ES Tostada",
+          ca: "CLIENT-CA Torrada",
+          gl: "CLIENT-GL Torrada",
+        },
+        kitchenName: "KITCHEN Torrada",
+        unitId: unit.id,
+        unitPrice: "2.00",
+        vatClass: "general",
+      });
+      const bread = await createOptionList(
+        tx,
+        {
+          name: "STAFF Pa",
+          customerName: { es: "ES Tipo de pan", ca: "CA Tipus de pa", gl: "GL Tipo de pan" },
+          kitchenName: "KITCHEN Pa",
+          defaultLabelId: null,
+          active: true,
+          labels: [
+            {
+              name: "STAFF Segol",
+              customerName: { es: "ES Centeno", ca: "CA Sègol", gl: "GL Centeo" },
+              kitchenName: "KITCHEN Segol",
+              available: true,
+            },
+          ],
+        },
+        "es",
+      );
+      await writeProductModifiers(tx, product.id, [{ kind: "options", id: bread.id }]);
+      const offers = await offerProducts(tx, v.cfg, { productIds: [product.id] });
+      return {
+        menuItemId: offers.offerFor(product.id),
+        options: [{ listId: bread.id, labelId: bread.labels[0]!.id }],
+      };
+    });
+    return { v, goods };
+  }
+
+  /** Every printed line, its runs of spaces closed up. */
+  const flat = (lines: string[]) => lines.map((line) => line.replace(/\s+/g, " "));
+
+  /** The Catalan goods, and no other language's. */
+  function expectCatalanGoods(receipt: string[]): void {
+    const lines = flat(receipt);
+    expect(lines.some((line) => /^2 CA-rac CLIENT-CA Torrada /u.test(line))).toBe(true);
+    expect(lines).toContain("CA Tipus de pa: CA Sègol");
+    for (const other of ["ES-rac", "GL-rac", "CLIENT-ES", "CLIENT-GL", "ES Tipo", "GL Tipo"]) {
+      expect(
+        lines.some((line) => line.includes(other)),
+        other,
+      ).toBe(false);
+    }
+  }
+
+  async function sellChosen(
+    v: Venue,
+    goods: Awaited<ReturnType<typeof goodsVenue>>["goods"],
+    id: string = randomUUID(),
+  ) {
+    const res = await v.app.request("/api/sales", {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie: v.till },
+      body: JSON.stringify({
+        workingOrderId: id,
+        lines: [{ menuItemId: goods.menuItemId, quantity: "2", options: goods.options }],
+        tender: { method: "cash", amount: "5.00" },
+        receiptLanguage: "es-ES",
+      }),
+    });
+    return {
+      id,
+      status: res.status,
+      body: (await res.json()) as { locale?: string; namesLocale?: string },
+    };
+  }
+
+  it("prints Spanish fixed words with the Catalan dish name, unit and options answer", async () => {
+    const { v, goods } = await goodsVenue();
+
+    const sale = await sellChosen(v, goods);
+
+    expect(sale.status).toBe(200);
+    expect(sale.body.locale).toBe("es-ES");
+    expect(sale.body.namesLocale).toBe("ca-ES");
+    expect(await saleRow(suite.db, sale.id)).toEqual({
+      locale: "es-ES",
+      invoiceLocales: ["ca-ES", "es-ES"],
+    });
+    const [receipt] = await takePrinted(suite.db);
+    for (const label of ["Factura", "Fecha", "IVA", "Efectivo", "Cambio"]) {
+      expect(startsWith(receipt!, label), label).toBe(true);
+    }
+    for (const label of ["Data", "Efectiu", "Canvi"]) {
+      expect(startsWith(receipt!, label), label).toBe(false);
+    }
+    expectCatalanGoods(receipt!);
+  });
+
+  it("prints a Galician copy with the Catalan goods, and answers the names' language on a replay", async () => {
+    const { v, goods } = await goodsVenue();
+    const sale = await sellChosen(v, goods);
+    expect(sale.status).toBe(200);
+    await takePrinted(suite.db);
+
+    expect((await reprint(v, sale.id, { language: "gl-ES" })).status).toBe(200);
+    const [copy] = await takePrinted(suite.db);
+    expect(startsWith(copy!, "IVE"), "IVE").toBe(true);
+    expect(copy).toContain("DUPLICADO");
+    expect(startsWith(copy!, "IVA")).toBe(false);
+    expectCatalanGoods(copy!);
+
+    // The same sale sent again answers the ticket read back from the filed sale.
+    const replay = await sellChosen(v, goods, sale.id);
+    expect(replay.status).toBe(200);
+    expect(replay.body).toMatchObject({ locale: "es-ES", namesLocale: "ca-ES" });
+  });
+});
+
 describe("the receipt language staff choose is saved on the order", () => {
   /** A Madrid venue saved as Catalan, with Spanish and Catalan content: it offers ca-ES and es-ES. */
   async function choosingVenue(): Promise<BillVenue> {
@@ -1057,6 +1204,7 @@ describe("a sale files in the receipt language saved on its order", () => {
 
       expect(last.status).toBe(200);
       expect(await filed(venue, billId)).toEqual(expected);
+      expect(last.json.invoice).toMatchObject({ locale: expected.locale, namesLocale: "ca-ES" });
     });
 
     it("files a bill a discount leaves paid", async () => {
@@ -1180,6 +1328,7 @@ describe("a sale files in the receipt language saved on its order", () => {
 
       expect(paid.status).toBe(200);
       expect(paid.json.locale).toBe(expected.locale);
+      expect(paid.json.namesLocale).toBe("ca-ES");
       expect(await filed(venue, id)).toEqual({ ...expected, lines: [{ "ca-ES": "CA Tarta" }] });
     });
 
@@ -1201,6 +1350,10 @@ describe("a sale files in the receipt language saved on its order", () => {
       });
 
       expect(out.outcome).toBe("captured");
+      expect(out.outcome === "captured" && out.ticket).toMatchObject({
+        locale: expected.locale,
+        namesLocale: "ca-ES",
+      });
       expect(await filed(venue, id)).toEqual({ ...expected, lines: [{ "ca-ES": "CA Tarta" }] });
     });
 
@@ -1229,6 +1382,10 @@ describe("a sale files in the receipt language saved on its order", () => {
       const out = await payWorkingOrderIntegrated(deps, venue.cfg, { id, lines: [] });
 
       expect(out.outcome).toBe("captured");
+      expect(out.outcome === "captured" && out.ticket).toMatchObject({
+        locale: expected.locale,
+        namesLocale: "ca-ES",
+      });
       expect(await filed(venue, id)).toEqual({ ...expected, lines: [{ "ca-ES": "CA Tarta" }] });
     });
   });
@@ -1523,6 +1680,7 @@ describe("a sale files in the receipt language saved on its order", () => {
 
       expect(collected.status).toBe(200);
       expect(collected.json.locale).toBe("es-ES");
+      expect(collected.json.namesLocale).toBe("ca-ES");
       expect((await orderRow(venue, id))?.receiptLocale).toBe("es-ES");
       expect(await filed(venue, id)).toEqual(SPANISH_TARTA);
     });

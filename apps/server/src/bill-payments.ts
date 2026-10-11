@@ -750,6 +750,7 @@ async function issueWhenFullyPaid(
     ...(selected.recipient === undefined ? {} : { recipient: selected.recipient }),
     ...receiptOrder,
     locale: language.locale,
+    namesLocale: language.invoiceLocales[0]!,
     invoiceNumber: await readInvoiceNumber(tx, saleId),
     issuedAt: fiscal.issuedAt.toISOString(),
     total: priced.total,

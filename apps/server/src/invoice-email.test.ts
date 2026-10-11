@@ -255,6 +255,52 @@ describe("invoice SMTP transport", () => {
     },
   );
 
+  it.each([
+    ["es-ES", "Factura FF/1", "Fecha de operación"],
+    ["eu-ES", "Faktura FF/1", "Eragiketaren data"],
+  ] as const)(
+    "words a %s invoice's subject and page in its own language and its goods in the names' language",
+    async (invoiceLocale, subject, fixedWords) => {
+      const rig = await smtpRig("accepted");
+      try {
+        const named = (index: number) => ({
+          "ca-ES": `CA plat ${index}`,
+          "es-ES": `ES plato ${index}`,
+          "eu-ES": `EU platera ${index}`,
+        });
+        const document = {
+          ...fixture,
+          invoiceLocale,
+          namesLocale: "ca-ES",
+          result: {
+            ...fixture.result,
+            locale: invoiceLocale,
+            namesLocale: "ca-ES",
+            lines: fixture.result.lines.map((line, index) => ({
+              ...line,
+              descriptions: named(index),
+            })),
+          },
+        };
+        expect(
+          await createInvoiceEmailSender(rig.config)({
+            recipient: "customer@example.test",
+            document,
+          }),
+        ).toEqual({ status: "sent" });
+        const message = rig.messages[0]!;
+        expect(message).toContain(`Subject: ${subject}`);
+        const text = (await attachmentText(message)).replace(/\s+/g, " ");
+        expect(text).toContain(fixedWords);
+        expect(text).toContain("CA plat 0");
+        expect(text).not.toContain("ES plato");
+        expect(text).not.toContain("EU platera");
+      } finally {
+        await rig.close();
+      }
+    },
+  );
+
   it.each(["recipient-refused", "data-refused"] as const)(
     "returns a sanitised certain refusal for %s",
     async (reply) => {

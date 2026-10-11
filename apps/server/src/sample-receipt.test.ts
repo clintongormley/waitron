@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { formatSampleReceipt } from "./sample-receipt.js";
+import { formatSampleReceipt, sampleSale } from "./sample-receipt.js";
 import { printedCommands, printedLines } from "./testing/decode-ticket.js";
 
 const WORDS = { caption: "CAP-X", legend: "LEG-Y" };
@@ -51,5 +51,11 @@ describe("formatSampleReceipt", () => {
     expect(text).not.toContain("VERI*FACTU");
     expect(text).not.toContain("QR tributario");
     expect(text).toContain("MUESTRA/1");
+  });
+
+  it("names the language its goods were written in", () => {
+    const sale = sampleSale(undefined);
+    expect(sale.namesLocale).toBe("es-ES");
+    expect(Object.keys(sale.lines[0]!.descriptions)).toEqual(["es-ES"]);
   });
 });
