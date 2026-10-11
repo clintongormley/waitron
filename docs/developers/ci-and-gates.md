@@ -1608,8 +1608,9 @@ dates, such as the in-flight core 0140 and venue-service 0049, add 1,000 ms; the
 not been measured here. A new reset may require measuring this allowance again.
 
 `scripts/migration-upgrade-budget.test.mjs` sends the captured elapsed time through the real
-`reportStallAfter` with an injected clock: the old budget rejects it, the new budget accepts it,
-and a walk at its new deadline still fails. It also checks a doubled walk. All migration,
+`reportStallAfter` with an injected clock: the new budget accepts it, and a walk at its new deadline
+still fails. During A489's failing-test experiment, substituting the old 110,000 ms budget rejected
+the captured workload and the doubled walk. All migration,
 row-preservation, reset and trigger assertions in the upgrade test stay in force.
 
 ### The upgrade test keeps its database in memory on Linux
