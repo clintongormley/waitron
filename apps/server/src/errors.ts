@@ -957,6 +957,12 @@ declare module "@waitron/shared" {
      */
     "node.retire_superseded": { heldTerm: number; mintedTerm: number };
     /**
+     * The box runs setup mode (it was reset, or never set up), so no management route exists.
+     * Setup mode answers it to every `/management-api/*` request, which a dashboard tab left open
+     * still sends.
+     */
+    "node.reset": Record<string, never>;
+    /**
      * `rejoinAsSecondary` was invoked on a node that is NOT fenced. A serving node must never be
      * wiped (its own tail could still be unshipped); refused before any irreversible step.
      */

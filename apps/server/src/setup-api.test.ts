@@ -78,6 +78,20 @@ describe("mountSetup — setup-mode routes for an unprovisioned box", () => {
     expect(await res.text()).toMatch(/set ?up/i);
   });
 
+  it.each([
+    ["GET", "/management-api/session/me"],
+    ["POST", "/management-api/session"],
+    ["DELETE", "/management-api/session"],
+    ["GET", "/management-api/events"],
+  ])("answers %s %s with 404 node.reset, not the placeholder page", async (method, path) => {
+    const app = new Hono();
+    mountSetup(app, { environment: "preproduction" }, noopLog);
+    const res = await app.request(path, { method, headers: { Accept: "text/html" } });
+    expect(res.status).toBe(404);
+    expect(res.headers.get("content-type")).toContain("application/json");
+    expect(await res.json()).toEqual({ error: { code: "node.reset", params: {} } });
+  });
+
   it("does not shadow a route registered before it (e.g. /health)", async () => {
     const app = new Hono();
     app.get("/health", (c) => c.json({ ok: true }));
@@ -1512,6 +1526,18 @@ describe("mountSetup — serving a built setup wizard when setupAppDir is config
     const res = await app.request(path, { headers: { Accept: "text/html" } });
     expect(res.status).toBe(404);
     expect(res.headers.get("location")).toBeNull();
+  });
+
+  it.each([
+    ["GET", "/management-api/session/me"],
+    ["POST", "/management-api/session"],
+    ["DELETE", "/management-api/session"],
+  ])("answers %s %s with 404 node.reset beside the built wizard", async (method, path) => {
+    const app = new Hono();
+    mountSetup(app, { environment: "preproduction", setupAppDir: wizardDir }, noopLog);
+    const res = await app.request(path, { method, headers: { Accept: "text/html" } });
+    expect(res.status).toBe(404);
+    expect(await res.json()).toEqual({ error: { code: "node.reset", params: {} } });
   });
 
   it("falls back to the inline placeholder for a stray path when setupAppDir is absent (unchanged)", async () => {
