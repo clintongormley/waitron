@@ -48,7 +48,7 @@ const model: RoutingView = {
   canMakeDefault: true,
 };
 
-it("searches again only when the query or the search's open categories change", async () => {
+it("does not search again when an editor opens or a choice is waiting, and does when a category opens during the search", async () => {
   const host = document.createElement("div");
   applyTokens(host);
   document.body.append(host);

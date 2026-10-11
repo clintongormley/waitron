@@ -3353,7 +3353,7 @@ describe("Routing grid", () => {
     });
   });
 
-  it("a preview refused for a disabled station shows beside the cell without opening confirmation or writing", async () => {
+  it("a preview refused for a disabled station shows in the cell without opening confirmation or writing", async () => {
     const message = "This station is disabled. Choose an active station.";
     const { a, el } = await mountGrid({
       preview: vi.fn().mockRejectedValue({ code: "route.station_inactive" }),
@@ -3382,7 +3382,7 @@ describe("Routing grid", () => {
     expect(a.setCell).not.toHaveBeenCalled();
   });
 
-  it("a write refused after the preview (station disabled meanwhile) shows beside the cell and once at the bottom; retry stays enabled", async () => {
+  it("a write refused after the preview (station disabled meanwhile) shows in the cell and once at the bottom; retry stays enabled", async () => {
     const message = "This station is disabled. Choose an active station.";
     const { a, el } = await mountGrid({
       preview: vi.fn().mockResolvedValue([breadMove]),
@@ -3420,7 +3420,7 @@ describe("Routing grid", () => {
   });
 
   for (const code of ["service_zone.not_found", "route.subject_not_found"]) {
-    it(`a write refused with ${code} shows the save error beside the cell and at the bottom`, async () => {
+    it(`a write refused with ${code} shows the save error in the cell and at the bottom`, async () => {
       setLocale("en");
       const message = "The change could not be saved.";
       const { el } = await mountGrid({

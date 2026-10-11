@@ -308,7 +308,7 @@ export class RoutingGrid extends LitElement {
   ];
 
   @property({ attribute: false }) model: RoutingView | null = null;
-  /** A refused write: its message shows beside that cell and once at the bottom of the grid. */
+  /** A refused write: its message shows in that cell and once at the bottom of the grid. */
   @property({ attribute: false }) refusal: RoutingRefusal | null = null;
   /** Set by the host while it previews or saves a choice, and cleared when that settles. */
   @property({ attribute: false }) pending: RoutingPending | null = null;

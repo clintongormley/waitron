@@ -243,7 +243,7 @@ export interface WaitingChoice {
   readonly periods?: readonly PeriodLine[];
 }
 
-/** What `cellPeriodLines` and `blankZoneCell` look up, built once per model and shared by both. */
+/** What `cellPeriodLines` and `blankZoneCell` look up. */
 export interface RoutingLookups {
   readonly rules: RoutingSelectionRules;
   readonly cells: ReadonlyMap<string, RoutingModelCell>;

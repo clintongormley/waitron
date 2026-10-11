@@ -3405,8 +3405,8 @@ window shows the labels, Every zone and one zone column without scrolling (the "
 cases in `routing-grid.test.ts`).
 
 Each cell is a borderless button that fills its table cell, except the All categories × Every zone
-cell for someone who cannot set the default station, which is plain text. A warning or refusal
-under the station is drawn inside the button. Pointing at it tints it with
+cell for someone who cannot set the default station, which is plain text. A warning, a refusal or the default
+cell's repair note under the station is drawn inside the button. Pointing at it tints it with
 `--wt-color-surface-lifted` (not while it shows a refusal, whose colour is under 4.5:1 on that tint
 in the dark theme), draws the focus outline just inside its edges and shows a hand pointer; keyboard
 focus draws the same outline. A station or No preparation set in that cell, or
@@ -3454,7 +3454,7 @@ disabled one as Disabled and lets it stay chosen only where the station already 
 a read-out for a person without `printer.manage`, which the screen cannot yet select. Add station
 also sets Printers. Station Edit, Make default and Delete actions belong to the Stations row menu,
 which has its own Actions column pinned to the end of the table, so it stays on screen on a phone;
-an active station's drag grip stays before its name. Routing's All categories × Every zone cell
+an active station's drag grip stays before its name. The Routes tab's All categories × Every zone cell
 also sets the default station, for someone with `venue.configure`. The page is offered only to
 someone with `venue_service.manage`; a supervisor is not offered it.
 
