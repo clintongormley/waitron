@@ -267,6 +267,11 @@ closed, as today.
 - Each column's ⋮ has "Copy to…", ticking several days or dates at once, and Clear. A special
   fortnight is painted once, copied across, and the odd dates changed after.
 - The day name and its ⋮ share one line.
+- **Periods are edited in a dialog from the painter** (owner, 2026-10-11), not a tab. "Periods…" in
+  the paint row lists the department's periods (colour, name, customer menu, staff-only menus) with
+  Add, Edit and Delete; "+ New period" opens the same dialog at its add form, and the new period
+  becomes the paint. Each period in the paint row has an edit control opening the dialog at it.
+  The list follows the painter's department picker.
 
 **Taken in from older entries.**
 - Real-week headings: a date heading must not repeat the weekday, and the date and Today marker
@@ -284,9 +289,11 @@ closed, as today.
   live queries in `packages/venue-service/src/`, plus `apps/dashboard/src/api/live-queries.ts`;
   prep station times (`station-times.ts`) read the week. Follow each call chain; a search is not a
   complete list.
-- Where the Periods list (colour, name, menus) and the read-only prep station times live, now that
-  the tabs go; and whether the month's "All departments" picker is enough of the old All
-  departments view.
+- Deleting a period that is painted in a season or on a special day, or that a routing cell
+  names: the dialog says where it is used before deleting (the 2026-10-07 spec, section 8, already
+  warns for routing cells). What happens to the painted time is the spec's to decide.
+- Where the read-only prep station times live, now that the tabs go; and whether the month's "All
+  departments" picker is enough of the old All departments view.
 - What the till sells at a moment is decided by these hours, so the sale-path resolver's
   season-then-special-day layering needs real-database tests across a season boundary and across
   midnight.
