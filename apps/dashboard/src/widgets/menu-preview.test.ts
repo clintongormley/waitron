@@ -1285,7 +1285,7 @@ it("A498 places schedules over changes and keeps document and change controls on
 
 it("A498 keeps the content choice readable beside Expand all on a phone", async () => {
   await page.viewport(390, 844);
-  const el = await mount();
+  const el = await mount({});
   el.style.width = "358px";
   const tree = q<MenuDocumentTree>(el, "dashboard-menu-document-tree")!;
   await tree.updateComplete;
