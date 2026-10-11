@@ -1290,6 +1290,50 @@ describe("dish extras on kitchen tickets", () => {
     expect(ticket).toContain("+ Jamón 0.150 kg");
   });
 
+  // The kitchen looks a unit up under its own `es-ES`, which no unit key is, so it prints the first
+  // stored entry: the unit here stores Catalan first.
+  it("prints a measured extra's unit in the default content language, not the language its unit stores first", async () => {
+    const { cfg, catalogueId } = await setupVenue();
+    const { printerId, jobs } = await asApp(cfg, async (tx) => {
+      const station = await createStation(tx, cfg, { name: "Cocina", isDefault: true });
+      const printerId = await makePrinter(tx, cfg, "Cocina printer");
+      await attachPrinterToStation(tx, {
+        locationId: cfg.locationId,
+        stationId: station.id,
+        printerId,
+      });
+      const dish = await makeProduct(tx, cfg, catalogueId, "Cortado", { stationId: station.id });
+      const { listId, productIds } = await addExtras(tx, cfg, catalogueId, dish, [
+        { name: "Jamón", customerName: "Jamón cliente", kitchenName: "JAMÓN" },
+      ]);
+      const [gram] = await tx
+        .insert(units)
+        .values({
+          name: { ca: "CA gram", es: "ES gramo" },
+          abbreviation: { ca: "CA-g", es: "ES-g" },
+          precision: 0,
+          hardwareUnit: "g",
+        })
+        .returning({ id: units.id });
+      await assignProductUnit(tx, productIds[0]!, gram!.id);
+      await tx.execute(sql`update extra_list_items set portion = 50000, max_quantity = 3
+        where list_id = ${listId} and product_id = ${productIds[0]}`);
+      await fireNewOrder(tx, cfg, [
+        {
+          productId: dish,
+          quantity: "1",
+          extras: [{ listId, picks: [{ productId: productIds[0]!, quantity: 3 }] }],
+        },
+      ]);
+      expect(cfg.locale).toBe("es-ES");
+      return { printerId, jobs: await printJobsFor(tx) };
+    });
+
+    const ticket = decodeTicket(jobs.find((job) => job.printerId === printerId)!.payload);
+    expect(ticket).toContain("+ Jamón 150.000 ES-g");
+    expect(ticket).not.toContain("CA-g");
+  });
+
   it("prints split chips once on Fryer paper and cross-references both station and pass paper", async () => {
     const venue = await setupSplitExtrasVenue();
     const { cfg, products, lists, printers } = venue;

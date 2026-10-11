@@ -122,9 +122,9 @@ export async function readOfferedReceiptLanguages(
 /**
  * The `locale` and `invoiceLocales` a sale is filed with, given the receipt language saved on its
  * order (`stored`, undefined for none): the chosen language after the location's first, so the list's
- * first entry stays the language its line descriptions were written in. A saved language the
- * location no longer offers files in the location's receipt language and logs a warning: a sale is
- * never refused for its language.
+ * first entry stays the location's first, a key the line descriptions are stored under and the one
+ * the goods are read by (`namesLocale`). A saved language the location no longer offers files in
+ * the location's receipt language and logs a warning: a sale is never refused for its language.
  */
 export async function saleLanguageFor(
   tx: Transaction,

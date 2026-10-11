@@ -4419,15 +4419,19 @@ describe("advanceTicketItem / advanceTicket / listStationQueue (bump + queue)", 
       // Neither product carries a kitchen name of its own, so each falls back to its staff name.
       expect(group!.items[0]).toMatchObject({
         name: "Café",
-        unitName: { [CONTENT_LANGUAGE]: EACH_UNIT.abbreviation.es },
         unitPrecision: 0,
         quantity: "2.000",
       });
+      expect(group!.items[0]!.unitName).toEqual({
+        [CONTENT_LANGUAGE]: EACH_UNIT.abbreviation.es,
+      });
       expect(group!.items[1]).toMatchObject({
         name: "Agua",
-        unitName: { [CONTENT_LANGUAGE]: EACH_UNIT.abbreviation.es },
         unitPrecision: 0,
         quantity: "3.000",
+      });
+      expect(group!.items[1]!.unitName).toEqual({
+        [CONTENT_LANGUAGE]: EACH_UNIT.abbreviation.es,
       });
     });
   });

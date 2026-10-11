@@ -146,7 +146,7 @@ export const workingOrders = table(
  *
  * `descriptions` is a locale→string map holding exactly the location's invoice locales as they
  * were when the line was written or last moved, checked by trigger against
- * locations.invoice_locales.
+ * locations.invoice_locales; every key holds the venue's default content language's text.
  */
 export const workingOrderLines = table(
   "working_order_lines",
@@ -161,7 +161,7 @@ export const workingOrderLines = table(
     // PICKED product.
     productId: id("product_id"),
     variantName: label("variant_name"),
-    // Keyed like `descriptions`, and checked by trigger the same way.
+    // Keyed and filled like `descriptions`, and checked by trigger the same way.
     // Null = the variant has no customer name.
     variantDescriptions: json<Record<string, string>>("variant_descriptions"),
     variantKitchenName: label("variant_kitchen_name"),
@@ -171,7 +171,8 @@ export const workingOrderLines = table(
     // list or a label, so editing or deleting a list cannot rewrite a saved order. EXTRAS are not
     // here: a pick becomes its own child line.
     optionSnapshots: json<OptionSnapshot[]>("option_snapshots").notNull().default([]),
-    // The printed unit label (the unit's abbreviation), frozen at add-time — presentation only.
+    // The printed unit label (the unit's abbreviation), frozen at add-time as one entry under the
+    // default content language — presentation only.
     unitName: json<Record<string, string>>("unit_name"),
     unitPrecision: count("unit_precision"),
     quantity: quantity("quantity").notNull(),

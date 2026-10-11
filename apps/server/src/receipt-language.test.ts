@@ -4,6 +4,7 @@ import { Hono } from "hono";
 import { and, eq, sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import {
+  billPayments,
   deviceProfiles,
   devices,
   invoiceSeries,
@@ -11,6 +12,7 @@ import {
   printJobs,
   printers,
   sales,
+  tenants,
   withTransaction,
   workingOrders,
   type Database,
@@ -47,6 +49,8 @@ import { deploymentEnvironment } from "./config.js";
 import { DEVICE_COOKIE } from "./device-session.js";
 import { ALL_MODULES } from "./modules.js";
 import { mountTillApi } from "./till-api.js";
+import { readInvoiceDocument } from "./invoice-document.js";
+import { buildReceiptDocument } from "./receipt-document.js";
 import { mountPaymentsApi } from "./payments-api.js";
 import { loadTillConfig } from "./till-config.js";
 import type { DeviceRequestConfig } from "./till-config.js";
@@ -69,6 +73,7 @@ import {
 } from "./testing/bill-venue.js";
 import { REASONS } from "./testing/adjustment-venue.js";
 import { settlePendingBillPayments } from "./bill-payments-loop.js";
+import { completeBillPayment } from "./bill-payments.js";
 import { BASIC_ACTIONS, seedSessionDevice, deviceRequestCfg } from "./testing/session-device.js";
 import { SESSION_COOKIE } from "./till-session.js";
 import "./errors.js";
@@ -105,6 +110,7 @@ interface Venue {
   /** The session plus an enrolled till device, as a sale is sent. */
   till: string;
   menuItemId: string;
+  backend: VerifactuBackend;
 }
 
 async function venueWith(
@@ -240,6 +246,7 @@ async function venueWith(
     session: `${SESSION_COOKIE}=${session.token}`,
     till: `${tillSession}; ${deviceCookie}`,
     menuItemId,
+    backend,
   };
 }
 
@@ -379,7 +386,7 @@ describe("a receipt follows its location's saved language when its order saves n
       invoiceLocales: ["es-ES", "ca-ES"],
     });
     expect(lineDescriptions(suite.db, sale.id)).toEqual([
-      { "es-ES": "CLIENT-ES Pan con tomate", "ca-ES": "CLIENT-CA Pa amb tomàquet" },
+      { "es-ES": "CLIENT-ES Pan con tomate", "ca-ES": "CLIENT-ES Pan con tomate" },
     ]);
     const [receipt] = await takePrinted(suite.db);
     expect(startsWith(receipt!, "Fecha")).toBe(true);
@@ -641,9 +648,9 @@ describe("an issued receipt reprinted in another receipt language", () => {
     for (const label of ["Data", "Efectiu", "Canvi", "Comanda", "DUPLICAT"]) {
       expect(startsWith(spanish, label), label).toBe(false);
     }
-    // The dish name is the one the sale was filed with, not the Spanish one the product also has.
-    expect(spanish.some((line) => line.includes("CLIENT-CA Pa amb tomàquet"))).toBe(true);
-    expect(spanish.some((line) => line.includes("CLIENT-ES"))).toBe(false);
+    // The dish name is the one the line stored, in the default content language (Spanish).
+    expect(spanish.some((line) => line.includes("CLIENT-ES Pan con tomate"))).toBe(true);
+    expect(spanish.some((line) => line.includes("CLIENT-CA"))).toBe(false);
 
     // Line by line, only the copy marking and the fixed words differ.
     const withoutMark = spanish.filter((line) => line !== "DUPLICADO");
@@ -717,32 +724,66 @@ describe("an issued receipt reprinted in another receipt language", () => {
   });
 });
 
-describe("a sale in a chosen receipt language prints its goods in the language they were saved in", () => {
-  /** A Barcelona venue saved as Catalan, offering Catalan, Spanish and Galician, selling a dish
-   *  whose customer name, unit and options answer differ in every language. */
-  async function goodsVenue() {
+/** A dish, its unit and its options answer, worded differently in every content language. */
+const GOODS = {
+  es: {
+    name: "CLIENT-ES Tostada",
+    unitName: "ES ración",
+    unit: "ES-rac",
+    list: "ES Tipo de pan",
+    label: "ES Centeno",
+  },
+  ca: {
+    name: "CLIENT-CA Torrada",
+    unitName: "CA ració",
+    unit: "CA-rac",
+    list: "CA Tipus de pa",
+    label: "CA Sègol",
+  },
+  gl: {
+    name: "CLIENT-GL Torrada",
+    unitName: "GL ración",
+    unit: "GL-rac",
+    list: "GL Tipo de pan",
+    label: "GL Centeo",
+  },
+  en: {
+    name: "CLIENT-EN Toast",
+    unitName: "EN portion",
+    unit: "EN-por",
+    list: "EN Bread",
+    label: "EN Rye",
+  },
+} as const;
+type GoodsLanguage = keyof typeof GOODS;
+
+describe("a sale prints its goods in the default content language its lines stored them in, whatever its receipt language", () => {
+  /** A Barcelona venue saved as Catalan, with `defaultLanguage` and `languages` as its content
+   *  languages, selling a dish whose customer name, unit and options answer are worded in each of
+   *  `languages`. */
+  async function goodsVenueIn(defaultLanguage: GoodsLanguage, languages: GoodsLanguage[]) {
     const v = await venueWith(suite.db, ["ca-ES"], BARCELONA);
-    expect(await tillReceiptLanguages(v)).toEqual(["ca-ES", "es-ES", "gl-ES"]);
+    const wording = (pick: (words: (typeof GOODS)[GoodsLanguage]) => string) =>
+      Object.fromEntries(languages.map((language) => [language, pick(GOODS[language])]));
     const goods = await withTransaction(suite.db, async (tx) => {
+      await tx.execute(
+        sql`update content_languages set default_language = ${defaultLanguage}, languages = ${JSON.stringify(languages)}`,
+      );
       const menu = await createCatalogue(tx, { name: "Racions" });
       const unit = await createUnit(
         tx,
         {
-          name: { es: "ES ración", ca: "CA ració", gl: "GL ración" },
+          name: wording((words) => words.unitName),
           precision: 0,
-          abbreviation: { es: "ES-rac", ca: "CA-rac", gl: "GL-rac" },
+          abbreviation: wording((words) => words.unit),
         },
-        "es",
+        defaultLanguage,
       );
       const product = await createProduct(tx, {
         catalogueId: menu.id,
         categoryId: null,
         name: "STAFF Torrada",
-        customerName: {
-          es: "CLIENT-ES Tostada",
-          ca: "CLIENT-CA Torrada",
-          gl: "CLIENT-GL Torrada",
-        },
+        customerName: wording((words) => words.name),
         kitchenName: "KITCHEN Torrada",
         unitId: unit.id,
         unitPrice: "2.00",
@@ -752,40 +793,61 @@ describe("a sale in a chosen receipt language prints its goods in the language t
         tx,
         {
           name: "STAFF Pa",
-          customerName: { es: "ES Tipo de pan", ca: "CA Tipus de pa", gl: "GL Tipo de pan" },
+          customerName: wording((words) => words.list),
           kitchenName: "KITCHEN Pa",
           defaultLabelId: null,
           active: true,
           labels: [
             {
               name: "STAFF Segol",
-              customerName: { es: "ES Centeno", ca: "CA Sègol", gl: "GL Centeo" },
+              customerName: wording((words) => words.label),
               kitchenName: "KITCHEN Segol",
               available: true,
             },
           ],
         },
-        "es",
+        defaultLanguage,
       );
       await writeProductModifiers(tx, product.id, [{ kind: "options", id: bread.id }]);
       const offers = await offerProducts(tx, v.cfg, { productIds: [product.id] });
       return {
         menuItemId: offers.offerFor(product.id),
+        zoneId: offers.zoneId,
         options: [{ listId: bread.id, labelId: bread.labels[0]!.id }],
       };
     });
     return { v, goods };
   }
 
+  /** {@link goodsVenueIn} with Spanish the default among Spanish, Catalan and Galician. */
+  async function goodsVenue() {
+    const venue = await goodsVenueIn("es", ["es", "ca", "gl"]);
+    expect(await tillReceiptLanguages(venue.v)).toEqual(["ca-ES", "es-ES", "gl-ES"]);
+    return venue;
+  }
+
+  type Goods = Awaited<ReturnType<typeof goodsVenue>>["goods"];
+
   /** Every printed line, its runs of spaces closed up. */
   const flat = (lines: string[]) => lines.map((line) => line.replace(/\s+/g, " "));
 
-  /** The Catalan goods, and no other language's. */
-  function expectCatalanGoods(receipt: string[]): void {
+  /** The words of every language but `language`, each of which no printed line may hold. */
+  const otherWords = (language: GoodsLanguage) =>
+    (Object.keys(GOODS) as GoodsLanguage[])
+      .filter((other) => other !== language)
+      .flatMap((other) => {
+        const words = GOODS[other];
+        return [words.name.split(" ")[0]!, words.unit, words.list, words.label];
+      });
+
+  /** Two of the dish in `language`'s unit and name, its answer in `language`, and no other
+   *  language's goods. */
+  function expectGoods(receipt: string[], language: GoodsLanguage): void {
     const lines = flat(receipt);
-    expect(lines.some((line) => /^2 CA-rac CLIENT-CA Torrada /u.test(line))).toBe(true);
-    expect(lines).toContain("CA Tipus de pa: CA Sègol");
-    for (const other of ["ES-rac", "GL-rac", "CLIENT-ES", "CLIENT-GL", "ES Tipo", "GL Tipo"]) {
+    const words = GOODS[language];
+    expect(startsWith(lines, `2 ${words.unit} ${words.name}`)).toBe(true);
+    expect(lines).toContain(`${words.list}: ${words.label}`);
+    for (const other of otherWords(language)) {
       expect(
         lines.some((line) => line.includes(other)),
         other,
@@ -793,9 +855,51 @@ describe("a sale in a chosen receipt language prints its goods in the language t
     }
   }
 
-  async function sellChosen(
+  /** The line a Spanish-default venue stores, on the order and on the sale. */
+  const SPANISH_LINE = {
+    descriptions: { "ca-ES": "CLIENT-ES Tostada" },
+    unitName: { es: "ES-rac" },
+    optionSnapshots: [
+      {
+        listName: { es: "STAFF Pa" },
+        listCustomerName: { es: "ES Tipo de pan" },
+        listKitchenName: "KITCHEN Pa",
+        labelName: { es: "STAFF Segol" },
+        labelCustomerName: { es: "ES Centeno" },
+        labelKitchenName: "KITCHEN Segol",
+      },
+    ],
+  };
+
+  /** The goods stored on an order's lines and on the sale filed from it. */
+  function storedGoods(id: string) {
+    type Row = { descriptions: string; unit_name: string | null; option_snapshots: string };
+    const parse = (rows: Row[]) =>
+      rows.map((row) => ({
+        descriptions: JSON.parse(row.descriptions) as unknown,
+        unitName: row.unit_name === null ? null : (JSON.parse(row.unit_name) as unknown),
+        optionSnapshots: JSON.parse(row.option_snapshots) as unknown,
+      }));
+    return {
+      order: parse(
+        suite.db.all<Row>(
+          sql`select descriptions, unit_name, option_snapshots from working_order_lines
+              where working_order_id = ${id}`,
+        ),
+      ),
+      sale: parse(
+        suite.db.all<Row>(
+          sql`select sl.descriptions, sl.unit_name, sl.option_snapshots from sale_lines sl
+              join sales s on s.id = sl.sale_id where s.working_order_id = ${id}`,
+        ),
+      ),
+    };
+  }
+
+  async function sellGoods(
     v: Venue,
-    goods: Awaited<ReturnType<typeof goodsVenue>>["goods"],
+    goods: Goods,
+    extra: Record<string, unknown> = {},
     id: string = randomUUID(),
   ) {
     const res = await v.app.request("/api/sales", {
@@ -805,17 +909,41 @@ describe("a sale in a chosen receipt language prints its goods in the language t
         workingOrderId: id,
         lines: [{ menuItemId: goods.menuItemId, quantity: "2", options: goods.options }],
         tender: { method: "cash", amount: "5.00" },
-        receiptLanguage: "es-ES",
+        ...extra,
       }),
     });
     return {
       id,
       status: res.status,
-      body: (await res.json()) as { locale?: string; namesLocale?: string },
+      body: (await res.json()) as {
+        locale?: string;
+        namesLocale?: string;
+        lines?: { descriptions: unknown; unitName?: unknown; optionSnapshots?: unknown }[];
+      },
     };
   }
 
-  it("prints Spanish fixed words with the Catalan dish name, unit and options answer", async () => {
+  const sellChosen = (v: Venue, goods: Goods, id?: string) =>
+    sellGoods(v, goods, { receiptLanguage: "es-ES" }, id);
+
+  it("prints the default content language's goods under Catalan fixed words, chosen or not, and stores them once in that language", async () => {
+    const { v, goods } = await goodsVenue();
+
+    for (const extra of [{ receiptLanguage: "ca-ES" }, {}]) {
+      const sale = await sellGoods(v, goods, extra);
+
+      expect(sale.status).toBe(200);
+      expect(sale.body.locale).toBe("ca-ES");
+      const [receipt] = await takePrinted(suite.db);
+      for (const label of ["Data", "Efectiu", "Canvi"]) {
+        expect(startsWith(receipt!, label), label).toBe(true);
+      }
+      expectGoods(receipt!, "es");
+      expect(storedGoods(sale.id)).toEqual({ order: [SPANISH_LINE], sale: [SPANISH_LINE] });
+    }
+  });
+
+  it("prints Spanish fixed words with the default content language's dish name, unit and options answer", async () => {
     const { v, goods } = await goodsVenue();
 
     const sale = await sellChosen(v, goods);
@@ -834,10 +962,10 @@ describe("a sale in a chosen receipt language prints its goods in the language t
     for (const label of ["Data", "Efectiu", "Canvi"]) {
       expect(startsWith(receipt!, label), label).toBe(false);
     }
-    expectCatalanGoods(receipt!);
+    expectGoods(receipt!, "es");
   });
 
-  it("prints the Catalan dish name, not the Spanish one also saved, when a two-language location's Spanish is chosen", async () => {
+  it("prints the default content language's dish name, stored under both keys, when a two-language location's Spanish is chosen", async () => {
     const v = await venueWith(suite.db, ["ca-ES", "es-ES"], BARCELONA);
     const id = randomUUID();
 
@@ -857,20 +985,19 @@ describe("a sale in a chosen receipt language prints its goods in the language t
       locale: "es-ES",
       invoiceLocales: ["ca-ES", "es-ES"],
     });
-    // The control: the line holds both names, so a lookup in Spanish would find the Spanish one.
     expect(lineDescriptions(suite.db, id)).toEqual([
-      { "ca-ES": "CLIENT-CA Pa amb tomàquet", "es-ES": "CLIENT-ES Pan con tomate" },
+      { "ca-ES": "CLIENT-ES Pan con tomate", "es-ES": "CLIENT-ES Pan con tomate" },
     ]);
     const [receipt] = await takePrinted(suite.db);
     for (const label of ["Fecha", "Efectivo", "Cambio"]) {
       expect(startsWith(receipt!, label), label).toBe(true);
     }
     expect(startsWith(receipt!, "Data")).toBe(false);
-    expect(receipt!.some((line) => line.includes("CLIENT-CA Pa amb tomàquet"))).toBe(true);
-    expect(receipt!.some((line) => line.includes("CLIENT-ES"))).toBe(false);
+    expect(receipt!.some((line) => line.includes("CLIENT-ES Pan con tomate"))).toBe(true);
+    expect(receipt!.some((line) => line.includes("CLIENT-CA"))).toBe(false);
   });
 
-  it("prints a Galician copy with the Catalan goods, and answers the names' language on a replay", async () => {
+  it("prints a Galician copy with the default content language's goods, and answers the names' language on a replay", async () => {
     const { v, goods } = await goodsVenue();
     const sale = await sellChosen(v, goods);
     expect(sale.status).toBe(200);
@@ -881,12 +1008,163 @@ describe("a sale in a chosen receipt language prints its goods in the language t
     expect(startsWith(copy!, "IVE"), "IVE").toBe(true);
     expect(copy).toContain("DUPLICADO");
     expect(startsWith(copy!, "IVA")).toBe(false);
-    expectCatalanGoods(copy!);
+    expectGoods(copy!, "es");
 
     // The same sale sent again answers the ticket read back from the filed sale.
     const replay = await sellChosen(v, goods, sale.id);
     expect(replay.status).toBe(200);
     expect(replay.body).toMatchObject({ locale: "es-ES", namesLocale: "ca-ES" });
+  });
+
+  // A full invoice cannot be asked for at the counter (`sale.full_invoice_unavailable`), so the
+  // order is saved with the choice and paid the way a bill payment is completed.
+  it("renders a full invoice's A4 and the till's receipt lines with the default content language's goods under Catalan fixed words", async () => {
+    const { v, goods } = await goodsVenue();
+    const id = randomUUID();
+    const [cashier] = suite.db.all<{ id: string }>(
+      sql`select id from persons where display_name = 'Cajera'`,
+    );
+
+    const { invoice } = await withTransaction(suite.db, async (tx) => {
+      await tx.update(tenants).set({ taxpayerDomicile: "Carrer 1, 08001 Barcelona" });
+      await createOpenOrder(
+        tx,
+        v.cfg,
+        id,
+        [{ menuItemId: goods.menuItemId, quantity: "2", options: goods.options }],
+        null,
+        {
+          zoneId: goods.zoneId,
+          receiptLocale: "ca-ES",
+          invoiceChoice: {
+            invoiceType: "F1",
+            recipient: {
+              taxId: "B12345674",
+              legalName: "Client SL",
+              address: "Calle Mayor 2, 08001 Barcelona, Barcelona, España",
+              countryCode: "ES",
+            },
+            recipientNameMaxLength: v.backend.recipientNameMaxLength,
+          },
+        },
+      );
+      const [payment] = await tx
+        .insert(billPayments)
+        .values({
+          workingOrderId: id,
+          submissionId: randomUUID(),
+          fingerprint: "receipt-language-full-invoice",
+          kind: "contribution",
+          method: "cash",
+          applied: 400,
+          tendered: 500,
+          state: "pending",
+          requestedBy: cashier!.id,
+          source: v.cfg.origin.source,
+          deviceId: v.cfg.origin.deviceId,
+        })
+        .returning();
+      return completeBillPayment(
+        tx,
+        { db: suite.db, backend: v.backend, clock },
+        v.cfg,
+        payment!.id,
+        AT,
+      );
+    });
+
+    expect(invoice?.invoiceType).toBe("F1");
+    expect(invoice?.locale).toBe("ca-ES");
+    // What the till's on-screen receipt draws.
+    expect(
+      invoice!.lines.map(({ descriptions, unitName, optionSnapshots }) => ({
+        descriptions,
+        unitName,
+        optionSnapshots,
+      })),
+    ).toEqual([SPANISH_LINE]);
+    expect(storedGoods(id)).toEqual({ order: [SPANISH_LINE], sale: [SPANISH_LINE] });
+    const [filed] = suite.db.all<{ id: string }>(
+      sql`select id from sales where working_order_id = ${id}`,
+    );
+    // What the email attaches.
+    const document = await withTransaction(suite.db, (tx) =>
+      readInvoiceDocument(v.backend, tx, v.cfg, filed!.id),
+    );
+    expect(document.result.invoiceType).toBe("F1");
+    const text = buildReceiptDocument(document).elements.flatMap((element) =>
+      element.kind === "text"
+        ? [element.text.trim()]
+        : element.kind === "amount"
+          ? [element.caption]
+          : [],
+    );
+    expect(startsWith(text, "Data"), "Data").toBe(true);
+    expect(startsWith(text, "Fecha")).toBe(false);
+    expectGoods(text, "es");
+  });
+
+  it("reprints a sale's original and a Spanish copy with the goods it stored, after the default content language changes", async () => {
+    const { v, goods } = await goodsVenue();
+    const sale = await sellGoods(v, goods);
+    expect(sale.status).toBe(200);
+    await takePrinted(suite.db);
+
+    await withTransaction(suite.db, (tx) =>
+      tx.execute(sql`update content_languages set default_language = 'ca'`),
+    );
+    // The control: a dish sold now stores the Catalan goods.
+    expect((await sellGoods(v, goods)).status).toBe(200);
+    expectGoods((await takePrinted(suite.db))[0]!, "ca");
+
+    expect((await reprint(v, sale.id)).status).toBe(200);
+    const [original] = await takePrinted(suite.db);
+    expect(startsWith(original!, "Data"), "Data").toBe(true);
+    expect(original).toContain("DUPLICAT");
+    expectGoods(original!, "es");
+
+    expect((await reprint(v, sale.id, { language: "es-ES" })).status).toBe(200);
+    const [spanish] = await takePrinted(suite.db);
+    expect(startsWith(spanish!, "Fecha"), "Fecha").toBe(true);
+    expect(spanish).toContain("DUPLICADO");
+    expectGoods(spanish!, "es");
+  });
+
+  it("prints the Catalan goods when Catalan is the default content language, with nothing chosen and with Spanish chosen", async () => {
+    const { v, goods } = await goodsVenueIn("ca", ["ca", "es", "gl"]);
+
+    const plain = await sellGoods(v, goods);
+    expect([plain.status, plain.body.locale]).toEqual([200, "ca-ES"]);
+    const [catalan] = await takePrinted(suite.db);
+    const chosen = await sellChosen(v, goods);
+    expect([chosen.status, chosen.body.locale]).toEqual([200, "es-ES"]);
+    const [spanish] = await takePrinted(suite.db);
+
+    expect(startsWith(catalan!, "Data"), "Data").toBe(true);
+    expectGoods(catalan!, "ca");
+    expect(startsWith(spanish!, "Fecha"), "Fecha").toBe(true);
+    expectGoods(spanish!, "ca");
+  });
+
+  it("prints the English goods under Catalan or Spanish fixed words when English, which has no receipt language, is the default content language", async () => {
+    const { v, goods } = await goodsVenueIn("en", ["en", "es", "ca"]);
+    expect(await tillReceiptLanguages(v)).toEqual(["ca-ES", "es-ES"]);
+
+    const plain = await sellGoods(v, goods);
+    expect([plain.status, plain.body.locale]).toEqual([200, "ca-ES"]);
+    const [catalan] = await takePrinted(suite.db);
+    const chosen = await sellChosen(v, goods);
+    expect([chosen.status, chosen.body.locale]).toEqual([200, "es-ES"]);
+    const [spanish] = await takePrinted(suite.db);
+
+    for (const label of ["Data", "Efectiu", "Canvi"]) {
+      expect(startsWith(catalan!, label), label).toBe(true);
+    }
+    expectGoods(catalan!, "en");
+    for (const label of ["Fecha", "Efectivo", "Cambio"]) {
+      expect(startsWith(spanish!, label), label).toBe(true);
+    }
+    expectGoods(spanish!, "en");
   });
 });
 

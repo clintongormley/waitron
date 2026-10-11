@@ -1,9 +1,7 @@
 import { resolveSnapshotText } from "@waitron/shared";
 
-/**
- * Customer text frozen onto an order line in the venue's default content language. Where the
- * default has no text, another stored language's is taken (`resolveSnapshotText`).
- */
+// Customer text frozen onto an order line in the venue's default content language. Where the
+// default has no text, another stored language's is taken (`resolveSnapshotText`).
 
 /** Every receipt key in `keys` holds the default content language's text. */
 export function defaultLanguageDescriptions(

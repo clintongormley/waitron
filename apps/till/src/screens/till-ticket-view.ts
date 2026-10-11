@@ -31,13 +31,15 @@ export interface TicketIssuer {
 }
 
 /**
- * A filed line's goods name in the receipt's language (art. 7.1.e).
+ * A filed line's goods name (art. 7.1.e), looked up under the sale's names language.
  *
- * `descriptions` is keyed by the receipt languages saved when the line was added
- * (`defaultLanguageDescriptions`, `packages/catalogue/src/default-language-text.ts`); a later change can
- * leave them without the sale's language, so the lookup falls back to the first stored name. Nothing
- * re-keys the line's `unitName`, which is why the quantity below resolves that one through
- * `resolveSnapshotText` instead, as the printed twin (`apps/server/src/receipt-ticket.ts`) does.
+ * `descriptions` is keyed by the location's receipt languages when the line was added, every key
+ * holding the venue's default content language's text (`defaultLanguageDescriptions`,
+ * `packages/catalogue/src/default-language-text.ts`); a later change can leave them without the
+ * names language, so the lookup falls back to the first stored name. The line's `unitName` is keyed
+ * by a content language such as `es`, never a receipt language, which is why the quantity below
+ * resolves it through `resolveSnapshotText` instead, as the printed twin
+ * (`apps/server/src/receipt-document.ts`) does.
  */
 function lineName(descriptions: Record<string, string>, locale: string): string {
   return descriptions[locale] ?? Object.values(descriptions)[0] ?? "";
