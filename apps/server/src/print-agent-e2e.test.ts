@@ -27,6 +27,7 @@ import {
   NetworkTcpTransport,
   RoutingTransport,
   createAgent,
+  createClient,
   type PrinterTarget,
 } from "@waitron/print-agent";
 import { fakeHost } from "@waitron/print-agent/testing/fake-host.js";
@@ -365,6 +366,7 @@ describe("print-agent end to end", () => {
       return enqueuePrintJob(tx, { locationId }, usbPrinterId, usbPayload);
     });
 
+    await agent.runOnce();
     await agent.runOnce();
     expect(agent.status.phase).toBe("running");
     const received = await loopback.firstConnection;
@@ -741,6 +743,7 @@ describe("a printer deleted while its agent is sending", () => {
         });
         release();
         await tick;
+        await agent.runOnce();
 
         expect(results.get(jobId)).toBe(204);
         expect(results.get(keepJobId)).toBe(204);
@@ -972,7 +975,7 @@ describe("a printer deleted over real HTTP", () => {
         ends: [{ key: "print_jobs", count: 1, targets: [] }],
       });
 
-      // New work queued after the impact read, then claimed and held mid-send while the delete runs.
+      // The first job is held mid-send; the later queued job must not reach transport after deletion.
       const later = await enqueue(oldId, "Queued after the impact read");
       holdPrinter = oldId;
       const tick = agent.runOnce();
@@ -986,6 +989,16 @@ describe("a printer deleted over real HTTP", () => {
       release();
       await within("the held tick to finish", tick);
       holdPrinter = null;
+      await within("the claimed print", sink.received(2));
+      expect(sink.printed).toEqual([before.payload, waiting.payload]);
+      expect(results.has(later.jobId)).toBe(false);
+      const late = await createClient({ fetch: host.fetch }).report(
+        base,
+        (await host.token())!,
+        later.jobId,
+        { status: "done" },
+      );
+      expect(late).toEqual({ ok: true, value: undefined });
 
       for (const { jobId } of [waiting, later]) {
         expect(results.get(jobId)).toBe(204);
