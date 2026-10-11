@@ -295,7 +295,7 @@ describe("a profile's kitchen screens", () => {
     await expect(screensOf(venue, venue.kds)).resolves.toEqual({});
   });
 
-  it("refuses a deleted station but permits keeping its switched-off zone", async () => {
+  it("refuses deleted stations and previously stored deleted zones", async () => {
     const venue = await seedVenue();
     await set(venue, venue.kds, {
       pass: { stationIds: [venue.grill, venue.cold], zoneIds: [venue.dining] },
@@ -315,9 +315,9 @@ describe("a profile's kitchen screens", () => {
         }),
       ),
     ).resolves.toEqual(refused("passScreenStations", "not_found"));
-    await set(venue, venue.kds, { pass: { stationIds: [venue.cold], zoneIds: [venue.dining] } });
+    await expect(outcome(set(venue, venue.kds, { pass: { stationIds: [venue.cold], zoneIds: [venue.dining] } }))).resolves.toEqual(refused("passScreenZones", "not_found"));
     await expect(screensOf(venue, venue.kds)).resolves.toEqual({
-      pass: { stationIds: [venue.cold], zoneIds: [venue.dining] },
+      pass: { stationIds: [venue.cold], zoneIds: [] },
     });
     await expect(
       outcome(
