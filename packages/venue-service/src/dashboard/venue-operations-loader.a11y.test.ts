@@ -30,7 +30,7 @@ describe.each(["light", "dark"] as const)("load wrapper accessibility (%s)", (th
     model.floorZones = model.zones.map(({ id, name, active }) => ({ id, name, active }));
     loader.api = new VenueServiceApi((async (path) => {
       if (state === "failure") throw new Error("offline");
-      if (path.endsWith("includeInactive=true")) return model.floorZones;
+      if (path.endsWith("/management-api/zones")) return model.floorZones;
       if (path === "/management-api/venue-service") return model;
       if (path.endsWith("/transfers"))
         return { departmentId: "d1", receivingProfileId: null, destinationDepartmentIds: [] };

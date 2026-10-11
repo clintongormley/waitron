@@ -62,7 +62,7 @@ async function mount(path = "/manage/venue-operations") {
       if (failRead) throw new Error("offline");
       return structuredClone(value);
     }
-    if (url === "/management-api/zones?includeInactive=true") return value.floorZones;
+    if (url === "/management-api/zones") return value.floorZones;
     return [];
   });
   const app = document.createElement("a10-load-ownership-app") as App;
@@ -127,12 +127,9 @@ it("the initial read opens the department list actively and later live reads are
   value(model("New live name"));
   await invalidate(liveData, request);
   await expect.poll(() => shell.model.departments[0]!.name).toBe("New live name");
-  expect(request).toHaveBeenLastCalledWith(
-    "/management-api/zones?includeInactive=true",
-    "GET",
-    undefined,
-    { passive: true },
-  );
+  expect(request).toHaveBeenLastCalledWith("/management-api/zones", "GET", undefined, {
+    passive: true,
+  });
   expect(request).toHaveBeenCalledWith("/management-api/venue-service", "GET", undefined, {
     passive: true,
   });
@@ -232,7 +229,7 @@ it("an initial load failure recovers through a passive live read", async () => {
   const liveData = new LiveData();
   let failed = true;
   const request = vi.fn(async (path: string) => {
-    if (path.endsWith("includeInactive=true")) return [];
+    if (path.endsWith("/management-api/zones")) return [];
     if (failed) throw new Error("offline");
     return model();
   });
@@ -351,7 +348,7 @@ it("opening an already cached query displays it without extending the session", 
   history.replaceState(null, "", "/manage/venue-operations");
   const data = new LiveData();
   const request = vi.fn(async (path: string) =>
-    path.endsWith("includeInactive=true") ? [] : model("Cached restaurant"),
+    path.endsWith("/management-api/zones") ? [] : model("Cached restaurant"),
   );
   const api = new VenueServiceApi(request as DashboardRequest, data);
   const observation = data.observe(

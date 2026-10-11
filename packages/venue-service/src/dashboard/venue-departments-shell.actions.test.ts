@@ -68,7 +68,7 @@ async function mount(
       if (readFailure) throw readFailure;
       return loaded;
     }
-    if (url === "/management-api/zones?includeInactive=true") return loaded.floorZones;
+    if (url === "/management-api/zones") return loaded.floorZones;
     if (url.endsWith("/profiles")) return [];
     if (url.endsWith("/delete-impact")) {
       const id = url.split("/").at(-2)!;

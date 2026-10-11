@@ -287,7 +287,7 @@ describe("VenueServiceApi", () => {
     expect(loaded).not.toHaveProperty("menus");
     expect(fetchImpl.mock.calls.map(([path]) => path)).toEqual([
       "/management-api/venue-service",
-      "/management-api/zones?includeInactive=true",
+      "/management-api/zones",
     ]);
   });
 
