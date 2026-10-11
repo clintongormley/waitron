@@ -214,6 +214,7 @@ function mountApp(
   venue: Venue,
   providers: readonly CardProviderContribution[] = PROVIDERS,
   db: Database = suite.db,
+  { log = noopLog, fetch }: { log?: Logger; fetch?: typeof globalThis.fetch } = {},
 ): Hono {
   const app = new Hono();
   mountPaymentsApi(
@@ -226,8 +227,9 @@ function mountApp(
       environment: "preproduction",
       pool,
       providers,
+      ...(fetch === undefined ? {} : { fetch }),
     },
-    noopLog,
+    log,
   );
   return app;
 }
@@ -1114,21 +1116,10 @@ describe("unpair reader — a failed provider call answers as Delete does", () =
     fetchImpl?: typeof fetch,
   ): { app: Hono; lines: { level: string; event: string; fields: Record<string, unknown> }[] } {
     const lines: { level: string; event: string; fields: Record<string, unknown> }[] = [];
-    const app = new Hono();
-    mountPaymentsApi(
-      app,
-      {
-        db: suite.db,
-        ...saleDeps(),
-        cfg: cfgOf(venue),
-        ring: RING,
-        environment: "preproduction",
-        pool,
-        providers,
-        ...(fetchImpl === undefined ? {} : { fetch: fetchImpl }),
-      },
-      (level, event, fields) => lines.push({ level, event, fields: fields ?? {} }),
-    );
+    const app = mountApp(venue, providers, suite.db, {
+      log: (level, event, fields) => lines.push({ level, event, fields: fields ?? {} }),
+      ...(fetchImpl === undefined ? {} : { fetch: fetchImpl }),
+    });
     return { app, lines };
   }
 
