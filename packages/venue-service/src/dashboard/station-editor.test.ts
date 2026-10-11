@@ -453,3 +453,25 @@ it("reads the timings in Spanish", async () => {
     "Deja el campo vacío para usar el valor del local.",
   );
 });
+
+it("explains timings out of order in Spanish beside the field and at the bottom, and sends nothing", async () => {
+  const el = await mount({ ...GRILL, timingOverrides: NO_OVERRIDES }, { locale: "es" });
+  const seen = saves(el);
+  await setTiming(el, "warmAfterMinutes", "10");
+  await save(el);
+  expect(seen).toEqual([]);
+  expect(timingField(el, "warmAfterMinutes").error).toBe("");
+  expect(timingField(el, "overdueAfterMinutes").error).toBe(
+    "Usa minutos enteros con aviso < atraso < olvido.",
+  );
+  expect(formMessage(el)).toBe("Corrige los campos marcados para continuar.");
+  const button = $<HTMLElementTagNameMap["wt-button"]>(el, "[data-test=save-station-edit]")!;
+  expect(button.disabled).toBe(true);
+  await expect
+    .poll(() => el.shadowRoot!.activeElement)
+    .toBe(timingField(el, "overdueAfterMinutes"));
+  await setTiming(el, "warmAfterMinutes", "9");
+  expect(timingField(el, "overdueAfterMinutes").error).toBe("");
+  expect(formMessage(el)).toBe("");
+  expect(button.disabled).toBe(false);
+});
