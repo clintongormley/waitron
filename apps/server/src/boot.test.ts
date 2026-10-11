@@ -4776,12 +4776,13 @@ describe("startServer — the append-only watch in trading mode", () => {
     };
   }
 
-  for (const [what, statements] of [
+  for (const [what, statements, refusedTriggers] of [
     [
       "replaced",
       `drop trigger ${UPDATE}; create trigger ${UPDATE} before update on sales begin select 1; end;`,
+      { missing: [], altered: [UPDATE] },
     ],
-    ["dropped", `drop trigger ${UPDATE};`],
+    ["dropped", `drop trigger ${UPDATE};`, { missing: [UPDATE], altered: [] }],
   ] as const) {
     it(`keeps an untouched box trading, then stops it and records the refusal for the next start when a trigger is ${what}`, async () => {
       await withMockedKill(async (kills) => {
@@ -4798,6 +4799,7 @@ describe("startServer — the append-only watch in trading mode", () => {
             refused: true,
             level: "recovery",
             lastErrorCode: "append_only.triggers_changed",
+            refusedTriggers,
           });
           // The file the recovery page's log tail reads (`resolveLogDir`, beside the state folder).
           const logged = (await readFile(join(box.stateDir, "logs", "waitron.log"), "utf8"))

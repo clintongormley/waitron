@@ -20,6 +20,13 @@ export interface RecoveryState {
   /** Present, and true, only when the running server stopped itself; it holds the box at
    *  `recovery` whatever the count, until a clear. */
   refused?: true;
+  /** The trigger names whose fault made the running server stop; kept only beside `refused`. */
+  refusedTriggers?: RefusedTriggers;
+}
+
+export interface RefusedTriggers {
+  missing: string[];
+  altered: string[];
 }
 
 export const FRESH: RecoveryState = {
@@ -56,7 +63,10 @@ function failureRecord(
     clears: state.clears,
   };
   if (holderKind !== undefined) record.holderKind = holderKind;
-  if (refused) record.refused = true;
+  if (refused) {
+    record.refused = true;
+    if (state.refusedTriggers !== undefined) record.refusedTriggers = state.refusedTriggers;
+  }
   return record;
 }
 
@@ -91,11 +101,31 @@ export async function readRecoveryState(stateDir: string): Promise<RecoveryState
     // is kept.
     const kind = VENUE_HOLDER_KINDS.find((known) => known === raw.holderKind);
     if (kind !== undefined) state.holderKind = kind;
-    if (refused) state.refused = true;
+    if (refused) {
+      state.refused = true;
+      const triggers = triggersIn(raw.refusedTriggers);
+      if (triggers !== undefined) state.refusedTriggers = triggers;
+    }
     return state;
   } catch {
     return FRESH;
   }
+}
+
+function namesIn(value: unknown): string[] | undefined {
+  return Array.isArray(value) && value.every((name) => typeof name === "string")
+    ? [...(value as string[])]
+    : undefined;
+}
+
+/** The names reach the page, so only the two lists of strings are kept, and nothing else. */
+function triggersIn(value: unknown): RefusedTriggers | undefined {
+  if (typeof value !== "object" || value === null) return undefined;
+  const { missing, altered } = value as Record<string, unknown>;
+  const missingNames = namesIn(missing);
+  const alteredNames = namesIn(altered);
+  if (missingNames === undefined || alteredNames === undefined) return undefined;
+  return { missing: missingNames, altered: alteredNames };
 }
 
 /** 0600: it sits beside the vault key in the state volume. */
@@ -128,8 +158,9 @@ export function refusedWhileRunning(
   current: RecoveryState,
   errorCode: string,
   at: Date,
+  triggers: RefusedTriggers,
 ): RecoveryState {
-  return withFailureCode({ ...current, refused: true }, errorCode, at);
+  return withFailureCode({ ...current, refused: true, refusedTriggers: triggers }, errorCode, at);
 }
 
 /** A server that stayed up clears the count, but not a refusal it made itself in that time. */
@@ -144,8 +175,15 @@ function sameState(a: RecoveryState, b: RecoveryState): boolean {
     a.lastErrorCode === b.lastErrorCode &&
     a.lastFailureAt === b.lastFailureAt &&
     a.holderKind === b.holderKind &&
-    a.refused === b.refused
+    a.refused === b.refused &&
+    sameNames(a.refusedTriggers?.missing, b.refusedTriggers?.missing) &&
+    sameNames(a.refusedTriggers?.altered, b.refusedTriggers?.altered)
   );
+}
+
+function sameNames(a: readonly string[] | undefined, b: readonly string[] | undefined): boolean {
+  if (a === undefined || b === undefined) return a === b;
+  return a.length === b.length && a.every((name, index) => name === b[index]);
 }
 
 /**

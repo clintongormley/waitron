@@ -792,6 +792,7 @@ describe("a box the running server stopped", () => {
     afterFailure(FRESH, "x", new Date()),
     "append_only.triggers_changed",
     new Date("2026-10-11T10:00:00Z"),
+    { missing: ["sales_append_only_update"], altered: ["x<y"] },
   );
   const appFor = (current: RecoveryState) =>
     recoveryApp({ state: current, logDir: "/nonexistent", onRetry: vi.fn() });
@@ -805,6 +806,101 @@ describe("a box the running server stopped", () => {
     ).text();
     expect(body).toContain(`<p>${escapeHtml(line)}</p>`);
     expect(body).not.toMatch(count);
+  });
+
+  async function bodyOf(current: RecoveryState, language = "en-GB"): Promise<string> {
+    return await (
+      await appFor(current).request("/", { headers: { "Accept-Language": language } })
+    ).text();
+  }
+
+  it.each([
+    ["en-GB", "Waitron stopped", "Waitron did not start"],
+    [SPANISH, "Waitron se ha detenido", "Waitron no ha arrancado"],
+  ])("is headed as stopped, not as a failed start (%s)", async (language, heading, failed) => {
+    const body = await bodyOf(refused, language);
+    expect(body).toContain(`<title>${heading}</title>`);
+    expect(body).toContain(`<h1>${heading}</h1>`);
+    expect(body).not.toContain(failed);
+  });
+
+  it.each([
+    [
+      "en-GB",
+      "<p>Missing triggers: sales_append_only_update</p>",
+      "<p>Changed triggers: x&lt;y</p>",
+    ],
+    [
+      SPANISH,
+      "<p>Disparadores que faltan: sales_append_only_update</p>",
+      "<p>Disparadores cambiados: x&lt;y</p>",
+    ],
+  ])(
+    "names the triggers that stopped it, under the status line (%s)",
+    async (language, missing, changed) => {
+      const body = await bodyOf(refused, language);
+      expect(body).toContain(missing);
+      expect(body).toContain(changed);
+      expect(body.indexOf(missing)).toBeGreaterThan(body.indexOf("<h2>"));
+    },
+  );
+
+  it("joins several names, and shows no line for an empty list", async () => {
+    const body = await bodyOf({
+      ...refused,
+      refusedTriggers: { missing: ["a", "b"], altered: [] },
+    });
+    expect(body).toContain("<p>Missing triggers: a, b</p>");
+    expect(body).not.toContain("Changed triggers");
+  });
+
+  it("shows no names line for a refusal that recorded none", async () => {
+    const body = await bodyOf({ ...refused, refusedTriggers: undefined });
+    expect(body).toContain("<h1>Waitron stopped</h1>");
+    expect(body).not.toContain("Missing triggers");
+    expect(body).not.toContain("Changed triggers");
+  });
+
+  it("masks a password in a name", async () => {
+    const body = await bodyOf({
+      ...refused,
+      refusedTriggers: { missing: ["postgres://u:secret@h/db"], altered: [] },
+    });
+    expect(body).toContain("<p>Missing triggers: postgres://u:***@h/db</p>");
+    expect(body).not.toContain("secret");
+  });
+
+  it("masks a password in one name without swallowing the next", async () => {
+    const body = await bodyOf({
+      ...refused,
+      refusedTriggers: {
+        missing: ["https://h/db?password=s", "sales_append_only_update"],
+        altered: [],
+      },
+    });
+    expect(body).toContain(
+      "<p>Missing triggers: https://h/db?password=***, sales_append_only_update</p>",
+    );
+    expect(body).not.toContain("password=s");
+  });
+
+  it("gives paragraphs, as well as pre, overflow-wrap: anywhere", async () => {
+    const body = await bodyOf({
+      ...refused,
+      refusedTriggers: { missing: ["t".repeat(512)], altered: [] },
+    });
+    expect(body).toContain(
+      "<style>pre { white-space: pre-wrap; } pre, p { overflow-wrap: anywhere; }</style>",
+    );
+  });
+
+  it("shows no names for a box that failed to start", async () => {
+    const body = await bodyOf({
+      ...state,
+      refusedTriggers: { missing: ["a"], altered: ["b"] },
+    });
+    expect(body).not.toContain("Missing triggers");
+    expect(body).not.toContain("Changed triggers");
   });
 
   it("still shows the count for a box that failed to start", async () => {

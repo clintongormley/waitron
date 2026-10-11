@@ -63,7 +63,10 @@ export function refuseTrading(deps: RefuseTradingDeps): (faults: Faults) => Prom
     deps.log("error", "append_only.triggers_changed", faults);
     try {
       await updateRecoveryState(deps.store, deps.stateDir, (current) =>
-        refusedWhileRunning(current, "append_only.triggers_changed", deps.now()),
+        refusedWhileRunning(current, "append_only.triggers_changed", deps.now(), {
+          missing: [...faults.missing],
+          altered: [...faults.altered],
+        }),
       );
     } catch (error) {
       deps.log("warn", "recovery.state_write_failed", { errorCode: codeOf(error) });

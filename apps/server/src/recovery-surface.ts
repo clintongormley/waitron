@@ -6,6 +6,7 @@ import type { Context } from "hono";
 import { FALLBACK_LOCALE, type ErrorCode, type SupportedLocale } from "@waitron/shared";
 import { LOG_FILE_NAME, type VenueHolderKind } from "@waitron/db";
 import { resolveLoginLocale } from "./login-locale.js";
+import { redactSecrets } from "./redact-secrets.js";
 import type { RecoveryLevel, RecoveryState } from "./recovery-state.js";
 
 const MAX_LOG_LINES = 200;
@@ -121,20 +122,24 @@ const HOLDER_NAMES: Readonly<Record<VenueHolderKind, Readonly<Record<SupportedLo
 };
 
 /**
- * The page's own fixed wording. `code` and `at` come from outside and are shown as recorded;
- * `level` is shown by its internal name. Each line is escaped whole where it is rendered.
+ * The page's own fixed wording. `code` and `at` come from outside and are shown as recorded, the
+ * trigger `names` through `redactSecrets`; `level` is shown by its internal name. Each line is
+ * escaped whole where it is rendered.
  */
 const PAGE_TEXT: Readonly<
   Record<
     SupportedLocale,
     {
       heading: string;
+      stoppedHeading: string;
       retry: string;
       forInstaller: string;
       logTail: string;
       lastFailure: (at: string) => string;
       status: (level: string, failures: number) => string;
       stoppedStatus: (level: string) => string;
+      missingTriggers: (names: string) => string;
+      changedTriggers: (names: string) => string;
       lastError: (code: string, at: string) => string;
       noCode: string;
       noTime: string;
@@ -144,12 +149,15 @@ const PAGE_TEXT: Readonly<
 > = {
   "en-GB": {
     heading: "Waitron did not start",
+    stoppedHeading: "Waitron stopped",
     retry: "Retry a normal boot",
     forInstaller: "For whoever installed this box",
     logTail: "Log tail",
     lastFailure: (at) => `Why the last start failed (${at})`,
     status: (level, failures) => `Level: ${level}. Failed ${failures} times.`,
     stoppedStatus: (level) => `Level: ${level}. Stopped while running.`,
+    missingTriggers: (names) => `Missing triggers: ${names}`,
+    changedTriggers: (names) => `Changed triggers: ${names}`,
     lastError: (code, at) => `Last error: ${code} at ${at}`,
     noCode: "none",
     noTime: "never",
@@ -157,12 +165,15 @@ const PAGE_TEXT: Readonly<
   },
   "es-ES": {
     heading: "Waitron no ha arrancado",
+    stoppedHeading: "Waitron se ha detenido",
     retry: "Reintentar un arranque normal",
     forInstaller: "Para quien instaló este equipo",
     logTail: "Final del registro",
     lastFailure: (at) => `Por qué falló el último arranque (${at})`,
     status: (level, failures) => `Nivel: ${level}. Intentos fallidos: ${failures}.`,
     stoppedStatus: (level) => `Nivel: ${level}. Se detuvo mientras funcionaba.`,
+    missingTriggers: (names) => `Disparadores que faltan: ${names}`,
+    changedTriggers: (names) => `Disparadores cambiados: ${names}`,
     lastError: (code, at) => `Último error: ${code}, fecha: ${at}`,
     noCode: "ninguno",
     noTime: "nunca",
@@ -207,8 +218,9 @@ type RecoveryCode = ErrorCode | typeof BOOT_INCOMPLETE | typeof HOLDER_STALLED;
 
 /**
  * Every string in this table is fixed and chosen by code. The strings on the page that are not —
- * the error code, `lastFailureAt`, the log tail and the last failed start's detail — are
- * HTML-escaped, in either language, as is the line carrying `level` and `failures`.
+ * the error code, `lastFailureAt`, the log tail, the last failed start's detail and the recorded
+ * trigger names — are HTML-escaped, in either language, as is the line carrying `level` and
+ * `failures`.
  *
  * The tail and the detail carry caught errors' own words, stacks and `AppError` params: the
  * operator's only window on why the box did not start (owner decision, 2026-09-26). What bounds
@@ -426,13 +438,25 @@ function operatorText(state: RecoveryState): OperatorText {
   return entries[lastErrorCode] ?? GENERIC_TEXT;
 }
 
+function triggerLines(state: RecoveryState, page: (typeof PAGE_TEXT)[SupportedLocale]): string {
+  if (state.refused !== true || state.refusedTriggers === undefined) return "";
+  const { missing, altered } = state.refusedTriggers;
+  const names = (list: readonly string[]) => list.map((name) => redactSecrets(name)).join(", ");
+  const lines = [
+    ...(missing.length > 0 ? [page.missingTriggers(names(missing))] : []),
+    ...(altered.length > 0 ? [page.changedTriggers(names(altered))] : []),
+  ];
+  return lines.map((line) => `<p>${escapeHtml(line)}</p>\n`).join("");
+}
+
 function renderPage(state: RecoveryState, log: LogView, locale: SupportedLocale): string {
   const page = PAGE_TEXT[locale];
   const text = operatorText(state)[locale];
-  const status =
-    state.refused === true
-      ? page.stoppedStatus(state.level)
-      : page.status(state.level, state.failures);
+  const refused = state.refused === true;
+  const heading = refused ? page.stoppedHeading : page.heading;
+  const status = refused
+    ? page.stoppedStatus(state.level)
+    : page.status(state.level, state.failures);
   const lastError = page.lastError(
     state.lastErrorCode ?? page.noCode,
     state.lastFailureAt ?? page.noTime,
@@ -453,11 +477,11 @@ function renderPage(state: RecoveryState, log: LogView, locale: SupportedLocale)
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>${escapeHtml(page.heading)}</title>
-<style>pre { white-space: pre-wrap; overflow-wrap: anywhere; }</style>
+<title>${escapeHtml(heading)}</title>
+<style>pre { white-space: pre-wrap; } pre, p { overflow-wrap: anywhere; }</style>
 </head>
 <body>
-<h1>${escapeHtml(page.heading)}</h1>
+<h1>${escapeHtml(heading)}</h1>
 <p>${escapeHtml(text.title)}</p>
 <p>${escapeHtml(text.action)}</p>
 <form method="post" action="/recovery-api/retry">
@@ -465,7 +489,7 @@ function renderPage(state: RecoveryState, log: LogView, locale: SupportedLocale)
 </form>
 <h2>${escapeHtml(page.forInstaller)}</h2>
 <p>${escapeHtml(status)}</p>
-<p>${escapeHtml(lastError)}</p>
+${triggerLines(state, page)}<p>${escapeHtml(lastError)}</p>
 ${lastFailure}<h2>${escapeHtml(page.logTail)}</h2>
 <pre>${tail}</pre>
 </body>
@@ -490,7 +514,7 @@ export function recoveryApp(deps: RecoveryDeps): Hono {
     return c.html(renderPage(deps.state, log, locale));
   });
 
-  // Named one by one, to leave out the clear count.
+  // Named one by one, to leave out the clear count and the trigger names.
   app.get("/recovery-api/status", (c) => {
     const { failures, level, lastErrorCode, lastFailureAt, holderKind } = deps.state;
     const refused = deps.state.refused === true;

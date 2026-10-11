@@ -505,6 +505,7 @@ describe("runEntry", () => {
       volume.current(),
       "append_only.triggers_changed",
       new Date("2026-10-11T10:00:00Z"),
+      { missing: ["sales_append_only_delete"], altered: [] },
     );
     await volume.deps.writeRecoveryState("/state", refused);
     const writes = volume.deps.writeRecoveryState.mock.calls.length;
@@ -523,6 +524,7 @@ describe("runEntry", () => {
         { ...FRESH, failures: 1 },
         "append_only.triggers_changed",
         new Date("2026-10-11T10:00:00Z"),
+        { missing: ["sales_append_only_delete"], altered: [] },
       ),
     );
     const serveRecovery = vi.fn<(app: Hono) => Promise<void>>(() => Promise.resolve());
@@ -533,6 +535,8 @@ describe("runEntry", () => {
     expect(page).toContain(
       escapeHtml(OPERATOR_TEXT["append_only.triggers_changed"]!["en-GB"].title),
     );
+    expect(page).toContain("<h1>Waitron stopped</h1>");
+    expect(page).toContain("<p>Missing triggers: sales_append_only_delete</p>");
   });
 
   it("passes the server's OWN migrations root, never the bundle-relative null", async () => {

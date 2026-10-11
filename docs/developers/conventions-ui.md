@@ -716,14 +716,18 @@ error's name and message, the stack, each `caused by` in its cause chain up to f
 read from the whole file so the tail's line cap cannot cut it off, and only when no later start
 began; in the tail each failure's `detail` is laid out on its own lines. A box the append-only
 check stopped while trading (`refused` in `recovery.json`, `apps/server/src/append-only-watch.ts`)
-shows "Stopped while running." where the count would be, and no failed start's detail, because the
-start before it did not fail: the trigger names are in the tail. `/recovery-api/status` reports
-`refused`.
+is headed "Waitron stopped", shows "Stopped while running." where the count would be, and no failed
+start's detail, because the start before it did not fail. The trigger names that stopped it are
+recorded with the refusal (`refusedTriggers`) and shown under that line, one line for each list
+that holds a name: "Missing triggers:" and "Changed triggers:". `/recovery-api/status` reports
+`refused`, not the names.
 
-Strings on the page that come from outside the image: the error CODE, `lastFailureAt`, the LOG TAIL
-and the last failure's detail, all HTML-escaped. The failure count also does, read as a number, and
+Strings on the page that come from outside the image: the error CODE, `lastFailureAt`, the LOG TAIL,
+the last failure's detail and the recorded trigger names, all HTML-escaped; the trigger names also
+pass through `redactSecrets`. The failure count also does, read as a number, and
 so does a recorded holder kind, which on the page only selects a fixed name from a closed table.
-`/recovery-api/status` returns the kind itself; the read of `recovery.json` keeps it only when it is one of `VENUE_HOLDER_KINDS`. The
+`/recovery-api/status` returns the kind itself; the read of `recovery.json` keeps it only when it is one of `VENUE_HOLDER_KINDS`, and keeps the
+trigger names only beside `refused` and only as two lists of strings. The
 browser's `Accept-Language` also reaches the page, and only selects the language
 `resolveLoginLocale` returns from the supported set (`apps/server/src/login-locale.ts`). The log
 file's lines carry caught errors' own words and `AppError` params, and `redactSecrets` masks only a
