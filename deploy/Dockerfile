@@ -68,12 +68,6 @@ RUN set -eux; \
 # Runs as the unprivileged `node` user the base image already ships (uid 1000).
 # ---------------------------------------------------------------------------
 FROM node:26-slim AS print-agent
-ARG WAITRON_BUILD_ID
-ARG WAITRON_IMAGE_CREATED
-ARG WAITRON_IMAGE_REF
-LABEL org.opencontainers.image.revision="${WAITRON_BUILD_ID}" \
-      org.opencontainers.image.created="${WAITRON_IMAGE_CREATED}" \
-      org.opencontainers.image.ref.name="${WAITRON_IMAGE_REF}"
 # python3-minimal goes in alone and first, so the packages it adds to the base image can be listed:
 # their Debian copyright files ship in /app/third-party/python3-minimal (deploy/third-party/README.md).
 # apt's own read timeout did not end a wait on a mirror sending a byte every 5 s, so each apt-get runs
@@ -116,6 +110,13 @@ USER node
 WORKDIR /app
 CMD ["node", "/app/print-agent.js"]
 
+ARG WAITRON_BUILD_ID
+ARG WAITRON_IMAGE_CREATED
+ARG WAITRON_IMAGE_REF
+LABEL org.opencontainers.image.revision="${WAITRON_BUILD_ID}" \
+      org.opencontainers.image.created="${WAITRON_IMAGE_CREATED}" \
+      org.opencontainers.image.ref.name="${WAITRON_IMAGE_REF}"
+
 # ---------------------------------------------------------------------------
 # Litestream stage — the pinned binary the server runs as a child process to
 # stream venue.db to the owner's bucket (packages/stream). A stage of its own so
@@ -147,12 +148,6 @@ RUN set -eux; \
 # ---------------------------------------------------------------------------
 FROM node:26-slim AS runtime
 
-ARG WAITRON_BUILD_ID
-ARG WAITRON_IMAGE_CREATED
-ARG WAITRON_IMAGE_REF
-LABEL org.opencontainers.image.revision="${WAITRON_BUILD_ID}" \
-      org.opencontainers.image.created="${WAITRON_IMAGE_CREATED}" \
-      org.opencontainers.image.ref.name="${WAITRON_IMAGE_REF}"
 
 # libcap2-bin is here for the setcap below. apt-get is bounded as in the print-agent stage.
 RUN set -eux; \
@@ -189,7 +184,9 @@ RUN install -d -o waitron -g waitron -m 0700 /var/lib/waitron \
 
 # Named file by file rather than copying the whole of dist/, because dist/ also holds the demo
 # scripts (record-one-sale.js and friends) — and record-one-sale.js writes a real sale through the
-# real Veri*Factu backend into an append-only, hash-chained table, under any WAITRON_ENV including
+# real Veri*Factu backend into an append-only, hash-chained table, under any WAITRON_ARG WAITRON_BUILD_ID
+
+ENV including
 # production. A production image has no business carrying it. dist/package.json ({"type":"module"})
 # travels with the bundle so /app declares its own module system rather than inheriting one from a
 # walk up the filesystem. deploy-image-env.test.ts pins this list against package.json's
@@ -272,3 +269,9 @@ WORKDIR /app
 # with --entrypoint (deploy/README.md). A bare `docker run <image> <command>` passes the command to
 # node-entry.js as arguments, which it refuses with server.entry_arguments_refused.
 ENTRYPOINT ["node", "/app/node-entry.js"]
+
+ARG WAITRON_IMAGE_CREATED
+ARG WAITRON_IMAGE_REF
+LABEL org.opencontainers.image.revision="${WAITRON_BUILD_ID}" \
+      org.opencontainers.image.created="${WAITRON_IMAGE_CREATED}" \
+      org.opencontainers.image.ref.name="${WAITRON_IMAGE_REF}"

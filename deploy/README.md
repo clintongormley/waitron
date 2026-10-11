@@ -151,7 +151,9 @@ commit link for each running Waitron image. `install` and its `update` alias pri
 after the box becomes healthy. Status reads the containers' image IDs, so pulling a newer tag
 does not change the reported version until you replace the containers. An image without the
 source labels prints `unknown — built before A490`; a service without a running container prints
-`not running`.
+`not running`. A development image without a source commit prints `development — source unknown`.
+If a Docker lookup fails, the script prints `version unavailable` for that service and carries on
+to the other service and the setup links.
 
 ```bash
 cd /opt/waitron

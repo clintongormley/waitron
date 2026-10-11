@@ -1694,3 +1694,13 @@ printed `fb6a474b830ceb51ce96babd133a6a635e5f725d`. The shell regressions cover 
 both pinned builds, status without labels or running containers, different revisions for the two
 services, and UTC-to-local conversion. The source guards read text; the smoke job inspects the
 built images.
+
+
+Keep changing image metadata after package-install `RUN` steps. A490's first label placement
+made those steps depend on the timestamp. On Docker Desktop 29.3.0, a scratch probe based on
+`node:26-slim` used `ARG C`, `LABEL created="${C}"` and `RUN printf cache-probe > /tmp/a490-cache`.
+Two `docker build --progress=plain --build-arg C=<value>` calls with new values `111014521` and
+`111014522` each printed `#5 DONE 0.1s` for that RUN. Moving ARG/LABEL after RUN made the second
+call print `#5 CACHED`. This measures that tiny Dockerfile, not the box's Docker version or apt's
+runtime. Both shipped targets now place the metadata after their final RUN; the deploy guard
+checks that ordering as text.

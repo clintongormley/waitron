@@ -88,6 +88,7 @@ case "$args" in
 esac
 case "$1" in
   compose)
+    case "$args" in *"ps -q app"*) [ "\${WT_LOOKUP_FAIL}" = ps ] && exit 1 ;; esac
     [ "\${WT_REQUIRE_BOX_CWD}" = 1 ] && [ "$PWD" != "$WAITRON_DIR" ] && exit 96
     shift
     [ "$1" = "-f" ] && shift 2
@@ -144,12 +145,25 @@ case "$1" in
       *) echo "docker stub: no arm for compose $args" >&2; exit 97 ;;
     esac ;;
   inspect)
+    [ "\${WT_LOOKUP_FAIL}" = inspect ] && [ "\${@: -1}" = app-container ] && exit 1
     case "$args" in
-      *app-container*) echo sha256:running-app ;;
-      *agent-container*) echo sha256:running-agent ;;
+      *app-container*)
+        case "$args" in
+          *"-f {{.Image}}"*) echo sha256:running-app ;;
+          *"-f {{.Config.Image}}"*) echo waitron:newer-tag ;;
+          *) exit 97 ;;
+        esac ;;
+      *agent-container*)
+        case "$args" in
+          *"-f {{.Image}}"*) echo sha256:running-agent ;;
+          *"-f {{.Config.Image}}"*) echo waitron-print-agent:newer-tag ;;
+          *) exit 97 ;;
+        esac ;;
     esac ;;
   image)
+    [ "\${WT_LOOKUP_FAIL}" = labels ] && [ "\${@: -1}" = sha256:running-app ] && exit 1
     case "$args" in
+      *--format*waitron:newer-tag*|*--format*waitron-print-agent:newer-tag*) echo 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|2026-10-12T12:00:00Z|newer-tag'; exit 0 ;;
       *--format*sha256:running-app*) printf '%s\\n' "\${WT_APP_LABELS}"; exit 0 ;;
       *--format*sha256:running-agent*) printf '%s\\n' "\${WT_AGENT_LABELS}"; exit 0 ;;
     esac
@@ -501,6 +515,35 @@ describe("waitron.sh image provenance", () => {
     const r = run(sb, ["status"], { ...labels, WT_REQUIRE_BOX_CWD: "1" });
     expect(r.status, r.stderr).toBe(0);
     expect(r.stdout).toContain("app: running 0123456789ab (main)");
+  });
+
+  it.each(["ps", "inspect", "labels"])(
+    "keeps the setup links and the other image when %s lookup fails",
+    (failure) => {
+      const sb = sandbox();
+      const r = run(sb, ["install"], { ...labels, WT_LOOKUP_FAIL: failure });
+      expect(r.status, r.stderr).toBe(0);
+      expect(r.stdout).toContain("app: version unavailable");
+      expect(r.stdout).toContain("print-agent: running fedcba987654");
+      expect(r.stdout).toContain("Waitron is ready.");
+      expect(r.stdout).toContain("http://waitron.local/setup/trust");
+      expect(readFileSync(sb.log, "utf8")).toContain("qrencode");
+    },
+  );
+
+  it("identifies a development image without claiming it predates source labels", () => {
+    const sb = sandbox();
+    writeFileSync(join(sb.boxDir, "compose.yml"), "stub\n");
+    const r = run(sb, ["status"], { ...labels, WT_APP_LABELS: "development||" });
+    expect(r.status, r.stderr).toBe(0);
+    expect(r.stdout).toContain("app: development — source unknown");
+  });
+
+  it("hands update to the refreshed script as install", () => {
+    const sb = sandbox({ runningScript: "marked", refScript: "pre-reset" });
+    const r = run(sb, ["update", "my-branch"]);
+    expect(r.status, r.stderr).toBe(0);
+    expect(readFileSync(sb.log, "utf8")).toContain("waitron.sh-start <install><my-branch>");
   });
 
   it("reports unlabelled running images as unknown", () => {

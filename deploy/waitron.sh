@@ -393,15 +393,28 @@ EOF
 print_image_versions() {
   local service container image labels sha created ref local_time epoch
   for service in app print-agent; do
-    container="$(docker compose -f "$WAITRON_DIR/compose.yml" ps -q "$service")"
+    if ! container="$(docker compose -f "$WAITRON_DIR/compose.yml" ps -q "$service")"; then
+      echo "$service: version unavailable"
+      continue
+    fi
     if [ -z "$container" ]; then
       echo "$service: not running"
       continue
     fi
     # Inspect the container's immutable image id: its tag may have moved since it started.
-    image="$(docker inspect -f '{{.Image}}' "$container")"
-    labels="$(docker image inspect --format '{{printf "%s|%s|%s" (index .Config.Labels "org.opencontainers.image.revision") (index .Config.Labels "org.opencontainers.image.created") (index .Config.Labels "org.opencontainers.image.ref.name")}}' "$image")"
+    if ! image="$(docker inspect -f '{{.Image}}' "$container")"; then
+      echo "$service: version unavailable"
+      continue
+    fi
+    if ! labels="$(docker image inspect --format '{{printf "%s|%s|%s" (index .Config.Labels "org.opencontainers.image.revision") (index .Config.Labels "org.opencontainers.image.created") (index .Config.Labels "org.opencontainers.image.ref.name")}}' "$image")"; then
+      echo "$service: version unavailable"
+      continue
+    fi
     IFS='|' read -r sha created ref <<<"$labels"
+    if [ "$sha" = development ]; then
+      echo "$service: development — source unknown"
+      continue
+    fi
     if ! [[ "$sha" =~ ^[0-9a-f]{40}$ ]] || [ -z "$created" ] || [ -z "$ref" ]; then
       echo "$service: unknown — built before A490"
       continue
@@ -706,6 +719,10 @@ main() {
     shift
   done
   local verb="${1:-}"
+  if [ "$verb" = update ]; then
+    WAITRON_ARGV[${#WAITRON_ARGV[@]} - $#]=install
+    verb=install
+  fi
   case "$verb" in
     install | update | status | reset | "" | -h | --help) ;;
     *) die "unknown command '$verb'" 2 ;;

@@ -136,9 +136,6 @@ jobs:
             org.opencontainers.image.created=${{ steps.provenance.outputs.created }}
             org.opencontainers.image.ref.name=${{ github.head_ref || github.ref_name }}
 
-      # `--wait` blocks on the compose healthcheck, which passes on EITHER /health or
-      # /setup-api/status — /health is 503 by design on a setup box, so waiting on that alone would
-      # sit here for the whole timeout and then call a healthy box broken.
       - name: Inspect both images' source labels
         env:
           EXPECTED_SHA: ${{ github.sha }}
@@ -156,6 +153,9 @@ jobs:
             ' <<< "$labels"
           done
 
+      # `--wait` blocks on the compose healthcheck, which passes on EITHER /health or
+      # /setup-api/status — /health is 503 by design on a setup box, so waiting on that alone would
+      # sit here for the whole timeout and then call a healthy box broken.
       - name: Bring the node up on blank volumes
         run: docker compose up -d --wait --wait-timeout 300
 
