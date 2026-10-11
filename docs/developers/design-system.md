@@ -3392,17 +3392,45 @@ period's end beside Keep open later. Its dialog offers server-provided times, ex
 period's delay and allows ending an existing extension. Both destination and endpoint dialogs
 use the shared draft scope and save-action state, with reconnect cases in their
 `*.unsaved.test.ts` suites under `apps/till/src/widgets/`.
-Routing shows the routing grid (`packages/venue-service/src/dashboard/routing-grid.ts`): a row for
-All categories, each category, each top-level product and, while a product has no category or the
-row holds a saved choice, No category; a column for Every zone and each active service zone. Below
-40rem the row-label column is at most 96 px and table cells pad by `--wt-space-1`, so a 390 px
+Routing shows the routing grid (`packages/venue-service/src/dashboard/routing-grid.ts`): a column
+for Every zone and each active service zone, and rows in a tree under All categories, with No
+category last while a product has no category or that row holds a saved choice. A row's label is its
+own name, indented under its parent category. The parent path is not drawn, but a cell's accessible
+name and a refusal at the bottom of the grid still read it ("Drinks › Cocktails › Mojito, Terrace:
+Terrace bar, inherited"). A closed category lists only the children that hold a setting of their own
+or have one further down, so a row with its own setting always shows, with every category above it
+as a row; opening a category lists all its children (`visibleRoutingRows`, `routing-grid-model.ts`).
+Below 40rem the row-label column is at most 96 px and table cells pad by `--wt-space-1`, so a 390 px
 window shows the labels, Every zone and one zone column without scrolling (the "at phone width"
-cases in `routing-grid.test.ts`). Each cell is a button showing its station (an inherited one muted
-and in italics) and one line per period choice ("Lunch, Afternoon: Downstairs bar"). Under a line
-the cell stores whose period's menus offer none of the row's active products, the grid shows "Not
-on Lunch menus" in the warning colour; the editor shows it under that saved line until the line's
-periods or station change, and it does not change Save. It opens the
-routing cell editor (`routing-cell-editor.ts`): "Any other time" holds the cell's own station,
+cases in `routing-grid.test.ts`).
+
+Each cell is a borderless button that fills its table cell, except the All categories × Every zone
+cell for someone who cannot set the default station, which is plain text. Pointing at it tints it
+with `--wt-color-surface-lifted`, draws the focus outline just inside its edges and shows a hand
+pointer; keyboard focus draws the same outline. A station or No preparation set in that cell, or
+chosen there and waiting to be saved, is bold in `--wt-color-primary-text`. An inherited Every zone
+value is in `--wt-color-text-muted`. An inherited zone value is left blank when it is what the row's
+own Every zone shows — the same station, and the same period lines for that zone's department — and
+is otherwise muted and in italics (`blankZoneCell`, `routing-grid-model.ts`). Under the station, one
+line per period choice in smaller text and the station's style ("Lunch, Afternoon: Downstairs bar").
+Under a line the cell stores whose period's menus offer none of the row's active products, the grid
+shows "Not on Lunch menus" in the warning colour; the editor shows it under that saved line until
+the line's periods or station change, and it does not change Save.
+
+A search field before Expand all ("Search categories and products") lists All categories, each
+category or product whose own name matches, and every category above a match. Matching ignores case
+and accents and follows `textSearch` (`packages/shared/src/text-search.ts`): every word must match,
+as a whole word except the one still being typed, which may be part of one. Each matched word is
+marked with `--wt-color-highlight`. A row shown only because a match is below it has a muted label,
+except the No category heading, where muted text on its sunken fill measures 4.34:1 in the light
+theme. The categories above a match start open and the matched ones closed, and an open category
+above a match lists only the way to its matches. After Collapse all a count reads "1 match",
+"{count} matches" or "No matches", counting matches inside closed categories too. While searching,
+opening and closing categories, Expand all and Collapse all change only the search's rows; each new
+query starts again from its own opening, and clearing the field brings back the tree as it was open
+(the "search" cases in `routing-grid.test.ts`).
+
+A cell's button opens the routing cell editor (`routing-cell-editor.ts`): "Any other time" holds the cell's own station,
 and "+ Different station during some periods" adds a line of periods with a station. A zone column offers only its
 department's periods, and none when the zone has no department; a line offers only periods whose
 menus include the row's products, or one the cell already stores with the same choice as that line, a station or No preparation. An inherited cell opens holding
