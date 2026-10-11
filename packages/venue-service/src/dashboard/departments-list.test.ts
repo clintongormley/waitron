@@ -212,7 +212,7 @@ describe("department list", () => {
       find(el, '[data-test="default-station-missing"]')!.querySelector("a")!.getAttribute("href"),
     ).toBe("/manage/prep-stations");
     expect(find(el, '[data-test="no-enabled-department"]')!.textContent).toContain(
-      "No department is enabled: enable one to take orders",
+      "No department is available: add one to take orders",
     );
     expect(find(el, '[data-test="unassigned-zones"]')!.textContent).toContain(
       "Zones in no department: Patio",
@@ -310,7 +310,7 @@ describe("department list", () => {
     expect(rows(el)[1]!.textContent).toContain("Sin zonas");
     expect(find(el, '[data-test="delete-department-d2"]')!.textContent!.trim()).toBe("Eliminar");
     expect(find(el, '[data-test="no-enabled-department"]')!.textContent).toContain(
-      "Ningún departamento está habilitado: habilita uno para aceptar pedidos",
+      "No hay ningún departamento disponible: añade uno para aceptar pedidos",
     );
   });
   it.each(["en", "es"])(

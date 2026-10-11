@@ -3096,9 +3096,9 @@ describe("restore, configuration and fiscal-test outcomes", () => {
   );
 
   const switchedOffTail =
-    "in the zone “Terraza”, but that zone's department, “Comedor”, is disabled. Enable “Comedor” in the restaurant you exported from, export again, then load the new export.";
+    "in the zone “Terraza”, but that zone's department, “Comedor”, is deleted. Create a new export from your current departments and zones, then load it.";
   const switchedOffTailEs =
-    "en la zona «Terraza», pero el departamento de esa zona, «Comedor», está deshabilitado. Habilita «Comedor» en el restaurante de origen, vuelve a exportar y carga la nueva exportación.";
+    "en la zona «Terraza», pero el departamento de esa zona, «Comedor», está eliminado. Crea una nueva exportación de tus departamentos y zonas actuales y cárgala.";
   it.each([
     [
       "en-GB",
@@ -3210,11 +3210,11 @@ describe("restore, configuration and fiscal-test outcomes", () => {
   it.each([
     [
       "en-GB",
-      "The export has the zone “Terraza” active, but its department, “Comedor”, is disabled. Enable “Comedor” in the restaurant you exported from, export again, then load the new export.",
+      "The export has the zone “Terraza” active, but its department, “Comedor”, is deleted. Create a new export from your current departments and zones, then load it.",
     ],
     [
       "es-ES",
-      "La exportación tiene la zona «Terraza» activa, pero su departamento, «Comedor», está deshabilitado. Habilita «Comedor» en el restaurante de origen, vuelve a exportar y carga la nueva exportación.",
+      "La exportación tiene la zona «Terraza» activa, pero su departamento, «Comedor», está eliminado. Crea una nueva exportación de tus departamentos y zonas actuales y cárgala.",
     ],
   ] as const)(
     "names a switched-on zone whose department is switched off (%s)",
