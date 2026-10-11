@@ -68,9 +68,8 @@ async function mount(
         {
           id: "table-one",
           label: "Window",
-          zoneId: null,
-          capacity: 4,
-          active: true,
+          zoneId: "z1",
+          planTableId: null,
           createdAt: "2026-01-01",
         },
       ] as T;

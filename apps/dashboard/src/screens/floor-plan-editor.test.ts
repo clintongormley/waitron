@@ -654,19 +654,18 @@ async function addTablesHint(el: FloorPlanEditor): Promise<string> {
   return addModal(el).querySelector("[data-preview]")!.textContent!.trim();
 }
 
-const venueTable = (id: string, label: string, zoneId: string | null, active: boolean) => ({
+const venueTable = (id: string, label: string, zoneId: string, planTableId: string | null) => ({
   id,
   label,
   zoneId,
-  capacity: null,
-  active,
+  planTableId,
   createdAt: "2026-10-01T10:00:00.000Z",
 });
 
-it("counts this zone's switched-off tables no draft table follows as taken", async () => {
+it("counts this zone's tables without a master no draft table follows as taken", async () => {
   const el = await open(
     stubApi({
-      listTables: vi.fn().mockResolvedValue([venueTable("l7", "Terrace 30", "z1", false)]),
+      listTables: vi.fn().mockResolvedValue([venueTable("l7", "Terrace 30", "z1", null)]),
     }),
   );
   expect(await addTablesHint(el)).toBe("Terrace 31");
@@ -678,10 +677,10 @@ it("counts other zones' tables as taken, but not this zone's live or followed ta
       listTables: vi
         .fn()
         .mockResolvedValue([
-          venueTable("l1", "Terrace 50", "z1", false),
-          venueTable("l8", "Terrace 60", "z1", true),
-          venueTable("l9", "Terrace 20", "z2", true),
-          venueTable("l10", "Terrace 9", null, false),
+          venueTable("l1", "Terrace 50", "z1", null),
+          venueTable("l8", "Terrace 60", "z1", "m8"),
+          venueTable("l9", "Terrace 20", "z2", "m9"),
+          venueTable("l10", "Terrace 9", "z3", null),
         ]),
     }),
   );

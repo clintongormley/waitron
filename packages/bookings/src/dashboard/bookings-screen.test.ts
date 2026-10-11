@@ -10,8 +10,8 @@ import type { BookingForm } from "./booking-form.js";
 import { BookingsScreen } from "./bookings-screen.js";
 
 const TABLES: DashboardTable[] = [
-  { id: "t-1", label: "Mesa 1", zoneId: null, capacity: 4, active: true, createdAt: "2026-01-01" },
-  { id: "t-2", label: "Mesa 2", zoneId: null, capacity: 2, active: true, createdAt: "2026-01-01" },
+  { id: "t-1", label: "Mesa 1", zoneId: "z1", planTableId: null, createdAt: "2026-01-01" },
+  { id: "t-2", label: "Mesa 2", zoneId: "z1", planTableId: null, createdAt: "2026-01-01" },
 ];
 
 function booking(overrides: Partial<Booking> = {}): Booking {

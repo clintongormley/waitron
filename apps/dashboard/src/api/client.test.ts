@@ -1572,8 +1572,7 @@ describe("DashboardApi — floor plan (zones + tables)", () => {
         id: "t1",
         label: "4",
         zoneId: "z1",
-        capacity: 2,
-        active: true,
+        planTableId: null,
         createdAt: "2026-08-17T00:00:00Z",
       },
     ];
