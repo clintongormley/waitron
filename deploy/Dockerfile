@@ -2,6 +2,8 @@
 #   docker build -f deploy/Dockerfile -t waitron:dev .   (`pnpm build:image`)
 
 ARG WAITRON_BUILD_ID=development
+ARG WAITRON_IMAGE_CREATED
+ARG WAITRON_IMAGE_REF
 
 # ---------------------------------------------------------------------------
 # Build stage — install the workspace and run the builds that already exist.
@@ -108,6 +110,13 @@ USER node
 WORKDIR /app
 CMD ["node", "/app/print-agent.js"]
 
+ARG WAITRON_BUILD_ID
+ARG WAITRON_IMAGE_CREATED
+ARG WAITRON_IMAGE_REF
+LABEL org.opencontainers.image.revision="${WAITRON_BUILD_ID}" \
+      org.opencontainers.image.created="${WAITRON_IMAGE_CREATED}" \
+      org.opencontainers.image.ref.name="${WAITRON_IMAGE_REF}"
+
 # ---------------------------------------------------------------------------
 # Litestream stage — the pinned binary the server runs as a child process to
 # stream venue.db to the owner's bucket (packages/stream). A stage of its own so
@@ -138,8 +147,6 @@ RUN set -eux; \
 # Runtime stage — the build outputs and a non-root user.
 # ---------------------------------------------------------------------------
 FROM node:26-slim AS runtime
-
-ARG WAITRON_BUILD_ID
 
 # libcap2-bin is here for the setcap below. apt-get is bounded as in the print-agent stage.
 RUN set -eux; \
@@ -238,6 +245,8 @@ COPY --from=build --chown=waitron:waitron /third-party/libvips/ /app/third-party
 # copies of boot.ts's BOX_HOSTNAME, pinned to it — along with compose's defaults and waitron.sh's
 # QR URL — by scripts/deploy-image-env.test.ts, which is what makes a change to one of the four
 # fail rather than ship a box whose certificate, QR and relying party disagree.
+ARG WAITRON_BUILD_ID
+
 ENV WAITRON_STATE_DIR=/var/lib/waitron/state \
   WAITRON_BUILD_ID=${WAITRON_BUILD_ID} \
   WAITRON_LOG_DIR=/var/lib/waitron/logs \
@@ -259,3 +268,9 @@ WORKDIR /app
 # with --entrypoint (deploy/README.md). A bare `docker run <image> <command>` passes the command to
 # node-entry.js as arguments, which it refuses with server.entry_arguments_refused.
 ENTRYPOINT ["node", "/app/node-entry.js"]
+
+ARG WAITRON_IMAGE_CREATED
+ARG WAITRON_IMAGE_REF
+LABEL org.opencontainers.image.revision="${WAITRON_BUILD_ID}" \
+      org.opencontainers.image.created="${WAITRON_IMAGE_CREATED}" \
+      org.opencontainers.image.ref.name="${WAITRON_IMAGE_REF}"

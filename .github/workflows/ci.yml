@@ -2020,6 +2020,10 @@ jobs:
       # be built under QEMU. Pay that on a release tag, not on every merge to `main` — and re-add
       # `docker/setup-qemu-action` when you do, since buildx alone registers no binfmt handler and an
       # emulated stage would fail at its first `RUN`.
+      - name: Record image build time
+        id: provenance
+        run: echo "created=$(date -u '+%Y-%m-%dT%H:%M:%SZ')" >> "$GITHUB_OUTPUT"
+
       - name: Publish to GHCR
         uses: docker/build-push-action@v7
         with:
@@ -2029,6 +2033,10 @@ jobs:
           push: true
           tags: ${{ steps.tags.outputs.tags }}
           build-args: WAITRON_BUILD_ID=${{ github.sha }}
+          labels: |
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.created=${{ steps.provenance.outputs.created }}
+            org.opencontainers.image.ref.name=${{ github.head_ref || github.ref_name }}
 
       - name: Publish the print-agent image to GHCR
         uses: docker/build-push-action@v7
@@ -2040,3 +2048,7 @@ jobs:
           push: true
           tags: ${{ steps.tags.outputs.agent_tags }}
           build-args: WAITRON_BUILD_ID=${{ github.sha }}
+          labels: |
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.created=${{ steps.provenance.outputs.created }}
+            org.opencontainers.image.ref.name=${{ github.head_ref || github.ref_name }}

@@ -3811,6 +3811,11 @@ _Formerly entries spread across the old sections._ Detail: [backlog/back-office.
 
 _Formerly B2, B3, B4, B5 and B7._ Detail: [backlog/box.md](backlog/box.md).
 
+- **A branch install fetches compose and support files before resolving the image commit.**
+  A push between those operations could give them different source commits; inferred from
+  `deploy/waitron.sh`'s call order, not reproduced. Pin file downloads to the resolved commit
+  in a separate deployment change. A490 pins both image builds only.
+
 - **S3-compatible bucket, then Google Drive.** The bucket stream of `venue.db` is built (slice 2);
   the archive's S3 backend is not — only `LocalFsBackend` exists for archives. The abort-aware
   per-destination timeout lands with the first network backend.
@@ -5215,6 +5220,9 @@ shipping-style wizard; `wa-wt reset demo|onboarding [worktree-name]` wipes and r
 
 From the 2026-09-05 whole-project design review and since. They supersede older spec text where they
 conflict.
+
+- **Box image identity (A490, owner 2026-10-11):** the script reports the commit and build time
+  of each running Waitron image. [Decision](backlog/box.md#decisions-and-deliberate-limits).
 
 - **One tenant per database everywhere, the cloud included, and the schema carries no tenant
   column** (2026-09-14; #378). A tenant is one taxpayer (`country` + `tax_id`), held as the single

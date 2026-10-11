@@ -41,8 +41,8 @@ sudo bash waitron.sh install
 `install` installs Docker Engine and the compose plugin if they are missing (Debian and Ubuntu only;
 on anything else it says so and exits 2) and enables the daemon at boot. It then fetches `compose.yml`
 and `.env.example` from the ref you are installing, overwriting any local copy of those two files and
-printing a line to say so, because the compose file and the image running against it must always come
-from the same commit. Finally it pulls the box's images, the two Waitron ones from GHCR and the
+printing a line to say so. These files follow the requested ref; the running image
+reports its own commit below. Finally it pulls the box's images, the two Waitron ones from GHCR and the
 mail catcher from Docker Hub, stopping with an error if any of them fails to download, and starts the
 containers.
 
@@ -146,6 +146,15 @@ it. It does not offer the box's fallback CA, which cannot certify that connectio
 
 ## Updating and operating
 
+Run `sudo bash waitron.sh status` to see the commit, requested ref, local build time and GitHub
+commit link for each running Waitron image. `install` and its `update` alias print the same lines
+after the box becomes healthy. Status reads the containers' image IDs, so pulling a newer tag
+does not change the reported version until you replace the containers. An image without the
+source labels prints `unknown — built before A490`; a service without a running container prints
+`not running`. A development image without a source commit prints `development — source unknown`.
+If a Docker lookup fails, the script prints `version unavailable` for that service and carries on
+to the other service and the setup links.
+
 ```bash
 cd /opt/waitron
 docker compose pull && docker compose up -d --remove-orphans   # updates to the published :main, unless a branch install pinned an image in .env (run `waitron.sh install` with no ref to return to :main)
@@ -181,7 +190,8 @@ goes with the old one, so read it before pulling a new image. The failed start's
 CI does not publish an image for a pull request (only pushes to `main` and `v*` tags publish to
 GHCR), so there is no PR image to `pull`. Give `install` a ref — a branch name or a commit SHA —
 instead of relying on the default `main`, and it builds that ref's image on the box instead of
-pulling: Docker fetches the ref itself, so no checkout or `pnpm` is needed.
+pulling. The script resolves the ref once through GitHub's commit API, then builds both Waitron
+images from that full commit. No checkout or `pnpm` is needed; a failed resolution stops the builds.
 
 ```bash
 sudo bash waitron.sh install <branch-or-ref>

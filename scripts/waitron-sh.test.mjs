@@ -88,6 +88,8 @@ case "$args" in
 esac
 case "$1" in
   compose)
+    case "$args" in *"ps -q app"*) [ "\${WT_LOOKUP_FAIL}" = ps ] && exit 1 ;; esac
+    [ "\${WT_REQUIRE_BOX_CWD}" = 1 ] && [ "$PWD" != "$WAITRON_DIR" ] && exit 96
     shift
     [ "$1" = "-f" ] && shift 2
     args="$*"
@@ -99,6 +101,10 @@ case "$1" in
         case "$args" in *--ignore-pull-failures*) exit 0 ;; esac
         [ "\${WT_PULL_FAIL}" = "1" ] && exit 1 ;;
       ps)
+        case "$args" in
+          *"-q app") [ "\${WT_NO_CONTAINERS}" != 1 ] && echo app-container; exit 0 ;;
+          *"-q print-agent") [ "\${WT_NO_CONTAINERS}" != 1 ] && echo agent-container; exit 0 ;;
+        esac
         # WT_DOCKER_PS_PENDING probes answer empty before the box reports WT_DOCKER_PS: a container
         # that has no health verdict yet. The counter is a file in the case's own directory, so cases
         # cannot see each other's, and it is what the probe-count assertions read.
@@ -138,7 +144,29 @@ case "$1" in
       up|down) ;;
       *) echo "docker stub: no arm for compose $args" >&2; exit 97 ;;
     esac ;;
+  inspect)
+    [ "\${WT_LOOKUP_FAIL}" = inspect ] && [ "\${@: -1}" = app-container ] && exit 1
+    case "$args" in
+      *app-container*)
+        case "$args" in
+          *"-f {{.Image}}"*) echo sha256:running-app ;;
+          *"-f {{.Config.Image}}"*) echo waitron:newer-tag ;;
+          *) exit 97 ;;
+        esac ;;
+      *agent-container*)
+        case "$args" in
+          *"-f {{.Image}}"*) echo sha256:running-agent ;;
+          *"-f {{.Config.Image}}"*) echo waitron-print-agent:newer-tag ;;
+          *) exit 97 ;;
+        esac ;;
+    esac ;;
   image)
+    [ "\${WT_LOOKUP_FAIL}" = labels ] && [ "\${@: -1}" = sha256:running-app ] && exit 1
+    case "$args" in
+      *--format*waitron:newer-tag*|*--format*waitron-print-agent:newer-tag*) echo 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|2026-10-12T12:00:00Z|newer-tag'; exit 0 ;;
+      *--format*sha256:running-app*) printf '%s\\n' "\${WT_APP_LABELS}"; exit 0 ;;
+      *--format*sha256:running-agent*) printf '%s\\n' "\${WT_AGENT_LABELS}"; exit 0 ;;
+    esac
     if [ "$2" = inspect ] && [ -n "\${WT_IMAGE_MISSING}" ]; then
       case "$args" in *"\${WT_IMAGE_MISSING}"*) exit 1 ;; esac
     fi ;;
@@ -165,6 +193,9 @@ stub(
   `
 out=""; url=""; while [ $# -gt 0 ]; do case "$1" in -o) out="$2"; shift 2;; -*) shift;; *) url="$1"; shift;; esac; done
 case "$url" in
+  https://api.github.com/repos/clintongormley/waitron/commits/*)
+    [ "\${WT_REF_FAIL}" = 1 ] && exit 22
+    printf '%s\\n' "\${WT_REF_SHA:-0123456789abcdef0123456789abcdef01234567}"; exit 0 ;;
   */deploy/waitron.sh)
     [ "\${WT_SELF_FETCH_FAIL}" = "1" ] && exit 22
     cp "\${WT_SELF_SCRIPT}" "$out"; exit 0 ;;
@@ -449,6 +480,138 @@ function composeCalls(sb) {
     .map((call) => call.slice("compose ".length));
 }
 
+describe("waitron.sh image provenance", () => {
+  const app = "0123456789abcdef0123456789abcdef01234567";
+  const agent = "fedcba9876543210fedcba9876543210fedcba98";
+  const labels = {
+    WT_APP_LABELS: `${app}|2026-10-11T12:00:00Z|main`,
+    WT_AGENT_LABELS: `${agent}|2026-10-11T11:30:00Z|feat/box`,
+    TZ: "Europe/Rome",
+  };
+
+  it.each([["install"], ["update"], ["status"]])(
+    "reports running image IDs and local build times after %s",
+    (verb) => {
+      const sb = sandbox();
+      writeFileSync(join(sb.boxDir, "compose.yml"), "stub\n");
+      const r = run(sb, [verb], labels);
+      expect(r.status, r.stderr).toBe(0);
+      expect(r.stdout).toContain(
+        `app: running 0123456789ab (main), built 2026-10-11 14:00:00 CEST https://github.com/clintongormley/waitron/commit/${app}`,
+      );
+      expect(r.stdout).toContain(
+        `print-agent: running fedcba987654 (feat/box), built 2026-10-11 13:30:00 CEST https://github.com/clintongormley/waitron/commit/${agent}`,
+      );
+      const calls = readFileSync(sb.log, "utf8");
+      expect(calls).toContain("sha256:running-app");
+      expect(calls).toContain("sha256:running-agent");
+      if (verb === "status") expect(calls).not.toMatch(/docker (build|pull)|compose .*up|curl /);
+    },
+  );
+
+  it("reads status from the installed box directory", () => {
+    const sb = sandbox();
+    writeFileSync(join(sb.boxDir, "compose.yml"), "stub\n");
+    const r = run(sb, ["status"], { ...labels, WT_REQUIRE_BOX_CWD: "1" });
+    expect(r.status, r.stderr).toBe(0);
+    expect(r.stdout).toContain("app: running 0123456789ab (main)");
+  });
+
+  it.each(["ps", "inspect", "labels"])(
+    "keeps the setup links and the other image when %s lookup fails",
+    (failure) => {
+      const sb = sandbox();
+      const r = run(sb, ["install"], { ...labels, WT_LOOKUP_FAIL: failure });
+      expect(r.status, r.stderr).toBe(0);
+      expect(r.stdout).toContain("app: version unavailable");
+      expect(r.stdout).toContain("print-agent: running fedcba987654");
+      expect(r.stdout).toContain("Waitron is ready.");
+      expect(r.stdout).toContain("http://waitron.local/setup/trust");
+      expect(readFileSync(sb.log, "utf8")).toContain("qrencode");
+    },
+  );
+
+  it("identifies a development image without claiming it predates source labels", () => {
+    const sb = sandbox();
+    writeFileSync(join(sb.boxDir, "compose.yml"), "stub\n");
+    const r = run(sb, ["status"], { ...labels, WT_APP_LABELS: "development||" });
+    expect(r.status, r.stderr).toBe(0);
+    expect(r.stdout).toContain("app: development — source unknown");
+  });
+
+  it("hands update to the refreshed script as install", () => {
+    const sb = sandbox({ runningScript: "marked", refScript: "pre-reset" });
+    const r = run(sb, ["update", "my-branch"]);
+    expect(r.status, r.stderr).toBe(0);
+    expect(readFileSync(sb.log, "utf8")).toContain("waitron.sh-start <install><my-branch>");
+  });
+
+  it("reports unlabelled running images as unknown", () => {
+    const sb = sandbox();
+    writeFileSync(join(sb.boxDir, "compose.yml"), "stub\n");
+    const r = run(sb, ["status"]);
+    expect(r.status, r.stderr).toBe(0);
+    expect(r.stdout).toContain("app: unknown — built before A490");
+    expect(r.stdout).toContain("print-agent: unknown — built before A490");
+    expect(r.stdout).not.toContain("/commit/");
+  });
+
+  it("reports a labelled image with an invalid build time without inventing a date", () => {
+    const sb = sandbox();
+    writeFileSync(join(sb.boxDir, "compose.yml"), "stub\n");
+    const r = run(sb, ["status"], { ...labels, WT_APP_LABELS: `${app}|bad-date|main` });
+    expect(r.status, r.stderr).toBe(0);
+    expect(r.stdout).toContain(
+      `app: running 0123456789ab (main), built unknown https://github.com/clintongormley/waitron/commit/${app}`,
+    );
+  });
+
+  it("does not describe absent containers as running", () => {
+    const sb = sandbox();
+    writeFileSync(join(sb.boxDir, "compose.yml"), "stub\n");
+    const r = run(sb, ["status"], { ...labels, WT_NO_CONTAINERS: "1" });
+    expect(r.status, r.stderr).toBe(0);
+    expect(r.stdout).toContain("app: not running");
+    expect(r.stdout).toContain("print-agent: not running");
+    expect(r.stdout).not.toContain("built");
+  });
+
+  it.each(["my-branch", "0123456", "release/v1", "feature#one"])(
+    "pins both builds of %s to the resolved commit and stamps the requested ref",
+    (ref) => {
+      const sb = sandbox();
+      const r = run(sb, ["install", ref], { WT_REF_SHA: app });
+      expect(r.status, r.stderr).toBe(0);
+      const calls = readFileSync(sb.log, "utf8").split("\n");
+      const builds = calls.filter((line) => line.startsWith("docker build "));
+      expect(builds).toHaveLength(2);
+      for (const line of builds) {
+        expect(line).toContain(`waitron.git#${app}`);
+        expect(line).toContain(`--build-arg WAITRON_BUILD_ID=${app}`);
+        expect(line).toContain(`--build-arg WAITRON_IMAGE_REF=${ref}`);
+        expect(line).toMatch(
+          /--build-arg WAITRON_IMAGE_CREATED=\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z/,
+        );
+      }
+      expect(builds[1]).toContain("--target print-agent");
+      expect(calls.filter((line) => line.includes("api.github.com"))).toHaveLength(1);
+      if (ref.includes("#")) expect(calls.join("\n")).toContain("commits/feature%23one");
+    },
+  );
+
+  it.each([{ WT_REF_FAIL: "1" }, { WT_REF_SHA: "not-a-commit" }])(
+    "refuses unresolved refs before either build or image pin",
+    (env) => {
+      const sb = sandbox();
+      const r = run(sb, ["install", "my-branch"], env);
+      expect(r.status).not.toBe(0);
+      expect(r.stderr).toContain("could not resolve");
+      expect(readFileSync(sb.log, "utf8")).not.toContain("docker build");
+      expect(existsSync(join(sb.boxDir, ".env"))).toBe(false);
+    },
+  );
+});
+
 describe("waitron.sh install (published main)", () => {
   it("pulls, starts, records no image override, and prints the links", () => {
     const sb = sandbox();
@@ -487,9 +650,11 @@ describe("waitron.sh install <ref>", () => {
     expect(r.status).toBe(0);
     const calls = readFileSync(sb.log, "utf8");
     expect(calls).toMatch(
-      /docker build .*-f deploy\/Dockerfile .*github\.com\/clintongormley\/waitron\.git#my-branch/,
+      /docker build .*-f deploy\/Dockerfile .*github\.com\/clintongormley\/waitron\.git#0123456789abcdef0123456789abcdef01234567/,
     );
-    expect(calls).toMatch(/docker build .*--target print-agent .*waitron\.git#my-branch/);
+    expect(calls).toMatch(
+      /docker build .*--target print-agent .*waitron\.git#0123456789abcdef0123456789abcdef01234567/,
+    );
     const env = readFileSync(join(sb.boxDir, ".env"), "utf8");
     expect(env).toMatch(/^WAITRON_IMAGE=waitron:my-branch$/m);
     expect(env).toMatch(/^WAITRON_PRINT_AGENT_IMAGE=waitron-print-agent:my-branch$/m);
@@ -1275,7 +1440,7 @@ describe("waitron.sh --reset install", () => {
     const r = run(sb, ["install", "my-branch"]);
     expect(r.status).toBe(0);
     expect(loggedCalls(sb)).not.toContainEqual(
-      expect.stringMatching(/^docker (image inspect|pull) /),
+      expect.stringMatching(/^docker (image inspect (?!.*sha256:running-)|pull )/),
     );
   });
 
