@@ -31,6 +31,7 @@ import {
   VENUE_SERVICE_PERMISSIONS,
   createDepartment,
   createServiceZone,
+  configureZone,
   departments,
   departmentReceipts,
   departmentTransferRequests,
@@ -48,6 +49,7 @@ import {
   cashContribution,
   commandFor,
   counterOrder,
+  pricedInZone,
   join,
   seat,
   setupPartyVenue,
@@ -967,7 +969,25 @@ it.each(["zone", "department"] as const)(
     expect(await run(completeSnapshot)).toEqual(earlier);
     const finishCommand = await commandFor(venue, seated.partyId);
     await run((tx) => finishTable(tx, { partyId: seated.partyId, ...finishCommand }));
-    const delivery = await counterOrder(venue, "Agua");
+    await run((tx) =>
+      configureZone(tx, venue.cfg, {
+        zoneId: f.zoneId,
+        departmentId: f.departmentId,
+        orderStart: "counter",
+      }),
+    );
+    const targetItem = await pricedInZone(venue, f.zoneId, "Agua", "2.00");
+    const targetOrder = async () => {
+      const id = randomUUID();
+      await parkOrder({ db: venue.db }, venue.cfg, {
+        id,
+        zoneId: f.zoneId,
+        lines: [{ menuItemId: targetItem, quantity: "1" }],
+        operatorId: venue.operator.personId,
+      });
+      return id;
+    };
+    const delivery = await targetOrder();
     await run((tx) =>
       tx
         .update(workingOrders)
@@ -1072,9 +1092,56 @@ it.each(["zone", "department"] as const)(
       code: "table.label_taken",
       params: { label },
     });
-    const contributed = await counterOrder(venue, "Agua");
+    const contributed = await targetOrder();
     await cashContribution(venue, contributed, "2.00");
+    const unaffected = await counterOrder(venue, "Agua");
+    await cashContribution(venue, unaffected, "2.00");
     const history = await run(retainedHistory);
+    const rows = (name: string) => history[name] as Record<string, unknown>[];
+    for (const orderId of [delivery, contributed]) {
+      expect(
+        rows("order_service_contexts").find((row) => row.working_order_id === orderId),
+      ).toMatchObject({
+        zone_id: f.zoneId,
+        department_id: f.departmentId,
+      });
+      const sale = rows("sales").find((row) => row.working_order_id === orderId)!;
+      expect(sale).toBeDefined();
+      expect(rows("sale_receipt_headers").find((row) => row.sale_id === sale.id)).toMatchObject({
+        department_id: f.departmentId,
+      });
+      expect(rows("registros_facturacion").filter((row) => row.sale_id === sale.id)).not.toEqual(
+        [],
+      );
+      const lines = rows("working_order_lines").filter((row) => row.working_order_id === orderId);
+      expect(lines).not.toEqual([]);
+      for (const line of lines)
+        expect(
+          rows("working_line_contexts").find((row) => row.working_order_line_id === line.id),
+        ).toMatchObject({
+          department_id: f.departmentId,
+        });
+    }
+    const unaffectedContext = rows("order_service_contexts").find(
+      (row) => row.working_order_id === unaffected,
+    )!;
+    expect(unaffectedContext).toMatchObject({ zone_id: venue.counter.zoneId });
+    expect(unaffectedContext.department_id).not.toBe(f.departmentId);
+    const unaffectedSale = rows("sales").find((row) => row.working_order_id === unaffected)!;
+    expect(unaffectedSale).toBeDefined();
+    const unaffectedHeader = rows("sale_receipt_headers").find(
+      (row) => row.sale_id === unaffectedSale.id,
+    )!;
+    expect(unaffectedHeader).toMatchObject({ department_id: unaffectedContext.department_id });
+    const unaffectedLines = rows("working_order_lines").filter(
+      (row) => row.working_order_id === unaffected,
+    );
+    expect(unaffectedLines).not.toEqual([]);
+    const unaffectedLineContexts = unaffectedLines.map((line) =>
+      rows("working_line_contexts").find((row) => row.working_order_line_id === line.id)!,
+    );
+    for (const context of unaffectedLineContexts)
+      expect(context).toMatchObject({ department_id: unaffectedContext.department_id });
     for (const name of [
       "department_receipts",
       "bill_payments",
@@ -1098,7 +1165,12 @@ it.each(["zone", "department"] as const)(
       expect(history[name], name).not.toEqual([]);
     const before = await run(completeSnapshot);
     await remove();
-    expect(await run(retainedHistory)).toEqual(history);
+    const retained = await run(retainedHistory);
+    expect(retained.order_service_contexts).toContainEqual(unaffectedContext);
+    expect(retained.sale_receipt_headers).toContainEqual(unaffectedHeader);
+    for (const context of unaffectedLineContexts)
+      expect(retained.working_line_contexts).toContainEqual(context);
+    expect(retained).toEqual(history);
     const after = await run(completeSnapshot);
     for (const name of FLOOR_ROWS) expect(after[name], name).toEqual([]);
     expect(after.working_orders).toEqual(
