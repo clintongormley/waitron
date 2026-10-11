@@ -643,7 +643,6 @@ async function issueWhenFullyPaid(
     .select({
       status: workingOrders.status,
       partyId: workingOrders.partyId,
-      receiptLocale: workingOrders.receiptLocale,
     })
     .from(workingOrders)
     .where(eq(workingOrders.id, workingOrderId));
@@ -683,11 +682,11 @@ async function issueWhenFullyPaid(
 
   // Deferred, then settled with the bill's tenders in this transaction: the filed record is the one
   // an immediate sale files, and settlement is what writes each tender's bill payment.
-  const language = await saleLanguageFor(tx, cfg.locationId, order.receiptLocale, {
+  const selected = await selectOrderInvoice(tx, deps.backend, cfg, workingOrderId, priced.total);
+  const language = await saleLanguageFor(tx, cfg.locationId, selected.receiptLocale, {
     log: deps.log,
     workingOrderId,
   });
-  const selected = await selectOrderInvoice(tx, deps.backend, cfg, workingOrderId, priced.total);
   const { saleId, fiscal } = await recordSale(tx, deps.backend, {
     origin: cfg.origin,
     nodeId: cfg.nodeId,

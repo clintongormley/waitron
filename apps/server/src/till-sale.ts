@@ -68,7 +68,7 @@ import { VENUE_SERVICE } from "./modules.js";
 import { readReceiptOrder } from "./receipt-order.js";
 import { receiptLines } from "./receipt-adjustments.js";
 import type { DeviceRequestConfig, OriginConfig, TillConfig } from "./till-config.js";
-import { readOfferedReceiptLanguages, readSaleLanguage } from "./venue-locale.js";
+import { readOfferedReceiptLanguages, saleLanguageFor } from "./venue-locale.js";
 import { storedDeviceOrigin } from "./request-config.js";
 import {
   enqueueSaleDrawer,
@@ -819,7 +819,10 @@ async function fileImmediateSale(
   const settledAt = clock.now().instant;
 
   const selected = await selectOrderInvoice(tx, deps.backend, cfg, workingOrderId, priced.total);
-  const language = await readSaleLanguage(tx, cfg.locationId, workingOrderId, deps.log);
+  const language = await saleLanguageFor(tx, cfg.locationId, selected.receiptLocale, {
+    log: deps.log,
+    workingOrderId,
+  });
   const { saleId, fiscal } = await recordSale(tx, deps.backend, {
     origin: cfg.origin,
     nodeId: cfg.nodeId,
@@ -1367,7 +1370,10 @@ async function finalizeCapture(
     return await withTransaction(deps.db, async (tx) => {
       const { priced, clock } = issueMoment(deps.clock, grossInP1);
       const selected = await selectOrderInvoice(tx, deps.backend, cfg, req.id, priced.total);
-      const language = await readSaleLanguage(tx, cfg.locationId, req.id, deps.log);
+      const language = await saleLanguageFor(tx, cfg.locationId, selected.receiptLocale, {
+        log: deps.log,
+        workingOrderId: req.id,
+      });
       const { saleId, fiscal } = await recordSale(tx, deps.backend, {
         origin: cfg.origin,
         nodeId: cfg.nodeId,
@@ -1519,7 +1525,10 @@ async function finalizeRecovery(
       .where(eq(payments.id, captured.id));
     const origin = storedDeviceOrigin(startedOn!);
     const selected = await selectOrderInvoice(tx, deps.backend, cfg, req.id, priced.total);
-    const language = await readSaleLanguage(tx, cfg.locationId, req.id, deps.log);
+    const language = await saleLanguageFor(tx, cfg.locationId, selected.receiptLocale, {
+      log: deps.log,
+      workingOrderId: req.id,
+    });
     const { saleId, fiscal } = await recordSale(tx, deps.backend, {
       origin,
       nodeId: cfg.nodeId,

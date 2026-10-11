@@ -56,9 +56,6 @@ import { BASIC_ACTIONS, seedSessionDevice, deviceRequestCfg } from "./testing/se
 import { SESSION_COOKIE } from "./till-session.js";
 import "./errors.js";
 
-// A receipt, and a copy that names no language, is printed in its location's saved language (the
-// first entry of `locations.invoice_locales`), read when the sale is filed — never in
-// `WAITRON_TILL_LOCALE`.
 const suite = useVenueDb({
   migrations: migrationOptionsFor(manifestSets(), null),
   timeoutMs: 60_000,
@@ -288,7 +285,7 @@ async function tillReceiptLanguages(v: Venue): Promise<string[] | undefined> {
 const startsWith = (lines: string[], label: string) =>
   lines.some((line) => line === label || line.startsWith(`${label} `));
 
-describe("a receipt follows its location's saved language", () => {
+describe("a receipt follows its location's saved language when its order saves none", () => {
   it("prints a Barcelona location saved as Catalan in Catalan, with WAITRON_TILL_LOCALE unset", async () => {
     const v = await venueWith(suite.db, ["ca-ES"], BARCELONA);
     expect(v.cfg.locale).toBe("es-ES");
@@ -412,7 +409,7 @@ async function takeReceipt(db: Database): Promise<string[]> {
   return receipts[0]!;
 }
 
-describe("a bill paid in parts and an unpaid invoice file the location's language", () => {
+describe("a bill paid in parts and an unpaid invoice file the location's language when the order saves none", () => {
   function cashContribution(venue: BillVenue, billId: string, amount: string) {
     return send(venue.app, venue.cookie, "POST", `/api/working-orders/${billId}/payments`, {
       submissionId: randomUUID(),
@@ -463,7 +460,7 @@ describe("a bill paid in parts and an unpaid invoice file the location's languag
   });
 });
 
-describe("a card-reader sale files and prints in the location's language", () => {
+describe("a card-reader sale files and prints in the location's language when the order saves none", () => {
   async function catalanCounter() {
     const venue = await catalanBillVenue();
     const { zoneId, offerFor } = await inTx(venue, async (tx) => {

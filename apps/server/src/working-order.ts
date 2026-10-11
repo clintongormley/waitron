@@ -203,7 +203,7 @@ import { readReceiptOrder } from "./receipt-order.js";
 import { enqueueCollectionTicket } from "./receipt-print.js";
 import { ordersWithUnfiledPayment, paymentAttemptIsLive } from "./till-sale.js";
 import { readIssuedSales } from "./sale-due.js";
-import { readOfferedReceiptLanguages, readSaleLanguage } from "./venue-locale.js";
+import { readOfferedReceiptLanguages, saleLanguageFor } from "./venue-locale.js";
 import { creditWholeInvoice, readOrderInvoice } from "./cancel-credit.js";
 import { overrideToCheck, withCheck, withPinCheckAhead } from "./pin-check-ahead.js";
 import {
@@ -5731,7 +5731,10 @@ export async function issueUnpaidInvoice(
   const { id, priced, clock } = invoice;
   await refuseUnavailableFullInvoice(tx, id);
   const selected = await selectOrderInvoice(tx, backend, cfg, id, priced.total);
-  const language = await readSaleLanguage(tx, cfg.locationId, id, log);
+  const language = await saleLanguageFor(tx, cfg.locationId, selected.receiptLocale, {
+    log,
+    workingOrderId: id,
+  });
   const { saleId, fiscal } = await recordSale(tx, backend, {
     origin: cfg.origin,
     nodeId: cfg.nodeId,

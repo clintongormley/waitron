@@ -54,14 +54,12 @@ export const tenants = table(
 );
 
 /**
- * A venue. `invoiceLocales` is an ORDERED list of one or two receipt languages. A
- * sale is filed and printed in the FIRST (`readReceiptLanguage`,
- * `packages/catalogue/src/operations.ts`); an order line's customer text is
- * snapshotted under every entry.
+ * A venue. `invoiceLocales` is an ORDERED list of one or two receipt languages. An
+ * order line's customer text is snapshotted under every entry.
  *
  * The order is fiscal, not presentational. A reprint or a corrective invoice
  * issued a year later must reproduce the document the customer took, which is
- * why `sales.invoice_locales` snapshots this list at issuance. Reordering a
+ * why a sale snapshots its languages at issuance (`sales.invoice_locales`). Reordering a
  * venue's configuration must therefore never change how an already-issued
  * receipt reprints — hence a snapshot of an ordered value, not a lookup of a set.
  * A `primary_locale`/`secondary_locale` pair encodes order but cannot grow past

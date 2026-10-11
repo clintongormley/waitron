@@ -94,6 +94,8 @@ export async function selectOrderInvoice(
   invoiceType: "F1" | "F2";
   recipient: InvoiceRecipient | undefined;
   sale: Pick<RecordSaleInput, "seriesId" | "counterparty" | "recipientAddress">;
+  /** The receipt language saved on the order; absent when none is. */
+  receiptLocale?: string;
 }> {
   const [order] = await tx
     .select({
@@ -102,18 +104,21 @@ export async function selectOrderInvoice(
       recipientLegalName: workingOrders.recipientLegalName,
       recipientAddress: workingOrders.recipientAddress,
       recipientCountryCode: workingOrders.recipientCountryCode,
+      receiptLocale: workingOrders.receiptLocale,
     })
     .from(workingOrders)
     .where(and(eq(workingOrders.id, orderId), eq(workingOrders.nodeId, cfg.nodeId)));
   if (order === undefined) {
     throw new AppError("working_order.not_open", { workingOrderId: orderId });
   }
+  const receiptLocale = order.receiptLocale === null ? {} : { receiptLocale: order.receiptLocale };
   if (order.invoiceType === "F2") {
     refuseOverSimplifiedLimit(cfg.simplifiedInvoiceLimit, total);
     return {
       invoiceType: "F2",
       recipient: undefined,
       sale: { seriesId: cfg.seriesId, counterparty: null, recipientAddress: null },
+      ...receiptLocale,
     };
   }
   const recipient = checkedInvoiceRecipient(backend, {
@@ -134,5 +139,6 @@ export async function selectOrderInvoice(
       },
       recipientAddress: recipient.address,
     },
+    ...receiptLocale,
   };
 }
