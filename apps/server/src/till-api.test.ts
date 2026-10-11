@@ -4115,6 +4115,170 @@ describe("canonical modifier checkout refusal", () => {
   );
 });
 
+describe("a till request cannot hand over settled extras or options", () => {
+  /** An extras pick in the shape the server settles internally, at a price and count of the
+   * sender's choosing: the list sells this cheese at 0.35, two at most. */
+  const settledPick = (f: Awaited<ReturnType<typeof modifierOfferFixture>>) => ({
+    productId: f.cheese.id,
+    name: f.cheese.name,
+    descriptions: {},
+    kitchenName: null,
+    price: "0.00",
+    listId: f.extrasList.id,
+    vatClass: "general",
+    quantity: 7,
+  });
+
+  async function storedLines(id: string) {
+    return (
+      await suite.db.execute(sql`
+        select product_id, cast(unit_price_gross as int) as unit_price_gross, quantity
+        from working_order_lines where working_order_id = ${id} order by line_no`)
+    ).rows;
+  }
+
+  it.each([
+    ["frozenExtras", (f: Awaited<ReturnType<typeof modifierOfferFixture>>) => [settledPick(f)]],
+    ["frozenOptions", (f: Awaited<ReturnType<typeof modifierOfferFixture>>) => f.optionSnapshots],
+  ] as const)("refuses a parked line carrying %s before any write", async (key, value) => {
+    const f = await modifierOfferFixture();
+    const id = randomUUID();
+    const response = await f.app.request("/api/working-orders", {
+      method: "POST",
+      headers: f.headers,
+      body: JSON.stringify({
+        id,
+        lines: [{ menuItemId: f.offer.id, quantity: "1", ...f.answers, [key]: value(f) }],
+      }),
+    });
+    expect(response.status, await response.clone().text()).toBe(400);
+    expect(await response.json()).toMatchObject({
+      error: { code: "management.request_invalid", params: { field: "lines" } },
+    });
+    const stored = await suite.db.execute(sql`select id from working_orders where id=${id}`);
+    expect(stored.rows).toEqual([]);
+  });
+
+  it("refuses a held-order edit adding a line that carries frozenExtras, leaving the order as it was", async () => {
+    const f = await modifierOfferFixture();
+    const id = randomUUID();
+    const parked = await f.app.request("/api/working-orders", {
+      method: "POST",
+      headers: f.headers,
+      body: JSON.stringify({
+        id,
+        lines: [{ menuItemId: f.offer.id, quantity: "1", ...f.answers }],
+      }),
+    });
+    expect(parked.status, await parked.clone().text()).toBe(200);
+    const got = await f.app.request(`/api/working-orders/${id}`, { headers: f.headers });
+    const body = (await got.json()) as { lines: HeldLine[]; revision: number };
+    const before = await storedLines(id);
+
+    const edited = await f.app.request(`/api/working-orders/${id}`, {
+      method: "PUT",
+      headers: f.headers,
+      body: JSON.stringify({
+        lines: [
+          {
+            workingOrderLineId: body.lines[0]!.workingOrderLineId,
+            menuItemId: f.offer.id,
+            quantity: "1",
+            ...f.answers,
+          },
+          {
+            menuItemId: f.offer.id,
+            quantity: "1",
+            options: f.answers.options,
+            frozenExtras: [settledPick(f)],
+          },
+        ],
+        revision: body.revision,
+      }),
+    });
+    expect(edited.status, await edited.clone().text()).toBe(400);
+    expect(await edited.json()).toMatchObject({
+      error: { code: "management.request_invalid", params: { field: "lines" } },
+    });
+    expect(await storedLines(id)).toEqual(before);
+    const after = await f.app.request(`/api/working-orders/${id}`, { headers: f.headers });
+    expect(((await after.json()) as { revision: number }).revision).toBe(body.revision);
+  });
+
+  it.each([
+    ["frozenExtras", (f: Awaited<ReturnType<typeof modifierOfferFixture>>) => [settledPick(f)]],
+    ["frozenOptions", (f: Awaited<ReturnType<typeof modifierOfferFixture>>) => f.optionSnapshots],
+  ] as const)(
+    "refuses a held-order edit whose retained line carries %s, leaving the order as it was",
+    async (key, value) => {
+      const f = await modifierOfferFixture();
+      const id = randomUUID();
+      const parked = await f.app.request("/api/working-orders", {
+        method: "POST",
+        headers: f.headers,
+        body: JSON.stringify({
+          id,
+          lines: [{ menuItemId: f.offer.id, quantity: "1", ...f.answers }],
+        }),
+      });
+      expect(parked.status, await parked.clone().text()).toBe(200);
+      const got = await f.app.request(`/api/working-orders/${id}`, { headers: f.headers });
+      const body = (await got.json()) as { lines: HeldLine[]; revision: number };
+      const before = await storedLines(id);
+
+      const edited = await f.app.request(`/api/working-orders/${id}`, {
+        method: "PUT",
+        headers: f.headers,
+        body: JSON.stringify({
+          lines: [
+            {
+              workingOrderLineId: body.lines[0]!.workingOrderLineId,
+              menuItemId: f.offer.id,
+              quantity: "2",
+              ...f.answers,
+              [key]: value(f),
+            },
+          ],
+          revision: body.revision,
+        }),
+      });
+      expect(edited.status, await edited.clone().text()).toBe(400);
+      expect(await edited.json()).toMatchObject({
+        error: { code: "management.request_invalid", params: { field: "lines" } },
+      });
+      expect(await storedLines(id)).toEqual(before);
+      const after = await f.app.request(`/api/working-orders/${id}`, { headers: f.headers });
+      expect(((await after.json()) as { revision: number }).revision).toBe(body.revision);
+    },
+  );
+
+  it("still refuses extras picked past the list's limit through the plain extras field", async () => {
+    const f = await modifierOfferFixture();
+    const id = randomUUID();
+    const response = await f.app.request("/api/working-orders", {
+      method: "POST",
+      headers: f.headers,
+      body: JSON.stringify({
+        id,
+        lines: [
+          {
+            menuItemId: f.offer.id,
+            quantity: "1",
+            options: f.answers.options,
+            extras: [{ listId: f.extrasList.id, picks: [{ productId: f.cheese.id, quantity: 7 }] }],
+          },
+        ],
+      }),
+    });
+    expect(response.status, await response.clone().text()).toBe(400);
+    expect(await response.json()).toMatchObject({
+      error: { code: "extras.limit_exceeded", params: { extraListId: f.extrasList.id } },
+    });
+    const stored = await suite.db.execute(sql`select id from working_orders where id=${id}`);
+    expect(stored.rows).toEqual([]);
+  });
+});
+
 describe("sale-policy order flow routes", () => {
   it.each([false, true])(
     "counter service refuses seating and stays in the counter list (zone override: %s)",
