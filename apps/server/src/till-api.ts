@@ -499,6 +499,7 @@ export const STATUS: Record<string, ContentfulStatusCode> = {
   "table.merged": 409,
   "table.delivery_pending": 409,
   "floor_plan.invalid": 400,
+  "merge.seats_required": 400,
   "zone.not_found": 404,
   "tab.already_open": 409,
   "tab.not_open": 409,

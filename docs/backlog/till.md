@@ -290,6 +290,11 @@ screen is designed.
   - `wt-floor-map` works out which table is under the finger on every pointer move. Two cheaper
     versions were tried and each picked a different table (one failed an existing test, the other
     a probe), so the faster version still needs a way that keeps the same answer.
+  - Back to saved place reports `table.not_on_today_plan` when a table still has today's row but
+    the last reset's copy removes it. The real `floor-today-changes.test.ts` case "refuses a
+    table whose master table was deleted, and one never on a plan" checks both the existing row and that refusal (A476
+    run-it review). Decide whether this needs its own saved-place code and wording; the owner's
+    A476 rename is retained for both paths.
   - `leaveMerges` (`apps/server/src/floor-today-merges.ts`) reads tables by id with no location
     filter; every caller checks the location first.
   - A second drop made while the first is still being sent replaces the first's drawn place.
