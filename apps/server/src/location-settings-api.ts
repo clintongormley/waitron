@@ -9,7 +9,12 @@ import { AppError, hasCode, isAppError } from "@waitron/shared";
 import { createErrorBoundary, readJsonBody, requireManagementSession } from "@waitron/server-kit";
 import type { Logger } from "./logger.js";
 import { readVenueReceiptLanguageRules } from "./venue-locale.js";
-import { readOnlyVenueFields, readVenueDetails, writeVenueDetails } from "./venue-details.js";
+import {
+  normalizeVenueText,
+  readOnlyVenueFields,
+  readVenueDetails,
+  writeVenueDetails,
+} from "./venue-details.js";
 import { venueClockPreview } from "./venue-clock-preview.js";
 import type { VenueClockPreview, VenueDetailWrite } from "./venue-detail-types.js";
 import "./errors.js";
@@ -62,10 +67,6 @@ function requestedLanguage(body: unknown): string {
   return language;
 }
 
-function text(value: string): string {
-  return value.normalize("NFC").trim();
-}
-
 function legalNameRequest(body: unknown): { legalName: string; expected: string } {
   const invalid = (field: string, reason: string) =>
     new AppError("venue.detail_invalid", { field, reason });
@@ -79,7 +80,7 @@ function legalNameRequest(body: unknown): { legalName: string; expected: string 
   const { legalName, expected } = body as Record<string, unknown>;
   if (typeof legalName !== "string") throw invalid("legalName", "type");
   if (typeof expected !== "string") throw invalid("expected", "type");
-  return { legalName: text(legalName), expected: text(expected) };
+  return { legalName: normalizeVenueText(legalName), expected: normalizeVenueText(expected) };
 }
 
 export function mountLocationSettingsApi(
@@ -163,7 +164,7 @@ export function mountLocationSettingsApi(
           throw refuse("fiscal_format");
         }
         const { issuer } = await readVenueDetails(tx, deps.cfg);
-        const stored = text(issuer.legalName);
+        const stored = normalizeVenueText(issuer.legalName);
         if (legalName === stored && expected === stored) throw refuse("unchanged");
         // A match after normalising stands for the stored spelling, which the write compares exactly.
         const { renamed } = await renameTaxpayer(tx, {
