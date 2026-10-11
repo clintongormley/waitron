@@ -3125,6 +3125,13 @@ _Formerly A6, and the old Track C's payments items; part of A9._ Detail: [backlo
   choose the right one; the current page shows amounts alone.** Left open by A247 (a pretend
   connected card reader in Demo mode, W38, #1172).
 
+- **Check how real Stripe answers a malformed reader id, and one from another Stripe account** —
+  left open by A519 (#1566). The add-reader route answers `reader.reference_unknown` when Stripe's
+  library throws `StripeInvalidRequestError` (`packages/payments-stripe/src/card-provider.ts`
+  `readers.add`), and its tests used a local server pretending to be Stripe answering 404
+  `resource_missing`. Whether test-mode Stripe answers those two cases the same way is unchecked; a
+  sandbox case beside `checkout.sandbox.test.ts` would settle it.
+
 - **Tip-collection UI** — the only surface that COLLECTS a tip is the integrated-Stripe idle screen;
   cash, manual card and the handheld have none. A design decision per tender type. And `#onPayTab`
   flattens every server code but the two permanent fiscal refusals to one `sale.error` key, hiding
