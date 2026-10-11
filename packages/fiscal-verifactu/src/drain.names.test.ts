@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { afterEach, describe, expect, it } from "vitest";
+import { describe, expect, it } from "vitest";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { createFakeAeat } from "@waitron/verifactu/testing";
 import type { Cabecera, EnvioRegistro, RegistroAlta, VerifactuClient } from "@waitron/verifactu";
@@ -123,12 +123,6 @@ async function closeGateUntil(at: Date): Promise<void> {
 }
 
 describe("drain — one taxpayer name per envío", () => {
-  afterEach(async () => {
-    await suite.db.execute(sql`delete from envios`);
-    await suite.db.execute(sql`delete from envio_flujo`);
-    await suite.db.execute(sql`delete from incidents`);
-  });
-
   it("sends the old name's records first and leaves the new name's pending, with no incident, for the next pass", async () => {
     const { ids } = await seedNamed([OLD, NEW]);
     const sent: Sent[] = [];

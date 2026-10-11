@@ -2279,7 +2279,7 @@ The envío's header (`Cabecera`) is built from its first record's name, and a le
 (`packages/fiscal-verifactu/src/drain.ts`) claims one name per envío and leaves the rest
 `pendiente`, with no incident; before AEAT's wait time has passed it sends nothing a name change
 would cut short of a full envío. Which name a record filed across a rename must carry is an open
-question for the asesor (Q37 in `docs/compliance/asesor-questions.md`). Guard:
+question for the asesor (Q37(d), S18 in the shortened list of `docs/compliance/asesor-questions.md`). Guard:
 `packages/fiscal-verifactu/src/drain.names.test.ts`.
 
 ## The box's BOOT path and the bucket rebuild carry an ahead-of-image check; no other migrating path does, and `waitron.sh install <ref>` is a one-way door

@@ -87,9 +87,9 @@ export const FISCAL_SLOT: FiscalContribution = {
     },
     seal: (deps, raw) => sealAeatSecret(deps, raw),
   },
-  // The operator-typed fields that reach AEAT verbatim. Refused here, at provision time, so the
-  // operator fixes them in the wizard — the alternative is the chain-append guard refusing the
-  // venue's first sale at the till, which is the worst place to learn a series code has a space.
+  // The operator-typed fields that reach AEAT verbatim, refused where the operator types them — the
+  // alternative is the chain-append guard refusing the venue's first sale at the till, which is the
+  // worst place to learn a series code has a space.
   venueFields: {
     validateLegalName,
     validateOperationDescription,

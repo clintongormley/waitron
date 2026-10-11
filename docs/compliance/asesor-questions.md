@@ -233,6 +233,7 @@ sent.
 
 Questions not in the 6 October Word copy (Q3, Q4, Q8, Q10, and the lawyer's Q9, Q11, Q12 and Q16)
 are unchanged by this pass. Q46, on selling by weight, was added afterwards the same day as S17.
+Q37(d), on a change of legal name, was added on 2026-10-11 as S18 (A494).
 
 ### What happened to each question sent on 6 October
 
@@ -349,6 +350,10 @@ are unchanged by this pass. Q46, on selling by weight, was added afterwards the 
   of conformity? (b) What Waitron does today, staff typing in the weight read off a certified scale
   and the till pricing it: does it comply, and does it need anything more, such as the total shown
   on the scale or a mention on the ticket? (c) If this is outside your field, whom should we ask?
+- **S18. A change of legal name, same tax ID (Q37(d)).** Each record keeps the name it was written
+  with. Which name must a record written before the change but sent after it carry: the one on the
+  invoice issued, or the one AEAT's census now holds? And a cancellation, written after the change,
+  of an invoice issued before it?
 
 **Review list: read, and correct only where we are wrong.**
 
@@ -483,6 +488,11 @@ are unchanged by this pass. Q46, on selling by weight, was added afterwards the 
 > **(c)** Si estas cuestiones quedan fuera de su ámbito, ¿a quién nos recomienda consultar: un
 > organismo notificado, el Centro Español de Metrología o el órgano de metrología de la comunidad
 > autónoma?
+>
+> **S18. Cambio de razón social con el mismo NIF.** Si el restaurante cambia su razón social, ¿qué
+> nombre debe llevar un registro generado antes del cambio pero remitido después: el que figura en la
+> factura expedida o el que la AEAT tiene ya en el censo? ¿Y una anulación, generada después del
+> cambio, de una factura expedida antes?
 >
 > **Para revisar: corríjanos solo si nos equivocamos.**
 >

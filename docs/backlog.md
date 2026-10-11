@@ -1306,7 +1306,12 @@ _Formerly entries spread across the old sections, A261's venue-operations steps 
 - **Which name a record sent across a legal-name change carries** (A494 follow-up, 2026-10-11). A
   record keeps the name it was written with, so one written before the change but sent after it
   carries the old name, and a later cancellation of an earlier invoice carries the new one. Waits
-  on the asesor's answer to Q37(d) in `docs/compliance/asesor-questions.md`.
+  on the asesor's answer to Q37(d), S18 in the shortened list of `docs/compliance/asesor-questions.md`.
+  Left as they are by decision (A494): on a venue with no tax regime a reprinted receipt shows the
+  current name, since none is stored with it (`apps/server/src/receipt-print.ts`); the card payment
+  slip, the Modelo 303 export and the till's start-up read the current name; and a reconcile query
+  across a rename takes its header name from whichever of its rows comes first
+  (`packages/fiscal-verifactu/src/reconcile.ts`).
 
 - **A495. Change the business-day start from a future date (owner, 2026-10-11).** Refused today once
   a venue has sales, because reports would regroup old days. Store the start with the date it takes
