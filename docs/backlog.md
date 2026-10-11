@@ -1819,13 +1819,14 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   change was queued. Left open by A413 (#1436, the Devices screen and Add a device).
 
 - **A429 — floor plans: a master plan per zone, today's plan on the till (owner, 2026-10-08; slices
-  1 (#1493), 2 (#1506) and 3 (#1517) built; slices 4–5 open).** Slice 1 is the
+  1 (#1493), 2 (#1506), 3 (#1517) and 4 (#1526) built; slice 5 open).** Slice 1 is the
   storage and reads: each zone's master plan (the layout the owner edits), today's plan (the copy
   the till works from), kept table names, the till's table-state answer, the dashboard's read and
   save routes, and the demo seed. Slice 2 is the dashboard editor. Slice 3 is the till's map: a
   planned zone drawn on a new map with status colours and dots, a details sheet, the seat dialog,
-  a 15-second re-read, and the order screen's status pin and notice. Left: today's
-  changes on the till, and removing the old pieces. The map follows the zone's proportions;
+  a 15-second re-read, and the order screen's status pin and notice. Slice 4 is today's changes
+  on the till: move, join, split, take off and reset tables for today. Left: removing the old
+  pieces. The map follows the zone's proportions;
   Bill requested chips share its purple, and Guests has no placeholder.
   [Detail](backlog/till.md#a429--floor-plans-a-master-plan-per-zone-todays-plan-on-the-till)
 
@@ -1835,9 +1836,13 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   [Detail](backlog/till.md#a466--floor-plan-editor-follow-ups)
 
 - **A470 — the till's floor map follow-ups (2026-10-10).** Small gaps the till's map left: an
-  unmeasured screen-reader activation, a drop after a re-read, two wordings and two notes for slice 4.
-  Left open by A429 slice 3.
+  unmeasured screen-reader activation and two wordings. Left open by A429 slice 3.
   [Detail](backlog/till.md#a470--the-tills-floor-map-follow-ups)
+
+- **A474 — today's floor changes on the till: follow-ups (2026-10-11).** A booking seated from
+  the dashboard skips the taken-off check, the map's drag works out its target the slow way, three
+  owner questions on wording and error codes, and smaller gaps. Left open by A429 slice 4 (#1526).
+  [Detail](backlog/till.md#a474--todays-floor-changes-on-the-till-follow-ups)
 
 - **The bookings list shows no table for any booking, and a past booking's kept table name
   (`bookings.table_label`) is stored but shown nowhere.** Left open by A429 slice 1 (#1493).

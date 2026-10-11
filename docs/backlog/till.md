@@ -236,7 +236,7 @@ screen is designed.
 ## A429 — floor plans: a master plan per zone, today's plan on the till
 
 - **A429 — floor plans: a master plan per zone, today's plan on the till (owner, 2026-10-08; slices
-  1 (#1493), 2 (#1506) and 3 built; slices 4–5 open).** Slice 1 is the
+  1 (#1493), 2 (#1506), 3 (#1517) and 4 (#1526) built; slice 5 open).** Slice 1 is the
   storage and reads: the master plan's tables, today's plan, table names kept as text when a party
   closes or a table is removed, today's plan in the till's table-state answer, the dashboard's
   read and save routes for a zone's master plan, today's plan caught up on every floor read and
@@ -244,8 +244,10 @@ screen is designed.
   master plans. Slice 2 is the dashboard editor at `/manage/floor-plan/zone/<id>`, opened from
   the zone panel's "Edit floor plan". Slice 3 is the till's map: a planned zone drawn on a new
   map with status colours and dots, a details sheet, the seat dialog, a 15-second
-  re-read, and the order screen's status pin and notice. Left: slice 4 (today's changes on the
-  till) and slice 5 (removing the old pieces). A Square-style editor on the
+  re-read, and the order screen's status pin and notice. Slice 4 is today's changes on the till:
+  move, join, split, take off and reset tables for today, with each reset copying the master's
+  saved joins into today's plan (owner, 2026-10-10). Left: slice 5 (removing the old pieces). A
+  Square-style editor on the
   dashboard for each zone's master plan (tables created in bulk, saved joins, Undo/Redo), and a
   till map whose job is status and rearranging. The master and today's plan are separate plans (owner, 2026-10-08): the master
   is edited freely and is copied into today's plan at the day's reset or on a button; everything
@@ -301,18 +303,39 @@ screen is designed.
     pointer's click to the gestures, so a screen reader whose activation sends a `click` with
     `detail` 1 or more and no pointer events would open nothing. Unmeasured; needs a manual
     VoiceOver and TalkBack check.
-  - A re-read that removes the held table during a drag still lets the drop send that drag's
-    coordinates (`wt-table-drag-end`). Slice 4 owns drops.
   - A party with an open tab and nothing owed reads "Owes €0.00" in the details sheet
     (`table-details-sheet.ts`); the floor card shows €0.00 the same way.
   - The old floor card says "1 listos" in Spanish (`till-floor-screen.ts`, the count followed by
     `floor.ready`); the map's pin and notice say "1 listo".
-  - For slice 4: spec §6.2 refuses a take-off only while a tab is open, but the till lists a
-    taken-off table that needs clearing or has a delivery on its way (`listedTables`,
-    `apps/till/src/state/floor-map.ts`), so slice 4 should refuse those take-offs or keep that
-    listing. A merge's member tables could also sit in different zones, while the map reads one
-    zone at a time.
 
+## A474 — today's floor changes on the till: follow-ups
+
+- **A474 — today's floor changes on the till: follow-ups (2026-10-11).** Left open by A429 slice 4
+  (#1526).
+  - A booking seated from the dashboard is believed to skip the taken-off check: the bookings
+    module seats through `core.seatTable` (`moduleCoreServices`, `apps/server/src/boot.ts`), while
+    the till's seat, join, Move guests and bill-move routes refuse a table taken off for today with
+    `table.taken_off` (`refuseTakenOff`, `apps/server/src/floor-today-table.ts`). Found by the
+    review reading the code; not run.
+  - `wt-floor-map` works out which table is under the finger on every pointer move. Two cheaper
+    versions were tried and each picked a different table (one failed an existing test, the other
+    a probe), so the faster version still needs a way that keeps the same answer.
+  - Three questions for the owner: should the editor's first-save note
+    (`floor_plan_editor.first_note`, "later changes, tomorrow") mention Reset as the other note now
+    does; should "this merge needs seats" get a code of its own rather than `floor_plan.invalid`
+    with `field: "seats"`; and should `table.not_in_floor_plan` be renamed (for example
+    `table.not_on_today_plan`), since it reads as the opposite of `table.in_floor_plan` but means
+    something else.
+  - `leaveMerges` (`apps/server/src/floor-today-merges.ts`) reads tables by id with no location
+    filter; every caller checks the location first.
+  - A second drop made while the first is still being sent replaces the first's drawn place.
+  - When a table is dropped on another to seat a party, the till checks only the dragged table's
+    gates; the server's join refusals are believed to cover the target, but that was not run.
+  - Tapping a table to seat it is not limited to devices whose profile takes orders, while every
+    other floor write is. Believed older than slice 4; not re-checked.
+  - From the look pass: at 390 px a fixed stool shows no name; the refusal line is plain text; two
+    tables' labels overlap while they line up mid-drag.
+  - The new floor test files repeat their setup; shared helpers were left out to avoid churn.
 
 ## Small floor-plan refusals still missing
 
