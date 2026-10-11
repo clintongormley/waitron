@@ -10,7 +10,8 @@ import { readOpeningHoursModel } from "./menu-timetable.js";
 import { periodProductIds } from "./routing-periods.js";
 import { loadRoutingRules } from "./routing-store.js";
 import { selectRoutingCell } from "./routing.js";
-import { rangeSpan, type ServiceRange, type ClosedRange } from "./service-day.js";
+import { rangeSpan, rangeSpanInDay, type ServiceRange, type ClosedRange } from "./service-day.js";
+import { serviceDayWallContext, type ServiceDayContext } from "./service-day-context.js";
 import "./errors.js";
 
 export interface StationServiceDay {
@@ -23,10 +24,21 @@ export interface StationServiceTimes {
 }
 
 type Span = { start: number; end: number };
-function subtract(range: Span, closed: readonly ClosedRange[], cutover: string): Span[] {
+function plannedSpan(
+  range: ClosedRange,
+  context: Pick<ServiceDayContext, "dayCutover" | "endMinute">,
+): Span {
+  const span = rangeSpanInDay(range, context);
+  return { ...span, end: Math.min(span.end, context.endMinute) };
+}
+function subtract(
+  range: Span,
+  closed: readonly ClosedRange[],
+  context: Pick<ServiceDayContext, "dayCutover" | "endMinute">,
+): Span[] {
   let shares = [range];
   for (const closure of closed) {
-    const { start, end } = rangeSpan(closure, cutover);
+    const { start, end } = plannedSpan(closure, context);
     shares = shares.flatMap((share) => {
       if (end <= share.start || start >= share.end) return [share];
       return [
@@ -130,6 +142,8 @@ export async function stationServiceTimes(
   const days: StationServiceDay[] = [];
   for (let index = 0; index < dayCount; index++) {
     const date = addDays(from, index);
+    const context = serviceDayWallContext(model.businessDayClock, date);
+    const cutover = context.dayCutover;
     const named =
       week === "normal" ? undefined : model.namedDays.find((day) => occursOn(day, date));
     const weekday = weekdayOf(date);
@@ -148,7 +162,7 @@ export async function stationServiceTimes(
             const closed = named?.ownHours
               ? (zone.dates.find((day) => day.specialDateId === named.id)?.ranges ?? [])
               : zone.week.find((day) => day.weekday === weekday)!.ranges;
-            shares.push(...subtract(rangeSpan(slot, model.dayCutover), closed, model.dayCutover));
+            shares.push(...subtract(plannedSpan(slot, context), closed, context));
           }
           byPeriod.set(slot.periodId, shares);
         }
@@ -156,13 +170,11 @@ export async function stationServiceTimes(
           .flatMap(([periodId, shares]) =>
             union(shares).map(({ start, end }) => ({
               periodId,
-              startsAt: timeAt(start, model.dayCutover),
-              endsAt: timeAt(end, model.dayCutover),
+              startsAt: timeAt(start, cutover),
+              endsAt: timeAt(end, cutover),
             })),
           )
-          .sort(
-            (a, b) => rangeSpan(a, model.dayCutover).start - rangeSpan(b, model.dayCutover).start,
-          );
+          .sort((a, b) => rangeSpan(a, cutover).start - rangeSpan(b, cutover).start);
         if (ranges.length > 0) results.push({ departmentId: department.id, ranges });
       }
     days.push({ date, departments: results });

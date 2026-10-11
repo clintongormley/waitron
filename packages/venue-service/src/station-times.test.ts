@@ -207,6 +207,8 @@ async function saveDate(tx: Transaction, cfg: VenueScope, date: string, closeWho
     null,
     { date, name: `Special ${date}`, closeWholeVenue },
     SAVED_AT,
+    undefined,
+    0,
   );
 }
 

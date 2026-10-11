@@ -290,6 +290,9 @@ const en = {
   "prep.actions": "Actions",
   "prep.service_zone": "Service zone",
   "prep.any_zone": "Any service zone",
+  "hours.clock_change_pending": "Cancel the pending business-day change before editing hours.",
+  "hours.clock_changed": "The business-day start changed. Reload hours.",
+  "venue.business_day_hours_conflict": "Adjust the conflicting hours first.",
   "hours.invalid":
     "Check the highlighted hours: periods must not overlap, including past midnight.",
   "hours.invalid_clash": "These hours overlap the hours on {date}.",
@@ -1046,6 +1049,9 @@ const es: Record<keyof typeof en, string> = {
   "prep.actions": "Acciones",
   "prep.service_zone": "Zona de servicio",
   "prep.any_zone": "Cualquier zona de servicio",
+  "hours.clock_change_pending": "Cancela el cambio pendiente del día antes de editar horarios.",
+  "hours.clock_changed": "Ha cambiado el inicio del día. Recarga los horarios.",
+  "venue.business_day_hours_conflict": "Ajusta primero los horarios en conflicto.",
   "hours.invalid":
     "Revisa los horarios marcados: los periodos no pueden solaparse, tampoco pasada la medianoche.",
   "hours.invalid_clash": "Este horario se solapa con el del {date}.",

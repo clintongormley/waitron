@@ -158,26 +158,32 @@ export async function readLocationClock(
   tx: Transaction,
   locationId: string,
 ): Promise<BusinessDayClock> {
-  const [location] = await tx
-    .select({ timeZone: locations.timeZone, dayCutover: locations.dayCutover })
-    .from(locations)
-    .where(eq(locations.id, locationId));
-  if (location === undefined) throw new Error(`reporting: no location ${locationId}`);
-  const changes = await tx
+  const rows = await tx
     .select({
+      timeZone: locations.timeZone,
+      dayCutover: locations.dayCutover,
       effectiveBusinessDay: locationDayCutoverChanges.effectiveBusinessDay,
-      dayCutover: locationDayCutoverChanges.dayCutover,
+      changedCutover: locationDayCutoverChanges.dayCutover,
     })
-    .from(locationDayCutoverChanges)
-    .where(eq(locationDayCutoverChanges.locationId, locationId))
+    .from(locations)
+    .leftJoin(locationDayCutoverChanges, eq(locationDayCutoverChanges.locationId, locations.id))
+    .where(eq(locations.id, locationId))
     .orderBy(asc(locationDayCutoverChanges.effectiveBusinessDay));
+  const location = rows[0];
+  if (location === undefined) throw new Error(`reporting: no location ${locationId}`);
   return {
     timeZone: location.timeZone,
     dayCutover: storedCutover(location.dayCutover),
-    cutoverChanges: changes.map((change) => ({
-      ...change,
-      dayCutover: storedCutover(change.dayCutover),
-    })),
+    cutoverChanges: rows.flatMap((row) =>
+      row.effectiveBusinessDay === null
+        ? []
+        : [
+            {
+              effectiveBusinessDay: row.effectiveBusinessDay,
+              dayCutover: storedCutover(row.changedCutover!),
+            },
+          ],
+    ),
   };
 }
 

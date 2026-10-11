@@ -150,7 +150,18 @@ async function send(
   return fx.app.request(`${BASE}${path}`, {
     method,
     headers,
-    ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+    ...(body === undefined
+      ? {}
+      : {
+          body: JSON.stringify(
+            path.startsWith("/special-dates") &&
+              body !== null &&
+              typeof body === "object" &&
+              !Array.isArray(body)
+              ? { expectedClockRevision: 0, ...body }
+              : body,
+          ),
+        }),
   });
 }
 
@@ -193,6 +204,8 @@ async function create(fx: Fixture, date: string, name: string) {
         cells: [],
       },
       new Date("2026-01-01T12:00:00Z"),
+      undefined,
+      0,
     ),
   );
 }

@@ -62,11 +62,17 @@ async function authorRange(startsAt: string, endsAt: string) {
     });
     const menuId = (await tx.execute<{ id: string }>(sql`select id from catalogues limit 1`))
       .rows[0]!.id;
-    const period = await saveMenuPeriod(tx, venue.cfg, department.id, {
-      name: "Service",
-      menuId,
-      staffMenuIds: [],
-    });
+    const period = await saveMenuPeriod(
+      tx,
+      venue.cfg,
+      department.id,
+      {
+        name: "Service",
+        menuId,
+        staffMenuIds: [],
+      },
+      0,
+    );
     await replaceMenuWeek(
       tx,
       venue.cfg,
@@ -76,6 +82,7 @@ async function authorRange(startsAt: string, endsAt: string) {
         slots: [{ periodId: period.id, startsAt, endsAt }],
       })),
       at,
+      0,
     );
     return { department, period };
   });
@@ -113,6 +120,7 @@ describe("business-day start scheduling", () => {
             slots: [{ periodId: period.id, startsAt, endsAt }],
           })),
           at,
+          0,
         ),
       );
     } catch (error) {
@@ -580,4 +588,24 @@ it("keeps another location's clock rows isolated and rejects a client-selected l
   });
   expect((await clockRows()).changes).toHaveLength(2);
   expect((await clockRows()).settings).toHaveLength(2);
+});
+
+describe("dated start schedule refusal", () => {
+  it("previews conflicts without writing and refuses incompatible PUT through the real boundary", async () => {
+    const { department } = await authorRange("05:00", "05:00");
+    const saved = await clockRows();
+    const query = new URLSearchParams(proposal() as unknown as Record<string, string>);
+    const preview = await request("GET", `/business-day-start/preview?${query}`);
+    expect(preview.status).toBe(200);
+    const body = await preview.json();
+    expect(body.conflictCount).toBe(7);
+    expect(body.conflicts).toHaveLength(7);
+    expect(body.conflicts[0]).toMatchObject({ departmentId: department.id, reason: "all_day" });
+    const response = await request("PUT", "/business-day-start", proposal());
+    expect(response.status).toBe(409);
+    expect(await response.json()).toMatchObject({
+      error: { code: "venue.business_day_hours_conflict", params: { conflictCount: 7 } },
+    });
+    expect(await clockRows()).toEqual(saved);
+  });
 });

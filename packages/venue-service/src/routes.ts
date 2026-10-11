@@ -118,6 +118,9 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "station.destination_invalid": 400,
   "time_zone.unreadable": 409,
   "hours.invalid": 400,
+  "hours.clock_change_pending": 409,
+  "hours.clock_changed": 409,
+  "venue.business_day_hours_conflict": 409,
   "special_date.not_found": 404,
   "special_date.date_taken": 409,
   "zone_closed_time.invalid": 400,
@@ -383,11 +386,18 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
     app.post("/management-api/venue-service/special-dates", (c) =>
       run(c, log, async () => {
         const sessionId = requireManagementSession(c);
-        const at = new Date();
-        const body = await readJsonBody<SpecialDateInput>(c);
+        const body = await readJsonBody<SpecialDateInput & { expectedClockRevision: number }>(c);
         return c.json(
           await gated(sessionId, (tx) =>
-            saveSpecialDate(tx, ctx.cfg, null, body, at, VENUE_SERVICE_CALENDAR_PARTICIPANTS),
+            saveSpecialDate(
+              tx,
+              ctx.cfg,
+              null,
+              body,
+              new Date(),
+              VENUE_SERVICE_CALENDAR_PARTICIPANTS,
+              body.expectedClockRevision as number,
+            ),
           ),
           201,
         );
@@ -397,12 +407,19 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
     app.put("/management-api/venue-service/special-dates/:id", (c) =>
       run(c, log, async () => {
         const sessionId = requireManagementSession(c);
-        const at = new Date();
         const id = requireUuidParam(c.req.param("id"), "SpecialDateId");
-        const body = await readJsonBody<SpecialDateInput>(c);
+        const body = await readJsonBody<SpecialDateInput & { expectedClockRevision: number }>(c);
         return c.json(
           await gated(sessionId, (tx) =>
-            saveSpecialDate(tx, ctx.cfg, id, body, at, VENUE_SERVICE_CALENDAR_PARTICIPANTS),
+            saveSpecialDate(
+              tx,
+              ctx.cfg,
+              id,
+              body,
+              new Date(),
+              VENUE_SERVICE_CALENDAR_PARTICIPANTS,
+              body.expectedClockRevision as number,
+            ),
           ),
         );
       }),
@@ -411,18 +428,18 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
     app.post("/management-api/venue-service/special-dates/:id/duplicate", (c) =>
       run(c, log, async () => {
         const sessionId = requireManagementSession(c);
-        const at = new Date();
         const id = requireUuidParam(c.req.param("id"), "SpecialDateId");
         const body = await readJsonBody<Record<string, unknown>>(c);
         const copies = await gated(sessionId, (tx) => {
-          onlyKeys(body, ["dates"]);
+          onlyKeys(body, ["dates", "expectedClockRevision"]);
           return duplicateHolidayNamedSpecialDates(
             tx,
             ctx.cfg,
             id,
             body.dates as readonly LocalDate[],
-            at,
+            new Date(),
             VENUE_SERVICE_CALENDAR_PARTICIPANTS,
+            body.expectedClockRevision as number,
           );
         });
         return c.json(copies, 201);
@@ -432,10 +449,17 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
     app.delete("/management-api/venue-service/special-dates/:id", (c) =>
       run(c, log, async () => {
         const sessionId = requireManagementSession(c);
-        const at = new Date();
         const id = requireUuidParam(c.req.param("id"), "SpecialDateId");
+        const body = await readJsonBody<{ expectedClockRevision: number }>(c);
         await gated(sessionId, (tx) =>
-          deleteSpecialDate(tx, ctx.cfg, id, at, VENUE_SERVICE_CALENDAR_PARTICIPANTS),
+          deleteSpecialDate(
+            tx,
+            ctx.cfg,
+            id,
+            new Date(),
+            VENUE_SERVICE_CALENDAR_PARTICIPANTS,
+            body.expectedClockRevision as number,
+          ),
         );
         return c.body(null, 204);
       }),
@@ -951,7 +975,14 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
         const sessionId = requireManagementSession(c);
         const departmentId = requireUuidParam(c.req.param("departmentId"), "DepartmentId");
         const body = await readJsonBody<Record<string, unknown>>(c);
-        onlyKeys(body, ["name", "colour", "menuId", "staffMenuIds", "endOffsetMinutes"]);
+        onlyKeys(body, [
+          "name",
+          "colour",
+          "menuId",
+          "staffMenuIds",
+          "endOffsetMinutes",
+          "expectedClockRevision",
+        ]);
         const name = requireString(body.name, "name");
         const menuId = requireBodyUuid(body.menuId, "menuId");
         const input = {
@@ -964,7 +995,7 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
             : { endOffsetMinutes: parseEndOffsetMinutes(body.endOffsetMinutes) }),
         };
         const period = await gated(sessionId, (tx) =>
-          saveMenuPeriod(tx, ctx.cfg, departmentId, input),
+          saveMenuPeriod(tx, ctx.cfg, departmentId, input, body.expectedClockRevision as number),
         );
         return c.json(period, 201);
       }),
@@ -975,8 +1006,15 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
         const sessionId = requireManagementSession(c);
         const periodId = requireUuidParam(c.req.param("periodId"), "MenuPeriodId");
         const body = await readJsonBody<Record<string, unknown>>(c);
-        onlyKeys(body, ["name", "colour", "menuId", "staffMenuIds", "endOffsetMinutes"]);
-        if (Object.keys(body).length === 0)
+        onlyKeys(body, [
+          "name",
+          "colour",
+          "menuId",
+          "staffMenuIds",
+          "endOffsetMinutes",
+          "expectedClockRevision",
+        ]);
+        if (Object.keys(body).every((key) => key === "expectedClockRevision"))
           throw new AppError("management.request_invalid", { field: "body" });
         const period = {
           ...(body.name === undefined ? {} : { name: requireString(body.name, "name") }),
@@ -989,7 +1027,9 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
             ? {}
             : { endOffsetMinutes: parseEndOffsetMinutes(body.endOffsetMinutes) }),
         };
-        await gated(sessionId, (tx) => updateMenuPeriod(tx, ctx.cfg, periodId, period));
+        await gated(sessionId, (tx) =>
+          updateMenuPeriod(tx, ctx.cfg, periodId, period, body.expectedClockRevision as number),
+        );
         return c.body(null, 204);
       }),
     );
@@ -1006,12 +1046,18 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
     app.put("/management-api/venue-service/departments/:departmentId/menu-week", (c) =>
       run(c, log, async () => {
         const sessionId = requireManagementSession(c);
-        const at = new Date();
         const departmentId = requireUuidParam(c.req.param("departmentId"), "DepartmentId");
         const body = await readJsonBody<Record<string, unknown>>(c);
-        onlyKeys(body, ["days"]);
+        onlyKeys(body, ["days", "expectedClockRevision"]);
         await gated(sessionId, (tx) =>
-          replaceMenuWeek(tx, ctx.cfg, departmentId, body.days as readonly MenuWeekDay[], at),
+          replaceMenuWeek(
+            tx,
+            ctx.cfg,
+            departmentId,
+            body.days as readonly MenuWeekDay[],
+            new Date(),
+            body.expectedClockRevision as number,
+          ),
         );
         return c.body(null, 204);
       }),
@@ -1022,8 +1068,16 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
         const sessionId = requireManagementSession(c);
         const zoneId = requireUuidParam(c.req.param("zoneId"), "ZoneId");
         const body = await readJsonBody<Record<string, unknown>>(c);
-        onlyKeys(body, ["days"]);
-        await gated(sessionId, (tx) => replaceZoneClosedWeek(tx, ctx.cfg, zoneId, body.days));
+        onlyKeys(body, ["days", "expectedClockRevision"]);
+        await gated(sessionId, (tx) =>
+          replaceZoneClosedWeek(
+            tx,
+            ctx.cfg,
+            zoneId,
+            body.days,
+            body.expectedClockRevision as number,
+          ),
+        );
         return c.body(null, 204);
       }),
     );
@@ -1033,8 +1087,17 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
         const id = requireUuidParam(c.req.param("id"), "SpecialDateId");
         const zoneId = requireUuidParam(c.req.param("zoneId"), "ZoneId");
         const body = await readJsonBody<Record<string, unknown>>(c);
-        onlyKeys(body, ["ranges"]);
-        await gated(sessionId, (tx) => saveZoneClosedDate(tx, ctx.cfg, id, zoneId, body.ranges));
+        onlyKeys(body, ["ranges", "expectedClockRevision"]);
+        await gated(sessionId, (tx) =>
+          saveZoneClosedDate(
+            tx,
+            ctx.cfg,
+            id,
+            zoneId,
+            body.ranges,
+            body.expectedClockRevision as number,
+          ),
+        );
         return c.body(null, 204);
       }),
     );
@@ -1044,13 +1107,20 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
     app.put(dateTimetable, (c) =>
       run(c, log, async () => {
         const sessionId = requireManagementSession(c);
-        const at = new Date();
         const id = requireUuidParam(c.req.param("id"), "SpecialDateId");
         const departmentId = requireUuidParam(c.req.param("departmentId"), "DepartmentId");
         const body = await readJsonBody<Record<string, unknown>>(c);
-        onlyKeys(body, ["slots"]);
+        onlyKeys(body, ["slots", "expectedClockRevision"]);
         await gated(sessionId, (tx) =>
-          saveSpecialDateMenus(tx, ctx.cfg, id, departmentId, body.slots as MenuSlot[], at),
+          saveSpecialDateMenus(
+            tx,
+            ctx.cfg,
+            id,
+            departmentId,
+            body.slots as MenuSlot[],
+            new Date(),
+            body.expectedClockRevision as number,
+          ),
         );
         return c.body(null, 204);
       }),

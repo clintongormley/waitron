@@ -1,3 +1,4 @@
+import type { BusinessDayScheduleStatus } from "./service-day-context.js";
 // Public-holiday types and constants only, safe to import in the browser.
 import type { NamedDayKind } from "./named-day-rules.js";
 import type { HolidayFact, LocalDate } from "./hours-types.js";
@@ -64,7 +65,7 @@ export interface NamedCalendarDay {
   ownHours: boolean;
   closed: boolean;
 }
-export interface NamedDaysModel {
+export interface NamedDaysModel extends BusinessDayScheduleStatus {
   timeZone: string;
   dayCutover: string;
   civilDate: LocalDate | null;

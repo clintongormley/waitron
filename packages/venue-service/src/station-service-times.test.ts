@@ -13,6 +13,7 @@ import {
   floorZones,
   kitchenStations,
   locations,
+  locationDayCutoverChanges,
   products,
   withTransaction,
   type Transaction,
@@ -77,20 +78,32 @@ async function fixture(db: Transaction) {
   ).id;
   await addProductToMenu(db, { menuId: menu, productId: product });
   const lunch = (
-    await saveMenuPeriod(db, cfg, department, {
-      name: "Lunch",
-      menuId: menu,
-      staffMenuIds: [],
-      colour: "blue",
-    })
+    await saveMenuPeriod(
+      db,
+      cfg,
+      department,
+      {
+        name: "Lunch",
+        menuId: menu,
+        staffMenuIds: [],
+        colour: "blue",
+      },
+      0,
+    )
   ).id;
   const afternoon = (
-    await saveMenuPeriod(db, cfg, department, {
-      name: "Afternoon",
-      menuId: menu,
-      staffMenuIds: [],
-      colour: "green",
-    })
+    await saveMenuPeriod(
+      db,
+      cfg,
+      department,
+      {
+        name: "Afternoon",
+        menuId: menu,
+        staffMenuIds: [],
+        colour: "green",
+      },
+      0,
+    )
   ).id;
   const lunchRange = { periodId: lunch, startsAt: "12:00", endsAt: "16:00" };
   await replaceMenuWeek(
@@ -99,6 +112,7 @@ async function fixture(db: Transaction) {
     department,
     week("slots", [lunchRange, { periodId: afternoon, startsAt: "16:00", endsAt: "18:00" }]),
     at,
+    0,
   );
   const station = stations[1]!.id;
   await setRoutingCell(
@@ -142,6 +156,8 @@ it("applies named-day own ranges and dated zone closures", async () =>
       null,
       { date: day, name: "Celebration", ownHours: true, closeWholeVenue: false },
       at,
+      undefined,
+      0,
     );
     await saveSpecialDateMenus(
       db,
@@ -150,10 +166,16 @@ it("applies named-day own ranges and dated zone closures", async () =>
       f.department,
       [{ periodId: f.lunch, startsAt: "13:00", endsAt: "17:00" }],
       at,
+      0,
     );
-    await saveZoneClosedDate(db, f.cfg, named.id, f.terrace, [
-      { startsAt: "15:00", endsAt: "06:00" },
-    ]);
+    await saveZoneClosedDate(
+      db,
+      f.cfg,
+      named.id,
+      f.terrace,
+      [{ startsAt: "15:00", endsAt: "06:00" }],
+      0,
+    );
     expect(await stationServiceTimes(db, f.cfg, f.station, day, day)).toEqual(
       planned(f, [{ periodId: f.lunch, startsAt: "13:00", endsAt: "15:00" }]),
     );
@@ -166,6 +188,7 @@ it("cuts Lunch at 15:00 when its only routing zone closes then", async () =>
       f.cfg,
       f.terrace,
       week("ranges", [{ startsAt: "15:00", endsAt: "06:00" }]),
+      0,
     );
     expect(await stationServiceTimes(db, f.cfg, f.station, day, day)).toEqual(
       planned(f, [{ ...f.lunchRange, endsAt: "15:00" }]),
@@ -190,6 +213,7 @@ it("unions overlapping zone shares without duplicate ranges", async () =>
       f.cfg,
       f.terrace,
       week("ranges", [{ startsAt: "14:00", endsAt: "06:00" }]),
+      0,
     );
     await replaceZoneClosedWeek(
       db,
@@ -199,6 +223,7 @@ it("unions overlapping zone shares without duplicate ranges", async () =>
         { startsAt: "06:00", endsAt: "13:00" },
         { startsAt: "15:00", endsAt: "06:00" },
       ]),
+      0,
     );
     expect(await stationServiceTimes(db, f.cfg, f.station, day, day)).toEqual(
       planned(f, [{ ...f.lunchRange, endsAt: "15:00" }]),
@@ -212,6 +237,7 @@ it("keeps separate surviving segments around a zone closure", async () =>
       f.cfg,
       f.terrace,
       week("ranges", [{ startsAt: "13:00", endsAt: "14:00" }]),
+      0,
     );
     expect(await stationServiceTimes(db, f.cfg, f.station, day, day)).toEqual(
       planned(f, [
@@ -264,6 +290,8 @@ it.each([
         null,
         { date: day, name: "Closed", ownHours: false, closeWholeVenue: true },
         at,
+        undefined,
+        0,
       );
     if (kind === "whole zone closed")
       await replaceZoneClosedWeek(
@@ -271,6 +299,7 @@ it.each([
         f.cfg,
         f.terrace,
         week("ranges", [{ startsAt: "06:00", endsAt: "06:00" }]),
+        0,
       );
     expect(
       await stationServiceTimes(db, f.cfg, kind === "unrouted" ? f.unused : f.station, day, day),
@@ -331,12 +360,18 @@ it("reads products from staff menus and routes a variant by its parent's categor
     await db.update(products).set({ active: false }).where(eq(products.id, f.product));
     expect(variant!.parentId).toBe(f.product);
     const { updateMenuPeriod } = await import("./menu-timetable.js");
-    await updateMenuPeriod(db, f.cfg, f.lunch, {
-      name: "Lunch",
-      menuId: empty,
-      staffMenuIds: [variantMenu],
-      colour: "blue",
-    });
+    await updateMenuPeriod(
+      db,
+      f.cfg,
+      f.lunch,
+      {
+        name: "Lunch",
+        menuId: empty,
+        staffMenuIds: [variantMenu],
+        colour: "blue",
+      },
+      0,
+    );
     expect(await stationServiceTimes(db, f.cfg, f.station, day, day)).toEqual(planned(f));
   }));
 it("a repeating own-hours day uses its occurrence, with an unsaved department still following the week", async () =>
@@ -348,6 +383,8 @@ it("a repeating own-hours day uses its occurrence, with an unsaved department st
       null,
       { date: day, name: "Annual day", repeats: true, ownHours: true, closeWholeVenue: false },
       at,
+      undefined,
+      0,
     );
     expect(await stationServiceTimes(db, f.cfg, f.station, "2037-10-12", "2037-10-12")).toEqual({
       always: null,
@@ -368,6 +405,7 @@ it("keeps cross-midnight service ranges and ignores today's kept-open period", a
       f.department,
       week("slots", [{ periodId: f.lunch, startsAt: "22:00", endsAt: "02:00" }]),
       at,
+      0,
     );
     const { periodExtensions } = await import("./schema/period-extensions.js");
     await db.insert(periodExtensions).values({
@@ -392,12 +430,18 @@ it("keeps each active department's ranges, cut by its own zone", async () =>
       .returning();
     await configureZone(db, f.cfg, { zoneId: zone!.id, departmentId: second });
     const period = (
-      await saveMenuPeriod(db, f.cfg, second, {
-        name: "Lunch",
-        menuId: f.menu,
-        staffMenuIds: [],
-        colour: "blue",
-      })
+      await saveMenuPeriod(
+        db,
+        f.cfg,
+        second,
+        {
+          name: "Lunch",
+          menuId: f.menu,
+          staffMenuIds: [],
+          colour: "blue",
+        },
+        0,
+      )
     ).id;
     await replaceMenuWeek(
       db,
@@ -405,6 +449,7 @@ it("keeps each active department's ranges, cut by its own zone", async () =>
       second,
       week("slots", [{ periodId: period, startsAt: "15:00", endsAt: "17:00" }]),
       at,
+      0,
     );
     await setRoutingCell(
       db,
@@ -417,6 +462,7 @@ it("keeps each active department's ranges, cut by its own zone", async () =>
       f.cfg,
       zone!.id,
       week("ranges", [{ startsAt: "16:00", endsAt: "06:00" }]),
+      0,
     );
     expect(await stationServiceTimes(db, f.cfg, f.station, day, day)).toEqual({
       always: null,
@@ -459,10 +505,47 @@ it("the normal week ignores a named-day closure while the dated week applies it"
         repeats: false,
       },
       at,
+      undefined,
+      0,
     );
     expect(await stationServiceTimes(db, f.cfg, f.station, day, day)).toEqual({
       always: null,
       days: [{ date: day, departments: [] }],
     });
     expect(await stationServiceTimes(db, f.cfg, f.station, day, day, "normal")).toEqual(planned(f));
+  }));
+
+it("clamps a station forecast to the following dated start", async () =>
+  tx(async (db) => {
+    const f = await fixture(db);
+    await replaceMenuWeek(
+      db,
+      f.cfg,
+      f.department,
+      week("slots", [{ periodId: f.lunch, startsAt: "09:00", endsAt: "06:00" }]),
+      at,
+      0,
+    );
+    await db
+      .insert(locationDayCutoverChanges)
+      .values({
+        locationId: f.cfg.locationId,
+        effectiveBusinessDay: "2026-10-13",
+        dayCutover: "03:00:00",
+      });
+    expect(await stationServiceTimes(db, f.cfg, f.station, day, "2026-10-13")).toEqual({
+      always: null,
+      days: [
+        {
+          date: day,
+          departments: [
+            {
+              departmentId: f.department,
+              ranges: [{ periodId: f.lunch, startsAt: "09:00", endsAt: "03:00" }],
+            },
+          ],
+        },
+        { date: "2026-10-13", departments: [] },
+      ],
+    });
   }));

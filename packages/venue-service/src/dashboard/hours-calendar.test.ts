@@ -87,6 +87,10 @@ describe("Opening hours named month", () => {
       closeWholeVenue: false,
     };
     return {
+      businessDayClock: { timeZone: "Europe/Madrid", dayCutover: "06:00", cutoverChanges: [] },
+      clockRevision: 0,
+      currentBusinessDay: "2026-10-07",
+      pending: null,
       timeZone: "Europe/Madrid",
       dayCutover: "06:00",
       civilDate: "2026-10-07",

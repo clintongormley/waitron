@@ -1,4 +1,8 @@
 import {
+  assertBusinessDayClockChange,
+  assertBusinessDayScheduleWrite,
+} from "./business-day-schedule.js";
+import {
   readDepartmentReceipt,
   readRetainedDepartmentReceipt,
   readPrintedDepartmentReceipt,
@@ -97,6 +101,8 @@ import {
 
 /** The generic server-facing service seat; it owns no transaction and calls no server code. */
 export const VENUE_SERVICE: VenueServiceContribution = {
+  assertBusinessDayClockChange,
+  assertBusinessDayScheduleWrite,
   assertPeriodEndOffsets,
   assertZoneTakesNewOrders,
   closedZoneIdsAt,

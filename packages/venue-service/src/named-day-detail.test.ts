@@ -39,6 +39,8 @@ it("reads named-day facts and enforces venue ownership without station-hours tab
         cells: [],
       },
       new Date("2026-10-09T12:00:00Z"),
+      undefined,
+      0,
     );
     return { cfg, other: { locationId: locationId(venues[1]!.id) }, day };
   });

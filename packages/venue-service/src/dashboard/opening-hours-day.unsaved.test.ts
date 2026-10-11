@@ -20,6 +20,10 @@ class DayLeaveApp extends LitElement {
       }
       if (this.failRead) throw new Error("offline");
       return {
+        businessDayClock: { timeZone: "Europe/Madrid", dayCutover: "06:00", cutoverChanges: [] },
+        clockRevision: 0,
+        currentBusinessDay: "2026-10-12",
+        pending: null,
         timeZone: "Europe/Madrid",
         clockReadable: true,
         dayCutover: "06:00",

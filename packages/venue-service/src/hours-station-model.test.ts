@@ -151,6 +151,8 @@ describe("named-day writers", () => {
           ],
         },
         at,
+        undefined,
+        0,
       ),
     );
     expect(edited).toEqual({
@@ -182,7 +184,7 @@ describe("named-day readers", () => {
       closeWholeVenue: false,
     });
     const [copy] = await withTransaction(suite.db, (tx) =>
-      duplicateSpecialDate(tx, f.cfg, f.special, ["2026-10-16"], at),
+      duplicateSpecialDate(tx, f.cfg, f.special, ["2026-10-16"], at, undefined, 0),
     );
     const copied = await withTransaction(suite.db, (tx) => readSpecialDate(tx, f.cfg, copy!.id));
     expect(copied).toEqual({ ...read, id: copy!.id, date: "2026-10-16" });
@@ -206,6 +208,8 @@ it("renames a named date while preserving its other calendar facts", async () =>
         cells: [],
       },
       at,
+      undefined,
+      0,
     ),
   );
   expect(saved).toEqual({

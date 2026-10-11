@@ -3,6 +3,7 @@ import { eq } from "drizzle-orm";
 import { CATALOGUE_MIGRATIONS, createCatalogue } from "@waitron/catalogue";
 import {
   CORE_MIGRATIONS,
+  locationDayCutoverChanges,
   floorZones,
   locations,
   withTransaction,
@@ -56,18 +57,30 @@ async function fixture(options: { afternoon?: boolean; spring?: boolean } = {}) 
     await configureZone(tx, cfg, { zoneId: zone!.id, departmentId });
     const menu = await createCatalogue(tx, { name: "Menu" });
     const lunch = (
-      await saveMenuPeriod(tx, cfg, departmentId, {
-        name: "Lunch",
-        menuId: menu.id,
-        staffMenuIds: [],
-      })
+      await saveMenuPeriod(
+        tx,
+        cfg,
+        departmentId,
+        {
+          name: "Lunch",
+          menuId: menu.id,
+          staffMenuIds: [],
+        },
+        0,
+      )
     ).id;
     const afternoon = (
-      await saveMenuPeriod(tx, cfg, departmentId, {
-        name: "Afternoon",
-        menuId: menu.id,
-        staffMenuIds: [],
-      })
+      await saveMenuPeriod(
+        tx,
+        cfg,
+        departmentId,
+        {
+          name: "Afternoon",
+          menuId: menu.id,
+          staffMenuIds: [],
+        },
+        0,
+      )
     ).id;
     await replaceMenuWeek(
       tx,
@@ -87,6 +100,7 @@ async function fixture(options: { afternoon?: boolean; spring?: boolean } = {}) 
         ],
       })),
       at("12:00"),
+      0,
     );
     return { cfg, departmentId, zoneId: zone!.id, lunch, afternoon, menuId: menu.id };
   });
@@ -317,7 +331,7 @@ it.each([
   "measures offset $offset at $time from the extended end",
   async ({ offset, time, orderable, sendable }) => {
     const f = await fixture();
-    await run((tx) => updateMenuPeriod(tx, f.cfg, f.lunch, { endOffsetMinutes: offset }));
+    await run((tx) => updateMenuPeriod(tx, f.cfg, f.lunch, { endOffsetMinutes: offset }, 0));
     await run((tx) =>
       keepPeriodOpen(tx, f.cfg, f.zoneId, { periodId: f.lunch, until: "15:00" }, at("13:00")),
     );
@@ -380,6 +394,7 @@ it.each([
           ],
         })),
         at("12:00"),
+        0,
       ),
     );
     expect(
@@ -400,6 +415,7 @@ async function zoneFixture(endsAt = "03:00") {
         slots: [{ periodId: f.lunch, startsAt: "21:00", endsAt }],
       })),
       at("21:00"),
+      0,
     );
     await replaceZoneClosedWeek(
       tx,
@@ -409,6 +425,7 @@ async function zoneFixture(endsAt = "03:00") {
         weekday,
         ranges: [{ startsAt: "23:30", endsAt: "06:00" }],
       })),
+      0,
     );
   });
   return f;
@@ -502,6 +519,7 @@ describe("keeping a zone open today", () => {
           ],
         })),
         at("21:00"),
+        0,
       ),
     );
     await expect(
@@ -545,6 +563,7 @@ describe("keeping a zone open today", () => {
         f.cfg,
         f.zoneId,
         [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({ weekday, ranges: [] })),
+        0,
       ),
     );
     expect((await run((tx) => readKeepOpen(tx, f.cfg, f.zoneId, at("23:00")))).zone).toBeNull();
@@ -670,6 +689,7 @@ it("retains a spanning extension in both readouts and when replacing it after th
         slots: [{ periodId: f.lunch, startsAt: "21:00", endsAt: "06:00" }],
       })),
       at("21:00"),
+      0,
     );
     await replaceZoneClosedWeek(
       tx,
@@ -682,6 +702,7 @@ it("retains a spanning extension in both readouts and when replacing it after th
           { startsAt: "01:00", endsAt: "03:00" },
         ],
       })),
+      0,
     );
     await keep.keepZoneOpen(tx, f.cfg, f.zoneId, { until: "02:00" }, at("23:00"));
   });
@@ -730,6 +751,7 @@ it("shows the effective extension after a manager moves the closure start", asyn
         weekday,
         ranges: [{ startsAt: "23:00", endsAt: "06:00" }],
       })),
+      0,
     ),
   );
   const instant = at("23:45");
@@ -789,6 +811,7 @@ it.each([
           weekday,
           ranges: [{ startsAt: "01:00", endsAt: "03:00" }],
         })),
+        0,
       );
       await tx
         .insert(zoneExtensions)
@@ -805,3 +828,46 @@ it.each([
     ).toMatchObject({ closesAt: "01:00", extendedUntil: null, running: false });
   },
 );
+
+describe("extensions use the actual following boundary", () => {
+  it.each([
+    ["04:00", "04:00", "04:15"],
+    ["08:00", "06:00", "06:15"],
+  ])("bounds choices before a %s start", async (cutover, lastChoice, refusedUntil) => {
+    const f = await fixture();
+    await run((tx) =>
+      replaceMenuWeek(
+        tx,
+        f.cfg,
+        f.departmentId,
+        Array.from({ length: 7 }, (_, weekday) => ({
+          weekday,
+          slots: [{ periodId: f.lunch, startsAt: "12:00", endsAt: "14:00" }],
+        })),
+        at("12:00"),
+        0,
+      ),
+    );
+    await run((tx) =>
+      tx.insert(locationDayCutoverChanges).values({
+        locationId: f.cfg.locationId,
+        effectiveBusinessDay: "2026-11-04",
+        dayCutover: `${cutover}:00`,
+      }),
+    );
+    const now = at("13:50", "2026-11-03");
+    const model = await run((tx) => readKeepOpen(tx, f.cfg, f.zoneId, now));
+    expect(model.period?.choices.at(-1)).toBe(lastChoice);
+    await expect(
+      run((tx) =>
+        keepPeriodOpen(tx, f.cfg, f.zoneId, { periodId: f.lunch, until: refusedUntil }, now),
+      ),
+    ).rejects.toMatchObject({
+      code: "period_extension.invalid",
+      params: { field: "until", reason: "not_later" },
+    });
+    await expect(
+      run((tx) => keepPeriodOpen(tx, f.cfg, f.zoneId, { periodId: f.lunch, until: null }, now)),
+    ).resolves.toBeUndefined();
+  });
+});

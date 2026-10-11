@@ -4,6 +4,10 @@ import * as clients from "./named-days-client.js";
 import type { NamedDaysModel } from "../holiday-types.js";
 
 const model: NamedDaysModel = {
+  businessDayClock: { timeZone: "Europe/Madrid", dayCutover: "06:00", cutoverChanges: [] },
+  clockRevision: 0,
+  currentBusinessDay: "2026-10-09",
+  pending: null,
   timeZone: "Europe/Madrid",
   dayCutover: "06:00",
   civilDate: "2026-10-09",

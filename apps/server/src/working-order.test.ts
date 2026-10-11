@@ -3492,7 +3492,7 @@ describe("opening hours", () => {
       expect(departmentRows.length).toBeGreaterThan(0);
       const closedWeek = WEEK_DISPLAY_ORDER.map((weekday) => ({ weekday, slots: [] }));
       for (const row of departmentRows)
-        await replaceMenuWeek(tx, cfg, row.id, closedWeek, new Date());
+        await replaceMenuWeek(tx, cfg, row.id, closedWeek, new Date(), 0);
       vi.useFakeTimers({ toFake: ["Date"] });
       vi.setSystemTime(new Date("2026-10-02T18:00:00Z"));
       try {
@@ -3905,6 +3905,8 @@ describe("a sale on a Spanish public holiday", () => {
           cells: [],
         },
         new Date(`${ORDINARY}T10:00:00Z`),
+        undefined,
+        0,
       ),
     );
     await withTransaction(db, (tx) =>

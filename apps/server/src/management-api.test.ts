@@ -1484,24 +1484,32 @@ describe("/management-api/stations (KDS-1 config)", () => {
         closeWholeVenue: false,
       });
       const earlier = await withTransaction(suite.db, (tx) =>
-        saveSpecialDate(tx, cfg, null, barDate("2096-06-09"), at),
+        saveSpecialDate(tx, cfg, null, barDate("2096-06-09"), at, undefined, 0),
       );
       const later = await withTransaction(suite.db, (tx) =>
-        saveSpecialDate(tx, cfg, null, barDate("2096-06-12"), at),
+        saveSpecialDate(tx, cfg, null, barDate("2096-06-12"), at, undefined, 0),
       );
       expect(
         (await req(`/stations/${bar}/default`, { method: "POST" }, managerCookie)).status,
       ).toBe(204);
       await withTransaction(suite.db, (tx) =>
-        saveSpecialDate(tx, cfg, later.id, { ...barDate("2096-06-10"), name: later.name }, at),
+        saveSpecialDate(
+          tx,
+          cfg,
+          later.id,
+          { ...barDate("2096-06-10"), name: later.name },
+          at,
+          undefined,
+          0,
+        ),
       );
 
       let removed = false;
       const removeDate = async () => {
         if (removed) return;
         await withTransaction(suite.db, async (tx) => {
-          await deleteSpecialDate(tx, cfg, later.id, at);
-          await deleteSpecialDate(tx, cfg, earlier.id, at);
+          await deleteSpecialDate(tx, cfg, later.id, at, undefined, 0);
+          await deleteSpecialDate(tx, cfg, earlier.id, at, undefined, 0);
         });
         removed = true;
       };

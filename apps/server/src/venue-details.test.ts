@@ -817,6 +817,7 @@ describe("venue details preserve committed history", () => {
             slots: [{ periodId: period.id, startsAt: "09:00", endsAt: "17:00" }],
           })),
           new Date(),
+          0,
         );
     });
     const initial = await read();
@@ -1549,12 +1550,18 @@ it("refuses a changed cutover that empties an offset placement and rolls back ot
     });
     const menu = (await tx.execute<{ id: string }>(sql`select id from catalogues limit 1`)).rows[0]!
       .id;
-    const period = await saveMenuPeriod(tx, venue.cfg, department.id, {
-      name: "Lunch",
-      menuId: menu,
-      staffMenuIds: [],
-      endOffsetMinutes: -119,
-    });
+    const period = await saveMenuPeriod(
+      tx,
+      venue.cfg,
+      department.id,
+      {
+        name: "Lunch",
+        menuId: menu,
+        staffMenuIds: [],
+        endOffsetMinutes: -119,
+      },
+      0,
+    );
     await replaceMenuWeek(
       tx,
       venue.cfg,
@@ -1564,6 +1571,7 @@ it("refuses a changed cutover that empties an offset placement and rolls back ot
         slots: [{ periodId: period.id, startsAt: "12:00", endsAt: "14:00" }],
       })),
       new Date(),
+      0,
     );
   });
   await expect(

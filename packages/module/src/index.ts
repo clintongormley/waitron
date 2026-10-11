@@ -80,3 +80,5 @@ export type { RestoreHook, RestoreOutcome } from "./restore.js";
 export type { Reconciliation } from "./reconcile.js";
 export { reconcile } from "./reconcile.js";
 import "./errors.js";
+
+export type { BusinessDayClockConflict } from "./module.js";

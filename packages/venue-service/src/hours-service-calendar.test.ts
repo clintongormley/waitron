@@ -48,22 +48,34 @@ async function fixture() {
       ])
       .returning();
     const [menu] = await tx.insert(catalogues).values({ name: randomUUID() }).returning();
-    const period = await saveMenuPeriod(tx, cfg, department!.id, {
-      name: "Late",
-      menuId: menu!.id,
-      staffMenuIds: [],
-    });
+    const period = await saveMenuPeriod(
+      tx,
+      cfg,
+      department!.id,
+      {
+        name: "Late",
+        menuId: menu!.id,
+        staffMenuIds: [],
+      },
+      0,
+    );
     const week = (weekday: number) =>
       [0, 1, 2, 3, 4, 5, 6].map((day) => ({
         weekday: day,
         slots: day === weekday ? [{ periodId: period.id, startsAt: "22:00", endsAt: "03:00" }] : [],
       }));
-    await replaceMenuWeek(tx, cfg, department!.id, week(1), at);
-    const inactivePeriod = await saveMenuPeriod(tx, cfg, inactive!.id, {
-      name: "Terrace",
-      menuId: menu!.id,
-      staffMenuIds: [],
-    });
+    await replaceMenuWeek(tx, cfg, department!.id, week(1), at, 0);
+    const inactivePeriod = await saveMenuPeriod(
+      tx,
+      cfg,
+      inactive!.id,
+      {
+        name: "Terrace",
+        menuId: menu!.id,
+        staffMenuIds: [],
+      },
+      0,
+    );
     await replaceMenuWeek(
       tx,
       cfg,
@@ -73,6 +85,7 @@ async function fixture() {
         slots: [{ periodId: inactivePeriod.id, startsAt: "04:30", endsAt: "04:30" }],
       })),
       at,
+      0,
     );
     await tx.update(departments).set({ active: false }).where(eq(departments.id, inactive!.id));
     return {
@@ -120,6 +133,8 @@ describe("calendar follows department service periods", () => {
           cells: [],
         },
         at,
+        undefined,
+        0,
       );
     });
     expect(await tones(f.cfg, "2026-10-20")).toEqual({
@@ -148,9 +163,11 @@ describe("calendar follows department service periods", () => {
           cells: [],
         },
         at,
+        undefined,
+        0,
       );
       await tx.update(specialDates).set({ ownHours: true }).where(eq(specialDates.id, special.id));
-      await saveSpecialDateMenus(tx, f.cfg, special.id, f.department, [], at);
+      await saveSpecialDateMenus(tx, f.cfg, special.id, f.department, [], at, 0);
       await saveSpecialDate(
         tx,
         f.cfg,
@@ -162,6 +179,8 @@ describe("calendar follows department service periods", () => {
           cells: [],
         },
         at,
+        undefined,
+        0,
       );
     });
     expect(await tones(f.cfg, "2026-10-19")).toEqual({
@@ -189,6 +208,8 @@ describe("calendar follows department service periods", () => {
           null,
           { date, name: "Special Tuesday", closeWholeVenue, cells: [] },
           at,
+          undefined,
+          0,
         );
         await tx
           .update(specialDates)
@@ -214,6 +235,7 @@ describe("calendar follows department service periods", () => {
             f.department,
             [{ periodId: f.period, startsAt: "10:00", endsAt: "14:00" }],
             at,
+            0,
           );
         }
       }
@@ -244,6 +266,8 @@ describe("calendar follows department service periods", () => {
         null,
         { date: "2026-10-19", name: "Venue closed", closeWholeVenue: true, cells: [] },
         at,
+        undefined,
+        0,
       ),
     );
     expect(await tones(f.cfg, "2026-10-19")).toEqual({
@@ -257,7 +281,7 @@ describe("calendar follows department service periods", () => {
     const f = await fixture();
     const other = await fixture();
     await withTransaction(suite.db, (tx) =>
-      replaceMenuWeek(tx, other.cfg, other.department, other.week(2), at),
+      replaceMenuWeek(tx, other.cfg, other.department, other.week(2), at, 0),
     );
     expect(await tones(f.cfg, "2026-10-20")).toEqual({
       calendar: ["closed"],

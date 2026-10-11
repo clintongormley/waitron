@@ -63,11 +63,17 @@ async function fixture() {
     const [menu] = await tx.insert(catalogues).values({ name: randomUUID() }).returning();
     const ids = [];
     for (const owner of [department!, other!]) {
-      const period = await saveMenuPeriod(tx, cfg, owner.id, {
-        name: "Lunch",
-        menuId: menu!.id,
-        staffMenuIds: [],
-      });
+      const period = await saveMenuPeriod(
+        tx,
+        cfg,
+        owner.id,
+        {
+          name: "Lunch",
+          menuId: menu!.id,
+          staffMenuIds: [],
+        },
+        0,
+      );
       await replaceMenuWeek(
         tx,
         cfg,
@@ -77,6 +83,7 @@ async function fixture() {
           slots: [{ periodId: period.id, startsAt: "12:00", endsAt: "16:00" }],
         })),
         now,
+        0,
       );
       ids.push(period.id);
     }

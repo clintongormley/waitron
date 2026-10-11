@@ -44,3 +44,5 @@ export const HOURS_RANGE_MAX_DAYS = 366;
 
 /** The order a week is shown in, Monday first. It never relabels a stored weekday. */
 export const WEEK_DISPLAY_ORDER = [1, 2, 3, 4, 5, 6, 0] as const;
+
+export { serviceDayContext, type ServiceDayContext } from "./service-day-context.js";

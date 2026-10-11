@@ -1,4 +1,5 @@
 import "@waitron/shared";
+import type { BusinessDayClockConflict } from "@waitron/module";
 import type { MenuPeriodUse } from "./menu-timetable-types.js";
 
 /** Something that still names a menu of a department's list, so the menu cannot leave it. */
@@ -10,6 +11,12 @@ export type MenuUse =
 
 declare module "@waitron/shared" {
   interface ErrorParams {
+    "hours.clock_change_pending": { effectiveBusinessDay: string };
+    "hours.clock_changed": Record<string, never>;
+    "venue.business_day_hours_conflict": {
+      conflicts: BusinessDayClockConflict[];
+      conflictCount: number;
+    };
     "department.name_taken": { name: string };
     "department_transfer.settings_invalid": {
       field: "receivingProfileId" | "destinationDepartmentIds";

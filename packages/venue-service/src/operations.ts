@@ -1,4 +1,4 @@
-import { rangeSpan } from "./service-day.js";
+import { rangeSpanInDay } from "./service-day.js";
 import {
   closedZoneIdsAt,
   zoneClosureDay,
@@ -1345,20 +1345,20 @@ export async function readZoneKeepOpenState(
   const c = await zoneClosureDay(tx, cfg, zoneId, at);
   if (c.moment === null) return null;
   const closure = c.ranges.find(
-    (range) => rangeSpan(range, c.clock.dayCutover).end > c.moment!.minute,
+    (range) => rangeSpanInDay(range, c.dayContext).end > c.moment!.minute,
   );
   if (closure === undefined) return null;
   const [zone] = await tx
     .select({ name: floorZones.name })
     .from(floorZones)
     .where(eq(floorZones.id, zoneId));
-  const extended = zoneExtensionForRange(c.extension, closure, c.clock.dayCutover);
+  const extended = zoneExtensionForRange(c.extension, closure, c.cutover);
   return {
     zoneId,
     zoneName: zone!.name,
     closesAt: extended?.endsAt ?? closure.startsAt,
-    running: !withoutZoneExtension(c.ranges, c.extension, c.clock.dayCutover).some((range) => {
-      const span = rangeSpan(range, c.clock.dayCutover);
+    running: !withoutZoneExtension(c.ranges, c.extension, c.cutover).some((range) => {
+      const span = rangeSpanInDay(range, c.dayContext);
       return span.start <= c.moment!.minute && c.moment!.minute < span.end;
     }),
     extendedUntil: extended?.endsAt ?? null,

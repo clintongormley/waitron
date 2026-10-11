@@ -3624,12 +3624,18 @@ it("transfers a department's customer and staff period menus to its zone under n
     });
     const bebidas = await createCatalogue(tx, { name: "Bebidas transferidas" });
     const desayunos = await createCatalogue(tx, { name: "Desayunos transferidos" });
-    const period = await saveMenuPeriod(tx, scope, department.id, {
-      name: "Servicio de cartas",
-      colour: "red",
-      menuId: bebidas.id,
-      staffMenuIds: [desayunos.id],
-    });
+    const period = await saveMenuPeriod(
+      tx,
+      scope,
+      department.id,
+      {
+        name: "Servicio de cartas",
+        colour: "red",
+        menuId: bebidas.id,
+        staffMenuIds: [desayunos.id],
+      },
+      0,
+    );
     return [department.id, barra.id, bebidas.id, desayunos.id, period.id];
   });
   const versions = await schemaVersionsByModule(suite.db, ALL_MODULES);
@@ -3895,12 +3901,18 @@ it("carries a cell's period choices with their cell, including a period whose me
       vatClass: "general",
     });
     const vacia = await createCatalogue(tx, { name: "Carta vacía de periodos" });
-    const period = await saveMenuPeriod(tx, scope, department.id, {
-      name: "Comidas de periodos",
-      colour: "red",
-      menuId: vacia.id,
-      staffMenuIds: [],
-    });
+    const period = await saveMenuPeriod(
+      tx,
+      scope,
+      department.id,
+      {
+        name: "Comidas de periodos",
+        colour: "red",
+        menuId: vacia.id,
+        staffMenuIds: [],
+      },
+      0,
+    );
     const atBarra = { kind: "station" as const, stationId: barra!.id };
     await setRoutingCell(
       tx,
@@ -4119,6 +4131,8 @@ describe("named days in a configuration transfer", () => {
           ],
         },
         AT,
+        undefined,
+        0,
       );
       await saveSpecialDate(
         tx,
@@ -4131,6 +4145,8 @@ describe("named days in a configuration transfer", () => {
           cells: [{ subject: deli, cell: ALL_DAY }],
         },
         AT,
+        undefined,
+        0,
       );
       await saveSpecialDate(
         tx,
@@ -4143,6 +4159,8 @@ describe("named days in a configuration transfer", () => {
           cells: [{ subject: bar, cell: ALL_DAY }],
         },
         AT,
+        undefined,
+        0,
       );
       await setStationToday(tx, cfg, bar.id, "closed", AT);
     });
@@ -4190,6 +4208,8 @@ describe("named days in a configuration transfer", () => {
           cells: [],
         },
         AT,
+        undefined,
+        0,
       );
       await tx.execute(sql`insert into zone_closed_times (id, zone_id, weekday, special_date_id, starts_at, ends_at)
         values (${randomUUID()}, ${zone.id}, 5, null, '23:00:00', '04:00:00'),
@@ -4339,6 +4359,8 @@ describe("named days in a configuration transfer", () => {
           cells: [],
         },
         AT,
+        undefined,
+        0,
       ),
     );
     const versions = await schemaVersionsByModule(suite.db, ALL_MODULES);
@@ -4483,6 +4505,8 @@ describe("named days in a configuration transfer", () => {
           cells: [{ subject: pase, cell: CLOSED }],
         },
         AT,
+        undefined,
+        0,
       );
       await setDefaultStation(
         tx,
@@ -4553,6 +4577,8 @@ describe("named days in a configuration transfer", () => {
           ],
         },
         AT,
+        undefined,
+        0,
       );
     });
     const versions = await schemaVersionsByModule(suite.db, ALL_MODULES);
@@ -4714,6 +4740,8 @@ describe("public holidays in a configuration transfer", () => {
           cells: [],
         },
         AT,
+        undefined,
+        0,
       );
     });
     await moveTo(suite.db, source, "Lleida", "Vielha e Mijaran");
@@ -5061,13 +5089,19 @@ it.each([-15, 14])(
       const customer = await createCatalogue(tx, { name: "Period customer" });
       const staffFirst = await createCatalogue(tx, { name: "Period staff first" });
       const staffSecond = await createCatalogue(tx, { name: "Period staff second" });
-      const period = await saveMenuPeriod(tx, scope, department.id, {
-        name: "Night transfer",
-        endOffsetMinutes,
-        colour: "blue",
-        menuId: customer.id,
-        staffMenuIds: [staffSecond.id, staffFirst.id],
-      });
+      const period = await saveMenuPeriod(
+        tx,
+        scope,
+        department.id,
+        {
+          name: "Night transfer",
+          endOffsetMinutes,
+          colour: "blue",
+          menuId: customer.id,
+          staffMenuIds: [staffSecond.id, staffFirst.id],
+        },
+        0,
+      );
       await replaceMenuWeek(
         tx,
         scope,
@@ -5077,6 +5111,7 @@ it.each([-15, 14])(
           slots: weekday === 5 ? [{ periodId: period.id, startsAt: "21:00", endsAt: "03:00" }] : [],
         })),
         new Date("2026-10-07T10:00:00Z"),
+        0,
       );
       return [department.id, customer.id, staffFirst.id, staffSecond.id, period.id];
     });

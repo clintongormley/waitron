@@ -137,6 +137,8 @@ async function fixture(): Promise<Fixture> {
       null,
       { date: "2030-10-15", name: "Elsewhere", closeWholeVenue: false, cells: [] },
       new Date(),
+      undefined,
+      0,
     );
     const person = async (role: "manager" | "supervisor" | "staff") => {
       const [row] = await tx
@@ -158,11 +160,17 @@ async function fixture(): Promise<Fixture> {
       .insert(catalogues)
       .values({ name: `Calendar ${randomUUID()}` })
       .returning();
-    const calendarPeriod = await saveMenuPeriod(tx, cfg, restaurant!.id, {
-      name: "Open",
-      menuId: calendarMenu!.id,
-      staffMenuIds: [],
-    });
+    const calendarPeriod = await saveMenuPeriod(
+      tx,
+      cfg,
+      restaurant!.id,
+      {
+        name: "Open",
+        menuId: calendarMenu!.id,
+        staffMenuIds: [],
+      },
+      0,
+    );
     await replaceMenuWeek(
       tx,
       cfg,
@@ -172,6 +180,7 @@ async function fixture(): Promise<Fixture> {
         slots: [{ periodId: calendarPeriod.id, startsAt: "06:00", endsAt: "06:00" }],
       })),
       new Date(),
+      0,
     );
     return {
       cfg: { locationId: locationId(location!.id) },
@@ -216,13 +225,26 @@ async function send(
   cookie: string | undefined,
   body?: unknown,
 ): Promise<Response> {
+  if (method === "DELETE" && path.startsWith("/special-dates/") && body === undefined)
+    body = { expectedClockRevision: 0 };
   const headers: Record<string, string> = {};
   if (cookie !== undefined) headers.cookie = cookie;
   if (body !== undefined) headers["content-type"] = "application/json";
   return fx.app.request(`${BASE}${path}`, {
     method,
     headers,
-    ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+    ...(body === undefined
+      ? {}
+      : {
+          body: JSON.stringify(
+            path.startsWith("/special-dates") &&
+              body !== null &&
+              typeof body === "object" &&
+              !Array.isArray(body)
+              ? { expectedClockRevision: 0, ...body }
+              : body,
+          ),
+        }),
   });
 }
 
@@ -261,7 +283,7 @@ const venueDates = (fx: Fixture) =>
     .orderBy(asc(specialDates.date));
 
 const createDate = (fx: Fixture, value: SpecialDateInput) =>
-  withTransaction(db, (tx) => saveSpecialDate(tx, fx.cfg, null, value, new Date()));
+  withTransaction(db, (tx) => saveSpecialDate(tx, fx.cfg, null, value, new Date(), undefined, 0));
 
 describe("reading Hours", () => {
   it("returns the whole page model for the range to anyone who may view the venue", async () => {
@@ -282,6 +304,10 @@ describe("reading Hours", () => {
     const model = (await response.json()) as NamedDaysModel;
     expect([before, after]).toContain(model.civilDate);
     expect(model).toEqual({
+      businessDayClock: { timeZone: "Europe/Madrid", dayCutover: "06:00", cutoverChanges: [] },
+      clockRevision: 0,
+      currentBusinessDay: model.civilDate,
+      pending: null,
       timeZone: "Europe/Madrid",
       dayCutover: "06:00",
       civilDate: model.civilDate,
@@ -391,13 +417,20 @@ describe("reading Hours", () => {
         fx.departmentIds.restaurant,
         [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({ weekday, slots: [] })),
         new Date(),
+        0,
       );
       const [menu] = await tx.insert(catalogues).values({ name: randomUUID() }).returning();
-      const period = await saveMenuPeriod(tx, fx.cfg, fx.departmentIds.deli, {
-        name: "Deli",
-        menuId: menu!.id,
-        staffMenuIds: [],
-      });
+      const period = await saveMenuPeriod(
+        tx,
+        fx.cfg,
+        fx.departmentIds.deli,
+        {
+          name: "Deli",
+          menuId: menu!.id,
+          staffMenuIds: [],
+        },
+        0,
+      );
       await replaceMenuWeek(
         tx,
         fx.cfg,
@@ -407,13 +440,14 @@ describe("reading Hours", () => {
           slots: weekday === 1 ? [{ periodId: period.id, startsAt: "09:00", endsAt: "17:00" }] : [],
         })),
         new Date(),
+        0,
       );
       return period;
     });
     const special = await createDate(fx, input({ date: "2030-10-14", cells: [] }));
     await db.update(specialDates).set({ ownHours: true }).where(eq(specialDates.id, special.id));
     await withTransaction(db, (tx) =>
-      saveSpecialDateMenus(tx, fx.cfg, special.id, fx.departmentIds.deli, [], new Date()),
+      saveSpecialDateMenus(tx, fx.cfg, special.id, fx.departmentIds.deli, [], new Date(), 0),
     );
     const model = (await (
       await send(fx, "GET", "/named-days?from=2030-10-14&to=2030-10-15", fx.manager)
@@ -439,6 +473,7 @@ describe("reading Hours", () => {
             weekday === 2 ? [{ periodId: deliPeriod.id, startsAt: "09:00", endsAt: "17:00" }] : [],
         })),
         new Date(),
+        0,
       ),
     );
     const open = await withTransaction(db, (tx) =>
@@ -477,7 +512,15 @@ describe("reading Hours", () => {
     const saved: Record<string, SpecialDate> = {};
     for (const date of ["2030-10-04", "2030-10-05", "2030-10-14", "2032-12-25"])
       saved[date] = await withTransaction(db, (tx) =>
-        saveSpecialDate(tx, fx.cfg, null, input({ date, name: date, cells: closedBar }), at),
+        saveSpecialDate(
+          tx,
+          fx.cfg,
+          null,
+          input({ date, name: date, cells: closedBar }),
+          at,
+          undefined,
+          0,
+        ),
       );
     const read = () =>
       withTransaction(db, (tx) => readNamedDaysModel(tx, fx.cfg, "2030-10-13", "2030-10-15", at));
@@ -917,6 +960,8 @@ describe("Hours when the venue's clock changes", () => {
           cells: [{ subject: fx.bar, cell: { mode: "closed", periods: [] } }],
         }),
         new Date("2026-10-01T10:00:00Z"),
+        undefined,
+        0,
       );
     });
     const madrid = await model(fx, AT);
@@ -944,7 +989,12 @@ describe("Hours when the venue's clock changes", () => {
     await setClock(fx, { dayCutover: "02:00:00" });
     const after = await model(fx, at);
     expect(await barStatus(fx, at)).toEqual({ open: true, why: "open" });
-    expect(after).toEqual({ ...before, dayCutover: "02:00" });
+    expect(after).toEqual({
+      ...before,
+      dayCutover: "02:00",
+      businessDayClock: { ...before.businessDayClock, dayCutover: "02:00" },
+      currentBusinessDay: "2026-10-15",
+    });
   });
 });
 

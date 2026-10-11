@@ -502,6 +502,8 @@ describe("clearProvisionFixture", () => {
           closeWholeVenue: false,
         },
         at,
+        undefined,
+        0,
       );
     });
 

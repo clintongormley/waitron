@@ -1,3 +1,4 @@
+import type { BusinessDayScheduleStatus } from "./service-day-context.js";
 // Browser-safe: types only, no database or server imports.
 import type { ClosedRange, ServiceRange } from "./service-day.js";
 import type { NamedDay } from "./holiday-types.js";
@@ -50,7 +51,7 @@ export type PeriodRoutingUse = (
   | { rowKind: "category" | "product"; rowLabel: string }
 ) & { zoneName: string | null };
 
-export interface OpeningHoursModel {
+export interface OpeningHoursModel extends BusinessDayScheduleStatus {
   timeZone: string;
   clockReadable: boolean;
   dayCutover: string;

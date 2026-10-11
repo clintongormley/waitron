@@ -72,11 +72,17 @@ it("keeps retained draft, group, course and ready station history through manage
     const course = { ...createdCourse, name: "Recorded dessert", displayOrder: 3 };
     const defaultStation = (await listStations(tx, v.cfg)).find((row) => row.isDefault)!;
     const department = (await listDepartments(tx, v.cfg))[0]!;
-    const period = await saveMenuPeriod(tx, v.cfg, department.id, {
-      name: "Dessert service",
-      menuId: v.tables.menuId,
-      staffMenuIds: [],
-    });
+    const period = await saveMenuPeriod(
+      tx,
+      v.cfg,
+      department.id,
+      {
+        name: "Dessert service",
+        menuId: v.tables.menuId,
+        staffMenuIds: [],
+      },
+      0,
+    );
     await setProductCourse(tx, v.cfg, v.productId("Flan"), course.id);
     await republishMenus(tx);
     const [flan] = await tx

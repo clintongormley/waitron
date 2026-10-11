@@ -11,6 +11,7 @@ import {
   businessDayBoundaryAt,
   businessDayBounds,
   cutoverForBusinessDay,
+  locationId,
   type BusinessDayClock,
 } from "@waitron/shared";
 import { localTimeOccurrences } from "@waitron/venue-service";
@@ -21,6 +22,7 @@ import type {
   VenueDetailsModel,
 } from "./venue-detail-types.js";
 import { readVenueDetails } from "./venue-details.js";
+import { VENUE_SERVICE } from "./modules.js";
 import "./errors.js";
 
 type Scope = { locationId: string };
@@ -185,13 +187,28 @@ export async function previewBusinessDayStart(
   assertEditable(model);
   const candidate = candidateFor(model, proposal);
   await protectHistory(tx, cfg, model.clock, candidate, proposal.effectiveBusinessDay);
+  let conflicts: BusinessDayStartPreview["conflicts"] = [];
+  let conflictCount = 0;
+  try {
+    await VENUE_SERVICE.assertBusinessDayClockChange(
+      tx,
+      { locationId: locationId(cfg.locationId) },
+      model.clock,
+      candidate,
+      proposal.effectiveBusinessDay,
+    );
+  } catch (error) {
+    if (!(error instanceof AppError) || error.code !== "venue.business_day_hours_conflict")
+      throw error;
+    ({ conflicts, conflictCount } = error.params);
+  }
   return {
     revision: model.revision,
     previousDay: view(candidate, addDays(proposal.effectiveBusinessDay, -1)),
     effectiveDay: view(candidate, proposal.effectiveBusinessDay),
     locksAt: businessDayBoundaryAt(candidate, addDays(proposal.effectiveBusinessDay, -1)),
-    conflicts: [],
-    conflictCount: 0,
+    conflicts,
+    conflictCount,
     backupDeadlines: { archive: null, cloud: null },
   };
 }
@@ -236,17 +253,22 @@ export async function writeBusinessDayStart(
   if (model.pending !== null)
     await protectHistory(tx, cfg, model.clock, candidate, model.pending.effectiveBusinessDay);
   await protectHistory(tx, cfg, model.clock, candidate, proposal.effectiveBusinessDay);
+  await VENUE_SERVICE.assertBusinessDayClockChange(
+    tx,
+    { locationId: locationId(cfg.locationId) },
+    model.clock,
+    candidate,
+    proposal.effectiveBusinessDay,
+  );
   if (model.pending !== null)
     await tx
       .delete(locationDayCutoverChanges)
       .where(pendingScope(cfg, model.pending.effectiveBusinessDay));
-  await tx
-    .insert(locationDayCutoverChanges)
-    .values({
-      locationId: cfg.locationId,
-      effectiveBusinessDay: proposal.effectiveBusinessDay,
-      dayCutover: `${proposal.dayCutover}:00`,
-    });
+  await tx.insert(locationDayCutoverChanges).values({
+    locationId: cfg.locationId,
+    effectiveBusinessDay: proposal.effectiveBusinessDay,
+    dayCutover: `${proposal.dayCutover}:00`,
+  });
   await bumpRevision(tx, cfg, model.revision);
   return { changed: true, model: await readVenueDetails(tx, cfg, at) };
 }

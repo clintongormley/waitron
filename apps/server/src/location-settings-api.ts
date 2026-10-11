@@ -38,6 +38,7 @@ const run = createErrorBoundary(
     "venue.business_day_invalid": 400,
     "venue.business_day_changed": 409,
     "venue.business_day_locked": 409,
+    "venue.business_day_hours_conflict": 409,
     "venue.detail_invalid": 400,
     "venue.detail_read_only": 409,
     "venue.detail_locked": 409,

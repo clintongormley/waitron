@@ -28,6 +28,10 @@ afterEach(() => {
 
 function model(): OpeningHoursModel {
   return {
+    businessDayClock: { timeZone: "Europe/Madrid", dayCutover: "06:00", cutoverChanges: [] },
+    clockRevision: 0,
+    currentBusinessDay: "2026-10-12",
+    pending: null,
     timeZone: "Europe/Madrid",
     clockReadable: true,
     dayCutover: "06:00",
@@ -1173,6 +1177,10 @@ it("restores the Calendar month URL and writes month navigation without a depart
     if (path.includes("named-days?")) {
       ranges.push(path);
       return {
+        businessDayClock: { timeZone: "Europe/Madrid", dayCutover: "06:00", cutoverChanges: [] },
+        clockRevision: 0,
+        currentBusinessDay: "2026-10-07",
+        pending: null,
         timeZone: "Europe/Madrid",
         dayCutover: "06:00",
         civilDate: "2026-10-07",
@@ -1219,6 +1227,10 @@ it("restores the Calendar month URL and writes month navigation without a depart
 describe("Calendar venue month fallback", () => {
   function calendarModel(civilDate: string | null = "2026-10-31") {
     return {
+      businessDayClock: { timeZone: "America/New_York", dayCutover: "06:00", cutoverChanges: [] },
+      clockRevision: 0,
+      currentBusinessDay: "2026-10-12",
+      pending: null,
       timeZone: "America/New_York",
       dayCutover: "06:00",
       civilDate,
@@ -1345,6 +1357,10 @@ describe("Calendar named-day actions", () => {
       if (path.includes("/named-days?")) {
         reads++;
         return {
+          businessDayClock: { timeZone: "Europe/Madrid", dayCutover: "06:00", cutoverChanges: [] },
+          clockRevision: 0,
+          currentBusinessDay: "2026-10-07",
+          pending: null,
           timeZone: "Europe/Madrid",
           dayCutover: "06:00",
           civilDate: "2026-10-07",

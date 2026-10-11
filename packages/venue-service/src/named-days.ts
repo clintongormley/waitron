@@ -1,3 +1,5 @@
+import { readBusinessDayScheduleStatus } from "./business-day-schedule.js";
+import { cutoverForBusinessDay } from "@waitron/shared";
 import { and, asc, eq, inArray, lte, or } from "drizzle-orm";
 import type { Transaction } from "@waitron/db";
 import { readLocationClock } from "@waitron/reporting";
@@ -87,13 +89,18 @@ export async function readNamedDaysModel(
   const dates = rangeDates(from, to);
   const clock = await readLocationClock(tx, cfg.locationId);
   const civilDate = venueLocalMoment(at, clock)?.civilDate ?? null;
+  const status = await readBusinessDayScheduleStatus(tx, cfg, clock, at);
   const read = await readHolidays(tx, cfg, from, to);
   const area = await readHolidayAreaModel(tx, cfg);
   const named = await namedDaysOn(tx, cfg, dates);
   const days = await readCalendarDays(tx, cfg, from, to, holidays ?? (async () => read.facts));
   return {
+    ...status,
     timeZone: clock.timeZone,
-    dayCutover: clock.dayCutover,
+    dayCutover:
+      status.currentBusinessDay === null
+        ? clock.dayCutover
+        : cutoverForBusinessDay(clock, status.currentBusinessDay),
     civilDate,
     clockReadable: civilDate !== null,
     days: days.map((day) => {

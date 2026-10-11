@@ -683,6 +683,8 @@ describe("transactions and other callers", () => {
         null,
         { date: "2026-05-01", name: "Labour", closeWholeVenue: true, cells: [] },
         new Date("2026-04-01T10:00:00Z"),
+        undefined,
+        0,
       ),
     );
     const after = await run((tx) => store.readHolidays(tx, cfg, "2026-01-01", "2026-12-31"));
@@ -698,6 +700,8 @@ describe("transactions and other callers", () => {
         null,
         { date: "2026-01-01", name: "New Year", closeWholeVenue: true, cells: [] },
         new Date("2025-12-01T10:00:00Z"),
+        undefined,
+        0,
       ),
     );
     const rows = async () => ({
@@ -893,6 +897,8 @@ it("lets a Spanish venue add more own holidays than the informational local numb
           cells: [],
         },
         new Date("2026-01-01T12:00:00Z"),
+        undefined,
+        0,
       ),
     );
   expect(

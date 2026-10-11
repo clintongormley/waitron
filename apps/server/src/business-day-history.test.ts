@@ -17,7 +17,11 @@ import {
 } from "@waitron/reporting";
 import { loginWithPin, startManagementSession } from "@waitron/identity";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
-import { recordKitchenNotices } from "@waitron/venue-service";
+import {
+  readOpeningHoursModel,
+  replaceMenuWeek,
+  recordKitchenNotices,
+} from "@waitron/venue-service";
 import { settleSale } from "@waitron/core";
 import { SESSION_COOKIE } from "./till-session.js";
 import { send } from "./testing/bill-venue.js";
@@ -76,6 +80,23 @@ const report = async (path: string) => {
   return response.json() as Promise<Record<string, unknown>>;
 };
 async function schedule(cutover: string) {
+  await inTx(async (tx) => {
+    const model = await readOpeningHoursModel(tx, venue.cfg, new Date());
+    for (const department of model.departments) {
+      const periodId = department.periods[0]?.id;
+      await replaceMenuWeek(
+        tx,
+        venue.cfg,
+        department.id,
+        Array.from({ length: 7 }, (_, weekday) => ({
+          weekday,
+          slots: periodId === undefined ? [] : [{ periodId, startsAt: "09:00", endsAt: "17:00" }],
+        })),
+        new Date(),
+        0,
+      );
+    }
+  });
   const response = await app.request("/management-api/venue-details/business-day-start", {
     method: "PUT",
     headers: { Cookie: await managerCookie(), "content-type": "application/json" },

@@ -85,11 +85,17 @@ describe("setup's saved first opening hours", () => {
       .from(menuPeriods)
       .where(eq(menuPeriods.departmentId, department.id));
     await withTransaction(suite.db, (tx) =>
-      saveMenuPeriod(tx, cfg, department.id, {
-        name: "Evening",
-        menuId: period!.menuId,
-        staffMenuIds: [],
-      }),
+      saveMenuPeriod(
+        tx,
+        cfg,
+        department.id,
+        {
+          name: "Evening",
+          menuId: period!.menuId,
+          staffMenuIds: [],
+        },
+        0,
+      ),
     );
     expect(await readSetupOpeningHours(suite.db, cfg)).toBeUndefined();
   });
@@ -111,6 +117,7 @@ describe("setup's saved first opening hours", () => {
             weekday === 0 ? [] : [{ periodId: period!.id, startsAt: "09:00", endsAt: "17:00" }],
         })),
         new Date(),
+        0,
       ),
     );
     expect(await readSetupOpeningHours(suite.db, cfg)).toBeUndefined();

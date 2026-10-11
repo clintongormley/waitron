@@ -306,6 +306,8 @@ describe("VENUE_SERVICE_PROVISIONING", () => {
           closeWholeVenue: false,
         },
         at,
+        undefined,
+        0,
       ),
     );
     const before = await db.transaction((tx) => readSpecialDate(tx, cfg, saved.id));
@@ -394,6 +396,8 @@ describe("VENUE_SERVICE_PROVISIONING", () => {
           cells: [],
         },
         new Date("2026-01-01T12:00:00Z"),
+        undefined,
+        0,
       ),
     );
     const readDays = () =>
