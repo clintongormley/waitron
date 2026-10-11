@@ -633,8 +633,9 @@ On a zone with today's plan, the floor screen hands the map each table's `fixed`
 at two or more groups, its `linkId`, so a fixed stool being dragged leaves a copy, with a line to
 the table it is over, and a party's tables are joined by a line. `canDrag` and the details sheet's
 actions follow `canChangeToday` (the profile's take-orders): without it nothing on the map moves,
-the sheet offers no changes for today and there is no zone menu. With it, a `wt-row-actions`
-⋮ beside the List/Map toggle opens the zone menu: Add a spare table, Taken off today and Reset to
+the sheet offers no changes for today and there is no zone menu. With it, on a zone with today's
+plan or a saved plan (the zone list's `hasPlan`, so a saved plan with no tables still offers Reset),
+a `wt-row-actions` ⋮ beside the List/Map toggle opens the zone menu: Add a spare table, Taken off today and Reset to
 saved plan. Each opens a `wt-dialog`; the two lists name their tables in number order (2, 9, 10),
 each list says so in one line when it is empty, and Reset asks before it resets.
 

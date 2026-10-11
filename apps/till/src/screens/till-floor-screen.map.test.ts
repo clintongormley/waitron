@@ -17,6 +17,7 @@ function zone(over: Partial<FloorZone> = {}): FloorZone {
     active: true,
     closesAt: null,
     closed: false,
+    hasPlan: false,
     ...over,
   };
 }

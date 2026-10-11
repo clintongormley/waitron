@@ -101,6 +101,7 @@ for (const locale of ["en", "es"] as const)
                                 active: true,
                                 closed,
                                 closesAt: state === "open" ? null : closesAt,
+                                hasPlan: false,
                               },
                             ],
                             tables: [],

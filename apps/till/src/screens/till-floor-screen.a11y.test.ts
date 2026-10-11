@@ -7,8 +7,24 @@ import type { TillFloorScreen } from "./till-floor-screen.js";
 import type { FloorZone, TableState } from "../api/client.js";
 
 const zones: FloorZone[] = [
-  { id: "z1", name: "Comedor", displayOrder: 0, active: true, closesAt: null, closed: false },
-  { id: "z2", name: "Terraza", displayOrder: 1, active: true, closesAt: null, closed: false },
+  {
+    id: "z1",
+    name: "Comedor",
+    displayOrder: 0,
+    active: true,
+    closesAt: null,
+    closed: false,
+    hasPlan: false,
+  },
+  {
+    id: "z2",
+    name: "Terraza",
+    displayOrder: 1,
+    active: true,
+    closesAt: null,
+    closed: false,
+    hasPlan: false,
+  },
 ];
 
 // A spread of occupancy states + a zoneless table, plus one card for EACH of the three service hints

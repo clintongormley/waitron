@@ -251,6 +251,7 @@ describe("a join that merges", () => {
       [{ moving: b, side: "left" }, invalid("merge.target")],
       [{ moving: "nope", target: a, side: "left" }, notFound("nope")],
       [{ moving: b, target: 7, side: "left" }, notFound("7")],
+      [{ moving: null, target: a, side: "left" }, notFound("null")],
       [{ moving: b, target: a, side: "middle", seats: 8 }, invalid("merge.side")],
       [{ moving: b, target: a, side: "left", seats: 0 }, invalid("merge.seats")],
       [{ moving: b, target: a, side: "left", seats: 1.5 }, invalid("merge.seats")],
@@ -300,6 +301,27 @@ describe("a table taken off today", () => {
       body: { error: { code: "table.taken_off", params: { tableId: b } } },
     });
     expect(await holders(a!, b!)).toEqual([p, null]);
+  });
+
+  it("answers a join's malformed merge before the table taken off", async () => {
+    const { a, b, x } = await tables({ key: "a", x: 0 }, { key: "b", x: 20 }, { key: "x", x: 40 });
+    const p = await seat(a!);
+    await ok(post(`/api/tables/${b}/today/take-off`, {}), 204);
+
+    expect(
+      await refusal(
+        join(p, {
+          tableId: b,
+          expectedPartyRevision: await revision(p),
+          otherPartyId: null,
+          merge: { moving: b, target: x, side: "left", seats: 8 },
+        }),
+      ),
+    ).toEqual({
+      status: 400,
+      body: { error: { code: "management.request_invalid", params: { field: "merge" } } },
+    });
+    expect(await holders(a!, b!, x!)).toEqual([p, null, null]);
   });
 
   it("is refused to a move, and the party stays where it was", async () => {

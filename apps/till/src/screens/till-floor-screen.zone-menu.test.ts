@@ -6,8 +6,8 @@ import type { FloorZone, TableState, TableToday, TillApi } from "../api/client.j
 import type { TillFloorZoneMenu } from "../widgets/floor-zone-menu.js";
 import { spareSpot } from "../state/floor-today.js";
 
-function zone(id: string, name: string): FloorZone {
-  return { id, name, displayOrder: 0, active: true, closesAt: null, closed: false };
+function zone(id: string, name: string, hasPlan = true): FloorZone {
+  return { id, name, displayOrder: 0, active: true, closesAt: null, closed: false, hasPlan };
 }
 
 function table(
@@ -53,7 +53,7 @@ function table(
   };
 }
 
-const zones = [zone("z1", "Terrace"), zone("z2", "Bar"), zone("z3", "Patio")];
+const zones = [zone("z1", "Terrace"), zone("z2", "Bar", false), zone("z3", "Patio")];
 const terraceTables = [
   table("t1", "z1", {}),
   table("t2", "z1", {
@@ -163,6 +163,17 @@ describe("till-floor-screen: the zone menu", () => {
     await send(el, "zone-reset", { zoneId: "z4" });
     expect(api.resetZoneToday).toHaveBeenCalledExactlyOnceWith("z4");
     expect(refreshes.count).toBe(1);
+  });
+
+  it("is not offered to a zone with no tables and no saved plan", async () => {
+    const { el } = await mountWidget<TillFloorScreen>("till-floor-screen", {
+      zones: [...zones, zone("z4", "Counter", false)],
+      tables: [...terraceTables, ...barTables, ...patioTables],
+      api: stubApi() as unknown as TillApi,
+      canChangeToday: true,
+    });
+    await showZone(el, "z4");
+    expect(menuOf(el)).toBeNull();
   });
 
   it("places a spare in the middle of the zone, puts a table back and resets the zone", async () => {

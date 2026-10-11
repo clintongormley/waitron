@@ -38,6 +38,7 @@ const zone: FloorZone = {
   active: true,
   closesAt: null,
   closed: false,
+  hasPlan: false,
 };
 
 const party: TableParty = {

@@ -1730,6 +1730,8 @@ export interface FloorZone {
   name: string;
   displayOrder: number;
   active: boolean;
+  /** The zone has a saved plan, which may have no tables. */
+  hasPlan: boolean;
 }
 
 /**

@@ -16,6 +16,7 @@ import {
 } from "@waitron/shared";
 import type { FloorAnnotator, TableRemoval } from "@waitron/module";
 import {
+  floorPlans,
   locations,
   newId,
   readNodeMembership,
@@ -213,7 +214,7 @@ import { requireBodyUuid, requireUuidParam } from "@waitron/server-kit";
 import { requestBill } from "./bill-request.js";
 import { mountAdjustmentsApi } from "./adjustments-api.js";
 import { mountDepartmentTransferApi } from "./department-transfer-api.js";
-import { mountFloorTodayApi, whole } from "./floor-today-api.js";
+import { mountFloorTodayApi, requireTargetTable, whole } from "./floor-today-api.js";
 import { mountKeepOpenApi } from "./keep-open-api.js";
 import { mountStationTodayApi } from "./station-today-api.js";
 import { mountUnpaidDepartureApi } from "./unpaid-departure-api.js";
@@ -826,15 +827,6 @@ function tableActionCommand(personId: string, body: Record<string, unknown>): Ta
     operatorId: personId,
     ...otherPartyRead(body),
   };
-}
-
-/** The table a move or join names, which the body must carry; a malformed id names no table. */
-function requireTargetTable(value: unknown, field: string): string {
-  if (value === undefined) throw invalid(field);
-  if (typeof value !== "string" || !isUuid(value)) {
-    throw new AppError("table.not_found", { tableId: String(value) });
-  }
-  return value.toLowerCase();
 }
 
 /** The other tables a seat names, absent for none; none may be the path table. */
@@ -2258,15 +2250,19 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       const zones = await withTransaction(deps.db, async (tx) => {
         const scope = await readZoneScope(tx, deps.cfg, device.deviceProfileId);
         const visible = (await listZones(tx, deps.cfg)).filter((zone) => inScope(scope, zone.id));
+        const ids = visible.map((zone) => zone.id);
         const at = new Date();
         const serviceZones = new Set(
           (await VENUE_SERVICE.listServiceZones(tx, deps.cfg)).map((zone) => zone.id),
         );
-        const closed = await VENUE_SERVICE.closedZoneIdsAt(
-          tx,
-          deps.cfg,
-          at,
-          visible.map((zone) => zone.id),
+        const closed = await VENUE_SERVICE.closedZoneIdsAt(tx, deps.cfg, at, ids);
+        const planned = new Set(
+          (
+            await tx
+              .select({ zoneId: floorPlans.zoneId })
+              .from(floorPlans)
+              .where(inArray(floorPlans.zoneId, ids))
+          ).map((row) => row.zoneId),
         );
         const answer = [];
         for (const zone of visible) {
@@ -2277,6 +2273,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
             ...zone,
             closed: closed.has(zone.id),
             closesAt: keepOpen?.closesAt ?? null,
+            hasPlan: planned.has(zone.id),
           });
         }
         return answer;
@@ -2420,7 +2417,6 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
           await checkZones(tx, deps.cfg, session, [{ partyId }, { tableId }]);
           const heldBefore = await memberTables(tx, partyId);
           const acted = await act(tx, sendCfg, partyId, tableId, command);
-          await refuseTakenOff(tx, [tableId]);
           if (path === "move") {
             // Only a party staying on part of its merge breaks it up; a merge left whole stays, free.
             const merged = await mergeMembers(tx, tableId);
@@ -2441,6 +2437,8 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
               free: false,
             });
           }
+          // Last, so the route's own refusals answer first.
+          await refuseTakenOff(tx, [tableId]);
           return acted;
         });
         return c.json(result);

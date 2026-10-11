@@ -16,6 +16,7 @@ const terrace: FloorZone = {
   active: true,
   closesAt: null,
   closed: false,
+  hasPlan: false,
 };
 
 function table(id: string, over: Partial<TableToday> = {}): TableState {

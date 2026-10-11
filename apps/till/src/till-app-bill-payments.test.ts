@@ -64,6 +64,7 @@ const zone: FloorZone = {
   active: true,
   closesAt: null,
   closed: false,
+  hasPlan: false,
 };
 
 function partyOf(over: Partial<TableParty> = {}): TableParty {

@@ -14,6 +14,7 @@ const zone: FloorZone = {
   active: true,
   closesAt: null,
   closed: false,
+  hasPlan: false,
 };
 
 function party(id: string, revision: number, tableIds: string[]): TableParty {

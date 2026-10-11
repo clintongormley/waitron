@@ -13,7 +13,6 @@ import {
   floorTodayTables,
   floorTodayZones,
   floorZones,
-  partyTables,
   workingOrders,
 } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
@@ -29,6 +28,7 @@ import {
 } from "./floor-reset-plan.js";
 import { foodOnItsWay } from "./delivery-release.js";
 import { leaveMerges } from "./floor-today-merges.js";
+import { holdersOf } from "./parties.js";
 import { refuseUnfree, refuseUnmovable, todayOf } from "./floor-today-table.js";
 import { refusedByAModule, removeLiveTables, tablesTied } from "./table-removal.js";
 import type { TillConfig } from "./till-config.js";
@@ -256,14 +256,7 @@ async function catchUpPass(
   );
   const ids = inZone.map((table) => table.id);
   const inZoneIds = new Set(ids);
-  const held = new Set(
-    (
-      await tx
-        .select({ tableId: partyTables.tableId })
-        .from(partyTables)
-        .where(and(inArray(partyTables.tableId, ids), isNull(partyTables.leftAt)))
-    ).map((row) => row.tableId),
-  );
+  const held = new Set((await holdersOf(tx, ids)).keys());
   const withToday = new Set(
     (
       await tx

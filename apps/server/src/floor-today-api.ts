@@ -29,6 +29,15 @@ export function whole(value: unknown, field: string, low: number, high: number):
   return value;
 }
 
+/** A table id a till body must carry; a malformed one names no table. */
+export function requireTargetTable(value: unknown, field: string): string {
+  if (value === undefined) throw invalid(field);
+  if (typeof value !== "string" || !isUuid(value)) {
+    throw new AppError("table.not_found", { tableId: String(value) });
+  }
+  return value.toLowerCase();
+}
+
 async function corner(c: Context): Promise<{ x: number; y: number }> {
   const body = asObject(await readRawJsonBody<unknown>(c));
   return { x: whole(body.x, "x", 0, 999), y: whole(body.y, "y", 0, 999) };
@@ -49,10 +58,7 @@ async function mergeBody(
   tableId: string,
 ): Promise<{ targetId: string; side: JoinSide; seats: number | null }> {
   const body = asObject(await readRawJsonBody<unknown>(c));
-  const target = body.targetId;
-  if (typeof target !== "string") throw invalid("targetId");
-  if (!isUuid(target)) throw new AppError("table.not_found", { tableId: target });
-  const targetId = target.toLowerCase();
+  const targetId = requireTargetTable(body.targetId, "targetId");
   if (targetId === tableId) throw invalid("targetId");
   const side = body.side;
   if (!JOIN_SIDES.includes(side as JoinSide)) throw invalid("side");

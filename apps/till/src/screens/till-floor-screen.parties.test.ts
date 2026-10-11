@@ -66,7 +66,15 @@ function seated(over: Partial<TableState> = {}, partyOver: Partial<TableParty> =
 async function mountFloor(tables: TableState[]): Promise<TillFloorScreen> {
   const { el } = await mountWidget<TillFloorScreen>("till-floor-screen", {
     zones: [
-      { id: "z1", name: "Comedor", displayOrder: 0, active: true, closesAt: null, closed: false },
+      {
+        id: "z1",
+        name: "Comedor",
+        displayOrder: 0,
+        active: true,
+        closesAt: null,
+        closed: false,
+        hasPlan: false,
+      },
     ],
     tables,
   });
@@ -602,7 +610,15 @@ describe("till-floor-screen: a party's release reminder", () => {
   async function mountAt(tables: TableState[], clock: number | "real" = now) {
     const { el } = await mountWidget<TillFloorScreen>("till-floor-screen", {
       zones: [
-        { id: "z1", name: "Comedor", displayOrder: 0, active: true, closesAt: null, closed: false },
+        {
+          id: "z1",
+          name: "Comedor",
+          displayOrder: 0,
+          active: true,
+          closesAt: null,
+          closed: false,
+          hasPlan: false,
+        },
       ],
       tables,
       now: clock === "real" ? undefined : clock,

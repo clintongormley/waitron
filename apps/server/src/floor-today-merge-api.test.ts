@@ -237,16 +237,21 @@ describe("merging and splitting free tables", () => {
   it("refuses a malformed merge", async () => {
     const { a, b } = await twoTables();
 
-    for (const body of [{ side: "right" }, { targetId: null, side: "right" }]) {
-      expect(await refusal(today(a, "merge", body))).toEqual({
-        status: 400,
-        body: { error: { code: "management.request_invalid", params: { field: "targetId" } } },
+    expect(await refusal(today(a, "merge", { side: "right" }))).toEqual({
+      status: 400,
+      body: { error: { code: "management.request_invalid", params: { field: "targetId" } } },
+    });
+    // As the join's merge and every other table id a till body carries.
+    for (const [targetId, tableId] of [
+      ["nope", "nope"],
+      [7, "7"],
+      [null, "null"],
+    ] as const) {
+      expect(await refusal(today(a, "merge", { targetId, side: "right" }))).toEqual({
+        status: 404,
+        body: { error: { code: "table.not_found", params: { tableId } } },
       });
     }
-    expect(await refusal(today(a, "merge", { targetId: "nope", side: "right" }))).toEqual({
-      status: 404,
-      body: { error: { code: "table.not_found", params: { tableId: "nope" } } },
-    });
     expect(
       await refusal(today(a, "merge", { targetId: a.toUpperCase(), side: "right", seats: 8 })),
     ).toEqual({

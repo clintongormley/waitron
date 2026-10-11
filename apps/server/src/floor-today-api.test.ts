@@ -322,3 +322,21 @@ describe("today's routes", () => {
     expect(await generationOf(zoneId)).toBeUndefined();
   });
 });
+
+describe("the till's zone list", () => {
+  it("says whether each zone has a saved plan, tables or none", async () => {
+    const { zoneId: withTables } = await plannedZone(v, [{ key: "a" }]);
+    const { zoneId: emptyPlan } = await plannedZone(v, []);
+    const unplanned = await tableServiceZone(v);
+
+    const answer = await send("GET", "/api/zones");
+    expect(answer.status).toBe(200);
+    const zones = (await answer.json()) as { id: string; hasPlan: boolean }[];
+    const hasPlan = (zoneId: string) => zones.find((zone) => zone.id === zoneId)?.hasPlan;
+    expect([hasPlan(withTables), hasPlan(emptyPlan), hasPlan(unplanned)]).toEqual([
+      true,
+      true,
+      false,
+    ]);
+  });
+});

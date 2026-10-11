@@ -3551,6 +3551,7 @@ describe("/api/zones + served route + /api/tables/state occupancy fields (FP-1, 
       active: true,
       closed: false,
       closesAt: null,
+      hasPlan: false,
     });
 
     // Read this table's occupancy row out of the state read.

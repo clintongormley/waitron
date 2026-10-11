@@ -3966,7 +3966,9 @@ if it is wrong.
     table, not a merge (decision 6). Cost: from the sheet a waiter cannot choose which table of a
     seated merge leaves, or move a bill with it; the order screen's Split a table still can.
 17. **The zone menu** is a `wt-row-actions` ("Today's plan", `floor.zone_menu`) in the floor screen's
-    action row, shown while the active zone is planned, in both views. Add a spare table and Taken
+    action row, shown while the active zone is planned, in both views (finish-branch review,
+    2026-10-11: or while the zone has a saved plan, `hasPlan` on `/api/zones`, so a saved plan with
+    no tables still offers Reset). Add a spare table and Taken
     off today open a list in a `wt-dialog`; each row acts at once. A spare is put in the middle of
     the zone's crop as the map first fits it (`cropToTables` of the placed tables; with none, at 0,
     0), not the middle of a zoomed view: the map does not tell the screen its view. Reset to saved plan

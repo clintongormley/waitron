@@ -49,6 +49,7 @@ const zone = {
   active: true,
   closesAt: null,
   closed: false,
+  hasPlan: false,
 };
 
 async function mount(theme: "light" | "dark", tables: TableState[]) {

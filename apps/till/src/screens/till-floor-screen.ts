@@ -1028,16 +1028,16 @@ export class TillFloorScreen extends LitElement {
 
   /**
    * Every action is a write through a `take-orders` route, so the menu needs `canChangeToday`. A zone
-   * with no tables is offered it too: its saved plan may have gained tables, which only a reset
-   * brings in, and the server's reset leaves a zone with no saved plan alone.
+   * with a saved plan and no tables is offered it too, since only a reset brings in tables its plan
+   * has gained. `planned` covers a zone list read before the plan was saved: a floor refresh re-reads
+   * the tables, not the zones.
    */
   #zoneMenu(
     planned: boolean,
     activeKey: string | null | undefined,
   ): TemplateResult | typeof nothing {
     const zone = this.zones.find((each) => each.id === activeKey);
-    const offered = planned || this.#zone.visible.length === 0;
-    if (!offered || !this.canChangeToday || zone === undefined) return nothing;
+    if (zone === undefined || !(planned || zone.hasPlan) || !this.canChangeToday) return nothing;
     return html`<till-floor-zone-menu
       .zone=${zone}
       .tables=${this.#zone.visible}
