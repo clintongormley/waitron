@@ -180,9 +180,6 @@ declare module "@waitron/shared" {
      * the host's own configuration.
      */
     "deployment.environment_mismatch": { databaseEnvironment: string; hostEnvironment: string };
-    /** After migrating, an append-only trigger is still absent or carries other text; the start is
-     * refused. Both lists hold trigger names, never a secret. */
-    "append_only.triggers_changed": { missing: string[]; altered: string[] };
     /**
      * The demo seed was asked to write sample data — catalogue, staff and back-dated fiscal
      * records — under a production stamp. Refused before anything is written: a production chain
@@ -190,6 +187,11 @@ declare module "@waitron/shared" {
      * `production`, the only value refused — and not a secret.
      */
     "deployment.demo_data_refused": { environment: string };
+    /**
+     * An append-only trigger is absent or carries other text: found after migrating, the start is
+     * refused; found while trading, the server stops. Both lists hold trigger names, never a secret.
+     */
+    "append_only.triggers_changed": { missing: string[]; altered: string[] };
     /**
      * An inbound hosted-payment webhook failed signature verification; nothing acts on the event
      * until the `payments.stripe` `webhookSecret` verifies the raw bytes. Carries NOTHING — never the

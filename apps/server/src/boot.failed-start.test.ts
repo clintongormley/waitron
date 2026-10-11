@@ -207,7 +207,10 @@ async function triggerFaults(venueDir: string, tables: readonly string[]) {
   }
 }
 
-/** Resolves once something accepts a connection on `port`: closing an unbound listener rejects. */
+/**
+ * Resolves once something accepts a connection on `port`. `startServer` resolves before its listener
+ * binds, and closing an unbound listener rejects.
+ */
 async function listening(port: number): Promise<void> {
   await vi.waitFor(
     () =>
@@ -671,19 +674,22 @@ describe("append-only triggers at boot", () => {
     const env = await tradingEnv(venueDir, state);
     // The box's own self-signed leaf: what is under test is that the start was not refused.
     const dispatcher = new Agent({ connect: { rejectUnauthorized: false } });
-    const server = await startServer(env);
     try {
-      const response = await vi.waitFor(
-        () =>
-          fetch(`https://127.0.0.1:${env.WAITRON_HTTP_PORT}/health`, {
-            dispatcher,
-          } as RequestInit),
-        { timeout: 10_000 },
-      );
-      await response.body?.cancel();
-      expect([200, 503]).toContain(response.status);
+      const server = await startServer(env);
+      try {
+        const response = await vi.waitFor(
+          () =>
+            fetch(`https://127.0.0.1:${env.WAITRON_HTTP_PORT}/health`, {
+              dispatcher,
+            } as RequestInit),
+          { timeout: 10_000 },
+        );
+        await response.body?.cancel();
+        expect([200, 503]).toContain(response.status);
+      } finally {
+        await server.close();
+      }
     } finally {
-      await server.close();
       await dispatcher.close();
     }
     expect(readVenueHolder(venueDir)).toBeNull();
@@ -701,8 +707,11 @@ describe("append-only triggers at boot", () => {
 
     const env = await tradingEnv(venueDir, state);
     const server = await startServer(env);
-    await listening(Number(env.WAITRON_HTTP_PORT));
-    await server.close();
+    try {
+      await listening(Number(env.WAITRON_HTTP_PORT));
+    } finally {
+      await server.close();
+    }
     expect(await triggerFaults(venueDir, ["sales"])).toEqual({ missing: [], altered: [] });
   }, 60_000);
 });
@@ -780,18 +789,7 @@ describe("closing a started server", () => {
     const env = await tradingEnv(venueDir, state);
     const stop = await spyOnMenuActivationStop();
     const server = await startServer(env);
-    // `startServer` resolves before its listener binds, and closing an unbound listener rejects.
-    await vi.waitFor(
-      () =>
-        new Promise<void>((resolve, reject) => {
-          const socket = connect(Number(env.WAITRON_HTTP_PORT), "127.0.0.1", () => {
-            socket.destroy();
-            resolve();
-          });
-          socket.once("error", reject);
-        }),
-      { timeout: 10_000 },
-    );
+    await listening(Number(env.WAITRON_HTTP_PORT));
     expect(stop).not.toHaveBeenCalled();
 
     await server.close();

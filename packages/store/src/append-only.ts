@@ -91,8 +91,9 @@ export function appendOnlyTriggers(tables: readonly string[]): AppendOnlyTrigger
  * same-name trigger in place whatever its body.
  *
  * SQLite stores a trigger's text with everything before its name rewritten to `CREATE TRIGGER `
- * and the rest kept as sent (measured 2026-10-11, `node:sqlite` on Node v26.7.0, SQLite 3.53.4), so that is the
- * text compared. The text names the table, so a same-name trigger on another table is altered too.
+ * and the rest kept as sent (measured 2026-10-11, `node:sqlite` on Node v26.7.0, SQLite 3.53.4),
+ * so that is the text compared. The text names the table, so a same-name trigger on another table
+ * is altered too.
  * Trigger names ignore case in SQLite — `"T_APPEND_ONLY_DELETE"` is refused while
  * `"t_append_only_delete"` exists — so names are matched lower-cased, and an upper-case
  * replacement is reported altered rather than missing.
