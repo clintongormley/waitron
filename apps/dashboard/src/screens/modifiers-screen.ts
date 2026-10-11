@@ -34,6 +34,7 @@ import { DashboardQueries } from "../api/query-controller.js";
 import { dashboardPath } from "../navigation.js";
 import { t } from "../i18n/t.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
+import { countOf } from "../widgets/count-text.js";
 
 type Kind = "extras" | "options";
 
@@ -537,12 +538,7 @@ export class ModifiersScreen extends LitElement {
   #deleteWarning(dependants: ListDependants): string {
     const parts = [t("modifiers.delete_warning_intro")];
     if (dependants.products.length > 0)
-      parts.push(
-        t("modifiers.delete_warning_products").replace(
-          "{count}",
-          String(dependants.products.length),
-        ),
-      );
+      parts.push(countOf("modifiers.delete_warning_products", dependants.products.length));
     return parts.join(" ");
   }
   #renderDependants() {

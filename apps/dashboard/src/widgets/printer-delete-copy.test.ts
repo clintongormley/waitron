@@ -36,7 +36,7 @@ describe("a printer's delete dialog copy, in English", () => {
     ]);
     expect(copy.refusals).not.toBe("");
     expect(copy.retry).not.toBe("");
-    expect(copy.loading).not.toBe("");
+    expect(copy.loading).toBe("Checking what changes…");
   });
 
   it.each([
@@ -95,6 +95,7 @@ describe("a printer's delete dialog copy, in Spanish", () => {
       "Eliminar",
       "Cancelar",
     ]);
+    expect(copy.loading).toBe("Comprobando qué cambia…");
   });
 
   it.each([
