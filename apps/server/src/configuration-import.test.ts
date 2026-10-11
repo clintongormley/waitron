@@ -716,11 +716,10 @@ describe("routing cells in a staged import", () => {
     expect(cells.rows[0]!.count).toBe(0);
   });
 
-  it("refuses a cell whose zone's department is switched off, naming the choice, and writes nothing", async () => {
+  it("refuses a deleted department before its routing cell, and writes nothing", async () => {
     const { bundle, versions } = await exported();
     const comedor = bundle.tables.departments!.find((row) => row.name === "Comedor")!;
     expect(comedor.active).toBe(1);
-    const terraza = bundle.tables.floor_zones!.find((row) => row.name === "Terraza")!;
     const switchedOff: ConfigurationBundle = {
       ...bundle,
       tables: {
@@ -730,17 +729,7 @@ describe("routing cells in a staged import", () => {
         ),
       },
     };
-    const refusal = {
-      code: "service_zone.not_found",
-      params: {
-        zoneId: terraza.id,
-        zoneName: "Terraza",
-        departmentId: comedor.id,
-        departmentName: "Comedor",
-        row: "product",
-        name: "Mojito",
-      },
-    };
+    const refusal = { code: "setup.request_invalid", params: { field: "departments.active" } };
     const { stateDir, result } = await staged(switchedOff, versions);
     await expect(result).rejects.toMatchObject(refusal);
     expect(await readdir(stateDir)).toEqual([]);
@@ -770,7 +759,7 @@ describe("routing cells in a staged import", () => {
     expect(cells.rows[0]!.count).toBe(0);
   });
 
-  it("refuses a switched-on zone in a switched-off department when no routing cell names it, and writes nothing", async () => {
+  it("refuses a deleted department without routing cells, and deleted zones too, and writes nothing", async () => {
     const { bundle, versions } = await exported();
     const comedor = bundle.tables.departments!.find((row) => row.name === "Comedor")!;
     expect(comedor.active).toBe(1);
@@ -790,15 +779,7 @@ describe("routing cells in a staged import", () => {
       () => expect.fail("the bundle was accepted"),
       (error: unknown) => error,
     );
-    const refusal = {
-      code: "zone.department_inactive",
-      params: {
-        zoneId: terraza.id,
-        zoneName: "Terraza",
-        departmentId: comedor.id,
-        departmentName: "Comedor",
-      },
-    };
+    const refusal = { code: "setup.request_invalid", params: { field: "departments.active" } };
     expect(zoneRefusal).toMatchObject({ code: refusal.code });
     expect((zoneRefusal as { params: unknown }).params).toEqual(refusal.params);
     expect(await readdir(zoneRefused.stateDir)).toEqual([]);
@@ -838,8 +819,12 @@ describe("routing cells in a staged import", () => {
         ),
       },
     };
-    const accepted = await staged(zonesOff, versions);
-    await expect(accepted.result).resolves.toMatchObject({ counts: { routing_cells: 1 } });
+    const rejected = await staged(zonesOff, versions);
+    await expect(rejected.result).rejects.toMatchObject({
+      code: "setup.request_invalid",
+      params: { field: "floor_zones.active" },
+    });
+    expect(await readdir(rejected.stateDir)).toEqual([]);
   });
 
   it("refuses a bundle exported before the routing grid by its venue-service version, before any write", async () => {

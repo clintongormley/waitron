@@ -411,6 +411,7 @@ describe("the menu timetable rows of a bundle", () => {
         { id: DELI, is_default: 0 },
       ],
       special_dates: [dateRow(CHRISTMAS, "2026-12-25")],
+      floor_zones: [{ id: BARRA, active: 1 }],
       zone_service_policies: [{ zone_id: BARRA, department_id: RESTAURANT }],
       catalogues: [{ id: "m-desayunos" }, { id: "m-copas" }, { id: "m-cafe" }, { id: "m-deli" }],
       menu_periods: [
@@ -1145,13 +1146,14 @@ describe("validateRoutingConfiguration", () => {
     const { validate } = VENUE_SERVICE_CONFIGURATION_TRANSFER;
     const tables = routingTables();
     tables.departments!.find((row) => row.id === DELI)!.active = 1;
+    tables.floor_zones!.find((row) => row.id === CLOSED_ZONE)!.active = 1;
     expect(() => validate(tables)).not.toThrow();
     tables.routing_cells!.push(cell({ product: LARGE, station: BAR }));
     expect(() => validate(tables)).toThrowError(refusal("routing_cells.product_id"));
   });
 });
 
-describe("a switched-on zone whose department is switched off", () => {
+describe("deleted hierarchy rows in a configuration bundle", () => {
   const PATIO = "z-patio";
   const { validate } = VENUE_SERVICE_CONFIGURATION_TRANSFER;
   function zoneTables(): Tables {
@@ -1174,14 +1176,11 @@ describe("a switched-on zone whose department is switched off", () => {
     throw new Error("the bundle was accepted");
   };
 
-  it("is refused with the zone's own code, naming the zone and its department", () => {
+  it("refuses a deleted department before checking its zone", () => {
     const error = refusalOf(zoneTables());
-    expect(error).toMatchObject({ code: "zone.department_inactive" });
+    expect(error).toMatchObject({ code: "setup.request_invalid" });
     expect((error as { params: unknown }).params).toEqual({
-      zoneId: PATIO,
-      zoneName: "Patio",
-      departmentId: DELI,
-      departmentName: "Deli",
+      field: "departments.active",
     });
   });
 
@@ -1189,18 +1188,21 @@ describe("a switched-on zone whose department is switched off", () => {
     ["no zone or department name", undefined, undefined],
     ["empty zone and department names", "", ""],
     ["a non-text zone and department name", 7, null],
-  ])("leaves out a name the bundle does not hold as text (%s)", (_, zoneName, departmentName) => {
-    const tables = zoneTables();
-    const zone = tables.floor_zones![0]!;
-    const department = tables.departments!.find((row) => row.id === DELI)!;
-    if (zoneName === undefined) delete zone.name;
-    else zone.name = zoneName;
-    if (departmentName === undefined) delete department.name;
-    else department.name = departmentName;
-    const error = refusalOf(tables);
-    expect(error).toMatchObject({ code: "zone.department_inactive" });
-    expect((error as { params: unknown }).params).toEqual({ zoneId: PATIO, departmentId: DELI });
-  });
+  ])(
+    "refuses its deleted department regardless of missing or malformed names (%s)",
+    (_, zoneName, departmentName) => {
+      const tables = zoneTables();
+      const zone = tables.floor_zones![0]!;
+      const department = tables.departments!.find((row) => row.id === DELI)!;
+      if (zoneName === undefined) delete zone.name;
+      else zone.name = zoneName;
+      if (departmentName === undefined) delete department.name;
+      else department.name = departmentName;
+      const error = refusalOf(tables);
+      expect(error).toMatchObject({ code: "setup.request_invalid" });
+      expect((error as { params: unknown }).params).toEqual({ field: "departments.active" });
+    },
+  );
 
   it("is accepted once its department is switched on", () => {
     const tables = zoneTables();
@@ -1208,10 +1210,10 @@ describe("a switched-on zone whose department is switched off", () => {
     expect(() => validate(tables)).not.toThrow();
   });
 
-  it("is accepted once the zone is switched off too, as switching a department off leaves it", () => {
+  it("refuses a deleted zone even when its department is deleted too", () => {
     const tables = zoneTables();
     tables.floor_zones![0]!.active = 0;
-    expect(() => validate(tables)).not.toThrow();
+    expect(() => validate(tables)).toThrowError(refusal("floor_zones.active"));
   });
 
   it.each([true, "1"])(
@@ -1235,7 +1237,7 @@ describe("a switched-on zone whose department is switched off", () => {
   it("reads a zone row without the flag as switched on, as storage does", () => {
     const tables = zoneTables();
     delete tables.floor_zones![0]!.active;
-    expect(refusalOf(tables)).toMatchObject({ code: "zone.department_inactive" });
+    expect(refusalOf(tables)).toMatchObject({ code: "setup.request_invalid" });
   });
 
   it("reads a department row without the flag as switched on, as storage does", () => {
@@ -1244,7 +1246,7 @@ describe("a switched-on zone whose department is switched off", () => {
     expect(() => validate(tables)).not.toThrow();
   });
 
-  it("still gets the routing grid's refusal, naming the row, when a routing cell names the zone", () => {
+  it("refuses the deleted department before a routing cell naming its zone", () => {
     const tables = zoneTables();
     tables.routing_cells = [
       {
@@ -1259,13 +1261,9 @@ describe("a switched-on zone whose department is switched off", () => {
       },
     ];
     const error = refusalOf(tables);
-    expect(error).toMatchObject({ code: "service_zone.not_found" });
+    expect(error).toMatchObject({ code: "setup.request_invalid" });
     expect((error as { params: unknown }).params).toEqual({
-      zoneId: PATIO,
-      zoneName: "Patio",
-      departmentId: DELI,
-      departmentName: "Deli",
-      row: "all",
+      field: "departments.active",
     });
   });
 });
@@ -1455,8 +1453,9 @@ describe("zone closed times in configuration transfer", () => {
   };
   function closureTables(): Tables {
     return {
+      departments: [{ id: RESTAURANT }],
       floor_zones: [{ id: "terrace", active: 1 }],
-      zone_service_policies: [{ zone_id: "terrace" }],
+      zone_service_policies: [{ zone_id: "terrace", department_id: RESTAURANT }],
       special_dates: [
         {
           id: "own-day",
@@ -1572,7 +1571,9 @@ describe("configuration receipt modes", () => {
       ]) {
         expect(() =>
           VENUE_SERVICE_CONFIGURATION_TRANSFER.validate({
-            [table]: [{ receipt_print_mode: value }],
+            departments: [{ id: RESTAURANT }],
+            floor_zones: [{ id: "zone" }],
+            [table]: [{ department_id: RESTAURANT, zone_id: "zone", receipt_print_mode: value }],
           }),
         ).toThrowError(refusal(`${table}.receipt_print_mode`));
       }
@@ -1589,7 +1590,15 @@ describe("configuration receipt modes", () => {
       ]) {
         expect(() =>
           VENUE_SERVICE_CONFIGURATION_TRANSFER.validate({
-            [table]: [value === undefined ? {} : { receipt_print_mode: value }],
+            departments: [{ id: RESTAURANT }],
+            floor_zones: [{ id: "zone" }],
+            [table]: [
+              {
+                department_id: RESTAURANT,
+                zone_id: "zone",
+                ...(value === undefined ? {} : { receipt_print_mode: value }),
+              },
+            ],
           }),
         ).not.toThrow();
       }
@@ -1612,7 +1621,9 @@ describe("configuration order starts", () => {
       ]) {
         expect(() =>
           VENUE_SERVICE_CONFIGURATION_TRANSFER.validate({
-            [table]: [{ order_start: value }],
+            departments: [{ id: RESTAURANT }],
+            floor_zones: [{ id: "zone" }],
+            [table]: [{ department_id: RESTAURANT, zone_id: "zone", order_start: value }],
           }),
         ).toThrowError(refusal(`${table}.order_start`));
       }
@@ -1629,7 +1640,15 @@ describe("configuration order starts", () => {
       ]) {
         expect(() =>
           VENUE_SERVICE_CONFIGURATION_TRANSFER.validate({
-            [table]: [value === undefined ? {} : { order_start: value }],
+            departments: [{ id: RESTAURANT }],
+            floor_zones: [{ id: "zone" }],
+            [table]: [
+              {
+                department_id: RESTAURANT,
+                zone_id: "zone",
+                ...(value === undefined ? {} : { order_start: value }),
+              },
+            ],
           }),
         ).not.toThrow();
       }
