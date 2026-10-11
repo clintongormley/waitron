@@ -11,6 +11,7 @@ export const PERMISSIONS = [
   "sale.discount", // no call site yet
   "sale.rectify",
   "person.manage",
+  "catalogue.manage",
   // Assigning or removing the admin role changes who can control every permission. Admin only.
   "person.admin",
   "layout.configure",
@@ -55,6 +56,7 @@ const SUPERVISOR: ReadonlySet<Permission> = new Set([
 const MANAGER: ReadonlySet<Permission> = new Set([
   ...SUPERVISOR,
   "person.manage",
+  "catalogue.manage",
   "layout.configure",
   "venue.configure",
   "system.manage",

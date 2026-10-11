@@ -543,6 +543,7 @@ export const en = {
   "printers.preview_empty": "This job has no printable content.",
   "printers.discovery_hint": "Searching for network, USB and Bluetooth printers.",
   "printers.seen_on": "Seen on",
+  "catalogue_defaults.title": "Defaults",
   "catalogue_settings.default_vat": "VAT class for new products",
   "catalogue_settings.hint":
     "Only products created afterwards use this default. Existing products keep their class.",
@@ -722,6 +723,7 @@ export const en = {
   "nav.staff": "Users",
   "nav.catalogue": "Products",
   "nav.units": "Units",
+  "nav.catalogue_defaults": "Defaults",
   "nav.roster": "Shifts",
   "nav.approvals": "Approvals",
   "nav.planned_actual": "Planned vs actual",
@@ -3163,6 +3165,7 @@ export const es: Record<StringKey, string> = {
   "printers.preview_empty": "Este trabajo no contiene contenido imprimible.",
   "printers.discovery_hint": "Buscando impresoras de red, USB y Bluetooth.",
   "printers.seen_on": "Detectada en",
+  "catalogue_defaults.title": "Valores predeterminados",
   "catalogue_settings.default_vat": "Clase de IVA para productos nuevos",
   "catalogue_settings.hint":
     "Solo los productos creados después usan este valor. Los productos existentes conservan su clase.",
@@ -3342,6 +3345,7 @@ export const es: Record<StringKey, string> = {
   "nav.staff": "Usuarios",
   "nav.catalogue": "Productos",
   "nav.units": "Unidades",
+  "nav.catalogue_defaults": "Valores predeterminados",
   "nav.roster": "Turnos",
   "nav.approvals": "Aprobaciones",
   "nav.planned_actual": "Previsto vs real",

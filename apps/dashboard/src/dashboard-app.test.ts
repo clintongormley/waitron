@@ -2789,9 +2789,72 @@ describe("dashboard-app", () => {
     },
   );
 
-  it("offers Content languages first in Settings, to a session holding person.manage, and opens its page", async () => {
+  it("offers Defaults last in Products and menus, to a session holding catalogue.manage, and opens its page", async () => {
     const api = stubApi({
-      getMe: vi.fn().mockResolvedValue({ ...meResponse, permissions: ["person.manage"] }),
+      getMe: vi.fn().mockResolvedValue({ ...meResponse, permissions: ["catalogue.manage"] }),
+    });
+    const { el } = await mountWidget<DashboardApp>("dashboard-app", { api });
+    await flush(el);
+    const item = navItem(el, "catalogue-defaults");
+    expect(item!.textContent!.trim()).toBe(t("nav.catalogue_defaults"));
+    const panel = el.shadowRoot!.querySelector("#nav-group-panel-menu")!;
+    const order = [...panel.querySelectorAll<HTMLElement>(".nav-item")].map((b) => b.dataset.test);
+    expect(order.at(-1)).toBe("nav-catalogue-defaults");
+
+    item!.click();
+    await flush(el);
+    const face = el.shadowRoot!.querySelector<HTMLElement & { api?: DashboardApi }>(
+      "dashboard-catalogue-defaults-screen",
+    );
+    expect(face!.api).toBe(api);
+    expect(location.pathname).toBe("/manage/catalogue-defaults");
+  });
+
+  it.each([
+    ["supervisor", []],
+    ["manager", ["person.manage"]],
+  ])(
+    "does not offer Defaults to a %s session without catalogue.manage",
+    async (role, permissions) => {
+      const { el } = await mountWidget<DashboardApp>("dashboard-app", {
+        api: stubApi({
+          getMe: vi.fn().mockResolvedValue({ ...meResponse, role, permissions }),
+          listStaff: vi.fn().mockResolvedValue([]),
+        }),
+      });
+      await flush(el);
+      expect(navItem(el, "overview")).toBeTruthy();
+      expect(navItem(el, "catalogue-defaults")).toBeNull();
+    },
+  );
+
+  it.each([
+    [
+      "manager",
+      ["catalogue.manage"],
+      "dashboard-catalogue-defaults-screen",
+      "/manage/catalogue-defaults",
+    ],
+    ["manager", ["person.manage"], "dashboard-overview-screen", "/manage/overview"],
+  ])(
+    "opens /manage/catalogue-defaults for a %s session holding %j only when it holds catalogue.manage",
+    async (role, permissions, tag, path) => {
+      history.replaceState(null, "", "/manage/catalogue-defaults");
+      const { el } = await mountWidget<DashboardApp>("dashboard-app", {
+        api: stubApi({
+          getMe: vi.fn().mockResolvedValue({ ...meResponse, role, permissions }),
+          listStaff: vi.fn().mockResolvedValue([]),
+        }),
+      });
+      await flush(el);
+      expect(el.shadowRoot!.querySelector(tag)).not.toBeNull();
+      expect(location.pathname).toBe(path);
+    },
+  );
+
+  it("offers Content languages first in Settings, to a session holding catalogue.manage, and opens its page", async () => {
+    const api = stubApi({
+      getMe: vi.fn().mockResolvedValue({ ...meResponse, permissions: ["catalogue.manage"] }),
       listStaff: vi.fn().mockResolvedValue([]),
     });
     const { el } = await mountWidget<DashboardApp>("dashboard-app", { api });
@@ -2814,8 +2877,9 @@ describe("dashboard-app", () => {
   it.each([
     ["supervisor", []],
     ["manager", ["booking.manage"]],
+    ["manager", ["person.manage"]],
   ])(
-    "does not offer Content languages to a %s session without person.manage",
+    "does not offer Content languages to a %s session without catalogue.manage",
     async (role, permissions) => {
       const { el } = await mountWidget<DashboardApp>("dashboard-app", {
         api: stubApi({
@@ -2832,13 +2896,14 @@ describe("dashboard-app", () => {
   it.each([
     [
       "manager",
-      ["person.manage"],
+      ["catalogue.manage"],
       "dashboard-content-languages-screen",
       "/manage/content-languages",
     ],
+    ["manager", ["person.manage"], "dashboard-overview-screen", "/manage/overview"],
     ["supervisor", [], "dashboard-overview-screen", "/manage/overview"],
   ])(
-    "opens /manage/content-languages for a %s session only when it holds person.manage",
+    "opens /manage/content-languages for a %s session only when it holds catalogue.manage",
     async (role, permissions, tag, path) => {
       history.replaceState(null, "", "/manage/content-languages");
       const { el } = await mountWidget<DashboardApp>("dashboard-app", {
@@ -4354,7 +4419,7 @@ it("keeps Venue settings within the window at desktop width, in view and edit mo
       venueSettings(el)!.shadowRoot!.querySelector<HTMLElement>(
         '[data-test="venue-settings-venue-details"]',
       )!;
-    await expect.poll(() => panels()?.children.length).toBe(2);
+    await expect.poll(() => panels()?.children.length).toBe(1);
     const details = panels().querySelector("dashboard-venue-details-panel")!;
     await expect
       .poll(() => details.shadowRoot!.querySelector<HTMLElement>('[data-test="edit"]'))
@@ -7119,7 +7184,9 @@ describe("inline translation application leave paths", () => {
         expected: "baseline",
       };
       const api = stubApi({
-        getMe: vi.fn().mockResolvedValue({ ...meResponse, permissions: ["person.manage"] }),
+        getMe: vi
+          .fn()
+          .mockResolvedValue({ ...meResponse, permissions: ["person.manage", "catalogue.manage"] }),
         getContentLanguages: vi.fn().mockResolvedValue(config),
         getContentLanguageRules: vi
           .fn()

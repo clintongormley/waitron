@@ -210,7 +210,7 @@ A menu edition can also be queued to go live at a set minute, then moved or canc
 Its content and number are fixed when it is queued; a later change to the working menu is not in
 it. The routes below take the time as a date and time on the venue location's clock, answer the
 instant, and list each time as that clock shows it. Each of them, and the publish route, needs the
-`person.manage` permission (403 `authorization.not_permitted`). A write that succeeds first marks
+`catalogue.manage` permission (403 `authorization.not_permitted`). A write that succeeds first marks
 the menu's editions whose time has come as activated, then makes its own change.
 
 - `POST /management-api/catalogues/:id/publications`, with
@@ -454,7 +454,7 @@ category, and a variant still storing a deleted category has it cleared.
 
 ## API
 
-These routes require a management session with `person.manage`, the catalogue write permission
+These routes require a management session with `catalogue.manage`, the catalogue write permission
 in `apps/server/src/catalogue-api.ts`. A category is `{ id, name, parentId, color }`, where `name`
 is a trimmed plain string, `parentId` is an ID or null, and `color` is a lowercase `#rrggbb` or
 null. A blank name is `category.invalid` (400); a non-string name is `management.request_invalid`

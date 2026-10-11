@@ -178,6 +178,7 @@ export class CatalogueSettingsPanel extends LitElement {
   override render() {
     const saveAction = saveActionState(this.#scope);
     return html`
+      <h2>${t("catalogue_settings.default_vat")}</h2>
       ${this.readError ? html`<p class="error" role="alert">${this.readError}</p>` : nothing}
       ${
         this.model

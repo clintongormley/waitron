@@ -567,7 +567,7 @@ const suite = useVenueDb({
       .values({ name: "Main", invoiceLocales: ["es-ES"], operationDescription: "Venta" })
       .returning({ id: locations.id });
     locationId = loc!.id;
-    // A MANAGER (holds `person.manage`) and a STAFF person (holds no `person.manage`), each with a
+    // A MANAGER (holds `catalogue.manage`) and a STAFF person (holds no `catalogue.manage`), each with a
     // live management session.
     const { managerSid, staffSid } = await withTransaction(db, async (tx) => {
       const [mgr] = await tx
@@ -5902,7 +5902,7 @@ describe("mountCatalogueApi — Device Home Page", () => {
       const staff = await send(app, method, path, { ...options, cookie: staffCookie });
       expect(staff.status, path).toBe(403);
       expect(await staff.json(), `${method} ${path}`).toMatchObject({
-        error: { code: "authorization.not_permitted", params: { permission: "person.manage" } },
+        error: { code: "authorization.not_permitted", params: { permission: "catalogue.manage" } },
       });
     }
     expect(await json<Home>(await send(app, "GET", homeOf(m.menuId)), 200)).toEqual({
@@ -6140,7 +6140,7 @@ describe("shared menu reads", () => {
     );
     expect(response.status).toBe(403);
     expect(await response.json()).toEqual({
-      error: { code: "authorization.not_permitted", params: { permission: "person.manage" } },
+      error: { code: "authorization.not_permitted", params: { permission: "catalogue.manage" } },
     });
   });
 

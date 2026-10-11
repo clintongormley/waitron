@@ -54,7 +54,7 @@ import "./screens/menus-screen.js";
 import "./screens/units-screen.js";
 import "./screens/receipts-screen.js";
 import "./screens/venue-details-panel.js";
-import "./screens/catalogue-settings-panel.js";
+import "./screens/catalogue-defaults-screen.js";
 import "./screens/content-languages-screen.js";
 import "./screens/service-status-screen.js";
 import "./screens/kitchen-screen.js";
@@ -107,6 +107,7 @@ const CORE_SCREENS = [
   "modifiers",
   "menus",
   "units",
+  "catalogue-defaults",
   "content-languages",
   "venue-settings",
   "roster",
@@ -189,6 +190,11 @@ const NAV_GROUPS: NavGroup[] = [
       { screen: "menus", labelKey: "nav.menus", requiresManager: true },
       { screen: "modifiers", labelKey: "nav.modifiers", requiresManager: true },
       { screen: "units", labelKey: "nav.units" },
+      {
+        screen: "catalogue-defaults",
+        labelKey: "nav.catalogue_defaults",
+        requiresPermission: "catalogue.manage",
+      },
     ],
   },
   {
@@ -220,7 +226,7 @@ const NAV_GROUPS: NavGroup[] = [
       {
         screen: "content-languages",
         labelKey: "nav.content_languages",
-        requiresPermission: "person.manage",
+        requiresPermission: "catalogue.manage",
       },
       { screen: "devices", labelKey: "nav.devices" },
       { screen: "printers", labelKey: "nav.printers" },
@@ -259,13 +265,6 @@ const CORE_SETTINGS_PANELS: readonly CoreSettingsPanel[] = [
         .api=${api}
         .readOnly=${!canConfigure}
       ></dashboard-venue-details-panel>`,
-  },
-  {
-    key: "catalogue-defaults",
-    tab: "venue-details",
-    requiresPermission: "person.manage",
-    render: (api) =>
-      html`<dashboard-catalogue-settings-panel .api=${api}></dashboard-catalogue-settings-panel>`,
   },
   {
     key: "receipts",
@@ -1979,6 +1978,10 @@ export class DashboardApp extends LitElement {
         ></dashboard-catalogue-screen>`;
       case "units":
         return html`<dashboard-units-screen .api=${this.api}></dashboard-units-screen>`;
+      case "catalogue-defaults":
+        return html`<dashboard-catalogue-defaults-screen
+          .api=${this.api}
+        ></dashboard-catalogue-defaults-screen>`;
       case "content-languages":
         return html`<dashboard-content-languages-screen
           .api=${this.api}
