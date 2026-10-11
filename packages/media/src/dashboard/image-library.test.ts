@@ -2015,6 +2015,25 @@ it.each([
   },
 );
 
+it("keeps a live department receipt usage linked to its editor", async () => {
+  const client = api();
+  client.getImage.mockResolvedValue({
+    image: { ...image, usageCount: 1 },
+    uses: [
+      { kind: "department_receipt", id: "bar/a&b", name: "Bar", active: true },
+    ] as ImageUsage[],
+  });
+  await mount(client);
+  click("[data-test=delete-one]");
+  await vi.waitFor(() => expect(el.shadowRoot!.querySelectorAll("wt-modal li a")).toHaveLength(1));
+  const link = el.shadowRoot!.querySelector("wt-modal li a")!;
+  expect(link.textContent?.trim()).toBe("Bar receipt logo");
+  expect(link.getAttribute("href")).toBe(
+    "/manage/venue-operations/department/bar%2Fa%26b/view/receipt",
+  );
+  expect(el.shadowRoot!.querySelector('[data-test="confirm-delete"]')).toBeNull();
+});
+
 it.each(["department_receipts", "departments"])(
   "refreshes image counts passively when %s changes",
   async (type) => {

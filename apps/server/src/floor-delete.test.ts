@@ -419,7 +419,7 @@ describe("floor hierarchy deletion", () => {
       ],
     });
     expect(await inTx(v, snapshot)).toEqual(before);
-    await inTx(v, (tx) => seatFor().clear(tx, input, NOW));
+    await expect(inTx(v, (tx) => seatFor().clear(tx, input, NOW))).resolves.toBeUndefined();
     const after = await inTx(v, snapshot);
     const removed: Record<string, { id: string }[]> = {
       diningTables: [...own.live, own.noToday],
