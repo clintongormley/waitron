@@ -1314,7 +1314,7 @@ describe("POST /api/sales/:id/reprint (manual receipt reprint over HTTP)", () =>
     expect(text).toContain("28013 Alcalá de Henares");
     expect(text).toContain("Madrid");
     const oldAddress = ["Calle Mayor 1", "28013 Madrid"];
-    const currentAddress = ["New street 17", "28013 Alcalá de Henares", "Madrid"];
+    const currentAddress = ["New street 17", "28013 Alcalá de Henares, Madrid"];
     expect(
       printedLines(new Uint8Array(jobs[1]!.payload)).filter(
         (line) => !currentAddress.includes(line.trim()),

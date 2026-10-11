@@ -19,6 +19,8 @@ import {
 } from "./receipt-document.js";
 export type { ReceiptIssuer, ReceiptTrim } from "./receipt-document.js";
 
+const SEPARATOR = " · ";
+
 export interface FormatReceiptInput extends ReceiptDocumentInput {
   printer: EscSetting;
   logo?: MonoRaster | null;
@@ -34,14 +36,33 @@ export function formatReceipt({ printer, logo = null, ...input }: FormatReceiptI
     const width = prepareText(indent.after).length;
     return width > columns / 2 ? 2 : width;
   };
+  // A line too wide for the roll breaks at its " · " separators first, so no part is split.
+  const textLines = (text: string, indent: number): string[] => {
+    const whole = wrapText(text, columns, indent);
+    if (whole.length === 1 || !text.includes(SEPARATOR)) return whole;
+    const lines: string[] = [];
+    let current = "";
+    for (const part of text.split(SEPARATOR)) {
+      const joined = current === "" ? part : `${current}${SEPARATOR}${part}`;
+      if (current === "" || joined.length <= columns) {
+        current = joined;
+        continue;
+      }
+      lines.push(...wrapText(current, columns, indent));
+      current = `${" ".repeat(indent)}${part}`;
+    }
+    return [...lines, ...wrapText(current, columns, indent)];
+  };
+  let lastBlank = false;
+  const blank = (): void => {
+    b.line();
+    lastBlank = true;
+  };
   for (const element of document.elements) {
+    if (element.kind !== "align" && element.kind !== "logo") lastBlank = false;
     switch (element.kind) {
       case "text":
-        for (const line of wrapText(
-          prepareText(element.text),
-          columns,
-          indentation(element.indent),
-        )) {
+        for (const line of textLines(prepareText(element.text), indentation(element.indent))) {
           b.line(line);
         }
         break;
@@ -56,13 +77,20 @@ export function formatReceipt({ printer, logo = null, ...input }: FormatReceiptI
         }
         break;
       case "break":
-        b.line();
+        blank();
+        break;
+      case "rule":
+        b.line("-".repeat(columns));
         break;
       case "align":
         b.align(element.alignment);
         break;
       case "logo":
-        if (logo !== null) b.bitmap(logo);
+        if (logo !== null) {
+          if (!lastBlank) b.line();
+          b.bitmap(logo);
+          blank();
+        }
         break;
       case "qr": {
         const matrix = qrModules(element.text);

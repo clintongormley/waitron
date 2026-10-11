@@ -1943,7 +1943,10 @@ describe("receipt issuer", () => {
       printedLines(new Uint8Array(job.payload)).map((line) => line.trim()),
     )[0]!;
     expect(original.indexOf("Deli Counter")).toBeGreaterThanOrEqual(0);
-    expect(original.indexOf("Deli Counter")).toBeLessThan(original.indexOf("Deli Recibos SL"));
+    const issuerAt = (lines: string[]) =>
+      lines.findIndex((line) => line.startsWith("Deli Recibos SL · NIF: "));
+    expect(issuerAt(original)).toBeGreaterThan(0);
+    expect(original.indexOf("Deli Counter")).toBeLessThan(issuerAt(original));
 
     await withTransaction(suite.db, (tx) =>
       tx.execute(
@@ -1954,7 +1957,8 @@ describe("receipt issuer", () => {
     const jobs = await printJobsFor(cfg);
     const reprint = printedLines(new Uint8Array(jobs.at(-1)!.payload)).map((line) => line.trim());
     expect(reprint.indexOf("Deli Counter")).toBeGreaterThanOrEqual(0);
-    expect(reprint.indexOf("Deli Counter")).toBeLessThan(reprint.indexOf("Deli Recibos SL"));
+    expect(issuerAt(reprint)).toBeGreaterThan(0);
+    expect(reprint.indexOf("Deli Counter")).toBeLessThan(issuerAt(reprint));
     expect(reprint).not.toContain("Renamed");
   });
 
@@ -2132,11 +2136,12 @@ describe("the receipt's top block: logo, address, phone and email", () => {
       .map((command) => [command.widthDots!, command.heightDots!, [...command.bytes.subarray(8)]]);
   }
 
-  /** The centred lines from the legal name to the NIF, trimmed. */
+  /** The centred lines from the legal name and NIF to the blank line that ends the block, trimmed. */
   function topBlock(payload: Uint8Array): string[] {
     const lines = printedLines(payload).map((line) => line.trim());
-    const name = lines.indexOf("Deli Recibos SL");
-    return lines.slice(name, lines.findIndex((line) => line.startsWith("NIF:")) + 1);
+    const name = lines.findIndex((line) => line.startsWith("Deli Recibos SL · NIF: "));
+    expect(name).toBeGreaterThanOrEqual(0);
+    return lines.slice(name, lines.indexOf("", name));
   }
 
   it("prints the stored logo for the printer's paper, then the location's address, phone and email", async () => {
@@ -2159,12 +2164,10 @@ describe("the receipt's top block: logo, address, phone and email", () => {
     expect(pictures(payload!).slice(1)).toEqual([[16, 2, LOGO_BITS]]);
     const taxId = (await withTransaction(suite.db, (tx) => readTenant(tx)))!.taxId;
     expect(topBlock(payload!)).toEqual([
-      "Deli Recibos SL",
+      `Deli Recibos SL · NIF: ${taxId}`,
       "Calle Mayor 1",
       "28013 Madrid",
-      "Tel. +34 910 000 000",
-      "hola@deli.test",
-      `NIF: ${taxId}`,
+      "Tel. +34 910 000 000 · hola@deli.test",
     ]);
   });
 
@@ -2176,7 +2179,7 @@ describe("the receipt's top block: logo, address, phone and email", () => {
     await sellOne(cfg, each, zoneId);
     const [payload] = await receiptPayloads(cfg);
     const taxId = (await withTransaction(suite.db, (tx) => readTenant(tx)))!.taxId;
-    expect(topBlock(payload!)).toEqual(["Deli Recibos SL", `NIF: ${taxId}`]);
+    expect(topBlock(payload!)).toEqual([`Deli Recibos SL · NIF: ${taxId}`]);
   });
 
   it.each([
@@ -2217,10 +2220,9 @@ describe("the receipt's top block: logo, address, phone and email", () => {
     const [payload] = await receiptPayloads(cfg);
     const taxId = (await withTransaction(suite.db, (tx) => readTenant(tx)))!.taxId;
     expect(topBlock(payload!)).toEqual([
-      "Deli Recibos SL",
+      `Deli Recibos SL · NIF: ${taxId}`,
       "Calle Mayor 1",
       "28013 Madrid",
-      `NIF: ${taxId}`,
     ]);
     // The footer prints after the tender line.
     const lines = printedLines(payload!).map((line) => line.trim());

@@ -63,7 +63,9 @@ describe("POST receipt draft preview", () => {
       language: "ca-ES",
     });
     const printed = lines(answer);
-    expect(printed.indexOf("Bar català")).toBeLessThan(printed.indexOf("Deli Test SL"));
+    const issuer = printed.findIndex((line) => line.startsWith("Deli Test SL · NIF: "));
+    expect(issuer).toBeGreaterThan(0);
+    expect(printed.indexOf("Bar català")).toBeLessThan(issuer);
     expect(printed).toContain("Gràcies");
     expect(printed).not.toContain("Bar español");
     expect(printed).not.toContain("Venue subtitle");
@@ -166,13 +168,12 @@ describe("POST receipt draft preview", () => {
       receipt: {},
       settings: { headerSubtitle: "Draft venue text" },
     });
-    expect(lines(venueOnly)).toContain("Tel. 910000000");
-    expect(lines(venueOnly)).toContain("venue@example.test");
+    expect(lines(venueOnly)).toContain("Tel. 910000000 · venue@example.test");
     expect(lines(venueOnly)).toContain("Draft venue text");
     expect(lines(venueOnly)).not.toContain("Saved venue text");
     const picked = await drawn(draft());
-    expect(lines(picked)).not.toContain("Tel. 910000000");
-    expect(lines(picked)).not.toContain("venue@example.test");
+    expect(lines(picked).join("\n")).not.toContain("910000000");
+    expect(lines(picked).join("\n")).not.toContain("venue@example.test");
   });
 
   it("does not persist the draft, a sale or a print job", async () => {
@@ -295,13 +296,13 @@ describe("POST receipt draft preview", () => {
       settings: { logo: stored.filename },
     });
     const ownMark = ownPreview.marks.logo!;
-    expect(ownPreview.preview.blocks[ownMark.start]).toMatchObject({
+    expect(ownPreview.preview.blocks[ownMark.start + 1]).toMatchObject({
       kind: "image",
       width: 16,
       height: 2,
     });
     const inherited = await drawn({ ...draft(), settings: { logo: stored.filename } });
-    expect(inherited.preview.blocks[inherited.marks.logo!.start]).toMatchObject({
+    expect(inherited.preview.blocks[inherited.marks.logo!.start + 1]).toMatchObject({
       kind: "image",
       width: 8,
       height: 1,
@@ -315,7 +316,7 @@ describe("POST receipt draft preview", () => {
     const before = await suite.db.select().from(departmentReceipts);
     const answer = await drawn({ ...draft(), receipt: { logo: stored.filename } });
     expect(answer.marks.logo).not.toBeNull();
-    expect(answer.preview.blocks[answer.marks.logo!.start]).toMatchObject({
+    expect(answer.preview.blocks[answer.marks.logo!.start + 1]).toMatchObject({
       kind: "image",
       width: 504,
       height: 151,
@@ -401,8 +402,7 @@ it("keeps the venue-only page's stored contact in the drawn paper without submit
     receipt: {},
     settings: { headerSubtitle: "Venue-only draft", footerMessage: "Thanks", printAddress: false },
   });
-  expect(lines(answer)).toContain("Tel. +34 912 345 678");
-  expect(lines(answer)).toContain("venue@example.com");
+  expect(lines(answer)).toContain("Tel. +34 912 345 678 · venue@example.com");
   expect(lines(answer)).toContain("Venue-only draft");
   expect(lines(answer)).toContain("Thanks");
   expect(answer.marks.address).toBeNull();

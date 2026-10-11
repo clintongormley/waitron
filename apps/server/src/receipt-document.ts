@@ -47,6 +47,7 @@ export type ReceiptElement =
   | { kind: "text"; text: string; indent: ReceiptIndent }
   | { kind: "amount"; caption: string; amount: string; indent: ReceiptIndent }
   | { kind: "break" }
+  | { kind: "rule" }
   | { kind: "align"; alignment: "left" | "center" }
   | { kind: "logo" }
   | { kind: "qr"; text: string };
@@ -157,17 +158,16 @@ export function buildReceiptDocument({
     text(tradingName);
   }
   if (receipt.headerSubtitle) text(receipt.headerSubtitle);
-  text(issuer.venueName);
+  text(`${issuer.venueName} · ${label.nif}: ${issuer.nif}`);
   if (surface === "thermal") {
     for (const line of venueAddress) text(line);
   }
-  if (receipt.phone) text(`${label.phone} ${receipt.phone}`);
-  if (receipt.email) text(receipt.email);
+  const contact = [receipt.phone ? `${label.phone} ${receipt.phone}` : "", receipt.email ?? ""]
+    .filter(Boolean)
+    .join(" · ");
+  if (contact) text(contact);
+  if (result.invoiceType === "F1" && issuer.domicile) text(issuer.domicile);
   if (duplicate) text(label.duplicate);
-  text(`${label.nif}: ${issuer.nif}`);
-  if (result.invoiceType === "F1") {
-    if (issuer.domicile) text(issuer.domicile);
-  }
   line();
   align("left");
 
@@ -254,7 +254,7 @@ export function buildReceiptDocument({
     row(`${label.base} ${v.rate}%`, formatMoney(v.base, locale));
     row(`${label.vat} ${v.rate}%`, formatMoney(v.tax, locale));
   }
-  line();
+  elements.push({ kind: "rule" });
   row(label.total, formatMoney(result.total, locale));
   line();
   const t = result.tender;

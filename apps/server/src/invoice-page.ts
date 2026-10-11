@@ -108,6 +108,8 @@ export function layoutInvoicePages(input: ReceiptDocumentInput): InvoicePage[] {
       case "break":
         y += LINE_HEIGHT / 2;
         break;
+      case "rule":
+        break;
       case "qr":
         room(QR_SIZE);
         pages.at(-1)!.elements.push({
