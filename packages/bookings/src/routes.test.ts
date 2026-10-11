@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import { describe, expect, it } from "vitest";
-import { diningTables, locations, withTransaction, type Database } from "@waitron/db";
+import { diningTables, floorZones, locations, withTransaction, type Database } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
@@ -92,9 +92,13 @@ function mountApp(ctx: ModuleRouteContext): Hono {
 }
 
 async function seedTable(cfg: ModuleRouteContext["cfg"], label = "12"): Promise<string> {
+  const [zone] = await suite.db
+    .insert(floorZones)
+    .values({ locationId: cfg.locationId, name: label })
+    .returning({ id: floorZones.id });
   const [row] = await suite.db
     .insert(diningTables)
-    .values({ locationId: cfg.locationId, label, active: true })
+    .values({ locationId: cfg.locationId, label, active: true, zoneId: zone!.id })
     .returning({ id: diningTables.id });
   return row!.id;
 }

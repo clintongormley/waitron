@@ -8,6 +8,7 @@ import { captureError } from "../testing/errors.js";
 import { useVenueDb } from "../testing/venue-db.js";
 import { withTransaction } from "../tenancy.js";
 import { diningTables } from "./dining-tables.js";
+import { floorZones } from "./floor-zones.js";
 import { tableServiceStatuses } from "./table-service-statuses.js";
 import { locations, tenants } from "./tenants.js";
 
@@ -47,10 +48,14 @@ describe("table_service_statuses schema (the dining_tables.status_id FK)", () =>
       invoiceLocales: ["es"],
       operationDescription: "Hostelería",
     });
+    const [zone] = await suite.db
+      .insert(floorZones)
+      .values({ locationId: LOCATION_A, name: "Table status zone" })
+      .returning({ id: floorZones.id });
     const [table] = await inTx((tx) =>
       tx
         .insert(diningTables)
-        .values({ locationId: LOCATION_A, label: "T-status" })
+        .values({ locationId: LOCATION_A, label: "T-status", zoneId: zone!.id })
         .returning({ id: diningTables.id }),
     );
     const tableId = table!.id;

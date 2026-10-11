@@ -58,10 +58,11 @@ describe("floor_zones schema (columns and the dining_tables.zone_id FK)", () => 
   });
 
   it("dining_tables.zone_id round-trips, and its FK rejects an absent zone", async () => {
+    const initialZoneId = await seedZone(LOCATION_A, "Initial");
     const [table] = await inTx((tx) =>
       tx
         .insert(diningTables)
-        .values({ locationId: LOCATION_A, label: "T-zone" })
+        .values({ locationId: LOCATION_A, label: "T-zone", zoneId: initialZoneId })
         .returning({ id: diningTables.id }),
     );
     const tableId = table!.id;

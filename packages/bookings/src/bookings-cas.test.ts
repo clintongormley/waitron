@@ -8,7 +8,7 @@
  */
 import { and, eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { diningTables, locations, withTransaction } from "@waitron/db";
+import { diningTables, floorZones, locations, withTransaction } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
@@ -39,9 +39,13 @@ async function setupVenue(db: Database): Promise<{ cfg: BookingConfig; createdBy
 /** An ACTIVE dining table for the venue (createTable's raw equivalent — the verb lives in
  * apps/server, which a module cannot import). */
 async function seedTable(db: Database, cfg: BookingConfig, label: string): Promise<string> {
+  const [zone] = await db
+    .insert(floorZones)
+    .values({ locationId: cfg.locationId, name: label })
+    .returning({ id: floorZones.id });
   const [row] = await db
     .insert(diningTables)
-    .values({ locationId: cfg.locationId, label, active: true })
+    .values({ locationId: cfg.locationId, label, active: true, zoneId: zone!.id })
     .returning({ id: diningTables.id });
   return row!.id;
 }

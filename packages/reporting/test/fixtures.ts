@@ -17,6 +17,7 @@ import {
   billPayments,
   catalogues,
   diningTables,
+  floorZones,
   invoiceSeries,
   locations,
   kitchenTimingDefaults,
@@ -492,9 +493,13 @@ export async function seedFiredOrder(
   // `working_order_lines_require_open_parent_*` triggers refuse a line on a non-open parent.
   const { orderId } = await seedOpenOrder(db, seed, opts.orderNumber);
   if (opts.tableLabel !== undefined) {
+    const [zone] = await db
+      .insert(floorZones)
+      .values({ locationId: seed.locationId, name: randomUUID() })
+      .returning({ id: floorZones.id });
     const [table] = await db
       .insert(diningTables)
-      .values({ locationId: seed.locationId, label: opts.tableLabel })
+      .values({ locationId: seed.locationId, label: opts.tableLabel, zoneId: zone!.id })
       .returning({ id: diningTables.id });
     await db
       .update(workingOrders)
@@ -537,9 +542,13 @@ export async function seedPartyAt(
     .values({ openedBy: randomUUID() })
     .returning({ id: parties.id });
   for (const table of tables) {
+    const [zone] = await db
+      .insert(floorZones)
+      .values({ locationId: seed.locationId, name: randomUUID() })
+      .returning({ id: floorZones.id });
     const [row] = await db
       .insert(diningTables)
-      .values({ id: table.id, locationId: seed.locationId, label: table.label })
+      .values({ id: table.id, locationId: seed.locationId, label: table.label, zoneId: zone!.id })
       .returning({ id: diningTables.id });
     await db.insert(partyTables).values({
       partyId: party!.id,

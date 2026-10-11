@@ -11,6 +11,7 @@ import { seedNode } from "../testing/seed.js";
 import { useVenueDb } from "../testing/venue-db.js";
 import { withTransaction } from "../tenancy.js";
 import { diningTables } from "./dining-tables.js";
+import { floorZones } from "./floor-zones.js";
 import { workingOrders } from "./orders.js";
 import { locations, tenants } from "./tenants.js";
 
@@ -59,9 +60,13 @@ describe("an order's delivery table", () => {
   /** One active table. The Drizzle builder, since `id` and `created_at` are `$defaultFn` columns. */
   async function openTable(label: string): Promise<string> {
     return inTx(async (tx) => {
+      const [zone] = await tx
+        .insert(floorZones)
+        .values({ locationId: LOCATION_A, name: label })
+        .returning({ id: floorZones.id });
       const [row] = await tx
         .insert(diningTables)
-        .values({ locationId: LOCATION_A, label })
+        .values({ locationId: LOCATION_A, label, zoneId: zone!.id })
         .returning({ id: diningTables.id });
       return row!.id;
     });

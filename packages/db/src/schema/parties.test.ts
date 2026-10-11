@@ -11,6 +11,7 @@ import { seedNode } from "../testing/seed.js";
 import { useVenueDb } from "../testing/venue-db.js";
 import { withTransaction } from "../tenancy.js";
 import { diningTables } from "./dining-tables.js";
+import { floorZones } from "./floor-zones.js";
 import { workingOrders } from "./orders.js";
 import { parties, partyTables, serviceCommands } from "./parties.js";
 import { locations, tenants } from "./tenants.js";
@@ -42,9 +43,13 @@ describe("parties, party_tables and service_commands", () => {
 
   async function table(label: string): Promise<string> {
     return inTx(async (tx) => {
+      const [zone] = await tx
+        .insert(floorZones)
+        .values({ locationId: LOCATION, name: label })
+        .returning({ id: floorZones.id });
       const [row] = await tx
         .insert(diningTables)
-        .values({ locationId: LOCATION, label })
+        .values({ locationId: LOCATION, label, zoneId: zone!.id })
         .returning({ id: diningTables.id });
       return row!.id;
     });

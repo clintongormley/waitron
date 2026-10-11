@@ -5,6 +5,7 @@ import { CORE_MIGRATIONS } from "../migrations.js";
 import { useVenueDb } from "../testing/venue-db.js";
 import { withTransaction } from "../tenancy.js";
 import { diningTables } from "./dining-tables.js";
+import { floorZones } from "./floor-zones.js";
 import { locations, tenants } from "./tenants.js";
 
 // What is proven is the produced Drizzle export's column mapping (posX -> "pos_x"), the decoding
@@ -38,9 +39,13 @@ describe("dining_tables columns", () => {
   // is refused `NOT NULL constraint failed: dining_tables.id`.
   async function seedTable(location: string, label: string): Promise<string> {
     return inTx(async (tx) => {
+      const [zone] = await tx
+        .insert(floorZones)
+        .values({ locationId: location, name: label })
+        .returning({ id: floorZones.id });
       const [row] = await tx
         .insert(diningTables)
-        .values({ locationId: location, label })
+        .values({ locationId: location, label, zoneId: zone!.id })
         .returning({ id: diningTables.id });
       return row!.id;
     });
