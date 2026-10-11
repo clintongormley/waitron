@@ -792,8 +792,41 @@ describe("the receipt language staff choose is saved on the order", () => {
     expect(await orderRow(venue, billId)).toEqual(before);
   });
 
+  it("refuses a second till's write sent with the revision it read before the first till's write", async () => {
+    const venue = await choosingVenue();
+    const billId = await tabWith(venue, "Tarta");
+    const { revision: read } = await orderRow(venue, billId);
+    const firstTill = await send(
+      venue.app,
+      venue.cookie,
+      "PUT",
+      `/api/working-orders/${billId}/receipt-language`,
+      { revision: read, language: "es-ES" },
+    );
+    expect(firstTill).toEqual({ status: 200, json: { revision: read + 1 } });
+    const afterFirst = await orderRow(venue, billId);
+
+    const secondTill = await send(
+      venue.app,
+      venue.cookie2,
+      "PUT",
+      `/api/working-orders/${billId}/receipt-language`,
+      { revision: read, language: "ca-ES" },
+    );
+
+    expect(secondTill).toEqual({
+      status: 409,
+      json: {
+        code: "working_order.out_of_date",
+        params: { workingOrderId: billId, revision: read + 1 },
+      },
+    });
+    expect(await orderRow(venue, billId)).toEqual(afterFirst);
+    expect(afterFirst.receiptLocale).toBe("es-ES");
+  });
+
   it.each([["gl-ES"], ["en-GB"], [5], [["es-ES"]], [undefined]])(
-    "refuses the language %j, which is not an offered receipt language",
+    "refuses %j as the language: not a string, or not an offered receipt language",
     async (language) => {
       const venue = await choosingVenue();
       const billId = await tabWith(venue, "Tarta");

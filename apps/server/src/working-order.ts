@@ -3432,6 +3432,48 @@ export async function refuseUnavailableFullInvoice(
   }
 }
 
+/**
+ * The order whose recorded choices (invoice type, receipt language) may still change: open, or
+ * placed with no sale yet, at the revision the caller read, with no payment in flight.
+ */
+async function readChoiceChangeableOrder(
+  tx: Transaction,
+  cfg: Pick<TillConfig, "nodeId">,
+  orderId: string,
+  expectedRevision: number,
+) {
+  const [order] = await tx
+    .select({
+      status: workingOrders.status,
+      revision: workingOrders.revision,
+      invoiceType: workingOrders.invoiceType,
+      locationId: workingOrders.locationId,
+    })
+    .from(workingOrders)
+    .where(and(eq(workingOrders.id, orderId), eq(workingOrders.nodeId, cfg.nodeId)));
+  if (order === undefined || (order.status !== "open" && order.status !== "placed")) {
+    throw new AppError("working_order.not_open", { workingOrderId: orderId });
+  }
+  if (order.status === "placed") {
+    const [issued] = await tx
+      .select({ id: sales.id })
+      .from(sales)
+      .where(eq(sales.workingOrderId, orderId))
+      .limit(1);
+    if (issued !== undefined) {
+      throw new AppError("working_order.not_open", { workingOrderId: orderId });
+    }
+  }
+  if (order.revision !== expectedRevision) {
+    throw new AppError("working_order.out_of_date", {
+      workingOrderId: orderId,
+      revision: order.revision,
+    });
+  }
+  await refusePaymentInFlight(tx, [orderId]);
+  return order;
+}
+
 export async function setOrderInvoiceChoice(
   db: Database,
   backend: Pick<FiscalBackend, "recipientNameMaxLength">,
@@ -3452,35 +3494,7 @@ export async function setOrderInvoiceChoice(
     throw new AppError("management.request_invalid", { field: "recipient" });
   }
   return withTransaction(db, async (tx) => {
-    const [order] = await tx
-      .select({
-        status: workingOrders.status,
-        revision: workingOrders.revision,
-        invoiceType: workingOrders.invoiceType,
-        locationId: workingOrders.locationId,
-      })
-      .from(workingOrders)
-      .where(and(eq(workingOrders.id, orderId), eq(workingOrders.nodeId, cfg.nodeId)));
-    if (order === undefined || (order.status !== "open" && order.status !== "placed")) {
-      throw new AppError("working_order.not_open", { workingOrderId: orderId });
-    }
-    if (order.status === "placed") {
-      const [issued] = await tx
-        .select({ id: sales.id })
-        .from(sales)
-        .where(eq(sales.workingOrderId, orderId))
-        .limit(1);
-      if (issued !== undefined) {
-        throw new AppError("working_order.not_open", { workingOrderId: orderId });
-      }
-    }
-    if (order.revision !== request.revision) {
-      throw new AppError("working_order.out_of_date", {
-        workingOrderId: orderId,
-        revision: order.revision,
-      });
-    }
-    await refusePaymentInFlight(tx, [orderId]);
+    const order = await readChoiceChangeableOrder(tx, cfg, orderId, request.revision);
     if (order.invoiceType === "F1" && request.invoiceType === "F2") {
       const [paid] = await tx
         .select({ id: billPayments.id })
@@ -3523,39 +3537,9 @@ export async function setOrderReceiptLanguage(
   orderId: string,
   request: { revision: number; language: unknown },
 ): Promise<number> {
-  const { language } = request;
-  if (language !== null && typeof language !== "string") {
-    throw new AppError("management.request_invalid", { field: "language" });
-  }
+  const language = requireNullableString(request.language, "language");
   return withTransaction(db, async (tx) => {
-    const [order] = await tx
-      .select({
-        status: workingOrders.status,
-        revision: workingOrders.revision,
-        locationId: workingOrders.locationId,
-      })
-      .from(workingOrders)
-      .where(and(eq(workingOrders.id, orderId), eq(workingOrders.nodeId, cfg.nodeId)));
-    if (order === undefined || (order.status !== "open" && order.status !== "placed")) {
-      throw new AppError("working_order.not_open", { workingOrderId: orderId });
-    }
-    if (order.status === "placed") {
-      const [issued] = await tx
-        .select({ id: sales.id })
-        .from(sales)
-        .where(eq(sales.workingOrderId, orderId))
-        .limit(1);
-      if (issued !== undefined) {
-        throw new AppError("working_order.not_open", { workingOrderId: orderId });
-      }
-    }
-    if (order.revision !== request.revision) {
-      throw new AppError("working_order.out_of_date", {
-        workingOrderId: orderId,
-        revision: order.revision,
-      });
-    }
-    await refusePaymentInFlight(tx, [orderId]);
+    const order = await readChoiceChangeableOrder(tx, cfg, orderId, request.revision);
     if (
       language !== null &&
       !(await readOfferedReceiptLanguages(tx, { locationId: order.locationId })).includes(language)
