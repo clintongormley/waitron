@@ -11,6 +11,11 @@ import { t } from "../i18n/t.js";
 
 export const BACKUP_SETUP_URL = "/manage/backup";
 
+function isServerError(error: unknown): boolean {
+  if (typeof error !== "object" || error === null || !("status" in error)) return false;
+  return typeof error.status === "number" && error.status >= 500;
+}
+
 @customElement("setup-done-screen")
 export class SetupDoneScreen extends LitElement {
   static override styles = [
@@ -123,14 +128,15 @@ export class SetupDoneScreen extends LitElement {
 
   /**
    * A resolved `getStatus` means the box has not restarted yet. A `TypeError` is `fetch` failing while
-   * the box is down mid-restart: expected, never shown. Any other rejection (a non-2xx, or a body that
-   * is not JSON) is taken to mean the setup route is gone and the box is trading.
+   * the box is down mid-restart: expected, never shown. A 5xx is the box answering but not ready yet,
+   * so it waits too. Any other rejection (a 404 once the setup route is gone, another non-2xx, or a
+   * body that is not JSON) is taken to mean the box is trading.
    */
   async #pollOnce(): Promise<void> {
     try {
       await this.api.getStatus();
     } catch (error) {
-      if (error instanceof TypeError) {
+      if (error instanceof TypeError || isServerError(error)) {
         return;
       }
       if (!this.isConnected) return;

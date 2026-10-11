@@ -223,6 +223,24 @@ describe("setup-done-screen", () => {
     await vi.waitFor(() => expect(q(el, "[data-test=status]")?.textContent?.trim()).toBe(READY_EN));
   });
 
+  it.each([500, 502, 503, 504])("keeps waiting while getStatus answers %i", async (status) => {
+    const getStatus = vi.fn().mockRejectedValue({ code: "server.internal", status });
+    const el = await mountDone(getStatus);
+    await vi.waitFor(() => expect(getStatus.mock.calls.length).toBeGreaterThan(1));
+    expect(q(el, "[data-test=status]")?.textContent?.trim()).toBe(RESTART_EN);
+  });
+
+  it("waits through 503s, then reports ready once getStatus answers 404", async () => {
+    const getStatus = vi
+      .fn()
+      .mockRejectedValueOnce({ code: "setup.not_ready", status: 503 })
+      .mockRejectedValueOnce({ code: "server.internal", status: 503 })
+      .mockRejectedValue({ code: "server.internal", status: 404 });
+    const el = await mountDone(getStatus);
+    await vi.waitFor(() => expect(q(el, "[data-test=status]")?.textContent?.trim()).toBe(READY_EN));
+    expect(getStatus.mock.calls.length).toBeGreaterThanOrEqual(3);
+  });
+
   // The removed element still renders once and arms its first-poll timer after it has left the page.
   // The attached control arms an identical zero-delay timer AFTER it, and same-delay timers fire in
   // the order they were set, so once the control has polled the removed one's timer has fired too.
