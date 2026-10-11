@@ -7,6 +7,7 @@ import type { RegistroAlta } from "@waitron/verifactu";
 import type { FakeAeat } from "@waitron/verifactu/testing";
 import { envios } from "../src/schema/envios.js";
 import { registrosFacturacion } from "../src/schema/registros.js";
+import { cadenas } from "../src/schema/cadenas.js";
 import { registroSif } from "../src/schema/sif.js";
 import { currentSif, registerSif } from "../src/registro-sif.js";
 import { decodeRegistroRow, fromRegistroRow } from "../src/registro-row.js";
@@ -67,6 +68,7 @@ const PAST_FECHA = "2026-07-20";
 const FUTURE_GENERATED_AT = "2026-07-22T00:00:00+01:00";
 let reusedIdentitySequence = 10_000;
 let independentNifSequence = 0;
+let pinnedInstallationSequence = 900;
 
 /** AEAT's `sf:fecha` ("DD-MM-YYYY") from this file's own ISO ("YYYY-MM-DD") literals. */
 function toAeatDate(isoDate: string): string {
@@ -282,7 +284,7 @@ export async function appendPendingAlta(
   db: Database,
   seeded: SeededDrain,
   secuencia: number,
-  options: { nombreRazonEmisor?: string } = {},
+  options: { nombreRazonEmisor?: string; generadoEn?: string } = {},
 ): Promise<{ registroId: string; facturaKey: string }> {
   const huella = String(secuencia).padStart(64, "0");
   // `DEFAULT_ENTORNO`, so the appended row agrees with the chain it extends.
@@ -296,6 +298,7 @@ export async function appendPendingAlta(
     fecha: PAST_FECHA,
     entorno: DEFAULT_ENTORNO,
     nombreRazonEmisor: options.nombreRazonEmisor,
+    generadoEn: options.generadoEn,
   });
   await db.insert(envios).values({ registroId, proximoIntentoEn: DUE_AT });
   return { registroId, facturaKey: `${seeded.nif}|${numSerieFactura}|${toAeatDate(PAST_FECHA)}` };
@@ -456,4 +459,81 @@ export async function seedIndependentChain(
   });
   await db.insert(envios).values({ registroId, proximoIntentoEn: DUE_AT });
   return { registroId, facturaKey: `${nif}|${numSerieFactura}|${toAeatDate(PAST_FECHA)}` };
+}
+
+/**
+ * Adds a chain under an ALREADY-seeded venue, on its own node, whose `registro_sif` row has the
+ * EXPLICIT `sifId` (so the chain's place in `order by r.sif_id` is the test's choice), the same
+ * `nif` as `seeded`, and one pending alta per entry of `rows`, chained in order from
+ * `firstSecuencia`. Chains sharing a `nif` need disjoint secuencia ranges, because the invoice
+ * number is derived from it and AEAT's record identity is the issuer, number and date. The returned
+ * `chain` extends it through `appendPendingAlta`.
+ */
+export async function seedPinnedChain(
+  db: Database,
+  seeded: SeededDrain,
+  params: {
+    sifId: string;
+    firstSecuencia: number;
+    rows: { nombreRazonEmisor: string; generadoEn: string }[];
+    entorno?: Entorno;
+  },
+): Promise<{ chain: SeededDrain; registroIds: string[] }> {
+  const [location] = await db
+    .insert(locations)
+    .values({
+      name: `Sala ${params.sifId.slice(0, 4)}`,
+      invoiceLocales: ["es"],
+      operationDescription: "Venta en establecimiento",
+    })
+    .returning({ id: locations.id });
+  const [node] = await db
+    .insert(nodes)
+    .values({ locationId: location!.id, name: `Node ${params.sifId.slice(0, 4)}` })
+    .returning({ id: nodes.id });
+  const nodeId = brandNodeId(node!.id);
+  pinnedInstallationSequence += 1;
+  await db.insert(registroSif).values({
+    id: params.sifId,
+    nodeId,
+    nif: seeded.nif,
+    idSistemaInformatico: "WT",
+    numeroInstalacion: pinnedInstallationSequence,
+  });
+  await db.insert(cadenas).values({ nodeId });
+
+  const { deviceId } = await seedDevice(db, { locationId: location!.id });
+  const registroIds: string[] = [];
+  const facturaKeys: string[] = [];
+  for (const [index, row] of params.rows.entries()) {
+    const secuencia = params.firstSecuencia + index;
+    const huella = `A${String(secuencia).padStart(63, "0")}`;
+    const { registroId, numSerieFactura } = await insertPendingAlta(db, {
+      locationId: location!.id,
+      nodeId,
+      deviceId,
+      sifId: params.sifId,
+      nif: seeded.nif,
+      secuencia,
+      huella,
+      fecha: PAST_FECHA,
+      generadoEn: row.generadoEn,
+      entorno: params.entorno ?? DEFAULT_ENTORNO,
+      nombreRazonEmisor: row.nombreRazonEmisor,
+    });
+    await db.insert(envios).values({ registroId, proximoIntentoEn: DUE_AT });
+    registroIds.push(registroId);
+    facturaKeys.push(`${seeded.nif}|${numSerieFactura}|${toAeatDate(PAST_FECHA)}`);
+  }
+  return {
+    chain: {
+      ...seeded,
+      locationId: location!.id,
+      nodeId,
+      sifId: params.sifId,
+      registroIds,
+      facturaKeys,
+    },
+    registroIds,
+  };
 }
