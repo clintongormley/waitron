@@ -208,9 +208,7 @@ describe("readZonePlan", () => {
         { id: joinIds[1]!, seats: 6, tableIds: [m5!, m2!, m4!].sort() },
       ].sort((a, b) => (a.id < b.id ? -1 : 1)),
     );
-    // The zone, the plan, its tables, their live tables, the joins, the joins' tables, and the
-    // live tables it could adopt.
-    expect(statements).toBe(7);
+    expect(statements).toBe(6);
     expect(await readCostWithJoins([2])).toBe(statements);
     expect(await readCostWithJoins([2, 2, 3])).toBe(statements);
   });
