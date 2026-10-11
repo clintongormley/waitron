@@ -101,7 +101,9 @@ Each line is the default that will be built. The owner may overrule any of them 
    5). An `AppError` the seat throws passes through with its own code (_2026-10-10, A435 step 3b:
    except `credentials.missing`, which the delete answers as `reader.provider_disconnected`._).
    The Unpair route keeps answering `server.internal` 500 on a failed call, as its test pins
-   (`apps/server/src/payments-api.test.ts:1043-1044`).
+   (`apps/server/src/payments-api.test.ts:1043-1044`). _2026-10-11 (A518): Unpair now answers a
+   failed provider call as Delete does — `reader.unpair_failed` 502, and `credentials.missing` as
+   `reader.provider_disconnected` 409._
 4. **The provider is looked up only for a reader that is still paired** (`unpaired_at` null), so
    an already-unpaired reader is deleted without consulting its provider at all, as the spec says.
    A still-paired reader whose provider module is not installed answers
@@ -1296,7 +1298,7 @@ needed, from Task 1's evidence, and the PR deletes the step 3 entry from the bac
 - `payments-api.test.ts` adoption cases (`:1055-1340`): unchanged; they must pass after Task 1's
   conflict target.
 - `payments-api.test.ts`, Unpair's failed vendor call → 500 (`:1043-1044`): unchanged; Unpair
-  keeps its answer (decision 3).
+  keeps its answer (decision 3). _2026-10-11 (A518): it now answers 502 `reader.unpair_failed`._
 - `printer-delete.db.test.ts`, `printer-delete-history.test.ts`: unchanged after the `namedItem`
   move.
 - Fixtures comparing whole `card_readers` rows with `toEqual` gain `deletedAt: null` and nothing

@@ -239,8 +239,8 @@ declare module "@waitron/shared" {
      */
     "reader.provider_disconnected": { providerId: string };
     /**
-     * The provider's unpair call failed, so the reader was not deleted. `providerId` is the public
-     * provider token, never a credential.
+     * The provider's unpair call failed. `providerId` is the public provider token, never a
+     * credential.
      */
     "reader.unpair_failed": { providerId: string };
     /**

@@ -770,7 +770,7 @@ describe("sumup-add-reader", () => {
       const request = stubRequest({
         status: () => ({ online: false, pairingStatus: "processing" }),
         unpair: () => {
-          throw { code: "server.internal" };
+          throw { code: "reader.unpair_failed" };
         },
       });
       const { el } = await mountWidget<SumUpAddReader>("sumup-add-reader", { request });

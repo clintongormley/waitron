@@ -555,8 +555,6 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
         if (first.deleted !== undefined) return c.json(first.deleted);
         const { plan } = first;
         const seat = cardProviderById(deps.providers, plan.provider);
-        // A disconnect can land once no reader of this provider is active, which step (a) may have
-        // just made true.
         await removeAtProvider(seat, plan.providerRef);
         const unpairedAt = nowIso();
         await gated(sessionId, (tx) => markCardReaderUnpaired(tx, id, unpairedAt));

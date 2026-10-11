@@ -165,7 +165,8 @@ Each line is what will be built. The owner may overrule any of them.
    for 5xx, `:282-283` for 4xx), which the route records as reason `unknown` (backlog: "A failed
    SumUp unpair is logged with reason `unknown`"). Following the rule for a rejected key would
    first need that distinction, or it would also delete readers in Waitron only during an ordinary
-   SumUp outage. A stored credential means "connected" here, as it does on the providers list
+   SumUp outage. _2026-10-11 (A518): SumUp's `deleteReader` now throws `ProviderCallFailed`,
+   whose reason the route logs as `logReason`._ A stored credential means "connected" here, as it does on the providers list
    (`payments-api.ts`, `GET …/providers`).
 13. **A disconnect that lands after step (a) answers `reader.provider_disconnected`.** Step (a)
     switches the reader off, which lets a disconnect through (`payments-api.ts:618-625` refuses only
@@ -177,7 +178,8 @@ Each line is what will be built. The owner may overrule any of them.
     shows the notice (decision 5). The reader is left switched off, not unpaired, not deleted. The
     pair-new route already answers `reader.provider_disconnected` rather than the opaque
     `credentials.missing` for the same cause, by checking first (`payments-api.ts:696-704`).
-    (Coordinator's decision, 2026-10-10.)
+    (Coordinator's decision, 2026-10-10.) _2026-10-11 (A518): Unpair now answers
+    `credentials.missing` as Delete does (`removeAtProvider`)._
 9. **The provider id is freed exactly as for Stripe.** A deleted row no longer counts toward
    `card_readers_provider_ref_key`, which ignores deleted rows (A435-3 Task 1). Nothing extra is
    written: `unpaired_at` stays null, as on a deleted Stripe reader (A435-3 decision 2). Once the
