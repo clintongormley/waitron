@@ -99,10 +99,10 @@ describe("POST receipt draft preview", () => {
     });
     expect(lines(omitted)).toContain("Current");
   });
-  it("renders an explicitly picked inactive department", async () => {
+  it("renders an explicitly picked live department", async () => {
     await suite.db
       .update(departments)
-      .set({ active: false, tradingName: "Closed counter" })
+      .set({ tradingName: "Closed counter" })
       .where(eq(departments.id, departmentId));
     const answer = await drawn({
       ...draft(),
@@ -110,6 +110,30 @@ describe("POST receipt draft preview", () => {
     });
     expect(lines(answer)).toContain("Closed counter");
     expect(lines(answer)).toContain("Closed draft");
+  });
+  it("refuses an explicitly picked deleted department without persisting drafts", async () => {
+    await suite.db
+      .update(departments)
+      .set({ active: false })
+      .where(eq(departments.id, departmentId));
+    const snapshot = async () => ({
+      departments: await suite.db.select().from(departments),
+      receipts: await suite.db.select().from(departmentReceipts),
+      defaults: await suite.db.select().from(tenantReceipts),
+      sales: await suite.db.select().from(sales),
+      jobs: await suite.db.select().from(printJobs),
+    });
+    const before = await snapshot();
+    const response = await ask({
+      ...draft(),
+      receipt: { headerSubtitle: { "es-ES": "Closed draft" } },
+    });
+    expect(response.status).toBe(404);
+    expect((await response.json()).error).toMatchObject({
+      code: "department.not_found",
+      params: { departmentId },
+    });
+    expect(await snapshot()).toEqual(before);
   });
   it("null department renders venue drafts and never stored default department text", async () => {
     await suite.db
