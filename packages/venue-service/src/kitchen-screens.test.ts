@@ -702,7 +702,7 @@ describe("the kitchen screens a device chooses", () => {
     await expect(
       outcome(
         choose(venue, till, venue.till, [
-          { ...pass, stationIds: [venue.grill] },
+          { ...pass, stationIds: [venue.grill], zoneIds: [venue.dining] },
           { kind: "station", stationIds: [venue.cold], zoneIds: null },
         ]),
       ),
