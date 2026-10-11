@@ -200,7 +200,7 @@ describe("a profile's kitchen screens", () => {
     });
   });
 
-  it("omits a deleted station and retains a switched-off zone", async () => {
+  it("omits deleted stations and zones", async () => {
     const venue = await seedVenue();
     await set(venue, venue.kds, {
       pass: { stationIds: [venue.grill, venue.cold], zoneIds: [venue.dining, venue.terrace] },
@@ -211,7 +211,7 @@ describe("a profile's kitchen screens", () => {
       .where(eq(kitchenStations.id, venue.cold));
     await db.update(floorZones).set({ active: false }).where(eq(floorZones.id, venue.terrace));
     await expect(screensOf(venue, venue.kds)).resolves.toEqual({
-      pass: { stationIds: [venue.grill], zoneIds: [venue.terrace, venue.dining] },
+      pass: { stationIds: [venue.grill], zoneIds: [venue.dining] },
     });
   });
 
