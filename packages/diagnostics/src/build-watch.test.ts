@@ -56,12 +56,23 @@ describe("watchBuild", () => {
     expect(onChange).not.toHaveBeenCalled();
   });
 
-  it("reads a relative path, a URL and a Request as the page's origin", async () => {
-    const { fetch, onChange } = watched(
-      serving("a", "a", "b") as unknown as typeof globalThis.fetch,
-    );
+  it("reads a relative path as the page's origin", async () => {
+    const { fetch, onChange } = watched(serving("a", "b") as unknown as typeof globalThis.fetch);
+    await fetch(new Request(`${ORIGIN}/api/till`));
     await fetch("/management-api/session/me");
+    expect(onChange).toHaveBeenCalledWith("b");
+  });
+
+  it("reads a URL as the page's origin", async () => {
+    const { fetch, onChange } = watched(serving("a", "b") as unknown as typeof globalThis.fetch);
+    await fetch("/api/node");
     await fetch(new URL(`${ORIGIN}/api/till`));
+    expect(onChange).toHaveBeenCalledWith("b");
+  });
+
+  it("reads a Request as the page's origin", async () => {
+    const { fetch, onChange } = watched(serving("a", "b") as unknown as typeof globalThis.fetch);
+    await fetch("/api/node");
     await fetch(new Request(`${ORIGIN}/api/till`));
     expect(onChange).toHaveBeenCalledWith("b");
   });
