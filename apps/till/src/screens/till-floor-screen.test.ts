@@ -443,50 +443,6 @@ describe("till-floor-screen", () => {
     expect(tabs).toEqual(["z1", "z2"]);
   });
 
-  it("groups zoneless tables under a no-zone tab and shows them when it is selected", async () => {
-    const { el } = await mount({
-      zones: [zone({ id: "z1", name: "Comedor" })],
-      tables: [table({ id: "t1", zoneId: "z1" }), table({ id: "t9", label: "9", zoneId: null })],
-    });
-    // The default tab is the first zone: the zoneless table is not shown yet.
-    expect(el.shadowRoot!.querySelector('[data-table="t9"]')).toBeNull();
-    const sinZona = el.shadowRoot!.querySelector<HTMLElement>('[data-zone="none"]')!;
-    expect(sinZona.textContent).toContain(t("floor.no_zone"));
-    sinZona.click();
-    await el.updateComplete;
-    // Selecting the no-zone tab reveals the null-zone table (and hides the zoned one).
-    expect(el.shadowRoot!.querySelector('[data-table="t9"]')).not.toBeNull();
-    expect(el.shadowRoot!.querySelector('[data-table="t1"]')).toBeNull();
-  });
-
-  it("keeps a table whose zone was deactivated (unknown zoneId) under the no-zone tab, never lost", async () => {
-    // `deactivateZone` is a soft `active=false` and never nulls a table's zoneId, so a table can carry
-    // a zoneId that is not among the ACTIVE zones. It must not vanish — least of all one owing money.
-    const { el } = await mount({
-      zones: [zone({ id: "z1", name: "Comedor" })],
-      tables: [
-        table({ id: "t1", zoneId: "z1" }),
-        table({
-          id: "tg",
-          label: "G",
-          zoneId: "ghost",
-          state: "open-tab",
-          hasOpenTab: true,
-          tabLineCount: 1,
-          tabTotal: "20.00",
-        }),
-      ],
-    });
-    // Not on the default (Comedor) tab — its zone is not active…
-    expect(el.shadowRoot!.querySelector('[data-table="tg"]')).toBeNull();
-    // …but a no-zone tab exists to catch it, and selecting it reveals the orphaned table.
-    const sinZona = el.shadowRoot!.querySelector<HTMLElement>('[data-zone="none"]')!;
-    expect(sinZona).not.toBeNull();
-    sinZona.click();
-    await el.updateComplete;
-    expect(el.shadowRoot!.querySelector('[data-table="tg"]')).not.toBeNull();
-  });
-
   it("shows no zoneless tab when every table belongs to a zone", async () => {
     const { el } = await mount({
       zones: [zone({ id: "z1", name: "Comedor" })],
@@ -563,27 +519,6 @@ describe("till-floor-screen — map/list toggle and tray", () => {
     await el.updateComplete;
     expect(el.shadowRoot!.querySelector('[data-table="t2"]')).not.toBeNull();
   });
-
-  it("restores and records the no-zone tab as an empty zone segment", async () => {
-    const url = new URL(location.href);
-    url.pathname = "/tabs/floor/zone/~";
-    history.replaceState(null, "", url);
-    const { el } = await mount({
-      zones: [zone()],
-      tables: [table(), table({ id: "t9", label: "9", zoneId: null })],
-    });
-    expect(el.shadowRoot!.querySelector('[data-table="t9"]')).not.toBeNull();
-    expect(el.shadowRoot!.querySelector('[data-table="t1"]')).toBeNull();
-    expect(el.shadowRoot!.querySelector('[data-zone="none"]')!.getAttribute("variant")).toBe(
-      "primary",
-    );
-    el.shadowRoot!.querySelector<HTMLElement>('[data-zone="z1"]')!.click();
-    await el.updateComplete;
-    expect(location.pathname).toBe("/tabs/floor/zone/z1");
-    el.shadowRoot!.querySelector<HTMLElement>('[data-zone="none"]')!.click();
-    await el.updateComplete;
-    expect(location.pathname).toBe("/tabs/floor/zone/~");
-  });
 });
 
 describe("closed floor zones", () => {
@@ -637,4 +572,21 @@ describe("closed floor zones", () => {
     await el.updateComplete;
     expect(el.shadowRoot!.querySelector("till-seat-dialog")).not.toBeNull();
   });
+});
+
+it("opens the first zone for an address with an empty zone segment", async () => {
+  const url = new URL(location.href);
+  url.pathname = "/tabs/floor/zone/~";
+  history.replaceState(null, "", url);
+  const { el } = await mount({
+    zones: [zone(), zone({ id: "z2", name: "Terrace", displayOrder: 1 })],
+    tables: [table(), table({ id: "t9", label: "9", zoneId: null })],
+  });
+  expect(el.shadowRoot!.querySelector('[data-zone="none"]')).toBeNull();
+  expect(el.shadowRoot!.querySelector('[data-zone="z1"]')!.getAttribute("variant")).toBe("primary");
+  expect(el.shadowRoot!.querySelector('[data-table="t1"]')).not.toBeNull();
+  expect(el.shadowRoot!.querySelector('[data-table="t9"]')).toBeNull();
+  el.shadowRoot!.querySelector<HTMLElement>('[data-zone="z2"]')!.click();
+  await el.updateComplete;
+  expect(location.pathname).toBe("/tabs/floor/zone/z2");
 });

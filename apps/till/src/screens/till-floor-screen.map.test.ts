@@ -270,11 +270,6 @@ describe("till-floor-screen on the new map", () => {
     expect(mapOf(el).tables.map((t) => t.id)).toEqual(["t2"]);
   });
 
-  it("gives the no-zone tab's map an empty fitKey", async () => {
-    const el = await mount({ zones: [], tables: [planned("t1", { zoneId: null })] });
-    expect(mapOf(el).fitKey).toBe("");
-  });
-
   it("fits a newly chosen zone to its own tables", async () => {
     const far = today({
       placement: { x: 80, y: 60, width: 2, height: 2, shape: "round", rotation: 0 },

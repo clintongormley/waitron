@@ -6,7 +6,6 @@ import {
   buildZoneTabs,
   clampPermille,
   defaultTraySlot,
-  isTableZoneless,
   resolveActiveTabKey,
   sizeForCapacity,
   snapRotation,
@@ -92,49 +91,15 @@ test("defaultTraySlot clamps posX into the 0..1000 range once the nudges run off
   expect(defaultTraySlot(20)).toEqual({ posX: 1000, posY: 500 });
 });
 
-test("isTableZoneless is true for a null zone and for a zone missing from the known set", () => {
-  const known = new Set(["z1", "z2"]);
-  expect(isTableZoneless({ zoneId: null }, known)).toBe(true);
-  expect(isTableZoneless({ zoneId: "z9" }, known)).toBe(true);
-});
-
-test("isTableZoneless is false for a table whose zone is active", () => {
-  expect(isTableZoneless({ zoneId: "z1" }, new Set(["z1", "z2"]))).toBe(false);
-});
-
 test("buildZoneTabs orders the zone tabs by displayOrder", () => {
   const zones = [
     { id: "z2", name: "Terraza", displayOrder: 2 },
     { id: "z1", name: "Comedor", displayOrder: 1 },
   ];
-  const tabs = buildZoneTabs(zones, [{ zoneId: "z1" }], "Sin zona");
+  const tabs = buildZoneTabs(zones);
   expect(tabs).toEqual([
     { key: "z1", name: "Comedor" },
     { key: "z2", name: "Terraza" },
-  ]);
-});
-
-test("buildZoneTabs omits the no-zone tab when every table has an active zone", () => {
-  const zones = [{ id: "z1", name: "Comedor", displayOrder: 1 }];
-  expect(buildZoneTabs(zones, [{ zoneId: "z1" }], "Sin zona")).toEqual([
-    { key: "z1", name: "Comedor" },
-  ]);
-});
-
-test("buildZoneTabs appends the no-zone tab for a table with a null zone", () => {
-  const zones = [{ id: "z1", name: "Comedor", displayOrder: 1 }];
-  expect(buildZoneTabs(zones, [{ zoneId: "z1" }, { zoneId: null }], "No zone")).toEqual([
-    { key: "z1", name: "Comedor" },
-    { key: null, name: "No zone" },
-  ]);
-});
-
-test("buildZoneTabs appends the no-zone tab for a table pointing at a deactivated zone", () => {
-  // z9 is not among the active zones, so the table that points at it lands under the no-zone tab.
-  const zones = [{ id: "z1", name: "Comedor", displayOrder: 1 }];
-  expect(buildZoneTabs(zones, [{ zoneId: "z9" }], "Sin zona")).toEqual([
-    { key: "z1", name: "Comedor" },
-    { key: null, name: "Sin zona" },
   ]);
 });
 
@@ -150,26 +115,12 @@ test("resolveActiveTabKey returns undefined when nothing is requested and there 
   expect(resolveActiveTabKey(undefined, [])).toBeUndefined();
 });
 
-test("resolveActiveTabKey honours an explicit request, including the null no-zone key", () => {
-  const tabs = [
-    { key: "z1", name: "A" },
-    { key: null, name: "Sin zona" },
-  ];
-  expect(resolveActiveTabKey("z1", tabs)).toBe("z1");
-  expect(resolveActiveTabKey(null, tabs)).toBeNull();
-});
-
 test("resolveActiveTabKey falls back to the first tab when the requested key is no longer present", () => {
   const tabs = [
     { key: "z1", name: "A" },
     { key: "z2", name: "B" },
   ];
   expect(resolveActiveTabKey("z9", tabs)).toBe("z1");
-});
-
-test("resolveActiveTabKey falls back to the first tab when a null request has no no-zone tab", () => {
-  const tabs = [{ key: "z1", name: "A" }];
-  expect(resolveActiveTabKey(null, tabs)).toBe("z1");
 });
 
 test("toFloorTable maps a placed table's coordinates and occupancy", () => {
@@ -351,4 +302,25 @@ test("toFloorTable carries the consumer's signal chips through the occupancy hal
     { state: "open-tab", pendingToServe: 0, chips },
   );
   expect(table.chips).toEqual(chips);
+});
+
+test("buildZoneTabs is the zones in display order, and nothing else", () => {
+  expect(
+    buildZoneTabs([
+      { id: "b", name: "B", displayOrder: 2 },
+      { id: "a", name: "A", displayOrder: 1 },
+    ]),
+  ).toEqual([
+    { key: "a", name: "A" },
+    { key: "b", name: "B" },
+  ]);
+});
+
+test("resolveActiveTabKey honours an explicit zone request", () => {
+  expect(
+    resolveActiveTabKey("z2", [
+      { key: "z1", name: "A" },
+      { key: "z2", name: "B" },
+    ]),
+  ).toBe("z2");
 });
