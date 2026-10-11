@@ -5,12 +5,13 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { devices, products, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { jobOrigin } from "@waitron/shared";
-import { resumeCardRefund } from "./bill-refunds.js";
+import { billRefundIsLive, resumeCardRefund } from "./bill-refunds.js";
 import { issueOrderInvoice } from "./testing/issue-order.js";
 import { loginWithPin, sessions } from "@waitron/identity";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { provisionBillVenue, send, tabWith, type BillVenue } from "./testing/bill-venue.js";
 import { offerProducts, type ZoneOffers } from "./testing/zone-offers.js";
+import { paymentAttemptIsLive } from "./till-sale.js";
 import { parkOrder, placeOrder } from "./working-order.js";
 import "./errors.js";
 
@@ -340,6 +341,7 @@ it.each(
         venue.adminId,
       );
     }
+    const original = effects(request.id);
     const calls = venue.card.collectCalls.length;
     const release = venue.card.holdNextCollect();
     const answer = send(venue.app, cookie, "POST", "/api/pay", {
@@ -356,8 +358,19 @@ it.each(
       status: 200,
       json: { outcome: "captured" },
     });
-    expect(effects(request.id).sales).toHaveLength(1);
-    expect(effects(request.id).payments).toMatchObject([{ state }]);
+    const written = effects(request.id);
+    expect(written.sales).toMatchObject([
+      { total: 1200, device_id: issued ? venue.cfg.origin.deviceId : venue.deviceId },
+    ]);
+    expect(written.sales).toHaveLength(1);
+    expect(written.payments).toMatchObject([{ state, amount: 1200, device_id: venue.deviceId }]);
+    expect(written.orders).toMatchObject([{ status: "settled", payment_attempt_at: null }]);
+    expect(written.settlements).toHaveLength(1);
+    if (issued) {
+      expect(written.sales).toEqual(original.sales);
+      expect(written.lines).toEqual(original.lines);
+    } else expect(written.lines).toMatchObject([{ credited_to: venue.adminId }]);
+    expect(paymentAttemptIsLive(suite.db, request.id)).toBe(false);
     expect(venue.card.collectCalls).toHaveLength(calls + 1);
   },
 );
@@ -394,7 +407,15 @@ it("finishes an admitted reader-card refund after the till is switched off", asy
     release();
   }
   expect(await answer).toMatchObject({ status: 200, json: { refund: { state: "completed" } } });
-  expect(effects(request.id).refunds).toMatchObject([{ state: "completed", applied_amount: 50 }]);
+  const [refund] = effects(request.id).refunds as { id: string }[];
+  expect(refund).toMatchObject({
+    state: "completed",
+    applied_amount: 50,
+    device_id: venue.deviceId,
+    requested_by: venue.adminId,
+    authorized_by: venue.adminId,
+  });
+  expect(billRefundIsLive(suite.db, refund!.id)).toBe(false);
   expect(venue.card.refundCalls).toHaveLength(calls + 1);
 });
 
@@ -419,7 +440,15 @@ it("recovers a pending reader-card refund after sign-out and deactivation withou
   );
   expect(recovered).toMatchObject({ claimed: true, refund: { state: "completed" }, resent: false });
   expect(effects(request.id).refunds).toMatchObject([
-    { id: pending!.id, state: "completed", applied_amount: 50 },
+    {
+      id: pending!.id,
+      state: "completed",
+      applied_amount: 50,
+      device_id: venue.deviceId,
+      requested_by: venue.adminId,
+      authorized_by: venue.adminId,
+    },
   ]);
+  expect(billRefundIsLive(suite.db, pending!.id)).toBe(false);
   expect(venue.card.refundCalls).toHaveLength(calls + 1);
 });
