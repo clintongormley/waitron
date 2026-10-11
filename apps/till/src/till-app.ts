@@ -1240,15 +1240,31 @@ export class TillApp extends LitElement {
       this.#cardAttemptsRunning > 0 ||
       this.#unansweredPayment !== null ||
       this.#unansweredRefund !== null ||
-      this.#billMoneyInFlight > 0 ||
-      this.#signOutSavesInFlight > 0
+      this.#reloadHolds > 0
     );
   }
 
-  /** A bill payment or refund sent and not yet ended; `#unansweredPayment` and `#unansweredRefund`
-   * are set only once it ends. */
-  #billMoneyInFlight = 0;
-  #signOutSavesInFlight = 0;
+  /** Requests out that a reload would cut off, so one the server never received would be lost:
+   * every resend-until-answered request, a whole bill payment or refund (`#unansweredPayment` and
+   * `#unansweredRefund` are set only once it ends), and a sign-out's save of the draft. */
+  #reloadHolds = 0;
+
+  async #holdingReload<T>(work: () => Promise<T>): Promise<T> {
+    this.#reloadHolds++;
+    try {
+      return await work();
+    } finally {
+      this.#reloadHolds--;
+    }
+  }
+
+  #resend<T>(
+    send: (signal: AbortSignal) => Promise<T>,
+    signal: AbortSignal,
+    live: () => boolean,
+  ): Promise<T> {
+    return this.#holdingReload(() => resendUnanswered(send, signal, live));
+  }
 
   sessionActivity: SessionActivity = new SessionActivity();
 
@@ -4055,7 +4071,7 @@ export class TillApp extends LitElement {
     const limit = limited(TABLE_REQUEST_LIMIT_MS);
     let handedOver = false;
     try {
-      await resendUnanswered(
+      await this.#resend(
         (signal) => this.api.markCollected(id, submissionId, { signal }),
         limit.signal,
         live,
@@ -6182,7 +6198,7 @@ export class TillApp extends LitElement {
         ...(billId === undefined ? {} : { billId }),
       };
       const draftId = sync.draftId;
-      submitted = await resendUnanswered(
+      submitted = await this.#resend(
         (signal) => this.api.submitDraft(party.id, draftId, command, { signal }),
         send.signal,
         live,
@@ -6364,7 +6380,7 @@ export class TillApp extends LitElement {
     this.errorKey = undefined;
     try {
       await this.#partyRequest(party, party.revision, (command) =>
-        resendUnanswered(
+        this.#resend(
           (signal) => this.api.requestBill(party.id, { ...command, requested }, { signal }),
           limit.signal,
           live,
@@ -6594,7 +6610,7 @@ export class TillApp extends LitElement {
     const unlock = counterSubmission === null ? () => {} : this.#store.lockEdits();
     const limit = limited(TABLE_REQUEST_LIMIT_MS);
     try {
-      await resendUnanswered(
+      await this.#resend(
         (signal) => this.api.moveDishStation(open.workingOrderId, body, { signal }),
         limit.signal,
         () => session === this.#operatorSession,
@@ -6705,7 +6721,7 @@ export class TillApp extends LitElement {
     const limit = limited(TABLE_REQUEST_LIMIT_MS);
     let refusal: string | null = null;
     try {
-      await resendUnanswered(
+      await this.#resend(
         (signal) => this.api.moveDishStation(open.workingOrderId, body, { signal }),
         limit.signal,
         live,
@@ -6907,7 +6923,7 @@ export class TillApp extends LitElement {
     const session = this.#operatorSession;
     const limit = limited(TABLE_REQUEST_LIMIT_MS);
     try {
-      const answer = await resendUnanswered(
+      const answer = await this.#resend(
         (signal) => this.api.applyAdjustment(open.orderId, command, { signal }),
         limit.signal,
         () => session === this.#operatorSession,
@@ -7817,7 +7833,7 @@ export class TillApp extends LitElement {
     const limit = limited(TABLE_REQUEST_LIMIT_MS);
     let sends = 0;
     try {
-      await resendUnanswered(
+      await this.#resend(
         (signal) => {
           sends++;
           return this.api.recordUnpaidDeparture(party.id, request, { signal });
@@ -8561,22 +8577,22 @@ export class TillApp extends LitElement {
     const settle = (error?: unknown) => {
       if (turn === this.#paymentSends) this.#unansweredPayment = unansweredAfter(submission, error);
     };
-    this.#billMoneyInFlight++;
-    try {
-      const result = await resendUnanswered(
-        (signal) => this.api.takeBillPayment(open.billId, submission.request, { signal }),
-        limit.signal,
-        () => session === this.#operatorSession,
-      );
-      settle();
-      await this.#onBillPaid(open, result);
-    } catch (error) {
-      settle(error);
-      await this.#onBillPayRefused(open.id, error, asked, "take");
-    } finally {
-      limit.done();
-      this.#billMoneyInFlight--;
-    }
+    await this.#holdingReload(async () => {
+      try {
+        const result = await this.#resend(
+          (signal) => this.api.takeBillPayment(open.billId, submission.request, { signal }),
+          limit.signal,
+          () => session === this.#operatorSession,
+        );
+        settle();
+        await this.#onBillPaid(open, result);
+      } catch (error) {
+        settle(error);
+        await this.#onBillPayRefused(open.id, error, asked, "take");
+      } finally {
+        limit.done();
+      }
+    });
   }
 
   /**
@@ -8783,34 +8799,34 @@ export class TillApp extends LitElement {
     const settle = (error?: unknown) => {
       if (turn === this.#refundSends) this.#unansweredRefund = unansweredAfter(submission, error);
     };
-    this.#billMoneyInFlight++;
-    try {
-      const result = await resendUnanswered(
-        (signal) =>
-          this.api.refundBillPayment(
-            open.billId,
-            open.payment.id,
-            override === undefined ? submission.request : { ...submission.request, override },
-            { signal },
-          ),
-        limit.signal,
-        () => session === this.#operatorSession,
-      );
-      settle();
-      await this.#onRefunded(open, result);
-    } catch (error) {
-      settle(error);
-      if (
-        override === undefined &&
-        (error as { code?: unknown }).code === "authorization.not_permitted" &&
-        this.#billRefundingNow(open.id) !== null
-      )
-        await this.#askRefundApprover(open.id);
-      else await this.#onRefundRefused(open, error);
-    } finally {
-      limit.done();
-      this.#billMoneyInFlight--;
-    }
+    await this.#holdingReload(async () => {
+      try {
+        const result = await this.#resend(
+          (signal) =>
+            this.api.refundBillPayment(
+              open.billId,
+              open.payment.id,
+              override === undefined ? submission.request : { ...submission.request, override },
+              { signal },
+            ),
+          limit.signal,
+          () => session === this.#operatorSession,
+        );
+        settle();
+        await this.#onRefunded(open, result);
+      } catch (error) {
+        settle(error);
+        if (
+          override === undefined &&
+          (error as { code?: unknown }).code === "authorization.not_permitted" &&
+          this.#billRefundingNow(open.id) !== null
+        )
+          await this.#askRefundApprover(open.id);
+        else await this.#onRefundRefused(open, error);
+      } finally {
+        limit.done();
+      }
+    });
   }
 
   /** The refund dialog closes; the bill payment dialog says what the refund did and shows the
@@ -8959,12 +8975,7 @@ export class TillApp extends LitElement {
     if (sync !== undefined) {
       this.#draftSync = undefined;
       this.#draftReady = false;
-      this.#signOutSavesInFlight++;
-      try {
-        await sync.close();
-      } finally {
-        this.#signOutSavesInFlight--;
-      }
+      await this.#holdingReload(() => sync.close());
       sync.drop();
     }
     if (signIns !== this.#signIns) return;

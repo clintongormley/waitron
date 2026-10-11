@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { BUILD_CHANGED_EVENT } from "@waitron/diagnostics";
 import {
   cleanupWidgets,
   draftServer,
@@ -1353,5 +1354,27 @@ describe("till-app: cancelling a dish", () => {
       },
     ]);
     expect(dialog(el)).toBeNull();
+  });
+});
+
+describe("till-app: a box update while an adjustment still waits for the server", () => {
+  it("shows the bar instead of reloading after an idle sign-out", async () => {
+    const applyAdjustment = vi.fn(() => new Promise(() => {}));
+    const activity = sessionActivityStub();
+    const { el } = await mountApp({ applyAdjustment }, activity);
+    const reload = vi.fn();
+    el.reload = reload;
+    const order = await openMesa4(el);
+    await previewComp(el, order);
+    await press(el, inDialog(el, "[data-adjust-confirm]"));
+    expect(applyAdjustment).toHaveBeenCalledOnce();
+
+    (activity.configure.mock.calls.at(-1)![0] as { onIdle: () => void }).onIdle();
+    await flush(el);
+    window.dispatchEvent(new Event(BUILD_CHANGED_EVENT));
+    await flush(el);
+
+    expect(reload).not.toHaveBeenCalled();
+    expect(el.shadowRoot!.querySelector("wt-banner[data-test=update-bar]")).not.toBeNull();
   });
 });

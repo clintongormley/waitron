@@ -4730,6 +4730,51 @@ describe("till-app when the server reports another build", () => {
     expect(updateBar(el)).not.toBeNull();
   });
 
+  function signOutIdle(activity: ReturnType<typeof fakeSessionActivity>): void {
+    (activity.configure.mock.calls.at(-1)![0] as { onIdle: () => void }).onIdle();
+  }
+
+  it("shows the bar instead of reloading while a hand-over still waits for the server after an idle sign-out", async () => {
+    const activity = fakeSessionActivity();
+    const reload = vi.fn();
+    const markCollected = vi.fn(() => new Promise(() => {}));
+    const { el } = await mountApp(
+      { markCollected },
+      { reload, sessionActivity: activity as never },
+    );
+    emit(await toCounter(el), "hand-over-order", { id: "wo-1" });
+    await flush(el);
+    expect(markCollected).toHaveBeenCalledOnce();
+    signOutIdle(activity);
+    await flush(el);
+    expect(lock(el)).not.toBeNull();
+    updated();
+    await flush(el);
+    expect(reload).not.toHaveBeenCalled();
+    expect(updateBar(el)).not.toBeNull();
+  });
+
+  it("reloads an idle till once a hand-over that was out has been answered", async () => {
+    const activity = fakeSessionActivity();
+    const reload = vi.fn();
+    let answer!: () => void;
+    const markCollected = vi.fn(() => new Promise<void>((resolve) => (answer = resolve)));
+    const { el } = await mountApp(
+      { markCollected },
+      { reload, sessionActivity: activity as never },
+    );
+    emit(await toCounter(el), "hand-over-order", { id: "wo-1" });
+    await flush(el);
+    signOutIdle(activity);
+    await flush(el);
+    answer();
+    await flush(el);
+    updated();
+    await flush(el);
+    expect(reload).toHaveBeenCalledOnce();
+    expect(updateBar(el)).toBeNull();
+  });
+
   it("reloads when Reload on the bar is pressed", async () => {
     const reload = vi.fn();
     const { el } = await mountApp({}, { reload });

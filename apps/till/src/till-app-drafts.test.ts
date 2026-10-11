@@ -1225,6 +1225,33 @@ describe("till-app: signing out with a draft", () => {
     expect(api.logout).toHaveBeenCalledOnce();
   });
 
+  it("shows the box-update bar instead of reloading while a sent order still waits for the server after an idle sign-out", async () => {
+    const activity = {
+      configure: vi.fn(),
+      noteInteraction: vi.fn(),
+      reacquire: vi.fn(),
+      start: vi.fn(),
+      stop: vi.fn(),
+    };
+    const reload = vi.fn();
+    const submitDraft = vi.fn(() => new Promise(() => {}));
+    const { el } = await mountApp({ submitDraft }, activity as never);
+    el.reload = reload;
+    await openMesa(el);
+    await tap(el, "Beer");
+    await act(el, "fire-all");
+    expect(submitDraft).toHaveBeenCalledOnce();
+
+    (activity.configure.mock.calls.at(-1)![0] as { onIdle: () => void }).onIdle();
+    await flush(el, 6);
+    expect(api.logout).toHaveBeenCalledOnce();
+    window.dispatchEvent(new Event(BUILD_CHANGED_EVENT));
+    await flush(el);
+
+    expect(reload).not.toHaveBeenCalled();
+    expect(el.shadowRoot!.querySelector("wt-banner[data-test=update-bar]")).not.toBeNull();
+  });
+
   it("saves the draft before the session ends", async () => {
     const { el } = await mountApp();
     await openMesa(el);
