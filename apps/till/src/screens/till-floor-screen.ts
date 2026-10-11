@@ -653,6 +653,18 @@ export class TillFloorScreen extends LitElement {
     return mergeLabel(members.map((drawn) => drawn.label));
   }
 
+  /** The party `table` is linked to on the map (a party drawn as two or more groups), or null. */
+  #linkOf(table: TableState): string | null {
+    return this.#zone.onMap.find((drawn) => drawn.id === table.id)?.linkId ?? null;
+  }
+
+  /** A linked party's name, as the map names it: every one of its tables. */
+  #linkName(linkId: string): string {
+    return mergeLabel(
+      this.#zone.onMap.filter((drawn) => drawn.linkId === linkId).map((drawn) => drawn.label),
+    );
+  }
+
   #detailsHeading(table: TableState): string {
     return this.#mergeName(table) ?? t("floor.table_title").replace("{table}", () => table.label);
   }
@@ -843,8 +855,8 @@ export class TillFloorScreen extends LitElement {
   }
 
   /**
-   * One per placed group of the zone, its first member in the map's label order named as the map
-   * names the group, leaving out every group a drop of `table` on it would do nothing with.
+   * One per placed group of the zone, a party linked across groups counting once, its first member
+   * in the map's label order named as the map names it, leaving out every group a drop of `table` on it would do nothing with.
    */
   #joinTargets(table: TableState, from: TodayPlacement): TableState[] {
     const zoneTables = this.#zone.visible;
@@ -852,12 +864,19 @@ export class TillFloorScreen extends LitElement {
     const targets: TableState[] = [];
     for (const each of [...zoneTables].sort((a, b) => inNumberOrder(a.label, b.label))) {
       if (each.today?.placement == null) continue;
-      const group = each.today.joinId ?? each.id;
+      const linkId = this.#linkOf(each);
+      const group =
+        linkId !== null
+          ? `link:${linkId}`
+          : each.today.joinId !== null
+            ? `join:${each.today.joinId}`
+            : `table:${each.id}`;
       if (seen.has(group)) continue;
       seen.add(group);
       const drop = { tableId: table.id, x: from.x, y: from.y, targetId: each.id };
       if (dropAction(zoneTables, drop).kind === "none") continue;
-      targets.push({ ...each, label: this.#mergeName(each) ?? each.label });
+      const label = linkId === null ? this.#mergeName(each) : this.#linkName(linkId);
+      targets.push({ ...each, label: label ?? each.label });
     }
     return targets;
   }

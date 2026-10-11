@@ -147,14 +147,12 @@ it("lists the movable spares in number order, and places the one picked", async 
   expect(dialog.open).toBe(false);
 });
 
-it("says there are no spares, and where to add them", async () => {
+it("says there are no spares", async () => {
   const el = await mount([placed, fixedSpare, takenOff]);
   await choose(el, "spares");
   const dialog = dialogOf(el, "spares");
   expect(dialog.querySelectorAll("[data-spare]")).toHaveLength(0);
-  expect(text(dialog.querySelector("[data-empty]"))).toBe(
-    "No spare tables — add some in the floor plan editor",
-  );
+  expect(text(dialog.querySelector("[data-empty]"))).toBe("No spare tables");
 });
 
 it("lists the tables taken off today in number order, each with Put back", async () => {
@@ -280,7 +278,7 @@ it("speaks Spanish", async () => {
   dialogOf(el, "reset").querySelector<HTMLElement>("[data-cancel]")!.click();
   await choose(el, "spares");
   expect(text(dialogOf(el, "spares").querySelector("[data-empty]"))).toBe(
-    "No hay mesas de reserva: añádelas en el editor del plano",
+    "No hay mesas de reserva",
   );
   dialogOf(el, "spares").querySelector<HTMLElement>("[data-cancel]")!.click();
   await choose(el, "taken-off");

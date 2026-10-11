@@ -255,6 +255,24 @@ describe("till-floor-screen: the details sheet's changes for today", () => {
     ]);
   });
 
+  it("Join with… lists a party at several tables once, named as the map links them", async () => {
+    const P = party("P", 3, ["t22", "t21"]);
+    const el = await mount(
+      [
+        planned("t1", 2),
+        planned("t22", 30, { fixed: true }, P),
+        planned("t21", 20, { fixed: true }, P),
+        planned("t3", 40),
+      ],
+      stubApi(),
+    );
+    await press(el, "t1", "join-with");
+    expect(joinDialog(el)!.targets.map((table) => [table.id, table.label])).toEqual([
+      ["t3", "3"],
+      ["t21", "21+22"],
+    ]);
+  });
+
   it("Join with… leaves out the table's own party's other tables", async () => {
     const P = party("P", 3, ["t1", "t2"]);
     const el = await mount(
