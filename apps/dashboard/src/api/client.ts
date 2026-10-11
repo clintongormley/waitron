@@ -1,4 +1,8 @@
-import type { DepartmentReceiptConfig, VenueReceiptSettings } from "@waitron/shared";
+import type {
+  BusinessDayClock,
+  DepartmentReceiptConfig,
+  VenueReceiptSettings,
+} from "@waitron/shared";
 import type { PlanPlacement } from "@waitron/ui";
 import type { CatalogueSettings } from "@waitron/catalogue/src/settings-types.js";
 export type { CatalogueSettings };
@@ -60,8 +64,10 @@ export type DetailReason =
   | "geography_context"
   | "current_details_only"
   | "holiday_geography"
-  | "clock_effects";
+  | "clock_effects"
+  | "business_day_history";
 export interface VenueDetailsModel {
+  businessDayClock: BusinessDayClockModel;
   details: VenueDetailValues;
   issuer: { country: string; legalName: string; taxId: string };
   hasSales: boolean;
@@ -91,6 +97,33 @@ export interface VenueClockPreview {
   current: VenueClockView | null;
   proposed: VenueClockView;
   backupDeadlines: { archive: string | null; cloud: string | null };
+}
+
+export interface BusinessDayClockModel {
+  clock: BusinessDayClock;
+  revision: number;
+  currentBusinessDay: string | null;
+  pending: null | {
+    effectiveBusinessDay: string;
+    dayCutover: string;
+    startsAt: string;
+    locksAt: string;
+    editable: boolean;
+  };
+}
+export interface BusinessDayStartInput {
+  effectiveBusinessDay: string;
+  dayCutover: string;
+  expectedClockRevision: number;
+}
+export interface BusinessDayStartPreview {
+  revision: number;
+  previousDay: { businessDay: string; dayCutover: string; startAt: string; endAt: string };
+  effectiveDay: { businessDay: string; dayCutover: string; startAt: string; endAt: string };
+  locksAt: string;
+  conflicts: readonly unknown[];
+  conflictCount: number;
+  backupDeadlines: VenueClockPreview["backupDeadlines"];
 }
 
 export interface MadeAt {
@@ -2665,6 +2698,31 @@ export class DashboardApi {
   }): Promise<{ model: VenueDetailsModel }> {
     return this.#request("/management-api/venue-details/legal-name", "PUT", input);
   }
+
+  previewBusinessDayStart(input: BusinessDayStartInput): Promise<BusinessDayStartPreview> {
+    const query = new URLSearchParams({
+      effectiveBusinessDay: input.effectiveBusinessDay,
+      dayCutover: input.dayCutover,
+      expectedClockRevision: String(input.expectedClockRevision),
+    });
+    return this.background.#request(
+      `/management-api/venue-details/business-day-start/preview?${query}`,
+      "GET",
+    );
+  }
+
+  putBusinessDayStart(
+    input: BusinessDayStartInput,
+  ): Promise<{ changed: boolean; model: VenueDetailsModel }> {
+    return this.#request("/management-api/venue-details/business-day-start", "PUT", input);
+  }
+
+  cancelBusinessDayStart(input: {
+    expectedClockRevision: number;
+  }): Promise<{ changed: boolean; model: VenueDetailsModel }> {
+    return this.#request("/management-api/venue-details/business-day-start", "DELETE", input);
+  }
+
 
   getLocationSettings(): Promise<{ name: string; operationDescription: string }> {
     return this.#request("/management-api/location-settings", "GET");
