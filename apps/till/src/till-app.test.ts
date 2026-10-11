@@ -1391,7 +1391,7 @@ describe("till-app", () => {
     expect(ticket(el)).toBeNull();
   });
 
-  it("a server switch rebuilds a mounted PIN owner and protects later input", async () => {
+  it("a server switch rebuilds a mounted PIN owner and later input is not protected", async () => {
     const router = new ServerRouter({
       origin: BOX,
       fetchImpl: probeFetch(),
@@ -1421,11 +1421,12 @@ describe("till-app", () => {
     await after.updateComplete;
     const event = new Event("beforeunload", { cancelable: true });
     window.dispatchEvent(event);
-    expect(event.defaultPrevented).toBe(true);
+    expect(event.defaultPrevented).toBe(false);
+    expect(el.shadowRoot!.querySelector("wt-unsaved-changes")!.open).toBe(false);
     expect(currentApi.login).not.toHaveBeenCalled();
   });
 
-  it("changing the lock screen language asks before dropping its typed PIN", async () => {
+  it("changing the lock screen language drops its typed PIN without asking", async () => {
     const { el } = await mountApp();
     await flush(el);
     const screen = lock(el)!;
@@ -1438,20 +1439,11 @@ describe("till-app", () => {
     const original = currentLocale();
     const next = original === "en" ? "es" : "en";
     emit(screen, "wt-locale-selected", { code: next });
+    await expect.poll(() => currentLocale()).toBe(next);
     await flush(el);
     const question = el.shadowRoot!.querySelector("wt-unsaved-changes")!;
     await question.updateComplete;
-    expect(question.open).toBe(true);
-    question.shadowRoot!.querySelector<HTMLElement>("[data-choice=keep]")!.click();
-    await expect.poll(() => question.open).toBe(false);
-    expect(lock(el)).toBe(screen);
-    expect(pad.value).toBe("0");
-    expect(currentLocale()).toBe(original);
-    emit(screen, "wt-locale-selected", { code: next });
-    await flush(el);
-    question.shadowRoot!.querySelector<HTMLElement>("[data-choice=discard]")!.click();
-    await expect.poll(() => currentLocale()).toBe(next);
-    await flush(el);
+    expect(question.open).toBe(false);
     expect(lock(el)).not.toBe(screen);
     expect(lock(el)!.shadowRoot!.querySelector("till-numeric-pad")).toBeNull();
     expect(currentApi.login).not.toHaveBeenCalled();

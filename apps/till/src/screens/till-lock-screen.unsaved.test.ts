@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { LitElement, html } from "lit";
 import { LeaveController } from "@waitron/ui";
-import { commands, page, userEvent } from "vitest/browser";
+import { page, userEvent } from "vitest/browser";
 import { cleanupWidgets, mountWidget, expectNoA11yViolations } from "../widgets/test-helpers.js";
 import { setLocale, t } from "../i18n/t.js";
 import type { TillApi } from "../api/client.js";
@@ -53,71 +53,57 @@ function unload() {
   window.dispatchEvent(event);
   return event.defaultPrevented;
 }
-async function question(app: LoginLeaveApp) {
+function asked(app: LoginLeaveApp) {
+  return app.shadowRoot!.querySelector("wt-unsaved-changes")!.open;
+}
+async function settle(app: LoginLeaveApp) {
+  await new Promise((done) => setTimeout(done, 0));
   await app.updateComplete;
-  const q = app.shadowRoot!.querySelector("wt-unsaved-changes")!;
-  await q.updateComplete;
-  return q;
 }
-async function choose(app: LoginLeaveApp, decision: "keep" | "discard") {
-  const q = await question(app);
-  expect(q.open).toBe(true);
-  q.shadowRoot!.querySelector<HTMLElement>(`[data-choice=${decision}]`)!.click();
-  await expect.poll(() => q.open).toBe(false);
-}
-it("Cancel asks before clearing typed PIN digits; Keep retains them and Discard never signs in", async () => {
+it("Cancel with typed PIN digits leaves PIN mode at once without asking and never signs in", async () => {
   const { app, screen, login } = await mount();
   await digit(screen, "0");
   await digit(screen, "1");
   screen.shadowRoot!.querySelector<HTMLElement>(".cancel")!.click();
-  expect((await question(app)).open).toBe(true);
-  expect(screen.shadowRoot!.querySelector(".pin-display")!.textContent).toBe("●●");
-  await choose(app, "keep");
-  expect(screen.shadowRoot!.querySelector(".pin-display")!.textContent).toBe("●●");
-  screen.shadowRoot!.querySelector<HTMLElement>(".cancel")!.click();
-  await choose(app, "discard");
-  await expect.poll(() => screen.shadowRoot!.querySelector("till-numeric-pad")).toBeNull();
+  await screen.updateComplete;
+  expect(screen.shadowRoot!.querySelector("till-numeric-pad")).toBeNull();
+  await settle(app);
+  expect(asked(app)).toBe(false);
+  screen.shadowRoot!.querySelector<HTMLElement>("[data-person]")!.click();
+  await screen.updateComplete;
+  expect(screen.shadowRoot!.querySelector(".pin-display")!.textContent).toBe("");
   expect(unload()).toBe(false);
   expect(login).not.toHaveBeenCalled();
 });
-it("typed PIN protects page departure and unload, while clean and reverted input leave directly", async () => {
+it("typed PIN never protects page departure or unload", async () => {
   const { app, screen } = await mount();
-  expect(unload()).toBe(false);
-  expect(
-    await app.leave.coordinator.request({ scopes: "all", reason: "navigation", proceed() {} }),
-  ).toBe("proceeded");
   await digit(screen, "0");
-  expect(unload()).toBe(true);
-  let leaves = 0;
-  const kept = app.leave.coordinator.request({
-    scopes: "all",
-    reason: "navigation",
-    proceed() {
-      leaves++;
-    },
-  });
-  await choose(app, "keep");
-  expect(await kept).toBe("kept");
-  expect(leaves).toBe(0);
-  await digit(screen, "backspace");
   expect(unload()).toBe(false);
-  screen.shadowRoot!.querySelector<HTMLElement>(".cancel")!.click();
-  await expect.poll(() => screen.shadowRoot!.querySelector("till-numeric-pad")).toBeNull();
-  expect((await question(app)).open).toBe(false);
+  let leaves = 0;
+  expect(
+    await app.leave.coordinator.request({
+      scopes: "all",
+      reason: "navigation",
+      proceed() {
+        leaves++;
+      },
+    }),
+  ).toBe("proceeded");
+  expect(leaves).toBe(1);
+  expect(asked(app)).toBe(false);
+  expect(app.leave.coordinator.isDirty()).toBe(false);
 });
-it("successful PIN submission goes straight to login and clears a pending leave answer", async () => {
+it("successful PIN submission signs in once without asking", async () => {
   const { app, screen, login } = await mount();
   await digit(screen, "0");
   await digit(screen, "1");
-  screen.shadowRoot!.querySelector<HTMLElement>(".cancel")!.click();
-  expect((await question(app)).open).toBe(true);
   screen.shadowRoot!.querySelector<HTMLElement>(".submit")!.click();
   await expect.poll(() => app.logins).toBe(1);
   expect(login).toHaveBeenCalledExactlyOnceWith("ana", "01");
-  expect((await question(app)).open).toBe(false);
+  expect(asked(app)).toBe(false);
   expect(unload()).toBe(false);
 });
-it("refused PIN is cleared but throttled PIN stays protected without changing the sign-in refusal", async () => {
+it("refused PIN is cleared and a throttled PIN leaves at once without changing the sign-in refusal", async () => {
   const login = vi
     .fn()
     .mockRejectedValueOnce({ code: "pin.invalid" })
@@ -128,30 +114,31 @@ it("refused PIN is cleared but throttled PIN stays protected without changing th
   await expect
     .poll(() => screen.shadowRoot!.querySelector(".error")?.textContent)
     .toContain(t("pin.invalid"));
+  expect(screen.shadowRoot!.querySelector(".pin-display")!.textContent).toBe("");
   expect(unload()).toBe(false);
   await digit(screen, "2");
   screen.shadowRoot!.querySelector<HTMLElement>(".submit")!.click();
   await expect.poll(() => screen.shadowRoot!.querySelector(".throttle")).not.toBeNull();
-  expect(unload()).toBe(true);
-  screen.shadowRoot!.querySelector<HTMLElement>(".cancel")!.click();
-  await choose(app, "discard");
-  await expect.poll(() => screen.shadowRoot!.querySelector("till-numeric-pad")).toBeNull();
+  expect(screen.shadowRoot!.querySelector(".pin-display")!.textContent).toBe("●");
   expect(unload()).toBe(false);
+  screen.shadowRoot!.querySelector<HTMLElement>(".cancel")!.click();
+  await screen.updateComplete;
+  expect(screen.shadowRoot!.querySelector("till-numeric-pad")).toBeNull();
+  await settle(app);
+  expect(asked(app)).toBe(false);
 });
-it("disconnect clears typed proof and invalidates the old question before reconnect", async () => {
+it("disconnect clears typed proof before reconnect", async () => {
   const { app, screen, login } = await mount();
   await digit(screen, "1");
-  screen.shadowRoot!.querySelector<HTMLElement>(".cancel")!.click();
-  expect((await question(app)).open).toBe(true);
   screen.remove();
   expect(unload()).toBe(false);
-  expect((await question(app)).open).toBe(false);
   app.shadowRoot!.prepend(screen);
   await screen.updateComplete;
   expect(screen.shadowRoot!.querySelector("till-numeric-pad")).toBeNull();
+  expect(asked(app)).toBe(false);
   expect(login).not.toHaveBeenCalled();
 });
-it("an explicit login in flight leaves directly and a departed reply cannot sign in the reconnected screen", async () => {
+it("a departed login reply cannot sign in the reconnected screen", async () => {
   let resolve!: (value: { personId: string; permissions: string[]; locale: null }) => void;
   const login = vi.fn(
     () =>
@@ -178,27 +165,29 @@ it("an explicit login in flight leaves directly and a departed reply cannot sign
   await screen.updateComplete;
   expect(app.logins).toBe(0);
   expect(screen.shadowRoot!.querySelector(".pin-display")!.textContent).toBe("●");
-  expect(unload()).toBe(true);
+  expect(unload()).toBe(false);
 });
-it("digits entered after submitting a PIN remain protected while that login is pending", async () => {
+it("digits entered while a login is pending are not protected and Cancel leaves at once", async () => {
   const login = vi.fn(
     () => new Promise<{ personId: string; permissions: string[]; locale: null }>(() => {}),
   );
   const { app, screen } = await mount(login);
   await digit(screen, "1");
   screen.shadowRoot!.querySelector<HTMLElement>(".submit")!.click();
-  expect(unload()).toBe(false);
   await digit(screen, "2");
-  expect(unload()).toBe(true);
-  screen.shadowRoot!.querySelector<HTMLElement>(".cancel")!.click();
-  await choose(app, "keep");
   expect(screen.shadowRoot!.querySelector("till-numeric-pad")!.value).toBe("12");
+  expect(unload()).toBe(false);
+  screen.shadowRoot!.querySelector<HTMLElement>(".cancel")!.click();
+  await screen.updateComplete;
+  expect(screen.shadowRoot!.querySelector("till-numeric-pad")).toBeNull();
+  await settle(app);
+  expect(asked(app)).toBe(false);
   expect(login).toHaveBeenCalledExactlyOnceWith("ana", "1");
 });
 for (const locale of ["en", "es"] as const)
   for (const theme of ["light", "dark"] as const)
     for (const width of [390, 1280]) {
-      it(`native PIN Cancel retains focus and proof in ${locale}/${theme}/${width}`, async () => {
+      it(`native PIN Cancel leaves PIN mode without asking in ${locale}/${theme}/${width}`, async () => {
         setLocale(locale);
         await page.viewport(width, 900);
         expect(window.innerWidth).toBe(width);
@@ -206,23 +195,11 @@ for (const locale of ["en", "es"] as const)
         await digit(screen, "0");
         const cancel = screen.shadowRoot!.querySelector(".cancel")!;
         await userEvent.click(page.elementLocator(cancel));
-        const q = await question(app);
-        expect(q.open).toBe(true);
-        await commands.parkPointer();
-        await expectNoA11yViolations(q);
-        await page.screenshot({
-          path: `../../node_modules/.cache/w69-lock/${locale}-${theme}-${width}-question.png`,
-        });
-        await userEvent.keyboard("{Escape}");
-        await expect.poll(() => q.open).toBe(false);
-        expect(screen.shadowRoot!.querySelector(".pin-display")!.textContent).toBe("●");
-        expect(screen.shadowRoot!.activeElement).toBe(cancel);
-        await page.screenshot({
-          path: `../../node_modules/.cache/w69-lock/${locale}-${theme}-${width}-kept.png`,
-        });
-        await userEvent.click(page.elementLocator(cancel));
-        await choose(app, "discard");
         await expect.poll(() => screen.shadowRoot!.querySelector("till-numeric-pad")).toBeNull();
+        await settle(app);
+        expect(asked(app)).toBe(false);
+        await expectNoA11yViolations(screen);
+        expect(unload()).toBe(false);
         expect(login).not.toHaveBeenCalled();
       });
     }
