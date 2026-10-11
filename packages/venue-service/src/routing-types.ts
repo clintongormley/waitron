@@ -63,6 +63,8 @@ export interface RoutingMove {
   from: RouteTarget | null;
   to: RouteTarget | null;
   toNoReplacement: boolean;
+  /** Present only on a variant's own move: the product it is a variant of. */
+  variantOf?: { productId: string; productName: string };
   /** Present only on an extra's move: the dish that offers it. */
   dish?: { productId: string; productName: string };
   /** The periods during which the move happens; null: at any other time. */

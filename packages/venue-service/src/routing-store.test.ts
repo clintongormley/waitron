@@ -1391,6 +1391,7 @@ describe("routing previews", () => {
           to: station(f.bar),
           toNoReplacement: false,
           periodIds: null,
+          variantOf: { productId: f.mojito, productName: "Mojito" },
         },
         {
           productId: f.variant,
@@ -1401,6 +1402,7 @@ describe("routing previews", () => {
           to: station(f.terraceBar),
           toNoReplacement: false,
           periodIds: null,
+          variantOf: { productId: f.mojito, productName: "Mojito" },
         },
         {
           productId: f.mojito,
@@ -1587,6 +1589,7 @@ describe("routing previews", () => {
           to: noPrep,
           toNoReplacement: false,
           periodIds: null,
+          variantOf: { productId: f.bread, productName: "Bread" },
         },
       ]);
       expect(set.filter((m) => categorised.includes(m.productId))).toEqual([]);
@@ -1700,6 +1703,41 @@ describe("routing previews", () => {
             dish: { productId: f.burger, productName: "Burger" },
           },
         ]);
+      }));
+
+    it("names a variant's product on the variant's own move, never on its product's or an extra's", async () =>
+      scoped(async (tx) => {
+        const f = await withExtras(tx);
+        const lime = await f.product("Lime", f.cocktails);
+        const garnish = await createExtraList(
+          tx,
+          {
+            name: "Garnish",
+            minPicks: 0,
+            maxPicks: 1,
+            items: [{ productId: lime, price: "0.20" }],
+          },
+          "en",
+        );
+        await writeProductModifiers(tx, f.burger, [{ kind: "extras", id: garnish.id }]);
+        const [downstairs] = await tx
+          .insert(kitchenStations)
+          .values({ ...f.cfg, name: "Downstairs bar" })
+          .returning();
+        const moves = await previewRoutingChange(tx, f.cfg, {
+          kind: "cell",
+          address: { row: categoryRow(f.cocktails), zoneId: null },
+          target: station(downstairs!.id),
+        });
+        const variantMoves = moves.filter((move) => move.productId === f.variant);
+        const mojitoMoves = moves.filter((move) => move.productId === f.mojito);
+        expect(variantMoves).not.toEqual([]);
+        expect(mojitoMoves).not.toEqual([]);
+        expect(extraMoves(moves)).not.toEqual([]);
+        for (const move of variantMoves)
+          expect(move.variantOf).toEqual({ productId: f.mojito, productName: "Mojito" });
+        for (const move of [...mojitoMoves, ...extraMoves(moves)])
+          expect(move).not.toHaveProperty("variantOf");
       }));
 
     it("lists an extra's move during a period its dish's cell has a line for", async () =>

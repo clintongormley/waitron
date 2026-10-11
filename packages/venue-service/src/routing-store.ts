@@ -536,6 +536,9 @@ export async function previewRoutingChange(
             from,
             to,
             toNoReplacement: next.noReplacement,
+            ...(product.parentName === null
+              ? {}
+              : { variantOf: { productId: product.routedId, productName: product.parentName } }),
           });
       }
     }
