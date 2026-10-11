@@ -711,7 +711,7 @@ describe("till-station-queue", () => {
     const spy = vi.fn();
     el.addEventListener("advance-ticket-item", (e) => spy((e as CustomEvent).detail));
     el.shadowRoot!.querySelector<HTMLElement>('[data-item="ti-1"]')!.click();
-    expect(spy).toHaveBeenCalledWith({ itemId: "ti-1", to: "preparing" });
+    expect(spy).toHaveBeenCalledWith({ itemId: "ti-1", stationId: "st-1", to: "preparing" });
   });
 
   it("line mode: tapping a preparing line emits advance-ticket-item { itemId, to: 'ready' }", async () => {
@@ -722,7 +722,7 @@ describe("till-station-queue", () => {
     const spy = vi.fn();
     el.addEventListener("advance-ticket-item", (e) => spy((e as CustomEvent).detail));
     el.shadowRoot!.querySelector<HTMLElement>('[data-item="ti-2"]')!.click();
-    expect(spy).toHaveBeenCalledWith({ itemId: "ti-2", to: "ready" });
+    expect(spy).toHaveBeenCalledWith({ itemId: "ti-2", stationId: "st-1", to: "ready" });
   });
 
   it("a ready line renders no bump control (its kitchen state is terminal)", async () => {
@@ -770,6 +770,36 @@ describe("till-station-queue", () => {
     el.shadowRoot!.querySelector<HTMLElement>('[data-item="ti-1"]')!.click();
     expect(captured!.composed).toBe(true);
     expect(captured!.bubbles).toBe(true);
+  });
+
+  it("line mode: a merged queue's bump names the dish's own station, not the widget's", async () => {
+    const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
+      groups: [
+        { ...groupA, stationId: "st-1" },
+        {
+          ...groupB,
+          stationId: "st-2",
+          items: [{ ...groupB.items[0]!, id: "ti-4", state: "queued" as const }],
+        },
+      ],
+      stationId: "st-9",
+    });
+    const spy = vi.fn();
+    el.addEventListener("advance-ticket-item", (e) => spy((e as CustomEvent).detail));
+    el.shadowRoot!.querySelector<HTMLElement>('[data-item="ti-1"]')!.click();
+    el.shadowRoot!.querySelector<HTMLElement>('[data-item="ti-4"]')!.click();
+    expect(spy.mock.calls.map(([detail]) => detail as unknown)).toEqual([
+      { itemId: "ti-1", stationId: "st-1", to: "preparing" },
+      { itemId: "ti-4", stationId: "st-2", to: "preparing" },
+    ]);
+  });
+
+  it("line mode without any station cannot bump a line (the route checks the dish's station)", async () => {
+    const { el } = await mountWidget<TillStationQueue>("till-station-queue", { groups });
+    const spy = vi.fn();
+    el.addEventListener("advance-ticket-item", spy);
+    el.shadowRoot!.querySelector<HTMLElement>('[data-item="ti-1"]')!.click();
+    expect(spy).not.toHaveBeenCalled();
   });
 
   it("rail: a SETTLED (collectable) order shows a per-order collect button; a placed one does not", async () => {
@@ -1071,7 +1101,7 @@ describe("till-station-queue — KDS-2 courses & fire", () => {
     const spy = vi.fn();
     el.addEventListener("advance-ticket-item", (e) => spy((e as CustomEvent).detail));
     el.shadowRoot!.querySelector<HTMLElement>('button[data-item="it-start"]')!.click();
-    expect(spy).toHaveBeenCalledWith({ itemId: "it-start", to: "ready" });
+    expect(spy).toHaveBeenCalledWith({ itemId: "it-start", stationId: "st-1", to: "ready" });
   });
 
   it("kitchen fire: a held course shows the Empezar curso button; clicking it emits fire-course, composed + bubbling", async () => {

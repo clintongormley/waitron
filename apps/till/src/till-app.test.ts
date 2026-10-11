@@ -9881,10 +9881,10 @@ describe("till-app", () => {
       const c = await toCounter(el);
       expect(stationQueueWidget(el)!.groups).toEqual([stationGroup]);
 
-      emit(c, "advance-ticket-item", { itemId: "ti-1", to: "preparing" });
+      emit(c, "advance-ticket-item", { itemId: "ti-1", stationId: "st-2", to: "preparing" });
       await flush(el);
 
-      expect(currentApi.advanceTicketItem).toHaveBeenCalledWith("ti-1", "preparing");
+      expect(currentApi.advanceTicketItem).toHaveBeenCalledWith("ti-1", "st-2", "preparing");
       // once on entering the counter, once after the advance.
       expect(currentApi.getStationQueue).toHaveBeenCalledTimes(2);
       // The refresh returned an EMPTY queue (the item advanced off), so the has-items gate hides the card.

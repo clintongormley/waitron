@@ -622,7 +622,7 @@ export class TillStationQueue extends LitElement {
   @property({ attribute: false }) notices: KitchenNotice[] = [];
   @property() view: "kanban" | "rail" = "kanban";
   @property() bumpMode: BumpMode = "line";
-  /** The station these items are AT — required for the whole-ticket bump's event (ticket mode). */
+  /** The station these items are AT; a bump without one (its own or its group's) sends nothing. */
   @property() stationId?: string;
   /** Set for a merged queue: each dish and notice is labelled with its station's name. */
   @property({ attribute: false }) stationNames?: ReadonlyMap<string, string>;
@@ -641,9 +641,9 @@ export class TillStationQueue extends LitElement {
   readonly #clock = new TickingClock(this);
 
   #bump(group: MergedQueueGroup, item: StationQueueItem, to: Exclude<TicketState, "queued">): void {
+    const stationId = group.stationId ?? this.stationId;
+    if (stationId === undefined) return;
     if (this.bumpMode === "ticket") {
-      const stationId = group.stationId ?? this.stationId;
-      if (stationId === undefined) return;
       this.dispatchEvent(
         new CustomEvent("advance-ticket", {
           detail: { orderId: group.orderId, stationId, to },
@@ -654,7 +654,7 @@ export class TillStationQueue extends LitElement {
     } else {
       this.dispatchEvent(
         new CustomEvent("advance-ticket-item", {
-          detail: { itemId: item.id, to },
+          detail: { itemId: item.id, stationId, to },
           bubbles: true,
           composed: true,
         }),

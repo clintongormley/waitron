@@ -1609,12 +1609,6 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   column view has no per-order card, so it does not show the rest of the order…
   [Detail](backlog/kitchen.md#three-follow-ups-3c-1-left)
 
-- **A till-session station view can bump a dish another station now has.** — left open by the
-  product folders work. The till-session `POST /api/ticket-items/:id/advance` route does not check
-  the item's station (`apps/server/src/till-api.ts`); the device route does
-  (`apps/server/src/device-api.ts`) and refuses `device.forbidden_station`.
-  [Detail](backlog/kitchen.md#a-till-session-station-view-can-bump-a-dish-another-station-now-has)
-
 - **A following extra has different names on paper and on screen.** — left open by the product
   folders work. Decide which name the following extra should show, then make the surfaces agree.
   [Detail](backlog/kitchen.md#a-following-extra-has-different-names-on-paper-and-on-screen)

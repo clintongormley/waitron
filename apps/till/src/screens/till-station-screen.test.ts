@@ -258,13 +258,13 @@ describe("till-station-screen", () => {
     host.addEventListener("advance-ticket-item", escaped);
     queueWidget(el)!.dispatchEvent(
       new CustomEvent("advance-ticket-item", {
-        detail: { itemId: "ti-1", to: "preparing" },
+        detail: { itemId: "ti-1", stationId: "st-2", to: "preparing" },
         bubbles: true,
         composed: true,
       }),
     );
     await flush(el);
-    expect(api.advanceTicketItem).toHaveBeenCalledWith("ti-1", "preparing");
+    expect(api.advanceTicketItem).toHaveBeenCalledWith("ti-1", "st-2", "preparing");
     // Reloaded: once on connect, once after the advance.
     expect(api.getStationQueue).toHaveBeenCalledTimes(2);
     expect(escaped).not.toHaveBeenCalled();
@@ -420,12 +420,14 @@ describe("till-station-screen", () => {
     await flush(el);
     el.shadowRoot!.querySelector(".empty")!.dispatchEvent(
       new CustomEvent("advance-ticket-item", {
-        detail: { itemId: "ti-1", to: "preparing" },
+        detail: { itemId: "ti-1", stationId: "st-1", to: "preparing" },
         bubbles: true,
         composed: true,
       }),
     );
-    await vi.waitFor(() => expect(api.advanceTicketItem).toHaveBeenCalledWith("ti-1", "preparing"));
+    await vi.waitFor(() =>
+      expect(api.advanceTicketItem).toHaveBeenCalledWith("ti-1", "st-1", "preparing"),
+    );
     await flush(el);
     expect(api.getStationQueue).not.toHaveBeenCalled();
   });

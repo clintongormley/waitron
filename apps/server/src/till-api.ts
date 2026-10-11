@@ -1907,10 +1907,23 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       const cfg = requestCfg(deps.cfg, session);
       const id = c.req.param("id");
       if (!isUuid(id)) throw new AppError("ticket.invalid_transition", { ticketItemId: id });
-      const body = await readJsonBody<{ to?: string }>(c);
+      const body = await readJsonBody<{ to?: string; stationId?: unknown }>(c);
+      if (typeof body.stationId !== "string" || !isUuid(body.stationId)) {
+        throw new AppError("management.request_invalid", { field: "stationId" });
+      }
+      const stationId = body.stationId.toLowerCase();
       // `advanceTicketItem` refuses any target outside its transition table before the update runs.
       const to = body.to as TicketState;
       await withTransaction(deps.db, async (tx) => {
+        // `advanceTicketItem` never checks the station, and a view can still show a dish another
+        // station has since taken. An unknown item is left to the verb.
+        const [item] = await tx
+          .select({ stationId: ticketItems.stationId })
+          .from(ticketItems)
+          .where(eq(ticketItems.id, id));
+        if (item !== undefined && item.stationId !== stationId) {
+          throw new AppError("device.forbidden_station", { stationId: item.stationId });
+        }
         await advanceTicketItem(tx, cfg, id, to);
       });
       return c.body(null, 200);

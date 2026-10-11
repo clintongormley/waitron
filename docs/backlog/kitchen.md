@@ -122,14 +122,6 @@ list does not exist.
   devices are not exported (`packages/db/src/configuration-transfer.ts:1-37`), so a venue set up
   from an export sets them again on the Devices screen.
 
-## A till-session station view can bump a dish another station now has
-
-- **A till-session station view can bump a dish another station now has.** The till-session
-  `POST /api/ticket-items/:id/advance` route does not check the item's station
-  (`apps/server/src/till-api.ts`); the device route does (`apps/server/src/device-api.ts`) and refuses
-  `device.forbidden_station`. Until its next 15-second poll, a till's station view can still show a
-  moved dish and advance it at its new station. The route predates PF7; moves make this more likely.
-
 ## A following extra has different names on paper and on screen
 
 - **A following extra has different names on paper and on screen.** Its `+` line prints the frozen

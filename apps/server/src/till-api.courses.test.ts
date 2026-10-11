@@ -323,7 +323,7 @@ describe("KDS-2 fire route + station-queue course/firedAt serialisation", () => 
     const held = await app.request(`/api/ticket-items/${heldItemId}/advance`, {
       method: "POST",
       headers: { "content-type": "application/json", cookie },
-      body: JSON.stringify({ to: "preparing" }),
+      body: JSON.stringify({ to: "preparing", stationId: station }),
     });
     expect(held.status).toBe(409);
     expect(await held.json()).toMatchObject({
@@ -343,7 +343,7 @@ describe("KDS-2 fire route + station-queue course/firedAt serialisation", () => 
     const advance = await app.request(`/api/ticket-items/${heldItemId}/advance`, {
       method: "POST",
       headers: { "content-type": "application/json", cookie },
-      body: JSON.stringify({ to: "preparing" }),
+      body: JSON.stringify({ to: "preparing", stationId: station }),
     });
     expect(advance.status).toBe(200);
     expect((await queueItemsByName(orderId, station)).get(FILETE)!.state).toBe("preparing");
@@ -546,7 +546,7 @@ describe("POST /api/working-orders/:id/lines/recall (A4 un-send a not-started li
     const advance = await app.request(`/api/ticket-items/${sopaItemId}/advance`, {
       method: "POST",
       headers: { "content-type": "application/json", cookie },
-      body: JSON.stringify({ to: "preparing" }),
+      body: JSON.stringify({ to: "preparing", stationId: station }),
     });
     expect(advance.status).toBe(200);
 

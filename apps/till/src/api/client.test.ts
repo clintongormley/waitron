@@ -1167,11 +1167,11 @@ describe("TillApi", () => {
     ]);
   });
 
-  it("advanceTicketItem POSTs { to } to the ticket item's advance route (empty 200 body)", async () => {
+  it("advanceTicketItem POSTs { to, stationId } to the ticket item's advance route (empty 200 body)", async () => {
     const fetchStub = vi.fn().mockResolvedValue(new Response(null, { status: 200 }));
 
     await expect(
-      new TillApi("", fetchStub).advanceTicketItem("ti-1", "preparing"),
+      new TillApi("", fetchStub).advanceTicketItem("ti-1", "st-1", "preparing"),
     ).resolves.toBeUndefined();
 
     expect(fetchStub).toHaveBeenCalledWith(
@@ -1180,7 +1180,7 @@ describe("TillApi", () => {
         method: "POST",
         credentials: "include",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ to: "preparing" }),
+        body: JSON.stringify({ to: "preparing", stationId: "st-1" }),
       }),
     );
   });
@@ -1193,7 +1193,7 @@ describe("TillApi", () => {
     );
 
     await expect(
-      new TillApi("", fetchStub).advanceTicketItem("ti-1", "ready"),
+      new TillApi("", fetchStub).advanceTicketItem("ti-1", "st-1", "ready"),
     ).rejects.toMatchObject({ code: "ticket.invalid_transition" });
   });
 
