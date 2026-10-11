@@ -782,8 +782,9 @@ they never rewrite the record. Regression: `packages/shared/src/content-language
 
 ## Unsaved changes: shared close interception, owner-provided draft comparisons
 
-Use the shared registry for staged modal, page and credential input, including keypad PIN
-entry. The application shells share one confirmation and accepted-history adapter. The
+Use the shared registry for staged modal, page and credential input, including the supervisor's
+keypad PIN. Sign-in screens are the exception and register nothing (design-system.md, "Protect an edited dialog
+before closing it"). The application shells share one confirmation and accepted-history adapter. The
 [dated owner audit](../superpowers/plans/2026-10-05-unsaved-changes-audit.md) records behavioral
 checks and their limits. Use `beforeClose`
 with a scoped ui-core coordinator request and `requestClose(reason)`
@@ -928,11 +929,9 @@ Query removal travels with the controller's path replacement in one guarded writ
 fallback. Unknown positions start a new epoch before old indices can imply a traversal distance.
 
 `forceReset()` retires draft handles. A sensitive form retained across that boundary must rebuild
-or register a new scope before accepting fresh input. The till lock screen is keyed by locale
-and operator-session generation so a server switch rebuilds its credential form. Regression
+or register a new scope before accepting fresh input. Regression
 receipts are in the dated W69 audit; `navigation-guard.test.ts`, `url-state.unsaved.test.ts`, the
-catalogue/login shell cases, the venue-operations Hours case and till-app server-switch cases
-exercise these behaviors.
+catalogue/login shell cases and the venue-operations Hours case exercise these behaviors.
 
 
 ### Preserve the selection when normalising a typed decimal

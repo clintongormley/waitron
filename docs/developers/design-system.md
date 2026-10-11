@@ -1345,9 +1345,10 @@ column that can never be hidden — the first column, any
 `alwaysShownColumnLabel` ("Always shown") in muted text where the eye would be. The first and the
 pinned columns are fixed in place, with no drag handle; an empty space of the handle's width stands
 in its place, so every column name starts at the same point. Other columns move by pointer drag or
-by the handle's arrow keys. While a pointer drags a column, its name follows the pointer and the row
-it can land on is highlighted. The preview and highlight disappear when the drag ends or the dialog
-closes. The dialog's Restore defaults button resets order and visibility. Escape closes it and
+by the handle's arrow keys. While a pointer drags a column, its row is lifted and follows the pointer,
+held within the movable rows, and the rows it passes slide out of its way to open the
+gap it will land in. Releasing there moves the column; releasing anywhere else, cancelling or closing
+the dialog puts every row back. The dialog's Restore defaults button resets order and visibility. Escape closes it and
 returns focus to the trigger. The first column remains shown, and the last visible movable column
 cannot be hidden: its eye stays, checked and disabled, with `lastShownColumnLabel` ("Keep at least
 one shown") under its name, which the eye names as its description (`aria-describedby`). Being a
@@ -2017,8 +2018,8 @@ and nothing guards it across screens:
   invoice recipient dialog; the extras picker when it edits a line (adding a dish never waits for a
   change, through `savableAtOpen`); the station dialog's Make at (its Move keeps today's look); the
   floor's seats dialog opened by Change seats (`apps/till/src/widgets/today-seats-dialog.ts`).
-  Every other till dialog that tracks unsaved changes takes an action — pay, refund, override, sign
-  in, seat, send — and keeps its own rules; the list, with the reason for each, is in
+  Every other till dialog that tracks unsaved changes takes an action — pay, refund, override, enrol,
+  seat, send — and keeps its own rules; the list, with the reason for each, is in
   [the Batch 5 table](../superpowers/plans/2026-10-07-a331-save-follows-changes.md#batch-5--the-till-app-lane-c-a331-5).
   The till's forms that track no unsaved changes wait for Batch 7's follow-up audit.
 
@@ -2229,8 +2230,9 @@ The dirty-only unload listener requests the browser's own warning. Activated des
 checks cover reload, external navigation and closing with a Schedule draft. The
 [design](../superpowers/specs/2026-10-05-unsaved-changes-warning-design.md) records activation and
 platform limits; mobile process termination and every-platform reliability are unverified.
-PIN sign-in compares ephemeral keypad input and asks on voluntary Cancel; explicit submission
-remains direct, and disconnect clears proof without asking.
+Sign-in screens — the dashboard's sign-in screen, including the account set-up and password-reset
+form an emailed link opens, and the till's PIN sign-in — take no part in the leave check: they
+register no draft scope, never ask, and never request the unload warning (owner, 2026-10-11, A499).
 
 #### A value saved from its own table row
 

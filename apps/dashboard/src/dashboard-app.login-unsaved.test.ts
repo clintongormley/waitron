@@ -71,16 +71,8 @@ async function enter(app: DashboardApp, name: string, value: string) {
   await login(app).updateComplete;
   return input;
 }
-async function choose(app: DashboardApp, decision: "keep" | "discard") {
-  const warning = app.shadowRoot!.querySelector("wt-unsaved-changes")!;
-  await expect.poll(() => warning.open).toBe(true);
-  await warning.updateComplete;
-  await userEvent.click(
-    warning
-      .shadowRoot!.querySelector(`[data-choice=${decision}]`)!
-      .shadowRoot!.querySelector("button")!,
-  );
-  await expect.poll(() => warning.open).toBe(false);
+function asked(app: DashboardApp) {
+  return app.shadowRoot!.querySelector("wt-unsaved-changes")!.open;
 }
 function unload() {
   const event = new Event("beforeunload", { cancelable: true });
@@ -88,72 +80,39 @@ function unload() {
   return event.defaultPrevented;
 }
 
-it("the real login reset link protects a password and runs its local action after Discard", async () => {
-  const requestPasswordReset = vi.fn().mockResolvedValue(undefined);
-  const app = await mount("/manage/", { requestPasswordReset });
-  await enter(app, "email", "ada@example.test");
-  login(app).shadowRoot!.querySelector<HTMLElement>("[data-test=continue]")!.click();
-  await expect.poll(() => field(app, "password")).not.toBeNull();
-  const password = await enter(app, "password", "synthetic password");
-  const link = login(app).shadowRoot!.querySelector<HTMLAnchorElement>(
-    "[data-test=reset-by-email]",
-  )!;
-  await userEvent.click(link);
-  await choose(app, "keep");
-  expect(password.value).toBe("synthetic password");
-  expect(requestPasswordReset).not.toHaveBeenCalled();
-  expect(location.hash).toBe("");
-  await userEvent.click(link);
-  await choose(app, "discard");
-  await expect
-    .poll(() => login(app).shadowRoot!.querySelector("[data-test=reset-sent]"))
-    .not.toBeNull();
-  expect(requestPasswordReset).toHaveBeenCalledExactlyOnceWith("ada@example.test");
-  expect(location.hash).toBe("");
-  expect(unload()).toBe(false);
-});
-
-it.each(["clean", "reverted"])(
-  "the real %s login reset link acts without a warning",
+it.each(["typed", "clean", "reverted"])(
+  "the real login reset link acts at once with a %s password",
   async (state) => {
     const requestPasswordReset = vi.fn().mockResolvedValue(undefined);
     const app = await mount("/manage/", { requestPasswordReset });
     await enter(app, "email", "ada@example.test");
     login(app).shadowRoot!.querySelector<HTMLElement>("[data-test=continue]")!.click();
     await expect.poll(() => field(app, "password")).not.toBeNull();
-    if (state === "reverted") {
-      await enter(app, "password", "synthetic password");
-      await enter(app, "password", "");
-    }
+    if (state !== "clean") await enter(app, "password", "synthetic password");
+    if (state === "reverted") await enter(app, "password", "");
+    expect(unload()).toBe(false);
     await userEvent.click(
       login(app).shadowRoot!.querySelector<HTMLAnchorElement>("[data-test=reset-by-email]")!,
     );
     await expect
       .poll(() => login(app).shadowRoot!.querySelector("[data-test=reset-sent]"))
       .not.toBeNull();
-    expect(app.shadowRoot!.querySelector("wt-unsaved-changes")!.open).toBe(false);
+    expect(asked(app)).toBe(false);
     expect(requestPasswordReset).toHaveBeenCalledExactlyOnceWith("ada@example.test");
     expect(location.hash).toBe("");
     expect(unload()).toBe(false);
   },
 );
 
-it("the dashboard's login action URL remains until Cancel is accepted", async () => {
+it("the dashboard's login action URL is removed by Cancel at once, keeping history state", async () => {
   const app = await mount("/manage/account?token=synthetic&purpose=invitation");
-  const password = await enter(app, "new-password", "synthetic password");
-  const pin = await enter(app, "new-pin", "4321");
-  const cancel = login(app).shadowRoot!.querySelector<HTMLElement>(
-    "[data-test=cancel-account-action]",
-  )!;
-  cancel.click();
-  await choose(app, "keep");
-  expect(location.search).toContain("token=synthetic");
-  expect(password.value).toBe("synthetic password");
-  expect(pin.value).toBe("4321");
-  cancel.click();
-  await choose(app, "discard");
+  await enter(app, "new-password", "synthetic password");
+  await enter(app, "new-pin", "4321");
+  expect(unload()).toBe(false);
+  login(app).shadowRoot!.querySelector<HTMLElement>("[data-test=cancel-account-action]")!.click();
   await expect.poll(() => location.pathname).toBe("/manage/");
   await expect.poll(() => field(app, "email")).not.toBeNull();
+  expect(asked(app)).toBe(false);
   expect(location.search).toBe("");
   expect(history.state).toMatchObject({
     external: "preserved",
@@ -161,23 +120,22 @@ it("the dashboard's login action URL remains until Cancel is accepted", async ()
   });
   expect(unload()).toBe(false);
 });
-it("the actual dashboard history adapter keeps login email on Back and accepts Back/Forward once", async () => {
+it("the actual dashboard history adapter accepts Back/Forward over a typed login email without asking", async () => {
   const app = await mount();
   await navigationGuardFor(window)!.write("/manage/?view=login-next");
   const input = await enter(app, "email", "draft@example.test");
+  expect(unload()).toBe(false);
   history.back();
-  await choose(app, "keep");
-  expect(location.search).toBe("?view=login-next");
-  expect(input.value).toBe("draft@example.test");
-  history.back();
-  await choose(app, "discard");
   await expect.poll(() => location.search).toBe("");
-  await expect.poll(() => input.value).toBe("");
+  expect(asked(app)).toBe(false);
+  expect(input.value).toBe("draft@example.test");
   history.forward();
   await expect.poll(() => location.search).toBe("?view=login-next");
+  expect(asked(app)).toBe(false);
+  expect(input.value).toBe("draft@example.test");
   expect(unload()).toBe(false);
 });
-it("changing the login language retains the same native draft", async () => {
+it("changing the login language retains the same native draft without a warning", async () => {
   const app = await mount();
   const input = await enter(app, "email", "draft@example.test");
   app.shadowRoot!.querySelector("wt-language-chooser")!.dispatchEvent(
@@ -190,27 +148,24 @@ it("changing the login language retains the same native draft", async () => {
   await expect.poll(() => currentLocale()).toBe("es-ES");
   expect(field(app, "email")).toBe(input);
   expect(input.value).toBe("draft@example.test");
-  expect(app.shadowRoot!.querySelector("wt-unsaved-changes")!.open).toBe(false);
-  expect(unload()).toBe(true);
+  expect(asked(app)).toBe(false);
+  expect(unload()).toBe(false);
 });
 it.each(["management_session.expired", "management_session.required", "person.suspended"])(
-  "%s clears the retained login credentials and cancels a pending answer immediately",
+  "%s clears the retained login credentials immediately",
   async (code) => {
     const app = await mount("/manage/account?token=synthetic&purpose=invitation");
     const screen = login(app);
     const password = await enter(app, "new-password", "synthetic password");
     const pin = await enter(app, "new-pin", "4321");
-    screen.shadowRoot!.querySelector<HTMLElement>("[data-test=cancel-account-action]")!.click();
-    await expect.poll(() => app.shadowRoot!.querySelector("wt-unsaved-changes")!.open).toBe(true);
     window.dispatchEvent(new CustomEvent("waitron-session-invalid", { detail: { code } }));
-    await expect.poll(() => app.shadowRoot!.querySelector("wt-unsaved-changes")!.open).toBe(false);
     await screen.updateComplete;
     expect(password.value).toBe("");
     expect(pin.value).toBe("");
-    expect(unload()).toBe(false);
     await expect.poll(() => field(app, "email")).not.toBeNull();
+    expect(asked(app)).toBe(false);
     await enter(app, "email", "fresh@example.test");
-    expect(unload()).toBe(true);
+    expect(unload()).toBe(false);
   },
 );
 

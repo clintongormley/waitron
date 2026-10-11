@@ -3176,9 +3176,10 @@ _Formerly A6, and the old Track C's payments items; part of A9._ Detail: [backlo
 
 _Formerly A7, and the dashboard entries in the opening part of the old Track A (before A1); part of A9._ Detail: [backlog/dashboard.md](backlog/dashboard.md).
 
-- **A499. Dragging in the column chooser, and leaving a sign-in screen (owner, 2026-10-11).** The
-  column being dragged is invisible while it moves, and a typed PIN brings up the unsaved-changes
-  question. [Detail](backlog/dashboard.md#a499-dragging-in-the-column-chooser-and-leaving-a-sign-in-screen)
+- **In the Customise dialog, a released column row jumps into its slot instead of sliding.** The
+  house rule for a dragged row (design-system.md, the `--wt-color-surface-lifted` paragraph) has it
+  slide into its slot over `--wt-duration-move`; here every row lands at once (`#endColumnDrag`,
+  `packages/ui/src/components/wt-data-table.ts`). Left open by A499.
 
 - **After a box reset, the reset page's own banner still shows the old venue's name.** By reading,
   not run: `#returnToLogin` (`apps/dashboard/src/dashboard-app.ts`) never clears the `venueName` that
@@ -3442,8 +3443,7 @@ _Formerly A7, and the dashboard entries in the opening part of the old Track A (
   [Detail](backlog/dashboard.md#the-browsers-password-manager-is-told-which-passkeys-waitron-still-accepts-c101-948--still-open)
 
 - **A403 — sign-in and passkey fixes (owner, 2026-10-08; open; low priority; not queued — owner
-  2026-10-08: take it from here when a lane has room):** **Choosing a passkey on the password step
-  asks to discard unsaved changes.** **Remove the passkey name field.**
+  2026-10-08: take it from here when a lane has room):** **Remove the passkey name field.**
   [Detail](backlog/dashboard.md#a403--sign-in-and-passkey-fixes-owner-2026-10-08-open-low-priority-not-queued--owner-2026-10-08-take-it-from-here-when-a-lane-has-room)
 
 - **Review every permission: fewer, coarser, and consistently named** (owner, 2026-09-26). The

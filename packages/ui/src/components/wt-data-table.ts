@@ -13,7 +13,7 @@ import { classMap } from "lit/directives/class-map.js";
 import { repeat } from "lit/directives/repeat.js";
 import { baseStyles, visuallyHiddenStyles } from "../base-styles.js";
 import { iconButtonStyles, trackIconTooltip } from "../icon-button.js";
-import { holdPageCursor, releasePageCursor } from "../reorder-table.js";
+import { holdPageCursor, offsetY, releasePageCursor, scrollAncestors } from "../reorder-table.js";
 import { registerIcons } from "./wt-icon.js";
 import "./wt-combobox.js";
 import "./wt-button.js";
@@ -131,6 +131,15 @@ interface Searched<Row> {
 }
 
 type TreeEntry<Row> = { row: Row; key: string; depth: number; hasChildren: boolean };
+
+/** A Customise dialog row with its box where it rests, its transform left out. */
+type RestingColumnRow = {
+  row: HTMLElement;
+  top: number;
+  bottom: number;
+  left: number;
+  right: number;
+};
 
 interface TreeShown<Row> {
   entries?: TreeEntry<Row>[];
@@ -619,22 +628,20 @@ export class WtDataTable<Row = unknown> extends LitElement {
         cursor: default;
       }
 
-      .column-choice[data-drop-target] {
-        background: var(--wt-color-surface-lifted);
-        outline: var(--wt-focus-ring);
-        outline-offset: calc(-1 * var(--wt-focus-offset));
+      .column-choice[data-sliding] {
+        transition: transform var(--wt-duration-move) ease-out;
       }
 
-      .column-drag-preview {
-        position: fixed;
+      @media (prefers-reduced-motion: reduce) {
+        .column-choice[data-sliding] {
+          transition: none;
+        }
+      }
+
+      .column-choice[data-dragging] {
+        position: relative;
         z-index: 1;
-        pointer-events: none;
-        transform: translate(-50%, -50%);
-        padding: var(--wt-space-2) var(--wt-space-3);
-        border: 1px solid var(--wt-color-border);
-        border-radius: var(--wt-radius-md);
         background: var(--wt-color-surface-lifted);
-        color: var(--wt-color-text);
         box-shadow: var(--wt-shadow-2);
       }
 
@@ -936,18 +943,22 @@ export class WtDataTable<Row = unknown> extends LitElement {
   @state() private columnChoices: Record<string, boolean> = {};
   @state() private columnOrder: string[] = [];
   @state() private columnMoveAnnouncement = "";
-  @state() private columnDragPreview: {
-    key: string;
-    x: number;
-    y: number;
-    target: string | null;
-  } | null = null;
   @state() private chooserOpen = false;
   @query(".columns-trigger") private chooserTrigger!: HTMLButtonElement;
   @query(".columns-panel") private chooserPanel!: HTMLElement;
   readonly #edgeScroll = new DragEdgeScroll();
   #columnPoint = { x: 0, y: 0 };
-  #columnDrag: { key: string; pointerId: number; startY: number; active: boolean } | null = null;
+  #columnDrag: {
+    key: string;
+    pointerId: number;
+    startY: number;
+    /** How far below the row's top the pointer took hold. */
+    grab: number;
+    active: boolean;
+    /** The movable columns' keys when the drag began, as JSON. */
+    movable: string;
+  } | null = null;
+  #columnScrollTargets: EventTarget[] = [];
   private readonly seededBranches = new Set<string>();
   #restored = false;
   /** A CSS condition cannot read a token, so the width is compared here and the host carries the
@@ -1159,6 +1170,12 @@ export class WtDataTable<Row = unknown> extends LitElement {
       this.filtersOpen = false;
     if (!this.#offersChooser()) this.chooserOpen = false;
     if (
+      this.#columnDrag &&
+      changed.has("columns") &&
+      (!this.chooserOpen || JSON.stringify(this.#movableKeys()) !== this.#columnDrag.movable)
+    )
+      this.#endColumnDrag();
+    if (
       changed.has("viewKey") ||
       changed.has("rememberExpanded") ||
       changed.has("collapseDescendants")
@@ -1308,13 +1325,19 @@ export class WtDataTable<Row = unknown> extends LitElement {
       : shown;
   }
 
+  #movableColumns(): DataTableColumn<Row>[] {
+    return this.#orderedColumns().filter((column, index) => index > 0 && column.pinned !== "end");
+  }
+
+  #movableKeys(): string[] {
+    return this.#movableColumns().map((column) => column.key);
+  }
+
   #moveColumn(key: string, delta: number): void {
     const focusedHandle = [
       ...this.renderRoot.querySelectorAll<HTMLButtonElement>("[data-reorder]"),
     ].find((handle) => handle.dataset.reorder === key && handle === this.shadowRoot?.activeElement);
-    const movable = this.#orderedColumns().filter(
-      (column, index) => index > 0 && column.pinned !== "end",
-    );
+    const movable = this.#movableColumns();
     const from = movable.findIndex((column) => column.key === key);
     const to = from + delta;
     if (from < 0 || to < 0 || to >= movable.length) return;
@@ -1342,7 +1365,18 @@ export class WtDataTable<Row = unknown> extends LitElement {
 
   #startColumnDrag(event: PointerEvent, key: string): void {
     if (event.button !== 0 || this.#columnDrag) return;
-    this.#columnDrag = { key, pointerId: event.pointerId, startY: event.clientY, active: false };
+    const row = (event.currentTarget as HTMLElement).closest<HTMLElement>("[data-column-row]")!;
+    this.#columnDrag = {
+      key,
+      pointerId: event.pointerId,
+      startY: event.clientY,
+      grab: event.clientY - row.getBoundingClientRect().top,
+      active: false,
+      movable: JSON.stringify(this.#movableKeys()),
+    };
+    this.#columnScrollTargets = scrollAncestors(row);
+    for (const target of this.#columnScrollTargets)
+      target.addEventListener("scroll", this.#scrollColumnDrag, { passive: true });
     document.addEventListener("pointermove", this.#moveColumnDrag);
     document.addEventListener("pointerup", this.#dropColumnDrag);
     document.addEventListener("pointercancel", this.#cancelColumnDrag);
@@ -1367,50 +1401,69 @@ export class WtDataTable<Row = unknown> extends LitElement {
     this.#trackColumnDrop();
   };
 
-  #trackColumnDrop(): void {
-    const target = [...this.chooserPanel.querySelectorAll<HTMLElement>("[data-column-row]")].find(
-      (row) => {
+  /** A scroll moves the resting rows under a pointer that has not moved. */
+  readonly #scrollColumnDrag = (): void => {
+    if (this.#columnDrag!.active) this.#trackColumnDrop();
+  };
+
+  /** The movable rows with where each rests, read without its transform so rows sliding out of
+   * the dragged row's way never change which row the pointer is over. */
+  #restingColumnRows(): RestingColumnRow[] {
+    return [...this.chooserPanel.querySelectorAll<HTMLElement>("[data-column-row]")]
+      .filter((row) => row.querySelector("[data-reorder]"))
+      .map((row) => {
         const box = row.getBoundingClientRect();
-        return (
-          row.querySelector("[data-reorder]") &&
-          this.#columnPoint.x >= box.left &&
-          this.#columnPoint.x < box.right &&
-          this.#columnPoint.y >= box.top &&
-          this.#columnPoint.y < box.bottom
-        );
-      },
+        const top = box.top - offsetY(row);
+        return { row, top, bottom: top + box.height, left: box.left, right: box.right };
+      });
+  }
+
+  /** The index, among `rows`, of the movable row resting under the pointer, or -1. */
+  #columnDropIndex(rows: RestingColumnRow[]): number {
+    const { x, y } = this.#columnPoint;
+    return rows.findIndex(
+      (rest) => x >= rest.left && x < rest.right && y >= rest.top && y < rest.bottom,
     );
-    this.columnDragPreview = {
-      key: this.#columnDrag!.key,
-      x: this.#columnPoint.x,
-      y: this.#columnPoint.y,
-      target: target?.dataset.columnRow ?? null,
-    };
+  }
+
+  #trackColumnDrop(): void {
+    const drag = this.#columnDrag!;
+    const rows = this.#restingColumnRows();
+    const from = rows.findIndex((rest) => rest.row.dataset.columnRow === drag.key);
+    if (from < 0) {
+      this.#endColumnDrag();
+      return;
+    }
+    const dragged = rows[from]!;
+    const height = dragged.bottom - dragged.top;
+    const spanTop = rows[0]!.top;
+    const spanBottom = rows.at(-1)!.bottom;
+    const lift = Math.min(Math.max(this.#columnPoint.y - drag.grab, spanTop), spanBottom - height);
+    dragged.row.setAttribute("data-dragging", "");
+    dragged.row.style.transform = `translateY(${lift - dragged.top}px)`;
+    const target = this.#columnDropIndex(rows);
+    const to = target < 0 ? from : target;
+    rows.forEach((rest, index) => {
+      if (index === from) return;
+      rest.row.setAttribute("data-sliding", "");
+      const shift =
+        from < index && index <= to ? -height : to <= index && index < from ? height : 0;
+      if (shift) rest.row.style.transform = `translateY(${shift}px)`;
+      else rest.row.style.removeProperty("transform");
+    });
   }
 
   readonly #dropColumnDrag = (event: PointerEvent): void => {
     const drag = this.#columnDrag;
     if (!drag || event.pointerId !== drag.pointerId) return;
     if (drag.active) {
-      const rows = [...this.chooserPanel.querySelectorAll<HTMLElement>("[data-column-row]")];
-      const target = rows.find((row) => {
-        const box = row.getBoundingClientRect();
-        return (
-          event.clientX >= box.left &&
-          event.clientX < box.right &&
-          event.clientY >= box.top &&
-          event.clientY < box.bottom
-        );
-      });
-      const destination = target?.dataset.columnRow;
-      if (destination && target?.querySelector("[data-reorder]")) {
-        const movable = this.#orderedColumns().filter(
-          (column, index) => index > 0 && column.pinned !== "end",
-        );
-        const from = movable.findIndex((column) => column.key === drag.key);
-        const to = movable.findIndex((column) => column.key === destination);
-        if (from >= 0 && to >= 0) this.#moveColumn(drag.key, to - from);
-      }
+      this.#columnPoint = { x: event.clientX, y: event.clientY };
+      const rows = this.#restingColumnRows();
+      const from = rows.findIndex((rest) => rest.row.dataset.columnRow === drag.key);
+      const to = this.#columnDropIndex(rows);
+      this.#endColumnDrag();
+      if (from >= 0 && to >= 0) this.#moveColumn(drag.key, to - from);
+      return;
     }
     this.#endColumnDrag();
   };
@@ -1427,11 +1480,18 @@ export class WtDataTable<Row = unknown> extends LitElement {
     this.#edgeScroll.stop();
     if (this.#columnDrag?.active) releasePageCursor();
     this.#columnDrag = null;
-    this.columnDragPreview = null;
+    for (const row of this.chooserPanel?.querySelectorAll<HTMLElement>("[data-column-row]") ?? []) {
+      row.removeAttribute("data-dragging");
+      row.removeAttribute("data-sliding");
+      row.style.removeProperty("transform");
+    }
     document.removeEventListener("pointermove", this.#moveColumnDrag);
     document.removeEventListener("pointerup", this.#dropColumnDrag);
     document.removeEventListener("pointercancel", this.#cancelColumnDrag);
     document.removeEventListener("keydown", this.#columnDragKey, true);
+    for (const target of this.#columnScrollTargets)
+      target.removeEventListener("scroll", this.#scrollColumnDrag);
+    this.#columnScrollTargets = [];
   }
 
   #restoreColumnDefaults(): void {
@@ -2715,7 +2775,6 @@ export class WtDataTable<Row = unknown> extends LitElement {
                 data-column-row=${column.key}
                 ?data-fixed=${fixed}
                 ?data-unchoosable=${column.choosable === undefined}
-                ?data-drop-target=${this.columnDragPreview?.target === column.key}
               >
                 ${
                   fixed
@@ -2772,17 +2831,6 @@ export class WtDataTable<Row = unknown> extends LitElement {
             },
           )}
         </div>
-        ${
-          this.columnDragPreview
-            ? html`<div
-                class="column-drag-preview"
-                aria-hidden="true"
-                style=${`left: ${this.columnDragPreview.x}px; top: ${this.columnDragPreview.y}px`}
-              >
-                ${this.columns.find((column) => column.key === this.columnDragPreview?.key)?.label}
-              </div>`
-            : nothing
-        }
         <div class="column-move-status" role="status" aria-live="polite">
           ${this.columnMoveAnnouncement}
         </div>

@@ -120,16 +120,12 @@ function unload() {
   window.dispatchEvent(event);
   return event.defaultPrevented;
 }
-async function choose(app: LoginLeaveApp, decision: "keep" | "discard") {
-  const warning = app.shadowRoot!.querySelector("wt-unsaved-changes")!;
-  await expect.poll(() => warning.open).toBe(true);
-  await warning.updateComplete;
-  await userEvent.click(
-    warning
-      .shadowRoot!.querySelector(`[data-choice=${decision}]`)!
-      .shadowRoot!.querySelector("button")!,
-  );
-  await expect.poll(() => warning.open).toBe(false);
+function asked(app: LoginLeaveApp) {
+  return app.shadowRoot!.querySelector("wt-unsaved-changes")!.open;
+}
+async function settle(screen: Screen) {
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  await screen.updateComplete;
 }
 async function password(screen: Screen) {
   await change(screen, "email", "ada@example.test");
@@ -137,59 +133,46 @@ async function password(screen: Screen) {
   await expect.poll(() => screen.shadowRoot!.querySelector("[name=password]")).not.toBeNull();
 }
 
-it("clean email and a reverted value leave without a warning", async () => {
+it("typed email never installs the unload warning nor holds navigation", async () => {
   const { app, screen } = await mount();
   expect(unload()).toBe(false);
   await change(screen, "email", "draft@example.test");
-  expect(unload()).toBe(true);
-  await change(screen, "email", "");
   expect(unload()).toBe(false);
-  expect(await guard!.write("/manage/other")).toBe("proceeded");
   expect(app.leave.coordinator.isDirty()).toBe(false);
+  expect(await guard!.write("/manage/other")).toBe("proceeded");
+  expect(asked(app)).toBe(false);
 });
-it("email navigation keeps the submitted value until Discard and preserves history state", async () => {
+it("email navigation proceeds at once without touching the typed email and preserves history state", async () => {
   const { app, screen } = await mount();
   await change(screen, "email", "draft@example.test");
-  const kept = guard!.write("/manage/other");
-  await choose(app, "keep");
-  expect(await kept).toBe("kept");
-  expect(location.pathname).toBe("/manage/");
+  expect(await guard!.write("/manage/other")).toBe("proceeded");
+  expect(asked(app)).toBe(false);
+  expect(location.pathname).toBe("/manage/other");
   expect(value(screen, "email")).toBe("draft@example.test");
-  const discarded = guard!.write("/manage/other");
-  await choose(app, "discard");
-  expect(await discarded).toBe("proceeded");
-  expect(value(screen, "email")).toBe("");
   expect(history.state).toMatchObject({ external: "retained", __wtNavigation: expect.any(Object) });
 });
-it("Continue accepts the email without prompting; Change account protects only the new password", async () => {
+it("Change account with a typed password returns to an empty email step without asking", async () => {
   const { app, screen } = await mount();
   await password(screen);
-  expect(unload()).toBe(false);
   await change(screen, "password", "synthetic password");
+  expect(unload()).toBe(false);
   await click(screen, "change-account");
-  await choose(app, "keep");
-  expect(value(screen, "password")).toBe("synthetic password");
-  expect(value(screen, "chosen-email")).toBe("ada@example.test");
-  await click(screen, "change-account");
-  await choose(app, "discard");
   await expect.poll(() => screen.shadowRoot!.querySelector("[name=email]")).not.toBeNull();
+  expect(asked(app)).toBe(false);
   expect(value(screen, "email")).toBe("");
   expect(unload()).toBe(false);
 });
-it("switching to Google waits for Discard before redirecting", async () => {
+it("switching to Google with a typed password redirects without asking", async () => {
   const { app, screen } = await mount();
   await password(screen);
   await change(screen, "password", "synthetic password");
   await click(screen, "google-login");
-  await choose(app, "keep");
-  expect(app.navigated).toEqual([]);
-  expect(value(screen, "password")).toBe("synthetic password");
-  await click(screen, "google-login");
-  await choose(app, "discard");
   await expect.poll(() => app.navigated).toEqual(["https://accounts.example.test/login"]);
+  expect(asked(app)).toBe(false);
+  expect(value(screen, "password")).toBe("");
   expect(unload()).toBe(false);
 });
-it("a failed login stays dirty and keeps the unchanged request body", async () => {
+it("a failed login keeps the unchanged request body and Change account still leaves without asking", async () => {
   const bodies: unknown[] = [];
   const { app, screen } = await mount("/manage/", {
     login: async (body) => {
@@ -202,12 +185,12 @@ it("a failed login stays dirty and keeps the unchanged request body", async () =
   await click(screen, "submit");
   await expect.poll(() => screen.shadowRoot!.textContent).toContain(t("login.failed"));
   expect(bodies).toEqual([{ email: "ada@example.test", password: "synthetic password" }]);
-  expect(unload()).toBe(true);
+  expect(unload()).toBe(false);
   await click(screen, "change-account");
-  await choose(app, "keep");
-  expect(value(screen, "password")).toBe("synthetic password");
+  await expect.poll(() => screen.shadowRoot!.querySelector("[name=email]")).not.toBeNull();
+  expect(asked(app)).toBe(false);
 });
-it("successful login clears the warning before reporting the authenticated result", async () => {
+it("successful login reports the authenticated result with no unload warning", async () => {
   const { screen, logins } = await mount();
   await password(screen);
   await change(screen, "password", "synthetic password");
@@ -218,25 +201,22 @@ it("successful login clears the warning before reporting the authenticated resul
   expect(logins).toEqual([{ email: "ada@example.test", password: "synthetic password" }]);
 });
 it.each(["invitation", "password_reset"])(
-  "%s credentials protect Cancel; Keep retains the URL and Discard removes only the action",
+  "%s Cancel with typed credentials removes only the action without asking",
   async (purpose) => {
     const { app, screen } = await mount(`/manage/account?token=synthetic&purpose=${purpose}`);
     await change(screen, "new-password", "synthetic new password");
     if (purpose === "invitation") await change(screen, "new-pin", "4321");
+    expect(unload()).toBe(false);
     await click(screen, "cancel-account-action");
-    await choose(app, "keep");
-    expect(location.search).toContain("token=synthetic");
-    expect(value(screen, "new-password")).toBe("synthetic new password");
-    if (purpose === "invitation") expect(value(screen, "new-pin")).toBe("4321");
-    await click(screen, "cancel-account-action");
-    await choose(app, "discard");
     await expect.poll(() => screen.shadowRoot!.querySelector("[name=email]")).not.toBeNull();
+    expect(asked(app)).toBe(false);
     expect(location.pathname).toBe("/manage/");
     expect(location.search).toBe("");
+    expect(history.state).toMatchObject({ external: "retained" });
     expect(unload()).toBe(false);
   },
 );
-it("accepted account credentials are clean before leaving the action URL", async () => {
+it("accepted account credentials leave the action URL with no question or warning", async () => {
   const { app, screen, completions } = await mount(
     "/manage/account?token=synthetic&purpose=invitation",
   );
@@ -245,10 +225,10 @@ it("accepted account credentials are clean before leaving the action URL", async
   await click(screen, "complete-account");
   await expect.poll(() => screen.shadowRoot!.querySelector("[name=email]")).not.toBeNull();
   expect(completions).toEqual([["synthetic", "invitation", "synthetic new password", "4321"]]);
-  expect(app.shadowRoot!.querySelector("wt-unsaved-changes")!.open).toBe(false);
+  expect(asked(app)).toBe(false);
   expect(unload()).toBe(false);
 });
-it("Back from an entered factor and changing its mode protect its code", async () => {
+it("Back from an entered factor and changing its mode act at once and clear its code", async () => {
   const { app, screen } = await mount("/manage/", {
     login: async () => {
       throw { code: "totp.required" };
@@ -258,33 +238,38 @@ it("Back from an entered factor and changing its mode protect its code", async (
   await change(screen, "password", "synthetic password");
   await click(screen, "submit");
   await expect.poll(() => screen.shadowRoot!.querySelector("[name=one-time-code]")).not.toBeNull();
-  expect(unload()).toBe(false);
   await change(screen, "one-time-code", "123456");
+  expect(unload()).toBe(false);
   await click(screen, "switch-factor");
-  await choose(app, "keep");
-  expect(value(screen, "one-time-code")).toBe("123456");
+  await settle(screen);
+  expect(asked(app)).toBe(false);
+  expect(value(screen, "one-time-code")).toBe("");
+  expect(
+    screen.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>(
+      "wt-input[name=one-time-code]",
+    )!.label,
+  ).toBe(t("login.recovery_code"));
+  await change(screen, "one-time-code", "recovery-synthetic");
   await click(screen, "back-to-password");
-  await choose(app, "discard");
   await expect.poll(() => screen.shadowRoot!.querySelector("[name=password]")).not.toBeNull();
+  expect(asked(app)).toBe(false);
   expect(value(screen, "password")).toBe("synthetic password");
   expect(unload()).toBe(false);
 });
-it("disconnect invalidates an outstanding answer and clears typed secrets", async () => {
+it("disconnect clears typed secrets", async () => {
   const { app, screen } = await mount();
   await password(screen);
   await change(screen, "password", "synthetic password");
-  await click(screen, "change-account");
-  await expect.poll(() => app.shadowRoot!.querySelector("wt-unsaved-changes")!.open).toBe(true);
   screen.remove();
-  await expect.poll(() => app.shadowRoot!.querySelector("wt-unsaved-changes")!.open).toBe(false);
   await screen.updateComplete;
   expect(value(screen, "password")).toBe("");
   expect(app.leave.coordinator.isDirty()).toBe(false);
+  expect(asked(app)).toBe(false);
   expect(unload()).toBe(false);
 });
 
 it.each(["name", "code"])(
-  "optional passkey setup protects its edited %s before Skip",
+  "optional passkey setup with an edited %s signs in on Skip without asking",
   async (field) => {
     const { app, screen } = await mount("/manage/", {
       login: async () => ({ personId: "p1", offerPasskey: true }),
@@ -296,30 +281,22 @@ it.each(["name", "code"])(
     await change(screen, "password", "synthetic password");
     await click(screen, "submit");
     await expect.poll(() => screen.shadowRoot!.querySelector("[name=passkey-name]")).not.toBeNull();
-    expect(unload()).toBe(false);
     if (field === "code") {
       await click(screen, "setup-passkey");
       await expect
         .poll(() => screen.shadowRoot!.querySelector("[name=one-time-code]"))
         .not.toBeNull();
-      expect(unload()).toBe(false);
       await change(screen, "one-time-code", "123456");
     } else await change(screen, "passkey-name", "Synthetic laptop");
-    expect(unload()).toBe(true);
+    expect(unload()).toBe(false);
     const results: boolean[] = [];
     screen.addEventListener("logged-in", () => results.push(unload()));
     await click(screen, "skip-passkey");
-    await choose(app, "keep");
-    expect(value(screen, field === "code" ? "one-time-code" : "passkey-name")).toBe(
-      field === "code" ? "123456" : "Synthetic laptop",
-    );
-    expect(results).toEqual([]);
-    await click(screen, "skip-passkey");
-    await choose(app, "discard");
     await expect.poll(() => results).toEqual([false]);
+    expect(asked(app)).toBe(false);
   },
 );
-it("switching to a passkey does not open its native prompt until Discard", async () => {
+it("switching to a passkey opens its native prompt at once without asking", async () => {
   let prompts = 0;
   vi.spyOn(navigator.credentials, "get").mockImplementation(async () => {
     prompts++;
@@ -334,17 +311,13 @@ it("switching to a passkey does not open its native prompt until Discard", async
   await password(screen);
   await change(screen, "password", "synthetic password");
   await click(screen, "passkey-login");
-  await choose(app, "keep");
-  expect(prompts).toBe(0);
-  expect(value(screen, "password")).toBe("synthetic password");
-  await click(screen, "passkey-login");
-  await choose(app, "discard");
   await expect.poll(() => prompts).toBe(1);
+  expect(asked(app)).toBe(false);
   await expect.poll(() => screen.shadowRoot!.querySelector("[name=password]")).not.toBeNull();
   expect(value(screen, "password")).toBe("");
   expect(unload()).toBe(false);
 });
-it("an accepted account write commits its submitted snapshot, leaving later input dirty", async () => {
+it("an accepted account write moves on with the submitted values even after later input", async () => {
   const pending = deferred<{ personId: string; authenticated: boolean }>();
   const bodies: unknown[][] = [];
   const { app, screen } = await mount("/manage/account?token=synthetic&purpose=invitation", {
@@ -358,18 +331,15 @@ it("an accepted account write commits its submitted snapshot, leaving later inpu
   await click(screen, "complete-account");
   await change(screen, "new-password", "newer synthetic password");
   pending.resolve({ personId: "p1", authenticated: false });
-  await expect.poll(() => bodies.length).toBe(1);
-  await new Promise((resolve) => setTimeout(resolve, 0));
-  await screen.updateComplete;
-  expect(value(screen, "new-password")).toBe("newer synthetic password");
-  expect(unload()).toBe(true);
-  await click(screen, "cancel-account-action");
-  await choose(app, "keep");
+  await expect.poll(() => screen.shadowRoot!.querySelector("[name=email]")).not.toBeNull();
   expect(bodies).toEqual([["synthetic", "invitation", "submitted synthetic password", "4321"]]);
+  expect(location.search).toBe("");
+  expect(asked(app)).toBe(false);
+  expect(unload()).toBe(false);
 });
 it.each(["resolve", "reject"])(
   "a departed login %s cannot authenticate or replace a reconnected draft",
-  async (settle) => {
+  async (settlement) => {
     const pending = deferred<{ personId: string; offerPasskey: boolean }>();
     const { app, screen } = await mount("/manage/", { login: async () => pending.promise });
     await password(screen);
@@ -382,15 +352,14 @@ it.each(["resolve", "reject"])(
     parent.appendChild(screen);
     await screen.updateComplete;
     await change(screen, "password", "reconnected synthetic password");
-    if (settle === "resolve") pending.resolve({ personId: "p1", offerPasskey: false });
+    if (settlement === "resolve") pending.resolve({ personId: "p1", offerPasskey: false });
     else pending.reject({ code: "password.invalid" });
-    await new Promise((resolve) => setTimeout(resolve, 0));
-    await screen.updateComplete;
+    await settle(screen);
     expect(results).toEqual([]);
     expect(value(screen, "password")).toBe("reconnected synthetic password");
     expect(screen.shadowRoot!.textContent).not.toContain(t("login.failed"));
-    expect(app.leave.coordinator.isDirty()).toBe(true);
-    expect(unload()).toBe(true);
+    expect(app.leave.coordinator.isDirty()).toBe(false);
+    expect(unload()).toBe(false);
   },
 );
 it("a cancelled account inspection never reopens or changes the later login form", async () => {
@@ -408,14 +377,13 @@ it("a cancelled account inspection never reopens or changes the later login form
   await expect.poll(() => screen.shadowRoot!.querySelector("[name=email]")).not.toBeNull();
   await change(screen, "email", "later@example.test");
   inspection.resolve({ email: "departed@example.test", purpose: "invitation" });
-  await new Promise((resolve) => setTimeout(resolve, 0));
-  await screen.updateComplete;
+  await settle(screen);
   expect(value(screen, "email")).toBe("later@example.test");
   expect(screen.shadowRoot!.querySelector("[name=new-password]")).toBeNull();
-  expect(unload()).toBe(true);
+  expect(unload()).toBe(false);
 });
 
-it("requesting a reset protects a typed password before changing to the read-only notice", async () => {
+it("requesting a reset with a typed password changes to the read-only notice without asking", async () => {
   const resets: string[] = [];
   const { app, screen } = await mount("/manage/", {
     requestPasswordReset: async (email) => {
@@ -425,30 +393,26 @@ it("requesting a reset protects a typed password before changing to the read-onl
   await password(screen);
   await change(screen, "password", "synthetic password");
   await click(screen, "reset-by-email");
-  await choose(app, "keep");
-  expect(resets).toEqual([]);
-  expect(value(screen, "password")).toBe("synthetic password");
-  await click(screen, "reset-by-email");
-  await choose(app, "discard");
   await expect
     .poll(() => screen.shadowRoot!.querySelector("[data-test=reset-sent]"))
     .not.toBeNull();
+  expect(asked(app)).toBe(false);
   expect(resets).toEqual(["ada@example.test"]);
   expect(unload()).toBe(false);
 });
-it("Google's delayed reply protects input entered while the authorization request ran", async () => {
+it("Google's delayed reply redirects without asking about input entered while it ran", async () => {
   const reply = deferred<{ authorizationUrl: string }>();
   const { app, screen } = await mount("/manage/", { beginGoogleLogin: async () => reply.promise });
   await password(screen);
   await click(screen, "google-login");
   await change(screen, "password", "newer synthetic password");
   reply.resolve({ authorizationUrl: "https://accounts.example.test/login" });
-  await choose(app, "keep");
-  expect(app.navigated).toEqual([]);
-  expect(value(screen, "password")).toBe("newer synthetic password");
-  expect(unload()).toBe(true);
+  await expect.poll(() => app.navigated).toEqual(["https://accounts.example.test/login"]);
+  expect(asked(app)).toBe(false);
+  expect(value(screen, "password")).toBe("");
+  expect(unload()).toBe(false);
 });
-it("recovery-mode Discard clears only the code and sends the new recovery request unchanged", async () => {
+it("switching to recovery mode clears only the code and sends the new recovery request unchanged", async () => {
   const bodies: unknown[] = [];
   const { app, screen } = await mount("/manage/", {
     login: async (body) => {
@@ -463,7 +427,8 @@ it("recovery-mode Discard clears only the code and sends the new recovery reques
   await expect.poll(() => screen.shadowRoot!.querySelector("[name=one-time-code]")).not.toBeNull();
   await change(screen, "one-time-code", "123456");
   await click(screen, "switch-factor");
-  await choose(app, "discard");
+  await settle(screen);
+  expect(asked(app)).toBe(false);
   expect(value(screen, "one-time-code")).toBe("");
   expect(unload()).toBe(false);
   await change(screen, "one-time-code", "recovery-synthetic");
@@ -479,7 +444,7 @@ it("recovery-mode Discard clears only the code and sends the new recovery reques
   ]);
   expect(unload()).toBe(false);
 });
-it("a clean saved email is the initial baseline and password reverts remove unload handling", async () => {
+it("a saved email shows and a typed password never installs unload handling", async () => {
   localStorage.setItem(
     "waitron-login-preference",
     JSON.stringify({ email: "remembered@example.test", method: "password" }),
@@ -489,8 +454,6 @@ it("a clean saved email is the initial baseline and password reverts remove unlo
   expect(value(screen, "chosen-email")).toBe("remembered@example.test");
   expect(unload()).toBe(false);
   await change(screen, "password", "synthetic password");
-  expect(unload()).toBe(true);
-  await change(screen, "password", "");
   expect(unload()).toBe(false);
 });
 
@@ -525,7 +488,7 @@ function registrationApi(seen: Promise<void>, verifies: unknown[]): Partial<Dash
     passkeyOfferSeen: async () => seen,
   } as Partial<DashboardApi>;
 }
-it("a saved passkey name is clean before the offer bookkeeping answers", async () => {
+it("a saved passkey name is sent, with no unload warning, before the offer bookkeeping answers", async () => {
   const seen = deferred<void>();
   const verifies: unknown[] = [];
   const { screen } = await mount("/manage/", registrationApi(seen.promise, verifies));
@@ -547,7 +510,7 @@ it("a saved passkey name is clean before the offer bookkeeping answers", async (
 for (const locale of ["en-GB", "es-ES"])
   for (const theme of ["light", "dark"] as const)
     for (const width of [390, 1280])
-      it(`native login Keep/Escape/Discard, ${locale}, ${theme}, ${width}`, async () => {
+      it(`native Change account leaves a typed password without asking, ${locale}, ${theme}, ${width}`, async () => {
         setLocale(locale);
         await page.viewport(width, 900);
         const { app, screen } = await mount("/manage/", {}, theme);
@@ -559,37 +522,17 @@ for (const locale of ["en-GB", "es-ES"])
         await input.updateComplete;
         const native = input.shadowRoot!.querySelector("input")!;
         await userEvent.fill(native, "synthetic password");
+        expect(unload()).toBe(false);
         const cancel = control(screen, "change-account").shadowRoot!.querySelector("button")!;
         await userEvent.click(cancel);
-        const warning = app.shadowRoot!.querySelector("wt-unsaved-changes")!;
-        await expect.poll(() => warning.open).toBe(true);
-        await warning.updateComplete;
-        const keep = warning
-          .shadowRoot!.querySelector("[data-choice=keep]")!
-          .shadowRoot!.querySelector("button")!;
-        await expect.poll(() => keep.matches(":focus")).toBe(true);
-        await expectNoA11yViolations(warning);
-        await page.screenshot({
-          path: `__screenshots__/w69-login-look/${locale}-${theme}-${width}-warning.png`,
-        });
-        await userEvent.keyboard("{Escape}");
-        await expect.poll(() => warning.open).toBe(false);
-        expect(native.value).toBe("synthetic password");
-        await expect.poll(() => cancel.matches(":focus")).toBe(true);
-        await page.screenshot({
-          path: `__screenshots__/w69-login-look/${locale}-${theme}-${width}-kept.png`,
-        });
-        await userEvent.click(cancel);
-        await choose(app, "keep");
-        expect(native.value).toBe("synthetic password");
-        await userEvent.click(cancel);
-        await choose(app, "discard");
         await expect.poll(() => screen.shadowRoot!.querySelector("[name=email]")).not.toBeNull();
+        expect(asked(app)).toBe(false);
         expect(value(screen, "email")).toBe("");
+        await expectNoA11yViolations(screen);
         expect(unload()).toBe(false);
       });
 
-it("a later passkey name survives its earlier verification write", async () => {
+it("a passkey verified with its submitted name signs in even after the name was changed", async () => {
   const verify = deferred<{ credentialId: string }>();
   const requests: unknown[] = [];
   const { app, screen } = await mount("/manage/", {
@@ -607,21 +550,14 @@ it("a later passkey name survives its earlier verification write", async () => {
   await click(screen, "setup-passkey");
   await expect.poll(() => requests.length).toBe(1);
   await change(screen, "passkey-name", "Newer laptop");
+  const results: boolean[] = [];
+  screen.addEventListener("logged-in", () => results.push(unload()));
   verify.resolve({ credentialId: "synthetic-key" });
-  await new Promise((resolve) => setTimeout(resolve, 0));
-  await screen.updateComplete;
-  expect(
-    screen.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>("[name=passkey-name]")
-      ?.value,
-  ).toBe("Newer laptop");
-  expect(unload()).toBe(true);
-  await click(screen, "skip-passkey");
-  await choose(app, "keep");
+  await expect.poll(() => results).toEqual([false]);
   expect(requests).toEqual([expect.objectContaining({ name: "Submitted laptop" })]);
-  await change(screen, "passkey-name", "Submitted laptop");
-  expect(unload()).toBe(false);
+  expect(asked(app)).toBe(false);
 });
-it("a successful autofill passkey clears the email draft before the authenticated event", async () => {
+it("a successful autofill passkey sends the authenticated event with no unload warning", async () => {
   const credential = deferred<Credential | null>();
   vi.stubGlobal(
     "PublicKeyCredential",
@@ -657,7 +593,7 @@ it("a successful autofill passkey clears the email draft before the authenticate
 });
 
 it.each(["email", "password", "new-password", "new-pin", "one-time-code", "passkey-name"])(
-  "%s input installs the unload warning in the same event task",
+  "%s input never installs the unload warning nor holds navigation",
   async (name) => {
     const action = name.startsWith("new-");
     const { app, screen } = await mount(
@@ -687,10 +623,9 @@ it.each(["email", "password", "new-password", "new-pin", "one-time-code", "passk
         composed: true,
       }),
     );
-    expect(unload()).toBe(true);
-    const pending = guard!.write("/manage/other");
-    await choose(app, "keep");
-    expect(await pending).toBe("kept");
-    expect(location.pathname).toBe(action ? "/manage/account" : "/manage/");
+    expect(unload()).toBe(false);
+    expect(await guard!.write("/manage/other")).toBe("proceeded");
+    expect(asked(app)).toBe(false);
+    expect(location.pathname).toBe("/manage/other");
   },
 );
