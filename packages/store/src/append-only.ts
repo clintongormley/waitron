@@ -29,7 +29,7 @@ const PLAIN_IDENTIFIER = /^[A-Za-z_][A-Za-z0-9_]*$/;
 const suffix = "is append-only";
 
 /**
- * Makes every named table refuse an update and a delete, for good.
+ * Makes every named table refuse an update and a delete.
  *
  * `RAISE(ABORT, …)` in a `BEFORE` trigger backs out the STATEMENT it refused and nothing else: the
  * enclosing transaction stays open and usable, and earlier writes inside a savepoint are not rolled
@@ -46,9 +46,9 @@ const suffix = "is append-only";
  * `BEFORE DELETE` trigger and the row is silently rewritten; the other three shapes are refused
  * either way, so a suite that omits the replace case passes while that hole is open.
  *
- * **What this cannot refuse: `DROP TABLE`.** SQLite has no trigger event for it (and no
- * `TRUNCATE` statement at all). A caller that can issue DDL can drop the table; nothing in the
- * engine stops it.
+ * **What this cannot refuse: `DROP TABLE`, or a `DROP TRIGGER` of its own triggers.** SQLite has
+ * no trigger event for either (and no `TRUNCATE` statement at all). A caller that can issue DDL can
+ * drop the table or the triggers; nothing in the engine stops it.
  *
  * The names come from the caller: the tables a module declared with `appendOnly()`
  * (`@waitron/sync-enrolment`), carried set by set through `MigrationSet.appendOnlyTables` — NOT

@@ -345,7 +345,6 @@ export const OPERATOR_TEXT: Readonly<Partial<Record<RecoveryCode, OperatorText>>
     },
   },
   "append_only.triggers_changed": {
-    // No retry: migrating cannot replace a same-name trigger, so the next start finds it again.
     "en-GB": {
       title: "A safeguard on the box's permanent records was removed or changed.",
       action: "Ask whoever installed this box to look at it before anything else.",
@@ -475,8 +474,9 @@ ${lastFailure}<h2>${escapeHtml(page.logTail)}</h2>
 }
 
 /**
- * Served instead of trading once boot has failed past the retry threshold. The one action is retry:
- * there is no degraded-but-trading mode.
+ * Served instead of trading once boot has failed past the retry threshold, or on the first start
+ * after the running server stopped itself (`refused`). The one action is retry: there is no
+ * degraded-but-trading mode.
  */
 export function recoveryApp(deps: RecoveryDeps): Hono {
   const app = new Hono();

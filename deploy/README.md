@@ -181,10 +181,11 @@ goes with the old one, so read it before pulling a new image. The failed start's
 Some of the venue's records, such as its tax filings and staff clock-ins, must never be changed or
 deleted. The database enforces that with a pair of triggers on each of those tables: small rules
 stored in the database itself that reject every update and every delete. While a trigger is gone or
-changed, the records on its table can be changed too, so Waitron checks the triggers every 10 seconds
-while it is trading, and stops and shows this page when one is missing or its text has changed. A
-start checks them too: it first puts back any that are missing, then refuses to start if one has
-changed. Find out what changed a trigger before you go on.
+changed, the records on its table can be changed too, so Waitron checks the triggers every 10
+seconds while it is trading, and stops and shows this page when one is missing or its text has
+changed. A start checks them too: it first puts back any that are missing from a table that is still
+there, then refuses to start if one is still missing or has changed. Find out what changed a trigger
+before you go on.
 
 The page names the triggers, in two lists. `missing` holds the ones that were not there, and
 `altered` the ones whose text is not the text Waitron writes. Where they appear depends on when
@@ -196,9 +197,10 @@ Waitron noticed:
   count of failed starts, and has no "Why the last start failed" section. The names are in the log
   tail, on the line whose `event` is `append_only.triggers_changed`.
 
-A trigger in `missing` needs nothing from you. Press Retry, and the start that follows puts it back
-and carries on trading. That start also shows a warning, `append_only.triggers_restored`, among the
-dashboard's alerts until the next restart, so whoever reads the alerts knows it happened.
+A trigger in `missing` whose table is still there needs nothing from you. Press Retry, and the start
+that follows puts it back and carries on trading. That start also shows a warning,
+`append_only.triggers_restored`, among the dashboard's alerts until the next restart, so whoever
+reads the alerts knows it happened.
 
 A trigger in `altered` stays as it is through every start, so Retry alone brings you back to this
 page. Stop the app, drop each altered trigger by name, and start the app again. The command below

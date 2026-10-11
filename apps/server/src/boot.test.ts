@@ -4783,7 +4783,7 @@ describe("startServer — the append-only watch in trading mode", () => {
     ],
     ["dropped", `drop trigger ${UPDATE};`],
   ] as const) {
-    it(`keeps an untouched box trading, then stops it and refuses the next start when a trigger is ${what}`, async () => {
+    it(`keeps an untouched box trading, then stops it and records the refusal for the next start when a trigger is ${what}`, async () => {
       await withMockedKill(async (kills) => {
         const box = await startWatched();
         try {

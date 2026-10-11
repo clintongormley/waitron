@@ -502,6 +502,8 @@ called weaker than its name, the topic file lists what it does not see.
   `classify()`** — `applyMigrations` turns those declarations into a `RAISE(ABORT)` trigger pair,
   but only from a `migrationOptionsFor(...)` result; a plain options array gets none of those
   triggers, silently. **The CLASS is not the trigger set.** A trigger cannot refuse `DROP TABLE`.
+  A release that marks an EXISTING table `appendOnly()` says so in its PR description: a box's
+  first start on it can raise `append_only.triggers_restored`.
   Guards: `scripts/classification-complete.test.ts`, `scripts/append-only-triggers.test.ts` and
   `scripts/apply-migrations-callers.test.ts`, the last weaker than its name — it checks the call's
   shape, not the sets handed to it.
@@ -783,10 +785,10 @@ browser test** — most of these rules exist because a test passed while proving
   (`packages/fiscal-verifactu/src/classification.ts`, beside the two filing-case tables), so `applyMigrations` puts a `RAISE(ABORT)`
   trigger on its updates and its deletes. Do not work around them; a value written wrong there stays
   wrong. That trigger pair is the WHOLE of the enforcement — the engine has no permissions, and a
-  `DROP TABLE` is refused by nothing at all. A start (after migrating, which puts back a missing
-  trigger) and a 10 s check while trading refuse to trade on a missing or changed trigger
-  (`apps/server/src/append-only-watch.ts`) — weaker than its name: stored text only, and only the
-  tables the start migrated.
+  `DROP TABLE` is refused by nothing at all. A start (after migrating, which puts back a dropped
+  trigger whose table is still there) and a 10 s check while trading refuse to trade on a missing
+  or changed trigger (`apps/server/src/append-only-watch.ts`) — weaker than its name: stored text
+  only, and only the tables the start migrated.
 - **Never put our own metadata into a hash.** `entorno` is ours, not AEAT's; a test pins that two
   records differing only in it hash identically. In `computeHuella` it would make every chain
   unverifiable under the other environment.
