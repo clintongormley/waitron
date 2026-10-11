@@ -48,8 +48,8 @@ type NamedRow = {
 
 /**
  * For each enabled language, in the configuration's order, what has no customer-facing name in it.
- * A `partial` gap is one {@link listContentTranslationGaps} reports for that language, less the
- * left-out rows below; a non-default language also lists what has no customer-facing name at all
+ * A `partial` gap is one {@link listContentTranslationGaps} reports for that language; a
+ * non-default language also lists what has no customer-facing name at all
  * (`absent`), which shows the staff name there. An extras list's own name reaches no order or
  * receipt, so an absent one is never listed, and a unit has no staff name to stand in for its own.
  * An include's folder is never `absent`: fixing no name, it shows the included menu's own, listed
