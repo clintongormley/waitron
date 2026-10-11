@@ -1406,16 +1406,13 @@ _Formerly entries spread across the old sections, A261's venue-operations steps 
 
 _Formerly the kitchen entries in the opening part of the old Track A (before A1), and kitchen entries elsewhere; part of A9._ Detail: [backlog/kitchen.md](backlog/kitchen.md).
 
-- **A507. Prep stations made lighter: a Routes grid you can scan and search, the row menu on the
-  right, timings in the station dialog (owner, 2026-10-11).** The Routes grid loses its cell boxes,
-  its "N more products" counts and its parent paths; a routing set on a row is bold blue, an
-  inherited one grey, and a zone cell is blank unless what it inherits differs from the row's own
-  Every zone. Rows with their own routing show with every category above them, even inside a
-  closed category, and a search bar finds any category or product. The Stations table's row menu
-  moves to its own column on the right; the Settings tab's three timings move into each station's
-  edit dialog and the tab goes; the empty station cards under the grid go; the route-change
-  notice no longer asks for a product's own edit and summarises a category's. Takes in two older
-  Prep stations entries. Mockups:
+- **A507. Prep stations made lighter: a Routes grid you can scan and search, and a shorter
+  route-change notice (owner, 2026-10-11)** — left open by A507 part 1 (#1564). The Routes grid
+  loses its cell boxes, its "N more products" counts and its parent paths; a routing set on a row is
+  bold blue, an inherited one grey, and a zone cell is blank unless what it inherits differs from
+  the row's own Every zone. Rows with their own routing show with every category above them, even
+  inside a closed category, and a search bar finds any category or product. The route-change notice
+  no longer asks for a product's own edit and summarises a category's. Mockups:
   [docs/backlog/mockups/a507-prep-stations/](backlog/mockups/a507-prep-stations/).
   [Detail](backlog/kitchen.md#a507-prep-stations-made-lighter)
 
@@ -3173,6 +3170,22 @@ _Formerly A6, and the old Track C's payments items; part of A9._ Detail: [backlo
 ### Users, sign-in and the dashboard shell
 
 _Formerly A7, and the dashboard entries in the opening part of the old Track A (before A1); part of A9._ Detail: [backlog/dashboard.md](backlog/dashboard.md).
+
+- **A form's bottom message in a full-height dialog sits far above its buttons** (found by A507's
+  look, owner decision needed). `wt-modal` keeps standard and wide dialogs at full height
+  (`packages/ui/src/components/wt-modal.ts:17`) and `wt-dialog` puts the form's message at the end
+  of the body (`packages/ui/src/components/wt-dialog.ts:459`), so a short form leaves a gap of about
+  150 px between the message and the buttons (seen in the Prep stations station editor; the same at
+  main 8dcc265ae with a blank name). The Forms rule puts it "at the bottom of the form, above the
+  buttons — in a dialog, at the end of the dialog's body" (design-system.md → Forms), and in a
+  full-height dialog those are not the same place. Options: push the message to the bottom of the
+  body, or into the footer.
+
+- **A disabled primary button reads as clickable in dark** (found by A507's look). `wt-button` only
+  fades a disabled button (`packages/ui-core/src/components/wt-button.ts:44-45`, opacity
+  `--wt-opacity-disabled`), and on a dark surface a faded primary stays a solid mid-blue, so a Save
+  held back by an invalid field looks pressable (station editor, dark, 390 and 1280). Fix: a
+  disabled colour pair in the tokens, or a quiet style while disabled, plus a dark contrast test.
 
 - **In the Customise dialog, a released column row jumps into its slot instead of sliding.** The
   house rule for a dragged row (design-system.md, the `--wt-color-surface-lifted` paragraph) has it

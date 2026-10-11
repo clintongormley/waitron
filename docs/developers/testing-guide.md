@@ -1187,6 +1187,10 @@ answer.
 editor and its native Escape checks remain. The experiment below describes the earlier two-editor
 shape, rather than a deletion control for the current screen.
 
+**2026-10-11, A507 part 1:** the Settings tab is gone, and with it the minutes editor and
+`prep-stations-screen.settings-unsaved.test.ts`, so the command below no longer runs. The minutes
+are now edited in the station editor, a dialog rather than an inline editor.
+
 Receipt, 2026-10-10: the two Settings cell editors in
 `packages/venue-service/src/dashboard/prep-stations-screen.ts` (the fallback choice and the minutes
 fields) each call `event.preventDefault()` on Escape, and the case “native Escape keeps the Settings

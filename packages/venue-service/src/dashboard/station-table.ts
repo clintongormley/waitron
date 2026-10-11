@@ -38,7 +38,7 @@ export class StationTable extends LitElement {
         grid-template-columns: max-content minmax(0, 1fr);
         align-items: center;
       }
-      wt-data-table::part(station-name-actions) {
+      wt-data-table::part(station-name-handle) {
         display: inline-flex;
         align-items: center;
       }
@@ -50,7 +50,8 @@ export class StationTable extends LitElement {
         display: block;
         white-space: normal;
       }
-      wt-data-table::part(service-times) {
+      wt-data-table::part(service-times),
+      wt-data-table::part(devices-link) {
         color: var(--wt-color-primary-text);
       }
       wt-data-table::part(badge) {
@@ -61,16 +62,16 @@ export class StationTable extends LitElement {
   ];
   @property({ attribute: false }) statusNotes: Readonly<Record<string, string | TemplateResult>> =
     {};
+  @property({ attribute: false }) handles: Readonly<Record<string, TemplateResult>> = {};
   @property({ attribute: false }) actions: Readonly<Record<string, TemplateResult>> = {};
   @property({ attribute: false }) stations: readonly PrepStation[] = [];
-  /** Each station's printers and screens. */
-  @property({ attribute: false }) outputs?: Readonly<
+  @property({ attribute: false }) outputs: Readonly<
     Record<string, { printedOn: string | TemplateResult; shownOn: string | TemplateResult }>
-  >;
+  > = {};
 
   #name(station: PrepStation) {
     return html`<span part="station-name-content"
-      ><span part="station-name-actions">${this.actions[station.id] ?? nothing}</span
+      ><span part="station-name-handle">${this.handles[station.id] ?? nothing}</span
       ><span part="station-name-details"
         ><span part="name">${station.name}</span>
         ${station.isDefault ? html`<span part="badge">${t("prep.default")}</span>` : nothing}
@@ -83,26 +84,28 @@ export class StationTable extends LitElement {
     const outputs = this.outputs;
     return [
       { key: "name", label: t("prep.name"), cell: (station) => this.#name(station) },
-      ...(outputs
-        ? [
-            {
-              key: "printedOn",
-              label: t("prep.printed_on"),
-              cell: (station: PrepStation) =>
-                html`<span data-test=${`printed-on-${station.id}`}
-                  >${outputs[station.id]?.printedOn}</span
-                >`,
-            },
-            {
-              key: "shownOn",
-              label: t("prep.shown_on"),
-              cell: (station: PrepStation) =>
-                html`<span part="screens" data-test=${`screens-${station.id}`}
-                  >${outputs[station.id]?.shownOn}</span
-                >`,
-            },
-          ]
-        : []),
+      {
+        key: "printedOn",
+        label: t("prep.printed_on"),
+        cell: (station) =>
+          html`<span data-test=${`printed-on-${station.id}`}
+            >${outputs[station.id]?.printedOn}</span
+          >`,
+      },
+      {
+        key: "shownOn",
+        label: t("prep.shown_on"),
+        cell: (station) =>
+          html`<span part="screens" data-test=${`screens-${station.id}`}
+            >${outputs[station.id]?.shownOn}</span
+          >`,
+      },
+      {
+        key: "actions",
+        label: t("prep.actions"),
+        pinned: "end",
+        cell: (station) => this.actions[station.id] ?? nothing,
+      },
     ];
   }
   override render() {

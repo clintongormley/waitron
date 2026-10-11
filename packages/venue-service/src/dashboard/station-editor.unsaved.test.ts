@@ -16,6 +16,16 @@ class StationEditorLeaveApp extends LitElement {
           active: true,
           showsRestOfOrder: false,
           printerIds: ["epson"],
+          timingOverrides: {
+            warmAfterMinutes: null,
+            overdueAfterMinutes: 5,
+            forgottenAfterMinutes: null,
+          },
+          timingDefaults: {
+            warmAfterMinutes: 3,
+            overdueAfterMinutes: 10,
+            forgottenAfterMinutes: 15,
+          },
         }}
         .printers=${[
           { id: "epson", name: "Epson" },
@@ -167,4 +177,33 @@ it("busy and disconnected editors refuse a retained close guard", async () => {
   el.remove();
   await el.updateComplete;
   expect(await guard("cancel")).toBe(false);
+});
+
+async function setTiming(el: StationEditor, name: string, value: string) {
+  el.shadowRoot!.querySelector(`wt-input[name=${name}]`)!.dispatchEvent(
+    new CustomEvent("wt-change", { detail: { value } }),
+  );
+  await el.updateComplete;
+}
+
+it("asks when only a timing changed", async () => {
+  const el = await mount();
+  await setTiming(el, "warmAfterMinutes", "4");
+  expect(unload()).toBe(true);
+  const close = modal(el).requestClose("cancel");
+  await choose("keep");
+  expect(await close).toBe(false);
+});
+
+it("keeps a timing edit across removal and reconnect", async () => {
+  const el = await mount();
+  await setTiming(el, "warmAfterMinutes", "4");
+  await reconnect(el);
+  expect(
+    el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>(
+      "wt-input[name=warmAfterMinutes]",
+    )!.value,
+  ).toBe("4");
+  expect(save(el).variant).toBe("primary");
+  expect(unload()).toBe(true);
 });

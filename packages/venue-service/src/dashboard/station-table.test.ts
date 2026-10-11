@@ -20,7 +20,8 @@ type StationTable = HTMLElement & {
   stations: readonly PrepStation[];
   statusNotes: Record<string, string>;
   actions: Record<string, unknown>;
-  outputs?: Record<string, { printedOn: unknown; shownOn: unknown }>;
+  handles: Record<string, unknown>;
+  outputs: Record<string, { printedOn: unknown; shownOn: unknown }>;
 };
 async function mount(stations: readonly PrepStation[] = [bar], theme: "light" | "dark" = "light") {
   const host = document.createElement("div");
@@ -44,7 +45,7 @@ it("draws its rows from the stations list, with its daily status beside Name", a
   const el = await mount();
   expect(
     [...(table(el)?.querySelectorAll("thead th") ?? [])].map((th) => th.textContent?.trim()),
-  ).toEqual(["Name"]);
+  ).toEqual(["Name", "Printed on", "Shown on", "Actions"]);
   const rows = [...(table(el)?.querySelectorAll("tbody tr") ?? [])];
   expect(rows).toHaveLength(1);
   expect(rows[0]!.textContent).toContain("Bar");
@@ -53,20 +54,25 @@ it("draws its rows from the stations list, with its daily status beside Name", a
   expect(table(el)?.querySelector("button")).toBeNull();
   expect(el.shadowRoot?.textContent).not.toContain("Loading station health");
 });
-it("puts a manager's row actions before the station's name", async () => {
+it("puts the grip before the name and the row menu in its own Actions column, pinned to the end", async () => {
   const el = await mount();
+  el.handles = { bar: html`<button type="button" data-test="grip-bar">⠿</button>` };
   el.actions = { bar: html`<button type="button" data-test="menu-bar">⋮</button>` };
   await new Promise((resolve) => setTimeout(resolve, 0));
-  const row = table(el)!.querySelector("tbody tr")!;
-  expect(row.querySelector('[data-test="menu-bar"]')).not.toBeNull();
-  expect(row.querySelectorAll("button")).toHaveLength(1);
+  const cells = [...table(el)!.querySelectorAll("tbody tr td")];
+  expect(cells[0]!.querySelector('[data-test="grip-bar"]')).not.toBeNull();
+  expect(cells[0]!.querySelector('[data-test="menu-bar"]')).toBeNull();
+  const last = cells.at(-1)!;
+  expect(last.getAttribute("data-pinned")).toBe("end");
+  expect(last.querySelector('[data-test="menu-bar"]')).not.toBeNull();
+  expect(table(el)!.querySelectorAll("tbody tr button")).toHaveLength(2);
 });
 it("names its columns in Spanish, and says so when there are no stations", async () => {
   setLocale("es");
   const el = await mount();
   expect(
     [...(table(el)?.querySelectorAll("thead th") ?? [])].map((th) => th.textContent?.trim()),
-  ).toEqual(["Nombre"]);
+  ).toEqual(["Nombre", "Se imprime en", "Se muestra en", "Acciones"]);
   const empty = await mount([]);
   expect(table(empty)?.textContent).toContain("No hay estaciones de preparación");
 });
@@ -136,7 +142,7 @@ it("reads each station's printers and screens in Printed on and Shown on, beside
   const el = await mount();
   el.outputs = outputs;
   await new Promise((resolve) => setTimeout(resolve, 0));
-  expect(headings(el)).toEqual(["Name", "Printed on", "Shown on"]);
+  expect(headings(el)).toEqual(["Name", "Printed on", "Shown on", "Actions"]);
   const row = table(el)!.querySelector("tbody tr")!;
   expect(row.querySelector('[data-test="printed-on-bar"]')!.textContent?.trim()).toBe(
     "Epson, Star",
@@ -145,17 +151,13 @@ it("reads each station's printers and screens in Printed on and Shown on, beside
   expect(
     row.querySelectorAll("td")[0]!.querySelector('[part="station-status"]')!.textContent?.trim(),
   ).toBe("Closed for today → Grill");
-  el.outputs = undefined;
-  await new Promise((resolve) => setTimeout(resolve, 0));
-  expect(headings(el)).toEqual(["Name"]);
-  expect(table(el)!.querySelector('[data-test="printed-on-bar"]')).toBeNull();
 });
 it("names the read-out columns in Spanish", async () => {
   setLocale("es");
   const el = await mount();
   el.outputs = outputs;
   await new Promise((resolve) => setTimeout(resolve, 0));
-  expect(headings(el)).toEqual(["Nombre", "Se imprime en", "Se muestra en"]);
+  expect(headings(el)).toEqual(["Nombre", "Se imprime en", "Se muestra en", "Acciones"]);
 });
 it.each([
   ["en", 390],
@@ -170,7 +172,7 @@ it.each([
     await new Promise((resolve) => setTimeout(resolve, 0));
     await new Promise((resolve) => requestAnimationFrame(resolve));
     const summary = el.shadowRoot!.querySelector("wt-data-table")!;
-    expect(headings(el)).toHaveLength(3);
+    expect(headings(el)).toHaveLength(4);
     expect(summary.getBoundingClientRect().right).toBeLessThanOrEqual(width);
   } finally {
     await page.viewport(frame.width, frame.height);

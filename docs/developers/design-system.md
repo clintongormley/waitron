@@ -2061,9 +2061,9 @@ their existing validation and retry behavior. See the
 for each provider call path.
 
 Preparation stations' Save editors follow the rule too (A331 batch 4d; A366 slice 4 for the
-station and routing cell editors): Add station, the station editor, the routing cell editor,
-and Settings timing. Rest-of-order is edited in
-the station editor. Routing Confirm and station service operations remain actions.
+station and routing cell editors): Add station, the station editor and the routing cell editor.
+Rest-of-order and a station's three late-flag minutes are edited in the station editor. Routing
+Confirm and station service operations remain actions.
 
 The setup audit (A331 batch 6, 2026-10-08) found no stored-setting editor to adopt this gate.
 Admin, venue and certificate Next buttons continue the wizard; Connect adopts a primary with
@@ -3363,11 +3363,11 @@ leave that tab clear" cases in `packages/ui/src/components/wt-tabs.test.ts`). Hi
 remain mounted, so switching tabs retains their input values. Supply unique, nonempty keys and a
 localized `label` for the tab group.
 
-Prep stations uses `stations`, `routing` and `settings` at
-`/manage/prep-stations/view/<key>`; any other key, such as an old `tickets` or `watchers` address,
-opens Stations. Stations shows no live kitchen numbers: each station's name with its Default mark,
-Printed on (its printers, or "No printer") and Shown on (the devices whose kitchen screens show it,
-and a link to Devices).
+Prep stations uses `stations` and `routing` at `/manage/prep-stations/view/<key>`; any other key,
+such as an old `settings`, `tickets` or `watchers` address, opens Stations and replaces the address
+without adding a history entry. Stations shows no live kitchen numbers: each station's name with its
+Default mark, Printed on (its printers, or "No printer"), Shown on (the devices whose kitchen screens
+show it, and a link to Devices) and Actions, the row's menu.
 A closure note beside its name reads Closed for today and its destination;
 open and default stations need no closure note (`packages/venue-service/src/dashboard/station-table.ts`).
 Each active non-default station links to Opening hours with its station id.
@@ -3399,13 +3399,20 @@ what it inherits, with Save ready so it can be pinned, and names the inherited p
 copy. The default cell (All categories × Every zone) takes no period lines. A choice that moves
 products opens a preview listing each one with its old and new destination ("… during Lunch" for a
 period's move) before anything is saved; a choice that moves nothing saves at once. Edit, in a
-Stations row's menu, opens the station editor (`station-editor.ts`): name, Printers and "Show the
-rest of the order", saved in one request. Printers offers every active printer, shows a
+Stations row's menu, opens the station editor (`station-editor.ts`): name, Printers, the three
+late-flag minutes (Warm after, Overdue after and Forgotten after) and "Show the rest of the order".
+Save sends only what changed, in one request. A minutes field left blank follows the venue's
+Kitchen default, which it shows as its placeholder, and clearing one sends `null` so the station
+follows the default again. Save first checks that each filled minutes field is a whole number from
+1 to 2147483647 and that warm < overdue < forgotten, counting a blank field as its default; it
+marks the field that fails and stays disabled until that field is fixed. A refusal from the server
+that names a minutes field (`station.thresholds_invalid` or `management.request_invalid`) shows
+under that field. Printers offers every active printer, shows a
 disabled one as Disabled and lets it stay chosen only where the station already has it. The editor has
 a read-out for a person without `printer.manage`, which the screen cannot yet select. Add station
-also sets Printers. Settings edits each station value in
-its own cell, with blank late-flag overrides inheriting the venue's Kitchen defaults. Station Edit, Make default and
-Delete actions belong to the Stations row menu; Routing's All categories × Every zone cell
+also sets Printers. Station Edit, Make default and Delete actions belong to the Stations row menu,
+which has its own Actions column pinned to the end of the table, so it stays on screen on a phone;
+an active station's drag grip stays before its name. Routing's All categories × Every zone cell
 also sets the default station, for someone with `venue.configure`. The page is offered only to
 someone with `venue_service.manage`; a supervisor is not offered it.
 

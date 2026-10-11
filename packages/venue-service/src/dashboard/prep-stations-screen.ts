@@ -14,7 +14,6 @@ import {
   ReorderController,
   reorder,
   UrlStateController,
-  type DataTableColumn,
 } from "@waitron/ui";
 import {
   holdPageCursor,
@@ -22,8 +21,6 @@ import {
   pointerElementsAt,
 } from "@waitron/ui/src/reorder-table.js";
 import { keyed } from "lit/directives/keyed.js";
-import "@waitron/ui/src/components/wt-card.js";
-import "@waitron/ui/src/components/wt-data-table.js";
 import "@waitron/ui/src/components/wt-tabs.js";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-input.js";
@@ -85,24 +82,8 @@ type StationAction = {
 
 type Editor = { kind: "station" };
 type NewStation = StationInput & { printerIds: string[] };
-const PREP_TABS = ["stations", "routing", "settings"] as const;
+const PREP_TABS = ["stations", "routing"] as const;
 type PrepTab = (typeof PREP_TABS)[number];
-const TIMING_FIELDS = ["warmAfterMinutes", "overdueAfterMinutes", "forgottenAfterMinutes"] as const;
-type TimingField = (typeof TIMING_FIELDS)[number];
-const TIMING_LABELS = {
-  warmAfterMinutes: "prep.warm",
-  overdueAfterMinutes: "prep.overdue",
-  forgottenAfterMinutes: "prep.forgotten",
-} as const;
-
-type SettingsDraft = {
-  stationId: string;
-  field: TimingField;
-  value: string;
-  fieldError: string;
-  error: string;
-  attempted: boolean;
-};
 const sameAddress = (a: CellAddress, b: CellAddress) => cellKey(a) === cellKey(b);
 
 /** One line per active device whose kitchen screens show the station, naming those screens' kinds. */
@@ -142,34 +123,6 @@ export class PrepStationsScreen extends LitElement {
       wt-tabs::part(tab-actions) {
         max-width: 50%;
       }
-      wt-data-table::part(settings-cell) {
-        display: grid;
-        gap: var(--wt-space-2);
-        max-width: calc(var(--wt-tap-min) * 5);
-        white-space: normal;
-      }
-      wt-data-table::part(settings-rest) {
-        inline-size: calc(var(--wt-tap-min) * 5);
-        grid-template-columns: minmax(0, 1fr);
-      }
-      wt-data-table::part(cell-actions) {
-        display: flex;
-        flex-wrap: wrap;
-        gap: var(--wt-space-2);
-      }
-      wt-data-table::part(edit-printers) {
-        border: 0;
-        background: transparent;
-        color: var(--wt-color-primary-text);
-        font: inherit;
-        cursor: pointer;
-        min-height: var(--wt-tap-min);
-        padding: 0;
-        text-decoration: underline;
-      }
-      wt-data-table::part(inherited) {
-        --wt-color-text: var(--wt-color-text-muted);
-      }
       h1 {
         margin: 0;
       }
@@ -184,16 +137,9 @@ export class PrepStationsScreen extends LitElement {
         justify-content: space-between;
         margin-bottom: var(--wt-space-4);
       }
-      .cards,
       .form {
         display: grid;
         gap: var(--wt-space-4);
-      }
-      .cards {
-        grid-template-columns: repeat(auto-fit, minmax(min(100%, var(--wt-field-max-width)), 1fr));
-      }
-      .muted {
-        color: var(--wt-color-text-muted);
       }
       .error {
         color: var(--wt-color-danger);
@@ -208,8 +154,6 @@ export class PrepStationsScreen extends LitElement {
   ];
   @property({ attribute: false }) api!: PrepStationsApi;
   @state() private view?: PrepStationsView;
-  @state() private settingsEditor?: SettingsDraft;
-  @state() private settingsBusy = false;
   @state() private editor?: Editor;
   @state() private draft: NewStation = {
     name: "",
@@ -300,63 +244,7 @@ export class PrepStationsScreen extends LitElement {
       this.stationAction = { ...action, loading: false, readError: t("prep.delete_load_error") };
     },
   );
-  #settingsScope?: DraftScope<string>;
-  #settingsIdentity?: object;
   #leave?: LeaveCoordinator;
-
-  #settingsCurrent(identity: object | undefined): boolean {
-    return this.isConnected && identity === this.#settingsIdentity;
-  }
-  #settingsValue(editor: SettingsDraft): string {
-    const value = editor.value.trim();
-    return value === "" ? "" : Number.isFinite(Number(value)) ? String(Number(value)) : value;
-  }
-  #syncSettingsDraft(): void {
-    if (!this.settingsEditor) {
-      this.#settingsScope?.dispose();
-      this.#settingsScope = undefined;
-      this.#settingsIdentity = undefined;
-    } else if (!this.#settingsIdentity) {
-      const id = (this.#settingsIdentity = {});
-      this.#leave ??= leaveCoordinatorFor(this);
-      this.#settingsScope = draftScopeFor(this, {
-        id,
-        current: () => this.#settingsValue(this.settingsEditor!),
-        snapshot: (value) => value,
-        equal: (a, b) => a === b,
-        restore: (value) => {
-          if (this.settingsEditor) this.settingsEditor = { ...this.settingsEditor, value };
-        },
-      }).scope;
-    }
-  }
-  #leaveSettings(reason: LeaveReason, identity: object | undefined, proceed: () => void): void {
-    if (!this.#settingsCurrent(identity) || this.settingsBusy) return;
-    if (!this.#settingsScope || !this.#leave) proceed();
-    else
-      void this.#leave!.request({
-        scopes: [this.#settingsScope.id],
-        reason,
-        proceed: () => {
-          if (this.#settingsCurrent(identity) && !this.settingsBusy) proceed();
-        },
-      });
-  }
-  #openSettings(editor: SettingsDraft): void {
-    this.#leaveSettings("navigation", this.#settingsIdentity, () => {
-      this.#settingsScope?.dispose();
-      this.#settingsScope = undefined;
-      this.#settingsIdentity = undefined;
-      this.settingsEditor = editor;
-      this.#syncSettingsDraft();
-    });
-  }
-  #cancelSettings(reason: LeaveReason, identity: object | undefined): void {
-    this.#leaveSettings(reason, identity, () => {
-      this.settingsEditor = undefined;
-      this.#syncSettingsDraft();
-    });
-  }
 
   #syncStationDrafts(): void {
     if (this.editor?.kind !== "station") {
@@ -467,7 +355,6 @@ export class PrepStationsScreen extends LitElement {
       this.pending = undefined;
     }
     this.#syncStationDrafts();
-    this.#syncSettingsDraft();
     this.#syncCellDraft();
     const changedState = changed as Map<PropertyKey, unknown>;
     if (changedState.has("view") && this.#writtenChoice !== undefined) {
@@ -498,11 +385,6 @@ export class PrepStationsScreen extends LitElement {
     )
       this.busy = false;
     this.#closeStationAction();
-    this.settingsEditor = undefined;
-    this.settingsBusy = false;
-    this.#settingsScope?.dispose();
-    this.#settingsScope = undefined;
-    this.#settingsIdentity = undefined;
     this.#stationScope?.dispose();
     this.stationEditBusy = false;
     this.pending = undefined;
@@ -546,17 +428,6 @@ export class PrepStationsScreen extends LitElement {
             this.stationEdit = undefined;
             this.stationEditBusy = false;
             this.#stationEditRun++;
-          }
-          if (
-            this.settingsEditor &&
-            this.settingsEditor.stationId !== "defaults" &&
-            !value.stations.some(
-              (station) => station.active && station.id === this.settingsEditor!.stationId,
-            )
-          ) {
-            this.settingsEditor = undefined;
-            this.settingsBusy = false;
-            this.#syncSettingsDraft();
           }
           if (
             this.cellRefusal !== null &&
@@ -899,67 +770,68 @@ export class PrepStationsScreen extends LitElement {
     document.removeEventListener("pointercancel", this.#dropStationDrag);
     document.removeEventListener("keydown", this.#stationDragKey, true);
   }
-  #stationMenu(station: PrepStation) {
-    return html`${
-        station.active
-          ? html`<button
-              type="button"
-              part="station-grip"
-              data-test=${`drag-${station.id}`}
-              aria-label=${format("prep.reorder_station", { name: station.name })}
-              ?disabled=${this.busy}
-              @pointerdown=${(event: PointerEvent) => this.#startStationDrag(event, station.id)}
-              @keydown=${(event: KeyboardEvent) => {
-                const delta = event.key === "ArrowUp" ? -1 : event.key === "ArrowDown" ? 1 : 0;
-                if (!delta || this.busy) return;
-                event.preventDefault();
-                const order = this.#activeStationOrder();
-                if (this.#moveStation(station.id, order.indexOf(station.id) + delta))
-                  void this.#saveStationOrder(station.id);
-              }}
-            >
-              <wt-icon name="grip"></wt-icon>
-            </button>`
-          : nothing
-      }<wt-row-actions
-        data-station-id=${station.id}
-        data-test=${`station-menu-${station.id}`}
-        label=${format("prep.row_actions", { name: station.name })}
-      >
-        <wt-button
-          align="start"
-          data-test=${`edit-${station.id}`}
+  #stationGrip(station: PrepStation) {
+    return station.active
+      ? html`<button
+          type="button"
+          part="station-grip"
+          data-test=${`drag-${station.id}`}
+          aria-label=${format("prep.reorder_station", { name: station.name })}
           ?disabled=${this.busy}
-          @click=${() => {
-            this.stationEditBusy = false;
-            this.stationEditRefusal = undefined;
-            this.stationEdit = { token: {}, station };
+          @pointerdown=${(event: PointerEvent) => this.#startStationDrag(event, station.id)}
+          @keydown=${(event: KeyboardEvent) => {
+            const delta = event.key === "ArrowUp" ? -1 : event.key === "ArrowDown" ? 1 : 0;
+            if (!delta || this.busy) return;
+            event.preventDefault();
+            const order = this.#activeStationOrder();
+            if (this.#moveStation(station.id, order.indexOf(station.id) + delta))
+              void this.#saveStationOrder(station.id);
           }}
-          >${t("venue.edit")}</wt-button
         >
-        ${
-          station.active && !station.isDefault
-            ? html`<wt-button
-                align="start"
-                data-test=${`make-default-${station.id}`}
-                ?disabled=${this.busy}
-                @click=${() =>
-                  void this.#act(
-                    () => this.api.setDefaultStation(station.id),
-                    (error) => this.#defaultRefusal(error),
-                  )}
-                >${t("prep.make_default")}</wt-button
-              >`
-            : nothing
-        }
-        <wt-button
-          align="start"
-          data-test=${`delete-${station.id}`}
-          ?disabled=${this.busy}
-          @click=${() => void this.#openStationAction(station.id)}
-          >${t("prep.delete")}</wt-button
-        >
-      </wt-row-actions>`;
+          <wt-icon name="grip"></wt-icon>
+        </button>`
+      : nothing;
+  }
+  #stationMenu(station: PrepStation) {
+    return html`<wt-row-actions
+      data-station-id=${station.id}
+      data-test=${`station-menu-${station.id}`}
+      label=${format("prep.row_actions", { name: station.name })}
+    >
+      <wt-button
+        align="start"
+        data-test=${`edit-${station.id}`}
+        ?disabled=${this.busy}
+        @click=${() => {
+          this.stationEditBusy = false;
+          this.stationEditRefusal = undefined;
+          this.stationEdit = { token: {}, station };
+        }}
+        >${t("venue.edit")}</wt-button
+      >
+      ${
+        station.active && !station.isDefault
+          ? html`<wt-button
+              align="start"
+              data-test=${`make-default-${station.id}`}
+              ?disabled=${this.busy}
+              @click=${() =>
+                void this.#act(
+                  () => this.api.setDefaultStation(station.id),
+                  (error) => this.#defaultRefusal(error),
+                )}
+              >${t("prep.make_default")}</wt-button
+            >`
+          : nothing
+      }
+      <wt-button
+        align="start"
+        data-test=${`delete-${station.id}`}
+        ?disabled=${this.busy}
+        @click=${() => void this.#openStationAction(station.id)}
+        >${t("prep.delete")}</wt-button
+      >
+    </wt-row-actions>`;
   }
   #stationOutputs(view: PrepStationsView) {
     return Object.fromEntries(
@@ -972,7 +844,7 @@ export class PrepStationsScreen extends LitElement {
           {
             printedOn: printers.join(", ") || t("prep.no_printer"),
             shownOn: html`${screenDevices(view.devices, station.id)}
-              <a href="/manage/devices">${t("prep.devices")}</a>`,
+              <a part="devices-link" href="/manage/devices">${t("prep.devices")}</a>`,
           },
         ];
       }),
@@ -1048,6 +920,8 @@ export class PrepStationsScreen extends LitElement {
           active: station.active,
           showsRestOfOrder: station.showsRestOfOrder,
           printerIds: this.#printersOf(station.id),
+          timingOverrides: station.timingOverrides,
+          timingDefaults: station.timingDefaults,
         }}
         .printers=${this.view.printers}
         .canManagePrinters=${canManagePrinters}
@@ -1187,10 +1061,6 @@ export class PrepStationsScreen extends LitElement {
   }
   #stationGone(id: string) {
     if (this.stationEdit?.station.id === id) this.stationEdit = undefined;
-    if (this.settingsEditor?.stationId === id) {
-      this.settingsEditor = undefined;
-      this.#syncSettingsDraft();
-    }
     if (this.view)
       this.view = {
         ...this.view,
@@ -1209,16 +1079,6 @@ export class PrepStationsScreen extends LitElement {
       if (modal && !(await modal.requestClose("navigation"))) return;
       if (this.stationEdit && this.stationEdit.token !== opening) return;
       this.stationEdit = undefined;
-    }
-    if (this.settingsEditor?.stationId === id && this.#settingsScope && this.#leave) {
-      const outcome = await this.#leave.request({
-        scopes: [this.#settingsScope.id],
-        reason: "navigation",
-        proceed() {},
-      });
-      if (outcome !== "proceeded") return;
-      this.settingsEditor = undefined;
-      this.#syncSettingsDraft();
     }
     if (!this.isConnected || previous !== this.#stationActionIdentity) return;
     this.#closeStationAction();
@@ -1297,195 +1157,6 @@ export class PrepStationsScreen extends LitElement {
     if (!this.isConnected || identity !== this.#stationActionIdentity) return;
     this.#stationGone(id);
     await this.#load();
-  }
-  #stationCard(s: PrepStation) {
-    return html`<wt-card data-test=${`station-${s.id}`}
-      ><h2>
-        ${s.name} ${s.isDefault ? html`<span class="muted">${t("prep.default")}</span>` : nothing}
-      </h2>
-    </wt-card>`;
-  }
-  async #saveSettingsCell(identity: object | undefined) {
-    if (saveActionState(this.#settingsScope).unchanged) return;
-    const editor = this.settingsEditor;
-    if (!editor || !this.#settingsCurrent(identity) || this.settingsBusy) return;
-    const scope = this.#settingsScope;
-    const submitted = this.#settingsValue(editor);
-    this.settingsEditor = { ...editor, attempted: true };
-    if (this.#settingsInvalid()) {
-      await this.updateComplete;
-      const table = this.renderRoot.querySelector<LitElement>(
-        "wt-data-table[data-test=settings-table]",
-      );
-      if (table) await table.updateComplete;
-      table?.shadowRoot
-        ?.querySelector<HTMLElement>(
-          '[data-test="settings-choice"], [data-test="settings-minutes"]',
-        )
-        ?.focus();
-      return;
-    }
-    this.settingsBusy = true;
-    this.settingsEditor = { ...editor, fieldError: "", error: "" };
-    try {
-      await this.api.updateStation(editor.stationId, {
-        [editor.field]: editor.value.trim() === "" ? null : Number(editor.value),
-      });
-    } catch (error) {
-      if (!this.#settingsCurrent(identity)) return;
-      const code = codeOf(error);
-      if (code === "station.not_found") {
-        this.settingsBusy = false;
-        this.#stationGone(editor.stationId);
-        this.#showError(t("prep.station_not_found"));
-        void this.#load();
-        return;
-      }
-      const field = (error as { params?: { field?: string } })?.params?.field;
-      const fieldError = TIMING_FIELDS.includes(editor.field as TimingField)
-        ? code === "station.thresholds_invalid" ||
-          (code === "management.request_invalid" && field === editor.field)
-          ? t("prep.threshold_invalid")
-          : ""
-        : code === "management.request_invalid" && field === "showsRestOfOrder"
-          ? t("prep.save_error")
-          : "";
-      this.settingsEditor = {
-        ...editor,
-        fieldError,
-        error: fieldError ? "" : t("prep.save_error"),
-      };
-      this.settingsBusy = false;
-      return;
-    }
-    if (!this.#settingsCurrent(identity)) return;
-    scope?.commit(submitted);
-    this.settingsEditor = undefined;
-    this.#syncSettingsDraft();
-    this.settingsBusy = false;
-    await this.#load();
-  }
-  #settingsInvalid() {
-    const editor = this.settingsEditor;
-    if (!editor?.attempted) return "";
-    const station = this.view?.stations.find((s) => s.id === editor.stationId);
-    if (!station) return t("prep.save_error");
-    const value =
-      editor.value.trim() === "" ? station.timingDefaults[editor.field] : Number(editor.value);
-    const values = {
-      warmAfterMinutes: station.warmAfterMinutes,
-      overdueAfterMinutes: station.overdueAfterMinutes,
-      forgottenAfterMinutes: station.forgottenAfterMinutes,
-      [editor.field]: value,
-    };
-    return !Number.isInteger(value) ||
-      value < 1 ||
-      value > 2_147_483_647 ||
-      values.warmAfterMinutes >= values.overdueAfterMinutes ||
-      values.overdueAfterMinutes >= values.forgottenAfterMinutes
-      ? t("prep.threshold_invalid")
-      : "";
-  }
-  #timingCell(station: PrepStation, field: TimingField) {
-    const label = `${station.name}: ${t(TIMING_LABELS[field])}`;
-    const editor =
-      this.settingsEditor?.stationId === station.id && this.settingsEditor.field === field
-        ? this.settingsEditor
-        : undefined;
-    if (!editor)
-      return html`<wt-button
-        part=${station.timingOverrides[field] === null ? "inherited" : "timing-override"}
-        data-test=${`edit-settings-${field}-${station.id}`}
-        aria-label=${label}
-        ?disabled=${this.settingsBusy}
-        @click=${() => {
-          this.#openSettings({
-            stationId: station.id,
-            field,
-            value:
-              station.timingOverrides[field] === null ? "" : String(station.timingOverrides[field]),
-            fieldError: "",
-            error: "",
-            attempted: false,
-          });
-        }}
-        >${station[field]}</wt-button
-      >`;
-    const identity = this.#settingsIdentity;
-    const invalid = this.#settingsInvalid();
-    return html`<div
-      part="settings-cell"
-      @keydown=${(event: KeyboardEvent) => {
-        if (event.key === "Escape" && !this.settingsBusy) {
-          event.preventDefault();
-          event.stopPropagation();
-          this.#cancelSettings("escape", identity);
-        } else
-          submitOnEnter(
-            event,
-            (event.currentTarget as HTMLElement).querySelector("[data-test=save-settings-cell]"),
-          );
-      }}
-    >
-      <wt-input
-        data-test="settings-minutes"
-        name=${field}
-        label=${label}
-        type="number"
-        placeholder=${String(station.timingDefaults[field])}
-        hint=${t("prep.inherit_minutes")}
-        .value=${editor.value}
-        .error=${invalid || editor.fieldError}
-        .disabled=${this.settingsBusy}
-        @wt-change=${(event: CustomEvent<{ value: string }>) => {
-          event.stopPropagation();
-          if (!this.#settingsCurrent(identity) || this.settingsBusy) return;
-          this.settingsEditor = { ...editor, value: event.detail.value, fieldError: "", error: "" };
-          this.#settingsScope?.changed();
-        }}
-      ></wt-input>
-      <wt-form-actions .error=${invalid || editor.fieldError ? t("prep.fix_fields") : editor.error}>
-        <wt-button
-          slot="cancel"
-          variant="secondary"
-          data-test="cancel-settings-cell"
-          ?disabled=${this.settingsBusy}
-          @click=${() => this.#cancelSettings("cancel", identity)}
-          >${t("venue.cancel")}</wt-button
-        >
-        <wt-button
-          data-test="save-settings-cell"
-          variant=${saveActionState(this.#settingsScope).variant}
-          ?disabled=${saveActionState(this.#settingsScope).unchanged || this.settingsBusy || !!invalid}
-          @click=${() => void this.#saveSettingsCell(identity)}
-          >${t("venue.save")}</wt-button
-        >
-      </wt-form-actions>
-    </div>`;
-  }
-  #settings() {
-    const stations = this.view!.stations.filter((station) => station.active).sort(
-      (a, b) => a.displayOrder - b.displayOrder || a.name.localeCompare(b.name),
-    );
-    const columns: DataTableColumn<PrepStation>[] = [
-      {
-        key: "name",
-        label: t("prep.name"),
-        cell: (station) => html`<span part="station-name">${station.name}</span>`,
-      },
-      ...TIMING_FIELDS.map((field) => ({
-        key: field,
-        label: t(TIMING_LABELS[field]),
-        cell: (station: PrepStation) => this.#timingCell(station, field),
-      })),
-    ];
-    return html`<wt-data-table
-      data-test="settings-table"
-      label=${t("prep.tab.settings")}
-      .columns=${columns}
-      .rows=${stations}
-      .rowKey=${(station: PrepStation) => station.id}
-    ></wt-data-table>`;
   }
   #field(field: keyof StationInput, label: string, type = "number") {
     const identity = this.#stationIdentity;
@@ -1728,10 +1399,6 @@ export class PrepStationsScreen extends LitElement {
       ...source,
       stations: source.stations.filter((station) => station.active),
     };
-    const active =
-      view?.stations
-        .filter((s) => s.active)
-        .sort((a, b) => a.displayOrder - b.displayOrder || a.name.localeCompare(b.name)) ?? [];
     return html`<div class="toolbar">
         <h1>${t("prep.title")}</h1>
       </div>
@@ -1752,8 +1419,6 @@ export class PrepStationsScreen extends LitElement {
                   this.#url.write({ dashboard: "prep-stations", view: tab });
                 };
                 if (this.pending) this.#leaveCell("navigation", proceed);
-                else if (this.tab === "settings" && this.settingsEditor)
-                  this.#leaveSettings("navigation", this.#settingsIdentity, proceed);
                 else proceed();
               }}
             >
@@ -1780,6 +1445,7 @@ export class PrepStationsScreen extends LitElement {
                 </div>
                 <prep-station-table
                   .stations=${view.stations.map((station) => ({ ...station, displayOrder: this.stationOrder?.indexOf(station.id) ?? station.displayOrder }))}
+                  .handles=${Object.fromEntries(view.stations.map((station) => [station.id, this.#stationGrip(station)]))}
                   .actions=${Object.fromEntries(view.stations.map((station) => [station.id, this.#stationMenu(station)]))}
                   .outputs=${this.#stationOutputs(view)}
                   .statusNotes=${Object.fromEntries(
@@ -1803,9 +1469,7 @@ export class PrepStationsScreen extends LitElement {
                   @routing-draft-lost=${(event: CustomEvent<{ address: CellAddress }>) =>
                     this.#dropDraft(event.detail.address)}
                 ></venue-routing-grid>
-                <div class="cards">${active.map((s) => this.#stationCard(s))}</div>
               </div>
-              <div slot="settings">${this.#settings()}</div>
             </wt-tabs>`
           : nothing
       }${this.error && !this.editor ? html`<p class="error" role="alert">${this.error}</p>` : nothing}${this.#dialog()}${this.#previewDialog()}${this.#stationActionDialog()}${this.#stationEditor()}`;

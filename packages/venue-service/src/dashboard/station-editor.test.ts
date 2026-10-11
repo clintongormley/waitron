@@ -19,6 +19,8 @@ const GRILL: StationEditorStation = {
   active: true,
   showsRestOfOrder: false,
   printerIds: ["epson"],
+  timingOverrides: { warmAfterMinutes: null, overdueAfterMinutes: 12, forgottenAfterMinutes: null },
+  timingDefaults: { warmAfterMinutes: 5, overdueAfterMinutes: 10, forgottenAfterMinutes: 15 },
 };
 
 async function mount(
@@ -48,11 +50,17 @@ const printersField = (el: StationEditor) =>
   $<HTMLElementTagNameMap["wt-combobox"]>(el, "wt-combobox[name=printerIds]");
 const restSwitch = (el: StationEditor) =>
   $<HTMLElementTagNameMap["wt-switch"]>(el, "wt-switch[name=showsRestOfOrder]")!;
+const timingField = (el: StationEditor, name: string) =>
+  $<HTMLElementTagNameMap["wt-input"]>(el, `wt-input[name=${name}]`)!;
 const formMessage = (el: StationEditor) =>
   $<HTMLElementTagNameMap["wt-form-actions"]>(el, "wt-form-actions")!.error;
 
 async function rename(el: StationEditor, value: string) {
   nameField(el).dispatchEvent(new CustomEvent("wt-change", { detail: { value } }));
+  await el.updateComplete;
+}
+async function setTiming(el: StationEditor, name: string, value: string) {
+  timingField(el, name).dispatchEvent(new CustomEvent("wt-change", { detail: { value } }));
   await el.updateComplete;
 }
 async function pickPrinters(el: StationEditor, values: string[]) {
@@ -292,4 +300,178 @@ it("keeps a printer choice it can no longer send out of the save when the statio
   expect(seen).toEqual([{ name: "Hot grill" }]);
   expect(el.saved()).toBe(false);
   expect(el.dirty).toBe(true);
+});
+
+const TIMINGS = ["warmAfterMinutes", "overdueAfterMinutes", "forgottenAfterMinutes"] as const;
+const NO_OVERRIDES = {
+  warmAfterMinutes: null,
+  overdueAfterMinutes: null,
+  forgottenAfterMinutes: null,
+};
+
+it("opens each timing empty when inherited, the venue default as its placeholder, and filled when overridden", async () => {
+  const el = await mount();
+  expect(TIMINGS.map((name) => timingField(el, name).value)).toEqual(["", "12", ""]);
+  expect(TIMINGS.map((name) => timingField(el, name).placeholder)).toEqual(["5", "10", "15"]);
+  expect(TIMINGS.map((name) => timingField(el, name).label)).toEqual([
+    "Warm after (min)",
+    "Overdue after (min)",
+    "Forgotten after (min)",
+  ]);
+  for (const name of TIMINGS) {
+    expect(timingField(el, name).required).toBe(false);
+    expect(timingField(el, name).type).toBe("number");
+    expect(timingField(el, name).hint).toBe("Leave blank to use the venue default.");
+  }
+});
+
+it("sends a typed timing, a cleared override as null, and an override equal to its default", async () => {
+  const el = await mount();
+  const seen = saves(el);
+  await setTiming(el, "warmAfterMinutes", "3");
+  await save(el);
+  expect(el.saved()).toBe(true);
+  const again = await mount();
+  const seenAgain = saves(again);
+  await setTiming(again, "overdueAfterMinutes", "");
+  await setTiming(again, "warmAfterMinutes", "5");
+  await save(again);
+  expect(seen).toEqual([{ warmAfterMinutes: 3 }]);
+  expect(seenAgain).toEqual([{ warmAfterMinutes: 5, overdueAfterMinutes: null }]);
+});
+
+it("sends a rename and a timing in one save", async () => {
+  const el = await mount();
+  const seen = saves(el);
+  await rename(el, "Pass");
+  await setTiming(el, "forgottenAfterMinutes", "20");
+  await save(el);
+  expect(seen).toEqual([{ name: "Pass", forgottenAfterMinutes: 20 }]);
+});
+
+it.each(["0", "1.5", "abc", "2147483648"])(
+  "marks Warm for %s, explains it at the bottom, sends nothing and focuses it",
+  async (value) => {
+    const el = await mount();
+    const seen = saves(el);
+    await setTiming(el, "warmAfterMinutes", value);
+    await save(el);
+    expect(seen).toEqual([]);
+    expect(timingField(el, "warmAfterMinutes").error).toBe(
+      "Use whole minutes with warm < overdue < forgotten.",
+    );
+    expect(timingField(el, "overdueAfterMinutes").error).toBe("");
+    expect(formMessage(el)).toBe("Correct the highlighted fields to continue.");
+    const button = $<HTMLElementTagNameMap["wt-button"]>(el, "[data-test=save-station-edit]")!;
+    expect(button.disabled).toBe(true);
+    await expect.poll(() => el.shadowRoot!.activeElement).toBe(timingField(el, "warmAfterMinutes"));
+    await setTiming(el, "warmAfterMinutes", "4");
+    expect(timingField(el, "warmAfterMinutes").error).toBe("");
+    expect(formMessage(el)).toBe("");
+    expect(button.disabled).toBe(false);
+    await save(el);
+    expect(seen).toEqual([{ warmAfterMinutes: 4 }]);
+  },
+);
+
+it("holds the timings in order, reading a blank one as its default", async () => {
+  const el = await mount({ ...GRILL, timingOverrides: NO_OVERRIDES });
+  const seen = saves(el);
+  await setTiming(el, "warmAfterMinutes", "9");
+  await save(el);
+  expect(seen).toEqual([{ warmAfterMinutes: 9 }]);
+
+  const warm = await mount({ ...GRILL, timingOverrides: NO_OVERRIDES });
+  await setTiming(warm, "warmAfterMinutes", "10");
+  await save(warm);
+  expect(timingField(warm, "warmAfterMinutes").error).toBe("");
+  expect(timingField(warm, "overdueAfterMinutes").error).toBe(
+    "Use whole minutes with warm < overdue < forgotten.",
+  );
+
+  const forgotten = await mount({ ...GRILL, timingOverrides: NO_OVERRIDES });
+  await setTiming(forgotten, "overdueAfterMinutes", "11");
+  await setTiming(forgotten, "forgottenAfterMinutes", "10");
+  await save(forgotten);
+  expect(timingField(forgotten, "overdueAfterMinutes").error).toBe("");
+  expect(timingField(forgotten, "forgottenAfterMinutes").error).toBe(
+    "Use whole minutes with warm < overdue < forgotten.",
+  );
+});
+
+it.each([
+  ["station.thresholds_invalid", "overdueAfterMinutes"],
+  ["management.request_invalid", "forgottenAfterMinutes"],
+] as const)("puts a %s refusal naming %s under that field", async (code, field) => {
+  const el = await mount();
+  await setTiming(el, "warmAfterMinutes", "3");
+  el.refusal = { code, params: { field } };
+  await el.updateComplete;
+  expect(timingField(el, field).error).toBe("Use whole minutes with warm < overdue < forgotten.");
+  expect(nameField(el).error).toBe("");
+  expect(formMessage(el)).toBe("Correct the highlighted fields to continue.");
+  expect($<HTMLElementTagNameMap["wt-button"]>(el, "[data-test=save-station-edit]")!.disabled).toBe(
+    false,
+  );
+});
+
+it("puts a connection failure at the bottom only, marking no timing", async () => {
+  const el = await mount();
+  await setTiming(el, "warmAfterMinutes", "3");
+  el.refusal = { code: "connection.failed" };
+  await el.updateComplete;
+  expect(TIMINGS.map((name) => timingField(el, name).error)).toEqual(["", "", ""]);
+  expect(formMessage(el)).toBe("The change could not be saved.");
+});
+
+it("follows a venue-default change while open and keeps a typed override", async () => {
+  const el = await mount();
+  await setTiming(el, "warmAfterMinutes", "3");
+  el.station = {
+    ...GRILL,
+    timingDefaults: { warmAfterMinutes: 6, overdueAfterMinutes: 11, forgottenAfterMinutes: 30 },
+  };
+  await el.updateComplete;
+  expect(TIMINGS.map((name) => timingField(el, name).placeholder)).toEqual(["6", "11", "30"]);
+  expect(timingField(el, "warmAfterMinutes").value).toBe("3");
+  expect(el.dirty).toBe(true);
+});
+
+it("reads the timings in Spanish", async () => {
+  const el = await mount(GRILL, { locale: "es" });
+  expect(TIMINGS.map((name) => timingField(el, name).label)).toEqual([
+    "Aviso a partir de (min)",
+    "Atraso a partir de (min)",
+    "Olvido a partir de (min)",
+  ]);
+  await setTiming(el, "warmAfterMinutes", "0");
+  await save(el);
+  expect(timingField(el, "warmAfterMinutes").error).toBe(
+    "Usa minutos enteros con aviso < atraso < olvido.",
+  );
+  expect(timingField(el, "warmAfterMinutes").hint).toBe(
+    "Deja el campo vacío para usar el valor del local.",
+  );
+});
+
+it("explains timings out of order in Spanish beside the field and at the bottom, and sends nothing", async () => {
+  const el = await mount({ ...GRILL, timingOverrides: NO_OVERRIDES }, { locale: "es" });
+  const seen = saves(el);
+  await setTiming(el, "warmAfterMinutes", "10");
+  await save(el);
+  expect(seen).toEqual([]);
+  expect(timingField(el, "warmAfterMinutes").error).toBe("");
+  expect(timingField(el, "overdueAfterMinutes").error).toBe(
+    "Usa minutos enteros con aviso < atraso < olvido.",
+  );
+  expect(formMessage(el)).toBe("Corrige los campos marcados para continuar.");
+  const button = $<HTMLElementTagNameMap["wt-button"]>(el, "[data-test=save-station-edit]")!;
+  expect(button.disabled).toBe(true);
+  await expect
+    .poll(() => el.shadowRoot!.activeElement)
+    .toBe(timingField(el, "overdueAfterMinutes"));
+  await setTiming(el, "warmAfterMinutes", "9");
+  expect(timingField(el, "overdueAfterMinutes").error).toBe("");
+  expect(formMessage(el)).toBe("");
+  expect(button.disabled).toBe(false);
 });

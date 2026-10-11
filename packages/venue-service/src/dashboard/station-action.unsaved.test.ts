@@ -50,6 +50,17 @@ async function edit(screen: PrepStationsScreen) {
   await editor.updateComplete;
   return editor;
 }
+async function editTiming(screen: PrepStationsScreen) {
+  table(screen).querySelector<HTMLElement>('[data-test="edit-bar"]')!.click();
+  await screen.updateComplete;
+  const editor = screen.shadowRoot!.querySelector("prep-station-editor")!;
+  await editor.updateComplete;
+  editor
+    .shadowRoot!.querySelector('wt-input[name="warmAfterMinutes"]')!
+    .dispatchEvent(new CustomEvent("wt-change", { detail: { value: "7" } }));
+  await editor.updateComplete;
+  return editor;
+}
 it.each(["cancel", "escape"])(
   "Delete's clean confirmation closes on %s without creating a disposition draft",
   async (route) => {
@@ -109,31 +120,12 @@ it("a remote deletion releases its timing draft and ignores the departed Save", 
   const liveData = new LiveData();
   const load = vi.fn().mockResolvedValue(stationView);
   const { screen, api } = await mount({ liveData, load, updateStation: vi.fn() });
-  screen
-    .shadowRoot!.querySelector("wt-tabs")!
-    .dispatchEvent(new CustomEvent("wt-tab-change", { detail: { value: "settings" } }));
-  await screen.updateComplete;
-  const settings = screen.shadowRoot!.querySelector('[data-test="settings-table"]')!.shadowRoot!;
-  settings.querySelector<HTMLElement>('[data-test="edit-settings-warmAfterMinutes-bar"]')!.click();
-  await screen.updateComplete;
-  const field = screen
-    .shadowRoot!.querySelector('[data-test="settings-table"]')!
-    .shadowRoot!.querySelector("wt-input")!;
-  field.dispatchEvent(new CustomEvent("wt-change", { detail: { value: "7" } }));
-  await screen.updateComplete;
-  const oldSave = screen
-    .shadowRoot!.querySelector('[data-test="settings-table"]')!
-    .shadowRoot!.querySelector<HTMLElement>('[data-test="save-settings-cell"]')!;
+  const editor = await editTiming(screen);
+  const oldSave = editor.shadowRoot!.querySelector<HTMLElement>('[data-test="save-station-edit"]')!;
   expect(unload()).toBe(true);
   load.mockResolvedValue({ ...stationView, stations: [] });
   liveData.invalidate([{ type: "kitchen_stations", id: "bar" }]);
-  await expect
-    .poll(() =>
-      screen
-        .shadowRoot!.querySelector('[data-test="settings-table"]')!
-        .shadowRoot!.querySelector("wt-input"),
-    )
-    .toBeNull();
+  await expect.poll(() => screen.shadowRoot!.querySelector("prep-station-editor")).toBeNull();
   expect(unload()).toBe(false);
   oldSave.click();
   expect(api.updateStation).not.toHaveBeenCalled();
@@ -199,30 +191,13 @@ it("station.not_found from an editor write closes that target and releases its d
   expect(unload()).toBe(false);
   expect(api.updateStation).toHaveBeenCalledExactlyOnceWith("bar", { name: "Changed bar" });
 });
-it("station.not_found from a timing write closes only that cell and releases its draft", async () => {
+it("station.not_found from a timing write closes the editor and releases its draft", async () => {
   const { screen, api } = await mount({
     updateStation: vi.fn().mockRejectedValue({ code: "station.not_found" }),
   });
-  screen
-    .shadowRoot!.querySelector("wt-tabs")!
-    .dispatchEvent(new CustomEvent("wt-tab-change", { detail: { value: "settings" } }));
-  await screen.updateComplete;
-  const settings = screen.shadowRoot!.querySelector('[data-test="settings-table"]')!.shadowRoot!;
-  settings.querySelector<HTMLElement>('[data-test="edit-settings-warmAfterMinutes-bar"]')!.click();
-  await screen.updateComplete;
-  const current = screen.shadowRoot!.querySelector('[data-test="settings-table"]')!.shadowRoot!;
-  current
-    .querySelector("wt-input")!
-    .dispatchEvent(new CustomEvent("wt-change", { detail: { value: "7" } }));
-  await screen.updateComplete;
-  current.querySelector<HTMLElement>('[data-test="save-settings-cell"]')!.click();
-  await expect
-    .poll(() =>
-      screen
-        .shadowRoot!.querySelector('[data-test="settings-table"]')!
-        .shadowRoot!.querySelector("wt-input"),
-    )
-    .toBeNull();
+  const editor = await editTiming(screen);
+  editor.shadowRoot!.querySelector<HTMLElement>('[data-test="save-station-edit"]')!.click();
+  await expect.poll(() => screen.shadowRoot!.querySelector("prep-station-editor")).toBeNull();
   expect(unload()).toBe(false);
   expect(api.updateStation).toHaveBeenCalledExactlyOnceWith("bar", { warmAfterMinutes: 7 });
 });

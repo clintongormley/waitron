@@ -1914,6 +1914,47 @@ describe("/management-api/stations (KDS-1 config)", () => {
       expect(await printersOf(id)).toEqual([a, b].sort());
     });
 
+    it("PATCH writes name, timings and printers together or not at all", async () => {
+      const original = unique("Atomic");
+      const id = await createStation(original);
+      const timing = () =>
+        suite.db.select().from(kitchenStationTiming).where(eq(kitchenStationTiming.stationId, id));
+      const missing = randomUUID();
+      const refused = await patch(id, {
+        name: unique("Atomic refused"),
+        warmAfterMinutes: 3,
+        overdueAfterMinutes: 8,
+        printerIds: [missing],
+      });
+      expect(refused.status).toBe(404);
+      expect(await refused.json()).toMatchObject({
+        error: { code: "printer.not_found", params: { id: missing } },
+      });
+      expect(await stationName(id)).toBe(original);
+      expect(await timing()).toEqual([]);
+      expect(await printersOf(id)).toEqual([]);
+
+      const printer = await addPrinter();
+      const renamed = unique("Atomic saved");
+      const saved = await patch(id, {
+        name: renamed,
+        warmAfterMinutes: 3,
+        overdueAfterMinutes: 8,
+        printerIds: [printer],
+      });
+      expect(saved.status).toBe(204);
+      expect(await stationName(id)).toBe(renamed);
+      expect(await timing()).toEqual([
+        {
+          stationId: id,
+          warmAfterMinutes: 3,
+          overdueAfterMinutes: 8,
+          forgottenAfterMinutes: null,
+        },
+      ]);
+      expect(await printersOf(id)).toEqual([printer]);
+    });
+
     it("a PATCH carrying only printerIds is a change: it replaces the station's printers", async () => {
       const id = await createStation(unique("Fryer"));
       const [a, b] = [await addPrinter(), await addPrinter()];
