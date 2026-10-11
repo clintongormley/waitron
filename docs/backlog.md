@@ -1552,6 +1552,12 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   uses (`readRoutingUses`, `packages/venue-service/src/menu-timetable.ts`), re-read on any product
   or category change, for the period delete warning alone. Work each out only where it is used.
 
+- **A selected tab that grows while its strip keeps its width is not scrolled back into view**
+  (`packages/ui/src/components/wt-tabs.ts`) — left open by A487a (#1540): a late font load or a
+  longer label can leave it cut at the strip's edge, and `main` before #1540 behaved the same. Since
+  #1540 the fade is resized when the tab grows; scrolling it back was not added because doing so
+  broke the "leaves a strip the reader scrolled where it is when only its height changes" case.
+
 - **`PUT /management-api/stations/:sid/printers` (`apps/server/src/print-api.ts`) has no dashboard caller** since A366 slice 4 Part A
   moved a station's printers into the station save; `parseStationPrinterIds`
   (`apps/server/src/management-api.ts`) repeats its checks. Decide whether to remove the route.
