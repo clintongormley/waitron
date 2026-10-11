@@ -3,7 +3,7 @@ import jsQR from "jsqr";
 import { getDocument } from "pdfjs-dist/legacy/build/pdf.mjs";
 import { describe, expect, it } from "vitest";
 import { FULL_INVOICE_DOCUMENT_FIXTURE as fixture } from "./testing/full-invoice-fixture.js";
-import { layoutInvoicePages } from "./invoice-page.js";
+import { layoutInvoicePages, type InvoicePageElement } from "./invoice-page.js";
 import type { ReceiptDocumentInput } from "./receipt-document.js";
 
 async function rendered(input: ReceiptDocumentInput = fixture) {
@@ -244,5 +244,78 @@ describe("A4 optional address and logo controls", () => {
         .flatMap((page) => page.elements)
         .filter((element) => element.kind === "logo"),
     ).toEqual([]);
+  });
+});
+
+describe("A4 line above the total and space around the logo", () => {
+  const LINE = 14;
+  const logo = { widthDots: 80, heightDots: 40, bits: new Uint8Array(400).fill(255) };
+  const textAt = (elements: InvoicePageElement[], start: string) =>
+    elements.find((element) => element.kind === "text" && element.text.startsWith(start));
+
+  it("puts one rule across the content width directly above TOTAL", () => {
+    const elements = layoutInvoicePages(fixture)[0]!.elements;
+    const total = elements.findIndex(
+      (element) => element.kind === "text" && element.text.startsWith("TOTAL"),
+    );
+    const rule = elements[total - 1];
+    expect(elements.filter((element) => element.kind === "rule")).toHaveLength(1);
+    if (rule?.kind !== "rule") throw new Error(`expected a rule before TOTAL, got ${rule?.kind}`);
+    expect(rule.x).toBe(36);
+    expect(rule.width).toBeCloseTo(595.28 - 72, 2);
+    expect(rule.thickness).toBeGreaterThan(0);
+    expect(rule.thickness).toBeLessThanOrEqual(1);
+    const above = elements[total - 2]!;
+    expect(above.kind).toBe("text");
+    expect(rule.y).toBeGreaterThan(above.y + LINE - 1);
+    expect(rule.y + rule.thickness).toBeLessThan(elements[total]!.y);
+  });
+
+  it("draws the rule as a dark line in the PDF and never as a QR", async () => {
+    const input = { ...fixture, result: { ...fixture.result, qr: "" } };
+    const rule = layoutInvoicePages(input)[0]!.elements.find((element) => element.kind === "rule");
+    if (rule?.kind !== "rule") throw new Error("Missing rule");
+    const { pages } = await rendered(input);
+    const page = pages[0]!;
+    expect(page.qr).toBeNull();
+    const row = Math.floor((rule.y + rule.thickness / 2) * 2);
+    const dark = (x: number) => page.pixels.data[(row * page.pixels.width + x) * 4]! < 128;
+    let drawn = 0;
+    for (let x = 36 * 2 + 2; x < (595.28 - 36) * 2 - 2; x++) if (dark(x)) drawn++;
+    expect(drawn).toBe(Math.ceil((595.28 - 36) * 2 - 2) - (36 * 2 + 2));
+    expect(dark(36 * 2 - 3)).toBe(false);
+    expect(dark(Math.ceil((595.28 - 36) * 2) + 3)).toBe(false);
+  });
+
+  it("leaves half a line above and below a drawn logo, and no extra space without one", () => {
+    const withLogo = layoutInvoicePages({ ...fixture, logo })[0]!.elements;
+    const index = withLogo.findIndex((element) => element.kind === "logo");
+    const drawn = withLogo[index]!;
+    if (drawn.kind !== "logo") throw new Error("Missing logo");
+    const before = withLogo[index - 1]!;
+    expect(before.kind === "text" && before.text).toBe("Factura completa");
+    expect(drawn.y - (before.y + LINE)).toBeCloseTo(LINE / 2, 5);
+    const after = withLogo[index + 1]!;
+    expect(after.y - (drawn.y + drawn.height)).toBeCloseTo(LINE / 2, 5);
+
+    const without = layoutInvoicePages(fixture)[0]!.elements;
+    const name = "Charcutería La Buena SL";
+    expect(textAt(withLogo, name)!.y - textAt(without, name)!.y).toBeCloseTo(
+      drawn.height + LINE,
+      5,
+    );
+  });
+
+  it("does not stack the logo's space on the blank line after the QR", () => {
+    const elements = layoutInvoicePages({
+      ...fixture,
+      logo,
+      result: { ...fixture.result, invoiceType: "F2" },
+    })[0]!.elements;
+    const index = elements.findIndex((element) => element.kind === "logo");
+    const drawn = elements[index]!;
+    const legend = elements[index - 1]!;
+    expect(legend.kind === "text" && legend.text).toBe("VERI*FACTU");
+    expect(drawn.y - (legend.y + LINE)).toBeCloseTo(LINE / 2, 5);
   });
 });
