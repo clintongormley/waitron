@@ -4563,7 +4563,7 @@ export class TillApp extends LitElement {
       const code = (error as { code?: string } | undefined)?.code;
       outOfDate = code === "working_order.out_of_date";
       this.errorKey = outOfDate
-        ? { code: "working_order.out_of_date" }
+        ? "held.changed_elsewhere"
         : counterError(error, "receipt_language.save_error");
     } finally {
       this.submitting = false;

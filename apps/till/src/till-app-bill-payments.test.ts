@@ -3881,8 +3881,8 @@ describe("till-app: a party bill's receipt language", () => {
 
     await choose(el, order, "ca-ES");
 
-    expect(text(el.shadowRoot!.querySelector('[role="alert"]'))).toContain(
-      codeMessage("working_order.out_of_date"),
+    expect(text(el.shadowRoot!.querySelector('[role="alert"]'))).toBe(
+      "This order was changed on another device. It has been reloaded: check it and make your change again",
     );
     expect(text(languageButton(order))).toBe("Receipt: Galician");
 
