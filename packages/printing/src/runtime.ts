@@ -62,7 +62,7 @@ function dueNow(): { claimedAt: string; due: SQL } {
     claimedAt,
     due: sql`(
         j.status = 'queued'
-        or (j.status = 'failed' and j.attempts < ${MAX_DELIVERY_ATTEMPTS})
+        or (j.kind = 'document' and j.status = 'failed' and j.attempts < ${MAX_DELIVERY_ATTEMPTS})
         or (j.status = 'printing'
             and (j.claimed_at is null or j.claimed_at < ${leaseCutoff}))
       )`,
@@ -210,9 +210,7 @@ export async function reportPrintJob(
   const setClause =
     outcome.status === "done"
       ? sql`status = 'done', delivered_at = ${nowIso()}`
-      : sql`status = 'failed', last_error = ${outcome.error},
-          attempts = case when print_jobs.kind = 'drawer' then ${MAX_DELIVERY_ATTEMPTS}
-            else print_jobs.attempts + 1 end`;
+      : sql`status = 'failed', last_error = ${outcome.error}, attempts = print_jobs.attempts + 1`;
   const result = await tx.execute<{ id: string }>(sql`
     update print_jobs set ${setClause}
     where print_jobs.id = ${jobId}

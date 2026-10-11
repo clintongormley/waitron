@@ -1016,8 +1016,8 @@ The A462 whole-branch review (2026-10-10) measured Preview's Expand all at 448â€
 Documents can retry after a failed send or an expired claim, accepting a duplicate when a
 completion report is lost. A drawer pulse cannot use that policy: a rejected write may already
 have opened it. `claimPrintJobs` hands out one job per pull and admits a drawer only while it is
-queued. A failed drawer report ends at the attempt cap; a lost claim stays unreported and is not
-reclaimed. If it never arrived, you can request a new manual open through the normal permission
+queued. A failed drawer report retains its actual failed-attempt count and ends delivery; a lost claim
+stays unreported and is not reclaimed. If it never arrived, you can request a new manual open through the normal permission
 and audit path. The claim must commit before transport; `runAgentOnce`'s caller-owned transaction
 cannot provide that guarantee and has no production caller (the separate backlog item remains).
 

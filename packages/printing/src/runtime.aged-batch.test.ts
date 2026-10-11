@@ -184,6 +184,7 @@ describe("aged print batches", () => {
     expect(sent.written.map((entry) => [...entry.bytes])).toEqual([[2]]);
     const [row] = await suite.db.select().from(printJobs).where(eq(printJobs.id, ctx.tail));
     expect(row!.status).toBe("failed");
+    expect(row!.attempts).toBe(1);
     expect(row!.lastError).toBe("connection reset after write");
   });
 

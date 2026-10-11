@@ -177,4 +177,21 @@ describe("failUnprintableBluetoothJobs", () => {
     ).toEqual([]);
     expect(await jobRow(jobId)).toMatchObject({ status: "queued", attempts: 0, lastError: null });
   });
+  it("preserves a drawer's failed attempt when Bluetooth becomes unavailable", async () => {
+    const cfg = await setup();
+    const agentId = await seedAgent(cfg, "Box");
+    const printerId = await bluetoothPrinter(cfg);
+    const { jobId } = await withTransaction(suite.db, (tx) =>
+      enqueuePrintJob(tx, cfg, printerId, new Uint8Array([7]), "drawer"),
+    );
+    await suite.db
+      .update(printJobs)
+      .set({ status: "failed", attempts: 1, lastError: "uncertain pulse" })
+      .where(eq(printJobs.id, jobId));
+    const before = await jobRow(jobId);
+    expect(
+      await withTransaction(suite.db, (tx) => failUnprintableBluetoothJobs(tx, agentId, [MAC])),
+    ).toEqual([]);
+    expect(await jobRow(jobId)).toEqual(before);
+  });
 });

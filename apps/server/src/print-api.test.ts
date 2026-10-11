@@ -571,6 +571,38 @@ describe("remote agents with an aged print queue", () => {
     expect(sink.written.map((entry) => [...entry.bytes])).toEqual(expected);
     expect((await jobRow(job.jobId)).status).toBe(status);
   });
+  it("bounds failed drawer history without pretending five sends failed", async () => {
+    const app = mountApp();
+    const a = await joinAndAccept(app);
+    const printerId = await createPrinterVia(app, a.agentId);
+    const ids: string[] = [];
+    await withTransaction(suite.db, async (tx) => {
+      for (let i = 0; i < 101; i += 1) {
+        const job = await enqueuePrintJob(
+          tx,
+          { locationId },
+          printerId,
+          new Uint8Array([7]),
+          "drawer",
+        );
+        ids.push(job.jobId);
+        await tx
+          .update(printJobs)
+          .set({
+            status: "failed",
+            attempts: 1,
+            lastError: "uncertain write",
+            createdAt: new Date(Date.UTC(2026, 0, 1, 0, 0, i)).toISOString(),
+          })
+          .where(eq(printJobs.id, job.jobId));
+      }
+    });
+    const reply = await send(app, "GET", "/management-api/print-jobs", { cookie: managerCookie });
+    expect(reply.status).toBe(200);
+    const rows = (await reply.json()) as { id: string; attempts: number; canResend: boolean }[];
+    expect(rows.map((row) => row.id)).toEqual(ids.slice(1).reverse());
+    expect(rows.map((row) => row.attempts)).toEqual(Array.from({ length: 100 }, () => 1));
+  });
 });
 
 describe("POST /print-api/agent/jobs — the pull carries nodeId + servers", () => {

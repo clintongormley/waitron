@@ -142,7 +142,12 @@ describe("endUnpairedPrinterJobs", () => {
       .update(printJobs)
       .set({ status: "failed", attempts: MAX_DELIVERY_ATTEMPTS, lastError: "device gone" })
       .where(eq(printJobs.id, givenUp));
-    const untouched = [othersLive, done, givenUp, otherAddress, usb];
+    const failedDrawer = await job(cfg, printerId, "drawer");
+    await suite.db
+      .update(printJobs)
+      .set({ status: "failed", attempts: 1, lastError: "uncertain pulse" })
+      .where(eq(printJobs.id, failedDrawer));
+    const untouched = [othersLive, done, givenUp, otherAddress, usb, failedDrawer];
     const before = await Promise.all(untouched.map(jobRow));
 
     const ended = await end(agentId, [MAC, "BB:BB:BB:BB:BB:BB"]);
