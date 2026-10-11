@@ -3266,3 +3266,104 @@ it("service deletion empty zone bound survives native unrelated save and actual 
     setLocale(before);
   }
 });
+
+const scopeBottom = (el: DeviceProfilesScreen) =>
+  el.shadowRoot!.querySelector(".form-message")?.textContent?.trim() ?? null;
+
+it("scope reader recovery clears its own refusal", async () => {
+  const api = Object.assign(stubApi(), { liveData: new LiveData() });
+  const el = await mount(api);
+  el.shadowRoot!.querySelector<HTMLElement>("[data-test=edit-p1]")!.click();
+  await flush(el);
+  vi.mocked(api.getProfileScopeChoices).mockRejectedValue({ code: "connection.failed" });
+  api.liveData.invalidate([{ type: "floor_zones", id: "z1" }]);
+  await vi.waitFor(() => expect(scopeBottom(el)).toBe(codeMessage("connection.failed")));
+  vi.mocked(api.getProfileScopeChoices).mockResolvedValue(scopeChoices);
+  api.liveData.invalidate([{ type: "floor_zones", id: "z1" }]);
+  await vi.waitFor(() => expect(scopeBottom(el)).toBeNull());
+});
+
+it("scope reader refusal survives the main list reader recovery", async () => {
+  const api = Object.assign(stubApi(), { liveData: new LiveData() });
+  const el = await mount(api);
+  el.shadowRoot!.querySelector<HTMLElement>("[data-test=edit-p1]")!.click();
+  await flush(el);
+  vi.mocked(api.listPrinters).mockRejectedValue({ code: "server.internal" });
+  api.liveData.invalidate([{ type: "printers", id: "pr1" }]);
+  await vi.waitFor(() => expect(scopeBottom(el)).toBe(codeMessage("server.internal")));
+  vi.mocked(api.getProfileScopeChoices).mockRejectedValue({ code: "connection.failed" });
+  api.liveData.invalidate([{ type: "floor_zones", id: "z1" }]);
+  await vi.waitFor(() => expect(scopeBottom(el)).toBe(codeMessage("connection.failed")));
+  vi.mocked(api.listPrinters).mockResolvedValue([]);
+  api.liveData.invalidate([{ type: "printers", id: "pr1" }]);
+  await vi.waitFor(() => expect(api.listPrinters).toHaveBeenCalledTimes(3));
+  await flush(el);
+  expect(scopeBottom(el)).toBe(codeMessage("connection.failed"));
+});
+
+it("scope reader recovery preserves a later action refusal", async () => {
+  const api = Object.assign(
+    stubApi({
+      updateDeviceProfile: vi.fn().mockRejectedValue({ code: "server.internal" }),
+    }),
+    { liveData: new LiveData() },
+  );
+  const el = await mount(api);
+  el.shadowRoot!.querySelector<HTMLElement>("[data-test=edit-p1]")!.click();
+  await flush(el);
+  vi.mocked(api.getProfileScopeChoices).mockRejectedValue({ code: "connection.failed" });
+  api.liveData.invalidate([{ type: "floor_zones", id: "z1" }]);
+  await vi.waitFor(() => expect(scopeBottom(el)).toBe(codeMessage("connection.failed")));
+  rename(el, "Pending edit");
+  el.shadowRoot!.querySelector<HTMLElement>("[data-test=profile-save]")!.click();
+  await vi.waitFor(() => expect(scopeBottom(el)).toBe(codeMessage("server.internal")));
+  vi.mocked(api.getProfileScopeChoices).mockResolvedValue(scopeChoices);
+  api.liveData.invalidate([{ type: "floor_zones", id: "z1" }]);
+  await vi.waitFor(() => expect(api.getProfileScopeChoices).toHaveBeenCalledTimes(3));
+  await flush(el);
+  expect(scopeBottom(el)).toBe(codeMessage("server.internal"));
+});
+
+it("scope opening keeps a newer zone snapshot after the held profile read", async () => {
+  const before = currentLocale();
+  try {
+    setLocale("en");
+    let release!: (profile: DeviceProfile) => void;
+    const profile = new Promise<DeviceProfile>((resolve) => {
+      release = resolve;
+    });
+    const api = Object.assign(stubApi({ getDeviceProfile: vi.fn(() => profile) }), {
+      liveData: new LiveData(),
+    });
+    const el = await mount(api);
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=edit-p1]")!.click();
+    await vi.waitFor(() => expect(api.getProfileScopeChoices).toHaveBeenCalledOnce());
+    await flush(el);
+    vi.mocked(api.getProfileScopeChoices).mockResolvedValue({
+      ...scopeChoices,
+      zones: scopeChoices.zones.filter((zone) => zone.id !== "z1"),
+    });
+    api.liveData.invalidate([{ type: "floor_zones", id: "z1" }]);
+    await vi.waitFor(() => expect(api.getProfileScopeChoices).toHaveBeenCalledTimes(2));
+    await flush(el);
+    release({ ...profiles[0]!, name: "Held profile draft", allowedZoneIds: ["z1", "z2"] });
+    await vi.waitFor(() =>
+      expect(el.shadowRoot!.querySelector("[data-test=profile-starting-zone]")).not.toBeNull(),
+    );
+    const start = el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-combobox"]>(
+      "[data-test=profile-starting-zone]",
+    )!;
+    await start.updateComplete;
+    expect(start.value).toBe("z2");
+    expect(start.shadowRoot!.querySelector("button")!.textContent).toContain("Terraza");
+    expect(el.shadowRoot!.querySelector("[data-test=profile-zone-z1]")).toBeNull();
+    expect(el.shadowRoot!.querySelector("[data-test=profile-zone-z2]")).not.toBeNull();
+    const name = el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>(
+      "[data-test=profile-name]",
+    )!;
+    await name.updateComplete;
+    expect(name.shadowRoot!.querySelector("input")!.value).toBe("Held profile draft");
+  } finally {
+    setLocale(before);
+  }
+});

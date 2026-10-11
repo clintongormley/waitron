@@ -501,7 +501,7 @@ export class DeviceProfilesScreen extends LitElement {
     },
     () => {
       this.#standingReadError = null;
-      if (this.#readErrorShown) this.#showError(null);
+      if (this.#readErrorOwner === "main") this.#showError(null);
     },
   );
 
@@ -526,8 +526,7 @@ export class DeviceProfilesScreen extends LitElement {
   @state() private staff: PersonSummary[] = [];
 
   @state() private errorKey: string | null = null;
-  /** Whether `errorKey` is a read's failure, the only message the reads' recovery may clear. */
-  #readErrorShown = false;
+  #readErrorOwner: "main" | "scope" | null = null;
   /** The live reads' latest failure until they recover. Opening the editor clears the screen's
    * message, and this is put back so the form still says why its lists may be stale or empty. */
   #standingReadError: { error: unknown } | null = null;
@@ -695,14 +694,15 @@ export class DeviceProfilesScreen extends LitElement {
     if (this.#standingReadError !== null) this.#showReadError(this.#standingReadError.error);
   }
 
-  #showError(code: string | null, fromRead = false): void {
+  #showError(code: string | null, owner: "main" | "scope" | null = null): void {
     this.errorKey = code;
-    this.#readErrorShown = fromRead;
+    this.#readErrorOwner = owner;
   }
 
   /** A read's failure never replaces an action's message. */
-  #showReadError(error: unknown): void {
-    if (this.errorKey === null || this.#readErrorShown) this.#showError(codeOf(error), true);
+  #showReadError(error: unknown, owner: "main" | "scope" = "main"): void {
+    if (this.errorKey === null || this.#readErrorOwner !== null)
+      this.#showError(codeOf(error), owner);
   }
 
   /** Reloads only the PROFILES: no profile write changes the canvas or printer set. */
@@ -954,6 +954,7 @@ export class DeviceProfilesScreen extends LitElement {
 
   #clearDraft(): void {
     this.#scopeQueries.release("choices");
+    this.#latestScopeChoices = null;
     this.#saveTurn++;
     this.saving = false;
     this.#draftScope?.dispose();
@@ -994,10 +995,15 @@ export class DeviceProfilesScreen extends LitElement {
    * on changes nothing. */
   #opened = 0;
 
+  #latestScopeChoices: ProfileScopeChoices | null = null;
+
   readonly #scopeQueries = new QueryController(
     this,
     () => this.api.liveData,
-    (error) => this.#showReadError(error),
+    (error) => this.#showReadError(error, "scope"),
+    () => {
+      if (this.#readErrorOwner === "scope") this.#showError(null);
+    },
   );
 
   #watchScopeChoices(): Promise<ProfileScopeChoices> {
@@ -1018,6 +1024,7 @@ export class DeviceProfilesScreen extends LitElement {
         },
         (choices) => {
           if (opened !== this.#opened) return;
+          this.#latestScopeChoices = choices;
           this.scopeChoices = choices;
           if (this.mode === "editor") this.#settleStartingZone();
         },
@@ -1036,8 +1043,9 @@ export class DeviceProfilesScreen extends LitElement {
     const opened = this.#opened;
     void this.#loadReaders(null, opened);
     this.#watchScopeChoices().then(
-      (choices) => {
+      (initialChoices) => {
         if (opened !== this.#opened) return;
+        const choices = this.#latestScopeChoices ?? initialChoices;
         this.scopeChoices = choices;
         if (this.draftDepartmentId !== "") return;
         const departments = choices.departments.filter((department) => department.active);
@@ -1051,7 +1059,7 @@ export class DeviceProfilesScreen extends LitElement {
         });
       },
       (error: unknown) => {
-        if (opened === this.#opened) this.#showReadError(error);
+        if (opened === this.#opened) this.#showReadError(error, "scope");
       },
     );
   }
@@ -1063,12 +1071,13 @@ export class DeviceProfilesScreen extends LitElement {
     this.#clearDraft();
     const opened = this.#opened;
     try {
-      const [profile, kitchenScreens, choices] = await Promise.all([
+      const [profile, kitchenScreens, initialChoices] = await Promise.all([
         this.api.getDeviceProfile(id),
         this.api.listProfileKitchenScreens(),
         this.#watchScopeChoices(),
       ]);
       if (opened !== this.#opened) return;
+      const choices = this.#latestScopeChoices ?? initialChoices;
       this.scopeChoices = choices;
       this.editingId = id;
       this.#loaded = profile;
