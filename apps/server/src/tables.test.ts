@@ -4,6 +4,7 @@ import { randomUUID } from "node:crypto";
 import { eq, sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it, vi } from "vitest";
 import {
+  tableInService,
   DEFAULT_TIME_ZONE,
   diningTables,
   floorZones,
@@ -283,7 +284,7 @@ describe("zone CRUD", () => {
     });
   });
 
-  it("deactivating a zone switches off its tables", async () => {
+  it("deactivating a zone takes its tables out of service", async () => {
     const cfg = await setupVenue();
     const { id: zoneId } = await asApp(cfg, (tx) => createZone(tx, cfg, { name: "Terrace" }));
     const { id: tableId } = await asApp(cfg, (tx) => createTable(tx, cfg, { label: "T8", zoneId }));
@@ -301,11 +302,11 @@ describe("zone CRUD", () => {
     expect(
       (
         await db
-          .select({ active: diningTables.active })
+          .select({ inService: tableInService(diningTables.id).mapWith(Boolean) })
           .from(diningTables)
           .where(eq(diningTables.id, tableId))
       )[0],
-    ).toEqual({ active: false });
+    ).toEqual({ inService: false });
   });
 
   it("refuses zone removal while an open party occupies a table there", async () => {

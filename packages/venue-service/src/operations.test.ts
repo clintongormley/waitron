@@ -1621,7 +1621,7 @@ describe("departments", () => {
     ]);
   });
 
-  it("removes another department with its zones and tables while retaining their service policy", async () => {
+  it("switches off another department and its zones while retaining their tables and service policy", async () => {
     const cfg = { locationId: brandLocationId(await seedLocation("Two departments")) };
     const terrace = await seedZone(cfg.locationId, "Terrace");
     const dining = await seedZone(cfg.locationId, "Dining room");
@@ -1661,11 +1661,11 @@ describe("departments", () => {
     expect(
       (
         await db
-          .select({ active: diningTables.active })
+          .select({ inService: tableInService(diningTables.id).mapWith(Boolean) })
           .from(diningTables)
           .where(eq(diningTables.id, tableId))
       )[0],
-    ).toEqual({ active: false });
+    ).toEqual({ inService: false });
     expect(
       (
         await db.execute<{ zone_id: string }>(
@@ -1736,12 +1736,12 @@ describe("departments", () => {
       params: { zoneId: back, tableId: backTable, tableName: "B2" },
     });
     const state = await db
-      .select({ id: diningTables.id, active: diningTables.active })
+      .select({ id: diningTables.id, inService: tableInService(diningTables.id).mapWith(Boolean) })
       .from(diningTables);
     expect(state).toEqual(
       expect.arrayContaining([
-        { id: frontTable, active: true },
-        { id: backTable, active: true },
+        { id: frontTable, inService: true },
+        { id: backTable, inService: true },
       ]),
     );
     expect(
@@ -2151,13 +2151,16 @@ describe("retired and moved zones", () => {
     expect(
       (
         await db
-          .select({ zoneId: diningTables.zoneId, active: diningTables.active })
+          .select({
+            zoneId: diningTables.zoneId,
+            inService: tableInService(diningTables.id).mapWith(Boolean),
+          })
           .from(diningTables)
           .where(eq(diningTables.id, table!.id))
       )[0],
     ).toEqual({
       zoneId: venue.barZone,
-      active: true,
+      inService: true,
     });
     expect(
       await db

@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
+  tableInService,
   diningTables,
   floorPlans,
   floorPlanTables,
@@ -778,12 +779,12 @@ describe("a disabled zone", () => {
     await masterOf(on, [{ label: "On 1", live: onTable }]);
     await inTx(v, (tx) => ensureToday(tx, v.cfg, NONE, NOW));
     await inTx(v, (tx) => deactivateZone(tx, v.cfg, off));
-    expect((await tableRow(v, offTable)).active).toBe(false);
+    expect(await inService(offTable)).toBe(false);
 
     const nextDay = new Date(NOW.getTime() + 24 * 60 * 60 * 1000);
     await inTx(v, (tx) => ensureToday(tx, v.cfg, NONE, nextDay));
 
-    expect((await tableRow(v, offTable)).active).toBe(false);
+    expect(await inService(offTable)).toBe(false);
     expect(await todayZone(off)).toMatchObject({ businessDay: "2026-10-10", generation: 1 });
     expect(await todayZone(on)).toMatchObject({ businessDay: "2026-10-11", generation: 2 });
   });
@@ -798,21 +799,30 @@ describe("a disabled zone", () => {
       { label: "Reopen 2", live: hidden },
     ]);
     await inTx(v, (tx) => ensureToday(tx, v.cfg, NONE, NOW));
-    // The state a removal waiting on its table leaves: off, and off today's plan.
+    // A pending removal has no row on today's plan.
     await deleteFromMaster(master.get("Reopen 2")!);
     await inTx(v, async (tx) => {
       await tx.delete(floorTodayTables).where(eq(floorTodayTables.tableId, hidden));
-      await tx.update(diningTables).set({ active: false }).where(eq(diningTables.id, hidden));
     });
     await inTx(v, (tx) => deactivateZone(tx, v.cfg, z));
 
     await inTx(v, (tx) => updateZone(tx, v.cfg, z, { active: true }));
 
-    expect((await tableRow(v, planned)).active).toBe(true);
-    expect((await tableRow(v, hidden)).active).toBe(false);
-    expect((await tableRow(v, never)).active).toBe(false);
+    expect(await inService(planned)).toBe(true);
+    expect(await inService(hidden)).toBe(false);
+    expect(await inService(never)).toBe(false);
     await inTx(v, (tx) => ensureToday(tx, v.cfg, NONE, NOW));
     const floor = await inTx(v, (tx) => listTablesWithState(tx, v.cfg, [], undefined, NOW));
     expect(floor.map((t) => t.id)).toContain(planned);
   });
 });
+
+async function inService(tableId: string): Promise<boolean> {
+  const [table] = await inTx(v, (tx) =>
+    tx
+      .select({ inService: tableInService(diningTables.id).mapWith(Boolean) })
+      .from(diningTables)
+      .where(eq(diningTables.id, tableId)),
+  );
+  return table!.inService;
+}

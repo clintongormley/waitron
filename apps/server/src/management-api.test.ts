@@ -781,6 +781,12 @@ describe("/management-api/tables", () => {
       );
       return id;
     }
+    async function listInService(): Promise<{ id: string; zoneId: string }[]> {
+      const res = await req("/tables", { method: "GET" }, managerCookie);
+      expect(res.status).toBe(200);
+      return (await res.json()) as { id: string; zoneId: string }[];
+    }
+
     async function listAll(): Promise<{ id: string; label: string; active: boolean }[]> {
       const res = await req("/tables?includeDisabled=true", { method: "GET" }, managerCookie);
       expect(res.status).toBe(200);
@@ -902,10 +908,9 @@ describe("/management-api/tables", () => {
             active: state === "active" ? 1 : 0,
           },
         ]);
-        expect((await listAll()).find((table) => table.id === source.tableId)).toMatchObject({
-          active: state === "active",
-          zoneId: source.zoneId,
-        });
+        const table = (await listInService()).find((table) => table.id === source.tableId);
+        if (state === "active") expect(table).toMatchObject({ zoneId: source.zoneId });
+        else expect(table).toBeUndefined();
       },
     );
 
@@ -925,13 +930,12 @@ describe("/management-api/tables", () => {
         sql`select department_id from zone_service_policies where zone_id = ${source.zoneId}`,
       );
       expect(stored.rows).toEqual([{ department_id: destination.departmentId }]);
-      expect((await listAll()).find((table) => table.id === source.tableId)).toMatchObject({
-        active: true,
+      expect((await listInService()).find((table) => table.id === source.tableId)).toMatchObject({
         zoneId: source.zoneId,
       });
     });
 
-    it("allows enabling a zone under an active department without enabling its tables", async () => {
+    it("enabling a zone under an active department restores its tables in service", async () => {
       const { zoneId, tableId } = await tableInServiceZone();
       await req(`/zones/${zoneId}`, { method: "DELETE" }, managerCookie);
       const response = await req(
@@ -945,7 +949,7 @@ describe("/management-api/tables", () => {
         active: boolean;
       }[];
       expect(list.find((z) => z.id === zoneId)).toMatchObject({ active: true });
-      expect((await listAll()).find((t) => t.id === tableId)).toMatchObject({ active: false });
+      expect((await listInService()).find((t) => t.id === tableId)).toMatchObject({ id: tableId });
     });
 
     it("a STAFF session is refused the includeDisabled list (403)", async () => {
