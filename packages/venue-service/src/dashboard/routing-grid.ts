@@ -101,6 +101,7 @@ export class RoutingGrid extends LitElement {
           --routing-first: calc(var(--wt-space-6) * 3);
           --routing-zone: calc(var(--wt-space-6) * 3.25);
           --routing-pad: var(--wt-space-1);
+          --routing-indent: var(--wt-space-2);
         }
       }
       .toolbar {
@@ -159,10 +160,13 @@ export class RoutingGrid extends LitElement {
         z-index: 1;
         border-inline-end: 1px solid var(--wt-color-border);
       }
+      /* The label or its toggle carries the block padding, so the toggle is the whole row tall. */
       tbody th {
         font-weight: var(--wt-font-weight-normal);
+        padding-block: 0;
         padding-inline-start: calc(
-          var(--routing-pad, var(--wt-space-2)) + var(--wt-space-4) * var(--routing-depth, 0)
+          var(--routing-pad, var(--wt-space-2)) + var(--routing-indent, var(--wt-space-4)) *
+            var(--routing-depth, 0)
         );
       }
       tbody tr.heading th {
@@ -171,21 +175,26 @@ export class RoutingGrid extends LitElement {
       }
       .toggle {
         display: inline-flex;
-        align-items: center;
+        align-items: flex-start;
         gap: var(--wt-space-1);
+        min-inline-size: 0;
         min-block-size: var(--wt-tap-min);
-        padding: 0;
+        padding: var(--routing-pad, var(--wt-space-2)) 0;
         border: 0;
         background: none;
         color: inherit;
         font: inherit;
+        font-weight: var(--wt-font-weight-medium);
         text-align: start;
         cursor: pointer;
       }
+      /* The large arrow takes up only a text-sized height, so it centres on the name's first line. */
       .arrow {
         display: inline-flex;
+        flex: none;
         justify-content: center;
         inline-size: var(--wt-space-5);
+        margin-block: calc((var(--wt-font-size-md) - var(--wt-font-size-xl)) / 2);
         font-size: var(--wt-font-size-xl);
         line-height: 1;
       }
@@ -201,12 +210,20 @@ export class RoutingGrid extends LitElement {
       tbody tr:not(.heading) .label.parent {
         color: var(--wt-color-text-muted);
       }
+      /* Top-aligned with a zone cell's padding, so a name's first line meets its station's. */
       .label {
         display: flex;
-        flex-wrap: wrap;
-        align-items: center;
-        column-gap: var(--wt-space-1);
+        align-items: flex-start;
         min-block-size: var(--wt-tap-min);
+        padding-block: var(--routing-pad, var(--wt-space-2));
+      }
+      .label:has(> .toggle) {
+        padding-block: 0;
+      }
+      /* One inline run, so a mark never splits the name; a word breaks only when it cannot fit. */
+      .name {
+        min-inline-size: 0;
+        overflow-wrap: break-word;
       }
       .note,
       .warning,
@@ -716,8 +733,12 @@ export class RoutingGrid extends LitElement {
   }
 
   #rowLabel(entry: GridRow) {
-    if (entry.row.kind === "all" || entry.row.kind === "no_category") return this.#rowName(entry);
-    const name = highlighted(entry.name, this.#found.get(rowKey(entry.row))?.ranges ?? []);
+    if (entry.row.kind === "all" || entry.row.kind === "no_category") {
+      return html`<span class="name">${this.#rowName(entry)}</span>`;
+    }
+    const name = html`<span class="name"
+      >${highlighted(entry.name, this.#found.get(rowKey(entry.row))?.ranges ?? [])}</span
+    >`;
     if (entry.row.kind === "product") return name;
     const id = entry.row.categoryId;
     const search = this.#search;

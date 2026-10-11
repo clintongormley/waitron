@@ -179,6 +179,54 @@ async function choose(el: RoutingGrid, box: HTMLButtonElement, label: string): P
   await el.updateComplete;
 }
 
+/** Names as a real venue writes them: upper-case categories, one of them three levels down. */
+function santet(): RoutingView {
+  return routing({
+    zones: [{ id: "front", name: "Front Bar", departmentId: null }],
+    categories: [
+      { id: "santet", name: "Santet Deli Co", parentId: null },
+      { id: "agave", name: "AGAVE", parentId: "santet" },
+      { id: "clandestina", name: "CLANDESTINA", parentId: "agave" },
+      { id: "cafes", name: "CAFÉS", parentId: "santet" },
+    ],
+    products: [
+      { id: "reposado", name: "Clandestina Reposado", categoryId: "clandestina" },
+      { id: "leche", name: "Café con leche", categoryId: "cafes" },
+    ],
+    cells: [
+      { row: { kind: "category", categoryId: "santet" }, zoneId: "front", target: station("bar") },
+      {
+        row: { kind: "category", categoryId: "clandestina" },
+        zoneId: null,
+        target: station("kitchen"),
+      },
+    ],
+  });
+}
+
+/** The row's header cell, found through its Every zone cell. */
+const rowHeader = (el: RoutingGrid, row: string) =>
+  cell(el, row, "every").closest("tr")!.querySelector("th")!;
+/** The text nodes under `within` that draw letters, outside the expand arrow. */
+function texts(within: Node): Text[] {
+  const walker = document.createTreeWalker(within, NodeFilter.SHOW_TEXT);
+  const found: Text[] = [];
+  for (let node = walker.nextNode(); node !== null; node = walker.nextNode()) {
+    if (node.textContent!.trim() !== "" && node.parentElement?.closest(".arrow") === null) {
+      found.push(node as Text);
+    }
+  }
+  return found;
+}
+/** The line boxes the characters `start`..`end` of `text` are drawn in. */
+function boxes(text: Text, start = 0, end = text.length): DOMRect[] {
+  const range = document.createRange();
+  range.setStart(text, start);
+  range.setEnd(text, end);
+  return [...range.getClientRects()];
+}
+const frame = () => new Promise((resolve) => requestAnimationFrame(resolve));
+
 describe("venue-routing-grid", () => {
   it("Expand all and Collapse all change the rendered rows, and focus stays on the trigger", async () => {
     const { el } = await mount();
@@ -990,6 +1038,49 @@ describe("venue-routing-grid", () => {
           expect(Math.abs(button[side] - td[side])).toBeLessThan(1.5);
       }
     });
+
+    it("draws a category's name medium and a product's normal", async () => {
+      await page.viewport(1280, 800);
+      const { el } = await mount(santet());
+      await userEvent.click(root(el).querySelector<HTMLElement>('[data-test="expand-all"]')!);
+      await el.updateComplete;
+      const weight = (row: string) =>
+        getComputedStyle(texts(rowHeader(el, row))[0]!.parentElement!).fontWeight;
+      expect(weight("c:agave")).toBe(tokenValue(el, "fontWeight", "var(--wt-font-weight-medium)"));
+      expect(weight("p:leche")).toBe(tokenValue(el, "fontWeight", "var(--wt-font-weight-normal)"));
+    });
+
+    it("lines a row's name up with the station beside it, in a row as tall as a tap target", async () => {
+      await page.viewport(1280, 800);
+      const { el } = await mount(santet());
+      await userEvent.click(root(el).querySelector<HTMLElement>('[data-test="expand-all"]')!);
+      await el.updateComplete;
+      const tap = parseFloat(getComputedStyle(el).getPropertyValue("--wt-tap-min"));
+      for (const row of ["c:agave", "p:leche", "all"]) {
+        const name = boxes(texts(rowHeader(el, row))[0]!);
+        expect(name, row).toHaveLength(1);
+        const height = rowHeader(el, row).closest("tr")!.getBoundingClientRect().height;
+        expect(height, row).toBeLessThanOrEqual(tap + 1.5);
+        const station = boxes(texts(cell(el, row, "every").querySelector(".station")!)[0]!);
+        expect(Math.abs(name[0]!.top - station[0]!.top), row).toBeLessThanOrEqual(2);
+      }
+      expect(
+        root(el).querySelector('button[data-category="agave"]')!.getBoundingClientRect().height,
+      ).toBeGreaterThanOrEqual(tap);
+    });
+
+    it("at phone width breaks a row's name between words, never inside a word that fits", async () => {
+      await page.viewport(390, 800);
+      const { el } = await mount(santet());
+      await userEvent.click(root(el).querySelector<HTMLElement>('[data-test="expand-all"]')!);
+      await el.updateComplete;
+      for (const row of ["c:santet", "c:agave", "c:cafes", "p:leche"]) {
+        const [text] = texts(rowHeader(el, row));
+        for (const word of text!.data.matchAll(/\S+/g)) {
+          expect(boxes(text!, word.index, word.index + word[0].length), word[0]).toHaveLength(1);
+        }
+      }
+    });
   });
 
   describe("the cell's button and its editor", () => {
@@ -1532,6 +1623,29 @@ describe("venue-routing-grid", () => {
       expect(rowLabels(el)).toEqual(before);
       expect(parentOnly(el).some(Boolean)).toBe(false);
       expect(status(el)).toBe("");
+    });
+
+    it("draws a marked name as one run of text, with no gap at the mark and the mark kept whole", async () => {
+      await page.viewport(1280, 800);
+      const { el } = await mount(santet());
+      await search(el, "clan");
+      const th = rowHeader(el, "c:clandestina");
+      const mark = th.querySelector("mark")!;
+      expect(mark.textContent).toBe("CLAN");
+      const rest = texts(th).find((text) => text.data === "DESTINA")!;
+      expect(boxes(rest)[0]!.left - mark.getBoundingClientRect().right).toBeCloseTo(0, 0);
+
+      await page.viewport(390, 800);
+      await frame();
+      const probe = document.createElement("mark");
+      probe.textContent = "CLAN";
+      probe.style.font = getComputedStyle(mark).font;
+      probe.style.position = "absolute";
+      el.parentElement!.append(probe);
+      const word = probe.getBoundingClientRect().width;
+      probe.remove();
+      expect(mark.getClientRects()).toHaveLength(1);
+      expect(mark.getBoundingClientRect().width).toBeGreaterThanOrEqual(word - 0.5);
     });
 
     it("Collapse all during search closes every category of the search", async () => {
