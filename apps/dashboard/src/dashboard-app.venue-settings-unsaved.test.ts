@@ -639,3 +639,141 @@ it("a legal-name change on Venue details re-reads the banner's name", async () =
   expect(getMe.mock.calls.length).toBe(calls + 1);
   expect(location.pathname).toBe("/manage/venue-settings/view/venue-details");
 });
+
+async function openLegalName(app: DashboardApp, typed?: string) {
+  await select(app, "venue-details");
+  await expect.poll(() => selected(app)).toBe("venue-details");
+  const panel = settings(app).shadowRoot!.querySelector("dashboard-venue-details-panel")!;
+  await expect
+    .poll(() => panel.shadowRoot?.querySelector("[data-test=change-legal-name]"))
+    .toBeTruthy();
+  panel.shadowRoot!.querySelector<HTMLElement>("[data-test=change-legal-name]")!.click();
+  const host = panel.shadowRoot!.querySelector("dashboard-legal-name-dialog")!;
+  await host.updateComplete;
+  const dialog = host.shadowRoot!.querySelector("wt-dialog")!;
+  const input = dialog.querySelector<WtInput>("wt-input[name=legalName]")!;
+  await input.updateComplete;
+  if (typed !== undefined)
+    await userEvent.fill(page.elementLocator(input.shadowRoot!.querySelector("input")!), typed);
+  const native = dialog.shadowRoot!.querySelector<HTMLDialogElement>("dialog")!;
+  return { host, dialog, input, native };
+}
+
+async function tabStillClickable(app: DashboardApp, key: string) {
+  try {
+    await userEvent.click(
+      page.elementLocator(tabs(app).shadowRoot!.querySelector(`[role=tab][data-key=${key}]`)!),
+      { timeout: 1000 },
+    );
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+it("leaving Venue details by Back and Discard closes a changed legal-name dialog", async () => {
+  const { app } = await mount();
+  const { host, dialog, native } = await openLegalName(app, "Proposed SL");
+  history.back();
+  await choose(app, "discard");
+  await expect.poll(() => selected(app)).toBe("tables");
+  await host.updateComplete;
+  expect(dialog.open).toBe(false);
+  expect(native.matches(":modal")).toBe(false);
+  expect(await tabStillClickable(app, "tables")).toBe(true);
+  await select(app, "kitchen");
+  await expect.poll(() => selected(app)).toBe("kitchen");
+  expect(app.shadowRoot!.querySelector("wt-unsaved-changes")!.open).toBe(false);
+});
+
+it("leaving Venue details by Back and Keep leaves the legal-name dialog open with its draft", async () => {
+  const { app } = await mount();
+  const { host, dialog, input, native } = await openLegalName(app, "Proposed SL");
+  history.back();
+  await choose(app, "keep");
+  await host.updateComplete;
+  expect(selected(app)).toBe("venue-details");
+  expect(dialog.open).toBe(true);
+  expect(native.matches(":modal")).toBe(true);
+  expect(native.checkVisibility()).toBe(true);
+  expect(input.value).toBe("Proposed SL");
+});
+
+it("leaving Venue details by Back closes an unchanged legal-name dialog", async () => {
+  const { app } = await mount();
+  const { host, dialog, native } = await openLegalName(app);
+  history.back();
+  await expect.poll(() => selected(app)).toBe("tables");
+  expect(app.shadowRoot!.querySelector("wt-unsaved-changes")!.open).toBe(false);
+  await host.updateComplete;
+  expect(dialog.open).toBe(false);
+  expect(native.matches(":modal")).toBe(false);
+  expect(await tabStillClickable(app, "kitchen")).toBe(true);
+});
+
+it("the newest banner read wins when two reads finish in the opposite order", async () => {
+  const response = (venueName: string) => ({
+    personId: "p1",
+    email: "ada@example.com",
+    role: "manager",
+    locale: "en-GB",
+    venueLocale: "en-GB",
+    sessionDefault: "en-GB",
+    venueName,
+    permissions: ["venue.view", "venue.configure"],
+    modules: [],
+  });
+  const pending: ((value: ReturnType<typeof response>) => void)[] = [];
+  const getMe = vi
+    .fn()
+    .mockResolvedValueOnce(response("Initial SL"))
+    .mockImplementation(() => new Promise((resolve) => pending.push(resolve)));
+  const { app } = await mount("/manage/venue-settings/view/venue-details", "en-GB", "light", {
+    getMe,
+  });
+  const banner = () => app.shadowRoot!.querySelector("[data-test=venue-name]")!.textContent!.trim();
+  await expect.poll(banner).toBe("Initial SL");
+  const changed = () =>
+    settings(app).dispatchEvent(
+      new CustomEvent("venue-identity-changed", { bubbles: true, composed: true }),
+    );
+  changed();
+  changed();
+  await expect.poll(() => pending.length).toBe(2);
+  pending[1]!(response("Newer SL"));
+  await expect.poll(banner).toBe("Newer SL");
+  pending[0]!(response("Older SL"));
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  await app.updateComplete;
+  expect(banner()).toBe("Newer SL");
+});
+
+it("a failed banner read keeps the name the banner shows", async () => {
+  const getMe = vi
+    .fn()
+    .mockResolvedValueOnce({
+      personId: "p1",
+      email: "ada@example.com",
+      role: "manager",
+      locale: "en-GB",
+      venueLocale: "en-GB",
+      sessionDefault: "en-GB",
+      venueName: "Initial SL",
+      permissions: ["venue.view", "venue.configure"],
+      modules: [],
+    })
+    .mockRejectedValue(new Error("network"));
+  const { app } = await mount("/manage/venue-settings/view/venue-details", "en-GB", "light", {
+    getMe,
+  });
+  const banner = () => app.shadowRoot!.querySelector("[data-test=venue-name]")!.textContent!.trim();
+  await expect.poll(banner).toBe("Initial SL");
+  settings(app).dispatchEvent(
+    new CustomEvent("venue-identity-changed", { bubbles: true, composed: true }),
+  );
+  await expect.poll(() => getMe.mock.calls.length).toBe(2);
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  await app.updateComplete;
+  expect(banner()).toBe("Initial SL");
+  expect(app.shadowRoot!.querySelector("dashboard-venue-settings-screen")).not.toBeNull();
+});

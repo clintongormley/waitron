@@ -929,12 +929,17 @@ export class DashboardApp extends LitElement {
     }
   }
 
-  /** The banner's name alone; a failed read keeps the name it shows. */
+  #venueNameRead = 0;
+
+  /** The banner's name alone; only the latest read is shown, and a failed read keeps the name it
+   *  shows. */
   async #rereadVenueName(): Promise<void> {
     const generation = this.sessionGeneration;
+    const read = ++this.#venueNameRead;
     try {
       const { venueName } = await this.api.getMe();
-      if (this.isConnected && generation === this.sessionGeneration) this.venueName = venueName;
+      if (this.isConnected && generation === this.sessionGeneration && read === this.#venueNameRead)
+        this.venueName = venueName;
     } catch {
       // Keeps the name it shows.
     }

@@ -158,6 +158,7 @@ export class VenueDetailsPanel extends LitElement {
   constructor() {
     super();
     this.addEventListener("venue-settings-hidden", () => {
+      this.renderRoot.querySelector("dashboard-legal-name-dialog")?.dismiss();
       if (this.#scope && saveActionState(this.#scope).unchanged) this.#cancel();
     });
   }

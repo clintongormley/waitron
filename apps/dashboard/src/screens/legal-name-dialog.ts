@@ -87,6 +87,12 @@ export class LegalNameDialog extends LitElement {
     scope.commit(legalName);
   }
 
+  /** Closes without asking. For a page that hides this dialog's host: a native modal left open
+   *  out of sight still blocks every click on the page. */
+  dismiss(): void {
+    if (this.opened !== null) this.#close();
+  }
+
   override disconnectedCallback(): void {
     this.#close();
     super.disconnectedCallback();

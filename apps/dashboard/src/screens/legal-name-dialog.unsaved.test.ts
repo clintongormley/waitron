@@ -101,3 +101,20 @@ it("a typed name asks before Cancel, and Discard closes without renaming", async
   expect(app.leave.coordinator.isDirty()).toBe(false);
   expect(renameTaxpayer).not.toHaveBeenCalled();
 });
+
+it("the panel being hidden closes the dialog and releases its draft", async () => {
+  const { app, dialog, input, renameTaxpayer } = await fixture();
+  input.shadowRoot!.querySelector("input")!.focus();
+  await userEvent.keyboard("{End} 2");
+  await expect.poll(() => app.leave.coordinator.isDirty()).toBe(true);
+  const closed = dialogClosed(dialog);
+  app
+    .shadowRoot!.querySelector("dashboard-venue-details-panel")!
+    .dispatchEvent(new Event("venue-settings-hidden"));
+  await closed;
+  expect(dialog.open).toBe(false);
+  expect(dialog.shadowRoot!.querySelector("dialog")!.matches(":modal")).toBe(false);
+  expect(app.leave.coordinator.isDirty()).toBe(false);
+  expect((await question(app)).open).toBe(false);
+  expect(renameTaxpayer).not.toHaveBeenCalled();
+});
