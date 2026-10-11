@@ -913,3 +913,20 @@ it("a save answer arriving while Add join is open re-keys its chosen table", asy
     "with T9 · seats 4",
   );
 });
+
+it("does not reserve an unfollowed live name backed by this zone's master plan", async () => {
+  const el = await open(
+    stubApi({
+      listTables: vi.fn().mockResolvedValue([
+        {
+          id: "l8",
+          label: "Terrace 30",
+          zoneId: "z1",
+          planTableId: "m8",
+          createdAt: "2026-10-01",
+        },
+      ]),
+    }),
+  );
+  expect(await addTablesHint(el)).toBe("Terrace 1");
+});

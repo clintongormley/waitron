@@ -769,6 +769,22 @@ describe("POST /management-api/session (email login)", () => {
 });
 
 describe("/management-api/tables", () => {
+  it("answers the management table list without the old columns, with planTableId", async () => {
+    const cfg = tillConfigFromVenue(venue);
+    const { id } = await withTransaction(suite.db, async (tx) =>
+      createTable(tx, cfg, {
+        label: unique("shape"),
+        zoneId: (await createTableZone(tx, cfg, { name: unique("Shape zone") })).id,
+      }),
+    );
+    const response = await req("/tables", { method: "GET" }, managerCookie);
+    expect(response.status).toBe(200);
+    const row = ((await response.json()) as Record<string, unknown>[]).find((t) => t.id === id)!;
+    expect(row).toMatchObject({ id, planTableId: null });
+    for (const key of ["capacity", "active", "posX", "posY", "shape", "rotation"])
+      expect(row).not.toHaveProperty(key);
+  });
+
   describe("disabled tables: the includeDisabled list", () => {
     async function newTable(): Promise<string> {
       const { id } = await withTransaction(suite.db, async (tx) =>
