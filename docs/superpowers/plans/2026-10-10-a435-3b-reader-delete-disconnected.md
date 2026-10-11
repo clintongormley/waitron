@@ -165,8 +165,9 @@ Each line is what will be built. The owner may overrule any of them.
    for 5xx, `:282-283` for 4xx), which the route records as reason `unknown` (backlog: "A failed
    SumUp unpair is logged with reason `unknown`"). Following the rule for a rejected key would
    first need that distinction, or it would also delete readers in Waitron only during an ordinary
-   SumUp outage. A stored credential means "connected" here, as it does on the providers list
-   (`payments-api.ts`, `GET …/providers`).
+   SumUp outage. _2026-10-11 (A518): SumUp's `deleteReader` now throws `reader.unpair_failed`
+   with a log-only reason, which the route logs as `logReason`._ A stored credential means
+   "connected" here, as it does on the providers list (`payments-api.ts`, `GET …/providers`).
 13. **A disconnect that lands after step (a) answers `reader.provider_disconnected`.** Step (a)
     switches the reader off, which lets a disconnect through (`payments-api.ts:618-625` refuses only
     while a reader is active). If the credential is gone when the seat reads it, SumUp's seat throws
@@ -177,7 +178,8 @@ Each line is what will be built. The owner may overrule any of them.
     shows the notice (decision 5). The reader is left switched off, not unpaired, not deleted. The
     pair-new route already answers `reader.provider_disconnected` rather than the opaque
     `credentials.missing` for the same cause, by checking first (`payments-api.ts:696-704`).
-    (Coordinator's decision, 2026-10-10.)
+    (Coordinator's decision, 2026-10-10.) _2026-10-11 (A518): Unpair now answers
+    `credentials.missing` as Delete does (`removeAtProvider`)._
 9. **The provider id is freed exactly as for Stripe.** A deleted row no longer counts toward
    `card_readers_provider_ref_key`, which ignores deleted rows (A435-3 Task 1). Nothing extra is
    written: `unpaired_at` stays null, as on a deleted Stripe reader (A435-3 decision 2). Once the
@@ -1072,7 +1074,9 @@ from the backlog, the decision recorded, and the fiscal guards green unedited.
   not tell a rejected key from an outage (backlog: "A failed SumUp unpair is logged with reason
   `unknown`"). Plan:
   `docs/superpowers/plans/2026-10-10-a435-3b-reader-delete-disconnected.md`." Keep the
-  "reason `unknown`" entry; this branch does not change it.
+  "reason `unknown`" entry; this branch does not change it. _2026-10-11 (A518): that backlog entry
+  is gone; docs/backlog/payments.md now says a rejected key and an outage are told apart in the
+  log._
 - [ ] **Step 4: Guards still owed.** The fiscal tests must pass unedited:
   `pnpm --filter @waitron/fiscal-verifactu exec vitest run src/write-path.e2e.test.ts src/sale-amount.huella.test.ts src/correction-amount.huella.test.ts src/money-conversion.huella.test.ts`
   and `pnpm --filter @waitron/fiscal-verifactu exec vitest run inmutabilidad`, all files unedited

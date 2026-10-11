@@ -1,5 +1,9 @@
+import { createServer } from "node:http";
+import type { AddressInfo } from "node:net";
 import { describe, expect, it } from "vitest";
-import { decimal } from "@waitron/shared";
+import { decimal, hasCode, isAppError } from "@waitron/shared";
+import type { AppError } from "@waitron/shared";
+import type { SumUpClient } from "./client.js";
 import { sumupClient, SumUpPairingRefused } from "./sumup-client.js";
 
 // `sumup-client.ts` is COVERAGE-excluded (the real HTTP boundary), not import-excluded: these tests
@@ -362,10 +366,143 @@ describe("sumupClient reader management", () => {
     expect(s.calls).toContainEqual(["DELETE", "/v0.1/merchants/MC/readers/rdr_1"]);
   });
 
+  async function unpairFailure(client: SumUpClient): Promise<AppError<"reader.unpair_failed">> {
+    const error: unknown = await client.deleteReader("rdr_1").catch((e: unknown) => e);
+    if (!isAppError(error) || !hasCode(error, "reader.unpair_failed"))
+      throw new Error(`expected reader.unpair_failed, got ${String(error)}`);
+    return error;
+  }
+
   it.each([400, 401, 403, 409, 429, 500])("rejects reader deletion on HTTP %s", async (status) => {
     const s = stub(() => ({ status, body: { title: "Rejected" } }));
     const client = sumupClient({ apiKey: "k", merchantCode: "MC", fetch: s.fetch });
-    await expect(client.deleteReader("rdr_1")).rejects.toThrow(`HTTP ${status}`);
+    expect((await unpairFailure(client)).params).toEqual({ providerId: "sumup" });
+  });
+
+  it.each([
+    [401, "credential_rejected"],
+    [403, "credential_rejected"],
+    [500, "provider_unavailable"],
+    [503, "provider_unavailable"],
+    [400, "http_400"],
+    [429, "http_429"],
+  ])("tells why a reader deletion failed on HTTP %s", async (status, reason) => {
+    const s = stub(() => ({ status, body: { title: "Rejected" } }));
+    const client = sumupClient({ apiKey: "k", merchantCode: "MC", fetch: s.fetch });
+    expect((await unpairFailure(client)).reason).toBe(reason);
+  });
+
+  const htmlPage = "<html><body><h1>Gateway says no</h1></body></html>";
+  const answering =
+    (status: number, body: BodyInit | null): typeof fetch =>
+    () =>
+      Promise.resolve(new Response(body, { status, headers: { "content-type": "text/html" } }));
+
+  it.each([
+    [401, "credential_rejected"],
+    [403, "credential_rejected"],
+    [429, "http_429"],
+  ])(
+    "tells why a reader deletion failed on HTTP %s from its status alone",
+    async (status, reason) => {
+      const client = sumupClient({
+        apiKey: "k",
+        merchantCode: "MC",
+        fetch: answering(status, htmlPage),
+      });
+      const error = await unpairFailure(client);
+      expect(error.reason).toBe(reason);
+    },
+  );
+
+  it("accepts deletion of an already absent reader whose 404 is not JSON", async () => {
+    const client = sumupClient({
+      apiKey: "k",
+      merchantCode: "MC",
+      fetch: answering(404, htmlPage),
+    });
+    await expect(client.deleteReader("rdr_1")).resolves.toBeUndefined();
+  });
+
+  it("tells a 401 whose body breaks off as credential_rejected, not unreachable", async () => {
+    const breaksOff = new ReadableStream<Uint8Array>({
+      pull(controller) {
+        controller.error(new TypeError("terminated"));
+      },
+    });
+    const client = sumupClient({
+      apiKey: "k",
+      merchantCode: "MC",
+      fetch: answering(401, breaksOff),
+    });
+    expect((await unpairFailure(client)).reason).toBe("credential_rejected");
+  });
+
+  it("releases the body of a reader deletion's answer it does not read", async () => {
+    let cancelled = false;
+    const unread = new ReadableStream<Uint8Array>({
+      cancel() {
+        cancelled = true;
+      },
+    });
+    const client = sumupClient({ apiKey: "k", merchantCode: "MC", fetch: answering(409, unread) });
+    await client.deleteReader("rdr_1").catch(() => undefined);
+    expect(cancelled).toBe(true);
+    // This stream never ends, so a client that reads the body hangs here and trips the bound.
+  }, 2_000);
+
+  it("tells a reader deletion cut off by a dropped connection as unreachable", async () => {
+    const client = sumupClient({
+      apiKey: "k",
+      merchantCode: "MC",
+      fetch: () => Promise.reject(new TypeError("fetch failed")),
+    });
+    expect((await unpairFailure(client)).reason).toBe("unreachable");
+  });
+
+  it("tells a reader deletion cut off by its deadline as unreachable", async () => {
+    let signal: AbortSignal | undefined;
+    const neverAnswering: typeof fetch = (_url, init) => {
+      signal = (init as RequestInit | undefined)?.signal ?? undefined;
+      return new Promise<Response>((_resolve, reject) => {
+        signal?.addEventListener("abort", () => reject(new Error("aborted")));
+      });
+    };
+    const client = sumupClient({
+      apiKey: "k",
+      merchantCode: "MC",
+      fetch: neverAnswering,
+      timeoutMs: 50,
+    });
+    expect((await unpairFailure(client)).reason).toBe("unreachable");
+    expect(signal?.aborted).toBe(true);
+    // Only the client's own 50 ms deadline settles this fetch; without it the 2 s bound trips.
+  }, 2_000);
+
+  it("refuses a reader deletion that SumUp redirects, without following it", async () => {
+    const requested: string[] = [];
+    const server = createServer((req, res) => {
+      requested.push(`${req.method ?? ""} ${req.url ?? ""}`);
+      if (req.url === "/v0.1/merchants/MC/readers/rdr_1") {
+        res.writeHead(302, { location: "/signin" }).end();
+      } else {
+        res.writeHead(200, { "content-type": "text/html" }).end(htmlPage);
+      }
+    });
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+    try {
+      const { port } = server.address() as AddressInfo;
+      const client = sumupClient({
+        apiKey: "k",
+        merchantCode: "MC",
+        baseUrl: `http://127.0.0.1:${port}`,
+      });
+      expect((await unpairFailure(client)).reason).toBe("http_302");
+      expect(requested).toEqual(["DELETE /v0.1/merchants/MC/readers/rdr_1"]);
+    } finally {
+      server.closeAllConnections();
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+    }
   });
 
   it("accepts deletion of an already absent reader on a retry", async () => {

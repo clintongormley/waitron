@@ -968,8 +968,8 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     es: "Conecta primero este proveedor de pagos",
   },
   "reader.unpair_failed": {
-    en: "Unpairing at the provider failed. The reader is disabled; try again.",
-    es: "No se pudo desvincular el lector en el proveedor. Queda deshabilitado; inténtalo de nuevo.",
+    en: "The provider did not confirm the unpairing. The reader is disabled; try again.",
+    es: "El proveedor no confirmó la desvinculación. Queda deshabilitado; inténtalo de nuevo.",
   },
   "reader.unpair_in_progress": {
     en: "That card reader is being unpaired or deleted. Try again when that finishes.",

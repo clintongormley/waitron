@@ -216,6 +216,54 @@ describe("Disable and optional provider unpairing", () => {
     expect(api.unpairReader).toHaveBeenCalledTimes(1);
   });
 
+  it.each([
+    ["en", "The provider did not confirm the unpairing. The reader is still enabled; try again."],
+    [
+      "es",
+      "El proveedor no confirmó la desvinculación. El lector sigue habilitado; inténtalo de nuevo.",
+    ],
+  ] as const)(
+    "says in %s that a reader whose unpair failed while disabling it is still enabled",
+    async (locale, text) => {
+      setLocale(locale);
+      const api = client([reader], true, {
+        unpairReader: vi.fn().mockRejectedValue({ code: "reader.unpair_failed" }),
+      });
+      const el = await mount(api);
+      await open(el);
+      await tick(el, true);
+      await press(el, "[data-test=confirm-disable]");
+      await vi.waitFor(async () =>
+        expect(
+          (
+            await formMessageOf(
+              q(el, "[data-test=reader-editor] wt-form-actions")! as WtFormActions,
+            )
+          )?.textContent?.trim(),
+        ).toBe(text),
+      );
+    },
+  );
+
+  it("keeps the shared wording when a standalone Unpair of a disabled reader fails", async () => {
+    const api = client([{ ...reader, active: false }], true, {
+      unpairReader: vi.fn().mockRejectedValue({ code: "reader.unpair_failed" }),
+    });
+    const el = await mount(api);
+    await chooseOption(q(el, "wt-combobox[name=reader-status-filter]")!, "disabled");
+    await el.updateComplete;
+    cell(el, "[data-test=unpair-counter]")!.click();
+    await el.updateComplete;
+    await press(el, "[data-test=confirm-unpair]");
+    await vi.waitFor(async () =>
+      expect(
+        (
+          await formMessageOf(q(el, "[data-test=reader-editor] wt-form-actions")! as WtFormActions)
+        )?.textContent?.trim(),
+      ).toBe(codeMessage("reader.unpair_failed")),
+    );
+  });
+
   it("prevents duplicate submits and freezes the choice while the request is pending", async () => {
     let done!: () => void;
     const api = client([reader], true, {

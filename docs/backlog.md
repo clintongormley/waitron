@@ -4919,13 +4919,6 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
   step 4 (#1519).
 - **A Stripe reader's delete confirmation does not say the reader stays registered at Stripe**,
   which a SumUp reader's does while SumUp is not connected. Left open by A435 step 3b.
-- **Unpair does not map `credentials.missing`**, which SumUp's seat throws when the account is
-  disconnected during Unpair's provider call; Delete answers the same case as
-  `reader.provider_disconnected` (`apps/server/src/payments-api.ts`). Left open by A435 step 3b.
-- **A failed SumUp unpair is logged with reason `unknown`**: `deleteReader`
-  (`packages/payments-sumup/src/sumup-client.ts`) throws a plain `Error` carrying the HTTP status
-  only in its message, which the log never reads, so a refused key, an outage and a dropped
-  connection log alike. Unpair logs the same. Left open by A435 step 3.
 - **The till names a reader deleted elsewhere with `reader.not_found`'s general sentence**
   ("This device has no card reader it can use…", `apps/till/src/i18n/codes.ts`), where a deleted
   printer has its own "That printer no longer exists". Owner to choose whether readers get one too.

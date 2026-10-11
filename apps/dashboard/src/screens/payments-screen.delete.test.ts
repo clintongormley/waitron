@@ -501,7 +501,7 @@ describe("Deleting a card reader", () => {
 
     expect(dialogOf(el)!.open).toBe(true);
     expect(dialogOf(el)!.actionError).toBe(
-      "Unpairing at the provider failed. The reader is disabled; try again.",
+      "The provider did not confirm the unpairing. The reader is disabled; try again.",
     );
     expect(confirmOf(el).hasAttribute("disabled")).toBe(false);
     // The delete's first transaction switched the reader off before calling the provider
