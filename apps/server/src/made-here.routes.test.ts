@@ -34,7 +34,7 @@ import {
   type BillVenue,
 } from "./testing/bill-venue.js";
 import { offerProducts } from "./testing/zone-offers.js";
-import { createTable } from "./tables.js";
+import { createTable } from "./testing/live-table.js";
 import { decodeTicket } from "./testing/decode-ticket.js";
 import { settlePendingBillPayments } from "./bill-payments-loop.js";
 import { fireLines } from "./working-order.js";

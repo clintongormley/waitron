@@ -15,7 +15,7 @@ import { listSalePolicies, resolveMakers } from "@waitron/venue-service";
 import { locationId as brandLocationId } from "@waitron/shared";
 import { readZonePlan } from "../../src/floor-plan.js";
 import type { Placement } from "../../src/floor-reset-plan.js";
-import { createTable } from "../../src/tables.js";
+import { createTable } from "../../src/testing/live-table.js";
 import type { TillConfig } from "../../src/till-config.js";
 import { DEMO_TABLES } from "./floor.js";
 import { seedFloor } from "./seed-floor.js";

@@ -12,7 +12,7 @@ import {
 } from "@waitron/catalogue";
 import { floorZones } from "@waitron/db";
 import type { Logger } from "./logger.js";
-import { createTable } from "./tables.js";
+import { createTable } from "./testing/live-table.js";
 import type { TillConfig } from "./till-config.js";
 import { mountTillApi } from "./till-api.js";
 import { offerProducts, type ZoneOffers } from "./testing/zone-offers.js";

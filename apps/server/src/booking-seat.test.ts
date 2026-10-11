@@ -24,7 +24,7 @@ import { MANAGEMENT_COOKIE, type Logger } from "@waitron/server-kit";
 import { writeClearingWorkflow } from "@waitron/venue-service";
 import type { ModuleRouteContext } from "@waitron/module";
 import type { TillConfig } from "./till-config.js";
-import { createTable } from "./tables.js";
+import { createTable } from "./testing/live-table.js";
 import { finishTable, moduleCoreServices, seatTable } from "./parties.js";
 import "./errors.js";
 

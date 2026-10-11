@@ -71,7 +71,7 @@ import { deploymentEnvironment } from "./config.js";
 import { DEVICE_COOKIE } from "./device-session.js";
 import type { Logger } from "./logger.js";
 import { ALL_MODULES } from "./modules.js";
-import { createTable } from "./tables.js";
+import { createTable } from "./testing/live-table.js";
 import { printedLines } from "./testing/decode-ticket.js";
 import { enrolDeviceForTest } from "./testing/enrol.js";
 import { offerProducts, type ZoneOffers } from "./testing/zone-offers.js";

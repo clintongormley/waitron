@@ -14,7 +14,7 @@ import { clearRoutingCell, setRoutingCell, setStationToday } from "@waitron/venu
 import { loginWithPin } from "@waitron/identity";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { createTable } from "./tables.js";
+import { createTable } from "./testing/live-table.js";
 import { inTx, provisionBillVenue, send, type BillVenue } from "./testing/bill-venue.js";
 import { SESSION_COOKIE } from "./till-session.js";
 import "./errors.js";

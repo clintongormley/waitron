@@ -6,6 +6,7 @@ import { randomUUID } from "node:crypto";
 import { and, eq, inArray, sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
 import {
+  diningTables,
   locations,
   kitchenTimingDefaults,
   nowIso,
@@ -45,7 +46,7 @@ import { seedLegacySellingUnits } from "./testing/seed-units.js";
 import { offerProducts } from "./testing/zone-offers.js";
 import { fireAll, openPartyTab, serveLine, unserveLine } from "./testing/serve-line.js";
 import { publishWorkingMenu, republishMenus } from "./testing/publish-menu.js";
-import { createTable, updateTable } from "./tables.js";
+import { createTable } from "./testing/live-table.js";
 import {
   addTabRound,
   advanceTicketItem,
@@ -1023,7 +1024,9 @@ describe("listTablesWithState (occupancy)", () => {
       );
     });
     const freeTable = await asApp(cfg, (tx) => createTable(tx, cfg, { label: "T2" }));
-    await asApp(cfg, (tx) => updateTable(tx, cfg, tableId, { zoneId: zone.id }));
+    await asApp(cfg, (tx) =>
+      tx.update(diningTables).set({ zoneId: zone.id }).where(eq(diningTables.id, tableId)),
+    );
 
     const { tabId } = await asApp(cfg, (tx) =>
       openPartyTab(tx, cfg, {

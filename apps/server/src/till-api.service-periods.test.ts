@@ -57,7 +57,7 @@ import { createStation } from "./kitchen.js";
 import { VENUE_SERVICE } from "./modules.js";
 import { attachPrinterToStation } from "./station-printers.js";
 import { decodeTicket } from "./testing/decode-ticket.js";
-import { createTable } from "./tables.js";
+import { createTable } from "./testing/live-table.js";
 import { deploymentEnvironment } from "./config.js";
 import { DEVICE_COOKIE } from "./device-session.js";
 import { ALL_MODULES } from "./modules.js";

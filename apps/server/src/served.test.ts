@@ -36,7 +36,7 @@ import {
 } from "@waitron/shared";
 import { deploymentEnvironment } from "./config.js";
 import { ALL_MODULES } from "./modules.js";
-import { createTable } from "./tables.js";
+import { createTable } from "./testing/live-table.js";
 import type { DeviceRequestConfig } from "./till-config.js";
 import { payWorkingOrder } from "./till-sale.js";
 import { offerProducts } from "./testing/zone-offers.js";

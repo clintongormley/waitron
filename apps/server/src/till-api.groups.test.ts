@@ -15,7 +15,7 @@ import {
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { createCourse, setProductCourse } from "./kitchen.js";
-import { createTable } from "./tables.js";
+import { createTable } from "./testing/live-table.js";
 import { inTx, provisionBillVenue, send, tabWith, type BillVenue } from "./testing/bill-venue.js";
 import { addTabRound } from "./working-order.js";
 import "./errors.js";

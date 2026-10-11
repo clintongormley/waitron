@@ -44,7 +44,7 @@ import {
 import type { OptionSelection } from "@waitron/shared";
 import type { OriginConfig } from "./till-config.js";
 import { createCourse } from "./kitchen.js";
-import { createTable } from "./tables.js";
+import { createTable } from "./testing/live-table.js";
 import { seedLegacySellingUnits } from "./testing/seed-units.js";
 import { offerProducts } from "./testing/zone-offers.js";
 import { publishWorkingMenu } from "./testing/publish-menu.js";

@@ -2,12 +2,11 @@ import { eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { partyTables } from "@waitron/db";
+import { diningTables, partyTables } from "@waitron/db";
 import { finishTable } from "./parties.js";
 import { joinTables, splitTable } from "./table-actions.js";
 import { listOrders, type OrderListFilter } from "./orders-list.js";
 import { readReceiptOrder } from "./receipt-order.js";
-import { updateTable } from "./tables.js";
 import {
   commandFor,
   inTx,
@@ -102,7 +101,9 @@ describe("a closing party keeps its table names", () => {
     await order(v, tabId, "Burger");
     await pay(v, tabId, "12.00");
     await finish(partyId);
-    await inTx(v, (tx) => updateTable(tx, v.cfg, table, { label: "Patio 4" }));
+    await inTx(v, (tx) =>
+      tx.update(diningTables).set({ label: "Patio 4" }).where(eq(diningTables.id, table)),
+    );
 
     expect((await partyRow(v, partyId)).tableNames).toEqual(["Porch 4"]);
     const page = await inTx(v, (tx) =>
@@ -146,7 +147,9 @@ describe("a closing party keeps its table names", () => {
     await order(v, tabId, "Agua");
     await pay(v, tabId, "2.00");
     await finish(partyId);
-    await inTx(v, (tx) => updateTable(tx, v.cfg, table, { label: "Lawn 7" }));
+    await inTx(v, (tx) =>
+      tx.update(diningTables).set({ label: "Lawn 7" }).where(eq(diningTables.id, table)),
+    );
 
     expect(await listed({ search: "Garden" })).toContain(tabId);
     expect(await listed({ table: "garden 7" })).toContain(tabId);

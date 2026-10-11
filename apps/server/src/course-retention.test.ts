@@ -30,7 +30,7 @@ import {
 } from "@waitron/shared";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
 import { createCourse, createStation, setProductCourse } from "./kitchen.js";
-import { createTable } from "./tables.js";
+import { createTable } from "./testing/live-table.js";
 import { mountTillApi } from "./till-api.js";
 import { seedLegacySellingUnits } from "./testing/seed-units.js";
 import { offerProducts, routeProductTo } from "./testing/zone-offers.js";

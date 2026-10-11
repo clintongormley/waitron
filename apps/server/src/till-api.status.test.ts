@@ -18,7 +18,7 @@ import {
   seriesId as brandSeriesId,
 } from "@waitron/shared";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
-import { createTable } from "./tables.js";
+import { createTable } from "./testing/live-table.js";
 import type { Logger, LogLevel } from "./logger.js";
 import { mountTillApi } from "./till-api.js";
 import type { TillApiDeps } from "./till-api.js";

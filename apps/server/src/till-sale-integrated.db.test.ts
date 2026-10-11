@@ -70,7 +70,7 @@ import {
   placeOrder,
   updateOrderLine,
 } from "./working-order.js";
-import { createTable } from "./tables.js";
+import { createTable } from "./testing/live-table.js";
 import {
   collectOrderOrchestration as collectOrder,
   payWorkingOrder,

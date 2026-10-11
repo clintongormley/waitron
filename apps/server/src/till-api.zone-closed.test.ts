@@ -20,7 +20,7 @@ import {
   zoneServicePolicies,
   zoneClosedTimes,
 } from "@waitron/venue-service";
-import { createTable } from "./tables.js";
+import { createTable } from "./testing/live-table.js";
 import { provisionBillVenue, send, type BillVenue } from "./testing/bill-venue.js";
 
 const suite = useVenueDb({

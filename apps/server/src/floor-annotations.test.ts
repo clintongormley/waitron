@@ -12,7 +12,7 @@ import {
   seriesId as brandSeriesId,
 } from "@waitron/shared";
 import type { TillConfig } from "./till-config.js";
-import { createTable } from "./tables.js";
+import { createTable } from "./testing/live-table.js";
 import { listTablesWithState } from "./working-order.js";
 import { ALL_MODULES, enabledFloorAnnotators } from "./modules.js";
 import "./errors.js";

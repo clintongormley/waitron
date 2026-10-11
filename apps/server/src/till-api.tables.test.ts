@@ -31,7 +31,7 @@ import { seedLegacySellingUnits } from "./testing/seed-units.js";
 import { offerProducts } from "./testing/zone-offers.js";
 import "./errors.js";
 import { cancelBody } from "./testing/cancel-line.js";
-import { createTable } from "./tables.js";
+import { createTable } from "./testing/live-table.js";
 import { seedSessionDevice } from "./testing/session-device.js";
 
 // The HTTP wiring of the table/tab routes: session guard, isUuid screens and STATUS mapping. The verbs

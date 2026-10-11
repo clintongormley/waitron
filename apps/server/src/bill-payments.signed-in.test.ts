@@ -39,7 +39,7 @@ import {
 import { deploymentEnvironment } from "./config.js";
 import { deleteDevice, disableDevice } from "./device-delete.js";
 import { ALL_MODULES } from "./modules.js";
-import { createTable } from "./tables.js";
+import { createTable } from "./testing/live-table.js";
 import { offerProducts, type ZoneOffers } from "./testing/zone-offers.js";
 import { openPartyTab } from "./testing/serve-line.js";
 import { deviceRequestCfg, openTillSession } from "./testing/session-device.js";

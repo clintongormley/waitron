@@ -17,7 +17,7 @@ import {
 } from "./parties.js";
 import { readDrafts, saveDraft, submitDraft } from "./order-drafts.js";
 import { VENUE_SERVICE } from "./modules.js";
-import { createTable } from "./tables.js";
+import { createTable } from "./testing/live-table.js";
 import {
   OPERATOR,
   activeTablesOf,

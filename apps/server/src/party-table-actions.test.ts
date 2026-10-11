@@ -20,7 +20,7 @@ import { readDrafts, saveDraft } from "./order-drafts.js";
 import { placeGroups } from "./order-groups.js";
 import { VENUE_SERVICE } from "./modules.js";
 import { finishTable, readPartyBills, setPartyName } from "./parties.js";
-import { deactivateTable } from "./tables.js";
+import { switchOff } from "./testing/live-table.js";
 import { listExpoQueue } from "./working-order.js";
 import {
   combineParties,
@@ -478,7 +478,7 @@ describe("move guests", () => {
     it("refuses a table taken out of use, and one that does not exist", async () => {
       const [m4, retired] = await tables("Retirada", 4, 9);
       const ana = await seat(v, m4);
-      await act((tx) => deactivateTable(tx, v.cfg, retired));
+      await switchOff(v, retired);
       const missing = randomUUID();
       const moving = await opts(ana.partyId);
 

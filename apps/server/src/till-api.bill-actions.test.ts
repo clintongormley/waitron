@@ -6,7 +6,7 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { workingOrders } from "@waitron/db";
 import { takeBillPayment } from "./bill-payments.js";
 import { seatTable } from "./parties.js";
-import { createTable } from "./tables.js";
+import { createTable } from "./testing/live-table.js";
 import {
   inTx,
   provisionBillVenue,

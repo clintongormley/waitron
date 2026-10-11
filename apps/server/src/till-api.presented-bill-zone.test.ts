@@ -15,7 +15,7 @@ import {
 import { DEVICE_COOKIE } from "./device-session.js";
 import { issuancePass } from "./issuance-pass.js";
 import { VENUE_SERVICE } from "./modules.js";
-import { createTable } from "./tables.js";
+import { createTable } from "./testing/live-table.js";
 import { enrolDeviceForTest } from "./testing/enrol.js";
 import {
   inTx,

@@ -37,7 +37,8 @@ import {
 import { deploymentEnvironment } from "./config.js";
 import { ALL_MODULES } from "./modules.js";
 import type { TillConfig, DeviceRequestConfig } from "./till-config.js";
-import { createTable, listTables, setTablePlacement } from "./tables.js";
+import { listTables, setTablePlacement } from "./tables.js";
+import { createTable } from "./testing/live-table.js";
 import { addTabRound, advanceTicketItem, fireLines, type TicketState } from "./working-order.js";
 import { payWorkingOrder } from "./till-sale.js";
 import { offerProducts } from "./testing/zone-offers.js";

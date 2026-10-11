@@ -28,7 +28,7 @@ import {
 import { deploymentEnvironment } from "./config.js";
 import { ALL_MODULES } from "./modules.js";
 import type { TillConfig, DeviceRequestConfig } from "./till-config.js";
-import { createTable } from "./tables.js";
+import { createTable } from "./testing/live-table.js";
 import { addTabRound, listStationQueue } from "./working-order.js";
 import { createCourse } from "./kitchen.js";
 import { payWorkingOrder, recordTillSaleOrchestration as recordTillSale } from "./till-sale.js";

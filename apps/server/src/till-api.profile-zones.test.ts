@@ -37,7 +37,7 @@ import { DEVICE_COOKIE } from "./device-session.js";
 import { VENUE_SERVICE } from "./modules.js";
 import type { Logger } from "./logger.js";
 import { placeGroups } from "./order-groups.js";
-import { createTable } from "./tables.js";
+import { createTable } from "./testing/live-table.js";
 import { mountTillApi } from "./till-api.js";
 import { mountDeviceApi } from "./device-api.js";
 import { createStation } from "./kitchen.js";

@@ -20,7 +20,7 @@ import { createCourse } from "./kitchen.js";
 import { bumpGroupReady, markGroupAway, placeGroups } from "./order-groups.js";
 import { finishTable } from "./parties.js";
 import { moveGuests } from "./table-actions.js";
-import { createTable, deactivateTable } from "./tables.js";
+import { createTable, switchOff } from "./testing/live-table.js";
 import {
   addTabRound,
   createOpenOrder,
@@ -484,7 +484,7 @@ describe("what a move refuses, changing nothing", () => {
   it("refuses a table taken out of use, and one that does not exist", async () => {
     const p = await twoParties("Mesa fuera");
     const retired = await v.table("Mesa fuera R");
-    await inTx(v, (tx) => deactivateTable(tx, v.cfg, retired));
+    await switchOff(v, retired);
     const missing = randomUUID();
 
     const inactive = await refused(p, [p.second], () => move(p.second, { tableId: retired }), [

@@ -18,7 +18,8 @@ import {
   jobOrigin,
 } from "@waitron/shared";
 import type { OriginConfig, TillConfig } from "./till-config.js";
-import { createTable, setTableStatus } from "./tables.js";
+import { setTableStatus } from "./tables.js";
+import { createTable } from "./testing/live-table.js";
 import { listTablesWithState } from "./working-order.js";
 import "./errors.js";
 import { openPartyTab } from "./testing/serve-line.js";

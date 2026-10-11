@@ -13,7 +13,8 @@ import {
   seriesId as brandSeriesId,
 } from "@waitron/shared";
 import type { TillConfig } from "./till-config.js";
-import { clearPlacement, createTable, setTablePlacement } from "./tables.js";
+import { clearPlacement, setTablePlacement } from "./tables.js";
+import { createTable } from "./testing/live-table.js";
 import "./errors.js";
 
 const LOCALE = "es-ES";

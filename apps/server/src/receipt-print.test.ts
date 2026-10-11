@@ -85,7 +85,7 @@ import {
   reprintSale,
 } from "./till-sale.js";
 import { createOpenOrder, parkOrder, placeOrder } from "./working-order.js";
-import { createTable } from "./tables.js";
+import { createTable } from "./testing/live-table.js";
 import { takeBillPayment } from "./bill-payments.js";
 import {
   DRAWER_KICK,

@@ -35,7 +35,7 @@ import { deploymentEnvironment } from "../config.js";
 import { DEVICE_COOKIE } from "../device-session.js";
 import type { Logger } from "../logger.js";
 import { ALL_MODULES } from "../modules.js";
-import { createTable } from "../tables.js";
+import { createTable } from "./live-table.js";
 import type { DeviceRequestConfig } from "../till-config.js";
 import { mountTillApi } from "../till-api.js";
 import { systemClock } from "../till-backend.js";

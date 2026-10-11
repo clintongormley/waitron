@@ -71,7 +71,7 @@ import {
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
 import { cardReaders, type PaymentProvider } from "@waitron/payments";
 import type { Logger, LogLevel } from "./logger.js";
-import { createTable } from "./tables.js";
+import { createTable } from "./testing/live-table.js";
 import { fireDishesAtPayment } from "./till-sale.js";
 import { mountTillApi, resolveCardCollector, run } from "./till-api.js";
 import type { TillApiDeps } from "./till-api.js";
