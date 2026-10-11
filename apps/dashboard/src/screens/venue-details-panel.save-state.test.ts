@@ -15,7 +15,10 @@ afterEach(() => {
 
 function filled(): VenueDetailsModel {
   const model = venueDetailsFixture({ addressLine2: "Piso 2", dayCutover: "06:00:00" });
-  model.businessDayClock.clock.dayCutover = "06:00";
+  model.businessDayClock = {
+    ...model.businessDayClock,
+    clock: { ...model.businessDayClock.clock, dayCutover: "06:00" },
+  };
   model.policy.province = { decision: "allow", reasons: [] };
   return model;
 }
