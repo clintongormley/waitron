@@ -11,6 +11,11 @@ import {
   deviceProfiles,
   diningTables,
   floorPlanTables,
+  floorPlanJoins,
+  floorPlanJoinTables,
+  floorResetTables,
+  floorTodayTables,
+  tableInService,
   floorPlans,
   floorZones,
   parties,
@@ -27,6 +32,7 @@ import {
   createDepartment,
   createServiceZone,
   departments,
+  departmentReceipts,
   departmentTransferRequests,
   requestDepartmentTransfer,
   readDepartmentDeleteImpact,
@@ -36,12 +42,25 @@ import {
   setDepartmentTransferSettings,
   zoneServicePolicies,
 } from "@waitron/venue-service";
-import { ALL_MODULES, enabledTableRemovals } from "./modules.js";
-import { moduleCoreServices } from "./parties.js";
-import { counterOrder, setupPartyVenue, type PartyVenue } from "./testing/party-venue.js";
+import { ALL_MODULES, enabledFloorAnnotators, enabledTableRemovals } from "./modules.js";
+import { finishTable, leaveTables, moduleCoreServices } from "./parties.js";
+import {
+  cashContribution,
+  commandFor,
+  counterOrder,
+  join,
+  seat,
+  setupPartyVenue,
+  type PartyVenue,
+} from "./testing/party-venue.js";
 import { createTable } from "./testing/live-table.js";
-import { saveZonePlan } from "./floor-plan.js";
-import { parkOrder } from "./working-order.js";
+import { readZonePlan, saveZonePlan } from "./floor-plan.js";
+import { handOverOrder, listTablesWithState, parkOrder, placeOrder } from "./working-order.js";
+import { catchUpZone, ensureToday, resetZone } from "./floor-today-store.js";
+import { collectOrder } from "./till-sale.js";
+import { WorkforceBackend } from "@waitron/workforce";
+import { recordDailyClose } from "@waitron/reporting";
+import { jobOrigin } from "@waitron/shared";
 
 const NOW = new Date("2026-10-11T12:00:00Z");
 let venue: PartyVenue;
@@ -417,19 +436,24 @@ async function mounted() {
       `${kind === "zone" ? "/management-api/zones" : "/management-api/venue-service/departments"}/${id}${method === "GET" ? "/delete-impact" : ""}`,
       { method, headers: { cookie } },
     );
-  const book = async (tableId: string) =>
+  const book = async (tableId: string, bookingDate = "2026-01-01") =>
     app.request("/management-api/bookings", {
       method: "POST",
       headers: { cookie, "content-type": "application/json" },
       body: JSON.stringify({
-        bookingDate: "2026-01-01",
+        bookingDate,
         bookingTime: "20:00",
         partySize: 2,
         contactName: "Queued guest",
         tableId,
       }),
     });
-  return { request, book };
+  const cancel = (id: string) =>
+    app.request(`/management-api/bookings/${id}/cancel`, {
+      method: "POST",
+      headers: { cookie },
+    });
+  return { request, book, cancel };
 }
 async function completeSnapshot(tx: Transaction) {
   const tables = await tx.execute<{ name: string }>(
@@ -786,4 +810,401 @@ describe("mounted authenticated service deletion races", () => {
     expect(await order).toMatchObject({ code: "service_zone.not_found" });
     expect(await run(completeSnapshot)).toEqual(await afterDelete);
   });
+});
+
+const FLOOR_ROWS = [
+  "dining_tables",
+  "floor_plans",
+  "floor_plan_tables",
+  "floor_plan_joins",
+  "floor_plan_join_tables",
+  "floor_reset_tables",
+  "floor_reset_joins",
+  "floor_reset_join_tables",
+  "floor_today_tables",
+  "floor_today_zones",
+  "floor_today_joins",
+  "floor_today_join_tables",
+] as const;
+const HISTORY_ROWS = [
+  "sales",
+  "sale_lines",
+  "tenders",
+  "sale_settlements",
+  "bill_payments",
+  "sale_receipt_headers",
+  "department_receipts",
+  "registros_facturacion",
+  "cadenas",
+  "order_amendments",
+  "working_order_lines",
+  "order_service_contexts",
+  "working_line_contexts",
+  "department_transfer_requests",
+  "time_entries",
+  "workforce_chains",
+  "daily_closes",
+  "daily_close_chain",
+] as const;
+
+async function retainedHistory(tx: Transaction) {
+  const all = await completeSnapshot(tx);
+  return Object.fromEntries(HISTORY_ROWS.map((name) => [name, all[name]!]));
+}
+
+it.each(["zone", "department"] as const)(
+  "master deletion waits for live work; %s deletion removes all floor state immediately and retains complete history",
+  async (kind) => {
+    const f = await target();
+    const removals = enabledTableRemovals(ALL_MODULES);
+    const label = (
+      await run((tx) => tx.select().from(diningTables).where(eq(diningTables.id, f.tableId)))
+    )[0]!.label;
+    const second = await venue.table(`Other ${randomUUID()}`, f.zoneId);
+    const master = await run(async (tx) => {
+      const [plan] = await tx
+        .insert(floorPlans)
+        .values({ zoneId: f.zoneId, revision: 1, savedAt: NOW.toISOString() })
+        .returning();
+      const masters = await tx
+        .insert(floorPlanTables)
+        .values([
+          { planId: plan!.id, label, seats: 4 },
+          { planId: plan!.id, label: `Saved ${randomUUID()}`, seats: 4 },
+        ])
+        .returning();
+      for (const [i, tableId] of [f.tableId, second].entries())
+        await tx
+          .update(diningTables)
+          .set({ planTableId: masters[i]!.id })
+          .where(eq(diningTables.id, tableId));
+      const [savedJoin] = await tx
+        .insert(floorPlanJoins)
+        .values({ planId: plan!.id, seats: 8 })
+        .returning();
+      await tx
+        .insert(floorPlanJoinTables)
+        .values(masters.map((m) => ({ joinId: savedJoin!.id, planTableId: m.id })));
+      await resetZone(tx, venue.cfg, removals, f.zoneId, NOW);
+      return { plan: plan!, masters };
+    });
+    const seated = await seat(venue, f.tableId);
+    const oldReset = (
+      await run((tx) =>
+        tx.select().from(floorResetTables).where(eq(floorResetTables.tableId, f.tableId)),
+      )
+    )[0]!;
+    const kept = {
+      id: master.masters[1]!.id,
+      key: "kept",
+      label: master.masters[1]!.label,
+      seats: 4,
+      fixed: false,
+      placement: null,
+    };
+    const save = (revision: number) =>
+      run((tx) =>
+        saveZonePlan(
+          tx,
+          venue.cfg,
+          removals,
+          f.zoneId,
+          { revision, tables: [kept], joins: [] },
+          NOW,
+        ),
+      );
+    const resetCopy = await run(completeSnapshot);
+    await expect(save(1)).resolves.toEqual({ revision: 2, ids: { kept: kept.id } });
+    const savedCopy = await run(completeSnapshot);
+    expect(savedCopy.floor_reset_joins).toEqual(resetCopy.floor_reset_joins);
+    expect(savedCopy.floor_reset_join_tables).toEqual(resetCopy.floor_reset_join_tables);
+    expect(
+      (await run((tx) => readZonePlan(tx, venue.cfg, f.zoneId))).tables.map((table) => table.id),
+    ).toEqual([kept.id]);
+    expect(
+      await run((tx) =>
+        tx.select().from(floorPlanJoins).where(eq(floorPlanJoins.planId, master.plan.id)),
+      ),
+    ).toEqual([]);
+    expect(await run((tx) => tx.select().from(floorPlanJoinTables))).toEqual([]);
+    expect(
+      (
+        await run((tx) =>
+          tx.select().from(floorResetTables).where(eq(floorResetTables.tableId, f.tableId)),
+        )
+      )[0],
+    ).toEqual({ ...oldReset, planTableId: null });
+    expect(
+      (await run((tx) => tx.select().from(diningTables).where(eq(diningTables.id, f.tableId))))[0],
+    ).toMatchObject({ id: f.tableId, planTableId: null });
+    await expect(save(1)).rejects.toMatchObject({ code: "floor_plan.out_of_date" });
+    const remove = () =>
+      run((tx) =>
+        kind === "zone"
+          ? deleteZone(tx, venue.cfg, core().floorDeletion, f.zoneId, NOW)
+          : deleteDepartment(tx, venue.cfg, core().floorDeletion, f.departmentId, NOW),
+      );
+    const unchanged = await run(completeSnapshot);
+    await expect(remove()).rejects.toMatchObject({ code: "zone.table_in_use" });
+    expect(await run(completeSnapshot)).toEqual(unchanged);
+    await join(venue, seated.partyId, second);
+    await run((tx) => leaveTables(tx, [f.tableId]));
+    await run((tx) => resetZone(tx, venue.cfg, removals, f.zoneId, NOW));
+    expect(
+      await run((tx) =>
+        tx.select().from(floorTodayTables).where(eq(floorTodayTables.tableId, f.tableId)),
+      ),
+    ).toEqual([]);
+    expect(
+      (
+        await run((tx) =>
+          tx.select().from(floorResetTables).where(eq(floorResetTables.tableId, f.tableId)),
+        )
+      )[0],
+    ).toMatchObject({ remove: true, pending: true });
+    const earlier = await run(completeSnapshot);
+    await expect(remove()).rejects.toMatchObject({ code: "zone.table_in_use" });
+    expect(await run(completeSnapshot)).toEqual(earlier);
+    const finishCommand = await commandFor(venue, seated.partyId);
+    await run((tx) => finishTable(tx, { partyId: seated.partyId, ...finishCommand }));
+    const delivery = await counterOrder(venue, "Agua");
+    await run((tx) =>
+      tx
+        .update(workingOrders)
+        .set({ deliveryTableId: f.tableId })
+        .where(eq(workingOrders.id, delivery)),
+    );
+    const unpaid = await run(completeSnapshot);
+    await expect(remove()).rejects.toMatchObject({ code: "table.delivery_in_progress" });
+    expect(await run(completeSnapshot)).toEqual(unpaid);
+    await placeOrder(
+      { db: venue.db, backend: venue.backend, clock: venue.clock },
+      venue.cfg,
+      delivery,
+      venue.operator.personId,
+    );
+    await collectOrder(
+      { db: venue.db, backend: venue.backend, clock: venue.clock },
+      venue.cfg,
+      { id: delivery, lines: [], tender: { method: "cash", amount: "2.00" } },
+      venue.operator,
+    );
+    const uncollected = await run(completeSnapshot);
+    await expect(remove()).rejects.toMatchObject({ code: "table.delivery_in_progress" });
+    expect(await run(completeSnapshot)).toEqual(uncollected);
+    await run((tx) => handOverOrder(tx, venue.cfg, delivery));
+    const http = await mounted();
+    const booked = await http.book(second);
+    expect(booked.status).toBe(201);
+    const bookingId = (await booked.json()).id as string;
+    const withBooking = await run(completeSnapshot);
+    await expect(remove()).rejects.toMatchObject({ code: "table.booked" });
+    expect(await run(completeSnapshot)).toEqual(withBooking);
+    expect((await http.cancel(bookingId)).status).toBe(204);
+    await run(async (tx) => {
+      const [counterPolicy] = await tx
+        .select()
+        .from(zoneServicePolicies)
+        .where(eq(zoneServicePolicies.zoneId, venue.counter.zoneId));
+      await tx.insert(departmentTransferRequests).values({
+        tabId: delivery,
+        sourceDepartmentId: f.departmentId,
+        destinationDepartmentId: counterPolicy!.departmentId,
+        destinationZoneId: venue.counter.zoneId,
+        senderId: venue.operator.personId,
+        status: "declined",
+        reason: "Retained lifecycle",
+        resolvedAt: NOW.toISOString(),
+      });
+      await tx.insert(departmentReceipts).values({
+        departmentId: f.departmentId,
+        receipt: { headerSubtitle: { "es-ES": "Retained table service" } },
+      });
+      const [timekeeper] = await tx
+        .select()
+        .from(persons)
+        .where(eq(persons.email, "owner@example.test"));
+      const workforce = new WorkforceBackend();
+      const event = {
+        nodeId: venue.cfg.nodeId,
+        locationId: venue.cfg.locationId,
+        personId: timekeeper!.id,
+        offsetMinutes: 120,
+        origin: jobOrigin("dashboard"),
+      };
+      await workforce.clockIn(tx, { ...event, at: "2026-10-01T10:00:00Z" });
+      await workforce.clockOut(tx, { ...event, at: "2026-10-01T11:00:00Z" });
+      await recordDailyClose(tx, {
+        nodeId: venue.cfg.nodeId,
+        businessDay: "2026-10-01",
+        timeZone: "Europe/Madrid",
+        dayCutover: "05:00",
+        closedBy: venue.operator.personId,
+        cashCounts: [],
+      });
+    });
+    const replacementZone = await run(async (tx) => {
+      const [counterPolicy] = await tx
+        .select()
+        .from(zoneServicePolicies)
+        .where(eq(zoneServicePolicies.zoneId, venue.counter.zoneId));
+      return createServiceZone(tx, venue.cfg, {
+        name: `Replacement ${randomUUID()}`,
+        departmentId: counterPolicy!.departmentId,
+      });
+    });
+    const replacementSave = () =>
+      run((tx) =>
+        saveZonePlan(
+          tx,
+          venue.cfg,
+          removals,
+          replacementZone.id,
+          {
+            revision: 0,
+            tables: [{ key: "new", label, seats: 4, fixed: false, placement: null }],
+            joins: [],
+          },
+          NOW,
+        ),
+      );
+    await expect(replacementSave()).rejects.toMatchObject({
+      code: "table.label_taken",
+      params: { label },
+    });
+    const contributed = await counterOrder(venue, "Agua");
+    await cashContribution(venue, contributed, "2.00");
+    const history = await run(retainedHistory);
+    for (const name of [
+      "department_receipts",
+      "bill_payments",
+      "tenders",
+      "sale_settlements",
+      "sales",
+      "sale_lines",
+      "registros_facturacion",
+      "cadenas",
+      "order_amendments",
+      "working_order_lines",
+      "order_service_contexts",
+      "working_line_contexts",
+      "sale_receipt_headers",
+      "department_transfer_requests",
+      "time_entries",
+      "workforce_chains",
+      "daily_closes",
+      "daily_close_chain",
+    ])
+      expect(history[name], name).not.toEqual([]);
+    const before = await run(completeSnapshot);
+    await remove();
+    expect(await run(retainedHistory)).toEqual(history);
+    const after = await run(completeSnapshot);
+    for (const name of FLOOR_ROWS) expect(after[name], name).toEqual([]);
+    expect(after.working_orders).toEqual(
+      before.working_orders!.map((row) => {
+        const order = row as Record<string, unknown>;
+        return order.delivery_table_id === f.tableId
+          ? { ...order, delivery_table_id: null, delivery_table_label: label }
+          : order;
+      }),
+    );
+    expect(after.bookings).toEqual(
+      before.bookings!.map((row) => {
+        const booking = row as Record<string, unknown>;
+        return booking.table_id === second
+          ? { ...booking, table_id: null, table_label: kept.label }
+          : booking;
+      }),
+    );
+    expect(after.parties).toEqual(before.parties);
+    expect(after.party_tables).toEqual(before.party_tables);
+    expect(
+      await run(async (tx) => {
+        const nextDay = new Date("2026-10-12T12:00:00Z");
+        await ensureToday(tx, venue.cfg, removals, nextDay);
+        return listTablesWithState(
+          tx,
+          venue.cfg,
+          enabledFloorAnnotators(ALL_MODULES),
+          undefined,
+          nextDay,
+        );
+      }),
+    ).toEqual([]);
+    expect(await run(completeSnapshot)).toEqual(after);
+    await expect(run((tx) => readZonePlan(tx, venue.cfg, f.zoneId))).rejects.toMatchObject({
+      code: "zone.not_found",
+    });
+    await expect(
+      run((tx) => catchUpZone(tx, venue.cfg, removals, f.zoneId, NOW)),
+    ).rejects.toMatchObject({ code: "zone.not_found" });
+    await replacementSave();
+    const replacementPlan = await run((tx) => readZonePlan(tx, venue.cfg, replacementZone.id));
+    const replacementId = replacementPlan.tables[0]!.liveTableId!;
+    expect(replacementId).not.toBe(f.tableId);
+    expect(replacementPlan.tables[0]!.label).toBe(label);
+    const [live] = await run((tx) =>
+      tx
+        .select({ inService: tableInService(diningTables.id).mapWith(Boolean) })
+        .from(diningTables)
+        .where(eq(diningTables.id, replacementId)),
+    );
+    expect(live!.inService).toBe(true);
+  },
+);
+
+it("rechecks an upcoming booking added after the master editor opened, but allows the cancelled booking's table to leave the master", async () => {
+  const f = await target();
+  const removals = enabledTableRemovals(ALL_MODULES);
+  const masterId = await run(async (tx) => {
+    const [table] = await tx.select().from(diningTables).where(eq(diningTables.id, f.tableId));
+    const [plan] = await tx
+      .insert(floorPlans)
+      .values({ zoneId: f.zoneId, revision: 1, savedAt: NOW.toISOString() })
+      .returning();
+    const [master] = await tx
+      .insert(floorPlanTables)
+      .values({ planId: plan!.id, label: table!.label, seats: 4 })
+      .returning();
+    await tx
+      .update(diningTables)
+      .set({ planTableId: master!.id })
+      .where(eq(diningTables.id, f.tableId));
+    await resetZone(tx, venue.cfg, removals, f.zoneId, NOW);
+    return master!.id;
+  });
+  const opened = await run((tx) => readZonePlan(tx, venue.cfg, f.zoneId));
+  expect(opened.tables[0]!.id).toBe(masterId);
+  const http = await mounted();
+  const response = await http.book(f.tableId, "2026-10-12");
+  expect(response.status).toBe(201);
+  const bookingId = (await response.json()).id as string;
+  const save = () =>
+    run((tx) =>
+      saveZonePlan(
+        tx,
+        venue.cfg,
+        removals,
+        f.zoneId,
+        { revision: opened.revision, tables: [], joins: [] },
+        NOW,
+      ),
+    );
+  const before = await run(completeSnapshot);
+  await expect(save()).rejects.toMatchObject({
+    code: "table.booked",
+    params: { tableId: f.tableId },
+  });
+  expect(await run(completeSnapshot)).toEqual(before);
+  await expect(
+    run((tx) => deleteZone(tx, venue.cfg, core().floorDeletion, f.zoneId, NOW)),
+  ).rejects.toMatchObject({ code: "table.booked" });
+  expect(await run(completeSnapshot)).toEqual(before);
+  expect((await http.cancel(bookingId)).status).toBe(204);
+  const terminal = (await run((tx) => tx.select().from(bookings)))[0]!;
+  await expect(save()).resolves.toEqual({ revision: 2, ids: {} });
+  expect(await run((tx) => tx.select().from(floorPlanTables))).toEqual([]);
+  expect((await run((tx) => tx.select().from(diningTables)))[0]!.id).toBe(f.tableId);
+  expect(await run((tx) => tx.select().from(bookings))).toEqual([terminal]);
 });
