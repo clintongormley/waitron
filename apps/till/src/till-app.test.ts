@@ -18836,6 +18836,18 @@ describe("till-app: a box update while a kitchen display's dish move still waits
     expect(el.shadowRoot!.querySelector("wt-banner[data-test=update-bar]")).not.toBeNull();
   });
 
+  it("reloads once the move has been refused, and the refusal is not left unhandled", async () => {
+    let refuse!: (error: unknown) => void;
+    const { el, reload } = await movedOnKitchenDisplay(
+      vi.fn(() => new Promise((_resolve, reject) => (refuse = reject))),
+    );
+    refuse({ code: "device.forbidden_station" });
+    await flush(el);
+    window.dispatchEvent(new Event(BUILD_CHANGED_EVENT));
+    await flush(el);
+    expect(reload).toHaveBeenCalledOnce();
+  });
+
   it("reloads once the move has been answered", async () => {
     let answer!: (value: unknown) => void;
     const { el, reload } = await movedOnKitchenDisplay(
