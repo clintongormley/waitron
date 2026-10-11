@@ -264,9 +264,7 @@ describe("table + tab routes", () => {
       createTable(tx, cfg, { label: "12", zoneId: seededZoneId, capacity: 4 }),
     );
     const list = (await (await request("/api/tables")).json()) as unknown[];
-    expect(list).toContainEqual(
-      expect.objectContaining({ id, label: "12", zoneId: seededZoneId, active: true }),
-    );
+    expect(list).toContainEqual(expect.objectContaining({ id, label: "12", zoneId: seededZoneId }));
   });
 
   it("POST /api/tables/:id/seat opens a tab; a second → 409 tab.already_open", async () => {

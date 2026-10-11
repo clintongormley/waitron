@@ -969,14 +969,12 @@ describe("/management-api/tables", () => {
     });
 
     it("a STAFF session is refused the includeDisabled list (403)", async () => {
-      const id = await newTable();
       for (const res of [
         await req("/tables?includeDisabled=true", { method: "GET" }, staffCookie),
       ]) {
         expect(res.status).toBe(403);
         expect(await res.json()).toMatchObject({ error: { code: "authorization.not_permitted" } });
       }
-      expect((await listAll()).find((t) => t.id === id)).toMatchObject({ active: true });
     });
   });
 

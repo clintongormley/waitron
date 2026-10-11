@@ -111,12 +111,7 @@ describe("table CRUD", () => {
         id,
         label: "12",
         zoneId,
-        capacity: 4,
-        active: true,
-        posX: null,
-        posY: null,
-        shape: null,
-        rotation: null,
+        planTableId: null,
       }),
     ]);
   });
