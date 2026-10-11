@@ -527,6 +527,30 @@ describe("floor hierarchy deletion", () => {
     });
   });
 
+  it("clears an explicitly requested inactive descendant's floor tables and plan", async () => {
+    const z = await zone("Retired child");
+    const own = await planned(z, "Retired child");
+    await inTx(v, (tx) => tx.update(floorZones).set({ active: false }).where(eq(floorZones.id, z)));
+    const read = await impact([z]);
+    expect(read.removes).toContainEqual({
+      key: "tables",
+      count: 4,
+      targets: targets([...own.live, own.noToday]),
+    });
+    expect(read.removes).toContainEqual({
+      key: "saved_tables",
+      count: 3,
+      targets: targets(own.masters),
+    });
+    await inTx(v, (tx) => seatFor().clear(tx, [z], NOW));
+    expect(
+      await inTx(v, (tx) => tx.select().from(diningTables).where(eq(diningTables.zoneId, z))),
+    ).toEqual([]);
+    expect(
+      await inTx(v, (tx) => tx.select().from(floorPlans).where(eq(floorPlans.zoneId, z))),
+    ).toEqual([]);
+  });
+
   it("empty and foreign zone selections do not change or create floor state", async () => {
     const [loc] = await inTx(v, (tx) =>
       tx

@@ -54,13 +54,7 @@ async function inventory(tx: Transaction, cfg: TillConfig, zoneIds: readonly str
   const zones = await tx
     .select({ id: floorZones.id })
     .from(floorZones)
-    .where(
-      and(
-        eq(floorZones.locationId, cfg.locationId),
-        eq(floorZones.active, true),
-        inArray(floorZones.id, [...zoneIds]),
-      ),
-    );
+    .where(and(eq(floorZones.locationId, cfg.locationId), inArray(floorZones.id, [...zoneIds])));
   const ids = zones.map((zone) => zone.id);
   const tables = await tx
     .select()
