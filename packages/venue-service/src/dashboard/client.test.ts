@@ -521,6 +521,7 @@ it("watches one zone's master floor plan passively and rereads it when a plan ta
         "floor_plan_joins",
         "floor_plan_join_tables",
         "dining_tables",
+        "floor_zones",
       ].map((type) => ({ type })),
     );
     live.invalidate([{ type: "floor_plan_tables" }]);

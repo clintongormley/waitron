@@ -91,5 +91,6 @@ it("refreshes a zone's floor plan preview when a floor plan, its tables or joins
     "floor_plan_joins",
     "floor_plan_join_tables",
     "dining_tables",
+    "floor_zones",
   ]);
 });
