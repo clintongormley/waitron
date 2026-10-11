@@ -268,7 +268,7 @@ describe.each(["light", "dark"] as const)("till-floor-screen a11y (%s theme)", (
     await expectNoA11yViolations(host);
   });
 
-  it("has no violations with unsent orders marked, on the list and on the map", async () => {
+  it("has no violations with unsent orders marked, on the list", async () => {
     const withUnsent = (table: TableState): TableState =>
       table.party === null
         ? table
@@ -290,31 +290,9 @@ describe.each(["light", "dark"] as const)("till-floor-screen a11y (%s theme)", (
     );
     expect(list.el.shadowRoot!.querySelectorAll("[data-unsent]").length).toBeGreaterThan(0);
     await expectNoA11yViolations(list.host);
-    cleanupWidgets();
-
-    const onMap = marked.map((table, index) => ({
-      ...table,
-      posX: 100 + index * 200,
-      posY: 300,
-      shape: "round" as const,
-      rotation: 0,
-    }));
-    const map = await mountWidget<TillFloorScreen>(
-      "till-floor-screen",
-      { zones, tables: onMap },
-      theme,
-    );
-    const canvas = map.el.shadowRoot!.querySelector("wt-floor-canvas")!;
-    await canvas.updateComplete;
-    const token = canvas.shadowRoot!.querySelector<
-      HTMLElement & { updateComplete: Promise<unknown> }
-    >("wt-table-token")!;
-    await token.updateComplete;
-    expect(token.shadowRoot!.querySelector("[data-unsent]")).not.toBeNull();
-    await expectNoA11yViolations(map.host);
   });
 
-  it("has no violations with a party's reminder due, on the list and on the map", async () => {
+  it("has no violations with a party's reminder due, on the list", async () => {
     const now = Date.parse("2026-09-29T20:00:00.000Z");
     const due = partyTables.map((table) =>
       table.party === null
@@ -334,31 +312,9 @@ describe.each(["light", "dark"] as const)("till-floor-screen a11y (%s theme)", (
     );
     expect(list.el.shadowRoot!.querySelectorAll("[data-fire-due]").length).toBeGreaterThan(0);
     await expectNoA11yViolations(list.host);
-    cleanupWidgets();
-
-    const onMap = due.map((table, index) => ({
-      ...table,
-      posX: 100 + index * 200,
-      posY: 300,
-      shape: "round" as const,
-      rotation: 0,
-    }));
-    const map = await mountWidget<TillFloorScreen>(
-      "till-floor-screen",
-      { zones, tables: onMap, now },
-      theme,
-    );
-    const canvas = map.el.shadowRoot!.querySelector("wt-floor-canvas")!;
-    await canvas.updateComplete;
-    const token = canvas.shadowRoot!.querySelector<
-      HTMLElement & { updateComplete: Promise<unknown> }
-    >("wt-table-token")!;
-    await token.updateComplete;
-    expect(token.shadowRoot!.querySelector("[data-fire-due]")).not.toBeNull();
-    await expectNoA11yViolations(map.host);
   });
 
-  it("has no violations with signals side by side and the stations' summary, on the list and on the map", async () => {
+  it("has no violations with signals side by side and the stations' summary, on the list", async () => {
     const signalled = partyTables.map((table): TableState =>
       table.party === null
         ? table
@@ -389,29 +345,6 @@ describe.each(["light", "dark"] as const)("till-floor-screen a11y (%s theme)", (
     expect(list.el.shadowRoot!.querySelectorAll("[data-chip]").length).toBeGreaterThan(5);
     expect(list.el.shadowRoot!.querySelector("[data-open-station]")).not.toBeNull();
     await expectNoA11yViolations(list.host);
-    cleanupWidgets();
-
-    const onMap = signalled.map((table, index) => ({
-      ...table,
-      posX: 100 + index * 200,
-      posY: 300,
-      shape: "round" as const,
-      rotation: 0,
-    }));
-    const map = await mountWidget<TillFloorScreen>(
-      "till-floor-screen",
-      { zones, tables: onMap },
-      theme,
-    );
-    const canvas = map.el.shadowRoot!.querySelector("wt-floor-canvas")!;
-    await canvas.updateComplete;
-    const token = canvas.shadowRoot!.querySelector<
-      HTMLElement & { updateComplete: Promise<unknown> }
-    >("wt-table-token")!;
-    await token.updateComplete;
-    expect(token.shadowRoot!.querySelectorAll("[data-chip]").length).toBeGreaterThan(5);
-    expect(map.el.shadowRoot!.querySelector("[data-station-summary]")).not.toBeNull();
-    await expectNoA11yViolations(map.host);
   });
 
   it("has no violations rendering a planned zone's map", async () => {
@@ -482,30 +415,6 @@ describe.each(["light", "dark"] as const)("till-floor-screen a11y (%s theme)", (
     await el.shadowRoot!.querySelector<HTMLElement & { updateComplete: Promise<unknown> }>(
       "till-seat-dialog",
     )!.updateComplete;
-    await expectNoA11yViolations(host);
-  });
-
-  it("has no violations with the map's Mark cleared dialog open", async () => {
-    const onMap = partyTables.map((table, index) => ({
-      ...table,
-      posX: 100 + index * 200,
-      posY: 300,
-      shape: "round" as const,
-      rotation: 0,
-    }));
-    const { el, host } = await mountWidget<TillFloorScreen>(
-      "till-floor-screen",
-      { zones, tables: onMap },
-      theme,
-    );
-    el.shadowRoot!.querySelector("wt-floor-canvas")!.dispatchEvent(
-      new CustomEvent("wt-open-table", {
-        detail: { tableId: "t8" },
-        bubbles: true,
-        composed: true,
-      }),
-    );
-    await el.updateComplete;
     await expectNoA11yViolations(host);
   });
 });

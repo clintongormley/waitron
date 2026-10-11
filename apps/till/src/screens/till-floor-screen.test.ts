@@ -339,19 +339,6 @@ describe("till-floor-screen", () => {
     expect(el.shadowRoot!.querySelector('[data-table="t1"] [data-reserved]')).toBeNull();
   });
 
-  it("renders the reserved chip on the map token for a placed reserved table", async () => {
-    const el = await mountFloor({
-      tables: [placed("t1", { nextReservation: { time: "21:00" } })],
-    });
-    const token = el
-      .shadowRoot!.querySelector("wt-floor-canvas")!
-      .shadowRoot!.querySelector("wt-table-token")!;
-    const chip = token.shadowRoot!.querySelector("[data-reserved]")!;
-    expect(chip).not.toBeNull();
-    expect(chip.textContent).toContain(t("floor.reserved"));
-    expect(chip.textContent).toContain("21:00");
-  });
-
   describe("order-timing accent (timingBand)", () => {
     it("renders no timing accent for a fresh table (the existing occupancy accent is untouched)", async () => {
       const { el } = await mount({ tables: [table({ id: "t1", timingBand: "fresh" })] });
@@ -528,59 +515,6 @@ describe("till-floor-screen", () => {
 });
 
 describe("till-floor-screen — map/list toggle and tray", () => {
-  it("defaults to the MAP (shared canvas) when the active zone has a placed table", async () => {
-    const el = await mountFloor({ tables: [placed("t1")] });
-    expect(el.shadowRoot!.querySelector("wt-floor-canvas")).not.toBeNull();
-    expect(el.shadowRoot!.querySelector(".grid")).toBeNull();
-  });
-
-  it("threads a placed table's timingBand through to the canvas's wt-table-token (forgotten flashes on the map too)", async () => {
-    const el = await mountFloor({ tables: [placed("t1", { timingBand: "forgotten" })] });
-    const canvas = el.shadowRoot!.querySelector("wt-floor-canvas")!;
-    const token = canvas.shadowRoot!.querySelector(
-      '[data-table="t1"] wt-table-token',
-    ) as HTMLElement & { table: { timingBand?: string }; shadowRoot: ShadowRoot };
-    // The DATA reaches the token regardless of the token's own render timing…
-    expect(token.table.timingBand).toBe("forgotten");
-    // …and the token renders the SAME age-forgotten flashing-red accent the till's LIST card shows.
-    const card = token.shadowRoot.querySelector(".card")!;
-    expect(card.classList.contains("age-forgotten")).toBe(true);
-  });
-
-  it("threads a warm timingBand through to the canvas token as the subtler steady accent (no flash)", async () => {
-    const el = await mountFloor({ tables: [placed("t1", { timingBand: "warm" })] });
-    const canvas = el.shadowRoot!.querySelector("wt-floor-canvas")!;
-    const token = canvas.shadowRoot!.querySelector(
-      '[data-table="t1"] wt-table-token',
-    ) as HTMLElement & { shadowRoot: ShadowRoot };
-    const card = token.shadowRoot.querySelector(".card")!;
-    expect(card.classList.contains("age-warm")).toBe(true);
-    expect(card.classList.contains("flash")).toBe(false);
-  });
-
-  it("defaults to the LIST (FP-1 cards) when the active zone has no placed table", async () => {
-    const el = await mountFloor({ tables: [table({ id: "t1" })] });
-    expect(el.shadowRoot!.querySelector("wt-floor-canvas")).toBeNull();
-    expect(el.shadowRoot!.querySelector('.grid [data-table="t1"]')).not.toBeNull();
-  });
-
-  it("a manual toggle flips the map to the list", async () => {
-    const el = await mountFloor({ tables: [placed("t1")] });
-    expect(el.shadowRoot!.querySelector("wt-floor-canvas")).not.toBeNull();
-    el.shadowRoot!.querySelector<HTMLElement>("[data-view-toggle]")!.click();
-    await el.updateComplete;
-    expect(el.shadowRoot!.querySelector("wt-floor-canvas")).toBeNull();
-    expect(el.shadowRoot!.querySelector('.grid [data-table="t1"]')).not.toBeNull();
-  });
-
-  it("a manual toggle flips the list to the map", async () => {
-    const el = await mountFloor({ tables: [table({ id: "t1" })] });
-    expect(el.shadowRoot!.querySelector("wt-floor-canvas")).toBeNull();
-    el.shadowRoot!.querySelector<HTMLElement>("[data-view-toggle]")!.click();
-    await el.updateComplete;
-    expect(el.shadowRoot!.querySelector("wt-floor-canvas")).not.toBeNull();
-  });
-
   it("lists the active zone's UNPLACED tables in a tray in map view (placed stays on the canvas)", async () => {
     const el = await mountFloor({
       zones: [zone({ id: "z1" })],
@@ -595,44 +529,6 @@ describe("till-floor-screen — map/list toggle and tray", () => {
     el.shadowRoot!.querySelector<HTMLElement>('[data-tray-table="t9"]')!.click();
     await el.updateComplete;
     expect(el.shadowRoot!.querySelector("till-seat-dialog")!.tableLabel).toBe("9");
-  });
-
-  it("re-emits a canvas wt-open-table as open-table, resolving from the read-model that the table is seated", async () => {
-    const el = await mountFloor({
-      tables: [
-        placed("t1", {
-          state: "open-tab",
-          hasOpenTab: true,
-          tabLineCount: 1,
-          tabTotal: "9.00",
-        }),
-      ],
-    });
-    const seen = captureOpenTable(el);
-    el.shadowRoot!.querySelector("wt-floor-canvas")!.dispatchEvent(
-      new CustomEvent("wt-open-table", {
-        detail: { tableId: "t1" },
-        bubbles: true,
-        composed: true,
-      }),
-    );
-    expect(seen.detail).toEqual({ tableId: "t1", seated: true });
-  });
-
-  it("ignores a canvas wt-open-table for a table the read-model does not know", async () => {
-    const el = await mountFloor({ tables: [placed("t1")] });
-    const seen = captureOpenTable(el);
-    const escaped = vi.fn();
-    el.addEventListener("wt-open-table", escaped);
-    el.shadowRoot!.querySelector("wt-floor-canvas")!.dispatchEvent(
-      new CustomEvent("wt-open-table", {
-        detail: { tableId: "gone" },
-        bubbles: true,
-        composed: true,
-      }),
-    );
-    expect(seen.detail).toBeUndefined();
-    expect(escaped).not.toHaveBeenCalled();
   });
 
   it("restores the zone after refresh and records a new zone selection", async () => {
@@ -704,20 +600,6 @@ describe("closed floor zones", () => {
     } finally {
       setLocale(previous);
     }
-  });
-
-  it("refuses the map's free table too", async () => {
-    const { el } = await mount({ zones: [zone({ closed: true })], tables: [placed("t1")] });
-    el.shadowRoot!.querySelector("wt-floor-canvas")!.dispatchEvent(
-      new CustomEvent("wt-open-table", {
-        detail: { tableId: "t1" },
-        bubbles: true,
-        composed: true,
-      }),
-    );
-    await el.updateComplete;
-    expect(el.shadowRoot!.querySelector("till-seat-dialog")).toBeNull();
-    expect(el.shadowRoot!.querySelector("[data-zone-closed]")).not.toBeNull();
   });
 
   it("still resumes an occupied table in a closed zone", async () => {

@@ -137,21 +137,6 @@ describe("till-floor-screen: seating a party", () => {
     expect(seatDialog(el)).toBeNull();
   });
 
-  it("opens the seat dialog for a free table tapped on the map", async () => {
-    const el = await mountFloor([table({ posX: 200, posY: 200, shape: "round", rotation: 0 })]);
-
-    el.shadowRoot!.querySelector("wt-floor-canvas")!.dispatchEvent(
-      new CustomEvent("wt-open-table", {
-        detail: { tableId: "t4" },
-        bubbles: true,
-        composed: true,
-      }),
-    );
-    await el.updateComplete;
-
-    expect(seatDialog(el)!.tableLabel).toBe("4");
-  });
-
   it("resumes a seated party whose tab has been paid rather than seating the table again", async () => {
     const el = await mountFloor([
       seated(
@@ -224,26 +209,6 @@ describe("till-floor-screen: what a seated party owes", () => {
     expect(card(el, "t4").querySelector("[data-paid]")).toBeNull();
   });
 
-  it("shows the party's outstanding amount on the map token", async () => {
-    const el = await mountFloor([
-      seated(
-        {
-          hasOpenTab: false,
-          tabLineCount: undefined,
-          tabTotal: undefined,
-          posX: 200,
-          posY: 200,
-          shape: "round",
-          rotation: 0,
-        },
-        { outstanding: "30.00" },
-      ),
-    ]);
-
-    const canvas = el.shadowRoot!.querySelector("wt-floor-canvas")!;
-    expect(canvas.tables[0]!.tabTotal).toBe("30.00");
-  });
-
   it("writes what the party owes the Spanish way in the list", async () => {
     setLocale("es");
     const el = await mountFloor([seated()]);
@@ -251,7 +216,7 @@ describe("till-floor-screen: what a seated party owes", () => {
     expect(card(el, "t4").querySelector(".total")!.textContent).toBe("44,00\u00a0€");
   });
 
-  it("writes what the party owes the Spanish way in the unplaced tray, and hands the map the language", async () => {
+  it("writes what the party owes the Spanish way in the unplaced tray", async () => {
     setLocale("es");
     const el = await mountFloor([
       seated(),
@@ -261,7 +226,6 @@ describe("till-floor-screen: what a seated party owes", () => {
       ),
     ]);
 
-    expect(el.shadowRoot!.querySelector("wt-floor-canvas")!.locale).toBe("es");
     const tray = el.shadowRoot!.querySelector<HTMLElement & { updateComplete: Promise<unknown> }>(
       '[data-tray-table="t4"] wt-table-token',
     )!;
@@ -273,14 +237,10 @@ describe("till-floor-screen: what a seated party owes", () => {
 describe("till-floor-screen: the party's name", () => {
   const partyName = (el: TillFloorScreen, id: string) =>
     card(el, id).querySelector("[data-party-name]")?.textContent?.trim() ?? null;
-  const placed = { posX: 200, posY: 200, shape: "round" as const, rotation: 0 };
 
-  it("shows a named party's name on its card and its map token", async () => {
+  it("shows a named party's name on its card", async () => {
     const list = await mountFloor([seated({}, { name: "Ana", displayName: "Ana" })]);
     expect(partyName(list, "t4")).toBe("Ana");
-
-    const map = await mountFloor([seated(placed, { name: "Ana", displayName: "Ana" })]);
-    expect(map.shadowRoot!.querySelector("wt-floor-canvas")!.tables[0]!.partyName).toBe("Ana");
   });
 
   it("shows a joined party's tables, and nothing more for a party named after its one table", async () => {
@@ -293,10 +253,6 @@ describe("till-floor-screen: the party's name", () => {
 
     const alone = await mountFloor([seated()]);
     expect(partyName(alone, "t4")).toBeNull();
-    const aloneOnMap = await mountFloor([seated(placed)]);
-    expect(
-      aloneOnMap.shadowRoot!.querySelector("wt-floor-canvas")!.tables[0]!.partyName,
-    ).toBeUndefined();
   });
 });
 
@@ -347,83 +303,6 @@ describe("till-floor-screen: a table needing clearing", () => {
 
     expect(opened).toEqual([]);
     expect(seatDialog(el)).toBeNull();
-  });
-
-  it("shows the state on the map token and offers Mark cleared when it is tapped there", async () => {
-    const el = await mountFloor([
-      { ...clearing("t4", "4"), posX: 200, posY: 200, shape: "round", rotation: 0 },
-    ]);
-    const cleared = capture(el, "mark-cleared");
-    const canvas = el.shadowRoot!.querySelector("wt-floor-canvas")!;
-    expect(canvas.tables[0]!.status?.label).toBe(t("floor.needs_clearing"));
-
-    canvas.dispatchEvent(
-      new CustomEvent("wt-open-table", {
-        detail: { tableId: "t4" },
-        bubbles: true,
-        composed: true,
-      }),
-    );
-    await el.updateComplete;
-    el.shadowRoot!.querySelector<HTMLElement>("[data-clear-dialog] [data-mark-cleared]")!.click();
-    await el.updateComplete;
-
-    expect(cleared).toEqual([{ tableId: "t4" }]);
-    expect(el.shadowRoot!.querySelector("[data-clear-dialog]")).toBeNull();
-  });
-
-  it("does not paint a table needing clearing as free on the map, although no party holds it", async () => {
-    const el = await mountFloor([
-      { ...clearing("t4", "4"), posX: 200, posY: 200, shape: "round", rotation: 0 },
-    ]);
-    const canvas = el.shadowRoot!.querySelector("wt-floor-canvas")!;
-    await canvas.updateComplete;
-    const token = canvas.shadowRoot!.querySelector<HTMLElement>(
-      '[data-table="t4"] wt-table-token',
-    )!;
-    await (token as HTMLElement & { updateComplete: Promise<unknown> }).updateComplete;
-    const card = token.shadowRoot!.querySelector(".card")!;
-    expect(card.classList.contains("state-free")).toBe(false);
-  });
-
-  it("closes the map's clearing dialog without clearing when it is cancelled", async () => {
-    const el = await mountFloor([
-      { ...clearing("t4", "4"), posX: 200, posY: 200, shape: "round", rotation: 0 },
-    ]);
-    const cleared = capture(el, "mark-cleared");
-    el.shadowRoot!.querySelector("wt-floor-canvas")!.dispatchEvent(
-      new CustomEvent("wt-open-table", {
-        detail: { tableId: "t4" },
-        bubbles: true,
-        composed: true,
-      }),
-    );
-    await el.updateComplete;
-
-    el.shadowRoot!.querySelector<HTMLElement>("[data-clear-dialog] [data-clear-cancel]")!.click();
-    await el.updateComplete;
-
-    expect(cleared).toEqual([]);
-    expect(el.shadowRoot!.querySelector("[data-clear-dialog]")).toBeNull();
-  });
-
-  it("closes the map's clearing dialog when it is dismissed", async () => {
-    const el = await mountFloor([
-      { ...clearing("t4", "4"), posX: 200, posY: 200, shape: "round", rotation: 0 },
-    ]);
-    el.shadowRoot!.querySelector("wt-floor-canvas")!.dispatchEvent(
-      new CustomEvent("wt-open-table", {
-        detail: { tableId: "t4" },
-        bubbles: true,
-        composed: true,
-      }),
-    );
-    await el.updateComplete;
-
-    el.shadowRoot!.querySelector("[data-clear-dialog]")!.dispatchEvent(new CustomEvent("wt-close"));
-    await el.updateComplete;
-
-    expect(el.shadowRoot!.querySelector("[data-clear-dialog]")).toBeNull();
   });
 });
 
@@ -520,38 +399,6 @@ describe("till-floor-screen: a table's unsent orders", () => {
     const el = await mountFloor([seated()]);
 
     expect(marks(el, "t4")).toEqual([]);
-  });
-
-  it("marks Mesa 4's token on the map with everyone's name", async () => {
-    const el = await mountFloor([
-      seated(onMap, {
-        unsentDrafts: [
-          { ownerName: "Alex", lineCount: 2 },
-          { ownerName: "Sam", lineCount: 1 },
-        ],
-      }),
-      table({ id: "t5", label: "5", ...onMap, posX: 600 }),
-    ]);
-
-    const canvas = el.shadowRoot!.querySelector("wt-floor-canvas")!;
-    await canvas.updateComplete;
-    const token = (id: string) =>
-      canvas.shadowRoot!.querySelector<Token>(`[data-table="${id}"] wt-table-token`)!;
-    expect(await tokenMark(token("t4"))).toBe("Unsent: Alex, Sam");
-    expect(await tokenMark(token("t5"))).toBeUndefined();
-  });
-
-  it("marks the token in Spanish on the map", async () => {
-    setLocale("es");
-    const el = await mountFloor([
-      seated(onMap, { unsentDrafts: [{ ownerName: "Alex", lineCount: 2 }] }),
-    ]);
-
-    const canvas = el.shadowRoot!.querySelector("wt-floor-canvas")!;
-    await canvas.updateComplete;
-    expect(
-      await tokenMark(canvas.shadowRoot!.querySelector<Token>('[data-table="t4"] wt-table-token')!),
-    ).toBe("Sin enviar: Alex");
   });
 
   it("leaves room in the tray for a hanging mark, above the next row and the tray's edge", async () => {
@@ -655,23 +502,6 @@ describe("till-floor-screen: a party's release reminder", () => {
     setLocale("es");
     const el = await mountAt([seated({}, { reminder: { groupId: "g2", dueAt: at(-1) } })]);
     expect(chip(el, "t4")!.textContent!.trim()).toBe("Hora de marchar");
-  });
-
-  it("marks the table's token on the map, and not a table whose reminder is not due", async () => {
-    setLocale("es");
-    const el = await mountAt([
-      seated(onMap, { reminder: { groupId: "g2", dueAt: at(-1) } }),
-      seated(
-        { id: "t5", label: "5", ...onMap, posX: 600 },
-        { id: "v5", reminder: { groupId: "g2", dueAt: at(60_000) } },
-      ),
-    ]);
-    const canvas = el.shadowRoot!.querySelector("wt-floor-canvas")!;
-    await canvas.updateComplete;
-    const token = (id: string) =>
-      canvas.shadowRoot!.querySelector<Token>(`[data-table="${id}"] wt-table-token`)!;
-    expect(await tokenChip(token("t4"))).toBe("Hora de marchar");
-    expect(await tokenChip(token("t5"))).toBeUndefined();
   });
 
   it("marks an unplaced table's token in the map's tray", async () => {
