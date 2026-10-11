@@ -60,7 +60,13 @@ import {
 } from "../state/floor-today.js";
 import { partyPaid, unsentText } from "../widgets/table-details-sheet.js";
 import type { SeatConfirmDetail } from "../widgets/seat-dialog.js";
-import { isPlannedZone, listedTables, mapTables, seatsFor } from "../state/floor-map.js";
+import {
+  drawnGroupKey,
+  isPlannedZone,
+  listedTables,
+  mapTables,
+  seatsFor,
+} from "../state/floor-map.js";
 import type { FloorZone, TableState, TableParty, TillApi, TodayPlacement } from "../api/client.js";
 import { delayUntil, reminderDueAt } from "../state/release-reminder.js";
 import { readyByStation, signalOf, type StationReady } from "../state/table-signals.js";
@@ -865,12 +871,7 @@ export class TillFloorScreen extends LitElement {
     for (const each of [...zoneTables].sort((a, b) => inNumberOrder(a.label, b.label))) {
       if (each.today?.placement == null) continue;
       const linkId = this.#linkOf(each);
-      const group =
-        linkId !== null
-          ? `link:${linkId}`
-          : each.today.joinId !== null
-            ? `join:${each.today.joinId}`
-            : `table:${each.id}`;
+      const group = drawnGroupKey(each, linkId);
       if (seen.has(group)) continue;
       seen.add(group);
       const drop = { tableId: table.id, x: from.x, y: from.y, targetId: each.id };
@@ -1025,13 +1026,18 @@ export class TillFloorScreen extends LitElement {
     ></till-bill-choice-dialog>`;
   }
 
-  /** Every action is a write through a `take-orders` route, so the menu needs `canChangeToday`. */
+  /**
+   * Every action is a write through a `take-orders` route, so the menu needs `canChangeToday`. A zone
+   * with no tables is offered it too: its saved plan may have gained tables, which only a reset
+   * brings in, and the server's reset leaves a zone with no saved plan alone.
+   */
   #zoneMenu(
     planned: boolean,
     activeKey: string | null | undefined,
   ): TemplateResult | typeof nothing {
     const zone = this.zones.find((each) => each.id === activeKey);
-    if (!planned || !this.canChangeToday || zone === undefined) return nothing;
+    const offered = planned || this.#zone.visible.length === 0;
+    if (!offered || !this.canChangeToday || zone === undefined) return nothing;
     return html`<till-floor-zone-menu
       .zone=${zone}
       .tables=${this.#zone.visible}

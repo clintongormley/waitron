@@ -149,6 +149,22 @@ describe("till-floor-screen: the zone menu", () => {
     expect(menuOf(el)).toBeNull();
   });
 
+  it("offers a zone with no tables a reset, which brings in the tables its saved plan has gained", async () => {
+    const api = stubApi();
+    const { el } = await mountWidget<TillFloorScreen>("till-floor-screen", {
+      zones: [...zones, zone("z4", "Garden")],
+      tables: [...terraceTables, ...barTables, ...patioTables],
+      api: api as unknown as TillApi,
+      canChangeToday: true,
+    });
+    await showZone(el, "z4");
+    expect(menuOf(el)!.zone!.id).toBe("z4");
+    const refreshes = countRefreshes(el);
+    await send(el, "zone-reset", { zoneId: "z4" });
+    expect(api.resetZoneToday).toHaveBeenCalledExactlyOnceWith("z4");
+    expect(refreshes.count).toBe(1);
+  });
+
   it("places a spare in the middle of the zone, puts a table back and resets the zone", async () => {
     const api = stubApi();
     const el = await mount(api);

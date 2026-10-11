@@ -160,6 +160,7 @@ import type { BillPayDetail, MoveBillDetail } from "./screens/till-table-order-s
 import type { TillTableOrderScreen } from "./screens/till-table-order-screen.js";
 import { billName, owing, paidInPart, shownBills } from "./state/bill-state.js";
 import { billRequestOf } from "./state/table-signals.js";
+import { mergeMembersOf } from "./state/floor-today.js";
 import type { BumpMode, FireControlMode } from "./widgets/station-queue.js";
 import type {
   AdjustmentAsk,
@@ -432,10 +433,10 @@ function billToOpen(bills: readonly PartyBill[]): string | undefined {
 function seatedTables(tables: readonly TableState[], named: readonly string[]): string[] {
   const held = new Set<string>();
   for (const id of named) {
-    const joinId = tables.find((table) => table.id === id)?.today?.joinId ?? null;
     held.add(id);
-    if (joinId === null) continue;
-    for (const table of tables) if (table.today?.joinId === joinId) held.add(table.id);
+    const table = tables.find((each) => each.id === id);
+    if (table === undefined) continue;
+    for (const member of mergeMembersOf(tables, table)) held.add(member.id);
   }
   return [...held];
 }

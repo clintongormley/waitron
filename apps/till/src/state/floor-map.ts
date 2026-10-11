@@ -134,8 +134,11 @@ function lookOf(from: Sources): Look {
   return { fill: from.status.fill, dot: from.status.dot, description: wordsOf(from) };
 }
 
-const groupKey = (table: TableState): string =>
-  table.today?.joinId == null ? `table:${table.id}` : `join:${table.today.joinId}`;
+/** The group a table is drawn and named with: its linked party's, else its merge's, else its own. */
+export function drawnGroupKey(table: TableState, linkId: string | null): string {
+  if (linkId !== null) return `link:${linkId}`;
+  return table.today?.joinId == null ? `table:${table.id}` : `join:${table.today.joinId}`;
+}
 
 /**
  * Every member of a merge, and every table of a party drawn as two or more groups, carries the same
@@ -150,15 +153,13 @@ export function mapTables(zoneTables: readonly TableState[]): FloorMapTable[] {
   for (const table of drawn) {
     if (table.party === null) continue;
     const groups = groupsOfParty.get(table.party.id);
-    if (groups) groups.add(groupKey(table));
-    else groupsOfParty.set(table.party.id, new Set([groupKey(table)]));
+    const key = drawnGroupKey(table, null);
+    if (groups) groups.add(key);
+    else groupsOfParty.set(table.party.id, new Set([key]));
   }
   const linkOf = (table: TableState): string | null =>
     table.party !== null && groupsOfParty.get(table.party.id)!.size > 1 ? table.party.id : null;
-  const lookKey = (table: TableState): string => {
-    const linkId = linkOf(table);
-    return linkId === null ? groupKey(table) : `link:${linkId}`;
-  };
+  const lookKey = (table: TableState): string => drawnGroupKey(table, linkOf(table));
   const together = new Map<string, TableState[]>();
   for (const table of drawn) {
     const members = together.get(lookKey(table));

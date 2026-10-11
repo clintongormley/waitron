@@ -35,10 +35,14 @@ interface Group {
   party: TableParty | null;
 }
 
-function groupOf(zoneTables: readonly TableState[], table: TableState): Group {
+/** `table` and every other member of its merge, in `tables`' order; `table` alone in none. */
+export function mergeMembersOf(tables: readonly TableState[], table: TableState): TableState[] {
   const joinId = table.today?.joinId ?? null;
-  const members =
-    joinId === null ? [table] : zoneTables.filter((each) => each.today?.joinId === joinId);
+  return joinId === null ? [table] : tables.filter((each) => each.today?.joinId === joinId);
+}
+
+function groupOf(zoneTables: readonly TableState[], table: TableState): Group {
+  const members = mergeMembersOf(zoneTables, table);
   return {
     members,
     fixed: members.some((each) => each.today?.fixed === true),

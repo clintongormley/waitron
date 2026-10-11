@@ -2,7 +2,7 @@ import { LitElement, type TemplateResult, css, html, nothing, svg } from "lit";
 import { customElement, property } from "lit/decorators.js";
 import { repeat } from "lit/directives/repeat.js";
 import { styleMap } from "lit/directives/style-map.js";
-import { partyTablesName } from "@waitron/shared";
+import { heldStep, partyTablesName } from "@waitron/shared";
 import { baseStyles } from "../base-styles.js";
 import { DOUBLE_TAP_MS, type GesturePoint, Gestures } from "../gestures.js";
 import { type FloorMapDot, type FloorMapFill, floorMapFillStyles } from "../floor-map-fills.js";
@@ -10,7 +10,6 @@ import {
   type PlanPlacement,
   type PlanRect,
   bounds,
-  clampToGrid,
   cropToTables,
   fitScale,
   showsName,
@@ -525,14 +524,17 @@ export class WtFloorMap extends LitElement {
     if (!this.canDrag) return;
     const { dx, dy } = at;
     const id = this.#held?.dataset["tableId"];
-    const first =
-      id === undefined ? undefined : this.#groupOf.get(id)?.members.find((m) => m.id === id);
+    const members = id === undefined ? undefined : this.#groupOf.get(id)?.members;
+    const first = members?.find((m) => m.id === id);
     if (first === undefined) return;
     const scale = this.#view!.scale;
-    const x = clampToGrid(first.placement.x + snapToSquare(dx, scale));
-    const y = clampToGrid(first.placement.y + snapToSquare(dy, scale));
-    const movedX = x - first.placement.x;
-    const movedY = y - first.placement.y;
+    // The whole group stays on the grid, as the server holds it when the move lands.
+    const xs = members!.map((m) => m.placement.x);
+    const ys = members!.map((m) => m.placement.y);
+    const movedX = heldStep(snapToSquare(dx, scale), Math.min(...xs), Math.max(...xs));
+    const movedY = heldStep(snapToSquare(dy, scale), Math.min(...ys), Math.max(...ys));
+    const x = first.placement.x + movedX;
+    const y = first.placement.y + movedY;
     const targetId = this.#targetAt(at, first.id);
     const drag = this.#drag;
     if (

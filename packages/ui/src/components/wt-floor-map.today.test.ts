@@ -250,6 +250,37 @@ it("a merge with one fixed member stays put, and its copy holds every member", a
   expect(ghost.querySelectorAll('[part="shape"]')).toHaveLength(2);
 });
 
+it("a merge dragged past the left and top edges is drawn where it lands, every member on the grid", async () => {
+  // 4 names the merge but is its right-hand member, so holding 4 alone on the grid leaves 5 off it.
+  const a = { ...t("a", "4", { x: 6, y: 3, width: 4 }), joinId: "j" };
+  const b = { ...t("b", "5", { x: 2, y: 4, width: 4 }), joinId: "j" };
+  const el = await map([a, b]);
+  const before = await boxIn(el, button(el, "a"));
+  const square = before.width / 8;
+  hold(el, before.left + square * 6, before.top + square * 2);
+  move(el, before.left + square, before.top - square * 3);
+  const after = await boxIn(el, button(el, "a"));
+  expect(after.left).toBeCloseTo(before.left - square * 2, 1);
+  expect(after.top).toBeCloseTo(before.top - square * 3, 1);
+  up(el, before.left + square, before.top - square * 3);
+  expect(drops).toEqual([{ tableId: "a", x: 4, y: 0, targetId: null }]);
+});
+
+it("a merge dragged past the right and bottom edges is drawn where it lands, every member on the grid", async () => {
+  const a = { ...t("a", "4", { x: 991, y: 990, width: 4 }), joinId: "j" };
+  const b = { ...t("b", "5", { x: 995, y: 993, width: 4 }), joinId: "j" };
+  const el = await map([a, b]);
+  const before = await boxIn(el, button(el, "a"));
+  const square = before.width / 8;
+  hold(el, before.left + square * 2, before.top + square * 2);
+  move(el, before.left + square * 7, before.top + square * 9);
+  const after = await boxIn(el, button(el, "a"));
+  expect(after.left).toBeCloseTo(before.left + square * 4, 1);
+  expect(after.top).toBeCloseTo(before.top + square * 6, 1);
+  up(el, before.left + square * 7, before.top + square * 9);
+  expect(drops).toEqual([{ tableId: "a", x: 995, y: 996, targetId: null }]);
+});
+
 it("a fixed table's copy over another table draws a line to it", async () => {
   const el = await map([fixedT1, t2]);
   hold(el, 300, 150);
