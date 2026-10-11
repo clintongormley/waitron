@@ -155,6 +155,20 @@ export async function readDepartmentReceipt(
   return parseReceipt(row);
 }
 
+export async function readRetainedDepartmentReceipt(
+  tx: Transaction,
+  cfg: DepartmentReceiptScope,
+  departmentId: string,
+): Promise<DepartmentReceiptConfig> {
+  const [row] = await tx
+    .select(trimProjection(cfg))
+    .from(departments)
+    .leftJoin(departmentReceipts, eq(departmentReceipts.departmentId, departments.id))
+    .where(rowQuery(cfg, departmentId));
+  if (!row) throw new AppError("department.not_found", { departmentId });
+  return parseReceipt(row);
+}
+
 export async function readPrintedDepartmentReceipt(
   tx: Transaction,
   cfg: DepartmentReceiptScope,

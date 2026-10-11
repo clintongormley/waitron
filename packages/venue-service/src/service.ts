@@ -1,5 +1,6 @@
 import {
   readDepartmentReceipt,
+  readRetainedDepartmentReceipt,
   readPrintedDepartmentReceipt,
   readDepartmentLogoRasters,
   writeDepartmentReceipt,
@@ -127,6 +128,7 @@ export const VENUE_SERVICE: VenueServiceContribution = {
   recordSaleReceiptHeader,
   readSaleReceiptHeader,
   readDepartmentReceipt,
+  readRetainedDepartmentReceipt,
   readPrintedDepartmentReceipt,
   readDepartmentLogoRasters,
   writeDepartmentReceipt,

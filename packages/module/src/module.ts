@@ -674,6 +674,11 @@ export interface VenueServiceContribution {
     cfg: DepartmentReceiptScope,
     departmentId: string,
   ): Promise<DepartmentReceiptConfig>;
+  readRetainedDepartmentReceipt(
+    tx: Transaction,
+    cfg: DepartmentReceiptScope,
+    departmentId: string,
+  ): Promise<DepartmentReceiptConfig>;
   readPrintedDepartmentReceipt(
     tx: Transaction,
     cfg: DepartmentReceiptScope,
