@@ -411,7 +411,7 @@ async function mounted() {
     () => {},
   );
   VENUE_SERVICE_ROUTES.mount(app, { db: venue.db, cfg: venue.cfg, core: core() }, () => {});
-  const request = (method: string, id: string, kind: "zone" | "department" = "department") =>
+  const request = async (method: string, id: string, kind: "zone" | "department" = "department") =>
     app.request(
       `${kind === "zone" ? "/management-api/zones" : "/management-api/venue-service/departments"}/${id}${method === "GET" ? "/delete-impact" : ""}`,
       { method, headers: { cookie } },
