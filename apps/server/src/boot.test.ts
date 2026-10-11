@@ -42,6 +42,7 @@ import {
   withTransaction,
   workingOrders,
   billPayments,
+  applicationVersion,
   type Database,
   type VenueDatabase,
 } from "@waitron/db";
@@ -463,6 +464,7 @@ describe("startServer, against a migrated venue directory", () => {
       ).toBe(true);
 
       const response = await fetchHealthOk(`http://127.0.0.1:${port}/health`);
+      expect(response.headers.get("x-waitron-build")).toBeNull();
       const body = (await response.json()) as { ok: boolean; venueHolder: unknown };
       expect(body.ok).toBe(true);
       // The booted server holds its own venue folder, so it reports itself, from the holder file.
@@ -474,12 +476,14 @@ describe("startServer, against a migrated venue directory", () => {
       expect(staff.status).toBe(200);
       // `requestIdMiddleware` wraps the routes mounted after it.
       expect(staff.headers.get("x-request-id")).toMatch(/^[A-Za-z0-9._-]+$/);
+      expect(staff.headers.get("x-waitron-build")).toBe(applicationVersion(process.env));
       expect(await staff.json()).toEqual([]);
       await assertPassiveManagementReads(port);
 
       // Fully gated, so 401 rather than 404; a 404 would mean `mountCatalogueApi` never ran.
       const catalogues = await fetch(`http://127.0.0.1:${port}/management-api/catalogues`);
       expect(catalogues.status).toBe(401);
+      expect(catalogues.headers.get("x-waitron-build")).toBe(applicationVersion(process.env));
       expect((await catalogues.json()) as { error: { code: string } }).toMatchObject({
         error: { code: "management_session.required" },
       });
@@ -560,6 +564,7 @@ describe("startServer, against a migrated venue directory", () => {
       // The placeholder shell answers any unclaimed path (200 HTML) over HTTPS too.
       const root = await fetch(`https://127.0.0.1:${port}/`, via);
       expect(root.status).toBe(200);
+      expect(root.headers.get("x-waitron-build")).toBe(applicationVersion(process.env));
       expect(root.headers.get("content-type")).toContain("text/html");
       expect(await root.text()).toMatch(/set ?up/i);
 
@@ -576,6 +581,7 @@ describe("startServer, against a migrated venue directory", () => {
 
       const management = await fetch(`https://127.0.0.1:${port}/management-api/session/me`, via);
       expect(management.status).toBe(404);
+      expect(management.headers.get("x-waitron-build")).toBe(applicationVersion(process.env));
       expect(await management.json()).toEqual({ error: { code: "node.reset", params: {} } });
 
       expect(await readFile(join(stateDir, "secrets.env"), "utf8")).toMatch(
@@ -1702,6 +1708,7 @@ describe("startServer, against a migrated venue directory", () => {
     try {
       const till = await fetch(`http://127.0.0.1:${port}/`);
       expect(till.status).toBe(200);
+      expect(till.headers.get("x-waitron-build")).toBe(applicationVersion(process.env));
       expect(till.headers.get("content-type")).toContain("text/html");
       expect(await till.text()).toContain("till-spa-root");
 
@@ -1722,6 +1729,7 @@ describe("startServer, against a migrated venue directory", () => {
 
       const asset = await fetch(`http://127.0.0.1:${port}/manage/assets/d-1.js`);
       expect(asset.status).toBe(200);
+      expect(asset.headers.get("x-waitron-build")).toBe(applicationVersion(process.env));
       expect(await asset.text()).toContain("dashboard-spa-asset");
 
       const health = await fetchHealthOk(`http://127.0.0.1:${port}/health`);

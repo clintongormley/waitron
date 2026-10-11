@@ -92,6 +92,7 @@ import { createLogger, type Logger } from "./logger.js";
 import { withDevMigrationHint } from "./dev-migration-hint.js";
 import { createRotatingFileSink, createLogReader, tee } from "./log-file.js";
 import { createVerbosityController } from "./verbosity.js";
+import { buildHeaderMiddleware } from "./build-header.js";
 import { requestIdMiddleware } from "./request-id.js";
 import { createOriginAllowlist } from "./allowed-origins.js";
 import { corsForVenue } from "./cors.js";
@@ -863,9 +864,10 @@ async function bootServer(
 
   const health = createHealthState(now());
   const app = healthApp(health, now, { venueDir: config.venueDir });
-  // Registered before every surface below, so it wraps all of them; `/health`, registered above, is
-  // deliberately left out of the request log.
+  // Registered before every surface below, so they wrap all of them; `/health`, registered above, is
+  // deliberately left out of the request log and names no build.
   app.use("*", requestIdMiddleware(log, now));
+  app.use("*", buildHeaderMiddleware(applicationVersion(process.env)));
   app.use("*", async (c, next) => {
     if (c.req.method === "GET" && c.req.header("x-waitron-live") === "1") {
       await withPassiveManagementRead(next);
