@@ -1636,3 +1636,32 @@ describe("configuration order starts", () => {
     },
   );
 });
+
+it.each([0, false])(
+  "refuses a deleted department with active=%j even without children",
+  (active) => {
+    expect(() =>
+      VENUE_SERVICE_CONFIGURATION_TRANSFER.validate({ departments: [{ id: "old", active }] }),
+    ).toThrowError(refusal("departments.active"));
+    expect(() =>
+      VENUE_SERVICE_CONFIGURATION_TRANSFER.validate({ departments: [{ id: "live", active: 1 }] }),
+    ).not.toThrow();
+  },
+);
+
+it.each([
+  ["zone_service_policies", "zone_id", { zone_id: "missing", department_id: RESTAURANT }],
+  ["zone_service_policies", "department_id", { zone_id: "z-live", department_id: "missing" }],
+  ["department_receipts", "department_id", { department_id: "missing", receipt: {} }],
+  ["department_sale_policies", "department_id", { department_id: "missing" }],
+  ["zone_sale_policies", "zone_id", { zone_id: "missing" }],
+])("refuses a deleted hierarchy child %s.%s with an absent parent", (table, field, row) => {
+  const tables = {
+    departments: [{ id: RESTAURANT, active: 1 }],
+    floor_zones: [{ id: "z-live", active: 1 }],
+    [table]: [row],
+  };
+  expect(() => VENUE_SERVICE_CONFIGURATION_TRANSFER.validate(tables)).toThrowError(
+    refusal(`${table}.${field}`),
+  );
+});

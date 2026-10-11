@@ -627,6 +627,47 @@ describe("routing cells in a staged import", () => {
     return { stateDir, result };
   }
 
+  it.each([
+    ["departments", "active", 0],
+    ["floor_zones", "active", 0],
+    ["zone_service_policies", "department_id", "absent-deleted-parent"],
+    ["zone_service_policies", "zone_id", "absent-deleted-parent"],
+    ["department_sale_policies", "department_id", "absent-deleted-parent"],
+    ["zone_sale_policies", "zone_id", "absent-deleted-parent"],
+  ])(
+    "refuses a deleted hierarchy bundle at staging and import: %s.%s",
+    async (table, field, value) => {
+      const { bundle, versions } = await exported();
+      const control = await staged(bundle, versions);
+      await expect(control.result).resolves.toMatchObject({ counts: { routing_cells: 2 } });
+      expect(bundle.tables[table]!.length).toBeGreaterThan(0);
+      const candidate = {
+        ...bundle,
+        tables: {
+          ...bundle.tables,
+          [table]: bundle.tables[table]!.map((row, index) =>
+            index === 0 ? { ...row, [field]: value } : row,
+          ),
+        },
+      };
+      const refusal = { code: "setup.request_invalid", params: { field: `${table}.${field}` } };
+      const rejected = await staged(candidate, versions);
+      await expect(rejected.result).rejects.toMatchObject(refusal);
+      expect(await readdir(rejected.stateDir)).toEqual([]);
+      await expect(
+        applyVenue(planVenue(venue("B24681365"), ALL_MODULES), {
+          db: target.db,
+          modules: ALL_MODULES,
+          beforeCommit: (tx, result) =>
+            importConfigurationTables(tx, candidate, result, ALL_MODULES, versions),
+        }),
+      ).rejects.toMatchObject(refusal);
+      expect((await target.db.execute(sql`select count(*) count from tenants`)).rows).toEqual([
+        { count: 0 },
+      ]);
+    },
+  );
+
   it("a refused routing bundle leaves no venue or cells", async () => {
     const { bundle, versions, variant } = await exported();
     expect(bundle.tables.routing_cells).toHaveLength(2);
