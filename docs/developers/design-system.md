@@ -2080,8 +2080,8 @@ without an edit. Recovery Retry also performs an operation. The
 lists the call paths and the forms it left to their owning batches.
 The 2026-10-08 [Batch 7b follow-up](../superpowers/plans/2026-10-07-a331-save-follows-changes.md#batch-7b--revisit-the-landed-reservations-lane-e-a331-7b)
 revisited the hardware, till, menus and invoice foundation after landing and found no additional
-staged Save editor. Batch 4b audited the service-period forms after A366 slice 1; a re-check
-after A366 slice 7 is in the backlog (A331).
+staged Save editor. Batch 4b audited the service-period forms after A366 slice 1, and a
+re-check after A366 slice 7 found no form missed (A487d, 2026-10-11).
 
 The switch in the include dialog on a menu's Structure tab
 (`apps/dashboard/src/widgets/include-folder-form.ts`) keeps the values of the fields it hides.

@@ -570,8 +570,8 @@ set to the dark theme. The media preference and selected source were not measure
 venue-service forms and the till's profile dialog) in #1418; batch 5 (the till) in #1414; batch 6 audited with no
 stored-setting editors; batch 7 unreserved forms audited; batch 2a landed as #1422; batch 2b
 (the menus screen) landed as #1424; batch 4d (preparation stations) in #1426;
-batch 7b's re-run inventories done; batch 4b (Departments and zones) built. One re-check after A366
-slice 7 stays open, below.** The owner:
+batch 7b's re-run inventories done; batch 4b (Departments and zones) built; the re-check after A366
+slice 7 found no form missed (A487d, 2026-10-11).** The owner:
 "open a form with the Save button transparent (and disabled?). but as soon as you make a change,
 make the Save button active/blue",
 then "this should be global". A form that saves opens with its main action (Save, Add…)
@@ -743,10 +743,19 @@ request per batch: [plan](../superpowers/plans/2026-10-07-a331-save-follows-chan
   with Rename dialogs, plus department Settings and zone settings, with Cancel before Save.
   Native keyboard-order checks are in
   `packages/venue-service/src/dashboard/department-dialogs.test.ts`; reconnect checks live in
-  each replacement form's sibling `*.unsaved.test.ts`. The post-slice-7 audit below remains open.
-- **Re-check the venue-service screens for the save rule.** Each A366 slice builds the rule
-  into the forms it creates or rewrites (owner, 2026-10-08); run batch 4b's
-  audit once more over `packages/venue-service/src/dashboard/` and gate any form a slice missed.
+  each replacement form's sibling `*.unsaved.test.ts`.
+- **Re-check after A366 slice 7 — DONE (A487d, 2026-10-11), no form missed.** On main b1f76fdcc,
+  every Save in `packages/venue-service/src/dashboard/` binds `saveActionState`: the department
+  dialogs, department Settings, zone settings, named-day editor and copy, the opening hours day,
+  week and zone-week Saves (whole week and one date), the period editor, the range dialog, the
+  routing cell editor, the station editor, and the Prep stations Settings and New station forms.
+  The other buttons there open a form, move between weeks or months, delete, enable or expand,
+  and Service settings saves on each change with no Save. Each of those 16 Saves was made
+  `primary` and enabled while unchanged, one at a time, and its own test files run in Chromium:
+  15 failed. The station editor's did not, because its own check that nothing can be sent
+  (`nothingToSend`) keeps Save quiet and disabled whenever the draft is unchanged; deleting that
+  check as well failed 7 of its 38 tests. Deleting only the unchanged early return in the range
+  dialog's and department Settings' save handlers failed 1 and 4 tests.
 - **2026-10-10, A366 slice 4 Part B:** the fallback editor and its checks below are retired;
   Settings retains rest-of-order and timing editors. The batch 4d account records its earlier scope.
 - **Batch 4d — LANDED in #1426 (A331-4d, 2026-10-08).** Preparation stations' New/Rename, station printer

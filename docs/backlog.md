@@ -3585,12 +3585,6 @@ _Formerly A7, and the dashboard entries in the opening part of the old Track A (
   unverified. Capture the current scroll/limit, pointer position, drag state and visible box
   before attributing it to the scroll helper.
 
-- **Re-check the venue-service screens for the save rule (A331, owner
-  2026-10-08)** — OPEN. Each A366 slice builds the rule into the forms it creates or rewrites;
-  run A331 batch 4b's audit once more over
-  `packages/venue-service/src/dashboard/` and gate any form a slice missed.
-  [Detail](backlog/dashboard.md#a-forms-save-stays-quiet-and-disabled-until-something-changes-a331-owner-2026-10-07)
-
 - **Service-status colour-field labels are clipped (found during W69, 2026-10-06) — OPEN.**
   The native status colour fields show an ellipsis instead of the full label in the inspected
   EN/ES service-status captures at 390 and 1280 px, both themes. Next action: reproduce in Venue
