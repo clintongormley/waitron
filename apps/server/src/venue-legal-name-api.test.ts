@@ -135,6 +135,41 @@ describe("changing the taxpayer's legal name", () => {
     expect((await taxpayer()).legalName).toBe("a".repeat(121));
   });
 
+  it("stores the composed spelling and calls a decomposed spelling of the same name unchanged", async () => {
+    const composed = "Caf\u00e9 SL";
+    const decomposed = "Cafe\u0301 SL";
+    expect((await rename({ legalName: decomposed, expected: original })).status).toBe(200);
+    expect((await taxpayer()).legalName).toBe(composed);
+    const response = await rename({ legalName: decomposed, expected: composed });
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual({
+      error: { code: "venue.detail_invalid", params: { field: "legalName", reason: "unchanged" } },
+    });
+  });
+
+  it("passes on a setup refusal about another field instead of blaming the name", async () => {
+    const real = realFiscal();
+    const response = await rename(
+      { legalName: "Deli Nueva SL", expected: original },
+      venue.managerCookie,
+      appWith({
+        ...real,
+        venueFields: {
+          ...real.venueFields!,
+          validateLegalName: () => {
+            throw new AppError("setup.request_invalid", { field: "taxId" });
+          },
+        },
+      }),
+    );
+    expect(response.status).not.toBe(200);
+    expect((await response.json()).error).toEqual({
+      code: "setup.request_invalid",
+      params: { field: "taxId" },
+    });
+    expect((await taxpayer()).legalName).toBe(original);
+  });
+
   it("passes on a validator refusal that is not a field refusal instead of blaming the name", async () => {
     const real = realFiscal();
     const response = await rename(

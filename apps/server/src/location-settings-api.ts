@@ -5,7 +5,7 @@ import { locations, withTransaction, type Database, type Transaction } from "@wa
 import type { FiscalContribution } from "@waitron/fiscal";
 import { authorizeManager } from "@waitron/identity";
 import { renameTaxpayer } from "@waitron/provisioning";
-import { AppError, isAppError } from "@waitron/shared";
+import { AppError, hasCode, isAppError } from "@waitron/shared";
 import { createErrorBoundary, readJsonBody, requireManagementSession } from "@waitron/server-kit";
 import type { Logger } from "./logger.js";
 import { readVenueReceiptLanguageRules } from "./venue-locale.js";
@@ -72,7 +72,7 @@ function legalNameRequest(body: unknown): { legalName: string; expected: string 
   const { legalName, expected } = body as Record<string, unknown>;
   if (typeof legalName !== "string") throw invalid("legalName", "type");
   if (typeof expected !== "string") throw invalid("expected", "type");
-  return { legalName: legalName.trim(), expected };
+  return { legalName: legalName.normalize("NFC").trim(), expected };
 }
 
 export function mountLocationSettingsApi(
@@ -147,13 +147,17 @@ export function mountLocationSettingsApi(
         try {
           deps.fiscal.venueFields?.validateLegalName(legalName);
         } catch (error) {
-          if (!isAppError(error) || error.code !== "setup.request_invalid") throw error;
+          if (
+            !isAppError(error) ||
+            !hasCode(error, "setup.request_invalid") ||
+            error.params.field !== "legalName"
+          )
+            throw error;
           throw refuse("fiscal_format");
         }
         const { issuer } = await readVenueDetails(tx, deps.cfg);
         if (legalName === issuer.legalName && expected === issuer.legalName)
           throw refuse("unchanged");
-        // Records already filed keep the name they copied; the next record reads this one.
         const { renamed } = await renameTaxpayer(tx, { expected, legalName });
         if (!renamed) throw new AppError("venue.detail_changed", { field: "legalName" });
         return { model: await readVenueDetails(tx, deps.cfg) };
