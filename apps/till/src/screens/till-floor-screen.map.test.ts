@@ -135,10 +135,15 @@ describe("till-floor-screen on the new map", () => {
     expect(mapOf(el).reducedMotion).toBe(false);
   });
 
-  it("keeps the old canvas for a zone with no today's rows", async () => {
+  it("never draws the old canvas, even for a zone with no today's rows", async () => {
     const el = await mount({ tables: [placed("t1")] });
-    expect(el.shadowRoot!.querySelector("wt-floor-canvas")).not.toBeNull();
+    expect(el.shadowRoot!.querySelector("wt-floor-canvas")).toBeNull();
     expect(el.shadowRoot!.querySelector("wt-floor-map")).toBeNull();
+    expect(el.shadowRoot!.querySelector('.grid [data-table="t1"]')).not.toBeNull();
+    await click(el, "[data-view-toggle]");
+    expect(mapOf(el)).not.toBeNull();
+    expect(mapOf(el).tables).toEqual([]);
+    expect(el.shadowRoot!.querySelector('[data-tray-table="t1"]')).not.toBeNull();
   });
 
   it("a tap on a free table asks for its guests, and goes no further", async () => {

@@ -139,6 +139,14 @@ describe("till-floor-screen's guest count and re-read", () => {
     expect(seen.count).toBe(2);
   });
 
+  it("polls an empty map with no today's rows after the view is chosen", async () => {
+    const el = await mount({ tables: [table()] });
+    const seen = countRefreshes(el);
+    await click(el, "[data-view-toggle]");
+    vi.advanceTimersByTime(15_000);
+    expect(seen.count).toBe(1);
+  });
+
   it("marks the 15-second ask as a poll", async () => {
     const el = await mount();
     const details: unknown[] = [];

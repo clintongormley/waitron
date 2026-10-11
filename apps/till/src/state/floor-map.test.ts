@@ -3,7 +3,6 @@ import { currentLocale, setLocale } from "../i18n/t.js";
 import type { TableParty, TableState, TableToday } from "../api/client.js";
 import {
   combinedStatus,
-  isPlannedZone,
   listedTables,
   mapTables,
   pinText,
@@ -175,12 +174,6 @@ describe("words", () => {
 });
 
 describe("zones and their tables", () => {
-  it("calls a zone planned when any of its tables has a today's row", () => {
-    expect(isPlannedZone([table(), table({ id: "t2", today: today() })])).toBe(true);
-    expect(isPlannedZone([table(), table({ id: "t2" })])).toBe(false);
-    expect(isPlannedZone([])).toBe(false);
-  });
-
   it("maps placed tables, leaving out spares and taken-off ones", () => {
     const t1 = table({ id: "t1", label: "1", today: today() });
     const t2 = table({ id: "t2", label: "2", today: today({ placement: null }) });
