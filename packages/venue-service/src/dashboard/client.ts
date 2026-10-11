@@ -12,9 +12,6 @@ export interface Department {
   tradingName: string;
   active: boolean;
 }
-export interface DepartmentRemovalImpact {
-  zones: { id: string; name: string; activeTableCount: number }[];
-}
 export interface ServiceZone {
   id: string;
   name: string;
@@ -289,25 +286,13 @@ export class VenueServiceApi {
 
   updateDepartment(
     departmentId: string,
-    input: { name?: string; tradingName?: string; active?: boolean },
+    input: { name?: string; tradingName?: string },
   ): Promise<void> {
     return this.request(
       `/management-api/venue-service/departments/${departmentId}`,
       "PATCH",
       input,
     );
-  }
-
-  deactivateDepartment(departmentId: string): Promise<void> {
-    return this.request(`/management-api/venue-service/departments/${departmentId}`, "DELETE");
-  }
-
-  departmentRemovalImpact(departmentId: string): Promise<DepartmentRemovalImpact> {
-    return this.#read(`/management-api/venue-service/departments/${departmentId}/removal-impact`);
-  }
-
-  zoneRemovalImpact(zoneId: string): Promise<DepartmentRemovalImpact> {
-    return this.#read(`/management-api/venue-service/zones/${zoneId}/removal-impact`);
   }
 
   configureZone(zoneId: string, input: { departmentId: string }): Promise<void> {
@@ -322,12 +307,8 @@ export class VenueServiceApi {
     return this.request("/management-api/venue-service/zones", "POST", input);
   }
 
-  updateZone(zoneId: string, patch: { name: string } | { active: true }): Promise<void> {
+  updateZone(zoneId: string, patch: { name: string }): Promise<void> {
     return this.request(`/management-api/zones/${zoneId}`, "PATCH", patch);
-  }
-
-  deactivateZone(zoneId: string): Promise<void> {
-    return this.request(`/management-api/zones/${zoneId}`, "DELETE");
   }
 
   setDepartmentSalePolicyField<K extends keyof Omit<DepartmentSalePolicy, "departmentId">>(

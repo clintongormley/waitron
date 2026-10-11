@@ -280,7 +280,6 @@ export class DepartmentDialogs extends LitElement {
   }
   private refusal(error: unknown): string {
     const code = (error as { code?: string } | undefined)?.code;
-    if (code === "zone.department_inactive") return t("venue.zone_department_inactive");
     if (code === "department.last_active") return t("venue.department_last_active");
     const table = (error as { params?: { tableName?: unknown } } | undefined)?.params?.tableName;
     if (code === "zone.table_in_use" && typeof table === "string")

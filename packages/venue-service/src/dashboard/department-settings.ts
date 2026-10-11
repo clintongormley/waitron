@@ -365,7 +365,7 @@ export class DepartmentSettings extends LitElement {
     ];
     if (code === "management.request_invalid" && fields.includes(params?.field as Field))
       field = params!.field as Field;
-    if (code === "department.name_taken" || code === "department.name_disabled") {
+    if (code === "department.name_taken") {
       field = "name";
       message = t("venue.department_name_taken");
     }

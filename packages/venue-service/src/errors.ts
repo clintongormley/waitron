@@ -11,8 +11,6 @@ export type MenuUse =
 declare module "@waitron/shared" {
   interface ErrorParams {
     "department.name_taken": { name: string };
-    "department.name_disabled": { name: string; departmentId: string };
-    "zone.name_disabled": { name: string; zoneId: string };
     "department_transfer.settings_invalid": {
       field: "receivingProfileId" | "destinationDepartmentIds";
     };
@@ -79,13 +77,6 @@ declare module "@waitron/shared" {
       reason?: "overlap" | "clock_skips" | "empty" | "order" | "step" | "end_offset";
     };
     "zone.name_taken": { name: string };
-    /** An import's refusal adds the department and each name the export holds. */
-    "zone.department_inactive": {
-      zoneId: string;
-      zoneName?: string;
-      departmentId?: string;
-      departmentName?: string;
-    };
     "service_zone.default_missing": Record<string, never>;
     "service_zone.offer_not_allowed": { zoneId: string; menuItemId: string };
     "service_zone.mode_incompatible": {

@@ -7,18 +7,14 @@ import {
 } from "./zone-closed-times.js";
 import { setDepartmentTransferSettings } from "./department-transfers.js";
 import { withdrawPendingDepartmentTransfers } from "./department-transfer-lifecycle.js";
-import { and, asc, desc, eq, inArray, isNotNull, isNull, ne, sql, type SQL } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNotNull, ne, sql, type SQL } from "drizzle-orm";
 import {
-  tableInService,
   catalogues,
-  diningTables,
   floorZones,
   refusalOn,
   UNIQUE_VIOLATION,
   kitchenStations,
   locations,
-  parties,
-  partyTables,
   workingOrderLines,
 } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
@@ -234,149 +230,6 @@ export async function updateDepartment(
     .update(departmentSalePolicies)
     .set({ orderStart: input.orderStart })
     .where(eq(departmentSalePolicies.departmentId, departmentId));
-}
-
-export async function activateDepartment(
-  tx: Transaction,
-  cfg: VenueScope,
-  departmentId: string,
-): Promise<void> {
-  const [row] = await tx
-    .update(departments)
-    .set({ active: true })
-    .where(
-      and(
-        eq(departments.id, departmentId),
-        eq(departments.locationId, cfg.locationId),
-        eq(departments.active, true),
-      ),
-    )
-    .returning({ id: departments.id });
-  if (row === undefined) throw new AppError("department.not_found", { departmentId });
-}
-
-export async function departmentRemovalImpact(
-  tx: Transaction,
-  cfg: VenueScope,
-  departmentId: string,
-): Promise<{ zones: { id: string; name: string; activeTableCount: number }[] }> {
-  const [department] = await tx
-    .select({ id: departments.id })
-    .from(departments)
-    .where(
-      and(
-        eq(departments.id, departmentId),
-        eq(departments.locationId, cfg.locationId),
-        eq(departments.active, true),
-      ),
-    );
-  if (department === undefined) throw new AppError("department.not_found", { departmentId });
-
-  const zones = await tx
-    .select({ id: floorZones.id, name: floorZones.name })
-    .from(zoneServicePolicies)
-    .innerJoin(floorZones, eq(floorZones.id, zoneServicePolicies.zoneId))
-    .where(and(eq(zoneServicePolicies.departmentId, departmentId), eq(floorZones.active, true)))
-    .orderBy(floorZones.name, floorZones.id);
-  if (zones.length === 0) return { zones: [] };
-  const tables = await tx
-    .select({ zoneId: diningTables.zoneId })
-    .from(diningTables)
-    .where(
-      and(
-        inArray(
-          diningTables.zoneId,
-          zones.map((zone) => zone.id),
-        ),
-        tableInService(diningTables.id),
-      ),
-    );
-  const counts = new Map<string, number>();
-  for (const table of tables) counts.set(table.zoneId!, (counts.get(table.zoneId!) ?? 0) + 1);
-  return { zones: zones.map((zone) => ({ ...zone, activeTableCount: counts.get(zone.id) ?? 0 })) };
-}
-
-export async function zoneRemovalImpact(
-  tx: Transaction,
-  cfg: VenueScope,
-  zoneId: string,
-): Promise<{ zones: { id: string; name: string; activeTableCount: number }[] }> {
-  const [zone] = await tx
-    .select({ id: floorZones.id, name: floorZones.name })
-    .from(floorZones)
-    .where(and(eq(floorZones.id, zoneId), eq(floorZones.locationId, cfg.locationId)));
-  if (zone === undefined) throw new AppError("service_zone.not_found", { zoneId });
-  const tables = await tx
-    .select({ id: diningTables.id })
-    .from(diningTables)
-    .where(and(eq(diningTables.zoneId, zoneId), tableInService(diningTables.id)));
-  return { zones: [{ ...zone, activeTableCount: tables.length }] };
-}
-
-export async function deactivateDepartment(
-  tx: Transaction,
-  cfg: VenueScope,
-  departmentId: string,
-): Promise<void> {
-  const [department] = await tx
-    .select({ id: departments.id })
-    .from(departments)
-    .where(and(eq(departments.id, departmentId), eq(departments.locationId, cfg.locationId)));
-  if (department === undefined) throw new AppError("department.not_found", { departmentId });
-
-  const activeDepartments = await tx
-    .select({ id: departments.id, name: departments.name })
-    .from(departments)
-    .where(and(eq(departments.locationId, cfg.locationId), eq(departments.active, true)))
-    .orderBy(asc(departments.name), asc(departments.id));
-  if (activeDepartments.length === 1 && activeDepartments[0]!.id === departmentId) {
-    throw new AppError("department.last_active", { departmentId });
-  }
-
-  const activeZones = await tx
-    .select({ id: floorZones.id })
-    .from(zoneServicePolicies)
-    .innerJoin(floorZones, eq(floorZones.id, zoneServicePolicies.zoneId))
-    .where(
-      and(
-        eq(zoneServicePolicies.locationId, cfg.locationId),
-        eq(zoneServicePolicies.departmentId, departmentId),
-        eq(floorZones.active, true),
-      ),
-    );
-  if (activeZones.length > 0) {
-    for (const zone of activeZones) await deactivateServiceZone(tx, cfg, zone.id);
-  }
-  await tx.update(departments).set({ active: false }).where(eq(departments.id, departmentId));
-}
-
-export async function deactivateServiceZone(
-  tx: Transaction,
-  cfg: VenueScope,
-  zoneId: string,
-): Promise<void> {
-  const [zone] = await tx
-    .select({ id: floorZones.id })
-    .from(floorZones)
-    .where(and(eq(floorZones.id, zoneId), eq(floorZones.locationId, cfg.locationId)));
-  if (zone === undefined) throw new AppError("service_zone.not_found", { zoneId });
-
-  const [occupied] = await tx
-    .select({ tableId: diningTables.id, tableName: diningTables.label })
-    .from(diningTables)
-    .innerJoin(partyTables, eq(partyTables.tableId, diningTables.id))
-    .innerJoin(parties, eq(parties.id, partyTables.partyId))
-    .where(
-      and(eq(diningTables.zoneId, zoneId), isNull(partyTables.leftAt), eq(parties.state, "open")),
-    )
-    .orderBy(diningTables.label, diningTables.id)
-    .limit(1);
-  if (occupied !== undefined) {
-    throw new AppError("zone.table_in_use", { zoneId, ...occupied });
-  }
-
-  await tx.delete(routingCells).where(eq(routingCells.zoneId, zoneId));
-  await tx.update(floorZones).set({ active: false }).where(eq(floorZones.id, zoneId));
 }
 
 export type VenueReadinessIssue =

@@ -3,7 +3,6 @@
 import "./errors.js";
 import { and, eq, sql } from "drizzle-orm";
 import { AppError } from "@waitron/shared";
-import { deactivateServiceZone, departments, zoneServicePolicies } from "@waitron/venue-service";
 import { authorizeManager } from "@waitron/identity";
 import {
   tableInService,
@@ -81,7 +80,7 @@ export async function updateZone(
   tx: Transaction,
   cfg: TillConfig,
   id: string,
-  patch: { name?: string; displayOrder?: number; active?: boolean },
+  patch: { name?: string; displayOrder?: number },
 ): Promise<void> {
   const [target] = await tx
     .select({ id: floorZones.id })
@@ -94,32 +93,9 @@ export async function updateZone(
       ),
     );
   if (target === undefined) throw new AppError("zone.not_found", { zoneId: id });
-  const set: { name?: string; displayOrder?: number; active?: boolean } = {};
+  const set: { name?: string; displayOrder?: number } = {};
   if (patch.name !== undefined) set.name = patch.name;
   if (patch.displayOrder !== undefined) set.displayOrder = patch.displayOrder;
-  if (patch.active !== undefined) set.active = patch.active;
-
-  if (patch.active === true) {
-    const [zone] = await tx
-      .select({ departmentActive: departments.active })
-      .from(floorZones)
-      .leftJoin(zoneServicePolicies, eq(zoneServicePolicies.zoneId, floorZones.id))
-      .leftJoin(departments, eq(departments.id, zoneServicePolicies.departmentId))
-      .where(and(eq(floorZones.id, id), eq(floorZones.locationId, cfg.locationId)));
-    if (zone === undefined) throw new AppError("zone.not_found", { zoneId: id });
-    if (zone.departmentActive !== true) {
-      throw new AppError("zone.department_inactive", { zoneId: id });
-    }
-  }
-
-  if (patch.active === false) {
-    const [zone] = await tx
-      .select({ id: floorZones.id })
-      .from(floorZones)
-      .where(and(eq(floorZones.id, id), eq(floorZones.locationId, cfg.locationId)));
-    if (zone === undefined) throw new AppError("zone.not_found", { zoneId: id });
-    await deactivateServiceZone(tx, cfg, id);
-  }
 
   let updated: { id: string }[];
   try {
@@ -143,16 +119,6 @@ export async function updateZone(
   if (updated.length === 0) {
     throw new AppError("zone.not_found", { zoneId: id });
   }
-}
-
-/** Never a hard delete: a `dining_tables.zone_id` may reference it. */
-export async function deactivateZone(tx: Transaction, cfg: TillConfig, id: string): Promise<void> {
-  const [zone] = await tx
-    .select({ id: floorZones.id })
-    .from(floorZones)
-    .where(and(eq(floorZones.id, id), eq(floorZones.locationId, cfg.locationId)));
-  if (zone === undefined) throw new AppError("zone.not_found", { zoneId: id });
-  await deactivateServiceZone(tx, cfg, id);
 }
 
 /** `createdAt` is an ISO string. */

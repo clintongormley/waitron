@@ -306,8 +306,6 @@ const en = {
   "holidays.local_limit_any_one": "You can enter at most 1 local holiday a year.",
   "holidays.geography_current":
     "These local holidays are for the venue's current address, so they cannot be removed together.",
-  "venue.zone_department_inactive":
-    "That zone needs an available department. Choose another department.",
   "venue.department_last_active": "You cannot delete the last department.",
   "venue.table_in_use":
     "Table {table} belongs to an open party. Finish the party before deleting this department.",
@@ -1067,8 +1065,6 @@ const es: Record<keyof typeof en, string> = {
   "holidays.local_limit_any_one": "Puedes introducir como máximo 1 festivo local al año.",
   "holidays.geography_current":
     "Estos festivos locales son de la dirección actual del local, así que no se pueden eliminar juntos.",
-  "venue.zone_department_inactive":
-    "Esa zona necesita un departamento disponible. Elige otro departamento.",
   "venue.department_last_active": "No puedes eliminar el último departamento.",
   "venue.table_in_use":
     "La mesa {table} pertenece a un grupo con una cuenta abierta. Finaliza el grupo antes de eliminar este departamento.",

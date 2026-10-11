@@ -494,21 +494,9 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "A department with that name already exists",
     es: "Ya existe un departamento con ese nombre",
   },
-  "department.name_disabled": {
-    en: "A department with that name already exists",
-    es: "Ya existe un departamento con ese nombre",
-  },
-  "zone.name_disabled": {
-    en: "A zone with that name already exists",
-    es: "Ya existe una zona con ese nombre",
-  },
   "zone.name_taken": {
     en: "A zone with that name already exists",
     es: "Ya existe una zona con ese nombre",
-  },
-  "zone.department_inactive": {
-    en: "That zone needs an available department. Choose another department.",
-    es: "Esa zona necesita un departamento disponible. Elige otro departamento.",
   },
   "service_zone.not_found": {
     en: "That zone no longer exists",

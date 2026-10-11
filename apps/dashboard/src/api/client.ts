@@ -2782,15 +2782,8 @@ export class DashboardApi {
     return this.#request<FloorZone[]>("/management-api/zones", "GET");
   }
 
-  updateZone(
-    id: string,
-    patch: { name?: string; displayOrder?: number; active?: boolean },
-  ): Promise<void> {
+  updateZone(id: string, patch: { name?: string; displayOrder?: number }): Promise<void> {
     return this.#request<void>(`/management-api/zones/${id}`, "PATCH", patch);
-  }
-
-  deactivateZone(id: string): Promise<void> {
-    return this.#request<void>(`/management-api/zones/${id}`, "DELETE");
   }
 
   getZoneDeleteImpact(id: string): Promise<DeleteImpact> {
