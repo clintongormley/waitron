@@ -395,27 +395,41 @@ landing listener (`buildLandingApp`, `apps/server/src/landing-app.ts`); both rea
 
 Each app's fetch passes through `watchBuild` (`@waitron/diagnostics`): the first build a response
 from the page's own origin names is the page's; the first different one sends
-`BUILD_CHANGED_EVENT` once. A missing or empty header changes nothing. Another origin's build is
-ignored, because a till's router can point at another server whose build says nothing about this
-page; by reasoning, not by a run, comparing it would reload an idle till in a loop. No request is added for it: the
-dashboard's automatic reads and the till router's 5 s probe of `/api/node` carry the header.
+`BUILD_CHANGED_EVENT` once, from its own microtask, so a listener that throws does not fail the
+request. A missing or empty header changes nothing. Another origin's build is ignored, and so is
+an answer a redirect brought from another origin (`response.url`), because a till's router can
+point at another server whose build says nothing about this page; by reasoning, not by a run,
+comparing it would reload an idle till in a loop. The dashboard adds no request for it: its
+automatic reads and the till router's 5 s probe of `/api/node` carry the header. The till adds at
+most one: before deciding, it waits for the router's probe round in flight, or starts one, because
+the answer naming the new build may be a reset box's setup page, which the router reads after the
+watcher has seen it.
 
-The dashboard shows the update bar. The till reloads by itself only when `#busyForReload()`
-(`apps/till/src/till-app.ts`) is false, and otherwise shows the same bar. It counts as busy when
+The dashboard shows the update bar. The till decides only while the box serves it
+(`#boxServesTill()`, `apps/till/src/till-app.ts`): while the router finds no box accepting sales,
+or the join or device-picker screen shows, it neither reloads nor shows the bar, and decides once
+that ends. It then reloads by itself only when `#busyForReload()` is false, and otherwise shows the
+same bar. It counts as busy when
 someone is signed in (`operatorName`), a sign-in is still loading (`#loginPending`), the basket or
 the table-free draft holds a line (`#store`, `#partylessDraft`), any draft is unsaved
 (`leave.coordinator.isDirty()`), a payment or an order is being sent (`submitting`), a card attempt
 is running (`#cardAttemptsRunning`), a bill payment or refund kept its send for a resend that must
 reuse its id — after no answer, or after a refusal that keeps the id (`#unansweredPayment`,
-`#unansweredRefund`), a bill payment or refund is still being sent (`#billMoneyInFlight`), or a
-sign-out's save of the draft is still being sent (`#signOutSavesInFlight`). A signed-in person
-counts because a reload signs them out.
+`#unansweredRefund`), or a request is held by `#holdingReload`: every request sent again until
+answered (`#resend`, around `resendUnanswered`), a whole bill payment or refund, and a sign-out's
+save of the draft. A signed-in person counts because a reload signs them out. The bar's Reload
+waits only for requests still out (`#requestsOut()`: `submitting`, a card attempt, or a held
+request), then reloads once.
 
 Guards: `packages/diagnostics/src/build-watch.test.ts`, `apps/server/src/build-header.test.ts`, the
 build-header lines in `apps/server/src/boot.test.ts`, the "build updates" cases in
 `apps/dashboard/src/dashboard-app.test.ts`, the "when the server reports another build" cases in
-`apps/till/src/till-app-boot-and-counter.test.ts`, and the box-update cases in
-`apps/till/src/till-app-bill-payments.test.ts` and `apps/till/src/till-app-drafts.test.ts`. No test
+`apps/till/src/till-app-boot-and-counter.test.ts` and its "box update meets a box reset or a
+refused device" cases, and the box-update cases in `apps/till/src/till-app-bill-payments.test.ts`,
+`apps/till/src/till-app-drafts.test.ts`, `apps/till/src/till-app-adjustments.test.ts`,
+`apps/till/src/till-app-counter-move-station.test.ts` and `apps/till/src/till-app-parties.test.ts`.
+The station screen's dish move (`apps/till/src/screens/till-station-screen.ts`) calls
+`resendUnanswered` itself, so it is not counted (read, not run). No test
 checks the wiring in either app's `main.ts`. It was run once instead, on 2026-10-11, on the demo
 stack (`wa-wt demo`) in Playwright's Chromium, with a route that swapped the header's value for
 another build: the header reached both pages through the Vite dev servers (`0.0.0`, not `null`);
