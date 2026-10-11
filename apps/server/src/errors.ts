@@ -192,8 +192,10 @@ declare module "@waitron/shared" {
      * refused; found while trading, the server stops. Both lists hold trigger names, never a secret.
      */
     "append_only.triggers_changed": { missing: string[]; altered: string[] };
-    /** A start found an append-only trigger missing before migrating, and migrating put it back.
-     * Built as data by `appendOnlyRestoredAlertSource`, never thrown. */
+    /**
+     * A start found an append-only trigger missing before migrating, and migrating put it back.
+     * Built as data by `appendOnlyRestoredAlertSource`, never thrown.
+     */
     "append_only.triggers_restored": Record<string, never>;
     /**
      * An inbound hosted-payment webhook failed signature verification; nothing acts on the event

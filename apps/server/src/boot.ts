@@ -831,8 +831,9 @@ async function bootServer(
   const db = store.venue;
   // After migrating, which reinstalls a missing trigger but leaves a same-name altered one in place.
   assertAppendOnlyIntact(db, appendOnlyTables);
-  // Also after a crash between a set's migration and its trigger install, or the first start of a
-  // release that marks an existing table append-only, so it is a warning and not a refusal.
+  // A missing trigger also shows up after a crash between a set's migration and its trigger
+  // install, or on the first start of a release that marks an existing table append-only, so this
+  // is a warning, not a refusal.
   const appendOnlyRestored = {
     restoredAt: restoredTriggers.length > 0 ? now().toISOString() : null,
   };

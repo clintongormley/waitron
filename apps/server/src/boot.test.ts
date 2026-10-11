@@ -1543,9 +1543,9 @@ describe("startServer, against a migrated venue directory", () => {
     }
   }, 60_000);
 
-  for (const [what, drop, raised] of [
-    ["raises append_only.triggers_restored when a start put back a dropped trigger", true, true],
-    ["raises no append_only.triggers_restored for an untouched venue", false, false],
+  for (const [what, drop] of [
+    ["raises append_only.triggers_restored when a start put back a dropped trigger", true],
+    ["raises no append_only.triggers_restored for an untouched venue", false],
   ] as const) {
     it(
       what,
@@ -1609,11 +1609,9 @@ describe("startServer, against a migrated venue directory", () => {
           const restored = body.alerts.filter(
             (alert) => alert.code === "append_only.triggers_restored",
           );
-          expect(restored).toEqual(
-            raised ? [expect.objectContaining({ severity: "warning" })] : [],
-          );
+          expect(restored).toEqual(drop ? [expect.objectContaining({ severity: "warning" })] : []);
         } finally {
-          await server?.close();
+          await server?.close().catch(() => {});
           await close();
           await venue.store.close();
           await rm(venue.directory, { recursive: true, force: true });
@@ -4756,7 +4754,8 @@ describe("startServer — the append-only watch in trading mode", () => {
       );
       await awaitListening(port);
     } catch (error) {
-      await server?.close();
+      // A listener that never bound rejects its close; the original error is the one to report.
+      await server?.close().catch(() => {});
       await venue.store.close();
       await cleanup();
       throw error;
