@@ -15,9 +15,9 @@ export type DeploymentEnvironment = "production" | "preproduction";
 
 /**
  * The environment a `WAITRON_ENV` value names, or `null` when it names none; the caller refuses
- * `null` with its own error code. Unset (absent or `""`) and `dev` mean `preproduction`, because a
- * production invoice number can never be reused: `production` has to be typed out exactly. Nothing
- * else is rounded to the nearer word.
+ * `null` with its own error code. Absent, `""` and `dev` mean `preproduction`; `production` must be
+ * typed out exactly, because a production invoice number can never be reused, so a mistake has to
+ * land on the harmless value. Nothing else is rounded to the nearer word.
  */
 export function deploymentEnvironmentFor(raw: string | undefined): DeploymentEnvironment | null {
   if (raw === undefined || raw === "" || raw === "dev") return "preproduction";
