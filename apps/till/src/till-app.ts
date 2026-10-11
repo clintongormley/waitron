@@ -1197,10 +1197,36 @@ export class TillApp extends LitElement {
   @property({ attribute: false }) reload: () => void = () => location.reload();
   @state() private updateAvailable = false;
 
-  readonly #onBuildChanged = (): void => {
-    if (this.#busyForReload()) this.updateAvailable = true;
-    else this.reload();
-  };
+  /** A newer build was seen and the box's state read after it; what to do waits until the box
+   * serves this till again. */
+  #newBuild = false;
+
+  readonly #onBuildChanged = (): void => void this.#confirmNewBuild();
+
+  /** The response naming the new build may be a reset box's setup page, which the router has not
+   * read yet: its round, or a new one, reads the box's state before anything is decided. */
+  async #confirmNewBuild(): Promise<void> {
+    await this.router?.probeNow();
+    if (!this.isConnected) return;
+    this.#newBuild = true;
+    this.#decideReload();
+  }
+
+  #decideReload(): void {
+    if (!this.#newBuild || this.updateAvailable || !this.#boxServesTill()) return;
+    if (this.#busyForReload()) {
+      this.updateAvailable = true;
+      return;
+    }
+    this.#newBuild = false;
+    this.reload();
+  }
+
+  /** A box in setup mode, or one refusing this device, has its own screen, which a reload would
+   * leave and the bar would cover. */
+  #boxServesTill(): boolean {
+    return !(this.router?.waiting ?? false) && this.frontDoor === undefined;
+  }
 
   /** A reload signs the operator out and drops whatever is only in this page's memory. */
   #busyForReload(): boolean {
@@ -1422,7 +1448,10 @@ export class TillApp extends LitElement {
     void this.#boot();
   };
 
-  readonly #onServerState = (): void => this.requestUpdate();
+  readonly #onServerState = (): void => {
+    this.requestUpdate();
+    this.#decideReload();
+  };
 
   #subscribeRouter(): void {
     if (this.#subscribedRouter === this.router) return;
@@ -2338,6 +2367,7 @@ export class TillApp extends LitElement {
       this.#affordanceList = this.#affordances();
     // `router` may be assigned after `connectedCallback`.
     if (changed.has("router")) this.#subscribeRouter();
+    if (changed.has("frontDoor")) this.#decideReload();
     // An answer can move the app off the order while the dialog is open. An apply already out
     // carries on without the dialog; #applyAdjustment says what its answer does then.
     const open = this.adjusting;
@@ -9421,7 +9451,7 @@ export class TillApp extends LitElement {
         @menu-selected=${(e: CustomEvent<{ id: string }>) => this.#onMenuSelected(e)}
       >
         ${
-          this.updateAvailable
+          this.updateAvailable && this.#boxServesTill()
             ? html`<wt-banner
                 data-test="update-bar"
                 message=${t("update.message")}

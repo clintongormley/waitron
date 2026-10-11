@@ -1,7 +1,7 @@
 import { page, userEvent } from "vitest/browser";
 import { applyTokens, currentContentLanguages } from "@waitron/ui";
 import type { ContentLanguages } from "@waitron/shared";
-import { BUILD_CHANGED_EVENT } from "@waitron/diagnostics";
+import { BUILD_CHANGED_EVENT, watchBuild } from "@waitron/diagnostics";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   cleanupWidgets,
@@ -13,6 +13,7 @@ import indexHtml from "../index.html?raw";
 import { productUnit } from "./widgets/product-name.js";
 import { TillApp } from "./till-app.js";
 import { ServerRouter } from "./api/server-router.js";
+import { TillApi as TillClient } from "./api/client.js";
 import { setLocale, t } from "./i18n/t.js";
 import { codeMessage } from "./i18n/codes.js";
 import { DEV_DEVICE_STORAGE_KEY } from "./api/dev-device.js";
@@ -4737,5 +4738,163 @@ describe("till-app when the server reports another build", () => {
     await flush(el);
     await userEvent.click(updateBar(el)!.shadowRoot!.querySelector("button")!);
     expect(reload).toHaveBeenCalledOnce();
+  });
+});
+
+describe("till-app when a box update meets a box reset or a refused device", () => {
+  const updateBar = (el: TillApp) =>
+    el.shadowRoot!.querySelector("wt-banner[data-test=update-bar]");
+  const enrol = (el: TillApp) => el.shadowRoot!.querySelector("till-enrol-screen");
+
+  /** A box whose answers go through the build watcher `main.ts` installs. In setup mode it answers
+   * every request with the setup page, as a reset box does. */
+  function fakeBox() {
+    const box = { build: "old", setup: false, down: false, deviceRefused: false };
+    const answer = async (input: RequestInfo | URL): Promise<Response> => {
+      if (box.down) throw new TypeError("Failed to fetch");
+      const headers = { "x-waitron-build": box.build };
+      if (box.setup)
+        return new Response("<html>Set up Waitron</html>", {
+          headers: { ...headers, "content-type": "text/html" },
+        });
+      const path = new URL(String(input instanceof Request ? input.url : input), location.origin)
+        .pathname;
+      if (path === "/api/device/me")
+        return box.deviceRefused
+          ? Response.json({ error: { code: "device.unauthorized" } }, { status: 401, headers })
+          : Response.json(
+              { deviceId: "till-dev", name: "Till 1", formFactor: "till" },
+              { headers },
+            );
+      return Response.json({ acceptingSales: true, term: 1 }, { headers });
+    };
+    const watched = watchBuild(answer as typeof fetch, {
+      origin: location.origin,
+      onChange: () => window.dispatchEvent(new Event(BUILD_CHANGED_EVENT)),
+    });
+    const router = new ServerRouter({
+      origin: location.origin,
+      fetchImpl: watched,
+      storage: { getItem: () => null, setItem: () => {} },
+    });
+    const client = new TillClient("", watched);
+    return { box, router, client };
+  }
+
+  async function mountOnBox(box: ReturnType<typeof fakeBox>, reload: () => void) {
+    await box.router.probeNow();
+    const { el } = await mountApp(
+      { getDeviceIdentity: () => box.client.getDeviceIdentity() },
+      { reload, router: box.router },
+    );
+    await flush(el);
+    return el;
+  }
+
+  it("shows no bar to a signed-in till when the box answers its probe in setup mode with a new build", async () => {
+    const fake = fakeBox();
+    const reload = vi.fn();
+    const el = await mountOnBox(fake, reload);
+    await toCounter(el);
+    fake.box.setup = true;
+    fake.box.build = "new";
+    await fake.router.probeNow();
+    await flush(el);
+    expect(fake.router.waiting).toBe(true);
+    expect(updateBar(el)).toBeNull();
+    expect(reload).not.toHaveBeenCalled();
+  });
+
+  it("hides the bar a signed-in till showed once the box answers its probe in setup mode", async () => {
+    const fake = fakeBox();
+    const reload = vi.fn();
+    const el = await mountOnBox(fake, reload);
+    await toCounter(el);
+    fake.box.build = "new";
+    await fake.router.probeNow();
+    await flush(el);
+    expect(updateBar(el)).not.toBeNull();
+    fake.box.setup = true;
+    await fake.router.probeNow();
+    await flush(el);
+    expect(fake.router.waiting).toBe(true);
+    expect(updateBar(el)).toBeNull();
+    expect(reload).not.toHaveBeenCalled();
+  });
+
+  it("does not reload an idle till onto a box in setup mode, whichever request saw the new build", async () => {
+    const fake = fakeBox();
+    const reload = vi.fn();
+    const el = await mountOnBox(fake, reload);
+    expect(lock(el)).not.toBeNull();
+    fake.box.setup = true;
+    fake.box.build = "new";
+    await fake.client.getDeviceIdentity().catch(() => undefined);
+    await flush(el);
+    await flush(el);
+    expect(reload).not.toHaveBeenCalled();
+    expect(fake.router.waiting).toBe(true);
+    expect(updateBar(el)).toBeNull();
+  });
+
+  it("reloads an idle till held by a box in setup mode once the box answers as a box again", async () => {
+    const fake = fakeBox();
+    const reload = vi.fn();
+    const el = await mountOnBox(fake, reload);
+    fake.box.setup = true;
+    fake.box.build = "new";
+    await fake.router.probeNow();
+    await flush(el);
+    expect(reload).not.toHaveBeenCalled();
+    fake.box.setup = false;
+    await fake.router.probeNow();
+    await flush(el);
+    expect(reload).toHaveBeenCalledOnce();
+  });
+
+  it("reloads an idle till when the box it could not reach while it restarted answers with the new build", async () => {
+    const fake = fakeBox();
+    const reload = vi.fn();
+    const el = await mountOnBox(fake, reload);
+    fake.box.down = true;
+    await fake.router.probeNow();
+    await flush(el);
+    expect(fake.router.waiting).toBe(true);
+    fake.box.down = false;
+    fake.box.build = "new";
+    await fake.router.probeNow();
+    await flush(el);
+    expect(reload).toHaveBeenCalledOnce();
+  });
+
+  it("shows no bar over the join screen when the refusal of a signed-in till's device names the new build", async () => {
+    const fake = fakeBox();
+    const reload = vi.fn();
+    const el = await mountOnBox(fake, reload);
+    const c = await toCounter(el);
+    fake.box.deviceRefused = true;
+    fake.box.build = "new";
+    emit(c, "device-unauthorized");
+    await vi.waitFor(() => expect(enrol(el)).not.toBeNull());
+    await flush(el);
+    expect(updateBar(el)).toBeNull();
+    expect(reload).not.toHaveBeenCalled();
+  });
+
+  it("takes the bar a signed-in till showed off the screen when its device is then refused", async () => {
+    const fake = fakeBox();
+    const reload = vi.fn();
+    const el = await mountOnBox(fake, reload);
+    const c = await toCounter(el);
+    fake.box.build = "new";
+    await fake.router.probeNow();
+    await flush(el);
+    expect(updateBar(el)).not.toBeNull();
+    fake.box.deviceRefused = true;
+    emit(c, "device-unauthorized");
+    await vi.waitFor(() => expect(enrol(el)).not.toBeNull());
+    await flush(el);
+    expect(updateBar(el)).toBeNull();
+    expect(reload).not.toHaveBeenCalled();
   });
 });
