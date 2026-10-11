@@ -1637,6 +1637,7 @@ describe("departments", () => {
         .insert(diningTables)
         .values({ locationId: cfg.locationId, label: "T12", zoneId: terrace })
         .returning({ id: diningTables.id });
+      await tx.insert(floorTodayTables).values({ tableId: table!.id });
       return { restaurant, bar, tableId: table!.id };
     });
 
@@ -1717,6 +1718,9 @@ describe("departments", () => {
         .values({ openedBy: randomUUID() })
         .returning({ id: parties.id });
       await tx.insert(partyTables).values({ partyId: party!.id, tableId: backTable!.id });
+      await tx
+        .insert(floorTodayTables)
+        .values([{ tableId: frontTable!.id }, { tableId: backTable!.id }]);
       return {
         restaurant,
         frontTable: frontTable!.id,
@@ -2131,6 +2135,8 @@ describe("retired and moved zones", () => {
         zoneId: venue.barZone,
       })
       .returning({ id: diningTables.id });
+
+    await db.insert(floorTodayTables).values({ tableId: table!.id });
 
     await scoped((tx) =>
       configureZone(tx, venue.cfg, {

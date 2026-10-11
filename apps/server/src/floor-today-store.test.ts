@@ -792,7 +792,7 @@ describe("a disabled zone", () => {
     const z = await zone();
     const planned = await v.table("Reopen 1", z);
     const hidden = await v.table("Reopen 2", z);
-    const never = await v.table("Reopen 3", z);
+    const never = await v.table("Reopen 3", z, { today: false });
     const master = await masterOf(z, [
       { label: "Reopen 1", live: planned },
       { label: "Reopen 2", live: hidden },
