@@ -933,7 +933,7 @@ describe("what a device's kitchen screens show", () => {
     ]);
   });
 
-  it("omits deleted stations while retaining narrowed stations and switched-off zones", async () => {
+  it("omits deleted stations and zones while retaining live narrowed slots", async () => {
     const venue = await seedVenue();
     const till = await seedDevice(venue, venue.till, "Till");
     await choose(venue, till, venue.till, [
@@ -963,11 +963,7 @@ describe("what a device's kitchen screens show", () => {
         everyZone: false,
         profileEveryStation: true,
         stations: [slot(venue.grill, "Grill", false)],
-        zones: [
-          slot(venue.terrace, "Terrace", false),
-          slot(venue.dining, "Dining room", false, true),
-          slot(venue.counter, "Counter", false),
-        ],
+        zones: [slot(venue.terrace, "Terrace", false)],
       },
     ]);
   });
