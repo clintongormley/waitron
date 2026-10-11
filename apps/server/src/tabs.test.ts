@@ -7,6 +7,7 @@ import { and, eq, inArray, sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
 import {
   diningTables,
+  tableInService,
   locations,
   kitchenTimingDefaults,
   nowIso,
@@ -319,7 +320,7 @@ async function bareOpenOrder(cfg: OriginConfig, id: string): Promise<void> {
 
 describe("opening only tables in service", () => {
   it.each(["missing today", "disabled zone"])(
-    "refuses %s with table.inactive while the table stays active",
+    "refuses %s with table.inactive while the table row remains",
     async (state) => {
       const { cfg, tableId } = await setupVenue();
       if (state === "missing today") {
@@ -334,10 +335,13 @@ describe("opening only tables in service", () => {
         params: { tableId },
       });
       const [row] = await db
-        .select({ active: diningTables.active })
+        .select({
+          id: diningTables.id,
+          inService: tableInService(diningTables.id).mapWith(Boolean),
+        })
         .from(diningTables)
         .where(eq(diningTables.id, tableId));
-      expect(row).toEqual({ active: true });
+      expect(row).toEqual({ id: tableId, inService: false });
     },
   );
 });

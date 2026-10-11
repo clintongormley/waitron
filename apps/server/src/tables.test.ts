@@ -102,9 +102,7 @@ describe("table CRUD", () => {
   it("creates a table WITH a zone and lists it (active, by label)", async () => {
     const cfg = await setupVenue();
     const { id: zoneId } = await asApp(cfg, (tx) => createZone(tx, cfg, { name: "Terraza" }));
-    const { id } = await asApp(cfg, (tx) =>
-      createTable(tx, cfg, { label: "12", zoneId, capacity: 4 }),
-    );
+    const { id } = await asApp(cfg, (tx) => createTable(tx, cfg, { label: "12", zoneId }));
     const tables = await asApp(cfg, (tx) => listTables(tx, cfg));
     expect(tables).toEqual([
       expect.objectContaining({
@@ -377,11 +375,14 @@ describe("zone CRUD", () => {
     expect(
       (
         await db
-          .select({ active: diningTables.active })
+          .select({
+            id: diningTables.id,
+            inService: tableInService(diningTables.id).mapWith(Boolean),
+          })
           .from(diningTables)
           .where(eq(diningTables.id, otherTable))
       )[0],
-    ).toEqual({ active: true });
+    ).toEqual({ id: otherTable, inService: true });
   });
 
   it("service zone creation rethrows a non-unique insert refusal raw", async () => {

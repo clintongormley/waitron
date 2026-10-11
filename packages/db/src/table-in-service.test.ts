@@ -33,7 +33,7 @@ describe("table in service", () => {
       { id: OTHER_ZONE, locationId: LOCATION, name: "Off", active: false },
     ]);
     await suite.db.insert(diningTables).values([
-      { id: PRESENT, locationId: LOCATION, zoneId: ZONE, label: "Present", active: false },
+      { id: PRESENT, locationId: LOCATION, zoneId: ZONE, label: "Present" },
       { id: TAKEN_OFF, locationId: LOCATION, zoneId: ZONE, label: "Taken off" },
       { id: ABSENT, locationId: LOCATION, zoneId: ZONE, label: "Absent" },
       { id: DISABLED_ZONE, locationId: LOCATION, zoneId: OTHER_ZONE, label: "Disabled zone" },
@@ -62,7 +62,7 @@ describe("table in service", () => {
     ]);
   });
 
-  it("calls a table with no today's row out of service, though active is true", async () => {
+  it("calls a table with no today's row out of service", async () => {
     expect((await read())[2]).toEqual({ id: ABSENT, inService: 0 });
   });
 

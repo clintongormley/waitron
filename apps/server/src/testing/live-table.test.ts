@@ -22,7 +22,6 @@ describe("test live tables", () => {
       const { id } = await createTable(tx, v.cfg, {
         label: "Fixture table",
         zoneId: zone!.id,
-        capacity: 6,
       });
       const [row] = await tx.select().from(diningTables).where(eq(diningTables.id, id));
       return { row, zoneId: zone!.id };
@@ -31,8 +30,6 @@ describe("test live tables", () => {
       locationId: v.cfg.locationId,
       label: "Fixture table",
       zoneId: result.zoneId,
-      capacity: 6,
-      active: true,
     });
   });
 });
