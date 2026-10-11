@@ -4413,6 +4413,11 @@ the tree. What remains, largest first:
 
 ### CI, tests and developer tooling
 
+- **Venue-service browser startup remains unexplained (#1557).** CI run `38170156450`
+  attempt 1 timed out before any browser test started; attempt 2 passed on the same commit.
+  No repair was established. Next: capture the browser launch, page navigation and connection
+  events on a Linux runner. [Diagnostic scope and receipts](backlog/ci.md#venue-service-browser-startup-remains-unexplained-1557).
+
 - **CodeQL's `timeout-minutes: 50` rests on the default setup's durations (A488).** codeql.yml
   saves no overlay-base database, which the default setup's runs did, so its own durations may
   differ. Next: after a week of nightly runs, read their job durations and set the limit from them

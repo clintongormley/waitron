@@ -3,6 +3,24 @@
 The open entries are listed in [the backlog](../backlog.md), under "CI, tests and developer tooling". This file holds
 their full text.
 
+## Venue-service browser startup remains unexplained (#1557)
+
+On 2026-10-11, [CI attempt 1's venue-service shard 2](https://github.com/clintongormley/waitron/actions/runs/38170156450/job/114561139899)
+passed 317 database tests, then reported `Failed to connect to the browser session` before any
+browser test started. Its test artifact contains the timeout stack, which does not distinguish
+an absent browser connection from an absent readiness message. The cause remains unclassified.
+
+[Diagnostic attempt 2](https://github.com/clintongormley/waitron/actions/runs/38170156450/job/114564298502)
+passed all 1,092 shard tests on the same commit, `497a37a01dcf2ddb0b841b650af52e77c894785f`.
+Warm and cold dependency-cache runs of shard `2/4` in an installed macOS candidate each passed
+all 40 files and 1,092 tests. Those runs did not reproduce the failure; they do not establish a
+repair or a Linux runner resource cause. The merged coverage job passed the package's thresholds.
+
+Next: reproduce on Linux with `DEBUG=vitest:browser:pool,vitest:browser:playwright,vitest:browser:api`
+and `VITEST_PW_DEBUG=1`. Retain page navigation/resource errors, browser connection and readiness
+events, plus runner memory/process state. GitHub's debug-enabled rerun did not set those Vitest
+variables. Locate the missing startup event before changing timeouts, concurrency or retries.
+
 ## The stream pause test's frozen-bucket control failed once in CI
 
 - **The stream pause test's frozen-bucket control failed once in CI (PR #1101, run 37108993254
