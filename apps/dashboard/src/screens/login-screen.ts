@@ -369,8 +369,8 @@ export class LoginScreen extends LitElement {
 
   readonly #onSessionInvalid = (event: Event): void => {
     const code = (event as CustomEvent<{ code?: unknown }>).detail?.code;
-    // `node.reset` is left out, and ends handling once shown: the reset view offers only Reload, and
-    // resetting the form would start a passkey autofill behind it.
+    // Neither `node.reset` nor any refusal while the reset view shows resets the form: that view
+    // offers only Reload, and a form reset would start a passkey autofill behind it.
     if (this.noticeCode === "node.reset") return;
     if (
       code !== "management_session.expired" &&
