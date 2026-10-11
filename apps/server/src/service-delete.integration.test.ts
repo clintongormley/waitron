@@ -1,5 +1,10 @@
 import { randomUUID } from "node:crypto";
-import { eq } from "drizzle-orm";
+import { Hono } from "hono";
+import { startManagementSession, persons, registerModulePermissions } from "@waitron/identity";
+import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
+import { mountManagementApi } from "./management-api.js";
+import { TOTP_KEY_RING } from "./testing/authenticator.js";
+import { eq, sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { bookings } from "@waitron/bookings";
 import {
@@ -17,6 +22,8 @@ import {
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import {
+  VENUE_SERVICE_ROUTES,
+  VENUE_SERVICE_PERMISSIONS,
   createDepartment,
   createServiceZone,
   departments,
@@ -26,7 +33,9 @@ import {
   deleteDepartment,
   deleteZone,
   setProfileServiceScope,
+  setDepartmentTransferSettings,
   zoneServicePolicies,
+  orderServiceContexts,
 } from "@waitron/venue-service";
 import { ALL_MODULES, enabledTableRemovals } from "./modules.js";
 import { moduleCoreServices } from "./parties.js";
@@ -375,5 +384,365 @@ describe("real module floor deletion", () => {
     await expect(transfer).rejects.toMatchObject({ code: "department.not_found" });
     expect(entered).toBe(true);
     expect(await run((tx) => tx.select().from(departmentTransferRequests))).toEqual(before);
+  });
+});
+
+registerModulePermissions(VENUE_SERVICE_PERMISSIONS);
+async function mounted() {
+  const app = new Hono();
+  const cookie = await run(async (tx) => {
+    const [admin] = await tx.select().from(persons).where(eq(persons.email, "owner@example.test"));
+    const session = await startManagementSession(tx, { personId: admin!.id });
+    return `${MANAGEMENT_COOKIE}=${session.token}`;
+  });
+  const removals = enabledTableRemovals(ALL_MODULES);
+  mountManagementApi(
+    app,
+    {
+      db: venue.db,
+      cfg: venue.cfg,
+      venueCfg: venue.cfg,
+      secureCookies: false,
+      rpId: "localhost",
+      origin: "http://localhost",
+      credentialKeyRing: TOTP_KEY_RING,
+      tableRemovals: removals,
+    },
+    () => {},
+  );
+  VENUE_SERVICE_ROUTES.mount(app, { db: venue.db, cfg: venue.cfg, core: core() }, () => {});
+  const request = (method: string, id: string, kind: "zone" | "department" = "department") =>
+    app.request(
+      `${kind === "zone" ? "/management-api/zones" : "/management-api/venue-service/departments"}/${id}${method === "GET" ? "/delete-impact" : ""}`,
+      { method, headers: { cookie } },
+    );
+  return { request };
+}
+async function completeSnapshot(tx: Transaction) {
+  const tables = await tx.execute<{ name: string }>(
+    sql`select name from sqlite_master where type = 'table' and name not like 'sqlite_%' and name != 'management_sessions' order by name`,
+  );
+  const result: Record<string, unknown[]> = {};
+  for (const { name } of tables.rows)
+    result[name] = (
+      await tx.execute(sql`select * from ${sql.identifier(name)} order by rowid`)
+    ).rows;
+  return result;
+}
+function queueSignal() {
+  const queued = gate();
+  const original = venue.db.withWriteLock.bind(venue.db);
+  const spy = vi.spyOn(venue.db, "withWriteLock").mockImplementation((body) => {
+    queued.open();
+    return original(body);
+  });
+  return { queued: queued.wait, restore: () => spy.mockRestore() };
+}
+
+describe("mounted authenticated service deletion races", () => {
+  it.each(["booking", "seating", "counter", "profile", "transfer", "master"] as const)(
+    "HTTP deletion rechecks a queued %s writer after preview",
+    async (kind) => {
+      const f = await target();
+      const { request } = await mounted();
+      const zoneId = kind === "counter" ? venue.counter.zoneId : f.zoneId;
+      const id = kind === "counter" ? zoneId : f.departmentId;
+      const targetKind = kind === "counter" ? "zone" : "department";
+      const profileId =
+        kind === "profile"
+          ? await run(
+              async (tx) =>
+                (
+                  await tx
+                    .insert(deviceProfiles)
+                    .values({ name: "Queued profile", formFactor: "till" })
+                    .returning()
+                )[0]!.id,
+            )
+          : "";
+      let tabId = "";
+      let sourceDepartmentId = "";
+      if (kind === "transfer") {
+        tabId = randomUUID();
+        await parkOrder({ db: venue.db }, venue.cfg, {
+          id: tabId,
+          zoneId: venue.tables.zoneId,
+          lines: [{ menuItemId: venue.item("Paella"), quantity: "1" }],
+          operatorId: venue.operator.personId,
+        });
+        const [source] = await run((tx) =>
+          tx
+            .select()
+            .from(zoneServicePolicies)
+            .where(eq(zoneServicePolicies.zoneId, venue.tables.zoneId)),
+        );
+        sourceDepartmentId = source!.departmentId;
+      }
+      const preview = await request("GET", id, targetKind);
+      expect(preview.status).toBe(200);
+      expect((await preview.json()).refusals).toEqual([]);
+      const held = gate();
+      const release = gate();
+      const writer = run(async (tx) => {
+        if (kind === "booking")
+          await tx.insert(bookings).values({
+            locationId: venue.cfg.locationId,
+            bookingDate: "2026-01-01",
+            bookingTime: "20:00:00",
+            partySize: 2,
+            contactName: "Queued guest",
+            tableId: f.tableId,
+            createdBy: venue.operator.personId,
+          });
+        if (kind === "seating")
+          await core().seatTable(tx, {
+            tableId: f.tableId,
+            guestCount: 2,
+            operatorId: venue.operator.personId,
+          });
+        if (kind === "counter") {
+          const [order] = await tx
+            .insert(workingOrders)
+            .values({
+              locationId: venue.cfg.locationId,
+              source: "operator_script",
+              orderNumber: 99,
+            })
+            .returning();
+          const [policy] = await tx
+            .select()
+            .from(zoneServicePolicies)
+            .where(eq(zoneServicePolicies.zoneId, zoneId));
+          await tx.insert(orderServiceContexts).values({
+            workingOrderId: order!.id,
+            locationId: venue.cfg.locationId,
+            zoneId,
+            departmentId: policy!.departmentId,
+            serviceMode: "prepay",
+          });
+        }
+        if (kind === "profile")
+          await setProfileServiceScope(tx, venue.cfg, profileId, {
+            departmentId: f.departmentId,
+            allowedZoneIds: [zoneId],
+            startingZoneId: zoneId,
+          });
+        if (kind === "transfer") {
+          const [receiving] = await tx
+            .insert(deviceProfiles)
+            .values({ name: "Receiving desk", formFactor: "till" })
+            .returning();
+          await setProfileServiceScope(tx, venue.cfg, receiving!.id, {
+            departmentId: f.departmentId,
+            allowedZoneIds: [zoneId],
+            startingZoneId: zoneId,
+          });
+          await setDepartmentTransferSettings(tx, venue.cfg, sourceDepartmentId, {
+            receivingProfileId: null,
+            destinationDepartmentIds: [f.departmentId],
+          });
+          await setDepartmentTransferSettings(tx, venue.cfg, f.departmentId, {
+            receivingProfileId: receiving!.id,
+            destinationDepartmentIds: [],
+          });
+          await requestDepartmentTransfer(tx, venue.cfg, tabId, f.departmentId, {
+            departmentId: sourceDepartmentId,
+            personId: venue.operator.personId,
+          });
+        }
+        if (kind === "master")
+          await saveZonePlan(
+            tx,
+            venue.cfg,
+            enabledTableRemovals(ALL_MODULES),
+            zoneId,
+            {
+              revision: 0,
+              tables: [
+                { key: "saved", label: "Queued saved", seats: 2, fixed: false, placement: null },
+              ],
+              joins: [],
+            },
+            NOW,
+          );
+        held.open();
+        await release.wait;
+        return completeSnapshot(tx);
+      });
+      await Promise.race([held.wait, writer]);
+      const signal = queueSignal();
+      const deletion = request("DELETE", id, targetKind);
+      await signal.queued;
+      signal.restore();
+      release.open();
+      const committed = await writer;
+      const response = await deletion;
+      if (kind === "master") {
+        expect(response.status).toBe(200);
+        expect((await response.json()).removes).toContainEqual({
+          key: "saved_tables",
+          count: 1,
+          targets: [expect.objectContaining({ name: "Queued saved" })],
+        });
+        expect(
+          await run((tx) => tx.select().from(floorPlans).where(eq(floorPlans.zoneId, zoneId))),
+        ).toEqual([]);
+        expect(
+          await run((tx) => tx.select().from(diningTables).where(eq(diningTables.zoneId, zoneId))),
+        ).toEqual([]);
+      } else {
+        expect(response.status).toBe(409);
+        const codes = {
+          booking: "table.booked",
+          seating: "zone.table_in_use",
+          counter: "zone.order_in_progress",
+          profile: "department.profile_in_use",
+          transfer: "department.transfer_pending",
+        };
+        expect(await response.json()).toMatchObject({ error: { code: codes[kind] } });
+        expect(await run(completeSnapshot)).toEqual(committed);
+      }
+    },
+  );
+
+  it("HTTP deletion commits before queued seating, profile, transfer and master saves and each refuses without orphan rows", async () => {
+    const f = await target();
+    const { request } = await mounted();
+    const profileId = await run(
+      async (tx) =>
+        (
+          await tx
+            .insert(deviceProfiles)
+            .values({ name: "Stale profile", formFactor: "till" })
+            .returning()
+        )[0]!.id,
+    );
+    const tabId = randomUUID();
+    await parkOrder({ db: venue.db }, venue.cfg, {
+      id: tabId,
+      zoneId: venue.tables.zoneId,
+      lines: [{ menuItemId: venue.item("Paella"), quantity: "1" }],
+      operatorId: venue.operator.personId,
+    });
+    const [source] = await run((tx) =>
+      tx
+        .select()
+        .from(zoneServicePolicies)
+        .where(eq(zoneServicePolicies.zoneId, venue.tables.zoneId)),
+    );
+    const held = gate();
+    const release = gate();
+    const first = run(async () => {
+      held.open();
+      await release.wait;
+    });
+    await held.wait;
+    const signal = queueSignal();
+    const deletion = request("DELETE", f.departmentId);
+    try {
+      await Promise.race([
+        signal.queued,
+        deletion.then(() => {
+          throw new Error("HTTP deletion answered before requesting the write queue");
+        }),
+      ]);
+    } catch (error) {
+      release.open();
+      throw error;
+    } finally {
+      signal.restore();
+    }
+    const afterDelete = run(completeSnapshot);
+    const writers = [
+      run((tx) =>
+        core().seatTable(tx, {
+          tableId: f.tableId,
+          guestCount: 1,
+          operatorId: venue.operator.personId,
+        }),
+      ),
+      run((tx) =>
+        setProfileServiceScope(tx, venue.cfg, profileId, {
+          departmentId: f.departmentId,
+          allowedZoneIds: [f.zoneId],
+          startingZoneId: f.zoneId,
+        }),
+      ),
+      run((tx) =>
+        requestDepartmentTransfer(tx, venue.cfg, tabId, f.departmentId, {
+          departmentId: source!.departmentId,
+          personId: venue.operator.personId,
+        }),
+      ),
+      run((tx) =>
+        saveZonePlan(
+          tx,
+          venue.cfg,
+          enabledTableRemovals(ALL_MODULES),
+          f.zoneId,
+          { revision: 0, tables: [], joins: [] },
+          NOW,
+        ),
+      ),
+    ].map((promise) =>
+      promise.then(
+        () => undefined,
+        (caught: unknown) => caught,
+      ),
+    );
+    release.open();
+    await first;
+    const response = await deletion;
+    expect(response.status).toBe(200);
+    expect((await response.json()).target).toEqual({
+      id: f.departmentId,
+      name: expect.any(String),
+    });
+    const committed = await afterDelete;
+    const codes = [
+      "table.not_found",
+      "device_profile.access_invalid",
+      "department.not_found",
+      "zone.not_found",
+    ];
+    for (const [index, error] of (await Promise.all(writers)).entries())
+      expect(error).toMatchObject({ code: codes[index] });
+    expect(await run(completeSnapshot)).toEqual(committed);
+  });
+
+  it("HTTP zone deletion precedes a queued counter order and leaves the complete committed state unchanged", async () => {
+    const { request } = await mounted();
+    const held = gate();
+    const release = gate();
+    const first = run(async () => {
+      held.open();
+      await release.wait;
+    });
+    await held.wait;
+    const signal = queueSignal();
+    const deletion = request("DELETE", venue.counter.zoneId, "zone");
+    try {
+      await Promise.race([
+        signal.queued,
+        deletion.then(() => {
+          throw new Error("HTTP deletion answered before requesting the write queue");
+        }),
+      ]);
+    } catch (error) {
+      release.open();
+      throw error;
+    } finally {
+      signal.restore();
+    }
+    const afterDelete = run(completeSnapshot);
+    const order = counterOrder(venue, "Paella").then(
+      () => undefined,
+      (caught: unknown) => caught,
+    );
+    release.open();
+    await first;
+    expect((await deletion).status).toBe(200);
+    expect(await order).toMatchObject({ code: "service_zone.not_found" });
+    expect(await run(completeSnapshot)).toEqual(await afterDelete);
   });
 });

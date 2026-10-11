@@ -3450,3 +3450,70 @@ it("saves combined department settings onto a deleted name", async () => {
     ]),
   );
 });
+
+describe("permanent department delete contracts", () => {
+  it("delete returns a full recomputed impact and retires the old preview path", async () => {
+    const fx = await fixture();
+    await withTransaction(db, (tx) =>
+      createDepartment(tx, fx, { name: "Dining", orderStart: "table" }),
+    );
+    const department = await withTransaction(db, (tx) =>
+      createDepartment(tx, fx, { name: "Events", orderStart: "table" }),
+    );
+    const path = `/management-api/venue-service/departments/${department.id}`;
+    const expected = {
+      target: { id: department.id, name: "Events" },
+      refusals: [],
+      ends: [],
+      removes: [{ key: "department_policy", count: 1, targets: [] }],
+    };
+    const preview = await send(fx.app, "GET", `${path}/delete-impact`, fx.managerCookie);
+    expect(preview.status).toBe(200);
+    expect(await preview.json()).toEqual(expected);
+    expect((await send(fx.app, "GET", `${path}/removal-impact`, fx.managerCookie)).status).toBe(
+      404,
+    );
+    const removed = await send(fx.app, "DELETE", path, fx.managerCookie);
+    expect(removed.status).toBe(200);
+    expect(await removed.json()).toEqual(expected);
+    for (const method of ["DELETE", "GET"] as const) {
+      const response = await send(
+        fx.app,
+        method,
+        `${path}${method === "GET" ? "/delete-impact" : ""}`,
+        fx.managerCookie,
+      );
+      expect(response.status).toBe(404);
+      expect(await response.json()).toMatchObject({
+        error: { code: "department.not_found", params: { departmentId: department.id } },
+      });
+    }
+  });
+  it("active presence refuses mixed renames without changing departments or zones", async () => {
+    const fx = await fixture();
+    const department = await withTransaction(db, (tx) =>
+      createDepartment(tx, fx, { name: "Dining", orderStart: "table" }),
+    );
+    const before = {
+      departments: await db.select().from(departments),
+      zones: await db.select().from(floorZones),
+    };
+    for (const active of [true, false, null, "false", []]) {
+      const response = await send(
+        fx.app,
+        "PATCH",
+        `/management-api/venue-service/departments/${department.id}`,
+        fx.managerCookie,
+        { active, name: "Changed" },
+      );
+      expect(response.status).toBe(400);
+      expect(await response.json()).toMatchObject({
+        error: { code: "management.request_invalid", params: { field: "active" } },
+      });
+      expect({
+        departments: await db.select().from(departments),
+        zones: await db.select().from(floorZones),
+      }).toEqual(before);
+    }
+  });
+});
