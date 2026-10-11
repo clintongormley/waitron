@@ -159,17 +159,19 @@ list does not exist.
 (`packages/venue-service/src/dashboard/prep-stations-screen.ts`), bundled because they share the
 screen. Mockups in [mockups/a507-prep-stations/](mockups/a507-prep-stations/): `0-routes-today.png`
 is the grid before, `1-routes-option-a-chosen.png` the chosen default view, `3-routes-search.png`
-search, and `2-routes-option-b-not-chosen.png` the alternative the owner turned down.
-`mockups.html` is their source.
+search, `4-period-lines-option-1-chosen.png` how a cell's period lines look, `7-cell-hover.png`
+pointing at a cell, and `8-`, `9-` and `10-dialog-*.png` the cell dialog over the new grid. The
+`*-not-chosen.png` boards are alternatives the owner turned down. The three `*-mockups.html` files
+are their source.
 
 **1. The Routes grid** (`routing-grid.ts`, `routing-grid-model.ts`).
 
 - Remove the boxes around each cell, the "384 more products, 1 more category" counts under a
-  category, and the parent path above a name ("Santet Deli Co › AGAVE ›"). Rows become one line.
+  category, and the parent path above a name ("Santet Deli Co › AGAVE ›"). A row is one line unless a cell has period lines.
 - A station set on that row is bold blue. Every zone always shows its station: bold blue when set
   here, grey when inherited.
-- A zone cell with nothing set on the row is **blank when the station it inherits is the row's own
-  Every zone**, and otherwise shows the inherited station in grey italics (option A). The owner
+- A zone cell with nothing set on the row is **blank when what it inherits — station and period
+  lines — is the row's own Every zone**, and otherwise shows the inherited station in grey italics (option A). The owner
   turned down blanking every inherited zone cell (option B): a category under one that sends Front
   Bar to Bar would then read as going to Kitchen from Front Bar.
 - A row's own Every zone beats a parent's setting for one zone: CLANDESTINA sets Every zone to
@@ -184,8 +186,14 @@ search, and `2-routes-option-b-not-chosen.png` the alternative the owner turned 
   text is highlighted. Clearing the search returns to the tree as it was open. This differs on
   purpose from the Products and Menu Structure search (A461, `catalogue.md` → _Decisions_), which
   lists matches flat with inline paths: here the parent rows carry the stations being inherited.
-- Not decided: how a cell's period lines (A455) look in the new style; the mockups show none.
-  Ask the owner before building them.
+- A cell's period lines (A455) are written out under its station in smaller text, one per line,
+  bold blue when set on the row and grey when inherited (option 1, chosen 2026-10-11). The
+  "Not on Lunch menus" warning keeps its full wording in amber under its line. The owner turned
+  down a "+1 period" marker with the lines on hover (option 2: a scan for one station needs
+  hovering) and the lines after the station on one line (option 3: crowds narrow columns).
+- Without boxes, a cell still has to read as clickable: pointing at it tints the whole cell, outlines
+  it and shows a hand pointer, and keyboard focus draws the same outline.
+- The cell dialog (`routing-cell-editor.ts`) stays as it is; boards 8–10 draw it over the new grid.
 
 **2. The Stations table's row menu** (`station-table.ts`). The ⋮ menu is drawn inside the name
 cell beside the drag handle. Move it to its own `actions` column pinned to the end, like every other
