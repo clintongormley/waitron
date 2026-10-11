@@ -28,6 +28,8 @@ it("refreshes the routing grid and the operations screen on a routing cell chang
     "station_day_states",
     "special_dates",
     "locations",
+    "location_business_day_settings",
+    "location_day_cutover_changes",
     "routing_cell_periods",
     "menu_periods",
     "menu_period_staff_menus",
@@ -40,6 +42,9 @@ it("refreshes the routing grid and the operations screen on a routing cell chang
     "catalogues",
   ]);
   expect(QUERY_DEPENDENCIES.operations).toEqual([
+    "locations",
+    "location_business_day_settings",
+    "location_day_cutover_changes",
     "departments",
     "zone_service_policies",
     "department_sale_policies",
@@ -73,6 +78,8 @@ it("refreshes Opening hours from its periods, ranges, dates, menu names and the 
     "departments",
     "catalogues",
     "locations",
+    "location_business_day_settings",
+    "location_day_cutover_changes",
     "zone_closed_times",
     "zone_service_policies",
     "floor_zones",

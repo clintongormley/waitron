@@ -1058,7 +1058,6 @@ it.each(["zone", "department"] as const)(
         nodeId: venue.cfg.nodeId,
         businessDay: "2026-10-01",
         timeZone: "Europe/Madrid",
-        dayCutover: "05:00",
         closedBy: venue.operator.personId,
         cashCounts: [],
       });

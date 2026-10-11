@@ -1211,7 +1211,6 @@ it("previews a dated business-day start passively and writes with the loaded rev
   ).toEqual(["1", null, null]);
 });
 
-
 it("reads a venue clock preview passively with encoded clock values", async () => {
   const response = {
     at: "2026-10-06T02:00:00.000Z",

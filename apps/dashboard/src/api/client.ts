@@ -2738,7 +2738,6 @@ export class DashboardApi {
     return this.#request("/management-api/venue-details/business-day-start", "DELETE", input);
   }
 
-
   getLocationSettings(): Promise<{ name: string; operationDescription: string }> {
     return this.#request("/management-api/location-settings", "GET");
   }

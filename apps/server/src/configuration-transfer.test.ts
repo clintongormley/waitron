@@ -6105,4 +6105,3 @@ describe("dated business-day configuration transfer", () => {
     expect(await suite.db.select().from(locationDayCutoverChanges)).toHaveLength(1);
   });
 });
-
