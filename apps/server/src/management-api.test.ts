@@ -2990,7 +2990,7 @@ describe("retired table writes", () => {
     const zoneId = await createZone(unique("Retired"));
     const label = unique("Retired table");
     const { id } = await withTransaction(suite.db, (tx) =>
-      createTable(tx, tillConfigFromVenue(venue), { label, zoneId, capacity: 4 }),
+      createTable(tx, tillConfigFromVenue(venue), { label, zoneId }),
     );
     const rows = () =>
       suite.db.all(sql`

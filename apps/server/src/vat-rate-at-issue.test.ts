@@ -243,7 +243,6 @@ async function openTableTab(
       locationId: v.cfg.locationId,
       zoneId: v.tables.zoneId,
       label: `Mesa ${tableId.slice(0, 4)}`,
-      active: true,
     });
     await tx.insert(floorTodayTables).values({ tableId: tableId });
     const { tabId } = await openPartyTab(tx, v.cfg, { tableId });

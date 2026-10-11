@@ -960,6 +960,27 @@
       "when": 1791671411920,
       "tag": "0136_floor_reset_joins",
       "breakpoints": true
+    },
+    {
+      "idx": 137,
+      "version": "6",
+      "when": 1791709961356,
+      "tag": "0137_floor_retire_drop_table_triggers",
+      "breakpoints": true
+    },
+    {
+      "idx": 138,
+      "version": "6",
+      "when": 1791709988063,
+      "tag": "0138_floor_retire_old_table_columns",
+      "breakpoints": true
+    },
+    {
+      "idx": 139,
+      "version": "6",
+      "when": 1791709996342,
+      "tag": "0139_floor_retire_recreate_table_triggers",
+      "breakpoints": true
     }
   ]
 }

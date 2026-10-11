@@ -1135,7 +1135,7 @@ export async function createOpenOrder(
     if (table === undefined) {
       throw new AppError("table.not_found", { tableId: deliveryTableId });
     }
-    effectiveZoneId = table.zoneId ?? effectiveZoneId;
+    effectiveZoneId = table.zoneId;
   }
   if (effectiveZoneId !== undefined && placement.existingService !== true) {
     await VENUE_SERVICE.assertZoneTakesNewOrders(tx, cfg, effectiveZoneId, new Date());
@@ -1261,15 +1261,13 @@ export async function openTab(
     throw new AppError("table.needs_clearing", { tableId: req.tableId });
   }
 
-  if (table.zoneId !== null) {
-    const context = await VENUE_SERVICE.resolveZoneContext(tx, cfg, table.zoneId);
-    if (context.serviceMode !== "table_tab") {
-      throw new AppError("service_zone.mode_incompatible", {
-        zoneId: table.zoneId,
-        expected: "table_tab",
-        actual: context.serviceMode,
-      });
-    }
+  const context = await VENUE_SERVICE.resolveZoneContext(tx, cfg, table.zoneId);
+  if (context.serviceMode !== "table_tab") {
+    throw new AppError("service_zone.mode_incompatible", {
+      zoneId: table.zoneId,
+      expected: "table_tab",
+      actual: context.serviceMode,
+    });
   }
 
   // A party still holds the table after its bills settle, until Finish table.
@@ -1279,7 +1277,7 @@ export async function openTab(
 
   const tabId = randomUUID();
   const { orderNumber } = await createOpenOrder(tx, cfg, tabId, req.lines ?? [], null, {
-    zoneId: table.zoneId ?? undefined,
+    zoneId: table.zoneId,
     partyId: req.partyId,
     creditedTo: req.operatorId,
   });

@@ -753,9 +753,6 @@ describe("a disabled zone", () => {
     const tableId = await v.table("Unchanged", z);
     await masterOf(z, [{ label: "Unchanged", live: tableId }]);
     await inTx(v, (tx) => ensureToday(tx, v.cfg, NONE, NOW));
-    await inTx(v, (tx) =>
-      tx.update(diningTables).set({ active: false }).where(eq(diningTables.id, tableId)),
-    );
     const before = await tableRow(v, tableId);
     const todayBefore = await todayRow(tableId);
     await inTx(v, (tx) => deactivateZone(tx, v.cfg, z));

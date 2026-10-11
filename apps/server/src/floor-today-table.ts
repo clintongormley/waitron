@@ -8,7 +8,7 @@ import "./errors.js";
 
 export interface Today {
   tableId: string;
-  zoneId: string | null;
+  zoneId: string;
   row: typeof floorTodayTables.$inferSelect;
   /** Every member's today's row, this table's included, by table id; null when the table is in no merge. */
   merge: { joinId: string; members: (typeof floorTodayTables.$inferSelect)[] } | null;

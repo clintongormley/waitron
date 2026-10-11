@@ -1840,7 +1840,6 @@ describe("ordering extras and options — parent + child lines", () => {
         locationId: v.cfg.locationId,
         zoneId: v.tablesZoneId,
         label: "Mesa 1",
-        active: true,
       });
       await tx.insert(floorTodayTables).values({ tableId: tableId });
     });
@@ -1897,7 +1896,6 @@ describe("ordering extras and options — parent + child lines", () => {
         locationId: v.cfg.locationId,
         zoneId: v.tablesZoneId,
         label: "Mesa 1",
-        active: true,
       });
       await tx.insert(floorTodayTables).values({ tableId: tableId });
       const { tabId } = await openPartyTab(tx, v.cfg, { tableId });
@@ -1927,7 +1925,6 @@ describe("ordering extras and options — parent + child lines", () => {
         locationId: v.cfg.locationId,
         zoneId: v.tablesZoneId,
         label: "Mesa NC",
-        active: true,
       });
       await tx.insert(floorTodayTables).values({ tableId: tableId });
     });
@@ -2333,7 +2330,6 @@ describe("ordering extras and options — parent + child lines", () => {
         locationId: v.cfg.locationId,
         zoneId: v.tablesZoneId,
         label: "Mesa V",
-        active: true,
       });
       await tx.insert(floorTodayTables).values({ tableId: tableId });
       const { tabId } = await openPartyTab(tx, v.cfg, { tableId });

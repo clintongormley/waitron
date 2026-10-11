@@ -12,7 +12,7 @@ import type { TillConfig } from "../till-config.js";
 export async function createTable(
   tx: Transaction,
   cfg: TillConfig,
-  input: { label: string; zoneId: string; capacity?: number },
+  input: { label: string; zoneId: string },
   options: { today?: boolean } = {},
 ): Promise<{ id: string }> {
   const [row] = await tx
@@ -22,7 +22,6 @@ export async function createTable(
       locationId: cfg.locationId,
       label: input.label,
       zoneId: input.zoneId,
-      capacity: input.capacity ?? null,
     })
     .returning({ id: diningTables.id });
   if (options.today !== false) await tx.insert(floorTodayTables).values({ tableId: row!.id });

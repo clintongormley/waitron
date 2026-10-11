@@ -82,7 +82,7 @@ export type {
   AmendmentVerification,
   VerifiableAmendment,
 } from "./order-amendment-hash.js";
-export { diningTables, floorTableShape } from "./schema/dining-tables.js";
+export { diningTables } from "./schema/dining-tables.js";
 export {
   floorPlanJoinTables,
   floorPlanJoins,

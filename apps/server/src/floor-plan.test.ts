@@ -105,12 +105,8 @@ async function masterOf(
   });
 }
 
-async function liveTable(zoneId: string, label: string, capacity: number | null = null) {
-  const id = await v.table(label, zoneId);
-  if (capacity !== null) {
-    await inTx(v, (tx) => tx.update(diningTables).set({ capacity }).where(eq(diningTables.id, id)));
-  }
-  return id;
+async function liveTable(zoneId: string, label: string) {
+  return v.table(label, zoneId);
 }
 
 async function refusal(promise: Promise<unknown>): Promise<AppError> {

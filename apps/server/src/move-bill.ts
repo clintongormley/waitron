@@ -65,7 +65,7 @@ export interface MoveBillResult {
 /** Where the bill goes: the counter, a free table, or a table another party holds. */
 type Destination =
   | { kind: "counter"; zoneId: string | null }
-  | { kind: "free"; tableId: string; zoneId: string | null }
+  | { kind: "free"; tableId: string; zoneId: string }
   | { kind: "party"; partyId: string };
 
 /**
@@ -182,7 +182,7 @@ async function resolveDestination(
 export interface TargetTable {
   /** The party holding the table now, or null. */
   holding: string | null;
-  zoneId: string | null;
+  zoneId: string;
 }
 
 /**
@@ -237,15 +237,13 @@ export async function refuseUnseatable(
   cfg: TillConfig,
   table: TargetTable,
 ): Promise<void> {
-  if (table.zoneId !== null) {
-    const context = await VENUE_SERVICE.resolveZoneContext(tx, cfg, table.zoneId);
-    if (context.serviceMode !== "table_tab") {
-      throw new AppError("service_zone.mode_incompatible", {
-        zoneId: table.zoneId,
-        expected: "table_tab",
-        actual: context.serviceMode,
-      });
-    }
+  const context = await VENUE_SERVICE.resolveZoneContext(tx, cfg, table.zoneId);
+  if (context.serviceMode !== "table_tab") {
+    throw new AppError("service_zone.mode_incompatible", {
+      zoneId: table.zoneId,
+      expected: "table_tab",
+      actual: context.serviceMode,
+    });
   }
 }
 

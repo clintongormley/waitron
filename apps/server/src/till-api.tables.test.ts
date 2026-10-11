@@ -233,7 +233,7 @@ describe("table + tab routes", () => {
   it("a signed-in staff session's POST, PATCH and DELETE on /api/tables answer 404 and leave the table unchanged", async () => {
     const label = `K-${randomUUID().slice(0, 6)}`;
     const { id } = await withTransaction(suite.db, (tx) =>
-      createTable(tx, cfg, { label, zoneId: seededZoneId, capacity: 4 }),
+      createTable(tx, cfg, { label, zoneId: seededZoneId }),
     );
     const row = () =>
       suite.db.all<{ label: string }>(sql`select label from dining_tables where id = ${id}`);
@@ -261,7 +261,7 @@ describe("table + tab routes", () => {
 
   it("GET /api/tables lists an active table", async () => {
     const { id } = await withTransaction(suite.db, (tx) =>
-      createTable(tx, cfg, { label: "12", zoneId: seededZoneId, capacity: 4 }),
+      createTable(tx, cfg, { label: "12", zoneId: seededZoneId }),
     );
     const list = (await (await request("/api/tables")).json()) as unknown[];
     expect(list).toContainEqual(expect.objectContaining({ id, label: "12", zoneId: seededZoneId }));
@@ -696,7 +696,7 @@ it.each(["PUT", "DELETE"])(
 
 it("answers a table's state and list without the old columns", async () => {
   const { id } = await withTransaction(suite.db, (tx) =>
-    createTable(tx, cfg, { label: `New shape ${randomUUID()}`, zoneId: seededZoneId, capacity: 4 }),
+    createTable(tx, cfg, { label: `New shape ${randomUUID()}`, zoneId: seededZoneId }),
   );
   for (const path of ["/api/tables/state", "/api/tables"]) {
     const response = await request(path);

@@ -100,7 +100,7 @@ beforeAll(async () => {
   tableId = randomUUID();
   await db
     .insert(diningTables)
-    .values({ id: tableId, locationId, zoneId: zone!.id, label: "Mesa 1", capacity: 4 });
+    .values({ id: tableId, locationId, zoneId: zone!.id, label: "Mesa 1" });
   await db.insert(floorTodayTables).values({ tableId: tableId });
   await db.insert(partyTables).values({ partyId: party!.id, tableId });
 
