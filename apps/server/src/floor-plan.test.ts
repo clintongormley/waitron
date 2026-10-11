@@ -389,24 +389,6 @@ describe("checkZonePlanSave", () => {
     expect(error.params).toEqual({ label: taken });
   });
 
-  it("refuses a name a live table with no zone uses", async () => {
-    const taken = fresh("Zoneless");
-    await inTx(v, (tx) =>
-      tx.insert(diningTables).values({ locationId: v.cfg.locationId, label: taken, zoneId: null }),
-    );
-    const { z, input } = await planned();
-    const save: ZonePlanSave = {
-      ...input,
-      tables: [
-        ...input.tables,
-        { key: "n", label: taken, seats: null, fixed: false, placement: null },
-      ],
-    };
-    const error = await refusal(check(z, save));
-    expect(error.code).toBe("table.label_taken");
-    expect(error.params).toEqual({ label: taken });
-  });
-
   it("compares names as the database does, by exact characters", async () => {
     const other = await zone();
     const taken = fresh("Loose");

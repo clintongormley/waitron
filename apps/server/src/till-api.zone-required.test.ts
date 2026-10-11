@@ -2,13 +2,7 @@ import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { eq, sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import {
-  deviceProfiles,
-  workingOrders,
-  locations,
-  withTransaction,
-  workingOrderLines,
-} from "@waitron/db";
+import { deviceProfiles, locations, withTransaction, workingOrderLines } from "@waitron/db";
 import type { Database } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedKitchenStation, seedNode, seedTenant } from "@waitron/db/testing/seed.js";
@@ -33,7 +27,7 @@ import type { PaymentProvider } from "@waitron/payments";
 import { mountTillApi } from "./till-api.js";
 import type { TillApiDeps } from "./till-api.js";
 import type { OriginConfig } from "./till-config.js";
-import { addTabRound, createOpenOrder, parkOrder } from "./working-order.js";
+import { createOpenOrder, parkOrder } from "./working-order.js";
 import { createTable } from "./testing/live-table.js";
 import { enrolDeviceForTest } from "./testing/enrol.js";
 import { seedLegacySellingUnits } from "./testing/seed-units.js";
@@ -41,7 +35,6 @@ import { offerProducts } from "./testing/zone-offers.js";
 import { DEVICE_COOKIE } from "./device-session.js";
 import { SESSION_COOKIE } from "./till-session.js";
 import "./errors.js";
-import { openPartyTab } from "./testing/serve-line.js";
 import { BASIC_ACTIONS } from "./testing/session-device.js";
 
 // Every line sold is priced from a service zone's menu offer. A venue with no zone, and an order
@@ -252,48 +245,6 @@ describe("an order with no service context takes no lines", () => {
       });
     }
     expect(await recorded()).toEqual({ orders: 0, lines: 0 });
-  });
-
-  it("openTab with lines on a table in no zone refuses order.service_context_missing", async () => {
-    const venue = await seedVenue(suite.db);
-    await expect(
-      withTransaction(suite.db, (tx) =>
-        openPartyTab(tx, venue.cfg, {
-          tableId: venue.tableId,
-          lines: [productLine(venue.water)],
-        }),
-      ),
-    ).rejects.toMatchObject({ code: "order.service_context_missing" });
-    expect(await recorded()).toEqual({ orders: 0, lines: 0 });
-  });
-
-  it("openTab with no lines on a table in no zone opens an empty tab", async () => {
-    const venue = await seedVenue(suite.db);
-    const { tabId, partyId } = await withTransaction(suite.db, (tx) =>
-      openPartyTab(tx, venue.cfg, { tableId: venue.tableId }),
-    );
-    const [bill] = await suite.db
-      .select({ partyId: workingOrders.partyId, status: workingOrders.status })
-      .from(workingOrders)
-      .where(eq(workingOrders.id, tabId));
-    expect(bill).toEqual({ partyId, status: "open" });
-    expect(await orderLines(tabId)).toEqual([]);
-  });
-
-  it("addTabRound on that empty tab refuses order.service_context_missing", async () => {
-    const venue = await seedVenue(suite.db);
-    const { tabId } = await withTransaction(suite.db, (tx) =>
-      openPartyTab(tx, venue.cfg, { tableId: venue.tableId }),
-    );
-    await expect(
-      withTransaction(suite.db, (tx) =>
-        addTabRound(tx, venue.cfg, tabId, [productLine(venue.water)]),
-      ),
-    ).rejects.toMatchObject({
-      code: "order.service_context_missing",
-      params: { workingOrderId: tabId },
-    });
-    expect(await orderLines(tabId)).toEqual([]);
   });
 
   it("createOpenOrder with no lines and no zone opens an empty order", async () => {

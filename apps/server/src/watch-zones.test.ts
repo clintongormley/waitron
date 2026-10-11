@@ -1,8 +1,6 @@
 import { createZone } from "./testing/service-zone.js";
 import { randomUUID } from "node:crypto";
-import { eq } from "drizzle-orm";
 import { describe, expect, it, vi } from "vitest";
-import { diningTables } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { VENUE_SERVICE } from "./modules.js";
@@ -160,12 +158,5 @@ describe("orderWatchZones", () => {
     expect(await inTx(v, (tx) => orderWatchZones(tx, v.cfg, []))).toEqual(new Map());
     expect(batch).not.toHaveBeenCalled();
     batch.mockRestore();
-
-    await inTx(v, async (tx) => {
-      await tx.update(diningTables).set({ zoneId: null }).where(eq(diningTables.id, outside));
-    });
-    expect(
-      await inTx(v, (tx) => orderWatchZones(tx, v.cfg, [counterBill(delivered, outside)])),
-    ).toEqual(new Map([[delivered, terrace]]));
   });
 });

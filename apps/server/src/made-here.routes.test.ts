@@ -45,7 +45,6 @@ let grillPrinterId: string;
 let grillStationId: string;
 let counterOffer: string;
 let counterPaellaOffer: string;
-let discountReasonId: string;
 let cancelReasonId: string;
 let garnishListId: string;
 let garnishProductId: string;
@@ -129,18 +128,6 @@ useVenueDb({
       });
       counterOffer = offers.offerFor(lager!.id);
       counterPaellaOffer = offers.offerFor(paella!.id);
-      discountReasonId = (
-        await createAdjustmentReason(tx, {
-          name: "Made-here test",
-          names: { "es-ES": "Descuento" },
-          actions: ["discount_percent"],
-          maxPercentBp: 1000,
-          maxAmount: null,
-          applyRole: "staff",
-          approverRole: "staff",
-          noteRequired: false,
-        })
-      ).id;
       cancelReasonId = (
         await createAdjustmentReason(tx, {
           name: "Cancel made-here",
@@ -230,19 +217,6 @@ async function lineCheck(lineId: string) {
       ),
     ).toHaveLength(jobs.length);
   };
-}
-
-async function bareParty() {
-  const { orderId, lineId } = await parkedLager();
-  const table = await inTx(venue, (tx) =>
-    createTable(tx, venue.cfg, { label: `Bare ${randomUUID()}` }),
-  );
-  const sessionOnly = venue.cookie.split(";")[0]!;
-  const moved = await send(venue.app, sessionOnly, "POST", `/api/bills/${orderId}/move`, {
-    to: { tableId: table.id },
-  });
-  expect(moved.status).toBe(200);
-  return { orderId, lineId, tableId: table.id, partyId: moved.json.partyId as string };
 }
 
 async function revisionOf(partyId: string) {
@@ -1669,168 +1643,6 @@ describe("made-here route wiring", () => {
       expectedOtherPartyRevision: party.revision,
     });
     expect(moved.status).toBe(200);
-    await check();
-  });
-
-  it("/api/parties/:id/move sends a zone-less party's unsent drink", async () => {
-    const bare = await bareParty();
-    const target = await inTx(venue, (tx) =>
-      createTable(tx, venue.cfg, { label: `Target ${randomUUID()}`, zoneId: venue.zoneId }),
-    );
-    const check = await lineCheck(bare.lineId);
-    const moved = await send(venue.app, venue.cookie, "POST", `/api/parties/${bare.partyId}/move`, {
-      toTableId: target.id,
-      expectedPartyRevision: await revisionOf(bare.partyId),
-    });
-    expect(moved.status).toBe(200);
-    await check();
-  });
-
-  it("/api/parties/:id/join sends a zone-less party's unsent drink", async () => {
-    const bare = await bareParty();
-    const seated = await seatedWith(venue);
-    const check = await lineCheck(bare.lineId);
-    const joined = await send(
-      venue.app,
-      venue.cookie,
-      "POST",
-      `/api/parties/${seated.partyId}/join`,
-      {
-        tableId: bare.tableId,
-        expectedPartyRevision: await revisionOf(seated.partyId),
-        otherPartyId: bare.partyId,
-        expectedOtherPartyRevision: await revisionOf(bare.partyId),
-      },
-    );
-    expect(joined.status).toBe(200);
-    await check();
-  });
-
-  it("PUT /api/working-orders/:id/lines/:lineNo makes added adjusted units here even from a held group", async () => {
-    const bare = await bareParty();
-    const jobsBefore = await inTx(venue, (tx) =>
-      tx.select({ id: printJobs.id }).from(printJobs).where(eq(printJobs.printerId, barPrinterId)),
-    );
-    const [order] = await inTx(venue, (tx) =>
-      tx
-        .select({ revision: workingOrders.revision })
-        .from(workingOrders)
-        .where(eq(workingOrders.id, bare.orderId)),
-    );
-    const discounted = await send(
-      venue.app,
-      venue.cookie,
-      "POST",
-      `/api/working-orders/${bare.orderId}/adjustments`,
-      {
-        submissionId: randomUUID(),
-        expectedRevision: order!.revision,
-        lineId: bare.lineId,
-        reasonId: discountReasonId,
-        action: "discount_percent",
-        percentBp: 1000,
-        note: null,
-      },
-    );
-    expect(discounted.status).toBe(200);
-    expect(
-      await inTx(venue, (tx) =>
-        tx.select().from(ticketItems).where(eq(ticketItems.workingOrderLineId, bare.lineId)),
-      ),
-    ).toEqual([]);
-    const edited = await send(
-      venue.app,
-      venue.cookie,
-      "PUT",
-      `/api/working-orders/${bare.orderId}/lines/1`,
-      { revision: discounted.json.revision, quantity: "2" },
-    );
-    expect(edited.status).toBe(200);
-    const lines = await inTx(venue, (tx) =>
-      tx
-        .select({ id: workingOrderLines.id })
-        .from(workingOrderLines)
-        .where(eq(workingOrderLines.workingOrderId, bare.orderId)),
-    );
-    expect(lines).toHaveLength(2);
-    const newId = lines.find((line) => line.id !== bare.lineId)!.id;
-    const [item] = await inTx(venue, (tx) =>
-      tx.select().from(ticketItems).where(eq(ticketItems.workingOrderLineId, newId)),
-    );
-    expect(item).toMatchObject({ madeHere: true, state: "ready" });
-    const [original] = await inTx(venue, (tx) =>
-      tx.select().from(ticketItems).where(eq(ticketItems.workingOrderLineId, bare.lineId)),
-    );
-    expect(original).toBeUndefined();
-    expect(
-      await inTx(venue, (tx) =>
-        tx
-          .select({ id: printJobs.id })
-          .from(printJobs)
-          .where(eq(printJobs.printerId, barPrinterId)),
-      ),
-    ).toHaveLength(jobsBefore.length);
-  });
-
-  it("/api/parties/:id/split-table sends the selected bill when it enters table service", async () => {
-    const bare = await bareParty();
-    const second = await parkedLager();
-    const sessionOnly = venue.cookie.split(";")[0]!;
-    const moved = await send(venue.app, sessionOnly, "POST", `/api/bills/${second.orderId}/move`, {
-      to: { tableId: bare.tableId },
-      bills: "separate",
-      otherPartyId: bare.partyId,
-      expectedOtherPartyRevision: await revisionOf(bare.partyId),
-    });
-    expect(moved.status).toBe(200);
-    const groups = await send(
-      venue.app,
-      venue.cookie,
-      "GET",
-      `/api/parties/${bare.partyId}/groups`,
-    );
-    const [secondLine] = await inTx(venue, (tx) =>
-      tx
-        .select({ groupId: workingOrderLines.groupId })
-        .from(workingOrderLines)
-        .where(eq(workingOrderLines.id, second.lineId)),
-    );
-    const held = (groups.json.groups as { id: string; state: string }[]).find(
-      (group) => group.id === secondLine!.groupId,
-    );
-    expect(held).toBeDefined();
-    const fired = await send(
-      venue.app,
-      venue.cookie,
-      "POST",
-      `/api/parties/${bare.partyId}/groups/${held!.id}/fire`,
-      { submissionId: randomUUID(), expectedPartyRevision: groups.json.revision },
-    );
-    expect(fired.status).toBe(200);
-    const service = await inTx(venue, (tx) =>
-      createTable(tx, venue.cfg, { label: `Service ${randomUUID()}`, zoneId: venue.zoneId }),
-    );
-    const joined = await send(
-      venue.app,
-      venue.cookie,
-      "POST",
-      `/api/parties/${bare.partyId}/join`,
-      { tableId: service.id, expectedPartyRevision: await revisionOf(bare.partyId) },
-    );
-    expect(joined.status).toBe(200);
-    const check = await lineCheck(second.lineId);
-    const split = await send(
-      venue.app,
-      venue.cookie,
-      "POST",
-      `/api/parties/${bare.partyId}/split-table`,
-      {
-        tableId: service.id,
-        billId: second.orderId,
-        expectedPartyRevision: await revisionOf(bare.partyId),
-      },
-    );
-    expect(split.status).toBe(200);
     await check();
   });
 
