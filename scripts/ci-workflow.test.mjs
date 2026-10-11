@@ -2280,3 +2280,31 @@ describe("CodeQL's workflow", () => {
     expect(codeql()).toMatch(/^ {10}trap-caching: false$/m);
   });
 });
+
+describe("CI image provenance", () => {
+  it.each(["ci.yml", "image-smoke.yml"])(
+    "stamps both images in %s and inspects smoke labels",
+    (file) => {
+      const workflow = readFileSync(join(repoRoot, ".github", "workflows", file), "utf8");
+      const builds = workflow.split(/uses: docker\/build-push-action@[^\n]+/).slice(1);
+      expect(builds).toHaveLength(2);
+      for (const build of builds) {
+        const withBlock = build.split(/\n {6}- /)[0];
+        expect(withBlock).toContain("org.opencontainers.image.revision=${{ github.sha }}");
+        expect(withBlock).toContain(
+          "org.opencontainers.image.created=${{ steps.provenance.outputs.created }}",
+        );
+        expect(withBlock).toContain(
+          "org.opencontainers.image.ref.name=${{ github.head_ref || github.ref_name }}",
+        );
+      }
+      expect(workflow).toContain("id: provenance");
+      expect(workflow).toContain("date -u '+%Y-%m-%dT%H:%M:%SZ'");
+      if (file === "image-smoke.yml") {
+        expect(workflow).toContain("docker image inspect --format '{{json .Config.Labels}}'");
+        expect(workflow).toContain("for image in waitron:ci waitron-print-agent:ci");
+        expect(workflow).toContain("org.opencontainers.image.revision");
+      }
+    },
+  );
+});

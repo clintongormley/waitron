@@ -111,6 +111,25 @@ function unnamedBusFields(rule: string): string[] {
   });
 }
 
+describe("image source labels", () => {
+  it.each(["print-agent", "runtime"])(
+    "declares revision, UTC creation time and requested ref on %s",
+    (target) => {
+      const stage = only(
+        DOCKERFILE,
+        new RegExp(`FROM [^\\n]+ AS ${target}\\n([\\s\\S]*?)(?=\\nFROM |$)`),
+        target,
+      );
+      expect(stage).toContain("ARG WAITRON_BUILD_ID");
+      expect(stage).toContain("ARG WAITRON_IMAGE_CREATED");
+      expect(stage).toContain("ARG WAITRON_IMAGE_REF");
+      expect(stage).toContain('org.opencontainers.image.revision="${WAITRON_BUILD_ID}"');
+      expect(stage).toContain('org.opencontainers.image.created="${WAITRON_IMAGE_CREATED}"');
+      expect(stage).toContain('org.opencontainers.image.ref.name="${WAITRON_IMAGE_REF}"');
+    },
+  );
+});
+
 describe("the container image's environment", () => {
   it("parses as a non-empty ENV block", () => {
     // A parser that silently returned {} would make every assertion below vacuous.
