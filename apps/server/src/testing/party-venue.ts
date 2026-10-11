@@ -11,6 +11,7 @@ import {
 import {
   billPayments,
   diningTables,
+  floorTodayTables,
   parties,
   partyTables,
   withTransaction,
@@ -81,7 +82,7 @@ export interface PartyVenue {
   counterItem(name: string): string;
   productId(name: string): string;
   /** A fresh dining table, in the tables zone unless another is named. */
-  table(label: string, zoneId?: string): Promise<string>;
+  table(label: string, zoneId?: string, options?: { today?: boolean }): Promise<string>;
 }
 
 /** What the database-only helpers need: a suite's `useVenueDb` handle passes too. */
@@ -176,9 +177,9 @@ export async function setupPartyVenue(db: Database): Promise<PartyVenue> {
     item: (name) => tables.offerFor(productIds.get(name)!),
     counterItem: (name) => counter.offerFor(productIds.get(name)!),
     productId: (name) => productIds.get(name)!,
-    table: (label, zoneId = tables.zoneId) =>
+    table: (label, zoneId = tables.zoneId, options) =>
       withTransaction(db, async (tx) => {
-        const { id } = await createTable(tx, cfg, { label, zoneId });
+        const { id } = await createTable(tx, cfg, { label, zoneId }, options);
         return id;
       }),
   };
@@ -186,11 +187,12 @@ export async function setupPartyVenue(db: Database): Promise<PartyVenue> {
 
 /** A dining table in the tables zone at a chosen id, for a test whose answer must not follow id order. */
 export async function tableAt(v: PartyVenue, id: string, label: string): Promise<string> {
-  await inTx(v, (tx) =>
-    tx
+  await inTx(v, async (tx) => {
+    await tx
       .insert(diningTables)
-      .values({ id, locationId: v.cfg.locationId, label, zoneId: v.tables.zoneId }),
-  );
+      .values({ id, locationId: v.cfg.locationId, label, zoneId: v.tables.zoneId });
+    await tx.insert(floorTodayTables).values({ tableId: id });
+  });
   return id;
 }
 

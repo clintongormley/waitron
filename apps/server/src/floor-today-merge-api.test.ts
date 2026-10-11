@@ -275,7 +275,9 @@ describe("merging and splitting free tables", () => {
       });
     }
     const { table } = await plannedZone(v, [{ key: "a" }]);
-    const never = await v.table(`Never ${randomUUID().slice(0, 6)}`, await zoneOfTable(table.a!));
+    const never = await v.table(`Never ${randomUUID().slice(0, 6)}`, await zoneOfTable(table.a!), {
+      today: false,
+    });
     expect(await todayRow(v, never)).toBeUndefined();
     expect(await refusal(today(never, "split"))).toEqual({
       status: 409,

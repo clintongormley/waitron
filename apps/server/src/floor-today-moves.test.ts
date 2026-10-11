@@ -197,7 +197,7 @@ describe("today's moves", () => {
       params: { tableId: table.off },
     });
 
-    const never = await v.table(`Never ${randomUUID().slice(0, 6)}`, zoneId);
+    const never = await v.table(`Never ${randomUUID().slice(0, 6)}`, zoneId, { today: false });
     expect(await todayRow(v, never)).toBeUndefined();
     await expect(move(never, { x: 1, y: 1 })).rejects.toMatchObject({
       code: "table.not_in_floor_plan",

@@ -1,3 +1,4 @@
+import { floorTodayTables } from "@waitron/db";
 import { randomUUID } from "node:crypto";
 import net from "node:net";
 import { eq, sql } from "drizzle-orm";
@@ -651,6 +652,7 @@ describe("print-on-fire (enqueueKitchenTickets wired into fireLines / fireCourse
         .insert(diningTables)
         .values({ locationId: cfg.locationId, label: "Mesa 5", zoneId: offers.zoneId })
         .returning({ id: diningTables.id });
+      await tx.insert(floorTodayTables).values({ tableId: table!.id });
       const { tabId } = await openPartyTab(tx, cfg, { tableId: table!.id });
       await addTabRound(tx, foreignCfg, tabId, offers.toOfferLines([line(drink)]));
       return { printerId, jobs: await printJobsFor(tx) };
@@ -711,6 +713,7 @@ describe("print-on-fire (enqueueKitchenTickets wired into fireLines / fireCourse
           zoneId: (await offerProducts(tx, cfg)).zoneId,
         })
         .returning({ id: diningTables.id });
+      await tx.insert(floorTodayTables).values({ tableId: table!.id });
       await tx.execute(sql`
         update working_orders set delivery_table_id = ${table!.id} where id = ${orderId}`);
       const [lineRow] = await tx
@@ -1023,6 +1026,7 @@ describe("every correction reaches the station as a notice, printer or not", () 
         .insert(diningTables)
         .values({ locationId: cfg.locationId, label: "T1", zoneId: offers.zoneId })
         .returning({ id: diningTables.id });
+      await tx.insert(floorTodayTables).values({ tableId: table!.id });
       const { tabId } = await openPartyTab(tx, cfg, { tableId: table!.id });
       await addTabRound(tx, cfg, tabId, [{ menuItemId: offers.offerFor(steak), quantity: "3" }]);
       const before = new Set((await printJobsFor(tx)).map((job) => job.id));

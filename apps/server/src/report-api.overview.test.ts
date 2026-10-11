@@ -1,3 +1,4 @@
+import { floorTodayTables } from "@waitron/db";
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { describe, expect, it } from "vitest";
@@ -120,6 +121,7 @@ async function seedDiningTables(db: Database): Promise<void> {
       { locationId, zoneId: zone!.id, label: "Mesa 3 (baja)", active: false },
     ])
     .returning({ id: diningTables.id });
+  await db.insert(floorTodayTables).values([{ tableId: held!.id }, { tableId: left!.id }]);
   for (const [table, leftAt] of [
     [held!, null],
     [left!, new Date().toISOString()],

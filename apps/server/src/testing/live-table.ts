@@ -1,11 +1,19 @@
 import { eq } from "drizzle-orm";
-import { diningTables, newId, withTransaction, type Database, type Transaction } from "@waitron/db";
+import {
+  diningTables,
+  floorTodayTables,
+  newId,
+  withTransaction,
+  type Database,
+  type Transaction,
+} from "@waitron/db";
 import type { TillConfig } from "../till-config.js";
 
 export async function createTable(
   tx: Transaction,
   cfg: TillConfig,
   input: { label: string; zoneId: string; capacity?: number },
+  options: { today?: boolean } = {},
 ): Promise<{ id: string }> {
   const [row] = await tx
     .insert(diningTables)
@@ -17,6 +25,7 @@ export async function createTable(
       capacity: input.capacity ?? null,
     })
     .returning({ id: diningTables.id });
+  if (options.today !== false) await tx.insert(floorTodayTables).values({ tableId: row!.id });
   return { id: row!.id };
 }
 

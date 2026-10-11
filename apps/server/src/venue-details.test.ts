@@ -1,3 +1,4 @@
+import { floorTodayTables } from "@waitron/db";
 import { Hono } from "hono";
 import { WorkforceBackend, employments } from "@waitron/workforce";
 import { startManagementSession } from "@waitron/identity";
@@ -931,6 +932,7 @@ describe("venue detail consumer reads", () => {
         )[0]!.id,
       })
       .returning({ id: diningTables.id });
+    await suite.db.insert(floorTodayTables).values({ tableId: table!.id });
     await suite.db.insert(bookings).values([
       {
         locationId: venue.cfg.locationId,

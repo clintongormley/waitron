@@ -1,3 +1,4 @@
+import { floorTodayTables } from "@waitron/db";
 import {
   diningTables,
   floorZones,
@@ -99,6 +100,7 @@ beforeAll(async () => {
   await db
     .insert(diningTables)
     .values({ id: tableId, locationId, zoneId: zone!.id, label: "Mesa 1", capacity: 4 });
+  await db.insert(floorTodayTables).values({ tableId: tableId });
   await db.insert(partyTables).values({ partyId: party!.id, tableId });
 
   cfg = {

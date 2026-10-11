@@ -1,3 +1,4 @@
+import { floorTodayTables } from "@waitron/db";
 import { eq } from "drizzle-orm";
 import { Hono } from "hono";
 import { describe, expect, it } from "vitest";
@@ -106,6 +107,7 @@ async function seedFiredOrder(
       .insert(diningTables)
       .values({ locationId, zoneId: zone!.id, label: opts.tableLabel })
       .returning({ id: diningTables.id });
+    await db.insert(floorTodayTables).values({ tableId: table!.id });
     await db
       .update(workingOrders)
       .set({ deliveryTableId: table!.id })

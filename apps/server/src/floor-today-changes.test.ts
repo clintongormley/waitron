@@ -346,7 +346,7 @@ describe("today's changes", () => {
       params: { tableId: table.a },
     });
 
-    const never = await v.table(`Never ${randomUUID().slice(0, 6)}`, zoneId);
+    const never = await v.table(`Never ${randomUUID().slice(0, 6)}`, zoneId, { today: false });
     await inTx(v, (tx) =>
       tx.insert(floorTodayTables).values({ tableId: never, seats: 4, ...place(40, 0) }),
     );

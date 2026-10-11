@@ -1,3 +1,4 @@
+import { floorTodayTables } from "@waitron/db";
 import { randomUUID } from "node:crypto";
 import { and, eq, sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it, vi } from "vitest";
@@ -298,6 +299,7 @@ async function openTableTab(v: Venue, lines: { menuItemId: string; quantity: str
       label: `Mesa ${tableId.slice(0, 4)}`,
       active: true,
     });
+    await tx.insert(floorTodayTables).values({ tableId: tableId });
     const { tabId } = await openPartyTab(tx, v.cfg, { tableId });
     await addTabRound(tx, v.cfg, tabId, lines);
     return tabId;

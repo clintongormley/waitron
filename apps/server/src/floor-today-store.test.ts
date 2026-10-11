@@ -396,7 +396,7 @@ describe("building today's plan from a zone's master plan", () => {
 
   it("seeds a table seated at the first reset, keeping its name until it is free", async () => {
     const z = await zone();
-    const t1 = await v.table("Seed 1", z);
+    const t1 = await v.table("Seed 1", z, { today: false });
     await masterOf(z, [{ label: "Seed 1b", seats: 6, place: place(5, 5), live: t1 }]);
     const { partyId } = await seat(v, t1);
 
@@ -468,7 +468,7 @@ describe("building today's plan from a zone's master plan", () => {
 
   it("leaves today's plan as it is when the venue's clock cannot be read", async () => {
     const z = await zone();
-    const t1 = await v.table("Clock 1", z);
+    const t1 = await v.table("Clock 1", z, { today: false });
     await masterOf(z, [{ label: "Clock 1", live: t1 }]);
     await inTx(v, (tx) =>
       tx
@@ -494,8 +494,8 @@ describe("building today's plan from a zone's master plan", () => {
 
   it("leaves a table the master never had untouched", async () => {
     const z = await zone();
-    const t1 = await v.table("Never 1", z);
-    const t2 = await v.table("Never 2", z);
+    const t1 = await v.table("Never 1", z, { today: false });
+    const t2 = await v.table("Never 2", z, { today: false });
     await inTx(v, (tx) =>
       tx.update(diningTables).set({ active: false }).where(eq(diningTables.id, t2)),
     );
@@ -605,7 +605,7 @@ describe("building today's plan from a zone's master plan", () => {
   it("puts a merge's last table back where it stood before the merge", async () => {
     const z = await zone();
     const t1 = await v.table("Back merge 1", z);
-    const u1 = await v.table("Back merge 2", z);
+    const u1 = await v.table("Back merge 2", z, { today: false });
     await masterOf(z, [{ label: "Back merge 1", place: place(0, 0), live: t1 }]);
     await inTx(v, async (tx) => {
       await tx
@@ -632,7 +632,7 @@ describe("building today's plan from a zone's master plan", () => {
   it("ends the merge of a table the master lost, and puts the other table back where it stood", async () => {
     const z = await zone();
     const t1 = await v.table("Lost merge 1", z);
-    const u1 = await v.table("Lost merge 2", z);
+    const u1 = await v.table("Lost merge 2", z, { today: false });
     const master = await masterOf(z, [{ label: "Lost merge 1", place: place(0, 0), live: t1 }]);
     await reset(z);
     await inTx(v, async (tx) => {
@@ -719,7 +719,7 @@ describe("building today's plan from a zone's master plan", () => {
 
   it("does not put a refused table without a today's place onto today's plan", async () => {
     const z = await zone();
-    const t1 = await v.table("Unseeded 1", z);
+    const t1 = await v.table("Unseeded 1", z, { today: false });
     const master = await masterOf(z, [{ label: "Unseeded 1", live: t1 }]);
     await deleteFromMaster(master.get("Unseeded 1")!);
     const bookings: TableRemoval = {
