@@ -6,7 +6,6 @@ import {
   checkDraft,
   deleteTable,
   draftFromPlan,
-  isAdoptable,
   moveTable,
   patchTable,
   placeTable,
@@ -29,7 +28,7 @@ const plan: FloorPlan = {
   tables: [
     { id: "m1", liveTableId: "l1", label: "T1", seats: 4, fixed: false, placement: m1Placement },
     { id: "m2", liveTableId: "l2", label: "T2", seats: 2, fixed: true, placement: null },
-    { id: null, liveTableId: "l9", label: "T9", seats: null, fixed: false, placement: null },
+    { id: "m9", liveTableId: "l9", label: "T9", seats: null, fixed: false, placement: null },
   ],
   joins: [{ id: "j1", seats: 6, tableIds: ["m1", "m2"] }],
 };
@@ -48,12 +47,12 @@ function table(draft: FloorPlanDraft, key: string) {
 }
 
 describe("floor plan draft", () => {
-  it("keys master tables by id, adoptable ones by their live table, joins by id", () => {
+  it("keys every master table and join by id", () => {
     const d = open();
-    expect(d.tables.map((t) => t.key)).toEqual(["m1", "m2", "live:l9"]);
-    expect(table(d, "live:l9")).toEqual({
-      key: "live:l9",
-      id: null,
+    expect(d.tables.map((t) => t.key)).toEqual(["m1", "m2", "m9"]);
+    expect(table(d, "m9")).toEqual({
+      key: "m9",
+      id: "m9",
       liveTableId: "l9",
       label: "T9",
       seats: null,
@@ -80,8 +79,8 @@ describe("floor plan draft", () => {
         { id: "m1", key: "m1", label: "T1", seats: 4, fixed: false, placement: m1Placement },
         { id: "m2", key: "m2", label: "T2", seats: 2, fixed: true, placement: null },
         {
-          liveTableId: "l9",
-          key: "live:l9",
+          id: "m9",
+          key: "m9",
           label: "T9",
           seats: null,
           fixed: false,
@@ -91,7 +90,19 @@ describe("floor plan draft", () => {
       joins: [{ seats: 6, tableKeys: ["m1", "m2"] }],
     });
     expect("liveTableId" in save.tables[0]!).toBe(false);
-    expect("id" in save.tables[2]!).toBe(false);
+    expect("liveTableId" in save.tables[2]!).toBe(false);
+  });
+
+  it("never sends a live-table adoption field for an unsaved draft table", () => {
+    const d = addTables(open(), [{ label: "T5", seats: 3, fixed: true }], counter("new"));
+    d.tables[3]!.liveTableId = "linked";
+    expect(saveFromDraft(3, d).tables[3]).toEqual({
+      key: "new:1",
+      label: "T5",
+      seats: 3,
+      fixed: true,
+      placement: null,
+    });
   });
 
   it("sends a new table with neither id nor live table", () => {
@@ -106,7 +117,7 @@ describe("floor plan draft", () => {
     let d = addTables(open(), [{ label: "T5", seats: 3, fixed: false }], counter("new"));
     d = addJoin(d, ["m1", "new:1"], 5, "join:1");
     const before = structuredClone(d);
-    const r = rekeyDraft(d, { m1: "m1", m2: "m2", "live:l9": "m9", "new:1": "m5" });
+    const r = rekeyDraft(d, { m1: "m1", m2: "m2", m9: "m9", "new:1": "m5" });
     expect(d).toEqual(before);
     expect(r.tables.map((t) => [t.key, t.id, t.liveTableId])).toEqual([
       ["m1", "m1", "l1"],
@@ -140,7 +151,7 @@ describe("floor plan draft", () => {
 
   it("leaves a key the answer does not name as it was", () => {
     const d = addTables(open(), [{ label: "T5", seats: 3, fixed: false }], counter("new"));
-    const r = rekeyDraft(d, { "live:l9": "m9" });
+    const r = rekeyDraft(d, { m9: "m9" });
     expect(r.tables.map((t) => t.key)).toEqual(["m1", "m2", "m9", "new:1"]);
     expect(table(r, "new:1").id).toBeNull();
   });
@@ -185,9 +196,9 @@ describe("floor plan draft", () => {
       false,
     );
     expect(sameDraft(d, removeJoin(d, "j1"))).toBe(false);
-    expect(
-      sameDraft(d, { ...d, joins: [{ key: "j1", seats: 6, tableKeys: ["m1", "live:l9"] }] }),
-    ).toBe(false);
+    expect(sameDraft(d, { ...d, joins: [{ key: "j1", seats: 6, tableKeys: ["m1", "m9"] }] })).toBe(
+      false,
+    );
   });
 
   it("counts a deleted table added back as new as a change", () => {
@@ -207,12 +218,12 @@ describe("floor plan draft", () => {
       key: "m2",
       problem: "label_missing",
     });
-    expect(checkDraft(patchTable(d, "live:l9", { label: " T1 " }))).toEqual({
-      key: "live:l9",
+    expect(checkDraft(patchTable(d, "m9", { label: " T1 " }))).toEqual({
+      key: "m9",
       problem: "label_repeated",
     });
     expect(
-      checkDraft(patchTable(patchTable(d, "m2", { label: "" }), "live:l9", { label: "T1" })),
+      checkDraft(patchTable(patchTable(d, "m2", { label: "" }), "m9", { label: "T1" })),
     ).toEqual({ key: "m2", problem: "label_missing" });
     expect(checkDraft(d)).toBeNull();
   });
@@ -293,10 +304,10 @@ describe("floor plan draft", () => {
     const before = structuredClone(d);
     const three = deleteTable(d, "new:1");
     expect(d).toEqual(before);
-    expect(three.tables.map((t) => t.key)).toEqual(["m1", "m2", "live:l9"]);
+    expect(three.tables.map((t) => t.key)).toEqual(["m1", "m2", "m9"]);
     expect(three.joins).toEqual([{ key: "j1", seats: 6, tableKeys: ["m1", "m2"] }]);
     const two = deleteTable(open(), "m2");
-    expect(two.tables.map((t) => t.key)).toEqual(["m1", "live:l9"]);
+    expect(two.tables.map((t) => t.key)).toEqual(["m1", "m9"]);
     expect(two.joins).toEqual([]);
   });
 
@@ -319,12 +330,12 @@ describe("floor plan draft", () => {
       joins: [
         { key: "j1", seats: 8, tableKeys: ["m1", "m2", "m3"] },
         { key: "j2", seats: 9, tableKeys: ["m3", "m2", "m1"] },
-        { key: "j3", seats: 4, tableKeys: ["m1", "live:l9"] },
+        { key: "j3", seats: 4, tableKeys: ["m1", "m9"] },
       ],
     };
     expect(deleteTable(d, "m3").joins).toEqual([
       { key: "j1", seats: 8, tableKeys: ["m1", "m2"] },
-      { key: "j3", seats: 4, tableKeys: ["m1", "live:l9"] },
+      { key: "j3", seats: 4, tableKeys: ["m1", "m9"] },
     ]);
   });
 
@@ -342,13 +353,13 @@ describe("floor plan draft", () => {
     expect(sameDraft(restored, saved)).toBe(true);
   });
 
-  it("does not delete a table offered for adoption", () => {
+  it("deletes every selected master or new table, even one with a live link", () => {
     const d = open();
-    expect(isAdoptable(table(d, "live:l9"))).toBe(true);
-    expect(isAdoptable(table(d, "m1"))).toBe(false);
     const fresh = addTables(d, [{ label: "T5", seats: 3, fixed: false }], counter("new"));
-    expect(isAdoptable(table(fresh, "new:1"))).toBe(false);
-    expect(deleteTable(d, "live:l9")).toEqual(d);
+    expect(deleteTable(d, "m9").tables.map((t) => t.key)).toEqual(["m1", "m2"]);
+    expect(deleteTable(fresh, "new:1").tables.map((t) => t.key)).toEqual(["m1", "m2", "m9"]);
+    fresh.tables[3]!.liveTableId = "linked";
+    expect(deleteTable(fresh, "new:1").tables.map((t) => t.key)).toEqual(["m1", "m2", "m9"]);
   });
 
   it("adds tables unplaced with fresh keys", () => {
@@ -380,13 +391,13 @@ describe("floor plan draft", () => {
         placement: null,
       },
     ]);
-    expect(d.tables.slice(0, 3).map((t) => t.key)).toEqual(["m1", "m2", "live:l9"]);
+    expect(d.tables.slice(0, 3).map((t) => t.key)).toEqual(["m1", "m2", "m9"]);
   });
 
   it("adds and removes a join", () => {
     const d = open();
-    const r = removeJoin(addJoin(d, ["m1", "live:l9"], 4, "join:1"), "j1");
-    expect(r.joins).toEqual([{ key: "join:1", seats: 4, tableKeys: ["m1", "live:l9"] }]);
+    const r = removeJoin(addJoin(d, ["m1", "m9"], 4, "join:1"), "j1");
+    expect(r.joins).toEqual([{ key: "join:1", seats: 4, tableKeys: ["m1", "m9"] }]);
     expect(d.joins).toHaveLength(1);
   });
 
@@ -425,7 +436,7 @@ describe("floor plan draft", () => {
     const opened = open();
     const moved = moveTable(deleteTable(opened, "m1"), "m2", 0, 0);
     const restored = restoreTable(moved, table(opened, "m1"));
-    expect(restored.tables.map((t) => t.key)).toEqual(["m2", "live:l9", "m1"]);
+    expect(restored.tables.map((t) => t.key)).toEqual(["m2", "m9", "m1"]);
     expect(table(restored, "m1")).toEqual(table(opened, "m1"));
     expect(table(restored, "m1").placement).not.toBe(table(opened, "m1").placement);
     expect(restored.joins).toEqual(moved.joins);
@@ -439,7 +450,7 @@ describe("floor plan draft", () => {
       joins: [
         { key: "j1", seats: 6, tableKeys: ["m1", "m2"] },
         { key: "j2", seats: 5, tableKeys: ["m2", "m3"] },
-        { key: "j3", seats: 4, tableKeys: ["m1", "live:l9"] },
+        { key: "j3", seats: 4, tableKeys: ["m1", "m9"] },
       ],
     };
     const deleted = removeJoin(deleteTable(deleteTable(opened, "m2"), "m3"), "j3");
@@ -470,7 +481,7 @@ describe("floor plan draft", () => {
       tables: [
         { ...table(d, "m1"), liveTableId: "l7" },
         { ...table(d, "m2"), liveTableId: null },
-        { ...table(d, "live:l9") },
+        { ...table(d, "m9") },
       ],
       joins: [],
     };

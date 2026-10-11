@@ -870,7 +870,7 @@ for (const [from, to] of sizes) {
 }
 
 it("a save answer arriving while Add join is open re-keys its chosen table", async () => {
-  const withT9 = (revision: number, id: string | null): FloorPlan => ({
+  const withT9 = (revision: number, id: string): FloorPlan => ({
     ...terrace(revision),
     tables: [
       ...terrace(revision).tables,
@@ -879,7 +879,7 @@ it("a save answer arriving while Add join is open re-keys its chosen table", asy
   });
   let answer!: (value: { revision: number; ids: Record<string, string> }) => void;
   const api = stubApi({
-    getFloorPlan: vi.fn().mockResolvedValueOnce(withT9(3, null)).mockResolvedValue(withT9(4, "m9")),
+    getFloorPlan: vi.fn().mockResolvedValueOnce(terrace(3)).mockResolvedValue(withT9(4, "m9")),
     saveFloorPlan: vi.fn(
       () =>
         new Promise<{ revision: number; ids: Record<string, string> }>((resolve) => {
@@ -888,13 +888,19 @@ it("a save answer arriving while Add join is open re-keys its chosen table", asy
     ),
   });
   const el = await open(api);
-  await fromCanvas(el, "wt-table-move", { key: "m1", x: 5, y: 4 });
+  await fromCanvas(el, "floor-plan-change", {
+    draft: addTables(
+      draftFromPlan(terrace(3)),
+      [{ label: "T9", seats: null, fixed: false }],
+      () => "new:9",
+    ),
+  });
   button(el, "save").click();
   await el.updateComplete;
   await fromCanvas(el, "wt-table-select", { key: "m1" });
   await openAddJoin(el);
-  await chooseOptions(joinField(el, "join-tables"), ["live:l9"]);
-  answer({ revision: 4, ids: { "live:l9": "m9" } });
+  await chooseOptions(joinField(el, "join-tables"), ["new:9"]);
+  answer({ revision: 4, ids: { "new:9": "m9" } });
   await flush(el);
   await flush(el);
   expect(panelOf(el).draft.tables.map((t) => t.key)).toContain("m9");

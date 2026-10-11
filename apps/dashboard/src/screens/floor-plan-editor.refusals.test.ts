@@ -40,7 +40,7 @@ function plan(): FloorPlan {
     tables: [
       { id: "m1", liveTableId: "l1", label: "T1", seats: 4, fixed: false, placement },
       { id: "m2", liveTableId: "l2", label: "T2", seats: 2, fixed: true, placement: null },
-      { id: null, liveTableId: "l9", label: "T9", seats: null, fixed: false, placement: null },
+      { id: "m9", liveTableId: "l9", label: "T9", seats: null, fixed: false, placement: null },
     ],
     joins: [{ id: "j1", seats: 6, tableIds: ["m1", "m2"] }],
   };
@@ -359,7 +359,7 @@ it("a booked table's mark goes at the next Save, which sends it back", async () 
   expect(saveFloorPlan).toHaveBeenCalledTimes(2);
   expect(saveFloorPlan.mock.calls[1]![1].tables.map((t: { key: string }) => t.key)).toEqual([
     "m1",
-    "live:l9",
+    "m9",
     "m2",
   ]);
   expect(saveFloorPlan.mock.calls[1]![1].joins).toEqual([{ seats: 6, tableKeys: ["m1", "m2"] }]);
@@ -571,12 +571,12 @@ it("an empty name is told in Spanish", async () => {
 it("a repeated name stops the save the same way", async () => {
   const api = stubApi();
   const el = await open(api);
-  await change(el, renamed(opened(), "live:l9", "T1"));
+  await change(el, renamed(opened(), "m9", "T1"));
   await press(el, "save");
   expect(api.saveFloorPlan).not.toHaveBeenCalled();
-  expect(canvas(el).selected).toBe("live:l9");
+  expect(canvas(el).selected).toBe("m9");
   expect(el.fieldError).toEqual({
-    key: "live:l9",
+    key: "m9",
     field: "label",
     message: "A table with that name already exists",
   });
@@ -585,19 +585,19 @@ it("a repeated name stops the save the same way", async () => {
 
 it("a fix that leaves another name failing moves the mark to it", async () => {
   const el = await open(stubApi());
-  const both = renamed(renamed(opened(), "m2", ""), "live:l9", "T1");
+  const both = renamed(renamed(opened(), "m2", ""), "m9", "T1");
   await change(el, both);
   await press(el, "save");
   expect(el.fieldError?.key).toBe("m2");
   await change(el, renamed(both, "m2", "T2"));
-  expect(el.fieldError?.key).toBe("live:l9");
-  expect(canvas(el).selected).toBe("live:l9");
+  expect(el.fieldError?.key).toBe("m9");
+  expect(canvas(el).selected).toBe("m9");
   expect(button(el, "save").disabled).toBe(true);
 });
 
 it("typing into the marked table keeps the mark there while its name repeats another", async () => {
   const el = await open(stubApi());
-  const start = renamed(renamed(opened(), "m1", ""), "live:l9", "T");
+  const start = renamed(renamed(opened(), "m1", ""), "m9", "T");
   await change(el, start);
   await press(el, "save");
   expect(el.fieldError?.key).toBe("m1");
@@ -628,13 +628,13 @@ it("once the marked table passes, the mark and selection move to the next empty 
 
 it("deleting the marked table moves the mark to the next failing name", async () => {
   const el = await open(stubApi());
-  const start = renamed(renamed(opened(), "m2", ""), "live:l9", "T1");
+  const start = renamed(renamed(opened(), "m2", ""), "m9", "T1");
   await change(el, start);
   await press(el, "save");
   expect(el.fieldError?.key).toBe("m2");
   await change(el, deleteTable(start, "m2"));
-  expect(el.fieldError?.key).toBe("live:l9");
-  expect(canvas(el).selected).toBe("live:l9");
+  expect(el.fieldError?.key).toBe("m9");
+  expect(canvas(el).selected).toBe("m9");
 });
 
 it("the next change to the refused field clears its sentence", async () => {
@@ -913,7 +913,7 @@ it("a refused field typed into a new table while it is saved stays marked under 
   await select(el, "new:1");
   await press(el, "save");
   await typeIntoPanel(el, "seats", "1000");
-  write.resolve({ revision: 4, ids: { m1: "m1", m2: "m2", "live:l9": "m9", "new:1": "m5" } });
+  write.resolve({ revision: 4, ids: { m1: "m1", m2: "m2", m9: "m9", "new:1": "m5" } });
   await flush(el);
   await tablePanel(el).updateComplete;
   expect(tablePanel(el).tableKey).toBe("m5");
@@ -946,7 +946,7 @@ it("a table saved new while other edits were made comes back when its delete is 
   await change(el, added);
   await press(el, "save");
   await change(el, moveTable(added, "m1", 5, 4));
-  write.resolve({ revision: 4, ids: { m1: "m1", m2: "m2", "live:l9": "m9", "new:1": "m5" } });
+  write.resolve({ revision: 4, ids: { m1: "m1", m2: "m2", m9: "m9", "new:1": "m5" } });
   await flush(el);
   reread.resolve(afterSave);
   await flush(el);
