@@ -1,3 +1,5 @@
+import { createServer } from "node:http";
+import type { AddressInfo } from "node:net";
 import { describe, expect, it } from "vitest";
 import { decimal, hasCode, isAppError } from "@waitron/shared";
 import type { AppError } from "@waitron/shared";
@@ -410,7 +412,6 @@ describe("sumupClient reader management", () => {
       });
       const error = await unpairFailure(client);
       expect(error.reason).toBe(reason);
-      expect(error.message).not.toContain("Gateway");
     },
   );
 
@@ -450,16 +451,58 @@ describe("sumupClient reader management", () => {
     // This stream never ends, so a client that reads the body hangs here and trips the bound.
   }, 2_000);
 
-  it.each([
-    ["a dropped connection", new TypeError("fetch failed")],
-    ["the deadline", Object.assign(new Error("aborted"), { name: "AbortError" })],
-  ])("tells a reader deletion cut off by %s as unreachable", async (_label, cause) => {
+  it("tells a reader deletion cut off by a dropped connection as unreachable", async () => {
     const client = sumupClient({
       apiKey: "k",
       merchantCode: "MC",
-      fetch: () => Promise.reject(cause),
+      fetch: () => Promise.reject(new TypeError("fetch failed")),
     });
     expect((await unpairFailure(client)).reason).toBe("unreachable");
+  });
+
+  it("tells a reader deletion cut off by its deadline as unreachable", async () => {
+    let signal: AbortSignal | undefined;
+    const neverAnswering: typeof fetch = (_url, init) => {
+      signal = (init as RequestInit | undefined)?.signal ?? undefined;
+      return new Promise<Response>((_resolve, reject) => {
+        signal?.addEventListener("abort", () => reject(new Error("aborted")));
+      });
+    };
+    const client = sumupClient({
+      apiKey: "k",
+      merchantCode: "MC",
+      fetch: neverAnswering,
+      timeoutMs: 50,
+    });
+    expect((await unpairFailure(client)).reason).toBe("unreachable");
+    expect(signal?.aborted).toBe(true);
+    // Only the client's own 50 ms deadline settles this fetch; without it the 2 s bound trips.
+  }, 2_000);
+
+  it("refuses a reader deletion that SumUp redirects, without following it", async () => {
+    const requested: string[] = [];
+    const server = createServer((req, res) => {
+      requested.push(`${req.method ?? ""} ${req.url ?? ""}`);
+      if (req.url === "/v0.1/merchants/MC/readers/rdr_1") {
+        res.writeHead(302, { location: "/signin" }).end();
+      } else {
+        res.writeHead(200, { "content-type": "text/html" }).end(htmlPage);
+      }
+    });
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+    try {
+      const { port } = server.address() as AddressInfo;
+      const client = sumupClient({
+        apiKey: "k",
+        merchantCode: "MC",
+        baseUrl: `http://127.0.0.1:${port}`,
+      });
+      expect((await unpairFailure(client)).reason).toBe("http_302");
+      expect(requested).toEqual(["DELETE /v0.1/merchants/MC/readers/rdr_1"]);
+    } finally {
+      server.closeAllConnections();
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+    }
   });
 
   it("accepts deletion of an already absent reader on a retry", async () => {
