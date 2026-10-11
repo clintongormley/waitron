@@ -4842,7 +4842,8 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
   Tables, zones and departments are next.
   [Spec](superpowers/specs/2026-10-08-delete-and-archive-design.md),
   [product archive plan](superpowers/plans/2026-10-08-a435-1-product-archive.md).
-- **A435 step 6 — tables, zones and departments: open, following courses and stations in the build order.** Replace
+- **A435 step 6 — tables, zones and departments: open, following courses and stations in the build order.**
+  [Reviewed implementation plan](superpowers/plans/2026-10-11-a435-6-tables-zones-departments-delete.md). Replace
   Disable with Delete, and drop each list's Status column and Status filter as in step 5 (owner, 2026-10-10).
   Printers, card readers and devices keep both, because they keep Disable. Each remaining step follows the
   linked spec and preserves recorded history.
