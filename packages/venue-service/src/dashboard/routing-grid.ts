@@ -1,4 +1,4 @@
-import { LitElement, css, html, nothing } from "lit";
+import { LitElement, css, html, nothing, type TemplateResult } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { repeat } from "lit/directives/repeat.js";
 import { styleMap } from "lit/directives/style-map.js";
@@ -246,9 +246,9 @@ export class RoutingGrid extends LitElement {
         gap: var(--wt-space-1);
         /* The cell keeps its padding and the button spreads over it, so the whole cell is the target. */
         inline-size: calc(100% + var(--routing-pad, var(--wt-space-2)) * 2);
+        block-size: calc(100% + var(--routing-pad, var(--wt-space-2)) * 2);
         min-block-size: var(--wt-tap-min);
         margin: calc(var(--routing-pad, var(--wt-space-2)) * -1);
-        margin-block-end: 0;
         padding: var(--routing-pad, var(--wt-space-2));
         border: 0;
         background: transparent;
@@ -258,12 +258,8 @@ export class RoutingGrid extends LitElement {
         cursor: pointer;
       }
       /* A definite height, which the row then grows, lets the button's percentage height resolve. */
-      td:has(> .cell:only-child) {
+      td:has(> .cell) {
         block-size: 1px;
-      }
-      .cell:only-child {
-        block-size: calc(100% + var(--routing-pad, var(--wt-space-2)) * 2);
-        margin-block-end: calc(var(--routing-pad, var(--wt-space-2)) * -1);
       }
       /* Drawn inside the cell, so the outline never covers a neighbour. */
       .cell:hover,
@@ -271,10 +267,18 @@ export class RoutingGrid extends LitElement {
         outline: var(--wt-focus-ring);
         outline-offset: calc(var(--wt-focus-offset) * -1);
       }
-      .cell:hover {
+      /* Untinted under a refusal: the danger colour falls under 4.5:1 on the tint in the dark theme. */
+      .cell:hover:not(:has(.cell-error)) {
         background: var(--wt-color-surface-lifted);
       }
-      .cell .warning {
+      .notes {
+        display: flex;
+        flex-direction: column;
+        gap: var(--wt-space-1);
+      }
+      .cell .warning,
+      .cell .repair,
+      .cell .cell-error {
         margin: 0;
       }
       .cell[data-style="set"] .station,
@@ -459,10 +463,11 @@ export class RoutingGrid extends LitElement {
   #error(address: CellAddress) {
     const message = this.#refusalAt(address);
     return message === ""
-      ? nothing
+      ? null
       : html`<span class="cell-error" data-test="cell-error">${message}</span>`;
   }
 
+  /** `notes` are drawn inside the button, so the whole cell stays the target. */
   #button(
     address: CellAddress,
     label: string,
@@ -470,7 +475,10 @@ export class RoutingGrid extends LitElement {
     style: CellStyle,
     station: string,
     lines: readonly PeriodLineText[],
+    notes: readonly (TemplateResult | null)[] = [],
   ) {
+    const shownNotes = notes.filter((note) => note !== null);
+    const notesId = `notes-${encodeURIComponent(cellKey(address))}`;
     const blank = style === "blank";
     const look = {
       set: "",
@@ -485,6 +493,7 @@ export class RoutingGrid extends LitElement {
       data-target=${targetKey(target)}
       data-style=${style}
       aria-label=${label}
+      aria-describedby=${shownNotes.length === 0 ? nothing : notesId}
       @click=${() => {
         this.editing = address;
       }}
@@ -498,6 +507,7 @@ export class RoutingGrid extends LitElement {
                 : html`<span class="warning" data-test="period-flag">${line.flagText}</span>`
             }`,
       )}
+      ${shownNotes.length === 0 ? nothing : html`<span class="notes" id=${notesId}>${shownNotes}</span>`}
     </button>`;
   }
 
@@ -532,16 +542,17 @@ export class RoutingGrid extends LitElement {
           : this.#blank!(entry.row, zone.id)
             ? "blank"
             : "differs";
-    return html`${this.#button(address, label, shown, style, text, periodLines.lines)}${this.#error(address)}${
+    return this.#button(address, label, shown, style, text, periodLines.lines, [
+      this.#error(address),
       disabled === null
-        ? nothing
+        ? null
         : html`<span class="warning" data-test="disabled-target"
             >${format("routing.disabled_target", {
               station: this.#station(disabled.stationId)?.name ?? disabled.stationId,
             })}
             ${this.#fallbackSentence(disabled.stationId)}</span
-          >`
-    }`;
+          >`,
+    ]);
   }
 
   #defaultTarget(): RouteTarget | null {
@@ -560,7 +571,7 @@ export class RoutingGrid extends LitElement {
     const name = target === null ? null : this.#targetText(target);
     const repair =
       target !== null
-        ? nothing
+        ? null
         : html`<span class="repair" data-test="default-repair"
             >${t("routing.default_repair")}</span
           >`;
@@ -577,7 +588,7 @@ export class RoutingGrid extends LitElement {
         state: t("routing.default_state"),
       }),
     );
-    return html`${this.#button(address, label, target, "set", text, [])}${this.#error(address)}${repair}`;
+    return this.#button(address, label, target, "set", text, [], [this.#error(address), repair]);
   }
 
   /** The row's name as the grid draws it, whether or not the row is shown. */
@@ -816,6 +827,7 @@ export class RoutingGrid extends LitElement {
           placeholder=${t("routing.search")}
           .value=${this.query}
           @wt-change=${(event: CustomEvent<{ value: string }>) => {
+            event.stopPropagation();
             this.query = event.detail.value;
             this.searchOpen = null;
           }}

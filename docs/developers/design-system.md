@@ -3405,9 +3405,11 @@ window shows the labels, Every zone and one zone column without scrolling (the "
 cases in `routing-grid.test.ts`).
 
 Each cell is a borderless button that fills its table cell, except the All categories × Every zone
-cell for someone who cannot set the default station, which is plain text. Pointing at it tints it
-with `--wt-color-surface-lifted`, draws the focus outline just inside its edges and shows a hand
-pointer; keyboard focus draws the same outline. A station or No preparation set in that cell, or
+cell for someone who cannot set the default station, which is plain text. A warning or refusal
+under the station is drawn inside the button. Pointing at it tints it with
+`--wt-color-surface-lifted` (not while it shows a refusal, whose colour is under 4.5:1 on that tint
+in the dark theme), draws the focus outline just inside its edges and shows a hand pointer; keyboard
+focus draws the same outline. A station or No preparation set in that cell, or
 chosen there and waiting to be saved, is bold in `--wt-color-primary-text`. An inherited Every zone
 value is in `--wt-color-text-muted`. An inherited zone value is left blank when it is what the row's
 own Every zone shows, judged on saved settings only (a choice waiting to be saved there does not

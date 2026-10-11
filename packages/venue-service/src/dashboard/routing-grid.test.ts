@@ -1025,18 +1025,54 @@ describe("venue-routing-grid", () => {
       );
     });
 
-    it("makes the whole cell the button", async () => {
-      const { el } = await mount();
-      for (const [row, zone] of [
-        ["c:drinks", "every"],
-        ["c:drinks", "terrace"],
-        ["p:bread", "terrace"],
+    /** Food on the Inside warns of its disabled station and carries a refusal. */
+    const warned = () =>
+      mount(routing(), {
+        refusal: {
+          address: { row: { kind: "category", categoryId: "food" }, zoneId: "inside" },
+          message: "This station was disabled. Choose another.",
+        },
+      });
+
+    it("makes the whole cell the button, with a warning, a refusal or a repair note under the station", async () => {
+      const { el } = await warned();
+      const repair = await mount(routing({ defaultStationId: null }));
+      for (const [grid, row, zone] of [
+        [el, "c:drinks", "every"],
+        [el, "c:drinks", "terrace"],
+        [el, "p:bread", "terrace"],
+        [el, "c:food", "inside"],
+        [repair.el, "all", "every"],
       ] as const) {
-        const td = cell(el, row, zone).getBoundingClientRect();
-        const button = combo(el, row, zone)!.getBoundingClientRect();
+        const td = cell(grid, row, zone).getBoundingClientRect();
+        const button = combo(grid, row, zone)!.getBoundingClientRect();
         for (const side of ["left", "top", "width", "height"] as const)
-          expect(Math.abs(button[side] - td[side])).toBeLessThan(1.5);
+          expect(Math.abs(button[side] - td[side]), `${row}|${zone} ${side}`).toBeLessThan(1.5);
       }
+    });
+
+    it.each([
+      ["the disabled-station warning", '[data-test="disabled-target"]'],
+      ["the refusal", '[data-test="cell-error"]'],
+    ])("a pointer click on %s under the station opens the cell's editor", async (_, selector) => {
+      const { el } = await warned();
+      const food = cell(el, "c:food", "inside");
+      const note = food.querySelector<HTMLElement>(selector)!;
+      const described = root(el).getElementById(
+        combo(el, "c:food", "inside")!.getAttribute("aria-describedby")!,
+      );
+      expect(described?.contains(note)).toBe(true);
+      expect(combo(el, "c:drinks", "every")!.hasAttribute("aria-describedby")).toBe(false);
+      await userEvent.click(note);
+      await vi.waitFor(() => expect(editorOf(el)?.open).toBe(true));
+    });
+
+    it("a pointer click at the bottom of a warned cell opens the cell's editor", async () => {
+      const { el } = await warned();
+      const food = cell(el, "c:food", "inside");
+      const { width, height } = food.getBoundingClientRect();
+      await userEvent.click(food, { position: { x: width - 4, y: height - 3 } });
+      await vi.waitFor(() => expect(editorOf(el)?.open).toBe(true));
     });
 
     it("draws a category's name medium and a product's normal", async () => {
@@ -1555,6 +1591,15 @@ describe("venue-routing-grid", () => {
         toolbar.indexOf(root(el).querySelector('[data-test="expand-all"]')!),
       );
       expect(status(el)).toBe("");
+    });
+
+    it("keeps the search field's wt-change inside the grid", async () => {
+      const { el } = await mount();
+      const escaped: Event[] = [];
+      el.addEventListener("wt-change", (event) => escaped.push(event));
+      await search(el, "coc");
+      expect(status(el)).not.toBe("");
+      expect(escaped).toEqual([]);
     });
 
     it("shows a match with its parents muted, its text marked, and the count", async () => {

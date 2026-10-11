@@ -300,6 +300,18 @@ describe.each(["light", "dark"] as const)("a hovered routing cell (%s)", (theme)
       'td[data-row="p:bread"][data-zone="terrace"]',
       ".station.differs",
     ],
+    [
+      "the disabled-station warning",
+      disabledTarget,
+      'td[data-row="c:drinks"][data-zone="inside"]',
+      '[data-test="disabled-target"]',
+    ],
+    [
+      "the repair note",
+      routing({ defaultStationId: null }),
+      'td[data-row="all"][data-zone="every"]',
+      '[data-test="default-repair"]',
+    ],
   ])("keeps %s at 4.5:1 against the hover", async (_, model, cellSelector, textSelector) => {
     await mountThemed("<div></div>", theme);
     const el = document.createElement("venue-routing-grid");
@@ -318,5 +330,30 @@ describe.each(["light", "dark"] as const)("a hovered routing cell (%s)", (theme)
     const hovered = getComputedStyle(cell).backgroundColor;
     expect(hovered).not.toBe(atRest);
     expect(contrastRatio(getComputedStyle(text).color, hovered)).toBeGreaterThanOrEqual(4.5);
+  });
+
+  test("outlines a cell carrying a refusal untinted, keeping the refusal at 4.5:1", async () => {
+    await mountThemed("<div></div>", theme);
+    const el = document.createElement("venue-routing-grid");
+    Object.assign(el, {
+      model: routing(),
+      refusal: {
+        address: { row: { kind: "category", categoryId: "drinks" }, zoneId: null },
+        message: "This station was disabled. Choose another.",
+      },
+    });
+    host.append(el);
+    await el.updateComplete;
+    const cell = el.shadowRoot!.querySelector<HTMLButtonElement>(
+      'td[data-row="c:drinks"][data-zone="every"] button[data-test="routing-cell"]',
+    )!;
+    const refusal = cell.querySelector('[data-test="cell-error"]')!;
+    await userEvent.hover(cell);
+    expect(cell.matches(":hover")).toBe(true);
+    const hovered = getComputedStyle(cell);
+    expect(hovered.outlineStyle).toBe("solid");
+    expect(hovered.backgroundColor).toBe("rgba(0, 0, 0, 0)");
+    const behind = getComputedStyle(cell.parentElement!).backgroundColor;
+    expect(contrastRatio(getComputedStyle(refusal).color, behind)).toBeGreaterThanOrEqual(4.5);
   });
 });
