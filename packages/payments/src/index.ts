@@ -126,11 +126,12 @@ export type {
   CardProviderRuntimeDeps,
   ConnectResult,
   ProviderCredentialField,
+  ProviderFailureReason,
   ReaderAddMode,
   ReaderStatus,
   VendorReader,
 } from "./card-provider.js";
-export { cardProviderById, selectCardProviders } from "./card-provider.js";
+export { ProviderCallFailed, cardProviderById, selectCardProviders } from "./card-provider.js";
 export { cardReaders } from "./schema/card-readers.js";
 export { deviceCardReaders } from "./schema/device-card-readers.js";
 export { deviceProfileCardReaders } from "./schema/device-profile-card-readers.js";

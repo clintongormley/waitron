@@ -17,6 +17,7 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { hashPin, persons, startManagementSession } from "@waitron/identity";
 import { getCredential, loadKeyRing, tryGetCredential, type KeyRing } from "@waitron/credentials";
 import { createStripeCardProvider, type MakeStripe } from "@waitron/payments-stripe";
+import { SUMUP_CARD_PROVIDER } from "@waitron/payments-sumup";
 import {
   DEMO_READER_ID,
   cardReaderHolders,
@@ -1093,8 +1094,7 @@ describe("unpair reader — retryable after a failed vendor unpair", () => {
     const first = await send(app, "POST", `/management-api/payments/readers/${reader.id}/unpair`, {
       cookie: venue.managerCookie,
     });
-    // The vendor call failed, so the first attempt is a server fault (not a clean 204).
-    expect(first.status).toBe(500);
+    expect(first.status).toBe(502);
 
     const retry = await send(app, "POST", `/management-api/payments/readers/${reader.id}/unpair`, {
       cookie: venue.managerCookie,
@@ -1102,6 +1102,194 @@ describe("unpair reader — retryable after a failed vendor unpair", () => {
     expect(retry.status).toBe(204);
     // The vendor removal was re-attempted on the retry (2 calls total) and succeeded.
     expect(removes).toBe(2);
+  });
+});
+
+describe("unpair reader — a failed provider call answers as Delete does", () => {
+  const base = "/management-api/payments";
+
+  function mountLogged(
+    venue: Venue,
+    providers: readonly CardProviderContribution[],
+    fetchImpl?: typeof fetch,
+  ): { app: Hono; lines: { level: string; event: string; fields: Record<string, unknown> }[] } {
+    const lines: { level: string; event: string; fields: Record<string, unknown> }[] = [];
+    const app = new Hono();
+    mountPaymentsApi(
+      app,
+      {
+        db: suite.db,
+        ...saleDeps(),
+        cfg: cfgOf(venue),
+        ring: RING,
+        environment: "preproduction",
+        pool,
+        providers,
+        ...(fetchImpl === undefined ? {} : { fetch: fetchImpl }),
+      },
+      (level, event, fields) => lines.push({ level, event, fields: fields ?? {} }),
+    );
+    return { app, lines };
+  }
+
+  function failingSeat(error: unknown): CardProviderContribution {
+    return {
+      ...stripeSeat,
+      readers: {
+        ...stripeSeat.readers,
+        canUnpair: true,
+        remove: async () => {
+          throw error;
+        },
+      },
+    };
+  }
+
+  async function pairedStripeReader(app: Hono, venue: Venue): Promise<string> {
+    expect((await connectStripe(app, venue)).status).toBe(200);
+    const added = await addReader(app, venue, nextRef());
+    expect(added.status).toBe(201);
+    return ((await added.json()) as { id: string }).id;
+  }
+
+  async function activeOf(id: string): Promise<boolean> {
+    const [row] = await suite.db.select().from(cardReaders).where(eq(cardReaders.id, id));
+    return row!.active;
+  }
+
+  it("answers reader.provider_disconnected when the seat finds no credential during the call", async () => {
+    const venue = await seedVenue();
+    const { app } = mountLogged(venue, [
+      failingSeat(new AppError("credentials.missing", { purpose: "payments.stripe" })),
+    ]);
+    const id = await pairedStripeReader(app, venue);
+
+    const res = await send(app, "POST", `${base}/readers/${id}/unpair`, {
+      cookie: venue.managerCookie,
+    });
+
+    expect(res.status).toBe(409);
+    expect(await res.json()).toEqual({
+      error: { code: "reader.provider_disconnected", params: { providerId: "stripe" } },
+    });
+    expect(await activeOf(id)).toBe(true);
+  });
+
+  it("answers reader.unpair_failed for a provider fault, leaving the reader as it was", async () => {
+    const venue = await seedVenue();
+    const { app, lines } = mountLogged(venue, [failingSeat(new Error("outage"))]);
+    const id = await pairedStripeReader(app, venue);
+
+    const res = await send(app, "POST", `${base}/readers/${id}/unpair`, {
+      cookie: venue.managerCookie,
+    });
+
+    expect(res.status).toBe(502);
+    expect(await res.json()).toEqual({
+      error: { code: "reader.unpair_failed", params: { providerId: "stripe" } },
+    });
+    expect(lines.filter((l) => l.event === "reader.unpair_failed")).toEqual([
+      expect.objectContaining({
+        level: "warn",
+        fields: expect.objectContaining({ logReason: "unknown" }),
+      }),
+    ]);
+    expect(await activeOf(id)).toBe(true);
+  });
+
+  it("passes a provider's own refusal through unwrapped", async () => {
+    const venue = await seedVenue();
+    const { app } = mountLogged(venue, [
+      failingSeat(new AppError("payment.provider_credential_rejected", { providerId: "stripe" })),
+    ]);
+    const id = await pairedStripeReader(app, venue);
+
+    const res = await send(app, "POST", `${base}/readers/${id}/unpair`, {
+      cookie: venue.managerCookie,
+    });
+
+    expect(res.status).toBe(422);
+    expect(await res.json()).toEqual({
+      error: { code: "payment.provider_credential_rejected", params: { providerId: "stripe" } },
+    });
+  });
+
+  describe("through the real SumUp client", () => {
+    /** SumUp's API as far as connect, pair and unpair reach it; `onDelete` answers the unpair. */
+    function sumupFetch(onDelete: () => Promise<Response>): typeof fetch {
+      return async (input, init) => {
+        const url = new URL(typeof input === "string" ? input : (input as Request).url);
+        const method = init?.method ?? "GET";
+        if (method === "GET" && url.pathname === "/v0.1/memberships")
+          return Response.json({ items: [{ resource_id: "MC", resource: { name: "Bar" } }] });
+        if (method === "POST" && url.pathname === "/v0.1/merchants/MC/readers")
+          return Response.json({ id: "rdr_1", status: "paired" });
+        if (method === "DELETE" && url.pathname === "/v0.1/merchants/MC/readers/rdr_1")
+          return onDelete();
+        return new Response(null, { status: 404 });
+      };
+    }
+
+    async function unpairLogReason(
+      route: "unpair" | "delete",
+      onDelete: () => Promise<Response>,
+    ): Promise<{ status: number; body: unknown; reasons: unknown[] }> {
+      const venue = await seedVenue();
+      const { app, lines } = mountLogged(venue, [SUMUP_CARD_PROVIDER], sumupFetch(onDelete));
+      const connected = await send(app, "POST", `${base}/providers/sumup/connect`, {
+        cookie: venue.managerCookie,
+        body: { apiKey: "sup_sk_test" },
+      });
+      expect(connected.status).toBe(200);
+      const added = await send(app, "POST", `${base}/readers`, {
+        cookie: venue.managerCookie,
+        body: { providerId: "sumup", name: "Barra", code: "ABC123" },
+      });
+      expect(added.status).toBe(201);
+      const { id } = (await added.json()) as { id: string };
+
+      const res =
+        route === "unpair"
+          ? await send(app, "POST", `${base}/readers/${id}/unpair`, { cookie: venue.managerCookie })
+          : await send(app, "DELETE", `${base}/readers/${id}`, { cookie: venue.managerCookie });
+      return {
+        status: res.status,
+        body: await res.json(),
+        reasons: lines
+          .filter((l) => l.event === "reader.unpair_failed")
+          .map((l) => l.fields.logReason),
+      };
+    }
+
+    const unpairFailed = {
+      error: { code: "reader.unpair_failed", params: { providerId: "sumup" } },
+    };
+
+    it.each([
+      ["a refused key (401)", 401, "credential_rejected"],
+      ["a refused key (403)", 403, "credential_rejected"],
+      ["an outage (503)", 503, "provider_unavailable"],
+      ["another refusal (429)", 429, "http_429"],
+    ])("logs %s on Unpair with its own reason", async (_label, status, reason) => {
+      const result = await unpairLogReason("unpair", async () =>
+        Response.json({ title: "Refused" }, { status }),
+      );
+      expect(result).toEqual({ status: 502, body: unpairFailed, reasons: [reason] });
+    });
+
+    it("logs a dropped connection on Unpair as unreachable", async () => {
+      const result = await unpairLogReason("unpair", async () => {
+        throw new TypeError("fetch failed");
+      });
+      expect(result).toEqual({ status: 502, body: unpairFailed, reasons: ["unreachable"] });
+    });
+
+    it("logs the same reasons on Delete", async () => {
+      const result = await unpairLogReason("delete", async () =>
+        Response.json({ title: "Unauthorized" }, { status: 401 }),
+      );
+      expect(result).toEqual({ status: 502, body: unpairFailed, reasons: ["credential_rejected"] });
+    });
   });
 });
 

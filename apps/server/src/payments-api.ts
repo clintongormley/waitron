@@ -19,6 +19,7 @@ import {
 } from "@waitron/db";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
 import {
+  ProviderCallFailed,
   cardProviderById,
   cardReaders,
   DEMO_READER_ID,
@@ -388,6 +389,15 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
   const removeAtProvider = async (seat: CardProviderContribution, providerRef: string) => {
     try {
       await seat.readers.remove(runtimeDeps(), providerRef);
+    } catch (error) {
+      if (isAppError(error) && error.code === "credentials.missing")
+        throw new AppError("reader.provider_disconnected", { providerId: seat.providerId });
+      if (isAppError(error)) throw error;
+      throw new AppError(
+        "reader.unpair_failed",
+        { providerId: seat.providerId },
+        { reason: error instanceof ProviderCallFailed ? error.reason : codeOf(error) },
+      );
     } finally {
       for (const adopt of adopting)
         if (adopt.provider === seat.providerId && adopt.providerRef === providerRef)
@@ -545,20 +555,9 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
         if (first.deleted !== undefined) return c.json(first.deleted);
         const { plan } = first;
         const seat = cardProviderById(deps.providers, plan.provider);
-        try {
-          await removeAtProvider(seat, plan.providerRef);
-        } catch (error) {
-          // A disconnect can land once no reader of this provider is active, which step (a) may
-          // have just made true.
-          if (isAppError(error) && error.code === "credentials.missing")
-            throw new AppError("reader.provider_disconnected", { providerId: plan.provider });
-          if (isAppError(error)) throw error;
-          throw new AppError(
-            "reader.unpair_failed",
-            { providerId: plan.provider },
-            { reason: codeOf(error) },
-          );
-        }
+        // A disconnect can land once no reader of this provider is active, which step (a) may have
+        // just made true.
+        await removeAtProvider(seat, plan.providerRef);
         const unpairedAt = nowIso();
         await gated(sessionId, (tx) => markCardReaderUnpaired(tx, id, unpairedAt));
         return c.json(await gated(sessionId, (tx) => deleteCardReader(tx, deps.providers, id)));

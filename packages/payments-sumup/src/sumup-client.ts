@@ -1,5 +1,6 @@
 import type { SumUpReader } from "./client.js";
 import type { Decimal } from "@waitron/shared";
+import { ProviderCallFailed } from "@waitron/payments";
 import { fromMajorUnits, toMinorUnits } from "./client.js";
 import type {
   CreateCheckoutOutcome,
@@ -274,13 +275,29 @@ export function sumupClient(opts: SumUpClientOptions): SumUpClient {
       };
     },
     async deleteReader(readerId: string): Promise<void> {
-      const r = await call(
-        "DELETE",
-        `/v0.1/merchants/${mc}/readers/${encodeURIComponent(readerId)}`,
-      );
+      let r: { status: number };
+      try {
+        r = await call(
+          "DELETE",
+          `/v0.1/merchants/${mc}/readers/${encodeURIComponent(readerId)}`,
+          undefined,
+          { answerServerErrors: true },
+        );
+      } catch (error) {
+        if (error instanceof SyntaxError) throw error;
+        throw new ProviderCallFailed("unreachable", "sumup DELETE reader: no answer", {
+          cause: error,
+        });
+      }
       // A retry may find the reader already removed; other refusals must not look like success.
-      if (r.status >= 400 && r.status !== 404)
-        throw new Error(`sumup DELETE reader: HTTP ${r.status}`);
+      if (r.status < 400 || r.status === 404) return;
+      const reason =
+        r.status === 401 || r.status === 403
+          ? "credential_rejected"
+          : r.status >= 500
+            ? "provider_unavailable"
+            : (`http_${r.status}` as const);
+      throw new ProviderCallFailed(reason, `sumup DELETE reader: HTTP ${r.status}`);
     },
     async memberships() {
       const r = await call("GET", "/v0.1/memberships");

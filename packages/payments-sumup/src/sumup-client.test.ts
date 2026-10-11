@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { decimal } from "@waitron/shared";
+import { ProviderCallFailed } from "@waitron/payments";
 import { sumupClient, SumUpPairingRefused } from "./sumup-client.js";
 
 // `sumup-client.ts` is COVERAGE-excluded (the real HTTP boundary), not import-excluded: these tests
@@ -366,6 +367,36 @@ describe("sumupClient reader management", () => {
     const s = stub(() => ({ status, body: { title: "Rejected" } }));
     const client = sumupClient({ apiKey: "k", merchantCode: "MC", fetch: s.fetch });
     await expect(client.deleteReader("rdr_1")).rejects.toThrow(`HTTP ${status}`);
+  });
+
+  it.each([
+    [401, "credential_rejected"],
+    [403, "credential_rejected"],
+    [500, "provider_unavailable"],
+    [503, "provider_unavailable"],
+    [400, "http_400"],
+    [429, "http_429"],
+  ])("tells why a reader deletion failed on HTTP %s", async (status, reason) => {
+    const s = stub(() => ({ status, body: { title: "Rejected" } }));
+    const client = sumupClient({ apiKey: "k", merchantCode: "MC", fetch: s.fetch });
+    const error: unknown = await client.deleteReader("rdr_1").catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(ProviderCallFailed);
+    expect((error as ProviderCallFailed).reason).toBe(reason);
+  });
+
+  it.each([
+    ["a dropped connection", new TypeError("fetch failed")],
+    ["the deadline", Object.assign(new Error("aborted"), { name: "AbortError" })],
+  ])("tells a reader deletion cut off by %s as unreachable", async (_label, cause) => {
+    const client = sumupClient({
+      apiKey: "k",
+      merchantCode: "MC",
+      fetch: () => Promise.reject(cause),
+    });
+    const error: unknown = await client.deleteReader("rdr_1").catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(ProviderCallFailed);
+    expect((error as ProviderCallFailed).reason).toBe("unreachable");
+    expect((error as ProviderCallFailed).cause).toBe(cause);
   });
 
   it("accepts deletion of an already absent reader on a retry", async () => {
