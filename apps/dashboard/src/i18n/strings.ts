@@ -2720,7 +2720,7 @@ export const es: Record<StringKey, string> = {
     "Los productos archivados por esta eliminación salen de todos los menús en los que están.",
   "folders.delete_heading": "¿Eliminar {count} elementos?",
   "folders.delete_heading_one": "¿Eliminar 1 elemento?",
-  "folders.deleting": "Categorías que se eliminarán:",
+  "folders.deleting": "Categorías a eliminar:",
   "folders.path_ordinal": "{path} ({position} de {total})",
   "folders.contents_question": "¿Qué pasa con lo que contienen?",
   "folders.contents_keep": "{items} pasan a {parent}",

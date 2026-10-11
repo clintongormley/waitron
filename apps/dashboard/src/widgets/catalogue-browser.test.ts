@@ -2302,6 +2302,25 @@ it.each([
     expect(contentsLabels(el)).toEqual([keep, deleteToo]);
   },
 );
+it.each([
+  ["en-GB", "Categories to delete:"],
+  ["es", "Categorías a eliminar:"],
+] as const)(
+  "heads the categories a delete removes without a future tense (%s)",
+  async (locale, heading) => {
+    setLocale(locale);
+    const el = await mountBrowser();
+    await selectKeys(el, ["folder:d"]);
+    await press(el, "delete");
+    await vi.waitFor(() =>
+      expect(el.shadowRoot!.querySelector('[data-test="deleting"]')).not.toBeNull(),
+    );
+    const paragraphs = [...el.shadowRoot!.querySelector("form")!.querySelectorAll("p")].map(
+      (paragraph) => paragraph.textContent!.trim(),
+    );
+    expect(paragraphs).toContain(heading);
+  },
+);
 it("shows the delete dialog at the compact size", async () => {
   const el = await mountBrowser();
   await selectKeys(el, ["folder:d"]);
