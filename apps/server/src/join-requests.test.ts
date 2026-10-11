@@ -26,6 +26,7 @@ import {
 import { createPairingMode, type PairingMode } from "./pairing-mode.js";
 import { parseDeviceCookie } from "./device-session.js";
 import {
+  floorZones,
   deviceProfiles,
   devices,
   joinRequests,
@@ -1732,5 +1733,61 @@ describe("selfEnrolNodeAgent", () => {
       .from(printAgents)
       .where(eq(printAgents.id, agentId));
     expect(active).toBe(false);
+  });
+});
+
+describe("deleted zone joins", () => {
+  it("pending join acceptance cannot restore a deleted zone", async () => {
+    const venue = await setupVenue(suite.db);
+    const profileId = await seedProfile("kds");
+    const [zone] = await suite.db
+      .insert(floorZones)
+      .values({ locationId: venue.cfg.locationId, name: "Pending pass zone" })
+      .returning({ id: floorZones.id });
+    const screen: DeviceKitchenScreen = {
+      kind: "pass",
+      stationIds: [venue.defaultStationId],
+      zoneIds: [zone!.id],
+    };
+    await withTransaction(suite.db, (tx) =>
+      VENUE_SERVICE.setProfileKitchenScreens(tx, venue.cfg, profileId, { pass: screen }),
+    );
+    const pending = await withTransaction(suite.db, (tx) =>
+      createJoinRequest(tx, venue.cfg, { kind: "device", label: "Pending pass" }),
+    );
+    await suite.db.update(floorZones).set({ active: false }).where(eq(floorZones.id, zone!.id));
+    await expect(
+      withTransaction(suite.db, (tx) =>
+        acceptDeviceJoinRequest(tx, venue.cfg, pending.joinId, {
+          label: "Pending pass",
+          profileId,
+          kitchenScreens: [screen],
+        }),
+      ),
+    ).rejects.toMatchObject({
+      code: "kitchen_screen.invalid",
+      params: { field: "zoneIds", reason: "not_found", screen: "pass" },
+    });
+    expect(await suite.db.select().from(devices).where(eq(devices.id, pending.joinId))).toEqual([]);
+    expect(
+      await suite.db.select().from(joinRequests).where(eq(joinRequests.id, pending.joinId)),
+    ).toHaveLength(1);
+    await withTransaction(suite.db, (tx) =>
+      acceptDeviceJoinRequest(tx, venue.cfg, pending.joinId, {
+        label: "Restricted pass",
+        profileId,
+        kitchenScreens: [{ ...screen, zoneIds: null }],
+      }),
+    );
+    const shown = await withTransaction(suite.db, (tx) =>
+      VENUE_SERVICE.readDeviceKitchenScreens(tx, venue.cfg, pending.joinId),
+    );
+    expect(shown[0]?.zones).toEqual([]);
+    expect(shown[0]?.stations.map((slot) => slot.id)).toEqual([venue.defaultStationId]);
+    await expect(
+      withTransaction(suite.db, (tx) =>
+        VENUE_SERVICE.assertPassScreenZone(tx, venue.cfg, pending.joinId, null),
+      ),
+    ).rejects.toMatchObject({ code: "kitchen_screen.zone_not_allowed", params: { zoneId: null } });
   });
 });

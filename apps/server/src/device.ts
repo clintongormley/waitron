@@ -395,10 +395,6 @@ export function parseProfileKitchenScreens(value: unknown): ProfileKitchenScreen
   return screens;
 }
 
-/**
- * Checks the kitchen screens a device on this profile is given, writing nothing; `deviceId` names a
- * device whose stored off zones it may keep.
- */
 export async function resolveDeviceKitchenScreens(
   tx: Transaction,
   cfg: TillConfig,

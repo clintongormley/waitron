@@ -1479,9 +1479,11 @@ export function mountManagementApi(
     }),
   );
 
-  app.post("/management-api/device-profiles", (c) =>
+  const createProfile = (c: Context, sourcePathId?: string) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
+      const sourceId =
+        sourcePathId === undefined ? undefined : requireDeviceProfileId(sourcePathId);
       const body = await readJsonBody<ProfileBody>(c);
       const { name, capabilities, formFactor, canvasId, inactivityTimeoutSeconds } =
         parseProfileSettings(body);
@@ -1490,6 +1492,14 @@ export function mountManagementApi(
       const scope = parseProfileScope(body);
       const admission = parseProfileAdmission(body);
       const result = await withTransaction(deps.db, async (tx) => {
+        if (sourceId !== undefined) {
+          await authorizeManager(tx, {
+            managementSessionId: sessionId,
+            permission: "layout.configure",
+          });
+          if ((await getDeviceProfileWithPrinters(tx, sourceId)) === undefined)
+            throw new AppError("device_profile.not_found", {});
+        }
         await requireListedPrinters(tx, sessionId, lists);
         const created = await createDeviceProfile(tx, {
           managementSessionId: sessionId,
@@ -1502,7 +1512,14 @@ export function mountManagementApi(
           printerLists: { ...emptyPrinterLists(), ...lists },
         });
         await VENUE_SERVICE.setProfileServiceScope(tx, requireVenueCfg(deps), created.id, scope);
-        if (kitchenScreens !== undefined)
+        if (sourceId !== undefined)
+          await VENUE_SERVICE.copyProfileKitchenScreens(
+            tx,
+            requireVenueCfg(deps),
+            sourceId,
+            created.id,
+          );
+        else if (kitchenScreens !== undefined)
           await VENUE_SERVICE.setProfileKitchenScreens(
             tx,
             requireVenueCfg(deps),
@@ -1513,8 +1530,9 @@ export function mountManagementApi(
         return (await withProfileAccess(tx, [created]))[0];
       });
       return c.json(result, 201);
-    }),
-  );
+    });
+  app.post("/management-api/device-profiles", (c) => createProfile(c));
+  app.post("/management-api/device-profiles/:id/copy", (c) => createProfile(c, c.req.param("id")));
 
   // Full replacement: an omitted `canvasId` or `inactivityTimeoutSeconds` stores null. These stay as
   // they were when omitted: the starting screen, a printer list, the kitchen screens, the role
