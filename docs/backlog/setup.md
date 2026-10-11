@@ -299,27 +299,6 @@ It comes after the Demo bar (A246, W36) and A238, whose device and profile model
   browser test page cannot be served over HTTPS. **Next action:** during the on-device trust rows
   above, click past the certificate warning on one device and confirm the page appears.
 
-## A496. A new taxpayer moves to a new venue by configuration export and import
-
-**A496 (owner, 2026-10-11) — OPEN.** A change of tax ID makes a new taxpayer: for example, a sole
-trader forming a company, or the business being sold. A new taxpayer has its own fiscal records,
-invoice numbering and certificate, so it needs a new venue with a fresh database. A change of
-country is treated the same way ([venue details plan](../superpowers/plans/2026-10-05-venue-details.md),
-"Country" row). The owner: build a configuration export that the new venue can import, as for
-pre-production to production.
-
-That export already exists. `apps/server/src/configuration-transfer.ts` builds the bundle, and
-setup imports it through `apps/server/src/configuration-import.ts`. But the bundle carries the old
-taxpayer's country, tax ID, legal name, domicile and invoice series codes, and setup takes them
-from it. Needed:
-- an import into a new venue that takes the NEW taxpayer's details and series and carries
-  everything else over;
-- a short operator procedure: close the old venue, keep its database, set up the new one.
-
-How long the old database must be kept, and in what form, has not been checked; it is an open
-point for the procedure. Related open entry: "Configuration export/import still leaves
-publications behind" (A291).
-
 ## Decisions and deliberate limits
 
 **DECIDED (owner, 2026-09-29): the mode screen's certificate note stays as built** (C40, #833) — it

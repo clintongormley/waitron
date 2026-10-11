@@ -7,6 +7,7 @@ import {
   dispatchSetupAdvance,
   dispatchSetupGoto,
   dispatchSetupPatch,
+  dispatchTaxpayerChosen,
 } from "./events.js";
 
 function capture(type: string, fire: (el: EventTarget) => void): CustomEvent {
@@ -74,6 +75,13 @@ test("dispatchConfigurationRequested fires a composed, bubbling configuration-re
   };
   const e = capture("configuration-requested", (el) => dispatchConfigurationRequested(el, request));
   expect(e.detail).toEqual({ request });
+  expect(e.bubbles).toBe(true);
+  expect(e.composed).toBe(true);
+});
+
+test("dispatchTaxpayerChosen fires a composed, bubbling taxpayer-chosen carrying the choice", () => {
+  const e = capture("taxpayer-chosen", (el) => dispatchTaxpayerChosen(el, true));
+  expect(e.detail).toEqual({ newTaxpayer: true });
   expect(e.bubbles).toBe(true);
   expect(e.composed).toBe(true);
 });

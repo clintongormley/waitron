@@ -142,12 +142,9 @@ export async function applyPreparedLocation(
   target: { locationId: string },
   location: PreparedVenue["location"],
 ): Promise<void> {
-  // A raw write never reaches the column's own encoder, so the JSON list is serialised here.
-  const invoiceLocales = JSON.stringify(location.invoiceLocales);
+  // The receipt languages and operation description stay as the provision request wrote them.
   await tx.execute(sql`
     update locations set
-      invoice_locales = ${invoiceLocales},
-      operation_description = ${location.operationDescription},
       bump_mode = ${location.bumpMode},
       fire_control = ${location.fireControl},
       catalogue_id = ${location.catalogueId}

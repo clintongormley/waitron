@@ -2987,6 +2987,50 @@ describe("setup routes — remaining refusals and resumption paths", () => {
     expect(provision).not.toHaveBeenCalled();
   });
 
+  it.each<[string, Record<string, unknown>]>([
+    [
+      "a new-taxpayer flag that is not true or false",
+      { ...liveBody(), aeatCert: CERT, configurationImport: true, newTaxpayer: "yes" },
+    ],
+    [
+      "a new taxpayer without a configuration import",
+      { ...liveBody(), aeatCert: CERT, newTaxpayer: true },
+    ],
+    ["a new taxpayer on a demo venue", { ...demoBody(), newTaxpayer: true }],
+    ["a new taxpayer on a prepared venue", { ...prepareBody(), newTaxpayer: true }],
+  ])("refuses %s", async (_label, body) => {
+    const app = new Hono();
+    const { deps, provision } = makeDeps();
+    mountSetup(app, deps, noopLog);
+
+    const res = await postProvision(app, body);
+
+    expect(res.status).toBe(400);
+    expect(await res.json()).toEqual(invalid("newTaxpayer"));
+    expect(provision).not.toHaveBeenCalled();
+  });
+
+  it.each<[string, Record<string, unknown>, boolean]>([
+    ["a new taxpayer's import", { newTaxpayer: true }, true],
+    ["a same-taxpayer import", {}, false],
+    ["an explicitly same-taxpayer import", { newTaxpayer: false }, false],
+  ])("carries %s through to provision", async (_label, flag, expected) => {
+    const app = new Hono();
+    const { deps, provisionRequests } = makeDeps();
+    mountSetup(app, deps, noopLog);
+
+    const res = await postProvision(app, {
+      ...liveBody(),
+      aeatCert: CERT,
+      configurationImport: true,
+      ...flag,
+    });
+
+    expect(res.status).toBe(200);
+    expect(provisionRequests[0]!.newTaxpayer).toBe(expected);
+    await tick();
+  });
+
   it("carries a live venue's configuration import through and clears the staged archive once published", async () => {
     const app = new Hono();
     const clearConfiguration = vi.fn(async () => {});

@@ -619,10 +619,289 @@ describe("setup-app", () => {
     });
     expect((readDraft(el).venue?.location as Record<string, unknown>).id).toBeUndefined();
     el.shadowRoot!.querySelector<HTMLElement>("[data-test=screen-configuration-preview]")!
-      .shadowRoot!.querySelector<HTMLElement>("[data-test=continue]")!
+      .shadowRoot!.querySelector<HTMLElement>("wt-choice-row[data-test=same-tax-id]")!
       .click();
     await flush(el);
     expect(el.shadowRoot!.querySelector("[data-test=screen-admin]")).not.toBeNull();
+    expect(readDraft(el)).toMatchObject({ venue: { taxId: "B12345678" } });
+    expect(readDraft(el).newTaxpayer).toBeUndefined();
+  });
+
+  describe("the taxpayer choice after staging a configuration", () => {
+    const exported = {
+      country: "ES",
+      taxId: "B12345678",
+      legalName: "Old Owner SL",
+      taxpayerDomicile: "Calle Vieja 1, 28001 Madrid",
+      location: {
+        id: "source-location",
+        name: "Prepared",
+        invoiceLocales: ["es-ES"],
+        operationDescription: "Restaurant",
+        fiscalTerritory: "ES-common",
+        addressLine1: "Calle 1",
+        addressLine2: null,
+        postalCode: "28001",
+        city: "Madrid",
+        province: "Madrid",
+        timeZone: "Europe/Madrid",
+        dayCutover: "06:00",
+      },
+      seriesCode: "OLD",
+      fullSeriesCode: "OLDF",
+      rectificativeSeriesCode: "OLDR",
+    };
+    const sixFields = {
+      taxId: "B12345678",
+      legalName: "Old Owner SL",
+      taxpayerDomicile: "Calle Vieja 1, 28001 Madrid",
+      seriesCode: "OLD",
+      fullSeriesCode: "OLDF",
+      rectificativeSeriesCode: "OLDR",
+    };
+    const typed = {
+      taxId: "A58818501",
+      legalName: "New Owner SL",
+      taxpayerDomicile: "Calle Nueva 2, 28002 Madrid",
+      seriesCode: "NEW",
+      fullSeriesCode: "NEWF",
+      rectificativeSeriesCode: "NEWR",
+    };
+
+    async function staged(api: Partial<Record<keyof SetupApi, unknown>> = {}) {
+      const stageConfiguration = vi
+        .fn()
+        .mockResolvedValue({ venue: exported, counts: {}, reconnect: [] });
+      const el = await mountSetupApp(stubApi({ stageConfiguration, ...api }));
+      patch(el, { mode: "live" });
+      configurationRequest(el, new File(["encrypted"], "old.waitron-config"), "passphrase");
+      await flush(el);
+      return el;
+    }
+
+    async function choose(el: SetupApp, newTaxpayer: boolean): Promise<void> {
+      const preview = el.shadowRoot!.querySelector("[data-test=screen-configuration-preview]");
+      (preview ?? wizard(el)).dispatchEvent(
+        new CustomEvent("taxpayer-chosen", {
+          detail: { newTaxpayer },
+          bubbles: true,
+          composed: true,
+        }),
+      );
+      await flush(el);
+    }
+
+    function venueValue(venue: HTMLElement, key: string): string {
+      return (venue.shadowRoot!.querySelector(`[data-test=${key}]`) as unknown as { value: string })
+        .value;
+    }
+
+    it("asks afresh for a new taxpayer's details and sends them with newTaxpayer", async () => {
+      const provision = vi.fn().mockResolvedValue({ provisioned: true, restarting: true });
+      const el = await staged({ provision });
+      fiscalTestRequest(el);
+      await flush(el);
+      expect(readState(el, ["fiscalTestStatus"]).fiscalTestStatus).toBe("accepted");
+      await choose(el, true);
+      expect(el.shadowRoot!.querySelector("[data-test=screen-admin]")).not.toBeNull();
+      expect(readState(el, ["fiscalTestStatus"]).fiscalTestStatus).toBeUndefined();
+      goto(el, "venue");
+      await el.updateComplete;
+      const venue = await screenHost(el, "venue");
+      expect(
+        Object.fromEntries(Object.keys(sixFields).map((key) => [key, venueValue(venue, key)])),
+      ).toEqual({
+        taxId: "",
+        legalName: "",
+        taxpayerDomicile: "",
+        seriesCode: "FS",
+        fullSeriesCode: "FF",
+        rectificativeSeriesCode: "FR",
+      });
+      expect(venueValue(venue, "name")).toBe("Prepared");
+      patch(el, { venue: typed });
+      provisionRequest(el);
+      await flush(el);
+      const body = provision.mock.calls[0]![0] as ProvisionBody & { newTaxpayer?: boolean };
+      expect(body.newTaxpayer).toBe(true);
+      expect(body.configurationImport).toBe(true);
+      expect(body.venue).toMatchObject({ ...typed, country: "ES" });
+      expect(body.venue.location).toMatchObject({ name: "Prepared", city: "Madrid" });
+    });
+
+    it("keeps the exported taxpayer for the same tax ID, without newTaxpayer", async () => {
+      const provision = vi.fn().mockResolvedValue({ provisioned: true, restarting: true });
+      const el = await staged({ provision });
+      await choose(el, false);
+      expect(el.shadowRoot!.querySelector("[data-test=screen-admin]")).not.toBeNull();
+      provisionRequest(el);
+      await flush(el);
+      const body = provision.mock.calls[0]![0] as ProvisionBody;
+      expect(Object.hasOwn(body, "newTaxpayer")).toBe(false);
+      expect(body.configurationImport).toBe(true);
+      expect(body.venue).toMatchObject(sixFields);
+    });
+
+    it("puts the exported taxpayer back when new is changed to same", async () => {
+      const provision = vi.fn().mockResolvedValue({ provisioned: true, restarting: true });
+      const el = await staged({ provision });
+      await choose(el, true);
+      patch(el, { venue: typed });
+      await choose(el, false);
+      provisionRequest(el);
+      await flush(el);
+      const body = provision.mock.calls[0]![0] as ProvisionBody;
+      expect(Object.hasOwn(body, "newTaxpayer")).toBe(false);
+      expect(body.venue).toMatchObject(sixFields);
+    });
+
+    it("ignores a fiscal test answer for the old taxpayer that arrives after New tax ID", async () => {
+      const answer = deferred<{ status: "accepted" }>();
+      const runFiscalTest = vi.fn(() => answer.promise);
+      const el = await staged({ runFiscalTest });
+      await choose(el, false);
+      goto(el, "fiscal-test");
+      await flush(el);
+      fiscalTestRequest(el);
+      await flush(el);
+      goto(el, "live-source");
+      await flush(el);
+      configurationRequest(el, new File(["encrypted"], "old.waitron-config"), "passphrase");
+      await flush(el);
+      await choose(el, true);
+      patch(el, { venue: typed });
+      answer.resolve({ status: "accepted" });
+      await flush(el);
+      goto(el, "fiscal-test");
+      await flush(el);
+      const screen = await screenHost(el, "fiscal-test");
+      expect(screen.shadowRoot!.querySelector("[data-test=continue]")).toBeNull();
+      expect(screen.shadowRoot!.querySelector("[data-test=run]")).not.toBeNull();
+      expect(readState(el, ["fiscalTestRunning"]).fiscalTestRunning).toBe(false);
+    });
+
+    it("lets a fiscal test started after New tax ID own its answer and its running state", async () => {
+      const old = deferred<{ status: "accepted" }>();
+      const fresh = deferred<{ status: "rejected"; rejections: [] }>();
+      const runFiscalTest = vi
+        .fn()
+        .mockReturnValueOnce(old.promise)
+        .mockReturnValueOnce(fresh.promise);
+      const el = await staged({ runFiscalTest });
+      fiscalTestRequest(el);
+      await flush(el);
+      await choose(el, true);
+      patch(el, { venue: typed });
+      fiscalTestRequest(el);
+      await flush(el);
+      old.reject(new Error("network"));
+      await flush(el);
+      expect(readState(el, ["fiscalTestRunning", "fiscalTestError"])).toEqual({
+        fiscalTestRunning: true,
+        fiscalTestError: undefined,
+      });
+      fresh.resolve({ status: "rejected", rejections: [] });
+      await flush(el);
+      expect(readState(el, ["fiscalTestRunning", "fiscalTestStatus"])).toEqual({
+        fiscalTestRunning: false,
+        fiscalTestStatus: "rejected",
+      });
+    });
+
+    it("lets a repeated fiscal test own its answer and its running state", async () => {
+      const first = deferred<{ status: "accepted" }>();
+      const second = deferred<{ status: "rejected"; rejections: [] }>();
+      const runFiscalTest = vi
+        .fn()
+        .mockReturnValueOnce(first.promise)
+        .mockReturnValueOnce(second.promise);
+      const el = await staged({ runFiscalTest });
+      fiscalTestRequest(el);
+      await flush(el);
+      fiscalTestRequest(el);
+      await flush(el);
+      first.reject(new Error("network"));
+      await flush(el);
+      expect(readState(el, ["fiscalTestRunning", "fiscalTestError"])).toEqual({
+        fiscalTestRunning: true,
+        fiscalTestError: undefined,
+      });
+      second.resolve({ status: "rejected", rejections: [] });
+      await flush(el);
+      expect(readState(el, ["fiscalTestRunning", "fiscalTestStatus"])).toEqual({
+        fiscalTestRunning: false,
+        fiscalTestStatus: "rejected",
+      });
+    });
+
+    it("clears an earlier screen's refusal when the choice moves on", async () => {
+      const provision = vi
+        .fn()
+        .mockRejectedValue({ code: "setup.request_invalid", params: { field: "taxId" } });
+      const el = await staged({ provision });
+      await choose(el, true);
+      patch(el, { venue: { ...typed, taxId: "B12345678" } });
+      provisionRequest(el);
+      await flush(el);
+      expect(readState(el, ["venueInvalidField"]).venueInvalidField).toBe("taxId");
+      configurationRequest(el, new File(["encrypted"], "old.waitron-config"), "passphrase");
+      await flush(el);
+      await choose(el, true);
+      expect(readState(el, ["screen", "venueInvalidField"])).toEqual({
+        screen: "admin",
+        venueInvalidField: undefined,
+      });
+    });
+
+    it("forgets the choice when a configuration is staged again", async () => {
+      const el = await staged();
+      await choose(el, true);
+      configurationRequest(el, new File(["encrypted"], "old.waitron-config"), "passphrase");
+      await flush(el);
+      expect(Object.hasOwn(readDraft(el), "newTaxpayer")).toBe(false);
+      expect(readDraft(el).venue).toMatchObject(sixFields);
+    });
+
+    it("forgets the choice when the mode switches to demo", async () => {
+      const el = await staged();
+      await choose(el, true);
+      patch(el, { mode: "demo" });
+      expect(Object.hasOwn(readDraft(el), "newTaxpayer")).toBe(false);
+      expect(readDraft(el).configurationImport).toBeUndefined();
+    });
+
+    it("ignores a fiscal test answer that arrives after the mode switches to demo", async () => {
+      const answer = deferred<{ status: "accepted" }>();
+      const el = await staged({ runFiscalTest: vi.fn(() => answer.promise) });
+      fiscalTestRequest(el);
+      await flush(el);
+      patch(el, { mode: "demo" });
+      answer.resolve({ status: "accepted" });
+      await flush(el);
+      expect(readState(el, ["fiscalTestRunning", "fiscalTestStatus"])).toEqual({
+        fiscalTestRunning: false,
+        fiscalTestStatus: undefined,
+      });
+    });
+
+    it("sends a refused new tax ID back to the venue form, marked and focused", async () => {
+      const provision = vi
+        .fn()
+        .mockRejectedValue({ code: "setup.request_invalid", params: { field: "taxId" } });
+      const el = await staged({ provision });
+      await choose(el, true);
+      patch(el, { venue: { ...typed, taxId: "B12345678" } });
+      provisionRequest(el);
+      await flush(el);
+      const venue = await screenHost(el, "venue");
+      const input = venue.shadowRoot!.querySelector<
+        HTMLElement & { error: string; updateComplete: Promise<unknown> }
+      >("wt-input[name=taxId]")!;
+      await input.updateComplete;
+      expect(input.hasAttribute("invalid")).toBe(true);
+      expect(input.error).toBe("Check the tax ID. A new business needs its own.");
+      await vi.waitFor(() => expect(venue.shadowRoot!.activeElement).toBe(input));
+    });
   });
 
   it("stages the selected backup and advances to done", async () => {
@@ -995,12 +1274,12 @@ describe("setup-app", () => {
   it("maps setup.request_invalid back to review with a banner naming the field", async () => {
     const provision = vi
       .fn()
-      .mockRejectedValue({ code: "setup.request_invalid", params: { field: "taxId" } });
+      .mockRejectedValue({ code: "setup.request_invalid", params: { field: "country" } });
     const el = await mountSetupApp(stubApi({ provision }));
     provisionRequest(el);
     await flush(el);
     expect(el.shadowRoot!.querySelector("[data-test=screen-review]")).not.toBeNull();
-    expect(await screenText(el, "review", "[data-test=error]")).toContain("taxId");
+    expect(await screenText(el, "review", "[data-test=error]")).toContain("country");
   });
 
   // Asserted on the form's own input, because a path the shell routes on but the form has no entry
@@ -2754,22 +3033,22 @@ describe("restore, configuration and fiscal-test outcomes", () => {
     [
       "en-GB",
       "category.name_taken",
-      "The export has two categories named “Bebidas” in the same place. Rename one in your prepared restaurant, export again, then load the new export.",
+      "The export has two categories named “Bebidas” in the same place. Rename one in the restaurant you exported from, export again, then load the new export.",
     ],
     [
       "en-GB",
       "product.name_taken",
-      "The export has two active products or variants named “Bebidas”. Rename one in your prepared restaurant, export again, then load the new export.",
+      "The export has two active products or variants named “Bebidas”. Rename one in the restaurant you exported from, export again, then load the new export.",
     ],
     [
       "es-ES",
       "category.name_taken",
-      "La exportación tiene dos categorías llamadas «Bebidas» en el mismo lugar. Cambia el nombre de una en tu restaurante preparado, vuelve a exportar y carga la nueva exportación.",
+      "La exportación tiene dos categorías llamadas «Bebidas» en el mismo lugar. Cambia el nombre de una en el restaurante de origen, vuelve a exportar y carga la nueva exportación.",
     ],
     [
       "es-ES",
       "product.name_taken",
-      "La exportación tiene dos productos o variantes activos llamados «Bebidas». Cambia el nombre de uno en tu restaurante preparado, vuelve a exportar y carga la nueva exportación.",
+      "La exportación tiene dos productos o variantes activos llamados «Bebidas». Cambia el nombre de uno en el restaurante de origen, vuelve a exportar y carga la nueva exportación.",
     ],
   ] as const)(
     "names the duplicate when setup refuses a configuration export for it (%s, %s)",
@@ -2817,9 +3096,9 @@ describe("restore, configuration and fiscal-test outcomes", () => {
   );
 
   const switchedOffTail =
-    "in the zone “Terraza”, but that zone's department, “Comedor”, is disabled. Enable “Comedor” in your prepared restaurant, export again, then load the new export.";
+    "in the zone “Terraza”, but that zone's department, “Comedor”, is disabled. Enable “Comedor” in the restaurant you exported from, export again, then load the new export.";
   const switchedOffTailEs =
-    "en la zona «Terraza», pero el departamento de esa zona, «Comedor», está deshabilitado. Habilita «Comedor» en tu restaurante preparado, vuelve a exportar y carga la nueva exportación.";
+    "en la zona «Terraza», pero el departamento de esa zona, «Comedor», está deshabilitado. Habilita «Comedor» en el restaurante de origen, vuelve a exportar y carga la nueva exportación.";
   it.each([
     [
       "en-GB",
@@ -2931,11 +3210,11 @@ describe("restore, configuration and fiscal-test outcomes", () => {
   it.each([
     [
       "en-GB",
-      "The export has the zone “Terraza” active, but its department, “Comedor”, is disabled. Enable “Comedor” in your prepared restaurant, export again, then load the new export.",
+      "The export has the zone “Terraza” active, but its department, “Comedor”, is disabled. Enable “Comedor” in the restaurant you exported from, export again, then load the new export.",
     ],
     [
       "es-ES",
-      "La exportación tiene la zona «Terraza» activa, pero su departamento, «Comedor», está deshabilitado. Habilita «Comedor» en tu restaurante preparado, vuelve a exportar y carga la nueva exportación.",
+      "La exportación tiene la zona «Terraza» activa, pero su departamento, «Comedor», está deshabilitado. Habilita «Comedor» en el restaurante de origen, vuelve a exportar y carga la nueva exportación.",
     ],
   ] as const)(
     "names a switched-on zone whose department is switched off (%s)",

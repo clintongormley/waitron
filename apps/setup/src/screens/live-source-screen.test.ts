@@ -220,7 +220,7 @@ describe("SetupLiveSourceScreen in Spanish", () => {
   it("offers both paths and explains its refusals in Spanish", async () => {
     setLocale("es-ES");
     const { el } = await mountWidget<SetupLiveSourceScreen>("setup-live-source-screen", {});
-    expect(q(el, "h1")!.textContent).toBe("Lleva tu restaurante preparado a producción");
+    expect(q(el, "h1")!.textContent).toBe("Importar una configuración");
     expect(q(el, "wt-input")!.getAttribute("label")).toBe("Contraseña de exportación");
     expect(q(el, "[data-test=empty]")!.textContent).toBe("Empezar desde cero");
     q(el, "[data-test=import]")!.click();
@@ -236,7 +236,7 @@ describe("SetupLiveSourceScreen in Spanish", () => {
     await typePassphrase(el, "twelve-chars");
     setLocale("es-ES");
     await el.updateComplete;
-    expect(q(el, "h1")!.textContent).toBe("Lleva tu restaurante preparado a producción");
+    expect(q(el, "h1")!.textContent).toBe("Importar una configuración");
     expect((q(el, "wt-input") as HTMLElement & { value: string }).value).toBe("twelve-chars");
   });
 });

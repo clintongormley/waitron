@@ -26,7 +26,7 @@ export interface ConfigurationExportDeps {
   now?: () => Date;
 }
 
-/** Authenticated preparation export. The allowlist engine has no route to transactional history. */
+/** Authenticated configuration export. The allowlist engine has no route to transactional history. */
 export function mountConfigurationExportApi(
   app: Hono,
   deps: ConfigurationExportDeps,

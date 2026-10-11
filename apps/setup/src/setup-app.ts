@@ -155,6 +155,16 @@ const sayWith =
   () =>
     format(key, params);
 
+/** The fields a new tax ID enters afresh rather than taking from the export. */
+const TAXPAYER_FIELDS = [
+  "taxId",
+  "legalName",
+  "taxpayerDomicile",
+  "seriesCode",
+  "fullSeriesCode",
+  "rectificativeSeriesCode",
+] as const;
+
 const VENUE_ERROR_MESSAGES: Record<string, StringKey> = {
   "provisioning.territory_country_mismatch": "shell.venue_error.territory_country_mismatch",
   "provisioning.invalid_locales": "shell.venue_error.invalid_locales",
@@ -590,6 +600,7 @@ export class SetupApp extends LitElement {
   @state() private fiscalTestRejections: { code: string | null; message: string | null }[] = [];
   @state() private fiscalTestRunning = false;
   @state() private fiscalTestError?: Message;
+  #fiscalTestGeneration = 0;
 
   /**
    * The adopt response carries this once, so the done screen is the operator's only chance to see and
@@ -697,7 +708,8 @@ export class SetupApp extends LitElement {
       delete venue.location.invoiceLocales;
       this.draft = { ...this.draft, venue };
       delete this.draft.configurationImport;
-      this.fiscalTestStatus = undefined;
+      delete this.draft.newTaxpayer;
+      this.#invalidateFiscalTest();
     }
     this.draft = deepMerge(this.draft, event.detail.patch) as DeepPartial<ProvisionBody>;
     this.#rootScope?.changed();
@@ -1206,6 +1218,7 @@ export class SetupApp extends LitElement {
         configurationImport: true,
         venue: { ...preview.venue, location },
       }) as DeepPartial<ProvisionBody>;
+      delete this.draft.newTaxpayer;
       this.#rootScope?.changed();
       this.configurationPreview = preview;
       if (owner) {
@@ -1220,22 +1233,50 @@ export class SetupApp extends LitElement {
     }
   }
 
+  #onTaxpayerChosen(event: CustomEvent<{ newTaxpayer: boolean }>): void {
+    event.stopPropagation();
+    const preview = this.configurationPreview;
+    if (!this.isConnected || !preview) return;
+    this.#registerRoot();
+    const venue: Record<string, unknown> = { ...this.draft.venue };
+    for (const key of TAXPAYER_FIELDS) {
+      if (event.detail.newTaxpayer) delete venue[key];
+      else venue[key] = preview.venue[key];
+    }
+    const draft = { ...this.draft, venue } as DeepPartial<ProvisionBody>;
+    if (event.detail.newTaxpayer) draft.newTaxpayer = true;
+    else delete draft.newTaxpayer;
+    this.draft = draft;
+    this.#invalidateFiscalTest();
+    this.#rootScope?.changed();
+    this.#goto("admin");
+  }
+
+  /** A test still in flight was run on the draft before this change, so its answer is dropped. */
+  #invalidateFiscalTest(): void {
+    ++this.#fiscalTestGeneration;
+    this.fiscalTestStatus = undefined;
+    this.fiscalTestRunning = false;
+  }
+
   async #onFiscalTestRequested(event: CustomEvent): Promise<void> {
     event.stopPropagation();
-    this.fiscalTestStatus = undefined;
+    this.#invalidateFiscalTest();
+    const generation = this.#fiscalTestGeneration;
+    const current = () => this.isConnected && generation === this.#fiscalTestGeneration;
     this.fiscalTestRejections = [];
     this.fiscalTestRunning = true;
     this.fiscalTestError = undefined;
     try {
       const result = await this.api.runFiscalTest(assembleBody(this.draft));
-      if (!this.isConnected) return;
+      if (!current()) return;
       this.fiscalTestStatus = result.status === "not-applicable" ? "accepted" : result.status;
       this.fiscalTestRejections = result.status === "rejected" ? (result.rejections ?? []) : [];
     } catch {
-      if (!this.isConnected) return;
+      if (!current()) return;
       this.fiscalTestError = say("shell.fiscal_test.could_not_run");
     } finally {
-      if (this.isConnected) this.fiscalTestRunning = false;
+      if (current()) this.fiscalTestRunning = false;
     }
   }
 
@@ -1409,6 +1450,7 @@ export class SetupApp extends LitElement {
         @cloud-restore-action=${(e: CustomEvent<{ action: "start" | "status" | "start-again" | "restore"; pointId?: string; oldBoxGone?: boolean }>) => void this.#onCloudRestoreAction(e)}
         @configuration-requested=${(e: CustomEvent<{ request: ConfigurationRequestDetail }>) =>
           void this.#onConfigurationRequested(e)}
+        @taxpayer-chosen=${(e: CustomEvent<{ newTaxpayer: boolean }>) => this.#onTaxpayerChosen(e)}
         @fiscal-test-requested=${(e: CustomEvent) => void this.#onFiscalTestRequested(e)}
         @reset-requested=${(e: CustomEvent<{ credential: ResetCredential }>) =>
           void this.#onResetRequested(e)}

@@ -1304,9 +1304,9 @@ export const en = {
   "servers.clear_explanation":
     "Clearing frees the place it takes on the list of servers. If it tries to come back under its old identity, this primary refuses it, so to use that machine again it has to join from scratch. This cannot be undone.",
   "backup.title": "Backups",
-  "backup.configuration.title": "Move your preparation to production",
+  "backup.configuration.title": "Configuration export",
   "backup.configuration.explanation":
-    "Download an encrypted copy of menus, layouts, staff profiles and settings. Sales, fiscal records and credentials stay behind.",
+    "Download an encrypted copy of menus, layouts, staff profiles and settings to set up a new venue. Sales, fiscal records and credentials stay behind.",
   "backup.configuration.passphrase": "Export passphrase (required)",
   "backup.configuration.confirm": "Confirm export passphrase (required)",
   "backup.configuration.download": "Download configuration export",
@@ -3932,9 +3932,9 @@ export const es: Record<StringKey, string> = {
   "servers.clear_explanation":
     "Quitarla libera el sitio que ocupa en la lista de servidores. Si intenta volver con su identidad anterior, este servidor principal la rechaza, así que para volver a usarla tiene que unirse de nuevo desde el principio. No se puede deshacer.",
   "backup.title": "Copias de seguridad",
-  "backup.configuration.title": "Lleva tu preparación a producción",
+  "backup.configuration.title": "Exportar la configuración",
   "backup.configuration.explanation":
-    "Descarga una copia cifrada de cartas, planos, perfiles del personal y ajustes. Las ventas, los registros fiscales y las credenciales no se copian.",
+    "Descarga una copia cifrada de cartas, planos, perfiles del personal y ajustes para crear un local nuevo. Las ventas, los registros fiscales y las credenciales no se copian.",
   "backup.configuration.passphrase": "Contraseña de exportación (obligatoria)",
   "backup.configuration.confirm": "Confirma la contraseña de exportación (obligatoria)",
   "backup.configuration.download": "Descargar configuración",

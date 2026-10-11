@@ -112,7 +112,7 @@ export interface SetupDeps {
     ReturnType<typeof createCloudRecoveryClient>,
     "replacementIdentity" | "replacementApproval"
   >;
-  /** Validates and stages a prepared configuration archive before live provisioning. */
+  /** Validates and stages a configuration export before live provisioning. */
   stageConfiguration?: (artifact: Uint8Array, passphrase: string) => Promise<ConfigurationPreview>;
   /** Removes any staged archive after the selected venue and its configuration are durable. */
   clearConfiguration?: () => Promise<void>;
@@ -473,6 +473,10 @@ function parseProvisionPayload(
     invalidRequest("configurationImport");
   }
   if (body.configurationImport === true && mode !== "live") invalidRequest("configurationImport");
+  if (body.newTaxpayer !== undefined && typeof body.newTaxpayer !== "boolean") {
+    invalidRequest("newTaxpayer");
+  }
+  if (body.newTaxpayer === true && body.configurationImport !== true) invalidRequest("newTaxpayer");
 
   const venue = parseVenue(body.venue, acceptLanguage);
   if (mode !== "demo" && !venue.taxpayerDomicile?.trim()) {
@@ -506,6 +510,7 @@ function parseProvisionPayload(
       environment,
       venue,
       configurationImport: mode === "live" && body.configurationImport === true,
+      newTaxpayer: mode === "live" && body.newTaxpayer === true,
     },
     contribution,
     secret,

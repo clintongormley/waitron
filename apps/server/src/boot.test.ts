@@ -4717,6 +4717,122 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
       await rm(sourceStateDir, { recursive: true, force: true });
     }
   }, 120_000);
+
+  it("imports a configuration export into the venue of a new taxpayer, which keeps its own identity and series", async () => {
+    const OLD_TAX_ID = "60000011A";
+    const NEW_TAX_ID = "60000012G";
+    const PASSPHRASE = "a long enough export passphrase";
+    const modules = enabledModules(ALL_MODULES, ES_MODULE_CONFIG);
+    const source = await freshVenue();
+    const target = await freshVenue();
+    const sourceStateDir = await mkdtemp(join(tmpdir(), "waitron-boot-new-taxpayer-source-"));
+    try {
+      const sourceIds = await provisionVenue(
+        {
+          ownerDb: source.store.venue,
+          moduleConfig: ES_MODULE_CONFIG,
+          database: source.directory,
+          stateDir: sourceStateDir,
+        },
+        { environment: "preproduction", venue: hashedVenueRequest(OLD_TAX_ID) },
+      );
+      await withTransaction(source.store.venue, (tx) =>
+        writeContentLanguages(tx, { defaultLanguage: "es", languages: ["es", "fr"] }),
+      );
+      await source.store.venue.execute(
+        sql`update locations set invoice_locales = '["es-ES","en-GB"]'`,
+      );
+      const [exporter] = await source.store.venue.select({ id: persons.id }).from(persons);
+      const artifact = encodeConfigurationBundle(
+        await buildConfigurationBundle(
+          source.store.venue,
+          { ...sourceIds, sourceOperatorId: exporter!.id },
+          modules,
+          new Date(),
+          await schemaVersionsByModule(source.store.venue, modules),
+        ),
+        PASSPHRASE,
+      );
+      const newTaxpayer = (taxId: string) => {
+        const body = provisionVenueBody(taxId);
+        return JSON.stringify({
+          mode: "live",
+          configurationImport: true,
+          newTaxpayer: true,
+          venue: {
+            ...body,
+            legalName: "Nueva Empresa SL",
+            taxpayerDomicile: "Calle Nueva 3, 28013 Madrid",
+            location: { ...body.location, operationDescription: "Comida para llevar" },
+            seriesCode: "B",
+            fullSeriesCode: "FB",
+            rectificativeSeriesCode: "RB",
+          },
+        });
+      };
+
+      await withSetupBoot(target.directory, { WAITRON_ENV: "dev" }, async ({ post, kills }) => {
+        const json = { "content-type": "application/json" };
+        const staged = await post("/setup-api/configuration", {
+          headers: {
+            "content-type": "application/octet-stream",
+            "x-waitron-export-passphrase": PASSPHRASE,
+          },
+          body: new Uint8Array(artifact),
+        });
+        expect(staged.status).toBe(200);
+
+        // Typed in lower case with a hyphen, the old tax ID still normalises to the bundle's.
+        const sameTaxId = await post("/setup-api/provision", {
+          headers: json,
+          body: newTaxpayer("60000011-a"),
+        });
+        expect(sameTaxId.status).toBe(400);
+        expect(await sameTaxId.json()).toEqual({
+          error: { code: "setup.request_invalid", params: { field: "taxId" } },
+        });
+
+        const provisioned = await post("/setup-api/provision", {
+          headers: json,
+          body: newTaxpayer(NEW_TAX_ID),
+        });
+        expect(provisioned.status, await provisioned.clone().text()).toBe(200);
+        await poll(() => (kills.length > 0 ? kills.length : undefined));
+        expect(kills).toEqual([{ pid: process.pid, signal: "SIGTERM" }]);
+      });
+
+      expect(
+        target.store.venue.all(
+          sql`select country, tax_id, legal_name, taxpayer_domicile from tenants`,
+        ),
+      ).toEqual([
+        {
+          country: "ES",
+          tax_id: NEW_TAX_ID,
+          legal_name: "Nueva Empresa SL",
+          taxpayer_domicile: "Calle Nueva 3, 28013 Madrid",
+        },
+      ]);
+      expect(
+        target.store.venue.all(
+          sql`select code from invoice_series where retired_at is null order by code`,
+        ),
+      ).toEqual([{ code: "B" }, { code: "FB" }, { code: "RB" }]);
+      expect(
+        target.store.venue.all(sql`select operation_description, invoice_locales from locations`),
+      ).toEqual([{ operation_description: "Comida para llevar", invoice_locales: '["es-ES"]' }]);
+      const imported = await withTransaction(target.store.venue, (tx) =>
+        readContentLanguages(tx, "es"),
+      );
+      expect(imported).toEqual({ defaultLanguage: "es", languages: ["es", "fr"] });
+    } finally {
+      await source.store.close();
+      await target.store.close();
+      await rm(source.directory, { recursive: true, force: true });
+      await rm(target.directory, { recursive: true, force: true });
+      await rm(sourceStateDir, { recursive: true, force: true });
+    }
+  }, 120_000);
 });
 
 describe("startServer — the append-only watch in trading mode", () => {
@@ -4835,4 +4951,56 @@ describe("startServer — the append-only watch in trading mode", () => {
       }
     });
   }, 60_000);
+});
+
+describe("startServer — the configuration export route in trading mode", () => {
+  it.each([
+    ["prepare", 401],
+    ["live", 401],
+    ["demo", 404],
+    [undefined, 404],
+  ] as const)(
+    "onboarding intent %s answers the export route with %s",
+    async (intent, status) => {
+      const venue = await freshVenue();
+      const stateDir = await mkdtemp(join(tmpdir(), "waitron-boot-export-route-state-"));
+      let server: StartedServer | undefined;
+      try {
+        await seedTradingVenue(venue.store.venue);
+        await venue.store.close();
+        await writeFile(
+          join(stateDir, "modules.json"),
+          JSON.stringify({ modules: { "fiscal-none": false } }),
+        );
+        const port = await freePort();
+        server = await startServer({
+          ...KEY_ENV,
+          WAITRON_STATE_DIR: stateDir,
+          WAITRON_VENUE_DIR: venue.directory,
+          WAITRON_HTTP_PORT: String(port),
+          WAITRON_MIGRATIONS_DIR: migrationsRoot,
+          // A live intent is accepted only on a production or development box (`config.ts`).
+          WAITRON_ENV: intent === "live" ? "dev" : "preproduction",
+          ...(intent === undefined ? {} : { WAITRON_ONBOARDING_INTENT: intent }),
+        });
+        await awaitListening(port);
+        const response = await fetch(
+          `http://127.0.0.1:${port}/management-api/configuration-export`,
+          {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ passphrase: "a long enough export passphrase" }),
+          },
+        );
+        expect(response.status).toBe(status);
+      } finally {
+        // A listener that never bound rejects its close; the original error is the one to report.
+        await server?.close().catch(() => {});
+        await venue.store.close();
+        await rm(venue.directory, { recursive: true, force: true });
+        await rm(stateDir, { recursive: true, force: true });
+      }
+    },
+    60_000,
+  );
 });
