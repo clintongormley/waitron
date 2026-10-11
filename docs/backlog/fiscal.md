@@ -400,8 +400,8 @@ PR [#1309](https://github.com/clintongormley/waitron/pull/1309), awaiting the ow
 approval. Its candidate preserves W41s-3c's reply identity checks and A494's one-taxpayer-name
 batching. The owner approved retaining missing-reply incidents for probes. The resumed tests
 add separate ordinary/probe and probe-only name batches and check that a
-deferred batch does not stamp an unsent probe. Receipt commands and results are retained in
-the lane's `receipts/w41s-3d-resume/` directory.
+deferred batch does not stamp an unsent probe. Run the focused checks with
+`pnpm --filter @waitron/fiscal-verifactu exec vitest run src/drain.probe.test.ts src/drain.probe.names.test.ts src/drain.probe.gate.test.ts src/drain.probe.seat.test.ts`.
 
 **Update, 2026-10-04:** the owner requires prevention before conflict recovery, including an
 old-backup restore on new hardware with no internet. The
@@ -460,9 +460,10 @@ once the refusals immediately before it make a run of three. The ongoing alert
 `fiscal.refusals_repeated` names the code and the length of the run. Nothing releases the hold yet.
 **Update, 2026-10-11 (W41s-3d candidate):** PR
 [#1309](https://github.com/clintongormley/waitron/pull/1309) adds an hourly retry of the first
-eligible brake-held record. An accept or a different-code refusal releases the remaining
+eligible brake-held record. An accept or a different-code refusal can release the remaining
 brake holds; a same-code refusal keeps them held. A record with its own filing case, an earlier
-held record or an unresolved earlier send is not probed. Manual release remains Task 8.
+held record, an unresolved earlier send, a cancellation of a refused original or a different
+environment is not probed. Manual release remains Task 8.
 The statements below about no release or hourly retry describe the landed W41s-3b version.
 
 **Follow-up (W41s Task 8, held-record resolution): release a brake hold (send the held records
