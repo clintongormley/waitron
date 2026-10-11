@@ -1431,7 +1431,8 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   Every zone. Rows with their own routing show with every category above them, even inside a
   closed category, and a search bar finds any category or product. The Stations table's row menu
   moves to its own column on the right; the Settings tab's three timings move into each station's
-  edit dialog and the tab goes; the empty station cards under the grid go. Takes in two older
+  edit dialog and the tab goes; the empty station cards under the grid go; the route-change
+  notice no longer asks for a product's own edit and summarises a category's. Takes in two older
   Prep stations entries. Mockups:
   [docs/backlog/mockups/a507-prep-stations/](backlog/mockups/a507-prep-stations/).
   [Detail](backlog/kitchen.md#a507-prep-stations-made-lighter)

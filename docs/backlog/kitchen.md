@@ -155,7 +155,7 @@ list does not exist.
 
 ## A507. Prep stations made lighter
 
-**A507 (owner, 2026-10-11) — OPEN.** Four changes to the Prep stations page
+**A507 (owner, 2026-10-11) — OPEN.** Five changes to the Prep stations page
 (`packages/venue-service/src/dashboard/prep-stations-screen.ts`), bundled because they share the
 screen. Mockups in [mockups/a507-prep-stations/](mockups/a507-prep-stations/): `0-routes-today.png`
 is the grid before, `1-routes-option-a-chosen.png` the chosen default view, `3-routes-search.png`
@@ -212,6 +212,24 @@ form rules instead.
 below the Routes grid holding only its name. Until A261-4 (#1363) each card also held the station's
 folder claims and a "Claim folder" button; that change moved routing into the grid and left the
 cards empty.
+
+**5. The "Review route change" notice asks less and says less** (`#previewDialog`,
+`#cellSentence` and `#moveName` in `prep-stations-screen.ts`). Today it opens whenever a cell's save
+moves any product, and lists one line per product, zone and period moved; a variant is a line of
+its own under its own name ("DOUBLE during Lunch"), with nothing tying it to its product.
+
+- **A product's own edit never asks** (owner, 2026-10-11): what changes is the product clicked, its
+  own variants and the extras that move with it as their dish, which the person already chose. It
+  saves at once, as a change that moves nothing does today. A category, All categories or
+  "no category" edit still asks when it moves something.
+- **The notice summarises.** Moves are grouped by zone, periods, from and to, each group one
+  sentence with a count of products; a product's variants are counted under it, not listed
+  ("AGAVE, Counter: 14 products move from Kitchen to Bar during Lunch"). The full list stays
+  behind a "Show products" disclosure, closed by default.
+- **Its first sentence is wrong today** and is fixed either way: it compares only the "Any other
+  time" station, so adding a Lunch line to Bar on CLANDESTINA read "this changes Kitchen to
+  Kitchen" (the owner's screenshot). It names what changed, period lines included, and drops the
+  parent path ("Santet Deli Co › AGAVE ›") to match the grid.
 
 **Taken in:** the station table still accepts no printers or screens (left open by A455, #1492) —
 nothing draws it without them now that supervisors are not offered the page, and its accessibility
