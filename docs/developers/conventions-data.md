@@ -1495,6 +1495,15 @@ Slice 5's rebuild uses `0137_floor_retire_drop_table_triggers.sql`,
 with `NOT NULL constraint failed: __new_dining_tables.zone_id`; the same guard then passed with
 that reset declared. In a disposable checkout, replacing the trigger drop with `SELECT 1;`
 made it fail with `error in trigger parties_clear_table_status: no such table: main.dining_tables`.
+The required zone is not the only reset reason. Measured on 2026-10-11 with Node v26.7.0,
+applying core SQL through `0136` with foreign keys on, then applying `0137`–`0139` inside one
+transaction: a zoned table with a `floor_today_tables` row failed with
+`FOREIGN KEY constraint failed`. A zoned table with no child row upgraded; a separate control
+that switched foreign keys off **before** the transaction upgraded and kept its today's row.
+The generated `PRAGMA foreign_keys=OFF` inside the transaction did not let the first case
+upgrade. Those controls establish the retained today's-row refusal; the six-key metadata
+measurement above is separate. Saving master plans does not remove this reset requirement.
+
 The schema guards passed 497 tests; `packages/db/src/schema/dining-tables.test.ts` also checks
 that a zoneless insert is refused and only the eight kept columns exist.
 

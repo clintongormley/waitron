@@ -254,7 +254,7 @@ async function upgradeOneStepAtATime(watch: ReturnType<typeof createStepWatch>) 
  * key naming no step the walk takes, fails the guard.
  */
 const RESETS: Record<string, { refused: readonly string[] } | { lost: readonly string[] }> = {
-  // Rebuilds dining_tables with zone_id required; a carried row's zone is null.
+  // Requires a venue reset: null zones fail the copy; a retained today's row refuses DROP.
   "core/0138_floor_retire_old_table_columns": {
     refused: ["NOT NULL constraint failed: __new_dining_tables.zone_id"],
   },
