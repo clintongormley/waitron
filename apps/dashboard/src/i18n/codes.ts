@@ -252,6 +252,10 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "Your session has expired — please log in again",
     es: "Tu sesión ha caducado. Vuelve a iniciar sesión",
   },
+  "node.reset": {
+    en: "This box was reset.",
+    es: "Este equipo se ha restablecido.",
+  },
   "password.invalid": {
     en: "Incorrect password, try again",
     es: "Contraseña incorrecta, inténtalo de nuevo",

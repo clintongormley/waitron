@@ -62,7 +62,7 @@ interface CompletedLogin {
   rememberedEmail?: string;
 }
 
-/** Notices that report a failure; any other notice, such as a completed reset, stays plain. */
+/** Notices that report a failure; any other notice, such as a completed password reset, stays plain. */
 const FAILURE_NOTICES: ReadonlySet<string> = new Set([
   "management_session.expired",
   "person.suspended",
@@ -253,6 +253,7 @@ export class LoginScreen extends LitElement {
   @property({ attribute: false }) navigate: (url: string) => void = (url) =>
     window.location.assign(url);
   @property({ attribute: false }) noticeCode: string | null = null;
+  @property({ attribute: false }) reload: () => void = () => location.reload();
   private readonly rememberedLogin = new URLSearchParams(window.location.search).has("token")
     ? null
     : readLoginPreference();
@@ -368,6 +369,9 @@ export class LoginScreen extends LitElement {
 
   readonly #onSessionInvalid = (event: Event): void => {
     const code = (event as CustomEvent<{ code?: unknown }>).detail?.code;
+    // Neither `node.reset` nor any refusal while the reset view shows resets the form: that view
+    // offers only Reload, and a form reset would start a passkey autofill behind it.
+    if (this.noticeCode === "node.reset") return;
     if (
       code !== "management_session.expired" &&
       code !== "management_session.required" &&
@@ -392,6 +396,7 @@ export class LoginScreen extends LitElement {
     super.connectedCallback();
     this.#trackForm();
     window.addEventListener("waitron-session-invalid", this.#onSessionInvalid);
+    if (this.noticeCode === "node.reset") return;
     if (this.token !== null && this.actionPurpose !== null) void this.#inspectAccountAction();
     else if (this.rememberedLogin === null) void this.#conditionalPasskeyLogin();
     else if (this.step === "password") this.#focusField("password");
@@ -1285,6 +1290,18 @@ export class LoginScreen extends LitElement {
   override render() {
     const form = this.#formState();
     const fieldError = (name: string) => form.fields[name] ?? "";
+    if (this.noticeCode === "node.reset") {
+      return html`
+        <div class="screen">
+          <p class="notice" role="status">${codeMessage(this.noticeCode)}</p>
+          <wt-form-actions>
+            <wt-button variant="primary" data-test="reload" @click=${() => this.reload()}
+              >${t("login.reload")}</wt-button
+            >
+          </wt-form-actions>
+        </div>
+      `;
+    }
     if (this.token !== null) {
       return html`
         <div class="screen">

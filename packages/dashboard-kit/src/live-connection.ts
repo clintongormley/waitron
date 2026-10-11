@@ -63,6 +63,7 @@ export class LiveConnection {
         this.options.open ?? ((url: string) => new EventSource(url, { withCredentials: true }));
       const stream = open(`/management-api/events?resources=${encodeURIComponent(key)}`);
       this.#stream = stream;
+      let refreshed = false;
       const listen = (name: string, action: (event: Event) => void): void => {
         stream.addEventListener(name, (event) => {
           if (this.#active && this.#stream === stream) action(event);
@@ -70,12 +71,18 @@ export class LiveConnection {
       };
       listen("open", () => {
         this.#retryMs = 1000;
+        refreshed = false;
         this.data.refresh();
       });
       listen("error", () => {
-        this.data.refresh();
         // EventSource retries transport interruptions itself, but HTTP failures can leave it CLOSED.
-        if (stream.readyState !== 2) return;
+        // Chromium fires `error` on every one of its own retries, so only this stream's first error,
+        // or its first since it last opened, re-reads everything.
+        const closed = stream.readyState === 2;
+        if (!closed && refreshed) return;
+        if (!closed) refreshed = true;
+        this.data.refresh();
+        if (!closed) return;
         this.#close();
         this.#retry = setTimeout(() => {
           this.#retry = undefined;

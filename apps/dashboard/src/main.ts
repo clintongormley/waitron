@@ -4,6 +4,7 @@ import { createInstrumentedFetch, installErrorCapture } from "@waitron/diagnosti
 import { createRequest, LiveConnection } from "@waitron/dashboard-kit";
 import { DashboardApi } from "./api/client.js";
 import { diag } from "./diagnostics.js";
+import { createSessionSignals } from "./session-signals.js";
 import { DASHBOARD_ICONS } from "./icons.js";
 import "./dashboard-app.js";
 
@@ -16,28 +17,17 @@ const app = document.querySelector<HTMLElement>("#app")!;
 // One instrumented fetch for both the api and the module-request primitive, so a module screen's
 // round trips land in the same diagnostics trail as the app client's.
 const instrumentedFetch = createInstrumentedFetch(fetch, diag);
-const reportSessionError = (code: string): void => {
-  if (
-    code === "management_session.expired" ||
-    code === "management_session.required" ||
-    code === "person.suspended"
-  ) {
-    window.dispatchEvent(new CustomEvent("waitron-session-invalid", { detail: { code } }));
-  }
-};
-const reportSessionActivity = (): void => {
-  window.dispatchEvent(new Event("waitron-session-active"));
-};
-const api = new DashboardApi("", instrumentedFetch, reportSessionError, reportSessionActivity);
-const liveUpdates = new LiveConnection(api.liveData, { onSessionInvalid: reportSessionError });
+const signals = createSessionSignals({ fetchImpl: instrumentedFetch });
+const api = new DashboardApi("", instrumentedFetch, signals.reportError, signals.reportActivity);
+const liveUpdates = new LiveConnection(api.liveData, { onSessionInvalid: signals.reportError });
 render(
   html`<dashboard-app
     .api=${api}
     .liveUpdates=${liveUpdates}
     .request=${createRequest({
       fetchImpl: instrumentedFetch,
-      onError: reportSessionError,
-      onSuccess: reportSessionActivity,
+      onError: signals.reportError,
+      onSuccess: signals.reportActivity,
     })}
   ></dashboard-app>`,
   app,

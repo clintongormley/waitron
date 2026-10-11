@@ -114,7 +114,7 @@ it("reports a rejected session before rejecting the request", async () => {
     code: "management_session.expired",
     status: 401,
   });
-  expect(onError).toHaveBeenCalledWith("management_session.expired");
+  expect(onError).toHaveBeenCalledWith("management_session.expired", 401);
 });
 
 it("carries the envelope's error params through on the rejection", async () => {
@@ -161,7 +161,33 @@ it("rejects with server.internal (not a parse error) when the error body is not 
   const request = createRequest({ fetchImpl, onError });
 
   await expect(request("/gone", "GET")).rejects.toEqual({ code: "server.internal", status: 404 });
-  expect(onError).toHaveBeenCalledWith("server.internal");
+  expect(onError).toHaveBeenCalledWith("server.internal", 404);
+});
+
+it("reports an answered 404 with an empty body as server.internal with its status", async () => {
+  const onError = vi.fn();
+  const fetchImpl = vi.fn<FetchLike>().mockResolvedValue(new Response(null, { status: 404 }));
+  const request = createRequest({ fetchImpl, onError });
+
+  await expect(request("/management-api/staff", "GET")).rejects.toEqual({
+    code: "server.internal",
+    status: 404,
+  });
+  expect(onError.mock.calls).toEqual([["server.internal", 404]]);
+});
+
+it("reports an answered 404 with an error envelope as its code with its status", async () => {
+  const onError = vi.fn();
+  const fetchImpl = vi
+    .fn<FetchLike>()
+    .mockResolvedValue(jsonResponse({ error: { code: "product.not_found" } }, 404));
+  const request = createRequest({ fetchImpl, onError });
+
+  await expect(request("/management-api/products/p1", "GET")).rejects.toEqual({
+    code: "product.not_found",
+    status: 404,
+  });
+  expect(onError.mock.calls).toEqual([["product.not_found", 404]]);
 });
 
 it("rejects with server.internal when the body is the literal JSON null", async () => {
@@ -237,7 +263,7 @@ it('decodes a refusal the same way with as: "blob"', async () => {
     params: { field: "period" },
     status: 400,
   });
-  expect(onError).toHaveBeenCalledWith("management.request_invalid");
+  expect(onError).toHaveBeenCalledWith("management.request_invalid", 400);
 });
 
 describe("the time limit on a read", () => {

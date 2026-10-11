@@ -802,10 +802,13 @@ export class DashboardApp extends LitElement {
 
   readonly #onSessionInvalid = (event: Event): void => {
     const code = (event as CustomEvent<{ code?: unknown }>).detail?.code;
+    // A refusal still in flight from before the reset must not replace its notice; only a reload does.
+    if (this.sessionNoticeCode === "node.reset") return;
     if (
       code === "management_session.expired" ||
       code === "management_session.required" ||
-      code === "person.suspended"
+      code === "person.suspended" ||
+      code === "node.reset"
     ) {
       this.#returnToLogin(code);
     }

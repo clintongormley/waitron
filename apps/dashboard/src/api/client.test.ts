@@ -188,7 +188,7 @@ describe("DashboardApi", () => {
       code: "management_session.expired",
       status: 401,
     });
-    expect(onError.mock.calls).toEqual([["management_session.expired"]]);
+    expect(onError.mock.calls).toEqual([["management_session.expired", 401]]);
     expect(onSuccess).not.toHaveBeenCalled();
   });
 

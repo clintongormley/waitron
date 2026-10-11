@@ -750,7 +750,7 @@ describe("DashboardApi routes", () => {
       const onError = vi.fn();
       const api = new DashboardApi("", vi.fn().mockResolvedValue(refusal(code, status)), onError);
       await expect(call(api)).rejects.toEqual({ code, status });
-      expect(onError).toHaveBeenCalledWith(code);
+      expect(onError).toHaveBeenCalledWith(code, status);
     },
   );
 
