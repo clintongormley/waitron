@@ -1522,8 +1522,7 @@ other trigger passes it (SQLite drops one silently: [conventions-data.md](conven
 
 `scripts/migration-upgrade.test.ts` times each migration step in five phases — migrate, open,
 change feed, close, rows — through `scripts/step-watch.mjs` (`watch.phase`), and runs the whole walk under
-`reportStallAfter`. At `STALL_DEADLINE_MS` (`TEST_BOUND_MS - 10_000`: 110 seconds, under the test's
-own 120) it fails with the phase still running, the process's active resources
+`reportStallAfter`. At `STALL_DEADLINE_MS` it fails with the phase still running, the process's active resources
 (`process.getActiveResourcesInfo()`) and every finished phase's duration. The deadline does not stop
 the stalled work; it only names it. The active resources are resource TYPES, not a cause, and
 the report's own timer is among them. A walk that finishes past the deadline fails too, with
@@ -1559,7 +1558,8 @@ the same run,
 with `core/0007_node_roles: change feed: 6130 ms` in the list. Whether SQLite's own lock-wait sleep
 holds the thread the same way was not measured.
 
-A healthy run prints the number of timed phases, their summed time and the five slowest. Measured
+A healthy run prints the number of timed phases, their summed time, the five slowest, and the
+step count and deadline. Measured
 2026-09-28 with `CI=true`: `224 phases, 4976 ms in all; the slowest:`, then five lines, the first
 `payments/0001_payment_resolutions: migrate: 84 ms`. The total covers the timed phases only; copying
 the migration folders, rewriting their journals, and the per-source `pragma_table_info` reads and
@@ -1571,6 +1571,46 @@ The worker's report is written to standard error directly and was visible with `
 with `AI_AGENT=1` set. Read from the installed Vitest 4.1.11 source, not run: Vitest 4 starts the
 root project's test process with `stdio: "pipe"` and passes its standard error through past the
 reporter.
+
+### The upgrade deadline grows with the walk
+
+The fixed 110-second deadline failed near the end of a growing walk. On 2026-10-11, main run
+38137016367 (`e5447f902`, Node v26.7.0, Vitest 4.1.11, root coverage) printed
+`Still running after 110242 ms, past the 110000 ms deadline`, entering
+`core/0139_floor_retire_recreate_table_triggers: migrate after 0 ms`. The 1,291 finished phases
+summed to 107,403 ms: migrate 50,245; rows 29,266; change feed 22,349; close 2,873; open 2,670.
+No finished phase exceeded 1,372 ms. This report places the deadline at the final step; it does
+not establish a stall inside that step.
+
+Read back with `gh run view <run> --job <root-guards-job> --log`:
+
+| Passing main run | Test duration | Timed phases | Room under the old deadline |
+| --- | ---: | ---: | ---: |
+| 38134978065 | 79,738 ms | 77,681 ms | 30,262 ms |
+| 38134868867 | 91,492 ms | 89,200 ms | 18,508 ms |
+| 38135363758 | 102,551 ms | 100,067 ms | 7,449 ms |
+| 38130831236 (first with core 0137–0139) | 105,339 ms | 102,702 ms | 4,661 ms |
+
+Those passing logs retain only the five slowest phases, so they cannot supply a complete
+per-step comparison. Core 0138's successful migrate phase took 950, 966 and 988 ms in the latter
+three logs. In the failure, core 0137's five phases totalled 265 ms; core 0138's refused attempt
+and successful retry totalled 1,540 ms. The three added cuts and reset added 16 reported phases
+(1,280 before #1528, 1,296 after). The earlier main run 38127537621 took 76,189 ms; these runs
+were on different runners, so their total difference does not measure the migration's cost.
+
+The deadline now allows 30 seconds plus 500 ms per distinct post-floor migration date, with one
+more step for the baseline. The test timeout leaves another ten seconds for the report. For
+249 steps that is a 154,500 ms deadline, 44,258 ms beyond the captured failing workload and
+49,161 ms beyond the slowest passing run above. The fixed allowance covers setup and resets;
+the per-step allowance is slightly above the failed walk's average of about 443 ms per step.
+This is a workload budget, not a claim that every individual phase fits 500 ms. Two additional
+dates, such as the in-flight core 0140 and venue-service 0049, add 1,000 ms; their runtime has
+not been measured here. A new reset may require measuring this allowance again.
+
+`scripts/migration-upgrade-budget.test.mjs` sends the captured elapsed time through the real
+`reportStallAfter` with an injected clock: the old budget rejects it, the new budget accepts it,
+and a walk at its new deadline still fails. It also checks a doubled walk. All migration,
+row-preservation, reset and trigger assertions in the upgrade test stay in force.
 
 ### The upgrade test keeps its database in memory on Linux
 
