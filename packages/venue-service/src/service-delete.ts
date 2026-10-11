@@ -217,6 +217,7 @@ async function selection(
       formFactor: deviceProfiles.formFactor,
       departmentId: deviceProfileServiceAccess.departmentId,
       everyZone: deviceProfileServiceAccess.everyZone,
+      startingZoneId: deviceProfileServiceAccess.startingZoneId,
     })
     .from(deviceProfileServiceAccess)
     .innerJoin(deviceProfiles, eq(deviceProfiles.id, deviceProfileServiceAccess.deviceProfileId))
@@ -237,6 +238,19 @@ async function selection(
     );
   for (const profile of ordered(scopes)) {
     if (profile.retiredAt !== null || profile.formFactor === "kds") continue;
+    if (departmentId !== null) {
+      if (profile.departmentId === departmentId)
+        refusals.push({
+          code: "department.profile_in_use",
+          params: { departmentId, profileId: profile.id },
+          targets: [{ id: profile.id, name: profile.name }],
+        });
+      continue;
+    }
+    const affected =
+      zoneIds.includes(profile.startingZoneId) ||
+      memberships.some((row) => row.deviceProfileId === profile.id && zoneIds.includes(row.zoneId));
+    if (!affected) continue;
     const allowed = candidates.filter(
       (candidate) =>
         candidate.departmentId === profile.departmentId &&
@@ -245,21 +259,12 @@ async function selection(
             (row) => row.deviceProfileId === profile.id && row.zoneId === candidate.id,
           )),
     );
-    const affected = allowed.filter((candidate) => zoneIds.includes(candidate.id));
-    if (affected.length === 0) continue;
     if (allowed.some((candidate) => !zoneIds.includes(candidate.id))) continue;
-    if (departmentId !== null)
-      refusals.push({
-        code: "department.profile_in_use",
-        params: { departmentId, profileId: profile.id },
-        targets: [{ id: profile.id, name: profile.name }],
-      });
-    else
-      refusals.push({
-        code: "zone.profile_in_use",
-        params: { zoneId: id, profileId: profile.id },
-        targets: [{ id: profile.id, name: profile.name }],
-      });
+    refusals.push({
+      code: "zone.profile_in_use",
+      params: { zoneId: id, profileId: profile.id },
+      targets: [{ id: profile.id, name: profile.name }],
+    });
   }
 
   const removes = [...floorImpact.removes, ...settings];
