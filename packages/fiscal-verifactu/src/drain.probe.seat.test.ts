@@ -187,7 +187,7 @@ describe("drain — the hourly probe's answers from a hand-built client seat (no
     expect(await refusalAlerts(PROBE_AT)).toEqual([{ codigo: String(RUN_CODE), count: 3 }]);
   });
 
-  it("a reply with no line for the probe keeps it held, records no incident, and probes again an hour later", async () => {
+  it("a reply with no line for the probe keeps it held, records missing-reply incidents, and probes again an hour later", async () => {
     const { first, second } = await brakeHold();
     const lineless = seat({ EstadoRegistro: "Correcto" });
     const client: VerifactuClient = {
@@ -203,7 +203,11 @@ describe("drain — the hourly probe's answers from a hand-built client seat (no
     expect(lineless.sent).toEqual([[first]]);
     expect(await estadoOf(first)).toEqual({ estado: "detenido", csv: null });
     expect((await estadoOf(second)).estado).toBe("detenido");
-    expect(await incidentCodes()).toEqual(RUN_REFUSALS);
+    expect(await incidentCodes()).toEqual([
+      ...RUN_REFUSALS,
+      "fiscal.estado_desconocido",
+      "fiscal.respuesta_descuadrada",
+    ]);
 
     const later = seat({ EstadoRegistro: "Correcto" });
     await drain(deps(later.client), new Date(PROBE_AT.getTime() + 59 * 60_000));
