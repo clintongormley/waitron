@@ -11,8 +11,6 @@ export type MenuUse =
 declare module "@waitron/shared" {
   interface ErrorParams {
     "department.name_taken": { name: string };
-    "department.name_disabled": { name: string; departmentId: string };
-    "zone.name_disabled": { name: string; zoneId: string };
     "department_transfer.settings_invalid": {
       field: "receivingProfileId" | "destinationDepartmentIds";
     };
@@ -30,6 +28,12 @@ declare module "@waitron/shared" {
     "bill.refund_in_progress": { workingOrderId: string };
     "department.not_found": { departmentId: string };
     "department.last_active": { departmentId: string };
+    "zone.order_in_progress": { zoneId: string; workingOrderId: string };
+    "zone.transfer_pending": { zoneId: string; requestId: string };
+    "zone.profile_in_use": { zoneId: string; profileId: string };
+    "department.order_in_progress": { departmentId: string; workingOrderId: string };
+    "department.transfer_pending": { departmentId: string; requestId: string };
+    "department.profile_in_use": { departmentId: string; profileId: string };
     "zone.table_in_use": { zoneId: string; tableId: string; tableName: string };
     /**
      * An import's refusal adds the zone's switched-off department, the routing row it refused, and
@@ -73,13 +77,6 @@ declare module "@waitron/shared" {
       reason?: "overlap" | "clock_skips" | "empty" | "order" | "step" | "end_offset";
     };
     "zone.name_taken": { name: string };
-    /** An import's refusal adds the department and each name the export holds. */
-    "zone.department_inactive": {
-      zoneId: string;
-      zoneName?: string;
-      departmentId?: string;
-      departmentName?: string;
-    };
     "service_zone.default_missing": Record<string, never>;
     "service_zone.offer_not_allowed": { zoneId: string; menuItemId: string };
     "service_zone.mode_incompatible": {

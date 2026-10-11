@@ -1,3 +1,6 @@
+import { closePartyTables } from "./parties.js";
+import { deleteZone } from "@waitron/venue-service";
+import { floorDeletionFor } from "./floor-delete.js";
 import { createTable } from "./testing/live-table.js";
 import { createZone } from "./testing/service-zone.js";
 import { randomUUID } from "node:crypto";
@@ -8,10 +11,10 @@ import {
   DEFAULT_TIME_ZONE,
   diningTables,
   floorZones,
-  kitchenTimingDefaults,
-  locations,
   parties,
   partyTables,
+  kitchenTimingDefaults,
+  locations,
   nowIso,
   ticketItems,
   withTransaction,
@@ -35,7 +38,7 @@ import {
   jobOrigin,
 } from "@waitron/shared";
 import type { OriginConfig } from "./till-config.js";
-import { deactivateZone, listTables, listZones, updateZone } from "./tables.js";
+import { listTables, listZones, updateZone } from "./tables.js";
 import { advanceTicketItem, fireLines, listTablesWithState } from "./working-order.js";
 import { openPartyTab, serveLine } from "./testing/serve-line.js";
 import "./errors.js";
@@ -133,7 +136,9 @@ describe("zone CRUD", () => {
       "Terraza",
       "Salón",
     ]);
-    await asApp(cfg, (tx) => deactivateZone(tx, cfg, id));
+    await asApp(cfg, async (tx) =>
+      tx.execute(sql`update floor_zones set active = false where id = ${id}`),
+    );
     // Inactive hidden.
     expect((await asApp(cfg, (tx) => listZones(tx, cfg))).map((z) => z.name)).toEqual(["Terraza"]);
   });
@@ -147,14 +152,17 @@ describe("zone CRUD", () => {
     expect(z).toEqual({ id, name: "Comedor", displayOrder: 3, active: true });
   });
 
-  it("can include inactive zones for management without changing the active-only list", async () => {
+  it("hides deleted zones even when management requests inactive entries", async () => {
     const cfg = await setupVenue();
     const { id } = await asApp(cfg, (tx) => createZone(tx, cfg, { name: "Closed room" }));
-    await asApp(cfg, (tx) => deactivateZone(tx, cfg, id));
+    await asApp(cfg, async (tx) =>
+      tx.execute(sql`update floor_zones set active = false where id = ${id}`),
+    );
     expect(await asApp(cfg, (tx) => listZones(tx, cfg))).toEqual([]);
-    expect(await asApp(cfg, (tx) => listZones(tx, cfg, { includeInactive: true }))).toEqual([
-      { id, name: "Closed room", displayOrder: 0, active: false },
-    ]);
+    expect(await asApp(cfg, (tx) => listZones(tx, cfg, { includeInactive: true }))).toEqual([]);
+    expect(await db.select().from(floorZones).where(eq(floorZones.id, id))).toContainEqual(
+      expect.objectContaining({ id, name: "Closed room", displayOrder: 0, active: false }),
+    );
   });
 
   it("createZone defaults displayOrder to 0 when omitted", async () => {
@@ -255,26 +263,25 @@ describe("zone CRUD", () => {
     });
   });
 
-  it("updateZone reactivates and reorders (the active + displayOrder patch branches)", async () => {
+  it("updateZone refuses to restore or reorder a deleted zone", async () => {
     const cfg = await setupVenue();
     const { id } = await asApp(cfg, (tx) =>
       createZone(tx, cfg, { name: "Patio", displayOrder: 5 }),
     );
-    await asApp(cfg, (tx) => deactivateZone(tx, cfg, id));
+    await asApp(cfg, async (tx) =>
+      tx.execute(sql`update floor_zones set active = false where id = ${id}`),
+    );
     expect(await asApp(cfg, (tx) => listZones(tx, cfg))).toEqual([]);
-    await asApp(cfg, (tx) => updateZone(tx, cfg, id, { active: true, displayOrder: 9 }));
-    expect(await asApp(cfg, (tx) => listZones(tx, cfg))).toEqual([
-      { id, name: "Patio", displayOrder: 9, active: true },
-    ]);
-  });
-
-  it("deactivateZone throws zone.not_found for an unknown id", async () => {
-    const cfg = await setupVenue();
-    const missing = randomUUID();
-    await expect(asApp(cfg, (tx) => deactivateZone(tx, cfg, missing))).rejects.toMatchObject({
-      code: "zone.not_found",
-      params: { zoneId: missing },
-    });
+    const before = await db.select().from(floorZones).where(eq(floorZones.id, id));
+    await expect(
+      asApp(cfg, (tx) =>
+        updateZone(tx, cfg, id, { active: true, displayOrder: 9 } as unknown as Parameters<
+          typeof updateZone
+        >[3]),
+      ),
+    ).rejects.toMatchObject({ code: "zone.not_found" });
+    expect(await db.select().from(floorZones).where(eq(floorZones.id, id))).toEqual(before);
+    expect(await asApp(cfg, (tx) => listZones(tx, cfg))).toEqual([]);
   });
 
   it("deactivating a zone takes its tables out of service", async () => {
@@ -282,7 +289,9 @@ describe("zone CRUD", () => {
     const { id: zoneId } = await asApp(cfg, (tx) => createZone(tx, cfg, { name: "Terrace" }));
     const { id: tableId } = await asApp(cfg, (tx) => createTable(tx, cfg, { label: "T8", zoneId }));
 
-    await asApp(cfg, (tx) => deactivateZone(tx, cfg, zoneId));
+    await asApp(cfg, async (tx) =>
+      tx.execute(sql`update floor_zones set active = false where id = ${zoneId}`),
+    );
 
     expect(
       (
@@ -300,89 +309,6 @@ describe("zone CRUD", () => {
           .where(eq(diningTables.id, tableId))
       )[0],
     ).toEqual({ inService: false });
-  });
-
-  it("refuses zone removal while an open party occupies a table there", async () => {
-    const cfg = await setupVenue();
-    const { id: zoneId } = await asApp(cfg, (tx) => createZone(tx, cfg, { name: "Terrace" }));
-    const { id: tableId } = await asApp(cfg, (tx) => createTable(tx, cfg, { label: "T9", zoneId }));
-    await asApp(cfg, async (tx) => {
-      const [party] = await tx
-        .insert(parties)
-        .values({ openedBy: randomUUID() })
-        .returning({ id: parties.id });
-      await tx.insert(partyTables).values({ partyId: party!.id, tableId });
-    });
-
-    await expect(asApp(cfg, (tx) => deactivateZone(tx, cfg, zoneId))).rejects.toMatchObject({
-      code: "zone.table_in_use",
-      params: { zoneId, tableId, tableName: "T9" },
-    });
-    await expect(
-      asApp(cfg, (tx) => updateZone(tx, cfg, zoneId, { active: false })),
-    ).rejects.toMatchObject({
-      code: "zone.table_in_use",
-      params: { zoneId, tableId, tableName: "T9" },
-    });
-    expect(
-      (
-        await db
-          .select({ active: floorZones.active })
-          .from(floorZones)
-          .where(eq(floorZones.id, zoneId))
-      )[0],
-    ).toEqual({ active: true });
-  });
-
-  it("allows removing a zone with a closed party while another zone has an open party", async () => {
-    const cfg = await setupVenue();
-    const { id: removedZone } = await asApp(cfg, (tx) => createZone(tx, cfg, { name: "Dining" }));
-    const { id: otherZone } = await asApp(cfg, (tx) => createZone(tx, cfg, { name: "Bar" }));
-    const { id: removedTable } = await asApp(cfg, (tx) =>
-      createTable(tx, cfg, { label: "D1", zoneId: removedZone }),
-    );
-    const { id: otherTable } = await asApp(cfg, (tx) =>
-      createTable(tx, cfg, { label: "B1", zoneId: otherZone }),
-    );
-    await asApp(cfg, async (tx) => {
-      const [closed] = await tx
-        .insert(parties)
-        .values({
-          openedBy: randomUUID(),
-          state: "closed",
-          closedAt: new Date().toISOString(),
-        })
-        .returning({ id: parties.id });
-      const [open] = await tx
-        .insert(parties)
-        .values({ openedBy: randomUUID() })
-        .returning({ id: parties.id });
-      await tx.insert(partyTables).values([
-        { partyId: closed!.id, tableId: removedTable },
-        { partyId: open!.id, tableId: otherTable },
-      ]);
-    });
-
-    await expect(asApp(cfg, (tx) => deactivateZone(tx, cfg, removedZone))).resolves.toBeUndefined();
-    expect(
-      (
-        await db
-          .select({ active: floorZones.active })
-          .from(floorZones)
-          .where(eq(floorZones.id, otherZone))
-      )[0],
-    ).toEqual({ active: true });
-    expect(
-      (
-        await db
-          .select({
-            id: diningTables.id,
-            inService: tableInService(diningTables.id).mapWith(Boolean),
-          })
-          .from(diningTables)
-          .where(eq(diningTables.id, otherTable))
-      )[0],
-    ).toEqual({ id: otherTable, inService: true });
   });
 
   it("service zone creation rethrows a non-unique insert refusal raw", async () => {
@@ -692,22 +618,108 @@ describe("listTablesWithState — timingBand (KDS order-timing alerts)", () => {
   });
 });
 
-it("identifies the disabled zone that keeps a renamed zone's name", async () => {
+it("renames a zone onto a deleted name while retaining the deleted row", async () => {
   const cfg = await setupVenue();
   const target = await asApp(cfg, (tx) => createZone(tx, cfg, { name: "Terrace" }));
   const source = await asApp(cfg, (tx) => createZone(tx, cfg, { name: "Dining" }));
-  await asApp(cfg, (tx) => deactivateZone(tx, cfg, target.id));
-  await expect(
-    asApp(cfg, (tx) => updateZone(tx, cfg, source.id, { name: "Terrace" })),
-  ).rejects.toMatchObject({
-    code: "zone.name_disabled",
-    params: { name: "Terrace", zoneId: target.id },
-  });
+  await asApp(cfg, async (tx) =>
+    tx.execute(sql`update floor_zones set active = false where id = ${target.id}`),
+  );
+  await asApp(cfg, (tx) => updateZone(tx, cfg, source.id, { name: "Terrace" }));
+  expect(source.id).not.toBe(target.id);
+  expect(await db.select().from(floorZones).where(eq(floorZones.id, target.id))).toContainEqual(
+    expect.objectContaining({ id: target.id, name: "Terrace", active: false }),
+  );
   expect(await asApp(cfg, (tx) => listZones(tx, cfg, { includeInactive: true }))).toEqual(
     expect.arrayContaining([
-      expect.objectContaining({ id: source.id, name: "Dining", active: true }),
-      expect.objectContaining({ id: target.id, name: "Terrace", active: false }),
+      expect.objectContaining({ id: source.id, name: "Terrace", active: true }),
     ]),
   );
   await asApp(cfg, (tx) => updateZone(tx, cfg, source.id, { name: "Dining" }));
+});
+
+it("refuses zone removal while an open party occupies a table there", async () => {
+  const cfg = await setupVenue();
+  const { id: zoneId } = await asApp(cfg, (tx) => createZone(tx, cfg, { name: "Terrace" }));
+  const { id: tableId } = await asApp(cfg, (tx) => createTable(tx, cfg, { label: "T9", zoneId }));
+  await asApp(cfg, async (tx) => {
+    const [party] = await tx
+      .insert(parties)
+      .values({ openedBy: randomUUID() })
+      .returning({ id: parties.id });
+    await tx.insert(partyTables).values({ partyId: party!.id, tableId });
+  });
+
+  await expect(
+    asApp(cfg, (tx) =>
+      deleteZone(tx, cfg, floorDeletionFor(cfg, []), zoneId, new Date("2026-10-11T12:00:00Z")),
+    ),
+  ).rejects.toMatchObject({
+    code: "zone.table_in_use",
+    params: { zoneId, tableId, tableName: "T9" },
+  });
+  expect(
+    (
+      await db
+        .select({ active: floorZones.active })
+        .from(floorZones)
+        .where(eq(floorZones.id, zoneId))
+    )[0],
+  ).toEqual({ active: true });
+});
+
+it("allows removing a zone with a closed party while another zone has an open party", async () => {
+  const cfg = await setupVenue();
+  const { id: removedZone } = await asApp(cfg, (tx) => createZone(tx, cfg, { name: "Dining" }));
+  const { id: otherZone } = await asApp(cfg, (tx) => createZone(tx, cfg, { name: "Bar" }));
+  const { id: removedTable } = await asApp(cfg, (tx) =>
+    createTable(tx, cfg, { label: "D1", zoneId: removedZone }),
+  );
+  const { id: otherTable } = await asApp(cfg, (tx) =>
+    createTable(tx, cfg, { label: "B1", zoneId: otherZone }),
+  );
+  await asApp(cfg, async (tx) => {
+    const [closed] = await tx
+      .insert(parties)
+      .values({
+        openedBy: randomUUID(),
+        state: "closed",
+        closedAt: new Date().toISOString(),
+      })
+      .returning({ id: parties.id });
+    const [open] = await tx
+      .insert(parties)
+      .values({ openedBy: randomUUID() })
+      .returning({ id: parties.id });
+    await tx.insert(partyTables).values([
+      { partyId: closed!.id, tableId: removedTable },
+      { partyId: open!.id, tableId: otherTable },
+    ]);
+    await closePartyTables(tx, closed!.id);
+  });
+
+  await expect(
+    asApp(cfg, (tx) =>
+      deleteZone(tx, cfg, floorDeletionFor(cfg, []), removedZone, new Date("2026-10-11T12:00:00Z")),
+    ),
+  ).resolves.toMatchObject({ target: { id: removedZone, name: "Dining" }, refusals: [], ends: [] });
+  expect(
+    (
+      await db
+        .select({ active: floorZones.active })
+        .from(floorZones)
+        .where(eq(floorZones.id, otherZone))
+    )[0],
+  ).toEqual({ active: true });
+  expect(
+    (
+      await db
+        .select({
+          id: diningTables.id,
+          inService: tableInService(diningTables.id).mapWith(Boolean),
+        })
+        .from(diningTables)
+        .where(eq(diningTables.id, otherTable))
+    )[0],
+  ).toEqual({ id: otherTable, inService: true });
 });

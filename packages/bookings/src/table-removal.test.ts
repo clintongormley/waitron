@@ -49,7 +49,7 @@ async function makeTable(v: Venue, label: string): Promise<string> {
 
 async function insertBooking(
   v: Venue,
-  fields: { tableId: string; date: string; time?: string; status?: string },
+  fields: { tableId: string; date: string; time?: string; status?: string; contact?: string },
 ): Promise<string> {
   const id = newId();
   await db.execute(sql`
@@ -58,7 +58,7 @@ async function insertBooking(
        contact_name, created_by, status)
     values
       (${id}, ${nowIso()}, ${v.locationId}, ${fields.tableId}, ${fields.date}, ${fields.time ?? "20:00:00"},
-       2, 'Ana', ${randomUUID()}, ${fields.status ?? "booked"})`);
+       2, ${fields.contact ?? "Ana"}, ${randomUUID()}, ${fields.status ?? "booked"})`);
   return id;
 }
 
@@ -190,5 +190,61 @@ describe("BOOKINGS_TABLE_REMOVAL.release", () => {
 
     const released = await inTx((tx) => getBooking(tx, elsewhere, stray));
     expect(released).toMatchObject({ tableId: null, tableLabel: "Terrace 6" });
+  });
+});
+
+describe("BOOKINGS_TABLE_REMOVAL.deleteRefusals", () => {
+  it("names every booked and seated booking, including past dates, in date/time/id order", async () => {
+    const v = await setupVenue();
+    const t = await makeTable(v, "Hierarchy");
+    const other = await makeTable(v, "Elsewhere");
+    const later = await insertBooking(v, {
+      tableId: t,
+      date: "2026-09-20",
+      time: "09:00:00",
+      contact: "Luis",
+    });
+    const evening = await insertBooking(v, {
+      tableId: t,
+      date: "2026-09-10",
+      time: "21:00:00",
+      contact: "Eva",
+    });
+    const past = await insertBooking(v, { tableId: t, date: "2026-09-01", status: "seated" });
+    const tiedA = await insertBooking(v, { tableId: t, date: "2026-09-10" });
+    const tiedB = await insertBooking(v, { tableId: t, date: "2026-09-10" });
+    for (const status of ["cancelled", "no_show", "completed"]) {
+      await insertBooking(v, { tableId: t, date: "2026-09-01", status });
+    }
+    await insertBooking(v, { tableId: other, date: "2026-09-01" });
+    const elsewhere = await setupVenue();
+    await insertBooking(elsewhere, { tableId: t, date: "2026-09-01" });
+
+    const result = await inTx((tx) =>
+      BOOKINGS_TABLE_REMOVAL.deleteRefusals!(tx, v, [t], AFTER_MADRID_MIDNIGHT),
+    );
+
+    const expected = [
+      { id: past, date: "2026-09-01", time: "20:00", contact: "Ana" },
+      ...[tiedA, tiedB]
+        .sort()
+        .map((id) => ({ id, date: "2026-09-10", time: "20:00", contact: "Ana" })),
+      { id: evening, date: "2026-09-10", time: "21:00", contact: "Eva" },
+      { id: later, date: "2026-09-20", time: "09:00", contact: "Luis" },
+    ];
+    expect(result).toEqual(
+      expected.map(({ id, date, time, contact }) => ({
+        code: "table.booked",
+        params: { tableId: t, date, time },
+        targets: [{ id, name: `${contact} · ${date} ${time}` }],
+      })),
+    );
+    expect(
+      await inTx((tx) => BOOKINGS_TABLE_REMOVAL.deleteRefusals!(tx, v, [], AFTER_MADRID_MIDNIGHT)),
+    ).toEqual([]);
+    expect(await inTx((tx) => getBooking(tx, v, past))).toMatchObject({
+      tableId: t,
+      tableLabel: null,
+    });
   });
 });

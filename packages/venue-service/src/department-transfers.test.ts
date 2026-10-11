@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   CATALOGUE_MIGRATIONS,
@@ -22,6 +22,7 @@ import {
   locations,
   withTransaction,
   workingOrders,
+  type Transaction,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { locationId } from "@waitron/shared";
@@ -580,6 +581,143 @@ describe("departmental tab transfers", () => {
     );
     expect(history).toHaveLength(106);
     expect(history.some((row) => row.id === ids[0])).toBe(true);
+  });
+
+  it.each(["request", "tab", "department"] as const)(
+    "reads resolved %s transfer history after deleting the source department",
+    async (reader) => {
+      const v = await pending();
+      const accepted = await accept(v);
+      const sender = { departmentId: v.a, personId: "sender" };
+      await withTransaction(suite.db, (tx) =>
+        service.deleteDepartment(
+          tx,
+          v.cfg,
+          { readImpact: async () => ({ refusals: [], removes: [] }), clear: async () => {} },
+          v.a,
+          new Date("2026-10-11T12:00:00Z"),
+        ),
+      );
+      const before = await withTransaction(suite.db, async (tx) => ({
+        request: await tx
+          .select()
+          .from(departmentTransferRequests)
+          .where(eq(departmentTransferRequests.id, v.request.id)),
+        context: await tx
+          .select()
+          .from(orderServiceContexts)
+          .where(eq(orderServiceContexts.workingOrderId, v.tab)),
+        department: await tx.select().from(departments).where(eq(departments.id, v.a)),
+      }));
+      expect(before.department).toContainEqual(
+        expect.objectContaining({ id: v.a, active: false, name: "Deli" }),
+      );
+      if (reader === "request") {
+        expect(
+          await withTransaction(suite.db, (tx) =>
+            service.readDepartmentTransfer(tx, v.cfg, v.request.id, sender),
+          ),
+        ).toEqual(accepted);
+      } else {
+        const history = await withTransaction(suite.db, (tx) =>
+          reader === "tab"
+            ? service.listSentDepartmentTransfers(tx, v.cfg, v.tab, sender)
+            : service.listDepartmentSentTransfers(tx, v.cfg, sender),
+        );
+        expect(history).toHaveLength(1);
+        expect(history[0]).toMatchObject({
+          ...accepted,
+          currentDepartmentId: v.b,
+          summary: {
+            orderNumber: 1,
+            tabLabel: null,
+            sourceDepartmentName: "Deli",
+            destinationDepartmentName: "Restaurant",
+          },
+        });
+      }
+      const foreign = await venue();
+      await expect(
+        withTransaction(suite.db, (tx) =>
+          service.readDepartmentTransfer(tx, foreign.cfg, v.request.id, sender),
+        ),
+      ).rejects.toMatchObject({ code: "department.not_found" });
+      await expect(
+        withTransaction(suite.db, (tx) =>
+          service.listSentDepartmentTransfers(tx, foreign.cfg, v.tab, sender),
+        ),
+      ).rejects.toMatchObject({ code: "department.not_found" });
+      await expect(
+        withTransaction(suite.db, (tx) =>
+          service.listDepartmentSentTransfers(tx, foreign.cfg, sender),
+        ),
+      ).rejects.toMatchObject({ code: "department.not_found" });
+      await expect(
+        withTransaction(suite.db, (tx) =>
+          service.readDepartmentTransfer(tx, v.cfg, v.request.id, { ...sender, departmentId: v.b }),
+        ),
+      ).rejects.toMatchObject({ code: "department_transfer.not_allowed" });
+      await expect(
+        withTransaction(suite.db, (tx) =>
+          service.withdrawDepartmentTransfer(tx, v.cfg, v.request.id, sender),
+        ),
+      ).rejects.toMatchObject({ code: "department.not_found" });
+      expect(
+        await withTransaction(suite.db, (tx) =>
+          service.listSentDepartmentTransfers(tx, v.cfg, v.tab, { ...sender, departmentId: v.b }),
+        ),
+      ).toEqual([]);
+      expect(
+        await withTransaction(suite.db, (tx) =>
+          service.listDepartmentSentTransfers(tx, v.cfg, { ...sender, departmentId: v.b }),
+        ),
+      ).toEqual([]);
+      expect(
+        await withTransaction(suite.db, async (tx) => ({
+          request: await tx
+            .select()
+            .from(departmentTransferRequests)
+            .where(eq(departmentTransferRequests.id, v.request.id)),
+          context: await tx
+            .select()
+            .from(orderServiceContexts)
+            .where(eq(orderServiceContexts.workingOrderId, v.tab)),
+          department: await tx.select().from(departments).where(eq(departments.id, v.a)),
+        })),
+      ).toEqual(before);
+    },
+  );
+  it("still refuses pending reads and actions against a deleted source without writes", async () => {
+    const v = await pending();
+    await withTransaction(suite.db, (tx) =>
+      tx.update(departments).set({ active: false }).where(eq(departments.id, v.a)),
+    );
+    const sender = { departmentId: v.a, personId: "sender" };
+    const snapshot = () =>
+      withTransaction(suite.db, async (tx) => {
+        const tables = await tx.execute<{ name: string }>(
+          sql`select name from sqlite_master where type = 'table' and name not like 'sqlite_%' order by name`,
+        );
+        const rows: Record<string, unknown[]> = {};
+        for (const { name } of tables.rows)
+          rows[name] = (
+            await tx.execute(sql`select * from ${sql.identifier(name)} order by rowid`)
+          ).rows;
+        return rows;
+      });
+    const before = await snapshot();
+    for (const action of [
+      (tx: Transaction) => service.readDepartmentTransfer(tx, v.cfg, v.request.id, sender),
+      (tx: Transaction) => service.listSentDepartmentTransfers(tx, v.cfg, v.tab, sender),
+      (tx: Transaction) => service.listDepartmentSentTransfers(tx, v.cfg, sender),
+      (tx: Transaction) => service.withdrawDepartmentTransfer(tx, v.cfg, v.request.id, sender),
+      (tx: Transaction) => service.requestDepartmentTransfer(tx, v.cfg, v.tab, v.b, sender),
+    ]) {
+      await expect(withTransaction<unknown>(suite.db, action)).rejects.toMatchObject({
+        code: "department.not_found",
+      });
+      expect(await snapshot()).toEqual(before);
+    }
   });
 
   it("reports current responsibility separately from an old accepted transfer", async () => {

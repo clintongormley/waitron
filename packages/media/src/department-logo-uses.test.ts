@@ -1,10 +1,17 @@
+import { locationId } from "@waitron/shared";
 import { expect, it } from "vitest";
 import { eq, sql } from "drizzle-orm";
 import { CATALOGUE_MIGRATIONS } from "@waitron/catalogue";
 import { CORE_MIGRATIONS, locations, tenantReceipts, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
-import { departmentReceipts, departments, VENUE_SERVICE_MIGRATIONS } from "@waitron/venue-service";
+import {
+  createDepartment,
+  deleteDepartment,
+  departmentReceipts,
+  departments,
+  VENUE_SERVICE_MIGRATIONS,
+} from "@waitron/venue-service";
 import { deleteImage, listImages, listImageUsages, readImage, uploadImage } from "./images.js";
 import { MEDIA_MIGRATIONS } from "./migrations.js";
 import { samplePreparedImage } from "./testing/sample-image.js";
@@ -118,3 +125,45 @@ it.each(["{", "null", "[]", "123", '{"logo":null}', '{"logo":[]}', '{"logo":{}}'
     });
   },
 );
+
+it("protects a deleted department's retained receipt logo after its name is reused", async () => {
+  await seedTenant(suite.db);
+  await withTransaction(suite.db, async (tx) => {
+    const [place] = await tx
+      .insert(locations)
+      .values({
+        name: "Restaurant",
+        invoiceLocales: ["es-ES"],
+        operationDescription: "Hospitality",
+      })
+      .returning();
+    const cfg = { locationId: locationId(place!.id) };
+    await createDepartment(tx, cfg, { name: "Survivor" });
+    const old = await createDepartment(tx, cfg, { name: "Dining" });
+    const { image } = await uploadImage(
+      tx,
+      { image: photo, names: { en: "Retained logo" } },
+      { fallbackLanguage: "en" },
+    );
+    await tx
+      .insert(departmentReceipts)
+      .values({ departmentId: old.id, receipt: { logo: image.filename } });
+    await deleteDepartment(
+      tx,
+      cfg,
+      { readImpact: async () => ({ refusals: [], removes: [] }), clear: async () => {} },
+      old.id,
+      new Date("2026-10-11T12:00:00Z"),
+    );
+    await createDepartment(tx, cfg, { name: "Dining" });
+    const uses = [{ kind: "department_receipt", id: old.id, name: "Dining", active: false }];
+    expect(await listImageUsages(tx, image.id)).toEqual(uses);
+    expect((await readImage(tx, image.id)).usageCount).toBe(1);
+    for (const sort of ["date", "name"] as const)
+      expect((await listImages(tx, { sort })).images[0]!.usageCount).toBe(1);
+    expect(await deleteImage(tx, image.id)).toEqual({ deleted: false, uses });
+    expect(await tx.select().from(departmentReceipts)).toEqual([
+      expect.objectContaining({ departmentId: old.id, receipt: { logo: image.filename } }),
+    ]);
+  });
+});

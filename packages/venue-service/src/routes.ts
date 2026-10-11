@@ -1,6 +1,9 @@
+import { and, eq } from "drizzle-orm";
+import { departments } from "./schema/service.js";
+import { readDepartmentDeleteImpact, deleteDepartment } from "./service-delete.js";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
 import { AppError } from "@waitron/shared";
-import { withTransaction, type Transaction } from "@waitron/db";
+import { floorZones, withTransaction, type Transaction } from "@waitron/db";
 import { authorizeManager, roleHasPermission, type PersonRoleValue } from "@waitron/identity";
 import type { ModuleRouteContext, ModuleRoutes } from "@waitron/module";
 import {
@@ -20,11 +23,7 @@ import {
   type ZoneServiceSettingsInput,
   configureZone,
   createServiceZone,
-  activateDepartment,
   createDepartment,
-  deactivateDepartment,
-  departmentRemovalImpact,
-  zoneRemovalImpact,
   listDepartments,
   listSalePolicies,
   listServiceZones,
@@ -86,13 +85,18 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "management.request_invalid": 400,
   "shared.invalid_id": 400,
   "department.name_taken": 409,
-  "department.name_disabled": 409,
-  "zone.name_disabled": 409,
   "department.not_found": 404,
   "department_transfer.settings_invalid": 400,
   "department.last_active": 409,
   "zone.table_in_use": 409,
-  "zone.department_inactive": 409,
+  "table.booked": 409,
+  "table.delivery_in_progress": 409,
+  "zone.order_in_progress": 409,
+  "zone.transfer_pending": 409,
+  "zone.profile_in_use": 409,
+  "department.order_in_progress": 409,
+  "department.transfer_pending": 409,
+  "department.profile_in_use": 409,
   "service_zone.not_found": 404,
   "department_menu.not_found": 404,
   "department_menu.in_use": 409,
@@ -477,8 +481,10 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
       run(c, log, async () => {
         const sessionId = requireManagementSession(c);
         const result = await gated(sessionId, async (tx) => ({
-          departments: await listDepartments(tx, ctx.cfg),
-          zones: await listServiceZones(tx, ctx.cfg, { includeInactive: true }),
+          departments: (await listDepartments(tx, ctx.cfg)).filter(
+            (department) => department.active,
+          ),
+          zones: await listServiceZones(tx, ctx.cfg),
         }));
         return c.json(result);
       }),
@@ -488,8 +494,10 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
       run(c, log, async () => {
         const sessionId = requireManagementSession(c);
         const result = await gated(sessionId, async (tx) => ({
-          departments: await listDepartments(tx, ctx.cfg),
-          zones: await listServiceZones(tx, ctx.cfg, { includeInactive: true }),
+          departments: (await listDepartments(tx, ctx.cfg)).filter(
+            (department) => department.active,
+          ),
+          zones: await listServiceZones(tx, ctx.cfg),
           salePolicies: await listSalePolicies(tx, ctx.cfg),
           readiness: await listVenueReadiness(tx, ctx.cfg),
           settings: { editSentLines: await readEditSentLines(tx) },
@@ -673,27 +681,31 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
         const sessionId = requireManagementSession(c);
         const departmentId = requireUuidParam(c.req.param("departmentId"), "DepartmentId");
         const body = await readJsonBody<Record<string, unknown>>(c);
-        onlyKeys(body, ["active", "name", "tradingName"]);
-        if (body.active !== undefined && typeof body.active !== "boolean") {
+        if (Object.hasOwn(body, "active"))
           throw new AppError("management.request_invalid", { field: "active" });
-        }
-        const active = body.active;
-        const edit =
-          body.name !== undefined || body.tradingName !== undefined || active === undefined
-            ? {
-                ...(body.name === undefined ? {} : { name: requireName(body.name, "name") }),
-                ...(body.tradingName === undefined
-                  ? {}
-                  : { tradingName: requireName(body.tradingName, "tradingName") }),
-              }
-            : undefined;
-        if (active === undefined && edit !== undefined && Object.keys(edit).length === 0) {
+        onlyKeys(body, ["name", "tradingName"]);
+        const edit = {
+          ...(body.name === undefined ? {} : { name: requireName(body.name, "name") }),
+          ...(body.tradingName === undefined
+            ? {}
+            : { tradingName: requireName(body.tradingName, "tradingName") }),
+        };
+        if (Object.keys(edit).length === 0)
           throw new AppError("management.request_invalid", { field: "name" });
-        }
         await gated(sessionId, async (tx) => {
-          if (edit !== undefined) await updateDepartment(tx, ctx.cfg, departmentId, edit);
-          if (active === true) await activateDepartment(tx, ctx.cfg, departmentId);
-          if (active === false) await deactivateDepartment(tx, ctx.cfg, departmentId);
+          const [department] = await tx
+            .select({ id: departments.id })
+            .from(departments)
+            .where(
+              and(
+                eq(departments.id, departmentId),
+                eq(departments.locationId, ctx.cfg.locationId),
+                eq(departments.active, true),
+              ),
+            );
+          if (department === undefined)
+            throw new AppError("department.not_found", { departmentId });
+          await updateDepartment(tx, ctx.cfg, departmentId, edit);
         });
         return c.body(null, 204);
       }),
@@ -752,21 +764,21 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
       }),
     );
 
-    app.get("/management-api/venue-service/departments/:departmentId/removal-impact", (c) =>
+    app.get("/management-api/venue-service/departments/:departmentId/delete-impact", (c) =>
       run(c, log, async () => {
         const sessionId = requireManagementSession(c);
         const departmentId = requireUuidParam(c.req.param("departmentId"), "DepartmentId");
         return c.json(
-          await gated(sessionId, (tx) => departmentRemovalImpact(tx, ctx.cfg, departmentId)),
+          await gated(sessionId, (tx) =>
+            readDepartmentDeleteImpact(
+              tx,
+              ctx.cfg,
+              ctx.core.floorDeletion,
+              departmentId,
+              new Date(),
+            ),
+          ),
         );
-      }),
-    );
-
-    app.get("/management-api/venue-service/zones/:zoneId/removal-impact", (c) =>
-      run(c, log, async () => {
-        const sessionId = requireManagementSession(c);
-        const zoneId = requireUuidParam(c.req.param("zoneId"), "ZoneId");
-        return c.json(await gated(sessionId, (tx) => zoneRemovalImpact(tx, ctx.cfg, zoneId)));
       }),
     );
 
@@ -774,8 +786,13 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
       run(c, log, async () => {
         const sessionId = requireManagementSession(c);
         const departmentId = requireUuidParam(c.req.param("departmentId"), "DepartmentId");
-        await gated(sessionId, (tx) => deactivateDepartment(tx, ctx.cfg, departmentId));
-        return c.body(null, 204);
+        if ((await c.req.text()) !== "")
+          throw new AppError("management.request_invalid", { field: "body" });
+        return c.json(
+          await gated(sessionId, (tx) =>
+            deleteDepartment(tx, ctx.cfg, ctx.core.floorDeletion, departmentId, new Date()),
+          ),
+        );
       }),
     );
 
@@ -823,12 +840,21 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
         const zoneId = requireUuidParam(c.req.param("zoneId"), "ServiceZoneId");
         const body = await readJsonBody<Record<string, unknown>>(c);
         onlyKeys(body, ["departmentId"]);
-        await gated(sessionId, (tx) =>
-          configureZone(tx, ctx.cfg, {
-            zoneId,
-            departmentId: requireBodyUuid(body.departmentId, "departmentId"),
-          }),
-        );
+        await gated(sessionId, async (tx) => {
+          const departmentId = requireBodyUuid(body.departmentId, "departmentId");
+          const [zone] = await tx
+            .select({ id: floorZones.id })
+            .from(floorZones)
+            .where(
+              and(
+                eq(floorZones.id, zoneId),
+                eq(floorZones.locationId, ctx.cfg.locationId),
+                eq(floorZones.active, true),
+              ),
+            );
+          if (zone === undefined) throw new AppError("service_zone.not_found", { zoneId });
+          await configureZone(tx, ctx.cfg, { zoneId, departmentId });
+        });
         return c.body(null, 204);
       }),
     );

@@ -61,6 +61,14 @@ export async function readDepartmentTransferSettings(
   };
 }
 
+async function recordedDepartment(tx: Transaction, cfg: VenueScope, departmentId: string) {
+  const [row] = await tx
+    .select({ id: departments.id })
+    .from(departments)
+    .where(and(eq(departments.id, departmentId), eq(departments.locationId, cfg.locationId)));
+  if (row === undefined) throw new AppError("department.not_found", { departmentId });
+}
+
 async function activeDepartment(tx: Transaction, cfg: VenueScope, departmentId: string) {
   const [row] = await tx
     .select({ id: departments.id })
@@ -264,7 +272,8 @@ export async function readDepartmentTransfer(
     .from(departmentTransferRequests)
     .where(eq(departmentTransferRequests.id, requestId));
   if (request === undefined) throw new AppError("department_transfer.not_found", { requestId });
-  await assertDepartment(tx, cfg, request.sourceDepartmentId);
+  await recordedDepartment(tx, cfg, request.sourceDepartmentId);
+  if (request.status === "pending") await assertDepartment(tx, cfg, request.sourceDepartmentId);
   if (request.sourceDepartmentId !== sender.departmentId)
     throw new AppError("department_transfer.not_allowed", {});
   return request;
@@ -538,7 +547,7 @@ export async function listSentDepartmentTransfers(
   tabId: string,
   sender: DepartmentTransferActor,
 ) {
-  await assertDepartment(tx, cfg, sender.departmentId);
+  await recordedDepartment(tx, cfg, sender.departmentId);
   const rows = await tx
     .select()
     .from(departmentTransferRequests)
@@ -549,6 +558,8 @@ export async function listSentDepartmentTransfers(
       ),
     )
     .orderBy(asc(departmentTransferRequests.createdAt), asc(departmentTransferRequests.id));
+  if (rows.some((row) => row.status === "pending"))
+    await assertDepartment(tx, cfg, sender.departmentId);
   if (rows.length === 0) {
     const context = await getOrderServiceContext(tx, cfg, tabId);
     if (context.departmentId !== sender.departmentId)
@@ -562,7 +573,7 @@ export async function listDepartmentSentTransfers(
   cfg: VenueScope,
   sender: DepartmentTransferActor,
 ) {
-  await activeDepartment(tx, cfg, sender.departmentId);
+  await recordedDepartment(tx, cfg, sender.departmentId);
   const recent = tx
     .select({ id: departmentTransferRequests.id })
     .from(departmentTransferRequests)
@@ -587,5 +598,7 @@ export async function listDepartmentSentTransfers(
       ),
     )
     .orderBy(asc(departmentTransferRequests.createdAt), asc(departmentTransferRequests.id));
+  if (rows.some((row) => row.status === "pending"))
+    await assertDepartment(tx, cfg, sender.departmentId);
   return summarizeTransfers(tx, rows);
 }

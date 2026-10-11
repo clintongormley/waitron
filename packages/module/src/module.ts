@@ -9,6 +9,8 @@ import type {
   ReceiptPaperWidth,
   Decimal,
   LocationId,
+  DeleteImpactRefusal,
+  DeleteImpactItem,
 } from "@waitron/shared";
 import type { ChangeSource } from "@waitron/shared";
 import type { Database, SQL, Transaction } from "@waitron/db";
@@ -31,6 +33,7 @@ export interface CoreServices {
     tx: Transaction,
     req: { tableId: string; guestCount: number | null; operatorId: string },
   ): Promise<{ tabId: string; partyId: string }>;
+  floorDeletion: FloorDeletion;
 }
 
 /**
@@ -76,8 +79,23 @@ export interface FloorAnnotator {
   ): Promise<Map<string, { reservedTime: string | null }>>;
 }
 
+export interface FloorDeletion {
+  readImpact(
+    tx: Transaction,
+    zoneIds: readonly string[],
+    now: Date,
+  ): Promise<{ refusals: DeleteImpactRefusal[]; removes: DeleteImpactItem[] }>;
+  clear(tx: Transaction, zoneIds: readonly string[], now: Date): Promise<void>;
+}
+
 /** A module's part in removing a live table. */
 export interface TableRemoval {
+  deleteRefusals?(
+    tx: Transaction,
+    cfg: { locationId: LocationId },
+    tableIds: readonly string[],
+    now: Date,
+  ): Promise<readonly DeleteImpactRefusal[]>;
   /**
    * The refusal for each of `tableIds` this module still needs; a table it lets go of has no entry.
    * A throw is not a refusal: it fails the caller, the till's floor read included.
@@ -656,6 +674,11 @@ export interface VenueServiceContribution {
     cfg: DepartmentReceiptScope,
     departmentId: string,
   ): Promise<DepartmentReceiptConfig>;
+  readRetainedDepartmentReceipt(
+    tx: Transaction,
+    cfg: DepartmentReceiptScope,
+    departmentId: string,
+  ): Promise<DepartmentReceiptConfig>;
   readPrintedDepartmentReceipt(
     tx: Transaction,
     cfg: DepartmentReceiptScope,
@@ -810,17 +833,21 @@ export interface VenueServiceContribution {
     tx: Transaction,
     cfg: { locationId: LocationId },
   ): Promise<{ profileId: string; screens: ProfileKitchenScreens }[]>;
-  /** Replaces all of a profile's kitchen screens. Refused `device_profile.access_invalid`, naming
-   *  the field, for zones on a station screen, an explicit empty list, a deleted station,
-   *  or an unknown zone or an off zone not already stored for that screen. Narrows nondeleted devices on the profile, switched off or not, at
-   *  every location, in the same transaction, recording what each lost, and gives each back what
-   *  the profile allows again of what it had lost; answers the devices it narrowed. */
+  /** Replaces the profile's screens, preserving an unchanged stored empty zone bound.
+   *  New empty lists and deleted nonempty zone or station choices refuse with field/reason. */
   setProfileKitchenScreens(
     tx: Transaction,
     cfg: { locationId: LocationId },
     profileId: string,
     screens: ProfileKitchenScreens,
   ): Promise<NarrowedDevice[]>;
+  /** Copies a live source's kitchen screens, retaining its explicit empty zone bounds. */
+  copyProfileKitchenScreens(
+    tx: Transaction,
+    cfg: { locationId: LocationId },
+    sourceId: string,
+    targetId: string,
+  ): Promise<void>;
   /** Narrows the device from its current profile to `profileId`, before a switch writes it,
    *  recording what it lost and giving back what `profileId` allows again, as a profile save does,
    *  against the profiles' lists at the device's own location; never refuses. Null: it lost nothing, or the device is unknown. */
@@ -874,8 +901,8 @@ export interface VenueServiceContribution {
    *  `kitchen_screen.invalid` `one_only`), each kind at most once and never both a pass screen and
    *  a pass monitor (`one_only`), of a kind its profile offers (`kitchen_screen.not_allowed`; on
    *  any form factor a pass monitor needs a profile row); stations and zones within the profile's
-   *  lists (`station.not_allowed`, `kitchen_screen.zone_not_allowed`). A stored off zone may stay
-   *  on the same device's kind; deleted stations are not new choices (`kitchen_screen.invalid`).
+   *  lists (`station.not_allowed`, `kitchen_screen.zone_not_allowed`). Deleted nonempty zone and
+   *  station choices refuse (`kitchen_screen.invalid`); a device's stored empty zone bound may stay.
    *  Writes nothing. */
   assertDeviceKitchenScreens(
     tx: Transaction,

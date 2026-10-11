@@ -1,4 +1,4 @@
-import { and, eq, isNull, ne, sql } from "drizzle-orm";
+import { and, asc, eq, isNull, ne, sql } from "drizzle-orm";
 import { deviceProfiles, floorZones, locations } from "@waitron/db";
 import type { ModuleProvisioning } from "@waitron/module";
 import { setProfileServiceScope } from "./profile-access.js";
@@ -27,21 +27,44 @@ export const VENUE_SERVICE_PROVISIONING: ModuleProvisioning = {
       const existingDepartment = await tx
         .select({ id: departments.id })
         .from(departments)
-        .where(and(eq(departments.locationId, node.locationId), eq(departments.isDefault, true)))
+        .where(
+          and(
+            eq(departments.locationId, node.locationId),
+            eq(departments.isDefault, true),
+            eq(departments.active, true),
+          ),
+        )
         .limit(1);
-      const departmentId =
-        existingDepartment[0]?.id ??
-        (
-          await tx
-            .insert(departments)
-            .values({
-              locationId: node.locationId,
-              name: location[0]!.name,
-              tradingName: location[0]!.name,
-              isDefault: true,
-            })
-            .returning({ id: departments.id })
-        )[0]!.id;
+      let departmentId = existingDepartment[0]?.id;
+      if (departmentId === undefined) {
+        await tx
+          .update(departments)
+          .set({ isDefault: false })
+          .where(and(eq(departments.locationId, node.locationId), eq(departments.isDefault, true)));
+        const [replacement] = await tx
+          .select({ id: departments.id })
+          .from(departments)
+          .where(and(eq(departments.locationId, node.locationId), eq(departments.active, true)))
+          .orderBy(asc(departments.name), asc(departments.id))
+          .limit(1);
+        departmentId =
+          replacement?.id ??
+          (
+            await tx
+              .insert(departments)
+              .values({
+                locationId: node.locationId,
+                name: location[0]!.name,
+                tradingName: location[0]!.name,
+                isDefault: true,
+              })
+              .returning({ id: departments.id })
+          )[0]!.id;
+        await tx
+          .update(departments)
+          .set({ isDefault: true })
+          .where(eq(departments.id, departmentId));
+      }
       await tx
         .insert(departmentSalePolicies)
         .values({ departmentId, orderStart: "counter" })
@@ -50,14 +73,29 @@ export const VENUE_SERVICE_PROVISIONING: ModuleProvisioning = {
       const existing = await tx
         .select({ zoneId: zoneServicePolicies.zoneId })
         .from(zoneServicePolicies)
+        .innerJoin(floorZones, eq(floorZones.id, zoneServicePolicies.zoneId))
+        .innerJoin(departments, eq(departments.id, zoneServicePolicies.departmentId))
         .where(
           and(
             eq(zoneServicePolicies.locationId, node.locationId),
             eq(zoneServicePolicies.isCounterDefault, true),
+            eq(floorZones.active, true),
+            eq(departments.active, true),
+            eq(floorZones.locationId, node.locationId),
+            eq(departments.locationId, node.locationId),
           ),
         )
         .limit(1);
       if (existing.length === 0) {
+        await tx
+          .update(zoneServicePolicies)
+          .set({ isCounterDefault: false })
+          .where(
+            and(
+              eq(zoneServicePolicies.locationId, node.locationId),
+              eq(zoneServicePolicies.isCounterDefault, true),
+            ),
+          );
         // The conflict clause updates the name to the value it already holds: the point is not the
         // update but the `returning`, which a plain `do nothing` would leave empty on a re-run.
         const zone = await tx
@@ -65,6 +103,7 @@ export const VENUE_SERVICE_PROVISIONING: ModuleProvisioning = {
           .values({ locationId: node.locationId, name: "Counter", displayOrder: 0, active: true })
           .onConflictDoUpdate({
             target: [floorZones.locationId, floorZones.name],
+            targetWhere: sql`${floorZones.active} = 1`,
             set: { name: sql`excluded.name` },
           })
           .returning({ id: floorZones.id });
@@ -78,7 +117,7 @@ export const VENUE_SERVICE_PROVISIONING: ModuleProvisioning = {
           })
           .onConflictDoUpdate({
             target: zoneServicePolicies.zoneId,
-            set: { isCounterDefault: true },
+            set: { isCounterDefault: true, departmentId },
           });
       }
       const policy = await tx
@@ -87,10 +126,16 @@ export const VENUE_SERVICE_PROVISIONING: ModuleProvisioning = {
           departmentId: zoneServicePolicies.departmentId,
         })
         .from(zoneServicePolicies)
+        .innerJoin(floorZones, eq(floorZones.id, zoneServicePolicies.zoneId))
+        .innerJoin(departments, eq(departments.id, zoneServicePolicies.departmentId))
         .where(
           and(
             eq(zoneServicePolicies.locationId, node.locationId),
             eq(zoneServicePolicies.isCounterDefault, true),
+            eq(floorZones.active, true),
+            eq(departments.active, true),
+            eq(floorZones.locationId, node.locationId),
+            eq(departments.locationId, node.locationId),
           ),
         )
         .limit(1);

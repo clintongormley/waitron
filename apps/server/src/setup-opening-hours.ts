@@ -21,8 +21,8 @@ export async function readSetupOpeningHours(
     { locationId: locationId(venue.locationId) },
     new Date(),
   );
-  const department = model.departments.find(({ id }) => id === first.id)!;
-  if (!department.active || department.periods.length !== 1) return undefined;
+  const department = model.departments.find(({ id }) => id === first.id);
+  if (!department?.active || department.periods.length !== 1) return undefined;
   const period = department.periods[0]!;
   if (period.name !== "Open") return undefined;
   const matches = department.week.every(({ weekday, slots }) =>

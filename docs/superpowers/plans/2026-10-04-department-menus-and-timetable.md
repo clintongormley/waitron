@@ -1,5 +1,9 @@
 # Department menus and timetable — implementation plan (W98)
 
+> **2026-10-11 supersession.** A435 step 6 omits deleted hierarchy from current menu/settings choices and removes its owned settings. Inactive-zone maintenance below records the earlier contract. See the
+> [step 6 reconciliation](2026-10-11-a435-6-tables-zones-departments-delete.md). Earlier behavior and receipts below remain historical.
+
+
 > **2026-10-08:** A366 slice 1 Task 10 retires `resolveOpeningDateHours`; its station week,
 > named-date and default-opening checks move to the retained Hours model and station-state
 > readers. See [slice 1 plan](2026-10-07-a366-slice-1-service-periods.md).

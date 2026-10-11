@@ -27,6 +27,7 @@ import type { ModuleRouteContext } from "@waitron/module";
 import type { TillConfig } from "./till-config.js";
 import { createTable } from "./testing/live-table.js";
 import { finishTable, moduleCoreServices, seatTable } from "./parties.js";
+import { ALL_MODULES, enabledTableRemovals } from "./modules.js";
 import "./errors.js";
 
 // The `seatBooking ↔ seatTable` edge with the REAL `apps/server` `seatTable` — the one seam the
@@ -92,7 +93,7 @@ async function setupVenue(): Promise<Venue> {
     db,
     cfg: { locationId: tillCfg.locationId },
     // What boot wires (boot.ts): the module reaches the seat verb ONLY through this seat.
-    core: moduleCoreServices(tillCfg),
+    core: moduleCoreServices(tillCfg, enabledTableRemovals(ALL_MODULES)),
   };
   return {
     tillCfg,

@@ -1,3 +1,5 @@
+import { floorDeletionFor } from "./floor-delete.js";
+import { readZoneDeleteImpact, deleteZone } from "@waitron/venue-service";
 import { readStationDeleteImpact, deleteStation } from "./station-delete.js";
 import { readCourseDeleteImpact, deleteCourse } from "./course-delete.js";
 import { mountDepartmentReceiptApi } from "./department-receipt-api.js";
@@ -19,8 +21,9 @@ import type { ContentfulStatusCode } from "hono/utils/http-status";
 import { AppError, isAppError } from "@waitron/shared";
 import { createPasswordThrottle, type PasswordThrottle } from "./password-throttle.js";
 import { ownPasswordChanges } from "./own-password-ahead.js";
-import { and, inArray, isNull } from "drizzle-orm";
+import { and, eq, inArray, isNull } from "drizzle-orm";
 import {
+  floorZones,
   fireControlMode,
   printers,
   readNodeMembership,
@@ -94,7 +97,6 @@ import { imageExists, readImageBytes } from "@waitron/media";
 import {
   createStatus,
   deactivateStatus,
-  deactivateZone,
   listStatuses,
   listTables,
   listZones,
@@ -284,9 +286,11 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "status.label_taken": 409,
   "zone.not_found": 404,
   "zone.table_in_use": 409,
+  "zone.order_in_progress": 409,
+  "zone.transfer_pending": 409,
+  "zone.profile_in_use": 409,
+  "table.delivery_in_progress": 409,
   "zone.name_taken": 409,
-  "zone.name_disabled": 409,
-  "zone.department_inactive": 409,
   "table.not_found": 404,
   "table.label_taken": 409,
   "table.booked": 409,
@@ -332,6 +336,20 @@ function requireStatusId(id: string): string {
 function requireZoneId(id: string): string {
   if (!isUuid(id)) throw new AppError("zone.not_found", { zoneId: id });
   return id;
+}
+
+async function requireLiveZone(tx: Transaction, cfg: TillConfig, id: string): Promise<void> {
+  const [zone] = await tx
+    .select({ id: floorZones.id })
+    .from(floorZones)
+    .where(
+      and(
+        eq(floorZones.id, id),
+        eq(floorZones.locationId, cfg.locationId),
+        eq(floorZones.active, true),
+      ),
+    );
+  if (zone === undefined) throw new AppError("zone.not_found", { zoneId: id });
 }
 
 function requireStationId(id: string): string {
@@ -1479,9 +1497,11 @@ export function mountManagementApi(
     }),
   );
 
-  app.post("/management-api/device-profiles", (c) =>
+  const createProfile = (c: Context, sourcePathId?: string) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
+      const sourceId =
+        sourcePathId === undefined ? undefined : requireDeviceProfileId(sourcePathId);
       const body = await readJsonBody<ProfileBody>(c);
       const { name, capabilities, formFactor, canvasId, inactivityTimeoutSeconds } =
         parseProfileSettings(body);
@@ -1490,6 +1510,14 @@ export function mountManagementApi(
       const scope = parseProfileScope(body);
       const admission = parseProfileAdmission(body);
       const result = await withTransaction(deps.db, async (tx) => {
+        if (sourceId !== undefined) {
+          await authorizeManager(tx, {
+            managementSessionId: sessionId,
+            permission: "layout.configure",
+          });
+          if ((await getDeviceProfileWithPrinters(tx, sourceId)) === undefined)
+            throw new AppError("device_profile.not_found", {});
+        }
         await requireListedPrinters(tx, sessionId, lists);
         const created = await createDeviceProfile(tx, {
           managementSessionId: sessionId,
@@ -1502,7 +1530,14 @@ export function mountManagementApi(
           printerLists: { ...emptyPrinterLists(), ...lists },
         });
         await VENUE_SERVICE.setProfileServiceScope(tx, requireVenueCfg(deps), created.id, scope);
-        if (kitchenScreens !== undefined)
+        if (sourceId !== undefined)
+          await VENUE_SERVICE.copyProfileKitchenScreens(
+            tx,
+            requireVenueCfg(deps),
+            sourceId,
+            created.id,
+          );
+        else if (kitchenScreens !== undefined)
           await VENUE_SERVICE.setProfileKitchenScreens(
             tx,
             requireVenueCfg(deps),
@@ -1513,8 +1548,9 @@ export function mountManagementApi(
         return (await withProfileAccess(tx, [created]))[0];
       });
       return c.json(result, 201);
-    }),
-  );
+    });
+  app.post("/management-api/device-profiles", (c) => createProfile(c));
+  app.post("/management-api/device-profiles/:id/copy", (c) => createProfile(c, c.req.param("id")));
 
   // Full replacement: an omitted `canvasId` or `inactivityTimeoutSeconds` stores null. These stay as
   // they were when omitted: the starting screen, a printer list, the kitchen screens, the role
@@ -1694,9 +1730,7 @@ export function mountManagementApi(
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
       const cfg = requireVenueCfg(deps);
-      const zones = await withVenueAuth(deps, sessionId, (tx) =>
-        listZones(tx, cfg, { includeInactive: c.req.query("includeInactive") === "true" }),
-      );
+      const zones = await withVenueAuth(deps, sessionId, (tx) => listZones(tx, cfg));
       return c.json(zones);
     }),
   );
@@ -1712,29 +1746,41 @@ export function mountManagementApi(
       if (typeof body !== "object" || body === null || Array.isArray(body)) {
         throw new AppError("management.request_invalid", { field: "body" });
       }
-      const patch: { name?: string; displayOrder?: number; active?: boolean } = {};
+      if (Object.hasOwn(body, "active"))
+        throw new AppError("management.request_invalid", { field: "active" });
+      const patch: { name?: string; displayOrder?: number } = {};
       if (body.name !== undefined) {
         if (typeof body.name !== "string")
           throw new AppError("management.request_invalid", { field: "name" });
         patch.name = body.name;
       }
-      if (body.displayOrder !== undefined) {
+      if (body.displayOrder !== undefined)
         patch.displayOrder = parseDisplayOrder(body.displayOrder);
-      }
-      if (body.active !== undefined) {
-        if (typeof body.active !== "boolean")
-          throw new AppError("management.request_invalid", { field: "active" });
-        patch.active = body.active;
-      }
-      if (
-        patch.name === undefined &&
-        patch.displayOrder === undefined &&
-        patch.active === undefined
-      ) {
-        return c.body(null, 204);
-      }
-      await withVenueAuth(deps, sessionId, (tx) => updateZone(tx, cfg, id, patch));
+      await withVenueAuth(deps, sessionId, async (tx) => {
+        await requireLiveZone(tx, cfg, id);
+        if (Object.keys(patch).length > 0) await updateZone(tx, cfg, id, patch);
+      });
       return c.body(null, 204);
+    }),
+  );
+
+  app.get("/management-api/zones/:id/delete-impact", (c) =>
+    run(c, log, async () => {
+      const sessionId = requireManagementSession(c);
+      const id = requireZoneId(c.req.param("id"));
+      const cfg = requireVenueCfg(deps);
+      return c.json(
+        await withVenueAuth(deps, sessionId, async (tx) => {
+          await requireLiveZone(tx, cfg, id);
+          return readZoneDeleteImpact(
+            tx,
+            cfg,
+            floorDeletionFor(cfg, deps.tableRemovals ?? []),
+            id,
+            new Date(),
+          );
+        }),
+      );
     }),
   );
 
@@ -1743,8 +1789,20 @@ export function mountManagementApi(
       const sessionId = requireManagementSession(c);
       const id = requireZoneId(c.req.param("id"));
       const cfg = requireVenueCfg(deps);
-      await withVenueAuth(deps, sessionId, (tx) => deactivateZone(tx, cfg, id));
-      return c.body(null, 204);
+      if ((await c.req.text()) !== "")
+        throw new AppError("management.request_invalid", { field: "body" });
+      return c.json(
+        await withVenueAuth(deps, sessionId, async (tx) => {
+          await requireLiveZone(tx, cfg, id);
+          return deleteZone(
+            tx,
+            cfg,
+            floorDeletionFor(cfg, deps.tableRemovals ?? []),
+            id,
+            new Date(),
+          );
+        }),
+      );
     }),
   );
 

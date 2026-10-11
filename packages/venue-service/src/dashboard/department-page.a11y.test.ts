@@ -126,7 +126,7 @@ afterEach(() => {
   setLocale("en");
 });
 describe.each(["light", "dark"] as const)("department-page %s", (theme) => {
-  it.each(["without-transfers", "transfers", "disabled", "refusal"])("%s", async (state) => {
+  it.each(["without-transfers", "transfers", "deleted", "refusal"])("%s", async (state) => {
     setLocale("en");
     const el = (await mountThemed(
       "<department-page></department-page>",
@@ -134,7 +134,7 @@ describe.each(["light", "dark"] as const)("department-page %s", (theme) => {
     )) as HTMLElementTagNameMap["department-page"];
     const view = structuredClone(model);
     if (state === "without-transfers") view.departments[1]!.active = false;
-    if (state === "disabled") view.departments[0]!.active = false;
+    if (state === "deleted") view.departments[0]!.active = false;
     el.model = view;
     el.departmentId = "d1";
     el.api = new VenueServiceApi((async (path, method) => {
@@ -149,6 +149,12 @@ describe.each(["light", "dark"] as const)("department-page %s", (theme) => {
     }) as DashboardRequest);
     await el.updateComplete;
     expect(el.shadowRoot).not.toBeNull();
+    if (state === "deleted") {
+      expect(el.shadowRoot!.querySelector("department-settings")).toBeNull();
+      expect(el.shadowRoot!.querySelector("[data-test=enable-department]")).toBeNull();
+      await expectNoA11yViolations(host);
+      return;
+    }
     const settings = el.shadowRoot!.querySelector("department-settings")!;
     await settings.updateComplete;
     if (state === "transfers" || state === "refusal")

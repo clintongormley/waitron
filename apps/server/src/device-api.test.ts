@@ -2342,6 +2342,45 @@ describe("PATCH /management-api/devices/:id (device.manage)", () => {
       });
     });
 
+    it("a stale previously stored deleted zone id is refused on device save", async () => {
+      const venue = await setupVenue(suite.db);
+      const app = mountApp(venue.cfg);
+      const [zone] = await suite.db
+        .insert(floorZones)
+        .values({ locationId: venue.cfg.locationId, name: "Deleted pass zone" })
+        .returning({ id: floorZones.id });
+      const profileId = await seedProfile("kds");
+      const screen: DeviceKitchenScreen = {
+        kind: "pass",
+        stationIds: [venue.defaultStationId],
+        zoneIds: [zone!.id],
+      };
+      await withTransaction(suite.db, (tx) =>
+        VENUE_SERVICE.setProfileKitchenScreens(tx, venue.cfg, profileId, { pass: screen }),
+      );
+      const { deviceId } = await knockAndAccept(app, venue, {
+        name: "Deleted-zone pass",
+        profileId,
+        kitchenScreens: [screen],
+      });
+      await suite.db.update(floorZones).set({ active: false }).where(eq(floorZones.id, zone!.id));
+      const res = await edit(app, venue.managerCookie, deviceId, {
+        name: "Must not save",
+        kitchenScreens: [screen],
+      });
+      expect({ status: res.status, body: await res.json() }).toEqual({
+        status: 400,
+        body: {
+          error: {
+            code: "kitchen_screen.invalid",
+            params: { field: "zoneIds", reason: "not_found", screen: "pass" },
+          },
+        },
+      });
+      expect(await labelOf(deviceId)).toBe("Deleted-zone pass");
+      expect((await shownOn(venue, deviceId))[0]?.zones).toEqual([]);
+    });
+
     /** A kitchen display running a pass monitor on Cocina and Grill, both offered on its profile. */
     async function monitorKds(venue: Venue, app: Hono) {
       const grill = await withTransaction(suite.db, (tx) =>

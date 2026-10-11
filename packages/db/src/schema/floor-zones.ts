@@ -1,4 +1,5 @@
-import { foreignKey, unique } from "drizzle-orm/sqlite-core";
+import { sql } from "drizzle-orm";
+import { foreignKey, uniqueIndex } from "drizzle-orm/sqlite-core";
 import { count, flag, id, label, newId, nowIso, table, tsString } from "./columns.js";
 import { locations } from "./tenants.js";
 
@@ -22,7 +23,9 @@ export const floorZones = table(
     createdAt: tsString("created_at").notNull().$defaultFn(nowIso),
   },
   (t) => [
-    unique("floor_zones_name_key").on(t.locationId, t.name),
+    uniqueIndex("floor_zones_name_key")
+      .on(t.locationId, t.name)
+      .where(sql`${t.active} = 1`),
     foreignKey({
       columns: [t.locationId],
       foreignColumns: [locations.id],

@@ -38,6 +38,8 @@ import {
   deviceKitchenScreens,
   deviceProfileKitchenScreens,
   deviceProfileKitchenScreenStations,
+  deviceProfileKitchenScreenZones,
+  deviceKitchenScreenZones,
 } from "./schema/kitchen-screens.js";
 
 const suite = useVenueDb({
@@ -200,7 +202,7 @@ describe("a profile's kitchen screens", () => {
     });
   });
 
-  it("omits a deleted station and retains a switched-off zone", async () => {
+  it("omits deleted stations and zones", async () => {
     const venue = await seedVenue();
     await set(venue, venue.kds, {
       pass: { stationIds: [venue.grill, venue.cold], zoneIds: [venue.dining, venue.terrace] },
@@ -211,7 +213,7 @@ describe("a profile's kitchen screens", () => {
       .where(eq(kitchenStations.id, venue.cold));
     await db.update(floorZones).set({ active: false }).where(eq(floorZones.id, venue.terrace));
     await expect(screensOf(venue, venue.kds)).resolves.toEqual({
-      pass: { stationIds: [venue.grill], zoneIds: [venue.terrace, venue.dining] },
+      pass: { stationIds: [venue.grill], zoneIds: [venue.dining] },
     });
   });
 
@@ -295,7 +297,7 @@ describe("a profile's kitchen screens", () => {
     await expect(screensOf(venue, venue.kds)).resolves.toEqual({});
   });
 
-  it("refuses a deleted station but permits keeping its switched-off zone", async () => {
+  it("refuses deleted stations and previously stored deleted zones", async () => {
     const venue = await seedVenue();
     await set(venue, venue.kds, {
       pass: { stationIds: [venue.grill, venue.cold], zoneIds: [venue.dining] },
@@ -315,9 +317,13 @@ describe("a profile's kitchen screens", () => {
         }),
       ),
     ).resolves.toEqual(refused("passScreenStations", "not_found"));
-    await set(venue, venue.kds, { pass: { stationIds: [venue.cold], zoneIds: [venue.dining] } });
+    await expect(
+      outcome(
+        set(venue, venue.kds, { pass: { stationIds: [venue.cold], zoneIds: [venue.dining] } }),
+      ),
+    ).resolves.toEqual(refused("passScreenZones", "not_found"));
     await expect(screensOf(venue, venue.kds)).resolves.toEqual({
-      pass: { stationIds: [venue.cold], zoneIds: [venue.dining] },
+      pass: { stationIds: [venue.cold], zoneIds: [] },
     });
     await expect(
       outcome(
@@ -335,7 +341,12 @@ describe("a profile's kitchen screens", () => {
     ).resolves.toEqual(refused("passScreenZones", "not_found"));
     // Stored for the pass screen is not stored for the station screen.
     await expect(
-      outcome(set(venue, venue.kds, { station: { stationIds: [venue.grill], zoneIds: null } })),
+      outcome(
+        set(venue, venue.kds, {
+          station: { stationIds: [venue.grill], zoneIds: null },
+          pass: { stationIds: [venue.cold], zoneIds: [] },
+        }),
+      ),
     ).resolves.toEqual(refused("stationScreenStations", "not_found"));
   });
 
@@ -684,7 +695,7 @@ describe("the kitchen screens a device chooses", () => {
     expect(await storedKindsOf(till)).toEqual([]);
   });
 
-  it("refuses a deleted station while keeping a stored switched-off zone", async () => {
+  it("refuses deleted stations and a stored deleted zone on device save", async () => {
     const { venue, till } = await kitchen();
     const pass = { kind: "pass", stationIds: [venue.cold], zoneIds: [venue.terrace] } as const;
     await choose(venue, till, venue.till, [pass]);
@@ -698,11 +709,11 @@ describe("the kitchen screens a device chooses", () => {
     );
     await expect(
       outcome(choose(venue, till, venue.till, [{ ...pass, stationIds: [venue.grill] }])),
-    ).resolves.toEqual({ resolved: undefined });
+    ).resolves.toEqual(invalid("zoneIds", "not_found", "pass"));
     await expect(
       outcome(
         choose(venue, till, venue.till, [
-          { ...pass, stationIds: [venue.grill] },
+          { ...pass, stationIds: [venue.grill], zoneIds: [venue.dining] },
           { kind: "station", stationIds: [venue.cold], zoneIds: null },
         ]),
       ),
@@ -897,7 +908,7 @@ describe("what a device's kitchen screens show", () => {
     ]);
   });
 
-  it("omits a deleted station, retains the switched-off zone and reads restored fixtures", async () => {
+  it("omits deleted stations and zones and reads restored fixtures", async () => {
     const venue = await seedVenue();
     const till = await seedDevice(venue, venue.till, "Till");
     await choose(venue, till, venue.till, [
@@ -916,7 +927,7 @@ describe("what a device's kitchen screens show", () => {
         everyZone: false,
         profileEveryStation: true,
         stations: [slot(venue.grill, "Grill")],
-        zones: [slot(venue.dining, "Dining room", false, true)],
+        zones: [],
       },
     ]);
     await off(true);
@@ -933,7 +944,7 @@ describe("what a device's kitchen screens show", () => {
     ]);
   });
 
-  it("omits deleted stations while retaining narrowed stations and switched-off zones", async () => {
+  it("omits deleted stations and zones while retaining live narrowed slots", async () => {
     const venue = await seedVenue();
     const till = await seedDevice(venue, venue.till, "Till");
     await choose(venue, till, venue.till, [
@@ -963,11 +974,7 @@ describe("what a device's kitchen screens show", () => {
         everyZone: false,
         profileEveryStation: true,
         stations: [slot(venue.grill, "Grill", false)],
-        zones: [
-          slot(venue.terrace, "Terrace", false),
-          slot(venue.dining, "Dining room", false, true),
-          slot(venue.counter, "Counter", false),
-        ],
+        zones: [slot(venue.terrace, "Terrace", false)],
       },
     ]);
   });
@@ -2123,5 +2130,91 @@ describe("a device's kitchen screens counted and removed", () => {
     }
     expect(await scoped((tx) => countDeviceKitchenScreens(tx, deviceA))).toBe(0);
     expect(await scoped((tx) => countDeviceKitchenScreens(tx, deviceB))).toBe(2);
+  });
+});
+
+describe("deleted zone bounds", () => {
+  it("retained empty zone bound survives unrelated profile save without widening", async () => {
+    const venue = await seedVenue();
+    await set(venue, venue.kds, { pass: { stationIds: [venue.grill], zoneIds: [venue.dining] } });
+    await db
+      .delete(deviceProfileKitchenScreenZones)
+      .where(eq(deviceProfileKitchenScreenZones.deviceProfileId, venue.kds));
+    await db.update(floorZones).set({ active: false }).where(eq(floorZones.id, venue.dining));
+    await expect(
+      set(venue, venue.kds, { pass: { stationIds: [venue.grill], zoneIds: [] } }),
+    ).resolves.toEqual([]);
+    await expect(screensOf(venue, venue.kds)).resolves.toEqual({
+      pass: { stationIds: [venue.grill], zoneIds: [] },
+    });
+    const [parent] = await db
+      .select()
+      .from(deviceProfileKitchenScreens)
+      .where(eq(deviceProfileKitchenScreens.deviceProfileId, venue.kds));
+    expect(parent).toMatchObject({ everyZone: false, everyStation: false });
+    await expect(outcome(set(venue, venue.kds, {}))).resolves.toEqual(
+      refused("passScreenZones", "empty"),
+    );
+  });
+
+  it("retained empty zone bound survives unchanged device save without widening", async () => {
+    const venue = await seedVenue();
+    await set(venue, venue.kds, { pass: { stationIds: [venue.grill], zoneIds: [venue.dining] } });
+    const deviceId = await seedDevice(venue, venue.kds, "Empty pass");
+    await choose(venue, deviceId, venue.kds, [
+      { kind: "pass", stationIds: [venue.grill], zoneIds: [venue.dining] },
+    ]);
+    await db
+      .delete(deviceKitchenScreenZones)
+      .where(eq(deviceKitchenScreenZones.deviceId, deviceId));
+    await db
+      .delete(deviceProfileKitchenScreenZones)
+      .where(eq(deviceProfileKitchenScreenZones.deviceProfileId, venue.kds));
+    await expect(
+      choose(venue, deviceId, venue.kds, [
+        { kind: "pass", stationIds: [venue.grill], zoneIds: [] },
+      ]),
+    ).resolves.toBeUndefined();
+    const [parent] = await db
+      .select()
+      .from(deviceKitchenScreens)
+      .where(eq(deviceKitchenScreens.deviceId, deviceId));
+    expect(parent).toMatchObject({ everyZone: false, everyStation: false });
+    await expect(shown(venue, deviceId)).resolves.toEqual([]);
+    await expect(
+      outcome(scoped((tx) => assertPassScreenZone(tx, venue.cfg, deviceId, venue.terrace))),
+    ).resolves.toEqual({ code: "kitchen_screen.not_allowed", params: { screen: "pass" } });
+  });
+
+  it("new empty device zone choice refuses while an empty profile bound restricts Every", async () => {
+    const venue = await seedVenue();
+    await set(venue, venue.kds, { pass: { stationIds: [venue.grill], zoneIds: [venue.dining] } });
+    await db
+      .delete(deviceProfileKitchenScreenZones)
+      .where(eq(deviceProfileKitchenScreenZones.deviceProfileId, venue.kds));
+    const deviceId = await seedDevice(venue, venue.kds, "New restricted pass");
+    await expect(
+      outcome(
+        choose(venue, deviceId, venue.kds, [{ kind: "pass", stationIds: null, zoneIds: [] }]),
+      ),
+    ).resolves.toEqual(invalid("zoneIds", "empty", "pass"));
+    await choose(venue, deviceId, venue.kds, [{ kind: "pass", stationIds: null, zoneIds: null }]);
+    await expect(shown(venue, deviceId)).resolves.toEqual([
+      {
+        kind: "pass",
+        available: true,
+        everyStation: true,
+        everyZone: true,
+        profileEveryStation: false,
+        stations: [{ id: venue.grill, name: "Grill", available: true, switchedOff: false }],
+        zones: [],
+      },
+    ]);
+    await expect(
+      outcome(scoped((tx) => assertPassScreenZone(tx, venue.cfg, deviceId, venue.terrace))),
+    ).resolves.toEqual({
+      code: "kitchen_screen.zone_not_allowed",
+      params: { zoneId: venue.terrace },
+    });
   });
 });

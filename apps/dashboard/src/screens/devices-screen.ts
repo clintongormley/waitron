@@ -1293,11 +1293,8 @@ export class DevicesScreen extends LitElement {
 
   #editOwnErrors(): IdentityErrors {
     const errors = this.#identityErrors(this.editAttempted, this.editForm);
-    const emptyStationBound = Object.values(this.editForm.screens).some(
-      (screen) => screen.stationIds?.length === 0,
-    );
-    return !this.#sendScreens() && emptyStationBound
-      ? { ...errors, stations: "", kitchenStations: "" }
+    return !this.#sendScreens()
+      ? { ...errors, stations: "", kitchenStations: "", zones: "" }
       : errors;
   }
 
@@ -2177,7 +2174,7 @@ export class DevicesScreen extends LitElement {
 
   /**
    * A surviving explicit station bound stays explicit when its last station disappears. A missing
-   * screen parent stays a removal marker; switched-off zones remain keepable only in Edit.
+   * screen parent stays a removal marker.
    */
   #draftFromRead(
     read: readonly ResolvedKitchenScreen[],
@@ -2202,7 +2199,6 @@ export class DevicesScreen extends LitElement {
             .map((slot) => slot.id);
       const zoneIds =
         screen.kind === "station" || screen.everyZone ? null : kept(screen.zones ?? []);
-      if (stationIds?.length !== 0 && zoneIds?.length === 0) continue;
       draft[screen.kind] = { stationIds, zoneIds };
     }
     return this.#fitted(draft, profileId);
@@ -2210,7 +2206,6 @@ export class DevicesScreen extends LitElement {
 
   /**
    * Empty station bounds retain their kind so fitting to a profile cannot widen them to Every.
-   * The existing empty-zone rule applies when the station bound is not empty.
    */
   #fitted(screens: KitchenDraft, profileId: string): KitchenDraft {
     const shared = this.#sharedDisplay(profileId);
@@ -2237,8 +2232,11 @@ export class DevicesScreen extends LitElement {
         this.stations.filter((station) => station.active),
         bound.stationIds,
       );
-      const zoneIds = within(scope.zoneIds, this.zones, bound.zoneIds);
-      if (stationIds?.length !== 0 && zoneIds?.length === 0) continue;
+      const zoneIds = within(
+        scope.zoneIds,
+        this.zones.filter((zone) => zone.active),
+        bound.zoneIds,
+      );
       out[kind] = { stationIds, zoneIds };
     }
     return out;
@@ -2295,7 +2293,10 @@ export class DevicesScreen extends LitElement {
   }): TemplateResult {
     const { ids } = list;
     const switchedOff =
-      ids === null || list.name === "screenStations" || list.name === "kitchenStations"
+      ids === null ||
+      list.name === "screenStations" ||
+      list.name === "kitchenStations" ||
+      list.name === "screenZones"
         ? []
         : list.all.filter((place) => !place.active && ids.includes(place.id));
     return this.#switchGroup(list.test, list.heading, list.error, [

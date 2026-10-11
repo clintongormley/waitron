@@ -1,14 +1,36 @@
-import { and, eq, gte, inArray, sql } from "drizzle-orm";
+import { and, asc, eq, gte, inArray, sql } from "drizzle-orm";
 import type { TableRemoval } from "@waitron/module";
 import { AppError } from "@waitron/shared";
 import "./errors.js";
 import { bookings } from "./schema/bookings.js";
 import { venueWallClockAt } from "./wall-clock.js";
 
-/** Refuses a table while a `booked` booking from the venue's today on names it, naming the earliest
- *  such booking's date and time; letting go keeps the table's name on every booking that named it.
- *  `booking_date` is `YYYY-MM-DD` and `booking_time` `HH:MM:SS` text, so both sort chronologically. */
 export const BOOKINGS_TABLE_REMOVAL: TableRemoval = {
+  async deleteRefusals(tx, cfg, tableIds) {
+    if (tableIds.length === 0) return [];
+    const rows = await tx
+      .select({
+        id: bookings.id,
+        tableId: bookings.tableId,
+        contactName: bookings.contactName,
+        date: bookings.bookingDate,
+        time: bookings.bookingTime,
+      })
+      .from(bookings)
+      .where(
+        and(
+          eq(bookings.locationId, cfg.locationId),
+          inArray(bookings.tableId, [...tableIds]),
+          inArray(bookings.status, ["booked", "seated"]),
+        ),
+      )
+      .orderBy(asc(bookings.bookingDate), asc(bookings.bookingTime), asc(bookings.id));
+    return rows.map((row) => ({
+      code: "table.booked",
+      params: { tableId: row.tableId!, date: row.date, time: row.time.slice(0, 5) },
+      targets: [{ id: row.id, name: `${row.contactName} · ${row.date} ${row.time.slice(0, 5)}` }],
+    }));
+  },
   async refuse(tx, cfg, tableIds, now) {
     const refusals = new Map<string, AppError>();
     if (tableIds.length === 0) return refusals;

@@ -48,6 +48,7 @@ export async function placeOpenPeriod(
   departmentId: string,
   menuId: string,
 ): Promise<void> {
+  await assertDepartment(tx, cfg, departmentId);
   const [existing] = await tx
     .select({ id: menuPeriods.id })
     .from(menuPeriods)
@@ -99,6 +100,7 @@ async function requirePeriod(tx: Transaction, cfg: VenueScope, periodId: string)
     .innerJoin(departments, eq(departments.id, menuPeriods.departmentId))
     .where(and(eq(menuPeriods.id, periodId), eq(departments.locationId, cfg.locationId)));
   if (row === undefined) throw new AppError("menu_period.not_found", { periodId });
+  await assertDepartment(tx, cfg, row.departmentId);
   return row;
 }
 
@@ -976,7 +978,7 @@ export async function readOpeningHoursModel(
   const departmentRows = await tx
     .select({ id: departments.id, name: departments.name, active: departments.active })
     .from(departments)
-    .where(eq(departments.locationId, cfg.locationId))
+    .where(and(eq(departments.locationId, cfg.locationId), eq(departments.active, true)))
     .orderBy(desc(departments.isDefault), asc(departments.name), asc(departments.id));
   const periods = await tx
     .select({
@@ -989,13 +991,13 @@ export async function readOpeningHoursModel(
     })
     .from(menuPeriods)
     .innerJoin(departments, eq(departments.id, menuPeriods.departmentId))
-    .where(eq(departments.locationId, cfg.locationId))
+    .where(and(eq(departments.locationId, cfg.locationId), eq(departments.active, true)))
     .orderBy(asc(menuPeriods.name), asc(menuPeriods.id));
   const staff = await tx
     .select({ periodId: menuPeriodStaffMenus.periodId, menuId: menuPeriodStaffMenus.menuId })
     .from(menuPeriodStaffMenus)
     .innerJoin(departments, eq(departments.id, menuPeriodStaffMenus.departmentId))
-    .where(eq(departments.locationId, cfg.locationId))
+    .where(and(eq(departments.locationId, cfg.locationId), eq(departments.active, true)))
     .orderBy(asc(menuPeriodStaffMenus.displayOrder), asc(menuPeriodStaffMenus.menuId));
   const timetables = await tx
     .select({
@@ -1006,7 +1008,7 @@ export async function readOpeningHoursModel(
     })
     .from(menuDayTimetables)
     .innerJoin(departments, eq(departments.id, menuDayTimetables.departmentId))
-    .where(eq(departments.locationId, cfg.locationId))
+    .where(and(eq(departments.locationId, cfg.locationId), eq(departments.active, true)))
     .orderBy(asc(menuDayTimetables.weekday), asc(menuDayTimetables.specialDateId));
   const slots = await slotsByTimetable(
     tx,

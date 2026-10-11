@@ -1981,15 +1981,11 @@ it("leaves Edit and Delete working as before once a preview has been opened and 
 });
 
 it.each([
-  ["en-GB", "Bar receipt logo (Disabled department)", "Dining receipt logo"],
-  [
-    "es-ES",
-    "Logotipo del recibo de Bar (Departamento deshabilitado)",
-    "Logotipo del recibo de Dining",
-  ],
+  ["en-GB", "Bar receipt logo (Deleted department)", "Dining receipt logo"],
+  ["es-ES", "Logotipo del recibo de Bar (Departamento eliminado)", "Logotipo del recibo de Dining"],
 ])(
-  "in %s, names each department logo and links its explicit Receipt tab",
-  async (locale, disabled, active) => {
+  "in %s, names retained department logos and links only live Receipt tabs",
+  async (locale, deleted, active) => {
     setLocale(locale);
     const client = api();
     client.getImage.mockResolvedValue({
@@ -2002,23 +1998,41 @@ it.each([
     });
     await mount(client);
     click("[data-test=delete-one]");
-    await vi.waitFor(() =>
-      expect(el.shadowRoot!.querySelectorAll("wt-modal li a")).toHaveLength(3),
-    );
+    await vi.waitFor(() => expect(el.shadowRoot!.querySelectorAll("wt-modal li")).toHaveLength(3));
+    const uses = [...el.shadowRoot!.querySelectorAll("wt-modal li")];
     const links = [...el.shadowRoot!.querySelectorAll("wt-modal li a")];
-    expect(links.map((link) => link.textContent)).toEqual([
+    expect(uses.map((use) => use.textContent?.trim())).toEqual([
       locale === "en-GB" ? "Receipt logo" : "Logotipo del recibo",
-      disabled,
+      deleted,
       active,
     ]);
+    expect(uses[1]!.querySelector("a")).toBeNull();
     expect(links.map((link) => link.getAttribute("href"))).toEqual([
       "/manage/venue-settings/view/receipts",
-      "/manage/venue-operations/department/bar%2Fa%26b/view/receipt",
       "/manage/venue-operations/department/dining/view/receipt",
     ]);
     expect(el.shadowRoot!.querySelector('[data-test="confirm-delete"]')).toBeNull();
   },
 );
+
+it("keeps a live department receipt usage linked to its editor", async () => {
+  const client = api();
+  client.getImage.mockResolvedValue({
+    image: { ...image, usageCount: 1 },
+    uses: [
+      { kind: "department_receipt", id: "bar/a&b", name: "Bar", active: true },
+    ] as ImageUsage[],
+  });
+  await mount(client);
+  click("[data-test=delete-one]");
+  await vi.waitFor(() => expect(el.shadowRoot!.querySelectorAll("wt-modal li a")).toHaveLength(1));
+  const link = el.shadowRoot!.querySelector("wt-modal li a")!;
+  expect(link.textContent?.trim()).toBe("Bar receipt logo");
+  expect(link.getAttribute("href")).toBe(
+    "/manage/venue-operations/department/bar%2Fa%26b/view/receipt",
+  );
+  expect(el.shadowRoot!.querySelector('[data-test="confirm-delete"]')).toBeNull();
+});
 
 it.each(["department_receipts", "departments"])(
   "refreshes image counts passively when %s changes",

@@ -57,11 +57,17 @@ export interface ZonePlanSave {
   joins: { seats: number; tableKeys: string[] }[];
 }
 
-async function requireZone(tx: Transaction, cfg: TillConfig, zoneId: string): Promise<void> {
+export async function requireZone(tx: Transaction, cfg: TillConfig, zoneId: string): Promise<void> {
   const [zone] = await tx
     .select({ id: floorZones.id })
     .from(floorZones)
-    .where(and(eq(floorZones.id, zoneId), eq(floorZones.locationId, cfg.locationId)));
+    .where(
+      and(
+        eq(floorZones.id, zoneId),
+        eq(floorZones.locationId, cfg.locationId),
+        eq(floorZones.active, true),
+      ),
+    );
   if (zone === undefined) throw new AppError("zone.not_found", { zoneId });
 }
 

@@ -3,7 +3,7 @@ import "@waitron/dashboard-modules";
 import { currentLocale, setLocale } from "../i18n/t.js";
 import { bookedReason } from "./floor-plan-booked.js";
 
-const sentence = "This table has an upcoming booking. Move the booking first";
+const sentence = "Move or cancel this table’s bookings before deleting it.";
 
 let originalLocale = currentLocale();
 beforeEach(() => {

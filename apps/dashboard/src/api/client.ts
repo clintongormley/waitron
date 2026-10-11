@@ -2782,15 +2782,33 @@ export class DashboardApi {
     return this.#request<FloorZone[]>("/management-api/zones", "GET");
   }
 
-  updateZone(
-    id: string,
-    patch: { name?: string; displayOrder?: number; active?: boolean },
-  ): Promise<void> {
+  updateZone(id: string, patch: { name?: string; displayOrder?: number }): Promise<void> {
     return this.#request<void>(`/management-api/zones/${id}`, "PATCH", patch);
   }
 
-  deactivateZone(id: string): Promise<void> {
-    return this.#request<void>(`/management-api/zones/${id}`, "DELETE");
+  getZoneDeleteImpact(id: string): Promise<DeleteImpact> {
+    return this.#request<DeleteImpact>(
+      `/management-api/zones/${encodeURIComponent(id)}/delete-impact`,
+      "GET",
+    );
+  }
+
+  deleteZone(id: string): Promise<DeleteImpact> {
+    return this.#request<DeleteImpact>(`/management-api/zones/${encodeURIComponent(id)}`, "DELETE");
+  }
+
+  getDepartmentDeleteImpact(id: string): Promise<DeleteImpact> {
+    return this.#request<DeleteImpact>(
+      `/management-api/venue-service/departments/${encodeURIComponent(id)}/delete-impact`,
+      "GET",
+    );
+  }
+
+  deleteDepartment(id: string): Promise<DeleteImpact> {
+    return this.#request<DeleteImpact>(
+      `/management-api/venue-service/departments/${encodeURIComponent(id)}`,
+      "DELETE",
+    );
   }
 
   getFloorPlan(zoneId: string): Promise<FloorPlan> {
@@ -3072,6 +3090,34 @@ export class DashboardApi {
       paymentSlipPrinterIds: printerLists.paymentSlipPrinterIds,
       ...extras,
     });
+  }
+
+  copyDeviceProfile(
+    sourceId: string,
+    ...[
+      name,
+      canvasId,
+      capabilities,
+      formFactor,
+      inactivityTimeoutSeconds,
+      printerLists,
+      extras,
+    ]: Parameters<DashboardApi["createDeviceProfile"]>
+  ): Promise<DeviceProfile> {
+    return this.#request<DeviceProfile>(
+      `/management-api/device-profiles/${encodeURIComponent(sourceId)}/copy`,
+      "POST",
+      {
+        name,
+        canvasId,
+        capabilities,
+        formFactor,
+        inactivityTimeoutSeconds,
+        receiptPrinterIds: printerLists.receiptPrinterIds,
+        paymentSlipPrinterIds: printerLists.paymentSlipPrinterIds,
+        ...extras,
+      },
+    );
   }
 
   updateDeviceProfile(

@@ -4567,3 +4567,41 @@ describe("department transfers across operator lifetimes", () => {
     expect(c.store.total).toBe("3.00");
   });
 });
+
+describe("hierarchy deletion service choices", () => {
+  it("starts at the surviving permitted zone after the remembered zone is deleted", async () => {
+    const initial = zoneOffers({ menus: [defaultMenu], products: [cafe] }, "removed");
+    initial.zones = [zone("removed", "prepay"), zone("survivor", "prepay")];
+    const survivor = zoneOffers({ menus: [defaultMenu], products: [cafe] }, "survivor");
+    survivor.zones = [zone("survivor", "prepay")];
+    const { el } = await mountApp({
+      listDefaultZoneOffers: vi.fn().mockResolvedValueOnce(initial).mockResolvedValue(survivor),
+    });
+    await toCounter(el);
+    emit(shell(el)!, "logout");
+    await flush(el);
+    emit(lock(el)!, "logged-in", { personId: "p1", displayName: "Ana", permissions: [] });
+    await flush(el);
+    expect(counter(el)!.selectedServiceZoneId).toBe("survivor");
+    expect(counter(el)!.products.map((product) => product.id)).toEqual(["cafe"]);
+    expect(api.listZoneOffers).not.toHaveBeenCalled();
+  });
+
+  it.each(["service_zone.default_missing", "device_profile.no_service_zone"])(
+    "an explicit empty service bound leaves no unscoped counter fallback after %s",
+    async (code) => {
+      const { el } = await mountApp({ listDefaultZoneOffers: vi.fn().mockRejectedValue({ code }) });
+      const c = await toCounter(el);
+      expect(c.selectedServiceZoneId).toBe("");
+      expect(c.products).toEqual([]);
+      expect(c.serviceZones).toEqual([]);
+      expect(banner(el)!.textContent).toContain(
+        code === "device_profile.no_service_zone"
+          ? codeMessage(code)
+          : t("service_zone.load_error"),
+      );
+      expect(api.listZoneOffers).not.toHaveBeenCalled();
+      expect(api.recordSale).not.toHaveBeenCalled();
+    },
+  );
+});

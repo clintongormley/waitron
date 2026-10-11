@@ -59,7 +59,6 @@ interface Renaming {
 
 export function planReset(input: {
   targets: readonly Target[];
-  /** Every live table of the zone, inactive ones included. */
   live: readonly LiveTable[];
   takenElsewhere: ReadonlySet<string>;
 }): ResetPlan {

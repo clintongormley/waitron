@@ -16,23 +16,19 @@ import "@waitron/ui/src/components/wt-input.js";
 import "@waitron/ui/src/components/wt-combobox.js";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
-import type {
-  Department,
-  DepartmentRemovalImpact,
-  FloorZone,
-  VenueServiceApi,
-  VenueServiceView,
-} from "./client.js";
+import type { Department, FloorZone, VenueServiceApi, VenueServiceView } from "./client.js";
 import { t } from "./strings.js";
 import { format } from "./hours-view.js";
+import type { DeleteImpact } from "@waitron/shared";
+import { serviceDeleteCopy, serviceDeleteError } from "./service-delete-copy.js";
+import "@waitron/ui/src/components/wt-delete-dialog.js";
 
 export type DepartmentDialog =
   | { kind: "add-department" }
-  | { kind: "rename-department" | "disable-department"; row: Department }
+  | { kind: "rename-department" | "delete-department"; row: Department }
   | { kind: "add-zone"; departmentId: string }
-  | { kind: "rename-zone" | "move-zone" | "add-to-department" | "disable-zone"; row: FloorZone };
+  | { kind: "rename-zone" | "move-zone" | "add-to-department" | "delete-zone"; row: FloorZone };
 type Draft = { name: string; departmentId: string };
-type Clash = { kind: "department" | "zone"; id: string; name: string };
 const copy = (value: Draft): Draft => ({ ...value });
 const equal = (a: Draft, b: Draft) =>
   a.name.trim() === b.name.trim() && a.departmentId === b.departmentId;
@@ -71,8 +67,11 @@ export class DepartmentDialogs extends LitElement {
   @state() private refused: Partial<Record<keyof Draft, string>> = {};
   @state() private failure = "";
   @state() private impactFailure = "";
-  @state() private clash?: Clash;
-  @state() private impact?: DepartmentRemovalImpact;
+  @state() private impact: DeleteImpact | null = null;
+  @state() private impactLoading = false;
+  @property({ attribute: false }) opener: HTMLElement | null = null;
+  @property({ type: Boolean }) readonly = false;
+  private impactDetach?: () => void;
   private opened?: DepartmentDialog;
   private baseline?: Draft;
   private scope?: DraftScope<Draft>;
@@ -80,16 +79,20 @@ export class DepartmentDialogs extends LitElement {
   private generation = {};
   override connectedCallback() {
     super.connectedCallback();
-    if (this.dialog && this.opened === this.dialog && this.confirming && !this.impact)
-      void this.loadImpact(this.dialog, this.generation);
+    if (this.dialog && this.opened === this.dialog && this.confirming)
+      this.loadImpact(this.dialog, this.generation);
     this.requestUpdate();
   }
   override disconnectedCallback() {
+    this.impactDetach?.();
+    this.impactDetach = undefined;
     this.scope?.dispose();
     this.scope = undefined;
     this.leave = undefined;
     this.generation = {};
     this.busy = false;
+    this.impact = null;
+    this.impactLoading = false;
     super.disconnectedCallback();
   }
   protected override willUpdate() {
@@ -104,8 +107,10 @@ export class DepartmentDialogs extends LitElement {
       this.refused = {};
       this.failure = "";
       this.impactFailure = "";
-      this.clash = undefined;
-      this.impact = undefined;
+      this.impactDetach?.();
+      this.impactDetach = undefined;
+      this.impact = null;
+      this.impactLoading = false;
       const dialog = this.dialog;
       this.draft = {
         name: dialog && "row" in dialog ? dialog.row.name : "",
@@ -130,7 +135,7 @@ export class DepartmentDialogs extends LitElement {
     }
   }
   private get confirming() {
-    return this.dialog?.kind.startsWith("disable") ?? false;
+    return this.dialog?.kind.startsWith("delete") ?? false;
   }
   private get moving() {
     return this.dialog?.kind === "move-zone" || this.dialog?.kind === "add-to-department";
@@ -159,27 +164,122 @@ export class DepartmentDialogs extends LitElement {
   private current(dialog: DepartmentDialog, generation: object) {
     return this.isConnected && this.dialog === dialog && generation === this.generation;
   }
-  private async loadImpact(dialog: DepartmentDialog, generation: object) {
-    if (!("row" in dialog)) return;
-    this.busy = true;
-    try {
-      const impact =
-        dialog.kind === "disable-department"
-          ? await this.api.departmentRemovalImpact(dialog.row.id)
-          : await this.api.zoneRemovalImpact(dialog.row.id);
-      if (this.current(dialog, generation)) {
-        this.impact = impact;
-        this.impactFailure = "";
+  private loadImpact(dialog: DepartmentDialog, generation: object) {
+    if (
+      !this.current(dialog, generation) ||
+      !("row" in dialog) ||
+      !this.confirming ||
+      this.busy ||
+      this.readonly ||
+      this.refreshing
+    )
+      return;
+    this.impactDetach?.();
+    this.impactDetach = undefined;
+    this.impactLoading = true;
+    this.impactFailure = "";
+    const readIdentity = {};
+    this.readIdentity = readIdentity;
+    const current = () => this.current(dialog, generation) && this.readIdentity === readIdentity;
+    let accepted = false;
+    const failed = (error: unknown) => {
+      if (!current() || this.busy) return;
+      accepted = false;
+      if (
+        ["department.not_found", "service_zone.not_found", "zone.not_found"].includes(
+          (error as { code?: string })?.code ?? "",
+        )
+      ) {
+        this.closeDelete(dialog, generation);
+        this.emit("gone", {});
+        return;
       }
+      this.impactLoading = false;
+      this.impactFailure = t("venue.delete_load_error");
+    };
+    const apply = (impact: DeleteImpact) => {
+      if (!current() || this.busy) return;
+      if (impact?.target?.id !== dialog.row.id) {
+        failed(new Error("Unexpected deletion target"));
+        return;
+      }
+      accepted = true;
+      this.impact = impact;
+      this.impactLoading = false;
+      this.impactFailure = "";
+    };
+    const recovered = () => {
+      if (current() && accepted) this.impactFailure = "";
+    };
+    const department = dialog.kind === "delete-department";
+    const api = this.api;
+    const watch = department ? api.watchDepartmentDeleteImpact : api.watchZoneDeleteImpact;
+    if (watch) {
+      const detach = watch.call(api, dialog.row.id, apply, failed, recovered);
+      if (current()) this.impactDetach = detach;
+      else detach();
+    } else
+      void (
+        department
+          ? api.getDepartmentDeleteImpact(dialog.row.id)
+          : api.getZoneDeleteImpact(dialog.row.id)
+      ).then(apply, failed);
+  }
+  private readIdentity = {};
+  private closeDelete(dialog: DepartmentDialog, generation: object) {
+    if (!this.current(dialog, generation)) return;
+    this.impactDetach?.();
+    this.impactDetach = undefined;
+    this.generation = {};
+    this.busy = false;
+    this.dialog = undefined;
+  }
+  private async deleteTarget(id: string, dialog: DepartmentDialog, generation: object) {
+    if (
+      !this.current(dialog, generation) ||
+      !this.confirming ||
+      !("row" in dialog) ||
+      dialog.row.id !== id ||
+      this.busy ||
+      this.refreshing ||
+      this.readonly ||
+      this.impactLoading ||
+      this.impactFailure ||
+      !this.impact ||
+      this.impact.target.id !== id ||
+      this.impact.refusals.length
+    )
+      return;
+    this.busy = true;
+    this.failure = "";
+    try {
+      if (dialog.kind === "delete-department") await this.api.deleteDepartment(id);
+      else await this.api.deleteZone(id);
     } catch (error) {
-      if (this.current(dialog, generation)) this.impactFailure = this.refusal(error);
-    } finally {
-      if (this.current(dialog, generation)) this.busy = false;
+      if (!this.current(dialog, generation)) return;
+      this.busy = false;
+      if (
+        ["department.not_found", "service_zone.not_found", "zone.not_found"].includes(
+          (error as { code?: string })?.code ?? "",
+        )
+      ) {
+        this.closeDelete(dialog, generation);
+        this.emit("gone", {});
+        return;
+      }
+      this.failure = serviceDeleteError(
+        dialog.kind === "delete-department" ? "department" : "zone",
+        error,
+      );
+      this.loadImpact(dialog, generation);
+      return;
     }
+    if (!this.current(dialog, generation)) return;
+    this.closeDelete(dialog, generation);
+    this.emit("saved", dialog.kind === "delete-department" ? { departmentId: id } : { zoneId: id });
   }
   private refusal(error: unknown): string {
     const code = (error as { code?: string } | undefined)?.code;
-    if (code === "zone.department_inactive") return t("venue.zone_department_inactive");
     if (code === "department.last_active") return t("venue.department_last_active");
     const table = (error as { params?: { tableName?: unknown } } | undefined)?.params?.tableName;
     if (code === "zone.table_in_use" && typeof table === "string")
@@ -204,19 +304,7 @@ export class DepartmentDialogs extends LitElement {
     if (kind && !this.moving) {
       field = "name";
       if (this.draft.name.trim() !== submitted.name.trim()) return;
-      this.refused = {
-        name: t(
-          code === `${kind}.name_disabled`
-            ? `venue.${kind}_name_disabled`
-            : `venue.${kind}_name_taken`,
-        ),
-      };
-      if (
-        code === `${kind}.name_disabled` &&
-        typeof params?.[`${kind}Id`] === "string" &&
-        typeof params.name === "string"
-      )
-        this.clash = { kind, id: params[`${kind}Id`] as string, name: params.name };
+      this.refused = { name: t(`venue.${kind}_name_taken`) };
     } else if (field) this.refused = { [field]: t("venue.field_refused") };
     else this.failure = this.refusal(error);
     if (field)
@@ -230,12 +318,11 @@ export class DepartmentDialogs extends LitElement {
     const refused = { ...this.refused };
     delete refused[field];
     this.refused = refused;
-    this.clash = undefined;
   }
   private emit(name: string, detail: object) {
     this.dispatchEvent(new CustomEvent(name, { detail, bubbles: true, composed: true }));
   }
-  private async save(enable?: Clash) {
+  private async save() {
     const dialog = this.dialog,
       generation = this.generation;
     if (
@@ -243,74 +330,57 @@ export class DepartmentDialogs extends LitElement {
       !this.isConnected ||
       this.busy ||
       this.refreshing ||
-      (!enable && !this.confirming && saveActionState(this.scope).unchanged)
+      this.confirming ||
+      saveActionState(this.scope).unchanged
     )
       return;
     this.attempted = true;
     this.refused = {};
     this.failure = "";
-    this.clash = undefined;
-    if (!enable && Object.keys(this.errors).length) {
+    if (Object.keys(this.errors).length) {
       void this.updateComplete.then(() => focusFirstInvalid(this.shadowRoot!));
       return;
     }
-    if (this.confirming && !this.impact) return;
     this.busy = true;
     const submitted = copy(this.draft);
     try {
       let detail: { departmentId: string } | { zoneId: string };
-      if (enable) {
-        if (enable.kind === "department")
-          await this.api.updateDepartment(enable.id, { active: true });
-        else await this.api.updateZone(enable.id, { active: true });
-        detail = enable.kind === "department" ? { departmentId: enable.id } : { zoneId: enable.id };
-      } else
-        switch (dialog.kind) {
-          case "add-department": {
-            const row = await this.api.createDepartment({ name: submitted.name.trim() });
-            detail = { departmentId: row.id };
-            break;
-          }
-          case "rename-department":
-            await this.api.updateDepartment(dialog.row.id, {
-              name: submitted.name.trim(),
-            });
-            detail = { departmentId: dialog.row.id };
-            break;
-          case "add-zone": {
-            const row = await this.api.createZone({
-              name: submitted.name.trim(),
-              departmentId: dialog.departmentId,
-            });
-            detail = { zoneId: row.id };
-            break;
-          }
-          case "rename-zone":
-            await this.api.updateZone(dialog.row.id, { name: submitted.name.trim() });
-            detail = { zoneId: dialog.row.id };
-            break;
-          case "move-zone":
-          case "add-to-department":
-            await this.api.configureZone(dialog.row.id, {
-              departmentId: submitted.departmentId,
-            });
-            detail = { zoneId: dialog.row.id };
-            break;
-          case "disable-department":
-            await this.api.deactivateDepartment(dialog.row.id);
-            detail = { departmentId: dialog.row.id };
-            break;
-          case "disable-zone":
-            await this.api.deactivateZone(dialog.row.id);
-            detail = { zoneId: dialog.row.id };
-            break;
+      switch (dialog.kind) {
+        case "add-department": {
+          const row = await this.api.createDepartment({ name: submitted.name.trim() });
+          detail = { departmentId: row.id };
+          break;
         }
-      if (this.current(dialog, generation)) {
-        if (enable && (dialog.kind === "rename-department" || dialog.kind === "rename-zone")) {
-          this.fieldRefusal({ code: `${enable.kind}.name_taken` }, submitted);
-          this.emit("written", detail);
+        case "rename-department":
+          await this.api.updateDepartment(dialog.row.id, {
+            name: submitted.name.trim(),
+          });
+          detail = { departmentId: dialog.row.id };
+          break;
+        case "add-zone": {
+          const row = await this.api.createZone({
+            name: submitted.name.trim(),
+            departmentId: dialog.departmentId,
+          });
+          detail = { zoneId: row.id };
+          break;
+        }
+        case "rename-zone":
+          await this.api.updateZone(dialog.row.id, { name: submitted.name.trim() });
+          detail = { zoneId: dialog.row.id };
+          break;
+        case "move-zone":
+        case "add-to-department":
+          await this.api.configureZone(dialog.row.id, {
+            departmentId: submitted.departmentId,
+          });
+          detail = { zoneId: dialog.row.id };
+          break;
+        case "delete-department":
+        case "delete-zone":
           return;
-        }
+      }
+      if (this.current(dialog, generation)) {
         this.scope?.commit(submitted);
         if (this.scope?.isDirty()) this.emit("written", detail);
         else {
@@ -320,18 +390,7 @@ export class DepartmentDialogs extends LitElement {
       }
     } catch (error) {
       if (this.current(dialog, generation)) {
-        if (enable) {
-          if (this.draft.name.trim() !== submitted.name.trim()) return;
-          if (
-            enable.kind === "zone" &&
-            (error as { code?: string } | undefined)?.code === "zone.department_inactive"
-          ) {
-            this.refused = { name: t("venue.zone_name_department_inactive") };
-          } else {
-            this.clash = enable;
-            this.failure = this.refusal(error);
-          }
-        } else this.fieldRefusal(error, submitted);
+        this.fieldRefusal(error, submitted);
       }
     } finally {
       if (this.current(dialog, generation)) this.busy = false;
@@ -358,9 +417,10 @@ export class DepartmentDialogs extends LitElement {
         return t("venue.move_to_department");
       case "add-to-department":
         return t("venue.add_to_department");
-      case "disable-department":
-      case "disable-zone":
-        return format("venue.disable_confirm", { name: dialog.row.name });
+      case "delete-department":
+      case "delete-zone":
+        return serviceDeleteCopy(dialog.kind === "delete-department" ? "department" : "zone")
+          .heading;
     }
   }
   override render(): unknown {
@@ -368,6 +428,35 @@ export class DepartmentDialogs extends LitElement {
     if (!dialog) return nothing;
     const generation = this.generation,
       current = () => this.current(dialog, generation) && !this.busy && !this.refreshing;
+    if (this.confirming)
+      return keyed(
+        generation,
+        html`<wt-delete-dialog
+          .open=${true}
+          .impact=${this.impact}
+          .loading=${this.impactLoading || this.refreshing || this.readonly}
+          .submitting=${this.busy}
+          .readError=${this.impactFailure}
+          .actionError=${this.failure}
+          .copy=${serviceDeleteCopy(dialog.kind === "delete-department" ? "department" : "zone")}
+          .opener=${this.opener}
+          @wt-delete-confirm=${(event: CustomEvent<{ id: string }>) => {
+            event.stopPropagation();
+            void this.deleteTarget(event.detail.id, dialog, generation);
+          }}
+          @wt-delete-retry=${(event: Event) => {
+            event.stopPropagation();
+            this.loadImpact(dialog, generation);
+          }}
+          @wt-close=${(event: Event) => {
+            event.stopPropagation();
+            if (this.current(dialog, generation) && !this.busy && !this.refreshing) {
+              this.closeDelete(dialog, generation);
+              this.emit("closed", {});
+            }
+          }}
+        ></wt-delete-dialog>`,
+      );
     const errors = { ...(this.attempted ? this.errors : {}), ...this.refused };
     const marked = Object.keys(errors).length > 0;
     const state = saveActionState(this.scope);
@@ -375,7 +464,7 @@ export class DepartmentDialogs extends LitElement {
       dialog,
       html`<wt-modal
         open
-        size=${this.confirming ? "compact" : "standard"}
+        size=${"standard"}
         heading=${this.heading(dialog)}
         .dismissible=${!this.busy && !this.refreshing}
         .beforeClose=${this.beforeClose}
@@ -393,51 +482,34 @@ export class DepartmentDialogs extends LitElement {
       >
         <div class="form">
           ${
-            this.confirming
-              ? html`<p>${"row" in dialog ? dialog.row.name : ""}</p>
-                  ${this.impact?.zones.map((zone) => html`<p>${zone.name}: ${format("venue.active_tables", { count: String(zone.activeTableCount) })}</p>`)}`
-              : this.moving
-                ? html`<wt-combobox
-                    name="departmentId"
-                    label=${t("venue.department")}
-                    required
-                    search="never"
-                    searchPlaceholder=${t("venue.combobox_search")}
-                    noResultsLabel=${t("venue.combobox_no_results")}
-                    .value=${this.draft.departmentId}
-                    .options=${this.choices}
-                    .error=${errors.departmentId ?? ""}
-                    @wt-change=${(event: CustomEvent<{ value: string }>) => {
-                      event.stopPropagation();
-                      if (this.current(dialog, generation))
-                        this.changed("departmentId", event.detail.value);
-                    }}
-                  ></wt-combobox>`
-                : html`<wt-input
-                    name="name"
-                    label=${t(dialog.kind.endsWith("department") ? "venue.name" : "venue.zone_name")}
-                    required
-                    .value=${this.draft.name}
-                    .error=${errors.name ?? ""}
-                    @wt-change=${(event: CustomEvent<{ value: string }>) => {
-                      event.stopPropagation();
-                      if (this.current(dialog, generation))
-                        this.changed("name", event.detail.value);
-                    }}
-                  ></wt-input>`
-          }
-          ${
-            this.clash
-              ? html`<wt-button
-                  variant="secondary"
-                  data-test="enable-name-clash"
-                  ?disabled=${this.busy || this.refreshing}
-                  @click=${() => {
-                    if (current()) void this.save(this.clash);
+            this.moving
+              ? html`<wt-combobox
+                  name="departmentId"
+                  label=${t("venue.department")}
+                  required
+                  search="never"
+                  searchPlaceholder=${t("venue.combobox_search")}
+                  noResultsLabel=${t("venue.combobox_no_results")}
+                  .value=${this.draft.departmentId}
+                  .options=${this.choices}
+                  .error=${errors.departmentId ?? ""}
+                  @wt-change=${(event: CustomEvent<{ value: string }>) => {
+                    event.stopPropagation();
+                    if (this.current(dialog, generation))
+                      this.changed("departmentId", event.detail.value);
                   }}
-                  >${format("venue.enable_name", { name: this.clash.name })}</wt-button
-                >`
-              : nothing
+                ></wt-combobox>`
+              : html`<wt-input
+                  name="name"
+                  label=${t(dialog.kind.endsWith("department") ? "venue.name" : "venue.zone_name")}
+                  required
+                  .value=${this.draft.name}
+                  .error=${errors.name ?? ""}
+                  @wt-change=${(event: CustomEvent<{ value: string }>) => {
+                    event.stopPropagation();
+                    if (this.current(dialog, generation)) this.changed("name", event.detail.value);
+                  }}
+                ></wt-input>`
           }
         </div>
         <wt-form-actions
@@ -455,12 +527,12 @@ export class DepartmentDialogs extends LitElement {
             >${t("venue.cancel")}</wt-button
           ><wt-button
             data-test="save-editor"
-            variant=${this.confirming ? "danger" : state.variant}
+            variant=${state.variant}
             ?disabled=${this.busy || this.refreshing || (this.confirming ? !this.impact : state.unchanged || (this.attempted && Object.keys(this.errors).length > 0))}
             @click=${() => {
               if (current()) void this.save();
             }}
-            >${t(this.confirming ? "venue.disable" : "venue.save")}</wt-button
+            >${t("venue.save")}</wt-button
           ></wt-form-actions
         >
       </wt-modal>`,

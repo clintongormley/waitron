@@ -25,12 +25,7 @@ import {
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { locationId } from "@waitron/shared";
 import { VENUE_SERVICE_MIGRATIONS } from "./migrations.js";
-import {
-  configureZone,
-  createDepartment,
-  deactivateDepartment,
-  deactivateServiceZone,
-} from "./operations.js";
+import { configureZone, createDepartment } from "./operations.js";
 import type { RouteTarget } from "./routing.js";
 import type { CellAddress } from "./routing-types.js";
 import { clearRoutingCell, setRoutingCell } from "./routing-store.js";
@@ -447,7 +442,9 @@ describe("setRoutingCell / clearRoutingCell", () => {
   it("refuses an inactive or foreign zone", async () => {
     const f = await setup();
     const other = await scoped((tx) => venue(tx, " (other)"));
-    await scoped((tx) => deactivateServiceZone(tx, f.cfg, f.inside));
+    await scoped(async (tx) =>
+      tx.execute(sql`update floor_zones set active = false where id = ${f.inside}`),
+    );
     for (const zoneId of [f.inside, other.terrace, randomUUID()]) {
       const address: CellAddress = { row: { kind: "category", categoryId: f.drinks }, zoneId };
       await expect(
@@ -469,53 +466,21 @@ describe("setRoutingCell / clearRoutingCell", () => {
     const closed = await scoped((tx) =>
       createDepartment(tx, f.cfg, { name: "Closed", orderStart: "table" }),
     );
-    await scoped((tx) => deactivateDepartment(tx, f.cfg, closed.id));
+    await scoped((tx) =>
+      (async () => {
+        await tx.execute(
+          sql`update floor_zones set active = false where id in (select zone_id from zone_service_policies where department_id = ${closed.id})`,
+        );
+        await tx.execute(sql`update departments set active = false where id = ${closed.id}`);
+      })(),
+    );
     await expect(
       scoped((tx) => configureZone(tx, f.cfg, { zoneId: f.terrace, departmentId: closed.id })),
     ).rejects.toMatchObject({
-      code: "zone.department_inactive",
-      params: { zoneId: f.terrace },
+      code: "department.not_found",
+      params: { departmentId: closed.id },
     });
     expect(await readStoredCells(f)).toEqual(before);
-    await scoped((tx) => clearRoutingCell(tx, f.cfg, address));
-    expect(await readStoredCells(f)).toEqual([]);
-  });
-
-  it("a disabled zone loses its cells, may move into a switched-off department, and takes cells again only once enabled in an enabled one", async () => {
-    const f = await setup();
-    const address: CellAddress = {
-      row: { kind: "category", categoryId: f.drinks },
-      zoneId: f.terrace,
-    };
-    await scoped((tx) => setRoutingCell(tx, f.cfg, address, station(f.bar)));
-    await scoped((tx) => deactivateServiceZone(tx, f.cfg, f.terrace));
-    expect(await readStoredCells(f)).toEqual([]);
-    const closed = await scoped((tx) =>
-      createDepartment(tx, f.cfg, { name: "Closed", orderStart: "table" }),
-    );
-    await scoped((tx) => deactivateDepartment(tx, f.cfg, closed.id));
-    await scoped((tx) => configureZone(tx, f.cfg, { zoneId: f.terrace, departmentId: closed.id }));
-    const refusesBoth = async () => {
-      await expect(
-        scoped((tx) => setRoutingCell(tx, f.cfg, address, station(f.bar))),
-      ).rejects.toMatchObject({ code: "service_zone.not_found", params: { zoneId: f.terrace } });
-      await expect(scoped((tx) => clearRoutingCell(tx, f.cfg, address))).rejects.toMatchObject({
-        code: "service_zone.not_found",
-        params: { zoneId: f.terrace },
-      });
-    };
-    await refusesBoth();
-    const open = await scoped((tx) =>
-      createDepartment(tx, f.cfg, { name: "Open", orderStart: "table" }),
-    );
-    await scoped((tx) => configureZone(tx, f.cfg, { zoneId: f.terrace, departmentId: open.id }));
-    await refusesBoth();
-    expect(await readStoredCells(f)).toEqual([]);
-    await db.update(floorZones).set({ active: true }).where(eq(floorZones.id, f.terrace));
-    await scoped((tx) => setRoutingCell(tx, f.cfg, address, station(f.bar)));
-    expect(await readStoredCells(f)).toEqual([
-      expect.objectContaining({ zone_id: f.terrace, station_id: f.bar }),
-    ]);
     await scoped((tx) => clearRoutingCell(tx, f.cfg, address));
     expect(await readStoredCells(f)).toEqual([]);
   });
@@ -526,8 +491,6 @@ describe("setRoutingCell / clearRoutingCell", () => {
       .select({ id: departments.id })
       .from(departments)
       .where(eq(departments.locationId, f.cfg.locationId));
-    // deactivateDepartment switches the department's zones off too, so this writes the state
-    // directly.
     await db.update(departments).set({ active: false }).where(eq(departments.id, dining!.id));
     const address: CellAddress = {
       row: { kind: "category", categoryId: f.drinks },
@@ -596,7 +559,9 @@ describe("setRoutingCell / clearRoutingCell", () => {
 
   it("refuses an inactive zone and an inactive station for a No category cell with the same codes as any row", async () => {
     const f = await setup();
-    await scoped((tx) => deactivateServiceZone(tx, f.cfg, f.inside));
+    await scoped(async (tx) =>
+      tx.execute(sql`update floor_zones set active = false where id = ${f.inside}`),
+    );
     const inside: CellAddress = { row: { kind: "no_category" }, zoneId: f.inside };
     await expect(
       scoped((tx) => setRoutingCell(tx, f.cfg, inside, station(f.bar))),

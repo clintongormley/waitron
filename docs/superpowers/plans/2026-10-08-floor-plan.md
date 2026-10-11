@@ -1,6 +1,9 @@
 > 2026-10-11, A476: the first-save note mentions Reset; merge seats use `merge.seats_required`,
 > and a table missing from today's plan uses `table.not_on_today_plan`. Code examples below use these names.
 
+> **2026-10-11 supersession.** A435 step 6 supersedes reversible zone switching and the activeTableCount hierarchy impact. Individual-table master/today, reset, catch-up and release behavior remains governed by the later floor design. See the
+> [step 6 reconciliation](2026-10-11-a435-6-tables-zones-departments-delete.md). Earlier behavior and receipts below remain historical.
+
 # Floor plans — implementation plan (A429)
 
 > **For agentic workers:** REQUIRED SUB-SKILL: use superpowers:subagent-driven-development

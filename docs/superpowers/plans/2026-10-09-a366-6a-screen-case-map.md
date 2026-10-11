@@ -1,5 +1,9 @@
 # A366 slice 6A: legacy screen case map
 
+> **2026-10-11 supersession.** A435 step 6 retires hierarchy Enable/Disable and disabled-name offers under a separate changed-check inventory. This preservation map and its receipts remain historical. See the
+> [step 6 reconciliation](2026-10-11-a435-6-tables-zones-departments-delete.md). Earlier behavior and receipts below remain historical.
+
+
 Source audit, 2026-10-09, against signed head `147528124eab747cd7da35034a1fdad422f2d631`. Original declarations and complete case bodies are retained in Lane E’s `receipts/a366-6a/a10-case-map/case-map.json`. A parameterized declaration can generate several runtime cases. This table maps declarations, not individual assertion expressions; it does not establish expression-by-expression equivalence or package coverage.
 
 This inventory accompanies Task A10’s Changed test checks commit. The approved removal list is in [the Part A plan](2026-10-08-a366-slice-6-departments.md#behaviour-this-slice-removes). For a mixed case, only the named tree, global-table, modal or obsolete-field presentation is removed; the replacement references identify the surviving behavioral checks. Source line numbers below describe this audit snapshot.

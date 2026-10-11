@@ -283,19 +283,6 @@ function validateDepartmentTransfers(tables: Tables): void {
   }
 }
 
-/**
- * Refuses (`setup.request_invalid`) a zone whose `active` flag is not 0 or 1 (`field`
- * `floor_zones.active`), and routing cells a save could not have written (`field` naming
- * `routing_cells.<column>`, or `departments.active` when the department of a cell's zone holds a
- * flag that is not 0 or 1): a bad coordinate or target shape, the All categories × Every zone cell, a
- * second cell at one coordinate, a variant or a product, category, zone or station the bundle does
- * not hold, and a zone that is switched off or has no service configuration. A zone whose
- * department is switched off is refused with the grid's own `service_zone.not_found`, its params
- * carrying the zone and department ids, the row, and each name the export holds as non-empty text.
- * A cell's period choice is refused (`routing_cell_periods.<column>`) for a cell, period or station
- * the bundle does not hold, a department that is not the period's, a zone cell's period of any
- * department but its zone's, a second choice for one cell and period, and a bad target.
- */
 export function validateRoutingConfiguration(tables: Tables): void {
   const categories = ids(tables.categories);
   const products = new Set(
@@ -401,27 +388,20 @@ function validateRoutingCellPeriods(
   }
 }
 
-/**
- * Refuses (`zone.department_inactive`) a switched-on zone whose department the bundle holds switched
- * off, which no save produces: switching a department off switches its zones off. A department a
- * zone belongs to whose `active` flag is not 0 or 1 is refused (`setup.request_invalid`,
- * `departments.active`).
- */
-function validateZoneDepartments(tables: Tables): void {
-  const zones = new Map((tables.floor_zones ?? []).map((row) => [row.id, row]));
-  const departments = new Map((tables.departments ?? []).map((row) => [row.id, row]));
-  for (const policy of tables.zone_service_policies ?? []) {
-    const zone = zones.get(policy.zone_id);
-    const department = departments.get(policy.department_id);
-    const zoneOn = zone !== undefined && isActive(zone, "floor_zones");
-    if (department === undefined || isActive(department, "departments") || !zoneOn) continue;
-    throw new AppError("zone.department_inactive", {
-      zoneId: String(policy.zone_id),
-      ...nameOf("zoneName", zone),
-      departmentId: String(policy.department_id),
-      ...nameOf("departmentName", department),
-    });
+function validateServiceHierarchy(tables: Tables): void {
+  for (const table of ["floor_zones", "departments"])
+    for (const row of tables[table] ?? []) if (!isActive(row, table)) refuse(`${table}.active`);
+  const zones = ids(tables.floor_zones);
+  const departments = ids(tables.departments);
+  for (const row of tables.zone_service_policies ?? []) {
+    if (!zones.has(row.zone_id)) refuse("zone_service_policies.zone_id");
+    if (!departments.has(row.department_id)) refuse("zone_service_policies.department_id");
   }
+  for (const table of ["department_receipts", "department_sale_policies"])
+    for (const row of tables[table] ?? [])
+      if (!departments.has(row.department_id)) refuse(`${table}.department_id`);
+  for (const row of tables.zone_sale_policies ?? [])
+    if (!zones.has(row.zone_id)) refuse("zone_sale_policies.zone_id");
 }
 
 function validateZoneClosedTimes(tables: Tables, bundle?: { readonly dayCutover: string }): void {
@@ -489,20 +469,19 @@ function validateVenueServiceConfiguration(
 ): void {
   validateReceiptModes(tables);
   validateOrderStarts(tables);
+  validateServiceHierarchy(tables);
   validateNamedDaysConfiguration(tables);
   validateHolidayConfiguration(tables);
   validateMenuTimetables(tables, bundle);
   validateZoneClosedTimes(tables, bundle);
   validateDepartmentTransfers(tables);
   validateRoutingConfiguration(tables);
-  // After the routing check, whose refusal of such a zone's cell also names the cell's row.
-  validateZoneDepartments(tables);
 }
 
 export const VENUE_SERVICE_CONFIGURATION_TRANSFER = {
   kind: "tables",
   tables: [
-    { name: "departments", locationColumns: ["location_id"] },
+    { name: "departments", locationColumns: ["location_id"], leaveBehindWhenFalse: "active" },
     { name: "department_receipts" },
     { name: "department_sale_policies" },
     { name: "zone_service_policies", locationColumns: ["location_id"] },

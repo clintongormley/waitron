@@ -150,6 +150,20 @@ export async function readDepartmentReceipt(
     .select(trimProjection(cfg))
     .from(departments)
     .leftJoin(departmentReceipts, eq(departmentReceipts.departmentId, departments.id))
+    .where(and(rowQuery(cfg, departmentId), eq(departments.active, true)));
+  if (!row) throw new AppError("department.not_found", { departmentId });
+  return parseReceipt(row);
+}
+
+export async function readRetainedDepartmentReceipt(
+  tx: Transaction,
+  cfg: DepartmentReceiptScope,
+  departmentId: string,
+): Promise<DepartmentReceiptConfig> {
+  const [row] = await tx
+    .select(trimProjection(cfg))
+    .from(departments)
+    .leftJoin(departmentReceipts, eq(departmentReceipts.departmentId, departments.id))
     .where(rowQuery(cfg, departmentId));
   if (!row) throw new AppError("department.not_found", { departmentId });
   return parseReceipt(row);
@@ -198,7 +212,7 @@ export async function readDepartmentLogoRasters(
     })
     .from(departments)
     .leftJoin(departmentReceipts, eq(departmentReceipts.departmentId, departments.id))
-    .where(rowQuery(cfg, departmentId));
+    .where(and(rowQuery(cfg, departmentId), eq(departments.active, true)));
   if (!row) throw new AppError("department.not_found", { departmentId });
   if (!row.logo || !MEDIA_FILENAME.test(row.logo) || row.narrow === null || row.wide === null)
     return null;
@@ -216,7 +230,7 @@ export async function writeDepartmentReceipt(
   const [row] = await tx
     .select({ id: departments.id })
     .from(departments)
-    .where(rowQuery(cfg, departmentId));
+    .where(and(rowQuery(cfg, departmentId), eq(departments.active, true)));
   if (!row) throw new AppError("department.not_found", { departmentId });
   if (
     receipt.logo &&
@@ -265,6 +279,12 @@ export async function receiptDefaultDepartment(
   const [row] = await tx
     .select({ id: departments.id })
     .from(departments)
-    .where(and(eq(departments.locationId, cfg.locationId), eq(departments.isDefault, true)));
+    .where(
+      and(
+        eq(departments.locationId, cfg.locationId),
+        eq(departments.isDefault, true),
+        eq(departments.active, true),
+      ),
+    );
   return row?.id ?? null;
 }

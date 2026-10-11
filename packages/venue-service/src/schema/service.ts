@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { check, foreignKey, primaryKey, unique, uniqueIndex } from "drizzle-orm/sqlite-core";
+import { check, foreignKey, primaryKey, uniqueIndex } from "drizzle-orm/sqlite-core";
 import { menuItems, menuVersions } from "@waitron/catalogue";
 import {
   count,
@@ -33,7 +33,9 @@ export const departments = table(
     createdAt: tsString("created_at").notNull().$defaultFn(nowIso),
   },
   (t) => [
-    unique("departments_location_name_key").on(t.locationId, t.name),
+    uniqueIndex("departments_location_name_key")
+      .on(t.locationId, t.name)
+      .where(sql`${t.active} = 1`),
     uniqueIndex("departments_one_default_per_location_key")
       .on(t.locationId)
       .where(sql`${t.isDefault}`),

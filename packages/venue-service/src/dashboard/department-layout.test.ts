@@ -111,7 +111,13 @@ describe.each(["light", "dark"] as const)("department phone bounds (%s)", (theme
             ".zones wt-button",
           ),
         ];
-        expect(choices).toHaveLength(4);
+        expect(choices).toHaveLength(3);
+        expect(choices.map((choice) => choice.getAttribute("data-test"))).toEqual([
+          "zone-z1",
+          "zone-z2",
+          "add-zone",
+        ]);
+        expect(el.shadowRoot!.querySelector("[data-test=zone-z3]")).toBeNull();
         for (const choice of choices) {
           await choice.updateComplete;
           inside(choice, bounds);

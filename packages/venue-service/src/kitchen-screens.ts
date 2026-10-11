@@ -100,6 +100,7 @@ async function readStored(
     .where(
       and(
         eq(floorZones.locationId, cfg.locationId),
+        eq(floorZones.active, true),
         profileIds === undefined
           ? undefined
           : inArray(deviceProfileKitchenScreenZones.deviceProfileId, [...profileIds]),
@@ -132,18 +133,41 @@ async function liveFormFactor(tx: Transaction, profileId: string): Promise<strin
   return profile.formFactor;
 }
 
-/** A stored switched-off zone may stay; an emptied station bound needs an explicit replacement. */
 export async function setProfileKitchenScreens(
   tx: Transaction,
   cfg: VenueScope,
   profileId: string,
   screens: ProfileKitchenScreens,
 ): Promise<NarrowedDevice[]> {
-  const formFactor = await liveFormFactor(tx, profileId);
   const stored = (await readStored(tx, cfg, [profileId])).get(profileId) ?? {};
+  return replaceProfileKitchenScreens(tx, cfg, profileId, screens, stored);
+}
+
+export async function copyProfileKitchenScreens(
+  tx: Transaction,
+  cfg: VenueScope,
+  sourceId: string,
+  targetId: string,
+): Promise<void> {
+  await liveFormFactor(tx, sourceId);
+  const stored = (await readStored(tx, cfg, [sourceId])).get(sourceId) ?? {};
+  await replaceProfileKitchenScreens(tx, cfg, targetId, stored, stored);
+}
+
+async function replaceProfileKitchenScreens(
+  tx: Transaction,
+  cfg: VenueScope,
+  profileId: string,
+  screens: ProfileKitchenScreens,
+  stored: MutableScreens,
+): Promise<NarrowedDevice[]> {
+  const formFactor = await liveFormFactor(tx, profileId);
   for (const kind of KITCHEN_SCREEN_KINDS) {
     if (stored[kind]?.stationIds?.length === 0 && screens[kind] === undefined)
       refuse(LIST_FIELDS[kind].stations, "empty");
+    const zoneField = LIST_FIELDS[kind].zones;
+    if (zoneField !== null && stored[kind]?.zoneIds?.length === 0 && screens[kind] === undefined)
+      refuse(zoneField, "empty");
   }
   const kinds = KITCHEN_SCREEN_KINDS.filter((kind) => screens[kind] !== undefined);
   const checked: { kind: KitchenScreenKind; scope: KitchenScreenScope }[] = [];
@@ -222,12 +246,15 @@ async function checkedZones(
 ): Promise<string[] | null> {
   if (ids === null || fields.zones === null) return null;
   const unique = [...new Set(ids)];
-  if (unique.length === 0) refuse(fields.zones, "empty");
+  if (unique.length === 0) {
+    if (stored?.zoneIds?.length === 0) return [];
+    refuse(fields.zones, "empty");
+  }
   const found = await tx
     .select({ id: floorZones.id, active: floorZones.active })
     .from(floorZones)
     .where(and(inArray(floorZones.id, unique), eq(floorZones.locationId, cfg.locationId)));
-  const usable = found.filter((row) => row.active || stored?.zoneIds?.includes(row.id));
+  const usable = found.filter((row) => row.active);
   if (usable.length !== unique.length) refuse(fields.zones, "not_found");
   return unique;
 }
@@ -351,7 +378,7 @@ async function placesHere(
   const zones = await tx
     .select({ id: floorZones.id, name: floorZones.name, active: floorZones.active })
     .from(floorZones)
-    .where(eq(floorZones.locationId, cfg.locationId))
+    .where(and(eq(floorZones.locationId, cfg.locationId), eq(floorZones.active, true)))
     .orderBy(asc(floorZones.displayOrder), asc(floorZones.name), asc(floorZones.id));
   return { stations, zones };
 }
@@ -444,7 +471,6 @@ function lessRemovals(
   return choices;
 }
 
-/** A stored switched-off zone may stay on the same screen. */
 async function checkChoice(
   tx: Transaction,
   cfg: VenueScope,
@@ -503,20 +529,19 @@ function checkedChoice(
   kind: KitchenScreenKind,
 ): readonly string[] {
   if (ids === null) return [];
-  if (ids.length === 0) refuseChoice(field, "empty", kind);
+  if (ids.length === 0) {
+    if (field === "zoneIds" && kept?.length === 0) return [];
+    refuseChoice(field, "empty", kind);
+  }
   for (const id of ids) {
     const place = places.find((entry) => entry.id === id);
-    if (place === undefined || !(place.active || kept?.includes(id))) {
+    if (place === undefined || !(place.active || (field === "stationIds" && kept?.includes(id)))) {
       refuseChoice(field, "not_found", kind);
     }
   }
   return ids;
 }
 
-/**
- * Checks a device's kitchen screens against the profile without writing them; with `deviceId`, the
- * device keeps what it stores, as `setDeviceKitchenScreens` lets it.
- */
 export async function assertDeviceKitchenScreens(
   tx: Transaction,
   cfg: VenueScope,
@@ -525,9 +550,7 @@ export async function assertDeviceKitchenScreens(
   deviceId?: string,
 ): Promise<void> {
   const stored =
-    deviceId === undefined
-      ? new Map()
-      : (await readEffectiveChoices(tx, [deviceId])).get(deviceId)!;
+    deviceId === undefined ? new Map() : (await readChoices(tx, [deviceId])).get(deviceId)!;
   await checkChoice(tx, cfg, profileId, screens, stored);
 }
 
@@ -538,7 +561,7 @@ export async function setDeviceKitchenScreens(
   input: { deviceId: string; profileId: string; screens: readonly DeviceKitchenScreen[] },
 ): Promise<void> {
   const { deviceId, profileId, screens } = input;
-  const stored = (await readEffectiveChoices(tx, [deviceId])).get(deviceId)!;
+  const stored = (await readChoices(tx, [deviceId])).get(deviceId)!;
   await checkChoice(tx, cfg, profileId, screens, stored);
   await tx.delete(deviceKitchenScreens).where(eq(deviceKitchenScreens.deviceId, deviceId));
   await tx
@@ -594,7 +617,7 @@ export async function removeDeviceKitchenScreens(tx: Transaction, deviceId: stri
 /**
  * The slots a list shows: the device's explicit list, or else the profile's (no row or "every"
  * meaning every switched-on one here) less what narrowings took; what they took shows too, as
- * no longer available, and so does a listed one switched off since.
+ * no longer available. Deleted places are absent.
  */
 function slots(
   places: readonly Place[],

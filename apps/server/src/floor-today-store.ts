@@ -1,4 +1,5 @@
-import { and, eq, exists, inArray, isNull, lt, or } from "drizzle-orm";
+import { requireZone } from "./floor-plan.js";
+import { and, eq, exists, getTableColumns, inArray, isNull, lt, or } from "drizzle-orm";
 import {
   diningTables,
   floorPlanJoins,
@@ -85,6 +86,7 @@ export async function resetZone(
   zoneId: string,
   now: Date,
 ): Promise<void> {
+  await requireZone(tx, cfg, zoneId);
   const day = await todayBusinessDay(tx, cfg, now);
   if (day !== null) await resetZoneFor(tx, cfg, removals, zoneId, day, now);
 }
@@ -220,10 +222,22 @@ async function catchUpPass(
   zoneId: string,
   now: Date,
 ): Promise<boolean> {
-  const rows = await tx
-    .select()
-    .from(floorResetTables)
-    .where(and(eq(floorResetTables.zoneId, zoneId), eq(floorResetTables.pending, true)));
+  const zoneRows = await tx
+    .select({ zoneId: floorZones.id, row: getTableColumns(floorResetTables) })
+    .from(floorZones)
+    .leftJoin(
+      floorResetTables,
+      and(eq(floorResetTables.zoneId, floorZones.id), eq(floorResetTables.pending, true)),
+    )
+    .where(
+      and(
+        eq(floorZones.id, zoneId),
+        eq(floorZones.locationId, cfg.locationId),
+        eq(floorZones.active, true),
+      ),
+    );
+  if (zoneRows.length === 0) throw new AppError("zone.not_found", { zoneId });
+  const rows = zoneRows.flatMap(({ row }) => (row === null ? [] : [row]));
   if (rows.length === 0) return false;
   const rowOf = new Map<Target, (typeof rows)[number]>();
   for (const row of rows) {
@@ -438,7 +452,6 @@ export async function ensureToday(
     .where(
       and(
         eq(floorZones.locationId, cfg.locationId),
-        // A reset switches tables on; a disabled zone's tables must stay off.
         eq(floorZones.active, true),
         or(
           isNull(floorTodayZones.businessDay),

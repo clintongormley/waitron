@@ -50,7 +50,7 @@ async function mount(path = "/manage/venue-operations") {
   const liveData = new LiveData();
   const request = vi.fn(async (url: string, method = "GET") => {
     if (method !== "GET") {
-      if (failWrite) throw { code: "department.name_taken" };
+      if (failWrite) throw { code: "connection.failed" };
       return { id: "new" };
     }
     if (url === "/management-api/venue-service") {
@@ -62,7 +62,7 @@ async function mount(path = "/manage/venue-operations") {
       if (failRead) throw new Error("offline");
       return structuredClone(value);
     }
-    if (url === "/management-api/zones?includeInactive=true") return value.floorZones;
+    if (url === "/management-api/zones") return value.floorZones;
     return [];
   });
   const app = document.createElement("a10-load-ownership-app") as App;
@@ -109,6 +109,18 @@ async function mount(path = "/manage/venue-operations") {
 function emit(el: HTMLElement, name: string, detail: object = {}) {
   el.dispatchEvent(new CustomEvent(name, { detail, bubbles: true, composed: true }));
 }
+async function renameDepartment(shell: HTMLElementTagNameMap["venue-departments-shell"]) {
+  emit(shell.shadowRoot!.querySelector("departments-list")!, "rename-department", {
+    departmentId: "d1",
+  });
+  await shell.updateComplete;
+  const dialog = shell.shadowRoot!.querySelector("department-dialogs")!;
+  await dialog.updateComplete;
+  emit(dialog.shadowRoot!.querySelector("[name=name]")!, "wt-change", { value: "Changed name" });
+  await dialog.updateComplete;
+  dialog.shadowRoot!.querySelector<HTMLButtonElement>("[data-test=save-editor]")!.click();
+  return dialog;
+}
 const reads = (request: ReturnType<typeof vi.fn>) =>
   request.mock.calls.filter(
     (call) => call[0] === "/management-api/venue-service" && (call[1] ?? "GET") === "GET",
@@ -127,12 +139,9 @@ it("the initial read opens the department list actively and later live reads are
   value(model("New live name"));
   await invalidate(liveData, request);
   await expect.poll(() => shell.model.departments[0]!.name).toBe("New live name");
-  expect(request).toHaveBeenLastCalledWith(
-    "/management-api/zones?includeInactive=true",
-    "GET",
-    undefined,
-    { passive: true },
-  );
+  expect(request).toHaveBeenLastCalledWith("/management-api/zones", "GET", undefined, {
+    passive: true,
+  });
   expect(request).toHaveBeenCalledWith("/management-api/venue-service", "GET", undefined, {
     passive: true,
   });
@@ -162,9 +171,7 @@ it.each(["resolve", "reject"] as const)(
     const pending = deferRead();
     await invalidate(liveData, request);
     value(model("Saved name"));
-    emit(shell.shadowRoot!.querySelector("departments-list")!, "enable-department", {
-      departmentId: "d2",
-    });
+    await renameDepartment(shell);
     await expect.poll(() => shell.model.departments[0]!.name).toBe("Saved name");
     if (answer === "resolve") pending.resolve(model("Old live name"));
     else pending.reject(new Error("old failure"));
@@ -217,9 +224,7 @@ it("an action refresh updates another cached observer when the change feed is si
     )
     .toBe("Restaurant");
   value(model("Saved without feed"));
-  emit(shell.shadowRoot!.querySelector("departments-list")!, "enable-department", {
-    departmentId: "d2",
-  });
+  await renameDepartment(shell);
   await expect.poll(() => shell.model.departments[0]!.name).toBe("Saved without feed");
   await expect
     .poll(
@@ -232,7 +237,7 @@ it("an initial load failure recovers through a passive live read", async () => {
   const liveData = new LiveData();
   let failed = true;
   const request = vi.fn(async (path: string) => {
-    if (path.endsWith("includeInactive=true")) return [];
+    if (path.endsWith("/management-api/zones")) return [];
     if (failed) throw new Error("offline");
     return model();
   });
@@ -259,26 +264,29 @@ it("an initial load failure recovers through a passive live read", async () => {
 it("live recovery clears a refresh failure without clearing a later action refusal", async () => {
   const { shell, loader, readFailure, writeFailure, request, liveData } = await mount();
   readFailure(true);
-  emit(shell.shadowRoot!.querySelector("departments-list")!, "enable-department", {
-    departmentId: "d2",
-  });
+  await renameDepartment(shell);
   await expect
     .poll(() => shell.shadowRoot!.querySelector("[role=alert]")?.textContent?.trim())
     .toBe("The venue configuration could not be loaded.");
   writeFailure(true);
-  emit(shell.shadowRoot!.querySelector("departments-list")!, "enable-department", {
-    departmentId: "d2",
-  });
-  await expect
-    .poll(() => shell.shadowRoot!.querySelector("[role=alert]")?.textContent?.trim())
-    .toBe("The change could not be saved.");
+  const dialog = await renameDepartment(shell);
+  const bottom = async () =>
+    (
+      await formMessageOf(dialog.shadowRoot!.querySelector("wt-form-actions")!)
+    )?.textContent?.trim() ?? "";
+  await expect.poll(bottom).toBe("The change could not be saved.");
+  expect(shell.shadowRoot!.querySelector("[role=alert]")?.textContent?.trim()).toBe(
+    "The venue configuration could not be loaded.",
+  );
   readFailure(false);
   await invalidate(liveData, request);
   await loader.updateComplete;
   await shell.updateComplete;
-  expect(shell.shadowRoot!.querySelector("[role=alert]")?.textContent?.trim()).toBe(
-    "The change could not be saved.",
-  );
+  expect(await bottom()).toBe("The change could not be saved.");
+  expect(shell.shadowRoot!.querySelector("[role=alert]")).toBeNull();
+  expect(
+    dialog.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>("[name=name]")!.value,
+  ).toBe("Changed name");
 });
 it("a reconnected load wrapper reads passively and retains its Settings draft", async () => {
   const { shell, loader, app, request } = await mount("/manage/venue-operations/department/d1");
@@ -323,9 +331,7 @@ it.each(["resolve", "reject"] as const)(
     const pending = deferRead();
     await invalidate(liveData, request);
     value(model("Saved in second observer"));
-    emit(other.shadowRoot!.querySelector("departments-list")!, "enable-department", {
-      departmentId: "d2",
-    });
+    await renameDepartment(other);
     await expect.poll(() => other.model.departments[0]!.name).toBe("Saved in second observer");
     // Hold the next cache read so it cannot conceal the old read's result.
     const next = deferRead();
@@ -351,7 +357,7 @@ it("opening an already cached query displays it without extending the session", 
   history.replaceState(null, "", "/manage/venue-operations");
   const data = new LiveData();
   const request = vi.fn(async (path: string) =>
-    path.endsWith("includeInactive=true") ? [] : model("Cached restaurant"),
+    path.endsWith("/management-api/zones") ? [] : model("Cached restaurant"),
   );
   const api = new VenueServiceApi(request as DashboardRequest, data);
   const observation = data.observe(

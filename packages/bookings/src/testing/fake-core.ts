@@ -38,6 +38,14 @@ let nextOrderNumber = 0;
 
 export function fakeCore(cfg: FakeCoreConfig): CoreServices {
   return {
+    floorDeletion: {
+      readImpact: async () => {
+        throw new Error("unused floor deletion");
+      },
+      clear: async () => {
+        throw new Error("unused floor deletion");
+      },
+    },
     async seatTable(tx: Transaction, req) {
       const [table] = await tx
         .select({ inService: tableInService(diningTables.id) })

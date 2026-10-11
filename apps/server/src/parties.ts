@@ -13,7 +13,7 @@ import {
   workingOrders,
 } from "@waitron/db";
 import type { StagedInvoiceDelivery, Transaction } from "@waitron/db";
-import type { CoreServices } from "@waitron/module";
+import type { CoreServices, TableRemoval } from "@waitron/module";
 import {
   AppError,
   centsToDecimal,
@@ -22,6 +22,7 @@ import {
   rawCentsToDecimal,
 } from "@waitron/shared";
 import { VENUE_SERVICE } from "./modules.js";
+import { floorDeletionFor } from "./floor-delete.js";
 import type { OriginConfig, TillConfig } from "./till-config.js";
 import { createOpenOrder, openTab } from "./working-order.js";
 import { outstandingOf, readPaymentsByBill, refuseBillHoldingMoney } from "./bill-payments.js";
@@ -101,9 +102,15 @@ export async function seatTable(
 }
 
 /** The core verbs a module's routes reach, bound to `cfg`. A module's routes are the dashboard's. */
-export function moduleCoreServices(cfg: TillConfig): CoreServices {
+export function moduleCoreServices(
+  cfg: TillConfig,
+  removals: readonly TableRemoval[],
+): CoreServices {
   const dashboard: OriginConfig = { ...cfg, origin: jobOrigin("dashboard") };
-  return { seatTable: (tx, req) => seatTable(tx, dashboard, req) };
+  return {
+    seatTable: (tx, req) => seatTable(tx, dashboard, req),
+    floorDeletion: floorDeletionFor(cfg, removals),
+  };
 }
 
 /**

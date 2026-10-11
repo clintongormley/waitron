@@ -17,7 +17,7 @@ export async function resolveInvoiceEmailContact(
   const contact = async (id: string | null) => {
     if (id === null) return null;
     try {
-      const receipt = await VENUE_SERVICE.readDepartmentReceipt(
+      const receipt = await VENUE_SERVICE.readRetainedDepartmentReceipt(
         tx,
         { ...cfg, receiptLanguages: [] },
         id,

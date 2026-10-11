@@ -275,6 +275,9 @@ the server checks each at the route, never trusting the till's copy:
   (`readProfileZones`, `packages/venue-service/src/profile-access.ts`). A zone outside the profile
   is refused `service_zone.not_allowed`, and lists show only the profile's zones and their orders.
   A profile with no department row keeps the venue's counter-default zone.
+  Public hierarchy Delete refuses removal of its last usable zone and replaces a removed starting
+  zone with a permitted survivor. The reader fallback above still handles moved or invalid stored
+  scope; it does not offer Enable for a deleted zone.
 - **A profile's kitchen screens are its manager's choices, not its routing.** A profile of any form
   factor may offer a station screen, a pass screen and a pass monitor (a view-only pass board with
   no buttons), each with its stations and, for the pass kinds, its zones, as "Every station" or a

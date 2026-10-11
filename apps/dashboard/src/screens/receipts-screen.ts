@@ -1,5 +1,5 @@
 import { QueryController } from "@waitron/dashboard-kit";
-import { LitElement, css, html, nothing, type TemplateResult } from "lit";
+import { LitElement, css, html, nothing, type TemplateResult, type PropertyValues } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import {
   isValidTelephone,
@@ -320,9 +320,15 @@ export class ReceiptsScreen extends LitElement {
   @state() private chosenPreviewLanguage: string | null = null;
   #previewTimer: ReturnType<typeof setTimeout> | undefined;
   #previewInFlight = false;
+  #previewOwner = {};
   #previewAgain = false;
   #previewRequested: string | null = null;
   #previewActive = false;
+
+  protected override willUpdate(changed: PropertyValues<this>): void {
+    if (changed.has("departmentId") && this.previewDepartmentId !== (this.departmentId || null))
+      this.#setPreviewDepartment();
+  }
 
   override connectedCallback(): void {
     super.connectedCallback();
@@ -352,6 +358,14 @@ export class ReceiptsScreen extends LitElement {
   }
 
   #setPreviewDepartment(): void {
+    this.#previewOwner = {};
+    this.#previewInFlight = false;
+    this.#previewAgain = false;
+    if (this.previewDepartmentId !== (this.departmentId || null)) {
+      this.departmentLanguage = null;
+      this.departmentVenueDefaults = {};
+      this.previewFailed = false;
+    }
     this.#previewContextReady = true;
     this.previewDepartmentId = this.departmentId || null;
     this.departmentDraft = null;
@@ -594,6 +608,7 @@ export class ReceiptsScreen extends LitElement {
       if (contactProblem(field, receipt[field]?.trim() ?? "") !== "") delete receipt[field];
     }
     const generation = this.#departmentGeneration;
+    const owner = this.#previewOwner;
     try {
       const preview = await client.previewReceiptDraft(
         {
@@ -611,10 +626,11 @@ export class ReceiptsScreen extends LitElement {
       }
     } catch {
       if (generation === this.#departmentGeneration) this.previewFailed = true;
-      this.#previewRequested = null;
+      if (owner === this.#previewOwner) this.#previewRequested = null;
     } finally {
-      this.#previewInFlight = false;
+      if (owner === this.#previewOwner) this.#previewInFlight = false;
     }
+    if (owner !== this.#previewOwner) return;
     if (this.#previewAgain) {
       this.#previewAgain = false;
       void this.#sendPreview();

@@ -1,4 +1,4 @@
-import { eq } from "drizzle-orm";
+import { sql, eq } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
 import { CATALOGUE_MIGRATIONS } from "@waitron/catalogue";
 import {
@@ -18,8 +18,6 @@ import {
   configureZone,
   createDepartment,
   createServiceZone,
-  deactivateDepartment,
-  deactivateServiceZone,
   resolveNewOrderZone,
 } from "./operations.js";
 import {
@@ -246,7 +244,14 @@ describe("a profile's service access", () => {
 
   it("refuses a disabled department", async () => {
     const venue = await seedVenue();
-    await scoped((tx) => deactivateDepartment(tx, venue.cfg, venue.deli));
+    await scoped((tx) =>
+      (async () => {
+        await tx.execute(
+          sql`update floor_zones set active = false where id in (select zone_id from zone_service_policies where department_id = ${venue.deli})`,
+        );
+        await tx.execute(sql`update departments set active = false where id = ${venue.deli}`);
+      })(),
+    );
     await expect(
       outcome(
         save(venue, restaurantScope(venue, { departmentId: venue.deli, startingZoneId: null })),
@@ -259,7 +264,9 @@ describe("a profile's service access", () => {
 
   it("refuses a deactivated zone as the starting zone", async () => {
     const venue = await seedVenue();
-    await scoped((tx) => deactivateServiceZone(tx, venue.cfg, venue.dining));
+    await scoped(async (tx) =>
+      tx.execute(sql`update floor_zones set active = false where id = ${venue.dining}`),
+    );
     await expect(outcome(save(venue, restaurantScope(venue)))).resolves.toEqual({
       code: "device_profile.access_invalid",
       params: { field: "startingZoneId", reason: "unavailable" },
@@ -364,7 +371,7 @@ describe("a profile's service access", () => {
         departmentId: venue.restaurant,
       });
       await tx.update(floorZones).set({ displayOrder: 3 }).where(eq(floorZones.id, zone.id));
-      await deactivateServiceZone(tx, venue.cfg, venue.terrace);
+      await tx.execute(sql`update floor_zones set active = false where id = ${venue.terrace}`);
       return zone.id;
     });
     await expect(read(venue)).resolves.toMatchObject({
@@ -382,7 +389,9 @@ describe("a profile's service access", () => {
         startingZoneId: venue.dining,
       }),
     );
-    await scoped((tx) => deactivateServiceZone(tx, venue.cfg, venue.terrace));
+    await scoped(async (tx) =>
+      tx.execute(sql`update floor_zones set active = false where id = ${venue.terrace}`),
+    );
     await expect(read(venue)).resolves.toMatchObject({ allowedZoneIds: [venue.dining] });
 
     const other = await seedVenue();
@@ -410,7 +419,9 @@ describe("a profile's service access", () => {
         startingZoneId: venue.dining,
       }),
     );
-    await scoped((tx) => deactivateServiceZone(tx, venue.cfg, venue.dining));
+    await scoped(async (tx) =>
+      tx.execute(sql`update floor_zones set active = false where id = ${venue.dining}`),
+    );
     await expect(read(venue)).resolves.toMatchObject({
       allowedZoneIds: [venue.terrace],
       startingZoneId: venue.terrace,
@@ -423,7 +434,9 @@ describe("a profile's service access", () => {
       venue,
       restaurantScope(venue, { allowedZoneIds: [venue.dining], startingZoneId: venue.dining }),
     );
-    await scoped((tx) => deactivateServiceZone(tx, venue.cfg, venue.dining));
+    await scoped(async (tx) =>
+      tx.execute(sql`update floor_zones set active = false where id = ${venue.dining}`),
+    );
     await expect(read(venue)).resolves.toEqual({
       departmentId: venue.restaurant,
       allowedZoneIds: [],
@@ -443,7 +456,14 @@ describe("a profile's service access", () => {
   it("says the profile cannot order once its department is disabled", async () => {
     const venue = await seedVenue();
     await save(venue, restaurantScope(venue));
-    await scoped((tx) => deactivateDepartment(tx, venue.cfg, venue.restaurant));
+    await scoped((tx) =>
+      (async () => {
+        await tx.execute(
+          sql`update floor_zones set active = false where id in (select zone_id from zone_service_policies where department_id = ${venue.restaurant})`,
+        );
+        await tx.execute(sql`update departments set active = false where id = ${venue.restaurant}`);
+      })(),
+    );
     await expect(read(venue)).resolves.toMatchObject({
       departmentId: venue.restaurant,
       allowedZoneIds: [],
@@ -551,7 +571,9 @@ describe("a profile's stored scope", () => {
       allowedZoneIds: [venue.dining, venue.terrace],
       startingZoneId: venue.dining,
     });
-    await scoped((tx) => deactivateServiceZone(tx, venue.cfg, venue.terrace));
+    await scoped(async (tx) =>
+      tx.execute(sql`update floor_zones set active = false where id = ${venue.terrace}`),
+    );
     await expect(scopes([venue.profile])).resolves.toMatchObject([
       { allowedZoneIds: [venue.terrace, venue.dining], startingZoneId: venue.dining },
     ]);
@@ -629,7 +651,9 @@ describe("a profile's stored scope", () => {
       allowedZoneIds: [venue.dining, venue.terrace],
       startingZoneId: venue.dining,
     });
-    await scoped((tx) => deactivateServiceZone(tx, venue.cfg, venue.terrace));
+    await scoped(async (tx) =>
+      tx.execute(sql`update floor_zones set active = false where id = ${venue.terrace}`),
+    );
     await expect(outcome(setScope(venue, {}))).resolves.toEqual({ resolved: undefined });
     await expect(scopes([venue.profile])).resolves.toMatchObject([
       { allowedZoneIds: [venue.terrace, venue.dining], startingZoneId: venue.dining },
@@ -722,7 +746,9 @@ describe("a zone checked against a profile", () => {
       configureZone(tx, venue.cfg, { zoneId: venue.terrace, departmentId: venue.deli }),
     );
     await expect(check(venue, venue.terrace)).resolves.toEqual(refused(venue.terrace));
-    await scoped((tx) => deactivateServiceZone(tx, venue.cfg, venue.dining));
+    await scoped(async (tx) =>
+      tx.execute(sql`update floor_zones set active = false where id = ${venue.dining}`),
+    );
     await expect(check(venue, venue.dining)).resolves.toEqual(refused(venue.dining));
   });
 
@@ -775,7 +801,9 @@ describe("a new order's zone for a profile", () => {
     const venue = await seedVenue();
     await makeCounterDefault(venue.counter);
     await save(venue, restaurantScope(venue, { startingZoneId: venue.dining }));
-    await scoped((tx) => deactivateServiceZone(tx, venue.cfg, venue.dining));
+    await scoped(async (tx) =>
+      tx.execute(sql`update floor_zones set active = false where id = ${venue.dining}`),
+    );
     await expect(start(venue)).resolves.toEqual({ resolved: venue.terrace });
   });
 
@@ -783,7 +811,9 @@ describe("a new order's zone for a profile", () => {
     const venue = await seedVenue();
     await makeCounterDefault(venue.counter);
     await save(venue, restaurantScope(venue, { allowedZoneIds: [venue.dining] }));
-    await scoped((tx) => deactivateServiceZone(tx, venue.cfg, venue.dining));
+    await scoped(async (tx) =>
+      tx.execute(sql`update floor_zones set active = false where id = ${venue.dining}`),
+    );
     await expect(start(venue)).resolves.toEqual({
       code: "device_profile.no_service_zone",
       params: { profileId: venue.profile },

@@ -134,13 +134,20 @@ export class DepartmentZones extends LitElement {
     return this.model?.departments.find((d) => d.id === this.departmentId);
   }
   private get zones() {
-    return this.model?.zones.filter((z) => z.departmentId === this.departmentId) ?? [];
+    return (
+      (this.department?.active ? this.model?.zones : undefined)?.filter(
+        (z) =>
+          z.departmentId === this.departmentId &&
+          z.active !== false &&
+          this.model?.floorZones.find((f) => f.id === z.id)?.active !== false,
+      ) ?? []
+    );
   }
   private get selected() {
     return this.zones.find((z) => z.id === this.zone) ?? this.zones[0];
   }
   private get readonly() {
-    return !this.department?.active || this.selected?.active === false;
+    return !this.department?.active;
   }
   protected override willUpdate() {
     if (this.isConnected && this.api !== this.hoursApi) {
@@ -162,7 +169,7 @@ export class DepartmentZones extends LitElement {
       );
     }
     const row = this.selected;
-    if (this.isConnected) this.watchPlan(this.api, row?.active === false ? undefined : row?.id);
+    if (this.isConnected) this.watchPlan(this.api, row?.id);
     if (!row) {
       this.scope?.dispose();
       this.scope = undefined;
@@ -262,7 +269,7 @@ export class DepartmentZones extends LitElement {
   }
   private async action(name: string, detail: object) {
     if (this.busy) return;
-    if ((name !== "move-zone" && name !== "disable-zone") || !this.leave || !this.scope) {
+    if ((name !== "move-zone" && name !== "delete-zone") || !this.leave || !this.scope) {
       this.emit(name, detail);
       return;
     }
@@ -418,7 +425,7 @@ export class DepartmentZones extends LitElement {
     const disabled = this.readonly,
       state = saveActionState(this.scope);
     return html`<div class="zones" aria-label=${t("venue.list_zones")}>
-        ${this.zones.map((z) => html`<wt-button variant="secondary" data-zone=${z.id} data-test=${`zone-${z.id}`} aria-pressed=${String(z.id === row?.id)} ?disabled=${this.busy} @click=${() => void this.select(z.id)}>${z.name}${z.active === false ? html` <span class="muted">(${t("venue.zone_disabled")})</span>` : nothing}</wt-button>`)}
+        ${this.zones.map((z) => html`<wt-button variant="secondary" data-zone=${z.id} data-test=${`zone-${z.id}`} aria-pressed=${String(z.id === row?.id)} ?disabled=${this.busy} @click=${() => void this.select(z.id)}>${z.name}</wt-button>`)}
         <wt-button
           variant=${department.active ? "primary" : "secondary"}
           data-test="add-zone"
@@ -446,25 +453,28 @@ export class DepartmentZones extends LitElement {
                     >${t("venue.rename")}</wt-button
                   >
                   ${this.model!.departments.some((d) => d.active && d.id !== department.id) ? html`<wt-button variant="secondary" align="start" data-test="move-zone" ?disabled=${this.busy} @click=${() => this.action("move-zone", { zoneId: row.id })}>${t("venue.move_to_department")}</wt-button>` : nothing}
-                  ${row.active === false ? (department.active ? html`<wt-button variant="secondary" align="start" data-test="enable-zone" ?disabled=${this.busy} @click=${() => this.action("enable-zone", { zoneId: row.id })}>${t("venue.enable")}</wt-button>` : nothing) : html`<wt-button variant="danger" align="start" data-test="disable-zone" ?disabled=${this.busy} @click=${() => this.action("disable-zone", { zoneId: row.id })}>${t("venue.disable")}</wt-button>`}
+                  <wt-button
+                    variant="danger"
+                    align="start"
+                    data-test="delete-zone"
+                    ?disabled=${this.busy}
+                    @click=${() => this.action("delete-zone", { zoneId: row.id })}
+                    >${t("venue.delete")}</wt-button
+                  >
                 </wt-row-actions>
               </div>
-              ${
-                row.active === false
-                  ? nothing
-                  : html`<div>
-                      ${this.hoursFailed ? html`<p role="alert">${t("opening.load_error")}</p>` : nothing}
-                      <p class="muted" data-test="closed-week-summary">${this.closedWeek()}</p>
-                      <p>
-                        <a
-                          data-test="zone-opening-hours"
-                          href=${`/manage/opening-hours/view/week/department/${encodeURIComponent(department.id)}/zone/${encodeURIComponent(row.id)}`}
-                          >${t("venue.zone_opening_hours")}</a
-                        >
-                      </p>
-                      ${this.floorPlan(row, department.id)}
-                    </div>`
-              }
+              <div>
+                ${this.hoursFailed ? html`<p role="alert">${t("opening.load_error")}</p>` : nothing}
+                <p class="muted" data-test="closed-week-summary">${this.closedWeek()}</p>
+                <p>
+                  <a
+                    data-test="zone-opening-hours"
+                    href=${`/manage/opening-hours/view/week/department/${encodeURIComponent(department.id)}/zone/${encodeURIComponent(row.id)}`}
+                    >${t("venue.zone_opening_hours")}</a
+                  >
+                </p>
+                ${this.floorPlan(row, department.id)}
+              </div>
               <dashboard-service-settings-fields
                 .value=${this.draft}
                 .follows=${follows}

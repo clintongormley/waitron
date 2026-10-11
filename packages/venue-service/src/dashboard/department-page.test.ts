@@ -229,18 +229,13 @@ it("shows only this department's readiness on its Setup line", async () => {
     "/manage/opening-hours/department/d1",
   );
 });
-it("shows disabled status and forwards Enable for this department", async () => {
+it("a deleted department shows no status, editor or Enable action", async () => {
   const view = structuredClone(model);
   view.departments[0]!.active = false;
-  await mount(view);
-  expect(el.shadowRoot!.querySelector("[data-test=department-status]")!.textContent).toBe(
-    "(Disabled)",
-  );
-  expect(el.shadowRoot!.querySelector("[data-test=setup]")!.textContent).toContain("Disabled");
-  const heard: unknown[] = [];
-  el.addEventListener("enable-department", (e) => heard.push((e as CustomEvent).detail));
-  el.shadowRoot!.querySelector<HTMLElement>("[data-test=enable-department]")!.click();
-  expect(heard).toEqual([{ departmentId: "d1" }]);
+  const el = await mount(view);
+  expect(el.shadowRoot!.querySelector("[data-test=department-status]")).toBeNull();
+  expect(el.shadowRoot!.querySelector("[data-test=enable-department]")).toBeNull();
+  expect(el.shadowRoot!.querySelector("department-settings")).toBeNull();
 });
 it("takes the selected view as input and emits a tab destination", async () => {
   await mount();

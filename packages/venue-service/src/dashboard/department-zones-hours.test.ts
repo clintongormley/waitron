@@ -271,14 +271,17 @@ it("stops a connected component's previous API watch before a late read answers"
   expect(summary()).toBe("");
 });
 
-it("omits the hours link for a disabled zone excluded by the hours reader", async () => {
+it("a deleted zone has no choice and the surviving zone retains its hours link", async () => {
   const hours = model();
   hours.departments[0]!.zones = hours.departments[0]!.zones.filter((z) => z.id !== "z1");
   await mount(hours);
   el.model!.zones[0]!.active = false;
   el.model = structuredClone(el.model!);
   await el.updateComplete;
-  expect(el.shadowRoot!.querySelector("dashboard-service-settings-fields")!.disabled).toBe(true);
-  expect(el.shadowRoot!.querySelector("[data-test=zone-opening-hours]")).toBeNull();
-  expect(el.shadowRoot!.querySelector("[data-test=closed-week-summary]")).toBeNull();
+  expect(el.shadowRoot!.querySelector('[data-zone="z1"]')).toBeNull();
+  expect(el.shadowRoot!.querySelector("dashboard-service-settings-fields")!.disabled).toBe(false);
+  expect(
+    el.shadowRoot!.querySelector<HTMLAnchorElement>("[data-test=zone-opening-hours]")!.href,
+  ).not.toContain("/zone/z1");
+  expect(el.shadowRoot!.querySelector("[data-test=closed-week-summary]")).not.toBeNull();
 });

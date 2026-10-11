@@ -106,6 +106,8 @@ import {
 import { payments } from "@waitron/payments";
 import {
   createDepartment,
+  deleteDepartment,
+  departmentReceipts,
   setDepartmentTransferSettings,
   setProfileServiceScope,
   createServiceZone,
@@ -128,7 +130,10 @@ import {
   zoneSalePolicies,
 } from "@waitron/venue-service";
 import { decimal, locationId, nodeId, seriesId, deviceOrigin } from "@waitron/shared";
-import { ALL_MODULES, VENUE_SERVICE } from "./modules.js";
+import { moduleCoreServices } from "./parties.js";
+import { createTable } from "./testing/live-table.js";
+import { saveZonePlan } from "./floor-plan.js";
+import { ALL_MODULES, enabledTableRemovals, VENUE_SERVICE } from "./modules.js";
 import { readVenueDetails, writeVenueDetails } from "./venue-details.js";
 import { drawLogoRasters } from "./receipt-logo.js";
 import { schemaVersionsByModule } from "./backup-manifest.js";
@@ -5772,4 +5777,141 @@ it("round-trips deleted kitchen configuration and preserves archived products an
   expect(bound).toBeDefined();
   expect(bound!.profileId).not.toBe(ids.profile);
   expect(bound!.screens).toEqual({ station: { stationIds: [], zoneIds: null } });
+});
+
+it("round-trips a deleted service hierarchy while remapping only its live namesake and floor links", async () => {
+  const source = await applyVenue(planVenue(venue("B12348765"), ALL_MODULES), {
+    db: suite.db,
+    modules: ALL_MODULES,
+  });
+  const cfg: TillConfig = {
+    locationId: locationId(source.locationId),
+    nodeId: nodeId(source.nodeId),
+    seriesId: seriesId(source.seriesIds[0]!),
+    locale: "es-ES",
+    invoiceLocales: ["es-ES"],
+    tipsEnabled: false,
+    simplifiedInvoiceLimit: null,
+  };
+  const removals = enabledTableRemovals(ALL_MODULES);
+  const ids = await withTransaction(suite.db, async (tx) => {
+    const old = await createDepartment(tx, cfg, {
+      name: "Shared service name",
+      tradingName: "Retained brand",
+    });
+    const zone = await createServiceZone(tx, cfg, {
+      name: "Shared zone name",
+      departmentId: old.id,
+    });
+    await tx.insert(departmentReceipts).values({
+      departmentId: old.id,
+      receipt: { headerSubtitle: { "es-ES": "Retained subtitle" } },
+    });
+    await createTable(tx, cfg, { label: "Old table", zoneId: zone.id });
+    await deleteDepartment(
+      tx,
+      cfg,
+      moduleCoreServices(cfg, removals).floorDeletion,
+      old.id,
+      new Date("2026-10-11T12:00:00Z"),
+    );
+    const live = await createDepartment(tx, cfg, {
+      name: "Shared service name",
+      tradingName: "Live brand",
+    });
+    const liveZone = await createServiceZone(tx, cfg, {
+      name: "Shared zone name",
+      departmentId: live.id,
+    });
+    await tx
+      .insert(departmentReceipts)
+      .values({ departmentId: live.id, receipt: { headerSubtitle: { "es-ES": "Live subtitle" } } });
+    await createTable(tx, cfg, { label: "Live table", zoneId: liveZone.id });
+    await saveZonePlan(
+      tx,
+      cfg,
+      removals,
+      liveZone.id,
+      {
+        revision: 0,
+        tables: [
+          {
+            key: "live",
+            label: "Live table",
+            fixed: false,
+            seats: 2,
+            placement: { x: 0, y: 0, width: 8, height: 8, rotation: 0, shape: "rect" },
+          },
+        ],
+        joins: [],
+      },
+      new Date("2026-10-11T12:00:00Z"),
+    );
+    const [linked] = await tx
+      .select()
+      .from(diningTables)
+      .where(eq(diningTables.zoneId, liveZone.id));
+    return {
+      old: old.id,
+      oldZone: zone.id,
+      live: live.id,
+      liveZone: liveZone.id,
+      table: linked!.id,
+    };
+  });
+  const versions = await schemaVersionsByModule(suite.db, ALL_MODULES);
+  const transferred = await buildConfigurationBundle(
+    suite.db,
+    source,
+    ALL_MODULES,
+    new Date("2026-10-11T12:00:00Z"),
+    versions,
+  );
+  expect(
+    transferred.tables
+      .departments!.filter((row) => row.name === "Shared service name")
+      .map((row) => row.id),
+  ).toEqual([ids.live]);
+  expect(
+    transferred.tables
+      .floor_zones!.filter((row) => row.name === "Shared zone name")
+      .map((row) => row.id),
+  ).toEqual([ids.liveZone]);
+  expect(transferred.tables.department_receipts).toEqual([
+    {
+      department_id: ids.live,
+      receipt: JSON.stringify({ headerSubtitle: { "es-ES": "Live subtitle" } }),
+      logo_rasters: null,
+      updated_at: expect.any(String),
+    },
+  ]);
+  for (const table of ["department_sale_policies", "zone_service_policies", "zone_sale_policies"])
+    expect(JSON.stringify(transferred.tables[table])).not.toContain(ids.old);
+  expect(JSON.stringify(transferred.tables.zone_sale_policies)).not.toContain(ids.oldZone);
+  expect(transferred.tables.dining_tables!.map((row) => row.id)).toEqual([ids.table]);
+  const target = await applyVenue(planVenue(venue("B98765431"), ALL_MODULES), {
+    db: targetSuite.db,
+    modules: ALL_MODULES,
+    beforeCommit: (tx, result) =>
+      importConfigurationTables(tx, transferred, result, ALL_MODULES, versions),
+  });
+  const rows = await targetSuite.db.execute<{
+    department: string;
+    zone: string;
+    table_id: string;
+    receipt: string;
+  }>(
+    sql`select d.id department, z.id zone, t.id table_id, r.receipt from departments d join zone_service_policies s on s.department_id=d.id join floor_zones z on z.id=s.zone_id join dining_tables t on t.zone_id=z.id join department_receipts r on r.department_id=d.id where d.name='Shared service name'`,
+  );
+  expect(rows.rows).toHaveLength(1);
+  const imported = rows.rows[0]!;
+  expect(imported.department).not.toBe(ids.live);
+  expect(imported.zone).not.toBe(ids.liveZone);
+  expect(imported.table_id).not.toBe(ids.table);
+  expect(imported.receipt).toBe(JSON.stringify({ headerSubtitle: { "es-ES": "Live subtitle" } }));
+  const links = await targetSuite.db.execute(
+    sql`select f.zone_id, t.id table_id from floor_plans f join floor_plan_tables p on p.plan_id=f.id join dining_tables t on t.plan_table_id=p.id where f.zone_id=${imported.zone}`,
+  );
+  expect(links.rows).toEqual([{ zone_id: imported.zone, table_id: imported.table_id }]);
+  expect(target.locationId).not.toBe(source.locationId);
 });

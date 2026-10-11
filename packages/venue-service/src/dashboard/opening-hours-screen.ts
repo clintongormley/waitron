@@ -278,6 +278,30 @@ export class OpeningHoursScreen extends LitElement {
   }
   protected override willUpdate() {
     if (!this.model) return;
+    if (this.editor) {
+      const department = this.model.departments.find(
+        (row) => row.active && row.id === this.editor!.department.id,
+      );
+      if (
+        !department ||
+        (this.editor.period &&
+          !department.periods.some((period) => period.id === this.editor!.period!.id))
+      ) {
+        this.editor = undefined;
+        this.busy = false;
+      }
+    }
+    if (
+      this.deleting &&
+      !this.model.departments.some(
+        (department) =>
+          department.active &&
+          department.periods.some((period) => period.id === this.deleting!.period.id),
+      )
+    ) {
+      this.deleting = undefined;
+      this.busy = false;
+    }
     const rawWeek = new URL(navigationGuardFor(window)?.href ?? location.href).searchParams.get(
       "week",
     );
@@ -438,7 +462,7 @@ export class OpeningHoursScreen extends LitElement {
       }
       return;
     } finally {
-      this.busy = false;
+      if (this.editor === editor && this.isConnected) this.busy = false;
     }
     if (this.editor === editor && component.commitSubmitted(input)) this.editor = undefined;
     this.api.rereadWatches();

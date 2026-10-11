@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { and, eq } from "drizzle-orm";
+import { sql, and, eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -21,7 +21,7 @@ import { AppError } from "@waitron/shared";
 import { zoneSalePolicies, zoneServicePolicies } from "@waitron/venue-service";
 import { catchUpZone, ensureToday, resetZone, todayBusinessDay } from "./floor-today-store.js";
 import { finishTable } from "./parties.js";
-import { deactivateZone, updateZone } from "./tables.js";
+import { updateZone } from "./tables.js";
 import {
   commandFor,
   inTx,
@@ -747,18 +747,24 @@ describe("building today's plan from a zone's master plan", () => {
   });
 });
 
-describe("a disabled zone", () => {
-  it("switches a zone off and on without rewriting a table or its today's state", async () => {
+describe("a deleted zone", () => {
+  it("refuses restoring a deleted zone without rewriting a table or its today's state", async () => {
     const z = await zone();
     const tableId = await v.table("Unchanged", z);
     await masterOf(z, [{ label: "Unchanged", live: tableId }]);
     await inTx(v, (tx) => ensureToday(tx, v.cfg, NONE, NOW));
     const before = await tableRow(v, tableId);
     const todayBefore = await todayRow(tableId);
-    await inTx(v, (tx) => deactivateZone(tx, v.cfg, z));
+    await inTx(v, async (tx) =>
+      tx.execute(sql`update floor_zones set active = false where id = ${z}`),
+    );
     expect(await tableRow(v, tableId)).toEqual(before);
     expect(await todayRow(tableId)).toEqual(todayBefore);
-    await inTx(v, (tx) => updateZone(tx, v.cfg, z, { active: true }));
+    await expect(
+      inTx(v, (tx) =>
+        updateZone(tx, v.cfg, z, { active: true } as unknown as Parameters<typeof updateZone>[3]),
+      ),
+    ).rejects.toMatchObject({ code: "zone.not_found" });
     expect(await tableRow(v, tableId)).toEqual(before);
     expect(await todayRow(tableId)).toEqual(todayBefore);
   });
@@ -771,7 +777,9 @@ describe("a disabled zone", () => {
     await masterOf(off, [{ label: "Off 1", live: offTable }]);
     await masterOf(on, [{ label: "On 1", live: onTable }]);
     await inTx(v, (tx) => ensureToday(tx, v.cfg, NONE, NOW));
-    await inTx(v, (tx) => deactivateZone(tx, v.cfg, off));
+    await inTx(v, async (tx) =>
+      tx.execute(sql`update floor_zones set active = false where id = ${off}`),
+    );
     expect(await inService(offTable)).toBe(false);
 
     const nextDay = new Date(NOW.getTime() + 24 * 60 * 60 * 1000);
@@ -782,7 +790,7 @@ describe("a disabled zone", () => {
     expect(await todayZone(on)).toMatchObject({ businessDay: "2026-10-11", generation: 2 });
   });
 
-  it("switches its tables on today's plan back on when it is enabled again the same day", async () => {
+  it("keeps its tables out of service when restoring the deleted zone is refused", async () => {
     const z = await zone();
     const planned = await v.table("Reopen 1", z);
     const hidden = await v.table("Reopen 2", z);
@@ -797,16 +805,22 @@ describe("a disabled zone", () => {
     await inTx(v, async (tx) => {
       await tx.delete(floorTodayTables).where(eq(floorTodayTables.tableId, hidden));
     });
-    await inTx(v, (tx) => deactivateZone(tx, v.cfg, z));
+    await inTx(v, async (tx) =>
+      tx.execute(sql`update floor_zones set active = false where id = ${z}`),
+    );
 
-    await inTx(v, (tx) => updateZone(tx, v.cfg, z, { active: true }));
+    await expect(
+      inTx(v, (tx) =>
+        updateZone(tx, v.cfg, z, { active: true } as unknown as Parameters<typeof updateZone>[3]),
+      ),
+    ).rejects.toMatchObject({ code: "zone.not_found" });
 
-    expect(await inService(planned)).toBe(true);
+    expect(await inService(planned)).toBe(false);
     expect(await inService(hidden)).toBe(false);
     expect(await inService(never)).toBe(false);
     await inTx(v, (tx) => ensureToday(tx, v.cfg, NONE, NOW));
     const floor = await inTx(v, (tx) => listTablesWithState(tx, v.cfg, [], undefined, NOW));
-    expect(floor.map((t) => t.id)).toContain(planned);
+    expect(floor.map((t) => t.id)).not.toContain(planned);
   });
 });
 
@@ -893,3 +907,35 @@ it.each([false, true])(
     expect(await pendingRows(z)).toEqual([]);
   },
 );
+
+describe("catch-up containing-zone validation", () => {
+  it("accepts an empty live zone without creating floor rows", async () => {
+    const z = await zone();
+    await catchUp(z);
+    expect(await liveTablesOf(z)).toEqual([]);
+    expect(await pendingRows(z)).toEqual([]);
+    expect(await todayZone(z)).toBeUndefined();
+  });
+
+  it.each(["missing", "deleted", "other-location"] as const)(
+    "refuses an empty %s zone without creating floor rows",
+    async (kind) => {
+      const z = kind === "missing" ? randomUUID() : await zone();
+      if (kind === "deleted")
+        await inTx(v, (tx) =>
+          tx.update(floorZones).set({ active: false }).where(eq(floorZones.id, z)),
+        );
+      const cfg =
+        kind === "other-location"
+          ? { ...v.cfg, locationId: randomUUID() as typeof v.cfg.locationId }
+          : v.cfg;
+      await expect(inTx(v, (tx) => catchUpZone(tx, cfg, NONE, z, NOW))).rejects.toMatchObject({
+        code: "zone.not_found",
+        params: { zoneId: z },
+      });
+      expect(await liveTablesOf(z)).toEqual([]);
+      expect(await pendingRows(z)).toEqual([]);
+      expect(await todayZone(z)).toBeUndefined();
+    },
+  );
+});

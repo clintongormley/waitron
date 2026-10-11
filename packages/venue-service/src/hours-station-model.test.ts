@@ -243,8 +243,9 @@ it("keeps local department names in the Opening hours model without station colu
   const model = await withTransaction(suite.db, (tx) => readOpeningHoursModel(tx, f.cfg, at));
   expect(model.departments.map(({ id, name }) => ({ id, name }))).toEqual([
     { id: f.department, name: "Dining" },
-    { id: inactive, name: "Closed dining" },
   ]);
+  expect(model.departments.some(({ id }) => id === inactive)).toBe(false);
+  expect(model.departments.some(({ name }) => name === "Foreign dining")).toBe(false);
   expect(model).not.toHaveProperty("subjects");
 });
 

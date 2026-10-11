@@ -44,7 +44,6 @@ async function fixture() {
           locationId: cfg.locationId,
           name: "Terrace",
           tradingName: "Terrace",
-          active: false,
         },
       ])
       .returning();
@@ -75,6 +74,7 @@ async function fixture() {
       })),
       at,
     );
+    await tx.update(departments).set({ active: false }).where(eq(departments.id, inactive!.id));
     return {
       cfg,
       department: department!.id,

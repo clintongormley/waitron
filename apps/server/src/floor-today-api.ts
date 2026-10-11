@@ -135,7 +135,6 @@ export function mountFloorTodayApi(app: Hono, deps: TillApiDeps, log: Logger, ru
         if (zone === undefined) throw new AppError("zone.not_found", { zoneId });
         const now = deps.clock.now().instant;
         await ensureToday(tx, deps.cfg, removals, now);
-        // A reset switches tables on, so a disabled zone's must stay off; ensureToday skips both too.
         if (zone.active && zone.planId !== null)
           await resetZone(tx, deps.cfg, removals, zoneId, now);
       });

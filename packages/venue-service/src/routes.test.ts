@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { eq, sql } from "drizzle-orm";
+import { eq, inArray, sql } from "drizzle-orm";
 import { Hono } from "hono";
 import { beforeAll, describe, expect, it } from "vitest";
 import {
@@ -141,7 +141,45 @@ async function fixture(): Promise<Fixture> {
     {
       db,
       cfg: { locationId: scopedLocationId },
-      core: {} as ModuleRouteContext["core"],
+      core: {
+        seatTable: () => Promise.reject(new Error("route fixture: seating needs the server seat")),
+        floorDeletion: {
+          readImpact: async (tx, zoneIds) => {
+            const tables =
+              zoneIds.length === 0
+                ? []
+                : await tx
+                    .select()
+                    .from(diningTables)
+                    .where(inArray(diningTables.zoneId, [...zoneIds]))
+                    .orderBy(diningTables.label);
+            return {
+              refusals: [],
+              removes:
+                tables.length === 0
+                  ? []
+                  : [
+                      {
+                        key: "tables",
+                        count: tables.length,
+                        targets: tables.map(({ id, label }) => ({ id, name: label })),
+                      },
+                    ],
+            };
+          },
+          clear: async (tx, zoneIds) => {
+            const tables =
+              zoneIds.length === 0
+                ? []
+                : await tx
+                    .select()
+                    .from(diningTables)
+                    .where(inArray(diningTables.zoneId, [...zoneIds]));
+            if (tables.length > 0)
+              throw new Error("route fixture: physical table deletion needs the server seat");
+          },
+        },
+      } as ModuleRouteContext["core"],
     },
     noopLog,
   );
@@ -226,6 +264,20 @@ async function settingsSnapshot(fx: Awaited<ReturnType<typeof settingsFixture>>)
   return { model: await model.json(), transfers: await transfers.json() };
 }
 
+async function rawSettingsSnapshot() {
+  return withTransaction(db, async (tx) => {
+    const tables = await tx.execute<{ name: string }>(
+      sql`select name from sqlite_master where type = 'table' and name not like 'sqlite_%' and name != 'management_sessions' order by name`,
+    );
+    const rows: Record<string, unknown[]> = {};
+    for (const { name } of tables.rows)
+      rows[name] = (
+        await tx.execute(sql`select * from ${sql.identifier(name)} order by rowid`)
+      ).rows;
+    return rows;
+  });
+}
+
 describe("whole service settings saves", () => {
   it("saves every department field and optional transfers in one PUT", async () => {
     const fx = await settingsFixture();
@@ -304,27 +356,24 @@ describe("whole service settings saves", () => {
     ).toBe("counter");
   });
 
-  it.each([true, false])(
-    "refuses a name clash with active=%s without writing any settings",
-    async (active) => {
-      const fx = await settingsFixture();
-      const other = await withTransaction(db, (tx) =>
-        createDepartment(tx, fx, { name: "Taken", orderStart: "counter" }),
-      );
-      await db.update(departments).set({ active }).where(eq(departments.id, other.id));
-      const before = await settingsSnapshot(fx);
-      const response = await send(fx.app, "PUT", fx.departmentPath, fx.managerCookie, {
-        ...departmentSettings,
-        name: "Taken",
-        transfers: { receivingProfileId: null, destinationDepartmentIds: [other.id] },
-      });
-      expect(response.status).toBe(409);
-      expect(await response.json()).toMatchObject({
-        error: { code: active ? "department.name_taken" : "department.name_disabled" },
-      });
-      expect(await settingsSnapshot(fx)).toEqual(before);
-    },
-  );
+  it("refuses a live name clash without writing any settings", async () => {
+    const fx = await settingsFixture();
+    const other = await withTransaction(db, (tx) =>
+      createDepartment(tx, fx, { name: "Taken", orderStart: "counter" }),
+    );
+    await db.update(departments).set({ active: true }).where(eq(departments.id, other.id));
+    const before = await settingsSnapshot(fx);
+    const response = await send(fx.app, "PUT", fx.departmentPath, fx.managerCookie, {
+      ...departmentSettings,
+      name: "Taken",
+      transfers: { receivingProfileId: null, destinationDepartmentIds: [other.id] },
+    });
+    expect(response.status).toBe(409);
+    expect(await response.json()).toMatchObject({
+      error: { code: "department.name_taken" },
+    });
+    expect(await settingsSnapshot(fx)).toEqual(before);
+  });
 
   it("rolls back the department and sale policy when a transfer names itself", async () => {
     const fx = await settingsFixture();
@@ -417,11 +466,20 @@ describe("whole service settings saves", () => {
         .update(departments)
         .set({ active: false })
         .where(eq(departments.id, fx.departmentId));
-    const before = await settingsSnapshot(fx);
+    const before = await rawSettingsSnapshot();
     const response = await send(fx.app, "PUT", path, fx.managerCookie, departmentSettings);
     expect(response.status).toBe(404);
     expect(await response.json()).toMatchObject({ error: { code: "department.not_found" } });
-    expect(await settingsSnapshot(fx)).toEqual(before);
+    expect(await rawSettingsSnapshot()).toEqual(before);
+    const transfers = await send(
+      fx.app,
+      "GET",
+      `/management-api/venue-service/departments/${fx.departmentId}/transfers`,
+      fx.managerCookie,
+    );
+    expect(transfers.status).toBe(kind === "disabled" ? 404 : 200);
+    if (kind === "disabled")
+      expect(await transfers.json()).toMatchObject({ error: { code: "department.not_found" } });
   });
 
   it("saves all four zone overrides and clears all four to inherit", async () => {
@@ -880,7 +938,7 @@ describe("venue service management routes", () => {
   });
 
   it.each([true, false])(
-    "keeps the zone active flag %s when assigning a disabled department",
+    "refuses reassignment without changing zone active=%s or adding policies",
     async (active) => {
       const fx = await fixture();
       const department = await withTransaction(db, (tx) =>
@@ -893,6 +951,7 @@ describe("venue service management routes", () => {
           .where(eq(departments.id, department.id));
         await tx.update(floorZones).set({ active }).where(eq(floorZones.id, fx.zoneId));
       });
+      const before = await rawSettingsSnapshot();
       const response = await send(
         fx.app,
         "PUT",
@@ -900,16 +959,18 @@ describe("venue service management routes", () => {
         fx.managerCookie,
         { departmentId: department.id },
       );
-      expect(response.status).toBe(active ? 409 : 204);
-      if (active)
-        expect(await response.json()).toMatchObject({
-          error: { code: "zone.department_inactive", params: { zoneId: fx.zoneId } },
-        });
+      expect(response.status).toBe(404);
+      expect(await response.json()).toMatchObject({
+        error: active
+          ? { code: "department.not_found", params: { departmentId: department.id } }
+          : { code: "service_zone.not_found", params: { zoneId: fx.zoneId } },
+      });
+      expect(await rawSettingsSnapshot()).toEqual(before);
       const policies = await db
         .select({ departmentId: zoneServicePolicies.departmentId })
         .from(zoneServicePolicies)
         .where(eq(zoneServicePolicies.zoneId, fx.zoneId));
-      expect(policies).toEqual(active ? [] : [{ departmentId: department.id }]);
+      expect(policies).toEqual([]);
       expect(
         await db
           .select({ active: floorZones.active })
@@ -1005,7 +1066,7 @@ describe("venue service management routes", () => {
     }
   });
 
-  it("previews department removal with zone names and active table counts", async () => {
+  it("previews department delete with all physical tables and zone names", async () => {
     const fx = await fixture();
     const department = (await (
       await send(fx.app, "POST", "/management-api/venue-service/departments", fx.managerCookie, {
@@ -1055,19 +1116,41 @@ describe("venue service management routes", () => {
     const response = await send(
       fx.app,
       "GET",
-      `/management-api/venue-service/departments/${department.id}/removal-impact`,
+      `/management-api/venue-service/departments/${department.id}/delete-impact`,
       fx.managerCookie,
     );
     expect(response.status).toBe(200);
+    const physical = await db.select().from(diningTables).orderBy(diningTables.label);
     expect(await response.json()).toEqual({
-      zones: [
-        { id: secondZone!.id, name: "Dining room", activeTableCount: 2 },
-        { id: fx.zoneId, name: "Terrace", activeTableCount: 1 },
+      target: { id: department.id, name: "Restaurant" },
+      refusals: [
+        { code: "department.last_active", params: { departmentId: department.id }, targets: [] },
+      ],
+      ends: [],
+      removes: [
+        {
+          key: "tables",
+          count: 4,
+          targets: ["D1", "D2", "T1", "T2"].map((name) => ({
+            id: physical.find((table) => table.label === name)!.id,
+            name,
+          })),
+        },
+        { key: "zone_policies", count: 4, targets: [] },
+        { key: "department_policy", count: 1, targets: [] },
+        {
+          key: "zones",
+          count: 2,
+          targets: [
+            { id: secondZone!.id, name: "Dining room" },
+            { id: fx.zoneId, name: "Terrace" },
+          ],
+        },
       ],
     });
   });
 
-  it("previews removal of an unconfigured zone with its active table count", async () => {
+  it("retires the module zone removal preview without changing its tables", async () => {
     const fx = await fixture();
     const tables = await db
       .insert(diningTables)
@@ -1087,22 +1170,19 @@ describe("venue service management routes", () => {
       `/management-api/venue-service/zones/${fx.zoneId}/removal-impact`,
       fx.managerCookie,
     );
-    expect(response.status).toBe(200);
-    expect(await response.json()).toEqual({
-      zones: [{ id: fx.zoneId, name: "Terrace", activeTableCount: 1 }],
-    });
-
+    expect(response.status).toBe(404);
+    expect(await db.select().from(diningTables)).toEqual(tables);
     const otherVenue = await fixture();
-    const outside = await send(
-      fx.app,
-      "GET",
-      `/management-api/venue-service/zones/${otherVenue.zoneId}/removal-impact`,
-      fx.managerCookie,
-    );
-    expect(outside.status).toBe(404);
-    expect(await outside.json()).toMatchObject({
-      error: { code: "service_zone.not_found", params: { zoneId: otherVenue.zoneId } },
-    });
+    expect(
+      (
+        await send(
+          fx.app,
+          "GET",
+          `/management-api/venue-service/zones/${otherVenue.zoneId}/removal-impact`,
+          fx.managerCookie,
+        )
+      ).status,
+    ).toBe(404);
   });
 
   it("reads inherited sale policy and edits one field with a clearable zone override", async () => {
@@ -1600,66 +1680,52 @@ describe("venue service management routes", () => {
       ).departments;
     }
 
-    it("disables with active: false, as Disable does, and enables again with active: true", async () => {
+    it("delete is permanent and leaves the surviving department and retained zone names intact", async () => {
       const fx = await fixture();
       const [restaurant, events] = await twoDepartments(fx);
       await withTransaction(db, (tx) =>
         configureZone(tx, fx, { zoneId: fx.zoneId, departmentId: restaurant }),
       );
       const path = `/management-api/venue-service/departments/${restaurant}`;
-      expect((await send(fx.app, "PATCH", path, fx.managerCookie, { active: false })).status).toBe(
-        204,
-      );
-      expect(await listed(fx)).toEqual(
-        expect.arrayContaining([
-          expect.objectContaining({ id: restaurant, name: "Restaurant", active: false }),
-          expect.objectContaining({ id: events, active: true }),
-        ]),
-      );
-      const [zone] = await db
-        .select({ active: floorZones.active })
-        .from(floorZones)
-        .where(eq(floorZones.id, fx.zoneId));
-      expect(zone!.active).toBe(false);
-
-      expect((await send(fx.app, "PATCH", path, fx.managerCookie, { active: true })).status).toBe(
-        204,
-      );
-      expect(await listed(fx)).toEqual(
-        expect.arrayContaining([
-          expect.objectContaining({ id: restaurant, name: "Restaurant", active: true }),
-        ]),
-      );
-      const [after] = await db
-        .select({ active: floorZones.active })
-        .from(floorZones)
-        .where(eq(floorZones.id, fx.zoneId));
-      expect(after!.active).toBe(false);
+      expect((await send(fx.app, "DELETE", path, fx.managerCookie)).status).toBe(200);
+      expect(await listed(fx)).toEqual([
+        expect.objectContaining({ id: events, name: "Events", active: true }),
+      ]);
+      expect(
+        await db
+          .select({ active: floorZones.active, name: floorZones.name })
+          .from(floorZones)
+          .where(eq(floorZones.id, fx.zoneId)),
+      ).toEqual([{ active: false, name: "Terrace" }]);
+      const response = await send(fx.app, "PATCH", path, fx.managerCookie, { name: "Reborn" });
+      expect(response.status).toBe(404);
+      expect(await response.json()).toMatchObject({ error: { code: "department.not_found" } });
+      expect(
+        await db
+          .select({ active: departments.active, name: departments.name })
+          .from(departments)
+          .where(eq(departments.id, restaurant)),
+      ).toEqual([{ active: false, name: "Restaurant" }]);
     });
 
-    it("takes an edit and active together", async () => {
+    it("rejects an edit mixed with active without changing the name", async () => {
       const fx = await fixture();
       const [restaurant] = await twoDepartments(fx);
       const path = `/management-api/venue-service/departments/${restaurant}`;
-      expect((await send(fx.app, "DELETE", path, fx.managerCookie)).status).toBe(204);
-      expect(
-        (
-          await send(fx.app, "PATCH", path, fx.managerCookie, {
-            name: "Dining",
-            tradingName: "Dining room",
-
-            active: true,
-          })
-        ).status,
-      ).toBe(204);
-      expect(await listed(fx)).toEqual(
-        expect.arrayContaining([
-          expect.objectContaining({ id: restaurant, name: "Dining", active: true }),
-        ]),
-      );
+      const before = await listed(fx);
+      const response = await send(fx.app, "PATCH", path, fx.managerCookie, {
+        name: "Dining",
+        tradingName: "Dining room",
+        active: true,
+      });
+      expect(response.status).toBe(400);
+      expect(await response.json()).toMatchObject({
+        error: { code: "management.request_invalid", params: { field: "active" } },
+      });
+      expect(await listed(fx)).toEqual(before);
     });
 
-    it("refuses to disable the last active department with department.last_active", async () => {
+    it("refuses to delete the last active department with department.last_active", async () => {
       const fx = await fixture();
       const [restaurant, events] = await twoDepartments(fx);
       await send(
@@ -1670,10 +1736,9 @@ describe("venue service management routes", () => {
       );
       const refused = await send(
         fx.app,
-        "PATCH",
+        "DELETE",
         `/management-api/venue-service/departments/${restaurant}`,
         fx.managerCookie,
-        { active: false },
       );
       expect(refused.status).toBe(409);
       expect(await refused.json()).toMatchObject({
@@ -1688,7 +1753,7 @@ describe("venue service management routes", () => {
       const fx = await fixture();
       const [restaurant] = await twoDepartments(fx);
       const path = `/management-api/venue-service/departments/${restaurant}`;
-      for (const active of [null, "false", 0]) {
+      for (const active of [true, false, null, "false", 0, []]) {
         const refused = await send(fx.app, "PATCH", path, fx.managerCookie, { active });
         expect(refused.status, String(active)).toBe(400);
         expect(await refused.json()).toMatchObject({
@@ -1700,38 +1765,44 @@ describe("venue service management routes", () => {
       );
     });
 
-    it("answers department.not_found for another venue's department and leaves it disabled", async () => {
+    it("answers department.not_found for another venue's deleted department and leaves it deleted", async () => {
       const fx = await fixture();
       const other = await fixture();
       const [otherRestaurant] = await twoDepartments(other);
-      await send(
-        other.app,
-        "PATCH",
-        `/management-api/venue-service/departments/${otherRestaurant}`,
-        other.managerCookie,
-        { active: false },
-      );
+      expect(
+        (
+          await send(
+            other.app,
+            "DELETE",
+            `/management-api/venue-service/departments/${otherRestaurant}`,
+            other.managerCookie,
+          )
+        ).status,
+      ).toBe(200);
       const refused = await send(
         fx.app,
         "PATCH",
         `/management-api/venue-service/departments/${otherRestaurant}`,
         fx.managerCookie,
-        { active: true },
+        { name: "Changed" },
       );
       expect(refused.status).toBe(404);
       expect(await refused.json()).toMatchObject({
         error: { code: "department.not_found", params: { departmentId: otherRestaurant } },
       });
-      expect(await listed(other)).toEqual(
-        expect.arrayContaining([expect.objectContaining({ id: otherRestaurant, active: false })]),
-      );
+      expect(
+        await db
+          .select({ active: departments.active, name: departments.name })
+          .from(departments)
+          .where(eq(departments.id, otherRestaurant)),
+      ).toEqual([{ active: false, name: "Restaurant" }]);
     });
 
-    it("refuses active from a staff session", async () => {
+    it("refuses a rename from a staff session", async () => {
       const fx = await fixture();
       const [restaurant] = await twoDepartments(fx);
       const path = `/management-api/venue-service/departments/${restaurant}`;
-      const refused = await send(fx.app, "PATCH", path, fx.staffCookie, { active: false });
+      const refused = await send(fx.app, "PATCH", path, fx.staffCookie, { name: "Changed" });
       expect(refused.status).toBe(403);
       expect(await refused.json()).toMatchObject({
         error: { code: "authorization.not_permitted" },
@@ -1739,7 +1810,7 @@ describe("venue service management routes", () => {
     });
   });
 
-  it("shows a configured inactive zone to management while excluding it from new-order choices", async () => {
+  it("omits a deleted configured zone from management and new-order choices", async () => {
     const fx = await fixture();
     const department = await withTransaction(db, (tx) =>
       createDepartment(
@@ -1767,13 +1838,13 @@ describe("venue service management routes", () => {
     expect(response.status).toBe(200);
     expect(
       ((await response.json()) as { zones: { id: string; active: boolean }[] }).zones,
-    ).toContainEqual(expect.objectContaining({ id: fx.zoneId, active: false }));
+    ).not.toContainEqual(expect.objectContaining({ id: fx.zoneId }));
     expect(
       await withTransaction(db, (tx) => listServiceZones(tx, { locationId: fx.locationId })),
     ).not.toContainEqual(expect.objectContaining({ id: fx.zoneId }));
   });
 
-  it("lists only the venue's departments and every one of its zones, switched off included, for a manager", async () => {
+  it("lists only the venue's live departments and zones for a manager", async () => {
     const fx = await fixture();
     const other = await fixture();
     for (const venue of [fx, other]) {
@@ -1799,7 +1870,7 @@ describe("venue service management routes", () => {
     expect(Object.keys(body).sort()).toEqual(["departments", "zones"]);
     expect(body.departments).toEqual(whole.departments);
     expect(body.zones).toEqual(whole.zones);
-    expect(body.zones).toContainEqual(expect.objectContaining({ id: fx.zoneId, active: false }));
+    expect(body.zones).not.toContainEqual(expect.objectContaining({ id: fx.zoneId }));
     expect(body.zones).not.toContainEqual(expect.objectContaining({ id: other.zoneId }));
   });
 
@@ -1974,7 +2045,7 @@ describe("venue service management routes", () => {
           fx.managerCookie,
         )
       ).status,
-    ).toBe(204);
+    ).toBe(200);
   });
 
   it("accepts inherited service mode", async () => {
@@ -3138,19 +3209,14 @@ describe("what a supervisor reaches of prep stations", () => {
   });
 });
 
-it.each([false, true])("answers department name clashes with 409 (active=%s)", async (active) => {
+it("answers live department name clashes with 409", async () => {
   const fx = await fixture();
   const path = "/management-api/venue-service/departments";
   const original = await send(fx.app, "POST", path, fx.managerCookie, {
     name: "Deli",
   });
   expect(original.status).toBe(201);
-  const target = (await original.json()) as { id: string };
-  if (!active)
-    await db.update(departments).set({ active: false }).where(eq(departments.id, target.id));
-  const expected = active
-    ? { code: "department.name_taken", params: { name: "Deli" } }
-    : { code: "department.name_disabled", params: { name: "Deli", departmentId: target.id } };
+  const expected = { code: "department.name_taken", params: { name: "Deli" } };
   const duplicate = await send(fx.app, "POST", path, fx.managerCookie, {
     name: "Deli",
   });
@@ -3219,7 +3285,7 @@ describe("name-only department creation", () => {
       ).toEqual(before);
     },
   );
-  it("renames a disabled department through its existing full-body route", async () => {
+  it("refuses to rename a deleted department through its existing full-body route", async () => {
     const fx = await fixture();
     const row = await withTransaction(db, (tx) =>
       createDepartment(tx, fx, {
@@ -3236,10 +3302,13 @@ describe("name-only department creation", () => {
       fx.managerCookie,
       { name: "Renamed", tradingName: "Shop" },
     );
-    expect(response.status).toBe(204);
+    expect(response.status).toBe(404);
+    expect(await response.json()).toMatchObject({
+      error: { code: "department.not_found", params: { departmentId: row.id } },
+    });
     expect(
       (await db.select().from(departments).where(eq(departments.id, row.id)))[0],
-    ).toMatchObject({ name: "Renamed", active: false });
+    ).toMatchObject({ name: "Closed", active: false });
   });
 });
 
@@ -3352,5 +3421,125 @@ it("the station planning route returns the configured period ranges for a non-de
         departments: [{ departmentId: expected.departmentId, ranges: expected.ranges }],
       },
     ],
+  });
+});
+
+it.each(["create", "rename"])("allows department route %s onto a deleted name", async (action) => {
+  const fx = await fixture();
+  const path = "/management-api/venue-service/departments";
+  const original = await send(fx.app, "POST", path, fx.managerCookie, { name: "Deli" });
+  expect(original.status).toBe(201);
+  const old = (await original.json()) as { id: string };
+  await db.update(departments).set({ active: false }).where(eq(departments.id, old.id));
+  const made = await send(fx.app, "POST", path, fx.managerCookie, {
+    name: action === "create" ? "Deli" : "Bar",
+  });
+  expect(made.status).toBe(201);
+  const replacement = (await made.json()) as { id: string };
+  if (action === "rename")
+    expect(
+      (
+        await send(fx.app, "PATCH", `${path}/${replacement.id}`, fx.managerCookie, {
+          name: "Deli",
+          tradingName: "Bar",
+        })
+      ).status,
+    ).toBe(204);
+  expect(replacement.id).not.toBe(old.id);
+  expect(
+    await db.select().from(departments).where(eq(departments.locationId, fx.locationId)),
+  ).toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({ id: old.id, name: "Deli", active: false }),
+      expect.objectContaining({ id: replacement.id, name: "Deli", active: true }),
+    ]),
+  );
+});
+
+it("saves combined department settings onto a deleted name", async () => {
+  const fx = await settingsFixture();
+  const old = await withTransaction(db, (tx) =>
+    createDepartment(tx, fx, { name: "Taken", orderStart: "counter" }),
+  );
+  await db.update(departments).set({ active: false }).where(eq(departments.id, old.id));
+  const response = await send(fx.app, "PUT", fx.departmentPath, fx.managerCookie, {
+    ...departmentSettings,
+    name: "Taken",
+  });
+  expect(response.status).toBe(204);
+  expect(
+    await db.select().from(departments).where(eq(departments.locationId, fx.locationId)),
+  ).toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({ id: old.id, name: "Taken", active: false }),
+      expect.objectContaining({ id: fx.departmentId, name: "Taken", active: true }),
+    ]),
+  );
+});
+
+describe("permanent department delete contracts", () => {
+  it("delete returns a full recomputed impact and retires the old preview path", async () => {
+    const fx = await fixture();
+    await withTransaction(db, (tx) =>
+      createDepartment(tx, fx, { name: "Dining", orderStart: "table" }),
+    );
+    const department = await withTransaction(db, (tx) =>
+      createDepartment(tx, fx, { name: "Events", orderStart: "table" }),
+    );
+    const path = `/management-api/venue-service/departments/${department.id}`;
+    const expected = {
+      target: { id: department.id, name: "Events" },
+      refusals: [],
+      ends: [],
+      removes: [{ key: "department_policy", count: 1, targets: [] }],
+    };
+    const preview = await send(fx.app, "GET", `${path}/delete-impact`, fx.managerCookie);
+    expect(preview.status).toBe(200);
+    expect(await preview.json()).toEqual(expected);
+    expect((await send(fx.app, "GET", `${path}/removal-impact`, fx.managerCookie)).status).toBe(
+      404,
+    );
+    const removed = await send(fx.app, "DELETE", path, fx.managerCookie);
+    expect(removed.status).toBe(200);
+    expect(await removed.json()).toEqual(expected);
+    for (const method of ["DELETE", "GET"] as const) {
+      const response = await send(
+        fx.app,
+        method,
+        `${path}${method === "GET" ? "/delete-impact" : ""}`,
+        fx.managerCookie,
+      );
+      expect(response.status).toBe(404);
+      expect(await response.json()).toMatchObject({
+        error: { code: "department.not_found", params: { departmentId: department.id } },
+      });
+    }
+  });
+  it("active presence refuses mixed renames without changing departments or zones", async () => {
+    const fx = await fixture();
+    const department = await withTransaction(db, (tx) =>
+      createDepartment(tx, fx, { name: "Dining", orderStart: "table" }),
+    );
+    const before = {
+      departments: await db.select().from(departments),
+      zones: await db.select().from(floorZones),
+    };
+    for (const active of [true, false, null, "false", []]) {
+      const response = await send(
+        fx.app,
+        "PATCH",
+        `/management-api/venue-service/departments/${department.id}`,
+        fx.managerCookie,
+        { active, name: "Changed" },
+      );
+      expect(response.status).toBe(400);
+      expect(await response.json()).toMatchObject({
+        error: { code: "management.request_invalid", params: { field: "active" } },
+      });
+      expect({
+        departments: await db.select().from(departments),
+        zones: await db.select().from(floorZones),
+      }).toEqual(before);
+    }
   });
 });

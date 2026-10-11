@@ -311,3 +311,97 @@ it("acceptance sends a selected table in its chosen zone", async () => {
     ]),
   );
 });
+
+it("refuses a retained selected table removed from the current table list", async () => {
+  const table: TableState = {
+    id: "table-one",
+    label: "1",
+    zoneId: "terrace",
+    state: "free",
+    hasOpenTab: false,
+    condition: "free",
+    pendingDeliveries: 0,
+    pendingToServe: 0,
+    readyToServe: 0,
+    enRoute: 0,
+    timingBand: "fresh",
+    status: null,
+    nextReservation: null,
+    today: null,
+    party: null,
+    signals: [],
+  };
+  const { el, writes } = await mount(undefined, [table]);
+  click(el, "[data-accept]");
+  await vi.waitFor(() =>
+    expect(
+      el.shadowRoot!.querySelector<HTMLElement & { disabled: boolean }>("[data-save-transfer]")
+        ?.disabled,
+    ).toBe(false),
+  );
+  await change(el, "zoneId", "terrace");
+  expect(
+    el.shadowRoot!.querySelector<HTMLElement & { options: { value: string; label: string }[] }>(
+      "[name=tableId]",
+    )!.options,
+  ).toEqual([
+    { value: "", label: expect.any(String) },
+    { value: "table-one", label: "1" },
+  ]);
+  await change(el, "tableId", "table-one");
+  const save = el.shadowRoot!.querySelector<HTMLElement>("[data-save-transfer]")!;
+  Object.assign(el, { tables: [] });
+  await el.updateComplete;
+  save.click();
+  await el.updateComplete;
+  expect(writes).toEqual([]);
+  expect(
+    el.shadowRoot!.querySelector<HTMLElement & { value: string; error: string }>("[name=tableId]")!
+      .value,
+  ).toBe("table-one");
+  expect(
+    el.shadowRoot!.querySelector<HTMLElement & { error: string }>("[name=tableId]")!.error,
+  ).not.toBe("");
+  expect(
+    el.shadowRoot!.querySelector<HTMLElement & { disabled: boolean }>("[data-save-transfer]")!
+      .disabled,
+  ).toBe(true);
+});
+
+it("refuses a retained accept action after the receiving zone is deleted", async () => {
+  const { el, writes } = await mount();
+  click(el, "[data-accept]");
+  await vi.waitFor(() =>
+    expect(
+      el.shadowRoot!.querySelector<HTMLElement & { disabled: boolean }>("[data-save-transfer]")
+        ?.disabled,
+    ).toBe(false),
+  );
+  await change(el, "zoneId", "terrace");
+  el.serviceZones = zones.filter((zone) => zone.id !== "terrace");
+  await el.updateComplete;
+  click(el, "[data-save-transfer]");
+  await el.updateComplete;
+  expect(writes).toEqual([]);
+  expect(
+    el.shadowRoot!.querySelector<HTMLElement & { error: string }>("[name=zoneId]")!.error,
+  ).not.toBe("");
+});
+
+it("refuses a retained accept action after its request disappears from the snapshot", async () => {
+  const { el, writes } = await mount();
+  click(el, "[data-accept]");
+  await vi.waitFor(() =>
+    expect(
+      el.shadowRoot!.querySelector<HTMLElement & { disabled: boolean }>("[data-save-transfer]")
+        ?.disabled,
+    ).toBe(false),
+  );
+  await change(el, "zoneId", "terrace");
+  const save = el.shadowRoot!.querySelector<HTMLElement>("[data-save-transfer]")!;
+  el.snapshot = { ...el.snapshot, incoming: [], notifications: [] };
+  await el.updateComplete;
+  expect(el.shadowRoot!.querySelector("[data-current-tab]")).toBeNull();
+  save.click();
+  expect(writes).toEqual([]);
+});

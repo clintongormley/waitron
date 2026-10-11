@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { CATALOGUE_MIGRATIONS } from "@waitron/catalogue";
 import {
   CORE_MIGRATIONS,
@@ -45,7 +45,7 @@ async function fixture(nullHeader = false) {
       name: "Default",
       tradingName: "Default",
       isDefault: true,
-      active: false,
+      active: true,
     })
     .returning();
   const [order] = await suite.db
@@ -218,4 +218,36 @@ describe("contact imported-row boundaries", () => {
       email: "local@example.com",
     });
   });
+});
+
+it("does not choose a deleted default when the recorded source has no contact", async () => {
+  const f = await fixture();
+  await authored(f.fallback, { email: "deleted-default@example.com" });
+  await suite.db.update(departments).set({ active: false }).where(eq(departments.id, f.fallback));
+  expect(await read(f.cfg, { kind: "sale", saleId: f.saleId })).toBeNull();
+});
+
+it("propagates a recorded contact storage failure instead of selecting a fallback", async () => {
+  const f = await fixture();
+  await authored(f.primary, { email: "recorded@example.com" });
+  await authored(f.fallback, { email: "fallback@example.com" });
+  const failure = new Error("Receipt storage unavailable");
+  const session = (
+    suite.db as unknown as { session: { prepareQuery: (...args: unknown[]) => unknown } }
+  ).session;
+  const original = session.prepareQuery.bind(session);
+  let failed = false;
+  const spy = vi.spyOn(session, "prepareQuery").mockImplementation((...args) => {
+    const query = args[0] as { sql: string };
+    if (!failed && query.sql.includes('left join "department_receipts"')) {
+      failed = true;
+      throw failure;
+    }
+    return original(...args);
+  });
+  try {
+    await expect(read(f.cfg, { kind: "sale", saleId: f.saleId })).rejects.toBe(failure);
+  } finally {
+    spy.mockRestore();
+  }
 });

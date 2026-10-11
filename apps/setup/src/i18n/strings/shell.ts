@@ -126,16 +126,6 @@ export const shellEn = {
     "The export has two categories named “{name}” in the same place. Rename one in the restaurant you exported from, export again, then load the new export.",
   "shell.configuration.product_name_taken":
     "The export has two active products or variants named “{name}”. Rename one in the restaurant you exported from, export again, then load the new export.",
-  "shell.configuration.department_off_category":
-    "The export has a routing setting for the category “{name}” in the zone “{zone}”, but that zone's department, “{department}”, is disabled. Enable “{department}” in the restaurant you exported from, export again, then load the new export.",
-  "shell.configuration.department_off_product":
-    "The export has a routing setting for the product “{name}” in the zone “{zone}”, but that zone's department, “{department}”, is disabled. Enable “{department}” in the restaurant you exported from, export again, then load the new export.",
-  "shell.configuration.department_off_no_category":
-    "The export has a routing setting for the No category row in the zone “{zone}”, but that zone's department, “{department}”, is disabled. Enable “{department}” in the restaurant you exported from, export again, then load the new export.",
-  "shell.configuration.department_off_all":
-    "The export has a routing setting for the All categories row in the zone “{zone}”, but that zone's department, “{department}”, is disabled. Enable “{department}” in the restaurant you exported from, export again, then load the new export.",
-  "shell.configuration.zone_department_off":
-    "The export has the zone “{zone}” active, but its department, “{department}”, is disabled. Enable “{department}” in the restaurant you exported from, export again, then load the new export.",
 } as const;
 
 export const shellEs: Record<keyof typeof shellEn, string> = {
@@ -269,14 +259,4 @@ export const shellEs: Record<keyof typeof shellEn, string> = {
     "La exportación tiene dos categorías llamadas «{name}» en el mismo lugar. Cambia el nombre de una en el restaurante de origen, vuelve a exportar y carga la nueva exportación.",
   "shell.configuration.product_name_taken":
     "La exportación tiene dos productos o variantes activos llamados «{name}». Cambia el nombre de uno en el restaurante de origen, vuelve a exportar y carga la nueva exportación.",
-  "shell.configuration.department_off_category":
-    "La exportación tiene un ajuste de asignación para la categoría «{name}» en la zona «{zone}», pero el departamento de esa zona, «{department}», está deshabilitado. Habilita «{department}» en el restaurante de origen, vuelve a exportar y carga la nueva exportación.",
-  "shell.configuration.department_off_product":
-    "La exportación tiene un ajuste de asignación para el producto «{name}» en la zona «{zone}», pero el departamento de esa zona, «{department}», está deshabilitado. Habilita «{department}» en el restaurante de origen, vuelve a exportar y carga la nueva exportación.",
-  "shell.configuration.department_off_no_category":
-    "La exportación tiene un ajuste de asignación para la fila Sin categoría en la zona «{zone}», pero el departamento de esa zona, «{department}», está deshabilitado. Habilita «{department}» en el restaurante de origen, vuelve a exportar y carga la nueva exportación.",
-  "shell.configuration.department_off_all":
-    "La exportación tiene un ajuste de asignación para la fila Todas las categorías en la zona «{zone}», pero el departamento de esa zona, «{department}», está deshabilitado. Habilita «{department}» en el restaurante de origen, vuelve a exportar y carga la nueva exportación.",
-  "shell.configuration.zone_department_off":
-    "La exportación tiene la zona «{zone}» activa, pero su departamento, «{department}», está deshabilitado. Habilita «{department}» en el restaurante de origen, vuelve a exportar y carga la nueva exportación.",
 };

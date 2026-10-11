@@ -160,7 +160,7 @@ it("an accepted external department route recreates the form and its baseline", 
   expect(app.leave.coordinator.isDirty()).toBe(false);
 });
 
-it.each(["move-zone", "disable-zone"])(
+it.each(["move-zone", "delete-zone"])(
   "the real %s menu waits for the zone draft decision before opening its dialog",
   async (action) => {
     const { shell } = await mount("/manage/venue-operations/department/d1/view/zones/zone/z1");
@@ -173,8 +173,9 @@ it.each(["move-zone", "disable-zone"])(
       active: true,
     });
     shell.model = snapshot;
-    vi.spyOn(shell.api, "zoneRemovalImpact").mockResolvedValue({
-      zones: [],
+    vi.spyOn(shell.api, "watchZoneDeleteImpact").mockImplementation((_id, apply) => {
+      apply({ target: { id: "z1", name: "Patio" }, refusals: [], ends: [], removes: [] });
+      return () => {};
     });
     await shell.updateComplete;
     const zones = shell.shadowRoot!.querySelector("department-zones")!;

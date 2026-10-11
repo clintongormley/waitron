@@ -69,13 +69,13 @@ export class VenueDepartmentsShell extends LitElement {
       const department = this.model.departments.find((row) => row.id === this.departmentId);
       if (!department?.active) return;
       dialog = { kind, departmentId: department.id };
-    } else if (kind === "rename-department" || kind === "disable-department") {
+    } else if (kind === "rename-department" || kind === "delete-department") {
       const row = this.model.departments.find((row) => row.id === event.detail.departmentId);
-      if (!row) return;
+      if (!row || row.active === false) return;
       dialog = { kind, row };
     } else {
       const row = this.model.floorZones.find((row) => row.id === event.detail.zoneId);
-      if (!row) return;
+      if (!row || row.active === false) return;
       dialog = { kind, row };
     }
     const list = this.shadowRoot?.querySelector("departments-list");
@@ -93,7 +93,7 @@ export class VenueDepartmentsShell extends LitElement {
         ) ?? undefined;
     else {
       const table = list?.shadowRoot?.querySelector("wt-data-table");
-      const key = kind === "disable-department" ? "deactivate-department" : kind;
+      const key = kind;
       const action = kind.endsWith("department")
         ? table?.shadowRoot?.querySelector<HTMLElement>(
             `[data-test="${key}-${CSS.escape(event.detail.departmentId!)}"]`,
@@ -152,6 +152,15 @@ export class VenueDepartmentsShell extends LitElement {
       return false;
     }
   }
+  async #gone(event: Event) {
+    event.stopPropagation();
+    if (this.busy) return;
+    const generation = this.#generation;
+    this.busy = true;
+    await this.#closeDialog();
+    await this.#refresh(generation);
+    if (this.#current(generation)) this.busy = false;
+  }
   async #written(event: Event) {
     event.stopPropagation();
     if (this.busy) return;
@@ -190,36 +199,6 @@ export class VenueDepartmentsShell extends LitElement {
       if (this.#current(generation) && location.pathname === focusPath)
         await this.#returnFocus(opener, dialog);
     }
-  }
-  async #enable(event: CustomEvent<{ departmentId?: string; zoneId?: string }>) {
-    event.stopPropagation();
-    if (this.busy || this.dialog) return;
-    const department = event.type === "enable-department";
-    const id = department ? event.detail.departmentId : event.detail.zoneId;
-    if (
-      !id ||
-      !(department ? this.model.departments : this.model.floorZones).some((row) => row.id === id)
-    )
-      return;
-    const generation = this.#generation;
-    this.busy = true;
-    this.actionError = "";
-    try {
-      if (department) await this.api.updateDepartment(id, { active: true });
-      else await this.api.updateZone(id, { active: true });
-    } catch (error) {
-      if (this.#current(generation)) {
-        this.actionError = t(
-          (error as { code?: string } | undefined)?.code === "zone.department_inactive"
-            ? "venue.zone_department_inactive"
-            : "venue.save_error",
-        );
-        this.busy = false;
-      }
-      return;
-    }
-    if (this.#current(generation)) await this.#refresh(generation);
-    if (this.#current(generation)) this.busy = false;
   }
   readonly #url = new UrlStateController(this, () => this.#restore(), {
     basePath: "/manage",
@@ -261,7 +240,7 @@ export class VenueDepartmentsShell extends LitElement {
         .model=${this.model}
         @open-department=${this.#open}
       ></departments-list>`;
-    const row = this.model.departments.find((d) => d.id === this.departmentId);
+    const row = this.model.departments.find((d) => d.id === this.departmentId && d.active);
     if (!row)
       return html`<nav aria-label=${t("venue.departments")}>
           <a href="/manage/venue-operations">${t("venue.departments")}</a> ›
@@ -292,14 +271,12 @@ export class VenueDepartmentsShell extends LitElement {
     return html`<div
         @add-department=${this.#openDialog}
         @rename-department=${this.#openDialog}
-        @disable-department=${this.#openDialog}
+        @delete-department=${this.#openDialog}
         @add-zone=${this.#openDialog}
         @rename-zone=${this.#openDialog}
         @move-zone=${this.#openDialog}
         @add-to-department=${this.#openDialog}
-        @disable-zone=${this.#openDialog}
-        @enable-department=${this.#enable}
-        @enable-zone=${this.#enable}
+        @delete-zone=${this.#openDialog}
         @saved=${this.#saved}
         ?inert=${this.busy}
       >
@@ -309,6 +286,8 @@ export class VenueDepartmentsShell extends LitElement {
         .api=${this.api}
         .model=${this.model}
         .dialog=${this.dialog}
+        .opener=${this.#opener ?? null}
+        @gone=${this.#gone}
         .refreshing=${this.busy}
         @saved=${this.#saved}
         @written=${this.#written}

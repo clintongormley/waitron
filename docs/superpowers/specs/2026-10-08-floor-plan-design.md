@@ -1,5 +1,9 @@
 # Floor plans: the saved plan, today's plan and the till's map
 
+> **2026-10-11 supersession.** A435 step 6 adds permanent hierarchy Delete. This floor design still governs individual-table Undo, master/today release and location-wide labels. See the
+> [step 6 reconciliation](../plans/2026-10-11-a435-6-tables-zones-departments-delete.md). Earlier behavior and receipts below remain historical.
+
+
 **Status:** owner decisions of 2026-10-08, from one brainstorm that used Square for Restaurants'
 floor plan editor as the reference. The owner approved this written spec on 2026-10-08, and changed it the same day while
 reviewing the implementation plan: the master plan and today's plan are separate plans (§3, §6.3,

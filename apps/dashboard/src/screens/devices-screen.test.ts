@@ -4963,6 +4963,72 @@ describe("a device's kitchen screens", () => {
     await flush(el);
   }
 
+  it("service deletion keeps an empty native device zone bound through an unrelated save", async () => {
+    const api = ksApi(
+      [
+        kds("k1", [
+          {
+            kind: "pass_monitor",
+            available: true,
+            everyStation: true,
+            everyZone: false,
+            profileEveryStation: true,
+            stations: [],
+            zones: [],
+          },
+        ]),
+      ],
+      {
+        listProfileKitchenScreens: vi
+          .fn()
+          .mockResolvedValue([
+            { profileId: "pk", screens: { pass_monitor: { stationIds: null, zoneIds: [] } } },
+          ]),
+      },
+    );
+    const el = await openEdit(api, "k1");
+    const every = q(el, "[data-test=edit-screen-every-zone]") as
+      HTMLElementTagNameMap["wt-switch"] | null;
+    expect(every).not.toBeNull();
+    await every!.updateComplete;
+    expect(every!.shadowRoot!.querySelector("input")!.checked).toBe(false);
+    const name = q(el, "[data-test=edit-name]") as HTMLElementTagNameMap["wt-input"];
+    await name.updateComplete;
+    await userEvent.fill(
+      page.elementLocator(name.shadowRoot!.querySelector("input")!),
+      "Retained empty bounds",
+    );
+    await saveEdit(el);
+    await vi.waitFor(() => expect(api.updateDevice).toHaveBeenCalledOnce());
+    expect(vi.mocked(api.updateDevice).mock.calls[0]![1]).not.toHaveProperty("kitchenScreens");
+  });
+  it("service deletion removes a deleted zone from live native device choices", async () => {
+    const api = ksApi(
+      [
+        kds("k1", [
+          {
+            kind: "pass_monitor",
+            available: true,
+            everyStation: true,
+            everyZone: false,
+            profileEveryStation: true,
+            stations: [],
+            zones: [slot("z1"), slot("z2")],
+          },
+        ]),
+      ],
+      { liveData: new LiveData() },
+    );
+    const el = await openEdit(api, "k1");
+    expect(q(el, "[data-test=edit-screen-zone-z1]")).not.toBeNull();
+    vi.mocked(api.listZones).mockResolvedValue(zones.slice(1));
+    api.liveData.invalidate([{ type: "floor_zones", id: "z1" }]);
+    await vi.waitFor(() => expect(q(el, "[data-test=edit-screen-zone-z1]")).toBeNull());
+    const survivor = q(el, "[data-test=edit-screen-zone-z2]") as HTMLElementTagNameMap["wt-switch"];
+    await survivor.updateComplete;
+    expect(survivor.shadowRoot!.querySelector("input")!.checked).toBe(true);
+  });
+
   it("a kitchen display chooses its Screen from the kinds its profile offers, then stations within the profile's", async () => {
     const api = ksApi([]);
     const el = await openPair(api);

@@ -2,7 +2,14 @@ import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { eq, sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
-import { devices, printerHolders, printers, withTransaction } from "@waitron/db";
+import {
+  deviceProfiles,
+  floorZones,
+  devices,
+  printerHolders,
+  printers,
+  withTransaction,
+} from "@waitron/db";
 import { createCatalogue } from "@waitron/catalogue";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -13,8 +20,9 @@ import { applyVenue, planVenue } from "@waitron/provisioning";
 import {
   createDepartment,
   createServiceZone,
-  deactivateServiceZone,
   zoneServicePolicies,
+  deviceProfileKitchenScreenZones,
+  deviceProfileKitchenScreens,
 } from "@waitron/venue-service";
 import type { Logger } from "./logger.js";
 import { mountManagementApi } from "./management-api.js";
@@ -1660,6 +1668,155 @@ describe("Management API — device-profile CRUD (Task 4)", () => {
       }
     });
 
+    it("a stale previously stored deleted zone id is refused on profile save", async () => {
+      const app = mountApp();
+      const { grill } = await kitchenChoices();
+      const [zone] = await suite.db
+        .insert(floorZones)
+        .values({ locationId: venueCfg.locationId, name: uniqueName("Deleted profile zone") })
+        .returning({ id: floorZones.id });
+      const name = uniqueName("Stale pass");
+      const kitchenScreens = { pass: { stationIds: [grill], zoneIds: [zone!.id] } };
+      const created = await app.request("/management-api/device-profiles", {
+        method: "POST",
+        headers: { ...JSON_HEADERS, cookie: managerCookie },
+        body: JSON.stringify(kitchen(name, { kitchenScreens })),
+      });
+      expect(created.status).toBe(201);
+      const { id } = (await created.json()) as ProfileRow;
+      await suite.db.update(floorZones).set({ active: false }).where(eq(floorZones.id, zone!.id));
+      const res = await app.request(`/management-api/device-profiles/${id}`, {
+        method: "PUT",
+        headers: { ...JSON_HEADERS, cookie: managerCookie },
+        body: JSON.stringify(kitchen(uniqueName("Must not save"), { kitchenScreens })),
+      });
+      expect({ status: res.status, body: await res.json() }).toEqual({
+        status: 400,
+        body: {
+          error: {
+            code: "device_profile.access_invalid",
+            params: { field: "passScreenZones", reason: "not_found" },
+          },
+        },
+      });
+      expect(
+        (
+          await suite.db
+            .select({ name: deviceProfiles.name })
+            .from(deviceProfiles)
+            .where(eq(deviceProfiles.id, id))
+        )[0]?.name,
+      ).toBe(name);
+      expect(await screensOf(app, id)).toEqual({ pass: { stationIds: [grill], zoneIds: [] } });
+    });
+
+    it("retained empty zone bound survives unrelated save and profile copy without widening", async () => {
+      const app = mountApp();
+      const { grill } = await kitchenChoices();
+      const [zone] = await suite.db
+        .insert(floorZones)
+        .values({ locationId: venueCfg.locationId, name: uniqueName("Emptied zone") })
+        .returning({ id: floorZones.id });
+      const name = uniqueName("Empty pass");
+      const created = await app.request("/management-api/device-profiles", {
+        method: "POST",
+        headers: { ...JSON_HEADERS, cookie: managerCookie },
+        body: JSON.stringify(
+          kitchen(name, { kitchenScreens: { pass: { stationIds: [grill], zoneIds: [zone!.id] } } }),
+        ),
+      });
+      expect(created.status).toBe(201);
+      const { id } = (await created.json()) as ProfileRow;
+      await suite.db
+        .delete(deviceProfileKitchenScreenZones)
+        .where(eq(deviceProfileKitchenScreenZones.deviceProfileId, id));
+      await suite.db.update(floorZones).set({ active: false }).where(eq(floorZones.id, zone!.id));
+      const kitchenScreens = { pass: { stationIds: [grill], zoneIds: [] } };
+      const saved = await app.request(`/management-api/device-profiles/${id}`, {
+        method: "PUT",
+        headers: { ...JSON_HEADERS, cookie: managerCookie },
+        body: JSON.stringify(kitchen(name, { kitchenScreens })),
+      });
+      expect(saved.status).toBe(200);
+      expect(await screensOf(app, id)).toEqual(kitchenScreens);
+      const renamed = await app.request(`/management-api/device-profiles/${id}`, {
+        method: "PUT",
+        headers: { ...JSON_HEADERS, cookie: managerCookie },
+        body: JSON.stringify(kitchen(uniqueName("Renamed empty pass"))),
+      });
+      expect(renamed.status).toBe(200);
+      expect(await screensOf(app, id)).toEqual(kitchenScreens);
+      const copied = await app.request(`/management-api/device-profiles/${id}/copy`, {
+        method: "POST",
+        headers: { ...JSON_HEADERS, cookie: managerCookie },
+        body: JSON.stringify(kitchen(uniqueName("Copy"), { kitchenScreens })),
+      });
+      expect(copied.status).toBe(201);
+      const copy = (await copied.json()) as ProfileRow;
+      expect(await screensOf(app, copy.id)).toEqual(kitchenScreens);
+      const [parent] = await suite.db
+        .select()
+        .from(deviceProfileKitchenScreens)
+        .where(eq(deviceProfileKitchenScreens.deviceProfileId, copy.id));
+      expect(parent).toMatchObject({ screen: "pass", everyZone: false, everyStation: false });
+      expect(
+        await suite.db
+          .select()
+          .from(deviceProfileKitchenScreenZones)
+          .where(eq(deviceProfileKitchenScreenZones.deviceProfileId, copy.id)),
+      ).toEqual([]);
+    });
+
+    it("profile copy validates the live source and keeps nonempty zone and station bounds", async () => {
+      const app = mountApp();
+      const { grill, cold } = await kitchenChoices();
+      const screens = {
+        station: { stationIds: [cold], zoneIds: null },
+        pass: { stationIds: [grill], zoneIds: [ordering.startingZoneId] },
+      };
+      const created = await app.request("/management-api/device-profiles", {
+        method: "POST",
+        headers: { ...JSON_HEADERS, cookie: managerCookie },
+        body: JSON.stringify(kitchen(uniqueName("Copy source"), { kitchenScreens: screens })),
+      });
+      expect(created.status).toBe(201);
+      const { id } = (await created.json()) as ProfileRow;
+      const copyName = uniqueName("Copied bounds");
+      const copied = await app.request(`/management-api/device-profiles/${id}/copy`, {
+        method: "POST",
+        headers: { ...JSON_HEADERS, cookie: managerCookie },
+        body: JSON.stringify(kitchen(copyName)),
+      });
+      expect(copied.status).toBe(201);
+      const copy = (await copied.json()) as ProfileRow;
+      expect(await screensOf(app, copy.id)).toEqual(screens);
+      const before = await suite.db.select({ id: deviceProfiles.id }).from(deviceProfiles);
+      await suite.db
+        .update(deviceProfiles)
+        .set({ retiredAt: new Date().toISOString() })
+        .where(eq(deviceProfiles.id, id));
+      for (const sourceId of [id, randomUUID(), "bad-id"]) {
+        const refused = await app.request(`/management-api/device-profiles/${sourceId}/copy`, {
+          method: "POST",
+          headers: { ...JSON_HEADERS, cookie: managerCookie },
+          body: JSON.stringify(kitchen(uniqueName("Invalid source"))),
+        });
+        expect({ status: refused.status, body: await refused.json() }).toEqual({
+          status: 404,
+          body: { error: { code: "device_profile.not_found", params: {} } },
+        });
+      }
+      expect(await suite.db.select({ id: deviceProfiles.id }).from(deviceProfiles)).toEqual(before);
+      const staffCookie = await login(app, STAFF_EMAIL);
+      const forbidden = await app.request(`/management-api/device-profiles/${copy.id}/copy`, {
+        method: "POST",
+        headers: { ...JSON_HEADERS, cookie: staffCookie },
+        body: JSON.stringify(kitchen(uniqueName("Forbidden copy"))),
+      });
+      expect(forbidden.status).toBe(403);
+      expect(await suite.db.select({ id: deviceProfiles.id }).from(deviceProfiles)).toEqual(before);
+    });
+
     it("refuses the kitchen screens to a staff session", async () => {
       const app = mountApp();
       const staffCookie = await login(app, STAFF_EMAIL);
@@ -2210,7 +2367,9 @@ describe("Management API — who and where a device profile serves (W97)", () =>
       }),
     );
     const id = (created.body as Detail).id;
-    await withTransaction(suite.db, (tx) => deactivateServiceZone(tx, venueCfg, spare.id));
+    await withTransaction(suite.db, async (tx) =>
+      tx.execute(sql`update floor_zones set active = false where id = ${spare.id}`),
+    );
     expect((await read(id)).allowedZoneIds).toEqual(
       expect.arrayContaining([ordering.startingZoneId, spare.id]),
     );

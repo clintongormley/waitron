@@ -1,5 +1,9 @@
 # Routing grid: implementation plan (A261 step 4)
 
+> **2026-10-11 supersession.** A435 step 6 permanently deletes zones and removes their routing cells and period children. Reusing a name creates a new id. Product lifecycle statements are outside this hierarchy change. See the
+> [step 6 reconciliation](2026-10-11-a435-6-tables-zones-departments-delete.md). Earlier behavior and receipts below remain historical.
+
+
 > 2026-10-10: A435 step 5 replaces course/station Disable and Enable with permanent
 > Delete. The [current deletion contract](../../developers/conventions-data.md#permanent-course-and-station-deletion)
 > governs retained history, routing cleanup and empty screen scopes. Earlier station/course

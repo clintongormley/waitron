@@ -201,3 +201,134 @@ describe("till-floor-screen's guest count and re-read", () => {
     expect(seen.count).toBe(0);
   });
 });
+
+describe("hierarchy deletion snapshots", () => {
+  it("removes the deleted zone tab and draws the first surviving zone", async () => {
+    const el = await mount({
+      zones: [zone(), zone({ id: "z2", name: "Terrace", displayOrder: 1 })],
+      tables: [
+        planned("t1"),
+        table({ id: "t2", zoneId: "z2", label: "Surviving table", today: today() }),
+      ],
+    });
+    await click(el, '[data-zone="z1"]');
+    el.zones = [zone({ id: "z2", name: "Terrace", displayOrder: 1 })];
+    el.tables = [table({ id: "t2", zoneId: "z2", label: "Surviving table", today: today() })];
+    await el.updateComplete;
+    expect(el.shadowRoot!.querySelector('[data-zone="z1"]')).toBeNull();
+    expect(
+      el.shadowRoot!.querySelector<HTMLElement & { fitKey: string }>("wt-floor-map")!.fitKey,
+    ).toBe("z2");
+    const opens: unknown[] = [];
+    el.addEventListener("open-table", (event) => opens.push((event as CustomEvent).detail));
+    el.shadowRoot!.querySelector("wt-floor-map")!.dispatchEvent(
+      new CustomEvent("wt-table-tap", { detail: { tableId: "t1" }, bubbles: true, composed: true }),
+    );
+    expect(opens).toEqual([]);
+  });
+
+  it("closes seating for a deleted table and refuses its retained confirmation", async () => {
+    const el = await mount();
+    await tapMap(el, "t1");
+    const removedDialog = seatDialog(el)!;
+    await removedDialog.updateComplete;
+    const opens: unknown[] = [];
+    el.addEventListener("open-table", (event) => opens.push((event as CustomEvent).detail));
+    el.tables = [];
+    await el.updateComplete;
+    expect(seatDialog(el)).toBeNull();
+    removedDialog.dispatchEvent(
+      new CustomEvent("seat-confirm", {
+        detail: { guestCount: 2 },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+    expect(opens).toEqual([]);
+  });
+
+  it("keeps seating for an unaffected table after another zone is deleted", async () => {
+    const el = await mount({ zones: [zone(), zone({ id: "z2" })] });
+    await tapMap(el, "t1");
+    el.zones = [zone()];
+    el.tables = [planned("t1")];
+    await el.updateComplete;
+    expect(seatDialog(el)).not.toBeNull();
+    const opens: unknown[] = [];
+    el.addEventListener("open-table", (event) => opens.push((event as CustomEvent).detail));
+    seatDialog(el)!.dispatchEvent(
+      new CustomEvent("seat-confirm", {
+        detail: { guestCount: 2 },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+    expect(opens).toEqual([{ tableId: "t1", seated: false, guestCount: 2 }]);
+  });
+});
+
+it("refuses a retained table card after the table is removed", async () => {
+  const el = await mount();
+  await click(el, "[data-view-toggle]");
+  const card = el.shadowRoot!.querySelector<HTMLElement>('[data-table="t1"]')!;
+  el.tables = [];
+  await el.updateComplete;
+  card.click();
+  await el.updateComplete;
+  expect(seatDialog(el)).toBeNull();
+});
+
+it("closes clearing for a removed table and refuses its retained action", async () => {
+  const el = await mount({ tables: [table({ today: today(), condition: "needs_clearing" })] });
+  await tapMap(el, "t1");
+  const action = el.shadowRoot!.querySelector<HTMLElement>(
+    "[data-clear-dialog] [data-mark-cleared]",
+  )!;
+  expect(action).not.toBeNull();
+  const clears: unknown[] = [];
+  el.addEventListener("mark-cleared", (event) => clears.push((event as CustomEvent).detail));
+  el.tables = [];
+  await el.updateComplete;
+  expect(el.shadowRoot!.querySelector("[data-clear-dialog]")).toBeNull();
+  action.click();
+  expect(clears).toEqual([]);
+});
+
+it("refuses a retained occupied table card after its table is removed", async () => {
+  const el = await mount({ tables: [table({ hasOpenTab: true })] });
+  const card = el.shadowRoot!.querySelector<HTMLElement>('[data-table="t1"]')!;
+  expect(card).not.toBeNull();
+  const opens: unknown[] = [];
+  el.addEventListener("open-table", (event) => opens.push((event as CustomEvent).detail));
+  el.tables = [];
+  await el.updateComplete;
+  card.click();
+  expect(opens).toEqual([]);
+});
+
+it("keeps clearing an unaffected table after another zone is deleted", async () => {
+  const el = await mount({
+    zones: [zone(), zone({ id: "z2" })],
+    tables: [table({ today: today(), condition: "needs_clearing" })],
+  });
+  await tapMap(el, "t1");
+  el.zones = [zone()];
+  await el.updateComplete;
+  const clears: unknown[] = [];
+  el.addEventListener("mark-cleared", (event) => clears.push((event as CustomEvent).detail));
+  await click(el, "[data-clear-dialog] [data-mark-cleared]");
+  expect(clears).toEqual([{ tableId: "t1" }]);
+});
+
+it("opens an unaffected occupied table after another zone is deleted", async () => {
+  const el = await mount({
+    zones: [zone(), zone({ id: "z2" })],
+    tables: [table({ hasOpenTab: true })],
+  });
+  el.zones = [zone()];
+  await el.updateComplete;
+  const opens: unknown[] = [];
+  el.addEventListener("open-table", (event) => opens.push((event as CustomEvent).detail));
+  await click(el, '[data-table="t1"]');
+  expect(opens).toEqual([{ tableId: "t1", seated: true }]);
+});

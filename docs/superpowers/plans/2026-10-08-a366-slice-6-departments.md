@@ -1,5 +1,9 @@
 # Departments, slice 6 — the department list and page, "How orders start", one set of service settings (A366)
 
+> **2026-10-11 supersession.** A435 step 6 supersedes disabled hierarchy rows/status, disabled-name Enable offers, read-only Enable editors and removal-impact. Permanent Delete uses complete impact and tears down deleted editors. See the
+> [step 6 reconciliation](2026-10-11-a435-6-tables-zones-departments-delete.md). Earlier behavior and receipts below remain historical.
+
+
 > 2026-10-10, A366 slice 7 Part B: the receipt link below now opens the department's
 > `/manage/venue-operations/department/:id/view/receipt` tab.
 > [Current host plan](2026-10-08-a366-slice-7-receipts-per-department.md#part-b--department--receipt-host-second-pr-after-slice-6)

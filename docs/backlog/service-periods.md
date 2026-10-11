@@ -92,8 +92,8 @@ and hours proposals; the historical spec keeps its dated pointers.
 
 ## A493. Departments and zones as one list, edited in dialogs
 
-**A493 (owner, 2026-10-11) — OPEN. Starts after A435 step 6 lands** (lane E, in progress). That step
-changes the same screens and replaces a zone's and a department's Disable with Delete
+**A493 (owner, 2026-10-11) — OPEN (lane D).** A435 step 6 replaces a zone's and a department's
+Disable with permanent Delete in the same screens
 ([plan](../superpowers/plans/2026-10-11-a435-6-tables-zones-departments-delete.md)). The owner's
 mockup is the private canvas https://claude.ai/artifact/Tya5FcmK39ESBkQ2hTaA7s, which has four
 boards: the list, Edit department, Edit zone and Edit receipt.
@@ -288,6 +288,20 @@ period order — spec section 2).
   midnight.
 
 ## Decisions and deliberate limits
+
+- **Hierarchy Delete is permanent (A435 step 6, 2026-10-11).** One complete impact is rechecked
+  inside the write transaction. Live work refuses; no work is abandoned. All saved, today, reset
+  and join descendants are removed together. Department-owned routing, periods, hours overrides
+  and transfer settings go; shared menus, venue calendars and holidays stay. Deleted receipt
+  settings and media stay for internal printing, with no editor or import/export access.
+- **Profiles and defaults stay within surviving configuration (A435 step 6, 2026-10-11).** A
+  nonretired ordering profile bound to the department, or losing its only effective zone, refuses
+  Delete even without an active device. A removed start/default uses the declared surviving order,
+  never invented configuration or wider access. An explicit empty KDS parent stays empty; Every
+  stays Every. A default change does not rewrite historical department attribution. Closed today,
+  opening hours and hardware Disable remain separate. The
+  [reconciliation](../superpowers/plans/2026-10-11-a435-6-tables-zones-departments-delete.md)
+  records the complete limits.
 
 - **Permanent station Delete is separate from Close for today (A435 step 5, 2026-10-10).**
   Close keeps its Send/Leave choice. Delete refuses held, queued or preparing food and explicit

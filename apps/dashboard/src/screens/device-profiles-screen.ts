@@ -1,3 +1,5 @@
+import { QueryController } from "@waitron/dashboard-kit";
+import { dashboardQuery } from "../api/live-queries.js";
 import { DashboardQueries } from "../api/query-controller.js";
 import { LitElement, type TemplateResult, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
@@ -206,7 +208,6 @@ function comparableScreens(
 /** Empty explicit station bounds survive copying so the copy cannot widen them to Every. */
 function switchedOnScreens(
   screens: ProfileKitchenScreens,
-  sharedDisplay: boolean,
   stationOn: (id: string) => boolean,
   zoneOn: (id: string) => boolean,
 ): ProfileKitchenScreens {
@@ -216,8 +217,6 @@ function switchedOnScreens(
     if (scope === undefined) continue;
     const stationIds = scope.stationIds === null ? null : scope.stationIds.filter(stationOn);
     const zoneIds = scope.zoneIds === null ? null : scope.zoneIds.filter(zoneOn);
-    const noRowBoundsNothing = !sharedDisplay && kind !== "pass_monitor";
-    if (stationIds?.length !== 0 && zoneIds?.length === 0 && !noRowBoundsNothing) continue;
     out[kind] = { stationIds, zoneIds };
   }
   return out;
@@ -247,15 +246,10 @@ function sameExceptions(a: readonly PersonException[], b: readonly PersonExcepti
   );
 }
 
-/** The department's switched-on zones, by position. */
 function activeZones(choices: ProfileScopeChoices, departmentId: string | null) {
   return choices.zones.filter((zone) => zone.departmentId === departmentId && zone.active);
 }
 
-/**
- * A stored subset and starting zone less the zones switched off since, as the till reads them: the
- * start moves to the first zone left, or is empty when none is.
- */
 function liveZones(
   scope: ProfileServiceScope,
   choices: ProfileScopeChoices,
@@ -502,7 +496,7 @@ export class DeviceProfilesScreen extends LitElement {
     },
     () => {
       this.#standingReadError = null;
-      if (this.#readErrorShown) this.#showError(null);
+      if (this.#readErrorOwner === "main") this.#showError(null);
     },
   );
 
@@ -527,8 +521,7 @@ export class DeviceProfilesScreen extends LitElement {
   @state() private staff: PersonSummary[] = [];
 
   @state() private errorKey: string | null = null;
-  /** Whether `errorKey` is a read's failure, the only message the reads' recovery may clear. */
-  #readErrorShown = false;
+  #readErrorOwner: "main" | "scope" | null = null;
   /** The live reads' latest failure until they recover. Opening the editor clears the screen's
    * message, and this is put back so the form still says why its lists may be stale or empty. */
   #standingReadError: { error: unknown } | null = null;
@@ -556,8 +549,7 @@ export class DeviceProfilesScreen extends LitElement {
   /** The chosen zones while `draftEveryZone` is off, by the zones' position. */
   @state() private draftZoneIds: string[] = [];
   @state() private draftStartingZoneId = "";
-  /** Set once the manager changes the department, zones or starting zone; until then an edit keeps
-   * the stored scope, zones switched off since included. */
+  /** Until the service scope changes, unrelated edits leave its stored fields untouched. */
   #scopeEdited = false;
   @state() private draftRoles: PersonRole[] = [...ROLES];
   @state() private draftExceptions: PersonException[] = [];
@@ -696,14 +688,15 @@ export class DeviceProfilesScreen extends LitElement {
     if (this.#standingReadError !== null) this.#showReadError(this.#standingReadError.error);
   }
 
-  #showError(code: string | null, fromRead = false): void {
+  #showError(code: string | null, owner: "main" | "scope" | null = null): void {
     this.errorKey = code;
-    this.#readErrorShown = fromRead;
+    this.#readErrorOwner = owner;
   }
 
   /** A read's failure never replaces an action's message. */
-  #showReadError(error: unknown): void {
-    if (this.errorKey === null || this.#readErrorShown) this.#showError(codeOf(error), true);
+  #showReadError(error: unknown, owner: "main" | "scope" = "main"): void {
+    if (this.errorKey === null || this.#readErrorOwner !== null)
+      this.#showError(codeOf(error), owner);
   }
 
   /** Reloads only the PROFILES: no profile write changes the canvas or printer set. */
@@ -846,7 +839,6 @@ export class DeviceProfilesScreen extends LitElement {
 
   // ── Where it serves ──────────────────────────────────────────────────────────────────────────────
 
-  /** The department's switched-on zones, by position. */
   #departmentZones(departmentId: string): ProfileScopeChoices["zones"] {
     return activeZones(this.scopeChoices, departmentId);
   }
@@ -954,6 +946,8 @@ export class DeviceProfilesScreen extends LitElement {
   // ── New / Edit ─────────────────────────────────────────────────────────────────────────────────
 
   #clearDraft(): void {
+    this.#scopeQueries.release("choices");
+    this.#latestScopeChoices = null;
     this.#saveTurn++;
     this.saving = false;
     this.#draftScope?.dispose();
@@ -994,8 +988,44 @@ export class DeviceProfilesScreen extends LitElement {
    * on changes nothing. */
   #opened = 0;
 
-  /** A venue with one department starts the profile there, at its first zone. The departments and
-   * zones are read when the editor opens rather than kept live: the editor is the only reader. */
+  #latestScopeChoices: ProfileScopeChoices | null = null;
+
+  readonly #scopeQueries = new QueryController(
+    this,
+    () => this.api.liveData,
+    (error) => this.#showReadError(error, "scope"),
+    () => {
+      if (this.#readErrorOwner === "scope") this.#showError(null);
+    },
+  );
+
+  #watchScopeChoices(): Promise<ProfileScopeChoices> {
+    const opened = this.#opened;
+    const first = this.api.getProfileScopeChoices();
+    let initial = true;
+    const query = dashboardQuery(this.api.background ?? this.api, "getProfileScopeChoices", []);
+    void this.#scopeQueries
+      .watch(
+        "choices",
+        {
+          ...query,
+          read: () => {
+            if (!initial) return query.read();
+            initial = false;
+            return first;
+          },
+        },
+        (choices) => {
+          if (opened !== this.#opened) return;
+          this.#latestScopeChoices = choices;
+          this.scopeChoices = choices;
+          if (this.mode === "editor") this.#settleStartingZone();
+        },
+      )
+      .catch(() => {});
+    return first;
+  }
+
   #openCreate(): void {
     this.#clearDraft();
     this.#clearErrorOnOpen();
@@ -1005,9 +1035,10 @@ export class DeviceProfilesScreen extends LitElement {
     const scope = this.#draftScope;
     const opened = this.#opened;
     void this.#loadReaders(null, opened);
-    this.api.getProfileScopeChoices().then(
-      (choices) => {
+    this.#watchScopeChoices().then(
+      (initialChoices) => {
         if (opened !== this.#opened) return;
+        const choices = this.#latestScopeChoices ?? initialChoices;
         this.scopeChoices = choices;
         if (this.draftDepartmentId !== "") return;
         const departments = choices.departments.filter((department) => department.active);
@@ -1021,7 +1052,7 @@ export class DeviceProfilesScreen extends LitElement {
         });
       },
       (error: unknown) => {
-        if (opened === this.#opened) this.#showReadError(error);
+        if (opened === this.#opened) this.#showReadError(error, "scope");
       },
     );
   }
@@ -1030,15 +1061,16 @@ export class DeviceProfilesScreen extends LitElement {
    * delivered yet. */
   async #openEditor(id: string): Promise<void> {
     this.#clearErrorOnOpen();
-    const opened = ++this.#opened;
+    this.#clearDraft();
+    const opened = this.#opened;
     try {
-      const [profile, kitchenScreens, choices] = await Promise.all([
+      const [profile, kitchenScreens, initialChoices] = await Promise.all([
         this.api.getDeviceProfile(id),
         this.api.listProfileKitchenScreens(),
-        this.api.getProfileScopeChoices(),
+        this.#watchScopeChoices(),
       ]);
       if (opened !== this.#opened) return;
-      this.#clearDraft();
+      const choices = this.#latestScopeChoices ?? initialChoices;
       this.scopeChoices = choices;
       this.editingId = id;
       this.#loaded = profile;
@@ -1553,7 +1585,6 @@ export class DeviceProfilesScreen extends LitElement {
       const stored = this.kitchenScreens.find((entry) => entry.profileId === profile.id)?.screens;
       const screens = switchedOnScreens(
         stored ?? {},
-        isSharedDisplay(profile.formFactor),
         (id) => this.stations.some((station) => station.id === id && station.active),
         (id) => choices.zones.some((zone) => zone.id === id && zone.active),
       );
@@ -1575,7 +1606,8 @@ export class DeviceProfilesScreen extends LitElement {
       for (const { defaultKey } of PRINTER_LISTS)
         if (profile[defaultKey] !== null) extras[defaultKey] = profile[defaultKey];
       const extrasArg = Object.keys(extras).length === 0 ? [] : ([extras] as const);
-      const created = await this.api.createDeviceProfile(
+      const created = await this.api.copyDeviceProfile(
+        profile.id,
         name,
         profile.canvasId,
         profile.capabilities,
@@ -1892,18 +1924,15 @@ export class DeviceProfilesScreen extends LitElement {
     return pass && this.draftKitchenScreens.pass_monitor !== undefined;
   }
 
-  /** The venue's switched-on entries in their order, plus any switched off the list still holds,
-   * marked, so a save keeps them. */
   #listChoices(
     all: readonly { id: string; name: string; active: boolean }[],
     listed: readonly string[],
-    mark: string,
   ): { id: string; label: string; on: boolean }[] {
     return all
-      .filter((entry) => entry.active || listed.includes(entry.id))
+      .filter((entry) => entry.active)
       .map((entry) => ({
         id: entry.id,
-        label: entry.active ? entry.name : `${entry.name} (${mark})`,
+        label: entry.name,
         on: listed.includes(entry.id),
       }));
   }
@@ -1933,7 +1962,6 @@ export class DeviceProfilesScreen extends LitElement {
         handler: (e: CustomEvent<{ checked: boolean }>) => void;
       },
       all: readonly { id: string; name: string; active: boolean }[],
-      mark: string,
       item: string,
       heading: string,
     ) => {
@@ -1959,7 +1987,7 @@ export class DeviceProfilesScreen extends LitElement {
             : []),
           ...(listed === null
             ? []
-            : this.#listChoices(all, listed, mark).map(
+            : this.#listChoices(all, listed).map(
                 (choice) =>
                   html`<wt-switch
                     data-test="profile-${slug}-${item}-${choice.id}"
@@ -1983,7 +2011,6 @@ export class DeviceProfilesScreen extends LitElement {
           handler: (e) => this.#onScreenEveryStation(e, kind),
         },
         this.stations.filter((station) => station.active),
-        t("devices.station_disabled_mark"),
         "station",
         t("device_profiles.kitchen_stations"),
       )}
@@ -1999,7 +2026,6 @@ export class DeviceProfilesScreen extends LitElement {
                 handler: (e) => this.#onScreenEveryZone(e, kind),
               },
               this.scopeChoices.zones,
-              t("device_profiles.zone_disabled_mark"),
               "zone",
               t("device_profiles.kitchen_zones"),
             )

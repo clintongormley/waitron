@@ -166,6 +166,7 @@ export class OpeningHoursDay extends LitElement {
     this.scope?.dispose();
     this.scope = undefined;
     this.generation = {};
+    this.saving = false;
     super.disconnectedCallback();
   }
   protected override willUpdate() {
@@ -177,6 +178,7 @@ export class OpeningHoursDay extends LitElement {
     }
     this.registerScope();
     if (this.source !== this.model) {
+      this.retireDeletedOwners();
       if (
         (this.scope ? saveActionState(this.scope).unchanged : equal(this.draft, this.baseline)) &&
         !this.saving
@@ -188,6 +190,39 @@ export class OpeningHoursDay extends LitElement {
       this.source = this.model;
     }
     this.watchCalendar();
+  }
+  private retireDeletedOwners() {
+    const departments = this.model.departments;
+    const ids = new Set(departments.map((department) => department.id));
+    const zoneIds = new Set(
+      departments.flatMap((department) => (department.zones ?? []).map((zone) => zone.id)),
+    );
+    if (
+      !Object.keys(this.draft.menus).some((id) => !ids.has(id)) &&
+      !Object.keys(this.draft.zones).some((id) => !zoneIds.has(id))
+    )
+      return;
+    this.generation = {};
+    this.saving = false;
+    this.scope?.dispose();
+    this.scope = undefined;
+    const surviving = (value: Draft): Draft => ({
+      menus: Object.fromEntries(Object.entries(value.menus).filter(([id]) => ids.has(id))),
+      zones: Object.fromEntries(Object.entries(value.zones).filter(([id]) => zoneIds.has(id))),
+    });
+    this.draft = surviving(this.draft);
+    this.baseline = surviving(this.baseline);
+    this.contextDepartments = this.contextDepartments
+      .filter((department) => ids.has(department.id))
+      .map((department) => ({
+        ...department,
+        zones: department.zones.filter((zone) => zoneIds.has(zone.id)),
+      }));
+    if (this.opening && !ids.has(this.opening.department.id)) this.opening = undefined;
+    if (this.zoneOpening && !zoneIds.has(this.zoneOpening.zone.id)) this.zoneOpening = undefined;
+    if (this.periodOpening && !ids.has(this.periodOpening.range.department.id))
+      this.periodOpening = undefined;
+    this.registerScope();
   }
   private registerScope() {
     if (this.isConnected && !this.scope) {
@@ -571,7 +606,7 @@ export class OpeningHoursDay extends LitElement {
         }
       this.api.rereadWatches();
     } finally {
-      this.saving = false;
+      if (generation === this.generation && this.isConnected) this.saving = false;
     }
   }
   private async savePeriod(

@@ -144,7 +144,7 @@ it("a write from a disconnected editor cannot commit a later zone", async () => 
   expect(el.shadowRoot!.querySelector("h2")!.textContent).toBe("Terrace");
 });
 
-it.each(["move-zone", "disable-zone"])(
+it.each(["move-zone", "delete-zone"])(
   "%s asks before discarding the selected zone's service settings",
   async (action) => {
     const el = await mount();
@@ -175,18 +175,15 @@ it.each(["move-zone", "disable-zone"])(
   },
 );
 
-it.each(["move-zone", "disable-zone"])(
-  "clean %s opens without a leave question",
-  async (action) => {
-    const el = await mount();
-    const events: unknown[] = [];
-    el.addEventListener(action, (event) => events.push((event as CustomEvent).detail));
-    el.shadowRoot!.querySelector<HTMLElement>(`[data-test=${action}]`)!.click();
-    await expect.poll(() => events).toEqual([{ zoneId: "z2" }]);
-    expect(app.shadowRoot!.querySelector("wt-unsaved-changes")!.open).toBe(false);
-    expect(unload()).toBe(false);
-  },
-);
+it.each(["move-zone", "delete-zone"])("clean %s opens without a leave question", async (action) => {
+  const el = await mount();
+  const events: unknown[] = [];
+  el.addEventListener(action, (event) => events.push((event as CustomEvent).detail));
+  el.shadowRoot!.querySelector<HTMLElement>(`[data-test=${action}]`)!.click();
+  await expect.poll(() => events).toEqual([{ zoneId: "z2" }]);
+  expect(app.shadowRoot!.querySelector("wt-unsaved-changes")!.open).toBe(false);
+  expect(unload()).toBe(false);
+});
 
 it("Rename retains the zone service draft without asking to discard it", async () => {
   const el = await mount();

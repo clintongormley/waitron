@@ -95,3 +95,15 @@ describe("CORE_CONFIGURATION_TRANSFER", () => {
     });
   });
 });
+
+it.each([0, false])("refuses a deleted floor zone with active=%j", (active) => {
+  expect(() => validateCoreConfiguration({ floor_zones: [{ id: "old", active }] })).toThrowError(
+    expect.objectContaining({
+      code: "setup.request_invalid",
+      params: { field: "floor_zones.active" },
+    }),
+  );
+  expect(() =>
+    validateCoreConfiguration({ floor_zones: [{ id: "live", active: 1 }] }),
+  ).not.toThrow();
+});

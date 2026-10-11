@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
-import { eq } from "drizzle-orm";
+import { sql, eq } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -15,7 +15,7 @@ import {
 import { hashPin, loginWithPin, persons } from "@waitron/identity";
 import { saveZonePlan } from "./floor-plan.js";
 import { ALL_MODULES, enabledTableRemovals } from "./modules.js";
-import { deactivateZone } from "./tables.js";
+
 import { mountTillApi } from "./till-api.js";
 import { SESSION_COOKIE } from "./till-session.js";
 import {
@@ -224,7 +224,9 @@ describe("today's routes", () => {
 
   it("leaves a disabled planned zone's tables off on a reset", async () => {
     const { zoneId, table } = await plannedZone(v, [{ key: "a" }]);
-    await inTx(v, (tx) => deactivateZone(tx, v.cfg, zoneId));
+    await inTx(v, async (tx) =>
+      tx.execute(sql`update floor_zones set active = false where id = ${zoneId}`),
+    );
     expect(await inService(table.a!)).toBe(false);
     const generation = await generationOf(zoneId);
     expect(generation).toBe(1);

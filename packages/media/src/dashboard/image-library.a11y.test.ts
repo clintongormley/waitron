@@ -151,7 +151,22 @@ it.each([
     ],
   });
   const modal = await openDialog(library, "delete-bread");
-  await vi.waitFor(() => expect(modal.querySelectorAll("a")).toHaveLength(3));
+  await vi.waitFor(() => expect(modal.querySelectorAll("li")).toHaveLength(3));
+  const uses = [...modal.querySelectorAll("li")];
+  expect(uses.map((use) => use.textContent?.trim())).toEqual(
+    locale === "en-GB"
+      ? ["Receipt logo", "Bar receipt logo (Deleted department)", "Dining receipt logo"]
+      : [
+          "Logotipo del recibo",
+          "Logotipo del recibo de Bar (Departamento eliminado)",
+          "Logotipo del recibo de Dining",
+        ],
+  );
+  expect(uses[1]!.querySelector("a")).toBeNull();
+  expect([...modal.querySelectorAll("a")].map((link) => link.getAttribute("href"))).toEqual([
+    "/manage/venue-settings/view/receipts",
+    "/manage/venue-operations/department/dining/view/receipt",
+  ]);
   expect(modal.querySelector("[data-test=confirm-delete]")).toBeNull();
   await expectNoA11yViolations(host);
 });

@@ -122,7 +122,7 @@ export class DepartmentPage extends LitElement {
   }
   override render() {
     const row = this.model?.departments.find((d) => d.id === this.departmentId);
-    if (!row) return nothing;
+    if (!row || !row.active) return nothing;
     const setup = this.setup();
     const receipt =
       this.renderPanel?.("department-receipt", { id: row.id, name: row.name }) ?? null;
@@ -132,7 +132,6 @@ export class DepartmentPage extends LitElement {
       </nav>
       <div class="heading">
         <h1>${row.name}</h1>
-        ${!row.active ? html`<span class="status" data-test="department-status">(${t("venue.department_disabled")})</span><wt-button data-test="enable-department" @click=${() => this.emit("enable-department", { departmentId: row.id })}>${t("venue.enable")}</wt-button>` : nothing}
       </div>
       ${setup === nothing ? nothing : html`<p class="setup" data-test="setup">${setup}</p>`}
       <wt-tabs
@@ -153,7 +152,6 @@ export class DepartmentPage extends LitElement {
           .api=${this.api}
           .model=${this.model}
           .departmentId=${row.id}
-          .showEnable=${false}
           .showReceipt=${receipt !== null}
         ></department-settings>
         <slot name="zones" slot="zones"></slot>

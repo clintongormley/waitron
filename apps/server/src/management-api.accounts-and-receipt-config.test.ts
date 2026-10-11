@@ -2119,7 +2119,7 @@ describe("independent department and global defaults routes", () => {
       await setupTenant();
       const app = mountApp();
       const cookie = await login(app, MANAGER_EMAIL);
-      const id = await departmentFixture(false);
+      const id = await departmentFixture();
       await putReceiptOverHttp(app, cookie, {
         email: "legacy@venue.test",
         phone: "+34 910 000 000",

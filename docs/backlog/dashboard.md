@@ -843,6 +843,8 @@ request per batch: [plan](../superpowers/plans/2026-10-07-a331-save-follows-chan
   the historical catalogue-only warning was not reproduced.
   A396's disabled-zone profile ruling is
   done in #1428; A231q's future invoice screens remain a separate task.
+  **2026-10-11:** A435 step 6 prevents public hierarchy Delete from emptying ordering access.
+  Existing invalid stored-scope validation still applies; this earlier A396 receipt remains historical.
 
 ## Service-status colour-field labels are clipped (found during W69, 2026-10-06)
 

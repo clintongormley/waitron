@@ -8,7 +8,7 @@ import { namedDaysOn } from "./named-days.js";
 import { specialDates } from "./schema/hours.js";
 import { zoneExtensions } from "./schema/zone-extensions.js";
 import { zoneClosedTimes } from "./schema/zone-closed-times.js";
-import { zoneServicePolicies } from "./schema/service.js";
+import { departments, zoneServicePolicies } from "./schema/service.js";
 import "./errors.js";
 
 export async function replaceZoneClosedWeek(
@@ -93,11 +93,13 @@ export async function readZoneClosedTimes(tx: Transaction, cfg: VenueScope, cuto
     })
     .from(floorZones)
     .innerJoin(zoneServicePolicies, eq(zoneServicePolicies.zoneId, floorZones.id))
+    .innerJoin(departments, eq(departments.id, zoneServicePolicies.departmentId))
     .where(
       and(
         eq(floorZones.locationId, cfg.locationId),
         eq(zoneServicePolicies.locationId, cfg.locationId),
         eq(floorZones.active, true),
+        eq(departments.active, true),
       ),
     )
     .orderBy(asc(floorZones.displayOrder), asc(floorZones.id));

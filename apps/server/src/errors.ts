@@ -19,6 +19,7 @@ import type { AllocationPreview } from "./bill-allocation.js";
  */
 declare module "@waitron/shared" {
   interface ErrorParams {
+    "table.delivery_in_progress": { tableId: string; workingOrderId: string };
     "invoice_delivery.email_unavailable": Record<string, never>;
     "invoice_delivery.printer_invalid": Record<string, never>;
     "invoice_delivery.receipt_invalid": Record<string, never>;

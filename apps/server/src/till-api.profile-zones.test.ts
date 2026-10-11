@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
-import { eq } from "drizzle-orm";
+import { sql, eq } from "drizzle-orm";
 import { beforeAll, describe, expect, it, vi } from "vitest";
 import {
   billPayments,
@@ -28,7 +28,6 @@ import {
   configureZone,
   createDepartment,
   createServiceZone,
-  deactivateServiceZone,
   setProfileServiceAccess,
   zoneServicePolicies,
 } from "@waitron/venue-service";
@@ -1369,7 +1368,9 @@ describe("a Restaurant profile in its own zones", () => {
       return zone.id;
     });
     expect((await send(restaurant, "GET", `/api/service-zones/${patio}/offers`)).status).toBe(200);
-    await inTx(v, (tx) => deactivateServiceZone(tx, v.cfg, patio));
+    await inTx(v, async (tx) =>
+      tx.execute(sql`update floor_zones set active = false where id = ${patio}`),
+    );
     expect(await send(restaurant, "GET", `/api/service-zones/${patio}/offers`)).toEqual(
       notAllowed(patio),
     );
@@ -1391,7 +1392,9 @@ describe("a Restaurant profile in its own zones", () => {
       return zone.id;
     });
     const cookie = await signIn(profileId);
-    await inTx(v, (tx) => deactivateServiceZone(tx, v.cfg, zoneId));
+    await inTx(v, async (tx) =>
+      tx.execute(sql`update floor_zones set active = false where id = ${zoneId}`),
+    );
     expect(await send(cookie, "GET", "/api/default-service-zone/offers")).toEqual({
       status: 409,
       body: { error: { code: "device_profile.no_service_zone", params: { profileId } } },
