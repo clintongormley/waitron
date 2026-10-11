@@ -34,7 +34,6 @@ import type { VenueResult } from "@waitron/provisioning";
 import {
   configureZone,
   createDepartment,
-  deactivateDepartment,
   VENUE_SERVICE_ROUTES,
   VENUE_SERVICE_PERMISSIONS,
 } from "@waitron/venue-service";
@@ -853,7 +852,12 @@ describe("/management-api/tables", () => {
     it("refuses active PATCH on a zone whose department is deleted", async () => {
       const { departmentId, zoneId } = await tableInServiceZone();
       await withTransaction(suite.db, (tx) =>
-        deactivateDepartment(tx, tillConfigFromVenue(venue), departmentId),
+        (async () => {
+          await tx.execute(
+            sql`update floor_zones set active = false where id in (select zone_id from zone_service_policies where department_id = ${departmentId})`,
+          );
+          await tx.execute(sql`update departments set active = false where id = ${departmentId}`);
+        })(),
       );
       const response = await req(
         `/zones/${zoneId}`,
@@ -906,7 +910,14 @@ describe("/management-api/tables", () => {
         const source = await tableInServiceZone();
         const destination = await tableInServiceZone();
         await withTransaction(suite.db, (tx) =>
-          deactivateDepartment(tx, tillConfigFromVenue(venue), destination.departmentId),
+          (async () => {
+            await tx.execute(
+              sql`update floor_zones set active = false where id in (select zone_id from zone_service_policies where department_id = ${destination.departmentId})`,
+            );
+            await tx.execute(
+              sql`update departments set active = false where id = ${destination.departmentId}`,
+            );
+          })(),
         );
         if (state === "deleted")
           expect(
@@ -920,10 +931,13 @@ describe("/management-api/tables", () => {
           },
           managerCookie,
         );
-        expect(response.status).toBe(state === "active" ? 409 : 404);
+        expect(response.status).toBe(404);
         if (state === "active")
           expect(await response.json()).toMatchObject({
-            error: { code: "zone.department_inactive", params: { zoneId: source.zoneId } },
+            error: {
+              code: "department.not_found",
+              params: { departmentId: destination.departmentId },
+            },
           });
         const stored = await suite.db.execute<{ department_id: string; active: number }>(
           sql`select p.department_id, z.active from zone_service_policies p join floor_zones z on z.id = p.zone_id where z.id = ${source.zoneId}`,
