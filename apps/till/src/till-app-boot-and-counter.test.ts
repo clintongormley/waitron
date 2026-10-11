@@ -4856,6 +4856,26 @@ describe("till-app when a box update meets a box reset or a refused device", () 
     return el;
   }
 
+  it("neither reloads nor throws once the till has left the page before its server check answered", async () => {
+    const router = new ServerRouter({
+      origin: location.origin,
+      fetchImpl: fetch,
+      storage: { getItem: () => null, setItem: () => {} },
+    });
+    let answer!: () => void;
+    vi.spyOn(router, "probeNow").mockReturnValue(
+      new Promise<void>((resolve) => (answer = resolve)),
+    );
+    const reload = vi.fn();
+    const { el } = await mountApp({}, { reload, router });
+    await flush(el);
+    window.dispatchEvent(new Event(BUILD_CHANGED_EVENT));
+    el.remove();
+    answer();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(reload).not.toHaveBeenCalled();
+  });
+
   it("shows no bar to a signed-in till when the box answers its probe in setup mode with a new build", async () => {
     const fake = fakeBox();
     const reload = vi.fn();
