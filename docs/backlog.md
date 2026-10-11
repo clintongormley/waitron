@@ -4919,6 +4919,13 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
   step 4 (#1519).
 - **A Stripe reader's delete confirmation does not say the reader stays registered at Stripe**,
   which a SumUp reader's does while SumUp is not connected. Left open by A435 step 3b.
+- **SumUp's other calls still follow redirects** (`packages/payments-sumup/src/sumup-client.ts`;
+  only `deleteReader` passes `redirect: "manual"` since A518, #1562). Unchecked: a redirected refund
+  POST is re-sent as a GET, and if its target answers 200 with an empty body the refund might read as
+  accepted. Next: a real local server answering a refund with a 302, as A518's `deleteReader` test does.
+- **The Disable dialog's failed-unpair message says the reader is "still enabled"** (A518, #1562),
+  which is untrue if another session disables it while the dialog is open, because the Unpair route
+  checks only that the reader exists. Left as it is: right whenever nobody else acts at the same moment.
 - **The till names a reader deleted elsewhere with `reader.not_found`'s general sentence**
   ("This device has no card reader it can use…", `apps/till/src/i18n/codes.ts`), where a deleted
   printer has its own "That printer no longer exists". Owner to choose whether readers get one too.
