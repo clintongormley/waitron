@@ -36,13 +36,29 @@ describe("equalBytes", () => {
     expect(equalBytes(new Uint8Array([1]), new Uint16Array([1]))).toBeUndefined();
     expect(equalBytes("a", "a")).toBeUndefined();
   });
+
+  it("leaves equal bytes to Vitest when either array carries another own property", () => {
+    const bare = new Uint8Array([1, 2]);
+    expect(equalBytes(Object.assign(new Uint8Array([1, 2]), { extra: 1 }), bare)).toBeUndefined();
+    expect(
+      equalBytes(bare, Object.assign(new Uint8Array([1, 2]), { [Symbol("s")]: 1 })),
+    ).toBeUndefined();
+    expect(equalBytes(Buffer.from([1, 2]), Buffer.from([1, 2]))).toBe(true);
+  });
 });
 
 describe("the registered tester", () => {
   it("is what toEqual uses for byte arrays in this config", () => {
-    // Vitest's own equality also compares own enumerable keys, so this passes only when
-    // `equalBytes` is registered through the setup file.
-    expect(new Uint8Array([1])).toEqual(Object.assign(new Uint8Array([1]), { extra: 1 }));
+    // Vitest's own equality walks a byte array through its iterator; the tester never does.
+    let iterated = 0;
+    class Counted extends Uint8Array {
+      override [Symbol.iterator]() {
+        iterated += 1;
+        return super[Symbol.iterator]();
+      }
+    }
+    expect(new Counted([1, 2, 3])).toEqual(new Counted([1, 2, 3]));
+    expect(iterated).toBe(0);
   });
 
   it("still fails toEqual on a table whose byte arrays differ in one byte", () => {
@@ -50,5 +66,29 @@ describe("the registered tester", () => {
     const changed = [{ id: 1, payload: new Uint8Array([1, 2, 4]) }];
     expect(() => expect(table).toEqual(changed)).toThrow();
     expect(table).toEqual([{ id: 1, payload: new Uint8Array([1, 2, 3]) }]);
+  });
+
+  it("fails every matcher when the same bytes carry different extra properties", () => {
+    const one = Object.assign(new Uint8Array([1, 2, 3]), { extra: 1 });
+    const two = Object.assign(new Uint8Array([1, 2, 3]), { extra: 2 });
+    const bare = new Uint8Array([1, 2, 3]);
+    for (const [a, b] of [
+      [one, two],
+      [one, bare],
+      [bare, one],
+    ]) {
+      expect(() => expect(a).toEqual(b)).toThrow();
+      expect(() => expect(a).toStrictEqual(b)).toThrow();
+      expect(() => expect(a).toMatchObject(b)).toThrow();
+      expect(() => expect({ payload: a }).toEqual({ payload: b })).toThrow();
+    }
+  });
+
+  it("passes every matcher when the same bytes carry the same extra properties", () => {
+    const one = Object.assign(new Uint8Array([1, 2, 3]), { extra: 1 });
+    const same = Object.assign(new Uint8Array([1, 2, 3]), { extra: 1 });
+    expect(one).toEqual(same);
+    expect(one).toStrictEqual(same);
+    expect(one).toMatchObject(same);
   });
 });

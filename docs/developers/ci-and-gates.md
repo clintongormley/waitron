@@ -848,11 +848,10 @@ lines in runs 38177927525, 38171667214 and 38170124439: `src/bill-payments.test.
   `iterableEquality`. Its whole-table `toEqual`s read `print_jobs`, whose `payload` is a
   `Uint8Array`, and Vitest compares a typed array one element at a time. `apps/server` now registers
   an equality tester for byte arrays (`apps/server/src/testing/byte-equality.ts`, through the
-  config's `setupFiles`) that compares two arrays of one constructor with `Buffer.compare`. Measured
-  locally with coverage: the file fell from 44.3 s to 5.5 s; `print-api.test.ts`,
-  `receipt-print.test.ts` and `till-api.receipt.test.ts` together from 46.5 s to 23.1 s. The tester
-  ignores properties added to a byte array beside its bytes, which Vitest's own equality compares;
-  its suite pins that difference to prove the tester is registered.
+  config's `setupFiles`) that compares two arrays of one constructor with `Buffer.compare`, and
+  leaves equal bytes to Vitest when either array has an own property besides its indices. Measured
+  locally with coverage: the file fell from 44.3 s to 5.8 s; `print-api.test.ts`,
+  `receipt-print.test.ts` and `till-api.receipt.test.ts` together from 46.5 s to 24.2–25.8 s.
 - `boot.test.ts` is real work — a CPU profile put about half of a local run in migrating fresh
   databases and about a sixth in deriving and generating keys — so it was split, test for test, into
   `boot.test.ts`, `boot.restore.test.ts` and `boot.setup-routes.test.ts` (17.9, 14.4 and 23.4 s
