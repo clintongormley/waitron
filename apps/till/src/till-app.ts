@@ -1236,12 +1236,28 @@ export class TillApp extends LitElement {
       this.#store.lines.length > 0 ||
       this.#partylessDraft.lines.length > 0 ||
       this.leave.coordinator.isDirty() ||
-      this.submitting ||
-      this.#cardAttemptsRunning > 0 ||
       this.#unansweredPayment !== null ||
       this.#unansweredRefund !== null ||
-      this.#reloadHolds > 0
+      this.#requestsOut()
     );
+  }
+
+  /** Even a reload the operator asked for waits for these; their screens may already be gone. */
+  #requestsOut(): boolean {
+    return this.submitting || this.#cardAttemptsRunning > 0 || this.#reloadHolds > 0;
+  }
+
+  #reloadAsked = false;
+
+  #onReloadPressed(): void {
+    this.#reloadAsked = true;
+    this.#reloadWhenSettled();
+  }
+
+  #reloadWhenSettled(): void {
+    if (!this.#reloadAsked || this.#requestsOut()) return;
+    this.#reloadAsked = false;
+    this.reload();
   }
 
   /** Requests out that a reload would cut off, so one the server never received would be lost:
@@ -1255,6 +1271,7 @@ export class TillApp extends LitElement {
       return await work();
     } finally {
       this.#reloadHolds--;
+      this.#reloadWhenSettled();
     }
   }
 
@@ -2384,6 +2401,8 @@ export class TillApp extends LitElement {
     // `router` may be assigned after `connectedCallback`.
     if (changed.has("router")) this.#subscribeRouter();
     if (changed.has("frontDoor")) this.#decideReload();
+    // `submitting` and `cardAttemptsOver` are state, so a payment that settles comes through here.
+    this.#reloadWhenSettled();
     // An answer can move the app off the order while the dialog is open. An apply already out
     // carries on without the dialog; #applyAdjustment says what its answer does then.
     const open = this.adjusting;
@@ -9467,7 +9486,7 @@ export class TillApp extends LitElement {
                 data-test="update-bar"
                 message=${t("update.message")}
                 action-label=${t("update.reload")}
-                @wt-banner-action=${() => this.reload()}
+                @wt-banner-action=${() => this.#onReloadPressed()}
               ></wt-banner>`
             : nothing
         }

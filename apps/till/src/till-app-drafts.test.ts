@@ -1252,6 +1252,30 @@ describe("till-app: signing out with a draft", () => {
     expect(el.shadowRoot!.querySelector("wt-banner[data-test=update-bar]")).not.toBeNull();
   });
 
+  it("reloads only once the sign-out's save of the draft is answered, when Reload was pressed while it was out", async () => {
+    const answer = holdNextSave();
+    const reload = vi.fn();
+    const { el } = await mountApp();
+    el.reload = reload;
+    await openMesa(el);
+    await tap(el, "Beer");
+    emit(tableOrder(el)!, "logout");
+    await flush(el);
+    window.dispatchEvent(new Event(BUILD_CHANGED_EVENT));
+    await flush(el);
+
+    await userEvent.click(
+      el
+        .shadowRoot!.querySelector("wt-banner[data-test=update-bar]")!
+        .shadowRoot!.querySelector("button")!,
+    );
+    await flush(el);
+    expect(reload).not.toHaveBeenCalled();
+    answer();
+    await flush(el);
+    expect(reload).toHaveBeenCalledOnce();
+  });
+
   it("saves the draft before the session ends", async () => {
     const { el } = await mountApp();
     await openMesa(el);

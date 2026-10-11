@@ -4775,6 +4775,26 @@ describe("till-app when the server reports another build", () => {
     expect(updateBar(el)).toBeNull();
   });
 
+  it("reloads only once a payment that was out is answered, when Reload was pressed while it was out", async () => {
+    const reload = vi.fn();
+    let answer!: (value: unknown) => void;
+    const recordSale = vi.fn(() => new Promise((resolve) => (answer = resolve)));
+    const { el } = await mountApp({ recordSale }, { reload });
+    const c = await toCounter(el);
+    c.store.addProduct(c.products[0]!, "1");
+    emit(c, "confirm-payment", { method: "cash", amount: "5" });
+    await flush(el);
+    expect(recordSale).toHaveBeenCalledOnce();
+    updated();
+    await flush(el);
+    await userEvent.click(updateBar(el)!.shadowRoot!.querySelector("button")!);
+    await flush(el);
+    expect(reload).not.toHaveBeenCalled();
+    answer(saleResult);
+    await flush(el);
+    expect(reload).toHaveBeenCalledOnce();
+  });
+
   it("reloads when Reload on the bar is pressed", async () => {
     const reload = vi.fn();
     const { el } = await mountApp({}, { reload });
