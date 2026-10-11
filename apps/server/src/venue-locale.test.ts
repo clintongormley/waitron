@@ -7,6 +7,7 @@ import { seedTenant } from "@waitron/db/testing/seed.js";
 import { getCountryPack } from "@waitron/country-packs";
 import {
   offeredReceiptLanguages,
+  readOfferedReceiptLanguages,
   readVenueContentLanguageRules,
   readVenueLocale,
   readVenueReceiptLanguageRules,
@@ -192,5 +193,15 @@ describe("offeredReceiptLanguages", () => {
       "es-ES",
       "ca-ES",
     ]);
+  });
+});
+
+describe("readOfferedReceiptLanguages", () => {
+  it("refuses a location that does not exist", async () => {
+    const missing = randomUUID();
+
+    await expect(
+      withTransaction(suite.db, (tx) => readOfferedReceiptLanguages(tx, { locationId: missing })),
+    ).rejects.toThrow(`no location ${missing}`);
   });
 });

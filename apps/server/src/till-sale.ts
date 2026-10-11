@@ -460,22 +460,19 @@ function refuseUnavailableInvoiceRequest(invoiceType: unknown, recipient: unknow
 /**
  * Store the receipt language a pay request sent on an existing order that has no sale yet, as its
  * own update one revision on: `working_orders_enforce_transition` refuses a placed order's language
- * changing in the update that settles it.
+ * changing in the update that settles it. `order` is the row as the caller read it in this
+ * transaction, with nothing written to it since.
  */
 async function storeSentReceiptLanguage(
   tx: Transaction,
   workingOrderId: string,
+  order: { revision: number; receiptLocale: string | null },
   language: string | undefined,
 ): Promise<void> {
-  if (language === undefined) return;
-  const [order] = await tx
-    .select({ revision: workingOrders.revision, receiptLocale: workingOrders.receiptLocale })
-    .from(workingOrders)
-    .where(eq(workingOrders.id, workingOrderId));
-  if (order!.receiptLocale === language) return;
+  if (language === undefined || order.receiptLocale === language) return;
   await tx
     .update(workingOrders)
-    .set({ receiptLocale: language, revision: order!.revision + 1 })
+    .set({ receiptLocale: language, revision: order.revision + 1 })
     .where(eq(workingOrders.id, workingOrderId));
 }
 
@@ -588,7 +585,12 @@ async function runPayWorkingOrder(
       await admit(tx);
       // Step 1; the doc comment says what serialises a concurrent pay against this read.
       const [locked] = await tx
-        .select({ status: workingOrders.status, partyId: workingOrders.partyId })
+        .select({
+          status: workingOrders.status,
+          partyId: workingOrders.partyId,
+          revision: workingOrders.revision,
+          receiptLocale: workingOrders.receiptLocale,
+        })
         .from(workingOrders)
         .where(eq(workingOrders.id, req.id));
 
@@ -636,7 +638,7 @@ async function runPayWorkingOrder(
           },
         });
       } else {
-        await storeSentReceiptLanguage(tx, req.id, req.receiptLanguage);
+        await storeSentReceiptLanguage(tx, req.id, locked, req.receiptLanguage);
         order = await priceStoredOrderForIssuance(tx, req.id);
       }
 
@@ -1038,6 +1040,8 @@ async function payIntegrated(
         status: workingOrders.status,
         attemptAt: workingOrders.paymentAttemptAt,
         partyId: workingOrders.partyId,
+        revision: workingOrders.revision,
+        receiptLocale: workingOrders.receiptLocale,
       })
       .from(workingOrders)
       .where(eq(workingOrders.id, req.id));
@@ -1108,7 +1112,9 @@ async function payIntegrated(
       }
     }
 
-    if (locked !== undefined) await storeSentReceiptLanguage(tx, req.id, req.receiptLanguage);
+    if (locked !== undefined) {
+      await storeSentReceiptLanguage(tx, req.id, locked, req.receiptLanguage);
+    }
     const order: GrossOrder =
       locked === undefined
         ? await createOpenOrder(tx, cfg, req.id, req.lines, null, {
@@ -1891,7 +1897,11 @@ async function runCollectOrder(
   return withTransaction(deps.db, async (tx) => {
     await admit(tx);
     const [locked] = await tx
-      .select({ status: workingOrders.status })
+      .select({
+        status: workingOrders.status,
+        revision: workingOrders.revision,
+        receiptLocale: workingOrders.receiptLocale,
+      })
       .from(workingOrders)
       .where(eq(workingOrders.id, req.id));
 
@@ -1959,7 +1969,7 @@ async function runCollectOrder(
     }
 
     await refuseUnavailableFullInvoice(tx, req.id);
-    await storeSentReceiptLanguage(tx, req.id, req.receiptLanguage);
+    await storeSentReceiptLanguage(tx, req.id, locked, req.receiptLanguage);
     const order = await priceStoredOrderForIssuance(tx, req.id);
     return fileImmediateSale(tx, deps, cfg, req.id, req.tender, order, operatorId);
   });

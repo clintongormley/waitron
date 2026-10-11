@@ -7,11 +7,7 @@ import {
   type Database,
   type Transaction,
 } from "@waitron/db";
-import {
-  contentLanguagesOr,
-  readReceiptLanguage,
-  readSavedContentLanguages,
-} from "@waitron/catalogue";
+import { contentLanguagesOr, readSavedContentLanguages } from "@waitron/catalogue";
 import type { ReceiptLanguageRules } from "@waitron/country";
 import {
   resolveInstalledContentLanguageRules,
@@ -27,16 +23,20 @@ import {
 } from "@waitron/shared";
 import type { Logger } from "./logger.js";
 
+async function countryIn(tx: Transaction): Promise<string | null> {
+  return (await readTenant(tx))?.country ?? null;
+}
+
 async function geographyIn(
   tx: Transaction,
   locationId: string,
 ): Promise<{ country: string | null; area: string | null }> {
-  const t = await readTenant(tx);
+  const country = await countryIn(tx);
   const [loc] = await tx
     .select({ province: locations.province })
     .from(locations)
     .where(eq(locations.id, locationId));
-  return { country: t?.country ?? null, area: loc?.province ?? null };
+  return { country, area: loc?.province ?? null };
 }
 
 function readVenueGeography(
@@ -93,8 +93,8 @@ export function offeredReceiptLanguages(
   receiptLanguage: string,
   packChoices: readonly string[],
   contentCodes: readonly string[],
-): string[] {
-  const offered = [receiptLanguage];
+): [string, ...string[]] {
+  const offered: [string, ...string[]] = [receiptLanguage];
   for (const choice of packChoices) {
     if (!offered.includes(choice) && contentCodes.includes(contentLanguageCode(choice))) {
       offered.push(choice);
@@ -103,20 +103,42 @@ export function offeredReceiptLanguages(
   return offered;
 }
 
-async function offeredFor(tx: Transaction, locationId: string, locale: string): Promise<string[]> {
-  const { choices } = await readVenueReceiptLanguageRules(tx, { locationId });
-  const { languages } = contentLanguagesOr(await readSavedContentLanguages(tx), locale);
-  return offeredReceiptLanguages(locale, choices, languages);
+/** A location's receipt language (the first of its `invoice_locales`), the whole list, and its
+ * province, in one read. */
+async function locationLanguageIn(
+  tx: Transaction,
+  locationId: string,
+): Promise<{ locale: string; invoiceLocales: string[]; area: string | null }> {
+  const [row] = await tx
+    .select({ invoiceLocales: locations.invoiceLocales, province: locations.province })
+    .from(locations)
+    .where(eq(locations.id, locationId));
+  const locale = row?.invoiceLocales[0];
+  // The column's CHECK holds one or two entries, so only a missing row leaves no first entry.
+  if (locale === undefined) throw new Error(`no location ${locationId}`);
+  return { locale, invoiceLocales: row!.invoiceLocales, area: row!.province };
 }
 
-/** {@link offeredReceiptLanguages} for a location, read in the caller's transaction. With no saved
- * content languages, only the location's receipt language is offered. */
+async function offeredIn(
+  tx: Transaction,
+  location: { locale: string; area: string | null },
+): Promise<[string, ...string[]]> {
+  const { choices } = resolveInstalledReceiptLanguageRules({
+    country: await countryIn(tx),
+    area: location.area,
+  });
+  const { languages } = contentLanguagesOr(await readSavedContentLanguages(tx), location.locale);
+  return offeredReceiptLanguages(location.locale, choices, languages);
+}
+
+/** {@link offeredReceiptLanguages} for a location, read in the caller's transaction: the location's
+ * receipt language is always the first entry. With no saved content languages, only the location's
+ * receipt language is offered. */
 export async function readOfferedReceiptLanguages(
   tx: Transaction,
   params: { locationId: string },
-): Promise<string[]> {
-  const { locale } = await readReceiptLanguage(tx, params.locationId);
-  return offeredFor(tx, params.locationId, locale);
+): Promise<[string, ...string[]]> {
+  return offeredIn(tx, await locationLanguageIn(tx, params.locationId));
 }
 
 /**
@@ -132,15 +154,16 @@ export async function saleLanguageFor(
   stored: string | undefined,
   warn: { log: Logger | undefined; workingOrderId: string },
 ): Promise<{ locale: string; invoiceLocales: string[] }> {
-  const location = await readReceiptLanguage(tx, locationId);
-  if (stored === undefined || stored === location.locale) return location;
-  if (!(await offeredFor(tx, locationId, location.locale)).includes(stored)) {
+  const location = await locationLanguageIn(tx, locationId);
+  const filedIn = { locale: location.locale, invoiceLocales: location.invoiceLocales };
+  if (stored === undefined || stored === location.locale) return filedIn;
+  if (!(await offeredIn(tx, location)).includes(stored)) {
     warn.log?.("warn", "receipt_language.not_offered", {
       workingOrderId: warn.workingOrderId,
       language: stored,
       filedIn: location.locale,
     });
-    return location;
+    return filedIn;
   }
   // `locations_invoice_locales_len` holds the location's list to one or two entries, so whenever
   // that list holds `stored` this pair IS that list.

@@ -42,11 +42,7 @@ import {
   withPassiveManagementRead,
 } from "@waitron/identity";
 import type { PinAttempts, PinThrottle } from "@waitron/identity";
-import {
-  listAccessibleCatalogues,
-  listAvailableProducts,
-  readReceiptLanguage,
-} from "@waitron/catalogue";
+import { listAccessibleCatalogues, listAvailableProducts } from "@waitron/catalogue";
 import {
   getCanvas,
   getCanvasForFormFactor,
@@ -1297,11 +1293,12 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
             activeReaders.push({ id: reader.id, name: reader.name, provider });
           }
         }
+        const receiptLanguages = await readOfferedReceiptLanguages(tx, {
+          locationId: deps.cfg.locationId,
+        });
         return {
-          invoiceLocale: (await readReceiptLanguage(tx, deps.cfg.locationId)).locale,
-          receiptLanguages: await readOfferedReceiptLanguages(tx, {
-            locationId: deps.cfg.locationId,
-          }),
+          invoiceLocale: receiptLanguages[0],
+          receiptLanguages,
           issuer:
             taxpayer === null ? undefined : { venueName: taxpayer.legalName, nif: taxpayer.taxId },
           bumpMode: loc?.bumpMode,
