@@ -32,6 +32,7 @@ describe("VENUE_SERVICE", () => {
       "closedZoneIdsAt",
       "copyLineContext",
       "copyOrderContext",
+      "copyProfileKitchenScreens",
       "countDeviceKitchenScreens",
       "declineDepartmentTransfer",
       "describeMakers",
