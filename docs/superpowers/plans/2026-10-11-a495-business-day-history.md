@@ -151,3 +151,7 @@ server 17, root live/module/error/pointers 2430 and browser purity 61. Fiscal go
 20 and reporting close hash/verifier 30 passed; protected production paths have no diff. Focused
 shared/db/reporting/module/adjustments/provisioning types passed; corrected service/server/dashboard
 types passed. Full candidate review, normal push hook, current-head CI and owner approval remain.
+
+## Updated campaign authority, 2026-10-11
+
+The watcher-recorded owner answer “merge both” lifts A495's separate landing sign-off and requires two completed run-it reviews. The driver must resolve findings, verify required CI on the current head, then land under the shared landing lock. This supersedes Task 7's one-review and stop-before-landing checkpoints; earlier execution receipts remain historical.
