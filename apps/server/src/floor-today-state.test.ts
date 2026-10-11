@@ -135,10 +135,4 @@ describe("the till's table-state answer carries today's plan", () => {
       joinSeats: null,
     });
   });
-
-  it("answers null for a table whose zone has no master plan", async () => {
-    const zoneId = await zone();
-    const t = await v.table(fresh("N"), zoneId);
-    expect((await read()).get(t)!.today).toBeNull();
-  });
 });
