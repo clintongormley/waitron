@@ -632,6 +632,10 @@ _Formerly the catalogue and menus entries in the opening part of the old Track A
   narrower schedule dialog.
   [Detail](backlog/catalogue.md#a498-menu-screens-colour-picker-menu-preview-and-the-preview-tab)
 
+- **A505. Duplicate a menu from the Menus list (owner, 2026-10-11).** A Duplicate item in each
+  menu's row menu makes an unpublished copy called "<name> (copy)". Starts after A498 lands.
+  [Detail](backlog/catalogue.md#a505-duplicate-a-menu-from-the-menus-list)
+
 - **A product in more than one category (owner 2026-10-10, A461 amendment 4).** Define the
   storage, editor and what Move/Remove do to memberships. Products currently has one category;
   A461 shows existing placements only. This work is not queued.
