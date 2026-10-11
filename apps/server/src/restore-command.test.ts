@@ -1,5 +1,5 @@
 import { mkdtempSync } from "node:fs";
-import { cp, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
+import { cp, mkdtemp, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { loadKeyRing, putCredential } from "@waitron/credentials";
@@ -846,7 +846,8 @@ describe("waitron-restore restore <artifact>, the old server's bucket", () => {
     }
     const validated = {
       manifest: { manifestVersion: 1, createdAt: "", environment: "preproduction", modules: {} },
-      dumpEntry: { name: "db.dump", bytes: await readFile(file) },
+      databasePath: file,
+      discard: () => rm(dirname(file), { recursive: true, force: true }),
       secretEntries: [
         {
           name: "secrets/secrets.env",
@@ -896,11 +897,13 @@ describe("waitron-restore restore <artifact> and the old server", () => {
       const artifactPath = await makeArtifact(dir);
       const unreadable = {
         manifest: { manifestVersion: 1, createdAt: "", environment: "preproduction", modules: {} },
-        dumpEntry: { name: "db.dump", bytes: Buffer.from("not a database") },
+        databasePath: join(dir, "venue.db"),
+        discard: async () => {},
         secretEntries: [
           { name: "secrets/secrets.env", bytes: Buffer.from("WAITRON_CREDENTIALS_KEY=x\n") },
         ],
       } as unknown as ValidatedArtifact;
+      await writeFile(unreadable.databasePath, "not a database");
       let check: RestoreDeps["checkSourceLive"];
       await runRestore({
         argv: ["restore", artifactPath, ...flags],

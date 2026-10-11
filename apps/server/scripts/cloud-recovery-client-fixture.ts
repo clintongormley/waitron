@@ -74,21 +74,25 @@ else if (request.command === "stage") {
       artifact: candidate.artifact,
       recoveryKey: candidate.recoveryKey,
     });
-    if (request.expectedModules)
-      assert.deepEqual(checked.manifest.modules, request.expectedModules);
-    const trading = checked.secretEntries.find((entry) => entry.name === "secrets/trading.env");
-    assert(trading);
-    if (request.expectedSourceNodeId)
-      assert.equal(
-        parseEnvFile(Buffer.from(trading.bytes).toString()).WAITRON_TILL_NODE_ID,
-        request.expectedSourceNodeId,
+    try {
+      if (request.expectedModules)
+        assert.deepEqual(checked.manifest.modules, request.expectedModules);
+      const trading = checked.secretEntries.find((entry) => entry.name === "secrets/trading.env");
+      assert(trading);
+      if (request.expectedSourceNodeId)
+        assert.equal(
+          parseEnvFile(Buffer.from(trading.bytes).toString()).WAITRON_TILL_NODE_ID,
+          request.expectedSourceNodeId,
+        );
+      assert(
+        !checked.secretEntries.some(
+          (entry) => entry.name.includes("cloud-connection") || entry.name.includes("cloud-staff"),
+        ),
       );
-    assert(
-      !checked.secretEntries.some(
-        (entry) => entry.name.includes("cloud-connection") || entry.name.includes("cloud-staff"),
-      ),
-    );
-    await stageRestoreRequest(stateDir, candidate);
+      await stageRestoreRequest(stateDir, candidate);
+    } finally {
+      await checked.discard();
+    }
   }, request.expectedPointId);
   result = {
     restoreStaged: true,

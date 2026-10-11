@@ -4139,8 +4139,9 @@ _Formerly B2, B3, B4, B5 and B7._ Detail: [backlog/box.md](backlog/box.md).
   [Detail](backlog/box.md#when-the-key-rename-and-the-put-back-both-fail-the-new-certificate-is-left-beside-the-old-key)
 
 - **A copy over 2 GiB cannot be restored**: `restoreFromStream` reads the downloaded file whole, and
-  Node refuses a file that size (`ERR_FS_FILE_TOO_LARGE`). The root is that placement
-  (`restoreDatabase`) takes bytes, not a file. Left open by SQLite slice 2 Task 9b (#642,
+  Node refuses a file that size (`ERR_FS_FILE_TOO_LARGE`). The remaining work carries paths
+  through the bucket callers and streams scheduled local archives. Left open by SQLite slice 2
+  Task 9b (#642,
   `waitron-restore restore --from-bucket`).
   [Detail](backlog/box.md#a-copy-over-2-gib-cannot-be-restored)
 

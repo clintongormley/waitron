@@ -45,13 +45,25 @@ import type { Logger } from "./logger.js";
 import {
   type RestoreDeps,
   clearReplacedDatabases,
-  restoreDatabase,
+  restoreDatabase as placeDatabaseFile,
   restoreFromArtifact,
   restoreSecrets,
   setAsideExistingIdentity,
-  validateArtifact,
+  validateArtifact as validateOwnedArtifact,
+  type ValidatedArtifact,
+  validateDatabaseEntries,
   writeValidated,
 } from "./restore.js";
+
+const ownedValidations: ValidatedArtifact[] = [];
+afterEach(async () => {
+  for (const validated of ownedValidations.splice(0)) await validated.discard();
+});
+async function validateArtifact(deps: Parameters<typeof validateOwnedArtifact>[0]) {
+  const validated = await validateOwnedArtifact(deps);
+  ownedValidations.push(validated);
+  return validated;
+}
 
 // One real SQLite venue directory for the hook phase: these tests exercise transaction rollback and
 // the series settlement, and make no concurrency claim.
@@ -179,6 +191,15 @@ let venueDir: string;
 /** The file `openVenueStore` opens, and the working name `restoreDatabase` writes through. */
 const venueFile = (): string => join(venueDir, "venue.db");
 const incomingFile = (): string => `${venueFile()}.incoming`;
+
+async function restoreDatabase(
+  args: Omit<Parameters<typeof placeDatabaseFile>[0], "databasePath"> & { dumpBytes: Uint8Array },
+) {
+  const folder = await mkdtemp(join(stagingDir, "placement-source-"));
+  const databasePath = join(folder, "venue.db");
+  await writeFile(databasePath, args.dumpBytes, { mode: 0o600 });
+  return placeDatabaseFile({ ...args, databasePath });
+}
 
 async function expectVenueUntouched(): Promise<void> {
   await expect(stat(venueFile())).rejects.toMatchObject({ code: "ENOENT" });
@@ -399,7 +420,7 @@ setInterval(() => db, 1000);`;
     });
     expect(checkSourceLive).toHaveBeenCalledOnce();
     expect(checkSourceLive).toHaveBeenCalledWith(
-      expect.objectContaining({ dumpEntry: expect.objectContaining({ name: "db.dump" }) }),
+      expect.objectContaining({ databasePath: expect.any(String) }),
     );
     await expectVenueUntouched();
     await expect(stat(join(stateDir, REBUILD_MARKER))).rejects.toMatchObject({ code: "ENOENT" });
@@ -550,9 +571,64 @@ describe("validateArtifact / writeValidated (R3 validate-before-wipe split)", ()
     await expect(stat(join(stateDir, "secrets.env"))).rejects.toMatchObject({ code: "ENOENT" });
   });
 
+  it("borrowed database validation keeps the source when disposed and rejects a second dump", async () => {
+    const databasePath = join(stagingDir, "borrowed.db");
+    await writeFile(databasePath, VENUE_BYTES);
+    const allEntries = [
+      { name: "manifest.json", bytes: Buffer.from(JSON.stringify(MANIFEST)) },
+      ...FULL_ENTRIES,
+    ];
+    const entries = allEntries.filter((entry) => entry.name !== "db.dump");
+    const validated = await validateDatabaseEntries(entries, databasePath, deps());
+    expect(validated.databasePath).toBe(databasePath);
+    await validated.discard();
+    expect(await readFile(databasePath)).toEqual(VENUE_BYTES);
+    await expect(validateDatabaseEntries(allEntries, databasePath, deps())).rejects.toMatchObject({
+      code: "restore.unsafe_entry_path",
+    });
+  });
+
+  it("validation owns one protected database file and disposal removes only its scratch", async () => {
+    const validated = await validateArtifact(deps());
+    expect(await readFile(validated.databasePath)).toEqual(VENUE_BYTES);
+    expect((await stat(validated.databasePath)).mode & 0o777).toBe(0o600);
+    const folder = validated.databasePath.slice(0, validated.databasePath.lastIndexOf("/"));
+    expect((await stat(folder)).mode & 0o777).toBe(0o700);
+    await validated.discard();
+    await validated.discard();
+    await expect(stat(folder)).rejects.toMatchObject({ code: "ENOENT" });
+    await expectVenueUntouched();
+  });
+
+  it("disposal after placement keeps the placed database and secret files", async () => {
+    const validated = await validateArtifact(deps());
+    await writeValidated(validated, deps());
+    await validated.discard();
+    await validated.discard();
+    await expectVenueRestored();
+    expect(await readFile(join(stateDir, "secrets.env"), "utf8")).toBe(SECRET);
+  });
+
+  it("source refusal disposes validated scratch without touching the destination", async () => {
+    await expect(
+      restoreFromArtifact(
+        deps({
+          checkSourceLive: async () => {
+            throw new AppError("restore.stream_source_live", {
+              lastChangeAt: "2026-10-12T00:00:00Z",
+            });
+          },
+        }),
+      ),
+    ).rejects.toMatchObject({ code: "restore.stream_source_live" });
+    expect(await readdir(stagingDir)).toEqual([]);
+    await expectVenueUntouched();
+    await expect(stat(join(stateDir, "secrets.env"))).rejects.toMatchObject({ code: "ENOENT" });
+  });
+
   it("validateArtifact returns the classified pieces and writeValidated then writes them", async () => {
     const validated = await validateArtifact(deps());
-    expect(validated.dumpEntry.bytes).toEqual(VENUE_BYTES);
+    expect(await readFile(validated.databasePath)).toEqual(VENUE_BYTES);
     expect(validated.secretEntries.map((e) => e.name)).toEqual([
       "secrets/secrets.env",
       "secrets/trading.env",

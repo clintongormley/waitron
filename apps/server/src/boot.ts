@@ -952,13 +952,17 @@ async function bootServer(
               modules: ALL_MODULES,
               environment: candidate.environment,
             });
-            await refuseIfArchiveSourceLive({
-              validated,
-              stateDir: config.stateDir,
-              oldBoxGone,
-              now,
-              openStore: openBoundedBucket,
-            });
+            try {
+              await refuseIfArchiveSourceLive({
+                validated,
+                stateDir: config.stateDir,
+                oldBoxGone,
+                now,
+                openStore: openBoundedBucket,
+              });
+            } finally {
+              await validated.discard();
+            }
           }),
         stageReset: (operationId) => stageResetRequest(config.stateDir, operationId),
         stageBucketRestore: async ({ kit, environment, oldBoxGone, venueConfirmed }) =>

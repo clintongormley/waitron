@@ -329,13 +329,11 @@ Open:
 **Task 9b** (#642, `waitron-restore restore --from-bucket`, `apps/server/src/restore-stream.ts`).
 Open:
 
-- A copy over 2 GiB cannot be restored: `restoreFromStream` reads the downloaded file whole, and
-  Node refuses a file that size (`ERR_FS_FILE_TOO_LARGE`). Archive creation has the same limit
-  (`apps/server/src/backup-sweep.ts`). The root is that placement (`restoreDatabase`) takes bytes,
-  not a file. Letting it take a source path and rename it into place on the same filesystem would
-  remove the read into memory on the bucket path, and also the archive form's extra full copy:
-  `refuseIfArchiveSourceLive` writes the whole database to a scratch folder only to read the bucket
-  settings from it.
+- Bucket CLI, setup validation and staged boot still read the downloaded database whole.
+  Scheduled archive creation still buffers the database, the packed archive and the ciphertext.
+  File placement and owned validation scratch are the first part of A516; the remaining work
+  carries paths through the bucket callers and streams local archive creation and restoration
+  without changing WBA1/WBK1. The managed Cloud and setup upload limits remain separate.
 
 ## Litestream at trace logging deadlocked sales for five seconds
 

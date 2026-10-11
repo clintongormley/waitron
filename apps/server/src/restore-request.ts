@@ -109,10 +109,11 @@ export async function stageStreamRestore(
         environment: deps.environment,
       },
       async (request) => {
-        await validateEntries(
+        const validated = await validateEntries(
           [...request.entries, { name: "db.dump", bytes: await readFile(request.databasePath) }],
           deps,
         );
+        await validated.discard();
       },
     );
   } finally {

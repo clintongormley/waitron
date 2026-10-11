@@ -1,3 +1,4 @@
+import { readdirSync } from "node:fs";
 import { copyFile, mkdtemp, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
@@ -675,7 +676,8 @@ describe("refuseIfArchiveSourceLive", () => {
     }
     return {
       manifest: MANIFEST,
-      dumpEntry: { name: "db.dump", bytes: await readFile(file) },
+      databasePath: file,
+      discard: () => rm(dirname(file), { recursive: true, force: true }),
       secretEntries: secrets
         ? [{ name: "secrets/secrets.env", bytes: Buffer.from(SECRETS_ENV) }]
         : [],
@@ -737,6 +739,22 @@ describe("refuseIfArchiveSourceLive", () => {
     expect(opened).toEqual([KIT.bucket]);
     await expectStateUntouched(a.stateDir);
     await refuseIfArchiveSourceLive({ ...a, oldBoxGone: true });
+    await expectStateUntouched(a.stateDir);
+  });
+
+  it("checks source liveness without materializing another database copy", async () => {
+    const validated = await archive(true);
+    const store = await bucket();
+    const a = await args(validated, () => store);
+    let seen: string[] = [];
+    await refuseIfArchiveSourceLive({
+      ...a,
+      openStore: () => {
+        seen = readdirSync(a.stateDir).filter((name) => name.startsWith("archive-source-check-"));
+        return store;
+      },
+    });
+    expect(seen).toEqual([]);
     await expectStateUntouched(a.stateDir);
   });
 

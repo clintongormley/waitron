@@ -3,7 +3,6 @@
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { readFile } from "node:fs/promises";
 import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
@@ -135,7 +134,7 @@ describe("a restored venue keeps its fiscal ledger immutable", () => {
 
       // 2. The archive is placed exactly as a cold restore places it.
       await restoreDatabase({
-        dumpBytes: await readFile(archivePath),
+        databasePath: archivePath,
         venueDir,
         log: () => {},
       });
