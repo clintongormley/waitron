@@ -440,7 +440,7 @@ describe.each(["light", "dark"] as const)("devices-screen a11y (%s theme)", (the
   );
 
   it.each([390, 1280])(
-    "renders a kitchen display's Edit dialog with a pass monitor's lists, a station no longer available and a zone switched off accessibly at %ipx",
+    "renders a kitchen display's Edit dialog with a pass monitor's lists, a station no longer available and deleted zones omitted accessibly at %ipx",
     async (width) => {
       await page.viewport(width, 900);
       const slot = (id: string, name: string, available = true) => ({
@@ -492,7 +492,7 @@ describe.each(["light", "dark"] as const)("devices-screen a11y (%s theme)", (the
       );
       await flush(el);
       expect(el.shadowRoot!.querySelector("[data-test=edit-screen-zone-z2]")).not.toBeNull();
-      expect(el.shadowRoot!.querySelector("[data-test=edit-screen-zone-z3]")).not.toBeNull();
+      expect(el.shadowRoot!.querySelector("[data-test=edit-screen-zone-z3]")).toBeNull();
       const dialog = el
         .shadowRoot!.querySelector("[data-test=edit-device-modal]")!
         .shadowRoot!.querySelector("dialog")!;

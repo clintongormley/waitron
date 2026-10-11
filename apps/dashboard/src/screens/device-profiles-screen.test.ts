@@ -110,6 +110,7 @@ function stubApi(overrides: Partial<DashboardApi> = {}): DashboardApi {
     listDeviceProfiles: vi.fn().mockResolvedValue(profiles),
     getDeviceProfile: vi.fn().mockResolvedValue(profiles[0]),
     createDeviceProfile: vi.fn().mockResolvedValue({ ...profiles[0], id: "p9" }),
+    copyDeviceProfile: vi.fn().mockResolvedValue({ ...profiles[0], id: "p9" }),
     updateDeviceProfile: vi.fn().mockResolvedValue(profiles[0]),
     deleteDeviceProfile: vi.fn().mockResolvedValue(undefined),
     listCanvases: vi.fn().mockResolvedValue(canvases),
@@ -252,7 +253,8 @@ describe("device-profiles-screen list mode", () => {
     await flush(el);
     // The shipped locale is es-ES, so the copy suffix is the Spanish " (copia)". The copy carries the
     // source profile's form factor unchanged.
-    expect(api.createDeviceProfile).toHaveBeenCalledWith(
+    expect(api.copyDeviceProfile).toHaveBeenCalledWith(
+      "p1",
       "Front counter (copia)",
       "c1",
       ["integrated-card-payment", "open-cash-drawer"],
@@ -859,7 +861,7 @@ it.each(["connection.failed", "server.internal"])(
   "keeps a failed duplicate's message through a re-read failing with %s and the reads' recovery",
   async (rereadCode) => {
     const api = Object.assign(
-      stubApi({ createDeviceProfile: vi.fn().mockRejectedValue({ code: "connection.failed" }) }),
+      stubApi({ copyDeviceProfile: vi.fn().mockRejectedValue({ code: "connection.failed" }) }),
       { liveData: new LiveData() },
     );
     const el = await mount(api);
@@ -868,7 +870,7 @@ it.each(["connection.failed", "server.internal"])(
     api.liveData.refresh();
     await vi.waitFor(() => expect(alert()).toBe(codeMessage("connection.failed")));
     el.shadowRoot!.querySelector<HTMLElement>("[data-test=duplicate-p1]")!.click();
-    await vi.waitFor(() => expect(api.createDeviceProfile).toHaveBeenCalledOnce());
+    await vi.waitFor(() => expect(api.copyDeviceProfile).toHaveBeenCalledOnce());
     await flush(el);
     vi.mocked(api.listDeviceProfiles).mockRejectedValue({ code: rereadCode });
     api.liveData.refresh();
@@ -879,6 +881,7 @@ it.each(["connection.failed", "server.internal"])(
       { ...profiles[1]!, id: "p3", name: "Bar screen" },
     ]);
     api.liveData.refresh();
+    expect(vi.mocked(api.copyDeviceProfile).mock.calls[0]![0]).toBe("p1");
     await vi.waitFor(() =>
       expect(el.shadowRoot!.querySelector("[data-test=profile-row-p3]")).toBeTruthy(),
     );
@@ -1143,7 +1146,8 @@ describe("device-profiles-screen printer lists", () => {
     await flush(el);
     el.shadowRoot!.querySelector<HTMLElement>("[data-test=duplicate-p1]")!.click();
     await flush(el);
-    expect(vi.mocked(api.createDeviceProfile).mock.calls[0]![5]).toEqual({
+    expect(vi.mocked(api.copyDeviceProfile).mock.calls[0]![0]).toBe("p1");
+    expect(vi.mocked(api.copyDeviceProfile).mock.calls[0]![6]).toEqual({
       receiptPrinterIds: ["pr2", "pr1"],
       paymentSlipPrinterIds: ["pr3"],
     });
@@ -1227,7 +1231,7 @@ describe("device-profiles-screen kitchen screens", () => {
     await flush(el);
   }
 
-  it("shows a kitchen display's three kinds and live stations while retaining disabled zones", async () => {
+  it("shows a kitchen display's three kinds and live stations without deleted zones", async () => {
     const { el } = await edit(kitchen, stored);
     expect(
       shown(el, "profile-kitchen-screens").filter(([label]) =>
@@ -1257,7 +1261,6 @@ describe("device-profiles-screen kitchen screens", () => {
       [t("device_profiles.every_zone_venue"), false],
       ["Comedor", false],
       ["Terraza", true],
-      [`Barra vieja (${t("device_profiles.zone_disabled_mark")})`, true],
     ]);
   });
 
@@ -1605,10 +1608,12 @@ describe("device-profiles-screen kitchen screens", () => {
     el.shadowRoot!.querySelector<HTMLElement>("[data-test=duplicate-p2]")!.click();
     await flush(el);
     await flush(el);
-    expect(vi.mocked(api.createDeviceProfile).mock.calls[0]![6]).toEqual({
+    expect(vi.mocked(api.copyDeviceProfile).mock.calls[0]![0]).toBe("p2");
+    expect(vi.mocked(api.copyDeviceProfile).mock.calls[0]![7]).toEqual({
       kitchenScreens: {
         station: { stationIds: ["s1"], zoneIds: null },
         pass: { stationIds: [], zoneIds: null },
+        pass_monitor: { stationIds: null, zoneIds: [] },
       },
     });
   });
@@ -1624,14 +1629,15 @@ describe("device-profiles-screen kitchen screens", () => {
     el.shadowRoot!.querySelector<HTMLElement>("[data-test=duplicate-p1]")!.click();
     await flush(el);
     await flush(el);
-    expect(vi.mocked(api.createDeviceProfile).mock.calls[0]![6]).toMatchObject({
+    expect(vi.mocked(api.copyDeviceProfile).mock.calls[0]![0]).toBe("p1");
+    expect(vi.mocked(api.copyDeviceProfile).mock.calls[0]![7]).toMatchObject({
       kitchenScreens: {
         station: { stationIds: [], zoneIds: null },
         pass: { stationIds: null, zoneIds: [] },
       },
     });
     expect(
-      vi.mocked(api.createDeviceProfile).mock.calls[0]![6]!.kitchenScreens!.pass_monitor,
+      vi.mocked(api.copyDeviceProfile).mock.calls[0]![7]!.kitchenScreens!.pass_monitor,
     ).toEqual({ stationIds: [], zoneIds: null });
   });
 
@@ -1644,7 +1650,8 @@ describe("device-profiles-screen kitchen screens", () => {
     el.shadowRoot!.querySelector<HTMLElement>("[data-test=duplicate-p1]")!.click();
     await flush(el);
     await flush(el);
-    expect(vi.mocked(api.createDeviceProfile).mock.calls[0]![6]).toMatchObject({
+    expect(vi.mocked(api.copyDeviceProfile).mock.calls[0]![0]).toBe("p1");
+    expect(vi.mocked(api.copyDeviceProfile).mock.calls[0]![7]).toMatchObject({
       kitchenScreens: { pass_monitor: { stationIds: ["s2"], zoneIds: ["z1"] } },
     });
   });
@@ -2163,7 +2170,8 @@ describe("device-profiles-screen where a profile serves and who signs in (W97)",
     const el = await mount(api);
     q(el, "duplicate-p1")!.click();
     await flush(el);
-    expect(vi.mocked(api.createDeviceProfile).mock.calls[0]![6]).toEqual({
+    expect(vi.mocked(api.copyDeviceProfile).mock.calls[0]![0]).toBe("p1");
+    expect(vi.mocked(api.copyDeviceProfile).mock.calls[0]![7]).toEqual({
       departmentId: "d1",
       allowedZoneIds: ["z1"],
       startingZoneId: "z1",
@@ -2191,11 +2199,12 @@ describe("device-profiles-screen where a profile serves and who signs in (W97)",
       const el = await mount(api);
       q(el, "duplicate-p1")!.click();
       await flush(el);
-      expect(vi.mocked(api.createDeviceProfile).mock.calls[0]![6]).toBeUndefined();
+      expect(vi.mocked(api.copyDeviceProfile).mock.calls[0]![0]).toBe("p1");
+      expect(vi.mocked(api.copyDeviceProfile).mock.calls[0]![7]).toBeUndefined();
     },
   );
 
-  it("reads the departments and zones when the editor opens, not while the list is showing", async () => {
+  it("reads the departments and zones initially and after live changes while the editor is open", async () => {
     const liveData = new LiveData();
     const api = Object.assign(stubApi(), { liveData });
     const el = await mount(api);
@@ -2208,7 +2217,7 @@ describe("device-profiles-screen where a profile serves and who signs in (W97)",
       { type: "floor_zones", id: "z1" },
     ]);
     await flush(el);
-    expect(api.getProfileScopeChoices).toHaveBeenCalledTimes(1);
+    expect(api.getProfileScopeChoices).toHaveBeenCalledTimes(2);
   });
 
   it("opens an edit with its stored zones even when the departments arrive after the click", async () => {
@@ -2284,7 +2293,8 @@ describe("device-profiles-screen where a profile serves and who signs in (W97)",
     const el = await mount(api);
     q(el, "duplicate-p1")!.click();
     await flush(el);
-    expect(vi.mocked(api.createDeviceProfile).mock.calls[0]![6]).toEqual({
+    expect(vi.mocked(api.copyDeviceProfile).mock.calls[0]![0]).toBe("p1");
+    expect(vi.mocked(api.copyDeviceProfile).mock.calls[0]![7]).toEqual({
       departmentId: "d1",
       allowedZoneIds: ["z2"],
       startingZoneId: "z2",
@@ -2891,8 +2901,9 @@ describe("device-profiles-screen equipment defaults, drawers and card readers", 
     const { api } = await duplicateListed({
       listDeviceProfiles: vi.fn().mockResolvedValue([withDrawer, profiles[1]]),
     });
-    expect(api.createDeviceProfile).toHaveBeenCalledTimes(1);
-    expect(vi.mocked(api.createDeviceProfile).mock.calls[0]![6]).toMatchObject({
+    expect(vi.mocked(api.copyDeviceProfile).mock.calls[0]![0]).toBe("p1");
+    expect(api.copyDeviceProfile).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(api.copyDeviceProfile).mock.calls[0]![7]).toMatchObject({
       cashDrawerPrinterIds: ["pr1"],
     });
   });
@@ -2917,12 +2928,13 @@ describe("device-profiles-screen equipment defaults, drawers and card readers", 
 
   it("a duplicate copies the reader list and its default onto the new profile", async () => {
     const { api } = await duplicateListed();
+    expect(vi.mocked(api.copyDeviceProfile).mock.calls[0]![0]).toBe("p1");
     expect(api.getProfileReaders).toHaveBeenCalledWith("p1");
     expect(api.setProfileReaders).toHaveBeenCalledExactlyOnceWith("p9", {
       readerIds: ["r1", "r2"],
       defaultReaderId: "r2",
     });
-    expect(vi.mocked(api.createDeviceProfile).mock.invocationCallOrder[0]!).toBeLessThan(
+    expect(vi.mocked(api.copyDeviceProfile).mock.invocationCallOrder[0]!).toBeLessThan(
       vi.mocked(api.setProfileReaders).mock.invocationCallOrder[0]!,
     );
   });
@@ -2931,7 +2943,8 @@ describe("device-profiles-screen equipment defaults, drawers and card readers", 
     const { api, el } = await duplicateListed({
       setProfileReaders: vi.fn().mockRejectedValue({ code: "reader.not_found" }),
     });
-    expect(api.createDeviceProfile).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(api.copyDeviceProfile).mock.calls[0]![0]).toBe("p1");
+    expect(api.copyDeviceProfile).toHaveBeenCalledTimes(1);
     expect(api.deleteDeviceProfile).not.toHaveBeenCalled();
     expect(el.shadowRoot!.querySelector("[role=alert]")?.textContent?.trim()).toBe(
       codeMessage("reader.not_found"),
@@ -2949,7 +2962,8 @@ describe("device-profiles-screen equipment defaults, drawers and card readers", 
     ],
   ])("a duplicate copies no reader list %s, and says nothing", async (_when, getProfileReaders) => {
     const { api, el } = await duplicateListed({ getProfileReaders });
-    expect(api.createDeviceProfile).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(api.copyDeviceProfile).mock.calls[0]![0]).toBe("p1");
+    expect(api.copyDeviceProfile).toHaveBeenCalledTimes(1);
     expect(api.setProfileReaders).not.toHaveBeenCalled();
     expect(el.shadowRoot!.querySelector("[role=alert]")).toBeNull();
   });
