@@ -1051,9 +1051,12 @@ async function bootServer(
           if (
             staged !== null &&
             (staged.bundle.venue.country !== req.venue.country ||
-              staged.bundle.venue.taxId !== req.venue.taxId)
+              (!req.newTaxpayer && staged.bundle.venue.taxId !== req.venue.taxId))
           ) {
             throw new AppError("setup.request_invalid", { field: "configurationImport" });
+          }
+          if (staged !== null && req.newTaxpayer && staged.bundle.venue.taxId === req.venue.taxId) {
+            throw new AppError("setup.request_invalid", { field: "taxId" });
           }
           const versions = staged === null ? undefined : await schemaVersionsByModule(db, modules);
           const result = await provisionVenue(
