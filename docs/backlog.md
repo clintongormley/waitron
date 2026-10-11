@@ -5074,11 +5074,6 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
   to -6 first); 16 owner questions; A394-8 settles A374's. The follow-ups and the rows:
   `docs/superpowers/plans/2026-10-08-a394-refusal-statuses.md`.
 
-- **Purchase invoice create/edit refusal tests do not pin the original failure** — OPEN, carried
-  from A394-4. In `packages/purchasing/src/operations.test.ts`, the “other refusal passes through” cases
-  assert `isAppError(error)` is false. Next: assert the original refusal's identity
-  or cause so a different non-domain error cannot satisfy them.
-
 - **Comments and test titles still cite sections of specs that were deleted** — OPEN (2026-09-26). A
   pointer that names only a SECTION ("spec §3.2", "design §3", "(till-reroute §3.6)") was fixed only
   for the last 28 documents. **Next action:** fold into the comment-pruning sweeps: re-point each to
