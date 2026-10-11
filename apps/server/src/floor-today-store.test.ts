@@ -105,7 +105,7 @@ async function masterOf(zoneId: string, tables: MasterTable[]): Promise<Map<stri
       if (table.live !== undefined) {
         await tx
           .update(diningTables)
-          .set({ planTableId: row!.id, planned: true })
+          .set({ planTableId: row!.id })
           .where(eq(diningTables.id, table.live));
       }
     }
@@ -492,22 +492,6 @@ describe("building today's plan from a zone's master plan", () => {
     }
   });
 
-  it("leaves a table the master never had untouched", async () => {
-    const z = await zone();
-    const t1 = await v.table("Never 1", z, { today: false });
-    const t2 = await v.table("Never 2", z, { today: false });
-    await inTx(v, (tx) =>
-      tx.update(diningTables).set({ active: false }).where(eq(diningTables.id, t2)),
-    );
-    await masterOf(z, [{ label: "Never 3" }]);
-
-    await reset(z);
-
-    expect(await todayRow(t1)).toBeUndefined();
-    expect(await tableRow(v, t1)).toMatchObject({ active: true, planned: false });
-    expect(await tableRow(v, t2)).toMatchObject({ active: false, planned: false });
-  });
-
   it("places a table whose new name is taken in another zone, keeping its old name", async () => {
     const z = await zone();
     const t1 = await v.table("Taken 1", z);
@@ -662,20 +646,6 @@ describe("building today's plan from a zone's master plan", () => {
     expect(await todayRow(u1)).toMatchObject({ x: 30, y: 40, rotation: 90 });
   });
 
-  it("does not hand a name to a new table while a hidden table still holds it", async () => {
-    const z = await zone();
-    const t1 = await v.table("Hold 1", z);
-    await inTx(v, (tx) =>
-      tx.update(diningTables).set({ active: false }).where(eq(diningTables.id, t1)),
-    );
-    await masterOf(z, [{ label: "Hold 1" }]);
-
-    await reset(z);
-
-    expect((await liveTablesOf(z)).map((t) => t.id)).toEqual([t1]);
-    expect(await pendingRows(z)).toMatchObject([{ tableId: null, label: "Hold 1" }]);
-  });
-
   it("keeps a table a module refuses to let go, whole, until the module lets it go", async () => {
     const z = await zone();
     const t1 = await v.table("Refuse 1", z);
@@ -793,12 +763,12 @@ describe("a disabled zone", () => {
     const z = await zone();
     const planned = await v.table("Reopen 1", z);
     const hidden = await v.table("Reopen 2", z);
-    const never = await v.table("Reopen 3", z, { today: false });
     const master = await masterOf(z, [
       { label: "Reopen 1", live: planned },
       { label: "Reopen 2", live: hidden },
     ]);
     await inTx(v, (tx) => ensureToday(tx, v.cfg, NONE, NOW));
+    const never = await v.table("Reopen 3", z, { today: false });
     // A pending removal has no row on today's plan.
     await deleteFromMaster(master.get("Reopen 2")!);
     await inTx(v, async (tx) => {

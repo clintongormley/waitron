@@ -365,7 +365,7 @@ describe("floor plan tables", () => {
     await inTx(async (tx) => {
       await tx
         .update(diningTables)
-        .set({ planTableId: masterId, planned: true })
+        .set({ planTableId: masterId })
         .where(eq(diningTables.id, TABLE_1));
       await tx
         .insert(floorResetTables)
@@ -416,15 +416,14 @@ describe("floor plan tables", () => {
         .select({
           id: diningTables.id,
           planTableId: diningTables.planTableId,
-          planned: diningTables.planned,
         })
         .from(diningTables)
         .where(eq(diningTables.zoneId, ZONE))
         .orderBy(diningTables.label),
     );
     expect(live).toEqual([
-      { id: TABLE_1, planTableId: masterId, planned: true },
-      { id: TABLE_2, planTableId: null, planned: false },
+      { id: TABLE_1, planTableId: masterId },
+      { id: TABLE_2, planTableId: null },
     ]);
     const resets = await inTx((tx) =>
       tx

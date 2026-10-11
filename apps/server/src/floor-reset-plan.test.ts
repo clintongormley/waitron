@@ -208,7 +208,7 @@ describe("planReset", () => {
 
 describe("targetsFromMaster", () => {
   it("makes every live table of the zone a target: one that follows no master table goes", () => {
-    const live = [{ id: "c", label: "Old 3", planTableId: null, planned: false }];
+    const live = [{ id: "c", label: "Old 3", planTableId: null }];
     expect(targetsFromMaster([], live)).toEqual([
       {
         tableId: "c",
@@ -222,19 +222,20 @@ describe("targetsFromMaster", () => {
     ]);
   });
 
-  it("builds targets from the master, leaving out a table the master never had", () => {
+  it("builds targets from the master and removes live tables the master no longer has", () => {
     const master = [
       { id: "m1", label: "T1", seats: 4, fixed: false, placement: null },
       { id: "m2", label: "T2", seats: 2, fixed: false, placement: null },
     ];
     const live = [
-      { id: "a", label: "Old 1", planTableId: "m1", planned: true },
-      { id: "b", label: "Old 2", planTableId: null, planned: true },
-      { id: "c", label: "Old 3", planTableId: null, planned: false },
+      { id: "a", label: "Old 1", planTableId: "m1" },
+      { id: "b", label: "Old 2", planTableId: null },
+      { id: "c", label: "Old 3", planTableId: null },
     ];
     expect(targetsFromMaster(master, live).map((x) => [x.tableId, x.label, x.remove])).toEqual([
       ["a", "T1", false],
       ["b", expect.any(String), true],
+      ["c", "Old 3", true],
       [null, "T2", false],
     ]);
   });
@@ -243,8 +244,8 @@ describe("targetsFromMaster", () => {
     const placement = { x: 3, y: 4, width: 8, height: 6, shape: "round" as const, rotation: 45 };
     const master = [{ id: "m1", label: "T1", seats: 6, fixed: true, placement }];
     const live = [
-      { id: "a", label: "Old 1", planTableId: "m1", planned: true },
-      { id: "b", label: "Old 2", planTableId: "m9", planned: true },
+      { id: "a", label: "Old 1", planTableId: "m1" },
+      { id: "b", label: "Old 2", planTableId: "m9" },
     ];
     expect(targetsFromMaster(master, live)).toEqual([
       {

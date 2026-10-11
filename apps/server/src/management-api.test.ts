@@ -2862,20 +2862,13 @@ describe("floor plans", () => {
     expect(
       (await put(zoneId, { revision: 0, tables: [entry("a", unique("R"))], joins: [] })).status,
     ).toBe(200);
-    const spare = unique("S");
-    const { id: spareId } = await withTransaction(suite.db, (tx) =>
-      createTable(tx, tillConfigFromVenue(venue), { label: spare, capacity: 2, zoneId }),
-    );
-
     const read = (await (await get(zoneId)).json()) as {
       revision: number;
       tables: { id: string | null; liveTableId: string | null }[];
       joins: unknown[];
     };
-    // The master entry carries its own live table; the spare is offered with a null id.
     expect(read.tables.map((t) => [t.id === null, t.liveTableId !== null])).toEqual([
       [false, true],
-      [true, true],
     ]);
     const body = {
       ...read,
@@ -2886,26 +2879,7 @@ describe("floor plans", () => {
     const after = (await (await get(zoneId)).json()) as {
       tables: { id: string | null; liveTableId: string | null; label: string }[];
     };
-    expect(after.tables.find((t) => t.label === spare)).toMatchObject({ liveTableId: spareId });
     expect(after.tables.every((t) => t.id !== null)).toBe(true);
-  });
-
-  it("refuses a master table whose live table is not its own", async () => {
-    const zoneId = await createZone(unique("PlanOwn"));
-    const first = await put(zoneId, { revision: 0, tables: [entry("a", unique("O"))], joins: [] });
-    const { ids } = (await first.json()) as { ids: Record<string, string> };
-    const { id: otherId } = await withTransaction(suite.db, (tx) =>
-      createTable(tx, tillConfigFromVenue(venue), { label: unique("X"), zoneId }),
-    );
-    const res = await put(zoneId, {
-      revision: 1,
-      tables: [{ ...entry("a", unique("O")), id: ids.a, liveTableId: otherId }],
-      joins: [],
-    });
-    expect(res.status).toBe(400);
-    expect(await res.json()).toMatchObject({
-      error: { code: "floor_plan.invalid", params: { field: "tables.0.id" } },
-    });
   });
 
   it("refuses a rotation off the 15-degree steps", async () => {
@@ -2931,10 +2905,6 @@ describe("floor plans", () => {
     ["tables.0.label", { revision: 0, tables: [{ ...entry("a", "L"), label: 1 }], joins: [] }],
     ["tables.0.fixed", { revision: 0, tables: [{ ...entry("a", "L"), fixed: "no" }], joins: [] }],
     ["tables.0.id", { revision: 0, tables: [{ ...entry("a", "L"), id: 7 }], joins: [] }],
-    [
-      "tables.0.liveTableId",
-      { revision: 0, tables: [{ ...entry("a", "L"), liveTableId: 7 }], joins: [] },
-    ],
     [
       "tables.0.placement",
       { revision: 0, tables: [{ ...entry("a", "L"), placement: undefined }], joins: [] },

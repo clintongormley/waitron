@@ -95,7 +95,7 @@ async function plannedZone(...labels: string[]): Promise<{ zoneId: string; ids: 
         .returning({ id: floorPlanTables.id });
       await tx
         .update(diningTables)
-        .set({ planTableId: row!.id, planned: true })
+        .set({ planTableId: row!.id })
         .where(eq(diningTables.id, ids[i]!));
     }
   });
