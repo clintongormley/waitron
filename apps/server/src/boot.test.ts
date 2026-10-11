@@ -31,6 +31,7 @@ import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:
 import { tmpdir } from "node:os";
 import { basename, dirname, isAbsolute, join } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
+import { DatabaseSync } from "node:sqlite";
 import { eq, sql } from "drizzle-orm";
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { Agent } from "undici";
@@ -121,6 +122,7 @@ import { offerProducts } from "./testing/zone-offers.js";
 import type { Turns } from "./backup-turns.js";
 import { MIN_PASSPHRASE_LENGTH } from "./recovery-bundle.js";
 import { freePort, freePorts } from "./testing/free-ports.js";
+import { readRecoveryState } from "./recovery-state.js";
 import { seedDevice } from "@waitron/db/testing/seed.js";
 
 /**
@@ -4636,4 +4638,110 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
       await rm(sourceStateDir, { recursive: true, force: true });
     }
   }, 120_000);
+});
+
+describe("startServer — the append-only watch in trading mode", () => {
+  const INTERVAL_MS = 50;
+  const UPDATE = "sales_append_only_update";
+
+  /** A seeded trading venue of its own, so a tampered trigger reaches no other test. */
+  async function startWatched() {
+    const venue = await freshVenue();
+    await seedTradingVenue(venue.store.venue);
+    await venue.store.close();
+    const stateDir = await mkdtemp(join(tmpdir(), "waitron-boot-append-only-state-"));
+    await writeFile(
+      join(stateDir, "modules.json"),
+      JSON.stringify({ modules: { "fiscal-none": false } }),
+    );
+    const port = await freePort();
+    const server = await startServer(
+      {
+        ...KEY_ENV,
+        WAITRON_STATE_DIR: stateDir,
+        WAITRON_VENUE_DIR: venue.directory,
+        WAITRON_HTTP_PORT: String(port),
+        WAITRON_MIGRATIONS_DIR: migrationsRoot,
+        WAITRON_ENV: "preproduction",
+      },
+      {},
+      { appendOnlyWatch: { intervalMs: INTERVAL_MS } },
+    );
+    await awaitListening(port);
+    return {
+      server,
+      stateDir,
+      cleanup: async () => {
+        await rm(venue.directory, { recursive: true, force: true });
+        await rm(stateDir, { recursive: true, force: true });
+      },
+      /** The timeout lets the DDL wait out a boot duty's write rather than fail SQLITE_BUSY. */
+      tamper: (statements: string) => {
+        const raw = new DatabaseSync(join(venue.directory, "venue.db"), { timeout: 5_000 });
+        try {
+          raw.exec(statements);
+        } finally {
+          raw.close();
+        }
+      },
+    };
+  }
+
+  for (const [what, statements] of [
+    [
+      "replaced",
+      `drop trigger ${UPDATE}; create trigger ${UPDATE} before update on sales begin select 1; end;`,
+    ],
+    ["dropped", `drop trigger ${UPDATE};`],
+  ] as const) {
+    it(`keeps an untouched box trading, then stops it and refuses the next start when a trigger is ${what}`, async () => {
+      await withMockedKill(async (kills) => {
+        const box = await startWatched();
+        try {
+          await delay(INTERVAL_MS * 5);
+          expect(kills).toEqual([]);
+
+          box.tamper(statements);
+          await vi.waitFor(() => expect(kills).toEqual([{ pid: process.pid, signal: "SIGTERM" }]), {
+            timeout: 5_000,
+          });
+          expect(await readRecoveryState(box.stateDir)).toMatchObject({
+            refused: true,
+            level: "recovery",
+            lastErrorCode: "append_only.triggers_changed",
+          });
+          // The file the recovery page's log tail reads (`resolveLogDir`, beside the state folder).
+          const logged = (await readFile(join(box.stateDir, "logs", "waitron.log"), "utf8"))
+            .split("\n")
+            .filter(Boolean)
+            .map((line) => JSON.parse(line) as LogLine & Record<string, unknown>);
+          expect(logged).toContainEqual(
+            expect.objectContaining({ level: "error", event: "append_only.triggers_changed" }),
+          );
+        } finally {
+          await box.server.close();
+          await box.cleanup();
+        }
+      });
+    }, 60_000);
+  }
+
+  it("stops watching once the server is closed", async () => {
+    await withMockedKill(async (kills) => {
+      const box = await startWatched();
+      try {
+        await box.server.close();
+        // A watch left running reads the closed store, which throws, so it logs and never refuses.
+        const lines = await withCapturedStdout(async (captured) => {
+          box.tamper(`drop trigger ${UPDATE};`);
+          await delay(INTERVAL_MS * 5);
+          return captured;
+        });
+        expect(kills).toEqual([]);
+        expect(lines.filter((line) => line.includes('"event":"append_only.'))).toEqual([]);
+      } finally {
+        await box.cleanup();
+      }
+    });
+  }, 60_000);
 });

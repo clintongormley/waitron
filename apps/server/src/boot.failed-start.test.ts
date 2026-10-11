@@ -18,6 +18,7 @@ import {
 } from "@waitron/db";
 import { applyMigrations, manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { appendOnlyTriggerFaults } from "@waitron/store";
+import { startAppendOnlyWatch } from "./append-only-watch.js";
 import { startServer, type StartedServer } from "./boot.js";
 import { listBoxIpv4 } from "./box-reach.js";
 import { ensureBoxSecrets } from "./box-secrets.js";
@@ -67,6 +68,11 @@ vi.mock("./menu-activation.js", async (importOriginal) => {
   return { ...actual, startMenuActivation: vi.fn(actual.startMenuActivation) };
 });
 
+vi.mock("./append-only-watch.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("./append-only-watch.js")>();
+  return { ...actual, startAppendOnlyWatch: vi.fn(actual.startAppendOnlyWatch) };
+});
+
 const TILL_ENV = {
   WAITRON_TILL_NODE_ID: "33333333-3333-4333-8333-333333333333",
   WAITRON_TILL_SERIES_ID: "44444444-4444-4444-8444-444444444444",
@@ -104,6 +110,7 @@ afterEach(async () => {
   vi.mocked(runCloudWorker).mockClear();
   vi.mocked(runCloudSnapshotLoop).mockClear();
   vi.mocked(startMenuActivation).mockClear();
+  vi.mocked(startAppendOnlyWatch).mockClear();
   for (const dir of cleanup.splice(0)) await rm(dir, { recursive: true, force: true });
 });
 
@@ -121,6 +128,19 @@ async function spyOnMenuActivationStop() {
   vi.mocked(startMenuActivation).mockImplementationOnce((deps) => {
     const duty = realStart(deps);
     stop.mockImplementation(() => duty.stop());
+    return { stop };
+  });
+  return stop;
+}
+
+/** Spies on the stop of the next append-only watch boot starts. */
+async function spyOnAppendOnlyWatchStop() {
+  const { startAppendOnlyWatch: realStart } =
+    await vi.importActual<typeof import("./append-only-watch.js")>("./append-only-watch.js");
+  const stop = vi.fn<() => void>();
+  vi.mocked(startAppendOnlyWatch).mockImplementationOnce((deps) => {
+    const watch = realStart(deps);
+    stop.mockImplementation(() => watch.stop());
     return { stop };
   });
   return stop;
@@ -488,6 +508,19 @@ describe("a start that fails after the venue folder is opened gives the folder b
     expect(readVenueHolder(venueDir)).toBeNull();
   }, 60_000);
 
+  it("in trading mode, when a step after the listener is started throws, stopping the append-only watch", async () => {
+    const venueDir = await seededVenueDir();
+    const state = await stateDir(undefined, { leaf: true });
+    const env = await tradingEnv(venueDir, state, { landing: true });
+    const failure = new Error("interfaces unreadable");
+    failLandingAfterMdns(failure);
+    const stop = await spyOnAppendOnlyWatchStop();
+
+    await expect(startServer(env)).rejects.toBe(failure);
+    expect(stop).toHaveBeenCalledOnce();
+    expect(readVenueHolder(venueDir)).toBeNull();
+  }, 60_000);
+
   it("waits for the cloud snapshot loop when the cloud worker refuses to stop", async () => {
     const venueDir = await seededVenueDir();
     const state = await stateDir(undefined, { leaf: true });
@@ -671,6 +704,44 @@ describe("append-only triggers at boot", () => {
     await listening(Number(env.WAITRON_HTTP_PORT));
     await server.close();
     expect(await triggerFaults(venueDir, ["sales"])).toEqual({ missing: [], altered: [] });
+  }, 60_000);
+});
+
+describe("which starts watch the append-only triggers", () => {
+  async function startAndClose(env: Record<string, string>) {
+    const server = await startServer(env);
+    try {
+      await listening(Number(env.WAITRON_HTTP_PORT));
+    } finally {
+      await server.close();
+    }
+  }
+
+  it("a trading start does", async () => {
+    const venueDir = await seededVenueDir();
+    await startAndClose(await tradingEnv(venueDir, await stateDir(undefined, { leaf: true })));
+    expect(startAppendOnlyWatch).toHaveBeenCalledOnce();
+  }, 60_000);
+
+  it("a start waiting on an adoption does not", async () => {
+    const venueDir = await seededVenueDir();
+    const state = await stateDir(undefined, { leaf: true });
+    await writeFile(join(state, PENDING_ADOPTION_FILE), "{}");
+    await startAndClose(await tradingEnv(venueDir, state));
+    expect(startAppendOnlyWatch).not.toHaveBeenCalled();
+  }, 60_000);
+
+  it("a setup start does not", async () => {
+    const [httpPort] = await freePorts(1);
+    await startAndClose({
+      WAITRON_VENUE_DIR: await tempDir("waitron-failed-start-setup-venue-"),
+      WAITRON_STATE_DIR: await tempDir("waitron-failed-start-setup-state-"),
+      WAITRON_MIGRATIONS_DIR: migrationsRoot,
+      WAITRON_ENV: "preproduction",
+      WAITRON_HTTP_PORT: String(httpPort),
+      WAITRON_HTTP_LANDING_PORT: "0",
+    });
+    expect(startAppendOnlyWatch).not.toHaveBeenCalled();
   }, 60_000);
 });
 

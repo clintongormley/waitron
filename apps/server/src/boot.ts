@@ -1,4 +1,9 @@
-import { assertAppendOnlyIntact } from "./append-only-watch.js";
+import {
+  APPEND_ONLY_CHECK_MS,
+  assertAppendOnlyIntact,
+  refuseTrading,
+  startAppendOnlyWatch,
+} from "./append-only-watch.js";
 import { createAuthorityClockStatus, authorityClockAlertSource } from "./time-health.js";
 import { createCloudSnapshotWorker } from "./cloud-snapshot-worker.js";
 import { createCloudSnapshotArchive } from "./cloud-snapshot-archive.js";
@@ -208,6 +213,8 @@ import { closeListener } from "./close-listener.js";
 import { mountBoxStatusApi } from "./box-status.js";
 import { mountBoxRetireApi } from "./box-retire.js";
 import { mountRecoveryBundleApi } from "./recovery-bundle-api.js";
+import { withRecoveryLock } from "./recovery-lock.js";
+import { readRecoveryState, writeRecoveryState } from "./recovery-state.js";
 import { mountBackupApi } from "./backup-api.js";
 import { createSealedStateRefresher, type SealedStateStatus } from "./sealed-state.js";
 import { loadBackupConfig, loadRecoveryKey } from "./backup-config.js";
@@ -693,6 +700,7 @@ function makeStartedServer(
 /** Test seams; production leaves them unset. */
 export interface StartServerSeams {
   stream?: Pick<StreamHostDeps, "walLimitBytes">;
+  appendOnlyWatch?: { intervalMs?: number };
 }
 
 /**
@@ -2014,6 +2022,21 @@ async function bootServer(
     mountSpa(app, { root: config.tillAppDir, basePath: "", navigationPath: "/tabs" }, log);
   }
 
+  const appendOnlyWatch = startAppendOnlyWatch({
+    db,
+    tables: appendOnlyTables,
+    intervalMs: seams.appendOnlyWatch?.intervalMs ?? APPEND_ONLY_CHECK_MS,
+    refuse: refuseTrading({
+      stateDir: config.stateDir,
+      now,
+      log,
+      kill: () => process.kill(process.pid, "SIGTERM"),
+      store: { lock: withRecoveryLock, read: readRecoveryState, write: writeRecoveryState },
+    }),
+    log,
+  });
+  undoOnFailure.push(async () => appendOnlyWatch.stop());
+
   // After every mount above, so the app is complete before it binds.
   const server = startTradingListener(config, app, now, log);
   undoOnFailure.push(() => closeListener(server));
@@ -2199,6 +2222,7 @@ async function bootServer(
           () => cloudSnapshots,
           unsubscribeFromChanges,
           () => menuActivation.stop(),
+          () => appendOnlyWatch.stop(),
           () => liveEvents.close(),
           () => tunnelController.abort(),
           () => loop,
