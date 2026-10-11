@@ -7,6 +7,7 @@ import { Hono } from "hono";
 import { beforeAll, describe, expect, it, onTestFinished, vi } from "vitest";
 import {
   floorZones,
+  diningTables,
   kitchenCourses,
   kitchenStations,
   kitchenStationTiming,
@@ -448,12 +449,12 @@ describe("/management-api/zones", () => {
     });
   });
 
-  it("PATCH edits name/displayOrder/active (204), then GET reflects it", async () => {
+  it("PATCH edits name/displayOrder (204), then GET reflects it", async () => {
     const id = await createZone(unique("Reservados"));
     const newName = unique("Reservados-edited");
     const patch = await req(
       `/zones/${id}`,
-      { method: "PATCH", body: JSON.stringify({ name: newName, displayOrder: 7, active: true }) },
+      { method: "PATCH", body: JSON.stringify({ name: newName, displayOrder: 7 }) },
       managerCookie,
     );
     expect(patch.status).toBe(204);
@@ -534,34 +535,43 @@ describe("/management-api/zones", () => {
     expect(emptyBody.status).toBe(204);
   });
 
-  it("DELETE deactivates a zone (204); GET drops it; PATCH active:true restores it", async () => {
+  it("DELETE permanently removes a zone from choices and rejects revival", async () => {
     const name = unique("ToRetire");
     const id = await createZone(name);
-
+    const preview = await req(`/zones/${id}/delete-impact`, { method: "GET" }, managerCookie);
+    expect(preview.status).toBe(200);
+    const impact = await preview.json();
     const del = await req(`/zones/${id}`, { method: "DELETE" }, managerCookie);
-    expect(del.status).toBe(204);
-    expect(await del.text()).toBe("");
-
-    const afterDel = (await (await req("/zones", { method: "GET" }, managerCookie)).json()) as {
-      id: string;
-    }[];
-    expect(afterDel.find((z) => z.id === id)).toBeUndefined();
-    const forManagement = (await (
-      await req("/zones?includeInactive=true", { method: "GET" }, managerCookie)
-    ).json()) as { id: string; active: boolean }[];
-    expect(forManagement.find((z) => z.id === id)).toMatchObject({ active: false });
-
-    // Reactivating via PATCH shows it was a soft delete.
-    await req(
+    expect(del.status).toBe(200);
+    expect(await del.json()).toEqual(impact);
+    for (const suffix of ["", "?includeInactive=true"]) {
+      const list = (await (
+        await req(`/zones${suffix}`, { method: "GET" }, managerCookie)
+      ).json()) as { id: string }[];
+      expect(list.find((z) => z.id === id)).toBeUndefined();
+    }
+    const active = await req(
       `/zones/${id}`,
       { method: "PATCH", body: JSON.stringify({ active: true }) },
       managerCookie,
     );
-    const afterRestore = (await (await req("/zones", { method: "GET" }, managerCookie)).json()) as {
-      id: string;
-      name: string;
-    }[];
-    expect(afterRestore.find((z) => z.id === id)).toMatchObject({ name });
+    expect(active.status).toBe(400);
+    expect(await active.json()).toMatchObject({
+      error: { code: "management.request_invalid", params: { field: "active" } },
+    });
+    const edit = await req(
+      `/zones/${id}`,
+      { method: "PATCH", body: JSON.stringify({ name: "Reborn" }) },
+      managerCookie,
+    );
+    expect(edit.status).toBe(404);
+    expect(await edit.json()).toMatchObject({ error: { code: "zone.not_found" } });
+    expect(
+      await suite.db
+        .select({ name: floorZones.name, active: floorZones.active })
+        .from(floorZones)
+        .where(eq(floorZones.id, id)),
+    ).toEqual([{ name, active: false }]);
   });
 
   it("DELETE reports the occupied table's name when a zone has an open party", async () => {
@@ -840,7 +850,7 @@ describe("/management-api/tables", () => {
       return { departmentId, zoneId, tableId };
     }
 
-    it("refuses enabling a zone whose department is disabled", async () => {
+    it("refuses active PATCH on a zone whose department is deleted", async () => {
       const { departmentId, zoneId } = await tableInServiceZone();
       await withTransaction(suite.db, (tx) =>
         deactivateDepartment(tx, tillConfigFromVenue(venue), departmentId),
@@ -850,17 +860,17 @@ describe("/management-api/tables", () => {
         { method: "PATCH", body: JSON.stringify({ active: true }) },
         managerCookie,
       );
-      expect(response.status).toBe(409);
+      expect(response.status).toBe(400);
       expect(await response.json()).toMatchObject({
-        error: { code: "zone.department_inactive", params: { zoneId } },
+        error: { code: "management.request_invalid", params: { field: "active" } },
       });
       const list = (await (
         await req("/zones?includeInactive=true", { method: "GET" }, managerCookie)
       ).json()) as { id: string; active: boolean }[];
-      expect(list.find((z) => z.id === zoneId)).toMatchObject({ active: false });
+      expect(list.find((z) => z.id === zoneId)).toBeUndefined();
     });
 
-    it("refuses enabling a zone without a department", async () => {
+    it("refuses active PATCH on a deleted zone without a department", async () => {
       const [zone] = await withTransaction(suite.db, (tx) =>
         tx
           .insert(floorZones)
@@ -879,9 +889,9 @@ describe("/management-api/tables", () => {
         },
         managerCookie,
       );
-      expect(response.status).toBe(409);
+      expect(response.status).toBe(400);
       expect(await response.json()).toMatchObject({
-        error: { code: "zone.department_inactive", params: { zoneId: zone!.id } },
+        error: { code: "management.request_invalid", params: { field: "active" } },
       });
       const [stored] = await suite.db
         .select({ active: floorZones.active })
@@ -890,18 +900,18 @@ describe("/management-api/tables", () => {
       expect(stored).toEqual({ active: false });
     });
 
-    it.each(["active", "disabled"])(
-      "judges the department when moving an %s zone",
+    it.each(["active", "deleted"])(
+      "rejects a move into a deleted department for an %s zone",
       async (state) => {
         const source = await tableInServiceZone();
         const destination = await tableInServiceZone();
         await withTransaction(suite.db, (tx) =>
           deactivateDepartment(tx, tillConfigFromVenue(venue), destination.departmentId),
         );
-        if (state === "disabled")
+        if (state === "deleted")
           expect(
             (await req(`/zones/${source.zoneId}`, { method: "DELETE" }, managerCookie)).status,
-          ).toBe(204);
+          ).toBe(200);
         const response = await req(
           `/venue-service/zones/${source.zoneId}`,
           {
@@ -910,7 +920,7 @@ describe("/management-api/tables", () => {
           },
           managerCookie,
         );
-        expect(response.status).toBe(state === "active" ? 409 : 204);
+        expect(response.status).toBe(state === "active" ? 409 : 404);
         if (state === "active")
           expect(await response.json()).toMatchObject({
             error: { code: "zone.department_inactive", params: { zoneId: source.zoneId } },
@@ -918,12 +928,9 @@ describe("/management-api/tables", () => {
         const stored = await suite.db.execute<{ department_id: string; active: number }>(
           sql`select p.department_id, z.active from zone_service_policies p join floor_zones z on z.id = p.zone_id where z.id = ${source.zoneId}`,
         );
-        expect(stored.rows).toEqual([
-          {
-            department_id: state === "active" ? source.departmentId : destination.departmentId,
-            active: state === "active" ? 1 : 0,
-          },
-        ]);
+        expect(stored.rows).toEqual(
+          state === "active" ? [{ department_id: source.departmentId, active: 1 }] : [],
+        );
         const table = (await listInService()).find((table) => table.id === source.tableId);
         if (state === "active") expect(table).toMatchObject({ zoneId: source.zoneId });
         else expect(table).toBeUndefined();
@@ -951,21 +958,26 @@ describe("/management-api/tables", () => {
       });
     });
 
-    it("enabling a zone under an active department restores its tables in service", async () => {
+    it("a deleted zone cannot restore its removed tables through active PATCH", async () => {
       const { zoneId, tableId } = await tableInServiceZone();
-      await req(`/zones/${zoneId}`, { method: "DELETE" }, managerCookie);
+      expect((await req(`/zones/${zoneId}`, { method: "DELETE" }, managerCookie)).status).toBe(200);
       const response = await req(
         `/zones/${zoneId}`,
         { method: "PATCH", body: JSON.stringify({ active: true }) },
         managerCookie,
       );
-      expect(response.status).toBe(204);
+      expect(response.status).toBe(400);
+      expect(await response.json()).toMatchObject({
+        error: { code: "management.request_invalid", params: { field: "active" } },
+      });
       const list = (await (await req("/zones", { method: "GET" }, managerCookie)).json()) as {
         id: string;
-        active: boolean;
       }[];
-      expect(list.find((z) => z.id === zoneId)).toMatchObject({ active: true });
-      expect((await listInService()).find((t) => t.id === tableId)).toMatchObject({ id: tableId });
+      expect(list.find((z) => z.id === zoneId)).toBeUndefined();
+      expect((await listInService()).find((t) => t.id === tableId)).toBeUndefined();
+      expect(
+        await suite.db.select().from(diningTables).where(eq(diningTables.id, tableId)),
+      ).toEqual([]);
     });
 
     it("a STAFF session is refused the includeDisabled list (403)", async () => {
@@ -2748,7 +2760,7 @@ describe("venue late-flag defaults", () => {
 });
 
 it("a zone rename reuses a deleted name and retains the deleted row", async () => {
-  const name = unique("Disabled terrace");
+  const name = unique("Deleted terrace");
   const target = (await (
     await req(
       "/venue-service/zones",
@@ -2763,43 +2775,59 @@ it("a zone rename reuses a deleted name and retains the deleted row", async () =
       managerCookie,
     )
   ).json()) as { id: string };
-  expect((await req(`/zones/${target.id}`, { method: "DELETE" }, managerCookie)).status).toBe(204);
-  const response = await req(
-    `/zones/${source.id}`,
-    { method: "PATCH", body: JSON.stringify({ name }) },
-    managerCookie,
-  );
-  expect(response.status).toBe(204);
+  expect((await req(`/zones/${target.id}`, { method: "DELETE" }, managerCookie)).status).toBe(200);
+  expect(
+    (
+      await req(
+        `/zones/${source.id}`,
+        { method: "PATCH", body: JSON.stringify({ name }) },
+        managerCookie,
+      )
+    ).status,
+  ).toBe(204);
   expect(source.id).not.toBe(target.id);
   const rows = (await (
     await req("/zones?includeInactive=true", { method: "GET" }, managerCookie)
   ).json()) as { id: string; name: string; active: boolean }[];
-  expect(rows).toEqual(
-    expect.arrayContaining([
-      expect.objectContaining({ id: target.id, name, active: false }),
-      expect.objectContaining({ id: source.id, name, active: true }),
-    ]),
-  );
+  expect(rows).toContainEqual(expect.objectContaining({ id: source.id, name, active: true }));
+  expect(rows).not.toContainEqual(expect.objectContaining({ id: target.id }));
+  expect(
+    await suite.db
+      .select({ name: floorZones.name, active: floorZones.active })
+      .from(floorZones)
+      .where(eq(floorZones.id, target.id)),
+  ).toEqual([{ name, active: false }]);
 });
 
-it("renames a disabled zone through the management route without enabling it", async () => {
+it("refuses a deleted zone rename and retains its original name", async () => {
+  const original = unique("Deleted garden");
   const created = await req(
     "/venue-service/zones",
-    { method: "POST", body: JSON.stringify({ name: unique("Rename disabled") }) },
+    { method: "POST", body: JSON.stringify({ name: original }) },
     managerCookie,
   );
   expect(created.status).toBe(201);
   const { id } = (await created.json()) as { id: string };
-  expect((await req(`/zones/${id}`, { method: "DELETE" }, managerCookie)).status).toBe(204);
-  const name = unique("Renamed disabled");
-  expect(
-    (await req(`/zones/${id}`, { method: "PATCH", body: JSON.stringify({ name }) }, managerCookie))
-      .status,
-  ).toBe(204);
+  expect((await req(`/zones/${id}`, { method: "DELETE" }, managerCookie)).status).toBe(200);
+  const response = await req(
+    `/zones/${id}`,
+    { method: "PATCH", body: JSON.stringify({ name: "Changed" }) },
+    managerCookie,
+  );
+  expect(response.status).toBe(404);
+  expect(await response.json()).toMatchObject({
+    error: { code: "zone.not_found", params: { zoneId: id } },
+  });
   const rows = (await (
     await req("/zones?includeInactive=true", { method: "GET" }, managerCookie)
-  ).json()) as { id: string; name: string; active: boolean }[];
-  expect(rows.find((row) => row.id === id)).toMatchObject({ name, active: false });
+  ).json()) as { id: string }[];
+  expect(rows.find((row) => row.id === id)).toBeUndefined();
+  expect(
+    await suite.db
+      .select({ name: floorZones.name, active: floorZones.active })
+      .from(floorZones)
+      .where(eq(floorZones.id, id)),
+  ).toEqual([{ name: original, active: false }]);
 });
 
 describe("floor plans", () => {
