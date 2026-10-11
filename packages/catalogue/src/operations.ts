@@ -309,7 +309,7 @@ export async function createCatalogue(
   return row;
 }
 
-/** The menu's own row alone; a menu also needs the sections and details `createMenuShell` writes. */
+/** The menu's own row alone; the caller writes its root and home sections and its `menu_details` row. */
 export async function insertCatalogue(tx: Transaction, name: string): Promise<Catalogue> {
   const [row] = await tx.insert(catalogues).values({ name }).returning(CATALOGUE_COLUMNS);
   return row!;

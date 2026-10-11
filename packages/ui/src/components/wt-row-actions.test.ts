@@ -308,7 +308,7 @@ it("does not close for disabled actions or already handled Escape", async () => 
   expect(popup.matches(":popover-open")).toBe(false);
 });
 
-describe("an action judged as it was when the click started", () => {
+describe("an action judged before its own click listeners run", () => {
   it("closes when the action disables itself in its own click handler", async () => {
     const { edit, popup } = await mountActions();
     edit.addEventListener("click", () => edit.setAttribute("disabled", ""));

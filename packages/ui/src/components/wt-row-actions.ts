@@ -129,7 +129,7 @@ export class WtRowActions extends LitElement {
   }
 
   // Judged while capturing, before the action's own listeners: a real click runs microtasks after
-  // each listener, so an update its handler schedules can disable the action before the click bubbles here.
+  // each listener, so an update its handler schedules can disable the action before the click bubbles to `onAction`.
   private readonly judgeAction = {
     capture: true,
     handleEvent: (event: MouseEvent) => {

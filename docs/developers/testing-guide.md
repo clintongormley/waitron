@@ -1158,6 +1158,22 @@ input-type guard without reaching the branch it claims to check. Exercise the ev
 input and prove the target guard by deletion. Receipt: `packages/ui-core/src/submit-on-enter.test.ts`
 (UI keyboard review, 2026-09-06).
 
+## A scripted click runs microtasks only after the whole dispatch
+
+In Chromium, a click started from script (`element.click()`) runs every listener before any
+pending microtask runs; a click from a real pointer (`userEvent.click`, a Playwright mouse
+click) runs them after each listener. So an update one listener schedules — a Lit re-render, a
+`queueMicrotask` — has already happened when a later listener sees a real click, and has not when
+it sees a scripted one.
+
+Receipt (A505): the Menus list's Duplicate click handler marks the menu as being copied, and the
+screen's next render, in a later microtask, draws the item disabled; `wt-row-actions` used to read
+the item's disabled state when the click bubbled to it, after the handler. Every scripted test closed the menu; on the dev stack a Playwright mouse click left it open.
+The `wt-row-actions.test.ts` case "closes under a real pointer click when the handler disables the
+action through a later update" and the `menus-screen.test.ts` case "closes the row's menu on a real
+click on Duplicate, though the click disables the item" each failed against the old component. The
+component now judges the click in the capture phase, before the action's own listeners.
+
 ## Test an inline Escape warning with the native keypress.
 
 An inline editor that opens a confirmation from `keydown` must cancel Escape's default action as

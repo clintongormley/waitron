@@ -680,6 +680,12 @@ browser test** — most of these rules exist because a test passed while proving
   [testing-guide.md](docs/developers/testing-guide.md#a-test-waits-for-a-browser-grant-by-tracking-the-request-never-by-a-fixed-sleep).
 - **Dispatch events when testing a `composedPath()` guard.** An undispatched `KeyboardEvent` has an
   empty path, so the test can pass without reaching the branch it claims to check.
+- **A click whose outcome depends on whether an update one listener schedules has run before a
+  later listener sees the click is tested with `userEvent.click`, not `element.click()`.** In
+  Chromium a scripted click runs pending microtasks only after the whole dispatch; a real pointer
+  click runs them after each listener. Cost: A505's row menu stayed open on the real page while every scripted test closed it.
+  Nothing guards it. Receipt:
+  [testing-guide.md](docs/developers/testing-guide.md#a-scripted-click-runs-microtasks-only-after-the-whole-dispatch).
 - **Position a native popover before its first paint.** Positioning from the asynchronous `toggle`
   event left the menu at `(0, 0)` for its first frame.
 - **Test public recovery links through the real boot modes that serve them.** Mounting a route on a
