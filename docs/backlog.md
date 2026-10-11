@@ -3204,7 +3204,7 @@ _Formerly A7, and the dashboard entries in the opening part of the old Track A (
 - **A sign-in screen already showing when a box reset is found may already have started its passkey
   autofill, and has started its Google settings read; the switch to the reset notice stops neither.** By reading, not
   run: a tab already on sign-in (sent by the shared session deadline, or by a failed check on coming
-  back into view) switches to the reset notice only when a later status check finds setup mode.
+  back into view) switches to the reset notice only when a later request is answered `node.reset`.
 
 - **`waitron.sh reset --all` deletes the box's own minted certificate** (`deploy/waitron.sh`, the
   `rm_volume waitron_state` branch; minted by `apps/server/src/box-secrets.ts`), so — by reading,

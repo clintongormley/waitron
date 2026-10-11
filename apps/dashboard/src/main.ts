@@ -17,7 +17,7 @@ const app = document.querySelector<HTMLElement>("#app")!;
 // One instrumented fetch for both the api and the module-request primitive, so a module screen's
 // round trips land in the same diagnostics trail as the app client's.
 const instrumentedFetch = createInstrumentedFetch(fetch, diag);
-const signals = createSessionSignals({ fetchImpl: instrumentedFetch });
+const signals = createSessionSignals();
 const api = new DashboardApi("", instrumentedFetch, signals.reportError, signals.reportActivity);
 const liveUpdates = new LiveConnection(api.liveData, { onSessionInvalid: signals.reportError });
 render(
