@@ -32,8 +32,6 @@ export type GridRow = {
   name: string;
   path: string[];
   depth: number;
-  hiddenProducts: number;
-  hiddenCategories: number;
 };
 
 export interface StationTimes {

@@ -653,25 +653,6 @@ export class RoutingGrid extends LitElement {
     )?.focus();
   }
 
-  #hiddenText(entry: GridRow): string {
-    const parts: string[] = [];
-    if (entry.hiddenProducts > 0) {
-      parts.push(
-        entry.hiddenProducts === 1
-          ? t("routing.more_product")
-          : format("routing.more_products", { count: String(entry.hiddenProducts) }),
-      );
-    }
-    if (entry.hiddenCategories > 0) {
-      parts.push(
-        entry.hiddenCategories === 1
-          ? t("routing.more_category")
-          : format("routing.more_categories", { count: String(entry.hiddenCategories) }),
-      );
-    }
-    return parts.join(", ");
-  }
-
   #rowLabel(entry: GridRow, open: ReadonlySet<string>) {
     if (entry.row.kind === "all" || entry.row.kind === "no_category") return this.#rowName(entry);
     const row = entry.row;
@@ -686,7 +667,6 @@ export class RoutingGrid extends LitElement {
     if (entry.row.kind === "product") return html`${path}${entry.name}`;
     const id = entry.row.categoryId;
     const expanded = this.expanded.has(id);
-    const hidden = this.#hiddenText(entry);
     return html`${path}<button
         type="button"
         class="toggle"
@@ -698,8 +678,8 @@ export class RoutingGrid extends LitElement {
             : expandCategory(this.expanded, id);
         }}
       >
-        <span class="arrow" aria-hidden="true">${expanded ? "▾" : "▸"}</span> ${entry.name}</button
-      >${hidden ? html` <span class="hidden">${hidden}</span>` : nothing}`;
+        <span class="arrow" aria-hidden="true">${expanded ? "▾" : "▸"}</span> ${entry.name}
+      </button>`;
   }
 
   #row(entry: GridRow, zones: readonly Zone[], open: ReadonlySet<string>) {

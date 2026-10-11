@@ -15,11 +15,6 @@ import {
 import type { PeriodLine, RoutingModelCell } from "../routing-types.js";
 import { format } from "./hours-view.js";
 
-interface Hidden {
-  categories: number;
-  products: number;
-}
-
 function append<T>(lists: Map<string, T[]>, key: string, value: T): void {
   const list = lists.get(key);
   if (list === undefined) lists.set(key, [value]);
@@ -32,15 +27,14 @@ function hasNoCategoryCell(model: RoutingModel): boolean {
 
 /**
  * The grid's rows in tree order: All categories, the root categories, every row whose ancestors
- * are all expanded, every category or product holding a cell (at its own place, without its
- * hidden ancestors), then the No category row — while a product has no category or the row holds
- * a cell — and the products with no category under it. A shown category's children are shown
- * exactly when its id is in `expanded`, so a category shown only for its cell opens too. A
- * category whose children are not shown counts the rows of its subtree that are absent. Siblings
- * are sorted by name with the shared label comparison, equal names keeping the model's order. A
- * category that is its own parent is sorted with the roots. Categories on or below a longer parent
- * cycle follow the roots, and the cycle members placed at the top level are not sorted by name; a
- * category's subcategories come before its products.
+ * are all expanded, every category or product holding a cell together with every ancestor of it,
+ * then the No category row — while a product has no category or the row holds a cell — and the
+ * products with no category under it. A shown category that is not in `expanded` lists only the
+ * children that hold a cell or have a descendant that does; one in `expanded` lists all of them.
+ * Siblings are sorted by name with the shared label comparison, equal names keeping the model's
+ * order. A category that is its own parent is sorted with the roots. Categories on or below a
+ * longer parent cycle follow the roots, and the cycle members placed at the top level are not
+ * sorted by name; a category's subcategories come before its products.
  */
 export function visibleRoutingRows(model: RoutingModel, expanded: ReadonlySet<string>): GridRow[] {
   const known = new Map(model.categories.map((category) => [category.id, category]));
@@ -76,53 +70,42 @@ export function visibleRoutingRows(model: RoutingModel, expanded: ReadonlySet<st
     if (row.kind === "product") productsWithCells.add(row.productId);
   }
 
-  const entries: GridRow[] = [
-    { row: { kind: "all" }, name: "", path: [], depth: 0, hiddenProducts: 0, hiddenCategories: 0 },
-  ];
+  const entries: GridRow[] = [{ row: { kind: "all" }, name: "", path: [], depth: 0 }];
   const placed = new Set<string>();
 
-  // Returns the absent rows of `category`'s subtree, itself included, for its ancestors' counts.
-  function place(category: GridCategory, path: string[], shown: boolean): Hidden {
+  // Returns whether the subtree holds a cell, which shows the category even under a closed
+  // parent. A category that turns out hidden takes back the rows its subtree wrote.
+  function place(category: GridCategory, path: string[], parentOpen: boolean): boolean {
     placed.add(category.id);
+    const mark = entries.length;
     const depth = path.length + 1;
-    const visible = shown || categoriesWithCells.has(category.id);
-    const open = visible && expanded.has(category.id);
-    const entry: GridRow = {
+    const open = expanded.has(category.id);
+    const childPath = [...path, category.name];
+    entries.push({
       row: { kind: "category", categoryId: category.id },
       name: category.name,
       path,
       depth,
-      hiddenProducts: 0,
-      hiddenCategories: 0,
-    };
-    if (visible) entries.push(entry);
-    const below: Hidden = { categories: 0, products: 0 };
-    const childPath = [...path, category.name];
+    });
+    let forced = categoriesWithCells.has(category.id);
     for (const child of childCategories.get(category.id) ?? []) {
       if (placed.has(child.id)) continue;
-      const absent = place(child, childPath, open);
-      below.categories += absent.categories;
-      below.products += absent.products;
+      if (place(child, childPath, open)) forced = true;
     }
     for (const product of productsIn.get(category.id) ?? []) {
-      if (open || productsWithCells.has(product.id)) {
+      const own = productsWithCells.has(product.id);
+      if (own) forced = true;
+      if (open || own) {
         entries.push({
           row: { kind: "product", productId: product.id },
           name: product.name,
           path: childPath,
           depth: depth + 1,
-          hiddenProducts: 0,
-          hiddenCategories: 0,
         });
-      } else {
-        below.products += 1;
       }
     }
-    if (!open) {
-      entry.hiddenCategories = below.categories;
-      entry.hiddenProducts = below.products;
-    }
-    return { categories: below.categories + (visible ? 0 : 1), products: below.products };
+    if (!parentOpen && !forced) entries.length = mark;
+    return forced;
   }
 
   for (const root of roots) place(root, [], true);
@@ -145,8 +128,6 @@ export function visibleRoutingRows(model: RoutingModel, expanded: ReadonlySet<st
       name: "",
       path: [],
       depth: 0,
-      hiddenProducts: 0,
-      hiddenCategories: 0,
     });
     for (const product of uncategorised) {
       entries.push({
@@ -154,8 +135,6 @@ export function visibleRoutingRows(model: RoutingModel, expanded: ReadonlySet<st
         name: product.name,
         path: [],
         depth: 1,
-        hiddenProducts: 0,
-        hiddenCategories: 0,
       });
     }
   }

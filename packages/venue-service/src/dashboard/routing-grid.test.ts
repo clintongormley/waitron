@@ -178,12 +178,12 @@ async function choose(el: RoutingGrid, box: HTMLButtonElement, label: string): P
 }
 
 describe("venue-routing-grid", () => {
-  it("Expand all and Collapse all change the rendered rows and counts, and focus stays on the trigger", async () => {
+  it("Expand all and Collapse all change the rendered rows, and focus stays on the trigger", async () => {
     const { el } = await mount();
     expect(rowLabels(el)).toEqual([
       "All categories",
-      "▸ Drinks 2 more products",
-      "Drinks › ▸ Cocktails 1 more product",
+      "▸ Drinks",
+      "Drinks › ▸ Cocktails",
       "▸ Food",
       "Food › Burger",
       "No category",
@@ -198,7 +198,7 @@ describe("venue-routing-grid", () => {
     expect(rowLabels(el)).toEqual([
       "All categories",
       "▾ Drinks",
-      "▸ Cocktails 1 more product",
+      "▸ Cocktails",
       "Cola",
       "▸ Food",
       "Food › Burger",
@@ -225,7 +225,7 @@ describe("venue-routing-grid", () => {
     const collapseAll = root(el).querySelector<HTMLElement>('[data-test="collapse-all"]')!;
     await userEvent.click(collapseAll);
     await el.updateComplete;
-    expect(rowLabels(el)[1]).toBe("▸ Drinks 2 more products");
+    expect(rowLabels(el)[1]).toBe("▸ Drinks");
     expect(root(el).activeElement).toBe(collapseAll);
   });
 
