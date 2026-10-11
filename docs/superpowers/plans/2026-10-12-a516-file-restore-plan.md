@@ -62,6 +62,16 @@ Retain byte `validateEntries`/`validateArtifact`; shared validation materializes
   Run `test -- src/restore.test.ts src/restore-stream.test.ts src/restore-command.test.ts src/restore-fiscal-e2e.test.ts src/restore-fiscal-receipt.test.ts`, then `typecheck`.
 - [x] Inspect the diff for fiscal/boot-test changes and sign off the complete Task 1 commit.
 
+### Task 1 qualification, 2026-10-12
+
+Signed implementation `785dca03c246145a30505b7085c5c41e958df092` passed the eleven selected server
+suites (302 tests), four root guards (61 tests), server types, changed-file lint/format and the
+unedited fiscal golden/immutability pair (20 tests). In an independent installed clone, deleting
+source protection failed 11 cases, deleting rollback failed one, deleting validation disposal failed
+one, and deleting duplicate-entry protection failed one. Restoring each passed; the source control
+also passed the unrelated-hard-link case. These results cover Task 1, not the remaining bucket
+whole-file reads or archive pipeline. The branch stays unpublished until Tasks 2–4 pass.
+
 ## Task 2: bucket CLI, setup stage and staged entry remain file-based
 
 **Files:** modify `apps/server/src/{restore-stream.ts,restore-request.ts}`; tests `restore-stream.test.ts`, `restore-request.test.ts`, `restore-command.test.ts`.
