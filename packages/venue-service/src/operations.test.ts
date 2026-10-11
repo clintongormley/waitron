@@ -3204,9 +3204,7 @@ for (const { statement, constraint } of [
 
 describe("reserved venue names", () => {
   it.each([
-    { active: false, action: "create" },
     { active: true, action: "create" },
-    { active: false, action: "rename" },
     { active: true, action: "rename" },
   ])(
     "refuses a department $action onto a reserved name (active=$active)",
@@ -3218,10 +3216,7 @@ describe("reserved venue names", () => {
       const source = await scoped((tx) =>
         createDepartment(tx, cfg, { name: "Bar", orderStart: "counter" }),
       );
-      if (!active) await scoped((tx) => deactivateDepartment(tx, cfg, target.id));
-      const expected = active
-        ? { code: "department.name_taken", params: { name: "Deli" } }
-        : { code: "department.name_disabled", params: { name: "Deli", departmentId: target.id } };
+      const expected = { code: "department.name_taken", params: { name: "Deli" } };
       const write =
         action === "create"
           ? (tx: Transaction) => createDepartment(tx, cfg, { name: "Deli", orderStart: "counter" })
@@ -3257,7 +3252,7 @@ describe("reserved venue names", () => {
     },
   );
 
-  it("identifies the disabled zone that keeps a new zone's name", async () => {
+  it("reuses a deleted zone name with a new id", async () => {
     const cfg = { locationId: brandLocationId(await seedLocation("Disabled zone names")) };
     const department = await scoped((tx) =>
       createDepartment(tx, cfg, { name: "Restaurant", orderStart: "counter" }),
@@ -3266,12 +3261,13 @@ describe("reserved venue names", () => {
       createServiceZone(tx, cfg, { name: "Terrace", departmentId: department.id }),
     );
     await scoped((tx) => deactivateServiceZone(tx, cfg, zone.id));
-    await expect(
-      scoped((tx) => createServiceZone(tx, cfg, { name: "Terrace", departmentId: department.id })),
-    ).rejects.toMatchObject({
-      code: "zone.name_disabled",
-      params: { name: "Terrace", zoneId: zone.id },
-    });
+    const replacement = await scoped((tx) =>
+      createServiceZone(tx, cfg, { name: "Terrace", departmentId: department.id }),
+    );
+    expect(replacement.id).not.toBe(zone.id);
+    expect(await db.select().from(floorZones).where(eq(floorZones.id, replacement.id))).toEqual([
+      expect.objectContaining({ id: replacement.id, name: "Terrace", active: true }),
+    ]);
     expect(await db.select().from(floorZones).where(eq(floorZones.id, zone.id))).toEqual([
       expect.objectContaining({ name: "Terrace", active: false }),
     ]);
@@ -3517,4 +3513,39 @@ it("keeps a switched-off zone's table rows and today's rows unchanged", async ()
         .where(tableInService(diningTables.id)),
     ).toContainEqual({ id: table!.id });
   });
+});
+
+it.each(["create", "rename"])("allows department %s onto a deleted name", async (action) => {
+  const cfg = { locationId: brandLocationId(await seedLocation("Deleted names")) };
+  const old = await scoped((tx) =>
+    createDepartment(tx, cfg, { name: "Deli", orderStart: "counter" }),
+  );
+  await scoped((tx) => createDepartment(tx, cfg, { name: "Surviving", orderStart: "counter" }));
+  await scoped((tx) => deactivateDepartment(tx, cfg, old.id));
+  const replacement = await scoped((tx) =>
+    createDepartment(tx, cfg, {
+      name: action === "create" ? "Deli" : "Bar",
+      orderStart: "counter",
+    }),
+  );
+  if (action === "rename")
+    await scoped((tx) =>
+      updateDepartment(tx, cfg, replacement.id, {
+        name: "Deli",
+        tradingName: "Changed",
+        orderStart: "table",
+      }),
+    );
+  expect(replacement.id).not.toBe(old.id);
+  expect(await scoped((tx) => listDepartments(tx, cfg))).toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({ id: old.id, name: "Deli", active: false }),
+      expect.objectContaining({
+        id: replacement.id,
+        name: "Deli",
+        active: true,
+        tradingName: action === "create" ? "Deli" : "Changed",
+      }),
+    ]),
+  );
 });

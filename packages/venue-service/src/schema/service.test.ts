@@ -1,3 +1,9 @@
+import { eq } from "drizzle-orm";
+import { CORE_MIGRATIONS, locations, withTransaction } from "@waitron/db";
+import { seedTenant } from "@waitron/db/testing/seed.js";
+import { useVenueDb } from "@waitron/db/testing/venue-db.js";
+import { VENUE_SERVICE_MIGRATIONS } from "../migrations.js";
+import { CATALOGUE_MIGRATIONS } from "@waitron/catalogue";
 import { describe, expect, it } from "vitest";
 import { getTableConfig } from "drizzle-orm/sqlite-core";
 import type { SQLiteTable } from "drizzle-orm/sqlite-core";
@@ -37,8 +43,8 @@ const EXPECTED: Record<
     table: departments,
     foreignKeys: ["departments_location_fk"],
     checks: [],
-    indexes: ["departments_one_default_per_location_key"],
-    uniqueConstraints: ["departments_location_name_key"],
+    indexes: ["departments_location_name_key", "departments_one_default_per_location_key"],
+    uniqueConstraints: [],
     primaryKeys: [],
   },
   department_sale_policies: {
@@ -238,6 +244,7 @@ describe("venue-service schema", () => {
       ...getTableConfig(routingCells).indexes,
     ].filter((index) => index.config.where !== undefined);
     expect(partial.map((index) => [index.config.name, index.config.unique])).toEqual([
+      ["departments_location_name_key", true],
       ["departments_one_default_per_location_key", true],
       ["zone_service_policies_one_counter_default_key", true],
       ["kitchen_notices_open_idx", false],
@@ -249,5 +256,51 @@ describe("venue-service schema", () => {
       ["routing_cells_no_category_every_zone_key", true],
       ["routing_cells_no_category_zone_key", true],
     ]);
+  });
+});
+
+describe("department name storage", () => {
+  const suite = useVenueDb({
+    migrations: [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS, VENUE_SERVICE_MIGRATIONS],
+  });
+  async function location(name: string) {
+    const [row] = await suite.db
+      .insert(locations)
+      .values({ name, invoiceLocales: ["es"], operationDescription: "Hospitality" })
+      .returning();
+    return row!.id;
+  }
+  async function insert(locationId: string, name: string) {
+    return withTransaction(suite.db, async (tx) => {
+      const [row] = await tx
+        .insert(departments)
+        .values({ locationId, name, tradingName: name })
+        .returning();
+      return row!;
+    });
+  }
+  it("reuses a deleted department name with a new id", async () => {
+    await seedTenant(suite.db);
+    const locationId = await location("Venue");
+    const old = await insert(locationId, "Deli");
+    await suite.db.update(departments).set({ active: false }).where(eq(departments.id, old.id));
+    const replacement = await insert(locationId, "Deli");
+    expect(replacement.id).not.toBe(old.id);
+    expect(await suite.db.select().from(departments).where(eq(departments.id, old.id))).toEqual([
+      { ...old, active: false },
+    ]);
+  });
+  it("still refuses two live names in one location", async () => {
+    await seedTenant(suite.db);
+    const locationId = await location("Venue");
+    await insert(locationId, "Deli");
+    await expect(insert(locationId, "Deli")).rejects.toThrow("UNIQUE constraint failed:");
+  });
+  it("allows equal names in separate locations", async () => {
+    await seedTenant(suite.db);
+    const first = await insert(await location("Venue A"), "Deli");
+    const second = await insert(await location("Venue B"), "Deli");
+    expect(second.id).not.toBe(first.id);
+    expect([first.name, second.name]).toEqual(["Deli", "Deli"]);
   });
 });

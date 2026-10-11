@@ -692,20 +692,16 @@ describe("listTablesWithState — timingBand (KDS order-timing alerts)", () => {
   });
 });
 
-it("identifies the disabled zone that keeps a renamed zone's name", async () => {
+it("renames a zone onto a deleted name while retaining the deleted row", async () => {
   const cfg = await setupVenue();
   const target = await asApp(cfg, (tx) => createZone(tx, cfg, { name: "Terrace" }));
   const source = await asApp(cfg, (tx) => createZone(tx, cfg, { name: "Dining" }));
   await asApp(cfg, (tx) => deactivateZone(tx, cfg, target.id));
-  await expect(
-    asApp(cfg, (tx) => updateZone(tx, cfg, source.id, { name: "Terrace" })),
-  ).rejects.toMatchObject({
-    code: "zone.name_disabled",
-    params: { name: "Terrace", zoneId: target.id },
-  });
+  await asApp(cfg, (tx) => updateZone(tx, cfg, source.id, { name: "Terrace" }));
+  expect(source.id).not.toBe(target.id);
   expect(await asApp(cfg, (tx) => listZones(tx, cfg, { includeInactive: true }))).toEqual(
     expect.arrayContaining([
-      expect.objectContaining({ id: source.id, name: "Dining", active: true }),
+      expect.objectContaining({ id: source.id, name: "Terrace", active: true }),
       expect.objectContaining({ id: target.id, name: "Terrace", active: false }),
     ]),
   );

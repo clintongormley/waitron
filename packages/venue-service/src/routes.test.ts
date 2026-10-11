@@ -304,27 +304,24 @@ describe("whole service settings saves", () => {
     ).toBe("counter");
   });
 
-  it.each([true, false])(
-    "refuses a name clash with active=%s without writing any settings",
-    async (active) => {
-      const fx = await settingsFixture();
-      const other = await withTransaction(db, (tx) =>
-        createDepartment(tx, fx, { name: "Taken", orderStart: "counter" }),
-      );
-      await db.update(departments).set({ active }).where(eq(departments.id, other.id));
-      const before = await settingsSnapshot(fx);
-      const response = await send(fx.app, "PUT", fx.departmentPath, fx.managerCookie, {
-        ...departmentSettings,
-        name: "Taken",
-        transfers: { receivingProfileId: null, destinationDepartmentIds: [other.id] },
-      });
-      expect(response.status).toBe(409);
-      expect(await response.json()).toMatchObject({
-        error: { code: active ? "department.name_taken" : "department.name_disabled" },
-      });
-      expect(await settingsSnapshot(fx)).toEqual(before);
-    },
-  );
+  it("refuses a live name clash without writing any settings", async () => {
+    const fx = await settingsFixture();
+    const other = await withTransaction(db, (tx) =>
+      createDepartment(tx, fx, { name: "Taken", orderStart: "counter" }),
+    );
+    await db.update(departments).set({ active: true }).where(eq(departments.id, other.id));
+    const before = await settingsSnapshot(fx);
+    const response = await send(fx.app, "PUT", fx.departmentPath, fx.managerCookie, {
+      ...departmentSettings,
+      name: "Taken",
+      transfers: { receivingProfileId: null, destinationDepartmentIds: [other.id] },
+    });
+    expect(response.status).toBe(409);
+    expect(await response.json()).toMatchObject({
+      error: { code: "department.name_taken" },
+    });
+    expect(await settingsSnapshot(fx)).toEqual(before);
+  });
 
   it("rolls back the department and sale policy when a transfer names itself", async () => {
     const fx = await settingsFixture();
@@ -3138,19 +3135,14 @@ describe("what a supervisor reaches of prep stations", () => {
   });
 });
 
-it.each([false, true])("answers department name clashes with 409 (active=%s)", async (active) => {
+it("answers live department name clashes with 409", async () => {
   const fx = await fixture();
   const path = "/management-api/venue-service/departments";
   const original = await send(fx.app, "POST", path, fx.managerCookie, {
     name: "Deli",
   });
   expect(original.status).toBe(201);
-  const target = (await original.json()) as { id: string };
-  if (!active)
-    await db.update(departments).set({ active: false }).where(eq(departments.id, target.id));
-  const expected = active
-    ? { code: "department.name_taken", params: { name: "Deli" } }
-    : { code: "department.name_disabled", params: { name: "Deli", departmentId: target.id } };
+  const expected = { code: "department.name_taken", params: { name: "Deli" } };
   const duplicate = await send(fx.app, "POST", path, fx.managerCookie, {
     name: "Deli",
   });
@@ -3353,4 +3345,57 @@ it("the station planning route returns the configured period ranges for a non-de
       },
     ],
   });
+});
+
+it.each(["create", "rename"])("allows department route %s onto a deleted name", async (action) => {
+  const fx = await fixture();
+  const path = "/management-api/venue-service/departments";
+  const original = await send(fx.app, "POST", path, fx.managerCookie, { name: "Deli" });
+  expect(original.status).toBe(201);
+  const old = (await original.json()) as { id: string };
+  await db.update(departments).set({ active: false }).where(eq(departments.id, old.id));
+  const made = await send(fx.app, "POST", path, fx.managerCookie, {
+    name: action === "create" ? "Deli" : "Bar",
+  });
+  expect(made.status).toBe(201);
+  const replacement = (await made.json()) as { id: string };
+  if (action === "rename")
+    expect(
+      (
+        await send(fx.app, "PATCH", `${path}/${replacement.id}`, fx.managerCookie, {
+          name: "Deli",
+          tradingName: "Bar",
+        })
+      ).status,
+    ).toBe(204);
+  expect(replacement.id).not.toBe(old.id);
+  expect(
+    await db.select().from(departments).where(eq(departments.locationId, fx.locationId)),
+  ).toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({ id: old.id, name: "Deli", active: false }),
+      expect.objectContaining({ id: replacement.id, name: "Deli", active: true }),
+    ]),
+  );
+});
+
+it("saves combined department settings onto a deleted name", async () => {
+  const fx = await settingsFixture();
+  const old = await withTransaction(db, (tx) =>
+    createDepartment(tx, fx, { name: "Taken", orderStart: "counter" }),
+  );
+  await db.update(departments).set({ active: false }).where(eq(departments.id, old.id));
+  const response = await send(fx.app, "PUT", fx.departmentPath, fx.managerCookie, {
+    ...departmentSettings,
+    name: "Taken",
+  });
+  expect(response.status).toBe(204);
+  expect(
+    await db.select().from(departments).where(eq(departments.locationId, fx.locationId)),
+  ).toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({ id: old.id, name: "Taken", active: false }),
+      expect.objectContaining({ id: fx.departmentId, name: "Taken", active: true }),
+    ]),
+  );
 });

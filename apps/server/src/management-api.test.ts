@@ -2747,7 +2747,7 @@ describe("venue late-flag defaults", () => {
   );
 });
 
-it("a zone rename onto a disabled name answers 409 with the existing zone id", async () => {
+it("a zone rename reuses a deleted name and retains the deleted row", async () => {
   const name = unique("Disabled terrace");
   const target = (await (
     await req(
@@ -2769,10 +2769,17 @@ it("a zone rename onto a disabled name answers 409 with the existing zone id", a
     { method: "PATCH", body: JSON.stringify({ name }) },
     managerCookie,
   );
-  expect(response.status).toBe(409);
-  expect(await response.json()).toEqual({
-    error: { code: "zone.name_disabled", params: { name, zoneId: target.id } },
-  });
+  expect(response.status).toBe(204);
+  expect(source.id).not.toBe(target.id);
+  const rows = (await (
+    await req("/zones?includeInactive=true", { method: "GET" }, managerCookie)
+  ).json()) as { id: string; name: string; active: boolean }[];
+  expect(rows).toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({ id: target.id, name, active: false }),
+      expect.objectContaining({ id: source.id, name, active: true }),
+    ]),
+  );
 });
 
 it("renames a disabled zone through the management route without enabling it", async () => {
