@@ -134,6 +134,7 @@ const PAGE_TEXT: Readonly<
       logTail: string;
       lastFailure: (at: string) => string;
       status: (level: string, failures: number) => string;
+      stoppedStatus: (level: string) => string;
       lastError: (code: string, at: string) => string;
       noCode: string;
       noTime: string;
@@ -148,6 +149,7 @@ const PAGE_TEXT: Readonly<
     logTail: "Log tail",
     lastFailure: (at) => `Why the last start failed (${at})`,
     status: (level, failures) => `Level: ${level}. Failed ${failures} times.`,
+    stoppedStatus: (level) => `Level: ${level}. Stopped while running.`,
     lastError: (code, at) => `Last error: ${code} at ${at}`,
     noCode: "none",
     noTime: "never",
@@ -160,6 +162,7 @@ const PAGE_TEXT: Readonly<
     logTail: "Final del registro",
     lastFailure: (at) => `Por qué falló el último arranque (${at})`,
     status: (level, failures) => `Nivel: ${level}. Intentos fallidos: ${failures}.`,
+    stoppedStatus: (level) => `Nivel: ${level}. Se detuvo mientras funcionaba.`,
     lastError: (code, at) => `Último error: ${code}, fecha: ${at}`,
     noCode: "ninguno",
     noTime: "nunca",
@@ -427,6 +430,10 @@ function operatorText(state: RecoveryState): OperatorText {
 function renderPage(state: RecoveryState, log: LogView, locale: SupportedLocale): string {
   const page = PAGE_TEXT[locale];
   const text = operatorText(state)[locale];
+  const status =
+    state.refused === true
+      ? page.stoppedStatus(state.level)
+      : page.status(state.level, state.failures);
   const lastError = page.lastError(
     state.lastErrorCode ?? page.noCode,
     state.lastFailureAt ?? page.noTime,
@@ -458,7 +465,7 @@ function renderPage(state: RecoveryState, log: LogView, locale: SupportedLocale)
 <button type="submit">${escapeHtml(page.retry)}</button>
 </form>
 <h2>${escapeHtml(page.forInstaller)}</h2>
-<p>${escapeHtml(page.status(state.level, state.failures))}</p>
+<p>${escapeHtml(status)}</p>
 <p>${escapeHtml(lastError)}</p>
 ${lastFailure}<h2>${escapeHtml(page.logTail)}</h2>
 <pre>${tail}</pre>
@@ -486,7 +493,8 @@ export function recoveryApp(deps: RecoveryDeps): Hono {
   // Named one by one, to leave out the clear count.
   app.get("/recovery-api/status", (c) => {
     const { failures, level, lastErrorCode, lastFailureAt, holderKind } = deps.state;
-    return c.json({ failures, level, lastErrorCode, lastFailureAt, holderKind });
+    const refused = deps.state.refused === true;
+    return c.json({ failures, level, lastErrorCode, lastFailureAt, holderKind, refused });
   });
 
   app.post("/recovery-api/retry", (c) => {

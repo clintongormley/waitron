@@ -17,6 +17,9 @@ export interface RecoveryState {
   /** Which kind of program held the venue folder when a start was refused by a holder that had
    *  stopped writing its heartbeat. Absent when unknown, and for every other failure. */
   holderKind?: VenueHolderKind;
+  /** Present, and true, only when the running server stopped itself; it holds the box at
+   *  `recovery` whatever the count, until a clear. */
+  refused?: true;
 }
 
 export const FRESH: RecoveryState = {
@@ -29,8 +32,8 @@ export const FRESH: RecoveryState = {
 
 const RECOVERY_AT = 3;
 
-export function levelFor(failures: number): RecoveryLevel {
-  return failures >= RECOVERY_AT ? "recovery" : "normal";
+export function levelFor(failures: number, refused = false): RecoveryLevel {
+  return refused || failures >= RECOVERY_AT ? "recovery" : "normal";
 }
 
 /**
@@ -44,14 +47,16 @@ function failureRecord(
   at: Date,
   holderKind?: VenueHolderKind,
 ): RecoveryState {
+  const refused = state.refused === true;
   const record: RecoveryState = {
     failures,
-    level: levelFor(failures),
+    level: levelFor(failures, refused),
     lastErrorCode: errorCode,
     lastFailureAt: at.toISOString(),
     clears: state.clears,
   };
   if (holderKind !== undefined) record.holderKind = holderKind;
+  if (refused) record.refused = true;
   return record;
 }
 
@@ -74,9 +79,10 @@ export async function readRecoveryState(stateDir: string): Promise<RecoveryState
   try {
     const raw = JSON.parse(text) as Partial<RecoveryState>;
     const failures = typeof raw.failures === "number" && raw.failures >= 0 ? raw.failures : 0;
+    const refused = raw.refused === true;
     const state: RecoveryState = {
       failures,
-      level: levelFor(failures),
+      level: levelFor(failures, refused),
       lastErrorCode: typeof raw.lastErrorCode === "string" ? raw.lastErrorCode : null,
       lastFailureAt: typeof raw.lastFailureAt === "string" ? raw.lastFailureAt : null,
       clears: Number.isSafeInteger(raw.clears) && (raw.clears as number) >= 0 ? raw.clears! : 0,
@@ -85,6 +91,7 @@ export async function readRecoveryState(stateDir: string): Promise<RecoveryState
     // is kept.
     const kind = VENUE_HOLDER_KINDS.find((known) => known === raw.holderKind);
     if (kind !== undefined) state.holderKind = kind;
+    if (refused) state.refused = true;
     return state;
   } catch {
     return FRESH;
@@ -116,13 +123,28 @@ export function cleared(current: RecoveryState): RecoveryState {
   return { ...FRESH, clears: current.clears + 1 };
 }
 
+/** The running server stopped itself: the next start serves the page, whatever the count. */
+export function refusedWhileRunning(
+  current: RecoveryState,
+  errorCode: string,
+  at: Date,
+): RecoveryState {
+  return withFailureCode({ ...current, refused: true }, errorCode, at);
+}
+
+/** A server that stayed up clears the count, but not a refusal it made itself in that time. */
+export function stayedUpClear(current: RecoveryState): RecoveryState {
+  return current.refused === true ? current : cleared(current);
+}
+
 function sameState(a: RecoveryState, b: RecoveryState): boolean {
   return (
     a.failures === b.failures &&
     a.clears === b.clears &&
     a.lastErrorCode === b.lastErrorCode &&
     a.lastFailureAt === b.lastFailureAt &&
-    a.holderKind === b.holderKind
+    a.holderKind === b.holderKind &&
+    a.refused === b.refused
   );
 }
 
@@ -141,7 +163,7 @@ export function withoutAttempt(
   if (sameState(current, wrote)) return before;
   if (current.clears !== wrote.clears) return current;
   const failures = Math.max(0, current.failures - 1);
-  return { ...current, failures, level: levelFor(failures) };
+  return { ...current, failures, level: levelFor(failures, current.refused === true) };
 }
 
 export interface RecoveryStore {

@@ -9,7 +9,7 @@ import { createErrorBoundary } from "@waitron/server-kit";
 import "./errors.js";
 import { createRotatingFileSink, tee } from "./log-file.js";
 import { createLogger } from "./logger.js";
-import { FRESH, afterFailure, type RecoveryState } from "./recovery-state.js";
+import { FRESH, afterFailure, refusedWhileRunning, type RecoveryState } from "./recovery-state.js";
 import { GENERIC_TEXT, OPERATOR_TEXT, escapeHtml, recoveryApp } from "./recovery-surface.js";
 
 const state = afterFailure(
@@ -48,6 +48,7 @@ describe("recoveryApp", () => {
       level: "recovery",
       lastErrorCode: "module.config_invalid",
       lastFailureAt: state.lastFailureAt,
+      refused: false,
     });
   });
 
@@ -604,6 +605,7 @@ describe("a start refused by a holder that stopped", () => {
       lastErrorCode: code,
       lastFailureAt: state.lastFailureAt,
       holderKind: "rejoin",
+      refused: false,
     });
   });
 });
@@ -780,5 +782,42 @@ describe("a migration the engine refused", () => {
     expect(text!["es-ES"].action).not.toMatch(
       /restáurala desde una copia de seguridad, o reinstala/i,
     );
+  });
+});
+
+describe("a box the running server stopped", () => {
+  const refused = refusedWhileRunning(
+    afterFailure(FRESH, "x", new Date()),
+    "append_only.triggers_changed",
+    new Date("2026-10-11T10:00:00Z"),
+  );
+  const appFor = (current: RecoveryState) =>
+    recoveryApp({ state: current, logDir: "/nonexistent", onRetry: vi.fn() });
+
+  it.each([
+    ["en-GB", "Level: recovery. Stopped while running.", /Failed \d+ times/],
+    [SPANISH, "Nivel: recovery. Se detuvo mientras funcionaba.", /Intentos fallidos/],
+  ])("says it stopped while running, in place of the count (%s)", async (language, line, count) => {
+    const body = await (
+      await appFor(refused).request("/", { headers: { "Accept-Language": language } })
+    ).text();
+    expect(body).toContain(`<p>${escapeHtml(line)}</p>`);
+    expect(body).not.toMatch(count);
+  });
+
+  it("still shows the count for a box that failed to start", async () => {
+    const body = await (await appFor(state).request("/")).text();
+    expect(body).toContain("Level: recovery. Failed 3 times.");
+    expect(body).not.toContain("Stopped while running.");
+  });
+
+  it("reports the refusal in the status JSON", async () => {
+    expect(await (await appFor(refused).request("/recovery-api/status")).json()).toEqual({
+      failures: 1,
+      level: "recovery",
+      lastErrorCode: "append_only.triggers_changed",
+      lastFailureAt: "2026-10-11T10:00:00.000Z",
+      refused: true,
+    });
   });
 });
