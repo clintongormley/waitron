@@ -426,10 +426,16 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
 
 _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
 
-- **A496. A new taxpayer moves to a new venue by configuration export and import (owner,
-  2026-10-11).** The export exists, but its bundle carries the old tax ID, legal name and invoice
-  series into the new venue.
-  [Detail](backlog/setup.md#a496-a-new-taxpayer-moves-to-a-new-venue-by-configuration-export-and-import)
+- **How long, and in what form, an old taxpayer's database must be kept.** Not checked. Left open
+  by A496; `deploy/README.md` → _Moving to a new tax ID_ says so.
+
+- **A change of country cannot import a configuration.** Setup refuses an export whose country
+  differs from the new venue's (`provision`, `apps/server/src/boot.ts`); importing across countries
+  needs its own design. Left open by A496.
+
+- **The dashboard shows the configuration export card on a demo box, where the export route is not
+  served**, so its download fails there. The route is mounted on a preparation or live box only
+  (`apps/server/src/boot.ts`). Left open by A496.
 
 - **`#onGoto` in `setup-app.ts` keeps `fiscalTestStatus`** — found by #567 while pruning comments.
   The done screen treats a non-network status refusal as ready, so an HTTP 503 can announce "The

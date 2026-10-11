@@ -2921,22 +2921,22 @@ describe("restore, configuration and fiscal-test outcomes", () => {
     [
       "en-GB",
       "category.name_taken",
-      "The export has two categories named “Bebidas” in the same place. Rename one in your prepared restaurant, export again, then load the new export.",
+      "The export has two categories named “Bebidas” in the same place. Rename one in the restaurant you exported from, export again, then load the new export.",
     ],
     [
       "en-GB",
       "product.name_taken",
-      "The export has two active products or variants named “Bebidas”. Rename one in your prepared restaurant, export again, then load the new export.",
+      "The export has two active products or variants named “Bebidas”. Rename one in the restaurant you exported from, export again, then load the new export.",
     ],
     [
       "es-ES",
       "category.name_taken",
-      "La exportación tiene dos categorías llamadas «Bebidas» en el mismo lugar. Cambia el nombre de una en tu restaurante preparado, vuelve a exportar y carga la nueva exportación.",
+      "La exportación tiene dos categorías llamadas «Bebidas» en el mismo lugar. Cambia el nombre de una en el restaurante de origen, vuelve a exportar y carga la nueva exportación.",
     ],
     [
       "es-ES",
       "product.name_taken",
-      "La exportación tiene dos productos o variantes activos llamados «Bebidas». Cambia el nombre de uno en tu restaurante preparado, vuelve a exportar y carga la nueva exportación.",
+      "La exportación tiene dos productos o variantes activos llamados «Bebidas». Cambia el nombre de uno en el restaurante de origen, vuelve a exportar y carga la nueva exportación.",
     ],
   ] as const)(
     "names the duplicate when setup refuses a configuration export for it (%s, %s)",
@@ -2984,9 +2984,9 @@ describe("restore, configuration and fiscal-test outcomes", () => {
   );
 
   const switchedOffTail =
-    "in the zone “Terraza”, but that zone's department, “Comedor”, is disabled. Enable “Comedor” in your prepared restaurant, export again, then load the new export.";
+    "in the zone “Terraza”, but that zone's department, “Comedor”, is disabled. Enable “Comedor” in the restaurant you exported from, export again, then load the new export.";
   const switchedOffTailEs =
-    "en la zona «Terraza», pero el departamento de esa zona, «Comedor», está deshabilitado. Habilita «Comedor» en tu restaurante preparado, vuelve a exportar y carga la nueva exportación.";
+    "en la zona «Terraza», pero el departamento de esa zona, «Comedor», está deshabilitado. Habilita «Comedor» en el restaurante de origen, vuelve a exportar y carga la nueva exportación.";
   it.each([
     [
       "en-GB",
@@ -3098,11 +3098,11 @@ describe("restore, configuration and fiscal-test outcomes", () => {
   it.each([
     [
       "en-GB",
-      "The export has the zone “Terraza” active, but its department, “Comedor”, is disabled. Enable “Comedor” in your prepared restaurant, export again, then load the new export.",
+      "The export has the zone “Terraza” active, but its department, “Comedor”, is disabled. Enable “Comedor” in the restaurant you exported from, export again, then load the new export.",
     ],
     [
       "es-ES",
-      "La exportación tiene la zona «Terraza» activa, pero su departamento, «Comedor», está deshabilitado. Habilita «Comedor» en tu restaurante preparado, vuelve a exportar y carga la nueva exportación.",
+      "La exportación tiene la zona «Terraza» activa, pero su departamento, «Comedor», está deshabilitado. Habilita «Comedor» en el restaurante de origen, vuelve a exportar y carga la nueva exportación.",
     ],
   ] as const)(
     "names a switched-on zone whose department is switched off (%s)",

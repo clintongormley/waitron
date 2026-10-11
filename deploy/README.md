@@ -347,6 +347,28 @@ the ref; re-run the command. Only then does it take the box down, wipe it exactl
 and start it on the new images. `--yes` and `--force-production` mean what they mean for `reset`.
 In a folder with no box installed there is nothing to wipe, so it says so and installs.
 
+## Moving to a new tax ID
+
+A new tax ID makes a new taxpayer — a sole trader forming a company, or the business being sold. A
+new taxpayer has its own fiscal records, invoice numbering and certificate, so it needs a new venue
+on a fresh database. Its menus, layouts, staff and settings can come from the old venue:
+
+1. Install the same Waitron release on the new box as on the old one. The import refuses an export
+   whose modules are at different versions.
+2. After the old venue's last sale, open its dashboard, go to Backups, and use Configuration export.
+   Note the passphrase.
+3. Leave the old box and its backups as they are. Do not reset it (`reset` refuses on a production
+   box anyway; see [Resetting a box](#resetting-a-box)).
+4. In the new box's setup wizard, choose Live, then on Import a configuration load the export with
+   its passphrase. On Whose restaurant is this?, choose New tax ID, then enter the new taxpayer's
+   tax ID, legal name, registered business address, invoice series and AEAT certificate.
+5. Once it is running, check what came over that may still name the old business: the receipt
+   header, footer, logo, phone and email (the venue's and each department's), and the staff. Staff
+   arrive suspended, with no PIN or password.
+
+The country must match: an export cannot be imported into a venue in another country. How long the
+old database must be kept, and in what form, has not been checked.
+
 ## The operator CLIs — two different invocation forms
 
 The image has an `ENTRYPOINT` (`node /app/node-entry.js`) and no `CMD`, and the two ways of running a
