@@ -524,7 +524,7 @@ function parseProvisionPayload(
 function directError(
   c: Context,
   log: Logger,
-  code: "setup.not_ready" | "setup.already_provisioning",
+  code: "setup.not_ready" | "setup.already_provisioning" | "node.reset",
   httpStatus: ContentfulStatusCode,
 ): Response {
   log("warn", code, {});
@@ -1150,6 +1150,8 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
       }
     });
   });
+
+  app.all("/management-api/*", (c) => directError(c, log, "node.reset", 404));
 
   // Setup has no URL routes. Registered after the API handlers, this redirects missing browser
   // navigation while preserving missing assets and API responses.

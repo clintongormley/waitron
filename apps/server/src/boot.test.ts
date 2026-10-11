@@ -895,6 +895,10 @@ describe("startServer, against a migrated venue directory", () => {
       expect(staff.headers.get("content-type")).toContain("text/html");
       expect(await staff.text()).toMatch(/set ?up/i);
 
+      const management = await fetch(`https://127.0.0.1:${port}/management-api/session/me`, via);
+      expect(management.status).toBe(404);
+      expect(await management.json()).toEqual({ error: { code: "node.reset", params: {} } });
+
       expect(await readFile(join(stateDir, "secrets.env"), "utf8")).toMatch(
         /WAITRON_CREDENTIALS_KEY=/,
       );
