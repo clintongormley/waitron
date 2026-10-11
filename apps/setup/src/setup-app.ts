@@ -600,6 +600,7 @@ export class SetupApp extends LitElement {
   @state() private fiscalTestRejections: { code: string | null; message: string | null }[] = [];
   @state() private fiscalTestRunning = false;
   @state() private fiscalTestError?: Message;
+  #fiscalTestGeneration = 0;
 
   /**
    * The adopt response carries this once, so the done screen is the operator's only chance to see and
@@ -708,7 +709,7 @@ export class SetupApp extends LitElement {
       this.draft = { ...this.draft, venue };
       delete this.draft.configurationImport;
       delete this.draft.newTaxpayer;
-      this.fiscalTestStatus = undefined;
+      this.#invalidateFiscalTest();
     }
     this.draft = deepMerge(this.draft, event.detail.patch) as DeepPartial<ProvisionBody>;
     this.#rootScope?.changed();
@@ -1246,27 +1247,36 @@ export class SetupApp extends LitElement {
     if (event.detail.newTaxpayer) draft.newTaxpayer = true;
     else delete draft.newTaxpayer;
     this.draft = draft;
-    this.fiscalTestStatus = undefined;
+    this.#invalidateFiscalTest();
     this.#rootScope?.changed();
-    this.screen = "admin";
+    this.#goto("admin");
+  }
+
+  /** A test still in flight was run on the draft before this change, so its answer is dropped. */
+  #invalidateFiscalTest(): void {
+    ++this.#fiscalTestGeneration;
+    this.fiscalTestStatus = undefined;
+    this.fiscalTestRunning = false;
   }
 
   async #onFiscalTestRequested(event: CustomEvent): Promise<void> {
     event.stopPropagation();
-    this.fiscalTestStatus = undefined;
+    this.#invalidateFiscalTest();
+    const generation = this.#fiscalTestGeneration;
+    const current = () => this.isConnected && generation === this.#fiscalTestGeneration;
     this.fiscalTestRejections = [];
     this.fiscalTestRunning = true;
     this.fiscalTestError = undefined;
     try {
       const result = await this.api.runFiscalTest(assembleBody(this.draft));
-      if (!this.isConnected) return;
+      if (!current()) return;
       this.fiscalTestStatus = result.status === "not-applicable" ? "accepted" : result.status;
       this.fiscalTestRejections = result.status === "rejected" ? (result.rejections ?? []) : [];
     } catch {
-      if (!this.isConnected) return;
+      if (!current()) return;
       this.fiscalTestError = say("shell.fiscal_test.could_not_run");
     } finally {
-      if (this.isConnected) this.fiscalTestRunning = false;
+      if (current()) this.fiscalTestRunning = false;
     }
   }
 

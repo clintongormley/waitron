@@ -755,6 +755,104 @@ describe("setup-app", () => {
       expect(body.venue).toMatchObject(sixFields);
     });
 
+    it("ignores a fiscal test answer for the old taxpayer that arrives after New tax ID", async () => {
+      const answer = deferred<{ status: "accepted" }>();
+      const runFiscalTest = vi.fn(() => answer.promise);
+      const el = await staged({ runFiscalTest });
+      await choose(el, false);
+      goto(el, "fiscal-test");
+      await flush(el);
+      fiscalTestRequest(el);
+      await flush(el);
+      goto(el, "live-source");
+      await flush(el);
+      configurationRequest(el, new File(["encrypted"], "old.waitron-config"), "passphrase");
+      await flush(el);
+      await choose(el, true);
+      patch(el, { venue: typed });
+      answer.resolve({ status: "accepted" });
+      await flush(el);
+      goto(el, "fiscal-test");
+      await flush(el);
+      const screen = await screenHost(el, "fiscal-test");
+      expect(screen.shadowRoot!.querySelector("[data-test=continue]")).toBeNull();
+      expect(screen.shadowRoot!.querySelector("[data-test=run]")).not.toBeNull();
+      expect(readState(el, ["fiscalTestRunning"]).fiscalTestRunning).toBe(false);
+    });
+
+    it("lets a fiscal test started after New tax ID own its answer and its running state", async () => {
+      const old = deferred<{ status: "accepted" }>();
+      const fresh = deferred<{ status: "rejected"; rejections: [] }>();
+      const runFiscalTest = vi
+        .fn()
+        .mockReturnValueOnce(old.promise)
+        .mockReturnValueOnce(fresh.promise);
+      const el = await staged({ runFiscalTest });
+      fiscalTestRequest(el);
+      await flush(el);
+      await choose(el, true);
+      patch(el, { venue: typed });
+      fiscalTestRequest(el);
+      await flush(el);
+      old.reject(new Error("network"));
+      await flush(el);
+      expect(readState(el, ["fiscalTestRunning", "fiscalTestError"])).toEqual({
+        fiscalTestRunning: true,
+        fiscalTestError: undefined,
+      });
+      fresh.resolve({ status: "rejected", rejections: [] });
+      await flush(el);
+      expect(readState(el, ["fiscalTestRunning", "fiscalTestStatus"])).toEqual({
+        fiscalTestRunning: false,
+        fiscalTestStatus: "rejected",
+      });
+    });
+
+    it("lets a repeated fiscal test own its answer and its running state", async () => {
+      const first = deferred<{ status: "accepted" }>();
+      const second = deferred<{ status: "rejected"; rejections: [] }>();
+      const runFiscalTest = vi
+        .fn()
+        .mockReturnValueOnce(first.promise)
+        .mockReturnValueOnce(second.promise);
+      const el = await staged({ runFiscalTest });
+      fiscalTestRequest(el);
+      await flush(el);
+      fiscalTestRequest(el);
+      await flush(el);
+      first.reject(new Error("network"));
+      await flush(el);
+      expect(readState(el, ["fiscalTestRunning", "fiscalTestError"])).toEqual({
+        fiscalTestRunning: true,
+        fiscalTestError: undefined,
+      });
+      second.resolve({ status: "rejected", rejections: [] });
+      await flush(el);
+      expect(readState(el, ["fiscalTestRunning", "fiscalTestStatus"])).toEqual({
+        fiscalTestRunning: false,
+        fiscalTestStatus: "rejected",
+      });
+    });
+
+    it("clears an earlier screen's refusal when the choice moves on", async () => {
+      const provision = vi
+        .fn()
+        .mockRejectedValue({ code: "setup.request_invalid", params: { field: "taxId" } });
+      const el = await staged({ provision });
+      await choose(el, true);
+      patch(el, { venue: { ...typed, taxId: "B12345678" } });
+      provisionRequest(el);
+      await flush(el);
+      expect(readState(el, ["venueInvalidField"]).venueInvalidField).toBe("taxId");
+      configurationRequest(el, new File(["encrypted"], "old.waitron-config"), "passphrase");
+      await flush(el);
+      await choose(el, true);
+      expect(readState(el, ["screen", "venueInvalidField"])).toEqual({
+        screen: "admin",
+        venueInvalidField: undefined,
+      });
+    });
+
     it("forgets the choice when a configuration is staged again", async () => {
       const el = await staged();
       await choose(el, true);
@@ -770,6 +868,20 @@ describe("setup-app", () => {
       patch(el, { mode: "demo" });
       expect(Object.hasOwn(readDraft(el), "newTaxpayer")).toBe(false);
       expect(readDraft(el).configurationImport).toBeUndefined();
+    });
+
+    it("ignores a fiscal test answer that arrives after the mode switches to demo", async () => {
+      const answer = deferred<{ status: "accepted" }>();
+      const el = await staged({ runFiscalTest: vi.fn(() => answer.promise) });
+      fiscalTestRequest(el);
+      await flush(el);
+      patch(el, { mode: "demo" });
+      answer.resolve({ status: "accepted" });
+      await flush(el);
+      expect(readState(el, ["fiscalTestRunning", "fiscalTestStatus"])).toEqual({
+        fiscalTestRunning: false,
+        fiscalTestStatus: undefined,
+      });
     });
 
     it("sends a refused new tax ID back to the venue form, marked and focused", async () => {

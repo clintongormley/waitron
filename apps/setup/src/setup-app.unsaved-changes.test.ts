@@ -1160,6 +1160,58 @@ describe("setup import acceptance", () => {
   );
 });
 
+function chooseTaxpayer(el: SetupApp, newTaxpayer: boolean) {
+  el.shadowRoot!.querySelector("main")!.dispatchEvent(
+    new CustomEvent("taxpayer-chosen", {
+      detail: { newTaxpayer },
+      bubbles: true,
+      composed: true,
+    }),
+  );
+}
+
+describe("setup taxpayer choice", () => {
+  it("New tax ID guards the page against unload when the staged root was clean", async () => {
+    const { el } = await mount();
+    const { location, ...venue } = importedConfiguration.venue;
+    const stagedLocation: Partial<typeof location> = { ...location };
+    delete stagedLocation.id;
+    Object.assign(el, {
+      draft: {
+        mode: "live",
+        configurationImport: true,
+        venue: { ...venue, admin: initialAdmin, location: stagedLocation },
+      },
+      configurationPreview: importedConfiguration,
+      screen: "configuration-preview",
+    });
+    await el.updateComplete;
+    expect(unload()).toBe(false);
+    chooseTaxpayer(el, true);
+    expect(unload()).toBe(true);
+    await expect.poll(() => (el as unknown as State).screen).toBe("admin");
+    expect((el as unknown as State).draft.newTaxpayer).toBe(true);
+    expect(unload()).toBe(true);
+  });
+
+  it("a choice from a disconnected shell changes nothing", async () => {
+    const { el, api, host } = await mount();
+    goto(el, "live-source");
+    await expect.poll(() => (el as unknown as State).screen).toBe("live-source");
+    importConfiguration(el, api);
+    await expect.poll(() => (el as unknown as State).screen).toBe("configuration-preview");
+    const root = structuredClone((el as unknown as State).draft);
+    el.remove();
+    chooseTaxpayer(el, true);
+    expect((el as unknown as State).screen).toBe("configuration-preview");
+    expect((el as unknown as State).draft).toEqual(root);
+    host.appendChild(el);
+    await el.updateComplete;
+    expect((el as unknown as State).screen).toBe("configuration-preview");
+    expect(unload()).toBe(true);
+  });
+});
+
 it("discard after import restores the accepted file identity in the native selection", async () => {
   const { el, source, api } = await liveSource();
   let accept!: (preview: ConfigurationPreview) => void;
