@@ -154,8 +154,12 @@ async function mount(view = structuredClone(model), failure?: unknown) {
   host.append(el);
   await el.updateComplete;
   expect(el.shadowRoot, "Settings component renders").not.toBeNull();
-  await expect.poll(() => el.shadowRoot!.querySelector("[name=name]")).not.toBeNull();
-  if (view.departments.filter((d) => d.active).length > 1)
+  if (view.departments.find((d) => d.id === "d1")?.active)
+    await expect.poll(() => el.shadowRoot!.querySelector("[name=name]")).not.toBeNull();
+  if (
+    view.departments.find((d) => d.id === "d1")?.active &&
+    view.departments.filter((d) => d.active).length > 1
+  )
     await expect
       .poll(() => el.shadowRoot!.querySelector("[name=receivingProfileId]"))
       .not.toBeNull();
@@ -303,20 +307,14 @@ it("a transfers read failure stays in that section while the rest of the form sa
   await expect.poll(() => writes.length).toBe(1);
   expect(writes[0]).not.toHaveProperty("transfers");
 });
-it("a disabled department is read-only, has no Save and offers Enable", async () => {
+it("a deleted department offers no editor or Enable action", async () => {
   const view = structuredClone(model);
   view.departments[0]!.active = false;
-  const { el } = await mount(view);
-  expect(el.shadowRoot!.textContent).toContain("Enable this department to change its settings");
-  expect(save(el)).toBeNull();
-  expect(field(el, "name").disabled).toBe(true);
-  expect(field(el, "tradingName").disabled).toBe(true);
-  expect(el.shadowRoot!.querySelector("dashboard-service-settings-fields")!.disabled).toBe(true);
-  expect(field(el, "printTradingName").hasAttribute("disabled")).toBe(true);
-  const heard: unknown[] = [];
-  el.addEventListener("enable-department", (e) => heard.push((e as CustomEvent).detail));
-  el.shadowRoot!.querySelector<HTMLElement>("[data-test=enable-department]")!.click();
-  expect(heard).toEqual([{ departmentId: "d1" }]);
+  const { el, writes } = await mount(view);
+  expect(el.shadowRoot!.querySelector("[data-test=save-editor]")).toBeNull();
+  expect(el.shadowRoot!.querySelector("[data-test=enable-department]")).toBeNull();
+  expect(el.shadowRoot!.querySelector("wt-input")).toBeNull();
+  expect(writes).toEqual([]);
 });
 it("marks an empty name only after submit and clears it when corrected", async () => {
   const { el, writes } = await mount();
@@ -333,26 +331,17 @@ it("marks an empty name only after submit and clears it when corrected", async (
   expect(await bottom(el)).toBe("");
   expect(save(el).disabled).toBe(false);
 });
-it("a disabled-name clash sits beside the name with Enable", async () => {
+it("a name refusal retains its draft without offering Enable", async () => {
   const { el } = await mount(structuredClone(model), {
-    code: "department.name_disabled",
-    params: { departmentId: "d3", name: "Closed" },
+    code: "department.name_taken",
+    params: { name: "Deli", departmentId: "d2" },
   });
-  await change(el, "name", "Closed");
+  await change(el, "name", "Deli");
   save(el).click();
   await expect
     .poll(() => field(el, "name").error)
-    .toBe("A disabled department already has this name. Enable it instead.");
-  expect(el.shadowRoot!.querySelector("[data-test=enable-name-clash]")!.textContent).toContain(
-    "Enable Closed",
-  );
-  expect(save(el).disabled).toBe(false);
-  const heard: unknown[] = [];
-  el.addEventListener("enable-department", (e) => heard.push((e as CustomEvent).detail));
-  el.shadowRoot!.querySelector<HTMLElement>("[data-test=enable-name-clash]")!.click();
-  expect(heard).toEqual([{ departmentId: "d3" }]);
-  await change(el, "name", "Other");
-  expect(field(el, "name").error).toBe("");
+    .toBe("A department with this name already exists.");
+  expect(field(el, "name").value).toBe("Deli");
   expect(el.shadowRoot!.querySelector("[data-test=enable-name-clash]")).toBeNull();
 });
 it.each([
@@ -577,29 +566,13 @@ it("a request failure naming no field stays at the bottom and allows retry", asy
   expect(field(el, "name").error).toBe("");
   expect(save(el).disabled).toBe(false);
 });
-it("a disabled department's transfer controls retain their values but cannot edit", async () => {
+it("deleted department transfer controls cannot be edited or enabled", async () => {
   const view = structuredClone(model);
   view.departments[0]!.active = false;
-  view.departments.push({
-    id: "d4",
-    name: "Cafe",
-    tradingName: "Coffee",
-
-    active: true,
-  });
-  const { el } = await mount(view);
-  const box = el.shadowRoot!.querySelector(
-    "[name=receivingProfileId]",
-  ) as HTMLElementTagNameMap["wt-combobox"];
-  expect(box.disabled).toBe(true);
-  expect(box.value).toBe("p1");
-  const fieldset = el.shadowRoot!.querySelector("fieldset")!;
-  expect(fieldset.disabled).toBe(true);
-  box.dispatchEvent(
-    new CustomEvent("wt-change", { detail: { value: "p2" }, bubbles: true, composed: true }),
-  );
-  await el.updateComplete;
-  expect(box.value).toBe("p1");
+  const { el, writes } = await mount(view);
+  expect(el.shadowRoot!.querySelector("dashboard-service-settings-fields")).toBeNull();
+  expect(el.shadowRoot!.querySelector("[data-test=enable-department]")).toBeNull();
+  expect(writes).toEqual([]);
 });
 
 it("hiding transfers during a pending save releases the action and never sends hidden transfers on the next save", async () => {

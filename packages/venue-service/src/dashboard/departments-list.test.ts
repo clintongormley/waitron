@@ -5,7 +5,6 @@ import {
   mount,
   mountInShadowRoot,
   cleanup,
-  host,
   expectRowMenusOnScreen,
 } from "@waitron/ui/src/test-helpers.js";
 import type { WtDataTable } from "@waitron/ui/src/components/wt-data-table.js";
@@ -28,7 +27,7 @@ const model: VenueServiceView = {
       name: "Deli",
       tradingName: "Casa Delgado Deli",
 
-      active: false,
+      active: true,
     },
   ],
   zones: [
@@ -144,7 +143,7 @@ async function action(el: List, key: string) {
 }
 
 describe("department list", () => {
-  it("shows the four department columns, active zones and muted disabled notes", async () => {
+  it("shows the four department columns and only active rows and zones", async () => {
     const el = await setup();
     const list = table(el);
     expect(list.viewKey).toBe("waitron.venue.departments");
@@ -162,13 +161,9 @@ describe("department list", () => {
       ),
     ).toEqual([
       ["Restaurant and bar", "Casa Delgado", "Dining room, Bar", ""],
-      ["Deli Disabled", "Casa Delgado Deli", "No zones", "Disabled"],
+      ["Deli", "Casa Delgado Deli", "No zones", ""],
     ]);
-    const note = list.shadowRoot!.querySelector<HTMLElement>('[part="disabled-note"]')!;
-    const probe = document.createElement("span");
-    probe.style.color = "var(--wt-color-text-muted)";
-    host.append(probe);
-    expect(getComputedStyle(note).color).toBe(getComputedStyle(probe).color);
+    expect(list.shadowRoot!.querySelector('[part="disabled-note"]')).toBeNull();
   });
   it("puts the department and its zone problems only in that department's Setup cell", async () => {
     const el = await setup({
@@ -187,7 +182,7 @@ describe("department list", () => {
     expect(cells[0]!.querySelector("a")!.textContent).toBe("Set up Opening hours");
     expect(cells[0]!.textContent).toContain("Dining room needs an active, published menu.");
     expect(cells[0]!.textContent).toContain("Bar: Lunch has no products for Bar.");
-    expect(cells[1]!.textContent!.trim()).toBe("Disabled");
+    expect(cells[1]!.textContent!.trim()).toBe("");
   });
   it("keeps another department's zone issues out of a ready department", async () => {
     const el = await setup({
@@ -268,8 +263,8 @@ describe("department list", () => {
     ["open-department-d1", "open-department", { departmentId: "d1" }],
     ["open-department-name-d2", "open-department", { departmentId: "d2" }],
     ["rename-department-d1", "rename-department", { departmentId: "d1" }],
-    ["deactivate-department-d1", "disable-department", { departmentId: "d1" }],
-    ["enable-department-d2", "enable-department", { departmentId: "d2" }],
+    ["delete-department-d1", "delete-department", { departmentId: "d1" }],
+    ["delete-department-d2", "delete-department", { departmentId: "d2" }],
     ["add-zone-to-department-z4", "add-to-department", { zoneId: "z4" }],
   ] as const)("%s emits %s through a parent shadow root", async (key, eventName, detail) => {
     const el = await setup(
@@ -289,38 +284,21 @@ describe("department list", () => {
       document.removeEventListener(eventName, listener);
     }
   });
-  it("offers Enable only for disabled departments and replaces it after the parent enables one", async () => {
-    const el = await setup();
-    expect(find(el, '[data-test="deactivate-department-d2"]')).toBeNull();
-    expect(find(el, '[data-test="enable-department-d2"]')!.textContent!.trim()).toBe("Enable");
-    expect(find(el, '[data-test="enable-department-d1"]')).toBeNull();
-    expect(find(el, '[data-test="deactivate-department-d1"]')!.textContent!.trim()).toBe(
-      "Disable department",
-    );
-    const listener = vi.fn();
-    el.addEventListener("enable-department", listener);
-    await action(el, "enable-department-d2");
-    expect(listener).toHaveBeenCalledTimes(1);
-    expect((listener.mock.calls[0]![0] as CustomEvent).detail).toEqual({ departmentId: "d2" });
-    el.model = {
+  it("deleted departments have no row or Enable action", async () => {
+    const el = await setup({
       ...model,
-      departments: model.departments.map((row) => ({ ...row, active: true })),
-    };
-    await el.updateComplete;
-    await table(el).updateComplete;
-    expect(rows(el).map((row) => row.querySelectorAll("td")[3]!.textContent!.trim())).toEqual([
-      "",
-      "",
-    ]);
-    expect(find(el, '[data-test="enable-department-d2"]')).toBeNull();
-    expect(find(el, '[data-test="deactivate-department-d2"]')).not.toBeNull();
+      departments: model.departments.map((d) => ({ ...d, active: d.id !== "d2" })),
+    });
+    const list = table(el);
+    expect(list.rows.map((row) => (row as { id: string }).id)).not.toContain("d2");
+    expect(list.shadowRoot!.querySelector('[data-test="enable-department-d2"]')).toBeNull();
   });
   it("localizes columns, empty zones, venue issues and menu actions in Spanish", async () => {
     setLocale("es");
     const el = await setup({
       ...model,
       readiness: [{ code: "venue.department_missing" }],
-      departments: model.departments.map((row) => ({ ...row, active: false })),
+      departments: model.departments.map((row) => ({ ...row, active: true })),
     });
     expect(table(el).columns.map(({ label }) => label)).toEqual([
       "Departamento",
@@ -330,7 +308,7 @@ describe("department list", () => {
       "Acciones",
     ]);
     expect(rows(el)[1]!.textContent).toContain("Sin zonas");
-    expect(find(el, '[data-test="enable-department-d2"]')!.textContent!.trim()).toBe("Habilitar");
+    expect(find(el, '[data-test="delete-department-d2"]')!.textContent!.trim()).toBe("Eliminar");
     expect(find(el, '[data-test="no-enabled-department"]')!.textContent).toContain(
       "Ningún departamento está habilitado: habilita uno para aceptar pedidos",
     );

@@ -212,7 +212,7 @@ it("a good read after a failed one clears the alert and shows the plan", async (
   expect(linkText()).toBe("Edit floor plan");
 });
 
-it("a disabled zone reads no plan and shows neither preview nor link", async () => {
+it("a deleted zone is absent and its replacement reads only the surviving plan", async () => {
   el = document.createElement("department-zones");
   el.model = {
     ...structuredClone(zonesModel),
@@ -224,9 +224,10 @@ it("a disabled zone reads no plan and shows neither preview nor link", async () 
   document.body.append(el);
   await el.updateComplete;
   await new Promise((r) => setTimeout(r, 50));
-  expect(reads).toEqual([]);
-  expect(preview()).toBeNull();
-  expect(link()).toBeNull();
+  await expect.poll(() => reads).toEqual(["z1"]);
+  expect(el.shadowRoot!.querySelector('[data-zone="z2"]')).toBeNull();
+  expect(link()?.href).toContain("/zone/z1");
+  await expect.poll(() => preview()).not.toBeNull();
 });
 
 it("stops reading the plan once the panel is removed", async () => {

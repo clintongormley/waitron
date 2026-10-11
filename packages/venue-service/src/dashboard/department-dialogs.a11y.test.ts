@@ -45,8 +45,6 @@ const dialogs: DepartmentDialog[] = [
   { kind: "rename-zone", row: model.floorZones[0]! },
   { kind: "move-zone", row: model.floorZones[0]! },
   { kind: "add-to-department", row: { id: "z2", name: "Garden" } },
-  { kind: "disable-department", row: model.departments[0]! },
-  { kind: "disable-zone", row: model.floorZones[0]! },
 ];
 afterEach(() => {
   cleanup();
@@ -80,7 +78,7 @@ describe.each(["light", "dark"] as const)("department dialogs (%s)", (theme) => 
       vi.fn(async () => {
         if (state === "busy") return new Promise(() => {});
         throw state === "clash"
-          ? { code: "department.name_disabled", params: { name: "Brunch", departmentId: "d2" } }
+          ? { code: "department.name_taken", params: { name: "Brunch", departmentId: "d2" } }
           : { code: "management.request_invalid", params: { field: "name" } };
       }),
     );

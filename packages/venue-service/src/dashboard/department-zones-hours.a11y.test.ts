@@ -17,7 +17,7 @@ it("renders the summary and hours link accessibly in EN/ES, both themes, desktop
     for (const locale of ["en", "es"])
       for (const theme of ["light", "dark"] as const)
         for (const width of [1280, 390])
-          for (const state of ["grouped", "open", "count", "failure", "disabled"] as const) {
+          for (const state of ["grouped", "open", "count", "failure", "deleted"] as const) {
             setLocale(locale);
             await page.viewport(width, 844);
             expect(window.innerWidth).toBe(width);
@@ -33,7 +33,7 @@ it("renders the summary and hours link accessibly in EN/ES, both themes, desktop
               theme,
             )) as HTMLElementTagNameMap["department-zones"];
             el.model = structuredClone(zonesModel);
-            if (state === "disabled") {
+            if (state === "deleted") {
               el.model.zones[0]!.active = false;
               hours.departments[0]!.zones = hours.departments[0]!.zones.filter(
                 (z) => z.id !== "z1",
@@ -49,9 +49,16 @@ it("renders the summary and hours link accessibly in EN/ES, both themes, desktop
             await el.updateComplete;
             if (state === "failure")
               await expect.poll(() => el.shadowRoot!.querySelector("[role=alert]")).not.toBeNull();
-            else if (state === "disabled") {
-              expect(el.shadowRoot!.querySelector("[data-test=zone-opening-hours]")).toBeNull();
-              expect(el.shadowRoot!.querySelector("[data-test=closed-week-summary]")).toBeNull();
+            else if (state === "deleted") {
+              expect(el.shadowRoot!.querySelector('[data-zone="z1"]')).toBeNull();
+              await expect
+                .poll(
+                  () =>
+                    el.shadowRoot!.querySelector<HTMLAnchorElement>(
+                      "[data-test=zone-opening-hours]",
+                    )?.href,
+                )
+                .toContain("/zone/z2");
             } else
               await expect
                 .poll(() =>
@@ -61,7 +68,7 @@ it("renders the summary and hours link accessibly in EN/ES, both themes, desktop
                 )
                 .toBeTruthy();
             await expectNoA11yViolations(host);
-            if (state !== "disabled") {
+            {
               const summary = el.shadowRoot!.querySelector<HTMLElement>(
                 "[data-test=closed-week-summary]",
               )!;

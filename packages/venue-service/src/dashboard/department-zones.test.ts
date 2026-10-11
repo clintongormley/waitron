@@ -144,17 +144,17 @@ it("renders inherited On request and Print from a refreshed department", async (
     )!.placeholder,
   ).toBe("On request");
 });
-it("offers Rename, Move and Disable events without writing settings", async () => {
+it("offers Rename, Move and Delete events without writing settings", async () => {
   await mount();
   const events: unknown[] = [];
-  for (const action of ["rename", "move", "disable"]) {
+  for (const action of ["rename", "move", "delete"]) {
     el.addEventListener(`${action}-zone`, (e) =>
       events.push({ action, detail: (e as CustomEvent).detail }),
     );
     button(`${action}-zone`).click();
   }
   expect(events).toEqual(
-    ["rename", "move", "disable"].map((action) => ({ action, detail: { zoneId: "z2" } })),
+    ["rename", "move", "delete"].map((action) => ({ action, detail: { zoneId: "z2" } })),
   );
   el.model = {
     ...el.model!,
@@ -163,29 +163,16 @@ it("offers Rename, Move and Disable events without writing settings", async () =
   await el.updateComplete;
   expect(el.shadowRoot!.querySelector("[data-test=move-zone]")).toBeNull();
 });
-it("a disabled zone stays visible and read-only, offering Enable only under an active department", async () => {
-  await mount();
-  el.model = { ...el.model!, zones: el.model!.zones.map((z) => ({ ...z, active: false })) };
+it("a deleted zone is absent and has no Enable action", async () => {
+  await mount("z1");
+  const view = structuredClone(el.model!);
+  view.zones.find((z) => z.id === "z1")!.active = false;
+  const floor = view.floorZones.find((z) => z.id === "z1");
+  if (floor) floor.active = false;
+  el.model = view;
   await el.updateComplete;
-  expect(button("zone-z2").textContent).toContain("(Disabled)");
-  expect(fields().disabled).toBe(true);
-  expect(button("save-zone").disabled).toBe(true);
-  expect(el.shadowRoot!.querySelector('[data-test="disable-zone"]')).toBeNull();
-  expect(el.shadowRoot!.querySelector('[data-test="enable-zone"]')!.textContent!.trim()).toBe(
-    "Enable",
-  );
-  const events: unknown[] = [];
-  el.addEventListener("enable-zone", (e) => events.push((e as CustomEvent).detail));
-  button("enable-zone").click();
-  expect(events).toEqual([{ zoneId: "z2" }]);
-  el.model = {
-    ...el.model!,
-    departments: el.model!.departments.map((d) => ({ ...d, active: false })),
-  };
-  await el.updateComplete;
+  expect(el.shadowRoot!.querySelector('[data-zone="z1"]')).toBeNull();
   expect(el.shadowRoot!.querySelector("[data-test=enable-zone]")).toBeNull();
-  await change({ orderStart: "counter" });
-  expect(fields().value.orderStart).toBe(null);
 });
 it("marks a field refusal, keeps retry available and shows a bottom message", async () => {
   await mount();
@@ -226,14 +213,14 @@ it("a save locks row actions and zone switching until it settles", async () => {
   );
   await change({ orderStart: "counter" });
   const events: unknown[] = [];
-  for (const name of ["rename-zone", "move-zone", "disable-zone", "zone-change", "add-zone"])
+  for (const name of ["rename-zone", "move-zone", "delete-zone", "zone-change", "add-zone"])
     el.addEventListener(name, (event) => events.push((event as CustomEvent).detail));
   button("save-zone").click();
   await el.updateComplete;
   expect(button("rename-zone").disabled).toBe(true);
   expect(button("move-zone").disabled).toBe(true);
-  expect(button("disable-zone").disabled).toBe(true);
-  for (const action of ["rename-zone", "move-zone", "disable-zone", "zone-z1", "add-zone"])
+  expect(button("delete-zone").disabled).toBe(true);
+  for (const action of ["rename-zone", "move-zone", "delete-zone", "zone-z1", "add-zone"])
     button(action).click();
   expect(events).toEqual([]);
   finish();
@@ -412,7 +399,7 @@ it.each([
       return {
         variant: save.variant,
         disabled: save.disabled,
-        innerDisabled: save.shadowRoot!.querySelector("button")!.disabled,
+        innerDeleted: save.shadowRoot!.querySelector("button")!.disabled,
       };
     };
     await fields().updateComplete;
@@ -432,8 +419,8 @@ it.each([
       await userEvent.click(page.elementLocator(option));
       await el.updateComplete;
     };
-    const quiet = { variant: "secondary", disabled: true, innerDisabled: true };
-    const ready = { variant: "primary", disabled: false, innerDisabled: false };
+    const quiet = { variant: "secondary", disabled: true, innerDeleted: true };
+    const ready = { variant: "primary", disabled: false, innerDeleted: false };
     expect(await state()).toEqual(quiet);
     button("save-zone").dispatchEvent(new MouseEvent("click"));
     await el.updateComplete;
@@ -454,7 +441,7 @@ it.each([
       await control.updateComplete;
       expect(control.disabled).toBe(false);
       expect(control.shadowRoot!.querySelector("button")!.disabled).toBe(false);
-      expect((await state()).innerDisabled).toBe(true);
+      expect((await state()).innerDeleted).toBe(true);
       await button("cancel-zone").updateComplete;
       expect(button("cancel-zone").shadowRoot!.querySelector("button")!.disabled).toBe(true);
       button("save-zone").dispatchEvent(new MouseEvent("click"));
@@ -561,9 +548,9 @@ it.each([
   },
 );
 
-it("zone menus retain Rename under a disabled parent, call the command Disable, and omit receipt-only details", async () => {
+it("zone menus retain Rename and Delete and omit receipt-only details", async () => {
   await mount();
-  expect(button("disable-zone").textContent!.trim()).toBe("Disable");
+  expect(button("delete-zone").textContent!.trim()).toBe("Delete");
   expect(el.shadowRoot!.querySelector("wt-row-actions")!.textContent).not.toContain("Remove");
   expect(el.shadowRoot!.querySelector("[name=printTradingName]")).toBeNull();
   expect(el.shadowRoot!.textContent).not.toContain("Casa");
@@ -574,10 +561,10 @@ it("zone menus retain Rename under a disabled parent, call the command Disable, 
     zones: el.model!.zones.map((z) => ({ ...z, active: false })),
   };
   await el.updateComplete;
-  expect(button("rename-zone").disabled).toBe(false);
+  expect(el.shadowRoot!.querySelector("[data-test=rename-zone]")).toBeNull();
   expect(el.shadowRoot!.querySelector("[data-test=enable-zone]")).toBeNull();
-  expect(button("zone-z2").textContent).toContain("(Disabled)");
-  expect(button("zone-z2").textContent).not.toContain("Inactive");
+  expect(el.shadowRoot!.querySelector("[data-test=zone-z2]")).toBeNull();
+  expect(el.shadowRoot!.textContent).not.toContain("Disabled");
 });
 const floorPlanLink = () =>
   el.shadowRoot!.querySelector<HTMLAnchorElement>("[data-test=zone-floor-plan]");
@@ -609,13 +596,13 @@ it("a disabled zone shows no floor plan link", async () => {
   await el.updateComplete;
   expect(floorPlanLink()).toBeNull();
 });
-it("the zone's ⋮ menu stays Rename, Move and Disable", async () => {
+it("the zone's ⋮ menu stays Rename, Move and Delete", async () => {
   await mount();
   const menu = el.shadowRoot!.querySelector("wt-row-actions")!;
   expect([...menu.children].map((n) => n.getAttribute("data-test"))).toEqual([
     "rename-zone",
     "move-zone",
-    "disable-zone",
+    "delete-zone",
   ]);
   expect(menu.querySelector("[data-test=zone-floor-plan]")).toBeNull();
 });

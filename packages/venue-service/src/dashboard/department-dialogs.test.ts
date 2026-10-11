@@ -55,8 +55,6 @@ export const dialogs: DepartmentDialog[] = [
   { kind: "rename-zone", row: view.floorZones[0]! },
   { kind: "move-zone", row: view.floorZones[0]! },
   { kind: "add-to-department", row: { id: "z2", name: "Garden" } },
-  { kind: "disable-department", row: view.departments[0]! },
-  { kind: "disable-zone", row: view.floorZones[0]! },
 ];
 async function mount(
   dialog: DepartmentDialog,
@@ -172,12 +170,12 @@ it("move lists only other active departments and preserves the override", async 
   });
 });
 it.each(["department", "zone"] as const)(
-  "renames a disabled %s without enabling it",
+  "renames an active %s without changing its state",
   async (kind) => {
     const row =
       kind === "department"
-        ? { ...view.departments[0]!, active: false }
-        : { ...view.floorZones[0]!, active: false };
+        ? { ...view.departments[0]!, active: true }
+        : { ...view.floorZones[0]!, active: true };
     const { el, request } = await mount({
       kind: kind === "department" ? "rename-department" : "rename-zone",
       row,
@@ -244,38 +242,7 @@ it("marks a blank changed name beside the field and above Save", async () => {
   expect(await bottom(el)).toBe("");
   expect(save(el).disabled).toBe(false);
 });
-it.each(["department", "zone"] as const)(
-  "offers Enable beside a disabled %s name refusal without creating another row",
-  async (kind) => {
-    const id = kind === "department" ? "d2" : "z1",
-      name = kind === "department" ? "Deli" : "Patio";
-    const request = vi.fn(async (_path: string, method?: string) => {
-      if (method === "POST")
-        throw { code: `${kind}.name_disabled`, params: { name, [`${kind}Id`]: id } };
-      return { id: "new", zones: [] };
-    });
-    const { el } = await mount(kind === "department" ? dialogs[0]! : dialogs[2]!, request);
-    await change(el, "name", name);
-    save(el).click();
-    await expect
-      .poll(() => field(el, "name").error)
-      .toBe(`A disabled ${kind} already has this name. Enable it instead.`);
-    expect(save(el).disabled).toBe(false);
-    const enable = el.shadowRoot!.querySelector<HTMLElement>("[data-test=enable-name-clash]");
-    expect(enable).not.toBeNull();
-    expect(enable!.textContent!.trim()).toBe(`Enable ${name}`);
-    enable!.click();
-    await expect.poll(() => el.dialog).toBeUndefined();
-    expect(request).toHaveBeenCalledWith(
-      kind === "department"
-        ? `/management-api/venue-service/departments/${id}`
-        : `/management-api/zones/${id}`,
-      "PATCH",
-      { active: true },
-    );
-    expect(request.mock.calls.filter((c) => c[1] === "POST")).toHaveLength(1);
-  },
-);
+
 it("keeps a refusal usable and puts only a shown field refusal beside it", async () => {
   const request = vi
     .fn()
@@ -297,20 +264,7 @@ it("keeps a refusal usable and puts only a shown field refusal beside it", async
   expect(field(el, "name").error).toBe("");
   expect(save(el).disabled).toBe(false);
 });
-it("shows the removal impact before disabling", async () => {
-  const { el, request } = await mount(dialogs[6]!);
-  expect(el.shadowRoot!.textContent).toContain("Patio");
-  expect(el.shadowRoot!.textContent).toContain("2 active tables");
-  expect(request).toHaveBeenCalledWith(
-    "/management-api/venue-service/departments/d1/removal-impact",
-    "GET",
-    undefined,
-    { passive: false },
-  );
-  save(el).click();
-  await expect.poll(() => el.dialog).toBeUndefined();
-  expect(request).toHaveBeenCalledWith("/management-api/venue-service/departments/d1", "DELETE");
-});
+
 it("holds the shared name field to the form width at 1280px", async () => {
   const width = window.innerWidth,
     height = window.innerHeight;
@@ -351,24 +305,6 @@ it.each(dialogs)("$kind puts Cancel before the action in native keyboard order",
   expect(save(el).shadowRoot!.activeElement).toBe(save(el).shadowRoot!.querySelector("button"));
 });
 
-it("retains a disabled-name Enable offer when enabling fails", async () => {
-  const request = vi.fn(async (_path: string, method?: string) => {
-    if (method === "POST")
-      throw { code: "department.name_disabled", params: { name: "Brunch", departmentId: "d2" } };
-    throw { code: "connection.failed" };
-  });
-  const { el } = await mount(dialogs[0]!, request);
-  await change(el, "name", "Brunch");
-  save(el).click();
-  await expect
-    .poll(() => el.shadowRoot!.querySelector("[data-test=enable-name-clash]"))
-    .not.toBeNull();
-  el.shadowRoot!.querySelector<HTMLElement>("[data-test=enable-name-clash]")!.click();
-  await expect.poll(() => bottom(el)).toContain("The change could not be saved.");
-  expect(el.shadowRoot!.querySelector("[data-test=enable-name-clash]")).not.toBeNull();
-  expect(save(el).disabled).toBe(false);
-});
-
 it.each(["department", "zone"] as const)(
   "explains an active %s name refusal without offering Enable",
   async (kind) => {
@@ -390,46 +326,7 @@ it.each(["department", "zone"] as const)(
     expect(await bottom(el)).toBe("");
   },
 );
-it("shows a failed impact load and cannot disable without its impact", async () => {
-  const { el, request } = await mount(
-    dialogs[6]!,
-    vi.fn(async () => {
-      throw { code: "connection.failed" };
-    }),
-  );
-  expect(await bottom(el)).toBe("The change could not be saved.");
-  expect(save(el).disabled).toBe(true);
-  save(el).click();
-  await el.updateComplete;
-  expect(request).toHaveBeenCalledTimes(1);
-  el.shadowRoot!.querySelector<HTMLElement>("[data-test=cancel-editor]")!.click();
-  await expect.poll(() => el.dialog).toBeUndefined();
-});
-it.each([
-  [{ code: "department.last_active" }, "You cannot disable the last active department."],
-  [
-    { code: "zone.department_inactive" },
-    "That zone needs an active department. Enable its department or assign it to an active one first",
-  ],
-  [
-    { code: "zone.table_in_use", params: { tableName: "Table 4" } },
-    "Table Table 4 has an open tab. Close it before disabling this department.",
-  ],
-  [{ code: "zone.table_in_use", params: { tableName: 1 } }, "The change could not be saved."],
-  [undefined, "The change could not be saved."],
-] as const)("keeps a disable refusal available to retry: %j", async (error, message) => {
-  const { el } = await mount(
-    dialogs[7]!,
-    vi.fn(async (_path: string, method?: string) => {
-      if (method === "GET") return { zones: [] };
-      throw error;
-    }),
-  );
-  save(el).click();
-  await expect.poll(() => bottom(el)).toBe(message);
-  expect(save(el).disabled).toBe(false);
-  expect(el.shadowRoot!.querySelector("wt-modal")).not.toBeNull();
-});
+
 it.each(["management.request_invalid", "department.not_found"])(
   "puts a refused move destination beside its field: %s",
   async (code) => {
@@ -459,27 +356,6 @@ it("refuses an invalid move destination and frees Save once it is corrected", as
   await chooseOption(field(el, "departmentId"), "d2");
   expect(save(el).disabled).toBe(false);
 });
-it("explains a blocked zone Enable beside its reserved name and removes the unusable offer", async () => {
-  const request = vi.fn(async (_path: string, method?: string) => {
-    if (method === "POST")
-      throw { code: "zone.name_disabled", params: { name: "Patio", zoneId: "z1" } };
-    throw { code: "zone.department_inactive" };
-  });
-  const { el } = await mount(dialogs[2]!, request);
-  await change(el, "name", "Patio");
-  save(el).click();
-  await expect
-    .poll(() => el.shadowRoot!.querySelector("[data-test=enable-name-clash]"))
-    .not.toBeNull();
-  el.shadowRoot!.querySelector<HTMLElement>("[data-test=enable-name-clash]")!.click();
-  await expect
-    .poll(() => field(el, "name").error)
-    .toBe(
-      "A disabled zone already has this name. Enable its department or assign it to an active department first.",
-    );
-  expect(el.shadowRoot!.querySelector("[data-test=enable-name-clash]")).toBeNull();
-  expect(save(el).disabled).toBe(false);
-});
 
 it("Cancel closes a clean dialog and emits closed without writing", async () => {
   const { el, request } = await mount(dialogs[0]!);
@@ -490,30 +366,7 @@ it("Cancel closes a clean dialog and emits closed without writing", async () => 
   expect(closed).toHaveBeenCalledTimes(1);
   expect(request).not.toHaveBeenCalled();
 });
-it.each(["success", "refusal"])(
-  "ignores a departed impact %s when another dialog opens",
-  async (outcome) => {
-    let finish!: () => void;
-    const request = vi.fn(
-      () =>
-        new Promise<unknown>((resolve, reject) => {
-          finish = () =>
-            outcome === "success"
-              ? resolve({ zones: [{ id: "z1", name: "Departed", activeTableCount: 9 }] })
-              : reject({ code: "connection.failed" });
-        }),
-    );
-    const { el } = await mount(dialogs[6]!, request);
-    el.dialog = dialogs[0];
-    await el.updateComplete;
-    finish();
-    await new Promise((r) => setTimeout(r, 0));
-    await el.updateComplete;
-    expect(await bottom(el)).toBe("");
-    expect(el.shadowRoot!.textContent).not.toContain("Departed");
-    expect(save(el).disabled).toBe(true);
-  },
-);
+
 it("ignores a departed refusal after the dialog is replaced", async () => {
   let reject!: (error: unknown) => void;
   const { el } = await mount(
@@ -541,23 +394,20 @@ it.each([
   { name: "Reserved" },
   { name: "Reserved", departmentId: 1 },
   { name: 1, departmentId: "d2" },
-])(
-  "a malformed disabled-name refusal does not offer an unidentifiable Enable: %j",
-  async (params) => {
-    const { el } = await mount(
-      dialogs[0]!,
-      vi.fn(async () => {
-        throw { code: "department.name_disabled", params };
-      }),
-    );
-    await change(el, "name", "Reserved");
-    save(el).click();
-    await expect
-      .poll(() => field(el, "name").error)
-      .toBe("A disabled department already has this name. Enable it instead.");
-    expect(el.shadowRoot!.querySelector("[data-test=enable-name-clash]")).toBeNull();
-  },
-);
+])("a malformed name refusal marks its field without offering Enable: %j", async (params) => {
+  const { el } = await mount(
+    dialogs[0]!,
+    vi.fn(async () => {
+      throw { code: "department.name_disabled", params };
+    }),
+  );
+  await change(el, "name", "Reserved");
+  save(el).click();
+  await expect
+    .poll(() => field(el, "name").error)
+    .toBe("A department with this name already exists.");
+  expect(el.shadowRoot!.querySelector("[data-test=enable-name-clash]")).toBeNull();
+});
 it("a retained close guard refuses a busy or disconnected dialog", async () => {
   let finish!: () => void;
   const { el } = await mount(
@@ -644,13 +494,6 @@ it.each([
     body: { departmentId: "d2" },
     detail: { zoneId: "z2" },
   },
-  {
-    index: 6,
-    path: "/management-api/venue-service/departments/d1",
-    method: "DELETE",
-    detail: { departmentId: "d1" },
-  },
-  { index: 7, path: "/management-api/zones/z1", method: "DELETE", detail: { zoneId: "z1" } },
 ])(
   "sends $method $path and identifies the saved row",
   async ({ index, path, method, body, detail }) => {
@@ -668,50 +511,6 @@ it.each([
     expect(event.detail).toEqual(detail);
     expect(event.bubbles).toBe(true);
     expect(event.composed).toBe(true);
-  },
-);
-
-it.each([6, 7])(
-  "restarts unfinished removal impact after reconnect for Disable kind %s",
-  async (index) => {
-    const reads: ((value: unknown) => void)[] = [];
-    const request = vi.fn<(path: string, method?: string) => Promise<unknown>>(
-      async (_path, method) => {
-        if (method === "GET")
-          return new Promise((resolve) => {
-            reads.push(resolve);
-          });
-        return undefined;
-      },
-    );
-    const { el } = await mount(dialogs[index]!, request);
-    expect(reads).toHaveLength(1);
-    expect(save(el).disabled).toBe(true);
-    const parent = el.parentNode!;
-    el.remove();
-    await new Promise((resolve) => setTimeout(resolve, 0));
-    parent.append(el);
-    await el.updateComplete;
-    await expect.poll(() => reads.length).toBe(2);
-    reads[0]!({ zones: [{ id: "z1", name: "Old impact", activeTableCount: 9 }] });
-    await new Promise((resolve) => setTimeout(resolve, 0));
-    await el.updateComplete;
-    expect(el.shadowRoot!.textContent).not.toContain("Old impact");
-    expect(save(el).disabled).toBe(true);
-    expect(el.shadowRoot!.querySelector("wt-modal")!.dismissible).toBe(false);
-    reads[1]!({ zones: [{ id: "z1", name: "Fresh impact", activeTableCount: 2 }] });
-    await expect.poll(() => save(el).disabled).toBe(false);
-    expect(el.shadowRoot!.textContent).toContain("Fresh impact");
-    expect(el.shadowRoot!.textContent).toContain("2 active tables");
-    expect(el.shadowRoot!.querySelector("wt-modal")!.dismissible).toBe(true);
-    save(el).click();
-    await expect.poll(() => el.dialog).toBeUndefined();
-    expect(request.mock.calls.filter((call) => call[1] === "DELETE")).toEqual([
-      [
-        index === 6 ? "/management-api/venue-service/departments/d1" : "/management-api/zones/z1",
-        "DELETE",
-      ],
-    ]);
   },
 );
 
@@ -734,63 +533,6 @@ it("clean native Escape closes, emits closed and performs no write", async () =>
   expect(closed).toHaveBeenCalledTimes(1);
   expect(request).not.toHaveBeenCalled();
 });
-
-it.each([6, 7])(
-  "clears a recovered impact read error after reconnect for Disable kind %s",
-  async (index) => {
-    let fresh!: (value: unknown) => void;
-    const request = vi
-      .fn<(path: string, method?: string) => Promise<unknown>>()
-      .mockRejectedValueOnce({ code: "connection.failed" })
-      .mockImplementationOnce(
-        () =>
-          new Promise((resolve) => {
-            fresh = resolve;
-          }),
-      );
-    const { el } = await mount(dialogs[index]!, request);
-    expect(await bottom(el)).toBe("The change could not be saved.");
-    expect(save(el).disabled).toBe(true);
-    const parent = el.parentNode!;
-    el.remove();
-    await new Promise((resolve) => setTimeout(resolve, 0));
-    parent.append(el);
-    await el.updateComplete;
-    expect(request).toHaveBeenCalledTimes(2);
-    expect(save(el).disabled).toBe(true);
-    fresh({ zones: [{ id: "z1", name: "Recovered impact", activeTableCount: 3 }] });
-    await expect.poll(() => save(el).disabled).toBe(false);
-    expect(el.shadowRoot!.textContent).toContain("Recovered impact");
-    expect(await bottom(el)).toBe("");
-  },
-);
-
-it.each([6, 7])(
-  "preserves a Disable action refusal across reconnect for kind %s",
-  async (index) => {
-    const request = vi.fn<(path: string, method?: string) => Promise<unknown>>(
-      async (_path, method) => {
-        if (method === "GET") return { zones: [] };
-        throw { code: "zone.table_in_use", params: { tableName: "4" } };
-      },
-    );
-    const { el } = await mount(dialogs[index]!, request);
-    save(el).click();
-    await expect
-      .poll(() => bottom(el))
-      .toBe("Table 4 has an open tab. Close it before disabling this department.");
-    const parent = el.parentNode!;
-    el.remove();
-    await new Promise((resolve) => setTimeout(resolve, 0));
-    parent.append(el);
-    await el.updateComplete;
-    expect(await bottom(el)).toBe(
-      "Table 4 has an open tab. Close it before disabling this department.",
-    );
-    expect(save(el).disabled).toBe(false);
-    expect(request.mock.calls.filter((call) => call[1] === "GET")).toHaveLength(1);
-  },
-);
 
 it.each(dialogs.slice(0, 4))(
   "$kind leaves newer native text free of an earlier name refusal",
@@ -822,52 +564,6 @@ it.each(dialogs.slice(0, 4))(
     expect(await bottom(el)).toBe("");
     expect(el.dialog).toEqual(dialog);
     expect(request).toHaveBeenCalledTimes(1);
-  },
-);
-
-it.each(dialogs.slice(0, 4))(
-  "$kind leaves newer native text free of an earlier Enable refusal",
-  async (dialog) => {
-    let refuse!: (error: unknown) => void;
-    const kind = dialog.kind.endsWith("department") ? "department" : "zone";
-    let calls = 0;
-    const request = vi.fn(async () => {
-      if (++calls === 1)
-        throw {
-          code: `${kind}.name_disabled`,
-          params: { name: "Reserved", [`${kind}Id`]: "disabled" },
-        };
-      return new Promise<unknown>((_resolve, reject) => {
-        refuse = reject;
-      });
-    });
-    const { el } = await mount(dialog, request);
-    await change(el, "name", "Reserved");
-    save(el).click();
-    await expect
-      .poll(() => el.shadowRoot!.querySelector("[data-test=enable-name-clash]"))
-      .not.toBeNull();
-    el.shadowRoot!.querySelector<HTMLElement>("[data-test=enable-name-clash]")!.click();
-    await expect.poll(() => request.mock.calls.length).toBe(2);
-    await field(el, "name").updateComplete;
-    const native = field(el, "name").shadowRoot!.querySelector("input")!;
-    await userEvent.fill(page.elementLocator(native), "New available name");
-    await el.updateComplete;
-    refuse(kind === "zone" ? { code: "zone.department_inactive" } : { code: "connection.failed" });
-    await expect.poll(() => save(el).disabled).toBe(false);
-    expect(field(el, "name").error).toBe("");
-    expect(native.value).toBe("New available name");
-    expect(el.shadowRoot!.querySelector("[data-test=enable-name-clash]")).toBeNull();
-    expect(await bottom(el)).toBe("");
-    expect(el.dialog).toEqual(dialog);
-    expect(request).toHaveBeenCalledTimes(2);
-    expect(request).toHaveBeenLastCalledWith(
-      kind === "department"
-        ? "/management-api/venue-service/departments/disabled"
-        : "/management-api/zones/disabled",
-      "PATCH",
-      { active: true },
-    );
   },
 );
 
@@ -1077,63 +773,6 @@ it.each(
   expect(request).toHaveBeenCalledTimes(1);
 });
 
-it.each(dialogs.slice(6))(
-  "$kind enables its native danger action after its impact is loaded",
-  async (dialog) => {
-    const { el, request } = await mount(dialog);
-    await expect.poll(() => save(el).disabled).toBe(false);
-    await save(el).updateComplete;
-    expect({
-      variant: save(el).variant,
-      disabled: save(el).disabled,
-      innerDisabled: save(el).shadowRoot!.querySelector("button")!.disabled,
-    }).toEqual({ variant: "danger", disabled: false, innerDisabled: false });
-    await userEvent.click(page.elementLocator(save(el).shadowRoot!.querySelector("button")!));
-    await expect.poll(() => el.dialog).toBeUndefined();
-    expect(request.mock.calls.filter(([, method]) => method === "DELETE")).toEqual([
-      [
-        dialog.kind === "disable-department"
-          ? "/management-api/venue-service/departments/d1"
-          : "/management-api/zones/z1",
-        "DELETE",
-      ],
-    ]);
-  },
-);
-
-it("Disable department sends once while pending and keeps a refused confirmation available", async () => {
-  let reject!: (error: Error) => void;
-  const pending = new Promise<void>((_, no) => {
-    reject = no;
-  });
-  const { el, request } = await mount(
-    dialogs[6]!,
-    vi.fn(async (_path: string, method?: string) => {
-      if (method === "GET") return { zones: [] };
-      await pending;
-    }),
-  );
-  expect(el.shadowRoot!.querySelector("wt-modal")!.heading).toBe("Disable Restaurant?");
-  expect(request.mock.calls.filter((call) => call[1] === "DELETE")).toEqual([]);
-  const button = save(el);
-  button.click();
-  button.click();
-  await el.updateComplete;
-  expect(request.mock.calls.filter((call) => call[1] === "DELETE")).toEqual([
-    ["/management-api/venue-service/departments/d1", "DELETE"],
-  ]);
-  expect(button.disabled).toBe(true);
-  await button.updateComplete;
-  expect(button.shadowRoot!.querySelector<HTMLButtonElement>("button")!.disabled).toBe(true);
-  reject(new Error("write failed"));
-  await expect.poll(() => bottom(el)).toBe("The change could not be saved.");
-  expect(el.shadowRoot!.querySelector("wt-modal")).not.toBeNull();
-  expect(el.shadowRoot!.querySelector("[role=alert]")).toBeNull();
-  expect(button.disabled).toBe(false);
-  await button.updateComplete;
-  expect(button.shadowRoot!.querySelector<HTMLButtonElement>("button")!.disabled).toBe(false);
-});
-
 it("the Move department picker's search and empty result are Spanish", async () => {
   setLocale("es");
   const { el } = await mount(dialogs[4]!);
@@ -1174,151 +813,3 @@ it("a missing zone keeps its Spanish Rename draft and exact attempted name", asy
   expect(el.shadowRoot!.querySelector("wt-modal")).not.toBeNull();
   expect(save(el).disabled).toBe(false);
 });
-it.each(["en", "es"])(
-  "zone Disable names its impact before writing and retains a missing-zone refusal in %s",
-  async (locale) => {
-    setLocale(locale);
-    const { el, request } = await mount(
-      dialogs[7]!,
-      vi.fn(async (_path: string, method?: string) => {
-        if (method === "GET") return { zones: [{ id: "z1", name: "Patio", activeTableCount: 2 }] };
-        throw { code: "zone.not_found" };
-      }),
-    );
-    expect(el.shadowRoot!.querySelector("wt-modal")!.heading).toBe(
-      locale === "en" ? "Disable Patio?" : "¿Deshabilitar Patio?",
-    );
-    expect(save(el).textContent!.trim()).toBe(locale === "en" ? "Disable" : "Deshabilitar");
-    expect(el.shadowRoot!.textContent).toMatch(
-      locale === "en" ? /Patio: 2 active tables/ : /Patio: 2 mesas activas/,
-    );
-    expect(request.mock.calls.filter((call) => call[1] === "DELETE")).toEqual([]);
-    save(el).click();
-    await expect
-      .poll(() => bottom(el))
-      .toBe(locale === "en" ? "The change could not be saved." : "No se pudo guardar el cambio.");
-    expect(request.mock.calls.filter((call) => call[1] === "DELETE")).toEqual([
-      ["/management-api/zones/z1", "DELETE"],
-    ]);
-    expect(el.shadowRoot!.querySelector("wt-modal")).not.toBeNull();
-    expect(save(el).disabled).toBe(false);
-  },
-);
-
-it.each(["en", "es"].flatMap((locale) => ["department", "zone"].map((kind) => ({ locale, kind }))))(
-  "a successful reserved-name Enable keeps the refused Rename draft in $locale for $kind",
-  async ({ locale, kind }) => {
-    await page.viewport(390, 900);
-    try {
-      const name = kind === "department" ? "Deli" : "Deli counter";
-      const dialog = dialogs[kind === "department" ? 1 : 3]!;
-      const request = vi.fn(async (_path: string, _method?: string, body?: unknown) => {
-        if (!(body as { active?: boolean })?.active)
-          throw { code: `${kind}.name_disabled`, params: { name, [`${kind}Id`]: "reserved" } };
-      });
-      const { el } = await mount(dialog, request);
-      setLocale(locale);
-      await el.updateComplete;
-      await change(el, "name", name);
-      save(el).click();
-      await expect
-        .poll(() => el.shadowRoot!.querySelector("[data-test=enable-name-clash]"))
-        .not.toBeNull();
-      const enable = el.shadowRoot!.querySelector<HTMLElement>("[data-test=enable-name-clash]")!;
-      expect(field(el, "name").error).toBe(
-        locale === "en"
-          ? `A disabled ${kind} already has this name. Enable it instead.`
-          : kind === "department"
-            ? "Un departamento deshabilitado ya tiene este nombre. Habilítalo en su lugar."
-            : "Una zona deshabilitada ya tiene este nombre. Habilítala en su lugar.",
-      );
-      expect(enable.textContent!.trim()).toBe(
-        `${locale === "en" ? "Enable" : "Habilitar"} ${name}`,
-      );
-      expect(enable.getBoundingClientRect().left).toBeGreaterThanOrEqual(0);
-      expect(enable.getBoundingClientRect().right).toBeLessThanOrEqual(window.innerWidth);
-      const written: unknown[] = [];
-      const saved: unknown[] = [];
-      el.addEventListener("written", (event) => written.push((event as CustomEvent).detail));
-      el.addEventListener("saved", (event) => saved.push((event as CustomEvent).detail));
-      enable.click();
-      await expect.poll(() => request.mock.calls.length).toBe(2);
-      await el.updateComplete;
-      expect(el.dialog).toEqual(dialog);
-      expect(field(el, "name").error).toBe(
-        locale === "en"
-          ? `A ${kind} with this name already exists.`
-          : `Ya existe ${kind === "department" ? "un departamento" : "una zona"} con este nombre.`,
-      );
-      expect(field(el, "name").shadowRoot!.querySelector("input")!.value).toBe(name);
-      expect(el.shadowRoot!.querySelector("[data-test=enable-name-clash]")).toBeNull();
-      expect(save(el).disabled).toBe(false);
-      expect(saved).toEqual([]);
-      expect(written).toEqual([
-        kind === "department" ? { departmentId: "reserved" } : { zoneId: "reserved" },
-      ]);
-      expect(request).toHaveBeenLastCalledWith(
-        kind === "department"
-          ? "/management-api/venue-service/departments/reserved"
-          : "/management-api/zones/reserved",
-        "PATCH",
-        { active: true },
-      );
-      await change(
-        el,
-        "name",
-        dialog.kind === "rename-department" || dialog.kind === "rename-zone" ? dialog.row.name : "",
-      );
-      expect(save(el).disabled).toBe(true);
-      el.remove();
-    } finally {
-      await page.viewport(1280, 900);
-    }
-  },
-);
-
-it.each(dialogs.slice(0, 4))(
-  "$kind leaves newer native text free of an earlier Enable success",
-  async (dialog) => {
-    let finish!: (value: unknown) => void;
-    const kind = dialog.kind.endsWith("department") ? "department" : "zone";
-    let calls = 0;
-    const request = vi.fn(async () => {
-      if (++calls === 1)
-        throw {
-          code: `${kind}.name_disabled`,
-          params: { name: "Reserved", [`${kind}Id`]: "disabled" },
-        };
-      return new Promise<unknown>((resolve) => {
-        finish = resolve;
-      });
-    });
-    const { el } = await mount(dialog, request);
-    await change(el, "name", "Reserved");
-    save(el).click();
-    await expect
-      .poll(() => el.shadowRoot!.querySelector("[data-test=enable-name-clash]"))
-      .not.toBeNull();
-    el.shadowRoot!.querySelector<HTMLElement>("[data-test=enable-name-clash]")!.click();
-    await expect.poll(() => request.mock.calls.length).toBe(2);
-    await field(el, "name").updateComplete;
-    const native = field(el, "name").shadowRoot!.querySelector("input")!;
-    await userEvent.fill(page.elementLocator(native), "New available name");
-    await el.updateComplete;
-    finish(undefined);
-    await expect.poll(() => save(el).disabled).toBe(false);
-    expect(field(el, "name").error).toBe("");
-    expect(native.value).toBe("New available name");
-    expect(el.shadowRoot!.querySelector("[data-test=enable-name-clash]")).toBeNull();
-    expect(await bottom(el)).toBe("");
-    expect(el.dialog).toEqual(dialog);
-    expect(request).toHaveBeenCalledTimes(2);
-    expect(request).toHaveBeenLastCalledWith(
-      kind === "department"
-        ? "/management-api/venue-service/departments/disabled"
-        : "/management-api/zones/disabled",
-      "PATCH",
-      { active: true },
-    );
-  },
-);

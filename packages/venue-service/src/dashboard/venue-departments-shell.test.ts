@@ -15,7 +15,7 @@ const department = (id: string, active = true) => ({
 });
 function model(count = 2): VenueServiceView {
   return {
-    departments: Array.from({ length: count }, (_, i) => department(`d${i + 1}`, i === 0)),
+    departments: Array.from({ length: count }, (_, i) => department(`d${i + 1}`, true)),
     zones: ["z1", "z2"].map((id) => ({
       id,
       name: id,
@@ -51,6 +51,7 @@ async function mount(path = "/manage/venue-operations", view = model()) {
       departmentId: "d1",
       receivingProfileId: null,
       destinationDepartmentIds: [],
+      profiles: [],
     }),
     listDeviceProfiles: vi.fn().mockResolvedValue([]),
   };

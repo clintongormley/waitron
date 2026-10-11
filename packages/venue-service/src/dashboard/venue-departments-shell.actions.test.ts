@@ -70,7 +70,10 @@ async function mount(
     }
     if (url === "/management-api/zones?includeInactive=true") return loaded.floorZones;
     if (url.endsWith("/profiles")) return [];
-    if (url.endsWith("/removal-impact")) return { zones: [] };
+    if (url.endsWith("/delete-impact")) {
+      const id = url.split("/").at(-2)!;
+      return { target: { id, name: id }, refusals: [], ends: [], removes: [] };
+    }
     return { departmentId: "d1", receivingProfileId: null, destinationDepartmentIds: [] };
   });
   shell.api = new VenueServiceApi(((...args: Parameters<DashboardRequest>) => {
@@ -120,11 +123,11 @@ function alert(shell: HTMLElementTagNameMap["venue-departments-shell"]) {
 }
 it.each([
   ["rename-department", { departmentId: "d1" }, "rename-department", "d1"],
-  ["disable-department", { departmentId: "d1" }, "disable-department", "d1"],
+  ["delete-department", { departmentId: "d1" }, "delete-department", "d1"],
   ["rename-zone", { zoneId: "z1" }, "rename-zone", "z1"],
   ["move-zone", { zoneId: "z1" }, "move-zone", "z1"],
   ["add-to-department", { zoneId: "z1" }, "add-to-department", "z1"],
-  ["disable-zone", { zoneId: "z1" }, "disable-zone", "z1"],
+  ["delete-zone", { zoneId: "z1" }, "delete-zone", "z1"],
 ] as const)("%s opens the dialog for its recorded row", async (event, detail, kind, id) => {
   const { shell } = await mount();
   emit(shell.shadowRoot!.querySelector("departments-list")!, event, detail);
@@ -194,57 +197,7 @@ it("a successful write with failed refresh closes the dialog and reports a load 
   expect(alert(shell)).not.toContain("saved");
   expect(request.mock.calls.filter((call) => call[1] === "POST")).toHaveLength(1);
 });
-it.each(["department", "zone"] as const)(
-  "Enable %s sends only active:true and refreshes",
-  async (kind) => {
-    const { shell, loaded, request } = await mount();
-    const next = view();
-    next.departments[1]!.active = true;
-    loaded(next);
-    emit(
-      shell.shadowRoot!.querySelector("departments-list")!,
-      `enable-${kind}`,
-      kind === "department" ? { departmentId: "d2" } : { zoneId: "z1" },
-    );
-    await expect
-      .poll(() => request.mock.calls.filter((call) => call[1] === "PATCH").length)
-      .toBe(1);
-    expect(request).toHaveBeenCalledWith(
-      kind === "department"
-        ? "/management-api/venue-service/departments/d2"
-        : "/management-api/zones/z1",
-      "PATCH",
-      { active: true },
-    );
-    await expect.poll(() => shell.model.departments[1]!.active).toBe(true);
-  },
-);
-it("Enable refusal keeps the disabled department and permits a second attempt", async () => {
-  const { shell, failWrite, loaded } = await mount("/manage/venue-operations/department/d2");
-  failWrite({ code: "department.not_found" });
-  const page = shell.shadowRoot!.querySelector("department-page")!;
-  await page.updateComplete;
-  page.shadowRoot!.querySelector<HTMLElement>("[data-test=enable-department]")!.click();
-  await expect.poll(() => alert(shell)).toBe("The change could not be saved.");
-  expect(shell.model.departments[1]!.active).toBe(false);
-  failWrite(undefined);
-  const next = view();
-  next.departments[1]!.active = true;
-  loaded(next);
-  page.shadowRoot!.querySelector<HTMLElement>("[data-test=enable-department]")!.click();
-  await expect.poll(() => shell.model.departments[1]!.active).toBe(true);
-  expect(alert(shell)).toBe("");
-});
-it("zone Enable explains its disabled department", async () => {
-  const { shell, failWrite } = await mount();
-  failWrite({ code: "zone.department_inactive" });
-  emit(shell.shadowRoot!.querySelector("departments-list")!, "enable-zone", { zoneId: "z1" });
-  await expect
-    .poll(() => alert(shell))
-    .toBe(
-      "That zone needs an active department. Enable its department or assign it to an active one first",
-    );
-});
+
 it("a moved zone leaves the current tab and chooses the first remaining zone", async () => {
   const { shell, loaded } = await mount(
     "/manage/venue-operations/department/d1/view/zones/zone/z1",
@@ -276,9 +229,7 @@ it("refresh completion retains a newer externally delivered model", async () => 
   vi.spyOn(shell.api, "background", "get").mockReturnValue({
     load: read,
   } as unknown as VenueServiceApi);
-  emit(shell.shadowRoot!.querySelector("departments-list")!, "enable-department", {
-    departmentId: "d2",
-  });
+  emit(shell.shadowRoot!.querySelector("department-dialogs")!, "written", { departmentId: "d1" });
   await expect.poll(() => read.mock.calls.length).toBe(1);
   const newer = view();
   newer.departments[0]!.name = "New live name";
@@ -329,40 +280,7 @@ it.each([0, 2])("adding a zone returns focus to Add with %i prior zones", async 
   ]);
   await expect.poll(() => zones.shadowRoot!.activeElement).toBe(opener);
 });
-it("zone Enable closes its real popover before the request completes", async () => {
-  let release!: () => void;
-  const pending = new Promise<void>((resolve) => {
-    release = resolve;
-  });
-  const model = view();
-  model.zones[0]!.active = false;
-  model.floorZones[0]!.active = false;
-  const { shell, request } = await mount(
-    "/manage/venue-operations/department/d1/view/zones/zone/z1",
-    model,
-    pending,
-  );
-  const zones = shell.shadowRoot!.querySelector("department-zones")!;
-  await zones.updateComplete;
-  const action = zones.shadowRoot!.querySelector<HTMLElement>("[data-test=enable-zone]")!;
-  const menu = action.closest("wt-row-actions")!;
-  await menu.updateComplete;
-  const popup = menu.shadowRoot!.querySelector<HTMLElement>("[popover]")!;
-  try {
-    await userEvent.click(menu.shadowRoot!.querySelector("button")!);
-    expect(popup.matches(":popover-open")).toBe(true);
-    await userEvent.click(action);
-    await expect
-      .poll(() => request.mock.calls.filter((call) => call[1] === "PATCH").length)
-      .toBe(1);
-    expect(request).toHaveBeenCalledWith("/management-api/zones/z1", "PATCH", { active: true });
-    expect(popup.matches(":popover-open")).toBe(false);
-    expect(shell.shadowRoot!.querySelector("department-dialogs")!.dialog).toBeUndefined();
-  } finally {
-    release();
-    await expect.poll(() => shell.getAttribute("aria-busy")).toBe("false");
-  }
-});
+
 it.each(["cancel", "save"] as const)(
   "Rename %s restores the department row-menu trigger",
   async (ending) => {
@@ -399,9 +317,7 @@ it("a late refresh refusal does not hide a newer successfully delivered snapshot
   vi.spyOn(shell.api, "background", "get").mockReturnValue({
     load: read,
   } as unknown as VenueServiceApi);
-  emit(shell.shadowRoot!.querySelector("departments-list")!, "enable-department", {
-    departmentId: "d2",
-  });
+  emit(shell.shadowRoot!.querySelector("department-dialogs")!, "written", { departmentId: "d1" });
   await expect.poll(() => read.mock.calls.length).toBe(1);
   const newer = view();
   newer.departments[0]!.name = "New live name";
@@ -441,68 +357,11 @@ it("a refresh finishing after browser navigation does not reopen the created dep
   await expect.poll(() => shell.getAttribute("aria-busy")).toBe("false");
   expect(location.pathname).toBe("/manage/venue-operations/department/d1");
 });
-it("recovering a read clears only its load error and retains an Enable refusal", async () => {
-  const { shell, failRead, failWrite } = await mount();
-  failRead(new Error("offline"));
-  const list = shell.shadowRoot!.querySelector("departments-list")!;
-  emit(list, "enable-department", { departmentId: "d2" });
-  await expect.poll(() => alert(shell)).toBe("The venue configuration could not be loaded.");
-  failWrite(new Error("refused"));
-  emit(list, "enable-department", { departmentId: "d2" });
-  await expect.poll(() => alert(shell)).toBe("The change could not be saved.");
-  const recovered = view();
-  recovered.departments[0]!.name = "Read recovered";
-  shell.model = recovered;
-  await shell.updateComplete;
-  expect(alert(shell)).toBe("The change could not be saved.");
-});
-it("Enable sends one request while its first request is pending", async () => {
-  const { shell } = await mount();
-  let release!: () => void;
-  const write = vi.spyOn(shell.api, "updateDepartment").mockImplementation(
-    () =>
-      new Promise<void>((yes) => {
-        release = yes;
-      }),
-  );
-  const list = shell.shadowRoot!.querySelector("departments-list")!;
-  emit(list, "enable-department", { departmentId: "d2" });
-  emit(list, "enable-department", { departmentId: "d2" });
-  await shell.updateComplete;
-  expect(write).toHaveBeenCalledExactlyOnceWith("d2", { active: true });
-  expect(shell.getAttribute("aria-busy")).toBe("true");
-  release();
-  await expect.poll(() => shell.getAttribute("aria-busy")).toBe("false");
-});
-it("an Enable response from a previous connection cannot refresh a reconnected shell", async () => {
-  const { shell, request } = await mount();
-  let release!: () => void;
-  vi.spyOn(shell.api, "updateDepartment").mockImplementation(
-    () =>
-      new Promise<void>((yes) => {
-        release = yes;
-      }),
-  );
-  emit(shell.shadowRoot!.querySelector("departments-list")!, "enable-department", {
-    departmentId: "d2",
-  });
-  await shell.updateComplete;
-  shell.remove();
-  document.body.append(shell);
-  await shell.updateComplete;
-  release();
-  await shell.updateComplete;
-  expect(
-    request.mock.calls.filter((call) => call[0] === "/management-api/venue-service"),
-  ).toHaveLength(0);
-  expect(shell.model.departments[1]!.active).toBe(false);
-});
+
 it("a delivered recovery snapshot clears an earlier load failure", async () => {
   const { shell, failRead } = await mount();
   failRead(new Error("offline"));
-  emit(shell.shadowRoot!.querySelector("departments-list")!, "enable-department", {
-    departmentId: "d2",
-  });
+  emit(shell.shadowRoot!.querySelector("department-dialogs")!, "written", { departmentId: "d1" });
   await expect.poll(() => alert(shell)).toBe("The venue configuration could not be loaded.");
   shell.model = view();
   await shell.updateComplete;
@@ -735,189 +594,4 @@ it("a retained dialog cannot write again while its successful write is refreshin
   await expect.poll(() => el.dialog).toBeUndefined();
   await expect.poll(() => shell.model.departments[0]!.name).toBe("Newer");
   expect(request.mock.calls.filter((call) => call[1] === "PATCH")).toHaveLength(2);
-});
-
-it.each([
-  ["en", "Enable", "Disabled", "The change could not be saved."],
-  ["es", "Habilitar", "Deshabilitada", "No se pudo guardar el cambio."],
-] as const)(
-  "a refused zone Enable stays available and its retry updates that zone in %s",
-  async (locale, enableLabel, disabledLabel, refusal) => {
-    const initial = view();
-    initial.zones[0]!.active = false;
-    initial.floorZones[0]!.active = false;
-    setLocale(locale);
-    const { shell, request, failWrite, loaded } = await mount(
-      "/manage/venue-operations/department/d1/view/zones/zone/z1",
-      initial,
-    );
-    setLocale(locale);
-    shell.requestUpdate();
-    await shell.updateComplete;
-    const zones = shell.shadowRoot!.querySelector("department-zones")!;
-    await zones.updateComplete;
-    const enable =
-      zones.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>(
-        "[data-test=enable-zone]",
-      )!;
-    expect(enable.textContent?.trim()).toBe(enableLabel);
-    expect(zones.shadowRoot!.querySelector("[data-test=zone-z1]")!.textContent).toContain(
-      disabledLabel,
-    );
-    failWrite({ code: "connection.failed" });
-    enable.click();
-    await expect.poll(() => alert(shell)).toBe(refusal);
-    expect(request.mock.calls).toEqual([["/management-api/zones/z1", "PATCH", { active: true }]]);
-    expect(shell.model.zones[0]!.active).toBe(false);
-    expect(shell.shadowRoot!.querySelector("department-dialogs")?.dialog).toBeUndefined();
-    expect(zones.shadowRoot!.querySelector("[data-test=enable-zone]")).not.toBeNull();
-    expect(zones.shadowRoot!.querySelector("[data-test=disable-zone]")).toBeNull();
-
-    const next = structuredClone(initial);
-    next.zones[0]!.active = true;
-    next.floorZones[0]!.active = true;
-    loaded(next);
-    failWrite(undefined);
-    enable.click();
-    await expect.poll(() => shell.model.zones[0]!.active).toBe(true);
-    await zones.updateComplete;
-    expect(zones.shadowRoot!.querySelector("[data-test=zone-z1]")!.textContent).not.toContain(
-      disabledLabel,
-    );
-    expect(zones.shadowRoot!.querySelector("[data-test=enable-zone]")).toBeNull();
-    expect(zones.shadowRoot!.querySelector("[data-test=disable-zone]")).not.toBeNull();
-    expect(alert(shell)).toBe("");
-    expect(request.mock.calls.filter((call) => call[1] === "PATCH")).toEqual([
-      ["/management-api/zones/z1", "PATCH", { active: true }],
-      ["/management-api/zones/z1", "PATCH", { active: true }],
-    ]);
-  },
-);
-
-it.each([
-  [
-    "en",
-    "That zone needs an active department. Enable its department or assign it to an active one first",
-  ],
-  [
-    "es",
-    "Esa zona necesita un departamento habilitado. Habilita su departamento o asígnala primero a uno habilitado",
-  ],
-] as const)("a zone Enable department refusal keeps its control in %s", async (locale, refusal) => {
-  const initial = view();
-  initial.zones[0]!.active = false;
-  initial.floorZones[0]!.active = false;
-  const { shell, request, failWrite } = await mount(
-    "/manage/venue-operations/department/d1/view/zones/zone/z1",
-    initial,
-  );
-  setLocale(locale);
-  shell.requestUpdate();
-  await shell.updateComplete;
-  const zones = shell.shadowRoot!.querySelector("department-zones")!;
-  await zones.updateComplete;
-  failWrite({ code: "zone.department_inactive", params: { departmentId: "d1" } });
-  zones.shadowRoot!.querySelector<HTMLElement>("[data-test=enable-zone]")!.click();
-  await expect.poll(() => alert(shell)).toBe(refusal);
-  expect(request.mock.calls).toEqual([["/management-api/zones/z1", "PATCH", { active: true }]]);
-  expect(shell.model.zones[0]!.active).toBe(false);
-  expect(zones.shadowRoot!.querySelector("[data-test=enable-zone]")).not.toBeNull();
-  expect(zones.shadowRoot!.querySelector("[data-test=disable-zone]")).toBeNull();
-});
-
-it.each([
-  ["en", "Enable", "Disabled", "The change could not be saved."],
-  ["es", "Habilitar", "Deshabilitado", "No se pudo guardar el cambio."],
-] as const)(
-  "a refused department Enable keeps its page and Settings read-only until retry in %s",
-  async (locale, enableLabel, disabledLabel, refusal) => {
-    setLocale(locale);
-    const { shell, request, failWrite, loaded } = await mount(
-      "/manage/venue-operations/department/d2",
-    );
-    const departmentPage = shell.shadowRoot!.querySelector("department-page")!;
-    await departmentPage.updateComplete;
-    const settings = departmentPage.shadowRoot!.querySelector("department-settings")!;
-    await settings.updateComplete;
-    const name =
-      settings.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>("[name=name]")!;
-    const enable = departmentPage.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>(
-      "[data-test=enable-department]",
-    )!;
-    expect(enable.textContent?.trim()).toBe(enableLabel);
-    expect(
-      departmentPage.shadowRoot!.querySelector("[data-test=department-status]")!.textContent,
-    ).toContain(disabledLabel);
-    expect(name.disabled).toBe(true);
-    failWrite({ code: "connection.failed" });
-    enable.click();
-    await expect.poll(() => alert(shell)).toBe(refusal);
-    expect(request.mock.calls).toEqual([
-      ["/management-api/venue-service/departments/d2", "PATCH", { active: true }],
-    ]);
-    expect(shell.model.departments[1]!.active).toBe(false);
-    expect(name.disabled).toBe(true);
-    expect(
-      departmentPage.shadowRoot!.querySelector("[data-test=enable-department]"),
-    ).not.toBeNull();
-    expect(shell.shadowRoot!.querySelector("department-dialogs")?.dialog).toBeUndefined();
-    const next = view();
-    next.departments[1]!.active = true;
-    loaded(next);
-    failWrite(undefined);
-    enable.click();
-    await expect.poll(() => shell.model.departments[1]!.active).toBe(true);
-    await departmentPage.updateComplete;
-    await settings.updateComplete;
-    expect(departmentPage.shadowRoot!.querySelector("[data-test=enable-department]")).toBeNull();
-    expect(departmentPage.shadowRoot!.querySelector("[data-test=department-status]")).toBeNull();
-    expect(name.disabled).toBe(false);
-    expect(alert(shell)).toBe("");
-    expect(request.mock.calls.filter((call) => call[1] === "PATCH")).toEqual([
-      ["/management-api/venue-service/departments/d2", "PATCH", { active: true }],
-      ["/management-api/venue-service/departments/d2", "PATCH", { active: true }],
-    ]);
-  },
-);
-
-it("a reserved-name Enable refreshes the shell without accepting or navigating away from Rename", async () => {
-  const { shell, request, loaded, failWrite } = await mount(
-    "/manage/venue-operations/department/d1",
-  );
-  failWrite({ code: "department.name_disabled", params: { name: "Deli", departmentId: "d2" } });
-  emit(shell.shadowRoot!.querySelector("department-page")!, "rename-department", {
-    departmentId: "d1",
-  });
-  const editor = await dialogs(shell);
-  await saveName(editor, "Deli");
-  await expect
-    .poll(() => editor.shadowRoot!.querySelector("[data-test=enable-name-clash]"))
-    .not.toBeNull();
-  const next = view();
-  next.departments[1]!.active = true;
-  loaded(next);
-  failWrite(undefined);
-  editor.shadowRoot!.querySelector<HTMLElement>("[data-test=enable-name-clash]")!.click();
-  await expect.poll(() => shell.model.departments[1]!.active).toBe(true);
-  await expect.poll(() => shell.getAttribute("aria-busy")).toBe("false");
-  expect(editor.dialog?.kind).toBe("rename-department");
-  const field = editor.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>("[name=name]")!;
-  await field.updateComplete;
-  expect(field.shadowRoot!.querySelector("input")!.value).toBe("Deli");
-  expect(field.error).toBe("A department with this name already exists.");
-  expect(editor.shadowRoot!.querySelector("[data-test=enable-name-clash]")).toBeNull();
-  expect(
-    editor.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>("[data-test=save-editor]")!
-      .disabled,
-  ).toBe(false);
-  expect(shell.model.departments[0]!.name).toBe("Restaurant");
-  expect(location.pathname).toBe("/manage/venue-operations/department/d1");
-  expect(alert(shell)).toBe("");
-  expect(request.mock.calls.filter((call) => call[1] === "PATCH")).toEqual([
-    ["/management-api/venue-service/departments/d1", "PATCH", { name: "Deli" }],
-    ["/management-api/venue-service/departments/d2", "PATCH", { active: true }],
-  ]);
-  expect(request).toHaveBeenCalledWith("/management-api/venue-service", "GET", undefined, {
-    passive: true,
-  });
 });
