@@ -12,5 +12,5 @@ export const BOOKINGS_CLASSIFICATION: readonly ClassifiedTable[] = [
 import type { ChangeSource } from "@waitron/shared";
 
 export const BOOKINGS_CHANGE_SOURCES: readonly ChangeSource[] = [
-  { table: "bookings", type: "bookings" },
+  { table: "bookings", type: "bookings", related: [{ type: "dining_tables", column: "table_id" }] },
 ];

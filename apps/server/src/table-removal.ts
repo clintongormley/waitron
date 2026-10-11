@@ -11,7 +11,7 @@ import {
 } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import type { TableRemoval } from "@waitron/module";
-import type { AppError } from "@waitron/shared";
+import type { AppError, DeleteImpactRefusal } from "@waitron/shared";
 import { foodOnItsWay, releaseDeliveries } from "./delivery-release.js";
 import { leaveMerges } from "./floor-today-merges.js";
 import type { TillConfig } from "./till-config.js";
@@ -107,4 +107,49 @@ export async function removeLiveTables(
     }
   }
   return kept;
+}
+
+export async function tableDeleteRefusals(
+  tx: Transaction,
+  cfg: Pick<TillConfig, "locationId">,
+  removals: readonly TableRemoval[],
+  tableIds: readonly string[],
+  now: Date,
+): Promise<DeleteImpactRefusal[]> {
+  if (tableIds.length === 0) return [];
+  const result: DeleteImpactRefusal[] = [];
+  let labels: Map<string, string> | undefined;
+  for (const removal of removals) {
+    if (removal.deleteRefusals) {
+      result.push(
+        ...(await removal.deleteRefusals(tx, { locationId: cfg.locationId }, tableIds, now)),
+      );
+    } else {
+      const refusals = await removal.refuse(tx, { locationId: cfg.locationId }, tableIds, now);
+      for (const id of tableIds) {
+        const refusal = refusals.get(id);
+        if (refusal === undefined) continue;
+        labels ??= new Map(
+          (
+            await tx
+              .select({ id: diningTables.id, label: diningTables.label })
+              .from(diningTables)
+              .where(inArray(diningTables.id, [...tableIds]))
+          ).map((row) => [row.id, row.label]),
+        );
+        const params: Record<string, string | number> = {};
+        for (const [key, value] of Object.entries(refusal.params)) {
+          // Preserve the original refusal when its parameters cannot travel in the impact contract.
+          if (typeof value !== "string" && typeof value !== "number") throw refusal;
+          params[key] = value;
+        }
+        result.push({
+          code: refusal.code,
+          params,
+          targets: [{ id, name: labels.get(id) ?? id }],
+        });
+      }
+    }
+  }
+  return result;
 }

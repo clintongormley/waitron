@@ -9,6 +9,8 @@ import type {
   ReceiptPaperWidth,
   Decimal,
   LocationId,
+  DeleteImpactRefusal,
+  DeleteImpactItem,
 } from "@waitron/shared";
 import type { ChangeSource } from "@waitron/shared";
 import type { Database, SQL, Transaction } from "@waitron/db";
@@ -76,8 +78,23 @@ export interface FloorAnnotator {
   ): Promise<Map<string, { reservedTime: string | null }>>;
 }
 
+export interface FloorDeletion {
+  readImpact(
+    tx: Transaction,
+    zoneIds: readonly string[],
+    now: Date,
+  ): Promise<{ refusals: DeleteImpactRefusal[]; removes: DeleteImpactItem[] }>;
+  clear(tx: Transaction, zoneIds: readonly string[], now: Date): Promise<void>;
+}
+
 /** A module's part in removing a live table. */
 export interface TableRemoval {
+  deleteRefusals?(
+    tx: Transaction,
+    cfg: { locationId: LocationId },
+    tableIds: readonly string[],
+    now: Date,
+  ): Promise<readonly DeleteImpactRefusal[]>;
   /**
    * The refusal for each of `tableIds` this module still needs; a table it lets go of has no entry.
    * A throw is not a refusal: it fails the caller, the till's floor read included.

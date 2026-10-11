@@ -8,6 +8,7 @@ export type {
   ModulePermission,
   FloorAnnotator,
   TableRemoval,
+  FloorDeletion,
   CoreServices,
   ConfigurationTransferTable,
   ModuleConfigurationTransfer,
