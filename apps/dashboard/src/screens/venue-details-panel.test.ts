@@ -116,8 +116,8 @@ it("draws semantic shared fields, explicit unset text and a locked province expl
     [...el.shadowRoot!.querySelectorAll("wt-input")].map((input) => input.getAttribute("name")),
   ).toEqual(["venueName", "addressLine1", "addressLine2", "city", "timeZone", "dayCutover"]);
   expect(q(el, "[data-test=locked-province]")?.textContent).toContain("Not set");
-  expect(q(el, "[data-test=locked-province]")?.textContent).toContain("setup");
-  expect(q(el, "[data-test=locked-postalCode]")?.textContent).toContain("setup");
+  expect(q(el, "[data-test=locked-postalCode]")?.textContent).toContain("28001");
+  expect(q(el, "[data-test=locked-notes]")?.textContent?.split("setup")).toHaveLength(2);
   expect(field(el, "venueName").required).toBe(true);
   expect(q(el, "wt-help-tooltip")).not.toBeNull();
 });
@@ -240,7 +240,7 @@ it("a first sale updates locks without discarding the proposed clock value", asy
   r.set(locked);
   await r.notify(el, "sales");
   expect(field(el, "timeZone").value).toBe("UTC");
-  expect(q(el, "[data-test=lock-timeZone]")?.textContent).toContain("sales");
+  expect(q(el, "[data-test=locked-notes]")?.textContent).toContain("sales");
   await click(el, "[data-test=acknowledge]");
   await click(el, "[data-test=save]");
   expect(r.api.patchVenueDetails).toHaveBeenCalledWith({
@@ -539,4 +539,80 @@ it("explains an unavailable country beside the changed city and leaves retry ava
     "This geography cannot be changed here. A different fiscal or language context requires separate setup or a venue reset.",
   );
   expect(save(el).disabled).toBe(false);
+});
+
+const text = (node: Element | null | undefined) =>
+  (node?.textContent ?? "").replace(/\s+/g, " ").trim();
+const lines = (el: Panel) =>
+  [...(q(el, "[data-test=address]")?.children ?? [])].map((line) => text(line));
+const count = (haystack: string, needle: string) => haystack.split(needle).length - 1;
+
+it("shows the legal name, tax ID and country as one line outside the form, in view and edit mode", async () => {
+  setLocale("en-GB");
+  const el = await mount(rig().api);
+  expect(text(q(el, "[data-test=issuer]"))).toBe("Issuer SL · B12345678 · ES");
+  expect(el.shadowRoot!.textContent).not.toContain("Legal name");
+  expect(el.shadowRoot!.textContent).not.toContain("Tax ID");
+  await click(el, "[data-test=edit]");
+  expect(text(q(el, "[data-test=issuer]"))).toBe("Issuer SL · B12345678 · ES");
+  expect(q(el, "form [data-test=issuer]")).toBeNull();
+  expect(q(el, "form")).not.toBeNull();
+});
+
+it.each([
+  [{}, ["Calle Mayor 1", "28001 Madrid", "Madrid"]],
+  [{ addressLine2: "Piso 2" }, ["Calle Mayor 1", "Piso 2", "28001 Madrid", "Madrid"]],
+])("shows the saved address as one unlabelled block (%o)", async (details, expected) => {
+  setLocale("en-GB");
+  const el = await mount(rig(venueDetailsFixture(details)).api);
+  expect(lines(el)).toEqual(expected);
+  const labels = [...el.shadowRoot!.querySelectorAll("dt")].map((label) => text(label));
+  for (const perLine of ["Street address", "Address line 2", "Postcode", "City", "Province"])
+    expect(labels).not.toContain(perLine);
+  expect(labels).toEqual(
+    expect.arrayContaining(["Venue name", "Time zone", "Business day starts at"]),
+  );
+});
+
+it.each([
+  ["en-GB", "Locked: the venue has recorded sales.", "recorded sales"],
+  ["es", "Bloqueado: el local tiene ventas registradas.", "ventas registradas"],
+])(
+  "says the sales lock once for the form, tooltips included (%s)",
+  async (locale, sentence, stem) => {
+    setLocale(locale);
+    const r = rig();
+    const el = await editing(r.api);
+    change(el, "timeZone", "UTC");
+    await flush(el);
+    const locked = venueDetailsFixture();
+    locked.hasSales = true;
+    for (const key of ["city", "timeZone", "dayCutover"] as const)
+      locked.policy[key] = { decision: "refuse", reasons: ["sales"] };
+    r.set(locked);
+    await r.notify(el, "sales");
+    const all = el.shadowRoot!.textContent ?? "";
+    expect(count(all, stem)).toBe(1);
+    const notes = [...el.shadowRoot!.querySelectorAll("[data-test=locked-notes] > p")].map(text);
+    expect(notes.filter((note) => note === sentence)).toHaveLength(1);
+    const clockHelp = field(el, "timeZone").parentElement!.querySelector("wt-help-tooltip")!;
+    expect(clockHelp.textContent).toContain(
+      locale === "es" ? "Los horarios de apertura" : "Department and station opening hours",
+    );
+  },
+);
+
+it("puts a sales-lock refusal from the server beside its field in words that read on their own", async () => {
+  setLocale("en-GB");
+  const { api } = rig();
+  vi.mocked(api.patchVenueDetails).mockRejectedValue({
+    code: "venue.detail_locked",
+    params: { field: "addressLine1", reason: "sales" },
+  });
+  const el = await editing(api);
+  change(el, "addressLine1", "Different street");
+  await flush(el);
+  await click(el, "[data-test=save]");
+  expect(field(el, "addressLine1").error).toBe("Locked: the venue has recorded sales.");
+  expect(actions(el).error).toBe("Correct the highlighted fields to continue.");
 });
