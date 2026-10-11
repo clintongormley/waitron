@@ -120,8 +120,8 @@ describe("image source labels", () => {
         new RegExp(`FROM [^\\n]+ AS ${target}\\n([\\s\\S]*?)(?=\\nFROM |$)`),
         target,
       );
-      expect(stage.indexOf("ARG WAITRON_BUILD_ID")).toBeGreaterThan(stage.lastIndexOf("\nRUN "));
-      expect(stage.indexOf("LABEL org.opencontainers.image.revision")).toBeGreaterThan(
+      expect(stage.search(/^ARG WAITRON_BUILD_ID$/m)).toBeGreaterThan(stage.lastIndexOf("\nRUN "));
+      expect(stage.search(/^LABEL org.opencontainers.image.revision=/m)).toBeGreaterThan(
         stage.lastIndexOf("\nRUN "),
       );
       expect(stage).toContain("ARG WAITRON_BUILD_ID");

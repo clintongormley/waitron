@@ -1704,3 +1704,10 @@ Two `docker build --progress=plain --build-arg C=<value>` calls with new values 
 call print `#5 CACHED`. This measures that tiny Dockerfile, not the box's Docker version or apt's
 runtime. Both shipped targets now place the metadata after their final RUN; the deploy guard
 checks that ordering as text.
+
+
+A490's correction also hit a prose occurrence of `ENV`, creating `ENV including`; source scans
+passed, but CI failed before building a layer. The driver reproduced `ENV must have two arguments`
+with `docker build --check -f deploy/Dockerfile .`. Use anchored instruction lines when moving
+Dockerfile declarations, and run that check after changing them. The metadata-order guard now
+requires an actual ARG/LABEL line, but remains a source scan, not Docker's parser.

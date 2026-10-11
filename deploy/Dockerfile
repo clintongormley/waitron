@@ -148,7 +148,6 @@ RUN set -eux; \
 # ---------------------------------------------------------------------------
 FROM node:26-slim AS runtime
 
-
 # libcap2-bin is here for the setcap below. apt-get is bounded as in the print-agent stage.
 RUN set -eux; \
   printf '%s\n' 'Acquire::Retries "3";' 'Acquire::http::Timeout "30";' 'Acquire::https::Timeout "30";' 'APT::Update::Error-Mode "any";' \
@@ -184,9 +183,7 @@ RUN install -d -o waitron -g waitron -m 0700 /var/lib/waitron \
 
 # Named file by file rather than copying the whole of dist/, because dist/ also holds the demo
 # scripts (record-one-sale.js and friends) — and record-one-sale.js writes a real sale through the
-# real Veri*Factu backend into an append-only, hash-chained table, under any WAITRON_ARG WAITRON_BUILD_ID
-
-ENV including
+# real Veri*Factu backend into an append-only, hash-chained table, under any WAITRON_ENV including
 # production. A production image has no business carrying it. dist/package.json ({"type":"module"})
 # travels with the bundle so /app declares its own module system rather than inheriting one from a
 # walk up the filesystem. deploy-image-env.test.ts pins this list against package.json's
@@ -248,6 +245,8 @@ COPY --from=build --chown=waitron:waitron /third-party/libvips/ /app/third-party
 # copies of boot.ts's BOX_HOSTNAME, pinned to it — along with compose's defaults and waitron.sh's
 # QR URL — by scripts/deploy-image-env.test.ts, which is what makes a change to one of the four
 # fail rather than ship a box whose certificate, QR and relying party disagree.
+ARG WAITRON_BUILD_ID
+
 ENV WAITRON_STATE_DIR=/var/lib/waitron/state \
   WAITRON_BUILD_ID=${WAITRON_BUILD_ID} \
   WAITRON_LOG_DIR=/var/lib/waitron/logs \
