@@ -849,3 +849,50 @@ it("keeps an unlinked live table seated until it is free, then removes it", asyn
   expect(await todayRow(tableId)).toBeUndefined();
   expect(await pendingRows(z)).toEqual([]);
 });
+
+it.each([false, true])(
+  "removes an unlinked merge only once its tables are free (occupied: %s)",
+  async (occupied) => {
+    const z = await zone();
+    const t1 = await v.table("Unlinked merge 1", z);
+    const t2 = await v.table("Unlinked merge 2", z);
+    await masterOf(z, []);
+    const partyId = occupied ? (await seat(v, t1)).partyId : null;
+    if (partyId !== null) await join(v, partyId, t2);
+    await inTx(v, async (tx) => {
+      const [merge] = await tx
+        .insert(floorTodayJoins)
+        .values({ zoneId: z, seats: 8 })
+        .returning({ id: floorTodayJoins.id });
+      for (const tableId of [t1, t2]) {
+        await tx.insert(floorTodayJoinTables).values({
+          joinId: merge!.id,
+          tableId,
+          beforeX: 0,
+          beforeY: 0,
+          beforeRotation: 0,
+        });
+      }
+    });
+
+    await reset(z);
+
+    if (partyId !== null) {
+      expect((await liveTablesOf(z)).map((t) => t.id).sort()).toEqual([t1, t2].sort());
+      expect(await mergeMembersIn(z)).toEqual([t1, t2].sort());
+      expect(await todayRow(t1)).toBeDefined();
+      expect(await todayRow(t2)).toBeDefined();
+      expect((await pendingRows(z)).map((t) => t.tableId).sort()).toEqual([t1, t2].sort());
+      await finish(partyId);
+      await catchUp(z);
+    }
+    expect(await liveTablesOf(z)).toEqual([]);
+    expect(await mergeMembersIn(z)).toEqual([]);
+    expect(
+      await inTx(v, (tx) => tx.select().from(floorTodayJoins).where(eq(floorTodayJoins.zoneId, z))),
+    ).toEqual([]);
+    expect(await todayRow(t1)).toBeUndefined();
+    expect(await todayRow(t2)).toBeUndefined();
+    expect(await pendingRows(z)).toEqual([]);
+  },
+);
