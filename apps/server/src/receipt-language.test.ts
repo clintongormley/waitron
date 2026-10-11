@@ -1873,6 +1873,16 @@ describe("a sale files in the receipt language saved on its order", () => {
       return row;
     }
 
+    async function orderInvoiceType(venue: BillVenue, id: string) {
+      const [row] = await inTx(venue, (tx) =>
+        tx
+          .select({ invoiceType: workingOrders.invoiceType })
+          .from(workingOrders)
+          .where(eq(workingOrders.id, id)),
+      );
+      return row?.invoiceType;
+    }
+
     function saleCount(venue: BillVenue, id: string): number {
       return venue.db.all(sql`select id from sales where working_order_id = ${id}`).length;
     }
@@ -1931,7 +1941,16 @@ describe("a sale files in the receipt language saved on its order", () => {
             [
               "PUT",
               `/api/working-orders/${id}/invoice-choice`,
-              { revision, invoiceType: "F2", recipient: null },
+              {
+                revision,
+                invoiceType: "F1",
+                recipient: {
+                  taxId: "B12345674",
+                  legalName: "Client SL",
+                  address: "Calle Mayor 2, 08001 Barcelona, Barcelona, España",
+                  countryCode: "ES",
+                },
+              },
             ] as const,
         ],
         [
@@ -1952,6 +1971,10 @@ describe("a sale files in the receipt language saved on its order", () => {
         "refuses %s, and files the language the payment started with",
         async (_name, request) => {
           const venue = await barcelonaVenue();
+          // A domicile, so a full invoice the request let through would be filed as one.
+          await inTx(venue, (tx) =>
+            tx.update(tenants).set({ taxpayerDomicile: "Carrer 1, 08001 Barcelona" }),
+          );
           const id = await placedTarta(venue);
           await choose(venue, id, "es-ES");
           const { pay, release } = await payHeldAtReader(venue, id, "es-ES");
@@ -1970,6 +1993,12 @@ describe("a sale files in the receipt language saved on its order", () => {
           expect(result.outcome === "captured" && result.ticket.locale).toBe("es-ES");
           expect(saleCount(venue, id)).toBe(1);
           expect(await filed(venue, id)).toEqual(SPANISH_TARTA);
+          expect(
+            venue.db.all(
+              sql`select counterparty_tax_id as taxId from sales where working_order_id = ${id}`,
+            ),
+          ).toEqual([{ taxId: null }]);
+          expect(await orderInvoiceType(venue, id)).toBe("F2");
         },
       );
 
