@@ -493,7 +493,7 @@ export const STATUS: Record<string, ContentfulStatusCode> = {
   "reader.payment_in_progress": 409,
   "table.not_found": 404,
   "table.inactive": 409,
-  "table.not_in_floor_plan": 409,
+  "table.not_on_today_plan": 409,
   "table.taken_off": 409,
   "table.fixed": 409,
   "table.merged": 409,

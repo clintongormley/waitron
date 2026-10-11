@@ -249,7 +249,7 @@ describe("today's routes", () => {
     });
     expect(await refusal(today(table.spare!, "rotate"))).toEqual({
       status: 409,
-      body: { error: { code: "table.not_in_floor_plan", params: { tableId: table.spare! } } },
+      body: { error: { code: "table.not_on_today_plan", params: { tableId: table.spare! } } },
     });
     expect(await refusal(today(table.off!, "move", { x: 5, y: 5 }))).toEqual({
       status: 409,

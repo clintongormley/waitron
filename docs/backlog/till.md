@@ -290,12 +290,6 @@ screen is designed.
   - `wt-floor-map` works out which table is under the finger on every pointer move. Two cheaper
     versions were tried and each picked a different table (one failed an existing test, the other
     a probe), so the faster version still needs a way that keeps the same answer.
-  - Three questions for the owner: should the editor's first-save note
-    (`floor_plan_editor.first_note`, "later changes, tomorrow") mention Reset as the other note now
-    does; should "this merge needs seats" get a code of its own rather than `floor_plan.invalid`
-    with `field: "seats"`; and should `table.not_in_floor_plan` be renamed (for example
-    `table.not_on_today_plan`), since it reads as the opposite of `table.in_floor_plan` but means
-    something else.
   - `leaveMerges` (`apps/server/src/floor-today-merges.ts`) reads tables by id with no location
     filter; every caller checks the location first.
   - A second drop made while the first is still being sent replaces the first's drawn place.

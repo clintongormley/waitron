@@ -222,7 +222,7 @@ export async function writeMerge(
     moving.tableId,
   ];
   const seats = args.seats ?? (await savedJoinSeats(tx, members));
-  if (seats === null) throw new AppError("floor_plan.invalid", { field: "seats" });
+  if (seats === null) throw new AppError("merge.seats_required", {});
 
   let joinId = target.merge?.joinId;
   if (joinId === undefined) {

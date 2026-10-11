@@ -88,7 +88,11 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "That table is off today's plan. Put it back first",
     es: "Esa mesa está quitada hoy. Vuelve a ponerla primero",
   },
-  "table.not_in_floor_plan": {
+  "merge.seats_required": {
+    en: "Enter the seats for this merge",
+    es: "Indica las plazas de esta unión",
+  },
+  "table.not_on_today_plan": {
     en: "That table is not on today's plan",
     es: "Esa mesa no está en el plano de hoy",
   },

@@ -278,7 +278,7 @@ describe("a join that merges", () => {
       ),
     ).toEqual({
       status: 400,
-      body: { error: { code: "floor_plan.invalid", params: { field: "seats" } } },
+      body: { error: { code: "merge.seats_required", params: {} } },
     });
     expect(await holders(a!, b!)).toEqual([p, null]);
     expect(await place(b!)).toEqual({ x: 20, y: 0, rotation: 0 });

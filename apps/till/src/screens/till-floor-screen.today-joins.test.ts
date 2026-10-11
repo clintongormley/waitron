@@ -136,7 +136,7 @@ function send(target: Element, type: string, detail?: unknown): void {
 
 const P = party("P", 3, ["t1"], "Ana");
 const Q = party("Q", 7, ["t2"]);
-const seatsRefusal = { code: "floor_plan.invalid", status: 400, field: "seats" };
+const seatsRefusal = { code: "merge.seats_required", status: 400 };
 
 afterEach(cleanupWidgets);
 
@@ -347,7 +347,7 @@ describe("till-floor-screen: dragging on today's plan — joins and seating", ()
     await settle(el);
 
     expect(el.shadowRoot!.querySelector("till-today-seats-dialog")).toBeNull();
-    expect(refusal(el)).toBe("Something went wrong, try again");
+    expect(refusal(el)).toBe("Enter the seats for this merge");
   });
 
   it("without an api a join sends nothing and draws nothing new", async () => {

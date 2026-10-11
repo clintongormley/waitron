@@ -28,7 +28,7 @@ export async function todayOf(tx: Transaction, cfg: TillConfig, tableId: string)
     .where(and(eq(diningTables.id, tableId), eq(diningTables.locationId, cfg.locationId)));
   if (table === undefined) throw new AppError("table.not_found", { tableId });
   const { zoneId, row, joinId } = table;
-  if (row === null) throw new AppError("table.not_in_floor_plan", { tableId });
+  if (row === null) throw new AppError("table.not_on_today_plan", { tableId });
   if (joinId === null) return { tableId, zoneId, row, merge: null };
   const members = await tx
     .select({ row: floorTodayTables })
@@ -42,7 +42,7 @@ export async function todayOf(tx: Transaction, cfg: TillConfig, tableId: string)
 /** The refusals a move, a turn or a merge shares, in the order the routes answer them; each is checked across every table before the next. */
 export function refuseUnmovable(...tables: readonly Today[]): void {
   for (const { tableId, row } of tables) {
-    if (row.x === null) throw new AppError("table.not_in_floor_plan", { tableId });
+    if (row.x === null) throw new AppError("table.not_on_today_plan", { tableId });
   }
   for (const { tableId, row } of tables) {
     if (row.takenOff) throw new AppError("table.taken_off", { tableId });

@@ -126,8 +126,8 @@ describe("today's merges", () => {
     expect(await inTx(v, (tx) => savedJoinSeats(tx, [table.a!, table.b!]))).toBeNull();
     expect(await inTx(v, (tx) => savedJoinSeats(tx, [table.a!, "missing-table"]))).toBeNull();
     await expect(merge(table.b!, table.a!, "right", null)).rejects.toMatchObject({
-      code: "floor_plan.invalid",
-      params: { field: "seats" },
+      code: "merge.seats_required",
+      params: {},
     });
 
     expect(await place(table.b!)).toEqual({ x: 20, y: 0, rotation: 0 });
@@ -166,8 +166,8 @@ describe("today's merges", () => {
     await merge(table.b!, table.a!, "right", 8);
 
     await expect(merge(table.c!, table.b!, "bottom", null)).rejects.toMatchObject({
-      code: "floor_plan.invalid",
-      params: { field: "seats" },
+      code: "merge.seats_required",
+      params: {},
     });
     expect(await place(table.c!)).toEqual({ x: 40, y: 0, rotation: 30 });
 
@@ -263,9 +263,9 @@ describe("today's merges", () => {
     const unplanned = await v.table(`Unplanned ${table.a!.slice(0, 6)}`);
 
     for (const [moving, target, code, tableId] of [
-      [table.s!, table.a!, "table.not_in_floor_plan", table.s!],
-      [table.a!, table.s!, "table.not_in_floor_plan", table.s!],
-      [unplanned, table.a!, "table.not_in_floor_plan", unplanned],
+      [table.s!, table.a!, "table.not_on_today_plan", table.s!],
+      [table.a!, table.s!, "table.not_on_today_plan", table.s!],
+      [unplanned, table.a!, "table.not_on_today_plan", unplanned],
       [table.t!, table.a!, "table.taken_off", table.t!],
       [table.a!, table.t!, "table.taken_off", table.t!],
     ] as const) {

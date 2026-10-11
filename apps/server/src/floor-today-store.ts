@@ -591,7 +591,7 @@ export async function backToSaved(
     .from(floorResetTables)
     .where(eq(floorResetTables.tableId, tableId));
   if (saved === undefined || saved.remove) {
-    throw new AppError("table.not_in_floor_plan", { tableId });
+    throw new AppError("table.not_on_today_plan", { tableId });
   }
   await leaveMerges(tx, [tableId]);
   await tx

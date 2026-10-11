@@ -1,3 +1,6 @@
+> 2026-10-11, A476: the first-save note mentions Reset; merge seats use `merge.seats_required`,
+> and a table missing from today's plan uses `table.not_on_today_plan`. Code examples below use these names.
+
 # Floor plans — implementation plan (A429)
 
 > **For agentic workers:** REQUIRED SUB-SKILL: use superpowers:subagent-driven-development
@@ -3969,7 +3972,7 @@ if it is wrong.
    merge route (on the join route carrying `merge`, `joinTables`' own refusals come first —
    `service_zone.join_mismatch`, `table.needs_clearing`, `table-actions.ts:123-132` — and
    `writeMerge`'s follow in this order):
-   - **`table.not_in_floor_plan { tableId }`** (new): it has no today's row; or, for a move, turn or
+   - **`table.not_on_today_plan { tableId }`** (new): it has no today's row; or, for a move, turn or
      merge, it has no place (a spare); or, for Back to its saved place, its reset row is missing or
      says the table goes (its master table was deleted).
    - **`table.taken_off { tableId }`** (new): a move, turn, place, seats or merge of a taken-off table,
@@ -3985,11 +3988,11 @@ if it is wrong.
    - **`table.delivery_pending { tableId }`** (new): taking off a table with food on its way to it
      (decision 12).
    - `service_zone.join_mismatch` (existing): a merge of tables in two zones.
-   - `floor_plan.invalid { field: "seats" }` (existing; its comment widens): a merge whose tables
+   - `merge.seats_required {}` (A476, owner 2026-10-11): a merge whose tables
      have no join with exactly them in today's copy of the master's joins (Task 4.3f), sent without
      `seats`. The till answers it by asking (decision 7).
    Each new code gets its `apps/server/src/errors.ts` entry beside `table.in_floor_plan`, 409 in the
-   till's `STATUS` (and `floor_plan.invalid` 400 there), English and Spanish in
+   till's `STATUS` (and `merge.seats_required` 400 there), English and Spanish in
    `apps/till/src/i18n/codes.ts` and `apps/dashboard/src/i18n/codes.ts` (the Global constraints'
    rule), and a place in `TABLE_REFUSALS`. Cost: five new codes; each names one thing a person can
    act on.
@@ -4036,7 +4039,7 @@ if it is wrong.
    the copy. A join saved, changed or deleted in the editor during the day waits for the next reset.
    The owner's example: a join of 4+5 with 6 seats saved in the editor at 13:00, and a waiter merging
    4 and 5 at 13:30, does NOT get 6 seats; today's copy has no such join, so the till asks. Without a
-   join in the copy the route refuses `floor_plan.invalid { field: "seats" }` before anything changes,
+   join in the copy the route refuses `merge.seats_required {}` before anything changes,
    and the till opens the seats prompt with the members' seats for today added up (a table without
    seats counts 0) and sends again with `seats`. The same holds when a merge grows: its seats are
    worked out again for all its members. Cost: a join saved mid-service is not used until the next
@@ -4135,7 +4138,7 @@ if it is wrong.
     "That table is fixed in place" / "Esa mesa está fija"; `table.merged` "That table is joined to
     another. Split it first" / "Esa mesa está unida a otra. Sepárala primero"; `table.taken_off`
     "That table is off today's plan. Put it back first" / "Esa mesa está quitada hoy. Vuelve a
-    ponerla primero"; `table.not_in_floor_plan` "That table is not on today's plan" / "Esa mesa no
+    ponerla primero"; `table.not_on_today_plan` "That table is not on today's plan" / "Esa mesa no
     está en el plano de hoy"; `table.delivery_pending` "Food is on its way to that table" / "Hay
     comida en camino a esa mesa". Cost: the look pass may shorten more. (The look pass shortened `floor.no_spares`
     to "No spare tables" / "No hay mesas de reserva", 2026-10-11.)
@@ -4203,13 +4206,13 @@ export async function placeSpareToday(tx: Transaction, cfg: TillConfig, tableId:
 ```
 
 - New codes in `errors.ts` (each with a one-line comment saying when it is thrown, as its
-  neighbours have): `table.not_in_floor_plan { tableId }`, `table.taken_off { tableId }`,
+  neighbours have): `table.not_on_today_plan { tableId }`, `table.taken_off { tableId }`,
   `table.fixed { tableId }`, `table.merged { tableId }`.
 
 Behaviour (decisions 2, 3, 11): one private reader, `todayOf(tx, cfg, tableId)`, reads the table's
 `dining_tables` row in `cfg.locationId` (none: `table.not_found`), its `floor_today_tables` row (none:
-`table.not_in_floor_plan`) and its merge's id and members; each write refuses in decision 3's order.
-`moveToday` refuses a spare (`table.not_in_floor_plan`), `table.taken_off`, `table.fixed`; for a
+`table.not_on_today_plan`) and its merge's id and members; each write refuses in decision 3's order.
+`moveToday` refuses a spare (`table.not_on_today_plan`), `table.taken_off`, `table.fixed`; for a
 merged table it moves every member by `(at.x − x, at.y − y)`, that distance first held so that every
 member's `x` and `y` stay within 0–999. `rotateToday` refuses a spare, taken off, fixed and
 `table.merged`, then sets `rotation = (rotation + 15) % 360`. `placeSpareToday` refuses
@@ -4229,7 +4232,7 @@ it("turns a table 15° about its centre, from 345° back to 0", async () => { /*
 it("refuses to move or turn a fixed table, and nothing moves", async () => { /* fixed entry: moveToday and rotateToday reject table.fixed { tableId }; todayRow unchanged */ });
 it("refuses to turn a table in a merge", async () => { /* table.merged */ });
 it("refuses a spare, a taken-off table and a table never on a plan", async () => {
-  /* spare: move/rotate → table.not_in_floor_plan; taken off (set taken_off true): move → table.taken_off; a live table of the zone with no today's row → table.not_in_floor_plan */
+  /* spare: move/rotate → table.not_on_today_plan; taken off (set taken_off true): move → table.taken_off; a live table of the zone with no today's row → table.not_on_today_plan */
 });
 it("refuses a table of another venue as not found", async () => { /* random uuid → table.not_found */ });
 it("places a spare 8 × 8 at the corner it is given, and leaves a placed table where it is", async () => {
@@ -4267,13 +4270,13 @@ export async function seatsToday(tx: Transaction, cfg: TillConfig, tableId: stri
 export async function backToSaved(tx: Transaction, cfg: TillConfig, tableId: string): Promise<void>;
 ```
 
-Behaviour (decisions 2, 3, 12): `takeOffToday` refuses in decision 3's order: `table.not_in_floor_plan` (no today's row), `table.merged`, then
+Behaviour (decisions 2, 3, 12): `takeOffToday` refuses in decision 3's order: `table.not_on_today_plan` (no today's row), `table.merged`, then
 `tab.already_open` (an open `party_tables` row), `table.needs_clearing` (`needs_clearing_since` set),
 `table.delivery_pending` (an order delivered to it matching `foodOnItsWay()`); an already taken-off
 table is left as it is; else `taken_off = true`, keeping its place. `putBackToday` sets `taken_off = false`.
 `seatsToday` sets the merge's `floor_today_joins.seats` for a merged table, else the table's own
 seats; a taken-off table is `table.taken_off`. `backToSaved` reads the table's `floor_reset_tables`
-row (by `table_id`); none, or `remove` true, is `table.not_in_floor_plan`; it then runs
+row (by `table_id`); none, or `remove` true, is `table.not_on_today_plan`; it then runs
 `leaveMerges(tx, [tableId])` and sets the today's row's seats, fixed, six placement columns (null
 for a row that copied a spare) and `taken_off = false` from it. It never renames: names change only
 at a reset or a catch-up.
@@ -4295,7 +4298,7 @@ it("puts a table back as the last reset copied it, not as the master is now", as
 it("takes a table out of its merge when it goes back, and puts its partner back too", async () => { /* merge A+B; backToSaved(A) → no merge; B at its before place */ });
 it("sends a table the last reset copied as a spare back to the spares", async () => { /* placeSpareToday → todayRow has a place (x not null); backToSaved → placement columns null */ });
 it("refuses a table whose master table was deleted, and one never on a plan", async () => {
-  /* reset row remove true (delete the master table, reset while a party sits there) → table.not_in_floor_plan; a zone table with no reset row → table.not_in_floor_plan */
+  /* reset row remove true (delete the master table, reset while a party sits there) → table.not_on_today_plan; a zone table with no reset row → table.not_on_today_plan */
 });
 it("does not rename a table going back to its saved place", async () => { /* a pending reset row with a new label: label unchanged */ });
 ```
@@ -4313,7 +4316,7 @@ it("does not rename a table going back to its saved place", async () => { /* a p
 **Files:**
 - Create: `apps/server/src/floor-today-api.ts`, `apps/server/src/floor-today-api.test.ts`
 - Modify: `apps/server/src/till-api.ts` (mount beside `mountDepartmentTransferApi`, `:1091`; `STATUS`,
-  `:369`: the five codes 409 and `floor_plan.invalid` 400), `apps/till/src/i18n/codes.ts` (the five
+  `:369`: the five codes 409 and `merge.seats_required` 400), `apps/till/src/i18n/codes.ts` (the five
   codes' words, decision 19, beside `table.needs_clearing`, `:75`), `apps/dashboard/src/i18n/codes.ts`
   (the same, beside `table.in_floor_plan`, `:525`), `apps/till/src/till-app.ts` (`TABLE_REFUSALS`,
   `:361-386`)
@@ -4355,7 +4358,7 @@ it("leaves a disabled planned zone's tables off on a reset", async () => {
      and its floor_today_zones generation is unchanged (its first save wrote the row, so the row itself exists) */
 });
 it("answers a refusal with its code and status", async () => {
-  /* a fixed table's move → 409 table.fixed { tableId }; a spare's rotate → 409 table.not_in_floor_plan; taken off → 409 table.taken_off */
+  /* a fixed table's move → 409 table.fixed { tableId }; a spare's rotate → 409 table.not_on_today_plan; taken off → 409 table.taken_off */
 });
 it("refuses a malformed id or body", async () => {
   /* /api/tables/not-a-uuid/today/move → 404 table.not_found; { x: 1.5, y: 0 } → 400 management.request_invalid { field: "x" }; seats 0 → { field: "seats" }; /api/zones/not-a-uuid/today/reset → 404 zone.not_found */
@@ -4387,7 +4390,7 @@ read, `till-session.ts:122-124`). The zone map gains comment rows (`table` for t
 `/api/tables/${x.deliTable}/today/<verb>` with a valid body (`{ x: 1, y: 1 }` for move and place,
 `{ seats: 2 }` for seats, `{}` otherwise) and zone `deliTableZone`; the reset
 `/api/zones/${x.deliTables}/today/reset`, zone `deliTableZone`. The Deli table has no today's row (its zone has no master plan; reasoned, not run), so
-a route that checked anything before the zone would answer `table.not_in_floor_plan`, not
+a route that checked anything before the zone would answer `table.not_on_today_plan`, not
 `service_zone.not_allowed`.
 
 - [ ] **Step 1: Add the rows** (they are the failing tests until Task 4.2a's routes exist; with them
@@ -4406,7 +4409,7 @@ a route that checked anything before the zone would answer `table.not_in_floor_p
 - Create: `packages/shared/src/floor-join.ts`, `packages/shared/src/floor-join.test.ts`,
   `apps/server/src/floor-today-merges.test.ts`
 - Modify: `packages/shared/src/index.ts` (export beside `party-name`), `apps/server/src/floor-today-merges.ts`,
-  `apps/server/src/errors.ts` (`floor_plan.invalid`'s comment, `:631`, adds today's merge)
+  `apps/server/src/errors.ts` (`merge.seats_required` declares today's merge refusal)
 
 **Interfaces:**
 - Produces:
@@ -4434,12 +4437,12 @@ export async function mergeMembers(tx: Transaction, tableId: string): Promise<st
 
 Behaviour: `writeMerge` refuses `management.request_invalid { field: "targetId" }` when the two are
 one table, reads both as Task 4.1a's `todayOf` does, and refuses in decision 3's order:
-`table.not_in_floor_plan` (no row or no place), `table.taken_off`, `table.fixed` (either),
+`table.not_on_today_plan` (no row or no place), `table.taken_off`, `table.fixed` (either),
 `table.merged` (the moving one), then, with `free`, `tab.already_open` and `table.needs_clearing`
 (either), then `service_zone.join_mismatch { orderZoneId: <target's zone>, tableZoneId: <moving's
 zone> }` (two zones). It works out the merge's members after the join (the target's members, or
 the target, plus the moving table); the seats are `args.seats`, else `savedJoinSeats(members)`, else
-`floor_plan.invalid { field: "seats" }`, thrown before anything is written. It then records the
+`merge.seats_required {}`, thrown before anything is written. It then records the
 moving table's `before_x`, `before_y`, `before_rotation` as it stands (and the target's, for a new
 merge), places the moving table at `touchingPlace(target, moving, freeSide(target, moving, <the
 target's members>, side))` (decision 4), and writes or updates the
@@ -4466,13 +4469,13 @@ it("merges two tables, the moving one against the target, with each one's place 
 });
 it("takes the seats from the saved join with exactly these tables", async () => { /* a master join of A, B with seats 6, no seats sent → 6 */ });
 it("refuses a merge with no saved join and no seats, and writes nothing", async () => {
-  /* floor_plan.invalid { field: "seats" }; B still at (20,0); no merge. A saved join of A, B, C does not count for A + B */
+  /* merge.seats_required {}; B still at (20,0); no merge. A saved join of A, B, C does not count for A + B */
 });
-it("grows a merge with a third table, working its seats out again", async () => { /* A+B (seats 8), C onto B "bottom" with seats 12 → three members, seats 12; without seats and no saved join of three → floor_plan.invalid */ });
+it("grows a merge with a third table, working its seats out again", async () => { /* A+B (seats 8), C onto B "bottom" with seats 12 → three members, seats 12; without seats and no saved join of three → merge.seats_required */ });
 it("refuses a fixed table either way, a merged moving table, two zones and one table twice", async () => {
   /* table.fixed (moving fixed; target fixed); table.merged (moving in a merge); service_zone.join_mismatch; management.request_invalid { field: "targetId" } */
 });
-it("refuses a spare and a taken-off table", async () => { /* table.not_in_floor_plan; table.taken_off */ });
+it("refuses a spare and a taken-off table", async () => { /* table.not_on_today_plan; table.taken_off */ });
 it("puts each table that leaves back where it stood before, and ends a merge left with one", async () => {
   /* A+B+C merged: leaveMergesRestoring([C]) → C at its before place, A+B still merged; leaveMergesRestoring([A, B]) → both back, no merge */
 });
@@ -4517,7 +4520,7 @@ it("merges two free tables and splits them back", async () => {
   /* POST …/A/today/merge { targetId: B, side: "right", seats: 8 } → 204; floor read: A and B share a joinId, joinSeats 8, A against B;
      POST …/A/today/split → 204; each back where it stood, no joinId */
 });
-it("asks for seats when no saved join has exactly these tables", async () => { /* no seats → 400 floor_plan.invalid { field: "seats" }; with a saved join → 204 and its seats */ });
+it("asks for seats when no saved join has exactly these tables", async () => { /* no seats → 400 merge.seats_required {}; with a saved join → 204 and its seats */ });
 it("refuses to merge a seated table or one needing clearing, and to split a seated merge here", async () => {
   /* tab.already_open; table.needs_clearing; split of a merge a party holds → tab.already_open */
 });
@@ -4630,7 +4633,7 @@ it("a party moved to a table of a free merge holds every table of it", async () 
 it("refuses a merge that names neither the party's table nor the body's, and joins nothing", async () => {
   /* merge { moving: X, target: B } → management.request_invalid { field: "merge" }; P still at A only */
 });
-it("undoes the join when the merge is refused", async () => { /* no saved join, no seats → floor_plan.invalid { field: "seats" }; P still at A only, B free */ });
+it("undoes the join when the merge is refused", async () => { /* no saved join, no seats → merge.seats_required {}; P still at A only, B free */ });
 it("a split table goes back to where it stood before the merge", async () => {
   /* P at A+B, merged with A the target (B moved against it); POST /api/parties/P/split-table { tableId: B, billId: null } → B at its before place,
      no merge, A where it stands (the merge's last table goes back to its before place, floor-today-merges.ts:24-30, which for the target is where it stood) */
@@ -4846,8 +4849,7 @@ nothing else in the file uses them.
 - The dashboard's live subscription lists (`apps/dashboard/src/api/live-queries.ts:388-389`,
   `packages/venue-service/src/dashboard/live-queries.ts:77-78`), the classification and the
   configuration transfer — stay: the master's own tables.
-- Nothing in `apps/till` reads a join; the till acts on the refusal `floor_plan.invalid { field:
-  "seats" }` (Tasks 4.4f, 4.4g, 4.5b), so no till task changes.
+- Nothing in `apps/till` reads a join; the till acts on the refusal `merge.seats_required {}` (Tasks 4.4f, 4.4g, 4.5b), so no till task changes.
 
 **At upgrade time.** A box's today's plans built before this task have no copy until their zone's
 next reset (the next business day's first floor read or change, or Reset to saved plan); until then
@@ -4872,7 +4874,7 @@ point, commits, and hands over (done, left, files, each check's state).
 // floor-today-merge-api.test.ts — the owner's example (case a)
 it("a join saved in the editor waits for the next reset", async () => {
   /* twoTables() with no join; resaveMaster(zoneId, { joins: [{ seats: 6, masterIds: [master.a, master.b] }] });
-     POST …/a/today/merge { targetId: b, side: "right" } → 400 floor_plan.invalid { field: "seats" }, mergeOf(a) null;
+     POST …/a/today/merge { targetId: b, side: "right" } → 400 merge.seats_required {}, mergeOf(a) null;
      POST /api/zones/:zoneId/today/reset → 204; the same merge → 204 and floorToday(a).joinSeats 6.
      First check that the routes' catch-up cannot reset the zone between the save and the merge: build the zone and resave
      it with the instant the app's clock answers, so both fall on one business day; a reset there would copy the new join and hide the case. */
@@ -4920,7 +4922,7 @@ it("a reset after a copied member's master table was deleted replaces the copy w
   Then prove each part by deletion, restoring each after:
   - put back the old `savedJoinSeats` body (the read of `floor_plan_join_tables`) and watch (a) and
     (b) fail;
-  - delete the insert of the copy and watch (a)'s last merge refuse `floor_plan.invalid` and (c) fail;
+  - delete the insert of the copy and watch (a)'s last merge refuse `merge.seats_required` and (c) fail;
   - move step 1's delete after the reset rows' delete and watch every case that resets a zone with a
     copy fail on a foreign-key refusal (`isRefusal(error, FOREIGN_KEY_VIOLATION)`), (c) and (f) among
     them;
@@ -5238,7 +5240,7 @@ Behaviour: on `wt-table-drag-end` (stopped, as the map's events are re-emitted; 
 `pointerdown` or `keydown` listener) the screen runs `dropAction(<the active zone's tables>, detail)`:
 `none` does nothing; `say` shows the words in the status line; `move` sets `#pending` and calls
 `api.moveToday`; `merge` sets `#pending` and calls `api.mergeToday` with no seats. A merge refused
-`floor_plan.invalid` with `field: "seats"` opens `till-today-seats-dialog` (action `join`, `seats` the
+`merge.seats_required` opens `till-today-seats-dialog` (action `join`, `seats` the
 guess, heading `floor.seats_title` with `heading`), whose confirm sends the same call again with the
 seats, and whose cancel drops `#pending`. Any other refusal drops `#pending` and shows its words;
 every settled call sends `floor-refresh`. `#pending` overrides the active zone's map placements in
@@ -5255,7 +5257,7 @@ it("a drop on empty space moves the table and draws it there until the next read
 });
 it("a refused move puts the table back and says why", async () => { /* moveToday rejects { code: "table.fixed" } → t1 at its old place; [data-floor-refusal] "That table is fixed in place" */ });
 it("two free tables merge, asking for seats when the server wants them", async () => {
-  /* mergeToday rejects { code: "floor_plan.invalid", field: "seats" } → till-today-seats-dialog with seats 8; confirm 10 → mergeToday(t2, { targetId: t1, side, seats: 10 }) */
+  /* mergeToday rejects { code: "merge.seats_required" } → till-today-seats-dialog with seats 8; confirm 10 → mergeToday(t2, { targetId: t1, side, seats: 10 }) */
 });
 it("cancelling the seats puts the table back", async () => { /* today-seats-cancel → #pending dropped; nothing sent */ });
 it("a merge dropped on a table says to drag the other one", async () => { /* [data-floor-refusal] "Drag the other table onto it"; no api call */ });
@@ -5296,14 +5298,14 @@ tableId, seated: false, guestCount, withTableIds }`; `join` asks the bill choice
 is not null (scope `table.combine_scope` from the dragged party into the target's), then calls
 `api.joinTables(party.id, tableId, bills, { expectedPartyRevision: party.revision,
 ...otherPartyRead(<seated read at tableId>, party.id) }, merge ?? undefined)` through `#settle`, a
-join refused `floor_plan.invalid` with `field: "seats"` asking for seats as Task 4.4f's merge does.
+join refused `merge.seats_required` asking for seats as Task 4.4f's merge does.
 The seat dialog for a free merge is headed with the merge's name (`#detailsHeading`).
 
 - [ ] **Step 1: Write the failing tests** in `till-floor-screen.today-joins.test.ts` (as Task 4.4f's):
 
 ```ts
 it("a seated table dropped on a free one joins and merges", async () => { /* joinTables(P, t2, "merge", { expectedPartyRevision, otherPartyId: null }, { moving: t1, target: t2, side }) */ });
-it("a join that needs seats asks for them and sends them", async () => { /* rejects floor_plan.invalid seats → dialog; confirm 9 → joinTables(…, { …merge, seats: 9 }) */ });
+it("a join that needs seats asks for them and sends them", async () => { /* rejects merge.seats_required → dialog; confirm 9 → joinTables(…, { …merge, seats: 9 }) */ });
 it("two seated tables ask which bills to keep, then join", async () => { /* till-bill-choice-dialog; confirm separate → joinTables(Q, t1, "separate", { …, otherPartyId: P, expectedOtherPartyRevision }, merge) */ });
 it("two free fixed tables open the seat dialog for both, and seat them in one go", async () => {
   /* drop F1 on F2 → till-seat-dialog headed "Bar 1+2"; confirm 2 → open-table { tableId: F1, seated: false, guestCount: 2, withTableIds: [F2] } */
