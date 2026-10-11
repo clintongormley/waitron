@@ -617,3 +617,17 @@ describe("till-floor-screen: a party's release reminder", () => {
     });
   });
 });
+
+it("shows today's seats on a tray token", async () => {
+  const el = await mountFloor([
+    table({ id: "t1", label: "1", today: today() }),
+    seated({ today: { ...today(), placement: null, seats: 6 } }),
+  ]);
+  const token = el.shadowRoot!.querySelector<HTMLElement & { updateComplete: Promise<unknown> }>(
+    '[data-tray-table="t4"] wt-table-token',
+  )!;
+  await token.updateComplete;
+  expect(
+    token.shadowRoot!.querySelector(".capacity")!.textContent?.replace(/\s+/g, " ").trim(),
+  ).toBe("6 pax");
+});

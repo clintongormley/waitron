@@ -1,58 +1,14 @@
 import { expect, test } from "vitest";
 import {
-  FLOOR_ASPECT,
-  GRID_STEP,
   ROTATION_STEP,
   buildZoneTabs,
-  clampPermille,
-  defaultTraySlot,
   resolveActiveTabKey,
-  sizeForCapacity,
   snapRotation,
-  snapToGrid,
   toFloorTable,
 } from "./floor.js";
 
-test("FLOOR_ASPECT is the single 3:2 canvas ratio", () => {
-  expect(FLOOR_ASPECT).toBe(1.5);
-  expect(FLOOR_ASPECT).toBe(3 / 2);
-});
-
-test.each([
-  [1, "S"],
-  [2, "S"],
-  [3, "M"],
-  [4, "M"],
-  [5, "L"],
-  [6, "L"],
-  [7, "XL"],
-  [8, "XL"],
-  [20, "XL"],
-] as const)("sizeForCapacity(%i) === %s", (capacity, expected) => {
-  expect(sizeForCapacity(capacity)).toBe(expected);
-});
-
-test("sizeForCapacity treats an unknown capacity as medium", () => {
-  expect(sizeForCapacity(undefined)).toBe("M");
-  expect(sizeForCapacity(null as unknown as undefined)).toBe("M");
-});
-
-test("GRID_STEP and ROTATION_STEP are the shared snap increments", () => {
-  expect(GRID_STEP).toBe(50);
+test("ROTATION_STEP is the shared snap increment", () => {
   expect(ROTATION_STEP).toBe(15);
-});
-
-test("snapToGrid rounds to the nearest 50 permille step", () => {
-  expect(snapToGrid(333)).toBe(350);
-  expect(snapToGrid(520)).toBe(500);
-  expect(snapToGrid(0)).toBe(0);
-  expect(snapToGrid(1000)).toBe(1000);
-  // Always lands on a multiple of the step.
-  expect(snapToGrid(333) % GRID_STEP).toBe(0);
-});
-
-test("snapToGrid accepts a custom step", () => {
-  expect(snapToGrid(17, 10)).toBe(20);
 });
 
 test("snapRotation snaps to the nearest 15 degrees and wraps at 360", () => {
@@ -73,22 +29,6 @@ test("snapRotation normalizes a negative rotation into the [0, 360) contract", (
   expect(snapRotation(-7)).toBe(0);
   expect(snapRotation(-15)).toBe(345);
   expect(snapRotation(-360)).toBe(0);
-});
-
-test("clampPermille pins a coordinate into the 0..1000 canvas range", () => {
-  expect(clampPermille(-40)).toBe(0);
-  expect(clampPermille(500)).toBe(500);
-  expect(clampPermille(1400)).toBe(1000);
-});
-
-test("defaultTraySlot centres the first placement and nudges each later one right by a grid step", () => {
-  expect(defaultTraySlot(0)).toEqual({ posX: 500, posY: 500 });
-  expect(defaultTraySlot(1)).toEqual({ posX: 550, posY: 500 });
-  expect(defaultTraySlot(3)).toEqual({ posX: 650, posY: 500 });
-});
-
-test("defaultTraySlot clamps posX into the 0..1000 range once the nudges run off the edge", () => {
-  expect(defaultTraySlot(20)).toEqual({ posX: 1000, posY: 500 });
 });
 
 test("buildZoneTabs orders the zone tabs by displayOrder", () => {
@@ -123,29 +63,19 @@ test("resolveActiveTabKey falls back to the first tab when the requested key is 
   expect(resolveActiveTabKey("z9", tabs)).toBe("z1");
 });
 
-test("toFloorTable maps a placed table's coordinates and occupancy", () => {
+test("toFloorTable maps a table's seats and occupancy", () => {
   const table = toFloorTable(
     {
       id: "t1",
       label: "1",
-      capacity: 4,
-      posX: 200,
-      posY: 300,
-      shape: "rect",
-      rotation: 90,
-      zoneId: "z1",
+      seats: 4,
     },
     { state: "open-tab", tabTotal: "12.50", pendingToServe: 2, status: null },
   );
   expect(table).toEqual({
     id: "t1",
     label: "1",
-    capacity: 4,
-    posX: 200,
-    posY: 300,
-    shape: "rect",
-    rotation: 90,
-    zoneId: "z1",
+    seats: 4,
     state: "open-tab",
     tabTotal: "12.50",
     pendingToServe: 2,
@@ -159,12 +89,7 @@ test("toFloorTable carries the reserved time through the occupancy half", () => 
     {
       id: "t1",
       label: "1",
-      capacity: 4,
-      posX: 200,
-      posY: 300,
-      shape: "rect",
-      rotation: 90,
-      zoneId: "z1",
+      seats: 4,
     },
     {
       state: "open-tab",
@@ -181,12 +106,7 @@ test("toFloorTable carries the party's name through the occupancy half", () => {
   const placement = {
     id: "t1",
     label: "4",
-    capacity: 4,
-    posX: 200,
-    posY: 300,
-    shape: "rect" as const,
-    rotation: 0,
-    zoneId: "z1",
+    seats: 4,
   };
   const named = toFloorTable(placement, {
     state: "open-tab",
@@ -203,12 +123,7 @@ test("toFloorTable carries whether a party's release reminder is due through the
   const placement = {
     id: "t1",
     label: "4",
-    capacity: 4,
-    posX: 200,
-    posY: 300,
-    shape: "rect" as const,
-    rotation: 0,
-    zoneId: "z1",
+    seats: 4,
   };
   const occupancy = { state: "open-tab" as const, pendingToServe: 0, status: null };
   expect(toFloorTable(placement, { ...occupancy, fireDue: true }).fireDue).toBe(true);
@@ -216,22 +131,15 @@ test("toFloorTable carries whether a party's release reminder is due through the
   expect(toFloorTable(placement, occupancy).fireDue).toBeUndefined();
 });
 
-test("toFloorTable defaults null coordinates to 0 and a missing tab total to null", () => {
+test("toFloorTable defaults a missing tab total to null", () => {
   const table = toFloorTable(
     {
       id: "t2",
       label: "2",
-      capacity: null,
-      posX: null,
-      posY: null,
-      shape: null,
-      rotation: null,
-      zoneId: null,
+      seats: null,
     },
     { state: "free", pendingToServe: 0, status: null },
   );
-  expect(table.posX).toBe(0);
-  expect(table.posY).toBe(0);
   expect(table.tabTotal).toBeNull();
   expect(table.state).toBe("free");
 });
@@ -241,12 +149,7 @@ test("toFloorTable threads a supplied timingBand through onto the FloorTable", (
     {
       id: "t1",
       label: "1",
-      capacity: 4,
-      posX: 200,
-      posY: 300,
-      shape: "rect",
-      rotation: 90,
-      zoneId: "z1",
+      seats: 4,
     },
     {
       state: "open-tab",
@@ -264,12 +167,7 @@ test("toFloorTable leaves timingBand undefined when the occupancy input omits it
     {
       id: "t2",
       label: "2",
-      capacity: null,
-      posX: null,
-      posY: null,
-      shape: null,
-      rotation: null,
-      zoneId: null,
+      seats: null,
     },
     { state: "free", pendingToServe: 0, status: null },
   );
@@ -281,12 +179,7 @@ test("toFloorTable carries the names of the people with an unsent order through 
     {
       id: "t4",
       label: "4",
-      capacity: 4,
-      posX: 200,
-      posY: 300,
-      shape: "round",
-      rotation: 0,
-      zoneId: "z1",
+      seats: 4,
     },
     { state: "open-tab", pendingToServe: 0, status: null, unsentDrafts: ["Alex", "Sam"] },
   );
