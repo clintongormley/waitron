@@ -156,7 +156,7 @@ list does not exist.
 ## A507. Prep stations made lighter
 
 **A507 (owner, 2026-10-11) — OPEN: change 5, left open by A507 part 1 (#1564) and A507 part 2
-(#PR).** A change to the Prep stations page
+(#1568).** A change to the Prep stations page
 (`packages/venue-service/src/dashboard/prep-stations-screen.ts`). Mockups of the Routes grid it sits
 on are in [mockups/a507-prep-stations/](mockups/a507-prep-stations/): `0-routes-today.png`
 is the grid before, `1-routes-option-a-chosen.png` the chosen default view, `3-routes-search.png`
