@@ -10,6 +10,7 @@ import {
   createProduct,
 } from "@waitron/catalogue";
 import {
+  floorTodayTables,
   CORE_MIGRATIONS,
   diningTables,
   floorZones,
@@ -1035,12 +1036,20 @@ describe("venue service management routes", () => {
           departmentId: department.id,
         },
       );
-      await tx.insert(diningTables).values([
-        { locationId: fx.locationId, label: "T1", zoneId: fx.zoneId },
-        { locationId: fx.locationId, label: "T2", zoneId: fx.zoneId, active: false },
-        { locationId: fx.locationId, label: "D1", zoneId: secondZone!.id },
-        { locationId: fx.locationId, label: "D2", zoneId: secondZone!.id },
-      ]);
+      const tables = await tx
+        .insert(diningTables)
+        .values([
+          { locationId: fx.locationId, label: "T1", zoneId: fx.zoneId },
+          { locationId: fx.locationId, label: "T2", zoneId: fx.zoneId },
+          { locationId: fx.locationId, label: "D1", zoneId: secondZone!.id },
+          { locationId: fx.locationId, label: "D2", zoneId: secondZone!.id },
+        ])
+        .returning();
+      await tx
+        .insert(floorTodayTables)
+        .values(
+          tables.filter((table) => table.label !== "T2").map((table) => ({ tableId: table.id })),
+        );
     });
 
     const response = await send(
@@ -1060,10 +1069,18 @@ describe("venue service management routes", () => {
 
   it("previews removal of an unconfigured zone with its active table count", async () => {
     const fx = await fixture();
-    await db.insert(diningTables).values([
-      { locationId: fx.locationId, label: "T1", zoneId: fx.zoneId },
-      { locationId: fx.locationId, label: "T2", zoneId: fx.zoneId, active: false },
-    ]);
+    const tables = await db
+      .insert(diningTables)
+      .values([
+        { locationId: fx.locationId, label: "T1", zoneId: fx.zoneId },
+        { locationId: fx.locationId, label: "T2", zoneId: fx.zoneId },
+      ])
+      .returning();
+    await db
+      .insert(floorTodayTables)
+      .values(
+        tables.filter((table) => table.label !== "T2").map((table) => ({ tableId: table.id })),
+      );
     const response = await send(
       fx.app,
       "GET",

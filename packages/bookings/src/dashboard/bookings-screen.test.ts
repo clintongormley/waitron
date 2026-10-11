@@ -711,3 +711,23 @@ it.each([
     await vi.waitFor(() => expect(el.shadowRoot!.querySelector("[role=alert]")).toBeNull());
   },
 );
+
+it.each(["floor_today_tables", "floor_zones"])(
+  "refreshes table choices after %s changes",
+  async (type) => {
+    const liveData = new LiveData();
+    const api = Object.assign(stubApi(), { liveData });
+    const { el } = await mountWidget<BookingsScreen>("dashboard-bookings-screen", { api });
+    await flush(el);
+    vi.mocked(api.listTables).mockResolvedValue([]);
+    liveData.invalidate([{ type, id: "changed" }]);
+    await vi.waitFor(() => expect(api.listTables).toHaveBeenCalledTimes(2));
+    await click(el, "seat-bk-late");
+    await flush(el);
+    expect(api.seatBooking).not.toHaveBeenCalled();
+    expect(el.shadowRoot!.querySelector("[data-test=confirm-seat-bk-late]")).toBeNull();
+    expect(el.shadowRoot!.querySelector("[role=alert]")!.textContent).toContain(
+      codeMessage("booking.table_required", "es-ES"),
+    );
+  },
+);

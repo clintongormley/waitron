@@ -6,6 +6,7 @@ import type {
 export type { DepartmentTransferActor, DepartmentTransferReceiver } from "@waitron/module";
 import { and, asc, desc, eq, inArray, isNull, ne, or, sql } from "drizzle-orm";
 import {
+  tableInService,
   billPayments,
   billPaymentRefunds,
   deviceProfiles,
@@ -413,7 +414,7 @@ export async function acceptDepartmentTransfer(
           eq(diningTables.id, input.tableId),
           eq(diningTables.locationId, cfg.locationId),
           eq(diningTables.zoneId, input.zoneId),
-          eq(diningTables.active, true),
+          tableInService(diningTables.id),
         ),
       );
     if (table === undefined)

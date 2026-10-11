@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
-import { floorZones, newId, nowIso, withTransaction } from "@waitron/db";
+import { floorTodayTables, floorZones, newId, nowIso, withTransaction } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
@@ -40,9 +40,10 @@ async function makeTable(v: Venue, label: string): Promise<string> {
     .values({ locationId: v.locationId, name: label })
     .returning({ id: floorZones.id });
   const row = await db.execute<{ id: string }>(sql`
-    insert into dining_tables (id, created_at, location_id, zone_id, label, active)
-    values (${newId()}, ${nowIso()}, ${v.locationId}, ${zone!.id}, ${label}, 1)
+    insert into dining_tables (id, created_at, location_id, zone_id, label)
+    values (${newId()}, ${nowIso()}, ${v.locationId}, ${zone!.id}, ${label})
     returning id`);
+  await db.insert(floorTodayTables).values({ tableId: row.rows[0]!.id });
   return row.rows[0]!.id;
 }
 

@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
-import { floorZones, newId, nowIso, withTransaction } from "@waitron/db";
+import { floorTodayTables, floorZones, newId, nowIso, withTransaction } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import type { CoreServices } from "@waitron/module";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -52,8 +52,7 @@ async function insertLocation(name: string): Promise<string> {
   return loc.rows[0]!.id;
 }
 
-/** `id` and `created_at` are supplied for the reason {@link insertLocation} gives. `active` is bound
- * as 1 or 0 because `node:sqlite` refuses to bind a JavaScript boolean. */
+/** Raw inserts supply the id and timestamp; the helper optionally gives the table a today row. */
 async function insertDiningTable(
   locationId: string,
   label: string,
@@ -64,9 +63,10 @@ async function insertDiningTable(
     .values({ locationId, name: label })
     .returning({ id: floorZones.id });
   const row = await db.execute<{ id: string }>(sql`
-    insert into dining_tables (id, created_at, location_id, zone_id, label, active)
-    values (${newId()}, ${nowIso()}, ${locationId}, ${zone!.id}, ${label}, ${active ? 1 : 0})
+    insert into dining_tables (id, created_at, location_id, zone_id, label)
+    values (${newId()}, ${nowIso()}, ${locationId}, ${zone!.id}, ${label})
     returning id`);
+  if (active) await db.insert(floorTodayTables).values({ tableId: row.rows[0]!.id });
   return row.rows[0]!.id;
 }
 
@@ -723,4 +723,21 @@ describe("seatBooking", () => {
     await scoped(cfg, (tx) => completeBooking(tx, cfg, id));
     expect((await scoped(cfg, (tx) => getBooking(tx, cfg, id)))!.status).toBe("completed");
   });
+});
+
+it("refuses booking a table with no today's row", async () => {
+  const { cfg, createdBy } = await setupVenue();
+  const tableId = await makeTable(cfg, false);
+  await expect(
+    scoped(cfg, (tx) =>
+      createBooking(tx, cfg, {
+        bookingDate: "2026-08-20",
+        bookingTime: "20:00",
+        partySize: 2,
+        contactName: "Guest",
+        createdBy,
+        tableId,
+      }),
+    ),
+  ).rejects.toMatchObject({ code: "table.not_found", params: { tableId } });
 });

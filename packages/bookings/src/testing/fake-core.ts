@@ -11,7 +11,14 @@ import "@waitron/shared";
 import { randomUUID } from "node:crypto";
 import { and, eq, isNull } from "drizzle-orm";
 import { AppError } from "@waitron/shared";
-import { diningTables, parties, partyTables, workingOrders, type Transaction } from "@waitron/db";
+import {
+  tableInService,
+  diningTables,
+  parties,
+  partyTables,
+  workingOrders,
+  type Transaction,
+} from "@waitron/db";
 import type { CoreServices } from "@waitron/module";
 
 declare module "@waitron/shared" {
@@ -33,11 +40,11 @@ export function fakeCore(cfg: FakeCoreConfig): CoreServices {
   return {
     async seatTable(tx: Transaction, req) {
       const [table] = await tx
-        .select({ active: diningTables.active })
+        .select({ inService: tableInService(diningTables.id) })
         .from(diningTables)
         .where(eq(diningTables.id, req.tableId));
       if (table === undefined) throw new AppError("table.not_found", { tableId: req.tableId });
-      if (!table.active) throw new AppError("table.inactive", { tableId: req.tableId });
+      if (!table.inService) throw new AppError("table.inactive", { tableId: req.tableId });
       const [held] = await tx
         .select({ id: partyTables.id })
         .from(partyTables)

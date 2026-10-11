@@ -751,6 +751,24 @@ describe("building today's plan from a zone's master plan", () => {
 });
 
 describe("a disabled zone", () => {
+  it("switches a zone off and on without rewriting a table or its today's state", async () => {
+    const z = await zone();
+    const tableId = await v.table("Unchanged", z);
+    await masterOf(z, [{ label: "Unchanged", live: tableId }]);
+    await inTx(v, (tx) => ensureToday(tx, v.cfg, NONE, NOW));
+    await inTx(v, (tx) =>
+      tx.update(diningTables).set({ active: false }).where(eq(diningTables.id, tableId)),
+    );
+    const before = await tableRow(v, tableId);
+    const todayBefore = await todayRow(tableId);
+    await inTx(v, (tx) => deactivateZone(tx, v.cfg, z));
+    expect(await tableRow(v, tableId)).toEqual(before);
+    expect(await todayRow(tableId)).toEqual(todayBefore);
+    await inTx(v, (tx) => updateZone(tx, v.cfg, z, { active: true }));
+    expect(await tableRow(v, tableId)).toEqual(before);
+    expect(await todayRow(tableId)).toEqual(todayBefore);
+  });
+
   it("is left out of the next day's reset, so its tables stay off, while an active zone resets", async () => {
     const off = await zone();
     const on = await zone();

@@ -25,6 +25,7 @@ import {
   writeProductModifiers,
 } from "@waitron/catalogue";
 import {
+  tableInService,
   CORE_MIGRATIONS,
   captureError,
   engineErrorMessage,
@@ -33,6 +34,7 @@ import {
   products,
   partyTables,
   floorZones,
+  floorTodayTables,
   invoiceSeries,
   kitchenStations,
   locations,
@@ -3437,5 +3439,73 @@ describe("combined settings operations", () => {
         receiptPrintMode: "on_request",
       });
     });
+  });
+});
+
+it("counts only tables in service in zone and department removal impact", async () => {
+  const cfg = { locationId: brandLocationId(await seedLocation("Today impact")) };
+  await scoped(async (tx) => {
+    const department = await createDepartment(tx, cfg, { name: "Dining" });
+    const zone = await createServiceZone(tx, cfg, { name: "Dining", departmentId: department.id });
+    const tables = await tx
+      .insert(diningTables)
+      .values([
+        { locationId: cfg.locationId, zoneId: zone.id, label: "Present" },
+        { locationId: cfg.locationId, zoneId: zone.id, label: "Absent" },
+      ])
+      .returning();
+    await tx.insert(floorTodayTables).values({ tableId: tables[0]!.id, takenOff: true });
+    expect(await settingsOperations.zoneRemovalImpact(tx, cfg, zone.id)).toEqual({
+      zones: [{ id: zone.id, name: "Dining", activeTableCount: 1 }],
+    });
+    expect(await departmentRemovalImpact(tx, cfg, department.id)).toEqual({
+      zones: [{ id: zone.id, name: "Dining", activeTableCount: 1 }],
+    });
+    await tx.update(floorZones).set({ active: false }).where(eq(floorZones.id, zone.id));
+    expect(await settingsOperations.zoneRemovalImpact(tx, cfg, zone.id)).toEqual({
+      zones: [{ id: zone.id, name: "Dining", activeTableCount: 0 }],
+    });
+  });
+});
+
+it("keeps a switched-off zone's table rows and today's rows unchanged", async () => {
+  const cfg = { locationId: brandLocationId(await seedLocation("Today reopen")) };
+  await scoped(async (tx) => {
+    const department = await createDepartment(tx, cfg, { name: "Dining" });
+    const zone = await createServiceZone(tx, cfg, { name: "Dining", departmentId: department.id });
+    const [table] = await tx
+      .insert(diningTables)
+      .values({
+        locationId: cfg.locationId,
+        zoneId: zone.id,
+        label: "Present",
+      })
+      .returning();
+    await tx.insert(floorTodayTables).values({ tableId: table!.id, takenOff: true, seats: 3 });
+    const before = await tx.select().from(diningTables).where(eq(diningTables.id, table!.id));
+    const todayBefore = await tx
+      .select()
+      .from(floorTodayTables)
+      .where(eq(floorTodayTables.tableId, table!.id));
+    await deactivateServiceZone(tx, cfg, zone.id);
+    expect(await tx.select().from(diningTables).where(eq(diningTables.id, table!.id))).toEqual(
+      before,
+    );
+    expect(
+      await tx.select().from(floorTodayTables).where(eq(floorTodayTables.tableId, table!.id)),
+    ).toEqual(todayBefore);
+    expect(
+      await tx
+        .select({ id: diningTables.id })
+        .from(diningTables)
+        .where(tableInService(diningTables.id)),
+    ).not.toContainEqual({ id: table!.id });
+    await tx.update(floorZones).set({ active: true }).where(eq(floorZones.id, zone.id));
+    expect(
+      await tx
+        .select({ id: diningTables.id })
+        .from(diningTables)
+        .where(tableInService(diningTables.id)),
+    ).toContainEqual({ id: table!.id });
   });
 });

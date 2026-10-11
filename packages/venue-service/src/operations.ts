@@ -9,6 +9,7 @@ import { setDepartmentTransferSettings } from "./department-transfers.js";
 import { withdrawPendingDepartmentTransfers } from "./department-transfer-lifecycle.js";
 import { and, asc, desc, eq, inArray, isNotNull, isNull, ne, sql, type SQL } from "drizzle-orm";
 import {
+  tableInService,
   catalogues,
   diningTables,
   floorZones,
@@ -277,7 +278,7 @@ export async function departmentRemovalImpact(
           diningTables.zoneId,
           zones.map((zone) => zone.id),
         ),
-        eq(diningTables.active, true),
+        tableInService(diningTables.id),
       ),
     );
   const counts = new Map<string, number>();
@@ -298,7 +299,7 @@ export async function zoneRemovalImpact(
   const tables = await tx
     .select({ id: diningTables.id })
     .from(diningTables)
-    .where(and(eq(diningTables.zoneId, zoneId), eq(diningTables.active, true)));
+    .where(and(eq(diningTables.zoneId, zoneId), tableInService(diningTables.id)));
   return { zones: [{ ...zone, activeTableCount: tables.length }] };
 }
 
@@ -365,7 +366,6 @@ export async function deactivateServiceZone(
   }
 
   await tx.delete(routingCells).where(eq(routingCells.zoneId, zoneId));
-  await tx.update(diningTables).set({ active: false }).where(eq(diningTables.zoneId, zoneId));
   await tx.update(floorZones).set({ active: false }).where(eq(floorZones.id, zoneId));
 }
 

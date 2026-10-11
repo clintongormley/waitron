@@ -9,6 +9,7 @@ import {
   units,
 } from "@waitron/catalogue";
 import {
+  floorTodayTables,
   CORE_MIGRATIONS,
   billPayments,
   billPaymentRefunds,
@@ -945,6 +946,28 @@ describe("departmental tab transfers", () => {
     },
   );
 
+  it("refuses a destination table with no today's row", async () => {
+    const v = await pending();
+    const [table] = await suite.db
+      .insert(diningTables)
+      .values({
+        locationId: v.cfg.locationId,
+        zoneId: v.bz,
+        label: randomUUID(),
+      })
+      .returning();
+    await expect(accept(v, 0, v.bz, table!.id)).rejects.toMatchObject({
+      code: "department_transfer.destination_invalid",
+      params: { field: "tableId" },
+    });
+    expect(
+      await suite.db
+        .select()
+        .from(departmentTransferRequests)
+        .where(eq(departmentTransferRequests.id, v.request.id)),
+    ).toEqual([v.request]);
+  });
+
   it("assigns an explicitly chosen active destination table without moving a party", async () => {
     const v = await pending();
     const [table] = await withTransaction(suite.db, (tx) =>
@@ -953,6 +976,7 @@ describe("departmental tab transfers", () => {
         .values({ locationId: v.cfg.locationId, zoneId: v.bz, label: randomUUID() })
         .returning(),
     );
+    await suite.db.insert(floorTodayTables).values({ tableId: table!.id });
     await accept(v, 0, v.bz, table!.id);
     const [tab] = await suite.db.select().from(workingOrders).where(eq(workingOrders.id, v.tab));
     expect(tab).toMatchObject({ deliveryTableId: table!.id, partyId: null, revision: 1 });
@@ -1105,7 +1129,6 @@ describe("departmental tab transfers", () => {
               locationId: v.cfg.locationId,
               zoneId: v.bz,
               label: randomUUID(),
-              active: false,
             })
             .returning(),
         );

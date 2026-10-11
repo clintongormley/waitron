@@ -129,6 +129,8 @@ export const QUERY_DEPENDENCIES = {
     "tenders",
     "working_orders",
     "dining_tables",
+    "floor_today_tables",
+    "floor_zones",
     "products",
     "locations",
   ],
