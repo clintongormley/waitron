@@ -398,7 +398,7 @@ it.each([
   const { el } = await mount(
     dialogs[0]!,
     vi.fn(async () => {
-      throw { code: "department.name_disabled", params };
+      throw { code: "department.name_taken", params };
     }),
   );
   await change(el, "name", "Reserved");
@@ -554,7 +554,7 @@ it.each(dialogs.slice(0, 4))(
     await el.updateComplete;
     const kind = dialog.kind.endsWith("department") ? "department" : "zone";
     refuse({
-      code: `${kind}.name_disabled`,
+      code: `${kind}.name_taken`,
       params: { name: "Reserved", [`${kind}Id`]: "disabled" },
     });
     await expect.poll(() => save(el).disabled).toBe(false);

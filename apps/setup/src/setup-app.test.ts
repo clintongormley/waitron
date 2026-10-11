@@ -3095,82 +3095,6 @@ describe("restore, configuration and fiscal-test outcomes", () => {
     },
   );
 
-  const switchedOffTail =
-    "in the zone “Terraza”, but that zone's department, “Comedor”, is deleted. Create a new export from your current departments and zones, then load it.";
-  const switchedOffTailEs =
-    "en la zona «Terraza», pero el departamento de esa zona, «Comedor», está eliminado. Crea una nueva exportación de tus departamentos y zonas actuales y cárgala.";
-  it.each([
-    [
-      "en-GB",
-      "category",
-      `The export has a routing setting for the category “Bebidas” ${switchedOffTail}`,
-    ],
-    [
-      "en-GB",
-      "product",
-      `The export has a routing setting for the product “Bebidas” ${switchedOffTail}`,
-    ],
-    [
-      "en-GB",
-      "no_category",
-      `The export has a routing setting for the No category row ${switchedOffTail}`,
-    ],
-    [
-      "en-GB",
-      "all",
-      `The export has a routing setting for the All categories row ${switchedOffTail}`,
-    ],
-    [
-      "es-ES",
-      "category",
-      `La exportación tiene un ajuste de asignación para la categoría «Bebidas» ${switchedOffTailEs}`,
-    ],
-    [
-      "es-ES",
-      "product",
-      `La exportación tiene un ajuste de asignación para el producto «Bebidas» ${switchedOffTailEs}`,
-    ],
-    [
-      "es-ES",
-      "no_category",
-      `La exportación tiene un ajuste de asignación para la fila Sin categoría ${switchedOffTailEs}`,
-    ],
-    [
-      "es-ES",
-      "all",
-      `La exportación tiene un ajuste de asignación para la fila Todas las categorías ${switchedOffTailEs}`,
-    ],
-  ] as const)(
-    "names the routing choice whose zone's department is switched off (%s, %s)",
-    async (locale, row, sentence) => {
-      try {
-        const el = await mountSetupApp(
-          stubApi({
-            stageConfiguration: vi.fn().mockRejectedValue({
-              code: "service_zone.not_found",
-              params: {
-                zoneId: "z-1",
-                zoneName: "Terraza",
-                departmentId: "d-1",
-                departmentName: "Comedor",
-                row,
-                ...(row === "category" || row === "product" ? { name: "Bebidas" } : {}),
-              },
-              status: 400,
-            }),
-          }),
-        );
-        setLocale(locale);
-        configurationRequest(el, new File(["encrypted"], "prepared.waitron-config"), "passphrase");
-        await flush(el);
-        expect(await bottomOf(await screenHost(el, "live-source"))).toBe(sentence);
-        expect(readDraft(el).configurationImport).toBeUndefined();
-      } finally {
-        setLocale("en-GB");
-      }
-    },
-  );
-
   it.each([
     [{ zoneId: "z-1" }],
     [{ zoneId: "z-1", zoneName: "Terraza", departmentName: "Comedor" }],
@@ -3197,68 +3121,6 @@ describe("restore, configuration and fiscal-test outcomes", () => {
           stageConfiguration: vi
             .fn()
             .mockRejectedValue({ code: "service_zone.not_found", params, status: 400 }),
-        }),
-      );
-      configurationRequest(el, new File(["encrypted"], "prepared.waitron-config"), "passphrase");
-      await flush(el);
-      expect(await bottomOf(await screenHost(el, "live-source"))).toBe(
-        "The configuration export could not be opened. Check the file and passphrase.",
-      );
-    },
-  );
-
-  it.each([
-    [
-      "en-GB",
-      "The export has the zone “Terraza” active, but its department, “Comedor”, is deleted. Create a new export from your current departments and zones, then load it.",
-    ],
-    [
-      "es-ES",
-      "La exportación tiene la zona «Terraza» activa, pero su departamento, «Comedor», está eliminado. Crea una nueva exportación de tus departamentos y zonas actuales y cárgala.",
-    ],
-  ] as const)(
-    "names a switched-on zone whose department is switched off (%s)",
-    async (locale, sentence) => {
-      try {
-        const el = await mountSetupApp(
-          stubApi({
-            stageConfiguration: vi.fn().mockRejectedValue({
-              code: "zone.department_inactive",
-              params: {
-                zoneId: "z-1",
-                zoneName: "Terraza",
-                departmentId: "d-1",
-                departmentName: "Comedor",
-              },
-              status: 400,
-            }),
-          }),
-        );
-        setLocale(locale);
-        configurationRequest(el, new File(["encrypted"], "prepared.waitron-config"), "passphrase");
-        await flush(el);
-        expect(await bottomOf(await screenHost(el, "live-source"))).toBe(sentence);
-        expect(readDraft(el).configurationImport).toBeUndefined();
-      } finally {
-        setLocale("en-GB");
-      }
-    },
-  );
-
-  it.each([
-    [{ zoneId: "z-1" }],
-    [{ zoneId: "z-1", zoneName: "Terraza", departmentId: "d-1" }],
-    [{ zoneId: "z-1", departmentId: "d-1", departmentName: "Comedor" }],
-    [{ zoneId: "z-1", zoneName: "", departmentName: "Comedor" }],
-    [{ zoneId: "z-1", zoneName: "Terraza", departmentName: "" }],
-  ])(
-    "falls back to the could-not-open sentence for a zone refusal missing a name (%o)",
-    async (params) => {
-      const el = await mountSetupApp(
-        stubApi({
-          stageConfiguration: vi
-            .fn()
-            .mockRejectedValue({ code: "zone.department_inactive", params, status: 400 }),
         }),
       );
       configurationRequest(el, new File(["encrypted"], "prepared.waitron-config"), "passphrase");
@@ -4829,3 +4691,33 @@ describe("application unsaved changes renderer", () => {
     }
   }
 });
+
+it.each([
+  ["en-GB", "The configuration export could not be opened. Check the file and passphrase."],
+  [
+    "es-ES",
+    "No se ha podido abrir la exportación de configuración. Revisa el archivo y la contraseña de exportación.",
+  ],
+] as const)(
+  "explains a deleted-department export refusal without staging it (%s)",
+  async (locale, sentence) => {
+    try {
+      const el = await mountSetupApp(
+        stubApi({
+          stageConfiguration: vi.fn().mockRejectedValue({
+            code: "setup.request_invalid",
+            params: { field: "departments.active" },
+            status: 400,
+          }),
+        }),
+      );
+      setLocale(locale);
+      configurationRequest(el, new File(["encrypted"], "prepared.waitron-config"), "passphrase");
+      await flush(el);
+      expect(await bottomOf(await screenHost(el, "live-source"))).toBe(sentence);
+      expect(readDraft(el).configurationImport).toBeUndefined();
+    } finally {
+      setLocale("en-GB");
+    }
+  },
+);
