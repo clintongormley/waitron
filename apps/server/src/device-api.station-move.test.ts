@@ -8,6 +8,9 @@ import {
   deviceProfiles,
   ticketItemMoves,
   ticketItems,
+  workingOrderLines,
+  workingOrders,
+  printJobs,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
@@ -114,6 +117,50 @@ const move = (
   });
 
 describe("POST /api/device/working-orders/:id/lines/move-station", () => {
+  it.each([false, true])(
+    "refuses an extra without changing the request's dishes (mixed: %s)",
+    async (mixed) => {
+      const screen = await display(stationScreen(bar));
+      const { tabId } = await seatedWith(venue, "Paella", "Caña");
+      const items = await inTx(venue, (tx) =>
+        tx.select().from(ticketItems).where(eq(ticketItems.workingOrderId, tabId)),
+      );
+      const [dish, extra] = items as [(typeof items)[0], (typeof items)[0]];
+      await inTx(venue, (tx) =>
+        tx
+          .update(workingOrderLines)
+          .set({ parentLineId: dish.workingOrderLineId })
+          .where(eq(workingOrderLines.id, extra.workingOrderLineId)),
+      );
+      const snapshot = () =>
+        inTx(venue, async (tx) => ({
+          items: await tx.select().from(ticketItems).where(eq(ticketItems.workingOrderId, tabId)),
+          lines: await tx
+            .select()
+            .from(workingOrderLines)
+            .where(eq(workingOrderLines.workingOrderId, tabId)),
+          order: await tx.select().from(workingOrders).where(eq(workingOrders.id, tabId)),
+          moves: await tx.select().from(ticketItemMoves),
+          jobs: await tx.select().from(printJobs),
+        }));
+      const before = await snapshot();
+      const answer = await move(screen.cookie, tabId, {
+        submissionId: randomUUID(),
+        lineIds: mixed
+          ? [dish.workingOrderLineId, extra.workingOrderLineId]
+          : [extra.workingOrderLineId],
+        stationId: grill,
+        ...{ includeExtras: true },
+      });
+      expect({ status: answer.status, ...answer.json }).toMatchObject({
+        status: 400,
+        code: "ticket.extra_not_movable",
+        params: { workingOrderId: tabId, lineId: extra.workingOrderLineId },
+      });
+      expect(await snapshot()).toEqual(before);
+    },
+  );
+
   it("moves a queued dish at the screen's station to another active station", async () => {
     const screen = await display(stationScreen(bar));
     const { tabId, item } = await paella();

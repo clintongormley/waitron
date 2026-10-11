@@ -553,3 +553,10 @@ it.each(["en", "es"])("hierarchy deletion refusals have actionable %s messages",
     expect(codeMessage(code, language)).not.toBe(code);
   }
 });
+
+it("explains why an extra cannot move independently in both languages", () => {
+  expect(codeMessage("ticket.extra_not_movable", "en")).toBe("Extras cannot be moved separately");
+  expect(codeMessage("ticket.extra_not_movable", "es")).toBe(
+    "Los extras no se pueden pasar por separado",
+  );
+});

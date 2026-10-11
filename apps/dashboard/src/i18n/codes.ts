@@ -2,6 +2,10 @@ import { codeMessage, codeOf, registerCodeMessages } from "@waitron/dashboard-ki
 
 // Add new codes with BOTH columns.
 const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
+  "ticket.extra_not_movable": {
+    en: "Extras cannot be moved separately",
+    es: "Los extras no se pueden pasar por separado",
+  },
   "cloud.unavailable": {
     en: "Waitron could not reach Cloud or verify its reply. Try again.",
     es: "Waitron no pudo conectar con Cloud o verificar su respuesta. Vuelve a intentarlo.",

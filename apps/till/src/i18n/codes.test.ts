@@ -514,3 +514,10 @@ it("says a printer was deleted, or no longer exists, in both languages", () => {
   );
   expect(codeMessage("printer.not_found", "es")).toBe("Esa impresora ya no existe. Elige otra");
 });
+
+it("explains why an extra cannot move independently in both languages", () => {
+  expect(codeMessage("ticket.extra_not_movable", "en")).toBe("Extras cannot be moved separately");
+  expect(codeMessage("ticket.extra_not_movable", "es")).toBe(
+    "Los extras no se pueden pasar por separado",
+  );
+});

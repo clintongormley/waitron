@@ -244,3 +244,27 @@ describe("till-station-choice-dialog", () => {
     },
   );
 });
+
+it.each([false, true])(
+  "explains an extra move refusal in the dialog (whole order: %s)",
+  async (wholeOrder) => {
+    const el = await mount({
+      mode: "move",
+      wholeOrder,
+      currentStationId: "grill",
+      refusal: "ticket.extra_not_movable",
+    });
+    await choose(el, 1);
+    expect(root(el).querySelector("[data-body]")?.lastElementChild?.textContent?.trim()).toBe(
+      "Extras cannot be moved separately",
+    );
+    expect(submit(el).disabled).toBe(false);
+    setLocale("es");
+    el.requestUpdate();
+    await el.updateComplete;
+    expect(root(el).querySelector("[data-body]")?.lastElementChild?.textContent?.trim()).toBe(
+      "Los extras no se pueden pasar por separado",
+    );
+    setLocale("en");
+  },
+);

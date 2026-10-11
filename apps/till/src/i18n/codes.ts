@@ -3,6 +3,10 @@ import { currentLocale, pickLocale } from "./t.js";
 // An operator must never see a raw wire code: a code missing from this table degrades to the GENERIC
 // sentence. Add new codes with BOTH columns.
 const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
+  "ticket.extra_not_movable": {
+    en: "Extras cannot be moved separately",
+    es: "Los extras no se pueden pasar por separado",
+  },
   "zone_extension.invalid": {
     en: "Choose a later time, in 15-minute steps, before the end of the day.",
     es: "Elige una hora posterior, en pasos de 15 minutos, antes del final del día.",

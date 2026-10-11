@@ -85,6 +85,7 @@ export async function withStationDishes(
           lineIds,
         },
         mover,
+        { includeExtras: true },
       );
   } else if (choice === "leave" && dishes.length > 0) {
     await tx
