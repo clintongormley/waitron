@@ -768,22 +768,6 @@ From **Allergens and nutrition (#370, #377, #385) — what is left open.**
   **Next action:** whoever adopts the shared picker for ingredients and the till picks ONE shape,
   and decides whether the product editor keeps both summaries.
 
-## A505. Duplicate a menu from the Menus list
-
-**A505 (owner, 2026-10-11) — OPEN. Starts after A498 lands** (lane D), which changes the same
-screens. Each menu's row menu on the Menus list offers Open and Rename today
-(`apps/dashboard/src/screens/menus-screen.ts`); it gains Duplicate.
-
-- The copy is a new menu named "<name> (copy)", holding the original's working copy as the editor
-  shows it: its details, sections and products (`menu_details`, `menu_items`,
-  `packages/catalogue/src/schema/menu.ts`) and its price overrides
-  (`menu_item_variant_overrides`).
-- The copy is not published. The original's published versions and any scheduled publication
-  (`packages/catalogue/src/schema/publication.ts`) are not copied.
-- Menu periods name the menu a department's zones start on (`menu_periods`,
-  `packages/venue-service/src/schema/menus.ts`); none of them is changed to point at the copy.
-- English and Spanish strings both change.
-
 ## Decisions and deliberate limits
 
 **Table toolbars and closure (A462, owner 2026-10-10).** Customise follows search and stays last

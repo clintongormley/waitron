@@ -642,10 +642,6 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
 _Formerly the catalogue and menus entries in the opening part of the old Track A (before A1), and the catalogue entries filed under A2; part of A9._ Detail: [backlog/catalogue.md](backlog/catalogue.md).
 
 
-- **A505. Duplicate a menu from the Menus list (owner, 2026-10-11).** A Duplicate item in each
-  menu's row menu makes an unpublished copy called "<name> (copy)". Starts after A498 lands.
-  [Detail](backlog/catalogue.md#a505-duplicate-a-menu-from-the-menus-list)
-
 - **A product in more than one category (owner 2026-10-10, A461 amendment 4).** Define the
   storage, editor and what Move/Remove do to memberships. Products currently has one category;
   A461 shows existing placements only. This work is not queued.

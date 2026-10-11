@@ -145,6 +145,16 @@ would make no cycle as `{ id, name, rootSectionId }`; `includedBy` lists direct 
 `{ id, name }`. Write the menu's top level through the member routes on `rootSectionId`. An
 unknown menu answers `catalogue.not_found` (404).
 
+`POST /management-api/catalogues/:id/duplicate`, with `{ name }`, makes a new menu holding a copy
+of this menu's working copy and answers 201 with the new menu (`{ id, name, active, version }`). It
+copies the menu's own sections and their members, its Home shortcuts, its display settings, its
+products' menu prices and its variant prices (`duplicateMenu`,
+`packages/catalogue/src/menu-copy.ts`). An include, and a Home shortcut into an included menu,
+still name the other menu's sections. Published versions, scheduled publications and menu periods
+are not copied, so the copy starts unpublished. A blank name answers `management.request_invalid`
+(400, `field: "name"`); an unknown menu answers `catalogue.not_found` (404). The dashboard names
+the copy "<name> (copy)" in the reader's language.
+
 `PATCH /management-api/catalogues/:id/items/:itemId` returns 204. Set `grossPrice` to a price or
 null. Null clears this menu's price so the combined menu can supply it; omitting it keeps the saved
 value. The retired `active` and `offered` fields are refused with `management.request_invalid`

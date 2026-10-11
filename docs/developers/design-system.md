@@ -3539,7 +3539,8 @@ icon and an `aria-label`) beside the heading — but **no screen does today**, a
 control uses `shape="round"` at all, so read this as a permission rather than a pattern with a home.
 The menu uses a native popover: clicking outside or pressing Escape closes it. Clicking an action
 inside it closes it too; `onAction` in `packages/ui/src/components/wt-row-actions.ts` decides which
-clicks count. The menu learns of the click only when the click reaches it, so an action's click
+clicks count, judging the action as it was when the click started, so an action that disables
+itself while its request is out still closes the menu. The menu learns of the click only when the click reaches it, so an action's click
 handler must not stop the click's propagation, or the menu stays open. Its action buttons
 follow normal Tab navigation. Give every `wt-button` slotted into a `wt-row-actions` popover
 `align="start"` — a centred label reads oddly once the button has been stretched to the popover's
