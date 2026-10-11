@@ -94,6 +94,8 @@ export async function insertPendingAlta(
     generadoEn?: string;
     /** Required here: the default is applied once, at `seedPendingEnvios`. */
     entorno: Entorno | null;
+    /** Defaults to `"Waitron SL"`. */
+    nombreRazonEmisor?: string | undefined;
   },
 ): Promise<{ registroId: string; numSerieFactura: string }> {
   const numSerieFactura = `S${String(params.secuencia)}/1`;
@@ -168,7 +170,7 @@ export async function insertPendingAlta(
       idEmisorFactura: params.nif,
       numSerieFactura,
       fechaExpedicionFactura: params.fecha,
-      nombreRazonEmisor: "Waitron SL",
+      nombreRazonEmisor: params.nombreRazonEmisor ?? "Waitron SL",
       tipoFactura: "F2",
       descripcionOperacion: "Venta en establecimiento",
       desglose,
@@ -280,6 +282,7 @@ export async function appendPendingAlta(
   db: Database,
   seeded: SeededDrain,
   secuencia: number,
+  options: { nombreRazonEmisor?: string } = {},
 ): Promise<{ registroId: string; facturaKey: string }> {
   const huella = String(secuencia).padStart(64, "0");
   // `DEFAULT_ENTORNO`, so the appended row agrees with the chain it extends.
@@ -292,6 +295,7 @@ export async function appendPendingAlta(
     huella,
     fecha: PAST_FECHA,
     entorno: DEFAULT_ENTORNO,
+    nombreRazonEmisor: options.nombreRazonEmisor,
   });
   await db.insert(envios).values({ registroId, proximoIntentoEn: DUE_AT });
   return { registroId, facturaKey: `${seeded.nif}|${numSerieFactura}|${toAeatDate(PAST_FECHA)}` };

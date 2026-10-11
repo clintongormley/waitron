@@ -168,6 +168,8 @@ export async function drain(deps: DrainDeps, now: Date): Promise<DrainResult> {
  *   - Otherwise the pass sends its first chunk, and keeps sending full chunks back to back while at
  *     least `maxPorEnvio` rows remain due. A sub-cap tail left after a chunk has gone is neither a
  *     full envío nor past the wait, so it is deferred to a later pass gated on `t`.
+ *   - An envío carries one taxpayer name (see `claimBatch`). Before the wait has passed, and after
+ *     a chunk has gone, a chunk a name change would cut short is not sent; the pass ends there.
  */
 async function drainDue(
   db: Database,
@@ -196,6 +198,8 @@ async function drainDue(
 
   let t = flujo.tiempoEsperaSeg || TIEMPO_ESPERA_INICIAL_SEG;
   let dueCount = dueCount0;
+  // Until AEAT's wait has passed, an envío goes only when it is full.
+  let waitPending = !gateOpen;
   // Chains the environment guard refused anywhere in this pass, shared across every claim so a
   // later chunk does not re-discover (and re-incident) them. Fresh each pass, so a chain is
   // re-examined next time rather than assumed still blocked.
@@ -205,14 +209,29 @@ async function drainDue(
     // chains the environment guard just blocked, and the growing `blockedSifIds` lets the next
     // SELECT reach past them. Bounded: each empty round either blocks a new chain or moves its rows
     // to `detenido` (`haltOpenChainClaims`), and the next SELECT sees neither.
-    let claimed: { sendable: DueRow[]; rawCount: number };
+    let claimed: { sendable: DueRow[]; rawCount: number; deferred: boolean };
     for (;;) {
       claimed = await countOnCommit(db, result, async (tx, counts) => {
-        const c = await claimBatch(tx, now, environment, counts, blockedSifIds, maxPorEnvio);
+        const c = await claimBatch(
+          tx,
+          now,
+          environment,
+          counts,
+          blockedSifIds,
+          maxPorEnvio,
+          waitPending,
+        );
         const kept = await haltOpenChainClaims(tx, c.sendable, now, counts);
-        return { sendable: kept, rawCount: c.rawCount };
+        return { sendable: kept, rawCount: c.rawCount, deferred: c.deferred };
       });
-      if (claimed.sendable.length > 0 || claimed.rawCount === 0) break;
+      if (claimed.deferred || claimed.sendable.length > 0 || claimed.rawCount === 0) break;
+    }
+    if (claimed.deferred) {
+      if (result.batchesSent === 0) {
+        bumpNextDue(result, flujo.proximoEnvioEn);
+        return;
+      }
+      break;
     }
     const batch = claimed.sendable;
     // Due work can wait for an earlier retry or an unresolved original invoice.
@@ -230,6 +249,7 @@ async function drainDue(
       // Counted as soon as AEAT has answered: the envío was sent whether or not its reply is kept.
       result.batchesSent += 1;
       result.recordsSubmitted += batch.length;
+      waitPending = true;
       const resolved = await resolveLines(client, batch, registros, respuesta);
 
       dueCount = await countOnCommit(db, result, async (tx, counts) => {
@@ -406,6 +426,12 @@ async function requeueClaims(
  *
  * The `sif_id not in (...)` exclusion stops a window filled by refused rows from coming back on
  * every retry, which would starve sendable work sorting behind it.
+ *
+ * **One taxpayer name per envío.** `drainDue` builds the envío's `Cabecera` from its first row, and
+ * a rename leaves rows of the old and the new name due together, so only the leading run of rows
+ * sharing the first sendable row's `nombre_razon_emisor` is claimed; the rest stay `pendiente`,
+ * with no incident. With `fullOnly`, a window a name change cuts short claims nothing and returns
+ * `deferred`.
  */
 async function claimBatch(
   tx: Transaction,
@@ -414,7 +440,8 @@ async function claimBatch(
   result: CommittedCounts,
   blockedSifIds: Set<string>,
   maxPorEnvio: number,
-): Promise<{ sendable: DueRow[]; rawCount: number }> {
+  fullOnly: boolean,
+): Promise<{ sendable: DueRow[]; rawCount: number; deferred: boolean }> {
   const alreadyBlocked = blockedSifIds.size > 0 ? [...blockedSifIds] : null;
   const claimed = (
     await tx.execute<Record<string, unknown>>(sql`
@@ -487,6 +514,15 @@ async function claimBatch(
     }
   }
 
+  // A cut keeps chain order: the rows are in (sif_id, secuencia) order, so what stays behind on a
+  // chain comes after everything claimed on it.
+  const name = sendable[0]?.nombre_razon_emisor;
+  const runEnd = sendable.findIndex((row) => row.nombre_razon_emisor !== name);
+  if (runEnd !== -1) {
+    if (fullOnly) return { sendable: [], rawCount: rows.length, deferred: true };
+    sendable.length = runEnd;
+  }
+
   if (sendable.length > 0) {
     const ids = sendable.map((r) => r.id);
     // drizzle expands an array parameter into an already-parenthesised list, so `in ${ids}` takes
@@ -501,6 +537,7 @@ async function claimBatch(
   return {
     sendable: sendable.map((r) => ({ ...r, intentos: r.intentos + 1 })),
     rawCount: rows.length,
+    deferred: false,
   };
 }
 

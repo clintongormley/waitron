@@ -135,7 +135,8 @@ export async function reconcile(
 
   const client = await deps.resolveClient();
 
-  // All rows share one obligado (one database, one taxpayer), so any row builds the cabecera.
+  // One database holds one taxpayer, but a rename leaves rows carrying different names; the
+  // cabecera takes the first row's, in no stated order.
   const authority = await fetchAuthority(client, cabeceraFor(rows[0]!), normalizedPeriod);
 
   // T2
