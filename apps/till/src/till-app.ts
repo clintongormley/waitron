@@ -1255,8 +1255,15 @@ export class TillApp extends LitElement {
     this.#reloadWhenSettled();
   }
 
+  /** A press waiting for requests is dropped once the box stops serving this till or the till is
+   * used again: either changes what the operator agreed to lose. The bar stays to be pressed again. */
   #reloadWhenSettled(): void {
-    if (!this.#reloadAsked || this.#requestsOut()) return;
+    if (!this.#reloadAsked) return;
+    if (!this.#boxServesTill()) {
+      this.#reloadAsked = false;
+      return;
+    }
+    if (this.#requestsOut()) return;
     this.#reloadAsked = false;
     this.reload();
   }
@@ -1510,7 +1517,10 @@ export class TillApp extends LitElement {
   #inactivityTimeoutSeconds: number | null = null;
   #startingScreen: NavigationScreen | null = null;
 
-  readonly #onInteraction = (): void => this.sessionActivity.noteInteraction();
+  readonly #onInteraction = (): void => {
+    this.#reloadAsked = false;
+    this.sessionActivity.noteInteraction();
+  };
 
   readonly #onVisibility = (): void => this.sessionActivity.reacquire();
 

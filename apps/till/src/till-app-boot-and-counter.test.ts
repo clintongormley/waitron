@@ -4795,6 +4795,27 @@ describe("till-app when the server reports another build", () => {
     expect(reload).toHaveBeenCalledOnce();
   });
 
+  it("drops a pressed Reload when the till is used before the request it waited for is answered", async () => {
+    const reload = vi.fn();
+    let answer!: () => void;
+    const markCollected = vi.fn(() => new Promise<void>((resolve) => (answer = resolve)));
+    const { el } = await mountApp({ markCollected }, { reload });
+    const c = await toCounter(el);
+    emit(c, "hand-over-order", { id: "wo-1" });
+    await flush(el);
+    updated();
+    await flush(el);
+    await userEvent.click(updateBar(el)!.shadowRoot!.querySelector("button")!);
+    await flush(el);
+    expect(reload).not.toHaveBeenCalled();
+    await userEvent.click(c);
+    c.store.addProduct(c.products[0]!, "1");
+    answer();
+    await flush(el);
+    expect(reload).not.toHaveBeenCalled();
+    expect(updateBar(el)).not.toBeNull();
+  });
+
   it("reloads when Reload on the bar is pressed", async () => {
     const reload = vi.fn();
     const { el } = await mountApp({}, { reload });
@@ -4846,10 +4867,14 @@ describe("till-app when a box update meets a box reset or a refused device", () 
     return { box, router, client };
   }
 
-  async function mountOnBox(box: ReturnType<typeof fakeBox>, reload: () => void) {
+  async function mountOnBox(
+    box: ReturnType<typeof fakeBox>,
+    reload: () => void,
+    overrides: Record<string, unknown> = {},
+  ) {
     await box.router.probeNow();
     const { el } = await mountApp(
-      { getDeviceIdentity: () => box.client.getDeviceIdentity() },
+      { getDeviceIdentity: () => box.client.getDeviceIdentity(), ...overrides },
       { reload, router: box.router },
     );
     await flush(el);
@@ -4964,6 +4989,71 @@ describe("till-app when a box update meets a box reset or a refused device", () 
     await flush(el);
     expect(updateBar(el)).toBeNull();
     expect(reload).not.toHaveBeenCalled();
+  });
+
+  /** A signed-in till on `fake` with a hand-over out, the bar showing for a new build, and Reload
+   * pressed; `answer` answers the hand-over. */
+  async function reloadPressedWithHandOverOut(fake: ReturnType<typeof fakeBox>) {
+    const reload = vi.fn();
+    let answer!: () => void;
+    const markCollected = vi.fn(() => new Promise<void>((resolve) => (answer = resolve)));
+    const el = await mountOnBox(fake, reload, { markCollected });
+    const c = await toCounter(el);
+    emit(c, "hand-over-order", { id: "wo-1" });
+    await flush(el);
+    fake.box.build = "new";
+    await fake.router.probeNow();
+    await flush(el);
+    await userEvent.click(updateBar(el)!.shadowRoot!.querySelector("button")!);
+    await flush(el);
+    expect(reload).not.toHaveBeenCalled();
+    return { el, c, reload, answer };
+  }
+
+  it("drops a pressed Reload when the box is reset before the request it waited for is answered", async () => {
+    const fake = fakeBox();
+    const { el, reload, answer } = await reloadPressedWithHandOverOut(fake);
+    fake.box.setup = true;
+    await fake.router.probeNow();
+    await flush(el);
+    expect(updateBar(el)).toBeNull();
+    answer();
+    await flush(el);
+    expect(reload).not.toHaveBeenCalled();
+    fake.box.setup = false;
+    await fake.router.probeNow();
+    await flush(el);
+    expect(reload).not.toHaveBeenCalled();
+    expect(updateBar(el)).not.toBeNull();
+  });
+
+  it("drops a pressed Reload when the device is refused before the request it waited for is answered", async () => {
+    const fake = fakeBox();
+    const { el, c, reload, answer } = await reloadPressedWithHandOverOut(fake);
+    fake.box.deviceRefused = true;
+    emit(c, "device-unauthorized");
+    await vi.waitFor(() => expect(enrol(el)).not.toBeNull());
+    answer();
+    await flush(el);
+    expect(reload).not.toHaveBeenCalled();
+  });
+
+  it("reloads an idle till held by the join screen once its device has joined", async () => {
+    const fake = fakeBox();
+    fake.box.deviceRefused = true;
+    const reload = vi.fn();
+    const el = await mountOnBox(fake, reload);
+    await vi.waitFor(() => expect(enrol(el)).not.toBeNull());
+    fake.box.build = "new";
+    await fake.router.probeNow();
+    await flush(el);
+    expect(reload).not.toHaveBeenCalled();
+    expect(updateBar(el)).toBeNull();
+    fake.box.deviceRefused = false;
+    emit(enrol(el)!, "enrolled");
+    await vi.waitFor(() => expect(enrol(el)).toBeNull());
+    await flush(el);
+    expect(reload).toHaveBeenCalledOnce();
   });
 
   it("takes the bar a signed-in till showed off the screen when its device is then refused", async () => {
