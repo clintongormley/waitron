@@ -269,6 +269,27 @@ describe("recordCorrection — the corrective's origin", () => {
     expect(await storedOrigin(saleId)).toEqual({ source: "demo_seed", device_id: null });
   });
 
+  it.each(["Deli meals", "Terrace drinks", ""])(
+    "files the supplied operation description %j without location fallback",
+    async (operationDescription) => {
+      const fake = new FakeFiscalBackend(suite.db);
+      const { saleId: original } = await sell(fake);
+      const seen: string[] = [];
+      const backend: FiscalBackend = Object.assign(Object.create(fake) as FakeFiscalBackend, {
+        recordCorrection: (
+          tx: Transaction,
+          sale: SaleForFiscalRecord,
+          extra: Parameters<FiscalBackend["recordCorrection"]>[2],
+        ) => {
+          seen.push(sale.descriptionOfOperation);
+          return fake.recordCorrection(tx, sale, extra);
+        },
+      });
+      await correct(backend, original, { operationDescription });
+      expect(seen).toEqual([operationDescription]);
+    },
+  );
+
   it("hands the origin to the fiscal backend", async () => {
     const fake = new FakeFiscalBackend(suite.db);
     const { saleId: original } = await sell(fake);

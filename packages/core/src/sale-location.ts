@@ -3,15 +3,13 @@ import { devices, locations, nodes } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import type { NodeId, SaleOrigin } from "@waitron/shared";
 
-/**
- * The description of operation a sale files with: its device's location's, or, for a sale with no
- * device, the location of the node that chains it.
- */
 export async function operationDescriptionFor(
   tx: Transaction,
   origin: SaleOrigin,
   nodeId: NodeId,
+  supplied?: string,
 ): Promise<string> {
+  if (supplied !== undefined) return supplied;
   const [location] =
     origin.deviceId === null
       ? await tx

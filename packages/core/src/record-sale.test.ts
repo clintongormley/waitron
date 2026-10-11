@@ -211,6 +211,13 @@ describe("recordSale — the sale's origin", () => {
     expect(seen.map((sale) => sale.origin)).toEqual([jobOrigin("readiness_test")]);
   });
 
+  it.each(["Deli meals", "Terrace drinks", ""])(
+    "files the supplied operation description %j without location fallback",
+    async (operationDescription) => {
+      expect(await descriptionsFiled({ operationDescription })).toEqual([operationDescription]);
+    },
+  );
+
   it("describes the operation from the location of the device the sale was rung on", async () => {
     const [terrace] = await suite.db
       .insert(locations)

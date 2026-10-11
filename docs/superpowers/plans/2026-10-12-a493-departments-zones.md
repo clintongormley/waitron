@@ -28,7 +28,7 @@
 2. Receipt locale absent from enabled content languages, hidden saved translations, and historical copy language must remain visible/readable as appropriate (Task 3).
 3. A real grip drag ending over a pinned cell, after scrolling, or after a model refresh must send at most one correct move and no edit click (Task 4).
 4. Live changes/deletion or late results while an editor is dirty/pending must preserve its draft or close the removed identity, never overwrite another editor (Tasks 3–4).
-5. Captured-card recovery, funded bills and corrective issuance must file the selected department description, while replay retains filed facts and has no repeat side effects (Task 2).
+5. Captured-card recovery, funded bills and corrective issuance must file the selected department description, while replay retains filed facts and has no repeat side effects (Task 3).
 
 ## Execution discipline and provisional boundaries
 
@@ -60,10 +60,10 @@ Task 1 completed 2026-10-12 at foundation `1bc75b31f13e89b883b0c394c096830727e4b
 
 **Interfaces:** consume Task 1 receipt reads and the spec's source union; produce `readSaleOperationDescription(...): Promise<string>`. Add optional `operationDescription` to all three core input types and a fourth optional string to the one core resolver. `undefined` uses existing standalone location behavior; an explicit `""` wins. `SaleForFiscalRecord.descriptionOfOperation` stays unchanged (`packages/fiscal/src/backend.ts:55`).
 
-- [ ] Add core cases `uses explicit operation description`, `empty supplied description never falls back`, and equivalent correction/substitution cases. Assert backend-observed strings `"Deli meals"`, `"Terrace drinks"`, `""`; keep the existing location assertions `"Terrace service"` and `"Counter service"` at `packages/core/src/record-sale.test.ts:225` and `:238` unchanged.
-- [ ] Run `pnpm --filter @waitron/core exec vitest run src/record-sale.test.ts src/record-correction.test.ts src/record-substitution.test.ts --reporter=dot`; observe explicit-string assertions fail, not a fixture/type startup failure. Implement only input and shared selection plumbing, then rerun.
-- [ ] Add and run `sale-operation-description.test.ts` RED then GREEN against the private helper: distinct department/location values, order and retained-sale context, missing/blank description domain refusal, populated opposite controls and cross-location refusal. The helper is not called by public payment/issuance routes until Task 3's editor and setup supply its required field. Register its domain code without changing a fiscal builder.
-- [ ] Run **unedited** `pnpm --filter @waitron/fiscal-verifactu exec vitest run src/write-path.e2e.test.ts src/inmutabilidad.test.ts --reporter=dot`. Confirm the golden files/fixtures and prohibited paths have no diff. Complete focused checks and signed-off checkpoint; Task 2 has no visible changes.
+- [x] Add core cases `uses explicit operation description`, `empty supplied description never falls back`, and equivalent correction/substitution cases. Assert backend-observed strings `"Deli meals"`, `"Terrace drinks"`, `""`; keep the existing location assertions `"Terrace service"` and `"Counter service"` at `packages/core/src/record-sale.test.ts:225` and `:238` unchanged.
+- [x] Run `pnpm --filter @waitron/core exec vitest run src/record-sale.test.ts src/record-correction.test.ts src/record-substitution.test.ts --reporter=dot`; observe explicit-string assertions fail, not a fixture/type startup failure. Implement only input and shared selection plumbing, then rerun.
+- [x] Add and run `sale-operation-description.test.ts` RED then GREEN against the private helper: distinct department/location values, order and retained-sale context, missing/blank description domain refusal, populated opposite controls and cross-location refusal. The helper is not called by public payment/issuance routes until Task 3's editor and setup supply its required field. Register its domain code without changing a fiscal builder.
+- [x] Run **unedited** `pnpm --filter @waitron/fiscal-verifactu exec vitest run src/write-path.e2e.test.ts src/inmutabilidad.test.ts --reporter=dot`. Confirm the golden files/fixtures and prohibited paths have no diff. Complete focused checks and signed-off checkpoint; Task 2 has no visible changes.
 
 
 ### Task 3: Receipt dialog, Venue language and complete live-default retirement

@@ -214,9 +214,11 @@ None of these columns enters the fiscal hash, and none of them is sent to AEAT e
 Veri\*Factu record has no line list at all — the goods reach it only as the sale's total, its VAT
 breakdown, and one `DescripcionOperacion` string for the whole sale. That string is the venue's
 configured operation description, which `packages/fiscal-verifactu` offers as "Venta en
-establecimiento" (`packages/fiscal-verifactu/src/slot.ts`): `packages/core/src/record-sale.ts` reads
-it from `locations.operation_description` and hands it to the fiscal backend as
-`descriptionOfOperation`, and `packages/fiscal-verifactu/src/backend.ts` files it. These columns are
+establecimiento" (`packages/fiscal-verifactu/src/slot.ts`). Core passes a supplied
+`operationDescription` to the fiscal backend as `descriptionOfOperation`; only when that input
+is absent does `operationDescriptionFor` read `locations.operation_description`. An explicit empty
+string stays empty. The supplied/absent cases are exercised by the three core record suites;
+`packages/fiscal-verifactu/src/backend.ts` files the selected string. These columns are
 presentation columns, like `unit_name`.
 
 Where each one surfaces:

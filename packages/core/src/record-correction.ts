@@ -34,6 +34,7 @@ const ZERO = decimal("0");
 export interface RecordCorrectionInput {
   /** Where the sale came from, written to `sales.source` and `sales.device_id`. */
   origin: SaleOrigin;
+  operationDescription?: string;
   /**
    * The node that issues this corrective invoice and whose chain it extends. Checked against the
    * corrective series (`sale.series_wrong_node`) but deliberately NOT against the original sale's
@@ -307,7 +308,12 @@ export async function recordCorrection(
         saleLineRows(saleId, input.lines, { corrective: true }),
     );
 
-  const descriptionOfOperation = await operationDescriptionFor(tx, input.origin, input.nodeId);
+  const descriptionOfOperation = await operationDescriptionFor(
+    tx,
+    input.origin,
+    input.nodeId,
+    input.operationDescription,
+  );
 
   const fiscal = await backend.recordCorrection(
     tx,
