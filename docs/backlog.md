@@ -5045,21 +5045,22 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
   word-matching checks in `packages/db/src/constraint-target.ts` could share one private helper.
 
 - **A switched-off module's append-only tables are neither re-protected nor checked** — OPEN, left
-  open by A483. A start migrates, re-protects and checks only the modules switched on, so nothing
-  puts back or checks the triggers of `time_entries` (workforce), `payment_resolutions` (payments),
-  or `registros_facturacion` and its filing-case tables on a box later moved to `fiscal-none`.
+  open by A483, #1544. A start migrates, re-protects and checks only the modules switched on, so
+  nothing puts back or checks the triggers of `time_entries` (workforce), `payment_resolutions`
+  (payments), or `registros_facturacion` and its filing-case tables on a box later moved to
+  `fiscal-none`.
   [Detail](backlog/architecture.md#a-switched-off-modules-append-only-tables-are-neither-re-protected-nor-checked)
 
-- **Putting back a changed append-only trigger is a hand-typed command** — OPEN, left open by A483.
-  Retry cannot clear `append_only.triggers_changed` for a changed trigger; the installer runs the
-  `node -e` drop in `deploy/README.md` (_When the page names `append_only.triggers_changed`_) and
-  then presses Retry. **Next action:** decide whether Waitron ships that as an operator command.
+- **Putting back a changed append-only trigger is a hand-typed command** — OPEN, left open by A483,
+  #1544. Retry cannot clear `append_only.triggers_changed` for a changed trigger; the installer runs
+  the `node -e` drop in `deploy/README.md` (_When the page names `append_only.triggers_changed`_)
+  and then presses Retry. **Next action:** decide whether Waitron ships that as an operator command.
 
-- **The append-only check does not read `PRAGMA recursive_triggers`** — OPEN, left open by A483.
-  With the pragma off, `INSERT OR REPLACE` rewrites an append-only row without touching a trigger
-  (measured, `docs/developers/conventions-data.md`); `apps/server/src/append-only-watch.ts` reads
-  only the triggers' stored text. Whether anything on a running server can turn the pragma off is
-  unmeasured.
+- **The append-only check does not read `PRAGMA recursive_triggers`** — OPEN, left open by A483,
+  #1544. With the pragma off, `INSERT OR REPLACE` rewrites an append-only row without touching a
+  trigger (measured, `docs/developers/conventions-data.md`); `apps/server/src/append-only-watch.ts`
+  reads only the triggers' stored text. Whether anything on a running server can turn the pragma off
+  is unmeasured.
 
 - **`apps/server` → `apps/print-agent` is the first app-to-app workspace edge in the tree** — left
   behind by the TypeScript 7 upgrade (#460, 2026-09-20). Moving the WHOLE cohort would settle it,
