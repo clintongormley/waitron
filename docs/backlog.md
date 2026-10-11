@@ -1833,6 +1833,22 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   smaller gaps. Left open by A429 slice 4 (#1526).
   [Detail](backlog/till.md#a474--todays-floor-changes-on-the-till-follow-ups)
 
+- **A502. The floor plan editor as a big modal, with handles and a shorter form (owner,
+  2026-10-11).** The editor fills the window, a selected table's form shrinks to name, seats, shape
+  and Moveable, the table is sized and turned by handles on the plan, and the tables list marks
+  which tables are placed. Table pickers sort by number.
+  [Detail](backlog/till.md#a502-the-floor-plan-editor-as-a-big-modal-with-handles-and-a-shorter-form)
+
+- **A503. Joined tables replace saved joins (owner, 2026-10-11).** A table made of other tables
+  is set up in the editor and starts the day as one table; the till can split it. Two tables
+  pushed together during service ask for their seats. Needs a short design first.
+  [Detail](backlog/till.md#a503-joined-tables-replace-saved-joins)
+
+- **A504. Floor plans published for a future date, and one per service period (owner,
+  2026-10-11).** Like menus, a layout could go live on a chosen date, and a zone could have
+  different layouts for different periods. Backlog only, not queued to a lane.
+  [Detail](backlog/till.md#a504-floor-plans-published-for-a-future-date-and-one-per-service-period)
+
 - **The bookings list shows no table for any booking, and a past booking's kept table name
   (`bookings.table_label`) is stored but shown nowhere.** Left open by A429 slice 1 (#1493).
 

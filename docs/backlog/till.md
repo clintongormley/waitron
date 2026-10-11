@@ -294,6 +294,69 @@ screen is designed.
     tables' labels overlap while they line up mid-drag.
   - The new floor test files repeat their setup; shared helpers were left out to avoid churn.
 
+## A502. The floor plan editor as a big modal, with handles and a shorter form
+
+**A502 (owner, 2026-10-11) — OPEN.** The editor wastes space today: the dashboard's header and menu
+stay on screen, and a selected table's form is a long column of fields. The owner's mockup is the
+private canvas https://claude.ai/artifact/NkwkgPN6rjSu26P6qAjTyK; boards 1 to 4 are this job and
+board 5 is A503.
+
+- **A big modal.** The editor opens over the whole window, so the dashboard's header and menu are
+  hidden. The header holds the zone's name and the line 'Changes will go live tomorrow, unless you
+  "Reset to saved plan" on the till.', then Undo and Redo as round arrow icons, then Cancel (today's
+  Close) beside Save.
+- **The selected table's form** is Name; Seats beside a rectangle/round shape toggle; and a
+  Moveable switch, on by default, replacing "Fixed in place". Width, Height, Rotation, Remove from
+  plan and Delete leave the form. Joins leave it too once A503 lands; until then they stay.
+- **Handles on the selected table.** A dot in the middle of each side changes width or height. A
+  two-headed quarter-circle arrow on the top-right corner turns the table, and turns with it, so it
+  stays at the same corner. The table's name stays upright. The arrow-key nudge and turn shortcuts
+  stay. With the Width and Height fields gone, the plan needs a keyboard way to resize as well.
+- **The tables list.** Each row shows a marker (on the plan, or not placed; A503 adds a third for
+  a table that is part of a joined table), the name, the seats, and a bin that deletes the table
+  after a confirmation. The markers differ in shape as well as colour. Clicking a row puts the
+  table on the plan, or takes it off with no confirmation. A table taken off keeps its position,
+  size, turn and shape, and goes back to the same place when it is clicked again.
+- **Sort by number everywhere a table is picked.** The tables list already sorts by number
+  (`Intl.Collator` with `numeric: true`, `apps/dashboard/src/screens/floor-plan-tables-panel.ts`),
+  and so does the till (`inNumberOrder`). The Add join dialog's picker lists tables in the draft's
+  own order (`#options`, `apps/dashboard/src/screens/floor-plan-add-join.ts`), and the booking
+  form's table dropdown (`packages/bookings/src/dashboard/booking-form.ts`) lists them in the order
+  the server sends, which was not traced. A503's "made of" picker must sort by number too.
+- A466's list and canvas items (the unmarked selected row, the rotate handle drawn outside the
+  grid) are on the same code; fold in the ones this job does not make moot.
+
+## A503. Joined tables replace saved joins
+
+**A503 (owner, 2026-10-11) — OPEN. Needs a short design before a plan.** It changes what is stored
+for joins and how the till merges and splits tables. Today a saved join is a seat count for a
+combination of tables that are each placed on their own: when staff drag one onto the other during
+service, the merged table takes its seats from today's copy of that saved join (floor plan spec
+section 6.1, `docs/superpowers/specs/2026-10-08-floor-plan-design.md`; `floor_plan_joins` and
+`floor_reset_joins`, `packages/db/src/schema/floor-plans.ts`).
+
+- **Add joined table** in the editor asks for a name, a seat count, and the tables it is made of,
+  chosen from tables not on the plan (mockup board 5). The joined table is placed on the plan as
+  one table; its parts are marked "in <joined table>" in the tables list and cannot be placed on
+  their own. The list's last column shows what a joined table is made of.
+- **On the till a joined table can be split.** Its parts go side by side inside the outline the
+  joined table took up, each with its own seats.
+- **Two separate tables dragged together during service ask for the seat count.** Adding the two
+  tables' seats is wrong: two four-seat tables pushed together seat six.
+- Saved joins and the editor's Joins section go. Before go-live no data needs carrying over. "A
+  saved join's seats have no upper bound" (Small floor-plan refusals, below) goes with them; a
+  joined table's seats need their own bound.
+
+## A504. Floor plans published for a future date, and one per service period
+
+**A504 (owner, 2026-10-11) — backlog only.** Two related wishes, each probably its own job:
+
+- **Publish a layout for a future date**, as menus can (a queued edition goes live at its time:
+  `menu_scheduled_publications`, `packages/catalogue/src/schema/publication.ts`). Today a saved plan
+  reaches the till at the next reset.
+- **Different layouts for different periods** of the day, for example lunch and dinner. This needs
+  deciding how a change of layout meets tables that are occupied when the period changes.
+
 ## Small floor-plan refusals still missing
 
 - **Small floor-plan refusals still missing.** Left open by A429 slice 1 (#1493).
