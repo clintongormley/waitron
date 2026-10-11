@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { userEvent } from "vitest/browser";
 import { chooseOption } from "@waitron/ui/src/test-helpers.js";
 import { setLocale } from "../i18n/t.js";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
@@ -450,33 +451,46 @@ describe("SetupRestoreScreen", () => {
       expect(getComputedStyle(box).boxShadow).toContain("rgb(4, 5, 6)");
     });
 
-    const expectDangerOutline = (input: HTMLInputElement): void => {
-      const style = getComputedStyle(input);
-      expect(style.outlineStyle).toBe("solid");
-      expect(style.outlineColor).toBe("rgb(4, 5, 6)");
-      expect(style.outlineWidth).not.toBe("0px");
+    const expectDangerRing = (input: HTMLInputElement): void => {
+      expect(getComputedStyle(input).boxShadow).toContain("rgb(4, 5, 6)");
     };
 
-    it("outlines the backup file it names in the danger colour", async () => {
+    it("rings the backup file it names in the danger colour", async () => {
       const { el, host } = await mountWidget<SetupRestoreScreen>("setup-restore-screen", {
         request: REQUEST,
         errorMessage: REFUSAL.artifact,
         invalidField: "artifact",
       });
       host.style.setProperty("--wt-color-danger", "rgb(4, 5, 6)");
-      expectDangerOutline(q<HTMLInputElement>(el, "[data-test=artifact]")!);
+      expectDangerRing(q<HTMLInputElement>(el, "[data-test=artifact]")!);
     });
 
-    it("outlines a missing backup file only after Restore is pressed, and not once one is chosen", async () => {
+    it("rings a missing backup file only after Restore is pressed, and not once one is chosen", async () => {
       const { el, host } = await mountWidget<SetupRestoreScreen>("setup-restore-screen", {});
       host.style.setProperty("--wt-color-danger", "rgb(4, 5, 6)");
       const file = q<HTMLInputElement>(el, "[data-test=artifact]")!;
-      expect(getComputedStyle(file).outlineStyle).toBe("none");
+      expect(getComputedStyle(file).boxShadow).toBe("none");
       q(el, "[data-test=restore]")!.click();
       await el.updateComplete;
-      expectDangerOutline(file);
+      expectDangerRing(file);
       await fill(el, { artifact: true });
-      expect(getComputedStyle(file).outlineStyle).toBe("none");
+      expect(getComputedStyle(file).boxShadow).toBe("none");
+    });
+
+    it("keeps the keyboard focus ring on a refused backup file, beside the danger ring", async () => {
+      const { el, host } = await mountWidget<SetupRestoreScreen>("setup-restore-screen", {});
+      host.style.setProperty("--wt-color-danger", "rgb(4, 5, 6)");
+      host.style.setProperty("--wt-color-focus", "rgb(7, 8, 9)");
+      q(el, "[data-test=restore]")!.click();
+      await el.updateComplete;
+      const file = q<HTMLInputElement>(el, "[data-test=artifact]")!;
+      await userEvent.keyboard("{Shift}");
+      file.focus();
+      expect(file.matches(":focus-visible")).toBe(true);
+      const style = getComputedStyle(file);
+      expect(style.outlineStyle).toBe("solid");
+      expect(style.outlineColor).toBe("rgb(7, 8, 9)");
+      expectDangerRing(file);
     });
 
     it("drops it when the named field changes", async () => {

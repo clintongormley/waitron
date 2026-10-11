@@ -41,9 +41,9 @@ export class SetupRestoreScreen extends LitElement {
       :host {
         display: block;
       }
+      /* A box-shadow, not an outline, so the shared keyboard focus ring still draws outside it. */
       input[type="file"][aria-invalid="true"] {
-        outline: var(--wt-field-line-width-active) solid var(--wt-color-danger);
-        outline-offset: var(--wt-space-1);
+        box-shadow: 0 0 0 var(--wt-field-line-width-active) var(--wt-color-danger);
         border-radius: var(--wt-radius-sm);
       }
     `,
