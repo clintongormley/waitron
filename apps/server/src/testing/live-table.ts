@@ -31,6 +31,6 @@ export async function createTable(
 
 export async function switchOff(v: { db: Database }, tableId: string): Promise<void> {
   await withTransaction(v.db, async (tx) => {
-    await tx.update(diningTables).set({ active: false }).where(eq(diningTables.id, tableId));
+    await tx.delete(floorTodayTables).where(eq(floorTodayTables.tableId, tableId));
   });
 }

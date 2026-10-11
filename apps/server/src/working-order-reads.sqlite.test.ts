@@ -22,6 +22,7 @@ import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
 import type { TillConfig } from "./till-config.js";
+import { listTables } from "./tables.js";
 import { listExpoQueue, listStationQueue, listTablesWithState } from "./working-order.js";
 import { dashboardOrderAt } from "./testing/session-device.js";
 
@@ -115,6 +116,42 @@ beforeAll(async () => {
 });
 
 describe("the kitchen and floor read models on a real migrated venue", () => {
+  it("omits missing-today and disabled-zone tables from both floor lists, keeping taken-off tables", async () => {
+    const [zone] = await db
+      .insert(floorZones)
+      .values({ locationId: cfg.locationId, name: "Closed", active: false })
+      .returning();
+    const [normalZone] = await db.select().from(floorZones).where(eq(floorZones.name, "Tables"));
+    const [absent, closed, takenOff] = await db
+      .insert(diningTables)
+      .values([
+        { locationId: cfg.locationId, zoneId: normalZone!.id, label: "Absent" },
+        { locationId: cfg.locationId, zoneId: zone!.id, label: "Closed" },
+        { locationId: cfg.locationId, zoneId: normalZone!.id, label: "Spare" },
+      ])
+      .returning();
+    await db
+      .insert(floorTodayTables)
+      .values([{ tableId: closed!.id }, { tableId: takenOff!.id, takenOff: true }]);
+    await withTransaction(db, async (tx) => {
+      const floor = await listTablesWithState(tx, cfg);
+      const plain = await listTables(tx, cfg);
+      const all = await listTables(tx, cfg, { includeDisabled: true });
+      expect(floor.map((t) => t.id).sort()).toEqual([tableId, takenOff!.id].sort());
+      expect(plain.map((t) => t.id).sort()).toEqual([tableId, takenOff!.id].sort());
+      expect(all.map((t) => t.id).sort()).toEqual(
+        [tableId, absent!.id, closed!.id, takenOff!.id].sort(),
+      );
+      expect(floor.find((t) => t.id === takenOff!.id)?.today?.takenOff).toBe(true);
+    });
+    await db.delete(floorTodayTables).where(eq(floorTodayTables.tableId, takenOff!.id));
+    await db.delete(diningTables).where(eq(diningTables.id, takenOff!.id));
+    await db.delete(floorTodayTables).where(eq(floorTodayTables.tableId, closed!.id));
+    await db.delete(diningTables).where(eq(diningTables.id, closed!.id));
+    await db.delete(diningTables).where(eq(diningTables.id, absent!.id));
+    await db.delete(floorZones).where(eq(floorZones.id, zone!.id));
+  });
+
   it("rolls an open tab up onto its table — counts, total and timing band", async () => {
     const [table] = await withTransaction(db, async (tx) => {
       return listTablesWithState(tx, cfg);

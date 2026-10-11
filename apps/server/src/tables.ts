@@ -1,3 +1,4 @@
+import { tableInService } from "@waitron/db";
 // Side-effect only: keeps this host's error registry (errors.ts) reachable from a file that throws
 // its codes.
 import "./errors.js";
@@ -58,7 +59,7 @@ export async function listTables(
     .where(
       and(
         eq(diningTables.locationId, cfg.locationId),
-        options.includeDisabled ? undefined : eq(diningTables.active, true),
+        options.includeDisabled ? undefined : tableInService(diningTables.id),
       ),
     )
     .orderBy(diningTables.label);
@@ -351,15 +352,15 @@ export async function setTableStatus(
   // Each subquery is NULL when no row matches, so a missing status stays distinct from an inactive
   // one. `number`, not `boolean`: a raw-SQL read bypasses the `flag` column's boolean mapping.
   const { rows } = await tx.execute<{
-    table_active: number | null;
+    table_in_service: number | null;
     status_active: number | null;
   }>(
     statusId === null
-      ? sql`select (select ${diningTables.active} from ${diningTables} where ${diningTables.id} = ${tableId}) as table_active`
-      : sql`select (select ${diningTables.active} from ${diningTables} where ${diningTables.id} = ${tableId}) as table_active, (select ${tableServiceStatuses.active} from ${tableServiceStatuses} where ${tableServiceStatuses.id} = ${statusId}) as status_active`,
+      ? sql`select (select ${tableInService(diningTables.id)} from ${diningTables} where ${diningTables.id} = ${tableId}) as table_in_service`
+      : sql`select (select ${tableInService(diningTables.id)} from ${diningTables} where ${diningTables.id} = ${tableId}) as table_in_service, (select ${tableServiceStatuses.active} from ${tableServiceStatuses} where ${tableServiceStatuses.id} = ${statusId}) as status_active`,
   );
   const row = rows[0]!;
-  if (!row.table_active) {
+  if (!row.table_in_service) {
     throw new AppError("table.not_found", { tableId });
   }
 

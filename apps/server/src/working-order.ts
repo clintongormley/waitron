@@ -1,3 +1,4 @@
+import { tableInService } from "@waitron/db";
 import { readStationQueueMoves, type StationQueueMove } from "./station-queue-moves.js";
 import {
   checkedInvoiceChoiceDelivery,
@@ -1245,7 +1246,7 @@ export async function openTab(
 ): Promise<{ tabId: string; orderNumber: number }> {
   const [table] = await tx
     .select({
-      active: diningTables.active,
+      inService: tableInService(diningTables.id).mapWith(Boolean),
       zoneId: diningTables.zoneId,
       needsClearingSince: diningTables.needsClearingSince,
     })
@@ -1254,7 +1255,7 @@ export async function openTab(
   if (table === undefined) {
     throw new AppError("table.not_found", { tableId: req.tableId });
   }
-  if (!table.active) {
+  if (!table.inService) {
     throw new AppError("table.inactive", { tableId: req.tableId });
   }
   if (table.needsClearingSince !== null) {
@@ -7037,8 +7038,7 @@ export interface TableState {
   posY: number | null;
   shape: FloorTableShape | null;
   rotation: number | null;
-  /** `null` when the table has no today's row. */
-  today: TableToday | null;
+  today: TableToday;
   /** Merged from the enabled modules' floor annotators; `null` when none annotates the table. */
   nextReservation: { time: string } | null;
   party: TableParty | null;
@@ -7173,7 +7173,7 @@ export async function listTablesWithState(
     ) del on del.delivery_table_id = dt.id
     left join table_service_statuses tss
       on tss.id = dt.status_id
-    where dt.location_id = ${loc} and dt.active = true
+    where dt.location_id = ${loc} and ${tableInService(sql`dt.id`)}
     order by dt.label
   `);
 
@@ -7222,7 +7222,7 @@ export async function listTablesWithState(
       posY: r.pos_y,
       shape: r.shape,
       rotation: r.rotation,
-      today: today.get(r.id) ?? null,
+      today: today.get(r.id)!,
       nextReservation: null as { time: string } | null,
       party: party ?? null,
       signals: tableSignals(

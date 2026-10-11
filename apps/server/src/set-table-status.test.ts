@@ -103,6 +103,24 @@ async function statusOf(tableId: string): Promise<string | null> {
 }
 
 describe("setTableStatus", () => {
+  it.each(["missing today", "disabled zone"])(
+    "answers table.not_found for %s and preserves the manual status",
+    async (state) => {
+      const { cfg, tableId, activeStatusId } = await setupVenue();
+      await asApp(cfg, (tx) => setTableStatus(tx, cfg, tableId, activeStatusId));
+      if (state === "missing today")
+        await db.execute(sql`delete from floor_today_tables where table_id = ${tableId}`);
+      else
+        await db.execute(
+          sql`update floor_zones set active = false where id = (select zone_id from dining_tables where id = ${tableId})`,
+        );
+      await expect(
+        asApp(cfg, (tx) => setTableStatus(tx, cfg, tableId, null)),
+      ).rejects.toMatchObject({ code: "table.not_found", params: { tableId } });
+      expect(await statusOf(tableId)).toBe(activeStatusId);
+    },
+  );
+
   it("sets a table's manual status, then clears it with null", async () => {
     const { cfg, tableId, activeStatusId } = await setupVenue();
     await asApp(cfg, (tx) => setTableStatus(tx, cfg, tableId, activeStatusId));

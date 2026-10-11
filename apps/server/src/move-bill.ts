@@ -1,3 +1,4 @@
+import { tableInService } from "@waitron/db";
 import { and, eq, inArray, isNull, ne, sql } from "drizzle-orm";
 import {
   diningTables,
@@ -218,14 +219,14 @@ export async function readTargetTable(
   }
   const [table] = await tx
     .select({
-      active: diningTables.active,
+      inService: tableInService(diningTables.id).mapWith(Boolean),
       zoneId: diningTables.zoneId,
       needsClearingSince: diningTables.needsClearingSince,
     })
     .from(diningTables)
     .where(and(eq(diningTables.id, tableId), eq(diningTables.locationId, cfg.locationId)));
   if (table === undefined) throw new AppError("table.not_found", { tableId });
-  if (!table.active) throw new AppError("table.inactive", { tableId });
+  if (!table.inService) throw new AppError("table.inactive", { tableId });
   if (table.needsClearingSince !== null) throw new AppError("table.needs_clearing", { tableId });
   return { holding, zoneId: table.zoneId };
 }

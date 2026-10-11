@@ -317,6 +317,31 @@ async function bareOpenOrder(cfg: OriginConfig, id: string): Promise<void> {
   });
 }
 
+describe("opening only tables in service", () => {
+  it.each(["missing today", "disabled zone"])(
+    "refuses %s with table.inactive while the table stays active",
+    async (state) => {
+      const { cfg, tableId } = await setupVenue();
+      if (state === "missing today") {
+        await db.execute(sql`delete from floor_today_tables where table_id = ${tableId}`);
+      } else {
+        await db.execute(
+          sql`update floor_zones set active = false where id = (select zone_id from dining_tables where id = ${tableId})`,
+        );
+      }
+      await expect(asApp(cfg, (tx) => openPartyTab(tx, cfg, { tableId }))).rejects.toMatchObject({
+        code: "table.inactive",
+        params: { tableId },
+      });
+      const [row] = await db
+        .select({ active: diningTables.active })
+        .from(diningTables)
+        .where(eq(diningTables.id, tableId));
+      expect(row).toEqual({ active: true });
+    },
+  );
+});
+
 describe("addTabRound (append-only, no re-price)", () => {
   it("appends a round with the NEXT line_no, without deleting or re-pricing existing lines", async () => {
     const { cfg, cafeId, tableId, cafeOffer } = await setupVenue();

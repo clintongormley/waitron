@@ -464,6 +464,31 @@ describe("what a move refuses, changing nothing", () => {
     expect(error).toMatchObject({ code: "table.needs_clearing", params: { tableId: dirty } });
   });
 
+  it.each(["missing today", "disabled zone"])(
+    "refuses moving a bill to %s with table.inactive",
+    async (state) => {
+      const p = await twoParties(`Service ${state}`);
+      const target = await v.table(`Target ${state}`);
+      await inTx(v, async (tx) =>
+        tx.execute(
+          state === "missing today"
+            ? sql`delete from floor_today_tables where table_id = ${target}`
+            : sql`update floor_zones set active = false where id = (select zone_id from dining_tables where id = ${target})`,
+        ),
+      );
+      const error = await refused(p, [p.second], () => move(p.second, { tableId: target }), [
+        target,
+      ]);
+      expect(error).toMatchObject({ code: "table.inactive", params: { tableId: target } });
+      if (state === "disabled zone")
+        await inTx(v, async (tx) =>
+          tx.execute(
+            sql`update floor_zones set active = true where id = (select zone_id from dining_tables where id = ${target})`,
+          ),
+        );
+    },
+  );
+
   it("refuses a table taken out of use, and one that does not exist", async () => {
     const p = await twoParties("Mesa fuera");
     const retired = await v.table("Mesa fuera R");

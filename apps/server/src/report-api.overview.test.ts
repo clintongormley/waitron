@@ -1,4 +1,5 @@
 import { floorTodayTables } from "@waitron/db";
+import { eq } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { describe, expect, it } from "vitest";
@@ -226,6 +227,28 @@ interface OverviewBody {
 }
 
 describe("mountReportApi — /reports/overview", () => {
+  it("counts only tables on today's plan in enabled zones", async () => {
+    const [zone] = await suite.db
+      .insert(floorZones)
+      .values({ locationId, name: "Closed", active: false })
+      .returning();
+    const [absent, closed] = await suite.db
+      .insert(diningTables)
+      .values([
+        { locationId, zoneId: zone!.id, label: "Not on today" },
+        { locationId, zoneId: zone!.id, label: "Closed today" },
+      ])
+      .returning();
+    await suite.db.insert(floorTodayTables).values({ tableId: closed!.id });
+    const response = await get(mountApp());
+    expect(response.status).toBe(200);
+    expect(((await response.json()) as OverviewBody).openTables).toEqual({ open: 1, total: 2 });
+    await suite.db.delete(floorTodayTables).where(eq(floorTodayTables.tableId, closed!.id));
+    await suite.db.delete(diningTables).where(eq(diningTables.id, closed!.id));
+    await suite.db.delete(diningTables).where(eq(diningTables.id, absent!.id));
+    await suite.db.delete(floorZones).where(eq(floorZones.id, zone!.id));
+  });
+
   it("200 returns the overview with the seeded takings, counts, open tables and top sellers", async () => {
     const res = await get(mountApp());
     expect(res.status).toBe(200);
