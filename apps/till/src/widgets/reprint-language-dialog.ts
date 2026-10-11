@@ -1,4 +1,4 @@
-import { LitElement, css, html, type PropertyValues } from "lit";
+import { LitElement, css, html, nothing, type PropertyValues } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { languageDisplayName } from "@waitron/shared";
 import { baseStyles } from "@waitron/ui";
@@ -11,8 +11,8 @@ export interface ReprintLanguageDetail {
 }
 
 /**
- * Asks which receipt language a copy of an issued receipt prints in.
- * The dialog only reports the choice.
+ * Asks which receipt language a receipt prints in: a copy of an issued one (`reprint`), or the
+ * receipt of a sale still to be taken (`receipt`). The dialog only reports the choice.
  */
 @customElement("till-reprint-language-dialog")
 export class TillReprintLanguageDialog extends LitElement {
@@ -58,6 +58,7 @@ export class TillReprintLanguageDialog extends LitElement {
   @property({ attribute: false }) languages: string[] = [];
   /** The language the question starts on; the first of {@link languages} when it is not one of them. */
   @property() defaultLanguage = "";
+  @property() purpose: "reprint" | "receipt" = "reprint";
 
   @state() private chosen = "";
 
@@ -91,14 +92,16 @@ export class TillReprintLanguageDialog extends LitElement {
   }
 
   override render() {
+    const reprint = this.purpose === "reprint";
+    const heading = t(reprint ? "reprint_language.title" : "receipt_language.title");
     return html`<wt-dialog
       ${trackDialog()}
       .open=${true}
-      .heading=${t("reprint_language.title")}
+      .heading=${heading}
       @wt-close=${() => this.#cancel()}
     >
-      <fieldset class="choice">
-        <legend>${t("reprint_language.legend")}</legend>
+      <fieldset class="choice" aria-label=${reprint ? nothing : heading}>
+        ${reprint ? html`<legend>${t("reprint_language.legend")}</legend>` : nothing}
         <div class="options">
           ${this.languages.map(
             (language) =>
@@ -132,7 +135,7 @@ export class TillReprintLanguageDialog extends LitElement {
         variant="primary"
         @click=${() => this.#confirm()}
       >
-        ${t("action.reprint")}
+        ${t(reprint ? "action.reprint" : "action.choose")}
       </wt-button>
     </wt-dialog>`;
   }

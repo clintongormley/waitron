@@ -198,6 +198,8 @@ export class TillCounterScreen extends LitElement {
   @property({ attribute: false }) cardAttemptsOver = 0;
   @property({ attribute: false }) activeReaders: TillActiveReader[] = [];
   @property() defaultReaderId?: string;
+  @property({ attribute: false }) receiptLanguages: string[] = [];
+  @property() receiptLanguage = "";
   /**
    * Set when rendered INSIDE the canvas tab shell, which owns the header chrome, so the screen drops its
    * own. The app always mounts it embedded (`till-app.ts` `#tabBody`), so the own-header branch is
@@ -356,6 +358,8 @@ export class TillCounterScreen extends LitElement {
         .cardAttemptsOver=${this.cardAttemptsOver}
         .activeReaders=${this.activeReaders}
         .defaultReaderId=${this.defaultReaderId}
+        .receiptLanguages=${this.receiptLanguages}
+        .receiptLanguage=${this.receiptLanguage}
         ><div slot="menu-controls" class="menu-controls">
           ${this.#menuControls()}
         </div></till-card-grid

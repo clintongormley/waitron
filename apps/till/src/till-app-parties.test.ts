@@ -1248,7 +1248,7 @@ describe("till-app: the party's bills and Finish table", () => {
     ).toBe(true);
   });
 
-  it("starts a paid bill's receipt copy on the location's language when the bill's is not offered", async () => {
+  it("offers a paid bill's own language for its copy, and starts on it, when it is not offered", async () => {
     const paid: PartyBill = {
       ...tabBill,
       workingOrderId: "wo-old",
@@ -1272,7 +1272,12 @@ describe("till-app: the party's bills and Finish table", () => {
 
     const dialog = el.shadowRoot!.querySelector("till-reprint-language-dialog")!;
     expect(
-      dialog.shadowRoot!.querySelector<HTMLInputElement>('input[value="eu-ES"]')!.checked,
+      [...dialog.shadowRoot!.querySelectorAll<HTMLInputElement>('input[name="language"]')].map(
+        (input) => input.value,
+      ),
+    ).toEqual(["es-ES", "ca-ES", "gl-ES", "eu-ES", "en-GB"]);
+    expect(
+      dialog.shadowRoot!.querySelector<HTMLInputElement>('input[value="en-GB"]')!.checked,
     ).toBe(true);
   });
 

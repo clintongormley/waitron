@@ -15,6 +15,7 @@ import {
   compareDecimal,
   decimal,
   formatMoney,
+  languageDisplayName,
   subtractDecimal,
   type Decimal,
 } from "@waitron/shared";
@@ -133,7 +134,8 @@ export class TillTenderPay extends LitElement {
 
       .idle-actions .cash-at-till,
       .idle-actions .tenders,
-      .idle-actions .place {
+      .idle-actions .place,
+      .idle-actions .receipt-language {
         grid-column: 1 / -1;
       }
 
@@ -156,7 +158,8 @@ export class TillTenderPay extends LitElement {
       .cancel,
       .retry,
       .switch-tender,
-      .wait {
+      .wait,
+      .receipt-language {
         width: 100%;
       }
 
@@ -219,6 +222,10 @@ export class TillTenderPay extends LitElement {
   /** Only NAMES the default on screen — never sent; an unset {@link chosenReaderId} already means
    * "use the device default". */
   @property() defaultReaderId?: string;
+  /** The receipt languages staff may choose from; the button shows only when there are several. */
+  @property({ attribute: false }) receiptLanguages: string[] = [];
+  /** The language this order's receipt prints in. */
+  @property() receiptLanguage = "";
 
   @state() private view: View = "idle";
   @state() private entry = "";
@@ -796,12 +803,33 @@ export class TillTenderPay extends LitElement {
     >`;
   }
 
+  #renderReceiptLanguageButton(disabled: boolean) {
+    if (this.receiptLanguages.length < 2) return nothing;
+    const name = languageDisplayName(this.receiptLanguage, currentLocale());
+    return html`<wt-button
+      class="receipt-language"
+      data-receipt-language
+      variant="secondary"
+      aria-label=${t("receipt_language.button").replace("{language}", () => name)}
+      ?disabled=${disabled}
+      @click=${(event: Event) => {
+        event.stopPropagation();
+        this.dispatchEvent(
+          new CustomEvent("choose-receipt-language", { bubbles: true, composed: true }),
+        );
+      }}
+      >${name}</wt-button
+    >`;
+  }
+
   /** No Hold: a placed order is not parked again. */
   #renderIdleCollect(disabled: boolean) {
     return html`
       ${this.#renderCardExtras()}
       ${formMessage(this.tipAttempted && this.#tipInvalid() ? t("form.fix_fields") : "")}
-      <div class="actions">${this.#renderTenderButtons(disabled)}</div>
+      <div class="actions">
+        ${this.#renderTenderButtons(disabled)} ${this.#renderReceiptLanguageButton(disabled)}
+      </div>
     `;
   }
 
@@ -835,6 +863,7 @@ export class TillTenderPay extends LitElement {
         >
           ${t("action.hold")}
         </wt-button>
+        ${this.#renderReceiptLanguageButton(disabled)}
       </div>
     `;
   }

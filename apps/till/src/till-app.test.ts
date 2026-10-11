@@ -3605,8 +3605,8 @@ describe("till-app", () => {
       expect(radio(el, "eu-ES").checked).toBe(true);
     });
 
-    it("starts on the location's language when the sale's is not one of the receipt languages", async () => {
-      const { el } = await soldWith(
+    it("offers the sale's own language, and starts on it, when it is not one of the receipt languages", async () => {
+      const { el, workingOrderId } = await soldWith(
         { invoiceLocale: "eu-ES", receiptLanguages: SPAIN },
         { recordSale: vi.fn().mockResolvedValue({ ...saleResult, locale: "en-GB" }) },
       );
@@ -3614,7 +3614,31 @@ describe("till-app", () => {
       emit(ticket(el)!, "reprint");
       await flush(el);
 
-      expect(radio(el, "eu-ES").checked).toBe(true);
+      expect(
+        [
+          ...languageDialog(el)!.shadowRoot!.querySelectorAll<HTMLInputElement>(
+            'input[name="language"]',
+          ),
+        ].map((input) => input.value),
+      ).toEqual([...SPAIN, "en-GB"]);
+      expect(radio(el, "en-GB").checked).toBe(true);
+      dialogButton(el, "confirm").click();
+      await flush(el);
+      expect(vi.mocked(currentApi.reprint).mock.calls).toEqual([[workingOrderId, "en-GB"]]);
+    });
+
+    it("asks with one receipt language offered when the sale was filed in another", async () => {
+      const { el } = await soldWith(
+        { invoiceLocale: "es-ES", receiptLanguages: ["es-ES"] },
+        { recordSale: vi.fn().mockResolvedValue({ ...saleResult, locale: "ca-ES" }) },
+      );
+
+      emit(ticket(el)!, "reprint");
+      await flush(el);
+
+      expect(currentApi.reprint).not.toHaveBeenCalled();
+      expect(radio(el, "ca-ES").checked).toBe(true);
+      expect(radio(el, "es-ES").checked).toBe(false);
     });
 
     it("reprints nothing when the language question is cancelled", async () => {
@@ -3670,6 +3694,283 @@ describe("till-app", () => {
 
       expect(languageDialog(el)).toBeNull();
       expect(vi.mocked(currentApi.reprint).mock.calls).toEqual([[workingOrderId]]);
+    });
+  });
+
+  describe("the counter's receipt language", () => {
+    // The location's own receipt language comes first, as `GET /api/till` lists them.
+    const OFFERED = ["ca-ES", "es-ES"];
+    const languageButton = (el: TillApp) =>
+      tenderPay(el).shadowRoot!.querySelector<HTMLElement>("[data-receipt-language]");
+    const languageDialog = (el: TillApp) =>
+      el.shadowRoot!.querySelector<HTMLElement & { purpose: string }>(
+        "till-reprint-language-dialog",
+      );
+    const checkedLanguage = (el: TillApp) =>
+      languageDialog(el)!.shadowRoot!.querySelector<HTMLInputElement>("input:checked")!.value;
+    const alert = (el: TillApp) => el.shadowRoot!.querySelector<HTMLElement>('[role="alert"]');
+
+    async function choose(el: TillApp, language: string): Promise<void> {
+      languageButton(el)!.click();
+      await flush(el);
+      const dialog = languageDialog(el)!;
+      dialog.shadowRoot!.querySelector<HTMLInputElement>(`input[value="${language}"]`)!.click();
+      dialog.shadowRoot!.querySelector<HTMLElement>("[data-reprint-confirm]")!.click();
+      await flush(el);
+    }
+
+    async function counterWith(overrides: Record<string, unknown> = {}, ring = true) {
+      const { el } = await mountApp({
+        getTill: vi
+          .fn()
+          .mockResolvedValue({ ...till, invoiceLocale: "ca-ES", receiptLanguages: OFFERED }),
+        setOrderReceiptLanguage: vi.fn().mockResolvedValue({ revision: 1 }),
+        ...overrides,
+      });
+      const c = await toCounter(el);
+      if (ring) c.store.addProduct(cafe, "2");
+      await flush(el);
+      return { el, c };
+    }
+
+    it("offers no language button when the location offers one receipt language", async () => {
+      const { el } = await counterWith({
+        getTill: vi.fn().mockResolvedValue({ ...till, receiptLanguages: ["es-ES"] }),
+      });
+
+      expect(tenderPay(el).shadowRoot!.querySelector("[data-full-invoice]")).not.toBeNull();
+      expect(languageButton(el)).toBeNull();
+    });
+
+    it("shows the location's language until staff choose another, then sends the chosen one with the sale", async () => {
+      const { el, c } = await counterWith();
+      const id = c.store.id;
+      expect(languageButton(el)!.textContent!.trim()).toBe("Catalán");
+
+      languageButton(el)!.click();
+      await flush(el);
+      expect(languageDialog(el)!.purpose).toBe("receipt");
+      expect(checkedLanguage(el)).toBe("ca-ES");
+      languageDialog(el)!
+        .shadowRoot!.querySelector<HTMLInputElement>('input[value="es-ES"]')!
+        .click();
+      languageDialog(el)!.shadowRoot!.querySelector<HTMLElement>("[data-reprint-confirm]")!.click();
+      await flush(el);
+
+      expect(languageDialog(el)).toBeNull();
+      expect(languageButton(el)!.textContent!.trim()).toBe("Español");
+      expect(currentApi.setOrderReceiptLanguage).not.toHaveBeenCalled();
+      emit(c, "confirm-payment", { method: "cash", amount: "5" });
+      await flush(el);
+      expect(currentApi.recordSale).toHaveBeenCalledWith(
+        expect.anything(),
+        { method: "cash", amount: "5" },
+        id,
+        undefined,
+        undefined,
+        "es-ES",
+      );
+    });
+
+    it("keeps the language when the question is cancelled", async () => {
+      const { el } = await counterWith();
+
+      languageButton(el)!.click();
+      await flush(el);
+      languageDialog(el)!.shadowRoot!.querySelector<HTMLElement>("[data-reprint-cancel]")!.click();
+      await flush(el);
+
+      expect(languageDialog(el)).toBeNull();
+      expect(languageButton(el)!.textContent!.trim()).toBe("Catalán");
+    });
+
+    it("sends the chosen language with an integrated card payment", async () => {
+      const { el, c } = await counterWith();
+      const id = c.store.id;
+
+      await choose(el, "es-ES");
+      emit(c, "collect-card", {});
+      await flush(el);
+
+      expect(currentApi.pay).toHaveBeenCalledWith(
+        expect.objectContaining({ id, receiptLanguage: "es-ES" }),
+      );
+    });
+
+    it("saves the chosen language when the order is placed, and sends it again when it is collected", async () => {
+      const placeOrder = vi.fn().mockResolvedValue({ id: "placed", status: "placed" });
+      const { el, c } = await counterWith({
+        zonePolicy: { serviceMode: "ticket_then_pay" },
+        placeOrder,
+      });
+      const id = c.store.id;
+
+      await choose(el, "es-ES");
+      emit(c, "place-order");
+      await flush(el);
+
+      expect(currentApi.setOrderReceiptLanguage).toHaveBeenCalledWith(id, {
+        revision: 0,
+        language: "es-ES",
+      });
+      expect(
+        vi.mocked(currentApi.setOrderReceiptLanguage).mock.invocationCallOrder[0],
+      ).toBeGreaterThan(vi.mocked(currentApi.parkOrder).mock.invocationCallOrder[0]!);
+      expect(
+        vi.mocked(currentApi.setOrderReceiptLanguage).mock.invocationCallOrder[0],
+      ).toBeLessThan(placeOrder.mock.invocationCallOrder[0]!);
+      expect(languageButton(el)!.textContent!.trim()).toBe("Español");
+      emit(c, "collect-order", { method: "cash", amount: "5" });
+      await flush(el);
+      expect(currentApi.collectOrder).toHaveBeenCalledWith(
+        id,
+        { method: "cash", amount: "5" },
+        "es-ES",
+      );
+    });
+
+    it("keeps each order's own language: a held order keeps its choice and the next sale starts on the location's", async () => {
+      const { el, c } = await counterWith({
+        retrieveWorkingOrder: vi.fn(async (id: string) => ({
+          id,
+          orderNumber: 5,
+          label: null,
+          revision: 1,
+          receiptLanguage: "es-ES",
+          lines: [{ menuItemId: "menu-item-cafe-0", productId: "cafe", quantity: "2.000" }],
+        })),
+      });
+      const held = c.store.id;
+
+      await choose(el, "es-ES");
+      emit(c, "park-order", {});
+      await flush(el);
+
+      expect(currentApi.setOrderReceiptLanguage).toHaveBeenCalledWith(held, {
+        revision: 0,
+        language: "es-ES",
+      });
+      expect(c.store.id).not.toBe(held);
+      expect(languageButton(el)!.textContent!.trim()).toBe("Catalán");
+
+      emit(c, "retrieve-order", { id: held });
+      await flush(el);
+      expect(c.store.id).toBe(held);
+      expect(languageButton(el)!.textContent!.trim()).toBe("Español");
+    });
+
+    it("holds the order, and says so, when its chosen language could not be saved", async () => {
+      const { el, c } = await counterWith({
+        setOrderReceiptLanguage: vi.fn().mockRejectedValue({ code: "server.internal" }),
+      });
+      const held = c.store.id;
+
+      await choose(el, "es-ES");
+      emit(c, "park-order", {});
+      await flush(el);
+
+      expect(currentApi.parkOrder).toHaveBeenCalledWith(expect.objectContaining({ id: held }));
+      expect(c.store.id).not.toBe(held);
+      expect(c.store.lineCount).toBe(0);
+      expect(alert(el)!.textContent).toContain(t("receipt_language.save_error"));
+    });
+
+    it("starts a retrieved order on its stored language, saves a new choice at once, and saves later edits from the revision that answered", async () => {
+      const setOrderReceiptLanguage = vi.fn().mockResolvedValue({ revision: 4 });
+      const { el, c } = await counterWith(
+        {
+          setOrderReceiptLanguage,
+          retrieveWorkingOrder: vi.fn().mockResolvedValue({
+            id: "wo-1",
+            orderNumber: 5,
+            label: null,
+            revision: 3,
+            receiptLanguage: "es-ES",
+            lines: [{ menuItemId: "menu-item-cafe-0", productId: "cafe", quantity: "2.000" }],
+          }),
+        },
+        false,
+      );
+      emit(c, "retrieve-order", { id: "wo-1" });
+      await flush(el);
+      expect(languageButton(el)!.textContent!.trim()).toBe("Español");
+
+      await choose(el, "ca-ES");
+
+      expect(setOrderReceiptLanguage).toHaveBeenCalledWith("wo-1", {
+        revision: 3,
+        language: "ca-ES",
+      });
+      expect(languageButton(el)!.textContent!.trim()).toBe("Catalán");
+      expect(c.store.revision).toBe(4);
+      c.store.addProduct(cafe, "1");
+      await flush(el);
+      emit(c, "confirm-payment", { method: "cash", amount: "10" });
+      await flush(el);
+      expect(currentApi.updateWorkingOrder).toHaveBeenCalledWith(
+        "wo-1",
+        expect.objectContaining({ revision: 4 }),
+      );
+      expect(currentApi.recordSale).toHaveBeenCalledWith(
+        expect.anything(),
+        { method: "cash", amount: "10" },
+        "wo-1",
+        undefined,
+        undefined,
+        "ca-ES",
+      );
+    });
+
+    it("reads the order again when its language was saved from a copy changed elsewhere", async () => {
+      const retrieveWorkingOrder = vi.fn().mockResolvedValue({
+        id: "wo-1",
+        orderNumber: 5,
+        label: null,
+        revision: 3,
+        lines: [{ menuItemId: "menu-item-cafe-0", productId: "cafe", quantity: "2.000" }],
+      });
+      const { el, c } = await counterWith(
+        {
+          retrieveWorkingOrder,
+          setOrderReceiptLanguage: vi
+            .fn()
+            .mockRejectedValue({ code: "working_order.out_of_date", revision: 5 }),
+        },
+        false,
+      );
+      emit(c, "retrieve-order", { id: "wo-1" });
+      await flush(el);
+      retrieveWorkingOrder.mockResolvedValue({
+        id: "wo-1",
+        orderNumber: 5,
+        label: null,
+        revision: 5,
+        receiptLanguage: "es-ES",
+        lines: [{ menuItemId: "menu-item-cafe-0", productId: "cafe", quantity: "2.000" }],
+      });
+
+      await choose(el, "es-ES");
+
+      expect(c.store.revision).toBe(5);
+      expect(languageButton(el)!.textContent!.trim()).toBe("Español");
+      expect(alert(el)!.textContent).toContain(t("held.changed_elsewhere"));
+    });
+
+    it("says so, keeping the language shown, when the choice could not be saved", async () => {
+      const { el, c } = await counterWith(
+        {
+          setOrderReceiptLanguage: vi.fn().mockRejectedValue({ code: "server.internal" }),
+        },
+        false,
+      );
+      emit(c, "retrieve-order", { id: "wo-1" });
+      await flush(el);
+
+      await choose(el, "es-ES");
+
+      expect(languageButton(el)!.textContent!.trim()).toBe("Catalán");
+      expect(c.store.revision).toBe(3);
+      expect(alert(el)!.textContent).toContain(t("receipt_language.save_error"));
     });
   });
 
@@ -14341,6 +14642,45 @@ describe("the counter's waiting orders (sent and not paid, or paid and not hande
     await flush(el);
     expect(tenderPay(el).mode).toBe("prepay");
     expect(tenderPay(el).stage).toBe("order");
+  });
+
+  it("collects a sent order in its stored language, saving a new choice at once against the revision it was read at", async () => {
+    const setOrderReceiptLanguage = vi.fn().mockResolvedValue({ revision: 3 });
+    const { el, c } = await counterWaiting({
+      getTill: vi.fn().mockResolvedValue({ ...till, receiptLanguages: ["es-ES", "ca-ES"] }),
+      listCounterWaiting: vi.fn().mockResolvedValue([sentOrder]),
+      retrievePlacedOrder: vi
+        .fn()
+        .mockResolvedValue({ ...placedRead("wo-sent"), receiptLanguage: "ca-ES" }),
+      setOrderReceiptLanguage,
+    });
+    pressPay(el, "wo-sent");
+    await flush(el);
+    const button = () =>
+      tenderPay(el).shadowRoot!.querySelector<HTMLElement>("[data-receipt-language]")!;
+    expect(tenderPay(el).stage).toBe("collect");
+    expect(button().textContent!.trim()).toBe("Catalán");
+
+    button().click();
+    await flush(el);
+    const dialog = el.shadowRoot!.querySelector("till-reprint-language-dialog")!;
+    dialog.shadowRoot!.querySelector<HTMLInputElement>('input[value="es-ES"]')!.click();
+    dialog.shadowRoot!.querySelector<HTMLElement>("[data-reprint-confirm]")!.click();
+    await flush(el);
+
+    expect(setOrderReceiptLanguage).toHaveBeenCalledWith("wo-sent", {
+      revision: 2,
+      language: "es-ES",
+    });
+    expect(c.store.revision).toBe(3);
+    expect(button().textContent!.trim()).toBe("Español");
+    emit(counter(el)!, "collect-order", { method: "cash", amount: "5" });
+    await flush(el);
+    expect(currentApi.collectOrder).toHaveBeenCalledWith(
+      "wo-sent",
+      { method: "cash", amount: "5" },
+      "es-ES",
+    );
   });
 
   it.each([

@@ -180,6 +180,8 @@ export class TillCardGrid extends LitElement {
   @property({ attribute: false }) cardAttemptsOver = 0;
   @property({ attribute: false }) activeReaders: TillActiveReader[] = [];
   @property() defaultReaderId?: string;
+  @property({ attribute: false }) receiptLanguages: string[] = [];
+  @property() receiptLanguage = "";
   @property({ attribute: false }) capabilities: CapabilityFlag[] = [];
   @property({ attribute: false }) api?: TillApi;
   @property() fireControl?: FireControlMode;
@@ -445,6 +447,8 @@ export class TillCardGrid extends LitElement {
             .cardAttemptsOver=${this.cardAttemptsOver}
             .activeReaders=${this.activeReaders}
             .defaultReaderId=${this.defaultReaderId}
+            .receiptLanguages=${this.receiptLanguages}
+            .receiptLanguage=${this.receiptLanguage}
           ></till-tender-pay>`;
       case "held-orders":
         return html`<till-held-orders

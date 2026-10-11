@@ -857,6 +857,8 @@ export interface TillSaleResult extends ReceiptPresentation {
   qrText?: { caption: string; legend: string };
   /** The language the sale was filed in. */
   locale?: string;
+  /** The language the dish names, units and option answers were saved in, when not {@link locale}. */
+  namesLocale?: string;
 }
 
 /**

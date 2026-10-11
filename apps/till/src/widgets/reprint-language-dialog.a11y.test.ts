@@ -18,5 +18,19 @@ describe.each(["light", "dark"] as const)(
       );
       await expectNoA11yViolations(host);
     });
+
+    it("has no violations when it asks for the receipt's language before a sale", async () => {
+      setLocale("es-ES");
+      const { host } = await mountWidget<TillReprintLanguageDialog>(
+        "till-reprint-language-dialog",
+        {
+          languages: ["es-ES", "ca-ES", "gl-ES", "eu-ES"],
+          defaultLanguage: "ca-ES",
+          purpose: "receipt",
+        },
+        theme,
+      );
+      await expectNoA11yViolations(host);
+    });
   },
 );

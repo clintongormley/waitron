@@ -1638,6 +1638,46 @@ describe("till-ticket-view: the sale's own language", () => {
     }
   });
 
+  it("names dishes, units and option answers in the language they were saved in, keeping the fixed words in the sale's", async () => {
+    const { el } = await mount({
+      locale: "es-ES",
+      namesLocale: "ca-ES",
+      lines: [
+        {
+          descriptions: { "es-ES": "Jamón", "ca-ES": "Pernil" },
+          unitName: { es: "ud", ca: "u" },
+          unitPrecision: 0,
+          quantity: "2",
+          gross: "8.00",
+          optionSnapshots: [
+            {
+              listName: { es: "Punto", ca: "Punt" },
+              listCustomerName: { "es-ES": "¿Cómo lo quiere?", "ca-ES": "Com el vol?" },
+              listKitchenName: "PTO",
+              labelName: { es: "Poco", ca: "Poc" },
+              labelCustomerName: { "es-ES": "Poco hecho", "ca-ES": "Poc fet" },
+              labelKitchenName: "PH",
+            },
+          ],
+        },
+        {
+          parentLineNo: 1,
+          descriptions: { "es-ES": "Pan", "ca-ES": "Pa" },
+          quantity: "2",
+          gross: "1.40",
+        },
+      ],
+    });
+
+    expect(rows(el, ".lines > li")).toEqual([
+      "Pernil 2 u 8,00 €",
+      "Com el vol?: Poc fet",
+      "Pa 1,40 €",
+    ]);
+    expect(rows(el, ".order-group")).toEqual(["Mesa 6 · Pedido 41"]);
+    expect(el.shadowRoot!.querySelector("article")!.getAttribute("lang")).toBe("es-ES");
+  });
+
   it("keeps the VERI*FACTU legend and AEAT's QR caption word for word", async () => {
     const { el } = await mount(catalan);
 

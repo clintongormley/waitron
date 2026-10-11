@@ -58,6 +58,23 @@ describe("till-reprint-language-dialog", () => {
     );
   });
 
+  it("asks for the receipt's language, named by its heading alone, when choosing before a sale", async () => {
+    setLocale("es-ES");
+    const el = await mountDialog({ purpose: "receipt" });
+    const seen = captured(el);
+
+    expect(el.shadowRoot!.querySelector("wt-dialog")!.heading).toBe("Idioma del recibo");
+    expect(el.shadowRoot!.querySelector("legend")).toBeNull();
+    expect(el.shadowRoot!.querySelector("fieldset")!.getAttribute("aria-label")).toBe(
+      "Idioma del recibo",
+    );
+    expect(button(el, "confirm").textContent!.trim()).toBe("Elegir");
+    radios(el)[2]!.click();
+    button(el, "confirm").click();
+
+    expect(seen.chose).toEqual([{ language: "gl-ES" }]);
+  });
+
   it("names the languages in the operator's language, capitalised to stand alone", async () => {
     setLocale("es-ES");
     const el = await mountDialog();
