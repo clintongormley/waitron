@@ -158,12 +158,14 @@ describe("seedFloor", () => {
       const { rows: tables } = await tx.execute<{
         label: string;
         zone_id: string | null;
-        capacity: number | null;
-        pos_x: number | null;
-        pos_y: number | null;
+        seats: number | null;
+        x: number | null;
+        y: number | null;
         shape: string | null;
       }>(
-        sql`select label, zone_id, capacity, pos_x, pos_y, shape from dining_tables where location_id = ${locationId} order by label`,
+        sql`select d.label, d.zone_id, p.seats, p.x, p.y, p.shape
+            from dining_tables d left join floor_plan_tables p on p.id = d.plan_table_id
+            where d.location_id = ${locationId} order by d.label`,
       );
       const { rows: statuses } = await tx.execute<{ label: string; color: string }>(
         sql`select label, color from table_service_statuses order by display_order`,
@@ -183,9 +185,9 @@ describe("seedFloor", () => {
     expect(res.tables.length).toBe(16);
     for (const table of res.tables) {
       expect(table.zone_id).not.toBeNull();
-      expect(table.capacity).not.toBeNull();
-      expect(table.pos_x).not.toBeNull();
-      expect(table.pos_y).not.toBeNull();
+      expect(table.seats).not.toBeNull();
+      expect(table.x).not.toBeNull();
+      expect(table.y).not.toBeNull();
       expect(table.shape).not.toBeNull();
     }
 
