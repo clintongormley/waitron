@@ -414,7 +414,8 @@ that ends. It then reloads by itself only when `#busyForReload()` is false, and 
 same bar. It counts as busy when
 someone is signed in (`operatorName`), a sign-in is still loading (`#loginPending`), the basket or
 the table-free draft holds a line (`#store`, `#partylessDraft`), any draft is unsaved
-(`leave.coordinator.isDirty()`), a payment or an order is being sent (`submitting`), a card attempt
+(`leave.coordinator.isDirty()`), a payment, a collection or a receipt-language save is being sent
+(`submitting`; holding and placing an order, `parking` and `placing`, are not counted), a card attempt
 is running (`#cardAttemptsRunning`), a bill payment or refund kept its send for a resend that must
 reuse its id — after no answer, or after a refusal that keeps the id (`#unansweredPayment`,
 `#unansweredRefund`), or a request is held by `#holdingReload`: every request sent again until
