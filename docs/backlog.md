@@ -3174,9 +3174,11 @@ _Formerly A6, and the old Track C's payments items; part of A9._ Detail: [backlo
 
 _Formerly A7, and the dashboard entries in the opening part of the old Track A (before A1); part of A9._ Detail: [backlog/dashboard.md](backlog/dashboard.md).
 
-- **A499. Dragging in the column chooser, and leaving a sign-in screen (owner, 2026-10-11).** The
-  column being dragged is invisible while it moves, and a typed PIN brings up the unsaved-changes
-  question. [Detail](backlog/dashboard.md#a499-dragging-in-the-column-chooser-and-leaving-a-sign-in-screen)
+- **In the Customise dialog, a released column row jumps into its slot instead of sliding.** The
+  house rule for a dragged row (design-system.md, the `--wt-color-surface-lifted` paragraph) has it
+  slide into place over `--wt-duration-move`; A499 made the row follow the pointer and the passed
+  rows slide, but on release every row lands at once (`#endColumnDrag`,
+  `packages/ui/src/components/wt-data-table.ts`).
 
 - **After a box reset, the reset page's own banner still shows the old venue's name.** By reading,
   not run: `#returnToLogin` (`apps/dashboard/src/dashboard-app.ts`) never clears the `venueName` that

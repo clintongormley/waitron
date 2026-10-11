@@ -890,18 +890,12 @@ From **Variants as products (#511–#556) — what is left open.** How the model
   measured 2026-09-24 at 1280px). **Next action:** decide whether a long name there may wrap
   mid-word.
 
-## A499. Dragging in the column chooser, and leaving a sign-in screen
-
-**A499 (owner, 2026-10-11) — OPEN.**
-
-- **The column chooser.** In `wt-data-table`'s column chooser, dragging a column name to reorder
-  it shows nothing moving with the pointer. Show the item being dragged. A493's zone drag handles
-  need the same.
-- **Leaving a sign-in screen.** Leaving the PIN sign-in with a PIN typed in asks whether to discard
-  unsaved data, because the login screen registers with the leave check (`leaveCoordinatorFor`,
-  `apps/dashboard/src/screens/login-screen.ts`). No sign-in screen should ever ask.
-
 ## Decisions and deliberate limits
+
+- **Sign-in screens never ask about unsaved changes (owner, 2026-10-11, A499).** The dashboard's
+  sign-in screen, every step of it, and the account set-up form an emailed link opens there, and the
+  till's PIN sign-in, take no part in the leave check. The till's enrol screen and the supervisor's
+  PIN dialog still ask; they are not sign-in screens.
 
 - **Change time at a repeated local time (A331 batch 2a, owner 2026-10-08).**
   On the autumn clock-change day, the Change time form can no longer move a scheduled menu
