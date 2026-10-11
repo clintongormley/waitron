@@ -4814,6 +4814,104 @@ test("Escape during a column drag restores the page cursor", async () => {
   expect(document.body.style.cursor).toBe(originalCursor);
 });
 
+/** Collects uncaught errors for the rest of the test instead of letting them fail the run. */
+function collectErrors(): string[] {
+  const errors: string[] = [];
+  const onError = (event: ErrorEvent) => {
+    errors.push(event.message);
+    event.preventDefault();
+  };
+  window.addEventListener("error", onError);
+  onTestFinished(() => window.removeEventListener("error", onError));
+  return errors;
+}
+
+function expectNoDisplacedColumnRow(el: AnyTable): void {
+  for (const row of el.shadowRoot!.querySelectorAll<HTMLElement>("[data-column-row]")) {
+    expect(row.hasAttribute("data-dragging")).toBe(false);
+    expect(row.hasAttribute("data-sliding")).toBe(false);
+    expect(row.style.transform).toBe("");
+  }
+}
+
+test.each([
+  ["removes", false],
+  ["removes", true],
+  ["fixes", false],
+  ["fixes", true],
+  ["withdraws the chooser from", true],
+] as const)(
+  "a columns update that %s the dragged column cancels the drag cleanly (lifted: %s)",
+  async (change, lifted) => {
+    const originalCursor = document.body.style.cursor;
+    const el = await table({ columns: dragColumns });
+    await userEvent.click(trigger(el));
+    const errors = collectErrors();
+    const rest = columnRests(el);
+    const start = grabColumn(el, "m1", 16);
+    const y = rest.m3!.top + rest.m3!.height / 2;
+    if (lifted) {
+      sendColumnPointer("pointermove", 16, start.x, y);
+      expect(columnRow(el, "m1").hasAttribute("data-dragging")).toBe(true);
+      expect(document.body.style.cursor).toBe("grabbing");
+    }
+    el.columns = dragColumns.flatMap((column) =>
+      change === "withdraws the chooser from"
+        ? [{ ...column, choosable: undefined }]
+        : column.key !== "m1"
+          ? [column]
+          : change === "removes"
+            ? []
+            : [{ ...column, pinned: "end" as const }],
+    );
+    await el.updateComplete;
+    expect(document.body.style.cursor).toBe(originalCursor);
+    expectNoDisplacedColumnRow(el);
+    const order = headers(el);
+    sendColumnPointer("pointermove", 16, start.x, y + 8);
+    expect(errors).toEqual([]);
+    expect(document.body.style.cursor).toBe(originalCursor);
+    expectNoDisplacedColumnRow(el);
+    sendColumnPointer("pointerup", 16, start.x, y + 8);
+    await el.updateComplete;
+    expect(errors).toEqual([]);
+    expect(headers(el)).toEqual(order);
+  },
+);
+
+test("a columns update that keeps the movable rows leaves a column drag running", async () => {
+  const el = await table({ columns: dragColumns });
+  await userEvent.click(trigger(el));
+  const rest = columnRests(el);
+  const start = grabColumn(el, "m1", 17);
+  const y = rest.m3!.top + rest.m3!.height / 2;
+  sendColumnPointer("pointermove", 17, start.x, y);
+  el.columns = dragColumns.map((column) => ({ ...column }));
+  await el.updateComplete;
+  sendColumnPointer("pointermove", 17, start.x, y + 2);
+  expect(columnRow(el, "m1").hasAttribute("data-dragging")).toBe(true);
+  expect(document.body.style.cursor).toBe("grabbing");
+  sendColumnPointer("pointerup", 17, start.x, y + 2);
+  await el.updateComplete;
+  expect(headers(el)).toEqual(["Name", "M2", "M3", "M1", "M4", "Actions"]);
+});
+
+test("a column drag whose row has left the dialog ends instead of throwing", async () => {
+  const originalCursor = document.body.style.cursor;
+  const el = await table({ columns: dragColumns });
+  await userEvent.click(trigger(el));
+  const errors = collectErrors();
+  const rest = columnRests(el);
+  const start = grabColumn(el, "m1", 18);
+  const y = rest.m3!.top + rest.m3!.height / 2;
+  sendColumnPointer("pointermove", 18, start.x, y);
+  columnRow(el, "m1").remove();
+  sendColumnPointer("pointermove", 18, start.x, y + 8);
+  expect(errors).toEqual([]);
+  expect(document.body.style.cursor).toBe(originalCursor);
+  expectNoDisplacedColumnRow(el);
+});
+
 async function choose(el: AnyTable, key: string): Promise<void> {
   chooserBox(el, key).click();
   await el.updateComplete;
@@ -8588,6 +8686,60 @@ test.each(["up", "leave", "cancel", "Escape", "disconnect", "fits"])(
     }
   },
 );
+
+test("scrolling the Customise dialog mid-drag keeps the lifted row under the pointer and moves the gap", async () => {
+  const el = await table({
+    columns: [
+      choosable[0]!,
+      ...Array.from({ length: 35 }, (_, i) => ({
+        key: `scroll-${i}`,
+        label: `Scroll ${i}`,
+        cell: () => "value",
+        choosable: "shown" as const,
+      })),
+    ],
+  });
+  const box = await customiseBody(el);
+  const height = columnRow(el, "scroll-3").getBoundingClientRect().height;
+  expect(box.scrollHeight - box.clientHeight).toBeGreaterThan(3 * height);
+  const scrollBy = async (delta: number) => {
+    const scrolled = new Promise((resolve) =>
+      box.addEventListener("scroll", resolve, { once: true }),
+    );
+    box.scrollTop += delta;
+    await scrolled;
+  };
+  const errors = collectErrors();
+  const start = grabColumn(el, "scroll-3", 19);
+  const y = start.y + 6;
+  try {
+    await scrollBy(height);
+    expect(panel(el).querySelector("[data-dragging], [data-sliding]")).toBeNull();
+    await scrollBy(-height);
+    sendColumnPointer("pointermove", 19, start.x, y);
+    const lifted = columnRow(el, "scroll-3");
+    const before = lifted.getBoundingClientRect().top;
+    await scrollBy(3 * height);
+    expect(lifted.getBoundingClientRect().top).toBeCloseTo(before, 0);
+    for (const key of ["scroll-4", "scroll-5", "scroll-6"])
+      expect(new DOMMatrixReadOnly(columnRow(el, key).style.transform).m42).toBeCloseTo(-height, 0);
+    expect(columnRow(el, "scroll-7").style.transform).toBe("");
+    sendColumnPointer("pointerup", 19, start.x, y);
+    await el.updateComplete;
+    expect(headers(el).slice(3, 8)).toEqual([
+      "Scroll 2",
+      "Scroll 4",
+      "Scroll 5",
+      "Scroll 6",
+      "Scroll 3",
+    ]);
+    await scrollBy(-height);
+    expect(errors).toEqual([]);
+    expectNoDisplacedColumnRow(el);
+  } finally {
+    sendColumnPointer("pointercancel", 19, start.x, y);
+  }
+});
 
 const a461Rows: TreeRow[] = [
   { id: "drinks", parent: null, name: "Drinks" },

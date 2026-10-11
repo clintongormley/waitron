@@ -55,8 +55,23 @@ export function pointerElementsAt(x: number, y: number): Element[] {
 }
 
 /** How far a transform currently draws the row from where it rests, mid-transition included. */
-function offsetY(row: Element): number {
+export function offsetY(row: Element): number {
   return new DOMMatrixReadOnly(getComputedStyle(row).transform).m42;
+}
+
+/** Everything whose scroll moves `element` on screen while the pointer stays still: each ancestor
+ * in the flattened tree, and the document for the page itself. An element's scroll event does not
+ * bubble, and a capturing listener outside a shadow root does not hear one fired inside it, so each
+ * needs its own listener. */
+export function scrollAncestors(element: Element): EventTarget[] {
+  const targets: EventTarget[] = [document];
+  let at: Element | null = element;
+  while (at !== null) {
+    const parent: Node | null = at.parentNode;
+    at = at.assignedSlot ?? at.parentElement ?? (parent instanceof ShadowRoot ? parent.host : null);
+    if (at !== null) targets.push(at);
+  }
+  return targets;
 }
 
 export interface ReorderModel {
@@ -285,18 +300,7 @@ export class ReorderController implements ReactiveController {
     document.addEventListener("pointerup", this.#onPointerEnd);
     document.addEventListener("pointercancel", this.#onPointerEnd);
     document.addEventListener("keydown", this.#onDragKey, true);
-    // A scroll of any ancestor moves the rows under a pointer that has not moved. An element's scroll
-    // event does not bubble, and a capturing listener outside a shadow root does not hear one fired
-    // inside it, so each ancestor in the flattened tree gets its own listener; the document's hears
-    // the page itself.
-    this.#scrollTargets = [document];
-    let at: Element | null = row;
-    while (at !== null) {
-      const parent: Node | null = at.parentNode;
-      at =
-        at.assignedSlot ?? at.parentElement ?? (parent instanceof ShadowRoot ? parent.host : null);
-      if (at !== null) this.#scrollTargets.push(at);
-    }
+    this.#scrollTargets = scrollAncestors(row);
     for (const target of this.#scrollTargets) {
       target.addEventListener("scroll", this.#onScroll, { passive: true });
     }
