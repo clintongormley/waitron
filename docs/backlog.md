@@ -564,6 +564,10 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
   code, not run; whether a real draft can reach that state has not been tested.
   [Detail](backlog/setup.md#in-demo-a-local-check-that-fails-only-on-a-field-demo-hides)
 
+- **A missing configuration export on the setup wizard's live-source screen gets no red ring.** The
+  backup restore screen's file input draws one (A523); `live-source-screen.ts` marks its file input
+  `aria-invalid` but has no style for it.
+
 - **A venue's time zone must come from its country pack's list (A166, owner 2026-10-01)** — OPEN.
   Readers then disagree about a bad zone: reporting throws, bookings falls back to Madrid, account
   emails to UTC. **Wanted:** each country pack lists the zones it allows (Spain: Madrid and Canary),
