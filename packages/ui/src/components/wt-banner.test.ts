@@ -7,14 +7,60 @@ import "./wt-banner.js";
 afterEach(cleanup);
 
 const button = (el: WtBanner) => el.shadowRoot!.querySelector("button");
+const message = (el: WtBanner) => el.shadowRoot!.querySelector(".message")!.textContent;
+const nextFrame = () => new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+const shown = async (el: WtBanner) => {
+  await nextFrame();
+  await nextFrame();
+  await el.updateComplete;
+};
 
 test("shows its message and its action, and is announced politely", async () => {
   const el = (await mount(
     '<wt-banner message="Waitron was updated." action-label="Reload"></wt-banner>',
   )) as WtBanner;
   expect(el.getAttribute("role")).toBe("status");
-  expect(el.shadowRoot!.querySelector(".message")!.textContent).toBe("Waitron was updated.");
+  await shown(el);
+  expect(message(el)).toBe("Waitron was updated.");
   expect(button(el)!.textContent!.trim()).toBe("Reload");
+});
+
+test("draws its live region empty for a whole frame before putting the message in", async () => {
+  const el = (await mount('<wt-banner message="Waitron was updated."></wt-banner>')) as WtBanner;
+  expect(message(el)).toBe("");
+  await nextFrame();
+  await el.updateComplete;
+  expect(message(el)).toBe("");
+  await nextFrame();
+  await el.updateComplete;
+  expect(message(el)).toBe("Waitron was updated.");
+});
+
+test("empties its live region again when it is moved, and refills it two frames later", async () => {
+  const el = (await mount('<wt-banner message="Waitron was updated."></wt-banner>')) as WtBanner;
+  const move = async () => {
+    el.remove();
+    host.append(el);
+    await el.updateComplete;
+  };
+  await shown(el);
+  await move();
+  expect(message(el)).toBe("");
+  await nextFrame();
+  await move();
+  await nextFrame();
+  await el.updateComplete;
+  expect(message(el)).toBe("");
+  await shown(el);
+  expect(message(el)).toBe("Waitron was updated.");
+});
+
+test("a new message replaces the shown one", async () => {
+  const el = (await mount('<wt-banner message="Waitron was updated."></wt-banner>')) as WtBanner;
+  await shown(el);
+  el.message = "Something else.";
+  await el.updateComplete;
+  expect(message(el)).toBe("Something else.");
 });
 
 test("keeps a role it was given", async () => {

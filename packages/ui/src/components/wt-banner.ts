@@ -1,5 +1,5 @@
 import { LitElement, css, html, nothing, type TemplateResult } from "lit";
-import { customElement, property } from "lit/decorators.js";
+import { customElement, property, state } from "lit/decorators.js";
 import { baseStyles } from "../base-styles.js";
 
 /** A full-width strip with one message and, when given an action label, one action. */
@@ -58,9 +58,27 @@ export class WtBanner extends LitElement {
   @property() message = "";
   @property({ attribute: "action-label" }) actionLabel = "";
 
+  @state() private shown = false;
+  #frame = 0;
+
+  /** The message goes in only after the empty region has been through a rendered frame, so it
+   * arrives as a change to a live region already on the page rather than together with it. */
   override connectedCallback(): void {
     super.connectedCallback();
     if (!this.hasAttribute("role")) this.setAttribute("role", "status");
+    this.shown = false;
+    this.#frame = requestAnimationFrame(() => {
+      this.#frame = requestAnimationFrame(() => {
+        this.#frame = 0;
+        this.shown = true;
+      });
+    });
+  }
+
+  override disconnectedCallback(): void {
+    cancelAnimationFrame(this.#frame);
+    this.#frame = 0;
+    super.disconnectedCallback();
   }
 
   readonly #onAction = (event: Event): void => {
@@ -72,7 +90,7 @@ export class WtBanner extends LitElement {
 
   override render(): TemplateResult {
     return html`<div class="bar">
-      <p class="message">${this.message}</p>
+      <p class="message">${this.shown ? this.message : nothing}</p>
       ${
         this.actionLabel === ""
           ? nothing
