@@ -256,8 +256,8 @@ cited range before editing it; line numbers drift.
     `resolveSnapshotText(text, d, d)` (the variant's blank still takes its staff name,
     `fillBlankLocalesWithStaffName`), and `unit_name` as `{ [d]: resolveSnapshotText(unit, d, d) }`.
     **When the default has no text** `resolveSnapshotText` takes another stored language's text
-    (the alphabetically first key with text), not the staff name: a staff name is never what a
-    customer surface shows (`docs/developers/products.md`, three names), and
+    (the alphabetically first key with text), not the staff name: a staff name is shown only when
+    there is no customer text in any language (`docs/developers/products.md`, three names), and
     `customerOptionSnapshotLabels` already falls back to staff names only when an answer has no
     customer text at all. **Why this and not a names language on the sale:** no customer reader,
     `sales` column, CHECK, trigger, migration or filing path changes (`saleLanguageFor` and
@@ -271,8 +271,12 @@ cited range before editing it; line numbers drift.
     golden test). The till's own answer builder (`optionSnapshotOf`, `held-options.ts:13-23`) keeps
     whole maps: its answers are display-only on the till and compared by ids. **Upgrade edge,
     accepted before go-live (CLAUDE.md §3, installations may be reset):** an order held across the
-    upgrade stores whole-map answers, so its first save afterwards sees them as changed; and lines
-    saved before the change print as they were saved (`namesLocale`).
+    upgrade stores whole-map answers, so a save afterwards sees each kept line's answer as changed.
+    A held line kept across the upgrade with a paid quantity is refused `bill.line_paid` on EVERY
+    save (the rollback keeps the old answer); a started line is refused `ticket.already_started`
+    until it leaves preparing/ready; an unstarted fired line is recalled and re-fired once. The PR
+    tells the owner to settle or abandon held orders before upgrading a box. Lines saved before the
+    change print as they were saved (`namesLocale`).
 
 ## Global constraints
 
