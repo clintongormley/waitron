@@ -13,10 +13,9 @@ afterEach(() => {
   setLocale("es-ES");
 });
 
-// Every field holds something, the cutover in the seconds spelling a stored time comes back in,
-// and the province is editable, so a field that rewrites its value on first draw shows as a change.
 function filled(): VenueDetailsModel {
   const model = venueDetailsFixture({ addressLine2: "Piso 2", dayCutover: "06:00:00" });
+  model.businessDayClock.clock.dayCutover = "06:00";
   model.policy.province = { decision: "allow", reasons: [] };
   return model;
 }
@@ -116,7 +115,7 @@ it("one edit wakes Save, and typing the stored value back, in any stored spellin
   expect(await state(el)).toEqual(ready);
   await type(el, "addressLine2", "Piso 2");
   expect(await state(el)).toEqual(quiet);
-  await type(el, "dayCutover", "06:00");
+  await type(el, "timeZone", " Europe/Madrid ");
   expect(await state(el)).toEqual(quiet);
 });
 

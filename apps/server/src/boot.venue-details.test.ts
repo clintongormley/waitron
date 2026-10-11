@@ -197,9 +197,17 @@ describe("a running venue's account email clock", () => {
           changes: { timeZone: "UTC" },
         });
         expect(saved.status).toBe(200);
+        const updatedModel = {
+          ...model,
+          details: { ...model.details, timeZone: "UTC" },
+          businessDayClock: {
+            ...model.businessDayClock,
+            clock: { ...model.businessDayClock.clock, timeZone: "UTC" },
+          },
+        };
         expect(await saved.json()).toEqual({
           changed: true,
-          model: { ...model, details: { ...model.details, timeZone: "UTC" } },
+          model: updatedModel,
         });
         const clockPreview = await request(previewPath);
         expect(clockPreview.status).toBe(200);
@@ -216,7 +224,7 @@ describe("a running venue's account email clock", () => {
             expect(response.status).toBe(200);
             expect(await response.json()).toEqual({
               changed: false,
-              model: { ...model, details: { ...model.details, timeZone: "UTC" } },
+              model: updatedModel,
             });
           } else {
             expect(response.status).toBe(400);
