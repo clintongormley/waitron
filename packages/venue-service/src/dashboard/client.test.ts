@@ -98,28 +98,6 @@ describe("VenueServiceApi", () => {
     ).toEqual([["/management-api/zones/z1", "PATCH", { name: "Garden room" }]]);
   });
 
-  it("enables a disabled floor zone through the zone route", async () => {
-    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(undefined, 204));
-    const api = new VenueServiceApi(createRequest({ fetchImpl: fetchImpl as typeof fetch }));
-    await api.updateZone("z1", { active: true });
-    expect(
-      fetchImpl.mock.calls.map(([path, init]) => [
-        path,
-        init.method,
-        JSON.parse(init.body as string),
-      ]),
-    ).toEqual([["/management-api/zones/z1", "PATCH", { active: true }]]);
-  });
-
-  it("removes a floor zone through the zone route", async () => {
-    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(undefined, 204));
-    const api = new VenueServiceApi(createRequest({ fetchImpl: fetchImpl as typeof fetch }));
-    await api.deactivateZone("z1");
-    expect(fetchImpl.mock.calls.map(([path, init]) => [path, init.method])).toEqual([
-      ["/management-api/zones/z1", "DELETE"],
-    ]);
-  });
-
   it("writes one department field and clears one zone override", async () => {
     const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(undefined, 204));
     const api = new VenueServiceApi(createRequest({ fetchImpl: fetchImpl as typeof fetch }));
@@ -215,39 +193,6 @@ describe("VenueServiceApi", () => {
         JSON.parse(init.body as string),
       ]),
     ).toEqual([["/management-api/venue-service/departments/d1", "PATCH", department]]);
-  });
-
-  it("enables a disabled department through the department edit route", async () => {
-    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(undefined, 204));
-    const api = new VenueServiceApi(createRequest({ fetchImpl: fetchImpl as typeof fetch }));
-    await api.updateDepartment("d1", { active: true });
-    expect(
-      fetchImpl.mock.calls.map(([path, init]) => [
-        path,
-        init.method,
-        JSON.parse(init.body as string),
-      ]),
-    ).toEqual([["/management-api/venue-service/departments/d1", "PATCH", { active: true }]]);
-  });
-
-  it("reads the exact removal impact before asking a manager to confirm", async () => {
-    const impact = { zones: [{ id: "z1", name: "Dining room", activeTableCount: 2 }] };
-    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(impact));
-    const api = new VenueServiceApi(createRequest({ fetchImpl: fetchImpl as typeof fetch }));
-    expect(await api.departmentRemovalImpact("d1")).toEqual(impact);
-    expect(fetchImpl.mock.calls.map(([path, init]) => [path, init.method ?? "GET"])).toEqual([
-      ["/management-api/venue-service/departments/d1/removal-impact", "GET"],
-    ]);
-  });
-
-  it("reads an unconfigured zone's removal impact", async () => {
-    const impact = { zones: [{ id: "z2", name: "Deli counter", activeTableCount: 2 }] };
-    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(impact));
-    const api = new VenueServiceApi(createRequest({ fetchImpl: fetchImpl as typeof fetch }));
-    expect(await api.zoneRemovalImpact("z2")).toEqual(impact);
-    expect(fetchImpl.mock.calls.map(([path, init]) => [path, init.method ?? "GET"])).toEqual([
-      ["/management-api/venue-service/zones/z2/removal-impact", "GET"],
-    ]);
   });
 
   it("stores whether items already sent to the kitchen may be changed", async () => {
@@ -356,14 +301,12 @@ describe("VenueServiceApi", () => {
       name: "Deli",
       tradingName: "Casa Delgado Deli",
     });
-    await api.deactivateDepartment("d1");
     expect("replaceHours" in api).toBe(false);
     await api.configureZone("z1", { departmentId: "d1" });
     expect("allowMenu" in api).toBe(false);
 
     expect(fetchImpl.mock.calls.map(([path, init]) => [path, init.method])).toEqual([
       ["/management-api/venue-service/departments", "POST"],
-      ["/management-api/venue-service/departments/d1", "DELETE"],
       ["/management-api/venue-service/zones/z1", "PUT"],
     ]);
   });
@@ -676,3 +619,14 @@ it.each(["Zone", "Department"] as const)(
     }
   },
 );
+
+it("does not offer reversible hierarchy removal or retired impact requests", () => {
+  const api = new VenueServiceApi(createRequest());
+  for (const name of [
+    "deactivateDepartment",
+    "deactivateZone",
+    "departmentRemovalImpact",
+    "zoneRemovalImpact",
+  ])
+    expect(api).not.toHaveProperty(name);
+});

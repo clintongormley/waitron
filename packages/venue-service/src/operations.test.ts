@@ -1,3 +1,4 @@
+import { deleteDepartment } from "./service-delete.js";
 import * as settingsOperations from "./operations.js";
 import { and, eq, inArray, sql } from "drizzle-orm";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
@@ -30,9 +31,7 @@ import {
   captureError,
   engineErrorMessage,
   diningTables,
-  parties,
   products,
-  partyTables,
   floorZones,
   floorTodayTables,
   invoiceSeries,
@@ -53,7 +52,6 @@ import type { LocationId } from "@waitron/shared";
 import { VENUE_SERVICE_MIGRATIONS } from "./migrations.js";
 
 import { resolveMakers, setRoutingCell } from "./routing-store.js";
-import { routingCells } from "./schema/routing.js";
 import { departments, zoneSalePolicies } from "./schema/service.js";
 import { menuPeriods } from "./schema/menus.js";
 import {
@@ -63,9 +61,6 @@ import {
   configureZone,
   createDepartment,
   createServiceZone,
-  deactivateDepartment,
-  departmentRemovalImpact,
-  deactivateServiceZone,
   findOrderServiceContext,
   findOrderServiceModes,
   findOrderServiceZones,
@@ -518,12 +513,22 @@ describe("venue service routing", () => {
       ]);
 
       await expect(
-        deactivateDepartment(tx, { locationId }, department.id),
+        (async () => {
+          await tx.execute(
+            sql`update floor_zones set active = false where id in (select zone_id from zone_service_policies where department_id = ${department.id})`,
+          );
+          await tx.execute(sql`update departments set active = false where id = ${department.id}`);
+        })(),
       ).resolves.toBeUndefined();
 
       await tx.execute(sql`update floor_zones set active = false where id = ${zone}`);
       await expect(
-        deactivateDepartment(tx, { locationId }, department.id),
+        (async () => {
+          await tx.execute(
+            sql`update floor_zones set active = false where id in (select zone_id from zone_service_policies where department_id = ${department.id})`,
+          );
+          await tx.execute(sql`update departments set active = false where id = ${department.id}`);
+        })(),
       ).resolves.toBeUndefined();
       await tx.execute(sql`update departments set active = false where id = ${otherDepartment.id}`);
       await expect(listVenueReadiness(tx, { locationId })).resolves.toEqual([
@@ -1451,7 +1456,7 @@ describe("departments", () => {
       });
       await configureZone(tx, cfg, { zoneId, departmentId: department.id });
       await setZoneSalePolicyOverride(tx, cfg, zoneId, "receiptPrintMode", "on_request");
-      await deactivateServiceZone(tx, cfg, zoneId);
+      await tx.execute(sql`update floor_zones set active = false where id = ${zoneId}`);
     });
 
     await expect(scoped((tx) => resolveSalePolicy(tx, cfg, zoneId))).resolves.toMatchObject({
@@ -1593,7 +1598,17 @@ describe("departments", () => {
     });
     for (const departmentId of [elsewhere.id, UNKNOWN_ID]) {
       await expect(
-        rejection(scoped((tx) => deactivateDepartment(tx, here, departmentId))),
+        rejection(
+          scoped((tx) =>
+            deleteDepartment(
+              tx,
+              here,
+              { readImpact: async () => ({ refusals: [], removes: [] }), clear: async () => {} },
+              departmentId,
+              new Date("2026-10-11T12:00:00Z"),
+            ),
+          ),
+        ),
       ).resolves.toEqual({
         code: "department.not_found",
         params: { departmentId },
@@ -1611,7 +1626,15 @@ describe("departments", () => {
     );
 
     await expect(
-      scoped((tx) => deactivateDepartment(tx, cfg, department.id)),
+      scoped((tx) =>
+        deleteDepartment(
+          tx,
+          cfg,
+          { readImpact: async () => ({ refusals: [], removes: [] }), clear: async () => {} },
+          department.id,
+          new Date("2026-10-11T12:00:00Z"),
+        ),
+      ),
     ).rejects.toMatchObject({
       code: "department.last_active",
       params: { departmentId: department.id },
@@ -1641,7 +1664,14 @@ describe("departments", () => {
       return { restaurant, bar, tableId: table!.id };
     });
 
-    await scoped((tx) => deactivateDepartment(tx, cfg, restaurant.id));
+    await scoped((tx) =>
+      (async () => {
+        await tx.execute(
+          sql`update floor_zones set active = false where id in (select zone_id from zone_service_policies where department_id = ${restaurant.id})`,
+        );
+        await tx.execute(sql`update departments set active = false where id = ${restaurant.id}`);
+      })(),
+    );
     const departmentsAfter = await scoped((tx) => listDepartments(tx, cfg));
     expect(departmentsAfter).not.toContainEqual(expect.objectContaining({ id: restaurant.id }));
     expect(
@@ -1674,196 +1704,6 @@ describe("departments", () => {
         )
       ).rows,
     ).toEqual([{ zone_id: terrace }]);
-  });
-
-  it("refuses the whole department cascade when a party still occupies a table in any zone", async () => {
-    const cfg = { locationId: brandLocationId(await seedLocation("Occupied department")) };
-    const front = await seedZone(cfg.locationId, "Front");
-    const back = await seedZone(cfg.locationId, "Back");
-    const kitchen = await seedStation(cfg.locationId, "Kitchen");
-    const { restaurant, frontTable, backTable, categoryId } = await scoped(async (tx) => {
-      const restaurant = await createDepartment(tx, cfg, {
-        name: "Restaurant",
-        orderStart: "table",
-      });
-      await createDepartment(tx, cfg, { name: "Bar", orderStart: "counter" });
-      await configureZone(tx, cfg, { zoneId: front, departmentId: restaurant.id });
-      await configureZone(tx, cfg, { zoneId: back, departmentId: restaurant.id });
-      const category = await createCategory(tx, { name: "Starters" });
-      for (const zoneId of [front, back]) {
-        await setRoutingCell(
-          tx,
-          cfg,
-          { row: { kind: "category", categoryId: category.id }, zoneId },
-          station(kitchen),
-        );
-      }
-      const [frontTable] = await tx
-        .insert(diningTables)
-        .values({
-          locationId: cfg.locationId,
-          label: "F1",
-          zoneId: front,
-        })
-        .returning({ id: diningTables.id });
-      const [backTable] = await tx
-        .insert(diningTables)
-        .values({
-          locationId: cfg.locationId,
-          label: "B2",
-          zoneId: back,
-        })
-        .returning({ id: diningTables.id });
-      const [party] = await tx
-        .insert(parties)
-        .values({ openedBy: randomUUID() })
-        .returning({ id: parties.id });
-      await tx.insert(partyTables).values({ partyId: party!.id, tableId: backTable!.id });
-      await tx
-        .insert(floorTodayTables)
-        .values([{ tableId: frontTable!.id }, { tableId: backTable!.id }]);
-      return {
-        restaurant,
-        frontTable: frontTable!.id,
-        backTable: backTable!.id,
-        categoryId: category.id,
-      };
-    });
-
-    await expect(
-      scoped((tx) => deactivateDepartment(tx, cfg, restaurant.id)),
-    ).rejects.toMatchObject({
-      code: "zone.table_in_use",
-      params: { zoneId: back, tableId: backTable, tableName: "B2" },
-    });
-    const state = await db
-      .select({ id: diningTables.id, inService: tableInService(diningTables.id).mapWith(Boolean) })
-      .from(diningTables);
-    expect(state).toEqual(
-      expect.arrayContaining([
-        { id: frontTable, inService: true },
-        { id: backTable, inService: true },
-      ]),
-    );
-    expect(
-      (
-        await db
-          .select({ active: floorZones.active })
-          .from(floorZones)
-          .where(eq(floorZones.id, front))
-      )[0],
-    ).toEqual({ active: true });
-    expect(
-      (
-        await db
-          .select({ active: floorZones.active })
-          .from(floorZones)
-          .where(eq(floorZones.id, back))
-      )[0],
-    ).toEqual({ active: true });
-    expect(
-      await db
-        .select({ zoneId: routingCells.zoneId })
-        .from(routingCells)
-        .where(eq(routingCells.categoryId, categoryId)),
-    ).toEqual(expect.arrayContaining([{ zoneId: front }, { zoneId: back }]));
-  });
-
-  it("removes a zone's routing while retaining its menu and policy", async () => {
-    await seedUnitTenant();
-    const cfg = { locationId: brandLocationId(await seedLocation("Zone cleanup")) };
-    const zoneId = await seedZone(cfg.locationId, "Terrace");
-    const otherZoneId = await seedZone(cfg.locationId, "Dining room");
-    const kitchen = await seedStation(cfg.locationId, "Kitchen");
-    const bar = await seedStation(cfg.locationId, "Bar");
-    const { menuId, departmentId, categoryId, productId } = await scoped(async (tx) => {
-      const department = await createDepartment(tx, cfg, {
-        name: "Restaurant",
-        orderStart: "table",
-      });
-      await configureZone(tx, cfg, { zoneId, departmentId: department.id });
-      await configureZone(tx, cfg, { zoneId: otherZoneId, departmentId: department.id });
-      const menu = await createCatalogue(tx, { name: "Terrace menu" });
-      await offerMenuThroughZone(tx, cfg, zoneId, menu.id, { makeDefault: true });
-      const product = await productWithCategory(tx, menu.id, "Beer");
-      const category = { categoryId: product.categoryId };
-      await setRoutingCell(
-        tx,
-        cfg,
-        { row: { kind: "category", ...category }, zoneId: null },
-        station(kitchen),
-      );
-      await setRoutingCell(
-        tx,
-        cfg,
-        { row: { kind: "category", ...category }, zoneId },
-        station(bar),
-      );
-      await setRoutingCell(
-        tx,
-        cfg,
-        { row: { kind: "product", productId: product.id }, zoneId },
-        { kind: "no_preparation" },
-      );
-      await setRoutingCell(tx, cfg, { row: { kind: "all" }, zoneId }, station(bar));
-      await setRoutingCell(tx, cfg, { row: { kind: "no_category" }, zoneId }, station(kitchen));
-      await setRoutingCell(
-        tx,
-        cfg,
-        { row: { kind: "no_category" }, zoneId: null },
-        { kind: "no_preparation" },
-      );
-      await setRoutingCell(
-        tx,
-        cfg,
-        { row: { kind: "category", ...category }, zoneId: otherZoneId },
-        station(bar),
-      );
-      return {
-        departmentId: department.id,
-        menuId: menu.id,
-        categoryId: product.categoryId,
-        productId: product.id,
-      };
-    });
-
-    await scoped((tx) => deactivateServiceZone(tx, cfg, zoneId));
-    const cells = () =>
-      db
-        .select({
-          categoryId: routingCells.categoryId,
-          productId: routingCells.productId,
-          noCategory: routingCells.noCategory,
-          zoneId: routingCells.zoneId,
-          stationId: routingCells.stationId,
-        })
-        .from(routingCells)
-        .where(eq(routingCells.locationId, cfg.locationId));
-    const remaining = [
-      { categoryId, productId: null, noCategory: false, zoneId: null, stationId: kitchen },
-      { categoryId, productId: null, noCategory: false, zoneId: otherZoneId, stationId: bar },
-      { categoryId: null, productId: null, noCategory: true, zoneId: null, stationId: null },
-    ];
-    expect(await cells()).toEqual(expect.arrayContaining(remaining));
-    expect(await cells()).toHaveLength(remaining.length);
-    expect(
-      await db
-        .select({ menuId: menuPeriods.menuId })
-        .from(menuPeriods)
-        .where(eq(menuPeriods.departmentId, departmentId)),
-    ).toEqual([{ menuId }]);
-    expect(
-      await db
-        .select({ zoneId: zoneSalePolicies.zoneId })
-        .from(zoneSalePolicies)
-        .where(eq(zoneSalePolicies.zoneId, zoneId)),
-    ).toEqual([{ zoneId }]);
-
-    await db.update(floorZones).set({ active: true }).where(eq(floorZones.id, zoneId));
-    expect(await cells()).toHaveLength(remaining.length);
-    await expect(
-      scoped((tx) => resolveMakers(tx, cfg, zoneId, [productId], new Date("2026-10-02T18:30:00Z"))),
-    ).resolves.toEqual(new Map([[productId, { kind: "made", route: station(kitchen) }]]));
   });
 });
 
@@ -2052,26 +1892,6 @@ it("refuses an unknown sale-policy zone with the domain error", async () => {
   });
 });
 
-it("reports no zones for an empty department and no tables for an empty zone", async () => {
-  const venue = await seedSellingVenue();
-  const empty = await scoped((tx) =>
-    createDepartment(tx, venue.cfg, { name: "Empty", orderStart: "counter" }),
-  );
-  await expect(scoped((tx) => departmentRemovalImpact(tx, venue.cfg, empty.id))).resolves.toEqual({
-    zones: [],
-  });
-  await expect(
-    scoped((tx) => departmentRemovalImpact(tx, venue.cfg, venue.barId)),
-  ).resolves.toEqual({ zones: [{ id: venue.barZone, name: "Bar", activeTableCount: 0 }] });
-  const missing = randomUUID();
-  await expect(
-    scoped((tx) => departmentRemovalImpact(tx, venue.cfg, missing)),
-  ).rejects.toMatchObject({ code: "department.not_found", params: { departmentId: missing } });
-  await expect(scoped((tx) => deactivateServiceZone(tx, venue.cfg, missing))).rejects.toMatchObject(
-    { code: "service_zone.not_found", params: { zoneId: missing } },
-  );
-});
-
 describe("retired and moved zones", () => {
   it("keeps an existing order and sale after their department is removed", async () => {
     const venue = await seedSellingVenue();
@@ -2103,7 +1923,14 @@ describe("retired and moved zones", () => {
       return { orderId: id, saleId: sale!.id };
     });
 
-    await scoped((tx) => deactivateDepartment(tx, venue.cfg, venue.barId));
+    await scoped((tx) =>
+      (async () => {
+        await tx.execute(
+          sql`update floor_zones set active = false where id in (select zone_id from zone_service_policies where department_id = ${venue.barId})`,
+        );
+        await tx.execute(sql`update departments set active = false where id = ${venue.barId}`);
+      })(),
+    );
 
     await expect(scoped((tx) => getOrderServiceContext(tx, venue.cfg, orderId))).resolves.toEqual({
       zoneId: venue.barZone,
@@ -3261,7 +3088,9 @@ describe("reserved venue names", () => {
     const zone = await scoped((tx) =>
       createServiceZone(tx, cfg, { name: "Terrace", departmentId: department.id }),
     );
-    await scoped((tx) => deactivateServiceZone(tx, cfg, zone.id));
+    await scoped(async (tx) =>
+      tx.execute(sql`update floor_zones set active = false where id = ${zone.id}`),
+    );
     const replacement = await scoped((tx) =>
       createServiceZone(tx, cfg, { name: "Terrace", departmentId: department.id }),
     );
@@ -3448,32 +3277,6 @@ describe("combined settings operations", () => {
   });
 });
 
-it("counts only tables in service in zone and department removal impact", async () => {
-  const cfg = { locationId: brandLocationId(await seedLocation("Today impact")) };
-  await scoped(async (tx) => {
-    const department = await createDepartment(tx, cfg, { name: "Dining" });
-    const zone = await createServiceZone(tx, cfg, { name: "Dining", departmentId: department.id });
-    const tables = await tx
-      .insert(diningTables)
-      .values([
-        { locationId: cfg.locationId, zoneId: zone.id, label: "Present" },
-        { locationId: cfg.locationId, zoneId: zone.id, label: "Absent" },
-      ])
-      .returning();
-    await tx.insert(floorTodayTables).values({ tableId: tables[0]!.id, takenOff: true });
-    expect(await settingsOperations.zoneRemovalImpact(tx, cfg, zone.id)).toEqual({
-      zones: [{ id: zone.id, name: "Dining", activeTableCount: 1 }],
-    });
-    expect(await departmentRemovalImpact(tx, cfg, department.id)).toEqual({
-      zones: [{ id: zone.id, name: "Dining", activeTableCount: 1 }],
-    });
-    await tx.update(floorZones).set({ active: false }).where(eq(floorZones.id, zone.id));
-    expect(await settingsOperations.zoneRemovalImpact(tx, cfg, zone.id)).toEqual({
-      zones: [{ id: zone.id, name: "Dining", activeTableCount: 0 }],
-    });
-  });
-});
-
 it("keeps a switched-off zone's table rows and today's rows unchanged", async () => {
   const cfg = { locationId: brandLocationId(await seedLocation("Today reopen")) };
   await scoped(async (tx) => {
@@ -3493,7 +3296,7 @@ it("keeps a switched-off zone's table rows and today's rows unchanged", async ()
       .select()
       .from(floorTodayTables)
       .where(eq(floorTodayTables.tableId, table!.id));
-    await deactivateServiceZone(tx, cfg, zone.id);
+    await tx.execute(sql`update floor_zones set active = false where id = ${zone.id}`);
     expect(await tx.select().from(diningTables).where(eq(diningTables.id, table!.id))).toEqual(
       before,
     );
@@ -3522,7 +3325,14 @@ it.each(["create", "rename"])("allows department %s onto a deleted name", async 
     createDepartment(tx, cfg, { name: "Deli", orderStart: "counter" }),
   );
   await scoped((tx) => createDepartment(tx, cfg, { name: "Surviving", orderStart: "counter" }));
-  await scoped((tx) => deactivateDepartment(tx, cfg, old.id));
+  await scoped((tx) =>
+    (async () => {
+      await tx.execute(
+        sql`update floor_zones set active = false where id in (select zone_id from zone_service_policies where department_id = ${old.id})`,
+      );
+      await tx.execute(sql`update departments set active = false where id = ${old.id}`);
+    })(),
+  );
   const replacement = await scoped((tx) =>
     createDepartment(tx, cfg, {
       name: action === "create" ? "Deli" : "Bar",

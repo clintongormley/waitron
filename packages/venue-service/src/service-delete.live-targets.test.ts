@@ -14,7 +14,7 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedNode } from "@waitron/db/testing/seed.js";
 import { locationId } from "@waitron/shared";
 import * as service from "./index.js";
-import { activateDepartment } from "./operations.js";
+
 import { readDepartmentLogoRasters } from "./department-receipts.js";
 import { saveZoneClosedDate } from "./zone-closed-times.js";
 import { placeOpenPeriod } from "./menu-timetable.js";
@@ -96,11 +96,6 @@ const actions: [string, string, (tx: Transaction, f: Fixture) => Promise<unknown
     "department rename",
     "department.not_found",
     (tx, f) => service.updateDepartment(tx, f.cfg, f.gone, { name: "Reborn" }),
-  ],
-  [
-    "department activation",
-    "department.not_found",
-    (tx, f) => activateDepartment(tx, f.cfg, f.gone),
   ],
   [
     "department policy",

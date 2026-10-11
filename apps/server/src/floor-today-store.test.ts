@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { and, eq } from "drizzle-orm";
+import { sql, and, eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -21,7 +21,7 @@ import { AppError } from "@waitron/shared";
 import { zoneSalePolicies, zoneServicePolicies } from "@waitron/venue-service";
 import { catchUpZone, ensureToday, resetZone, todayBusinessDay } from "./floor-today-store.js";
 import { finishTable } from "./parties.js";
-import { deactivateZone, updateZone } from "./tables.js";
+import { updateZone } from "./tables.js";
 import {
   commandFor,
   inTx,
@@ -755,12 +755,16 @@ describe("a deleted zone", () => {
     await inTx(v, (tx) => ensureToday(tx, v.cfg, NONE, NOW));
     const before = await tableRow(v, tableId);
     const todayBefore = await todayRow(tableId);
-    await inTx(v, (tx) => deactivateZone(tx, v.cfg, z));
+    await inTx(v, async (tx) =>
+      tx.execute(sql`update floor_zones set active = false where id = ${z}`),
+    );
     expect(await tableRow(v, tableId)).toEqual(before);
     expect(await todayRow(tableId)).toEqual(todayBefore);
-    await expect(inTx(v, (tx) => updateZone(tx, v.cfg, z, { active: true }))).rejects.toMatchObject(
-      { code: "zone.not_found" },
-    );
+    await expect(
+      inTx(v, (tx) =>
+        updateZone(tx, v.cfg, z, { active: true } as unknown as Parameters<typeof updateZone>[3]),
+      ),
+    ).rejects.toMatchObject({ code: "zone.not_found" });
     expect(await tableRow(v, tableId)).toEqual(before);
     expect(await todayRow(tableId)).toEqual(todayBefore);
   });
@@ -773,7 +777,9 @@ describe("a deleted zone", () => {
     await masterOf(off, [{ label: "Off 1", live: offTable }]);
     await masterOf(on, [{ label: "On 1", live: onTable }]);
     await inTx(v, (tx) => ensureToday(tx, v.cfg, NONE, NOW));
-    await inTx(v, (tx) => deactivateZone(tx, v.cfg, off));
+    await inTx(v, async (tx) =>
+      tx.execute(sql`update floor_zones set active = false where id = ${off}`),
+    );
     expect(await inService(offTable)).toBe(false);
 
     const nextDay = new Date(NOW.getTime() + 24 * 60 * 60 * 1000);
@@ -799,11 +805,15 @@ describe("a deleted zone", () => {
     await inTx(v, async (tx) => {
       await tx.delete(floorTodayTables).where(eq(floorTodayTables.tableId, hidden));
     });
-    await inTx(v, (tx) => deactivateZone(tx, v.cfg, z));
-
-    await expect(inTx(v, (tx) => updateZone(tx, v.cfg, z, { active: true }))).rejects.toMatchObject(
-      { code: "zone.not_found" },
+    await inTx(v, async (tx) =>
+      tx.execute(sql`update floor_zones set active = false where id = ${z}`),
     );
+
+    await expect(
+      inTx(v, (tx) =>
+        updateZone(tx, v.cfg, z, { active: true } as unknown as Parameters<typeof updateZone>[3]),
+      ),
+    ).rejects.toMatchObject({ code: "zone.not_found" });
 
     expect(await inService(planned)).toBe(false);
     expect(await inService(hidden)).toBe(false);

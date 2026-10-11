@@ -701,3 +701,14 @@ describe("service deletion", () => {
     ).toBe("department.not_found");
   });
 });
+
+it("exposes only permanent hierarchy removal operations", () => {
+  for (const name of [
+    "activateDepartment",
+    "deactivateDepartment",
+    "deactivateServiceZone",
+    "departmentRemovalImpact",
+    "zoneRemovalImpact",
+  ])
+    expect(serviceDelete).not.toHaveProperty(name);
+});

@@ -1540,16 +1540,6 @@ describe("DashboardApi — floor plan (zones + tables)", () => {
     });
   });
 
-  it("deactivateZone DELETEs the zone and resolves undefined on an empty 204", async () => {
-    const fetchImpl = vi.fn().mockResolvedValue(emptyResponse());
-    const api = new DashboardApi("", fetchImpl);
-    await expect(api.deactivateZone("z1")).resolves.toBeUndefined();
-    expect(fetchImpl).toHaveBeenCalledWith("/management-api/zones/z1", {
-      method: "DELETE",
-      credentials: "include",
-    });
-  });
-
   it("getFloorPlan GETs the zone's master plan", async () => {
     const plan = { zoneId: "z1", revision: 0, savedAt: null, tables: [], joins: [] };
     const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(plan));
@@ -3324,3 +3314,7 @@ it.each(["Zone", "Department"] as const)(
     expect(fetchImpl.mock.calls[3]).toEqual([path, { method: "DELETE", credentials: "include" }]);
   },
 );
+
+it("does not offer reversible zone removal", () => {
+  expect(new DashboardApi()).not.toHaveProperty("deactivateZone");
+});

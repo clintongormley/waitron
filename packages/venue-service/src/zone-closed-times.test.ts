@@ -1,12 +1,12 @@
 import { randomUUID } from "node:crypto";
-import { eq } from "drizzle-orm";
+import { sql, eq } from "drizzle-orm";
 import { describe, expect, it, vi } from "vitest";
 import { CORE_MIGRATIONS, floorZones, locations, withTransaction } from "@waitron/db";
 import { CATALOGUE_MIGRATIONS } from "@waitron/catalogue";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { locationId } from "@waitron/shared";
 import { VENUE_SERVICE_MIGRATIONS } from "./migrations.js";
-import { configureZone, createDepartment, deactivateDepartment } from "./operations.js";
+import { configureZone, createDepartment } from "./operations.js";
 import { saveSpecialDate, duplicateSpecialDate } from "./hours.js";
 import { VENUE_SERVICE_CALENDAR_PARTICIPANTS } from "./calendar-participants.js";
 import { readOpeningHoursModel } from "./menu-timetable.js";
@@ -121,7 +121,14 @@ describe("zone closed times", () => {
       tx((db) => replaceZoneClosedWeek(db, a.cfg, b.terrace, week([]))),
     ).rejects.toMatchObject({ code: "service_zone.not_found", params: { zoneId: b.terrace } });
     await tx((db) => createDepartment(db, b.cfg, { name: "Other", orderStart: "counter" }));
-    await tx((db) => deactivateDepartment(db, b.cfg, b.departmentId));
+    await tx((db) =>
+      (async () => {
+        await db.execute(
+          sql`update floor_zones set active = false where id in (select zone_id from zone_service_policies where department_id = ${b.departmentId})`,
+        );
+        await db.execute(sql`update departments set active = false where id = ${b.departmentId}`);
+      })(),
+    );
     await expect(
       tx((db) => replaceZoneClosedWeek(db, b.cfg, b.terrace, week([]))),
     ).rejects.toMatchObject({ code: "service_zone.not_found" });

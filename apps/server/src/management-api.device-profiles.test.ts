@@ -20,7 +20,6 @@ import { applyVenue, planVenue } from "@waitron/provisioning";
 import {
   createDepartment,
   createServiceZone,
-  deactivateServiceZone,
   zoneServicePolicies,
   deviceProfileKitchenScreenZones,
   deviceProfileKitchenScreens,
@@ -2368,7 +2367,9 @@ describe("Management API — who and where a device profile serves (W97)", () =>
       }),
     );
     const id = (created.body as Detail).id;
-    await withTransaction(suite.db, (tx) => deactivateServiceZone(tx, venueCfg, spare.id));
+    await withTransaction(suite.db, async (tx) =>
+      tx.execute(sql`update floor_zones set active = false where id = ${spare.id}`),
+    );
     expect((await read(id)).allowedZoneIds).toEqual(
       expect.arrayContaining([ordering.startingZoneId, spare.id]),
     );

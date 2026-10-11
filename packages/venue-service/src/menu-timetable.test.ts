@@ -56,7 +56,6 @@ import { VENUE_SERVICE_MIGRATIONS } from "./migrations.js";
 import {
   configureZone,
   createDepartment,
-  deactivateDepartment,
   listDepartments,
   listZoneOffers,
   listVenueReadiness,
@@ -964,7 +963,14 @@ describe("the menu a zone starts on", () => {
 
   it("is refused for a zone of an inactive department, or of another venue", async () => {
     const v = await timed();
-    await scoped((tx) => deactivateDepartment(tx, v.cfg, v.deli));
+    await scoped((tx) =>
+      (async () => {
+        await tx.execute(
+          sql`update floor_zones set active = false where id in (select zone_id from zone_service_policies where department_id = ${v.deli})`,
+        );
+        await tx.execute(sql`update departments set active = false where id = ${v.deli}`);
+      })(),
+    );
     await expect(resolve(v, v.mostrador, madrid(MONDAY, "12:30"))).rejects.toMatchObject({
       code: "service_zone.not_found",
       params: { zoneId: v.mostrador },
@@ -1921,7 +1927,12 @@ describe("the editor's model", () => {
     const v = await timed();
     const { menus, periods } = v;
     await scoped(async (tx) => {
-      await deactivateDepartment(tx, v.cfg, v.deli);
+      await (async () => {
+        await tx.execute(
+          sql`update floor_zones set active = false where id in (select zone_id from zone_service_policies where department_id = ${v.deli})`,
+        );
+        await tx.execute(sql`update departments set active = false where id = ${v.deli}`);
+      })();
     });
     const christmas = await makeDate(v, CHRISTMAS);
     await dateMenus(v, christmas.id, [slot(periods.brunch, "11:00", "15:00")]);
@@ -2665,7 +2676,14 @@ describe("department service periods", () => {
       { code: "department.no_periods", departmentId: v.restaurant, departmentName: "Restaurant" },
     ]);
     expect(issues.some((issue) => (issue.code as string) === "zone.menu_missing")).toBe(false);
-    await scoped((tx) => deactivateDepartment(tx, v.cfg, v.deli));
+    await scoped((tx) =>
+      (async () => {
+        await tx.execute(
+          sql`update floor_zones set active = false where id in (select zone_id from zone_service_policies where department_id = ${v.deli})`,
+        );
+        await tx.execute(sql`update departments set active = false where id = ${v.deli}`);
+      })(),
+    );
     const after = await scoped((tx) => listVenueReadiness(tx, v.cfg));
     expect(after.filter((issue) => issue.code === "department.no_periods")).toEqual([
       { code: "department.no_periods", departmentId: v.restaurant, departmentName: "Restaurant" },
@@ -2693,7 +2711,14 @@ describe("department service periods", () => {
     await scoped((tx) => saveSpecialDateMenus(tx, v.cfg, date.id, v.restaurant, [], AT));
     await db.update(specialDates).set({ kind: "holiday" }).where(eq(specialDates.id, date.id));
     await db.update(menuPeriods).set({ colour: "blue" }).where(eq(menuPeriods.id, v.lunch));
-    await scoped((tx) => deactivateDepartment(tx, v.cfg, v.deli));
+    await scoped((tx) =>
+      (async () => {
+        await tx.execute(
+          sql`update floor_zones set active = false where id in (select zone_id from zone_service_policies where department_id = ${v.deli})`,
+        );
+        await tx.execute(sql`update departments set active = false where id = ${v.deli}`);
+      })(),
+    );
     const model = await scoped((tx) => readOpeningHoursModel(tx, v.cfg, AT));
     expect(model.dayCutover).toBe("06:00");
     expect(model.departments.map((department) => department.id)).toEqual([v.restaurant]);
