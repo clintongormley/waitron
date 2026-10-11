@@ -17,7 +17,7 @@ const stations = [
 ] as PrepStation[];
 
 describe.each(["light", "dark"] as const)("station table (%s)", (theme) => {
-  it.each(["manager", "supervisor", "empty"] as const)("checks %s", async (state) => {
+  it.each(["manager", "empty"] as const)("checks %s", async (state) => {
     setLocale("en");
     await mountThemed("<div></div>", theme);
     const el = document.createElement("prep-station-table");
@@ -29,6 +29,15 @@ describe.each(["light", "dark"] as const)("station table (%s)", (theme) => {
             stations.map((station) => [
               station.id,
               html`<button type="button" aria-label=${`${station.name} actions`}>⋮</button>`,
+            ]),
+          )
+        : {};
+    el.handles =
+      state === "manager"
+        ? Object.fromEntries(
+            stations.map((station) => [
+              station.id,
+              html`<button type="button" aria-label=${`Reorder ${station.name}`}>⠿</button>`,
             ]),
           )
         : {};

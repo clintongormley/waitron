@@ -517,7 +517,7 @@ it("draws the Stations rows from the stations list with no health read and no he
   const el = await mount(a);
   expect(stationRow(el, "bar").textContent).toContain("Bar");
   expect(stationRow(el, "upstairs").textContent).toContain("Upstairs bar");
-  expect(stationHeadings(el)).toEqual(["Name", "Printed on", "Shown on"]);
+  expect(stationHeadings(el)).toEqual(["Name", "Printed on", "Shown on", "Actions"]);
   for (const word of ["Waiting", "Being made", "Ready", "Late", "Oldest"])
     expect(stationTable(el)!.querySelector("thead")!.textContent).not.toContain(word);
   expect(stationTable(el)!.querySelector('[part~="number"]')).toBeNull();
@@ -2551,8 +2551,8 @@ it.each(["en", "es"] as const)(
     const manager = await mountStations();
     expect(stationHeadings(manager.el)).toEqual(
       locale === "en"
-        ? ["Name", "Printed on", "Shown on"]
-        : ["Nombre", "Se imprime en", "Se muestra en"],
+        ? ["Name", "Printed on", "Shown on", "Actions"]
+        : ["Nombre", "Se imprime en", "Se muestra en", "Acciones"],
     );
     expect(q(manager.el, '[data-test="printed-on-bar"]')!.textContent?.trim()).toBe("Old printer");
     expect(q(manager.el, '[data-test="printed-on-upstairs"]')!.textContent?.trim()).toBe(

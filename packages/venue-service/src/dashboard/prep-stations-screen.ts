@@ -899,67 +899,68 @@ export class PrepStationsScreen extends LitElement {
     document.removeEventListener("pointercancel", this.#dropStationDrag);
     document.removeEventListener("keydown", this.#stationDragKey, true);
   }
-  #stationMenu(station: PrepStation) {
-    return html`${
-        station.active
-          ? html`<button
-              type="button"
-              part="station-grip"
-              data-test=${`drag-${station.id}`}
-              aria-label=${format("prep.reorder_station", { name: station.name })}
-              ?disabled=${this.busy}
-              @pointerdown=${(event: PointerEvent) => this.#startStationDrag(event, station.id)}
-              @keydown=${(event: KeyboardEvent) => {
-                const delta = event.key === "ArrowUp" ? -1 : event.key === "ArrowDown" ? 1 : 0;
-                if (!delta || this.busy) return;
-                event.preventDefault();
-                const order = this.#activeStationOrder();
-                if (this.#moveStation(station.id, order.indexOf(station.id) + delta))
-                  void this.#saveStationOrder(station.id);
-              }}
-            >
-              <wt-icon name="grip"></wt-icon>
-            </button>`
-          : nothing
-      }<wt-row-actions
-        data-station-id=${station.id}
-        data-test=${`station-menu-${station.id}`}
-        label=${format("prep.row_actions", { name: station.name })}
-      >
-        <wt-button
-          align="start"
-          data-test=${`edit-${station.id}`}
+  #stationGrip(station: PrepStation) {
+    return station.active
+      ? html`<button
+          type="button"
+          part="station-grip"
+          data-test=${`drag-${station.id}`}
+          aria-label=${format("prep.reorder_station", { name: station.name })}
           ?disabled=${this.busy}
-          @click=${() => {
-            this.stationEditBusy = false;
-            this.stationEditRefusal = undefined;
-            this.stationEdit = { token: {}, station };
+          @pointerdown=${(event: PointerEvent) => this.#startStationDrag(event, station.id)}
+          @keydown=${(event: KeyboardEvent) => {
+            const delta = event.key === "ArrowUp" ? -1 : event.key === "ArrowDown" ? 1 : 0;
+            if (!delta || this.busy) return;
+            event.preventDefault();
+            const order = this.#activeStationOrder();
+            if (this.#moveStation(station.id, order.indexOf(station.id) + delta))
+              void this.#saveStationOrder(station.id);
           }}
-          >${t("venue.edit")}</wt-button
         >
-        ${
-          station.active && !station.isDefault
-            ? html`<wt-button
-                align="start"
-                data-test=${`make-default-${station.id}`}
-                ?disabled=${this.busy}
-                @click=${() =>
-                  void this.#act(
-                    () => this.api.setDefaultStation(station.id),
-                    (error) => this.#defaultRefusal(error),
-                  )}
-                >${t("prep.make_default")}</wt-button
-              >`
-            : nothing
-        }
-        <wt-button
-          align="start"
-          data-test=${`delete-${station.id}`}
-          ?disabled=${this.busy}
-          @click=${() => void this.#openStationAction(station.id)}
-          >${t("prep.delete")}</wt-button
-        >
-      </wt-row-actions>`;
+          <wt-icon name="grip"></wt-icon>
+        </button>`
+      : nothing;
+  }
+  #stationMenu(station: PrepStation) {
+    return html`<wt-row-actions
+      data-station-id=${station.id}
+      data-test=${`station-menu-${station.id}`}
+      label=${format("prep.row_actions", { name: station.name })}
+    >
+      <wt-button
+        align="start"
+        data-test=${`edit-${station.id}`}
+        ?disabled=${this.busy}
+        @click=${() => {
+          this.stationEditBusy = false;
+          this.stationEditRefusal = undefined;
+          this.stationEdit = { token: {}, station };
+        }}
+        >${t("venue.edit")}</wt-button
+      >
+      ${
+        station.active && !station.isDefault
+          ? html`<wt-button
+              align="start"
+              data-test=${`make-default-${station.id}`}
+              ?disabled=${this.busy}
+              @click=${() =>
+                void this.#act(
+                  () => this.api.setDefaultStation(station.id),
+                  (error) => this.#defaultRefusal(error),
+                )}
+              >${t("prep.make_default")}</wt-button
+            >`
+          : nothing
+      }
+      <wt-button
+        align="start"
+        data-test=${`delete-${station.id}`}
+        ?disabled=${this.busy}
+        @click=${() => void this.#openStationAction(station.id)}
+        >${t("prep.delete")}</wt-button
+      >
+    </wt-row-actions>`;
   }
   #stationOutputs(view: PrepStationsView) {
     return Object.fromEntries(
@@ -1780,6 +1781,7 @@ export class PrepStationsScreen extends LitElement {
                 </div>
                 <prep-station-table
                   .stations=${view.stations.map((station) => ({ ...station, displayOrder: this.stationOrder?.indexOf(station.id) ?? station.displayOrder }))}
+                  .handles=${Object.fromEntries(view.stations.map((station) => [station.id, this.#stationGrip(station)]))}
                   .actions=${Object.fromEntries(view.stations.map((station) => [station.id, this.#stationMenu(station)]))}
                   .outputs=${this.#stationOutputs(view)}
                   .statusNotes=${Object.fromEntries(
