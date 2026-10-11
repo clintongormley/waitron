@@ -63,6 +63,7 @@ import type { WtToast } from "@waitron/ui";
 import type { AlertsBell } from "./widgets/alerts-bell.js";
 import type { AlertView, DashboardApi, PersonSummary } from "./api/client.js";
 import type { WtInput } from "@waitron/ui";
+import { venueDetailsFixture } from "./testing/venue-details-fixture.js";
 
 const stubRequest: DashboardRequest = async () => [] as never;
 const adjustmentsRequest: DashboardRequest = async (path, method, body, options) =>
@@ -4328,6 +4329,71 @@ it("keeps the phone drawer within the window inside the real page", async () => 
       el.shadowRoot!.querySelector("[data-test=brand-banner]")!.getBoundingClientRect().bottom - 1,
     );
     expect(sidebar.bottom).toBeLessThanOrEqual(window.innerHeight);
+  } finally {
+    await unmount();
+  }
+});
+
+const nextFrame = () => new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+
+it("keeps Venue settings within the window at desktop width, in view and edit mode, and scrolls to its last panel", async () => {
+  history.replaceState(null, "", "/manage/venue-settings/view/venue-details");
+  const { el, unmount } = await mountInRealPage(
+    stubApi({
+      getMe: vi.fn().mockResolvedValue({
+        ...meResponse,
+        permissions: ["venue.view", "venue.configure", "person.manage"],
+      }),
+      getVenueDetails: vi.fn().mockResolvedValue(venueDetailsFixture()),
+    }),
+    1280,
+    600,
+  );
+  try {
+    const panels = () =>
+      venueSettings(el)!.shadowRoot!.querySelector<HTMLElement>(
+        '[data-test="venue-settings-venue-details"]',
+      )!;
+    await expect.poll(() => panels()?.children.length).toBe(2);
+    const details = panels().querySelector("dashboard-venue-details-panel")!;
+    await expect
+      .poll(() => details.shadowRoot!.querySelector<HTMLElement>('[data-test="edit"]'))
+      .not.toBeNull();
+    const main = el.shadowRoot!.querySelector<HTMLElement>(".main")!;
+    const reachesFoot = async () => {
+      await nextFrame();
+      expect(document.scrollingElement!.scrollHeight).toBeLessThanOrEqual(window.innerHeight);
+      main.scrollTo(0, main.scrollHeight);
+      await nextFrame();
+      const last = panels().lastElementChild!.getBoundingClientRect();
+      expect(last.bottom).toBeLessThanOrEqual(main.getBoundingClientRect().bottom + 1);
+    };
+    await reachesFoot();
+    details.shadowRoot!.querySelector<HTMLElement>('[data-test="edit"]')!.click();
+    await expect.poll(() => details.shadowRoot!.querySelector('[data-test="save"]')).not.toBeNull();
+    await reachesFoot();
+  } finally {
+    await unmount();
+  }
+});
+
+it("keeps a hinted field below the fold from growing the page past the window at desktop width", async () => {
+  const { el, unmount } = await mountInRealPage(stubApi(), 1280, 600);
+  try {
+    const main = el.shadowRoot!.querySelector<HTMLElement>(".main")!;
+    const spacer = document.createElement("div");
+    spacer.style.blockSize = "2000px";
+    spacer.style.flex = "none";
+    const field = document.createElement("wt-input");
+    field.setAttribute("label", "Probe");
+    field.setAttribute("name", "probe");
+    field.setAttribute("hint", "A hint is drawn visually hidden");
+    main.append(spacer, field);
+    await (field as WtInput).updateComplete;
+    await nextFrame();
+    expect(field.shadowRoot!.querySelector("[data-hint]")).not.toBeNull();
+    expect(main.scrollHeight).toBeGreaterThan(2000);
+    expect(document.scrollingElement!.scrollHeight).toBeLessThanOrEqual(window.innerHeight);
   } finally {
     await unmount();
   }

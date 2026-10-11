@@ -471,8 +471,10 @@ export class DashboardApp extends LitElement {
 
       /* The content column beside the sidebar — scrolls independently, the same as .sidebar above,
          so a tall screen never grows the outer page past one viewport (that used to leave the
-         shorter sidebar looking cut off next to a taller .main). */
+         shorter sidebar looking cut off next to a taller .main). Positioned so a visually hidden
+         field hint is placed inside this scroll box, not against .layout, where it grows the page. */
       .main {
+        position: relative;
         flex: 1 1 auto;
         min-width: 0;
         min-height: 0;
