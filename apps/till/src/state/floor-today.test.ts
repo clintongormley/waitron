@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it } from "vitest";
+import { freeSide, touchingPlace } from "@waitron/shared";
 import { currentLocale, setLocale } from "../i18n/t.js";
 import type { TableParty, TableState, TableToday, TodayPlacement } from "../api/client.js";
 import { dropAction, pendingPlaces, spareSpot, sparesOf, takenOffOf } from "./floor-today.js";
@@ -340,6 +341,22 @@ describe("pendingPlaces", () => {
         heading: "4+5",
       }),
     ).toEqual(new Map([["b", { ...turned, x: 11, y: 13 }]]));
+  });
+
+  it("puts a table joining a merge on a side no member stands on, as the server places it", () => {
+    const a = table("a", "1", { today: today({ joinId: "j", placement: place(100, 100) }) });
+    const b = table("b", "2", { today: today({ joinId: "j", placement: place(104, 100) }) });
+    const c = table("c", "3", { today: today({ placement: place(200, 100) }) });
+    const zone = [a, b, c];
+    const action = dropAction(zone, { tableId: "c", x: 101, y: 100, targetId: "a" });
+    expect(action).toMatchObject({ kind: "merge", targetId: "a", side: "right" });
+
+    const drawn = pendingPlaces(zone, action).get("c");
+
+    const members = [a, b].map((each) => each.today!.placement!);
+    const side = freeSide(members[0]!, c.today!.placement!, members, "right");
+    expect(side).toBe("top");
+    expect(drawn).toEqual({ ...place(100, 96), ...touchingPlace(members[0]!, place(0, 0), side) });
   });
 
   it("draws nothing new for a drop that moves nothing", () => {

@@ -3869,12 +3869,18 @@ if it is wrong.
    bottom or top; a tie goes left–right, and centres that coincide give `right`. The server places
    the moving table so that, in the target's turned frame, the two boxes share that edge and their
    centres line up across it; the moving table takes the target's rotation; its corner is the nearest
-   whole square (`Math.round`), held to 0–999. Both live in one pure module,
-   `packages/shared/src/floor-join.ts` (`joinSide`, `touchingPlace`), so the till can draw the merge
-   before the server answers (decision 14) and the server places it the same way. Cost: at a
-   rotation that is not a multiple of 90°, or with an odd difference of sizes, rounding leaves a gap
-   or an overlap under one square; a table at the top or left edge dropped on that side overlaps its
-   target.
+   whole square (`Math.round`), held to 0–999. Where that place would cover a member of the target's
+   merge, the target included, by a square or more both ways (each box's extents in the target's
+   turned frame), the next side is tried: the two sides across the chosen one, top before bottom
+   and left before right, then its opposite (`freeSide`); with all four covered the chosen side
+   stands. The till sends the side `joinSide` picked and the server applies `freeSide` to the
+   merge's members as they stand, so a stale or hand-made side is checked like any other. All
+   of it lives in one pure module, `packages/shared/src/floor-join.ts` (`joinSide`, `touchingPlace`,
+   `freeSide`), so the till can draw the merge before the server answers (decision 14) and the
+   server places it the same way. Cost: at a rotation that is not a multiple of 90°, or with an odd
+   difference of sizes, rounding leaves a gap or an overlap under one square; a member turned
+   another way than the target counts by its extents, which can cover more than it does; a table
+   overlaps a member only when all four sides are covered.
 5. **Who joins whom on a drop.** The dragged table goes to the target, so a join's path party is the
    TARGET's party when both are seated (the dragged party combines into it, the bill choice asked
    first, as the order screen asks), else whichever party sits there; the body's `tableId` is the
@@ -4298,7 +4304,8 @@ zone> }` (two zones). It works out the merge's members after the join (the targe
 the target, plus the moving table); the seats are `args.seats`, else `savedJoinSeats(members)`, else
 `floor_plan.invalid { field: "seats" }`, thrown before anything is written. It then records the
 moving table's `before_x`, `before_y`, `before_rotation` as it stands (and the target's, for a new
-merge), places the moving table at `touchingPlace(target, moving, side)`, and writes or updates the
+merge), places the moving table at `touchingPlace(target, moving, freeSide(target, moving, <the
+target's members>, side))` (decision 4), and writes or updates the
 merge (`floor_today_joins` with the target's zone and the seats; `floor_today_join_tables` rows).
 
 - [ ] **Step 1: Write the failing tests:**

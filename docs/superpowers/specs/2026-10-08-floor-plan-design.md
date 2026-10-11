@@ -146,7 +146,8 @@ undone at the next reset anyway.
 
 - **A movable table dropped on empty space** moves there for today.
 - **A movable table dropped on another movable table** joins them. The dragged table snaps to touch
-  the target on the side nearest the drop, taking the target's rotation, and the two draw as one
+  the target on the side nearest the drop (or, where a table of the target's merge already stands
+  there, the next free side), taking the target's rotation, and the two draw as one
   shape labelled with both names ("4+5"). Its seats for today come from the saved join with exactly
   these tables; with none, the till asks, suggesting the tables' seats added together. Then:
   - two free tables are merged with no party, for example to set up for a booking;

@@ -1,5 +1,14 @@
 import { describe, expect, it } from "vitest";
-import { JOIN_SIDES, heldStep, joinSide, touchingPlace, type JoinPlace } from "./floor-join.js";
+import {
+  JOIN_SIDES,
+  NEW_TABLE_SIZE,
+  freeSide,
+  groupStep,
+  heldStep,
+  joinSide,
+  touchingPlace,
+  type JoinPlace,
+} from "./floor-join.js";
 import * as shared from "./index.js";
 
 const place = (x: number, y: number, width = 8, height = 8, rotation = 0): JoinPlace => ({
@@ -135,10 +144,105 @@ describe("heldStep", () => {
   });
 });
 
+describe("freeSide", () => {
+  const target = place(10, 10);
+  const square = { width: 8, height: 8 };
+  const at = (side: "left" | "right" | "top" | "bottom"): JoinPlace => ({
+    ...square,
+    ...touchingPlace(target, square, side),
+  });
+
+  it("keeps the preferred side when nothing else stands there", () => {
+    expect(freeSide(target, square, [target, at("right")], "left")).toBe("left");
+    expect(freeSide(target, square, [target], "bottom")).toBe("bottom");
+  });
+
+  it("takes the next free side when a member covers the preferred one: the two across it, top or left first, then its opposite", () => {
+    const chain = (preferred: "left" | "right" | "top" | "bottom"): string[] => {
+      const members = [target];
+      const taken: string[] = [];
+      for (let i = 0; i < 4; i += 1) {
+        const side = freeSide(target, square, members, preferred);
+        taken.push(side);
+        members.push(at(side));
+      }
+      return taken;
+    };
+    expect(chain("right")).toEqual(["right", "top", "bottom", "left"]);
+    expect(chain("left")).toEqual(["left", "top", "bottom", "right"]);
+    expect(chain("top")).toEqual(["top", "left", "right", "bottom"]);
+    expect(chain("bottom")).toEqual(["bottom", "left", "right", "top"]);
+  });
+
+  it("keeps the preferred side when every side is covered", () => {
+    const all = [target, at("left"), at("right"), at("top"), at("bottom")];
+    expect(freeSide(target, square, all, "top")).toBe("top");
+  });
+
+  it("counts the target as a member, so a side the grid's edge pushes onto it is covered", () => {
+    const edge = place(2, 0);
+    expect(freeSide(edge, square, [edge], "left")).toBe("bottom");
+  });
+
+  it("accepts an overlap under one square either way, on the boxes' extents in the target's frame", () => {
+    expect(freeSide(target, square, [target, place(25.5, 10)], "right")).toBe("right");
+    expect(freeSide(target, square, [target, place(25, 10)], "right")).toBe("top");
+    expect(freeSide(target, square, [target, place(18, 17.5)], "right")).toBe("right");
+    expect(freeSide(target, square, [target, place(18, 17)], "right")).toBe("top");
+  });
+
+  it("reads members in the turned target's frame", () => {
+    const turned = place(10, 10, 8, 8, 90);
+    const right = { ...square, ...touchingPlace(turned, square, "right") };
+    expect(freeSide(turned, square, [turned, right], "right")).toBe("top");
+    expect(freeSide(turned, square, [turned, right], "left")).toBe("left");
+    const tilted = place(10, 10, 8, 8, 30);
+    const beside = { ...square, ...touchingPlace(tilted, square, "right") };
+    expect(freeSide(tilted, square, [tilted, beside], "right")).toBe("top");
+    expect(freeSide(tilted, square, [tilted, beside], "left")).toBe("left");
+  });
+
+  it("bounds a member turned another way by its corners' extents, which can cover more than it does", () => {
+    const diamond = place(18, 10, 8, 8, 45);
+    // The diamond's extents reach the top and bottom places' corners; the diamond itself does not.
+    expect(freeSide(target, square, [target, diamond], "right")).toBe("left");
+    expect(freeSide(target, square, [target, place(24, 10, 8, 8, 45)], "right")).toBe("top");
+    expect(freeSide(target, square, [target, place(27, 10, 8, 8, 45)], "right")).toBe("right");
+  });
+
+  it("reads a member's height across when it is turned a quarter", () => {
+    const upright = place(18, 26, 8, 2, 90);
+    expect(freeSide(target, square, [target, upright], "right")).toBe("right");
+    expect(freeSide(target, square, [target, place(18, 20, 8, 2, 90)], "right")).toBe("top");
+  });
+
+  it("sizes the moving table's box by its own width and height", () => {
+    const wide = { width: 16, height: 4 };
+    expect(freeSide(target, wide, [target, place(34, 12)], "right")).toBe("right");
+    expect(freeSide(target, wide, [target, place(32, 12)], "right")).toBe("top");
+  });
+});
+
+describe("groupStep", () => {
+  it("moves a group by the step, held so every member stays in the grid", () => {
+    const group = [
+      { x: 10, y: 20 },
+      { x: 30, y: 5 },
+    ];
+    expect(groupStep(group, { x: 4, y: -3 })).toEqual({ dx: 4, dy: -3 });
+    expect(groupStep(group, { x: -50, y: -50 })).toEqual({ dx: -10, dy: -5 });
+    expect(groupStep(group, { x: 990, y: 990 })).toEqual({ dx: 969, dy: 979 });
+  });
+});
+
 it("names the four sides and is exported from the package", () => {
   expect(JOIN_SIDES).toEqual(["left", "right", "top", "bottom"]);
   expect(shared.joinSide).toBe(joinSide);
   expect(shared.touchingPlace).toBe(touchingPlace);
   expect(shared.JOIN_SIDES).toBe(JOIN_SIDES);
   expect(shared.heldStep).toBe(heldStep);
+  expect(shared.freeSide).toBe(freeSide);
+  expect(shared.groupStep).toBe(groupStep);
+  expect(shared.NEW_TABLE_SIZE).toBe(8);
+  expect(NEW_TABLE_SIZE).toBe(8);
 });

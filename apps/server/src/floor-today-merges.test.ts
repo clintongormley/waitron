@@ -242,6 +242,17 @@ describe("today's merges", () => {
     });
   });
 
+  it("grows a merge on another side when a member already stands on the side sent", async () => {
+    const { table } = await threeTables();
+    await merge(table.b!, table.a!, "right", 8);
+
+    await merge(table.c!, table.a!, "right", 12);
+
+    // A at (0, 0) on the grid's top edge: its top is held onto A itself, so C goes below.
+    expect(await place(table.b!)).toEqual({ x: 8, y: 0, rotation: 0 });
+    expect(await place(table.c!)).toEqual({ x: 0, y: 8, rotation: 0 });
+  });
+
   it("grows a merge to a saved join of three", async () => {
     const { table } = await threeTables([{ seats: 11, keys: ["a", "b", "c"] }]);
     await merge(table.b!, table.a!, "right", 8);

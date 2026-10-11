@@ -19,7 +19,7 @@ import {
 import type { Transaction } from "@waitron/db";
 import type { TableRemoval } from "@waitron/module";
 import { readLocationClock, venueMomentAt } from "@waitron/reporting";
-import { AppError, heldStep } from "@waitron/shared";
+import { AppError, NEW_TABLE_SIZE, groupStep } from "@waitron/shared";
 import {
   planReset,
   targetsFromMaster,
@@ -490,10 +490,10 @@ export async function moveToday(
   const today = await todayOf(tx, cfg, tableId);
   refuseUnmovable(today);
   const members = (today.merge?.members ?? [today.row]).filter((m) => m.x !== null);
-  const xs = members.map((m) => m.x!);
-  const ys = members.map((m) => m.y!);
-  const dx = heldStep(at.x - today.row.x!, Math.min(...xs), Math.max(...xs));
-  const dy = heldStep(at.y - today.row.y!, Math.min(...ys), Math.max(...ys));
+  const { dx, dy } = groupStep(
+    members.map((m) => ({ x: m.x!, y: m.y! })),
+    { x: at.x - today.row.x!, y: at.y - today.row.y! },
+  );
   for (const member of members) {
     await tx
       .update(floorTodayTables)
@@ -530,7 +530,14 @@ export async function placeSpareToday(
   if (row.fixed) throw new AppError("table.fixed", { tableId });
   await tx
     .update(floorTodayTables)
-    .set({ x: at.x, y: at.y, width: 8, height: 8, shape: "rect", rotation: 0 })
+    .set({
+      x: at.x,
+      y: at.y,
+      width: NEW_TABLE_SIZE,
+      height: NEW_TABLE_SIZE,
+      shape: "rect",
+      rotation: 0,
+    })
     .where(eq(floorTodayTables.id, row.id));
 }
 

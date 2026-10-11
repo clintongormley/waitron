@@ -2,7 +2,7 @@ import { LitElement, type TemplateResult, css, html, nothing, svg } from "lit";
 import { customElement, property } from "lit/decorators.js";
 import { repeat } from "lit/directives/repeat.js";
 import { styleMap } from "lit/directives/style-map.js";
-import { heldStep, partyTablesName } from "@waitron/shared";
+import { groupStep, partyTablesName } from "@waitron/shared";
 import { baseStyles } from "../base-styles.js";
 import { DOUBLE_TAP_MS, type GesturePoint, Gestures } from "../gestures.js";
 import { type FloorMapDot, type FloorMapFill, floorMapFillStyles } from "../floor-map-fills.js";
@@ -529,10 +529,10 @@ export class WtFloorMap extends LitElement {
     if (first === undefined) return;
     const scale = this.#view!.scale;
     // The whole group stays on the grid, as the server holds it when the move lands.
-    const xs = members!.map((m) => m.placement.x);
-    const ys = members!.map((m) => m.placement.y);
-    const movedX = heldStep(snapToSquare(dx, scale), Math.min(...xs), Math.max(...xs));
-    const movedY = heldStep(snapToSquare(dy, scale), Math.min(...ys), Math.max(...ys));
+    const { dx: movedX, dy: movedY } = groupStep(
+      members!.map((m) => m.placement),
+      { x: snapToSquare(dx, scale), y: snapToSquare(dy, scale) },
+    );
     const x = first.placement.x + movedX;
     const y = first.placement.y + movedY;
     const targetId = this.#targetAt(at, first.id);

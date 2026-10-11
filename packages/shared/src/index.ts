@@ -54,6 +54,9 @@ export { centsToDecimal, decimalToCents, rawCentsToDecimal, stringToCents } from
 export { currencySymbol, formatMoney, type CurrencySymbol } from "./money-format.js";
 export {
   JOIN_SIDES,
+  NEW_TABLE_SIZE,
+  freeSide,
+  groupStep,
   heldStep,
   joinSide,
   touchingPlace,

@@ -10,7 +10,7 @@ import {
   floorTodayTables,
 } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
-import { AppError, touchingPlace, type JoinSide } from "@waitron/shared";
+import { AppError, freeSide, touchingPlace, type JoinPlace, type JoinSide } from "@waitron/shared";
 import {
   refuseHeld,
   refuseUnfree,
@@ -240,18 +240,20 @@ export async function writeMerge(
     await tx.update(floorTodayJoins).set({ seats }).where(eq(floorTodayJoins.id, joinId));
   }
   await tx.insert(floorTodayJoinTables).values(beforeRow(joinId, moving));
-  const at = touchingPlace(
-    {
-      x: target.row.x!,
-      y: target.row.y!,
-      width: target.row.width!,
-      height: target.row.height!,
-      rotation: target.row.rotation!,
-    },
-    { width: moving.row.width!, height: moving.row.height! },
+  const goes = { width: moving.row.width!, height: moving.row.height! };
+  const against = placeOf(target.row);
+  const side = freeSide(
+    against,
+    goes,
+    (target.merge?.members ?? [target.row]).filter((m) => m.x !== null).map(placeOf),
     args.side,
   );
+  const at = touchingPlace(against, goes, side);
   await tx.update(floorTodayTables).set(at).where(eq(floorTodayTables.id, moving.row.id));
+}
+
+function placeOf(row: Today["row"]): JoinPlace {
+  return { x: row.x!, y: row.y!, width: row.width!, height: row.height!, rotation: row.rotation! };
 }
 
 function beforeRow(joinId: string, today: Today) {

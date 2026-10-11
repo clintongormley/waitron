@@ -1,4 +1,11 @@
-import { type JoinSide, heldStep, joinSide, touchingPlace } from "@waitron/shared";
+import {
+  type JoinSide,
+  NEW_TABLE_SIZE,
+  freeSide,
+  groupStep,
+  joinSide,
+  touchingPlace,
+} from "@waitron/shared";
 import { type FloorMapDrop, clampToGrid, cropToTables, mergeLabel } from "@waitron/ui";
 import type { TableParty, TableState, TodayPlacement } from "../api/client.js";
 import { codeMessage } from "../i18n/codes.js";
@@ -26,8 +33,6 @@ export type DropAction =
       seatsGuess: number;
       heading: string;
     };
-
-const SPARE_SIZE = 8;
 
 interface Group {
   members: TableState[];
@@ -154,10 +159,10 @@ export function pendingPlaces(
     const from = placed(action.tableId);
     if (table === undefined || from === null) return places;
     const members = groupOf(zoneTables, table).members.map((m) => [m.id, placed(m.id)!] as const);
-    const xs = members.map(([, p]) => p.x);
-    const ys = members.map(([, p]) => p.y);
-    const dx = heldStep(action.x - from.x, Math.min(...xs), Math.max(...xs));
-    const dy = heldStep(action.y - from.y, Math.min(...ys), Math.max(...ys));
+    const { dx, dy } = groupStep(
+      members.map(([, p]) => p),
+      { x: action.x - from.x, y: action.y - from.y },
+    );
     for (const [id, p] of members) places.set(id, { ...p, x: p.x + dx, y: p.y + dy });
     return places;
   }
@@ -169,10 +174,13 @@ export function pendingPlaces(
         : null;
   if (joined === null) return places;
   const moving = placed(joined.moving)!;
-  places.set(joined.moving, {
-    ...moving,
-    ...touchingPlace(placed(joined.target)!, moving, joined.side),
-  });
+  const target = zoneTables.find((each) => each.id === joined.target)!;
+  const against = target.today!.placement!;
+  const members = mergeMembersOf(zoneTables, target).flatMap((each) =>
+    each.today?.placement == null ? [] : [each.today.placement],
+  );
+  const side = freeSide(against, moving, members, joined.side);
+  places.set(joined.moving, { ...moving, ...touchingPlace(against, moving, side) });
   return places;
 }
 
@@ -200,8 +208,8 @@ export function spareSpot(zoneTables: readonly TableState[]): { x: number; y: nu
   );
   if (crop === null) return { x: 0, y: 0 };
   return {
-    x: clampToGrid(crop.x + crop.width / 2 - SPARE_SIZE / 2),
-    y: clampToGrid(crop.y + crop.height / 2 - SPARE_SIZE / 2),
+    x: clampToGrid(crop.x + crop.width / 2 - NEW_TABLE_SIZE / 2),
+    y: clampToGrid(crop.y + crop.height / 2 - NEW_TABLE_SIZE / 2),
   };
 }
 
