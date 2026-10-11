@@ -295,7 +295,9 @@ describe("reading Hours", () => {
     async ({ at, businessDay }) => {
       vi.useFakeTimers({ toFake: ["Date"] });
       vi.setSystemTime(new Date(at));
-      onTestFinished(() => vi.useRealTimers());
+      onTestFinished(() => {
+        vi.useRealTimers();
+      });
       const fx = await fixture();
       const party = await createDate(
         fx,
