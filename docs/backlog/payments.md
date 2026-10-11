@@ -177,9 +177,8 @@ their full text.
   answers `reader.unpair_failed` and leaves the reader switched off: a rejected key is found only
   when Delete is pressed, because the impact read calls no provider, so the confirmation could not
   say so beforehand; disconnecting and connecting again with a working key fixes it (Disconnect
-  needs every SumUp reader switched off first), and the delete then unpairs; and today's code does
-  not tell a rejected key from an outage (backlog: "A failed SumUp unpair is logged with reason
-  `unknown`"). Plan: `docs/superpowers/plans/2026-10-10-a435-3b-reader-delete-disconnected.md`.
+  needs every SumUp reader switched off first), and the delete then unpairs; and a rejected key and
+  an outage answer alike, told apart only in the log (`reader.unpair_failed`'s `logReason`). Plan: `docs/superpowers/plans/2026-10-10-a435-3b-reader-delete-disconnected.md`.
 
 - **SumUp's card-present price is a plan choice, not a rate** (owner supplied the table, 2026-09-18).
   Tarifa Plana (€25/month, 0 % up to €2 500/month of Spanish debit/credit, then 0,79 %) is the plan to
