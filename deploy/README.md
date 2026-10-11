@@ -196,15 +196,17 @@ changed. A start checks them too: it first puts back any that are missing from a
 there, then refuses to start if one is still missing or has changed. Find out what changed a trigger
 before you go on.
 
-The page names the triggers, in two lists. `missing` holds the ones that were not there, and
-`altered` the ones whose text is not the text Waitron writes. Where they appear depends on when
-Waitron noticed:
+The page names the triggers in two lists: `missing`, the ones that were not there, and `altered`,
+the ones whose text is not the text Waitron writes. Where they appear depends on when Waitron
+noticed:
 
 - When a start was refused, they are under "Why the last start failed", on the line that begins
   `params:`.
-- When Waitron stopped while it was trading, the page says "Stopped while running." instead of a
-  count of failed starts, and has no "Why the last start failed" section. The names are in the log
-  tail, on the line whose `event` is `append_only.triggers_changed`.
+- When Waitron stopped while it was trading, the page is headed "Waitron stopped", says "Stopped
+  while running." instead of a count of failed starts, and has no "Why the last start failed"
+  section. Just below "Stopped while running.", `missing` is the line that begins "Missing
+  triggers:" and `altered` the line that begins "Changed triggers:", their names separated by
+  commas. A list with no names has no line.
 
 A trigger in `missing` whose table is still there needs nothing from you. Press Retry, and the start
 that follows puts it back and carries on trading. That start also shows a warning,

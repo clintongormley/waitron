@@ -295,7 +295,8 @@ describe("a refusal while running", () => {
   const at = new Date("2026-10-11T10:00:00Z");
   const code = "append_only.triggers_changed";
   const once = afterFailure(FRESH, "x", new Date("2026-10-10T10:00:00Z"));
-  const refused = refusedWhileRunning(once, code, at);
+  const triggers = { missing: ["sales_append_only_delete"], altered: ["sales_append_only_update"] };
+  const refused = refusedWhileRunning(once, code, at, triggers);
 
   it("keeps the count, records the code and time, and is at recovery", () => {
     expect(refused).toStrictEqual({
@@ -305,7 +306,40 @@ describe("a refusal while running", () => {
       lastFailureAt: at.toISOString(),
       clears: 0,
       refused: true,
+      refusedTriggers: triggers,
     });
+  });
+
+  it("replaces the trigger names a refusal recorded before", () => {
+    const again = refusedWhileRunning(refused, code, at, { missing: ["x"], altered: [] });
+    expect(again.refusedTriggers).toStrictEqual({ missing: ["x"], altered: [] });
+  });
+
+  it.each([
+    ["no refusal", { failures: 1, refusedTriggers: { missing: ["a"], altered: [] } }],
+    [
+      "a member that is not a list",
+      { failures: 1, refused: true, refusedTriggers: { missing: "a", altered: [] } },
+    ],
+    [
+      "a member holding a non-string",
+      { failures: 1, refused: true, refusedTriggers: { missing: [], altered: [1] } },
+    ],
+    ["a missing member", { failures: 1, refused: true, refusedTriggers: { missing: [] } }],
+    ["names that are not an object", { failures: 1, refused: true, refusedTriggers: null }],
+  ])("reads back no trigger names for %s", async (_what, file) => {
+    const dir = await mkdtemp(join(tmpdir(), "wt-rec-"));
+    await writeFile(join(dir, "recovery.json"), JSON.stringify(file));
+    expect((await readRecoveryState(dir)).refusedTriggers).toBeUndefined();
+  });
+
+  it("reads back only the two lists of names", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "wt-rec-"));
+    await writeFile(
+      join(dir, "recovery.json"),
+      JSON.stringify({ ...refused, refusedTriggers: { ...triggers, extra: "<b>" } }),
+    );
+    expect((await readRecoveryState(dir)).refusedTriggers).toStrictEqual(triggers);
   });
 
   it("is read back refused, at recovery", async () => {
@@ -328,7 +362,7 @@ describe("a refusal while running", () => {
 
   it("stays at recovery when an attempt takes its failure back", () => {
     const wrote = afterFailure(once, "server.boot_incomplete", at);
-    const later = refusedWhileRunning(wrote, code, at);
+    const later = refusedWhileRunning(wrote, code, at, triggers);
     expect(withoutAttempt(later, once, wrote)).toStrictEqual({
       ...later,
       failures: 1,
@@ -342,6 +376,16 @@ describe("a refusal while running", () => {
     expect(withoutAttempt(flagged, once, wrote)).toStrictEqual({
       ...flagged,
       failures: 1,
+      level: "recovery",
+    });
+  });
+
+  it("treats different trigger names as a change since the attempt", () => {
+    const wrote = refusedWhileRunning(once, code, at, triggers);
+    const changed = refusedWhileRunning(once, code, at, { missing: [], altered: ["other"] });
+    expect(withoutAttempt(changed, once, wrote)).toStrictEqual({
+      ...changed,
+      failures: 0,
       level: "recovery",
     });
   });
@@ -360,6 +404,7 @@ describe("a refusal while running", () => {
       lastFailureAt: later.toISOString(),
       clears: 0,
       refused: true,
+      refusedTriggers: triggers,
     });
     expect(withFailureCode(refused, "provisioning.database_in_use", later)).toStrictEqual({
       failures: 1,
@@ -368,6 +413,7 @@ describe("a refusal while running", () => {
       lastFailureAt: later.toISOString(),
       clears: 0,
       refused: true,
+      refusedTriggers: triggers,
     });
   });
 });

@@ -51,6 +51,7 @@ describe("refuseTrading", () => {
       lastFailureAt: at.toISOString(),
       clears: 0,
       refused: true,
+      refusedTriggers: faults,
     };
     expect(calls).toEqual([
       ["log", "error", "append_only.triggers_changed", faults],
