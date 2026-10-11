@@ -2,7 +2,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { setImmediate as yieldTurn } from "node:timers/promises";
 import { eq, sql } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { devices, products, withTransaction } from "@waitron/db";
+import { devices, isUniqueViolation, products, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { jobOrigin } from "@waitron/shared";
 import { billRefundIsLive, resumeCardRefund } from "./bill-refunds.js";
@@ -452,3 +452,44 @@ it("recovers a pending reader-card refund after sign-out and deactivation withou
   expect(billRefundIsLive(suite.db, pending!.id)).toBe(false);
   expect(venue.card.refundCalls).toHaveLength(calls + 1);
 });
+
+it.each([null, "switched off", "signed out"] as const)(
+  "checks a forced cash conflict replay after revocation: %s",
+  async (change) => {
+    const request = await requestFor("counter sale");
+    const first = await send(venue.app, cookie, "POST", request.path, request.body);
+    expect(first.status).toBe(200);
+    const written = effects(request.id);
+    let conflict: unknown;
+    try {
+      await suite.db.execute(
+        sql`insert into devices select * from devices where id = ${venue.deviceId}`,
+      );
+    } catch (error) {
+      conflict = error;
+    }
+    expect(isUniqueViolation(conflict)).toBe(true);
+    expect(effects(request.id)).toEqual(written);
+    const pending = await pausedRequest(request);
+    const write = suite.db.withWriteLock.bind(suite.db);
+    let collided = false;
+    const lock = vi.spyOn(suite.db, "withWriteLock").mockImplementationOnce(async (body) => {
+      await write(body);
+      collided = true;
+      lock.mockRestore();
+      if (change !== null) await revoke(change);
+      throw conflict;
+    });
+    try {
+      pending.release();
+      const answer = await (await pending.response).json();
+      expect(collided).toBe(true);
+      if (change === null) expect(answer).toEqual(first.json);
+      else expect(answer).toMatchObject({ error: { code: refusalFor(change) } });
+      expect(effects(request.id)).toEqual(written);
+    } finally {
+      lock.mockRestore();
+      pending.release();
+    }
+  },
+);

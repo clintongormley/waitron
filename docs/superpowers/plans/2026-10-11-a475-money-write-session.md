@@ -21,7 +21,7 @@ Use one HTTP race suite for all four paths. A controlled request-body read pause
 - Historical A471 probe, quoted from the payments detail: sale “sale written, invoice issued”; integrated pay “reader asked once, payment captured, sale written”; collect “invoice issued, order settled”; cash refund “refund completed”. Session-ended refund already answered `session.not_open` through `authorize`.
 - Implement only the request checks, required argument plumbing, small shared-body extractions and tests. No schema, fiscal algorithm, provider protocol, permission/profile redesign or UI changes; reuse `assertStillSignedIn` unchanged.
 - Preserve one transaction per existing atomic write, sequential awaited queries and the existing integrated preparation/reader/completion split. Keep PIN derivation outside the refund write lock.
-- Files: modify `apps/server/src/{till-sale,till-api,bill-refunds,payments-api}.ts`; add `apps/server/src/{till-sale,bill-refunds}.write-session.test.ts`; extend `apps/server/src/payments-api.stuck.test.ts` for trusted recovery. Touch existing business test imports/call targets only as needed; remove the completed entry from both backlog files at completion.
+- Files: modify `apps/server/src/{till-sale,till-api,bill-refunds,payments-api}.ts`; add `apps/server/src/till-money.write-session.test.ts`; extend `apps/server/src/payments-api.stuck.test.ts` for trusted recovery. Touch existing business test imports/call targets only as needed; remove the completed entry from both backlog files at completion.
 
 ## Interfaces and test contract
 
