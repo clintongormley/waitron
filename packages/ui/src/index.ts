@@ -126,6 +126,7 @@ export { WtCountBadge, type WtCountBadgeTone } from "./components/wt-count-badge
 export { WtChoiceRow } from "./components/wt-choice-row.js";
 export { WtToast, type WtToastTone } from "./components/wt-toast.js";
 export { WtNotice } from "./components/wt-notice.js";
+export { WtBanner } from "./components/wt-banner.js";
 export { WtLanguageChooser, type WtLocaleOption } from "./components/wt-language-chooser.js";
 
 export { ReorderController, type ReorderModel } from "./reorder-table.js";

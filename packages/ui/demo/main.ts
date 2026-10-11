@@ -35,6 +35,7 @@ import "../src/components/wt-floor-map.js";
 import "../src/components/wt-sheet.js";
 import "../src/components/wt-toast.js";
 import "../src/components/wt-notice.js";
+import "../src/components/wt-banner.js";
 import "../src/components/wt-relative-time.js";
 import "../src/components/wt-language-chooser.js";
 
@@ -85,6 +86,7 @@ const panel = (theme: "light" | "dark") => `
     </div>
     <wt-toast open message="2 new alerts" close-label="Close" duration="0"></wt-toast>
     <wt-toast open tone="error" message="The tax agency rejected an invoice record" close-label="Close" duration="0"></wt-toast>
+    <wt-banner message="Waitron was updated." action-label="Reload"></wt-banner>
     <p><wt-notice duration="0">Unpaired</wt-notice></p>
     <p>
       Updated
