@@ -99,6 +99,10 @@ export const ALERT_MESSAGES: Readonly<
     en: "The box could not update the locked copy of its own keys and settings that it keeps with your data. A box rebuilt from your bucket might come back with out-of-date keys and settings, or without them if none were ever saved. Sales continue. Contact support.",
     es: "El equipo no ha podido actualizar la copia cifrada de sus propias claves y ajustes que guarda junto con tus datos. Un equipo reconstruido desde tu bucket podría volver con claves y ajustes desactualizados, o sin ellos si nunca se llegaron a guardar. Las ventas continúan. Contacta con soporte.",
   },
+  "append_only.triggers_restored": {
+    en: "A record protection was missing at start and was put back.",
+    es: "Faltaba una protección de registros al arrancar y se ha restablecido.",
+  },
   "restore.first_start_failed": {
     en: "This box could not finish setting itself up after the restore. Sales continue, but it will not copy to a storage bucket until it does. Restart the box; if this message stays, contact support.",
     es: "Este equipo no ha podido terminar de configurarse después de la restauración. Las ventas continúan, pero no copiará a ningún bucket de almacenamiento hasta que lo consiga. Reinicia el equipo; si el mensaje sigue, contacta con soporte.",

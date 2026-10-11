@@ -1543,6 +1543,87 @@ describe("startServer, against a migrated venue directory", () => {
     }
   }, 60_000);
 
+  for (const [what, drop, raised] of [
+    ["raises append_only.triggers_restored when a start put back a dropped trigger", true, true],
+    ["raises no append_only.triggers_restored for an untouched venue", false, false],
+  ] as const) {
+    it(
+      what,
+      async () => {
+        const venue = await freshVenue();
+        const stateDir = await mkdtemp(join(tmpdir(), "waitron-boot-triggers-restored-"));
+        let server: StartedServer | undefined;
+        let close = async () => {};
+        try {
+          const db = venue.store.venue;
+          await seedTradingVenue(db);
+          const [admin] = await db
+            .insert(persons)
+            .values({
+              displayName: "Restored Trigger Admin",
+              pinHash: hashPin("1234"),
+              passwordHash: hashPassword("dashPass123"),
+              email: "restored-trigger-admin@example.test",
+              role: "admin",
+            })
+            .returning({ id: persons.id });
+          const session = await withTransaction(db, (tx) =>
+            startManagementSession(tx, { personId: admin!.id }),
+          );
+          await venue.store.close();
+          if (drop) {
+            const raw = new DatabaseSync(join(venue.directory, "venue.db"), { timeout: 5000 });
+            try {
+              raw.exec("drop trigger sales_append_only_delete");
+            } finally {
+              raw.close();
+            }
+          }
+          await writeFile(
+            join(stateDir, "modules.json"),
+            JSON.stringify({ modules: { "fiscal-none": false } }),
+          );
+          await ensureBoxSecrets({
+            stateDir,
+            hostnames: ["waitron.local", "localhost"],
+            now: () => new Date(),
+          });
+          const port = await freePort();
+          server = await startServer({
+            ...KEY_ENV,
+            WAITRON_STATE_DIR: stateDir,
+            WAITRON_VENUE_DIR: venue.directory,
+            WAITRON_HTTP_PORT: String(port),
+            WAITRON_MIGRATIONS_DIR: migrationsRoot,
+            WAITRON_ENV: "preproduction",
+          });
+          const https = httpsVia(await readFile(join(stateDir, "tls", "ca.crt")));
+          close = https.close;
+          await (await fetchHealthOk(`https://127.0.0.1:${port}/health`, https.via)).body?.cancel();
+          const response = await fetch(`https://127.0.0.1:${port}/management-api/alerts`, {
+            ...https.via,
+            headers: { cookie: `${MANAGEMENT_COOKIE}=${session.token}` },
+          });
+          expect(response.status).toBe(200);
+          const body = (await response.json()) as { alerts: { code: string; severity: string }[] };
+          const restored = body.alerts.filter(
+            (alert) => alert.code === "append_only.triggers_restored",
+          );
+          expect(restored).toEqual(
+            raised ? [expect.objectContaining({ severity: "warning" })] : [],
+          );
+        } finally {
+          await server?.close();
+          await close();
+          await venue.store.close();
+          await rm(venue.directory, { recursive: true, force: true });
+          await rm(stateDir, { recursive: true, force: true });
+        }
+      },
+      60_000,
+    );
+  }
+
   // The only suite that observes boot's own wiring of the advertised addresses
   // (`box-secrets.test.ts` injects its own `listIpv4`): the override must reach both the leaf on disk
   // and `mountDiscovery`'s deps.

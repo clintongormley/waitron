@@ -264,14 +264,16 @@ async function bindAndRelease(port: number): Promise<void> {
   await new Promise<void>((resolve) => probe.close(() => resolve()));
 }
 
-/** The `event` of every line boot logs to stdout while `fn` runs; each chunk still reaches stdout. */
-async function withLoggedEvents(fn: () => Promise<void>): Promise<string[]> {
+/** Every line boot logs to stdout while `fn` runs, parsed; each chunk still reaches stdout. */
+async function withLoggedLines(
+  fn: () => Promise<void>,
+): Promise<{ event: string; [field: string]: unknown }[]> {
   const original = process.stdout.write.bind(process.stdout);
-  const events: string[] = [];
+  const lines: { event: string; [field: string]: unknown }[] = [];
   process.stdout.write = ((chunk: unknown, ...rest: unknown[]) => {
     for (const line of String(chunk).split("\n").filter(Boolean)) {
       try {
-        events.push((JSON.parse(line) as { event: string }).event);
+        lines.push(JSON.parse(line) as { event: string });
       } catch {
         // Not a log line.
       }
@@ -283,7 +285,12 @@ async function withLoggedEvents(fn: () => Promise<void>): Promise<string[]> {
   } finally {
     process.stdout.write = original;
   }
-  return events;
+  return lines;
+}
+
+/** The `event` of every line boot logs to stdout while `fn` runs. */
+async function withLoggedEvents(fn: () => Promise<void>): Promise<string[]> {
+  return (await withLoggedLines(fn)).map((line) => line.event);
 }
 
 /**
@@ -674,25 +681,31 @@ describe("append-only triggers at boot", () => {
     const env = await tradingEnv(venueDir, state);
     // The box's own self-signed leaf: what is under test is that the start was not refused.
     const dispatcher = new Agent({ connect: { rejectUnauthorized: false } });
+    let events: string[];
     try {
-      const server = await startServer(env);
-      try {
-        const response = await vi.waitFor(
-          () =>
-            fetch(`https://127.0.0.1:${env.WAITRON_HTTP_PORT}/health`, {
-              dispatcher,
-            } as RequestInit),
-          { timeout: 10_000 },
-        );
-        await response.body?.cancel();
-        expect([200, 503]).toContain(response.status);
-      } finally {
-        await server.close();
-      }
+      events = await withLoggedEvents(async () => {
+        const server = await startServer(env);
+        try {
+          const response = await vi.waitFor(
+            () =>
+              fetch(`https://127.0.0.1:${env.WAITRON_HTTP_PORT}/health`, {
+                dispatcher,
+              } as RequestInit),
+            { timeout: 10_000 },
+          );
+          await response.body?.cancel();
+          expect([200, 503]).toContain(response.status);
+        } finally {
+          await server.close();
+        }
+      });
     } finally {
       await dispatcher.close();
     }
     expect(readVenueHolder(venueDir)).toBeNull();
+    // The control: the start's own lines were captured.
+    expect(events).toContain("stream.stopped");
+    expect(events).not.toContain("append_only.triggers_restored");
   }, 60_000);
 
   it("a trigger dropped while the box was off is put back and the start goes on", async () => {
@@ -706,13 +719,18 @@ describe("append-only triggers at boot", () => {
     });
 
     const env = await tradingEnv(venueDir, state);
-    const server = await startServer(env);
-    try {
-      await listening(Number(env.WAITRON_HTTP_PORT));
-    } finally {
-      await server.close();
-    }
+    const lines = await withLoggedLines(async () => {
+      const server = await startServer(env);
+      try {
+        await listening(Number(env.WAITRON_HTTP_PORT));
+      } finally {
+        await server.close();
+      }
+    });
     expect(await triggerFaults(venueDir, ["sales"])).toEqual({ missing: [], altered: [] });
+    expect(lines.filter((line) => line.event === "append_only.triggers_restored")).toEqual([
+      expect.objectContaining({ level: "warn", triggers: ["sales_append_only_delete"] }),
+    ]);
   }, 60_000);
 });
 

@@ -1,4 +1,5 @@
-import type { Database } from "@waitron/db";
+import { sql } from "drizzle-orm";
+import { openVenueDatabase, type Database } from "@waitron/db";
 import { codeOf } from "@waitron/server-kit";
 import { AppError } from "@waitron/shared";
 import { appendOnlyTriggerFaults } from "@waitron/store";
@@ -16,6 +17,32 @@ export function assertAppendOnlyIntact(db: Database, tables: readonly string[]):
   const { missing, altered } = appendOnlyTriggerFaults(db, tables);
   if (missing.length > 0 || altered.length > 0) {
     throw new AppError("append_only.triggers_changed", { missing, altered });
+  }
+}
+
+/**
+ * The append-only triggers of `tables` missing from `venueDir` before migrating, counting only
+ * tables that already exist: a table the migration is about to create has no trigger yet.
+ */
+export async function missingBeforeMigration(
+  venueDir: string,
+  tables: readonly string[],
+): Promise<string[]> {
+  const probe = await openVenueDatabase(venueDir);
+  try {
+    const existing = new Set(
+      probe.venue
+        .execute<{ name: string }>(
+          sql`select lower(name) as name from sqlite_master where type = 'table'`,
+        )
+        .rows.map((row) => row.name),
+    );
+    return appendOnlyTriggerFaults(
+      probe.venue,
+      tables.filter((table) => existing.has(table.toLowerCase())),
+    ).missing;
+  } finally {
+    await probe.close();
   }
 }
 

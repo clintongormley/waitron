@@ -1,6 +1,7 @@
 import {
   APPEND_ONLY_CHECK_MS,
   assertAppendOnlyIntact,
+  missingBeforeMigration,
   refuseTrading,
   startAppendOnlyWatch,
 } from "./append-only-watch.js";
@@ -98,6 +99,7 @@ import { mountDiagnosticsApi } from "./diagnostics-api.js";
 import { mountAlertsApi } from "./alerts-api.js";
 import { createAlertRegistry } from "./alerts.js";
 import {
+  appendOnlyRestoredAlertSource,
   awaitingCertAlertSource,
   backupAlertSource,
   sealedStateAlertSource,
@@ -817,6 +819,8 @@ async function bootServer(
     config.migrationsRoot,
   );
   const appendOnlyTables = migrationOptions.flatMap((set) => set.appendOnlyTables ?? []);
+  // A short-lived open, closed before `applyMigrations`, which puts any of these back.
+  const restoredTriggers = await missingBeforeMigration(config.venueDir, appendOnlyTables);
   await withDevMigrationHint(log, config.devMode, () =>
     applyMigrations(config.venueDir, migrationOptions),
   );
@@ -827,6 +831,14 @@ async function bootServer(
   const db = store.venue;
   // After migrating, which reinstalls a missing trigger but leaves a same-name altered one in place.
   assertAppendOnlyIntact(db, appendOnlyTables);
+  // Also after a crash between a set's migration and its trigger install, or the first start of a
+  // release that marks an existing table append-only, so it is a warning and not a refusal.
+  const appendOnlyRestored = {
+    restoredAt: restoredTriggers.length > 0 ? now().toISOString() : null,
+  };
+  if (restoredTriggers.length > 0) {
+    log("warn", "append_only.triggers_restored", { triggers: restoredTriggers });
+  }
 
   // Drift visibility: log the enabled set against what the database has actually migrated. A
   // soft-disabled module's data is kept; it is simply not migrated.
@@ -1771,6 +1783,7 @@ async function bootServer(
     backupSource,
     sealedStateAlertSource(sealedStateStatus),
     firstStartAlertSource(firstStart),
+    appendOnlyRestoredAlertSource(appendOnlyRestored),
     awaitingCertAlertSource(awaitingFiscalCert),
     authorityClockAlertSource(authorityClock.read),
     printingAlertSource(),

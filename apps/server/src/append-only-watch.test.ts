@@ -1,12 +1,18 @@
-import { mkdtemp } from "node:fs/promises";
+import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { DatabaseSync } from "node:sqlite";
 import { sql } from "drizzle-orm";
 import { afterEach, describe, expect, it } from "vitest";
 import { CORE_MIGRATIONS, type Database } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
+import { applyMigrations } from "@waitron/migrations";
 import { installAppendOnlyTriggers } from "@waitron/store";
-import { refuseTrading, startAppendOnlyWatch } from "./append-only-watch.js";
+import {
+  missingBeforeMigration,
+  refuseTrading,
+  startAppendOnlyWatch,
+} from "./append-only-watch.js";
 import type { Logger, LogLevel } from "./logger.js";
 import { withRecoveryLock } from "./recovery-lock.js";
 import {
@@ -168,5 +174,39 @@ describe("startAppendOnlyWatch", () => {
       { level: "warn", event: "append_only.check_failed", fields: { errorCode: "unknown" } },
     ]);
     expect(w.armed).toHaveLength(2);
+  });
+});
+
+describe("missingBeforeMigration", () => {
+  const dirs: string[] = [];
+  afterEach(async () => {
+    for (const dir of dirs.splice(0)) await rm(dir, { recursive: true, force: true });
+  });
+
+  /** A fresh folder, migrated with the core set unless `migrate` is false. */
+  async function venueDir(migrate = true): Promise<string> {
+    const dir = await mkdtemp(join(tmpdir(), "wt-before-migration-"));
+    dirs.push(dir);
+    if (migrate) await applyMigrations(dir, [CORE_MIGRATIONS]);
+    return dir;
+  }
+
+  it("reports nothing for a folder with no tables yet", async () => {
+    expect(await missingBeforeMigration(await venueDir(false), ["sales"])).toEqual([]);
+  });
+
+  it("reports nothing for a migrated folder whose triggers are intact", async () => {
+    expect(await missingBeforeMigration(await venueDir(), ["sales"])).toEqual([]);
+  });
+
+  it("names a trigger dropped from a table that exists", async () => {
+    const dir = await venueDir();
+    const raw = new DatabaseSync(join(dir, "venue.db"), { timeout: 5000 });
+    try {
+      raw.exec(`drop trigger "${DELETE}"`);
+    } finally {
+      raw.close();
+    }
+    expect(await missingBeforeMigration(dir, ["sales"])).toEqual([DELETE]);
   });
 });
