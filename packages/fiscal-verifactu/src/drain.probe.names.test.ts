@@ -135,4 +135,29 @@ describe("hourly probes after a taxpayer-name change", () => {
     await advance(wire, 2);
     expect(sent.flatMap((batch) => batch.records.map((record) => record.id))).toContain(first);
   });
+
+  it("sends the earliest-generated probe's taxpayer name first", async () => {
+    const { aeat, seeded, first } = await held(NEW);
+    const other = await seedPinnedChain(suite.db, seeded, {
+      sifId: PINNED,
+      firstSecuencia: 100,
+      rows: Array.from({ length: 3 }, () => ({
+        nombreRazonEmisor: OLD,
+        generadoEn: "2026-07-20T18:10:00.000Z",
+      })),
+    });
+    for (const key of other.chain.facturaKeys) aeat.reject(key, 1100, "Rechazo");
+    await drain(deps(aeat.client()), new Date("2026-07-21T00:02:05Z"));
+    const older = await appendPendingAlta(suite.db, other.chain, 103, {
+      nombreRazonEmisor: OLD,
+      generadoEn: "2026-07-20T18:15:00.000Z",
+    });
+    await drain(deps(aeat.client()), new Date("2026-07-21T00:02:10Z"));
+    const { wire, sent } = capture(aeat.client());
+    await advance(wire, 1000, new Date("2026-07-21T01:02:10Z"));
+    expect(sent).toEqual([
+      { name: OLD, records: [{ name: OLD, id: older.registroId }] },
+      { name: NEW, records: [{ name: NEW, id: first }] },
+    ]);
+  });
 });

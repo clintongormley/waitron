@@ -71,6 +71,13 @@ describe("the dashboard's open alerts across an hourly probe of a chain stopped 
     expect(after.map((a) => a.key).sort()).toEqual(before.map((a) => a.key).sort());
   });
 
+  it("shows the latest same-code refusal time under the existing repeated-refusals key", async () => {
+    const { sifId, before, after } = await refusedProbe(RUN_CODE);
+    const key = `fiscal.refusals_repeated:${sifId}`;
+    expect(before.find((alert) => alert.key === key)?.since).toBe("2026-07-21T00:01:00.000Z");
+    expect(after.find((alert) => alert.key === key)?.since).toBe("2026-07-21T01:02:00.000Z");
+  });
+
   it("show the refusal's incident as a new key when the probe is refused with another code", async () => {
     const { before, after } = await refusedProbe(1200);
 
