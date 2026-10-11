@@ -40,9 +40,9 @@ export type DashboardRequest = <T>(
  * resolves to `undefined`, keyed off the empty body, not the status. A GET other than a blob download
  * is aborted after its time limit and fails as `connection.timed_out`, while a fetch that fails on
  * its own fails as `connection.failed`; it is aborted rather than only abandoned, so it does not keep
- * holding one of the browser's connections to the box. `onError` hears every failure's code, plus the
- * HTTP status when the box answered; a connection failure or time-out passes the code alone. This
- * primitive does NOT redirect on 401 — it only decodes and throws the code.
+ * holding one of the browser's connections to the box. `onError` hears each non-2xx answer's code
+ * with its HTTP status, and a failed or timed-out connection's code alone. This primitive does NOT
+ * redirect on 401 — it only decodes and throws the code.
  */
 export function createRequest(
   opts: {

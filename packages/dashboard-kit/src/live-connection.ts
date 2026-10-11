@@ -79,7 +79,8 @@ export class LiveConnection {
         // EventSource retries transport interruptions itself, but HTTP failures can leave it CLOSED.
         if (stream.readyState !== 2) {
           // Chromium fires `error` on every one of its own retries (about every 3 s while the box is
-          // down), so only the first since the stream last opened re-reads everything.
+          // down), so only the first since a stream last opened, or the connection started, re-reads
+          // everything.
           if (this.#refreshedSinceOpen) return;
           this.#refreshedSinceOpen = true;
           this.data.refresh();
