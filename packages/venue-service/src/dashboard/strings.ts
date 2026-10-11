@@ -728,6 +728,7 @@ const en = {
     "No default prep station is active. Choose one so items with no other setting have a station to go to.",
   "routing.refusal_at": "{row}, {zone}: {message}",
   "routing.preview_change": "{row}, {zone}: this changes {from} to {to}.",
+  "routing.preview_value_lines": "{station} ({lines})",
   "routing.target_unavailable":
     "This row or zone is no longer in the grid. Cancel, then choose again.",
   "routing.dropped_zone": "Your choice was not saved: its zone is no longer in the grid.",
@@ -1504,6 +1505,7 @@ const es: Record<keyof typeof en, string> = {
     "Ninguna estación de preparación predeterminada está activa. Elige una para que los artículos sin otro ajuste tengan una estación a la que ir.",
   "routing.refusal_at": "{row}, {zone}: {message}",
   "routing.preview_change": "{row}, {zone}: esto cambia {from} por {to}.",
+  "routing.preview_value_lines": "{station} ({lines})",
   "routing.target_unavailable":
     "Esta fila o zona ya no está en la cuadrícula. Cancela y vuelve a elegir.",
   "routing.dropped_zone": "Tu elección no se ha guardado: su zona ya no está en la cuadrícula.",

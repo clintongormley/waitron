@@ -1,5 +1,5 @@
 import { DragEdgeScroll } from "@waitron/ui/src/drag-edge-scroll.js";
-import { QueryController, codeOf } from "@waitron/dashboard-kit";
+import { QueryController, codeOf, currentLocale } from "@waitron/dashboard-kit";
 import { LitElement, css, html, nothing, type PropertyValues } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import {
@@ -32,7 +32,6 @@ import "@waitron/ui/src/components/wt-switch.js";
 import {
   cellKey,
   selectRoutingCell,
-  selectionRulesFromModel,
   targetKey,
   type CellAddress,
   type RouteTarget,
@@ -49,7 +48,12 @@ import type {
   StationInput,
 } from "./routing-client.js";
 import "./routing-grid.js";
-import { rowInModel } from "./routing-grid-model.js";
+import {
+  cellPeriodLines,
+  routingLookups,
+  rowInModel,
+  type CellPeriodLines,
+} from "./routing-grid-model.js";
 import type {
   RoutingCellChange,
   RoutingDefaultRefusal,
@@ -453,20 +457,6 @@ export class PrepStationsScreen extends LitElement {
       }
     }
   }
-  #path(id: string): string {
-    const byId = new Map(this.view?.categories.map((c) => [c.id, c]));
-    const names: string[] = [];
-    const seen = new Set<string>();
-    let current: string | null = id;
-    while (current && !seen.has(current)) {
-      seen.add(current);
-      const row = byId.get(current);
-      if (!row) break;
-      names.unshift(row.name);
-      current = row.parentId;
-    }
-    return names.join(" › ") || id;
-  }
   #stationName(id: string): string {
     return (
       this.view?.routing.stations.find((s) => s.id === id)?.name ??
@@ -569,7 +559,7 @@ export class PrepStationsScreen extends LitElement {
       isCurrent,
     );
   }
-  /** A choice that moves nothing is saved at once; otherwise its preview asks first. */
+  /** A product's own choice, or one that moves nothing, is saved at once; otherwise its preview asks first. */
   async #preview(change: RoutingChange, save: () => Promise<unknown>, isCurrent: () => boolean) {
     this.busy = true;
     this.#showError("");
@@ -585,7 +575,7 @@ export class PrepStationsScreen extends LitElement {
     if (!isCurrent()) return;
     this.busy = false;
     const pending = { change, moves, save, isCurrent };
-    if (moves.length > 0) this.pending = pending;
+    if (moves.length > 0 && change.address.row.kind !== "product") this.pending = pending;
     else if (this.#addressShown(change.address)) await this.#saveCell(pending);
     else this.#dropChoice(change.address);
   }
@@ -1240,14 +1230,28 @@ export class PrepStationsScreen extends LitElement {
       >`,
     );
   }
-  #selection: { model: RoutingModel; rules: RoutingSelectionRules } | undefined;
-  /** "Drinks, Terrace: this changes Bar to Kitchen." — what the cell resolves to before and after. */
+  #sentenceLookups:
+    | {
+        model: RoutingModel;
+        locale: string;
+        rules: RoutingSelectionRules;
+        lines: ReturnType<typeof cellPeriodLines>;
+      }
+    | undefined;
+  /** "Drinks, Terrace: this changes Bar to Kitchen (Lunch: Bar)." — the cell before and after. */
   #cellSentence(change: RoutingChange): string {
     const model = this.view!.routing;
-    if (this.#selection?.model !== model) {
-      this.#selection = { model, rules: selectionRulesFromModel(model) };
+    const locale = currentLocale();
+    if (this.#sentenceLookups?.model !== model || this.#sentenceLookups.locale !== locale) {
+      const lookups = routingLookups(model);
+      this.#sentenceLookups = {
+        model,
+        locale,
+        rules: lookups.rules,
+        lines: cellPeriodLines(model, (target) => this.#targetName(target), lookups),
+      };
     }
-    const { rules } = this.#selection;
+    const { rules, lines } = this.#sentenceLookups;
     const { row, zoneId } = change.address;
     const product =
       row.kind === "product" ? model.products.find((p) => p.id === row.productId) : undefined;
@@ -1255,8 +1259,16 @@ export class PrepStationsScreen extends LitElement {
     const before = selectRoutingCell(rules, row, zoneId, categoryId).target;
     const after =
       change.target ?? selectRoutingCell(rules, row, zoneId, categoryId, { skipOwn: true }).target;
-    const name = (target: RouteTarget | null) =>
-      target === null ? t("routing.no_station") : this.#targetName(target);
+    const stored = model.cells.find((cell) => sameAddress(cell, change.address))?.periods ?? [];
+    const value = (target: RouteTarget | null, { lines }: CellPeriodLines) => {
+      const station = target === null ? t("routing.no_station") : this.#targetName(target);
+      return lines.length === 0
+        ? station
+        : format("routing.preview_value_lines", {
+            station,
+            lines: lines.map((line) => line.text).join("; "),
+          });
+    };
     return format("routing.preview_change", {
       row:
         row.kind === "all"
@@ -1264,17 +1276,17 @@ export class PrepStationsScreen extends LitElement {
           : row.kind === "no_category"
             ? t("routing.no_category")
             : row.kind === "category"
-              ? this.#path(row.categoryId)
-              : [
-                  categoryId === null ? "" : `${this.#path(categoryId)} › `,
-                  product?.name ?? row.productId,
-                ].join(""),
+              ? (model.categories.find((c) => c.id === row.categoryId)?.name ?? row.categoryId)
+              : (product?.name ?? row.productId),
       zone:
         zoneId === null
           ? t("routing.every_zone")
           : (model.zones.find((zone) => zone.id === zoneId)?.name ?? zoneId),
-      from: name(before),
-      to: name(after),
+      from: value(before, lines(row, zoneId)),
+      to: value(
+        after,
+        lines(row, zoneId, { target: change.target, periods: change.periods ?? stored }),
+      ),
     });
   }
   /** The moved product, its dish for an extra, and the periods during which it moves. */

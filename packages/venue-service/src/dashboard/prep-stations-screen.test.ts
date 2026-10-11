@@ -3148,6 +3148,61 @@ describe("Routing grid", () => {
     expect(q(el, '[data-test="routing-preview"]')).toBeNull();
   });
 
+  it("a product row's choice that moves products saves at once, without the notice", async () => {
+    const { a, el } = await mountGrid({ preview: vi.fn().mockResolvedValue([breadMove]) });
+    const water = { row: { kind: "product", productId: "water" }, zoneId: null };
+    await chooseCell(el, "p:water", "every", "Kitchen");
+    await vi.waitFor(() => expect(a.setCell).toHaveBeenCalledExactlyOnceWith(water, kitchenTarget));
+    expect(a.preview).toHaveBeenCalledExactlyOnceWith({
+      kind: "cell",
+      address: water,
+      target: kitchenTarget,
+    });
+    expect(q(el, '[data-test="routing-preview"]')).toBeNull();
+  });
+
+  it("a preview refused on a product row shows beside its cell and writes nothing", async () => {
+    const { a, el } = await mountGrid({
+      preview: vi.fn().mockRejectedValue({ code: "route.station_inactive" }),
+    });
+    await chooseCell(el, "p:water", "every", "Kitchen");
+    await gridOf(el).updateComplete;
+    await vi.waitFor(() =>
+      expect(cellCombo(el, "p:water", "every").error).toBe(
+        "This station is disabled. Choose an active station.",
+      ),
+    );
+    expect(q(el, '[data-test="routing-preview"]')).toBeNull();
+    expect(a.setCell).not.toHaveBeenCalled();
+  });
+
+  it("a category row's choice that moves products still opens the notice", async () => {
+    const { a, el } = await mountGrid({ preview: vi.fn().mockResolvedValue([breadMove]) });
+    await chooseCell(el, "c:food", "every", "Kitchen");
+    expect(q(el, '[data-test="routing-preview"]')).not.toBeNull();
+    expect(a.setCell).not.toHaveBeenCalled();
+  });
+
+  it("the notice names a category under a parent by its own name", async () => {
+    const nested = gridView();
+    nested.routing.cells = [
+      ...nested.routing.cells,
+      {
+        row: { kind: "category", categoryId: "cocktails" },
+        zoneId: null,
+        target: { kind: "station", stationId: "bar" },
+      },
+    ];
+    const { el } = await mountGrid({
+      load: vi.fn().mockResolvedValue(nested),
+      preview: vi.fn().mockResolvedValue([breadMove]),
+    });
+    await chooseCell(el, "c:cocktails", "every", "Kitchen");
+    const text = q(el, '[data-test="routing-preview"]')!.textContent!;
+    expect(text).toContain("Cocktails, Every zone: this changes Bar to Kitchen.");
+    expect(text).not.toContain("Drinks ›");
+  });
+
   it("the preview lists each moved product with its old and new destinations, and No replacement for a dead end", async () => {
     setLocale("en");
     const { a, el } = await mountGrid({
@@ -3312,6 +3367,52 @@ describe("Routing grid", () => {
           .textContent!.replace(/\s+/g, " ")
           .trim(),
       ).toBe("Bread during Lunch (Dining), Lunch (Bar)");
+    });
+
+    it.each([
+      ["en", "Food, Every zone: this changes Bar to Bar (Lunch: Kitchen)."],
+      ["es", "Food, Todas las zonas: esto cambia Bar por Bar (Lunch: Kitchen)."],
+    ] as const)(
+      "the notice's first sentence names the lines a choice adds (%s)",
+      async (locale, sentence) => {
+        setLocale(locale);
+        const { el } = await mountGrid({
+          load: vi.fn().mockResolvedValue(timedView()),
+          preview: vi.fn().mockResolvedValue([breadMove]),
+        });
+        await saveLunchLine(el);
+        expect(q(el, '[data-test="routing-preview"]')!.textContent).toContain(sentence);
+      },
+    );
+
+    it("clearing a cell with stored lines names its lines and the inherited ones", async () => {
+      setLocale("en");
+      const lined = timedView();
+      lined.routing.cells = [
+        {
+          row: { kind: "category", categoryId: "drinks" },
+          zoneId: null,
+          target: { kind: "station", stationId: "bar" },
+          periods: [{ periodId: "lunch", target: { kind: "station", stationId: "kitchen" } }],
+        },
+        {
+          row: { kind: "category", categoryId: "cocktails" },
+          zoneId: null,
+          target: { kind: "station", stationId: "kitchen" },
+          periods: [
+            { periodId: "lunch", target: { kind: "station", stationId: "bar" } },
+            { periodId: "staff", target: { kind: "no_preparation" } },
+          ],
+        },
+      ];
+      const { el } = await mountGrid({
+        load: vi.fn().mockResolvedValue(lined),
+        preview: vi.fn().mockResolvedValue([breadMove]),
+      });
+      await chooseCell(el, "c:cocktails", "every", "Clear setting");
+      expect(q(el, '[data-test="routing-preview"]')!.textContent).toContain(
+        "Cocktails, Every zone: this changes Kitchen (Lunch: Bar; Staff lunch: No preparation) to Bar (Lunch: Kitchen).",
+      );
     });
 
     it("draws the waiting choice's lines in its cell while its preview is open", async () => {
