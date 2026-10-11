@@ -837,6 +837,39 @@ describe("a sale in a chosen receipt language prints its goods in the language t
     expectCatalanGoods(receipt!);
   });
 
+  it("prints the Catalan dish name, not the Spanish one also saved, when a two-language location's Spanish is chosen", async () => {
+    const v = await venueWith(suite.db, ["ca-ES", "es-ES"], BARCELONA);
+    const id = randomUUID();
+
+    const res = await v.app.request("/api/sales", {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie: v.till },
+      body: JSON.stringify({
+        workingOrderId: id,
+        lines: [{ menuItemId: v.menuItemId, quantity: "1" }],
+        tender: { method: "cash", amount: "5.00" },
+        receiptLanguage: "es-ES",
+      }),
+    });
+
+    expect(res.status).toBe(200);
+    expect(await saleRow(suite.db, id)).toEqual({
+      locale: "es-ES",
+      invoiceLocales: ["ca-ES", "es-ES"],
+    });
+    // The control: the line holds both names, so a lookup in Spanish would find the Spanish one.
+    expect(lineDescriptions(suite.db, id)).toEqual([
+      { "ca-ES": "CLIENT-CA Pa amb tomàquet", "es-ES": "CLIENT-ES Pan con tomate" },
+    ]);
+    const [receipt] = await takePrinted(suite.db);
+    for (const label of ["Fecha", "Efectivo", "Cambio"]) {
+      expect(startsWith(receipt!, label), label).toBe(true);
+    }
+    expect(startsWith(receipt!, "Data")).toBe(false);
+    expect(receipt!.some((line) => line.includes("CLIENT-CA Pa amb tomàquet"))).toBe(true);
+    expect(receipt!.some((line) => line.includes("CLIENT-ES"))).toBe(false);
+  });
+
   it("prints a Galician copy with the Catalan goods, and answers the names' language on a replay", async () => {
     const { v, goods } = await goodsVenue();
     const sale = await sellChosen(v, goods);

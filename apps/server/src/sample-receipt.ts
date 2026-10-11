@@ -12,7 +12,6 @@ const SAMPLE_QR = "https://example.invalid/waitron/sample-receipt";
 export function sampleSale(qrText: ReceiptQrText | undefined): ReceiptDocumentInput["result"] {
   return {
     locale: "es-ES",
-    namesLocale: "es-ES",
     orderLabel: "Mesa 6",
     orderNumber: 41,
     invoiceNumber: "MUESTRA/1",
