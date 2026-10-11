@@ -145,6 +145,7 @@ import type { LineExtras, OrderLinePatch, TicketState } from "./working-order.js
 import { listCourses, listStationsToday } from "./kitchen.js";
 import {
   finishTable,
+  holderOf,
   markTableCleared,
   memberTables,
   readPartyBills,
@@ -159,7 +160,6 @@ import { moveBill, moveWouldSend } from "./move-bill.js";
 import type { MoveBillOptions, MoveTarget, OtherPartyRead } from "./move-bill.js";
 import { joinTables, moveGuests, splitTable } from "./table-actions.js";
 import {
-  holderOf,
   joinMergeMembers,
   leaveMergesRestoring,
   mergeMembers,
@@ -184,6 +184,7 @@ import { RETAINED_COURSE } from "./retained-course.js";
 import { readDrafts, saveDraft, submitDraft, takeOverDraft } from "./order-drafts.js";
 import { availableStations, findDeadEnds, requireMakeAtStation } from "./dead-ends.js";
 import { ensureToday } from "./floor-today-store.js";
+import { refuseTakenOff } from "./floor-today-table.js";
 import type { SubmitDraftInput } from "./order-drafts.js";
 import { invalid } from "./bill-allocation.js";
 import { printSalePaymentSlip } from "./payment-slip-print.js";
@@ -212,7 +213,7 @@ import { requireBodyUuid, requireUuidParam } from "@waitron/server-kit";
 import { requestBill } from "./bill-request.js";
 import { mountAdjustmentsApi } from "./adjustments-api.js";
 import { mountDepartmentTransferApi } from "./department-transfer-api.js";
-import { mountFloorTodayApi } from "./floor-today-api.js";
+import { mountFloorTodayApi, whole } from "./floor-today-api.js";
 import { mountKeepOpenApi } from "./keep-open-api.js";
 import { mountStationTodayApi } from "./station-today-api.js";
 import { mountUnpaidDepartureApi } from "./unpaid-departure-api.js";
@@ -857,20 +858,14 @@ function requireMerge(value: unknown, tableId: string): JoinMerge | null {
   if (value === undefined) return null;
   if (typeof value !== "object" || value === null || Array.isArray(value)) throw invalid("merge");
   const { moving, target, side, seats } = value as Record<string, unknown>;
-  if (typeof moving !== "string" || !isUuid(moving)) throw invalid("merge");
-  if (typeof target !== "string" || !isUuid(target)) throw invalid("merge");
-  if (!JOIN_SIDES.includes(side as JoinSide)) throw invalid("merge");
-  if (
-    seats !== undefined &&
-    (typeof seats !== "number" || !Number.isInteger(seats) || seats < 1 || seats > 999)
-  ) {
-    throw invalid("merge");
-  }
+  const movingId = requireTargetTable(moving, "merge.moving");
+  const targetId = requireTargetTable(target, "merge.target");
+  if (!JOIN_SIDES.includes(side as JoinSide)) throw invalid("merge.side");
   const merge = {
-    moving: moving.toLowerCase(),
-    target: target.toLowerCase(),
+    moving: movingId,
+    target: targetId,
     side: side as JoinSide,
-    seats: seats ?? null,
+    seats: seats === undefined ? null : whole(seats, "merge.seats", 1, 999),
   };
   if ((merge.moving === tableId) === (merge.target === tableId)) throw invalid("merge");
   return merge;
@@ -2318,7 +2313,6 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
           ...withTableIds.map((tableId) => ({ tableId })),
         ]);
         const seated = await seatTable(tx, cfg, { tableId: id, guestCount, operatorId: personId });
-        if (withTableIds.length === 0) return seated;
         for (const otherId of withTableIds) {
           if ((await holderOf(tx, otherId)) === seated.partyId) continue;
           await joinTables(tx, sendCfg, seated.partyId, otherId, {
@@ -2329,6 +2323,9 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
           });
           await joinMergeMembers(tx, sendCfg, seated.partyId, otherId, personId);
         }
+        // After the writes, so a seat's and a join's own refusals answer first, as on the join route.
+        await refuseTakenOff(tx, [id, ...withTableIds]);
+        if (withTableIds.length === 0) return seated;
         return { ...seated, revision: await partyRevision(tx, seated.partyId) };
       });
       return c.json(result);
@@ -2423,6 +2420,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
           await checkZones(tx, deps.cfg, session, [{ partyId }, { tableId }]);
           const heldBefore = await memberTables(tx, partyId);
           const acted = await act(tx, sendCfg, partyId, tableId, command);
+          await refuseTakenOff(tx, [tableId]);
           if (path === "move") {
             // Only a party staying on part of its merge breaks it up; a merge left whole stays, free.
             const merged = await mergeMembers(tx, tableId);
@@ -3213,7 +3211,9 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
             "counter" in to && to.counter.zoneId !== null && { zoneId: to.counter.zoneId },
           ),
         ]);
-        return moveBill(tx, sendCfg, billId, to, command);
+        const moved = await moveBill(tx, sendCfg, billId, to, command);
+        if ("tableId" in to) await refuseTakenOff(tx, [to.tableId]);
+        return moved;
       });
       return c.json(result);
     }),

@@ -221,9 +221,6 @@ describe("a join that merges", () => {
       { moving: x, target: b, side: "left", seats: 8 },
       { moving: b, target: x, side: "left", seats: 8 },
       { moving: b, target: b, side: "left", seats: 8 },
-      { moving: b, target: a, side: "middle", seats: 8 },
-      { moving: b, target: a, side: "left", seats: 0 },
-      { moving: "nope", target: a, side: "left" },
       "b",
       null,
     ]) {
@@ -233,6 +230,35 @@ describe("a join that merges", () => {
       });
     }
     expect(await holders(a!, b!, x!)).toEqual([p, null, null]);
+    expect(await mergeOf(v, b!)).toBeNull();
+  });
+
+  it("names each malformed field of a merge, and joins nothing", async () => {
+    const { a, b } = await tables({ key: "a", x: 0 }, { key: "b", x: 20 });
+    const p = await seat(a!);
+    const body = { tableId: b, expectedPartyRevision: await revision(p), otherPartyId: null };
+    const invalid = (field: string) => ({
+      status: 400,
+      body: { error: { code: "management.request_invalid", params: { field } } },
+    });
+    const notFound = (tableId: string) => ({
+      status: 404,
+      body: { error: { code: "table.not_found", params: { tableId } } },
+    });
+
+    for (const [merge, answer] of [
+      [{ target: a, side: "left" }, invalid("merge.moving")],
+      [{ moving: b, side: "left" }, invalid("merge.target")],
+      [{ moving: "nope", target: a, side: "left" }, notFound("nope")],
+      [{ moving: b, target: 7, side: "left" }, notFound("7")],
+      [{ moving: b, target: a, side: "middle", seats: 8 }, invalid("merge.side")],
+      [{ moving: b, target: a, side: "left", seats: 0 }, invalid("merge.seats")],
+      [{ moving: b, target: a, side: "left", seats: 1.5 }, invalid("merge.seats")],
+      [{ moving: b, target: a, side: "left", seats: 1000 }, invalid("merge.seats")],
+    ] as const) {
+      expect(await refusal(join(p, { ...body, merge })), JSON.stringify(merge)).toEqual(answer);
+    }
+    expect(await holders(a!, b!)).toEqual([p, null]);
     expect(await mergeOf(v, b!)).toBeNull();
   });
 
@@ -256,6 +282,68 @@ describe("a join that merges", () => {
     expect(await holders(a!, b!)).toEqual([p, null]);
     expect(await place(b!)).toEqual({ x: 20, y: 0, rotation: 0 });
     expect(await mergeOf(v, b!)).toBeNull();
+  });
+});
+
+describe("a table taken off today", () => {
+  it("is refused to a join, and nobody takes it", async () => {
+    const { a, b } = await tables({ key: "a", x: 0 }, { key: "b", x: 20 });
+    const p = await seat(a!);
+    await ok(post(`/api/tables/${b}/today/take-off`, {}), 204);
+
+    expect(
+      await refusal(
+        join(p, { tableId: b, expectedPartyRevision: await revision(p), otherPartyId: null }),
+      ),
+    ).toEqual({
+      status: 409,
+      body: { error: { code: "table.taken_off", params: { tableId: b } } },
+    });
+    expect(await holders(a!, b!)).toEqual([p, null]);
+  });
+
+  it("is refused to a move, and the party stays where it was", async () => {
+    const { a, b } = await tables({ key: "a", x: 0 }, { key: "b", x: 20 });
+    const p = await seat(a!);
+    await ok(post(`/api/tables/${b}/today/take-off`, {}), 204);
+
+    expect(
+      await refusal(
+        post(`/api/parties/${p}/move`, {
+          toTableId: b,
+          expectedPartyRevision: await revision(p),
+          otherPartyId: null,
+        }),
+      ),
+    ).toEqual({
+      status: 409,
+      body: { error: { code: "table.taken_off", params: { tableId: b } } },
+    });
+    expect(await holders(a!, b!)).toEqual([p, null]);
+  });
+
+  it("is refused to a bill moved there, and no party starts on it", async () => {
+    const { a, b } = await tables({ key: "a", x: 0 }, { key: "b", x: 20 });
+    const { partyId: p, tabId } = (await ok(post(`/api/tables/${a}/seat`, { guestCount: 2 }))) as {
+      partyId: string;
+      tabId: string;
+    };
+    await ok(post(`/api/tables/${b}/today/take-off`, {}), 204);
+
+    expect(
+      await refusal(
+        post(`/api/bills/${tabId}/move`, {
+          to: { tableId: b },
+          expectedPartyRevision: await revision(p),
+          partyId: p,
+          otherPartyId: null,
+        }),
+      ),
+    ).toEqual({
+      status: 409,
+      body: { error: { code: "table.taken_off", params: { tableId: b } } },
+    });
+    expect(await holders(a!, b!)).toEqual([p, null]);
   });
 });
 

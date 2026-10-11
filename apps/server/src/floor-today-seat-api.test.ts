@@ -115,6 +115,53 @@ async function threeTables(fixed = false) {
   return { a: table.a!, b: table.b!, c: table.c! };
 }
 
+async function takeOff(tableId: string): Promise<void> {
+  const answer = await post(`/api/tables/${tableId}/today/take-off`, {});
+  expect(answer.status, await answer.clone().text()).toBe(204);
+}
+
+describe("seating at a table taken off today", () => {
+  it("refuses the table the path names, and seats nobody", async () => {
+    const { a } = await threeTables();
+    await takeOff(a);
+
+    expect(await refusal(post(`/api/tables/${a}/seat`, { guestCount: 2 }))).toEqual({
+      status: 409,
+      body: { error: { code: "table.taken_off", params: { tableId: a } } },
+    });
+    expect(await heldRows(a)).toBe(0);
+  });
+
+  it("refuses one of the other tables, and seats nobody", async () => {
+    const { a, b } = await threeTables();
+    await takeOff(b);
+
+    expect(
+      await refusal(post(`/api/tables/${a}/seat`, { guestCount: 2, withTableIds: [b] })),
+    ).toEqual({
+      status: 409,
+      body: { error: { code: "table.taken_off", params: { tableId: b } } },
+    });
+    expect(await heldRows(a)).toBe(0);
+    expect(await heldRows(b)).toBe(0);
+  });
+
+  it("names the first taken-off table in the order sent", async () => {
+    const { a, b, c } = await threeTables();
+    // Sent larger id first, so the order sent and the order by id disagree.
+    const [lo, hi] = [b, c].sort();
+    await takeOff(lo!);
+    await takeOff(hi!);
+
+    expect(
+      await refusal(post(`/api/tables/${a}/seat`, { guestCount: 2, withTableIds: [hi, lo] })),
+    ).toEqual({
+      status: 409,
+      body: { error: { code: "table.taken_off", params: { tableId: hi } } },
+    });
+  });
+});
+
 describe("seating at a merge", () => {
   it("seats a party at every table of a free merge", async () => {
     const { a, b, c } = await threeTables();

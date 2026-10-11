@@ -23,7 +23,7 @@ import { requireSession } from "./till-session.js";
 import { checkZones } from "./zone-access.js";
 import "./errors.js";
 
-function whole(value: unknown, field: string, low: number, high: number): number {
+export function whole(value: unknown, field: string, low: number, high: number): number {
   if (typeof value !== "number" || !Number.isInteger(value) || value < low || value > high)
     throw invalid(field);
   return value;
@@ -38,9 +38,11 @@ async function seatsOf(c: Context): Promise<number> {
   return whole(asObject(await readRawJsonBody<unknown>(c)).seats, "seats", 1, 999);
 }
 
-type TableWrite = (tx: Transaction, tableId: string) => Promise<void>;
 /** A write and the other tables its zone check covers. */
-type TablesWrite = { write: TableWrite; others: readonly string[] };
+interface TableWrite {
+  write: (tx: Transaction, tableId: string) => Promise<void>;
+  others?: readonly string[];
+}
 
 async function mergeBody(
   c: Context,
@@ -64,10 +66,7 @@ export function mountFloorTodayApi(app: Hono, deps: TillApiDeps, log: Logger, ru
 
   const tableRoute = (
     change: string,
-    read: (
-      c: Context,
-      tableId: string,
-    ) => TableWrite | TablesWrite | Promise<TableWrite | TablesWrite>,
+    read: (c: Context, tableId: string) => TableWrite | Promise<TableWrite>,
   ) =>
     app.post(`/api/tables/:id/today/${change}`, (c) =>
       run(c, log, async () => {
@@ -75,9 +74,7 @@ export function mountFloorTodayApi(app: Hono, deps: TillApiDeps, log: Logger, ru
         const id = c.req.param("id");
         if (!isUuid(id)) throw new AppError("table.not_found", { tableId: id });
         const tableId = id.toLowerCase();
-        const parsed = await read(c, tableId);
-        const { write, others } =
-          typeof parsed === "function" ? { write: parsed, others: [] } : parsed;
+        const { write, others = [] } = await read(c, tableId);
         await withTransaction(deps.db, async (tx) => {
           await checkZones(tx, deps.cfg, session, [
             { tableId },
@@ -92,20 +89,20 @@ export function mountFloorTodayApi(app: Hono, deps: TillApiDeps, log: Logger, ru
 
   tableRoute("move", async (c) => {
     const at = await corner(c);
-    return (tx, tableId) => moveToday(tx, deps.cfg, tableId, at);
+    return { write: (tx, tableId) => moveToday(tx, deps.cfg, tableId, at) };
   });
-  tableRoute("rotate", () => (tx, tableId) => rotateToday(tx, deps.cfg, tableId));
-  tableRoute("take-off", () => (tx, tableId) => takeOffToday(tx, deps.cfg, tableId));
-  tableRoute("put-back", () => (tx, tableId) => putBackToday(tx, deps.cfg, tableId));
+  tableRoute("rotate", () => ({ write: (tx, tableId) => rotateToday(tx, deps.cfg, tableId) }));
+  tableRoute("take-off", () => ({ write: (tx, tableId) => takeOffToday(tx, deps.cfg, tableId) }));
+  tableRoute("put-back", () => ({ write: (tx, tableId) => putBackToday(tx, deps.cfg, tableId) }));
   tableRoute("place", async (c) => {
     const at = await corner(c);
-    return (tx, tableId) => placeSpareToday(tx, deps.cfg, tableId, at);
+    return { write: (tx, tableId) => placeSpareToday(tx, deps.cfg, tableId, at) };
   });
   tableRoute("seats", async (c) => {
     const seats = await seatsOf(c);
-    return (tx, tableId) => seatsToday(tx, deps.cfg, tableId, seats);
+    return { write: (tx, tableId) => seatsToday(tx, deps.cfg, tableId, seats) };
   });
-  tableRoute("back", () => (tx, tableId) => backToSaved(tx, deps.cfg, tableId));
+  tableRoute("back", () => ({ write: (tx, tableId) => backToSaved(tx, deps.cfg, tableId) }));
   tableRoute("merge", async (c, tableId) => {
     const { targetId, side, seats } = await mergeBody(c, tableId);
     return {
@@ -114,7 +111,7 @@ export function mountFloorTodayApi(app: Hono, deps: TillApiDeps, log: Logger, ru
       others: [targetId],
     };
   });
-  tableRoute("split", () => (tx, tableId) => splitFreeMerge(tx, deps.cfg, tableId));
+  tableRoute("split", () => ({ write: (tx, tableId) => splitFreeMerge(tx, deps.cfg, tableId) }));
 
   app.post("/api/zones/:id/today/reset", (c) =>
     run(c, log, async () => {

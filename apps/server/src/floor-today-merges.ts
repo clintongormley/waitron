@@ -1,4 +1,4 @@
-import { and, asc, eq, inArray, isNotNull, isNull } from "drizzle-orm";
+import { and, asc, eq, inArray, isNotNull } from "drizzle-orm";
 import {
   floorResetJoins,
   floorResetJoinTables,
@@ -18,6 +18,7 @@ import {
   todayOf,
   type Today,
 } from "./floor-today-table.js";
+import { holderOf } from "./parties.js";
 import { joinTables } from "./table-actions.js";
 import type { OriginConfig, TillConfig } from "./till-config.js";
 import "./errors.js";
@@ -95,15 +96,14 @@ export async function splitFreeMerge(
 
 /** Every member of `tableId`'s merge by table id, `tableId` included, or [] when it is in none. Reads by id alone: the caller checks the venue first. */
 export async function mergeMembers(tx: Transaction, tableId: string): Promise<string[]> {
-  const [own] = await tx
+  const own = tx
     .select({ joinId: floorTodayJoinTables.joinId })
     .from(floorTodayJoinTables)
     .where(eq(floorTodayJoinTables.tableId, tableId));
-  if (own === undefined) return [];
   const members = await tx
     .select({ tableId: floorTodayJoinTables.tableId })
     .from(floorTodayJoinTables)
-    .where(eq(floorTodayJoinTables.joinId, own.joinId))
+    .where(inArray(floorTodayJoinTables.joinId, own))
     .orderBy(asc(floorTodayJoinTables.tableId));
   return members.map((m) => m.tableId);
 }
@@ -141,15 +141,6 @@ export async function joinMergeMembers(
       otherPartyId: null,
     });
   }
-}
-
-/** The party holding the table now, or null. Reads by id alone. */
-export async function holderOf(tx: Transaction, tableId: string): Promise<string | null> {
-  const [held] = await tx
-    .select({ partyId: partyTables.partyId })
-    .from(partyTables)
-    .where(and(eq(partyTables.tableId, tableId), isNull(partyTables.leftAt)));
-  return held?.partyId ?? null;
 }
 
 /** The party's revision as it stands in the transaction now. */
