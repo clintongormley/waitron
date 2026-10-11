@@ -703,7 +703,7 @@ describe("till-station-queue", () => {
     });
   });
 
-  it("line mode: tapping a queued line emits advance-ticket-item { itemId, to: 'preparing' }", async () => {
+  it("line mode: tapping a queued line emits advance-ticket-item { itemId, stationId, to: 'preparing' }", async () => {
     const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
       groups,
       stationId: "st-1",
@@ -714,7 +714,7 @@ describe("till-station-queue", () => {
     expect(spy).toHaveBeenCalledWith({ itemId: "ti-1", stationId: "st-1", to: "preparing" });
   });
 
-  it("line mode: tapping a preparing line emits advance-ticket-item { itemId, to: 'ready' }", async () => {
+  it("line mode: tapping a preparing line emits advance-ticket-item { itemId, stationId, to: 'ready' }", async () => {
     const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
       groups,
       stationId: "st-1",

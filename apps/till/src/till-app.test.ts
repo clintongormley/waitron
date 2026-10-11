@@ -9899,7 +9899,7 @@ describe("till-app", () => {
       });
       const c = await toCounter(el);
 
-      emit(c, "advance-ticket-item", { itemId: "ti-1", to: "preparing" });
+      emit(c, "advance-ticket-item", { itemId: "ti-1", stationId: "st-1", to: "preparing" });
       await flush(el);
 
       // the refresh runs even though the advance rejected — a stale entry corrects itself.
@@ -13313,7 +13313,7 @@ describe("a failed list refresh after a successful write", () => {
     const { el } = await mountWithPrepayZone(getStationQueue);
     const c = await toCounterFake(el);
     expect(c.stationQueue).toEqual([stationGroup]);
-    emit(c, "advance-ticket-item", { itemId: "ti-1", to: "preparing" });
+    emit(c, "advance-ticket-item", { itemId: "ti-1", stationId: "st-1", to: "preparing" });
     await settle(el);
     expect(getStationQueue).toHaveBeenCalledTimes(2);
 

@@ -177,6 +177,8 @@ import { offerProducts } from "./testing/zone-offers.js";
  * `/api/device/pass-screen`, its `/done` and
  * `/api/device/pass-monitor`, scoped by the device's pass screen or pass monitor; `/api/expo/queue`
  * and `/api/orders/:id/stations/:sid/advance`, which check the session only;
+ * `/api/ticket-items/:id/advance`, which checks the session and that the dish is still at the
+ * station the request names;
  * and the drawer, the authorizer and reason lists, `/api/statuses` and
  * `GET/PUT /api/device/equipment`, which name no zone.
  */

@@ -1908,10 +1908,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       const id = c.req.param("id");
       if (!isUuid(id)) throw new AppError("ticket.invalid_transition", { ticketItemId: id });
       const body = await readJsonBody<{ to?: string; stationId?: unknown }>(c);
-      if (typeof body.stationId !== "string" || !isUuid(body.stationId)) {
-        throw new AppError("management.request_invalid", { field: "stationId" });
-      }
-      const stationId = body.stationId.toLowerCase();
+      const stationId = requireBodyUuid(body.stationId, "stationId").toLowerCase();
       // `advanceTicketItem` refuses any target outside its transition table before the update runs.
       const to = body.to as TicketState;
       await withTransaction(deps.db, async (tx) => {
