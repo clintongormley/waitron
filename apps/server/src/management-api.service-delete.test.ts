@@ -513,7 +513,10 @@ describe("stale floor identifiers", () => {
     [
       "zone activate",
       "zone.not_found",
-      (tx, f) => updateZone(tx, v.cfg, f.zoneId, { active: true }),
+      (tx, f) =>
+        updateZone(tx, v.cfg, f.zoneId, { active: true } as unknown as Parameters<
+          typeof updateZone
+        >[3]),
     ],
     ["floor read", "zone.not_found", (tx, f) => readZonePlan(tx, v.cfg, f.zoneId)],
     [
