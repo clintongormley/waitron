@@ -155,7 +155,14 @@ list does not exist.
 
 ## A507. Prep stations made lighter
 
-**A507 (owner, 2026-10-11) — OPEN.** Five changes to the Prep stations page
+**A507 (owner, 2026-10-11) — PART 1 DONE (this PR); PARTS 2 AND 3 OPEN.** Part 1 (this PR) made
+changes 2, 3 and 4 and the "Taken in" point: the Stations table's row menu has its own Actions
+column pinned to the end, the three timings are in each station's edit dialog and saved with the
+rest of the station in one request, the Settings tab and `#saveSettingsCell` are gone, the empty
+station cards under the Routes grid are gone, and the station table always draws its Printed on
+and Shown on columns. Changes 1 and 5 remain, in the owner's words below.
+
+Five changes to the Prep stations page
 (`packages/venue-service/src/dashboard/prep-stations-screen.ts`), bundled because they share the
 screen. Mockups in [mockups/a507-prep-stations/](mockups/a507-prep-stations/): `0-routes-today.png`
 is the grid before, `1-routes-option-a-chosen.png` the chosen default view, `3-routes-search.png`
@@ -195,24 +202,6 @@ are their source.
   it and shows a hand pointer, and keyboard focus draws the same outline.
 - The cell dialog (`routing-cell-editor.ts`) stays as it is; boards 8–10 draw it over the new grid.
 
-**2. The Stations table's row menu** (`station-table.ts`). The ⋮ menu is drawn inside the name
-cell beside the drag handle. Move it to its own `actions` column pinned to the end, like every other
-`wt-data-table` (CLAUDE.md §3, A155). `scripts/pinned-actions-column.test.ts` did not catch this
-because it only recognises a column keyed `actions`.
-
-**3. The Settings tab goes.** It holds three numbers per active station — minutes until a ticket is
-warm, overdue and forgotten (`warmAfterMinutes`, `overdueAfterMinutes`, `forgottenAfterMinutes`;
-`TIMING_FIELDS`). They move into each station's edit dialog (`station-editor.ts`), saved with the
-rest of the station, and the tab is removed, leaving Stations and Routes. This retires
-`#saveSettingsCell` and the old follow-up that its save released its unsaved-changes registration
-before the refresh after it settled (left open by A261-4, #1363); the dialog's save follows the
-form rules instead.
-
-**4. The empty station cards under the grid go.** `#stationCard` draws one card per active station
-below the Routes grid holding only its name. Until A261-4 (#1363) each card also held the station's
-folder claims and a "Claim folder" button; that change moved routing into the grid and left the
-cards empty.
-
 **5. The "Review route change" notice asks less and says less** (`#previewDialog`,
 `#cellSentence` and `#moveName` in `prep-stations-screen.ts`). Today it opens whenever a cell's save
 moves any product, and lists one line per product, zone and period moved; a variant is a line of
@@ -230,11 +219,6 @@ its own under its own name ("DOUBLE during Lunch"), with nothing tying it to its
   time" station, so adding a Lunch line to Bar on CLANDESTINA read "this changes Kitchen to
   Kitchen" (the owner's screenshot). It names what changed, period lines included, and drops the
   parent path ("Santet Deli Co › AGAVE ›") to match the grid.
-
-**Taken in:** the station table still accepts no printers or screens (left open by A455, #1492) —
-nothing draws it without them now that supervisors are not offered the page, and its accessibility
-test still checks a "supervisor" state no page can draw. Require both inputs and drop that state
-while moving the menu.
 
 ## Decisions and deliberate limits
 

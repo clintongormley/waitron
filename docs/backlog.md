@@ -1407,15 +1407,16 @@ _Formerly entries spread across the old sections, A261's venue-operations steps 
 _Formerly the kitchen entries in the opening part of the old Track A (before A1), and kitchen entries elsewhere; part of A9._ Detail: [backlog/kitchen.md](backlog/kitchen.md).
 
 - **A507. Prep stations made lighter: a Routes grid you can scan and search, the row menu on the
-  right, timings in the station dialog (owner, 2026-10-11).** The Routes grid loses its cell boxes,
-  its "N more products" counts and its parent paths; a routing set on a row is bold blue, an
-  inherited one grey, and a zone cell is blank unless what it inherits differs from the row's own
-  Every zone. Rows with their own routing show with every category above them, even inside a
-  closed category, and a search bar finds any category or product. The Stations table's row menu
-  moves to its own column on the right; the Settings tab's three timings move into each station's
-  edit dialog and the tab goes; the empty station cards under the grid go; the route-change
-  notice no longer asks for a product's own edit and summarises a category's. Takes in two older
-  Prep stations entries. Mockups:
+  right, timings in the station dialog (owner, 2026-10-11)** — PART 1 DONE (this PR); PARTS 2 AND 3
+  OPEN. Done in this PR: the Stations table's row menu has its own column on the right, the Settings
+  tab's three timings are in each station's edit dialog and the tab is gone, the empty station
+  cards under the grid are gone, and both older Prep stations entries it took in are closed.
+  Still to do: the Routes grid loses its cell boxes, its "N more products" counts and its parent
+  paths; a routing set on a row is bold blue, an inherited one grey, and a zone cell is blank unless
+  what it inherits differs from the row's own Every zone. Rows with their own routing show with
+  every category above them, even inside a closed category, and a search bar finds any category or
+  product. The route-change notice no longer asks for a product's own edit and summarises a
+  category's. Mockups:
   [docs/backlog/mockups/a507-prep-stations/](backlog/mockups/a507-prep-stations/).
   [Detail](backlog/kitchen.md#a507-prep-stations-made-lighter)
 
