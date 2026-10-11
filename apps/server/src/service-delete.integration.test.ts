@@ -6,7 +6,7 @@ import { mountManagementApi } from "./management-api.js";
 import { TOTP_KEY_RING } from "./testing/authenticator.js";
 import { eq, sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { bookings } from "@waitron/bookings";
+import { bookings, BOOKINGS_ROUTES, BOOKINGS_PERMISSIONS } from "@waitron/bookings";
 import {
   deviceProfiles,
   diningTables,
@@ -35,7 +35,6 @@ import {
   setProfileServiceScope,
   setDepartmentTransferSettings,
   zoneServicePolicies,
-  orderServiceContexts,
 } from "@waitron/venue-service";
 import { ALL_MODULES, enabledTableRemovals } from "./modules.js";
 import { moduleCoreServices } from "./parties.js";
@@ -388,6 +387,7 @@ describe("real module floor deletion", () => {
 });
 
 registerModulePermissions(VENUE_SERVICE_PERMISSIONS);
+registerModulePermissions(BOOKINGS_PERMISSIONS);
 async function mounted() {
   const app = new Hono();
   const cookie = await run(async (tx) => {
@@ -411,12 +411,25 @@ async function mounted() {
     () => {},
   );
   VENUE_SERVICE_ROUTES.mount(app, { db: venue.db, cfg: venue.cfg, core: core() }, () => {});
+  BOOKINGS_ROUTES.mount(app, { db: venue.db, cfg: venue.cfg, core: core() }, () => {});
   const request = async (method: string, id: string, kind: "zone" | "department" = "department") =>
     app.request(
       `${kind === "zone" ? "/management-api/zones" : "/management-api/venue-service/departments"}/${id}${method === "GET" ? "/delete-impact" : ""}`,
       { method, headers: { cookie } },
     );
-  return { request };
+  const book = async (tableId: string) =>
+    app.request("/management-api/bookings", {
+      method: "POST",
+      headers: { cookie, "content-type": "application/json" },
+      body: JSON.stringify({
+        bookingDate: "2026-01-01",
+        bookingTime: "20:00",
+        partySize: 2,
+        contactName: "Queued guest",
+        tableId,
+      }),
+    });
+  return { request, book };
 }
 async function completeSnapshot(tx: Transaction) {
   const tables = await tx.execute<{ name: string }>(
@@ -444,7 +457,7 @@ describe("mounted authenticated service deletion races", () => {
     "HTTP deletion rechecks a queued %s writer after preview",
     async (kind) => {
       const f = await target();
-      const { request } = await mounted();
+      const { request, book } = await mounted();
       const zoneId = kind === "counter" ? venue.counter.zoneId : f.zoneId;
       const id = kind === "counter" ? zoneId : f.departmentId;
       const targetKind = kind === "counter" ? "zone" : "department";
@@ -483,124 +496,152 @@ describe("mounted authenticated service deletion races", () => {
       expect((await preview.json()).refusals).toEqual([]);
       const held = gate();
       const release = gate();
-      const writer = run(async (tx) => {
+      const beforeWriter = await run(completeSnapshot);
+      let committed!: Awaited<ReturnType<typeof completeSnapshot>>;
+      const original = venue.db.withWriteLock.bind(venue.db);
+      const writerLock = vi.spyOn(venue.db, "withWriteLock").mockImplementationOnce((body) =>
+        original(async () => {
+          const result = await body();
+          committed = await completeSnapshot(venue.db);
+          held.open();
+          await release.wait;
+          return result;
+        }),
+      );
+      const writer =
+        kind === "counter"
+          ? counterOrder(venue, "Paella")
+          : kind === "booking"
+            ? book(f.tableId).then((response) => {
+                expect(response.status).toBe(201);
+              })
+            : run(async (tx) => {
+                if (kind === "seating")
+                  await core().seatTable(tx, {
+                    tableId: f.tableId,
+                    guestCount: 2,
+                    operatorId: venue.operator.personId,
+                  });
+                if (kind === "profile")
+                  await setProfileServiceScope(tx, venue.cfg, profileId, {
+                    departmentId: f.departmentId,
+                    allowedZoneIds: [zoneId],
+                    startingZoneId: zoneId,
+                  });
+                if (kind === "transfer") {
+                  const [receiving] = await tx
+                    .insert(deviceProfiles)
+                    .values({ name: "Receiving desk", formFactor: "till" })
+                    .returning();
+                  await setProfileServiceScope(tx, venue.cfg, receiving!.id, {
+                    departmentId: f.departmentId,
+                    allowedZoneIds: [zoneId],
+                    startingZoneId: zoneId,
+                  });
+                  await setDepartmentTransferSettings(tx, venue.cfg, sourceDepartmentId, {
+                    receivingProfileId: null,
+                    destinationDepartmentIds: [f.departmentId],
+                  });
+                  await setDepartmentTransferSettings(tx, venue.cfg, f.departmentId, {
+                    receivingProfileId: receiving!.id,
+                    destinationDepartmentIds: [],
+                  });
+                  await requestDepartmentTransfer(tx, venue.cfg, tabId, f.departmentId, {
+                    departmentId: sourceDepartmentId,
+                    personId: venue.operator.personId,
+                  });
+                }
+                if (kind === "master")
+                  await saveZonePlan(
+                    tx,
+                    venue.cfg,
+                    enabledTableRemovals(ALL_MODULES),
+                    zoneId,
+                    {
+                      revision: 0,
+                      tables: [
+                        {
+                          key: "saved",
+                          label: "Queued saved",
+                          seats: 2,
+                          fixed: false,
+                          placement: null,
+                        },
+                      ],
+                      joins: [],
+                    },
+                    NOW,
+                  );
+              });
+      try {
+        await Promise.race([held.wait, writer]);
+        writerLock.mockRestore();
+        expect(await completeSnapshot(venue.db)).toEqual(beforeWriter);
+        const signal = queueSignal();
+        const deletion = request("DELETE", id, targetKind);
+        try {
+          await Promise.race([
+            signal.queued,
+            deletion.then(() => {
+              throw new Error("HTTP deletion answered before requesting the write queue");
+            }),
+          ]);
+        } finally {
+          release.open();
+          signal.restore();
+        }
+        await writer;
+        const response = await deletion;
+        if (kind === "master") {
+          expect(response.status).toBe(200);
+          expect((await response.json()).removes).toContainEqual({
+            key: "saved_tables",
+            count: 1,
+            targets: [expect.objectContaining({ name: "Queued saved" })],
+          });
+          expect(
+            await run((tx) => tx.select().from(floorPlans).where(eq(floorPlans.zoneId, zoneId))),
+          ).toEqual([]);
+          expect(
+            await run((tx) =>
+              tx.select().from(diningTables).where(eq(diningTables.zoneId, zoneId)),
+            ),
+          ).toEqual([]);
+        } else {
+          expect(response.status).toBe(409);
+          const codes = {
+            booking: "table.booked",
+            seating: "zone.table_in_use",
+            counter: "zone.order_in_progress",
+            profile: "department.profile_in_use",
+            transfer: "department.transfer_pending",
+          };
+          expect(await response.json()).toMatchObject({ error: { code: codes[kind] } });
+          expect(await run(completeSnapshot)).toEqual(committed);
+        }
         if (kind === "booking")
-          await tx.insert(bookings).values({
-            locationId: venue.cfg.locationId,
-            bookingDate: "2026-01-01",
-            bookingTime: "20:00:00",
-            partySize: 2,
-            contactName: "Queued guest",
-            tableId: f.tableId,
-            createdBy: venue.operator.personId,
-          });
-        if (kind === "seating")
-          await core().seatTable(tx, {
-            tableId: f.tableId,
-            guestCount: 2,
-            operatorId: venue.operator.personId,
-          });
-        if (kind === "counter") {
-          const [order] = await tx
-            .insert(workingOrders)
-            .values({
-              locationId: venue.cfg.locationId,
-              source: "operator_script",
-              orderNumber: 99,
-            })
-            .returning();
-          const [policy] = await tx
-            .select()
-            .from(zoneServicePolicies)
-            .where(eq(zoneServicePolicies.zoneId, zoneId));
-          await tx.insert(orderServiceContexts).values({
-            workingOrderId: order!.id,
-            locationId: venue.cfg.locationId,
-            zoneId,
-            departmentId: policy!.departmentId,
-            serviceMode: "prepay",
-          });
-        }
-        if (kind === "profile")
-          await setProfileServiceScope(tx, venue.cfg, profileId, {
-            departmentId: f.departmentId,
-            allowedZoneIds: [zoneId],
-            startingZoneId: zoneId,
-          });
-        if (kind === "transfer") {
-          const [receiving] = await tx
-            .insert(deviceProfiles)
-            .values({ name: "Receiving desk", formFactor: "till" })
-            .returning();
-          await setProfileServiceScope(tx, venue.cfg, receiving!.id, {
-            departmentId: f.departmentId,
-            allowedZoneIds: [zoneId],
-            startingZoneId: zoneId,
-          });
-          await setDepartmentTransferSettings(tx, venue.cfg, sourceDepartmentId, {
-            receivingProfileId: null,
-            destinationDepartmentIds: [f.departmentId],
-          });
-          await setDepartmentTransferSettings(tx, venue.cfg, f.departmentId, {
-            receivingProfileId: receiving!.id,
-            destinationDepartmentIds: [],
-          });
-          await requestDepartmentTransfer(tx, venue.cfg, tabId, f.departmentId, {
-            departmentId: sourceDepartmentId,
-            personId: venue.operator.personId,
-          });
-        }
-        if (kind === "master")
-          await saveZonePlan(
-            tx,
-            venue.cfg,
-            enabledTableRemovals(ALL_MODULES),
-            zoneId,
-            {
-              revision: 0,
-              tables: [
-                { key: "saved", label: "Queued saved", seats: 2, fixed: false, placement: null },
-              ],
-              joins: [],
-            },
-            NOW,
+          expect(committed.bookings).toContainEqual(
+            expect.objectContaining({
+              table_id: f.tableId,
+              booking_date: "2026-01-01",
+              booking_time: "20:00:00",
+              contact_name: "Queued guest",
+              status: "booked",
+            }),
           );
-        held.open();
-        await release.wait;
-        return completeSnapshot(tx);
-      });
-      await Promise.race([held.wait, writer]);
-      const signal = queueSignal();
-      const deletion = request("DELETE", id, targetKind);
-      await signal.queued;
-      signal.restore();
-      release.open();
-      const committed = await writer;
-      const response = await deletion;
-      if (kind === "master") {
-        expect(response.status).toBe(200);
-        expect((await response.json()).removes).toContainEqual({
-          key: "saved_tables",
-          count: 1,
-          targets: [expect.objectContaining({ name: "Queued saved" })],
-        });
-        expect(
-          await run((tx) => tx.select().from(floorPlans).where(eq(floorPlans.zoneId, zoneId))),
-        ).toEqual([]);
-        expect(
-          await run((tx) => tx.select().from(diningTables).where(eq(diningTables.zoneId, zoneId))),
-        ).toEqual([]);
-      } else {
-        expect(response.status).toBe(409);
-        const codes = {
-          booking: "table.booked",
-          seating: "zone.table_in_use",
-          counter: "zone.order_in_progress",
-          profile: "department.profile_in_use",
-          transfer: "department.transfer_pending",
-        };
-        expect(await response.json()).toMatchObject({ error: { code: codes[kind] } });
-        expect(await run(completeSnapshot)).toEqual(committed);
+        if (kind === "counter") {
+          expect(committed.working_orders).toHaveLength(beforeWriter.working_orders!.length + 1);
+          expect(committed.working_order_lines).toHaveLength(
+            beforeWriter.working_order_lines!.length + 1,
+          );
+          expect(committed.order_service_contexts).toContainEqual(
+            expect.objectContaining({ zone_id: zoneId }),
+          );
+        }
+      } finally {
+        release.open();
+        writerLock.mockRestore();
+        await writer;
       }
     },
   );
