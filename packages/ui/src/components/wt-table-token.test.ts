@@ -496,3 +496,9 @@ test("shows the table's seats with the covers suffix", async () => {
     "6 pax",
   );
 });
+
+test("the tray token is a rounded rectangle painted from the medium-radius token", async () => {
+  const el = await mountToken(table({ seats: 6 }));
+  host.style.setProperty("--wt-radius-md", "13px");
+  expect(getComputedStyle(el.shadowRoot!.querySelector(".card")!).borderTopLeftRadius).toBe("13px");
+});
