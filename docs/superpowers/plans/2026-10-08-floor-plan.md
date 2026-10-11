@@ -6364,6 +6364,14 @@ it.each(["PUT", "DELETE"])("answers %s /api/tables/:id/placement 404, and the ta
 
 ### Task 5.2d: Every test table gets a zone — apps/server
 
+> **Owner answer, 2026-10-11:** retire the no-zone case in
+> `apps/server/src/party-main-bill.test.ts:202-223`. Keep the payment case in
+> `apps/server/src/pay-owing-nothing.test.ts:265-330`: give its receiving table a zone and
+> expect that zone, retaining all payment, reader, drawer, fiscal and kitchen-ticket assertions.
+> The party bill starts in the receiving table-service zone so the move does not send its dish;
+> the walk-up bill keeps its ticket-before-payment zone. This extends the named retirement list
+> for Task 5.2d; it does not authorise changes to any other existing assertion.
+
 Before the predicate (Task 5.2f): a table in no zone will be out of service, since its zone cannot be
 switched on, so every test table needs a zone first.
 

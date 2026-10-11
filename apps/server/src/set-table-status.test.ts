@@ -1,3 +1,4 @@
+import { createZone } from "./testing/service-zone.js";
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
@@ -69,7 +70,10 @@ async function setupVenue(): Promise<Seeded> {
     simplifiedInvoiceLimit: null,
   };
   const seeded = await withTransaction(db, async (tx) => {
-    const { id: tableId } = await createTable(tx, cfg, { label: "T1" });
+    const { id: tableId } = await createTable(tx, cfg, {
+      label: "T1",
+      zoneId: (await createZone(tx, cfg, { name: "Tables" })).id,
+    });
     // Through the table definition for the same reason as the venue rows above.
     const [active] = await tx
       .insert(tableServiceStatuses)

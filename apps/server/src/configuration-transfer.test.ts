@@ -493,6 +493,12 @@ describe("configuration transfer database path", () => {
         label: "Practice tab",
       });
       await tx.insert(diningTables).values({
+        zoneId: (
+          await tx
+            .insert(floorZones)
+            .values({ locationId: source.locationId, name: "Practice tables" })
+            .returning({ id: floorZones.id })
+        )[0]!.id,
         id: "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb",
         locationId: source.locationId,
         label: "T1",
@@ -1837,6 +1843,12 @@ it("leaves a table's clearing state behind", async () => {
   });
   await withTransaction(suite.db, async (tx) => {
     await tx.insert(diningTables).values({
+      zoneId: (
+        await tx
+          .insert(floorZones)
+          .values({ locationId: source.locationId, name: "Clearing tables" })
+          .returning({ id: floorZones.id })
+      )[0]!.id,
       id: "eeeeeeee-bbbb-bbbb-bbbb-eeeeeeeeeeee",
       locationId: source.locationId,
       label: "T9",

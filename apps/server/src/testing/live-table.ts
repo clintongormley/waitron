@@ -5,7 +5,7 @@ import type { TillConfig } from "../till-config.js";
 export async function createTable(
   tx: Transaction,
   cfg: TillConfig,
-  input: { label: string; zoneId?: string; capacity?: number },
+  input: { label: string; zoneId: string; capacity?: number },
 ): Promise<{ id: string }> {
   const [row] = await tx
     .insert(diningTables)
@@ -13,7 +13,7 @@ export async function createTable(
       id: newId(),
       locationId: cfg.locationId,
       label: input.label,
-      zoneId: input.zoneId ?? null,
+      zoneId: input.zoneId,
       capacity: input.capacity ?? null,
     })
     .returning({ id: diningTables.id });

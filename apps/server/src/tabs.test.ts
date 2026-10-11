@@ -1023,7 +1023,9 @@ describe("listTablesWithState (occupancy)", () => {
         { kind: "no_preparation" },
       );
     });
-    const freeTable = await asApp(cfg, (tx) => createTable(tx, cfg, { label: "T2" }));
+    const freeTable = await asApp(cfg, (tx) =>
+      createTable(tx, cfg, { label: "T2", zoneId: zone.id }),
+    );
     await asApp(cfg, (tx) =>
       tx.update(diningTables).set({ zoneId: zone.id }).where(eq(diningTables.id, tableId)),
     );

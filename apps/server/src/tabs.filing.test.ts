@@ -161,7 +161,10 @@ async function seedTable(
   zoneId?: string,
 ): Promise<string> {
   return withTransaction(db, async (tx) => {
-    const { id } = await createTable(tx, cfg, { label, zoneId });
+    const { id } = await createTable(tx, cfg, {
+      label,
+      zoneId: zoneId ?? (await offerProducts(tx, cfg, { zone: "tables" })).zoneId,
+    });
     return id;
   });
 }

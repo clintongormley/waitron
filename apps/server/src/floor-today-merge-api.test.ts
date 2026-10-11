@@ -4,7 +4,13 @@ import { eq } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { diningTables, floorTodayTables, floorTodayZones, locations } from "@waitron/db";
+import {
+  floorZones,
+  diningTables,
+  floorTodayTables,
+  floorTodayZones,
+  locations,
+} from "@waitron/db";
 import { hashPin, loginWithPin, persons } from "@waitron/identity";
 import { ALL_MODULES, enabledTableRemovals } from "./modules.js";
 import { mountTillApi } from "./till-api.js";
@@ -293,9 +299,16 @@ describe("merging and splitting free tables", () => {
         invoiceLocales: ["es-ES"],
         operationDescription: "Restaurant",
       });
-      await tx
-        .insert(diningTables)
-        .values({ id: other, locationId: elsewhere, label: `Elsewhere ${other.slice(0, 6)}` });
+      const [zone] = await tx
+        .insert(floorZones)
+        .values({ locationId: elsewhere, name: "Other tables" })
+        .returning({ id: floorZones.id });
+      await tx.insert(diningTables).values({
+        id: other,
+        locationId: elsewhere,
+        zoneId: zone!.id,
+        label: `Elsewhere ${other.slice(0, 6)}`,
+      });
       await tx.insert(floorTodayTables).values({
         tableId: other,
         seats: 4,

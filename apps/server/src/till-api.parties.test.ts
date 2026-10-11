@@ -1,3 +1,4 @@
+import { createZone } from "./testing/service-zone.js";
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { eq } from "drizzle-orm";
@@ -120,7 +121,10 @@ async function cookie(): Promise<string> {
 
 async function table(): Promise<string> {
   return withTransaction(suite.db, async (tx) => {
-    const { id } = await createTable(tx, cfg, { label: `Mesa ${randomUUID()}` });
+    const { id } = await createTable(tx, cfg, {
+      label: `Mesa ${randomUUID()}`,
+      zoneId: (await createZone(tx, cfg, { name: `Tables ${randomUUID()}` })).id,
+    });
     return id;
   });
 }

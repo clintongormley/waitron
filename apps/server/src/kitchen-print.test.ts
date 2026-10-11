@@ -705,7 +705,11 @@ describe("print-on-fire (enqueueKitchenTickets wired into fireLines / fireCourse
       await createOfferedOrder(tx, cfg, orderId, [line(drink)]);
       const [table] = await tx
         .insert(diningTables)
-        .values({ locationId: cfg.locationId, label: "Barra 3" })
+        .values({
+          locationId: cfg.locationId,
+          label: "Barra 3",
+          zoneId: (await offerProducts(tx, cfg)).zoneId,
+        })
         .returning({ id: diningTables.id });
       await tx.execute(sql`
         update working_orders set delivery_table_id = ${table!.id} where id = ${orderId}`);

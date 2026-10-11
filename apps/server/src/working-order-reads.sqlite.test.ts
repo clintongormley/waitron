@@ -1,5 +1,6 @@
 import {
   diningTables,
+  floorZones,
   kitchenStations,
   locations,
   kitchenTimingDefaults,
@@ -90,8 +91,14 @@ beforeAll(async () => {
     queuedAt,
     firedAt: nowIso(),
   });
+  const [zone] = await db
+    .insert(floorZones)
+    .values({ locationId, name: "Tables" })
+    .returning({ id: floorZones.id });
   tableId = randomUUID();
-  await db.insert(diningTables).values({ id: tableId, locationId, label: "Mesa 1", capacity: 4 });
+  await db
+    .insert(diningTables)
+    .values({ id: tableId, locationId, zoneId: zone!.id, label: "Mesa 1", capacity: 4 });
   await db.insert(partyTables).values({ partyId: party!.id, tableId });
 
   cfg = {

@@ -5,6 +5,7 @@ import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
   diningTables,
+  floorZones,
   floorPlanTables,
   floorTodayJoinTables,
   floorTodayJoins,
@@ -218,9 +219,16 @@ describe("today's moves", () => {
         invoiceLocales: ["es-ES"],
         operationDescription: "Restaurant",
       });
-      await tx
-        .insert(diningTables)
-        .values({ id, locationId: elsewhere, label: `Elsewhere ${id.slice(0, 6)}` });
+      const [zone] = await tx
+        .insert(floorZones)
+        .values({ locationId: elsewhere, name: "Other tables" })
+        .returning({ id: floorZones.id });
+      await tx.insert(diningTables).values({
+        id,
+        locationId: elsewhere,
+        zoneId: zone!.id,
+        label: `Elsewhere ${id.slice(0, 6)}`,
+      });
       await tx.insert(floorTodayTables).values({
         tableId: id,
         seats: 4,

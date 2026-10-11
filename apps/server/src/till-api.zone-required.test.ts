@@ -2,7 +2,13 @@ import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { eq, sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { deviceProfiles, locations, withTransaction, workingOrderLines } from "@waitron/db";
+import {
+  floorZones,
+  deviceProfiles,
+  locations,
+  withTransaction,
+  workingOrderLines,
+} from "@waitron/db";
 import type { Database } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedKitchenStation, seedNode, seedTenant } from "@waitron/db/testing/seed.js";
@@ -53,7 +59,7 @@ interface Venue {
   coffee: string;
   // Water's extras list, offering the coffee.
   extrasListId: string;
-  // A dining table in no zone.
+  // A table in a zone with no service policy.
   tableId: string;
 }
 
@@ -124,7 +130,11 @@ async function seedVenue(db: Database): Promise<Venue> {
       "es",
     );
     await writeProductModifiers(tx, water.id, [{ kind: "extras", id: list.id }]);
-    const table = await createTable(tx, cfg, { label: "T1" });
+    const [zone] = await tx
+      .insert(floorZones)
+      .values({ locationId: cfg.locationId, name: "Tables" })
+      .returning({ id: floorZones.id });
+    const table = await createTable(tx, cfg, { label: "T1", zoneId: zone!.id });
     return { water: water.id, coffee: coffee.id, extrasListId: list.id, tableId: table.id };
   });
   const [profile] = await db

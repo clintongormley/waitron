@@ -5857,8 +5857,8 @@ describe("listExpoQueue (KDS-3 cross-station expo/pass read)", () => {
       await createStation(tx, cfg, { name: "Cocina", isDefault: true });
       const cafe = await makeProduct(tx, cfg, catalogueId, {});
       const { rows } = await tx.execute<{ id: string }>(sql`
-        insert into dining_tables (id, location_id, label, created_at)
-        values (${randomUUID()}, ${cfg.locationId}, 'Terraza 8', ${nowIso()})
+        insert into dining_tables (id, location_id, label, zone_id, created_at)
+        values (${randomUUID()}, ${cfg.locationId}, 'Terraza 8', ${(await offerProducts(tx, cfg)).zoneId}, ${nowIso()})
         returning id`);
       const { id } = await placeOrderWith(tx, cfg, [line(cafe)]);
       await tx

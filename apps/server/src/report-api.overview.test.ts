@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 import {
   CORE_MIGRATIONS,
   diningTables,
+  floorZones,
   parties,
   partyTables,
   invoiceSeries,
@@ -107,12 +108,16 @@ async function seedTodaySale(db: Database): Promise<void> {
  * while a party holds it, and an inactive table counts in neither.
  */
 async function seedDiningTables(db: Database): Promise<void> {
+  const [zone] = await db
+    .insert(floorZones)
+    .values({ locationId, name: "Tables" })
+    .returning({ id: floorZones.id });
   const [held, left, inactive] = await db
     .insert(diningTables)
     .values([
-      { locationId, label: "Mesa 1" },
-      { locationId, label: "Mesa 2" },
-      { locationId, label: "Mesa 3 (baja)", active: false },
+      { locationId, zoneId: zone!.id, label: "Mesa 1" },
+      { locationId, zoneId: zone!.id, label: "Mesa 2" },
+      { locationId, zoneId: zone!.id, label: "Mesa 3 (baja)", active: false },
     ])
     .returning({ id: diningTables.id });
   for (const [table, leftAt] of [

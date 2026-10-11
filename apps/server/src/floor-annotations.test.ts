@@ -1,3 +1,4 @@
+import { createZone } from "./testing/service-zone.js";
 import { randomUUID } from "node:crypto";
 import { beforeAll, describe, expect, it } from "vitest";
 import { DEFAULT_TIME_ZONE, kitchenTimingDefaults, locations, withTransaction } from "@waitron/db";
@@ -87,7 +88,12 @@ const MADRID_NOON = new Date("2026-09-15T10:00:00Z");
 describe("listTablesWithState — floor-annotator merge", () => {
   it("surfaces a table's imminent booked reservation through the bookings floor annotator", async () => {
     const cfg = await setupVenue();
-    const { id: tableId } = await asApp(cfg, (tx) => createTable(tx, cfg, { label: "7" }));
+    const { id: tableId } = await asApp(cfg, async (tx) =>
+      createTable(tx, cfg, {
+        label: "7",
+        zoneId: (await createZone(tx, cfg, { name: "Tables" })).id,
+      }),
+    );
     await insertBooking(cfg, tableId, "14:00");
 
     // The REAL enabled-set annotators (bookings among them) — the exact assembly boot passes.
@@ -102,7 +108,12 @@ describe("listTablesWithState — floor-annotator merge", () => {
     // A descriptor whose `floorAnnotations` seat is OMITTED: the badge flows ONLY through the seat, so
     // the booked row never reaches the floor.
     const cfg = await setupVenue();
-    const { id: tableId } = await asApp(cfg, (tx) => createTable(tx, cfg, { label: "8" }));
+    const { id: tableId } = await asApp(cfg, async (tx) =>
+      createTable(tx, cfg, {
+        label: "8",
+        zoneId: (await createZone(tx, cfg, { name: "Tables" })).id,
+      }),
+    );
     await insertBooking(cfg, tableId, "14:00");
 
     const withoutSeat = ALL_MODULES.map((m) => ({ ...m, floorAnnotations: undefined }));

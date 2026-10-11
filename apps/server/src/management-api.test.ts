@@ -1,3 +1,4 @@
+import { createZone as createTableZone } from "./testing/service-zone.js";
 import type { ModuleRouteContext, TableRemoval } from "@waitron/module";
 import { AppError } from "@waitron/shared";
 import { randomUUID } from "node:crypto";
@@ -770,8 +771,13 @@ describe("POST /management-api/session (email login)", () => {
 describe("/management-api/tables", () => {
   describe("disabled tables: the includeDisabled list", () => {
     async function newTable(): Promise<string> {
-      const { id } = await withTransaction(suite.db, (tx) =>
-        createTable(tx, tillConfigFromVenue(venue), { label: unique("en") }),
+      const { id } = await withTransaction(suite.db, async (tx) =>
+        createTable(tx, tillConfigFromVenue(venue), {
+          label: unique("en"),
+          zoneId: (
+            await createTableZone(tx, tillConfigFromVenue(venue), { name: unique("Tables") })
+          ).id,
+        }),
       );
       return id;
     }
