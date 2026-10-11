@@ -788,6 +788,9 @@ From **Allergens and nutrition (#370, #377, #385) — what is left open.**
     is live" starts at the top on the right;
   - "Expand all" sits on the language dropdown's line, to its right;
   - "Show all changes" sits on the "Unpublished changes" heading's line, to its right;
+  - "Scheduled versions" lists only schedules still waiting, and its Status column goes. Today it
+    also lists up to ten past schedules, cancelled or already live (`SETTLED_LISTED`,
+    `packages/catalogue/src/menu-schedule.ts`);
   - the note becomes "Current product availability is not shown." (`customer_menu.frozen_content`).
 - **Publishing.** "Publish Santet Deli Co" and "Schedule a publication…" (`menu_preview.publish`,
   `menu_publications.schedule`) become two buttons, "Publish now" and "Publish later". The
