@@ -27,7 +27,7 @@ below.
 **Each name falls back on its own.** A blank customer-facing name falls back to Name; a blank kitchen
 name falls back to Name. A customer-facing name blank in one language but not in the default
 language takes the default language's text in the text frozen for the receipt
-(`toInvoiceLineDescriptions`, below), not Name; that per-language step is `resolveContentText`
+(`defaultLanguageDescriptions`, below), not Name; that per-language step is `resolveContentText`
 (`packages/shared/src/content-languages.ts`), not `product-presentation.ts`. The printed allergen sheet instead requests only its chosen language: the receipt language when
 the till has a catalogue for it, else English. An absent or disabled customer translation uses
 Name (untagged staff text), rather than substituting a different customer translation (`customerProductName`,
@@ -110,23 +110,23 @@ comes from the published menu, and the rate from the day the invoice is issued, 
 - `name` — the product's staff name at add time; on a line sold as a variant, the PARENT's. On a
   line with no variant this is what the basket and a retrieved tab show after the product has been
   renamed or deleted; on a variant line they join it with `variant_name`.
-- `descriptions` — the customer-facing text, already resolved through `customerPresentationText` and
-  then narrowed to exactly the location's saved receipt languages (`locations.invoice_locales`) by
-  `toInvoiceLineDescriptions`. A receipt prints the entry for the sale's language (`sales.locale`),
-  which is the first of that list when the sale is filed. An order placed before the location's
-  receipt languages change and collected after is filed with `sales.locale` in the new language
-  while its lines' `descriptions` hold entries only for the languages saved when they were added
-  (the case "accepts a change while an order is placed, and the order can still be collected" in
-  `apps/server/src/location-settings-api.orders-open.test.ts`); when the new language is not among
-  them, `lineName` (`apps/server/src/receipt-ticket.ts`) prints the line's first stored name
-  instead.
+- `descriptions` — the customer-facing text, resolved through `customerPresentationText`, then
+  stored under exactly the location's saved receipt languages (`locations.invoice_locales`), every
+  key holding the venue's default content language's text, or another stored language's where the
+  default has none (`defaultLanguageDescriptions`, `packages/catalogue/src/default-language-text.ts`,
+  called by `priceOrderLines`, `apps/server/src/working-order.ts`). A receipt prints the entry for
+  the sale's names language (`namesLocale`, the first of `sales.invoice_locales`), else the line's
+  first stored entry (`lineName`, `apps/server/src/receipt-document.ts`), so it prints the same name
+  whatever receipt language staff choose. An order placed before the location's receipt languages
+  change and collected after keeps the keys its lines were stored under (the case "accepts a change
+  while an order is placed, and the order can still be collected" in
+  `apps/server/src/location-settings-api.orders-open.test.ts`), and prints through that fallback.
 - `variant_name`, `variant_descriptions`, `variant_kitchen_name`, `kitchen_name` — the chosen
   variant's own three names (`variant_name` and `variant_kitchen_name` as the variant row holds
-  them, `variant_descriptions` resolved and narrowed like `descriptions` above), plus the product's
-  (the parent's) kitchen name. A receipt language that neither its own text nor the default
-  language's text resolves is filled with the variant's staff name, by
-  `fillBlankLocalesWithStaffName` (`packages/catalogue/src/product-presentation.ts`), when the line
-  is priced (`priceOrderLines`, `apps/server/src/working-order.ts`).
+  them, `variant_descriptions` resolved and stored like `descriptions` above), plus the product's
+  (the parent's) kitchen name. A variant with no customer text in any language stores its own staff
+  name, never the parent's (`customerPresentationText`,
+  `packages/catalogue/src/product-presentation.ts`).
   Keeping both sets is what lets a report group variant lines under their parent.
   An extras item naming a variant freezes a composed pair from the published offer instead
   (`readExtraProducts`, `packages/catalogue/src/offered-modifiers.ts`); its child line carries
@@ -180,9 +180,11 @@ no text at all. The kitchen names are frozen raw and fall back when drawn, throu
 `kitchenPresentationName`.
 
 **An options answer is the exception to that, deliberately.** `buildLineExtras`
-(`apps/server/src/modifier-selection.ts`) freezes the list's and the label's customer-facing map
-exactly as the catalogue row holds it — `null` included — and widens each plain staff name into a
-one-entry map under the venue's default content language. Nothing has fallen back by the time the
+(`apps/server/src/modifier-selection.ts`) narrows the list's and the label's customer-facing map to
+one entry under the venue's default content language, holding another stored language's text where
+the default has none, and leaves a `null` map `null` (`defaultLanguageText`,
+`packages/catalogue/src/default-language-text.ts`); it widens each plain staff name into a
+one-entry map under the same language. Nothing has fallen back by the time the
 row is written, so the customer-to-staff fallback for an answer runs at RENDER time instead, in
 `customerOptionSnapshotLabels` (`packages/catalogue/src/option-snapshot-labels.ts`): it takes the customer
 map when `nonBlankTranslations` says that map holds text in some language and the staff map
@@ -222,7 +224,7 @@ Where each one surfaces:
 | Receipt — one `<list>: <label>` line under the dish | each frozen answer's customer maps, falling back to its staff maps | `customerOptionSnapshotLabels`, `packages/catalogue/src/option-snapshot-labels.ts` |
 | Kitchen ticket | dishes and split-off extras read frozen kitchen names, falling back to staff names; a following extra's `+` line reads its frozen staff name; cross-references read kitchen names; options answers read kitchen names, falling back to staff names | `buildTicketItems`, `apps/server/src/kitchen-print.ts` |
 | The rest of the order — "Also on this order" on a station's own ticket, on a ticket a printer shares between stations, and in the kitchen screen's order card — listing dishes at stations not on the ticket or card | the kitchen names, through `kitchenPresentationName` | `readRestOfOrder`, `apps/server/src/rest-of-order.ts` |
-| Kitchen display and the expediter's pass | dishes and split-off extras read frozen kitchen names, falling back to staff names; a following extra reads its frozen customer `descriptions`; cross-references read kitchen names | `readQueueSubItems`, `listStationQueue` and `listExpoQueue`, `apps/server/src/working-order.ts`, and `listPassScreen` and `listPassMonitor`, `apps/server/src/pass-board.ts` |
+| Kitchen display and the expediter's pass | dishes and split-off extras read frozen kitchen names, falling back to staff names; a following extra reads its frozen customer `descriptions`, the default content language's text; cross-references read kitchen names | `readQueueSubItems`, `listStationQueue` and `listExpoQueue`, `apps/server/src/working-order.ts`, and `listPassScreen` and `listPassMonitor`, `apps/server/src/pass-board.ts` |
 | Make now, on the till that sent made-here items | the staff names through `staffPresentationName`, each option answer's staff wording, and each extra's frozen staff name with ` x<n>` | `readMadeHereItems`, `apps/server/src/made-here.ts`, shown by `apps/till/src/widgets/make-now.ts` |
 | Till buttons and basket | the staff names | `apps/till/src/widgets/product-name.ts` |
 | A table tab's line list | the staff names, resolved server-side | `readTabLines`, `apps/server/src/working-order.ts` |

@@ -434,13 +434,13 @@ left both `lineTotal`s exactly where they were. `ImporteTotal` held still there 
 hands `recordSale` its own `total`, which a production sale does not — so what the third literal is
 pinned against is the CALLER's declared total, not the basket.
 
-The paper receipt prints one `<list>: <label>` line indented under its dish. Each side takes its
-CUSTOMER text in the language the sale was filed in (`namesLocale`, which a copy printed in another
-receipt language keeps), then in the venue's default content language (the key of the frozen staff
-name), then in any other stored language, and falls back to the staff name only when it has no
-customer text at all, never to the kitchen name —
-`customerOptionSnapshotLabels` (`packages/catalogue/src/option-snapshot-labels.ts`), beside the
-kitchen-facing `optionSnapshotLabels` the printed kitchen ticket uses.
+The paper receipt prints one `<list>: <label>` line indented under its dish. An order line stores
+each side's CUSTOMER text as one entry under the venue's default content language, holding that
+language's text, or another stored language's where the default has none (`buildLineExtras`,
+`apps/server/src/modifier-selection.ts`), so the receipt prints it whatever language it is in. Each
+side falls back to the staff name only when it has no customer text at all, never to the kitchen
+name — `customerOptionSnapshotLabels` (`packages/catalogue/src/option-snapshot-labels.ts`), beside
+the kitchen-facing `optionSnapshotLabels` the printed kitchen ticket uses.
 
 ## Storage
 

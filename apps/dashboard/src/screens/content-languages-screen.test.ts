@@ -777,7 +777,7 @@ describe("receipt language warning", () => {
     );
     expect(receiptWarning(el)!.getAttribute("role")).toBe("note");
     expect(receiptWarning(el)!.textContent!.trim()).toBe(
-      "Receipts print in Galician, which is not one of your content languages, so product names on them print in Spanish, the default language.",
+      "By default, receipts print in Galician, which is not one of your content languages. Product names on them print in Spanish, the default language.",
     );
   });
 
@@ -835,7 +835,7 @@ describe("receipt language warning", () => {
       }),
     );
     expect(receiptWarning(el)!.textContent!.trim()).toBe(
-      "Los recibos se imprimen en euskera, que no es uno de tus idiomas del contenido, así que los nombres de los productos salen en español, el idioma predeterminado.",
+      "Por defecto, los recibos se imprimen en euskera, que no es uno de tus idiomas del contenido. Los nombres de los productos salen en español, el idioma predeterminado.",
     );
   });
 });

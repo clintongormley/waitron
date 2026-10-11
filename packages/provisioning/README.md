@@ -141,7 +141,7 @@ not the venue.
 other value is refused with `fiscal.regime_not_implemented`. The pure `planVenue` also refuses a
 `--locale` count outside one-or-two (`provisioning.invalid_locales`) and duplicate codes among the
 standard, full and rectificative series (`provisioning.duplicate_series_code`) before the directory is opened.
-The first `--locale` is the language receipts print in. The command checks it neither against the
+The first `--locale` is the language receipts print in by default. The command checks it neither against the
 country pack's languages nor against a region that fixes one (Catalonia); the dashboard's Receipts
 page and setup do. Before `planVenue` runs, the command reaches the fiscal regime's own venue-field seat, which
 refuses a legal name or operation description carrying a character XML forbids, an operation

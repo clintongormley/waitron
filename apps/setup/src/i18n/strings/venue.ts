@@ -36,7 +36,7 @@ export const venueEn = {
   "venue.time_zone": "Time zone: {zone}",
   "venue.invoice_locales_help_label": "Help with the receipt language",
   "venue.invoice_locales_help":
-    "Choose the one language receipts print in. Where the region's law sets it, it is chosen for you and cannot be changed. The operation description is kept separately.",
+    "Choose the language receipts print in by default. Where the region's law sets it, it is chosen for you and cannot be changed. The operation description is kept separately.",
 
   // Each `venue.field.*` fills `{field}` in the three sentences after it. Spanish carries the
   // article in the field, so the sentences read correctly whatever the noun's gender.
@@ -230,7 +230,7 @@ export const venueEs: Record<keyof typeof venueEn, string> = {
   "venue.time_zone": "Zona horaria: {zone}",
   "venue.invoice_locales_help_label": "Ayuda sobre el idioma del recibo",
   "venue.invoice_locales_help":
-    "Elige el idioma en que se imprimen los recibos. Donde la ley de la región lo fija, viene elegido y no se puede cambiar. La descripción de la operación se guarda aparte.",
+    "Elige el idioma en que se imprimen los recibos por defecto. Donde la ley de la región lo fija, viene elegido y no se puede cambiar. La descripción de la operación se guarda aparte.",
 
   "venue.field.country": "el país",
   "venue.field.tax_id": "el número de identificación fiscal",

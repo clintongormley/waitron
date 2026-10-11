@@ -578,7 +578,7 @@ export interface ReceiptPreview {
   paperWidths: PrintPaperWidth[];
 }
 
-/** The language this location's receipts print in, which the venue's region may fix. */
+/** The language this location's receipts print in by default, which the venue's region may fix. */
 export interface ReceiptLanguage {
   /** As stored, even when it is not one of `choices`. */
   language: string;

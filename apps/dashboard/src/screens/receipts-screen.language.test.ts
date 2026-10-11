@@ -674,7 +674,7 @@ describe("the Receipts page's receipt language in Spanish", () => {
       "Euskera",
     ]);
     expect(warning(madridPage)!.textContent!.trim()).toBe(
-      "Los recibos se imprimen en gallego, que no es uno de tus idiomas del contenido, así que los nombres de los productos salen en español, el idioma predeterminado.",
+      "Por defecto, los recibos se imprimen en gallego, que no es uno de tus idiomas del contenido. Los nombres de los productos salen en español, el idioma predeterminado.",
     );
     cleanupWidgets();
     const barcelonaPage = await mount(stubApi(barcelona("es-ES")));

@@ -55,7 +55,7 @@ export const tenants = table(
 
 /**
  * A venue. `invoiceLocales` is an ORDERED list of one or two receipt languages. An
- * order line's customer text is snapshotted under every entry.
+ * order line's customer text, in the default content language, is stored under every entry.
  *
  * The order is fiscal, not presentational. A reprint or a corrective invoice
  * issued a year later must reproduce the document the customer took, which is
