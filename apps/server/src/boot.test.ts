@@ -4728,34 +4728,43 @@ describe("startServer — the append-only watch in trading mode", () => {
   /** A seeded trading venue of its own, so a tampered trigger reaches no other test. */
   async function startWatched() {
     const venue = await freshVenue();
-    await seedTradingVenue(venue.store.venue);
-    await venue.store.close();
     const stateDir = await mkdtemp(join(tmpdir(), "waitron-boot-append-only-state-"));
-    await writeFile(
-      join(stateDir, "modules.json"),
-      JSON.stringify({ modules: { "fiscal-none": false } }),
-    );
-    const port = await freePort();
-    const server = await startServer(
-      {
-        ...KEY_ENV,
-        WAITRON_STATE_DIR: stateDir,
-        WAITRON_VENUE_DIR: venue.directory,
-        WAITRON_HTTP_PORT: String(port),
-        WAITRON_MIGRATIONS_DIR: migrationsRoot,
-        WAITRON_ENV: "preproduction",
-      },
-      {},
-      { appendOnlyWatch: { intervalMs: INTERVAL_MS } },
-    );
-    await awaitListening(port);
+    const cleanup = async () => {
+      await rm(venue.directory, { recursive: true, force: true });
+      await rm(stateDir, { recursive: true, force: true });
+    };
+    let server: StartedServer | undefined;
+    try {
+      await seedTradingVenue(venue.store.venue);
+      await venue.store.close();
+      await writeFile(
+        join(stateDir, "modules.json"),
+        JSON.stringify({ modules: { "fiscal-none": false } }),
+      );
+      const port = await freePort();
+      server = await startServer(
+        {
+          ...KEY_ENV,
+          WAITRON_STATE_DIR: stateDir,
+          WAITRON_VENUE_DIR: venue.directory,
+          WAITRON_HTTP_PORT: String(port),
+          WAITRON_MIGRATIONS_DIR: migrationsRoot,
+          WAITRON_ENV: "preproduction",
+        },
+        {},
+        { appendOnlyWatch: { intervalMs: INTERVAL_MS } },
+      );
+      await awaitListening(port);
+    } catch (error) {
+      await server?.close();
+      await venue.store.close();
+      await cleanup();
+      throw error;
+    }
     return {
       server,
       stateDir,
-      cleanup: async () => {
-        await rm(venue.directory, { recursive: true, force: true });
-        await rm(stateDir, { recursive: true, force: true });
-      },
+      cleanup,
       /** The timeout lets the DDL wait out a boot duty's write rather than fail SQLITE_BUSY. */
       tamper: (statements: string) => {
         const raw = new DatabaseSync(join(venue.directory, "venue.db"), { timeout: 5_000 });

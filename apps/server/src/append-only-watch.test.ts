@@ -151,6 +151,12 @@ describe("startAppendOnlyWatch", () => {
     expect(w.armed).toHaveLength(1);
   });
 
+  it("finds the triggers restored after the case that replaced one", () => {
+    const w = watch();
+    w.tick();
+    expect(w.refused).toEqual([]);
+  });
+
   it("stop() cancels the armed tick, and a tick that fires anyway does nothing", () => {
     suite.db.run(sql.raw(`drop trigger "${UPDATE}"`));
     const w = watch();
