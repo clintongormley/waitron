@@ -115,7 +115,14 @@ describe("generic print runtime's invoice boundary", () => {
         visibleKeys: [],
         invoiceReceiptsAt: now,
       });
-      expect(jobs.map((job) => job.id)).toEqual([ctx.managed, ctx.ordinary]);
+      expect(jobs.map((job) => job.id)).toEqual([ctx.managed]);
+      const next = await claimPrintJobs(tx, ctx.agentId, {
+        locationId: ctx.locationId,
+        visibleKeys: [],
+        invoiceReceiptsAt: now,
+      });
+      expect(next.map((job) => job.id)).toEqual([ctx.ordinary]);
+      expect([...jobs, ...next].map((job) => job.id)).toEqual([ctx.managed, ctx.ordinary]);
       expect(
         await reportPrintJob(tx, {
           agentId: ctx.agentId,

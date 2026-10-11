@@ -181,11 +181,26 @@ describe("double-pull race", () => {
       (tx) => claimPrintJobs(tx, agentB, { locationId: cfg.locationId, visibleKeys: [] }),
     );
 
+    expect(aResult).toHaveLength(1);
+    expect(bResult).toHaveLength(1);
     const claimedIds = [...aResult.map((j) => j.id), ...bResult.map((j) => j.id)];
+    for (let pull = 2; pull < N; pull += 1) {
+      const next = await withTransaction(suite.db, (tx) =>
+        claimPrintJobs(tx, pull % 2 === 0 ? agentA : agentB, {
+          locationId: cfg.locationId,
+          visibleKeys: [],
+        }),
+      );
+      expect(next).toHaveLength(1);
+      claimedIds.push(next[0]!.id);
+    }
     expect(new Set(claimedIds).size).toBe(claimedIds.length);
     expect(claimedIds).toHaveLength(N);
-    expect(aResult).toHaveLength(N); // A ran first, so A won the whole batch
-    expect(bResult).toHaveLength(0);
+    expect(
+      await withTransaction(suite.db, (tx) =>
+        claimPrintJobs(tx, agentA, { locationId: cfg.locationId, visibleKeys: [] }),
+      ),
+    ).toEqual([]);
 
     const rows = await suite.db
       .select({ id: printJobs.id })

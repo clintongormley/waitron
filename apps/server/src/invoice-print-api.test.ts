@@ -575,7 +575,11 @@ describe("invoice receipt API attempt boundary", () => {
         "drawer",
       ),
     );
-    const jobs = await ctx.pull();
+    const first = await ctx.pull();
+    expect(first.map((job) => job.id)).toEqual([ctx.job.jobId]);
+    const second = await ctx.pull();
+    expect(second.map((job) => job.id)).toEqual([ordinary.jobId]);
+    const jobs = [...first, ...second];
     expect(jobs.map((job) => job.id)).toEqual([ctx.job.jobId, ordinary.jobId]);
     expect(jobs.find((job) => job.id === ordinary.jobId)).not.toHaveProperty("invoiceClaim");
     expect(
@@ -584,13 +588,13 @@ describe("invoice receipt API attempt boundary", () => {
     ).toBe(204);
     expect(
       (await suite.db.select().from(printJobs).where(eq(printJobs.id, ordinary.jobId)))[0],
-    ).toMatchObject({ status: "failed", attempts: 1, lastError: "ordinary connection detail" });
+    ).toMatchObject({ status: "failed", attempts: 5, lastError: "ordinary connection detail" });
     const retried = await ctx.pull();
-    expect(retried.map((job) => job.id)).toEqual([ordinary.jobId]);
+    expect(retried.map((job) => job.id)).toEqual([]);
     expect((await ctx.result({ status: "done" }, ordinary.jobId)).status).toBe(204);
     expect(
       (await suite.db.select().from(printJobs).where(eq(printJobs.id, ordinary.jobId)))[0],
-    ).toMatchObject({ status: "done", attempts: 1 });
+    ).toMatchObject({ status: "failed", attempts: 5, lastError: "ordinary connection detail" });
     expect(await ctx.row()).toMatchObject({ status: "sending", reportedOutcome: null });
   });
   it("rolls back the print claim if its invoice token cannot be attached", async () => {
