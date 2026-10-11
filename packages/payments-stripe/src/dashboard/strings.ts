@@ -17,12 +17,10 @@ const en = {
   "payments.stripe.add_reader_heading": "Add a Stripe reader",
   "payments.stripe.reader_name": "Reader name",
   "payments.stripe.reader_id": "Reader ID",
-  "payments.stripe.reader_id_help":
-    "The Terminal reader's ID from your Stripe dashboard — it starts with tmr_.",
+  "payments.stripe.reader_id_help": "tmr_… from your Stripe dashboard",
   "payments.stripe.reader_name_required": "Give the reader a name",
   "payments.stripe.reader_id_required": "Enter the reader's Stripe ID",
   "payments.stripe.add": "Add",
-  "payments.stripe.add_failed": "That reader ID was not accepted. Check it and try again.",
   "payments.stripe.cancel": "Cancel",
 } as const;
 
@@ -42,12 +40,10 @@ const es: Record<keyof typeof en, string> = {
   "payments.stripe.add_reader_heading": "Añadir un lector Stripe",
   "payments.stripe.reader_name": "Nombre del lector",
   "payments.stripe.reader_id": "ID del lector",
-  "payments.stripe.reader_id_help":
-    "El ID del lector Terminal desde tu panel de Stripe: empieza por tmr_.",
+  "payments.stripe.reader_id_help": "tmr_… de tu panel de Stripe",
   "payments.stripe.reader_name_required": "Ponle un nombre al lector",
   "payments.stripe.reader_id_required": "Introduce el ID de Stripe del lector",
   "payments.stripe.add": "Añadir",
-  "payments.stripe.add_failed": "No se aceptó ese ID de lector. Compruébalo e inténtalo de nuevo.",
   "payments.stripe.cancel": "Cancelar",
 };
 

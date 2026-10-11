@@ -7,7 +7,6 @@ import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-input.js";
 import "@waitron/ui/src/components/wt-dialog.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
-import "@waitron/ui/src/components/wt-help-tooltip.js";
 import { codeMessage, codeOf, type DashboardRequest } from "@waitron/dashboard-kit";
 import { t } from "./strings.js";
 import { StripePaymentsClient } from "./client.js";
@@ -25,14 +24,6 @@ export class StripeAddReader extends LitElement {
         display: block;
         margin-bottom: var(--wt-space-4);
       }
-      .id-label {
-        display: flex;
-        align-items: center;
-        gap: var(--wt-space-1);
-        margin-bottom: var(--wt-space-1);
-        font-size: var(--wt-font-size-sm);
-        color: var(--wt-color-text-muted);
-      }
     `,
   ];
 
@@ -45,6 +36,8 @@ export class StripeAddReader extends LitElement {
   @state() private attempted = false;
   /** A refusal that names no field, shown above Add until the next press. */
   @state() private refusal = "";
+  /** A refusal naming the Reader ID, shown under it until that field changes or Add is pressed. */
+  @state() private refusedReference = "";
   @state() private busy = false;
   #closed = false;
   #opening = {};
@@ -89,6 +82,7 @@ export class StripeAddReader extends LitElement {
     this.reference = "";
     this.attempted = false;
     this.refusal = "";
+    this.refusedReference = "";
     this.busy = false;
     super.disconnectedCallback();
   }
@@ -116,6 +110,7 @@ export class StripeAddReader extends LitElement {
     event.stopPropagation();
     if (opening !== this.#opening || !this.isConnected || this.#closed) return;
     this[field] = event.detail.value;
+    if (field === "reference") this.refusedReference = "";
     this.#scope?.changed();
   }
 
@@ -127,6 +122,17 @@ export class StripeAddReader extends LitElement {
     };
   }
 
+  #refused(error: unknown): void {
+    const code = codeOf(error);
+    const field = (error as { params?: { field?: unknown } }).params?.field;
+    if (code === "reader.reference_unknown" && field === "reference") {
+      this.refusedReference = codeMessage(code);
+      void this.updateComplete.then(() => focusFirstInvalid(this.shadowRoot!));
+    } else {
+      this.refusal = codeMessage(code);
+    }
+  }
+
   async #add(event: Event, opening: object): Promise<void> {
     event.stopPropagation();
     if (this.busy || opening !== this.#opening || !this.isConnected || this.#closed) return;
@@ -135,6 +141,7 @@ export class StripeAddReader extends LitElement {
     const added = this.onAdded;
     this.attempted = true;
     this.refusal = "";
+    this.refusedReference = "";
     const errors = this.#fieldErrors();
     if (errors.name !== "" || errors.reference !== "") {
       await this.updateComplete;
@@ -161,10 +168,7 @@ export class StripeAddReader extends LitElement {
       }
     } catch (error) {
       if (opening !== this.#opening || !this.isConnected || this.#closed) return;
-      this.refusal =
-        codeOf(error) === "reader.not_found" || codeOf(error) === "server.internal"
-          ? t("payments.stripe.add_failed")
-          : codeMessage(codeOf(error));
+      this.#refused(error);
     } finally {
       if (opening === this.#opening) {
         this.busy = false;
@@ -181,6 +185,7 @@ export class StripeAddReader extends LitElement {
     const opening = this.#opening;
     const errors = this.#fieldErrors();
     const blocked = errors.name !== "" || errors.reference !== "";
+    const referenceError = errors.reference || this.refusedReference;
     return html`
       <wt-dialog
         heading=${t("payments.stripe.add_reader_heading")}
@@ -201,25 +206,23 @@ export class StripeAddReader extends LitElement {
           .value=${this.name}
           @wt-change=${(e: CustomEvent<{ value: string }>) => this.#onField(e, "name", opening)}
         ></wt-input>
-        <div class="id-label">
-          <span>${t("payments.stripe.reader_id")}</span>
-          <wt-help-tooltip aria-label=${t("payments.stripe.reader_id")} data-test="reader-id-help">
-            ${t("payments.stripe.reader_id_help")}
-          </wt-help-tooltip>
-        </div>
         <wt-input
           class="field"
           name="reference"
           data-test="reader-id"
           label=${t("payments.stripe.reader_id")}
+          hint=${t("payments.stripe.reader_id_help")}
           required
-          error=${errors.reference}
+          error=${referenceError}
           .value=${this.reference}
           @wt-change=${(e: CustomEvent<{ value: string }>) => this.#onField(e, "reference", opening)}
         ></wt-input>
         <wt-form-actions
           slot="footer"
-          .error=${[this.refusal, blocked ? t("payments.stripe.fix_fields") : ""]
+          .error=${[
+            this.refusal,
+            blocked || this.refusedReference !== "" ? t("payments.stripe.fix_fields") : "",
+          ]
             .filter(Boolean)
             .join(" ")}
         >
