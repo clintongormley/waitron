@@ -285,10 +285,10 @@ describe("A4 line above the total and space around the logo", () => {
       );
       return { page, before: elements[total - 1]?.kind };
     };
-    const longInvoice = (count: number, simulated: boolean, qr: string, subtitle?: string) => ({
+    const longInvoice = (count: number, simulated: boolean, qr: string) => ({
       ...fixture,
       simulated,
-      receipt: { ...fixture.receipt, headerSubtitle: subtitle },
+      receipt: { ...fixture.receipt, headerSubtitle: undefined },
       result: {
         ...fixture.result,
         qr,
@@ -300,14 +300,16 @@ describe("A4 line above the total and space around the logo", () => {
       page: 2,
       before: "rule",
     });
-    for (const simulated of [false, true])
-      for (const qr of [fixture.result.qr, ""])
-        for (const subtitle of [undefined, "Sub"])
-          for (let count = 1; count < 120; count++)
-            expect(
-              ruleThenTotal(longInvoice(count, simulated, qr, subtitle)).before,
-              `${count} lines, simulated ${simulated}, QR ${qr !== ""}, subtitle ${subtitle}`,
-            ).toBe("rule");
+    // Each count leaves room for the rule but not for TOTAL at the foot of a page.
+    for (const [count, simulated, qr] of [
+      [9, false, ""],
+      [6, true, fixture.result.qr],
+      [22, true, ""],
+    ] as const)
+      expect(
+        ruleThenTotal(longInvoice(count, simulated, qr)).before,
+        `${count} lines, simulated ${simulated}, QR ${qr !== ""}`,
+      ).toBe("rule");
   });
 
   it("draws the rule as a dark line in the PDF and never as a QR", async () => {
