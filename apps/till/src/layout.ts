@@ -63,7 +63,6 @@ export type CardType =
   | "prep-queue"
   | "notifications"
   | "floor-plan"
-  | "table-layout-editor"
   | "kds-board"
   | "expo"
   | "table-order";
@@ -93,14 +92,10 @@ export interface CanvasDef {
   theme?: ThemeOverride;
 }
 
-// Mirrors the capability and permission axes of `CARD_CONTRACTS`
+// Mirrors the capability axis of `CARD_CONTRACTS`
 // (`packages/layouts/src/card-contract.ts`). `tender-pay` still renders without its capability, because
 // it takes cash (`widgets/card-grid.ts`).
 export const CARD_REQUIRED_CAPABILITY: Partial<Record<CardType, CapabilityFlag>> = {
   "tender-pay": "integrated-card-payment",
   "kds-board": "act-as-kds",
-};
-
-export const CARD_REQUIRED_PERMISSION: Partial<Record<CardType, string>> = {
-  "table-layout-editor": "venue.configure",
 };

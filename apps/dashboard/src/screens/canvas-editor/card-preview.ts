@@ -55,11 +55,6 @@ function buildPreview(type: CardType): TemplateResult {
         <span class="cp-table cp-table-round"></span><span class="cp-table"></span
         ><span class="cp-table cp-table-round"></span><span class="cp-table"></span>
       </div>`;
-    case "table-layout-editor":
-      return html`<div class="cp cp-table-layout-editor" data-preview="table-layout-editor">
-        <span class="cp-table"><span class="cp-edit-handle"></span></span
-        ><span class="cp-table cp-table-round"></span><span class="cp-table"></span>
-      </div>`;
     case "kds-board":
       return html`<div class="cp cp-kds-board" data-preview="kds-board">
         ${Array.from(

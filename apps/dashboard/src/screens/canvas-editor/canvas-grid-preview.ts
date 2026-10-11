@@ -246,9 +246,7 @@ export class CanvasGridPreview extends LitElement {
         flex: 1 1 auto;
         height: var(--wt-space-3);
       }
-      /* floor-plan / table-layout-editor → a few table shapes */
-      .cp-floor-plan,
-      .cp-table-layout-editor {
+      .cp-floor-plan {
         display: flex;
         flex-wrap: wrap;
         align-content: center;
@@ -261,15 +259,6 @@ export class CanvasGridPreview extends LitElement {
       }
       .cp-table-round {
         border-radius: var(--wt-radius-full);
-      }
-      .cp-edit-handle {
-        position: absolute;
-        right: calc(-1 * var(--wt-space-1));
-        bottom: calc(-1 * var(--wt-space-1));
-        width: var(--wt-space-2);
-        height: var(--wt-space-2);
-        background: var(--wt-color-primary);
-        border-radius: var(--wt-radius-sm);
       }
       /* kds-board → status columns of ticket cards */
       .cp-kds-board {

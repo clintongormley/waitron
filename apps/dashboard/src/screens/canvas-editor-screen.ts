@@ -1196,7 +1196,6 @@ export class CanvasEditorScreen extends LitElement {
 
   #renderCardPanel(tab: TabDef, index: number): TemplateResult {
     const card = tab.cards[index]!;
-    const contract = CARD_CONTRACTS[card.type];
     return html`<div class="panel" data-test="card-panel">
       <h2 class="panel-title">${t(`canvas_editor.card.${card.type}` as StringKey)}</h2>
       <wt-input
@@ -1218,13 +1217,6 @@ export class CanvasEditorScreen extends LitElement {
         @wt-change=${(e: CustomEvent<{ value: string }>) => this.#onRowSpan(e)}
       ></wt-input>
       ${this.#renderConfig(card)} ${this.#renderVisibleWhen(card)}
-      ${
-        contract.requiredPermission !== undefined
-          ? html`<p class="field" data-test="permission-note">
-              ${t("canvas_editor.permission_note")}
-            </p>`
-          : nothing
-      }
       <div class="panel-actions">
         <wt-button
           size="sm"

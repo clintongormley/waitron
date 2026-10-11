@@ -10,7 +10,6 @@ export const CARD_TYPES = [
   "prep-queue",
   "notifications",
   "floor-plan",
-  "table-layout-editor",
   "kds-board",
   "expo",
   "table-order",
@@ -100,7 +99,6 @@ export interface CardContractMirror {
   defaultColSpan: number;
   defaultRowSpan: number;
   visibilityStates: readonly string[];
-  requiredPermission?: string;
   requiredCapability?: CapabilityFlag;
   saleCritical: boolean;
   configFields: readonly string[];
@@ -160,14 +158,6 @@ export const CARD_CONTRACTS: Record<CardType, CardContractMirror> = {
   "floor-plan": {
     defaultColSpan: 24,
     defaultRowSpan: 12,
-    visibilityStates: [],
-    saleCritical: false,
-    configFields: [],
-  },
-  "table-layout-editor": {
-    defaultColSpan: 24,
-    defaultRowSpan: 12,
-    requiredPermission: "venue.configure",
     visibilityStates: [],
     saleCritical: false,
     configFields: [],
