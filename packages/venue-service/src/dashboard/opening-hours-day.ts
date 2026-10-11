@@ -173,7 +173,11 @@ export class OpeningHoursDay extends LitElement {
       this.source = this.model;
     }
     this.registerScope();
-    if (this.source !== this.model) {
+    if (
+      this.source !== this.model ||
+      this.draftRevision !== this.model.clockRevision ||
+      this.draftClock !== this.model.businessDayClock
+    ) {
       this.retireDeletedOwners();
       if (
         (this.scope ? saveActionState(this.scope).unchanged : equal(this.draft, this.baseline)) &&

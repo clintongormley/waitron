@@ -260,6 +260,8 @@ export const QUERY_DEPENDENCIES = {
     "receipt_reprints",
     "print_jobs",
     "printers",
+    "location_business_day_settings",
+    "location_day_cutover_changes",
   ],
   getOrderPrinters: ["printers"],
   // The current mode's list; `dependenciesOf` narrows it at time of sale.

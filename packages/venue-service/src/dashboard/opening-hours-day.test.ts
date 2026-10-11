@@ -888,3 +888,37 @@ it("uses the later occurrence's date for a repeating named day's clock warning",
   );
   expect(range.businessDate).toBe("2027-10-30");
 });
+
+it("a clean Day draft adopts a clock-only model change before its first edit", async () => {
+  const writes: unknown[] = [];
+  const model = dayFixture();
+  const day = await mount(async (_url, _method, body) => {
+    writes.push(body);
+  }, model);
+  model.clockRevision = 8;
+  day.requestUpdate();
+  await day.updateComplete;
+  resize(day);
+  await day.updateComplete;
+  save(day).click();
+  await expect.poll(() => writes.length).toBe(1);
+  expect(writes[0]).toMatchObject({ expectedClockRevision: 8 });
+});
+it("a dirty Day draft keeps its opened revision and hours through a passive clock replacement", async () => {
+  const writes: unknown[] = [];
+  const day = await mount(async (_url, _method, body) => {
+    writes.push(body);
+  });
+  resize(day);
+  await day.updateComplete;
+  day.model = { ...dayFixture(), clockRevision: 8 };
+  await day.updateComplete;
+  save(day).click();
+  await expect.poll(() => writes.length).toBe(1);
+  expect(writes[0]).toMatchObject({
+    expectedClockRevision: 0,
+    days: expect.arrayContaining([
+      { weekday: 1, slots: [{ periodId: "p1", startsAt: "10:00", endsAt: "15:00" }] },
+    ]),
+  });
+});

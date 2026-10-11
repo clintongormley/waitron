@@ -539,6 +539,12 @@ export interface StationNotice {
 
 export interface BusinessDayClockConflict {
   departmentId: string;
+  departmentName?: string;
+  zoneName?: string;
+  periodName?: string;
+  specialDateName?: string;
+  startsAt?: string;
+  endsAt?: string;
   zoneId?: string;
   weekday?: number;
   specialDateId?: string;

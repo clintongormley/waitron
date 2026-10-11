@@ -217,3 +217,90 @@ it("the Day view uses its selected business date for every department and zone c
     expect.objectContaining({ dayCutover: "05:00", endMinute: 1320 }),
   ]);
 });
+
+it("labels actual dated column bounds and both transition lengths without labelling a normal-week reference", async () => {
+  const el = await grid();
+  const columns = el.columns.map((column) => ({
+    ...column,
+    clock: {
+      ...column.clock!,
+      startAt: "2026-11-03T04:00:00.000Z",
+      endAt: column.key === "short" ? "2026-11-04T02:00:00.000Z" : "2026-11-04T06:00:00.000Z",
+    },
+  }));
+  el.columns = [
+    ...columns,
+    { key: "reference", label: "Normal week", slots: [], periods: [], editable: false },
+  ];
+  await el.updateComplete;
+  const headings = el.shadowRoot!.querySelectorAll(".heading");
+  expect(headings[2]!.textContent).toContain("22");
+  expect(headings[2]!.querySelector('time[datetime="2026-11-04T02:00:00.000Z"]')).toBeTruthy();
+  expect(headings[3]!.textContent).toContain("26");
+  expect(headings[3]!.querySelector('time[datetime="2026-11-04T06:00:00.000Z"]')).toBeTruthy();
+  expect(headings[1]!.textContent).toContain("05:00");
+  expect(headings[4]!.textContent).toContain("07:00");
+  expect(headings[5]!.textContent?.trim()).toBe("Normal week");
+});
+
+for (const kind of ["all", "station"] as const) {
+  it(`${kind} renders the historical start, transition end and future start in actual dated columns`, async () => {
+    const { OpeningHoursApi } = await import("./opening-hours-client.js");
+    await import("./opening-hours-all.js");
+    await import("./opening-hours-station.js");
+    const el = document.createElement(
+      kind === "all" ? "opening-hours-all" : "opening-hours-station",
+    );
+    const clock = {
+      timeZone: "Europe/Madrid",
+      dayCutover: "05:00",
+      cutoverChanges: [{ effectiveBusinessDay: "2026-11-04", dayCutover: "07:00" }],
+    };
+    const departments = [
+      { id: "d", name: "Restaurant", active: true, week: [], dates: [], periods: [] },
+    ];
+    Object.assign(el, {
+      weekStart: "2026-11-02",
+      dayCutover: "07:00",
+      businessDayClock: clock,
+      departments,
+      stationId: "station",
+      model: { dayCutover: "07:00", businessDayClock: clock, departments },
+      api: new OpeningHoursApi(async () => ({ always: null, days: [] }) as never),
+    });
+    applyTokens(el);
+    hosts.push(el);
+    document.body.append(el);
+    await el.updateComplete;
+    await expect.poll(() => el.shadowRoot!.querySelector("service-grid")).toBeTruthy();
+    const rendered = el.shadowRoot!.querySelector("service-grid")!;
+    await rendered.updateComplete;
+    const headings = rendered.shadowRoot!.querySelectorAll(".heading");
+    expect(headings[1]!.querySelector('time[datetime="2026-11-02T04:00:00.000Z"]')).toBeTruthy();
+    expect(headings[2]!.textContent).toContain("26");
+    expect(headings[2]!.querySelector('time[datetime="2026-11-04T06:00:00.000Z"]')).toBeTruthy();
+    expect(headings[3]!.textContent).toContain("07:00");
+    expect(headings[3]!.querySelector('time[datetime="2026-11-04T06:00:00.000Z"]')).toBeTruthy();
+    expect(rendered.shadowRoot!.querySelectorAll("[data-editable]")).toHaveLength(0);
+  });
+}
+
+it("keeps dated headings concise while exposing their precise boundary instants", async () => {
+  const el = await grid();
+  el.columns = [
+    {
+      ...el.columns[1]!,
+      clock: {
+        dayCutover: "05:00",
+        endMinute: 1320,
+        startAt: "2026-11-03T04:00:00.000Z",
+        endAt: "2026-11-04T02:00:00.000Z",
+      },
+    },
+  ];
+  await el.updateComplete;
+  const bounds = el.shadowRoot!.querySelector(".bounds")!;
+  expect(bounds.textContent?.replace(/\s+/g, " ").trim()).toBe("05:00 → 03:00");
+  expect(bounds.querySelector('time[datetime="2026-11-03T04:00:00.000Z"]')).toBeTruthy();
+  expect(bounds.querySelector('time[datetime="2026-11-04T02:00:00.000Z"]')).toBeTruthy();
+});

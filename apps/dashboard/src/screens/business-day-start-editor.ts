@@ -19,7 +19,7 @@ import type {
   BusinessDayStartInput,
   BusinessDayStartPreview,
 } from "../api/client.js";
-import { t } from "../i18n/t.js";
+import { t, currentLocale } from "../i18n/t.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
 
 type Draft = { effectiveBusinessDay: string; dayCutover: string };
@@ -96,7 +96,7 @@ export class BusinessDayStartEditor extends LitElement {
       this.#sequence++;
       this.preview = undefined;
       this.acknowledged = "";
-      this.actionError = t("business_day.changed");
+      if (!this.actionError) this.actionError = t("business_day.changed");
     }
     if (changes.has("readOnly") && this.readOnly) {
       this.#sequence++;
@@ -296,6 +296,60 @@ export class BusinessDayStartEditor extends LitElement {
       if (generation === this.#generation) this.busy = false;
     }
   }
+  #instant(at: string) {
+    return html`<time datetime=${at}
+      >${new Intl.DateTimeFormat(currentLocale(), {
+        timeZone: this.model.clock.timeZone,
+        year: "numeric",
+        month: "short",
+        day: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+        hourCycle: "h23",
+        timeZoneName: "short",
+      }).format(new Date(at))}</time
+    >`;
+  }
+  #conflict(conflict: BusinessDayStartPreview["conflicts"][number]): string {
+    const weekday =
+      conflict.weekday === undefined
+        ? undefined
+        : t(
+            (
+              [
+                "backup.weekday.mon",
+                "backup.weekday.tue",
+                "backup.weekday.wed",
+                "backup.weekday.thu",
+                "backup.weekday.fri",
+                "backup.weekday.sat",
+                "backup.weekday.sun",
+              ] as const
+            )[(conflict.weekday + 6) % 7]!,
+          );
+    const reason = t(
+      (
+        {
+          range: "business_day.conflict_range",
+          endpoint_day: "business_day.conflict_endpoint",
+          all_day: "business_day.conflict_all_day",
+          sending_cutoff: "business_day.conflict_sending",
+          transition_strip: "business_day.conflict_strip",
+        } as const
+      )[conflict.reason],
+    );
+    return [
+      conflict.departmentName ?? conflict.departmentId,
+      conflict.zoneName ?? conflict.zoneId,
+      conflict.specialDateName ?? conflict.specialDateId,
+      conflict.date ?? weekday,
+      conflict.periodName ?? conflict.periodId,
+      conflict.startsAt && conflict.endsAt ? `${conflict.startsAt}–${conflict.endsAt}` : undefined,
+      reason,
+    ]
+      .filter(Boolean)
+      .join(" · ");
+  }
   override render() {
     const model = this.model;
     if (!model) return nothing;
@@ -318,7 +372,7 @@ export class BusinessDayStartEditor extends LitElement {
             ? html`<dt>${t("business_day.pending")}</dt>
                 <dd>${pending.effectiveBusinessDay} · ${pending.dayCutover.slice(0, 5)}</dd>
                 <dt>${t("business_day.locks")}</dt>
-                <dd>${pending.locksAt}</dd>`
+                <dd>${this.#instant(pending.locksAt)}</dd>`
             : nothing
         }
       </dl>
@@ -400,13 +454,31 @@ export class BusinessDayStartEditor extends LitElement {
                         </p>
                         <dl>
                           <dt>${preview.previousDay.businessDay}</dt>
-                          <dd>${preview.previousDay.startAt} → ${preview.previousDay.endAt}</dd>
+                          <dd>
+                            ${this.#instant(preview.previousDay.startAt)} →
+                            ${this.#instant(preview.previousDay.endAt)}
+                          </dd>
                           <dt>${preview.effectiveDay.businessDay}</dt>
-                          <dd>${preview.effectiveDay.startAt} → ${preview.effectiveDay.endAt}</dd>
+                          <dd>
+                            ${this.#instant(preview.effectiveDay.startAt)} →
+                            ${this.#instant(preview.effectiveDay.endAt)}
+                          </dd>
                           <dt>${t("business_day.locks")}</dt>
-                          <dd>${preview.locksAt}</dd>
+                          <dd>${this.#instant(preview.locksAt)}</dd>
                         </dl>
-                        ${preview.conflictCount ? html`<p data-test="conflicts">${t("business_day.conflicts")} ${preview.conflictCount}. <a href="/manage/opening-hours">${t("business_day.open_hours")}</a></p>` : nothing}
+                        ${
+                          preview.conflictCount
+                            ? html`<p data-test="conflicts">
+                                  ${t("business_day.conflicts")} ${preview.conflictCount}.
+                                  <a href="/manage/opening-hours"
+                                    >${t("business_day.open_hours")}</a
+                                  >
+                                </p>
+                                <ul data-test="conflict-rows">
+                                  ${preview.conflicts.map((conflict) => html`<li>${this.#conflict(conflict)}</li>`)}
+                                </ul>`
+                            : nothing
+                        }
                       </div>`
                     : nothing
                 }

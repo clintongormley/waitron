@@ -121,7 +121,22 @@ export interface BusinessDayStartPreview {
   previousDay: { businessDay: string; dayCutover: string; startAt: string; endAt: string };
   effectiveDay: { businessDay: string; dayCutover: string; startAt: string; endAt: string };
   locksAt: string;
-  conflicts: readonly unknown[];
+  conflicts: readonly {
+    departmentId: string;
+    departmentName?: string;
+    zoneId?: string;
+    zoneName?: string;
+    weekday?: number;
+    specialDateId?: string;
+    specialDateName?: string;
+    date?: string;
+    periodId?: string;
+    periodName?: string;
+    startsAt?: string;
+    endsAt?: string;
+    rangeIndex: number;
+    reason: "range" | "endpoint_day" | "all_day" | "sending_cutoff" | "transition_strip";
+  }[];
   conflictCount: number;
   backupDeadlines: VenueClockPreview["backupDeadlines"];
 }

@@ -663,6 +663,12 @@ export const en = {
     "Earlier reports keep their days. Opening hours cannot change while this is pending.",
   "business_day.transition": "Previous day length:",
   "business_day.conflicts": "Conflicting schedules:",
+  "business_day.conflict_range": "Invalid or overlapping range",
+  "business_day.conflict_endpoint": "Range crosses the new start",
+  "business_day.conflict_all_day": "All-day range needs new hours",
+  "business_day.conflict_sending": "Last orders clash with the new start or next period",
+  "business_day.conflict_strip": "Hours overlap the changed start",
+
   "business_day.open_hours": "Review opening hours",
   "business_day.acknowledge": "I have reviewed the transition",
   "business_day.change": "Change start",
@@ -3273,6 +3279,13 @@ export const es: Record<StringKey, string> = {
     "Los informes anteriores conservan sus días. No se pueden cambiar los horarios mientras esté pendiente.",
   "business_day.transition": "Duración del día anterior:",
   "business_day.conflicts": "Horarios incompatibles:",
+  "business_day.conflict_range": "Tramo inválido o solapado",
+  "business_day.conflict_endpoint": "El tramo cruza el nuevo inicio",
+  "business_day.conflict_all_day": "El día completo necesita otro horario",
+  "business_day.conflict_sending":
+    "Los últimos pedidos coinciden con el nuevo inicio o el siguiente período",
+  "business_day.conflict_strip": "El horario coincide con el cambio de inicio",
+
   "business_day.open_hours": "Revisar horarios",
   "business_day.acknowledge": "He revisado la transición",
   "business_day.change": "Cambiar inicio",

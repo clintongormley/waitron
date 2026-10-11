@@ -156,7 +156,7 @@ venue defaults may be dropped rather than carried over (CLAUDE.md §3, last rule
 
 ## A495. Change the business-day start from a future date
 
-**A495 (owner, 2026-10-11) — OPEN.** Fiscal-adjacent: the owner lands it.
+**A495 (owner, 2026-10-11) — OPEN.** Implementation Tasks 1–5 are complete on the feature branch; scheduler/configuration transfer, final review and owner-approved landing remain. Fiscal-adjacent: the owner lands it.
 
 [Design](../superpowers/specs/2026-10-11-a495-business-day-history-design.md) ·
 [Implementation plan](../superpowers/plans/2026-10-11-a495-business-day-history.md).

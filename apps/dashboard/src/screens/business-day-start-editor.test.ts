@@ -208,7 +208,7 @@ it("shows schedule conflicts and prevents acknowledgement", async () => {
   const { el } = await rig({
     previewBusinessDayStart: async () => ({
       ...preview(),
-      conflicts: [{ departmentId: "dept", weekday: 1, reason: "range_cutover" }],
+      conflicts: [{ departmentId: "dept", weekday: 1, rangeIndex: 0, reason: "range" }],
       conflictCount: 1,
     }),
   });
@@ -245,4 +245,103 @@ it("read-only mode shows current and pending status without actions or fields", 
   expect(el.shadowRoot!.textContent).toContain("05:00");
   expect(q(el, "wt-button")).toBeNull();
   expect(q(el, "wt-input")).toBeNull();
+});
+
+it("shows identifying conflict rows with localized reasons while keeping the total and Save disabled", async () => {
+  setLocale("en-GB");
+  const { el } = await rig({
+    previewBusinessDayStart: async () => ({
+      ...preview(),
+      conflictCount: 23,
+      conflicts: [
+        {
+          departmentId: "dept",
+          departmentName: "Restaurant",
+          zoneId: "zone",
+          zoneName: "Terrace",
+          date: "2026-11-04",
+          specialDateId: "named",
+          specialDateName: "Festival",
+          periodId: "period",
+          periodName: "Dinner",
+          startsAt: "22:00",
+          endsAt: "04:30",
+          rangeIndex: 0,
+          reason: "endpoint_day",
+        },
+      ],
+    }),
+  });
+  await click(el, "change");
+  await change(el, "effectiveBusinessDay", "2026-11-04");
+  await change(el, "dayCutover", "03:00");
+  const rows = q(el, "[data-test=conflict-rows]");
+  expect(rows?.textContent).toContain("Restaurant");
+  expect(rows?.textContent).toContain("Terrace");
+  expect(rows?.textContent).toContain("Festival");
+  expect(rows?.textContent).toContain("2026-11-04");
+  expect(rows?.textContent).toContain("Dinner");
+  expect(rows?.textContent).toContain("22:00–04:30");
+  expect(rows?.textContent).toContain("crosses the new start");
+  expect(q(el, "[data-test=conflicts]")?.textContent).toContain("23");
+  expect(q(el, "[data-test=acknowledge]")).toBeNull();
+  expect(save(el).disabled).toBe(true);
+});
+
+it.each([
+  [0, "Sun"],
+  [1, "Mon"],
+  [6, "Sat"],
+])("labels weekly conflicts using calendar weekday %s", async (weekday, label) => {
+  setLocale("en-GB");
+  const { el } = await rig({
+    previewBusinessDayStart: async () => ({
+      ...preview(),
+      conflictCount: 1,
+      conflicts: [
+        {
+          departmentId: "d",
+          departmentName: "Restaurant",
+          weekday,
+          rangeIndex: 0,
+          reason: "range",
+        },
+      ],
+    }),
+  });
+  await click(el, "change");
+  await change(el, "effectiveBusinessDay", "2026-11-04");
+  await change(el, "dayCutover", "03:00");
+  expect(q(el, "[data-test=conflict-rows]")?.textContent).toContain(label);
+});
+
+it("retains a refused write message when a passive clock replacement invalidates its preview", async () => {
+  const { el } = await rig({
+    putBusinessDayStart: async () => {
+      throw { code: "connection.failed" };
+    },
+  });
+  await ready(el);
+  await click(el, "save");
+  const refusal = q<WtFormActions>(el, "wt-form-actions")!.error;
+  expect(refusal).toBeTruthy();
+  el.model = { ...clockModel(), revision: 5 };
+  await flush(el);
+  expect(q<WtFormActions>(el, "wt-form-actions")!.error).toBe(refusal);
+  expect(save(el).disabled).toBe(true);
+  expect(q<WtInput>(el, "[name=dayCutover]")!.value).toBe("03:00");
+});
+
+it("presents preview boundaries on the venue clock while retaining each exact instant", async () => {
+  setLocale("en-GB");
+  const { el } = await rig();
+  await ready(el);
+  const view = q(el, "[data-test=preview]")!;
+  expect(view.querySelector('time[datetime="2026-11-03T04:00:00.000Z"]')?.textContent).toContain(
+    "05:00",
+  );
+  expect(view.querySelector('time[datetime="2026-11-04T02:00:00.000Z"]')?.textContent).toContain(
+    "03:00",
+  );
+  expect(view.textContent).not.toContain(".000Z");
 });

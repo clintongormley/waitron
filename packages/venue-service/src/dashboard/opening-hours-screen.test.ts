@@ -1648,3 +1648,75 @@ describe("Calendar named-day actions", () => {
     await expect.poll(reads).toBe(2);
   });
 });
+
+it("an opened period keeps its revision through a passive replacement and submits the edited offset", async () => {
+  const data = model();
+  data.clockRevision = 7;
+  const writes: unknown[] = [];
+  const el = await mount((async (_path, method, body) => {
+    if (method === "GET") return structuredClone(data);
+    writes.push(body);
+    throw { code: "hours.clock_changed" };
+  }) as DashboardRequest);
+  const editor = await edit(el, true);
+  await change(editor, "endOffsetMinutes", "15");
+  data.clockRevision = 8;
+  data.departments[0]!.periods[0]!.name = "Refreshed Lunch";
+  el.api.rereadWatches();
+  await expect.poll(() => table(el).rows[0]?.name).toBe("Refreshed Lunch");
+  submit(editor);
+  await expect.poll(() => writes.length).toBe(1);
+  expect(writes[0]).toMatchObject({ endOffsetMinutes: 15, expectedClockRevision: 7 });
+  await expect.poll(() => editor.refusal?.code).toBe("hours.clock_changed");
+});
+it("an opened Calendar editor keeps its revision through a passive replacement", async () => {
+  const { namedWeekModel } = await import("../testing/real-week-model.js");
+  const data = model();
+  data.clockRevision = 7;
+  const calendar = namedWeekModel();
+  calendar.clockRevision = 7;
+  const writes: unknown[] = [];
+  let openingReads = 0;
+  history.replaceState(null, "", "/manage/opening-hours/view/calendar");
+  const el = await mount((async (path, method, body) => {
+    if (method === "GET") {
+      if (path.endsWith("/opening-hours")) openingReads++;
+      return structuredClone(path.includes("named-days?") ? calendar : data);
+    }
+    writes.push(body);
+    throw { code: "hours.clock_changed" };
+  }) as DashboardRequest);
+  const child = el.shadowRoot!.querySelector("hours-calendar")!;
+  child.dispatchEvent(
+    new CustomEvent("named-calendar-action", {
+      detail: { kind: "add", date: "2026-11-04", holidays: [], returnTo: () => child },
+      bubbles: true,
+      composed: true,
+    }),
+  );
+  await el.updateComplete;
+  const editor = el.shadowRoot!.querySelector("named-day-editor")!;
+  await editor.updateComplete;
+  editor.shadowRoot!.querySelector("[name=name]")!.dispatchEvent(
+    new CustomEvent("wt-change", {
+      detail: { value: "Festival" },
+      bubbles: true,
+      composed: true,
+    }),
+  );
+  await editor.updateComplete;
+  data.clockRevision = 8;
+  calendar.clockRevision = 8;
+  data.departments[0]!.name = "Updated Restaurant";
+  el.api.rereadWatches();
+  await expect.poll(() => openingReads).toBe(2);
+  await el.updateComplete;
+  editor.shadowRoot!.querySelector<HTMLElement>("[data-test=save-named-day]")!.click();
+  await expect.poll(() => writes.length).toBe(1);
+  expect(writes[0]).toMatchObject({
+    name: "Festival",
+    date: "2026-11-04",
+    expectedClockRevision: 7,
+  });
+  await expect.poll(() => editor.refusal?.code).toBe("hours.clock_changed");
+});

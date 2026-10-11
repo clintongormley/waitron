@@ -1,6 +1,6 @@
 import type { BusinessDayScheduleStatus } from "./service-day-context.js";
 import { asc, eq } from "drizzle-orm";
-import { locationBusinessDaySettings, type Transaction } from "@waitron/db";
+import { floorZones, locationBusinessDaySettings, type Transaction } from "@waitron/db";
 import { readLocationClock } from "@waitron/reporting";
 import {
   AppError,
@@ -23,6 +23,10 @@ export type { BusinessDayClockConflict } from "@waitron/module";
 const minutes = (time: string): number => Number(time.slice(0, 2)) * 60 + Number(time.slice(3, 5));
 interface Placement {
   departmentId: string;
+  departmentName: string;
+  zoneName?: string;
+  periodName?: string;
+  specialDateName: string | null;
   zoneId?: string;
   weekday: number | null;
   specialDateId: string | null;
@@ -44,6 +48,9 @@ export async function businessDayClockConflicts(
   const periods = await tx
     .select({
       departmentId: menuSlots.departmentId,
+      departmentName: departments.name,
+      periodName: menuPeriods.name,
+      specialDateName: specialDates.name,
       weekday: menuDayTimetables.weekday,
       specialDateId: menuDayTimetables.specialDateId,
       date: specialDates.date,
@@ -63,6 +70,9 @@ export async function businessDayClockConflicts(
   const closures = await tx
     .select({
       departmentId: zoneServicePolicies.departmentId,
+      departmentName: departments.name,
+      zoneName: floorZones.name,
+      specialDateName: specialDates.name,
       zoneId: zoneClosedTimes.zoneId,
       weekday: zoneClosedTimes.weekday,
       specialDateId: zoneClosedTimes.specialDateId,
@@ -73,6 +83,8 @@ export async function businessDayClockConflicts(
     })
     .from(zoneClosedTimes)
     .innerJoin(zoneServicePolicies, eq(zoneServicePolicies.zoneId, zoneClosedTimes.zoneId))
+    .innerJoin(departments, eq(departments.id, zoneServicePolicies.departmentId))
+    .innerJoin(floorZones, eq(floorZones.id, zoneClosedTimes.zoneId))
     .leftJoin(specialDates, eq(specialDates.id, zoneClosedTimes.specialDateId))
     .where(eq(zoneServicePolicies.locationId, cfg.locationId))
     .orderBy(asc(zoneClosedTimes.id));
@@ -227,6 +239,12 @@ export async function businessDayClockConflicts(
       if (reason !== null)
         conflicts.push({
           departmentId: p.departmentId,
+          departmentName: p.departmentName,
+          ...(p.zoneName === undefined ? {} : { zoneName: p.zoneName }),
+          ...(p.periodName === undefined ? {} : { periodName: p.periodName }),
+          ...(p.specialDateName === null ? {} : { specialDateName: p.specialDateName }),
+          startsAt,
+          endsAt,
           ...(p.zoneId === undefined ? {} : { zoneId: p.zoneId }),
           ...(p.weekday === null ? {} : { weekday: p.weekday }),
           ...(p.specialDateId === null ? {} : { specialDateId: p.specialDateId }),

@@ -91,3 +91,43 @@ for (const kind of ["department", "zone"] as const) {
     });
   });
 }
+
+for (const kind of ["department", "zone"] as const) {
+  it(`${kind} adopts a clock-only refresh while clean before the next edit`, async () => {
+    const writes: unknown[] = [];
+    const api = new OpeningHoursApi((async (_path, _method, body) => {
+      writes.push(body);
+    }) as DashboardRequest);
+    const el = document.createElement(
+      kind === "department" ? "opening-hours-week" : "opening-hours-zone-week",
+    );
+    Object.assign(el, {
+      api,
+      department: structuredClone(department),
+      zone: structuredClone(zone),
+      clockRevision: 7,
+    });
+    applyTokens(el);
+    hosts.push(el);
+    document.body.append(el);
+    await el.updateComplete;
+    el.clockRevision = 8;
+    await el.updateComplete;
+    el.shadowRoot!.querySelector("service-grid")!.dispatchEvent(
+      new CustomEvent("grid-block-change", {
+        detail: {
+          columnKey: "1",
+          index: 0,
+          startsAt: "10:00",
+          endsAt: kind === "department" ? "15:00" : "12:00",
+        },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+    await el.updateComplete;
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=save-week]")!.click();
+    await expect.poll(() => writes.length).toBe(1);
+    expect(writes[0]).toMatchObject({ expectedClockRevision: 8 });
+  });
+}

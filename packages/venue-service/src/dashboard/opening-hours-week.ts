@@ -152,7 +152,12 @@ export class OpeningHoursWeek extends LitElement {
       this.sourceNamedDays = this.namedDays;
     }
     this.registerScopes();
-    if (this.source !== this.department || this.sourceNamedDays !== this.namedDays) {
+    if (
+      this.source !== this.department ||
+      this.sourceNamedDays !== this.namedDays ||
+      this.draftRevision !== this.clockRevision ||
+      this.draftClock !== this.businessDayClock
+    ) {
       if (this.dirty()) {
         this.source = this.department;
         this.sourceNamedDays = this.namedDays;

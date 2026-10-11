@@ -115,7 +115,10 @@ export class OpeningHoursZoneWeek extends LitElement {
     if (!this.source) this.seedDraft();
     this.registerScopes();
     if (
-      (this.source !== this.zone || this.sourceNamedDays !== this.namedDays) &&
+      (this.source !== this.zone ||
+        this.sourceNamedDays !== this.namedDays ||
+        this.draftRevision !== this.clockRevision ||
+        this.draftClock !== this.businessDayClock) &&
       !this.saving &&
       !this.dirty()
     )

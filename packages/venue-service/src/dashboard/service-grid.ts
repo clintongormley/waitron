@@ -19,7 +19,7 @@ export interface GridColumn {
   layer?: "periods" | "closed";
   closed?: readonly ClosedRange[];
   narrow?: boolean;
-  clock?: { dayCutover: string; endMinute: number };
+  clock?: { dayCutover: string; endMinute: number; startAt?: string; endAt?: string };
 }
 
 export interface GridRangeSelection {
@@ -136,6 +136,13 @@ export class ServiceGrid extends LitElement {
       text-align: start;
       font-size: var(--wt-font-size-sm);
       overflow: hidden;
+    }
+    .bounds,
+    .transition {
+      display: block;
+      font-size: var(--wt-font-size-sm);
+      font-weight: var(--wt-font-weight-normal);
+      overflow-wrap: anywhere;
     }
     .faded::before {
       content: "";
@@ -561,7 +568,24 @@ export class ServiceGrid extends LitElement {
         style=${styleMap({ "--grid-height": `calc(var(--wt-space-6) * ${this.#extent() / STEP})`, "--column-tracks": this.columns.map((column) => (column.narrow ? "minmax(calc(var(--wt-space-6) * 3), .6fr)" : "minmax(calc(var(--wt-space-6) * 5), 1fr)")).join(" ") })}
       >
         <div class="heading"></div>
-        ${this.columns.map((column) => html`<div class="heading">${column.label}<slot name=${`header-${column.key}`}></slot></div>`)}
+        ${this.columns.map(
+          (column) =>
+            html`<div class="heading">
+              ${column.label}<slot name=${`header-${column.key}`}></slot>${
+                column.clock
+                  ? html`<span class="bounds"
+                        ><time datetime=${column.clock.startAt ?? nothing}
+                          >${column.clock.dayCutover.slice(0, 5)}</time
+                        >
+                        →
+                        <time datetime=${column.clock.endAt ?? nothing}
+                          >${this.#time(column.clock.endMinute, column)}</time
+                        ></span
+                      >${column.clock.endMinute !== DAY ? html`<span class="transition">${t(column.clock.endMinute < DAY ? "hours.short_day" : "hours.long_day").replace("{hours}", String(column.clock.endMinute / 60))}</span>` : nothing}`
+                  : nothing
+              }
+            </div>`,
+        )}
         <div class="times" aria-hidden="true">
           ${hours.map((minute) => html`<span class="hour" style=${styleMap({ top: `${(minute / this.#extent()) * 100}%` })}>${this.#time(minute)}</span>`)}
         </div>

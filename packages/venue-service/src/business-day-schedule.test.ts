@@ -30,6 +30,7 @@ import { menuDayTimetables, menuPeriods, menuSlots } from "./schema/menus.js";
 import { specialDates } from "./schema/hours.js";
 import { zoneClosedTimes } from "./schema/zone-closed-times.js";
 import {
+  businessDayClockConflicts,
   assertBusinessDayClockChange,
   assertBusinessDayScheduleWrite,
 } from "./business-day-schedule.js";
@@ -921,4 +922,29 @@ it("rechecks a time writer queued before a clock change commits", async () => {
     .from(menuSlots)
     .where(eq(menuSlots.departmentId, v.departmentId));
   expect(saved).toEqual([{ endsAt: "17:00:00" }]);
+});
+
+it("identifies conflicting period and zone schedules with names and recorded ranges", async () => {
+  for (const zone of [false, true]) {
+    const v = await fixture([range("05:00", "05:00")], { zone, date: E });
+    const result = await withTransaction(suite.db, (tx) =>
+      businessDayClockConflicts(tx, v.cfg, before, candidate("03:00"), E),
+    );
+    expect(result.conflictCount).toBe(1);
+    expect(result.conflicts).toEqual([
+      expect.objectContaining({
+        departmentId: v.departmentId,
+        departmentName: "Service",
+        date: E,
+        specialDateName: "Named day",
+        startsAt: "05:00",
+        endsAt: "05:00",
+        rangeIndex: 0,
+        reason: "all_day",
+        ...(zone
+          ? { zoneId: v.zoneId, zoneName: "Zone" }
+          : { periodId: v.periodId, periodName: "Service" }),
+      }),
+    ]);
+  }
 });

@@ -142,3 +142,69 @@ it("passive timer reads update a pending lock without a row change or active ses
     vi.useRealTimers();
   }
 });
+
+it("a real child save closes before the parent refresh fails and cannot submit twice", async () => {
+  let reads = 0,
+    writes = 0;
+  const initial = venueDetailsFixture();
+  initial.businessDayClock.currentBusinessDay = "2026-11-01";
+  const api = {
+    getVenueDetails: async () => {
+      if (++reads > 1) throw { code: "connection.failed" };
+      return initial;
+    },
+    previewBusinessDayStart: async () => ({
+      revision: 0,
+      previousDay: {
+        businessDay: "2026-11-03",
+        dayCutover: "05:00",
+        startAt: "2026-11-03T04:00:00Z",
+        endAt: "2026-11-04T02:00:00Z",
+      },
+      effectiveDay: {
+        businessDay: "2026-11-04",
+        dayCutover: "03:00",
+        startAt: "2026-11-04T02:00:00Z",
+        endAt: "2026-11-05T02:00:00Z",
+      },
+      locksAt: "2026-11-03T04:00:00Z",
+      conflicts: [],
+      conflictCount: 0,
+      backupDeadlines: { archive: null, cloud: null },
+    }),
+    putBusinessDayStart: async () => {
+      writes++;
+      return { changed: true, model: initial };
+    },
+  } as unknown as DashboardApi;
+  const { el } = await mountWidget<VenueDetailsPanel>("dashboard-venue-details-panel", { api });
+  await expect
+    .poll(() => el.shadowRoot!.querySelector("dashboard-business-day-start-editor"))
+    .toBeTruthy();
+  const editor = el.shadowRoot!.querySelector("dashboard-business-day-start-editor")!;
+  await editor.updateComplete;
+  editor.shadowRoot!.querySelector<HTMLElement>("[data-test=change]")!.click();
+  await editor.updateComplete;
+  for (const [name, value] of [
+    ["effectiveBusinessDay", "2026-11-04"],
+    ["dayCutover", "03:00"],
+  ]) {
+    editor
+      .shadowRoot!.querySelector(`[name=${name}]`)!
+      .dispatchEvent(
+        new CustomEvent("wt-change", { detail: { value }, bubbles: true, composed: true }),
+      );
+    await editor.updateComplete;
+  }
+  await expect.poll(() => editor.shadowRoot!.querySelector("[data-test=acknowledge]")).toBeTruthy();
+  editor.shadowRoot!.querySelector<HTMLElement>("[data-test=acknowledge]")!.click();
+  await editor.updateComplete;
+  const save =
+    editor.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>("[data-test=save]")!;
+  expect(save.disabled).toBe(false);
+  save.click();
+  await expect.poll(() => el.shadowRoot!.querySelector("[data-test=read-error]")).toBeTruthy();
+  expect(writes).toBe(1);
+  expect(editor.shadowRoot!.querySelector("wt-input")).toBeNull();
+  expect(editor.shadowRoot!.querySelector("[data-test=save]")).toBeNull();
+});
