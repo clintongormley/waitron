@@ -2105,6 +2105,29 @@ describe("duplicating a menu from the list", () => {
     await vi.waitFor(() => expect(duplicateItem(el, "menu-lunch").disabled).toBe(false));
   });
 
+  it("closes the row's menu on a real click on Duplicate, though the click disables the item", async () => {
+    let finish!: (value: CatalogueSummary) => void;
+    const client = api({
+      duplicateCatalogue: vi.fn(
+        () => new Promise<CatalogueSummary>((resolve) => (finish = resolve)),
+      ),
+    });
+    const el = await mount(client);
+    await at([1280, 900], "en", async () => {
+      await table(el).updateComplete;
+      const menu = rowMenu(el, "menu-lunch");
+      const popup = menu.shadowRoot!.querySelector<HTMLElement>("[popover]")!;
+      await userEvent.click(menu.shadowRoot!.querySelector("button")!);
+      expect(popup.matches(":popover-open")).toBe(true);
+      await userEvent.click(duplicateItem(el, "menu-lunch"));
+      expect(client.duplicateCatalogue).toHaveBeenCalledOnce();
+      expect(duplicateItem(el, "menu-lunch").disabled).toBe(true);
+      expect(popup.matches(":popover-open")).toBe(false);
+      finish(copy);
+      await vi.waitFor(() => expect(duplicateItem(el, "menu-lunch").disabled).toBe(false));
+    });
+  });
+
   it("says why a copy was refused beside the list, and leaves the list as it was", async () => {
     const client = api({
       duplicateCatalogue: vi.fn().mockRejectedValue({

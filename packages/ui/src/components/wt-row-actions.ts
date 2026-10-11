@@ -128,7 +128,17 @@ export class WtRowActions extends LitElement {
     this.popup.style.top = `${Math.max(8, Math.min(anchor.bottom, innerHeight - popup.height - 8))}px`;
   }
 
-  private onAction(event: MouseEvent): void {
+  // Judged while capturing, before the action's own listeners: a real click runs microtasks after
+  // each listener, so an update its handler schedules can disable the action before the click bubbles here.
+  private readonly judgeAction = {
+    capture: true,
+    handleEvent: (event: MouseEvent) => {
+      if (this.closesMenu(event)) this.closingClicks.add(event);
+    },
+  };
+  private readonly closingClicks = new WeakSet<Event>();
+
+  private closesMenu(event: MouseEvent): boolean {
     if (
       event
         .composedPath()
@@ -139,20 +149,23 @@ export class WtRowActions extends LitElement {
             node.hasAttribute("data-keep-open"),
         )
     )
-      return;
+      return false;
     const action = event
       .composedPath()
       .find(
         (node): node is HTMLElement =>
           node instanceof HTMLElement && node.matches("button, a[href], wt-button"),
       );
-    if (
-      !action ||
-      action.hasAttribute("disabled") ||
-      action.getAttribute("aria-disabled") === "true"
-    )
-      return;
-    if (this.popup.matches(":popover-open")) this.popup.hidePopover();
+    return (
+      action !== undefined &&
+      !action.hasAttribute("disabled") &&
+      action.getAttribute("aria-disabled") !== "true"
+    );
+  }
+
+  private onAction(event: MouseEvent): void {
+    if (this.closingClicks.has(event) && this.popup.matches(":popover-open"))
+      this.popup.hidePopover();
   }
 
   private onKeydown(event: KeyboardEvent): void {
@@ -179,7 +192,7 @@ export class WtRowActions extends LitElement {
         <slot name="badge"></slot>
       </button>
       <div id="actions" part="popup" popover @toggle=${this.onToggle} @keydown=${this.onKeydown}>
-        <div class="actions"><slot @click=${this.onAction}></slot></div>
+        <div class="actions" @click=${this.judgeAction}><slot @click=${this.onAction}></slot></div>
       </div>
     `;
   }
