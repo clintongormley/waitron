@@ -307,8 +307,8 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
 
 - **Follow-up (W41s Task 8, held-record resolution): release a brake hold (send the held records
   again).** — left open by W41s-3b (#1303), which says "Nothing releases the hold yet." Task 8 as
-  planned resolves records that have a case of their own; a record the brake holds has none. While
-  held, those records are not retried hourly. W41s-3d (a chain held by repeated same-code refusals
+  planned resolves records that have a case of their own; a record the brake holds has none.
+  W41s-3d (a chain held by repeated same-code refusals
   sends its first held record once an hour) is implemented on
   [#1309](https://github.com/clintongormley/waitron/pull/1309), awaiting the owner's landing approval.
   A manual release remains Task 8.

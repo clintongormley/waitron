@@ -458,6 +458,13 @@ AEAT's answer breaks a run: when the record right after a run was sent and its a
 or missing, the records added after it are sent with its retry, and a later record is held only
 once the refusals immediately before it make a run of three. The ongoing alert
 `fiscal.refusals_repeated` names the code and the length of the run. Nothing releases the hold yet.
+**Update, 2026-10-11 (W41s-3d candidate):** PR
+[#1309](https://github.com/clintongormley/waitron/pull/1309) adds an hourly retry of the first
+eligible brake-held record. An accept or a different-code refusal releases the remaining
+brake holds; a same-code refusal keeps them held. A record with its own filing case, an earlier
+held record or an unresolved earlier send is not probed. Manual release remains Task 8.
+The statements below about no release or hourly retry describe the landed W41s-3b version.
+
 **Follow-up (W41s Task 8, held-record resolution): release a brake hold (send the held records
 again).** Task 8 as planned resolves records that have a case of their own; a record the brake holds
 has none. While held, those records are not retried hourly. The owner chose (2026-10-06) to add
