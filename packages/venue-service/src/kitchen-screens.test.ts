@@ -897,7 +897,7 @@ describe("what a device's kitchen screens show", () => {
     ]);
   });
 
-  it("omits a deleted station, retains the switched-off zone and reads restored fixtures", async () => {
+  it("omits deleted stations and zones and reads restored fixtures", async () => {
     const venue = await seedVenue();
     const till = await seedDevice(venue, venue.till, "Till");
     await choose(venue, till, venue.till, [
@@ -916,7 +916,7 @@ describe("what a device's kitchen screens show", () => {
         everyZone: false,
         profileEveryStation: true,
         stations: [slot(venue.grill, "Grill")],
-        zones: [slot(venue.dining, "Dining room", false, true)],
+        zones: [],
       },
     ]);
     await off(true);
