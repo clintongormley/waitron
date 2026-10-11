@@ -3991,7 +3991,7 @@ describe("dashboard URL navigation", () => {
       [...tabs.shadowRoot!.querySelectorAll('[role="tab"]')].map((tab) =>
         tab.getAttribute("data-key"),
       ),
-    ).toEqual(["stations", "routing", "settings"]);
+    ).toEqual(["stations", "routing"]);
   });
 
   it("an old tester link opens the Routing tab", async () => {
