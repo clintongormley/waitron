@@ -143,18 +143,19 @@ describe("SetupRestoreBucketScreen", () => {
     expect({
       spellcheck: control.spellcheck,
       autocapitalize: control.getAttribute("autocapitalize"),
+      autocomplete: control.getAttribute("autocomplete"),
       font: getComputedStyle(control).fontFamily,
       size: getComputedStyle(control).fontSize,
-    }).toEqual({ spellcheck: false, autocapitalize: "off", font: "fantasy", size: "11px" });
+    }).toEqual({
+      spellcheck: false,
+      autocapitalize: "off",
+      autocomplete: "off",
+      font: "fantasy",
+      size: "11px",
+    });
     expect(kit!.querySelector("wt-help-tooltip[slot=help]")!.getAttribute("aria-label")).toBe(
       "Help with the recovery kit",
     );
-  });
-
-  it("keeps the browser from offering to remember the kit", async () => {
-    const { el } = await mountWidget<SetupRestoreBucketScreen>("setup-restore-bucket-screen", {});
-    const control = q(el, "[data-test=kit]")!.shadowRoot!.querySelector("textarea")!;
-    expect(control.getAttribute("autocomplete")).toBe("off");
   });
 
   it("picks the environment from the shared dropdown, with its help beside the box", async () => {
