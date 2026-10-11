@@ -239,11 +239,6 @@ declare module "@waitron/shared" {
      */
     "reader.provider_disconnected": { providerId: string };
     /**
-     * The provider's unpair call failed. `providerId` is the public provider token, never a
-     * credential.
-     */
-    "reader.unpair_failed": { providerId: string };
-    /**
      * A Delete or Unpair of this reader is running, so a second one, an Enable, or an adoption of
      * the same provider reader (`providerRef`) is refused until it ends. `readerId` is the reader's
      * uuid, which the reader list shows under the same permission; not a secret.

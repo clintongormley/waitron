@@ -762,7 +762,8 @@ await tx.update(cardReaders)
   Register `"reader.unpair_failed": { providerId: string }` in `apps/server/src/errors.ts` beside
   `reader.provider_disconnected` (`:222-226`), with a one-line comment saying the provider call to
   unpair failed, so the reader was left switched off and not deleted. Import that registry in
-  `card-reader-delete.ts` (`import "./errors.js";`).
+  `card-reader-delete.ts` (`import "./errors.js";`). _2026-10-11 (A518): the code is now declared in
+  `packages/payments/src/errors.ts`, so SumUp's client can throw it too._
 
 - [ ] **Step 6: Green.** Re-run Step 3's and Step 4's commands. In a disposable copy of the
   candidate (never by swapping files here), delete the `device_profile_card_readers` removal and

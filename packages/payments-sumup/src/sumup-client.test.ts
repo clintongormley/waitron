@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { decimal } from "@waitron/shared";
-import { ProviderCallFailed } from "@waitron/payments";
+import { decimal, hasCode, isAppError } from "@waitron/shared";
+import type { AppError } from "@waitron/shared";
+import type { SumUpClient } from "./client.js";
 import { sumupClient, SumUpPairingRefused } from "./sumup-client.js";
 
 // `sumup-client.ts` is COVERAGE-excluded (the real HTTP boundary), not import-excluded: these tests
@@ -363,10 +364,17 @@ describe("sumupClient reader management", () => {
     expect(s.calls).toContainEqual(["DELETE", "/v0.1/merchants/MC/readers/rdr_1"]);
   });
 
+  async function unpairFailure(client: SumUpClient): Promise<AppError<"reader.unpair_failed">> {
+    const error: unknown = await client.deleteReader("rdr_1").catch((e: unknown) => e);
+    if (!isAppError(error) || !hasCode(error, "reader.unpair_failed"))
+      throw new Error(`expected reader.unpair_failed, got ${String(error)}`);
+    return error;
+  }
+
   it.each([400, 401, 403, 409, 429, 500])("rejects reader deletion on HTTP %s", async (status) => {
     const s = stub(() => ({ status, body: { title: "Rejected" } }));
     const client = sumupClient({ apiKey: "k", merchantCode: "MC", fetch: s.fetch });
-    await expect(client.deleteReader("rdr_1")).rejects.toThrow(`HTTP ${status}`);
+    expect((await unpairFailure(client)).params).toEqual({ providerId: "sumup" });
   });
 
   it.each([
@@ -379,9 +387,7 @@ describe("sumupClient reader management", () => {
   ])("tells why a reader deletion failed on HTTP %s", async (status, reason) => {
     const s = stub(() => ({ status, body: { title: "Rejected" } }));
     const client = sumupClient({ apiKey: "k", merchantCode: "MC", fetch: s.fetch });
-    const error: unknown = await client.deleteReader("rdr_1").catch((e: unknown) => e);
-    expect(error).toBeInstanceOf(ProviderCallFailed);
-    expect((error as ProviderCallFailed).reason).toBe(reason);
+    expect((await unpairFailure(client)).reason).toBe(reason);
   });
 
   const htmlPage = "<html><body><h1>Gateway says no</h1></body></html>";
@@ -402,10 +408,9 @@ describe("sumupClient reader management", () => {
         merchantCode: "MC",
         fetch: answering(status, htmlPage),
       });
-      const error: unknown = await client.deleteReader("rdr_1").catch((e: unknown) => e);
-      expect(error).toBeInstanceOf(ProviderCallFailed);
-      expect((error as ProviderCallFailed).reason).toBe(reason);
-      expect((error as ProviderCallFailed).message).not.toContain("Gateway");
+      const error = await unpairFailure(client);
+      expect(error.reason).toBe(reason);
+      expect(error.message).not.toContain("Gateway");
     },
   );
 
@@ -429,9 +434,7 @@ describe("sumupClient reader management", () => {
       merchantCode: "MC",
       fetch: answering(401, breaksOff),
     });
-    const error: unknown = await client.deleteReader("rdr_1").catch((e: unknown) => e);
-    expect(error).toBeInstanceOf(ProviderCallFailed);
-    expect((error as ProviderCallFailed).reason).toBe("credential_rejected");
+    expect((await unpairFailure(client)).reason).toBe("credential_rejected");
   });
 
   it("releases the body of a reader deletion's answer it does not read", async () => {
@@ -456,10 +459,7 @@ describe("sumupClient reader management", () => {
       merchantCode: "MC",
       fetch: () => Promise.reject(cause),
     });
-    const error: unknown = await client.deleteReader("rdr_1").catch((e: unknown) => e);
-    expect(error).toBeInstanceOf(ProviderCallFailed);
-    expect((error as ProviderCallFailed).reason).toBe("unreachable");
-    expect((error as ProviderCallFailed).cause).toBe(cause);
+    expect((await unpairFailure(client)).reason).toBe("unreachable");
   });
 
   it("accepts deletion of an already absent reader on a retry", async () => {

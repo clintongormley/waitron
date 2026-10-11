@@ -67,7 +67,6 @@ export interface CardProviderContribution {
       input: { name: string; code?: string; reference?: string },
     ): Promise<AddReaderResult>;
     status(deps: CardProviderRuntimeDeps, providerRef: string): Promise<ReaderStatus>;
-    /** A provider failure whose reason the seat knows throws `ProviderCallFailed`. */
     remove(deps: CardProviderRuntimeDeps, providerRef: string): Promise<void>;
   };
 }
@@ -108,24 +107,6 @@ export interface CardProviderRuntimeDeps {
   db: Database;
   ring: KeyRing;
   fetch?: typeof fetch;
-}
-
-/** Why a provider call failed, safe to log: never the provider's body or the request. `http_<n>` is
- * a refusal that is neither a rejected key nor an outage. */
-export type ProviderFailureReason =
-  "credential_rejected" | "provider_unavailable" | "unreachable" | `http_${number}`;
-
-/** A provider call that failed for a known reason. A seat's `readers.remove` throws it so the route
- * can log why, beside the code it answers. */
-export class ProviderCallFailed extends Error {
-  constructor(
-    readonly reason: ProviderFailureReason,
-    message = `provider call failed: ${reason}`,
-    options?: { cause?: unknown },
-  ) {
-    super(message, options);
-    this.name = "ProviderCallFailed";
-  }
 }
 
 /** Throws `payment.provider_duplicate` rather than letting a later entry silently shadow an earlier

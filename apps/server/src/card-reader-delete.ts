@@ -1,5 +1,5 @@
-// Side-effect only: the registry for `reader.not_found`, `reader.provider_disconnected` and
-// `reader.unpair_failed`; `@waitron/payments` declares `reader.payment_in_progress`.
+// Side-effect only: the registry for `reader.not_found` and `reader.provider_disconnected`;
+// `@waitron/payments` declares `reader.payment_in_progress` and `reader.unpair_failed`.
 import "./errors.js";
 import { and, eq, inArray, isNull, sql } from "drizzle-orm";
 import {

@@ -1,7 +1,9 @@
 import type { SumUpReader } from "./client.js";
+import { AppError } from "@waitron/shared";
 import type { Decimal } from "@waitron/shared";
-import { ProviderCallFailed } from "@waitron/payments";
-import { fromMajorUnits, toMinorUnits } from "./client.js";
+// Side-effect only: the registry for `reader.unpair_failed`.
+import "@waitron/payments";
+import { fromMajorUnits, SUMUP_PROVIDER, toMinorUnits } from "./client.js";
 import type {
   CreateCheckoutOutcome,
   SumUpClient,
@@ -72,6 +74,9 @@ function refundEventsOf(t: { transaction_events?: RawEvent[]; events?: RawEvent[
       })),
   };
 }
+
+const unpairFailed = (reason: string) =>
+  new AppError("reader.unpair_failed", { providerId: SUMUP_PROVIDER }, { reason });
 
 /**
  * `SumUpClient` over SumUp's REST API (paths and shapes from SumUp's OpenAPI file —
@@ -299,20 +304,18 @@ export function sumupClient(opts: SumUpClientOptions): SumUpClient {
           "DELETE",
           `/v0.1/merchants/${mc}/readers/${encodeURIComponent(readerId)}`,
         );
-      } catch (error) {
-        throw new ProviderCallFailed("unreachable", "sumup DELETE reader: no answer", {
-          cause: error,
-        });
+      } catch {
+        throw unpairFailed("unreachable");
       }
       // A retry may find the reader already removed; other refusals must not look like success.
       if (status < 400 || status === 404) return;
-      const reason =
+      throw unpairFailed(
         status === 401 || status === 403
           ? "credential_rejected"
           : status >= 500
             ? "provider_unavailable"
-            : (`http_${status}` as const);
-      throw new ProviderCallFailed(reason, `sumup DELETE reader: HTTP ${status}`);
+            : `http_${status}`,
+      );
     },
     async memberships() {
       const r = await call("GET", "/v0.1/memberships");

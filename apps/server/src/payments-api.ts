@@ -19,7 +19,6 @@ import {
 } from "@waitron/db";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
 import {
-  ProviderCallFailed,
   cardProviderById,
   cardReaders,
   DEMO_READER_ID,
@@ -396,7 +395,7 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
       throw new AppError(
         "reader.unpair_failed",
         { providerId: seat.providerId },
-        { reason: error instanceof ProviderCallFailed ? error.reason : codeOf(error) },
+        { reason: codeOf(error) },
       );
     } finally {
       for (const adopt of adopting)

@@ -97,5 +97,10 @@ declare module "@waitron/shared" {
     "reader.not_held": { readerId: string };
     /** Another device has a payment in progress on the card reader. */
     "reader.payment_in_progress": { readerId: string };
+    /**
+     * The provider's unpair call failed. `providerId` is the public provider token, never a
+     * credential.
+     */
+    "reader.unpair_failed": { providerId: string };
   }
 }
