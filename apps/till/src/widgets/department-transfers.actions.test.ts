@@ -311,3 +311,41 @@ it("acceptance sends a selected table in its chosen zone", async () => {
     ]),
   );
 });
+
+it("refuses a retained accept action after the receiving zone is deleted", async () => {
+  const { el, writes } = await mount();
+  click(el, "[data-accept]");
+  await vi.waitFor(() =>
+    expect(
+      el.shadowRoot!.querySelector<HTMLElement & { disabled: boolean }>("[data-save-transfer]")
+        ?.disabled,
+    ).toBe(false),
+  );
+  await change(el, "zoneId", "terrace");
+  el.serviceZones = zones.filter((zone) => zone.id !== "terrace");
+  await el.updateComplete;
+  click(el, "[data-save-transfer]");
+  await el.updateComplete;
+  expect(writes).toEqual([]);
+  expect(
+    el.shadowRoot!.querySelector<HTMLElement & { error: string }>("[name=zoneId]")!.error,
+  ).not.toBe("");
+});
+
+it("refuses a retained accept action after its request disappears from the snapshot", async () => {
+  const { el, writes } = await mount();
+  click(el, "[data-accept]");
+  await vi.waitFor(() =>
+    expect(
+      el.shadowRoot!.querySelector<HTMLElement & { disabled: boolean }>("[data-save-transfer]")
+        ?.disabled,
+    ).toBe(false),
+  );
+  await change(el, "zoneId", "terrace");
+  const save = el.shadowRoot!.querySelector<HTMLElement>("[data-save-transfer]")!;
+  el.snapshot = { ...el.snapshot, incoming: [], notifications: [] };
+  await el.updateComplete;
+  expect(el.shadowRoot!.querySelector("[data-current-tab]")).toBeNull();
+  save.click();
+  expect(writes).toEqual([]);
+});

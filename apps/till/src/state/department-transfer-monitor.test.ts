@@ -607,3 +607,20 @@ it.each(["department_transfer.not_allowed", "authorization.not_permitted"])(
     }
   },
 );
+
+it("drops deleted hierarchy requests on a snapshot while keeping unaffected incoming work", async () => {
+  const source = desk();
+  const survivor = {
+    ...pending,
+    id: "surviving-request",
+    destinationDepartmentId: "surviving-department",
+  };
+  source.queue([pending, survivor]);
+  source.monitor.start();
+  await expect.poll(() => source.monitor.snapshot.incoming).toEqual([pending, survivor]);
+  source.queue([survivor]);
+  source.signal("change");
+  await expect.poll(() => source.monitor.snapshot.incoming).toEqual([survivor]);
+  expect(source.monitor.snapshot.notifications).toEqual([survivor]);
+  expect(source.monitor.running).toBe(true);
+});

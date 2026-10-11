@@ -525,6 +525,15 @@ export class TillFloorScreen extends LitElement {
   override willUpdate(changed: PropertyValues<this>): void {
     if (changed.has("tables") && this.askingSeats === null && this.askingBills === null)
       this.#pending = null;
+    if (
+      this.seating !== null &&
+      [this.seating.table.id, ...(this.seating.withTableIds ?? [])].some(
+        (id) => !this.tables.some((table) => table.id === id),
+      )
+    )
+      this.seating = null;
+    if (this.clearing !== null && !this.tables.some((table) => table.id === this.clearing!.id))
+      this.clearing = null;
     this.#drawnAt = this.now ?? Date.now();
     if (this.details !== null && !this.tables.some((table) => table.id === this.details!.tableId))
       this.details = null;
@@ -575,6 +584,7 @@ export class TillFloorScreen extends LitElement {
     table: TableState,
     seat: { heading: string; withTableIds: string[] } | null = null,
   ): void {
+    if (!this.tables.some((current) => current.id === table.id)) return;
     if (needsClearing(table)) {
       this.clearing = table;
       return;
@@ -597,6 +607,13 @@ export class TillFloorScreen extends LitElement {
 
   #onSeatConfirm(event: Event, seating: NonNullable<TillFloorScreen["seating"]>): void {
     event.stopPropagation();
+    if (
+      this.seating !== seating ||
+      [seating.table.id, ...(seating.withTableIds ?? [])].some(
+        (id) => !this.tables.some((table) => table.id === id),
+      )
+    )
+      return;
     this.seating = null;
     const { guestCount } = (event as CustomEvent<SeatConfirmDetail>).detail;
     const { table, withTableIds } = seating;
@@ -657,6 +674,7 @@ export class TillFloorScreen extends LitElement {
   }
 
   #markCleared(table: TableState): void {
+    if (!this.tables.some((current) => current.id === table.id)) return;
     this.clearing = null;
     this.#emit("mark-cleared", { tableId: table.id });
   }
