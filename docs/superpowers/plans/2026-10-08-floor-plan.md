@@ -275,12 +275,14 @@ cases it changes; a case found while running that is on neither list is a STOP.
   placement routes outside the profile's zones, and the map's rows `:104-105`).
 - **`listTables`' old fields** (the entry above, made concrete): `apps/server/src/tables.test.ts:110-130`
   pins `capacity: 4`, `active: true` and `posX`, `posY`, `shape`, `rotation` null on a listed table;
-  in Task 5.2k those keys leave the matcher and `planTableId: null` joins it, and in Task 5.3 the
-  `capacity: 4` argument goes. `apps/server/src/management-api.test.ts:1287-1327` and `:1328-1348`
+  in Task 5.2k all those keys leave the matcher and `planTableId: null` joins it, and in Task 5.3 the
+  `capacity: 4` argument to `createTable` goes. `apps/server/src/management-api.test.ts:1287-1327` and `:1328-1348`
   read `active` back through `listAll` (`active: state === "active"`, `active: true`): in Task 5.2h
   each instead asserts that the table is in the plain `GET /management-api/tables` list (the tables
-  in service) exactly when its zone stays switched on; `:1092-1100` loses its `active: false` key
-  there too (the table still appears with `includeDisabled` and not in the plain list).
+  in service) exactly when its zone stays switched on. `:1092-1100` loses its `active: false` key in
+  Task 5.2g, when `switchOff` stops writing `active` (the table still appears with `includeDisabled`
+  and not in the plain list). `:1654`'s `toMatchObject({ active: true })` is deleted in Task 5.2k,
+  when `active` leaves the answer (its `PATCH` row went in Task 5.2c).
 - **The till's seat fallback** (the entry above): `apps/till/src/state/floor-map.test.ts:306`
   (`seatsFor(table({ capacity: 4 }))` is 4) expects `null` in Task 5.2m.
 - **The card's permission lock** (slice 5 decision 12): `packages/layouts/src/card-contract.test.ts:22-24`;
@@ -317,7 +319,10 @@ cases it changes; a case found while running that is on neither list is a STOP.
   `:1125-1136` (a bill moved to, or paid at, a table with no zone; the last two through the helper
   `partyBillInTicketZone`, `:1073-1110`, whose table at `:1099` has no zone);
   `apps/server/src/floor-today-merges.test.ts:164-180`, `:182-217` (a merge refusing a table with no
-  zone).
+  zone); `apps/server/src/made-here.routes.test.ts:1675-1687`, `:1689-1707` (a zone-less party's
+  unsent drink, through `bareParty()`, `:235-246`, whose table gets a zone for its other users,
+  `:1710`, `:1776`); and the half of `apps/server/src/watch-zones.test.ts:126-170` at `:164-169`
+  that sets a delivery table's zone to null.
 - **`planned` and adoption** (the plan's decisions 16 and 17, slice 2 decision 20; slice 5
   decision 6): `apps/server/src/floor-plan.test.ts:218-281`, `:306-325`, `:339-350`, `:425-453`,
   the `liveTableId` arm of `:495-510`, `:587-619`, `:652-668`, `:870-889` (its `planned` and
@@ -326,7 +331,7 @@ cases it changes; a case found while running that is on neither list is a STOP.
   plan read is accepted back unchanged, without the adopted spare it made with `POST /tables`; its
   `[true, true]` row for that spare goes), `:3819-3838` (a save naming another table's live table as
   `liveTableId`, deleted: a save no longer reads the field) and the `tables.0.liveTableId` row
-  `:3864-3867` of the body checks `:3853-3880`; `apps/server/src/floor-reset-plan.test.ts:210-225`;
+  `:3863-3866` of the body checks `:3853-3881`; `apps/server/src/floor-reset-plan.test.ts:210-225`;
   `apps/server/src/floor-today-store.test.ts:495-510`, `:720-737`;
   `apps/server/src/table-removal.test.ts:96-99` (setup); the `planned` keys of
   `packages/db/src/schema/floor-plans.test.ts:357` onwards (`:368`, `:419`, `:427`);
@@ -335,8 +340,9 @@ cases it changes; a case found while running that is on neither list is a STOP.
 - **Zone switch-off switching tables off, and switching back on bringing them back** (slice 5
   decision 4): `packages/venue-service/src/operations.test.ts` the table halves of `:1622-1673`
   and `:1675` onwards (`:1661-1666`, `:1733-1738`), and of `:2116-2165` (`:2146-2152`);
-  `apps/server/src/tables.test.ts:549-572`; `apps/server/src/management-api.test.ts:1350-1366` (and
-  `:1287-1327`, `:1328-1348`, above);
+  `apps/server/src/tables.test.ts:549-572`; `apps/server/src/management-api.test.ts:1350-1366` (renamed in
+  its changed-test commit: its name, "…without enabling its tables", contradicts its new assertion),
+  and `:1287-1327`, `:1328-1348`, above;
   `apps/server/src/floor-today-store.test.ts:754-797`; `apps/server/src/floor-today-api.test.ts:219-231`.
 - **`active` read back as a column** (the entry above, made concrete): the `active` key beside a
   today's-row assertion in `apps/server/src/floor-today-store.test.ts:308`, `:315`, `:341`, `:394`
@@ -5696,8 +5702,8 @@ if it is wrong.
    to `apps/server/src/testing/live-table.ts` under the same name, `createTable`, so the 62 files that
    import it change one import line; from Task 5.2d it needs a zone, and from Task 5.2f it writes a
    today's row for the table (a spare) unless asked not to. Tests that switched a table off with
-   `deactivateTable` use a test-only `switchOff(v, tableId)` instead, and tests that renamed one with
-   `updateTable` update the row directly. Cost: a table can no longer be created, renamed or moved
+   `deactivateTable` use a test-only `switchOff(v, tableId)` instead, and tests that renamed one, or moved it
+   to another zone, with `updateTable` update the row directly. Cost: a table can no longer be created, renamed or moved
    to another zone outside the editor. Spec §11 removes the Config tab, the placement routes and the
    card; removing the create and rename routes goes beyond it, so the PR description names this
    decision.
@@ -5767,8 +5773,8 @@ if it is wrong.
     generated rebuild, and a custom one that re-creates the trigger unchanged, as `0043`, `0044` and
     `0045` did — so a later regeneration cannot drop the hand-written SQL with the generated file. It
     is refused on a venue holding a table with no zone, or any row pointing at a table (a party's
-    table, a delivery, a booking, a today's or reset row — and every table on a working venue has a
-    today's row); a venue whose tables all have zones and that holds no such row migrates (run by
+    table, a delivery, a booking, a today's row, a today's merge member in `floor_today_join_tables`,
+    or a reset row — and every table of a zone with a saved plan has a today's row); a venue whose tables all have zones and that holds no such row migrates (run by
     the plan's review, 2026-10-11); `RESETS` records the refusal the walk prints (expected
     `NOT NULL constraint failed: __new_dining_tables.zone_id`, because the walk's filler leaves a
     nullable column outside every unique index null, `scripts/migration-upgrade.test.ts:38-41`).
@@ -5821,18 +5827,28 @@ if it is wrong.
     `countOpenTables`). The dependency lists are client-side; the server's side is the change feed,
     which already sources both tables (every core-classified table is a change source,
     `CORE_CHANGE_SOURCES`, `packages/db/src/classification.ts:240-246`; both are classified,
-    `:91`, `:101`), so `scripts/live-subscriptions.test.ts` accepts them. Read, not run. Other queries
-    naming `dining_tables` read only a table's label (`listOrderPages`, `getOrder`,
-    `getOverdueOrders`) or are one-off reads (the zone and department removal counts). Cost: these
-    two queries refresh on every today's-plan change.
+    `:91`, `:101`), so `scripts/live-subscriptions.test.ts` accepts them. Read, not run. The other
+    queries naming `dining_tables` — `getOverdueOrders`, `listOrderPages`, `getOrder`,
+    `getStationDeleteImpact` (`apps/dashboard/src/api/live-queries.ts:357`; venue-service's
+    `station-delete-impact`, `packages/venue-service/src/dashboard/live-queries.ts:7`) and
+    `getFloorPlan` (`:390`; venue-service's `floor-plan`, `:79`) — read no table's `active` (the "Who
+    reads `active`" list above), so they change nothing here; the dashboard's `listTables` (`:383`) is
+    watched only by the old floor screen, which Task 5.1a removes. The zone and department removal
+    counts are one-off reads in no dependency list. Cost: the two queries refresh on every
+    today's-plan change.
 24. **A table in no zone stops existing, and so do the branches that handled one.** `zone_id`
     becomes required, so the cases that build a table with no zone are deleted (Task 5.2d; the
     Behaviour list names them), and the code paths for a table's null zone go in Task 5.3, where the
-    schema change makes them unreachable and the typecheck names most of them (TypeScript refuses a
-    `string` compared with `null`). Found by grep: `apps/server/src/floor-today-merges.ts:210-213`;
-    `apps/server/src/working-order.ts:1138`, `:1264`, `:1282`; `apps/server/src/move-bill.ts:110`,
-    `:239`; `apps/server/src/table-actions.ts:81`, `:101`, `:123` (the table halves of those
-    conditions). This answers the backlog's "A table in no zone still opens a tab, and nothing can be
+    schema change makes them unreachable. The typecheck does not find them (measured 2026-10-11 with
+    `apps/server`'s tsc 7.0.2, `--strict`, on a scratch file: `!== null`, `=== null` and `?? "x"` on a
+    plain `string` raised no error, while the control comparing a `string` with a `number` raised
+    TS2367; and `eslint.config.js` is not type-aware);
+    they are found by grep and by the per-file coverage table. Found by grep:
+    `apps/server/src/floor-today-merges.ts:210-213`; `apps/server/src/working-order.ts:1138`, `:1264`,
+    `:1282`; `apps/server/src/move-bill.ts:239`; `apps/server/src/table-actions.ts:81`, `:101`,
+    `:123` (the table halves of those conditions). (`move-bill.ts:110` is not one: its zone is a
+    counter request's, `MoveTarget` `:37`, copied at `:169`, which may be null; covered by
+    `party-move-bill.test.ts:837`.) This answers the backlog's "A table in no zone still opens a tab, and nothing can be
     added to it" (`docs/backlog.md:2684-2688`), which Task 5.4 deletes. Cost: between Tasks 5.2d and
     5.3, `apps/server`'s branch coverage counts those branches as uncovered.
 
@@ -6177,7 +6193,7 @@ creates the live tables and today's plan (`floor-plan.ts:464-468`). `createTable
 `setTablePlacement` are no longer called. Before its first save, for every seeded zone (not only
 those with seed tables, as `seed-floor.ts:240-251` loops today), the seed reads the zone's live
 tables and throws, naming the first one's label, if there is any: the error it raises today through
-the adoption draft (`:247-251`), so a table the seed did not create is still refused.
+the adoption draft (`:248-252`), so a table the seed did not create is still refused.
 
 No failing test first: the seed's result — zones, master plans, today's plan, labels, seats, fixed
 flags and places — is the same, and is pinned by `seed-floor.test.ts:196-297` and `:299-307`, which
@@ -6205,11 +6221,17 @@ code, so every suite stays green with no assertion changed.
 
 **Files:**
 - Create: `apps/server/src/testing/live-table.ts`
-- Modify: every file under `apps/server` that imports `createTable` from `./tables.js` or
-  `../../src/tables.js` (62, `grep -rln "createTable" apps/server/src apps/server/scripts`), and the
-  test files that use `deactivateTable` as setup (`party-table-actions.test.ts:23`, `:481`;
-  `party-move-bill.test.ts:23`, `:487`; `tabs.test.ts:48`, `:1026`) or `updateTable` to rename a
-  table (`party-table-names.test.ts:10`, `:105`, `:149`)
+- Modify: the test files under `apps/server` that import `createTable` from `./tables.js` or
+  `../../src/tables.js` — about 60: `grep -rln "createTable" apps/server/src apps/server/scripts`
+  finds 63, less `apps/server/src/tables.ts` (the definition), `apps/server/src/management-api.ts`
+  (product code that needs `tables.ts`' `createTable` until Task 5.2c),
+  `apps/server/scripts/demo-seed/seed-floor.ts` (its import went in Task 5.2a) and
+  `apps/server/src/tables.test.ts`, which stays on `./tables.js` because its cases at `:157`, `:165`
+  and `:220` test refusals the moved helper drops (`zone.not_found`, `table.label_taken`, an
+  unrelated database error re-thrown) and Task 5.2c deletes them; and the test files that use
+  `deactivateTable` as setup (`party-table-actions.test.ts:23`, `:481`; `party-move-bill.test.ts:23`,
+  `:487`), `updateTable` to rename a table (`party-table-names.test.ts:10`, `:105`, `:149`), or
+  `updateTable` to move one to another zone (`tabs.test.ts:48`, `:1026`)
 
 **Interfaces:**
 
@@ -6228,9 +6250,10 @@ Behaviour: none in the product. The moved `createTable` writes the same row as `
 `table.label_taken` translation, which belong to the route Task 5.2c removes. `tables.ts`' own
 `createTable` stays until Task 5.2c, for the routes that still call it.
 
-- [ ] **Step 1:** Write `live-table.ts`; point every import at it with a scripted replace of the
+- [ ] **Step 1:** Write `live-table.ts`; point those imports at it with a scripted replace of the
   import line (the typecheck then lists any file left); replace the `deactivateTable` setups with
-  `switchOff` and the `updateTable` renames with `update(diningTables).set({ label })`.
+  `switchOff`, the `updateTable` renames with `update(diningTables).set({ label })` and the zone move
+  in `tabs.test.ts:1026` with `update(diningTables).set({ zoneId })`.
 - [ ] **Step 2: Run** `pnpm --filter @waitron/server exec vitest run src/tabs.test.ts src/party-table-actions.test.ts src/party-move-bill.test.ts src/party-table-names.test.ts`,
   then `pnpm --filter @waitron/server test:coverage` once (check free memory first,
   `memory_pressure | grep free`), the server's typecheck and lint, `prettier --check`. Expected:
@@ -6273,11 +6296,15 @@ Existing tests that change (the Behaviour list):
   `GET` rows (trim the write rows; keep the GET rows, which still assert 403 and 401 for
   `GET /management-api/tables`); the zone-only cases `:1237-1286` stay as they are; `:1287-1327`,
   `:1328-1348` and `:1350-1366` keep their assertions here and change in Task 5.2h; the GET list case
-  `:1092-1100` stays, its `DELETE` setup becoming `switchOff`. Setup only: the
-  tables those cases need — `tableInServiceZone` (`:1167-1189`) and the "occupied zone" case
-  (`:586-609`, its `POST /tables` at `:591`) — are made with `createTable` instead of
-  `POST /tables`. `describe("/management-api/tables/:id/placement")` `:1741-1933` is deleted.
-- `tables.test.ts:132-148`, `:150-250`, `:252-329`, `:331-385`, `:691-797`;
+  `:1092-1100` stays, its `DELETE` setup becoming `switchOff`; `:815-848` (GET projects a placed
+  table's placement columns) is deleted. Setup only: the tables the kept cases need —
+  `tableInServiceZone` (`:1167-1189`), `newTable()` (`:1078-1084`, used by the kept `:1092` and
+  `:1641`), the "occupied zone" case (`:586-609`, its `POST /tables` at `:591`), and the plan cases'
+  `POST /tables` at `:3787-3792` and `:3823-3828` (until Task 5.2j changes those two cases) — are
+  made with `createTable` instead of `POST /tables`.
+  `describe("/management-api/tables/:id/placement")` `:1741-1933` is deleted.
+- `tables.test.ts:132-148`, `:150-250`, `:252-329`, `:331-385`, `:691-797` (the remaining cases'
+  `createTable` import moves to the test helper);
   `tables.location-scope.test.ts:68-119`; `served-at-huella.test.ts:389-416`;
   `till-api.test.ts:3717-4029`; `till-api.tables.test.ts:233-262` (the row read stops selecting
   `capacity` and `active`; the 404 answers stay); `errors.test.ts:25-31`;
@@ -6332,7 +6359,11 @@ switched on, so every test table needs a zone first.
   table, made at `:134`, gets a zone; the parked-order and open-order cases `:243-256` and `:299`
   onwards stay); `apps/server/src/party-move-bill.test.ts:337-352`, `:798-811`, `:1054-1068`,
   `:1112-1123`, `:1125-1136` (with the helper `partyBillInTicketZone`, `:1073-1110`, if nothing else
-  uses it); `apps/server/src/floor-today-merges.test.ts:164-180`, `:182-217`
+  uses it); `apps/server/src/floor-today-merges.test.ts:164-180`, `:182-217`;
+  `apps/server/src/made-here.routes.test.ts:1675-1687`, `:1689-1707` (deleted; `bareParty()`,
+  `:235-246`, gives its table a zone for its other users, `:1710`, `:1776`); and the half of
+  `apps/server/src/watch-zones.test.ts:126-170` at `:164-169` that sets a delivery table's zone to
+  null (deleted; the rest of the case stays)
 
 Behaviour: none in the product. Each table gets the zone its test already uses for its other tables
 (`v.tables.zoneId`, `venue.zoneId`, the zone the case made), or, where the case has none, a zone made
@@ -6471,7 +6502,9 @@ as already hidden. Queries on one transaction are awaited in turn.
 Existing tests that change (the Behaviour list): the `active` keys beside a today's-row assertion in
 `floor-today-store.test.ts:308`, `:315`, `:341`, `:394` (and that case's setup, `:384-395`, which
 deletes the today's row instead of setting `active` false), `:705`; `table-removal.test.ts:296`,
-`:339`, `:398`; and `floor-today-store.test.ts:720-737` (decision 14, the `active` key goes).
+`:339`, `:398`; `floor-today-store.test.ts:720-737` (decision 14, the `active` key goes); and
+`management-api.test.ts:1092-1100`, whose `active: false` key goes when `switchOff` stops writing
+`active` (the table still appears with `includeDisabled` and not in the plain list).
 Setup only, assertions unchanged: `tabs.test.ts:290-305` (a table taken out of service by deleting
 its today's row instead of `active = false` at `:299`), `set-table-status.test.ts:147` (likewise),
 `report-api.overview.test.ts:111-115` (the "inactive" table gets no today's row).
@@ -6547,8 +6580,8 @@ Task 5.2c; `tabs.test.ts:299`, `set-table-status.test.ts:147`, Task 5.2g).
 `listAll` and break here, because switching a zone off no longer writes it: each instead asserts the
 table is in the plain `GET /management-api/tables` list exactly when its zone stays switched on
 (`:1287`'s "active" arm and `:1328`) and absent from it otherwise; `:1350-1366`'s last line likewise
-asserts the table is back in the plain list once its zone is switched on again; `:1092-1100` loses
-its `active: false` key (the table appears with `includeDisabled` and not in the plain list).
+asserts the table is back in the plain list once its zone is switched on again, and the case is
+renamed, since its name ("…without enabling its tables") contradicts that.
 
 Live updates (decision 23): add `"floor_today_tables"` and `"floor_zones"` to bookings' `tables`
 dependencies (`packages/bookings/src/dashboard/live-queries.ts:1`) and to `getSalesOverview`'s
@@ -6571,8 +6604,13 @@ it("reads the overview again when today's plan or a zone changes", async () => {
 ```
 
 - [ ] **Step 2: Run and watch them fail** —
-  `pnpm --filter @waitron/venue-service exec vitest run src/operations.test.ts src/department-transfers.test.ts`
-  and `pnpm --filter @waitron/bookings exec vitest run src/bookings.test.ts`.
+  `pnpm --filter @waitron/venue-service exec vitest run src/operations.test.ts src/department-transfers.test.ts`,
+  `pnpm --filter @waitron/bookings exec vitest run src/bookings.test.ts src/dashboard/bookings-screen.test.ts`
+  and `pnpm --filter @waitron/dashboard exec vitest run src/screens/dashboard-overview-screen.test.ts`.
+  The two refresh cases change the data source as their files already do (`liveData.invalidate`,
+  `packages/bookings/src/dashboard/bookings-screen.test.ts:491-499`,
+  `apps/dashboard/src/screens/dashboard-overview-screen.test.ts:417-426`) and fail because neither
+  query lists those tables yet.
 - [ ] **Step 3: Implement**, then the fixture commit and the changed-test commit.
 - [ ] **Step 4: Run** every test file named under Files, `pnpm --filter @waitron/venue-service test:coverage`
   and `pnpm --filter @waitron/bookings test:coverage` (browser packages: check free memory first),
@@ -6592,7 +6630,8 @@ already works, so this task changes only test setup, and every suite stays green
   tables and reads each live table back from `readZonePlan`'s `liveTableId`, instead of making live
   tables and adopting them at `:64`), and the other helpers and setups that adopt: `masterOf` in
   `apps/server/src/floor-today-store.test.ts`, and the first-save setups in `floor-plan.test.ts`,
-  `floor-catch-up.test.ts`, `floor-today-state.test.ts`, `boot.test.ts` and `management-api.test.ts`
+  `floor-catch-up.test.ts`, `floor-today-state.test.ts`, `boot.test.ts`, `management-api.test.ts`,
+  `floor-today-api.test.ts:200` and `floor-today-changes.test.ts:264`
   (`grep -rln liveTableId apps/server/src`), except the cases Task 5.2j deletes because adoption is
   what they test
 
@@ -6637,8 +6676,8 @@ setup; `floor-reset-plan.test.ts:210-225`; `floor-today-store.test.ts:495-510`;
 keys at `:368`, `:419`, `:427`; `management-api.test.ts:3782-3817` (still checks that a plan read is
 accepted back unchanged, each master entry keeping its own `liveTableId`, without the adopted spare
 it made with `POST /tables` at `:3788-3792` and its `[true, true]` row), `:3819-3838` (deleted: a
-save no longer reads `liveTableId`; Step 1's new case covers what the route does with one), and the
-`tables.0.liveTableId` row `:3864-3867` of the body checks `:3853-3880` (deleted).
+save no longer reads `liveTableId`; Step 1's route case below replaces it), and the
+`tables.0.liveTableId` row `:3863-3866` of the body checks `:3853-3881` (deleted).
 
 - [ ] **Step 1: Write the failing tests:**
 
@@ -6650,12 +6689,16 @@ it("makes every live table of the zone a target: one that follows no master tabl
 // floor-plan.test.ts
 it("reads a zone with live tables and no master plan as an empty draft", async () => {});
 it("does not read a save entry's liveTableId", async () => { /* an entry naming another zone's live table by liveTableId and no id → accepted as a new table */ });
+// management-api.test.ts — the route's parser (management-api.ts:445-448)
+it("accepts a save whose master entry carries another table's liveTableId, and ignores it", async () => {
+  /* as :3819-3838's setup; today the route answers 400 floor_plan.invalid { field: "tables.0.id" } */
+});
 // floor-today-store.test.ts
 it("removes a free live table of a planned zone that follows no master table, at the next reset", async () => {});
 ```
 
 - [ ] **Step 2: Run and watch them fail** —
-  `pnpm --filter @waitron/server exec vitest run src/floor-reset-plan.test.ts src/floor-plan.test.ts src/floor-today-store.test.ts`.
+  `pnpm --filter @waitron/server exec vitest run src/floor-reset-plan.test.ts src/floor-plan.test.ts src/floor-today-store.test.ts src/management-api.test.ts`.
 - [ ] **Step 3: Implement** (the helpers already build their zones without adoption, Task 5.2i),
   then the changed-test commit. `planned` stays in the schema until
   Task 5.3; nothing reads or writes it after this task (`grep -rn "planned" apps/server/src packages/db/src`
@@ -6688,8 +6731,11 @@ editor's automatic names skip this zone's tables whose `planTableId` is null and
 follows, and every other zone's tables.
 
 Existing tests that change: `till-api.tables.test.ts:264-272` (`active: true` leaves the matcher);
-`apps/server/src/tables.test.ts:110-130` (`active`, `posX`, `posY`, `shape` and `rotation` leave the
-matcher and `planTableId: null` joins it; its `capacity: 4` stays until Task 5.3 drops the column);
+`apps/server/src/tables.test.ts:110-130` (`capacity`, `active`, `posX`, `posY`, `shape` and
+`rotation` leave the matcher and `planTableId: null` joins it; its `capacity: 4` argument to
+`createTable` stays until Task 5.3 drops the column); `management-api.test.ts:1654` (its
+`toMatchObject({ active: true })` is deleted, `active` having left the answer; the case's `PATCH` row
+went in Task 5.2c, so nothing is left for that line to guard);
 any `/api/tables/state` or table-list case pinning a whole row with `toEqual` (grep the server
 suites for `"/api/tables/state"`, `listTablesWithState(` and `"/management-api/tables"`; a key
 removed from such a pin is listed in the changed-test commit). Fixture only:
@@ -6797,11 +6843,13 @@ fixture that set `capacity` to show a seat count on a table with no today's row 
   sets `capacity`, which goes too. An `active: false` still present at this point is a setup Tasks
   5.2g and 5.2h missed, and is a STOP. Also: the test helper `createTable`'s `capacity` parameter
   goes (`apps/server/src/testing/live-table.ts`, with its callers, `grep -rn "createTable(" apps/server | grep capacity`,
-  and `apps/server/src/tables.test.ts:110-130`'s `capacity: 4`, argument and matcher key)
+  and the `capacity: 4` argument at `apps/server/src/tables.test.ts:110-130`, whose matcher key went
+  in Task 5.2k)
 - Modify also, for decision 24: the null-zone branches the schema change makes unreachable —
   `apps/server/src/floor-today-merges.ts:210-213`; `apps/server/src/working-order.ts:1138`, `:1264`,
-  `:1282`; `apps/server/src/move-bill.ts:110`, `:239`; `apps/server/src/table-actions.ts:81`, `:101`,
-  `:123` (their table halves) — found by grep, and any other the typecheck or the linter names
+  `:1282`; `apps/server/src/move-bill.ts:239`; `apps/server/src/table-actions.ts:81`, `:101`,
+  `:123` (their table halves) — found by grep, and any other the per-file coverage table shows
+  newly uncovered (the typecheck does not find them, decision 24)
 - Generated: three core migrations under `packages/db/drizzle/` with their snapshots and journal
   entries (drizzle-kit picks the numbers; the highest at `5afb32342` is `0136`)
 
