@@ -12,8 +12,8 @@ their full text.
   without `#clearProvisionOutcome()`, which the four other ways onto that screen call first, so an
   earlier attempt's message could show there (found by reading, not run); `AdoptOutcome`'s
   `breakGlassSecret` is typed as required, but a replayed adopt answers without it
-  (`apps/server/src/setup-api.ts`); the mode screen's own text says a live
-  server files real invoices, which a live run on a development box does not; `setup-app.test.ts`
+  (`apps/server/src/setup-api.ts`); the mode screen's own text says a live server files real
+  invoices, which a live run on a development box does not; `setup-app.test.ts`
   has two test titles naming a `SyntaxError` from a non-JSON error body that `apiError` turns into
   `server.internal`; `events.test.ts` has no case for the restore and fiscal-test dispatchers; the
   `*.css?inline` declaration in `vite-env.d.ts` is redundant (vite/client declares it);
