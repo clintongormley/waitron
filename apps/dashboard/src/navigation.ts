@@ -27,7 +27,6 @@ export const dashboardPath: UrlPathConfig = {
       q: "q",
     },
     printers: { view: "view", printer: "printer" },
-    floor: { "floor-view": "view", "floor-zone": "zone" },
     "floor-plan": { zone: "zone" },
     "canvas-editor": { canvas: "canvas", "canvas-tab": "tab" },
   },

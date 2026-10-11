@@ -57,7 +57,6 @@ import "./screens/venue-details-panel.js";
 import "./screens/catalogue-settings-panel.js";
 import "./screens/content-languages-screen.js";
 import "./screens/service-status-screen.js";
-import "./screens/floor-screen.js";
 import "./screens/kitchen-screen.js";
 import { VENUE_SETTINGS_TABS } from "./screens/venue-settings-screen.js";
 import type { VenueSettingsPanel, VenueSettingsTab } from "./screens/venue-settings-screen.js";
@@ -110,7 +109,6 @@ const CORE_SCREENS = [
   "units",
   "content-languages",
   "venue-settings",
-  "floor",
   "roster",
   "approvals",
   "planned-actual",
@@ -157,14 +155,11 @@ type NavGroup = {
   headerKey?: StringKey;
   icon?: string;
   items: NavItem[];
-  /** Sorted with the group's module pages; a tie keeps the core item first. */
-  itemsAmongModules?: (NavItem & { order: number })[];
   itemsAfterModules?: NavItem[];
 };
 
 const coreItems = (group: NavGroup): NavItem[] => [
   ...group.items,
-  ...(group.itemsAmongModules ?? []),
   ...(group.itemsAfterModules ?? []),
 ];
 /** A nav row as shown: a core item or a module's screen, labelled in the current language. */
@@ -200,7 +195,6 @@ const NAV_GROUPS: NavGroup[] = [
     id: "operations",
     headerKey: "nav.group.operations",
     items: [],
-    itemsAmongModules: [{ screen: "floor", labelKey: "nav.floor", order: 20 }],
     itemsAfterModules: [{ screen: "venue-settings", labelKey: "nav.venue_settings" }],
   },
   {
@@ -1172,10 +1166,7 @@ export class DashboardApp extends LitElement {
     this.drawerOpen = false;
     this.navSearch = "";
     this.#broadcastSessionDeadline(0);
-    this.#url.write(
-      { dashboard: null, canvas: null, "canvas-tab": null, "floor-view": null, "floor-zone": null },
-      true,
-    );
+    this.#url.write({ dashboard: null, canvas: null, "canvas-tab": null }, true);
     if (this.isConnected) {
       setLocale(this.#loginLocale ?? this.#venueLocale);
       void this.#seedLocale();
@@ -1772,20 +1763,9 @@ export class DashboardApp extends LitElement {
         .filter((item) => this.#mayOpen(item))
         .map((item) => ({ screen: item.screen, label: t(item.labelKey) }));
     return NAV_GROUPS.map((group) => {
-      const among = [
-        ...(group.itemsAmongModules ?? [])
-          .filter((item) => this.#mayOpen(item))
-          .map((item) => ({
-            order: item.order,
-            page: { screen: item.screen, label: t(item.labelKey) },
-          })),
-        ...(this.#navGroups.get(group.id) ?? []).map((screen) => ({
-          order: screen.order ?? 0,
-          page: { screen: screen.id, label: tKit(screen.navLabelKey) },
-        })),
-      ]
-        .sort((a, b) => a.order - b.order)
-        .map(({ page }) => page);
+      const among = [...(this.#navGroups.get(group.id) ?? [])]
+        .sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
+        .map((screen) => ({ screen: screen.id, label: tKit(screen.navLabelKey) }));
       const permitted: NavPage[] = [
         ...shown(group.items),
         ...among,
@@ -2002,8 +1982,6 @@ export class DashboardApp extends LitElement {
         return html`<dashboard-venue-settings-screen
           .panels=${this.#settingsPanels()}
         ></dashboard-venue-settings-screen>`;
-      case "floor":
-        return html`<dashboard-floor-screen .api=${this.api}></dashboard-floor-screen>`;
       case "roster":
         return html`<dashboard-roster-screen .api=${this.api}></dashboard-roster-screen>`;
       case "approvals":

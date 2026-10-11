@@ -587,15 +587,6 @@ export interface FloorZone {
 
 export type TableShape = "round" | "square" | "rect";
 
-/** The server refuses a `null` `zoneId` with `management.request_invalid`. */
-export interface TablePlacement {
-  posX: number;
-  posY: number;
-  shape: TableShape;
-  rotation: number;
-  zoneId: string | null;
-}
-
 export interface DashboardTable {
   id: string;
   label: string;
@@ -2818,33 +2809,6 @@ export class DashboardApi {
         : "/management-api/tables",
       "GET",
     );
-  }
-
-  createTable(input: {
-    label: string;
-    capacity?: number;
-    zoneId?: string;
-  }): Promise<{ id: string }> {
-    return this.#request<{ id: string }>("/management-api/tables", "POST", input);
-  }
-
-  updateTable(
-    id: string,
-    patch: { label?: string; zoneId?: string; capacity?: number; active?: boolean },
-  ): Promise<void> {
-    return this.#request<void>(`/management-api/tables/${id}`, "PATCH", patch);
-  }
-
-  deactivateTable(id: string): Promise<void> {
-    return this.#request<void>(`/management-api/tables/${id}`, "DELETE");
-  }
-
-  async setTablePlacement(tableId: string, placement: TablePlacement): Promise<void> {
-    await this.#request<void>(`/management-api/tables/${tableId}/placement`, "PUT", placement);
-  }
-
-  async clearPlacement(tableId: string): Promise<void> {
-    await this.#request<void>(`/management-api/tables/${tableId}/placement`, "DELETE");
   }
 
   // ── Kitchen stations + routing ─────────────────────────────────────────────────────────────────
