@@ -1277,6 +1277,18 @@ describe("unpair reader — a failed provider call answers as Delete does", () =
       expect(result).toEqual({ status: 502, body: unpairFailed, reasons: [reason] });
     });
 
+    it("logs a refused key on Unpair as credential_rejected when the answer is an HTML page", async () => {
+      const result = await unpairLogReason(
+        "unpair",
+        async () =>
+          new Response("<html><body>Unauthorized</body></html>", {
+            status: 401,
+            headers: { "content-type": "text/html" },
+          }),
+      );
+      expect(result).toEqual({ status: 502, body: unpairFailed, reasons: ["credential_rejected"] });
+    });
+
     it("logs a dropped connection on Unpair as unreachable", async () => {
       const result = await unpairLogReason("unpair", async () => {
         throw new TypeError("fetch failed");
