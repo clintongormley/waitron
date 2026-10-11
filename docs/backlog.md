@@ -1320,7 +1320,8 @@ _Formerly entries spread across the old sections, A261's venue-operations steps 
 - **A506. Opening hours rebuilt around seasons and special days (owner, 2026-10-11).** One
   standard week becomes four seasons that cover the whole year and repeat every year; special days
   are painted on top of the season, a stretch at a time. The page opens on a year calendar, and
-  seasons and special days are edited in full-screen painters. Supersedes the 2026-10-07 spec's
+  seasons and special days are edited in full-screen painters. Periods (menus, and A504's floor
+  plan) get a page of their own. Supersedes the 2026-10-07 spec's
   section 9.2 and the named-day hours of its section 7; takes in the two old Opening hours
   presentation entries. Mockups:
   [docs/backlog/mockups/a506-opening-hours-seasons/](backlog/mockups/a506-opening-hours-seasons/).

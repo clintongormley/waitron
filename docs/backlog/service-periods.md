@@ -236,6 +236,21 @@ week into future dates would bury the special days among ordinary ones.
   says which season it follows and offers "Edit the Winter week", "Make this a special day…" and
   adding it to an existing special day.
 
+**Periods get a page of their own** (owner, 2026-10-11): a period decides what is offered at a time
+of day — the customer menu, the staff-only menus and, once A504 lands, the floor plan — so it is
+more than a paint colour. Under Venue operations, beside Opening hours:
+- One list, periods grouped under their department as A493 groups zones, with columns Period
+  (colour and name), Customer menu, Staff-only menus, Floor plan (shown greyed until A504) and
+  Painted in (the seasons and special days that use it, each opening that editor). A period painted
+  nowhere is flagged, since nothing will sell its menu. Row ⋮: Edit, Open in Opening hours, Delete.
+  The owner chose this over one card per period.
+- One period dialog, opened from the page and from the painter: name, colour, customer menu (with
+  what it includes), staff-only menus, floor plan (from A504) and Painted in. Save stays quiet until
+  the draft changes.
+- Deleting says where the period is painted and which routing cells name it, and offers a period to
+  take its place. The mockup's answer without one: its painted time becomes closed in the seasons
+  and the season shows through on special days.
+
 **Venue, department, zone.** The venue holds the seasons and special days and no hours of its own
 (owner's choice). Departments paint periods; a zone follows its department except where it is marked
 closed, as today.
@@ -250,6 +265,10 @@ closed, as today.
 4. `4-special-day-editor.png` — a special day, in the same full-screen editor, one column per
    date instead of Monday to Sunday; name, dates and every-year in a side panel.
 5. `5-ordinary-date.png` — clicking an ordinary date.
+6. `6-periods-page.png` — the Periods page.
+7. `7-period-dialog.png` — the period dialog.
+8. `8-period-delete.png` — deleting a period that is in use.
+9. `9-new-period-in-painter.png` — "+ New period" from inside the painter.
 
 **The painter (both editors).**
 - Full screen, with one bar holding close, what is being edited, the season or department
@@ -267,11 +286,11 @@ closed, as today.
 - Each column's ⋮ has "Copy to…", ticking several days or dates at once, and Clear. A special
   fortnight is painted once, copied across, and the odd dates changed after.
 - The day name and its ⋮ share one line.
-- **Periods are edited in a dialog from the painter** (owner, 2026-10-11), not a tab. "Periods…" in
-  the paint row lists the department's periods (colour, name, customer menu, staff-only menus) with
-  Add, Edit and Delete; "+ New period" opens the same dialog at its add form, and the new period
-  becomes the paint. Each period in the paint row has an edit control opening the dialog at it.
-  The list follows the painter's department picker.
+- **Periods from inside the painter.** Each period in the paint row has ✎, and "+ New period"
+  opens the period dialog over the painter ("Add and paint with it"); the unsaved painting stays
+  underneath. A period saves when its dialog saves, separately from the painter's Save, because the
+  Periods page and the till use it at once (owner, 2026-10-11). The bar links to the Periods page;
+  leaving with unsaved painting asks first.
 
 **Taken in from older entries.**
 - Real-week headings: a date heading must not repeat the weekday, and the date and Today marker
@@ -289,9 +308,8 @@ closed, as today.
   live queries in `packages/venue-service/src/`, plus `apps/dashboard/src/api/live-queries.ts`;
   prep station times (`station-times.ts`) read the week. Follow each call chain; a search is not a
   complete list.
-- Deleting a period that is painted in a season or on a special day, or that a routing cell
-  names: the dialog says where it is used before deleting (the 2026-10-07 spec, section 8, already
-  warns for routing cells). What happens to the painted time is the spec's to decide.
+- Deleting a period in use: the mockup shows one answer (above); the spec confirms it, and what a
+  routing cell naming the period becomes (the 2026-10-07 spec, section 8, only warns).
 - Where the read-only prep station times live, now that the tabs go; and whether the month's "All
   departments" picker is enough of the old All departments view.
 - What the till sells at a moment is decided by these hours, so the sale-path resolver's

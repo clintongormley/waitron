@@ -360,7 +360,8 @@ section 6.1, `docs/superpowers/specs/2026-10-08-floor-plan-design.md`; `floor_pl
   `menu_scheduled_publications`, `packages/catalogue/src/schema/publication.ts`). Today a saved plan
   reaches the till at the next reset.
 - **Different layouts for different periods** of the day, for example lunch and dinner. This needs
-  deciding how a change of layout meets tables that are occupied when the period changes.
+  deciding how a change of layout meets tables that are occupied when the period changes. A506's
+  Periods page and period dialog already leave a Floor plan column and field for it.
 
 ## Small floor-plan refusals still missing
 
