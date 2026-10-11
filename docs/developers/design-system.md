@@ -909,7 +909,8 @@ saved before it, when Status was the only movable column, is not read.
 
 **A menu's queued versions sit above Unpublished changes on its Preview tab.** The "Scheduled
 versions" panel lists only waiting schedules, soonest first, with their time on the venue's clock.
-Cancelled and activated editions stay in the API response but have no row or Status column here. The time adds its UTC offset only when the venue's clock shows that
+Cancelled and activated editions stay in the API response but have no row or Status column here.
+The time adds its UTC offset only when the venue's clock shows that
 minute twice. The menus list does not show the queue: a menu whose only version is scheduled still
 reads "Unpublished" there until it goes live. "Publish later" opens a compact form with a date
 and a time; it is offered only when the preview has loaded with no clashes and the draft
@@ -3466,7 +3467,8 @@ Keep the live version in the editor header rather than repeating it in Preview. 
 as a red sentence, with each conflicting price and its source below it. A menu included by other
 menus names those includers as links to their Preview tabs beside Publish; omit that note when
 there are none. Keep Publish now outside the scrolling panes. Put Scheduled versions and its
-Publish later action above unpublished changes on the left, and the proposed menu on the right. Stack the panes with changes first when the host
+Publish later action above unpublished changes on the left, and the proposed menu on the right.
+Stack the panes with changes first when the host
 has less than 800px available. Each pane has its own accessible name and keyboard focus.
 
 Group changes by type under small headings, with one plain bullet per change. Keep a source note
@@ -3480,13 +3482,15 @@ Draw the proposed document as a read-only Structure-style tree. Share row presen
 Structure, including indentation and the swatch slot; an image occupies that same slot, with a
 colour fallback when absent. Use one name column without headings; centre the expand arrow on the
 media slot. Read names from the frozen document; a missing requested name gets one note naming
-that language, even when the displayed fallback is a staff name. Keep the actual translation's language tag. Internal names have an empty
+that language, even when the displayed fallback is a staff name. Keep the actual translation's
+language tag. Internal names have an empty
 language tag rather than inheriting the dashboard language. A replacement preview resets the
 tree's expansion and highlight without moving focus. Changing Content view makes no request.
 
 Put Expand all to the right of Content view. Put Show all changes to the right of the Unpublished
-changes heading. A Hide link removes a bullet and its group when the group becomes empty. Show all changes restores
-them and is disabled when nothing is hidden. Show the hidden count beside it and explain that
+changes heading. A Hide link removes a bullet and its group when the group becomes empty.
+Show all changes restores
+them and is disabled when nothing is hidden. Show the hidden count below the heading and explain that
 Publish still includes every change. Keep hidden IDs in component state for the same menu,
 intersecting them with each refreshed change list; leaving the menu forgets them.
 
