@@ -1193,7 +1193,7 @@ describe("permanent delete", () => {
         ).toBe("Current Mains"),
       );
       const root = el.shadowRoot!.querySelector("wt-delete-dialog")!.shadowRoot!;
-      expect(root.querySelector("li")!.textContent).toBe("3 products will fire earliest.");
+      expect(root.querySelector("li")!.textContent).toBe("3 products fire earliest.");
       expect(root.querySelector('[data-group="ends"]')).toBeNull();
       expect(root.querySelector("[data-irreversible]")!.textContent).toBe("This can't be undone.");
       expect(api.deleteCourse).not.toHaveBeenCalled();

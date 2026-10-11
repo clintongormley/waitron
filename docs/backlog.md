@@ -4838,8 +4838,9 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
   intentar este trabajo" where `printer.unpaired` says "así que este trabajo no se volverá a
   intentar". Left open by A435 step 2.
 - **Shorter printer-delete copy was offered to the owner during the build**: for the till's
-  deleted-printer sentence, "Trabajo que finalizará", and one dialog line per inherited default.
-  Left open by A435 step 2.
+  deleted-printer sentence, the Spanish heading over ending work (now "Trabajo que finaliza"; a
+  shorter "Lo que se detendrá" was offered, which in the present tense reads "Lo que se detiene"),
+  and one dialog line per inherited default. Left open by A435 step 2.
 - **`refuseDeletedPrinters` lives in `@waitron/layouts`** though `@waitron/printing` holds the
   printer functions and `printer.not_found`'s registry. Left open by A435 step 2.
 - **`deletePrinter` writes the device choices, profile lists and holders that layouts owns**; one

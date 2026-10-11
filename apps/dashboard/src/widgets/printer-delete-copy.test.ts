@@ -28,8 +28,8 @@ describe("a printer's delete dialog copy, in English", () => {
       copy.cancel,
     ]).toEqual([
       "Delete printer?",
-      "Work that will end",
-      "Settings that will be removed",
+      "Work that ends",
+      "Settings that are removed",
       "This can't be undone.",
       "Delete",
       "Cancel",
@@ -89,8 +89,8 @@ describe("a printer's delete dialog copy, in Spanish", () => {
       copy.cancel,
     ]).toEqual([
       "¿Eliminar la impresora?",
-      "Trabajo que finalizará",
-      "Configuración que se eliminará",
+      "Trabajo que finaliza",
+      "Configuración que se elimina",
       "Esta acción no se puede deshacer.",
       "Eliminar",
       "Cancelar",

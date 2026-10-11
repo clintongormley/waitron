@@ -1573,6 +1573,14 @@ it("previews the products a deleted extras list would touch, and NO order count"
   expect(confirmDelete(el).disabled).toBe(false);
 });
 
+it.each([
+  ["en-GB", "3 product(s) lose this list."],
+  ["es-ES", "3 producto(s) pierden esta lista."],
+] as const)("says in the present tense what deleting a list does (%s)", (locale, sentence) => {
+  setLocale(locale);
+  expect(t("modifiers.delete_warning_products").replace("{count}", "3")).toBe(sentence);
+});
+
 it("previews only the products a deleted options list would touch, and NO order count", async () => {
   const client = api({
     getOptionListDependants: vi.fn().mockResolvedValue({
