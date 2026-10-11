@@ -757,9 +757,8 @@ jobs:
   # split out of test-light on a measurement (341.7s of test-light's 358s wall-clock on run
   # 32417600304); sharding it is the next step down. See SERVER_PACKAGE in scripts/changed-scope.mjs.
   #
-  # Eight shards, so each one finishes in about four minutes or less: a simulation of Vitest's
-  # file-hash split over CI's per-file times left one of six shards near 4.1 minutes and the
-  # slowest of eight near 3.5 (A528).
+  # Eight shards: see docs/developers/ci-and-gates.md, "Every CI test job finishes in about 4
+  # minutes" (A528).
   #
   # The dedicated runners also let apps/server run in SEVERAL workers (apps/server/vitest.config.ts's
   # maxWorkers): the @vitest/coverage-v8 branch under-merge that held it to one worker is a `pnpm -r`

@@ -125,12 +125,13 @@ hook, or how tests are scheduled:
   Guard: the "run no more shards than the package has test files" case in
   `scripts/ci-workflow.test.mjs`, weaker than its name — it counts files named `*.test.ts` under the
   package, not what the package's Vitest config includes.
-- **Every CI test job — one shard of one package — finishes in about 4 minutes** (owner,
+- **Every CI test job — one shard of one package — should finish in about 4 minutes** (owner,
   2026-10-09 and 2026-10-11). Fix a job over it at the cause: a slow file, too few shards, slow
   setup; never by cutting a check. Cost: `test-server (5)` ran a 5.3-minute median behind two files
   of about 3 minutes each, one of them slow only in Vitest comparing byte arrays element by
   element. Guards, weaker than the rule: the reporter's warning on a file over 90 s, which never
-  fails a job, and the shard-count pin in `scripts/ci-workflow.test.mjs`. Receipt:
+  fails a job, the shard-count pin in `scripts/ci-workflow.test.mjs`, and each test job's 10-minute
+  `timeout-minutes` (its "bounds every test job" case), the only one that fails a job. Receipt:
   [ci-and-gates.md](docs/developers/ci-and-gates.md#every-ci-test-job-finishes-in-about-4-minutes).
 - **A browser package's shard coverage merges through `scripts/vitest-shard-coverage-merge.mjs`,
   never a plain `--merge-reports`**, which on Vitest 4.1.11 counts a file some shards never loaded

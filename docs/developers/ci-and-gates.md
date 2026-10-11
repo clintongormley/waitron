@@ -518,9 +518,10 @@ the default one; `test:shard` already names `default` and `blob`. Guard: the fil
 `scripts/ci-workflow.test.mjs`, weaker than its name — it reads `ci.yml` as text, and finds a test
 command only in a `Run the … shard` step or the stream step.
 
-A file that takes more than 90 seconds also gets a GitHub warning annotation (`::warning title=Slow
-test file::`), shown on the run's summary page, because one file that long holds up its shard
-(see "Every CI test job finishes in about 4 minutes" below). It warns and never fails the job.
+A file whose `end` line comes more than 90 seconds after its `start` line also gets a GitHub
+warning annotation (`::warning title=Slow test file::`), because one file that long holds up its
+shard (see "Every CI test job finishes in about 4 minutes" below). In browser mode that time can
+include waiting to be loaded (above). It warns and never fails the job.
 
 ### The `ci` check passes only when every needed job succeeded or was skipped
 
@@ -843,7 +844,7 @@ lines in runs 38177927525, 38171667214 and 38170124439: `src/bill-payments.test.
 `src/boot.test.ts` (163.4–186.8 s). No other server file took more than 73.6 s.
 
 - `bill-payments.test.ts` was slow in Vitest's own deep equality, not in the product: a CPU profile
-  of a local run put about 16 s of its 21 s in `@vitest/expect`'s `keys`, `eq` and
+  of a local run put most of its time in `@vitest/expect`'s `keys`, `eq` and
   `iterableEquality`. Its whole-table `toEqual`s read `print_jobs`, whose `payload` is a
   `Uint8Array`, and Vitest compares a typed array one element at a time. `apps/server` now registers
   an equality tester for byte arrays (`apps/server/src/testing/byte-equality.ts`, through the
@@ -855,7 +856,7 @@ lines in runs 38177927525, 38171667214 and 38170124439: `src/bill-payments.test.
 - `boot.test.ts` is real work — a CPU profile put about half of a local run in migrating fresh
   databases and about a sixth in deriving and generating keys — so it was split, test for test, into
   `boot.test.ts`, `boot.restore.test.ts` and `boot.setup-routes.test.ts` (17.9, 14.4 and 23.4 s
-  locally), with their shared helpers in `apps/server/src/testing/boot-harness.ts`. Vitest runs one
+  locally, each file run alone, without coverage), with their shared helpers in `apps/server/src/testing/boot-harness.ts`. Vitest runs one
   file on one worker, so a file of that size set a floor under its shard.
 - `test-server` went from six shards to eight. Vitest 4.1.11 assigns files to shards by the sha1 of
   each file's path, sorted and cut into equal COUNTS (`BaseSequencer.shard`), so which files share a
@@ -865,9 +866,10 @@ lines in runs 38177927525, 38171667214 and 38170124439: `src/bill-payments.test.
   about 690 s.
 
 Guards, each weaker than the rule: the 90-second warning above names a slow FILE but never fails a
-job; the supervising watcher flags a `test-*` job still running past 6 minutes; and the "pin each
-sharded package's shard count" case in `scripts/ci-workflow.test.mjs` holds the counts, not the
-times. Nothing measures a job's time against 4 minutes.
+job; the "pin each sharded package's shard count" case in `scripts/ci-workflow.test.mjs` holds the
+counts, not the times; and each test job's 10-minute `timeout-minutes` (the "bounds every test job"
+case in the same file) is the only one that fails a job, and only at 10 minutes. Nothing measures a
+job's time against 4 minutes.
 
 ### A cheap job can still be the critical path
 
