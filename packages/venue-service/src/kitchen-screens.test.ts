@@ -335,7 +335,7 @@ describe("a profile's kitchen screens", () => {
     ).resolves.toEqual(refused("passScreenZones", "not_found"));
     // Stored for the pass screen is not stored for the station screen.
     await expect(
-      outcome(set(venue, venue.kds, { station: { stationIds: [venue.grill], zoneIds: null } })),
+      outcome(set(venue, venue.kds, { station: { stationIds: [venue.grill], zoneIds: null }, pass: { stationIds: [venue.cold], zoneIds: [] } })),
     ).resolves.toEqual(refused("stationScreenStations", "not_found"));
   });
 
