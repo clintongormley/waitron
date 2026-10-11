@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { formatMoney } from "@waitron/shared";
+import { BUILD_CHANGED_EVENT } from "@waitron/diagnostics";
 import {
   adjustmentStubs,
   cancelThroughDialog,
@@ -3751,6 +3752,33 @@ describe("till-app: giving back a bill payment", () => {
     expect(dialog(el)).not.toBeNull();
     expect(withPin).not.toHaveBeenCalled();
   });
+
+  it("shows the box-update bar instead of reloading while a refund still waits for the server after an idle sign-out", async () => {
+    const reload = vi.fn();
+    const activity = idleActivity();
+    api = stubApi({
+      getPartyBills: vi.fn().mockResolvedValue([partly]),
+      getBillBalance: vi.fn().mockResolvedValue(holding(cashPaid)),
+      listRefundAuthorizers: vi.fn().mockResolvedValue(manager),
+      refundBillPayment: vi.fn(() => new Promise(() => {})),
+    });
+    const { el } = await mountWidget<TillApp>("till-app", {
+      api,
+      sessionActivity: activity as never,
+      reload,
+    });
+    await signInAndAskRefund(el, cashPaid);
+    expect(api.refundBillPayment).toHaveBeenCalledOnce();
+
+    await signOutIdle(el, activity);
+    expect(refundDialog(el)).toBeNull();
+    expect(unloadGuarded()).toBe(false);
+    buildChanged();
+    await flush(el);
+
+    expect(reload).not.toHaveBeenCalled();
+    expect(updateBar(el)).not.toBeNull();
+  });
 });
 
 describe("till-app: a party bill's receipt language", () => {
@@ -3958,3 +3986,63 @@ describe("till-app: a party bill's receipt language", () => {
     expect(text(el.shadowRoot!.querySelector('[role="alert"]'))).toBe("");
   });
 });
+
+describe("till-app: a box update while a bill payment still waits for the server", () => {
+  it("shows the bar instead of reloading after an idle sign-out closed the payment dialog", async () => {
+    const reload = vi.fn();
+    const activity = idleActivity();
+    api = stubApi({ takeBillPayment: vi.fn(() => new Promise(() => {})) });
+    const { el } = await mountWidget<TillApp>("till-app", {
+      api,
+      sessionActivity: activity as never,
+      reload,
+    });
+    await openTable(el);
+    await openDialog(el, "contribution");
+    await type(el, "amount", "40");
+    await type(el, "tendered", "50");
+    await press(el, "[data-pay-continue]");
+    await press(el, "[data-pay-confirm]");
+    expect(api.takeBillPayment).toHaveBeenCalledOnce();
+
+    await signOutIdle(el, activity);
+    expect(dialog(el)).toBeNull();
+    expect(unloadGuarded()).toBe(false);
+    buildChanged();
+    await flush(el);
+
+    expect(reload).not.toHaveBeenCalled();
+    expect(updateBar(el)).not.toBeNull();
+  });
+});
+
+function idleActivity() {
+  return {
+    configure: vi.fn(),
+    noteInteraction: vi.fn(),
+    reacquire: vi.fn(),
+    start: vi.fn(),
+    stop: vi.fn(),
+  };
+}
+
+async function signOutIdle(el: TillApp, activity: ReturnType<typeof idleActivity>): Promise<void> {
+  const config = activity.configure.mock.calls.at(-1)![0] as { onIdle: () => void };
+  config.onIdle();
+  await flush(el);
+  expect(lock(el)).not.toBeNull();
+}
+
+function buildChanged(): void {
+  window.dispatchEvent(new Event(BUILD_CHANGED_EVENT));
+}
+
+function unloadGuarded(): boolean {
+  const event = new Event("beforeunload", { cancelable: true });
+  window.dispatchEvent(event);
+  return event.defaultPrevented;
+}
+
+function updateBar(el: TillApp): HTMLElement | null {
+  return el.shadowRoot!.querySelector("wt-banner[data-test=update-bar]");
+}

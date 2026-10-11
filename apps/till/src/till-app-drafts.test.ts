@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { BUILD_CHANGED_EVENT } from "@waitron/diagnostics";
 import { leaveCoordinatorFor, type WtCombobox } from "@waitron/ui";
 import type { TillDeadEndsSection } from "./widgets/dead-ends-section.js";
 import { chooseOption } from "@waitron/ui/src/test-helpers.js";
@@ -1198,6 +1199,32 @@ describe("till-app: an order that moves to another party", () => {
 });
 
 describe("till-app: signing out with a draft", () => {
+  it("shows the box-update bar instead of reloading while the sign-out's save of the draft is still out", async () => {
+    const answer = holdNextSave();
+    const reload = vi.fn();
+    const { el } = await mountApp();
+    el.reload = reload;
+    await openMesa(el);
+    await tap(el, "Beer");
+
+    emit(tableOrder(el)!, "logout");
+    await flush(el);
+    expect(lock(el)).not.toBeNull();
+    expect(api.saveDraft).toHaveBeenCalledOnce();
+    expect(api.logout).not.toHaveBeenCalled();
+    const unload = new Event("beforeunload", { cancelable: true });
+    window.dispatchEvent(unload);
+    expect(unload.defaultPrevented).toBe(false);
+    window.dispatchEvent(new Event(BUILD_CHANGED_EVENT));
+    await flush(el);
+
+    expect(reload).not.toHaveBeenCalled();
+    expect(el.shadowRoot!.querySelector("wt-banner[data-test=update-bar]")).not.toBeNull();
+    answer();
+    await flush(el);
+    expect(api.logout).toHaveBeenCalledOnce();
+  });
+
   it("saves the draft before the session ends", async () => {
     const { el } = await mountApp();
     await openMesa(el);

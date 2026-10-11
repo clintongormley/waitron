@@ -1213,9 +1213,16 @@ export class TillApp extends LitElement {
       this.submitting ||
       this.#cardAttemptsRunning > 0 ||
       this.#unansweredPayment !== null ||
-      this.#unansweredRefund !== null
+      this.#unansweredRefund !== null ||
+      this.#billMoneyInFlight > 0 ||
+      this.#signOutSavesInFlight > 0
     );
   }
+
+  /** A bill payment or refund sent and not yet ended; `#unansweredPayment` and `#unansweredRefund`
+   * are set only once it ends. */
+  #billMoneyInFlight = 0;
+  #signOutSavesInFlight = 0;
 
   sessionActivity: SessionActivity = new SessionActivity();
 
@@ -8524,6 +8531,7 @@ export class TillApp extends LitElement {
     const settle = (error?: unknown) => {
       if (turn === this.#paymentSends) this.#unansweredPayment = unansweredAfter(submission, error);
     };
+    this.#billMoneyInFlight++;
     try {
       const result = await resendUnanswered(
         (signal) => this.api.takeBillPayment(open.billId, submission.request, { signal }),
@@ -8537,6 +8545,7 @@ export class TillApp extends LitElement {
       await this.#onBillPayRefused(open.id, error, asked, "take");
     } finally {
       limit.done();
+      this.#billMoneyInFlight--;
     }
   }
 
@@ -8744,6 +8753,7 @@ export class TillApp extends LitElement {
     const settle = (error?: unknown) => {
       if (turn === this.#refundSends) this.#unansweredRefund = unansweredAfter(submission, error);
     };
+    this.#billMoneyInFlight++;
     try {
       const result = await resendUnanswered(
         (signal) =>
@@ -8769,6 +8779,7 @@ export class TillApp extends LitElement {
       else await this.#onRefundRefused(open, error);
     } finally {
       limit.done();
+      this.#billMoneyInFlight--;
     }
   }
 
@@ -8918,7 +8929,12 @@ export class TillApp extends LitElement {
     if (sync !== undefined) {
       this.#draftSync = undefined;
       this.#draftReady = false;
-      await sync.close();
+      this.#signOutSavesInFlight++;
+      try {
+        await sync.close();
+      } finally {
+        this.#signOutSavesInFlight--;
+      }
       sync.drop();
     }
     if (signIns !== this.#signIns) return;
