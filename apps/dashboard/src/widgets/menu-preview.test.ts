@@ -603,10 +603,10 @@ it("offers to publish a never-published menu without repeating the header status
     ]),
   });
   expect(q(el, '[data-test="live"]')).toBeNull();
-  expect(text(q(el, '[data-test="publish"]'))).toBe("Publish Lunch Menu");
+  expect(text(q(el, '[data-test="publish"]'))).toBe("Publish now");
 });
 
-it("names the one menu on the publish button, and asks to publish the hash it previewed", async () => {
+it("offers Publish now and asks to publish the hash it previewed", async () => {
   const el = await mount({
     preview: preview([
       {
@@ -621,7 +621,7 @@ it("names the one menu on the publish button, and asks to publish the hash it pr
   });
   const asked: unknown[] = [];
   el.addEventListener("wt-menu-publish", (event) => asked.push((event as CustomEvent).detail));
-  expect(text(q(el, '[data-test="publish"]'))).toBe("Publish Lunch Menu");
+  expect(text(q(el, '[data-test="publish"]'))).toBe("Publish now");
   expect(q(el, '[data-test="only-this-menu"]')).toBeNull();
   q(el, '[data-test="publish"]')!.click();
   expect(asked).toEqual([{ hash: NEW_HASH }]);
@@ -1240,4 +1240,60 @@ it("keeps Publish blue while its own publish is being sent, even if a clash arri
   await el.updateComplete;
   expect(publish.disabled).toBe(true);
   expect(publish.variant).toBe("primary");
+});
+
+it("A498 places schedules over changes and keeps document and change controls on their heading lines", async () => {
+  await page.viewport(1280, 900);
+  const el = await mount({
+    preview: preview([
+      {
+        id: "new-product",
+        targets: { before: [], after: [] },
+        kind: "product_added",
+        productId: "p-burger",
+        name: "Burger",
+        under: [],
+        source: "this_menu",
+      },
+    ]),
+  });
+  el.style.width = "1200px";
+  const schedules = document.createElement("div");
+  schedules.slot = "schedule";
+  schedules.textContent = "Scheduled versions";
+  el.append(schedules);
+  await el.updateComplete;
+  const slot = el.shadowRoot!.querySelector('slot[name="schedule"]')!;
+  expect(slot.closest('[data-test="changes-pane"]')).not.toBeNull();
+  const heading = q(el, "#changes-heading")!.getBoundingClientRect();
+  const showAll = q(el, '[data-test="show-all-changes"]')!.getBoundingClientRect();
+  expect(showAll.top).toBeLessThan(heading.bottom);
+  expect(showAll.left).toBeGreaterThanOrEqual(heading.right);
+  const tree = q<MenuDocumentTree>(el, "dashboard-menu-document-tree")!;
+  await tree.updateComplete;
+  const table = tree.shadowRoot!.querySelector("wt-data-table")!;
+  await table.updateComplete;
+  const selector = q(el, "wt-combobox")!.getBoundingClientRect();
+  const expand = table.shadowRoot!.querySelector(".expand-all")!.getBoundingClientRect();
+  expect(expand.top).toBeLessThan(selector.bottom);
+  expect(expand.left).toBeGreaterThanOrEqual(selector.right);
+  expect(text(q(el, '[data-test="publish"]'))).toBe("Publish now");
+  expect(text(q(el, '[data-test="document"]'))).toContain(
+    "Current product availability is not shown.",
+  );
+});
+
+it("A498 keeps the content choice readable beside Expand all on a phone", async () => {
+  await page.viewport(390, 844);
+  const el = await mount();
+  el.style.width = "358px";
+  const tree = q<MenuDocumentTree>(el, "dashboard-menu-document-tree")!;
+  await tree.updateComplete;
+  const table = tree.shadowRoot!.querySelector("wt-data-table")!;
+  await table.updateComplete;
+  const selector = q(el, "wt-combobox")!.getBoundingClientRect();
+  const expand = table.shadowRoot!.querySelector(".expand-all")!.getBoundingClientRect();
+  expect(selector.width).toBeGreaterThanOrEqual(170);
+  expect(expand.top).toBeLessThan(selector.bottom);
+  expect(expand.left).toBeGreaterThanOrEqual(selector.right);
 });

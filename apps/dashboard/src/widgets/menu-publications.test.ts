@@ -180,18 +180,18 @@ describe("a menu's scheduled versions", () => {
     expect(api.getMenuPublications).toHaveBeenCalledWith("menu-lunch");
     expect(cell(el, "version-v-lunch-2")).toBe("Version 2");
     expect(cell(el, "time-v-lunch-2")).toBe("8 Oct 2026, 08:00");
-    expect(cell(el, "state-v-lunch-2")).toBe("Scheduled");
+    expect(cell(el, "version-v-lunch-2")).not.toBeNull();
     expect(cell(el, "time-v-lunch-4")).toBe("25 Oct 2026, 02:30 (UTC+01:00)");
-    expect(cell(el, "state-v-lunch-4")).toBe("Scheduled");
-    expect(cell(el, "version-v-lunch-3")).toBe("Version 3");
-    expect(cell(el, "time-v-lunch-3")).toBe("9 Oct 2026, 08:00");
-    expect(cell(el, "state-v-lunch-3")).toBe("Cancelled");
-    expect(cell(el, "state-v-lunch-1")).toBe("Activated");
+    expect(cell(el, "version-v-lunch-4")).not.toBeNull();
+    expect(cell(el, "version-v-lunch-3")).toBeNull();
+    expect(cell(el, "time-v-lunch-3")).toBeNull();
+    expect(cell(el, "state-v-lunch-3")).toBeNull();
+    expect(cell(el, "state-v-lunch-1")).toBeNull();
     expect(
       [...table(el).shadowRoot!.querySelectorAll("tbody tr")].map((row) =>
         row.getAttribute("data-row-key"),
       ),
-    ).toEqual(["v-lunch-2", "v-lunch-4", "v-lunch-3", "v-lunch-1"]);
+    ).toEqual(["v-lunch-2", "v-lunch-4"]);
   });
 
   it("lists them in Spanish", async () => {
@@ -199,10 +199,10 @@ describe("a menu's scheduled versions", () => {
     const el = await mount();
     expect(cell(el, "version-v-lunch-2")).toBe("Versión 2");
     expect(cell(el, "time-v-lunch-2")).toBe("8 oct 2026, 08:00");
-    expect(cell(el, "state-v-lunch-2")).toBe("Programada");
+    expect(cell(el, "version-v-lunch-2")).not.toBeNull();
     expect(cell(el, "time-v-lunch-4")).toBe("25 oct 2026, 02:30 (UTC+01:00)");
-    expect(cell(el, "state-v-lunch-3")).toBe("Cancelada");
-    expect(cell(el, "state-v-lunch-1")).toBe("Activada");
+    expect(cell(el, "state-v-lunch-3")).toBeNull();
+    expect(cell(el, "state-v-lunch-1")).toBeNull();
   });
 
   it("keeps a row menu, pinned at the end, on the queued rows alone", async () => {
@@ -220,21 +220,11 @@ describe("a menu's scheduled versions", () => {
     expect(rowMenu(el, "v-lunch-1")).toBeNull();
   });
 
-  it("mutes the state of a settled version and leaves a queued one in the text colour", async () => {
+  it("does not render a status column or settled rows", async () => {
     const el = await mount();
-    const colour = (testId: string) =>
-      getComputedStyle(table(el).shadowRoot!.querySelector(`[data-test="${testId}"]`)!).color;
-    const probe = document.createElement("span");
-    el.shadowRoot!.append(probe);
-    probe.style.color = "var(--wt-color-text-muted)";
-    const muted = getComputedStyle(probe).color;
-    probe.style.color = "var(--wt-color-text)";
-    const text = getComputedStyle(probe).color;
-    probe.remove();
-    expect(muted).not.toBe(text);
-    expect(colour("state-v-lunch-3")).toBe(muted);
-    expect(colour("state-v-lunch-1")).toBe(muted);
-    expect(colour("state-v-lunch-2")).toBe(text);
+    expect(table(el).columns.map((column) => column.key)).toEqual(["version", "time", "actions"]);
+    expect(cell(el, "version-v-lunch-3")).toBeNull();
+    expect(cell(el, "version-v-lunch-1")).toBeNull();
   });
 
   it("keeps the Actions heading on one line inside text that may break anywhere", async () => {
@@ -434,7 +424,7 @@ describe("a menu's scheduled versions", () => {
       await flush(el);
       await flush(el);
       expect(read).toHaveBeenCalledTimes(2);
-      expect(cell(el, "state-v-lunch-2")).toBe("Activated");
+      expect(cell(el, "version-v-lunch-2")).toBeNull();
       expect(rowMenu(el, "v-lunch-2")).toBeNull();
       expect(dialog(el).open).toBe(true);
       expect(await messageIn(dialog(el))).toBe(codeMessage(code));
@@ -524,11 +514,11 @@ describe("a menu's scheduled versions", () => {
     let answer = queue();
     const read = vi.fn(async () => answer);
     const el = await mount(stubApi({ liveData: live, getMenuPublications: read }));
-    expect(cell(el, "state-v-lunch-2")).toBe("Scheduled");
+    expect(cell(el, "version-v-lunch-2")).not.toBeNull();
     answer = queue();
     answer.editions[0] = { ...answer.editions[0]!, state: "cancelled" };
     live.invalidate([{ type: "menu_scheduled_publications" }]);
-    await vi.waitFor(() => expect(cell(el, "state-v-lunch-2")).toBe("Cancelled"));
+    await vi.waitFor(() => expect(cell(el, "version-v-lunch-2")).toBeNull());
     expect(read).toHaveBeenCalledTimes(2);
   });
 });
@@ -625,7 +615,7 @@ async function scheduleAt(
 describe("scheduling a publication", () => {
   it("opens a form with a required date and a required time, both marked", async () => {
     const el = await mount(stubApi(), { preview: draftPreview() });
-    expect(inShadow(el, "schedule-open")!.textContent!.trim()).toBe("Schedule a publication…");
+    expect(inShadow(el, "schedule-open")!.textContent!.trim()).toBe("Publish later");
     await openSchedule(el);
     expect(scheduleDialog(el).open).toBe(true);
     for (const [name, type, label] of [
@@ -1341,11 +1331,11 @@ describe("schedule fix round 1", () => {
     await flush(el);
     await vi.waitFor(() => expect(read).toHaveBeenCalledTimes(2));
     live.invalidate([{ type: "menu_scheduled_publications" }]);
-    await vi.waitFor(() => expect(cell(el, "state-v-lunch-2")).toBe("Cancelled"));
+    await vi.waitFor(() => expect(cell(el, "version-v-lunch-2")).toBeNull());
     older(queue());
     await flush(el);
     await flush(el);
-    expect(cell(el, "state-v-lunch-2")).toBe("Cancelled");
+    expect(cell(el, "version-v-lunch-2")).toBeNull();
   });
 
   it("keeps a newer live list when the overtake re-read resolves later", async () => {
@@ -1375,11 +1365,11 @@ describe("schedule fix round 1", () => {
     submitButton(el).click();
     await vi.waitFor(() => expect(read).toHaveBeenCalledTimes(2));
     live.invalidate([{ type: "menu_scheduled_publications" }]);
-    await vi.waitFor(() => expect(cell(el, "state-v-lunch-2")).toBe("Cancelled"));
+    await vi.waitFor(() => expect(cell(el, "version-v-lunch-2")).toBeNull());
     older(queue());
     await flush(el);
     await flush(el);
-    expect(cell(el, "state-v-lunch-2")).toBe("Cancelled");
+    expect(cell(el, "version-v-lunch-2")).toBeNull();
     expect(field(el, "time").error).toBe(
       "Version 2, scheduled for 8 Oct 2026, 08:00, must go live first. Cancel it or move it earlier, then try again.",
     );
@@ -1597,7 +1587,7 @@ describe("changing a queued version's time", () => {
     },
   ] as const)(
     "refuses to move v3 before v2 until v2 is cancelled, then moves it, leaving the draft alone ($locale)",
-    async ({ locale, sentence, action, cancelled, scheduled, moved, four }) => {
+    async ({ locale, sentence, action, moved, four }) => {
       setLocale(locale);
       onTestFinished(() => setLocale("en"));
       const server = editionServer();
@@ -1606,7 +1596,7 @@ describe("changing a queued version's time", () => {
       await editDraft(el, "b".repeat(64));
       await scheduleThrough(el, "2026-10-09", "08:00");
       await editDraft(el, "c".repeat(64));
-      expect(cell(el, "state-v-lunch-3")).toBe(scheduled);
+      expect(cell(el, "version-v-lunch-3")).toBe(locale === "en" ? "Version 3" : "Versión 3");
       const before = rows(el);
 
       await openMove(el, "v-lunch-3");
@@ -1636,7 +1626,7 @@ describe("changing a queued version's time", () => {
       await flush(el);
       await flush(el);
       expect(server.calls.cancelMenuPublication.mock.calls).toEqual([["menu-lunch", "v-lunch-2"]]);
-      expect(cell(el, "state-v-lunch-2")).toBe(cancelled);
+      expect(cell(el, "version-v-lunch-2")).toBeNull();
 
       await openMove(el, "v-lunch-3");
       await enter(el, "date", "2026-10-07");
@@ -1649,7 +1639,7 @@ describe("changing a queued version's time", () => {
       ]);
       expect(scheduleDialog(el).open).toBe(false);
       await flush(el);
-      expect(cell(el, "state-v-lunch-3")).toBe(scheduled);
+      expect(cell(el, "version-v-lunch-3")).toBe(locale === "en" ? "Version 3" : "Versión 3");
       expect(cell(el, "time-v-lunch-3")).toBe(moved);
       expect(server.writes).toEqual([
         "scheduleMenuPublication",
@@ -1859,4 +1849,25 @@ describe("changing a queued version's time", () => {
     await submit(el);
     expect(api.scheduleMenuPublication).toHaveBeenCalledTimes(1);
   });
+});
+
+it("A498 shows only waiting schedules without a status column and opens a compact publication dialog", async () => {
+  const el = await mount(stubApi(), { preview: draftPreview() });
+  expect(
+    [...table(el).shadowRoot!.querySelectorAll("tbody tr[data-row-key]")].map((row) =>
+      row.getAttribute("data-row-key"),
+    ),
+  ).toEqual(["v-lunch-2", "v-lunch-4"]);
+  expect(table(el).columns.map((column) => column.key)).toEqual(["version", "time", "actions"]);
+  const button = inShadow(el, "schedule-open")!;
+  expect(button.textContent!.trim()).toBe("Publish later");
+  button.click();
+  await flush(el);
+  const schedule = el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-dialog"]>(
+    'wt-dialog[data-test="schedule-dialog"]',
+  )!;
+  await schedule.updateComplete;
+  expect(
+    schedule.shadowRoot!.querySelector("dialog")!.getBoundingClientRect().width,
+  ).toBeLessThanOrEqual(480);
 });
