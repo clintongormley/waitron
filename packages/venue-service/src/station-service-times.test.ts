@@ -526,13 +526,11 @@ it("clamps a station forecast to the following dated start", async () =>
       at,
       0,
     );
-    await db
-      .insert(locationDayCutoverChanges)
-      .values({
-        locationId: f.cfg.locationId,
-        effectiveBusinessDay: "2026-10-13",
-        dayCutover: "03:00:00",
-      });
+    await db.insert(locationDayCutoverChanges).values({
+      locationId: f.cfg.locationId,
+      effectiveBusinessDay: "2026-10-13",
+      dayCutover: "03:00:00",
+    });
     expect(await stationServiceTimes(db, f.cfg, f.station, day, "2026-10-13")).toEqual({
       always: null,
       days: [

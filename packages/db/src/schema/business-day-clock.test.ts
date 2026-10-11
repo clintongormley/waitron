@@ -14,14 +14,12 @@ import { useVenueDb } from "../testing/venue-db.js";
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
 const locationId = "a495-location";
 beforeEach(async () => {
-  await suite.db
-    .insert(locations)
-    .values({
-      id: locationId,
-      name: "Clock",
-      invoiceLocales: ["es"],
-      operationDescription: "Restaurant",
-    });
+  await suite.db.insert(locations).values({
+    id: locationId,
+    name: "Clock",
+    invoiceLocales: ["es"],
+    operationDescription: "Restaurant",
+  });
 });
 const change = (location: string, date: string, cutover: string) =>
   withTransaction(suite.db, async (tx) => {

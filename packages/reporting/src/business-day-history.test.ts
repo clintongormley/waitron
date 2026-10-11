@@ -18,16 +18,14 @@ const clock = {
   cutoverChanges: [{ effectiveBusinessDay: "2026-11-04", dayCutover: "03:00" }],
 };
 beforeEach(async () => {
-  await suite.db
-    .insert(locations)
-    .values({
-      id: locationId,
-      name: "Clock",
-      invoiceLocales: ["es"],
-      operationDescription: "Restaurant",
-      timeZone: "Europe/Madrid",
-      dayCutover: "05:00:00",
-    });
+  await suite.db.insert(locations).values({
+    id: locationId,
+    name: "Clock",
+    invoiceLocales: ["es"],
+    operationDescription: "Restaurant",
+    timeZone: "Europe/Madrid",
+    dayCutover: "05:00:00",
+  });
 });
 afterEach(() => vi.useRealTimers());
 describe("complete reporting clock", () => {

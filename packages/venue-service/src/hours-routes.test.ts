@@ -1185,13 +1185,11 @@ it("returns the pending-clock refusal from an authenticated time writer", async 
     await tx
       .insert(locationBusinessDaySettings)
       .values({ locationId: fx.cfg.locationId, revision: 1 });
-    await tx
-      .insert(locationDayCutoverChanges)
-      .values({
-        locationId: fx.cfg.locationId,
-        effectiveBusinessDay: "2030-10-16",
-        dayCutover: "07:00:00",
-      });
+    await tx.insert(locationDayCutoverChanges).values({
+      locationId: fx.cfg.locationId,
+      effectiveBusinessDay: "2030-10-16",
+      dayCutover: "07:00:00",
+    });
   });
   await refused(
     await send(fx, "POST", "/special-dates", fx.manager, {

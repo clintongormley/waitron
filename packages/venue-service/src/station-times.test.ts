@@ -742,13 +742,11 @@ it("keeps today's station closure and actual expiry through the 26-hour tail", a
       .update(locations)
       .set({ dayCutover: "05:00:00" })
       .where(eq(locations.id, f.cfg.locationId));
-    await tx
-      .insert(locationDayCutoverChanges)
-      .values({
-        locationId: f.cfg.locationId,
-        effectiveBusinessDay: "2026-11-04",
-        dayCutover: "07:00:00",
-      });
+    await tx.insert(locationDayCutoverChanges).values({
+      locationId: f.cfg.locationId,
+      effectiveBusinessDay: "2026-11-04",
+      dayCutover: "07:00:00",
+    });
     await setStationToday(tx, f.cfg, f.upstairs, "closed", new Date("2026-11-03T12:00:00Z"));
     for (const time of ["2026-11-04T04:00:00Z", "2026-11-04T05:59:00Z"]) {
       expect((await venueMoment(tx, f.cfg, new Date(time)))?.businessDay).toBe("2026-11-03");

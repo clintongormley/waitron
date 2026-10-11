@@ -134,13 +134,11 @@ describe("boot's authority clock wiring", () => {
           cutoverChanges: [],
         });
       await withTransaction(suite.db, (tx) =>
-        tx
-          .insert(locationDayCutoverChanges)
-          .values({
-            locationId: venue.cfg.locationId,
-            effectiveBusinessDay: "2026-11-04",
-            dayCutover: "07:00:00",
-          }),
+        tx.insert(locationDayCutoverChanges).values({
+          locationId: venue.cfg.locationId,
+          effectiveBusinessDay: "2026-11-04",
+          dayCutover: "07:00:00",
+        }),
       );
       for (const read of [archiveClock, cloudClock])
         expect(await read()).toEqual({
