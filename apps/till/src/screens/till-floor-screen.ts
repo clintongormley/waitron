@@ -77,8 +77,7 @@ export interface FloorRefreshDetail {
 
 type JoinAction = Extract<DropAction, { kind: "join" }>;
 
-const asksSeats = (refused: { code?: string; field?: unknown }): boolean =>
-  refused.code === "floor_plan.invalid" && refused.field === "seats";
+const asksSeats = (refused: { code?: string }): boolean => refused.code === "merge.seats_required";
 
 function placedAt(table: TableState, pending: Map<string, TodayPlacement>): TableState {
   const placement = pending.get(table.id);

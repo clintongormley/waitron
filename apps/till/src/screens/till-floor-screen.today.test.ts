@@ -150,9 +150,8 @@ describe("till-floor-screen: dragging on today's plan", () => {
   it("two free tables merge, asking for seats when the server wants them", async () => {
     const api = stubApi();
     api.mergeToday.mockRejectedValueOnce({
-      code: "floor_plan.invalid",
+      code: "merge.seats_required",
       status: 400,
-      field: "seats",
     });
     const el = await mount([planned("t1", 2), planned("t2", 20)], api);
     const refreshes = countRefreshes(el);
@@ -192,9 +191,8 @@ describe("till-floor-screen: dragging on today's plan", () => {
   it("a re-read while the seats are asked keeps the table where it was dropped", async () => {
     const api = stubApi();
     api.mergeToday.mockRejectedValueOnce({
-      code: "floor_plan.invalid",
+      code: "merge.seats_required",
       status: 400,
-      field: "seats",
     });
     const el = await mount([planned("t1", 2), planned("t2", 20)], api);
     await drop(el, { tableId: "t2", x: 5, y: 3, targetId: "t1" });
@@ -211,9 +209,8 @@ describe("till-floor-screen: dragging on today's plan", () => {
   it("cancelling the seats puts the table back", async () => {
     const api = stubApi();
     api.mergeToday.mockRejectedValueOnce({
-      code: "floor_plan.invalid",
+      code: "merge.seats_required",
       status: 400,
-      field: "seats",
     });
     const el = await mount([planned("t1", 2), planned("t2", 20)], api);
     await drop(el, { tableId: "t2", x: 5, y: 3, targetId: "t1" });
@@ -246,7 +243,7 @@ describe("till-floor-screen: dragging on today's plan", () => {
 
   it("a merge refused for its seats a second time, or for another field, says why", async () => {
     const api = stubApi();
-    const seatsRefusal = { code: "floor_plan.invalid", status: 400, field: "seats" };
+    const seatsRefusal = { code: "merge.seats_required", status: 400 };
     api.mergeToday
       .mockRejectedValueOnce(seatsRefusal)
       .mockRejectedValueOnce(seatsRefusal)
@@ -263,7 +260,7 @@ describe("till-floor-screen: dragging on today's plan", () => {
     );
     await settle(el);
     expect(el.shadowRoot!.querySelector("till-today-seats-dialog")).toBeNull();
-    expect(refusal(el)).toBe("Something went wrong, try again");
+    expect(refusal(el)).toBe("Enter the seats for this merge");
     expect(drawnAt(el, "t2")).toBe(20);
 
     await drop(el, { tableId: "t2", x: 5, y: 3, targetId: "t1" });

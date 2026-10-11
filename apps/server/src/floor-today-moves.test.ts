@@ -179,11 +179,11 @@ describe("today's moves", () => {
       NOW,
     );
     await expect(move(table.spare!, { x: 1, y: 1 })).rejects.toMatchObject({
-      code: "table.not_in_floor_plan",
+      code: "table.not_on_today_plan",
       params: { tableId: table.spare },
     });
     await expect(rotate(table.spare!)).rejects.toMatchObject({
-      code: "table.not_in_floor_plan",
+      code: "table.not_on_today_plan",
       params: { tableId: table.spare },
     });
 
@@ -200,11 +200,11 @@ describe("today's moves", () => {
     const never = await v.table(`Never ${randomUUID().slice(0, 6)}`, zoneId, { today: false });
     expect(await todayRow(v, never)).toBeUndefined();
     await expect(move(never, { x: 1, y: 1 })).rejects.toMatchObject({
-      code: "table.not_in_floor_plan",
+      code: "table.not_on_today_plan",
       params: { tableId: never },
     });
     await expect(placeSpare(never, { x: 1, y: 1 })).rejects.toMatchObject({
-      code: "table.not_in_floor_plan",
+      code: "table.not_on_today_plan",
       params: { tableId: never },
     });
   });
@@ -259,7 +259,7 @@ describe("today's moves", () => {
     await setToday(table.spare!, { takenOff: true });
 
     await expect(move(table.spare!, { x: 1, y: 1 })).rejects.toMatchObject({
-      code: "table.not_in_floor_plan",
+      code: "table.not_on_today_plan",
       params: { tableId: table.spare },
     });
   });

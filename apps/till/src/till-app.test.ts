@@ -14102,6 +14102,20 @@ describe("the counter's held orders: moving one to a table, and paying a moved b
     },
   );
 
+  it("names a table absent from today's plan and reads the held orders again", async () => {
+    const { el, c } = await counterWith({
+      moveBill: vi.fn().mockRejectedValue({ code: "table.not_on_today_plan" }),
+    });
+    const heldReads = vi.mocked(currentApi.listWorkingOrders).mock.calls.length;
+
+    emit(c, "move-held-order", { orderId: "wo-12", tableId: "t9", seated: null, bills: "merge" });
+    await flush(el);
+
+    expect(alert(el)!.textContent).toContain("Esa mesa no está en el plano de hoy");
+    expect(toast(el).open).toBe(false);
+    expect(currentApi.listWorkingOrders).toHaveBeenCalledTimes(heldReads + 1);
+  });
+
   it("says the table changed when a party sat there since it was read free", async () => {
     const reads = vi
       .fn()

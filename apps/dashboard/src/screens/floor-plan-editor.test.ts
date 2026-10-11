@@ -125,7 +125,7 @@ it("says what a first save does, and when a saved plan's changes reach the till"
     }),
   );
   expect(first.shadowRoot!.querySelector("[data-note]")!.textContent!.trim()).toBe(
-    "Your first save goes live now; later changes, tomorrow.",
+    "Your first save goes live now; later changes tomorrow, or sooner with Reset to saved plan on the till.",
   );
   cleanupWidgets();
   const saved = await open();

@@ -341,7 +341,7 @@ describe("today's changes", () => {
     expect(await todayRow(v, table.a!)).toBeDefined();
 
     await expect(back(table.a!)).rejects.toMatchObject({
-      code: "table.not_in_floor_plan",
+      code: "table.not_on_today_plan",
       params: { tableId: table.a },
     });
 
@@ -351,7 +351,7 @@ describe("today's changes", () => {
     );
     expect(await resetRow(never)).toBeUndefined();
     await expect(back(never)).rejects.toMatchObject({
-      code: "table.not_in_floor_plan",
+      code: "table.not_on_today_plan",
       params: { tableId: never },
     });
   });

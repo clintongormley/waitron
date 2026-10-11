@@ -326,7 +326,7 @@ declare module "@waitron/shared" {
     "table.label_taken": { label: string };
     "table.inactive": { tableId: string };
     /** A change to today's plan named a table with no today's row, or a spare where it needs a place. */
-    "table.not_in_floor_plan": { tableId: string };
+    "table.not_on_today_plan": { tableId: string };
     /** A change to today's plan named a table taken off for today. */
     "table.taken_off": { tableId: string };
     /** A change to today's plan would move, turn or place a fixed table. */
@@ -645,11 +645,9 @@ declare module "@waitron/shared" {
      * current one; the caller reloads the plan and saves again.
      */
     "floor_plan.out_of_date": { zoneId: string; revision: number };
-    /**
-     * A master-plan save's entry is out of range; `field` is its path, such as `tables.0.seats`. Also
-     * today's merge sent without seats when no saved join has exactly its tables: `field` is `seats`.
-     */
+    /** A master-plan save's entry is out of range; `field` is its path, such as `tables.0.seats`. */
     "floor_plan.invalid": { field: string };
+    "merge.seats_required": Record<string, never>;
     /** A floor-plan zone name already exists in this venue. `name` is the operator's own text. */
     "zone.name_taken": { name: string };
     /** A kitchen-station name already exists in this venue. `name` is the operator's own text. */

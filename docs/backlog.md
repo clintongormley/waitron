@@ -1824,8 +1824,8 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   [Detail](backlog/till.md#a470--the-tills-floor-map-follow-ups)
 
 - **A474 — today's floor changes on the till: follow-ups (2026-10-11).** A booking seated from
-  the dashboard skips the taken-off check, the map's drag works out its target the slow way, three
-  owner questions on wording and error codes, and smaller gaps. Left open by A429 slice 4 (#1526).
+  the dashboard skips the taken-off check, the map's drag works out its target the slow way, and
+  smaller gaps. Left open by A429 slice 4 (#1526).
   [Detail](backlog/till.md#a474--todays-floor-changes-on-the-till-follow-ups)
 
 - **The bookings list shows no table for any booking, and a past booking's kept table name

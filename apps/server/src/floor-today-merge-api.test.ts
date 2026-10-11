@@ -150,7 +150,7 @@ describe("merging and splitting free tables", () => {
       await refusal(today(unsaved.a, "merge", { targetId: unsaved.b, side: "right" })),
     ).toEqual({
       status: 400,
-      body: { error: { code: "floor_plan.invalid", params: { field: "seats" } } },
+      body: { error: { code: "merge.seats_required", params: {} } },
     });
     expect(await mergeOf(v, unsaved.a)).toBeNull();
 
@@ -182,7 +182,7 @@ describe("merging and splitting free tables", () => {
 
     expect(await refusal(today(a, "merge", { targetId: b, side: "right" }))).toEqual({
       status: 400,
-      body: { error: { code: "floor_plan.invalid", params: { field: "seats" } } },
+      body: { error: { code: "merge.seats_required", params: {} } },
     });
     expect(await mergeOf(v, a)).toBeNull();
     expect(await generation()).toBe(built);
@@ -281,7 +281,7 @@ describe("merging and splitting free tables", () => {
     expect(await todayRow(v, never)).toBeUndefined();
     expect(await refusal(today(never, "split"))).toEqual({
       status: 409,
-      body: { error: { code: "table.not_in_floor_plan", params: { tableId: never } } },
+      body: { error: { code: "table.not_on_today_plan", params: { tableId: never } } },
     });
     expect(await refusal(today("not-a-uuid", "split"))).toMatchObject({
       status: 404,
