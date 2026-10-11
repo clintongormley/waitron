@@ -658,7 +658,9 @@ alone (`docs/backlog.md` → B9). Read those hedges in the guard rather than tru
 
 Real code does write all five, legitimately: the setup-mode provision route reaches `tenants`,
 `nodes` and `deployment`; the setup-mode adopt route reaches `deployment`, `node_roles` and
-`mirror_config`; and the promote route reaches `node_roles`. Each does it by calling into one of the
+`mirror_config`; the promote route reaches `node_roles`; and the dashboard's legal-name change
+(`PUT /management-api/venue-details/legal-name`, owner A494) reaches `tenants` through
+`packages/provisioning/src/taxpayer-name.ts`, which updates `legal_name` alone. Each does it by calling into one of the
 files `scripts/write-path-tables.json` names, which is where such a write is allowed to live.
 Keeping them in a handful of named files is the whole of the property now, because no connection
 makes the distinction for us any more.
@@ -2269,6 +2271,16 @@ Guards: `apps/server/src/restart-reset.test.ts`, which holds that the reset runs
 pass, and the case in `apps/server/src/boot.test.ts` that returns a previous run's in-flight claim
 to `pendiente` on a start's first pass — weaker than the rule, because nothing checks that a tool
 opening the folder with `exclusive: false` never files.
+
+## An envío to AEAT carries one taxpayer name
+
+The envío's header (`Cabecera`) is built from its first record's name, and a legal-name change
+(owner A494) leaves records under the old and the new name waiting together. So `claimBatch`
+(`packages/fiscal-verifactu/src/drain.ts`) claims one name per envío and leaves the rest
+`pendiente`, with no incident; before AEAT's wait time has passed it sends nothing a name change
+would cut short of a full envío. Which name a record filed across a rename must carry is an open
+question for the asesor (Q37 in `docs/compliance/asesor-questions.md`). Guard:
+`packages/fiscal-verifactu/src/drain.names.test.ts`.
 
 ## The box's BOOT path and the bucket rebuild carry an ahead-of-image check; no other migrating path does, and `waitron.sh install <ref>` is a one-way door
 

@@ -123,6 +123,7 @@ One page, one tab per group. Each tab's settings are set once and left.
 
 - **Venue details** (new): the venue's name, address, time zone and business-day start. Today these
   are set only during setup. The legal name and tax ID are the taxpayer's and are not edited here.
+  (2026-10-11: A494 added a "Change legal name" action here; the tax ID is still not edited.)
 - **Receipts**: §5.
 - **Tables** («Mesas»): a **Needs clearing** switch at the top (whether a table a party leaves shows
   "Needs clearing" until staff mark it clear; `service_settings.clearing_workflow`, which has no

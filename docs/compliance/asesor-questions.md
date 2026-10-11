@@ -2787,6 +2787,16 @@ and [dated receipt, §7.1](../superpowers/specs/2026-10-04-fiscal-prevention-and
 
 This records a question; no enquiry has been sent.
 
+**A change of legal name (added 2026-10-11, A494).** A manager can now change the taxpayer's legal
+name, keeping the tax ID. Each record keeps the name it was written with, so a record written before
+the change but sent after it carries the old name, while a cancellation written after the change
+carries the new one, even for an invoice issued before it. An envío never mixes two names.
+
+> **(d)** Si el restaurante cambia su razón social (mismo NIF), ¿qué nombre debe llevar un registro
+> generado antes del cambio pero remitido después: el que figura en la factura expedida o el que la
+> AEAT tiene ya en el censo? ¿Y una anulación, generada después del cambio, de una factura expedida
+> antes?
+
 ---
 
 ### Q38. The same sale recorded a second time (added 2026-10-03)

@@ -37,7 +37,7 @@
 ## Global constraints
 
 - All recommendations in this plan await owner approval. Do not turn them into approved spec decisions in comments or tests before that approval.
-- Legal name and tax ID stay read-only as A261 §3 requires. The country lock below is a recommendation awaiting approval. Never write `tenants`, fiscal territory, enabled modules, NIF/SIF, series, fiscal records or chain heads from this editor. Department name and trading name remain separate settings.
+- Legal name and tax ID stay read-only as A261 §3 requires. (2026-10-11: A494 added a separate "Change legal name" action on venue details, which writes `tenants.legal_name` only; the tax ID stays read-only.) The country lock below is a recommendation awaiting approval. Never write `tenants`, fiscal territory, enabled modules, NIF/SIF, series, fiscal records or chain heads from this editor. Department name and trading name remain separate settings.
 - No automatic rename of departments, nodes, recorded order labels or receipt snapshots. No fiscal or workforce date rewrite; no historical report regrouping mechanism in this build.
 - `venue.view` reads; existing `venue.configure` writes. Supervisors get a read-only panel (`packages/identity/src/permissions.ts:43` through `:58` declares supervisor `venue.view` and manager `venue.configure`). Preserve all existing authorization assertions and the role ladder.
 - One authenticated write transaction surrounds authorization, current-row read, policy check and update. Detail reader/writer helpers take `tx: Transaction`, never open another transaction, and await statements in turn. Existing per-send email reads are separate: `readVenueTimeZone` takes `Database` and opens its own transaction before shutdown drains the queue.
