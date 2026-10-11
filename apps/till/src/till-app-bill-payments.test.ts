@@ -3752,3 +3752,209 @@ describe("till-app: giving back a bill payment", () => {
     expect(withPin).not.toHaveBeenCalled();
   });
 });
+
+describe("till-app: a party bill's receipt language", () => {
+  const offered = ["es-ES", "ca-ES", "gl-ES"];
+  const withLanguages = () => ({
+    getTill: vi.fn().mockResolvedValue({ ...till, receiptLanguages: offered }),
+  });
+  const languageButton = (order: TillTableOrderScreen) =>
+    order.shadowRoot!.querySelector<HTMLElement>("[data-choose-bill-language]");
+  const languageDialog = (el: TillApp) =>
+    el.shadowRoot!.querySelector<HTMLElement & { purpose: string }>("till-reprint-language-dialog");
+  const radio = (el: TillApp, language: string) =>
+    languageDialog(el)!.shadowRoot!.querySelector<HTMLInputElement>(`input[value="${language}"]`)!;
+
+  async function choose(el: TillApp, order: TillTableOrderScreen, language: string) {
+    languageButton(order)!.click();
+    await flush(el);
+    radio(el, language).click();
+    languageDialog(el)!.shadowRoot!.querySelector<HTMLElement>("[data-reprint-confirm]")!.click();
+    await flush(el);
+  }
+
+  it("saves a bill's chosen language at once with the bill's revision, and adopts the revision that answers", async () => {
+    const setOrderReceiptLanguage = vi
+      .fn()
+      .mockResolvedValueOnce({ revision: 8 })
+      .mockResolvedValueOnce({ revision: 9 });
+    const { el } = await mountApp({
+      ...withLanguages(),
+      getPartyBills: vi.fn().mockResolvedValue([billOf({ revision: 7 })]),
+      getTabLines: vi.fn().mockResolvedValue({ lines: bill120, revision: 7, editSentLines: true }),
+      setOrderReceiptLanguage,
+    });
+    const order = await openTable(el);
+    expect(text(languageButton(order))).toBe("Receipt: Spanish");
+
+    languageButton(order)!.click();
+    await flush(el);
+    expect(languageDialog(el)!.purpose).toBe("receipt");
+    expect(radio(el, "es-ES").checked).toBe(true);
+    radio(el, "ca-ES").click();
+    languageDialog(el)!.shadowRoot!.querySelector<HTMLElement>("[data-reprint-confirm]")!.click();
+    await flush(el);
+
+    expect(setOrderReceiptLanguage).toHaveBeenCalledWith("wo-4", {
+      revision: 7,
+      language: "ca-ES",
+    });
+    expect(languageDialog(el)).toBeNull();
+    expect(text(languageButton(order))).toBe("Receipt: Catalan");
+    expect(order.revision).toBe(8);
+
+    await choose(el, order, "gl-ES");
+    expect(setOrderReceiptLanguage).toHaveBeenLastCalledWith("wo-4", {
+      revision: 8,
+      language: "gl-ES",
+    });
+    expect(text(languageButton(order))).toBe("Receipt: Galician");
+    expect(order.revision).toBe(9);
+  });
+
+  it("starts the question on the bill's stored language, and saves nothing when staff confirm it", async () => {
+    const setOrderReceiptLanguage = vi.fn();
+    const { el } = await mountApp({
+      ...withLanguages(),
+      getPartyBills: vi.fn().mockResolvedValue([billOf({ revision: 7, receiptLanguage: "ca-ES" })]),
+      setOrderReceiptLanguage,
+    });
+    const order = await openTable(el);
+    expect(text(languageButton(order))).toBe("Receipt: Catalan");
+
+    languageButton(order)!.click();
+    await flush(el);
+    expect(radio(el, "ca-ES").checked).toBe(true);
+    languageDialog(el)!.shadowRoot!.querySelector<HTMLElement>("[data-reprint-confirm]")!.click();
+    await flush(el);
+
+    expect(setOrderReceiptLanguage).not.toHaveBeenCalled();
+    expect(languageDialog(el)).toBeNull();
+  });
+
+  it("says so, keeping the language shown and the bill's revision, when the choice could not be saved", async () => {
+    const setOrderReceiptLanguage = vi
+      .fn()
+      .mockRejectedValueOnce({ code: "server.internal" })
+      .mockResolvedValueOnce({ revision: 8 });
+    const { el } = await mountApp({
+      getTill: vi.fn().mockResolvedValue({ ...till, locale: "es-ES", receiptLanguages: offered }),
+      getPartyBills: vi.fn().mockResolvedValue([billOf({ revision: 7 })]),
+      setOrderReceiptLanguage,
+    });
+    const order = await openTable(el);
+    expect(text(languageButton(order))).toBe("Recibo: Español");
+
+    await choose(el, order, "ca-ES");
+
+    expect(text(el.shadowRoot!.querySelector('[role="alert"]'))).toContain(
+      "No se pudo guardar el idioma del recibo, inténtalo de nuevo",
+    );
+    expect(text(languageButton(order))).toBe("Recibo: Español");
+
+    await choose(el, order, "ca-ES");
+    expect(setOrderReceiptLanguage.mock.calls).toEqual([
+      ["wo-4", { revision: 7, language: "ca-ES" }],
+      ["wo-4", { revision: 7, language: "ca-ES" }],
+    ]);
+    expect(text(languageButton(order))).toBe("Recibo: Catalán");
+  });
+
+  it("reads the party's bills again when the choice was refused as out of date, and chooses from what it reads", async () => {
+    let changedElsewhere = false;
+    const getPartyBills = vi
+      .fn()
+      .mockImplementation(async () => [
+        changedElsewhere
+          ? billOf({ revision: 9, receiptLanguage: "gl-ES" })
+          : billOf({ revision: 7 }),
+      ]);
+    const setOrderReceiptLanguage = vi
+      .fn()
+      .mockImplementationOnce(async () => {
+        changedElsewhere = true;
+        throw { code: "working_order.out_of_date" };
+      })
+      .mockResolvedValueOnce({ revision: 10 });
+    const { el } = await mountApp({ ...withLanguages(), getPartyBills, setOrderReceiptLanguage });
+    const order = await openTable(el);
+
+    await choose(el, order, "ca-ES");
+
+    expect(text(el.shadowRoot!.querySelector('[role="alert"]'))).toContain(
+      codeMessage("working_order.out_of_date"),
+    );
+    expect(text(languageButton(order))).toBe("Receipt: Galician");
+
+    await choose(el, order, "ca-ES");
+    expect(setOrderReceiptLanguage).toHaveBeenLastCalledWith("wo-4", {
+      revision: 9,
+      language: "ca-ES",
+    });
+    expect(text(languageButton(order))).toBe("Receipt: Catalan");
+  });
+
+  it("keeps each bill of the party on its own language", async () => {
+    const stored = new Map<string, string>([["wo-5", "gl-ES"]]);
+    const revisions = new Map<string, number>([
+      ["wo-4", 7],
+      ["wo-5", 2],
+    ]);
+    const getPartyBills = vi.fn().mockImplementation(async () =>
+      ["wo-4", "wo-5"].map((id) =>
+        billOf({
+          workingOrderId: id,
+          revision: revisions.get(id)!,
+          ...(stored.has(id) ? { receiptLanguage: stored.get(id)! } : {}),
+        }),
+      ),
+    );
+    const setOrderReceiptLanguage = vi
+      .fn()
+      .mockImplementation(async (id: string, choice: { revision: number; language: string }) => {
+        stored.set(id, choice.language);
+        revisions.set(id, choice.revision + 1);
+        return { revision: choice.revision + 1 };
+      });
+    const { el } = await mountApp({ ...withLanguages(), getPartyBills, setOrderReceiptLanguage });
+    const order = await openTable(el);
+
+    await choose(el, order, "ca-ES");
+    expect(text(languageButton(order))).toBe("Receipt: Catalan");
+
+    emit(order, "take-payment", { workingOrderId: "wo-5" });
+    await flush(el);
+    expect(text(languageButton(order))).toBe("Receipt: Galician");
+
+    emit(order, "take-payment", { workingOrderId: "wo-4" });
+    await flush(el);
+    expect(text(languageButton(order))).toBe("Receipt: Catalan");
+    expect(setOrderReceiptLanguage.mock.calls).toEqual([
+      ["wo-4", { revision: 7, language: "ca-ES" }],
+    ]);
+  });
+
+  it("says nothing when a refusal answers after the waiter has logged out", async () => {
+    let refuse!: (error: unknown) => void;
+    const setOrderReceiptLanguage = vi.fn().mockImplementation(
+      () =>
+        new Promise((_resolve, reject) => {
+          refuse = reject;
+        }),
+    );
+    const { el } = await mountApp({
+      ...withLanguages(),
+      getPartyBills: vi.fn().mockResolvedValue([billOf({ revision: 7 })]),
+      setOrderReceiptLanguage,
+    });
+    const order = await openTable(el);
+    await choose(el, order, "ca-ES");
+    emit(order, "logout");
+    await flush(el);
+
+    refuse({ code: "server.internal" });
+    await flush(el);
+
+    expect(text(el.shadowRoot!.querySelector('[role="alert"]'))).toBe("");
+  });
+});

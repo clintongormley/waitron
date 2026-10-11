@@ -279,3 +279,85 @@ describe("till-table-order-screen: items already paid for", () => {
     );
   });
 });
+
+describe("till-table-order-screen: a bill's receipt language", () => {
+  const offered = ["es-ES", "ca-ES", "gl-ES"];
+  const languageButton = (el: TillTableOrderScreen) =>
+    el.shadowRoot!.querySelector<HTMLElement & { variant: string; disabled: boolean }>(
+      "[data-choose-bill-language]",
+    );
+
+  it("names the bill's stored language beside its invoice action, and identifies the bill to change", async () => {
+    const el = await mountScreen({
+      bills: [{ ...untouched, revision: 5, receiptLanguage: "ca-ES" }],
+      receiptLanguages: offered,
+    });
+    const asked = capture<{ workingOrderId: string; revision: number }>(
+      el,
+      "choose-bill-receipt-language",
+    );
+
+    const button = languageButton(el)!;
+    expect(text(button)).toBe("Receipt: Catalan");
+    expect(el.shadowRoot!.querySelector("[data-choose-bill-invoice]")!.nextElementSibling).toBe(
+      button,
+    );
+    await press(el, "[data-choose-bill-language]");
+
+    expect(asked).toEqual([{ workingOrderId: "wo-4", revision: 5 }]);
+  });
+
+  it.each([
+    ["names none", undefined],
+    ["names one no longer offered", "eu-ES"],
+  ])("names the location's language when the bill %s", async (_case, stored) => {
+    const el = await mountScreen({
+      bills: [{ ...untouched, ...(stored === undefined ? {} : { receiptLanguage: stored }) }],
+      receiptLanguages: offered,
+    });
+
+    expect(text(languageButton(el))).toBe("Receipt: Spanish");
+  });
+
+  it("offers the language on a partly paid bill too, in the screen's language", async () => {
+    setLocale("es");
+    const el = await mountScreen({
+      bills: [{ ...partlyPaid, receiptLanguage: "gl-ES" }],
+      billBalance: balance(),
+      receiptLanguages: offered,
+    });
+
+    const button = languageButton(el)!;
+    expect(el.shadowRoot!.querySelector("[data-bill-payments]")!.contains(button)).toBe(true);
+    expect(text(button)).toBe("Recibo: Gallego");
+  });
+
+  it("draws the language button as quiet as the invoice action, and holds it while the till is busy", async () => {
+    const el = await mountScreen({ receiptLanguages: offered });
+    const invoice = el.shadowRoot!.querySelector<HTMLElement & { variant: string }>(
+      "[data-choose-bill-invoice]",
+    )!;
+
+    expect(languageButton(el)!.variant).toBe(invoice.variant);
+    expect(languageButton(el)!.disabled).toBe(false);
+    el.busy = true;
+    await el.updateComplete;
+    expect(languageButton(el)!.disabled).toBe(true);
+  });
+
+  it("offers no language button when one receipt language is offered", async () => {
+    const el = await mountScreen({ receiptLanguages: ["es-ES"] });
+
+    expect(el.shadowRoot!.querySelector("[data-choose-bill-invoice]")).not.toBeNull();
+    expect(languageButton(el)).toBeNull();
+  });
+
+  it("offers no language button on a bill already paid", async () => {
+    const el = await mountScreen({
+      bills: [{ ...untouched, status: "settled", outstanding: "0.00", receiptAvailable: true }],
+      receiptLanguages: offered,
+    });
+
+    expect(languageButton(el)).toBeNull();
+  });
+});

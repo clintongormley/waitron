@@ -524,6 +524,7 @@ export class TillCardGrid extends LitElement {
           .takeOversAnswered=${this.takeOversAnswered}
           .party=${this.party}
           .bills=${this.partyBills}
+          .receiptLanguages=${this.receiptLanguages}
           .billBalance=${this.billBalance}
           .finishRefused=${this.finishRefused}
           .nameRefusal=${this.nameRefusal}

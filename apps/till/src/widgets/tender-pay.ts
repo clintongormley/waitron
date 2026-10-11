@@ -15,12 +15,12 @@ import {
   compareDecimal,
   decimal,
   formatMoney,
-  languageDisplayName,
   subtractDecimal,
   type Decimal,
 } from "@waitron/shared";
 import { typedAmount } from "../state/bill-payment.js";
 import { currentLocale, t } from "../i18n/t.js";
+import { receiptLanguageLabel } from "./receipt-language.js";
 import "./numeric-pad.js";
 import "./reader-picker.js";
 import "./modifier-picker.js";
@@ -805,7 +805,6 @@ export class TillTenderPay extends LitElement {
 
   #renderReceiptLanguageButton(disabled: boolean) {
     if (this.receiptLanguages.length < 2) return nothing;
-    const name = languageDisplayName(this.receiptLanguage, currentLocale());
     return html`<wt-button
       class="receipt-language"
       data-receipt-language
@@ -817,7 +816,7 @@ export class TillTenderPay extends LitElement {
           new CustomEvent("choose-receipt-language", { bubbles: true, composed: true }),
         );
       }}
-      >${t("receipt_language.button").replace("{language}", () => name)}</wt-button
+      >${receiptLanguageLabel(this.receiptLanguage)}</wt-button
     >`;
   }
 

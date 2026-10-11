@@ -61,6 +61,7 @@ import "./screens/till-schedule-screen.js";
 import "./screens/till-floor-screen.js";
 import type { FloorRefreshDetail } from "./screens/till-floor-screen.js";
 import "./screens/till-table-order-screen.js";
+import { offeredReceiptLanguage, shownReceiptLanguage } from "./widgets/receipt-language.js";
 import "./widgets/station-choice-dialog.js";
 import "./widgets/department-transfers.js";
 import { lineProductName } from "./widgets/product-name.js";
@@ -636,6 +637,14 @@ function discardError(error: unknown): CounterError {
   return code === "order.payment_in_flight" || code === "bill.refund_in_progress"
     ? { code }
     : "held.stale";
+}
+
+/** A party bill whose receipt language is asked: its revision and party when asked, and the
+ * operator session that asked. */
+interface AskedBill {
+  revision: number;
+  partyId: string;
+  session: number;
 }
 
 /** An adjustment dialog: where it was opened, the bill and the revision its lines were read at
@@ -2013,8 +2022,9 @@ export class TillApp extends LitElement {
   @state() private receiptLanguageChoices: ReadonlyMap<string, string> = new Map();
   /** Orders whose chosen language the server does not hold yet: baskets not yet saved. */
   #unsavedReceiptLanguages = new Set<string>();
-  /** The counter order whose receipt language is being asked. */
-  @state() private receiptLanguageAsking: { orderId: string } | null = null;
+  /** The order whose receipt language is being asked: the counter's, or a party bill as it was read
+   * when asked. */
+  @state() private receiptLanguageAsking: { orderId: string; bill?: AskedBill } | null = null;
   /** The sale whose receipt copy is waiting for its language to be chosen, and the language it was
    * filed in. */
   @state() private reprintAsking: { workingOrderId: string; filedLanguage?: string } | null = null;
@@ -4307,12 +4317,9 @@ export class TillApp extends LitElement {
     else if (mustChooseAgain) this.errorKey = "held.options_changed";
     this.#store.loadFrom(order.id, lines, order.label ?? undefined, order.revision);
     this.#unsavedReceiptLanguages.delete(order.id);
-    // A stored language no longer offered is filed in the location's (`saleLanguageFor`).
     this.#rememberReceiptLanguage(
       order.id,
-      order.receiptLanguage !== undefined && this.receiptLanguages.includes(order.receiptLanguage)
-        ? order.receiptLanguage
-        : undefined,
+      offeredReceiptLanguage(order.receiptLanguage, this.receiptLanguages),
     );
     this.#clearUnlistedCounterStations();
     this.counterLines = listed;
@@ -4455,7 +4462,7 @@ export class TillApp extends LitElement {
   }
 
   #receiptLanguageShown(orderId: string): string {
-    return this.#chosenReceiptLanguage(orderId) ?? this.receiptLanguages[0] ?? "";
+    return shownReceiptLanguage(this.#chosenReceiptLanguage(orderId), this.receiptLanguages);
   }
 
   #rememberReceiptLanguage(orderId: string, language: string | undefined): void {
@@ -4474,6 +4481,10 @@ export class TillApp extends LitElement {
     const asking = this.receiptLanguageAsking;
     this.receiptLanguageAsking = null;
     const { language } = event.detail;
+    if (asking?.bill !== undefined) {
+      await this.#saveBillReceiptLanguage(asking.orderId, asking.bill, language);
+      return;
+    }
     const id = this.#store.id;
     if (asking === null || asking.orderId !== id) return;
     if (language === this.#receiptLanguageShown(id)) return;
@@ -4504,6 +4515,60 @@ export class TillApp extends LitElement {
       this.submitting = false;
     }
     if (outOfDate) await this.#reloadChangedOrder(id);
+  }
+
+  #billReceiptLanguageShown(orderId: string): string {
+    const bill = this.partyBills.find((row) => row.workingOrderId === orderId);
+    return shownReceiptLanguage(bill?.receiptLanguage, this.receiptLanguages);
+  }
+
+  #onChooseBillReceiptLanguage(event: Event): void {
+    const { workingOrderId, revision } = (
+      event as CustomEvent<{ workingOrderId: string; revision: number }>
+    ).detail;
+    const bill = this.partyBills.find((row) => row.workingOrderId === workingOrderId);
+    const partyId = this.orderParty?.id;
+    if (bill?.revision !== revision || partyId === undefined) return;
+    this.receiptLanguageAsking = {
+      orderId: workingOrderId,
+      bill: { revision, partyId, session: this.#operatorSession },
+    };
+  }
+
+  /** A party bill's choice is saved at once, as its invoice choice is, from the revision it was read
+   * at when asked. */
+  async #saveBillReceiptLanguage(orderId: string, asked: AskedBill, language: string) {
+    if (language === this.#billReceiptLanguageShown(orderId) || this.submitting) return;
+    const sent = this.#sentNow();
+    if (sent.session !== asked.session || this.#hasLeftParty(asked.partyId, sent)) return;
+    // Holds the bill's other actions while it is saved, so none starts from the revision replaced.
+    this.submitting = true;
+    this.errorKey = undefined;
+    let outOfDate = false;
+    try {
+      const saved = await this.api.setOrderReceiptLanguage(orderId, {
+        revision: asked.revision,
+        language,
+      });
+      if (this.#hasLeftParty(asked.partyId, sent)) return;
+      this.partyBills = this.partyBills.map((bill) =>
+        bill.workingOrderId === orderId && bill.revision === asked.revision
+          ? { ...bill, revision: saved.revision, receiptLanguage: language }
+          : bill,
+      );
+      if (this.activeTabId === orderId && this.tabRevision === asked.revision)
+        this.tabRevision = saved.revision;
+    } catch (error) {
+      if (this.#hasLeftParty(asked.partyId, sent)) return;
+      const code = (error as { code?: string } | undefined)?.code;
+      outOfDate = code === "working_order.out_of_date";
+      this.errorKey = outOfDate
+        ? { code: "working_order.out_of_date" }
+        : counterError(error, "receipt_language.save_error");
+    } finally {
+      this.submitting = false;
+    }
+    if (outOfDate) await this.#loadPartyBills();
   }
 
   /** Saves a chosen language the server does not hold yet, once the basket has been saved. */
@@ -9059,6 +9124,7 @@ export class TillApp extends LitElement {
           .takeOversAnswered=${this.takeOversAnswered}
           .party=${this.orderParty}
           .bills=${this.partyBills}
+          .receiptLanguages=${this.receiptLanguages}
           .billBalance=${this.billBalance}
           .finishRefused=${this.finishRefused}
           .nameRefusal=${this.nameRefusal}
@@ -9285,6 +9351,7 @@ export class TillApp extends LitElement {
         @pay-tab=${(event: Event) => void this.#onPayTab(event)}
         @bill-pay=${(event: Event) => void this.#onBillPay(event)}
         @choose-bill-invoice=${(event: Event) => this.#onChooseBillInvoice(event)}
+        @choose-bill-receipt-language=${(event: Event) => this.#onChooseBillReceiptLanguage(event)}
         @refund-excess=${(event: Event) => void this.#onRefundExcess(event)}
         @counter-bill-pay=${(event: Event) => void this.#onCounterBillPay(event)}
         @back-to-floor=${() => this.#requestLeave(() => this.#onBackToFloor())}
@@ -9462,7 +9529,11 @@ export class TillApp extends LitElement {
             : html`<till-reprint-language-dialog
                 purpose="receipt"
                 .languages=${this.receiptLanguages}
-                .defaultLanguage=${this.#receiptLanguageShown(this.receiptLanguageAsking.orderId)}
+                .defaultLanguage=${
+                  this.receiptLanguageAsking.bill === undefined
+                    ? this.#receiptLanguageShown(this.receiptLanguageAsking.orderId)
+                    : this.#billReceiptLanguageShown(this.receiptLanguageAsking.orderId)
+                }
                 @reprint-language-confirm=${(event: CustomEvent<ReprintLanguageDetail>) =>
                   void this.#onReceiptLanguageChosen(event)}
                 @reprint-language-cancel=${() => (this.receiptLanguageAsking = null)}

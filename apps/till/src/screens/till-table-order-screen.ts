@@ -65,6 +65,7 @@ import {
   type SeatedRead,
 } from "../widgets/table-targets.js";
 import { billName, owing, paidInPart, shownBills } from "../state/bill-state.js";
+import { receiptLanguageLabel, shownReceiptLanguage } from "../widgets/receipt-language.js";
 import {
   LINE_ADJUSTMENTS,
   billGross,
@@ -579,6 +580,7 @@ export class TillTableOrderScreen extends LitElement {
         justify-content: flex-end;
       }
 
+      .bill-choices,
       .bill-pay-ways {
         display: flex;
         flex-wrap: wrap;
@@ -1165,6 +1167,8 @@ export class TillTableOrderScreen extends LitElement {
   @property({ attribute: false }) party: TableParty | null = null;
   /** Every bill of {@link party}, merged parties' included. */
   @property({ attribute: false }) bills: PartyBill[] = [];
+  /** The receipt languages staff may choose for a bill; the choice shows only when there are several. */
+  @property({ attribute: false }) receiptLanguages: string[] = [];
   /** The payments of the bill on screen, when it holds any; a balance of another bill is ignored. */
   @property({ attribute: false }) billBalance: BillBalance | null = null;
   /** Finish table was refused because a bill is unpaid. */
@@ -3323,7 +3327,7 @@ export class TillTableOrderScreen extends LitElement {
           .busy=${this.busy}
           .takesCash=${this.takesCash}
         ></till-tender-pay>
-        ${this.#fullInvoiceChoice(shown)} ${this.#payWays()}
+        ${this.#billChoices(shown)} ${this.#payWays()}
       </section>`;
     const received = this.#balanceShown()?.received;
     return html`<section class="pay" data-bill-payments>
@@ -3344,25 +3348,37 @@ export class TillTableOrderScreen extends LitElement {
       >
         ${t("bill.pay_with_bill_payments")}
       </wt-button>
-      ${this.#fullInvoiceChoice(shown)} ${this.#payWays()}
+      ${this.#billChoices(shown)} ${this.#payWays()}
     </section>`;
   }
 
-  #fullInvoiceChoice(bill: PartyBill | undefined): TemplateResult | typeof nothing {
-    return bill === undefined || !owing(bill)
-      ? nothing
-      : html`<wt-button
-          variant="secondary"
-          size="sm"
-          data-choose-bill-invoice
-          .disabled=${this.busy}
-          @click=${() =>
-            this.#dispatch("choose-bill-invoice", {
-              workingOrderId: bill.workingOrderId,
-              revision: bill.revision,
-            })}
-          >${t("invoice.full")}</wt-button
-        >`;
+  /** Full invoice, and the receipt's language when several are offered, for a bill still owing. */
+  #billChoices(bill: PartyBill | undefined): TemplateResult | typeof nothing {
+    if (bill === undefined || !owing(bill)) return nothing;
+    const target = { workingOrderId: bill.workingOrderId, revision: bill.revision };
+    return html`<div class="bill-choices">
+      <wt-button
+        variant="secondary"
+        size="sm"
+        data-choose-bill-invoice
+        .disabled=${this.busy}
+        @click=${() => this.#dispatch("choose-bill-invoice", target)}
+        >${t("invoice.full")}</wt-button
+      >${
+        this.receiptLanguages.length < 2
+          ? nothing
+          : html`<wt-button
+              variant="secondary"
+              size="sm"
+              data-choose-bill-language
+              .disabled=${this.busy}
+              @click=${() => this.#dispatch("choose-bill-receipt-language", target)}
+              >${receiptLanguageLabel(
+                shownReceiptLanguage(bill.receiptLanguage, this.receiptLanguages),
+              )}</wt-button
+            >`
+      }
+    </div>`;
   }
 
   /** The balance read, when it is the bill on screen's. */

@@ -741,6 +741,19 @@ describe("till-card-grid", () => {
     expect((to as HTMLElement & { stations: Station[] }).stations).toBe(stations);
   });
 
+  it("hands a table-order card the receipt languages its bills may choose from", async () => {
+    const receiptLanguages = ["es-ES", "ca-ES"];
+    const { el } = await mountWidget<TillCardGrid>("till-card-grid", {
+      tab: orderTab,
+      receiptLanguages,
+      store: new WorkingOrderStore(),
+    });
+    const screen = el.shadowRoot!.querySelector<HTMLElement & { receiptLanguages: string[] }>(
+      "till-table-order-screen",
+    )!;
+    expect(screen.receiptLanguages).toBe(receiptLanguages);
+  });
+
   it("shows a big card with a visibleWhen gate the host cannot evaluate (fail open, follow-up d)", async () => {
     const store = new WorkingOrderStore();
     const { el } = await mountWidget<TillCardGrid>("till-card-grid", { tab: gatedBigCard, store });
