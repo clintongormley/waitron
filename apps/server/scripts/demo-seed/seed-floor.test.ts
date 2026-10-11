@@ -329,6 +329,34 @@ describe("seedFloor", () => {
     await expect(seeding).rejects.toThrow(/"Stray"/);
   });
 
+  it("refuses a disabled stray table even in a seeded zone without seed tables", async () => {
+    const { locationId } = await provisionVenue();
+    const seeding = withTransaction(suite.db, async (tx) => {
+      const { rows } = await tx.execute<{ zone_id: string }>(sql`
+        select zone_id from zone_service_policies
+        where location_id = ${locationId} and is_counter_default limit 1`);
+      const { id } = await createTable(
+        tx,
+        { locationId: brandLocationId(locationId) } as TillConfig,
+        { label: "Disabled stray", zoneId: rows[0]!.zone_id },
+      );
+      await tx.execute(sql`update dining_tables set active = false where id = ${id}`);
+      await seedFloor(tx, {
+        locationId,
+        locale: LOCALE,
+        departmentTradingNames: TRADING_NAMES,
+        dataSet: {
+          ...CASA_DELGADO_ES,
+          floor: {
+            ...CASA_DELGADO_ES.floor,
+            tables: CASA_DELGADO_ES.floor.tables.filter((table) => table.zoneKey !== "bar"),
+          },
+        },
+      });
+    });
+    await expect(seeding).rejects.toThrow(/"Disabled stray"/);
+  });
+
   it.each(["en", "es"] as const)(
     "gives the departments the trading names it is handed, whatever the seed language (%s)",
     async (locale) => {
