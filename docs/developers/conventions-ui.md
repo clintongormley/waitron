@@ -97,9 +97,10 @@ from 1.00 to 9.00 when the request reordered JSON keys and modifier entries: the
 reading how the request was written instead of what it said.
 
 Since the extras-and-options order path (2026-09-20) that comparison lives in `updateHeldOrder`
-(`apps/server/src/working-order.ts`). It rebuilds what the request's answers would freeze NOW
-(`buildLineExtras`, `apps/server/src/modifier-selection.ts`) and compares that with what the stored
-line holds, by value. The helper this replaces, `sameModifierSelections`, no longer exists.
+(`apps/server/src/working-order.ts`). It rebuilds what the request's answers would freeze NOW,
+each in the language the stored answer was frozen in (`editLineOptions`,
+`apps/server/src/modifier-selection.ts`), and compares that with what the stored line holds, by
+value. The helper this replaces, `sameModifierSelections`, no longer exists.
 
 **Neither side's ORDER is part of the comparison either, and the reason is worth carrying.** Both
 sides are built in the order the dish OFFERS its answers, which reads as a fixed thing and is not
@@ -107,7 +108,7 @@ one: it is a stored position in `product_modifiers.sort` and `extra_list_items.s
 from the body of each save. `docs/developers/modifiers.md` lists what writes each. So a
 line parked before one of those saves keeps the OLD order while the rebuilt side comes back in the
 new one — and a comparison pairing the two up position by position reads that as a changed answer.
-That is why the pairing is order-independent (`sameOptionSelections`, and for extras
+That is why the pairing is order-independent (`editLineOptions`, and for extras
 `editLineExtras`, which replaced `matchExtraChildren` with menus plan D10). Measured on 2026-09-20
 for BOTH comparators, through the column a product save writes: the options half and the extras
 half each re-issued every line under a new id and re-priced the dish. Since plan D10 a changed

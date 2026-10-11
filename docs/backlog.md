@@ -906,20 +906,17 @@ _Formerly the catalogue and menus entries in the opening part of the old Track A
   translates every missing customer-facing name in one go; this repository would only call it,
   behind the subscription. A machine translation needs the venue's review before a diner sees it.
 
-- **A customer-facing name with no text in the default language prints a blank goods line — OPEN
-  (found 2026-10-01 by C122).** No save path writes such a row today (product and variant saves
-  refuse it), only a direct write. It shows under the default language in the Missing translations
-  list. [Detail](backlog/catalogue.md#a-customer-facing-name-with-no-text-in-the-default-language-prints-a-blank-goods-line--open-found-2026-10-01-by-c122)
-
 - **`joinCustomerPresentationText` passes the requested language where the default belongs — OPEN
-  (found 2026-10-02 by A172, not measured).** The receipt fills the variant's text per receipt
-  language before it gets there (`apps/server/src/working-order.ts`), so whether any surface shows
-  the difference is unknown; reproduce before fixing. [Detail](backlog/catalogue.md#joincustomerpresentationtext-passes-the-requested-language-where-the-default-belongs--open-found-2026-10-02-by-a172-not-measured)
+  (found 2026-10-02 by A172, not measured).** The order path freezes the variant's text in the
+  default content language, under every receipt-language key, before it gets there
+  (`defaultLanguageDescriptions`, called by `priceOrderLines` in
+  `apps/server/src/working-order.ts`), so whether any surface shows the difference is unknown;
+  reproduce before fixing. [Detail](backlog/catalogue.md#joincustomerpresentationtext-passes-the-requested-language-where-the-default-belongs--open-found-2026-10-02-by-a172-not-measured)
 
 - **Menu draft/published state** and time-of-day / seasonal scheduling.
 
 - **Language resolution follow-ons** — there is still no single shared rule: the receipt's
-  `lineName` (`apps/server/src/receipt-ticket.ts`) and the kitchen ticket's `ticketName`
+  `lineName` (`apps/server/src/receipt-document.ts`) and the kitchen ticket's `ticketName`
   (`apps/server/src/kitchen-print.ts`) try the exact language and then take the first stored one.
   [Detail](backlog/catalogue.md#language-resolution-follow-ons)
 
@@ -1655,6 +1652,11 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   Receipt: Lane D `receipts/a432/task5-ci-till-coverage-green.log`, PR #1463. Cause unverified.
 
 _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
+
+- **An unpaid table bill shows two "Full invoice" buttons**: the payment panel's own
+  (`till-tender-pay`) and the bill's smaller one (`#billChoices`,
+  `apps/till/src/screens/till-table-order-screen.ts`), both drawn since A231 (#1256). **Next action
+  (owner decision):** which one stays.
 
 - **The device delete dialog's sign-in count is not live**: `sessions` is not a declared live
   table (`apps/dashboard/src/api/live-queries.ts:75-92`), so a sign-in or sign-out while the
@@ -2666,10 +2668,11 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
 
 _Formerly A3, A8 and B6; part of A9._ Detail: [backlog/printers.md](backlog/printers.md).
 
-- **A497. Receipt language chosen at the till, and the printed layout (owner, 2026-10-11).** Catalan
-  becomes the default rather than fixed, the languages offered narrow to the venue's content
-  languages, and the printed receipt is tidied. Amends decisions C113 and C114.
-  [Detail](backlog/printers.md#a497-receipt-language-chosen-at-the-till-and-the-printed-layout)
+- **The legal name and tax ID share one printed line, unchecked against what a receipt must show**
+  — left open by A497. A receipt's and an A4 invoice's top block print the legal name, then " · ",
+  then the tax ID with its label, as one line where it fits; a narrow roll breaks it at the
+  separator (`apps/server/src/receipt-document.ts`, `textLines` in
+  `apps/server/src/receipt-ticket.ts`), and the A4 page wraps it by width.
 
 - **Show a failed automatic invoice copy to staff.** A recoverable email or office-printer
   reservation refusal commits the sale with no delivery row or paper fallback; the diagnostic
@@ -2852,17 +2855,12 @@ _Formerly A3, A8 and B6; part of A9._ Detail: [backlog/printers.md](backlog/prin
   did before the change, and leaves the order's lines unchanged. No till screen calls that
   route.
 
-- A placed order collected after a language change is filed in the new language (`sales.locale`)
-  with its dish names as saved when its lines were added; when the new language is not among the
-  languages those names were saved in, its receipt prints the new language's fixed words with a
-  dish name in an old language. [Detail](backlog/printers.md#a-placed-order-collected-after-a-language-change-is-filed-in-the-new-language)
-
 - The refusal's count of blocking orders is not shown on the Receipts tab of Venue settings: `codeMessage` fills
   in no values.
 
 - The provisioning command (`waitron-provision`) can still store two languages, or one no pack
-  offers; the first entry is what prints. It does not hold Catalonia to Catalan: only the Receipts
-  route and setup do.
+  offers; the first entry is the default receipt language. It does not hold Catalonia to Catalan:
+  only the Receipts route and setup do.
 
 - `cfg.invoiceLocales` (`apps/server/src/till-config.ts`) is no longer read outside tests (by
   grep) and can be retired.
@@ -3153,6 +3151,12 @@ _Formerly A6, and the old Track C's payments items; part of A9._ Detail: [backlo
   screens' reads are not limited, and it was not measured in a real browser against a real silent
   provider. Left open by A260 (several card readers' status reads at once can use up the browser's
   connections to the box; W18c #1145 and W48 #1162).
+
+- **A placed order can be charged twice while its card is at the reader — OPEN (found 2026-10-11
+  during A497's review, measured at main 126cd3ad2).** A cash collect or a second `/api/pay` on it
+  answers 200, and both payments go through while only one is recorded on a sale. Next: refuse
+  collect and pay on a placed order while a card payment is in flight (`order.payment_in_flight`).
+  [Detail](backlog/payments.md#a-placed-order-can-be-charged-twice-while-its-card-is-at-the-reader)
 
 ### Users, sign-in and the dashboard shell
 
@@ -4891,6 +4895,12 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
   `apps/server/src/station-delete.ts` left all 47 station-delete and management-delete cases
   passing. Add a second-location draft case that fails without the clause, or establish by running
   the real writers that it is redundant before removing it. Its necessity remains unverified.
+
+- **`priceOrderLines`' call to `fillBlankLocalesWithStaffName` no longer changes what prints** —
+  left open by A497. A new line's variant text is now frozen in the default content language
+  first, so the call alters a value only when the variant's staff name is nothing but spaces, and
+  then from empty text to those spaces (`apps/server/src/working-order.ts`). **Next action:** delete the call,
+  and the helper in `packages/catalogue/src/product-presentation.ts` with its test.
 
 - **The till's status for an original whose printer was deleted uses the error code's sentence**
   ("…this job will not be retried."), where its neighbours speak of "the original". Owner to choose

@@ -173,6 +173,75 @@ describe("till-tender-pay", () => {
     expect(payment).not.toHaveBeenCalled();
   });
 
+  describe("receipt language", () => {
+    const languageButton = (el: TillTenderPay) =>
+      query(el, "[data-receipt-language]") as HTMLElement | null;
+    afterEach(() => setLocale("en-GB"));
+
+    it("offers no language button when one receipt language is offered", async () => {
+      const store = new WorkingOrderStore();
+      store.addProduct(cafe, "1");
+      const { el } = await mountWidget<TillTenderPay>("till-tender-pay", {
+        store,
+        receiptLanguages: ["es-ES"],
+        receiptLanguage: "es-ES",
+      });
+
+      expect(languageButton(el)).toBeNull();
+    });
+
+    it("names the chosen language and asks for another without starting a tender", async () => {
+      setLocale("es-ES");
+      const store = new WorkingOrderStore();
+      store.addProduct(cafe, "1");
+      const { el } = await mountWidget<TillTenderPay>("till-tender-pay", {
+        store,
+        receiptLanguages: ["es-ES", "ca-ES"],
+        receiptLanguage: "ca-ES",
+      });
+      const chosen = vi.fn();
+      const payment = vi.fn();
+      el.addEventListener("choose-receipt-language", chosen);
+      el.addEventListener("confirm-payment", payment);
+
+      const button = languageButton(el)!;
+      expect(button.textContent?.trim()).toBe("Recibo: Catalán");
+      expect(button.hasAttribute("aria-label")).toBe(false);
+      expect(button.getAttribute("variant")).toBe("secondary");
+      button.click();
+
+      expect(chosen).toHaveBeenCalledOnce();
+      expect(payment).not.toHaveBeenCalled();
+    });
+
+    it("offers the language button when collecting a placed order", async () => {
+      const store = new WorkingOrderStore();
+      store.addProduct(cafe, "1");
+      const { el } = await mountWidget<TillTenderPay>("till-tender-pay", {
+        store,
+        mode: "ticket_then_pay",
+        stage: "collect",
+        receiptLanguages: ["es-ES", "ca-ES"],
+        receiptLanguage: "es-ES",
+      });
+
+      expect(languageButton(el)!.textContent?.trim()).toBe("Receipt: Spanish");
+      expect(query(el, "[data-full-invoice]")).toBeNull();
+    });
+
+    it("disables the language button with Full invoice while the basket is empty", async () => {
+      const store = new WorkingOrderStore();
+      const { el } = await mountWidget<TillTenderPay>("till-tender-pay", {
+        store,
+        receiptLanguages: ["es-ES", "ca-ES"],
+        receiptLanguage: "es-ES",
+      });
+
+      expect(languageButton(el)!.hasAttribute("disabled")).toBe(true);
+      expect(query(el, "[data-full-invoice]")!.hasAttribute("disabled")).toBe(true);
+    });
+  });
+
   it("opens the cash screen showing the total when Cash is tapped", async () => {
     const store = new WorkingOrderStore();
     store.addProduct(cafe, "2"); // total 3.00

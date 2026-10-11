@@ -1038,7 +1038,7 @@ describe("moving sent work to another table tells the kitchen", () => {
         kind: "moved",
         lineName: "Agua",
         quantity: thousandthsToDecimal(2000),
-        unitName: EACH_UNIT.abbreviation,
+        unitName: { es: EACH_UNIT.abbreviation.es },
         note: null,
         wasStarted: false,
         movedTo: "T2",

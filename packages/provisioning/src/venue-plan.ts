@@ -49,7 +49,7 @@ export interface VenueRequest {
     firstNames?: string | null;
     lastNames?: string | null;
     /** The person's own UI language. Null or absent leaves them on the venue default. Not
-     * `location.invoiceLocales`, which decides the language an invoice is printed in. */
+     * `location.invoiceLocales`. */
     locale?: string | null;
   };
 }

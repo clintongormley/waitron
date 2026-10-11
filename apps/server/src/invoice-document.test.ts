@@ -778,3 +778,75 @@ describe("A4 filed language outside the current pack choices", () => {
     }
   });
 });
+
+describe("A4 invoice of a sale filed in a chosen receipt language", () => {
+  it("prints Spanish fixed words and looks the goods up under the sale's first receipt language", async () => {
+    const backend = none();
+    const { saleId } = await withTransaction(suite.db, async (tx) => {
+      const [series] = await tx
+        .select()
+        .from(invoiceSeries)
+        .where(eq(invoiceSeries.purpose, "full"));
+      return recordSale(tx, backend, {
+        origin: jobOrigin("operator_script"),
+        nodeId: venue.cfg.nodeId,
+        seriesId: seriesId(series!.id),
+        locale: "es-ES",
+        invoiceLocales: ["ca-ES", "es-ES"],
+        clock,
+        total: "4.00",
+        vatBreakdown: [{ rate: decimal("10"), base: decimal("3.64"), tax: decimal("0.36") }],
+        lines: [
+          {
+            lineNo: 1,
+            name: "STAFF Torrada",
+            descriptions: { "ca-ES": "CA Torrada", "es-ES": "ES Tostada" },
+            quantity: "2",
+            unitName: { "ca-ES": "CA-rac", "es-ES": "ES-rac" },
+            unitPrecision: 0,
+            unitPrice: "1.82",
+            vatRate: "10",
+            lineTotal: "3.64",
+            lineGross: "4.00",
+            optionSnapshots: [
+              {
+                listName: { es: "STAFF Pa" },
+                listCustomerName: { "ca-ES": "CA Tipus de pa", "es-ES": "ES Tipo de pan" },
+                listKitchenName: "KITCHEN Pa",
+                labelName: { es: "STAFF Segol" },
+                labelCustomerName: { "ca-ES": "CA Sègol", "es-ES": "ES Centeno" },
+                labelKitchenName: "KITCHEN Segol",
+              },
+            ],
+          },
+        ],
+        settlement: { kind: "deferred" },
+        counterparty: { taxId: "B12345674", legalName: "Saved customer", countryCode: "ES" },
+        recipientAddress: "Saved customer address",
+      });
+    });
+
+    const document = await read(backend, saleId);
+
+    expect(document.invoiceLocale).toBe("es-ES");
+    expect(document.namesLocale).toBe("ca-ES");
+    expect(document.result.locale).toBe("es-ES");
+    expect(document.result.namesLocale).toBe("ca-ES");
+    const text = buildReceiptDocument(document)
+      .elements.flatMap((element) =>
+        element.kind === "text"
+          ? [element.text]
+          : element.kind === "amount"
+            ? [element.caption]
+            : [],
+      )
+      .join("\n");
+    expect(text).toContain("Fecha");
+    expect(text).not.toContain("Data");
+    expect(text).toMatch(/2 CA-rac {2}CA Torrada/u);
+    expect(text).toContain("CA Tipus de pa: CA Sègol");
+    for (const other of ["ES Tostada", "ES-rac", "ES Tipo de pan", "ES Centeno"]) {
+      expect(text, other).not.toContain(other);
+    }
+  });
+});

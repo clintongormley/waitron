@@ -106,10 +106,10 @@ describe("counter handover timing", () => {
 // branch; they cannot observe two writers genuinely overlapping. The queue runs the bodies in the
 // order handed to it, so each coursing case reaches only ONE of its two outcomes.
 const LOCALE = "es-ES";
-// A filed line freezes the unit's ABBREVIATION as its printed label, not the unit's name — so the
-// legacy `each` unit files as its short form (`ea`/`ud`/`u`), matching `seedLegacySellingUnits`.
+// A filed line freezes the unit's ABBREVIATION as its printed label, not the unit's name, in the
+// default content language alone: Spanish here, from `LOCALE` with no saved setting.
 const EACH_UNIT_SNAPSHOT = {
-  unitName: { en: "ea", es: "ud", ca: "u", gl: "u", eu: "u" },
+  unitName: { es: "ud" },
   unitPrecision: 0,
 } as const;
 
@@ -1624,13 +1624,13 @@ describe("prepare & collect — zone payment timing", () => {
       tender: { method: "cash", amount: "1.50" },
     });
 
-    const abbreviation = { en: "ea", es: "ud", ca: "u", gl: "u", eu: "u" };
+    const abbreviation = { es: "ud" };
     const labels = await frozenUnitLabels(id);
     expect(labels.workingOrderLine).toEqual(abbreviation);
     expect(labels.saleLine).toEqual(abbreviation);
     // The live "Each" unit is the synthetic `EACH_UNIT` defined in code, so its name comes from there.
-    expect(EACH_UNIT.name.en.toLowerCase()).toBe("each");
-    expect(labels.saleLine).not.toEqual(EACH_UNIT.name);
+    expect(EACH_UNIT.name.es).toBe("Unidad");
+    expect(labels.saleLine).not.toEqual({ es: EACH_UNIT.name.es });
   });
 
   it("a quick-sale placement files nothing; payment files exactly one settled invoice", async () => {

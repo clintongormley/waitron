@@ -168,6 +168,16 @@ their full text.
   Solo actually does on a signature-required card (it belongs with the SumUp Solo experiments above),
   because if the reader owns the whole step there may be nothing for us to build.
 
+## A placed order can be charged twice while its card is at the reader
+
+**OPEN (found 2026-10-11 during A497's review, measured at main 126cd3ad2).** With a placed order's
+card payment held at the reader, a cash collect answered 200 and filed a sale, and the card then
+captured too, leaving a captured card payment no sale records. A second `/api/pay` also answered
+200, and both cards captured with one sale recording a payment. A497 refuses these only when they
+would change the receipt language (`refusePlacedPaymentInFlight`, `apps/server/src/till-sale.ts`).
+Fix: refuse collect and pay on a placed order while a card payment is in flight
+(`order.payment_in_flight`).
+
 ## Decisions and deliberate limits
 
 - **A reader still paired at a provider that can unpair it (SumUp) is deleted in Waitron only

@@ -318,32 +318,24 @@ coverage on main `5197ae03599332e540aba80c108c1829c5ae84d9`, and the same on its
 `57538cf47aab2038ed2d6e8968da4e51c0de453b`, with every test passing. Which
 test logs it was not looked for.
 
-## A customer-facing name with no text in the default language prints a blank goods line — OPEN (found 2026-10-01 by C122)
-
-- **A customer-facing name with no text in the default language prints a blank goods line — OPEN
-  (found 2026-10-01 by C122).** Under default Catalan, a customer name holding only Spanish printed
-  `1 u` and the price with no name on the receipt, and stored `{"ca-ES":""}` on the sale line
-  (`toInvoiceLineDescriptions`, `packages/catalogue/src/invoice-descriptions.ts`, then `lineName` in
-  `apps/server/src/receipt-ticket.ts`). No save path writes such a row today (product and variant
-  saves refuse it), only a direct write. It shows under the default language in the Missing
-  translations list.
-
 ## `joinCustomerPresentationText` passes the requested language where the default belongs — OPEN (found 2026-10-02 by A172, not measured)
 
 - **`joinCustomerPresentationText` passes the requested language where the default belongs — OPEN
   (found 2026-10-02 by A172, not measured).** It calls `resolveSnapshotText(variant, locale,
 locale)` (`packages/catalogue/src/product-presentation.ts`), the shape A172 fixed in
   `customerOptionSnapshotLabels`, so a locale blank in a variant's map takes the first stored
-  language alphabetically rather than the default. The receipt fills the variant's text per
-  receipt language before it gets there (`apps/server/src/working-order.ts`), so whether any
-  surface shows the difference is unknown; reproduce before fixing.
+  language alphabetically rather than the default. The order path freezes the variant's text in
+  the default content language, under every receipt-language key, before it gets there
+  (`defaultLanguageDescriptions`, called by `priceOrderLines` in
+  `apps/server/src/working-order.ts`), so whether any surface shows the difference is unknown;
+  reproduce before fixing.
 
 ## Language resolution follow-ons
 
 - **Language resolution follow-ons**
   ([original design](../superpowers/specs/2026-08-30-localization-fallback-negotiation-design.md)):
   there is still no single shared rule: the receipt's `lineName`
-  (`apps/server/src/receipt-ticket.ts`) and the kitchen ticket's `ticketName`
+  (`apps/server/src/receipt-document.ts`) and the kitchen ticket's `ticketName`
   (`apps/server/src/kitchen-print.ts`) try the exact language and then take the first stored one.
   Read in the code and not run: `resolveContentText` moves to another region of the same language
   (es-ES to es-MX), which the design rules out. Adding content translations does not translate

@@ -632,7 +632,7 @@ describe("POST /api/sales (the fiscal sale path over HTTP)", () => {
     expect(snapshottedLine).toEqual([
       {
         quantity: "200",
-        unit_name: { en: "kg", es: "kg", ca: "kg", "ca-ES-valencia": "kg", gl: "kg", eu: "kg" },
+        unit_name: { es: "kg" },
         unit_precision: 3,
       },
     ]);
@@ -1779,13 +1779,7 @@ describe("place → station queue → per-line advance → collect (KDS-1 ticket
             // The kitchen name, falling back to the staff name because this product carries none.
             name: "Agua mineral",
             quantity: "2.000",
-            unitName: {
-              ca: "u",
-              en: "ea",
-              es: "ud",
-              eu: "u",
-              gl: "u",
-            },
+            unitName: { es: "ud" },
             unitPrecision: 0,
             soldInEach: true,
             // No course, so the item fires immediately: a null course is treated as earliest.
@@ -2720,7 +2714,7 @@ it("files an extras pick and an options answer through cash checkout and reprint
       gross: "3.00",
       parentLineNo: null,
       optionSnapshots: [frozenAnswer],
-      unitName: { ca: "u", en: "ea", es: "ud", eu: "u", gl: "u" },
+      unitName: { [defaultLanguage]: "ud" },
       unitPrecision: 0,
     },
     {
@@ -2758,7 +2752,7 @@ it("files an extras pick and an options answer through cash checkout and reprint
     {
       quantity: "2000",
       vat_rate: "2100",
-      unit_name: { ca: "u", en: "ea", es: "ud", eu: "u", gl: "u" },
+      unit_name: { [defaultLanguage]: "ud" },
       unit_precision: 0,
     },
     {

@@ -34,7 +34,6 @@ import {
 } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import type { Decimal, SaleId, ReceiptPresentation } from "@waitron/shared";
-import { readReceiptLanguage } from "@waitron/catalogue";
 import type { GrossLines } from "@waitron/catalogue";
 import {
   payments,
@@ -69,7 +68,7 @@ import { VENUE_SERVICE } from "./modules.js";
 import { readReceiptOrder } from "./receipt-order.js";
 import { receiptLines } from "./receipt-adjustments.js";
 import type { DeviceRequestConfig, OriginConfig, TillConfig } from "./till-config.js";
-import { readVenueReceiptLanguageRules } from "./venue-locale.js";
+import { readOfferedReceiptLanguages, saleLanguageFor } from "./venue-locale.js";
 import { storedDeviceOrigin } from "./request-config.js";
 import {
   enqueueSaleDrawer,
@@ -168,6 +167,8 @@ export interface TillSaleRequest {
    * `table.not_found`.
    */
   deliveryTableId?: string;
+  /** Stored on the order before filing; see `storeSentReceiptLanguage`. */
+  receiptLanguage?: string;
 }
 
 /**
@@ -249,6 +250,11 @@ export interface TillSaleResult extends ReceiptPresentation {
   receiptHeader?: { tradingName: string; printTradingName: boolean };
   /** The language the sale was filed in (`sales.locale`). */
   locale: string;
+  /** The language the receipt looks the goods' names up by (`sales.invoice_locales[0]`); a line
+   * without that key prints its first entry. The text is the venue's default content language's
+   * when the line was written, or another stored language's where it had none. Absent reads as
+   * `locale`. */
+  namesLocale?: string;
   orderLabel: string | null;
   orderNumber: number;
   /** `NumSerieFactura`-shaped "A/1", read back from the sale row + its series after filing. */
@@ -439,6 +445,8 @@ export interface PayWorkingOrderRequest {
   deliveryTableId?: string;
   /** The selected service zone for a new counter order. Existing orders use their stored context. */
   zoneId?: string;
+  /** Stored on the order before filing; see `storeSentReceiptLanguage`. */
+  receiptLanguage?: string;
 }
 
 function refuseUnavailableInvoiceRequest(invoiceType: unknown, recipient: unknown): void {
@@ -449,6 +457,28 @@ function refuseUnavailableInvoiceRequest(invoiceType: unknown, recipient: unknow
   if (recipient !== undefined && recipient !== null) {
     throw new AppError("management.request_invalid", { field: "recipient" });
   }
+}
+
+/**
+ * Store the receipt language a pay request sent on an existing order that has no sale yet, as its
+ * own update one revision on: `working_orders_enforce_transition` refuses a placed order's language
+ * changing in the update that settles it. `order` is the row as the caller read it in this
+ * transaction, with nothing written to it since. A different language is refused while another
+ * card payment of a placed order is underway, since that payment files in the stored one.
+ */
+async function storeSentReceiptLanguage(
+  db: Database,
+  tx: Transaction,
+  workingOrderId: string,
+  order: { status: string; revision: number; receiptLocale: string | null },
+  language: string | undefined,
+): Promise<void> {
+  if (language === undefined || order.receiptLocale === language) return;
+  if (order.status === "placed") await refusePlacedPaymentInFlight(db, tx, workingOrderId);
+  await tx
+    .update(workingOrders)
+    .set({ receiptLocale: language, revision: order.revision + 1 })
+    .where(eq(workingOrders.id, workingOrderId));
 }
 
 /**
@@ -485,6 +515,8 @@ export interface IntegratedPayRequest {
   simulationOutcome?: "captured" | "declined";
   /** One pretend-reader attempt, shared with its cancellation request. */
   demoAttemptId?: string;
+  /** Stored on the order before filing; see `storeSentReceiptLanguage`. */
+  receiptLanguage?: string;
 }
 
 /**
@@ -558,7 +590,12 @@ async function runPayWorkingOrder(
       await admit(tx);
       // Step 1; the doc comment says what serialises a concurrent pay against this read.
       const [locked] = await tx
-        .select({ status: workingOrders.status, partyId: workingOrders.partyId })
+        .select({
+          status: workingOrders.status,
+          partyId: workingOrders.partyId,
+          revision: workingOrders.revision,
+          receiptLocale: workingOrders.receiptLocale,
+        })
         .from(workingOrders)
         .where(eq(workingOrders.id, req.id));
 
@@ -596,6 +633,7 @@ async function runPayWorkingOrder(
         order = await createOpenOrder(tx, cfg, req.id, req.lines, null, {
           deliveryTableId: req.deliveryTableId,
           zoneId: req.zoneId,
+          receiptLocale: req.receiptLanguage,
           creditedTo: operatorId,
           invalidMakeAt: "ignore",
           invoiceChoice: {
@@ -605,6 +643,7 @@ async function runPayWorkingOrder(
           },
         });
       } else {
+        await storeSentReceiptLanguage(deps.db, tx, req.id, locked, req.receiptLanguage);
         order = await priceStoredOrderForIssuance(tx, req.id);
       }
 
@@ -697,6 +736,7 @@ export async function readSettledTicket(
       issuedAt: sales.issuedAt,
       total: sales.total,
       locale: sales.locale,
+      invoiceLocales: sales.invoiceLocales,
     })
     .from(sales)
     .innerJoin(invoiceSeries, eq(invoiceSeries.id, sales.seriesId))
@@ -736,6 +776,7 @@ export async function readSettledTicket(
     ...(await readReceiptOrder(tx, cfg, workingOrderId)),
     ...(await readReceiptPresentation(tx, cfg, issued.saleId, issued.locale)),
     locale: issued.locale,
+    namesLocale: issued.invoiceLocales[0]!,
     invoiceNumber: formatInvoiceNumber(issued.code, issued.number),
     // So a replay's `issuedAt` reads identically to the original's `fiscal.issuedAt.toISOString()`.
     issuedAt: new Date(issued.issuedAt).toISOString(),
@@ -759,20 +800,18 @@ export async function printSaleReceipt(
   personId?: string,
 ): Promise<void> {
   await withTransaction(deps.db, async (tx) => {
-    if (language !== undefined) {
-      // Any of the pack's languages, even where the region fixes one (`fixed`), is a product
-      // choice (docs/backlog/printers.md, C114); it includes Spanish, which a customer there may
-      // ask for (TC 88/2017).
-      const { choices } = await readVenueReceiptLanguageRules(tx, { locationId: cfg.locationId });
-      if (!choices.includes(language)) {
+    const [existing] = await tx
+      .select({ id: sales.id, locale: sales.locale })
+      .from(sales)
+      .where(eq(sales.workingOrderId, workingOrderId));
+    if (language !== undefined && language !== existing?.locale) {
+      // The sale's own language stays accepted after the venue stops offering it.
+      const offered = await readOfferedReceiptLanguages(tx, { locationId: cfg.locationId });
+      if (!offered.includes(language)) {
         throw new AppError("management.request_invalid", { field: "language" });
       }
     }
     // No filed sale → nothing to print. This keeps `readSettledTicket`'s "no sale" throw unreachable.
-    const [existing] = await tx
-      .select({ id: sales.id })
-      .from(sales)
-      .where(eq(sales.workingOrderId, workingOrderId));
     if (existing === undefined) return;
     const ticket = await readSettledTicket(deps.backend, tx, cfg, workingOrderId);
     if (duplicate) await enqueueReceiptReprint(tx, cfg, ticket, existing.id, language, personId);
@@ -822,7 +861,10 @@ async function fileImmediateSale(
   const settledAt = clock.now().instant;
 
   const selected = await selectOrderInvoice(tx, deps.backend, cfg, workingOrderId, priced.total);
-  const language = await readReceiptLanguage(tx, cfg.locationId);
+  const language = await saleLanguageFor(tx, cfg.locationId, selected.receiptLocale, {
+    log: deps.log,
+    workingOrderId,
+  });
   const { saleId, fiscal } = await recordSale(tx, deps.backend, {
     origin: cfg.origin,
     nodeId: cfg.nodeId,
@@ -887,6 +929,7 @@ async function fileImmediateSale(
     ...(await readReceiptPresentation(tx, cfg, saleId, language.locale)),
     ...(await readReceiptOrder(tx, cfg, workingOrderId)),
     locale: language.locale,
+    namesLocale: language.invoiceLocales[0]!,
     invoiceNumber: await readInvoiceNumber(tx, saleId),
     issuedAt: fiscal.issuedAt.toISOString(),
     total: priced.total,
@@ -1002,6 +1045,8 @@ async function payIntegrated(
         status: workingOrders.status,
         attemptAt: workingOrders.paymentAttemptAt,
         partyId: workingOrders.partyId,
+        revision: workingOrders.revision,
+        receiptLocale: workingOrders.receiptLocale,
       })
       .from(workingOrders)
       .where(eq(workingOrders.id, req.id));
@@ -1072,10 +1117,14 @@ async function payIntegrated(
       }
     }
 
+    if (locked !== undefined) {
+      await storeSentReceiptLanguage(deps.db, tx, req.id, locked, req.receiptLanguage);
+    }
     const order: GrossOrder =
       locked === undefined
         ? await createOpenOrder(tx, cfg, req.id, req.lines, null, {
             zoneId: req.zoneId,
+            receiptLocale: req.receiptLanguage,
             creditedTo: operatorId,
             invalidMakeAt: "ignore",
             invoiceChoice: {
@@ -1214,6 +1263,25 @@ export function paymentAttemptIsLive(db: Database, workingOrderId: string): bool
   return liveAttemptsOf(db).has(workingOrderId);
 }
 
+/**
+ * Refuse `order.payment_in_flight` while a card payment of PLACED order `workingOrderId` could
+ * still file its sale: an integrated collection of it running in this process, or a payment its
+ * provider has not resolved or no sale records yet. A placed order's collection writes no mark, so
+ * `refusePaymentInFlight` does not see one.
+ */
+export async function refusePlacedPaymentInFlight(
+  db: Database,
+  tx: Transaction,
+  workingOrderId: string,
+): Promise<void> {
+  if (
+    paymentAttemptIsLive(db, workingOrderId) ||
+    (await ordersWithUnfiledPayment(tx, [workingOrderId])).has(workingOrderId)
+  ) {
+    throw new AppError("order.payment_in_flight", { workingOrderId });
+  }
+}
+
 /** A placed order writes no mark, so its entry in the live map carries this instead of one. */
 const PLACED_ATTEMPT = "placed";
 
@@ -1243,8 +1311,9 @@ function releasePlacedAttempt(db: Database, workingOrderId: string): void {
  * Which of these orders has a payment that is, or could still become, a capture no sale records:
  * an attempt its provider has not resolved, or a capture not yet filed. This decides whether a
  * mark may be RELEASED, whether Pay may go ahead over one, and whether a placed order's invoice
- * may be credited (`cancelPlacedOrder`); the check of the mark itself (`refuseOrderPaymentMarked`)
- * reads only the mark.
+ * may be credited (`cancelPlacedOrder`), and whether a placed order's invoice choice or receipt
+ * language may change (`refusePlacedPaymentInFlight`); the check of the mark itself
+ * (`refuseOrderPaymentMarked`) reads only the mark.
  */
 export async function ordersWithUnfiledPayment(
   tx: Transaction,
@@ -1370,7 +1439,10 @@ async function finalizeCapture(
     return await withTransaction(deps.db, async (tx) => {
       const { priced, clock } = issueMoment(deps.clock, grossInP1);
       const selected = await selectOrderInvoice(tx, deps.backend, cfg, req.id, priced.total);
-      const language = await readReceiptLanguage(tx, cfg.locationId);
+      const language = await saleLanguageFor(tx, cfg.locationId, selected.receiptLocale, {
+        log: deps.log,
+        workingOrderId: req.id,
+      });
       const { saleId, fiscal } = await recordSale(tx, deps.backend, {
         origin: cfg.origin,
         nodeId: cfg.nodeId,
@@ -1435,6 +1507,7 @@ async function finalizeCapture(
         ...(await readReceiptPresentation(tx, cfg, saleId, language.locale)),
         ...(await readReceiptOrder(tx, cfg, req.id)),
         locale: language.locale,
+        namesLocale: language.invoiceLocales[0]!,
         invoiceNumber: await readInvoiceNumber(tx, saleId),
         issuedAt: fiscal.issuedAt.toISOString(),
         total: priced.total,
@@ -1522,7 +1595,10 @@ async function finalizeRecovery(
       .where(eq(payments.id, captured.id));
     const origin = storedDeviceOrigin(startedOn!);
     const selected = await selectOrderInvoice(tx, deps.backend, cfg, req.id, priced.total);
-    const language = await readReceiptLanguage(tx, cfg.locationId);
+    const language = await saleLanguageFor(tx, cfg.locationId, selected.receiptLocale, {
+      log: deps.log,
+      workingOrderId: req.id,
+    });
     const { saleId, fiscal } = await recordSale(tx, deps.backend, {
       origin,
       nodeId: cfg.nodeId,
@@ -1585,6 +1661,7 @@ async function finalizeRecovery(
       ...(await readReceiptPresentation(tx, cfg, saleId, language.locale)),
       ...(await readReceiptOrder(tx, cfg, req.id)),
       locale: language.locale,
+      namesLocale: language.invoiceLocales[0]!,
       invoiceNumber: await readInvoiceNumber(tx, saleId),
       issuedAt: fiscal.issuedAt.toISOString(),
       total: priced.total,
@@ -1845,7 +1922,11 @@ async function runCollectOrder(
   return withTransaction(deps.db, async (tx) => {
     await admit(tx);
     const [locked] = await tx
-      .select({ status: workingOrders.status })
+      .select({
+        status: workingOrders.status,
+        revision: workingOrders.revision,
+        receiptLocale: workingOrders.receiptLocale,
+      })
       .from(workingOrders)
       .where(eq(workingOrders.id, req.id));
 
@@ -1913,6 +1994,7 @@ async function runCollectOrder(
     }
 
     await refuseUnavailableFullInvoice(tx, req.id);
+    await storeSentReceiptLanguage(deps.db, tx, req.id, locked, req.receiptLanguage);
     const order = await priceStoredOrderForIssuance(tx, req.id);
     return fileImmediateSale(tx, deps, cfg, req.id, req.tender, order, operatorId);
   });
@@ -1990,6 +2072,7 @@ async function runTillSale(
       recipient: req.recipient,
       deliveryTableId: req.deliveryTableId,
       zoneId: req.zoneId,
+      receiptLanguage: req.receiptLanguage,
     },
     operatorId,
     admit,

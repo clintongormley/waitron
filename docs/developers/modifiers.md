@@ -214,9 +214,11 @@ is not used in its place (`deriveExtraSelections` and `deriveOptionSelections`,
 `apps/till/src/state/`) — see the end of this section.
 
 An edit of a saved order sends each line's answers again, and prices only what the edit adds (menus
-plan D10). `updateHeldOrder` rebuilds what a stored line's options answers would freeze NOW and
-compares the result with what the line holds, by value; different, the new answers are frozen onto
-the same row, at the line's stored price, because an answer carries no price. Its extras picks are
+plan D10). `updateHeldOrder` rebuilds what a stored line's options answers would freeze NOW, each in the
+language the stored answer was frozen in, and compares the result with what the line holds, by
+value; an answer that differs is frozen in today's default content language onto the same row, at
+the line's stored price, because an answer carries no price, and an answer that matches stays as
+stored, so changing the default content language rewrites no unchanged answer. Its extras picks are
 paired with the stored child lines by `editLineExtras`: a pick that pairs keeps its child at the
 price it was sold at, a pick that pairs with nothing is new and priced from the menu's live
 published version, and a
@@ -226,7 +228,7 @@ an extra that is archived or Unavailable, or has gained an Active variant, refus
 raise with the code a new line naming it gets (`product.variant_required` for the variant). A line
 the edit does not change is not touched.
 
-Neither side's ORDER is part of that comparison (`sameOptionSelections` and `editLineExtras`,
+Neither side's ORDER is part of that comparison (`editLineOptions` and `editLineExtras`,
 `apps/server/src/modifier-selection.ts`). Both sides are built in the order the dish offers its
 answers, which reads as a fixed thing and is not one: it is a stored position, and the attachment and item sort columns
 hold parts of it, each re-numbered from the body of whatever save writes it.
@@ -434,13 +436,14 @@ left both `lineTotal`s exactly where they were. `ImporteTotal` held still there 
 hands `recordSale` its own `total`, which a production sale does not — so what the third literal is
 pinned against is the CALLER's declared total, not the basket.
 
-The paper receipt prints one `<list>: <label>` line indented under its dish. Each side takes its
-CUSTOMER text in the language the sale was filed in (`namesLocale`, which a copy printed in another
-receipt language keeps), then in the venue's default content language (the key of the frozen staff
-name), then in any other stored language, and falls back to the staff name only when it has no
-customer text at all, never to the kitchen name —
-`customerOptionSnapshotLabels` (`packages/catalogue/src/option-snapshot-labels.ts`), beside the
-kitchen-facing `optionSnapshotLabels` the printed kitchen ticket uses.
+The paper receipt prints one `<list>: <label>` line indented under its dish. An order line stores
+each side's CUSTOMER text as one entry under the default content language of the time the answer
+was frozen, holding that language's text, or another stored language's where it had none
+(`buildLineExtras`, or `editLineOptions` when an edit gives a new or changed answer, both in
+`apps/server/src/modifier-selection.ts`), so the receipt prints it whatever language it is in. Each
+side falls back to the staff name only when it has no customer text at all, never to the kitchen
+name — `customerOptionSnapshotLabels` (`packages/catalogue/src/option-snapshot-labels.ts`), beside
+the kitchen-facing `optionSnapshotLabels` the printed kitchen ticket uses.
 
 ## Storage
 

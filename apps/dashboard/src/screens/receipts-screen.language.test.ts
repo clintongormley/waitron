@@ -551,7 +551,7 @@ describe("the Receipts page's receipt language, where the region fixes it", () =
     expect(paperText(el)).toContain("Idioma es-ES");
     expect(q(el, "[data-test=receipt-language-value]")!.textContent!.trim()).toBe("Spanish");
     expect(q(el, "[data-test=receipt-language-stored]")!.textContent!.trim()).toBe(
-      t("receipts.language_stored").replace("{stored}", "Spanish").replace("{fixed}", "Catalan"),
+      "By default, receipts print in Spanish until you switch to Catalan.",
     );
     const use = q(el, "[data-test=use-fixed-language]")!;
     expect(use.textContent!.trim()).toBe("Use Catalan");
@@ -674,7 +674,7 @@ describe("the Receipts page's receipt language in Spanish", () => {
       "Euskera",
     ]);
     expect(warning(madridPage)!.textContent!.trim()).toBe(
-      "Los recibos se imprimen en gallego, que no es uno de tus idiomas del contenido, así que los nombres de los productos salen en español, el idioma predeterminado.",
+      "Por defecto, los recibos se imprimen en gallego, que no es uno de tus idiomas del contenido. Los nombres de los productos salen en español, el idioma predeterminado.",
     );
     cleanupWidgets();
     const barcelonaPage = await mount(stubApi(barcelona("es-ES")));

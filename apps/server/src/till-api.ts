@@ -42,11 +42,7 @@ import {
   withPassiveManagementRead,
 } from "@waitron/identity";
 import type { PinAttempts, PinThrottle } from "@waitron/identity";
-import {
-  listAccessibleCatalogues,
-  listAvailableProducts,
-  readReceiptLanguage,
-} from "@waitron/catalogue";
+import { listAccessibleCatalogues, listAvailableProducts } from "@waitron/catalogue";
 import {
   getCanvas,
   getCanvasForFormFactor,
@@ -122,6 +118,7 @@ import {
   sendLines,
   sendToPrep,
   setOrderInvoiceChoice,
+  setOrderReceiptLanguage,
   setLineCourse,
   unmarkServed,
   readOrderRevision,
@@ -201,7 +198,7 @@ import {
   type DeviceBinding,
   type TenderKind,
 } from "./device-session.js";
-import { requireBodyUuid, requireUuidParam } from "@waitron/server-kit";
+import { requireBodyUuid, requireString, requireUuidParam } from "@waitron/server-kit";
 import { requestBill } from "./bill-request.js";
 import { mountAdjustmentsApi } from "./adjustments-api.js";
 import { mountDepartmentTransferApi } from "./department-transfer-api.js";
@@ -211,8 +208,7 @@ import { mountStationTodayApi } from "./station-today-api.js";
 import { mountUnpaidDepartureApi } from "./unpaid-departure-api.js";
 import { mountBillLookupApi } from "./bill-lookup-api.js";
 import { mountInvoiceLookupApi } from "./invoice-lookup-api.js";
-import { resolveInstalledReceiptLanguageRules } from "@waitron/country-packs";
-import { geographyOf } from "./venue-locale.js";
+import { readOfferedReceiptLanguages } from "./venue-locale.js";
 import { resolveLoginLocale } from "./login-locale.js";
 // Side-effect only: loads this host's errors.ts augmentation.
 import "./errors.js";
@@ -1248,7 +1244,6 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
           .select({
             bumpMode: locations.bumpMode,
             fireControl: locations.fireControl,
-            province: locations.province,
           })
           .from(locations)
           .where(eq(locations.id, deps.cfg.locationId));
@@ -1298,10 +1293,12 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
             activeReaders.push({ id: reader.id, name: reader.name, provider });
           }
         }
+        const receiptLanguages = await readOfferedReceiptLanguages(tx, {
+          locationId: deps.cfg.locationId,
+        });
         return {
-          invoiceLocale: (await readReceiptLanguage(tx, deps.cfg.locationId)).locale,
-          receiptLanguages: resolveInstalledReceiptLanguageRules(geographyOf(taxpayer, loc))
-            .choices,
+          invoiceLocale: receiptLanguages[0],
+          receiptLanguages,
           issuer:
             taxpayer === null ? undefined : { venueName: taxpayer.legalName, nif: taxpayer.taxId },
           bumpMode: loc?.bumpMode,
@@ -1594,6 +1591,9 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       if (body.workingOrderId !== undefined) {
         requireUuidParam(body.workingOrderId, "WorkingOrderId");
       }
+      if (body.receiptLanguage !== undefined) {
+        requireString(body.receiptLanguage, "receiptLanguage");
+      }
       if (body.zoneId !== undefined) {
         requireUuidParam(body.zoneId, "ServiceZoneId");
       }
@@ -1643,6 +1643,9 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       }
       if (body.zoneId !== undefined) {
         requireUuidParam(body.zoneId, "ServiceZoneId");
+      }
+      if (body.receiptLanguage !== undefined) {
+        requireString(body.receiptLanguage, "receiptLanguage");
       }
       const zoneId = await resolveHttpOrderZone(deps, session, body.lines.length, body.zoneId);
       await gateZones(
@@ -1821,6 +1824,21 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
         },
         { personId: session.personId, emailAvailable, now: deps.clock.now().instant },
       );
+      return c.json({ revision });
+    }),
+  );
+
+  app.put("/api/working-orders/:id/receipt-language", (c) =>
+    run(c, log, async () => {
+      const session = await requireSession(deps, c, { action: "take-orders" });
+      const cfg = requestCfg(deps.cfg, session);
+      const id = requireUuidId(c.req.param("id"), "working_order.not_open");
+      await gateZones(deps, session, [{ orderId: id }]);
+      const body = await readJsonBody<{ revision?: unknown; language?: unknown }>(c);
+      const revision = await setOrderReceiptLanguage(deps.db, cfg, id, {
+        revision: requireRevision(body.revision),
+        language: body.language,
+      });
       return c.json({ revision });
     }),
   );
@@ -2187,12 +2205,15 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       const cfg = requestCfg(deps.cfg, session);
       const id = requireUuidId(c.req.param("id"), "working_order.not_placed");
       await gateZones(deps, session, [{ orderId: id }]);
-      const body = await readJsonBody<{ tender: TillTender }>(c);
+      const body = await readJsonBody<{ tender: TillTender; receiptLanguage?: string }>(c);
+      if (body.receiptLanguage !== undefined) {
+        requireString(body.receiptLanguage, "receiptLanguage");
+      }
       assertTakesTender(session.device, tillTenderKind(body.tender));
       const result = await collectOrder(
         { db: deps.db, backend: deps.backend, clock: deps.clock, log },
         cfg,
-        { id, lines: [], tender: body.tender },
+        { id, lines: [], tender: body.tender, receiptLanguage: body.receiptLanguage },
         { personId, sessionId: session.sessionId },
       );
       return c.json(result);

@@ -48,6 +48,10 @@ export async function renderInvoiceRaster(
             }
           }
         }
+      } else if (element.kind === "rule") {
+        paths.push(
+          `<rect shape-rendering="crispEdges" x="${element.x}" y="${element.y}" width="${element.width}" height="${element.thickness}"/>`,
+        );
       } else if (element.kind === "qr") {
         const pitch = element.size / (element.modules.length + 8);
         for (let row = 0; row < element.modules.length; row++) {

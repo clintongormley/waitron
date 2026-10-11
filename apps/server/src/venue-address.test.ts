@@ -15,7 +15,7 @@ const none = {
 };
 
 describe("addressLines", () => {
-  it("prints the two street lines, the postal code with the city, and a province unlike the city", () => {
+  it("joins the street lines, then the postal code and city with a province unlike the city: two lines", () => {
     expect(
       addressLines({
         addressLine1: "Calle Mayor 1",
@@ -24,7 +24,14 @@ describe("addressLines", () => {
         city: "Alicante",
         province: "Alicante/Alacant",
       }),
-    ).toEqual(["Calle Mayor 1", "Local 2", "03001 Alicante", "Alicante/Alacant"]);
+    ).toEqual(["Calle Mayor 1, Local 2", "03001 Alicante, Alicante/Alacant"]);
+  });
+
+  it("keeps a single street line and a province without a city on their own", () => {
+    expect(addressLines({ ...none, addressLine2: "Local 2", province: "Girona" })).toEqual([
+      "Local 2",
+      "Girona",
+    ]);
   });
 
   it("leaves out a province that names the city, whatever its case and spacing", () => {

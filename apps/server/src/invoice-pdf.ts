@@ -32,6 +32,8 @@ export async function renderInvoicePdf(input: ReceiptDocumentInput): Promise<Buf
           }
         }
         pdf.fill();
+      } else if (element.kind === "rule") {
+        pdf.rect(element.x, element.y, element.width, element.thickness).fill();
       } else {
         const pitch = element.size / (element.modules.length + 8);
         for (let row = 0; row < element.modules.length; row++) {

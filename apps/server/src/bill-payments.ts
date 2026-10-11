@@ -10,7 +10,7 @@ import {
   workingOrders,
 } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
-import { assertQuantityPrecision, readReceiptLanguage } from "@waitron/catalogue";
+import { assertQuantityPrecision } from "@waitron/catalogue";
 import {
   AppError,
   addDecimal,
@@ -94,6 +94,7 @@ import { storePrepayMadeHere } from "./made-here.js";
 import { assertStillSignedIn } from "./till-session.js";
 import "./errors.js";
 import { raiseDishesNotSent } from "./dish-not-sent-alert.js";
+import { saleLanguageFor } from "./venue-locale.js";
 
 /**
  * Payments taken against a bill before its invoice exists (bill payments design): the balance they
@@ -681,8 +682,11 @@ async function issueWhenFullyPaid(
 
   // Deferred, then settled with the bill's tenders in this transaction: the filed record is the one
   // an immediate sale files, and settlement is what writes each tender's bill payment.
-  const language = await readReceiptLanguage(tx, cfg.locationId);
   const selected = await selectOrderInvoice(tx, deps.backend, cfg, workingOrderId, priced.total);
+  const language = await saleLanguageFor(tx, cfg.locationId, selected.receiptLocale, {
+    log: deps.log,
+    workingOrderId,
+  });
   const { saleId, fiscal } = await recordSale(tx, deps.backend, {
     origin: cfg.origin,
     nodeId: cfg.nodeId,
@@ -746,6 +750,7 @@ async function issueWhenFullyPaid(
     ...(selected.recipient === undefined ? {} : { recipient: selected.recipient }),
     ...receiptOrder,
     locale: language.locale,
+    namesLocale: language.invoiceLocales[0]!,
     invoiceNumber: await readInvoiceNumber(tx, saleId),
     issuedAt: fiscal.issuedAt.toISOString(),
     total: priced.total,

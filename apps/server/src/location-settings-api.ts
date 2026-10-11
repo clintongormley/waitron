@@ -61,7 +61,7 @@ async function ordersBlockingReceiptLanguage(tx: Transaction, locationId: string
   return rows[0]!.count;
 }
 
-/** The location's saved receipt languages, the first being the one receipts print in. */
+/** The location's saved receipt languages. */
 async function storedLanguages(tx: Transaction, locationId: string): Promise<string[]> {
   const stored = await readInvoiceLocales(tx, locationId);
   if (stored.length === 0)

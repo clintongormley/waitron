@@ -1344,9 +1344,8 @@ export async function readInvoiceLocales(tx: Transaction, locationId: string): P
 }
 
 /**
- * The language a location's receipts are filed and printed in — the FIRST of its saved
- * `invoice_locales` — together with the whole list, which a sale snapshots. Read inside the
- * caller's transaction, so a sale files the language its lines were keyed under.
+ * A location's receipt language — the FIRST of its saved `invoice_locales` — together with the
+ * whole list.
  */
 export async function readReceiptLanguage(
   tx: Transaction,

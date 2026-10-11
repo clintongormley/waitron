@@ -9,6 +9,7 @@ const MARGIN = 36;
 const BODY_SIZE = 10;
 const LINE_HEIGHT = 14;
 const QR_SIZE = (35 * 72) / 25.4;
+const RULE_THICKNESS = 0.75;
 
 type PageText = { kind: "text"; text: string; x: number; y: number; size: number };
 type PageQr = {
@@ -26,7 +27,8 @@ type PageLogo = {
   width: number;
   height: number;
 };
-export type InvoicePageElement = PageText | PageQr | PageLogo;
+type PageRule = { kind: "rule"; x: number; y: number; width: number; thickness: number };
+export type InvoicePageElement = PageText | PageQr | PageLogo | PageRule;
 export interface InvoicePage {
   elements: InvoicePageElement[];
 }
@@ -62,6 +64,7 @@ export function layoutInvoicePages(input: ReceiptDocumentInput): InvoicePage[] {
   const pages: InvoicePage[] = [{ elements: [] }];
   let y = MARGIN;
   let alignment: "left" | "center" = "left";
+  let afterBreak = false;
   const room = (height: number): void => {
     if (y + height > INVOICE_PAGE_HEIGHT - MARGIN) {
       pages.push({ elements: [] });
@@ -82,6 +85,8 @@ export function layoutInvoicePages(input: ReceiptDocumentInput): InvoicePage[] {
     }
   };
   for (const element of buildReceiptDocument({ ...input, surface: "a4" }).elements) {
+    const previousWasBreak = afterBreak;
+    if (element.kind !== "align") afterBreak = element.kind === "break";
     switch (element.kind) {
       case "align":
         alignment = element.alignment;
@@ -92,6 +97,7 @@ export function layoutInvoicePages(input: ReceiptDocumentInput): InvoicePage[] {
           const pitch = 72 / 203;
           const logoWidth = raster.widthDots * pitch;
           const logoHeight = raster.heightDots * pitch;
+          if (!previousWasBreak) y += LINE_HEIGHT / 2;
           room(logoHeight + LINE_HEIGHT / 2);
           pages.at(-1)!.elements.push({
             kind: "logo",
@@ -106,6 +112,17 @@ export function layoutInvoicePages(input: ReceiptDocumentInput): InvoicePage[] {
         break;
       }
       case "break":
+        y += LINE_HEIGHT / 2;
+        break;
+      case "rule":
+        room(LINE_HEIGHT / 2 + LINE_HEIGHT);
+        pages.at(-1)!.elements.push({
+          kind: "rule",
+          x: MARGIN,
+          y: y + (LINE_HEIGHT / 2 - RULE_THICKNESS) / 2,
+          width: INVOICE_PAGE_WIDTH - 2 * MARGIN,
+          thickness: RULE_THICKNESS,
+        });
         y += LINE_HEIGHT / 2;
         break;
       case "qr":

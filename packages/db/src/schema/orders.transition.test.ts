@@ -81,6 +81,30 @@ describe("working_orders state machine (enforce_transition)", () => {
     );
   }
 
+  /** A sale filed against the order, as the till files one. */
+  async function issueSale(workingOrderId: string): Promise<void> {
+    const [series] = await suite.db
+      .insert(invoiceSeries)
+      .values({ nodeId: nodeA, code: `I${nextOrderNumber}`, purpose: "full" })
+      .returning({ id: invoiceSeries.id });
+    await suite.db.insert(sales).values({
+      source: "device",
+      deviceId: deviceA,
+      nodeId: nodeA,
+      seriesId: series!.id,
+      invoiceNumber: 1,
+      issuedAt: AT,
+      issuedOffsetMinutes: 0,
+      total: 0,
+      vatBreakdown: [],
+      locale: "es",
+      invoiceLocales: ["es"],
+      fiscalBackend: "verifactu",
+      fiscalState: "recorded",
+      workingOrderId,
+    });
+  }
+
   async function statusOf(id: string): Promise<string> {
     const [row] = await inTx((tx) =>
       tx
@@ -397,32 +421,72 @@ describe("working_orders state machine (enforce_transition)", () => {
     await inTx((tx) =>
       tx.update(workingOrders).set({ status: "placed" }).where(eq(workingOrders.id, id)),
     );
-    const [series] = await suite.db
-      .insert(invoiceSeries)
-      .values({ nodeId: nodeA, code: `I${nextOrderNumber}`, purpose: "full" })
-      .returning({ id: invoiceSeries.id });
-    await suite.db.insert(sales).values({
-      source: "device",
-      deviceId: deviceA,
-      nodeId: nodeA,
-      seriesId: series!.id,
-      invoiceNumber: 1,
-      issuedAt: AT,
-      issuedOffsetMinutes: 0,
-      total: 0,
-      vatBreakdown: [],
-      locale: "es",
-      invoiceLocales: ["es"],
-      fiscalBackend: "verifactu",
-      fiscalState: "recorded",
-      workingOrderId: id,
-    });
+    await issueSale(id);
 
     const error = await captureError(() =>
       inTx((tx) =>
         tx
           .update(workingOrders)
           .set({ recipientLegalName: "Changed customer", revision: 1 })
+          .where(eq(workingOrders.id, id)),
+      ),
+    );
+    expect(engineErrorMessage(error)).toBe(TRANSITION_REFUSAL);
+  });
+
+  it("lets an unissued placed bill change its receipt language with a revision change", async () => {
+    const id = await open();
+    await inTx((tx) =>
+      tx.update(workingOrders).set({ status: "placed" }).where(eq(workingOrders.id, id)),
+    );
+    await inTx((tx) =>
+      tx
+        .update(workingOrders)
+        .set({ receiptLocale: "es-ES", revision: 1 })
+        .where(eq(workingOrders.id, id)),
+    );
+    const [saved] = await inTx((tx) =>
+      tx.select().from(workingOrders).where(eq(workingOrders.id, id)),
+    );
+    expect(saved).toMatchObject({ status: "placed", revision: 1, receiptLocale: "es-ES" });
+  });
+
+  it.each([
+    ["without a revision", "placed", {}],
+    ["during settlement", "placed", { status: "settled", settledAt: AT }],
+    ["during abandonment", "placed", { status: "abandoned" }],
+    ["with placed handover", "placed", { collectedAt: AT }],
+    ["with settled handover", "settled", { collectedAt: AT }],
+  ] as const)("refuses a receipt language change %s", async (_name, status, change) => {
+    const id = await open();
+    await inTx((tx) =>
+      tx
+        .update(workingOrders)
+        .set({ status, ...(status === "settled" ? { settledAt: AT } : {}) })
+        .where(eq(workingOrders.id, id)),
+    );
+    const error = await captureError(() =>
+      inTx((tx) =>
+        tx
+          .update(workingOrders)
+          .set({ ...change, receiptLocale: "es-ES" })
+          .where(eq(workingOrders.id, id)),
+      ),
+    );
+    expect(engineErrorMessage(error)).toBe(TRANSITION_REFUSAL);
+  });
+
+  it("refuses a receipt language change after a placed bill has issued a sale", async () => {
+    const id = await open();
+    await inTx((tx) =>
+      tx.update(workingOrders).set({ status: "placed" }).where(eq(workingOrders.id, id)),
+    );
+    await issueSale(id);
+    const error = await captureError(() =>
+      inTx((tx) =>
+        tx
+          .update(workingOrders)
+          .set({ receiptLocale: "es-ES", revision: 1 })
           .where(eq(workingOrders.id, id)),
       ),
     );

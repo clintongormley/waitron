@@ -198,7 +198,7 @@ async function buildReceiptBytes(
     logo,
     receiptHeader,
     invoiceLocale: language ?? ticket.locale,
-    namesLocale: ticket.locale,
+    namesLocale: ticket.namesLocale ?? ticket.locale,
     printer,
     simulated: cfg.practiceMode,
     duplicate,

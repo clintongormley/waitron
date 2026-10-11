@@ -93,7 +93,10 @@ export interface TillInfo {
    * default derivation drops UI-unsupported codes, which must never reach the receipt.
    */
   invoiceLocale: string;
-  /** The venue's receipt languages, which a copy of an issued receipt may be printed in. */
+  /**
+   * The receipt languages staff may choose for a sale or a copy, the location's own first
+   * (`readOfferedReceiptLanguages`).
+   */
   receiptLanguages: string[];
   venueName: string;
   nif: string;
@@ -857,6 +860,8 @@ export interface TillSaleResult extends ReceiptPresentation {
   qrText?: { caption: string; legend: string };
   /** The language the sale was filed in. */
   locale?: string;
+  /** The language the dish names are looked up by; absent reads as {@link locale}. */
+  namesLocale?: string;
 }
 
 /**
@@ -1112,6 +1117,8 @@ export interface HeldOrder {
   label: string | null;
   /** What a save of this copy sends back, so a save from a copy since changed is refused. */
   revision: number;
+  /** The receipt language staff chose for the order; absent while the location's own applies. */
+  receiptLanguage?: string;
   lines: (Omit<SaleLine, "extras" | "options"> & {
     productId?: string;
     /**
@@ -1776,7 +1783,8 @@ export interface PartyBill {
   /** A payment is pending or received on the bill, which the single payment refuses. */
   hasPayments: boolean;
   receiptAvailable: boolean;
-  /** The language the bill's sale was filed in; absent while no sale is filed. */
+  /** The language the bill's sale was filed in, else the one staff chose for it; absent when
+   * neither is set. */
   receiptLanguage?: string;
   /** The issued invoice's number ("A/1"); absent while no sale is filed. */
   invoiceNumber?: string;
@@ -2323,6 +2331,7 @@ export class TillApi {
       invoiceType: "F1" | "F2";
       recipient: { taxId: string; legalName: string; address: string; countryCode: string } | null;
     },
+    receiptLanguage?: string,
   ): Promise<TillSaleResult> {
     return this.#request<TillSaleResult>("/api/sales", "POST", {
       lines,
@@ -2330,6 +2339,7 @@ export class TillApi {
       workingOrderId,
       zoneId: zoneId ?? this.#serviceZoneId,
       ...invoice,
+      receiptLanguage,
     });
   }
 
@@ -2351,6 +2361,7 @@ export class TillApi {
     simulationOutcome?: "captured" | "declined";
     readerId?: string;
     demoAttemptId?: string;
+    receiptLanguage?: string;
   }): Promise<PayOutcome> {
     return this.#request<PayOutcome>("/api/pay", "POST", {
       ...req,
@@ -2370,8 +2381,8 @@ export class TillApi {
    * Reprint a FILED sale's customer receipt → `POST /api/sales/:id/reprint`, by the till's own
    * working-order id. Paper only: it files NOTHING and ignores automatic receipt selection. An
    * id naming no filed sale, or a till with no active printer, is a 200 no-op. The copy's fixed words
-   * and formatting are in `language`, one of {@link TillInfo.receiptLanguages}, or without one in
-   * the language the sale was filed in.
+   * and formatting are in `language`, one of {@link TillInfo.receiptLanguages} or the sale's own,
+   * or without one in the language the sale was filed in.
    */
   async reprint(workingOrderId: string, language?: string): Promise<void> {
     await this.#request<void>(
@@ -2472,6 +2483,19 @@ export class TillApi {
     );
   }
 
+  /** Save the language the order's receipt prints in, one of {@link TillInfo.receiptLanguages};
+   * `null` goes back to the location's own → `PUT /api/working-orders/:id/receipt-language`. */
+  setOrderReceiptLanguage(
+    id: string,
+    choice: { revision: number; language: string | null },
+  ): Promise<{ revision: number }> {
+    return this.#request<{ revision: number }>(
+      `/api/working-orders/${id}/receipt-language`,
+      "PUT",
+      choice,
+    );
+  }
+
   /** The cross-till held list → `GET /api/working-orders`: every OPEN working order in the venue. */
   listWorkingOrders(options: ReadOptions = {}): Promise<HeldOrderSummary[]> {
     return this.#request<HeldOrderSummary[]>(
@@ -2560,8 +2584,11 @@ export class TillApi {
    * order's stored lines — never a client basket. A still-open or absent id rejects with
    * `working_order.not_placed`.
    */
-  collectOrder(id: string, tender: Tender): Promise<TillSaleResult> {
-    return this.#request<TillSaleResult>(`/api/working-orders/${id}/collect`, "POST", { tender });
+  collectOrder(id: string, tender: Tender, receiptLanguage?: string): Promise<TillSaleResult> {
+    return this.#request<TillSaleResult>(`/api/working-orders/${id}/collect`, "POST", {
+      tender,
+      receiptLanguage,
+    });
   }
 
   /** The venue's ACTIVE kitchen stations → `GET /api/stations`, by display order then name. */

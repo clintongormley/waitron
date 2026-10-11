@@ -127,12 +127,11 @@ heading and the "Edit the receipt" link go.
 - subtitle and footer per language.
 
 Each fiscal record carries its own description, but how a sale picks today's venue-wide value has
-not been traced: trace it before moving the field. The languages listed are the venue's content
-languages that have receipt wording (Spanish, Catalan, Galician and Basque today,
-`packages/country-es/src/receipt-labels.ts`), plus the venue's receipt language, which comes first.
-Headings carry the language name alone, with one line saying the others print as copies on request.
-That replaces "Catalan (receipts)" and "Spanish (copies)"
-(`apps/dashboard/src/screens/department-receipt-editor.ts`). The language rule is A497's.
+not been traced: trace it before moving the field. The languages listed are the ones staff may
+print in, `readOfferedReceiptLanguages` (`apps/server/src/venue-locale.ts`), with the receipt
+language first. Headings carry the language name alone. That replaces "Catalan (receipts)" and
+"Spanish (copies)" (`apps/dashboard/src/screens/department-receipt-editor.ts`). The "(copies)"
+heading is no longer accurate since A497, because a sale's own receipt can print in those languages.
 
 **The venue receipt page goes.** There are no venue-wide receipt defaults any more
 (`apps/dashboard/src/screens/venue-receipt-defaults-editor.ts`). Each department holds its own

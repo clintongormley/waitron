@@ -10,8 +10,8 @@ import { withReceiptListPrices } from "./receipt-lines.js";
 import {
   buildLineExtras,
   editLineExtras,
+  editLineOptions,
   namedPicks,
-  sameOptionSelections,
 } from "./modifier-selection.js";
 import type { ExtraChild, ExtraProductFacts } from "./modifier-selection.js";
 import type {
@@ -119,11 +119,11 @@ import {
   menusOfVersions,
   readOptionListsByIds,
   readProductModifiers,
-  toInvoiceLineDescriptions,
+  defaultLanguageDescriptions,
+  defaultLanguageText,
   readContentLanguages,
   readSavedContentLanguages,
   readInvoiceLocales,
-  readReceiptLanguage,
   parentsWithActiveVariants,
   selectMenuVariant,
   customerPresentationText,
@@ -202,8 +202,13 @@ import type { Logger } from "./logger.js";
 import type { DeviceRequestConfig, OriginConfig, TillConfig } from "./till-config.js";
 import { readReceiptOrder } from "./receipt-order.js";
 import { enqueueCollectionTicket } from "./receipt-print.js";
-import { ordersWithUnfiledPayment, paymentAttemptIsLive } from "./till-sale.js";
+import {
+  ordersWithUnfiledPayment,
+  paymentAttemptIsLive,
+  refusePlacedPaymentInFlight,
+} from "./till-sale.js";
 import { readIssuedSales } from "./sale-due.js";
+import { readOfferedReceiptLanguages, saleLanguageFor } from "./venue-locale.js";
 import { creditWholeInvoice, readOrderInvoice } from "./cancel-credit.js";
 import { overrideToCheck, withCheck, withPinCheckAhead } from "./pin-check-ahead.js";
 import {
@@ -710,24 +715,27 @@ export async function priceOrderLines(
   ]);
   const classifications = lineMeta.map((meta) => classifyLine(classification, meta.productId));
 
-  // New lines snapshot the location's receipt languages; locked and issued lines keep their stored
-  // text. A locale a variant's text leaves blank takes the variant's own staff name, never the
-  // parent's.
+  // A new line's customer text and unit are frozen in the default content language; the
+  // descriptions keep the location's receipt languages as their keys. A variant's blank text takes
+  // the variant's own staff name, never the parent's.
   for (const line of gross.lines) {
-    line.descriptions = toInvoiceLineDescriptions(
+    line.descriptions = defaultLanguageDescriptions(
       line.descriptions,
       invoiceLocales,
       contentConfig.defaultLanguage,
     );
     if (line.variantDescriptions != null) {
       line.variantDescriptions = fillBlankLocalesWithStaffName(
-        toInvoiceLineDescriptions(
+        defaultLanguageDescriptions(
           line.variantDescriptions,
           invoiceLocales,
           contentConfig.defaultLanguage,
         ),
         line.variantName ?? "",
       );
+    }
+    if (line.unitName != null) {
+      line.unitName = defaultLanguageText(line.unitName, contentConfig.defaultLanguage);
     }
   }
 
@@ -1104,6 +1112,7 @@ export async function createOpenOrder(
     zoneId?: string;
     partyId?: string | null;
     existingService?: boolean;
+    receiptLocale?: string;
     creditedTo?: string;
     invalidMakeAt?: "ignore";
     invoiceChoice?: {
@@ -1182,6 +1191,7 @@ export async function createOpenOrder(
     // Not a fiscal field.
     deliveryTableId,
     partyId: placement.partyId ?? null,
+    receiptLocale: placement.receiptLocale ?? null,
   });
 
   // An empty tab has no lines, and `tx.insert(...).values([])` throws.
@@ -3431,6 +3441,50 @@ export async function refuseUnavailableFullInvoice(
   }
 }
 
+/**
+ * The order whose recorded choices (invoice type, receipt language) may still change: open, or
+ * placed with no sale yet, at the revision the caller read, with no payment in flight.
+ */
+async function readChoiceChangeableOrder(
+  db: Database,
+  tx: Transaction,
+  cfg: Pick<TillConfig, "nodeId">,
+  orderId: string,
+  expectedRevision: number,
+) {
+  const [order] = await tx
+    .select({
+      status: workingOrders.status,
+      revision: workingOrders.revision,
+      invoiceType: workingOrders.invoiceType,
+      locationId: workingOrders.locationId,
+    })
+    .from(workingOrders)
+    .where(and(eq(workingOrders.id, orderId), eq(workingOrders.nodeId, cfg.nodeId)));
+  if (order === undefined || (order.status !== "open" && order.status !== "placed")) {
+    throw new AppError("working_order.not_open", { workingOrderId: orderId });
+  }
+  if (order.status === "placed") {
+    const [issued] = await tx
+      .select({ id: sales.id })
+      .from(sales)
+      .where(eq(sales.workingOrderId, orderId))
+      .limit(1);
+    if (issued !== undefined) {
+      throw new AppError("working_order.not_open", { workingOrderId: orderId });
+    }
+  }
+  if (order.revision !== expectedRevision) {
+    throw new AppError("working_order.out_of_date", {
+      workingOrderId: orderId,
+      revision: order.revision,
+    });
+  }
+  await refusePaymentInFlight(tx, [orderId]);
+  if (order.status === "placed") await refusePlacedPaymentInFlight(db, tx, orderId);
+  return order;
+}
+
 export async function setOrderInvoiceChoice(
   db: Database,
   backend: Pick<FiscalBackend, "recipientNameMaxLength">,
@@ -3451,35 +3505,7 @@ export async function setOrderInvoiceChoice(
     throw new AppError("management.request_invalid", { field: "recipient" });
   }
   return withTransaction(db, async (tx) => {
-    const [order] = await tx
-      .select({
-        status: workingOrders.status,
-        revision: workingOrders.revision,
-        invoiceType: workingOrders.invoiceType,
-        locationId: workingOrders.locationId,
-      })
-      .from(workingOrders)
-      .where(and(eq(workingOrders.id, orderId), eq(workingOrders.nodeId, cfg.nodeId)));
-    if (order === undefined || (order.status !== "open" && order.status !== "placed")) {
-      throw new AppError("working_order.not_open", { workingOrderId: orderId });
-    }
-    if (order.status === "placed") {
-      const [issued] = await tx
-        .select({ id: sales.id })
-        .from(sales)
-        .where(eq(sales.workingOrderId, orderId))
-        .limit(1);
-      if (issued !== undefined) {
-        throw new AppError("working_order.not_open", { workingOrderId: orderId });
-      }
-    }
-    if (order.revision !== request.revision) {
-      throw new AppError("working_order.out_of_date", {
-        workingOrderId: orderId,
-        revision: order.revision,
-      });
-    }
-    await refusePaymentInFlight(tx, [orderId]);
+    const order = await readChoiceChangeableOrder(db, tx, cfg, orderId, request.revision);
     if (order.invoiceType === "F1" && request.invoiceType === "F2") {
       const [paid] = await tx
         .select({ id: billPayments.id })
@@ -3506,6 +3532,35 @@ export async function setOrderInvoiceChoice(
         recipientCountryCode: normalizedRecipient?.countryCode ?? null,
         revision,
       })
+      .where(and(eq(workingOrders.id, orderId), eq(workingOrders.nodeId, cfg.nodeId)));
+    return revision;
+  });
+}
+
+/**
+ * Save the language the order's receipt prints in, or clear it with `null` so the location's own
+ * receipt language applies. Refused as {@link setOrderInvoiceChoice} refuses, and refused for a
+ * language the location does not offer.
+ */
+export async function setOrderReceiptLanguage(
+  db: Database,
+  cfg: Pick<TillConfig, "nodeId">,
+  orderId: string,
+  request: { revision: number; language: unknown },
+): Promise<number> {
+  const language = requireNullableString(request.language, "language");
+  return withTransaction(db, async (tx) => {
+    const order = await readChoiceChangeableOrder(db, tx, cfg, orderId, request.revision);
+    if (
+      language !== null &&
+      !(await readOfferedReceiptLanguages(tx, { locationId: order.locationId })).includes(language)
+    ) {
+      throw new AppError("management.request_invalid", { field: "language" });
+    }
+    const revision = order.revision + 1;
+    await tx
+      .update(workingOrders)
+      .set({ receiptLocale: language, revision })
       .where(and(eq(workingOrders.id, orderId), eq(workingOrders.nodeId, cfg.nodeId)));
     return revision;
   });
@@ -3973,6 +4028,8 @@ export interface HeldOrder {
   label: string | null;
   /** What an edit of this copy sends back, so a save from a copy since changed is refused. */
   revision: number;
+  /** The receipt language staff chose for the order; absent while the location's own applies. */
+  receiptLanguage?: string;
   /**
    * PARENT rows only, each dish's child lines nested as `extras`. A row carries its stored offer and
    * display snapshot, so retrieval does not depend on the offer still being active; a row with no
@@ -4120,6 +4177,7 @@ async function readBasketOrder(
         orderNumber: workingOrders.orderNumber,
         label: workingOrders.label,
         revision: workingOrders.revision,
+        receiptLocale: workingOrders.receiptLocale,
       })
       .from(workingOrders)
       .where(and(eq(workingOrders.id, id), which));
@@ -4245,6 +4303,7 @@ async function readBasketOrder(
       orderNumber: order.orderNumber,
       label: order.label,
       revision: order.revision,
+      ...(order.receiptLocale === null ? {} : { receiptLanguage: order.receiptLocale }),
       lines,
     };
   });
@@ -4786,14 +4845,13 @@ async function applyLineEdits(
     const modifiers = needsModifiers ? modifiersOf(parent) : NO_MODIFIERS;
     let optionSnapshots = parent.optionSnapshots;
     if (intent.options !== null) {
-      const frozen = buildLineExtras(
-        { extras: [], options: modifiers.options },
-        modifiers.extraProducts,
-        { options: intent.options.set },
-        defaultLanguage,
-      ).optionSnapshots;
-      // By value, never by order: see `docs/developers/modifiers.md`.
-      if (!sameOptionSelections(frozen, parent.optionSnapshots)) optionSnapshots = frozen;
+      optionSnapshots =
+        editLineOptions(
+          modifiers.options,
+          intent.options.set,
+          parent.optionSnapshots,
+          defaultLanguage,
+        ) ?? parent.optionSnapshots;
     }
     const extras =
       intent.extras === null
@@ -5679,11 +5737,15 @@ export async function issueUnpaidInvoice(
   cfg: DeviceRequestConfig,
   invoice: PricedInvoice,
   operatorId: string,
+  log?: Logger,
 ): Promise<IssuedInvoice> {
   const { id, priced, clock } = invoice;
   await refuseUnavailableFullInvoice(tx, id);
   const selected = await selectOrderInvoice(tx, backend, cfg, id, priced.total);
-  const language = await readReceiptLanguage(tx, cfg.locationId);
+  const language = await saleLanguageFor(tx, cfg.locationId, selected.receiptLocale, {
+    log,
+    workingOrderId: id,
+  });
   const { saleId, fiscal } = await recordSale(tx, backend, {
     origin: cfg.origin,
     nodeId: cfg.nodeId,

@@ -1,10 +1,14 @@
 import { afterEach, describe, it } from "vitest";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "./test-helpers.js";
-import { setLocale } from "../i18n/t.js";
+import { currentLocale, setLocale } from "../i18n/t.js";
 import "./reprint-language-dialog.js";
 import type { TillReprintLanguageDialog } from "./reprint-language-dialog.js";
 
-afterEach(cleanupWidgets);
+const originalLocale = currentLocale();
+afterEach(() => {
+  cleanupWidgets();
+  setLocale(originalLocale);
+});
 
 describe.each(["light", "dark"] as const)(
   "till-reprint-language-dialog a11y (%s theme)",
@@ -14,6 +18,20 @@ describe.each(["light", "dark"] as const)(
       const { host } = await mountWidget<TillReprintLanguageDialog>(
         "till-reprint-language-dialog",
         { languages: ["es-ES", "ca-ES", "gl-ES", "eu-ES"], defaultLanguage: "ca-ES" },
+        theme,
+      );
+      await expectNoA11yViolations(host);
+    });
+
+    it("has no violations when it asks for the receipt's language before a sale", async () => {
+      setLocale("es-ES");
+      const { host } = await mountWidget<TillReprintLanguageDialog>(
+        "till-reprint-language-dialog",
+        {
+          languages: ["es-ES", "ca-ES", "gl-ES", "eu-ES"],
+          defaultLanguage: "ca-ES",
+          purpose: "receipt",
+        },
         theme,
       );
       await expectNoA11yViolations(host);

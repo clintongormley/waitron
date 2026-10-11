@@ -494,15 +494,6 @@ returns `null`. This checks those readers, not every sale path.
   changed underneath an open bill by direct SQL, the bill's next split answers an unmapped 500
   `server.internal`; the same test file pins it.
 
-## A placed order collected after a language change is filed in the new language
-
-- A placed order collected after a language change is filed in the new language
-  (`sales.locale`) with its dish names as saved when its lines were added; when the new language
-  is not among the languages those names were saved in, its receipt prints the new language's
-  fixed words with a dish name in an old language (`lineName`'s fallback,
-  `apps/server/src/receipt-ticket.ts`; read in the code: the test checks what is filed, not a
-  printed receipt).
-
 ## Seen while looking at every modal at 1024px, not changed
 
 - **Seen while looking at every modal at 1024px, not changed:** the printers screen's list of
@@ -510,38 +501,6 @@ returns `null`. This checks those readers, not every sale path.
   while half the row stands empty; and the till's option picker, 1024px wide on a 1280px screen,
   puts each price far from its name (which adds to the "prices are not a column" item in the till
   layout pass, under A4). _2026-10-05 (W70): the picker is now the standard size, 672px wide at 1280._
-
-## A497. Receipt language chosen at the till, and the printed layout
-
-**A497 (owner, 2026-10-11) — OPEN.** It amends decisions C113 and C114 (below, under _Decisions
-and deliberate limits_).
-
-1. **Staff choose the receipt's own language at the till.** The default is the location's receipt
-   language, which is Catalan in Catalonia. This replaces C113's "no choice when the original
-   prints". The owner's reading, which the compliance research supports:
-   - the Catalan Consumer Code (art. 128-1.2) gives customers a right to receive invoices in
-     Catalan; it is not a rule that receipts default to Catalan;
-   - the Catalan consumer agency's guidance is stricter, "at least in Catalan";
-   - both are set out in [regional-language-rules.md](../compliance/regional-language-rules.md),
-     Catalonia.
-
-   The owner chose this knowing the agency reads it differently, and asked for no advisor
-   question. Before building, trace which language a sale is filed in (`namesLocale`,
-   [modifiers.md](../developers/modifiers.md)) against the language its receipt prints in.
-2. **Which languages are offered.** Both that choice and a copy in another language are offered
-   only in the venue's content languages that have receipt wording (Spanish, Catalan, Galician and
-   Basque today, `packages/country-es/src/receipt-labels.ts`), plus the receipt language. Spanish
-   stays offered in Catalonia (Spain's Constitutional Court, ruling 88/2017). This narrows C114,
-   which offered every language the country pack has. No English receipts (owner, 2026-10-11).
-   A493's receipt editor lists the same languages.
-3. **The printed layout:**
-   - space above and below the logo;
-   - a shorter contact block: the legal name and tax ID on one line, the address on two, phone and
-     email on one (A493's mockup preview);
-   - a line above TOTAL.
-
-   That the legal name and tax ID may share one line is not yet checked against what a receipt
-   must show.
 
 ## Decisions and deliberate limits
 
@@ -574,18 +533,30 @@ and deliberate limits_).
   manager holding both `printer.manage` and `cash.drawer`, with no per-till check — left as it
   is (owner, 2026-10-02).
 
-- **One receipt language per location (C113, owner 2026-09-30, #1014).** A receipt prints
-  in ONE language, never two, with no choice when the original prints, and dish names print as they
-  were saved. The language is the first entry of the location's saved list
-  (`locations.invoice_locales`); **in Catalonia it is fixed to Catalan**
-  ([regional-language-rules.md](../compliance/regional-language-rules.md), Catalonia).
-  **Amended by the owner, 2026-10-11 (A497, not built yet):** staff choose the receipt's own
-  language at the till, and the location's language (Catalan in Catalonia) is only the default.
+- **A receipt prints in one language; the location's is the default, and staff may choose another
+  at the till (C113, owner 2026-09-30, #1014; amended by A497, owner 2026-10-11).** The location's
+  receipt language is the first entry of its saved list (`locations.invoice_locales`); **in
+  Catalonia it is fixed to Catalan**
+  ([regional-language-rules.md](../compliance/regional-language-rules.md), Catalonia). A choice
+  made at the till is saved on the order (`working_orders.receipt_locale`) and read by every path
+  that files the order's sale (`saleLanguageFor`, `apps/server/src/venue-locale.ts`). The chosen
+  language sets the receipt's fixed words, its dates and amounts, and the department's subtitle and
+  footer. **Dish names, variant names, units and option answers are stored once, in the venue's
+  default content language, when a line is added, and print in it whatever receipt language is
+  chosen** (`packages/catalogue/src/default-language-text.ts`); no translated dish names (owner,
+  2026-10-11). Until A497, no choice was offered when the original printed.
 
-- **A copy can be printed in another receipt language (C114, #1022).** A copy is offered
-  in every receipt language the pack has, even in Catalonia: a product choice, which includes
-  Spanish, the customer's right there on request (Spain's Constitutional Court, ruling 88/2017;
-  [regional-language-rules.md](../compliance/regional-language-rules.md), Catalonia).
-  **Amended by the owner, 2026-10-11 (A497, not built yet):** copies are offered only in the
-  venue's content languages that have receipt wording, plus the receipt language; Spanish stays
-  offered in Catalonia.
+- **A copy can be printed in another receipt language (C114, #1022; narrowed by A497, owner
+  2026-10-11).** The till's choice and a copy are both offered in the location's receipt language,
+  then in each of the pack's receipt languages (Spanish, Catalan, Galician and Basque today) that is
+  one of the venue's content languages (`readOfferedReceiptLanguages`,
+  `apps/server/src/venue-locale.ts`); a copy is also offered in the sale's own language. No English
+  receipts (owner, 2026-10-11). Spanish stays offered in Catalonia, where it is a required content
+  language (`packages/country-es/src/spain.ts`), as the customer's right there on request (Spain's
+  Constitutional Court, ruling 88/2017;
+  [regional-language-rules.md](../compliance/regional-language-rules.md), Catalonia). Until A497 a
+  copy was offered in every receipt language the pack has.
+
+- **A Valencian venue is not offered Catalan receipts (owner, 2026-10-11).** Content and receipt
+  languages match by exact code, so a `ca-ES-valencia` content language does not offer `ca-ES`
+  (`offeredReceiptLanguages`, `apps/server/src/venue-locale.ts`).

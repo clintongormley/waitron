@@ -1218,8 +1218,8 @@ describe("GET /api/staff (pre-login roster) + GET /api/till (public boot info)",
       // above (both es-ES for this ES venue, but sourced from different fields — the decoupling test below
       // drives them apart).
       invoiceLocale: "es-ES",
-      // The Spanish pack's receipt languages, which a reprint may choose from.
-      receiptLanguages: ["es-ES", "ca-ES", "gl-ES", "eu-ES"],
+      // The offered receipt languages: with no content languages saved, the receipt language alone.
+      receiptLanguages: ["es-ES"],
       onboardingIntent: "prepare",
       venueName: "Test SL",
       nif: venueTaxId,

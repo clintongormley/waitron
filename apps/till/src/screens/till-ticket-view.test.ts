@@ -1425,10 +1425,9 @@ it("shows saved nonprice modifier answers literally without inventing charge row
 });
 
 it("resolves a filed line's unit abbreviation from a BARE content-language key", async () => {
-  // Only `descriptions` is re-keyed onto the venue's invoice locales
-  // (`toInvoiceLineDescriptions`, `packages/catalogue/src/invoice-descriptions.ts`); a line's
-  // `unit_name` keeps the bare content-language keys it was stored under, so an exact-key lookup
-  // against "es-ES" misses every one of them and shows whichever language happens to come first.
+  // Only `descriptions` is keyed by the venue's invoice locales; a line's `unit_name` keeps the
+  // bare content-language keys it was stored under, so an exact-key lookup against "es-ES" misses
+  // every one of them and shows whichever language happens to come first.
   const { el } = await mount({
     lines: [
       {
@@ -1636,6 +1635,79 @@ describe("till-ticket-view: the sale's own language", () => {
     for (const spanish of ["Fecha", "Pedido", "Efectivo", "Cambio"]) {
       expect(t).not.toContain(spanish);
     }
+  });
+
+  it("names dishes, units and option answers by the sale's `namesLocale`, keeping the fixed words in the sale's", async () => {
+    const { el } = await mount({
+      locale: "es-ES",
+      namesLocale: "ca-ES",
+      lines: [
+        {
+          descriptions: { "es-ES": "Jamón", "ca-ES": "Pernil" },
+          unitName: { es: "ud", ca: "u" },
+          unitPrecision: 0,
+          quantity: "2",
+          gross: "8.00",
+          optionSnapshots: [
+            {
+              listName: { es: "Punto", ca: "Punt" },
+              listCustomerName: { "es-ES": "¿Cómo lo quiere?", "ca-ES": "Com el vol?" },
+              listKitchenName: "PTO",
+              labelName: { es: "Poco", ca: "Poc" },
+              labelCustomerName: { "es-ES": "Poco hecho", "ca-ES": "Poc fet" },
+              labelKitchenName: "PH",
+            },
+          ],
+        },
+        {
+          parentLineNo: 1,
+          descriptions: { "es-ES": "Pan", "ca-ES": "Pa" },
+          quantity: "2",
+          gross: "1.40",
+        },
+      ],
+    });
+
+    expect(rows(el, ".lines > li")).toEqual([
+      "Pernil 2 u 8,00 €",
+      "Com el vol?: Poc fet",
+      "Pa 1,40 €",
+    ]);
+    expect(rows(el, ".order-group")).toEqual(["Mesa 6 · Pedido 41"]);
+    expect(el.shadowRoot!.querySelector("article")!.getAttribute("lang")).toBe("es-ES");
+  });
+
+  it("shows goods stored once in the default content language under the sale's Catalan fixed words", async () => {
+    const { el } = await mount({
+      locale: "ca-ES",
+      namesLocale: "ca-ES",
+      lines: [
+        {
+          descriptions: { "ca-ES": "ES Jamón" },
+          unitName: { es: "ES-ud" },
+          unitPrecision: 0,
+          quantity: "2",
+          gross: "8.00",
+          optionSnapshots: [
+            {
+              listName: { es: "STAFF Punto" },
+              listCustomerName: { es: "ES ¿Cómo lo quiere?" },
+              listKitchenName: "PTO",
+              labelName: { es: "STAFF Poco" },
+              labelCustomerName: { es: "ES Poco hecho" },
+              labelKitchenName: "PH",
+            },
+          ],
+        },
+      ],
+    });
+
+    expect(rows(el, ".lines > li")).toEqual([
+      "ES Jamón 2 ES-ud 8,00 €",
+      "ES ¿Cómo lo quiere?: ES Poco hecho",
+    ]);
+    expect(rows(el, ".tender .tender-row")).toEqual(["Efectiu 10,00 €", "Canvi 0,60 €"]);
+    expect(el.shadowRoot!.querySelector("article")!.getAttribute("lang")).toBe("ca-ES");
   });
 
   it("keeps the VERI*FACTU legend and AEAT's QR caption word for word", async () => {

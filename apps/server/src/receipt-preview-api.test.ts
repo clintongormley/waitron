@@ -89,6 +89,9 @@ function pictures(result: ReceiptPreviewResponse) {
   );
 }
 
+/** The venue's legal name and tax ID, on the one line an 80 mm receipt prints them on. */
+const legal = () => `Deli Test SL · NIF: ${taxId}`;
+
 function printedLines(result: ReceiptPreviewResponse): string[] {
   return linesOf(result, 0, result.preview.blocks.length);
 }
@@ -183,14 +186,10 @@ describe("POST /management-api/receipt-preview", () => {
       footerMessage: "Gracias por su visita",
     });
     const lines = printedLines(result);
-    const name = lines.indexOf("Deli Test SL");
+    const name = lines.indexOf(legal());
     expect(name).toBeGreaterThanOrEqual(0);
     expect(lines[name - 1]).toBe("Calle Mayor 1, Madrid");
-    expect(lines.slice(name + 1, name + 4)).toEqual([
-      "Calle Mayor 1",
-      "28013 Madrid",
-      `NIF: ${taxId}`,
-    ]);
+    expect(lines.slice(name + 1, name + 4)).toEqual(["Calle Mayor 1", "28013 Madrid", ""]);
     expect(lines.some((line) => line.startsWith("1  Café y tostada"))).toBe(true);
     const change = lines.findIndex((line) => line.startsWith("Cambio"));
     expect(lines.slice(change + 1).filter(Boolean)).toEqual(["Gracias por su visita"]);
@@ -211,7 +210,7 @@ describe("POST /management-api/receipt-preview", () => {
       expect(response.status).toBe(200);
       const lines = printedLines((await response.json()) as ReceiptPreviewResponse);
       expect(lines.indexOf("Deli Counter")).toBeGreaterThanOrEqual(0);
-      expect(lines.indexOf("Deli Counter")).toBeLessThan(lines.indexOf("Deli Test SL"));
+      expect(lines.indexOf("Deli Counter")).toBeLessThan(lines.indexOf(legal()));
     } finally {
       await suite.db.execute(
         sql`update departments set trading_name = ${originalName} where id = ${id}`,
@@ -273,14 +272,14 @@ describe("POST /management-api/receipt-preview", () => {
     expect(headerSubtitle).not.toBeNull();
     expect(headerSubtitle!.end - headerSubtitle!.start).toBe(2);
     expect(linesOf(result, headerSubtitle!.start, headerSubtitle!.end).join(" ")).toBe(header);
-    expect(linesOf(result, headerSubtitle!.end, headerSubtitle!.end + 1)).toEqual(["Deli Test SL"]);
+    expect(linesOf(result, headerSubtitle!.end, headerSubtitle!.end + 1)).toEqual([legal()]);
     expect(linesOf(result, footerMessage!.start, footerMessage!.end)).toEqual(["Hasta pronto"]);
   });
 
   it("marks nothing for a trim field left out, and the location's address, which prints unless switched off", async () => {
     const result = await rendered({});
     const lines = printedLines(result);
-    const name = lines.indexOf("Deli Test SL");
+    const name = lines.indexOf(legal());
     expect(result.marks).toEqual({
       headerSubtitle: null,
       footerMessage: null,
@@ -289,11 +288,7 @@ describe("POST /management-api/receipt-preview", () => {
       address: { start: name + 1, end: name + 3 },
       logo: null,
     });
-    expect(lines.slice(name + 1, name + 4)).toEqual([
-      "Calle Mayor 1",
-      "28013 Madrid",
-      `NIF: ${taxId}`,
-    ]);
+    expect(lines.slice(name + 1, name + 4)).toEqual(["Calle Mayor 1", "28013 Madrid", ""]);
   });
 
   it("is drawn 512 dots wide (80 mm at 180 dpi) when the location has no active receipt printer", async () => {
@@ -643,7 +638,7 @@ describe("POST /management-api/receipt-preview", () => {
     const lines = printedLines(result);
     expect(lines.indexOf("CAP-X")).toBeGreaterThanOrEqual(0);
     expect(lines.indexOf("LEG-Y")).toBeGreaterThan(lines.indexOf("CAP-X"));
-    expect(lines.indexOf("LEG-Y")).toBeLessThan(lines.indexOf("Deli Test SL"));
+    expect(lines.indexOf("LEG-Y")).toBeLessThan(lines.indexOf(legal()));
   });
 
   it("draws no QR, caption or legend for a venue whose fiscal backend gives no words", async () => {
@@ -651,7 +646,7 @@ describe("POST /management-api/receipt-preview", () => {
     expect(pictures(result)).toEqual([]);
     expect(result.preview.text).not.toContain("VERI*FACTU");
     expect(result.preview.text).not.toContain("QR tributario");
-    expect(printedLines(result)).toContain("Deli Test SL");
+    expect(printedLines(result)).toContain(legal());
   });
 
   it("marks a practice installation's receipt as a practice one, as its printed receipts are", async () => {
@@ -713,30 +708,33 @@ describe("the receipt preview's top block", () => {
       .values({ receipt: { phone: "910 000 000", email: "hola@deli.test" } });
     const result = await rendered({ headerSubtitle: "Desde 1990" });
     const lines = printedLines(result);
-    const name = lines.indexOf("Deli Test SL");
-    expect(lines.slice(name - 1, name + 6)).toEqual([
+    const name = lines.indexOf(legal());
+    expect(lines.slice(name - 1, name + 5)).toEqual([
       "Desde 1990",
-      "Deli Test SL",
+      legal(),
       "Calle Mayor 1",
       "28013 Madrid",
-      "Tel. 910 000 000",
-      "hola@deli.test",
-      `NIF: ${taxId}`,
+      "Tel. 910 000 000 · hola@deli.test",
+      "",
     ]);
     const { address, phone, email, logo } = result.marks;
     expect(linesOf(result, address!.start, address!.end)).toEqual([
       "Calle Mayor 1",
       "28013 Madrid",
     ]);
-    expect(linesOf(result, phone!.start, phone!.end)).toEqual(["Tel. 910 000 000"]);
-    expect(linesOf(result, email!.start, email!.end)).toEqual(["hola@deli.test"]);
+    expect(linesOf(result, phone!.start, phone!.end)).toEqual([
+      "Tel. 910 000 000 · hola@deli.test",
+    ]);
+    expect(linesOf(result, email!.start, email!.end)).toEqual([
+      "Tel. 910 000 000 · hola@deli.test",
+    ]);
     expect(logo).toBeNull();
   });
 
   it("draws no address, and marks none, when the receipt switches it off", async () => {
     const result = await rendered({ printAddress: false });
     const lines = printedLines(result);
-    expect(lines[lines.indexOf("Deli Test SL") + 1]).toBe(`NIF: ${taxId}`);
+    expect(lines[lines.indexOf(legal()) + 1]).toBe("");
     expect(result.marks).toEqual({
       headerSubtitle: null,
       footerMessage: null,
@@ -753,9 +751,9 @@ describe("the receipt preview's top block", () => {
     // 40 × 12 fitted inside 504 × 160 on the default 80 mm paper.
     expect(sizes(result)).toEqual([[504, 151]]);
     const mark = result.marks.logo!;
-    expect(mark.end - mark.start).toBe(1);
-    expect(result.preview.blocks[mark.start]).toMatchObject({ kind: "image", width: 504 });
-    expect(linesOf(result, mark.end, mark.end + 1)).toEqual(["Deli Test SL"]);
+    expect(linesOf(result, mark.start, mark.end)).toEqual(["", "", ""]);
+    expect(result.preview.blocks[mark.start + 1]).toMatchObject({ kind: "image", width: 504 });
+    expect(linesOf(result, mark.end, mark.end + 1)).toEqual([legal()]);
   });
 
   it("draws the saved picture when the logo is the saved one", async () => {

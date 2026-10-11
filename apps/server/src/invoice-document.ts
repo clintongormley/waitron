@@ -128,7 +128,7 @@ export async function readInvoiceDocument(
     receiptHeader: header?.departmentId == null ? undefined : header,
     venueAddress: [],
     invoiceLocale: sale.locale,
-    namesLocale: sale.locale,
+    namesLocale: sale.invoiceLocales[0]!,
     simulated: cfg.practiceMode,
     result: {
       ...(sale.workingOrderId === null
@@ -143,6 +143,7 @@ export async function readInvoiceDocument(
         address: sale.counterpartyAddress!,
       },
       locale: sale.locale,
+      namesLocale: sale.invoiceLocales[0]!,
       invoiceNumber: formatInvoiceNumber(issued.code, sale.invoiceNumber),
       issuedAt: new Date(sale.issuedAt).toISOString(),
       issuedOffsetMinutes: sale.issuedOffsetMinutes,

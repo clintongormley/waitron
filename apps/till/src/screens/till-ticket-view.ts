@@ -31,13 +31,15 @@ export interface TicketIssuer {
 }
 
 /**
- * A filed line's goods name in the receipt's language (art. 7.1.e).
+ * A filed line's goods name (art. 7.1.e), looked up under the sale's names language.
  *
- * `descriptions` is keyed by the receipt languages saved when the line was added
- * (`toInvoiceLineDescriptions`, `packages/catalogue/src/invoice-descriptions.ts`); a later change can
- * leave them without the sale's language, so the lookup falls back to the first stored name. Nothing
- * re-keys the line's `unitName`, which is why the quantity below resolves that one through
- * `resolveSnapshotText` instead, as the printed twin (`apps/server/src/receipt-ticket.ts`) does.
+ * `descriptions` is keyed by the location's receipt languages when the line was added; a line added
+ * from an order holds the same text under every key (`defaultLanguageDescriptions`,
+ * `packages/catalogue/src/default-language-text.ts`). A later change can leave the keys without the
+ * names language, so the lookup falls back to the first stored name. The line's `unitName` is keyed
+ * by a content language such as `es`, never a receipt language, which is why the quantity below
+ * resolves it through `resolveSnapshotText` instead, as the printed twin
+ * (`apps/server/src/receipt-document.ts`) does.
  */
 function lineName(descriptions: Record<string, string>, locale: string): string {
   return descriptions[locale] ?? Object.values(descriptions)[0] ?? "";
@@ -74,10 +76,9 @@ function lineGross(line: TillSaleLine, locale: string) {
   return html`<span class="line-gross">${formatMoney(line.listGross ?? line.gross, locale)}</span>`;
 }
 
-function netFacts(line: TillSaleLine, language: string, format: string, labels: ReceiptLabels) {
+function netFacts(line: TillSaleLine, names: string, format: string, labels: ReceiptLabels) {
   if (line.net === undefined) return nothing;
-  const unit =
-    line.unitName == null ? "" : ` ${resolveSnapshotText(line.unitName, language, language)}`;
+  const unit = line.unitName == null ? "" : ` ${resolveSnapshotText(line.unitName, names, names)}`;
   return html`<li class="invoice-facts">
     <div class="vat-row">
       <span>${labels.netUnitPrice}</span
@@ -490,6 +491,7 @@ export class TillTicketView extends LitElement {
     const r = this.result;
     const issuer = r.issuer ?? this.issuer;
     const language = r.locale ?? this.invoiceLocale;
+    const names = r.namesLocale ?? language;
     const labels = receiptLabelsFor(language);
     // Browsers ship no number or date formats for some receipt languages (Galician and Basque in
     // Chromium 153 and Chrome 154), and would write those amounts the English way.
@@ -605,40 +607,38 @@ export class TillTicketView extends LitElement {
             // the goods list can never diverge from the invoice.
             (group) => html`
               <li class="line">
-                <span class="line-name">${lineName(group.dish.descriptions, language)}</span>
+                <span class="line-name">${lineName(group.dish.descriptions, names)}</span>
                 <span class="line-qty"
                   >${group.dish.quantity}${
                     group.dish.unitName == null
                       ? ""
-                      : ` ${resolveSnapshotText(group.dish.unitName, language, language)}`
+                      : ` ${resolveSnapshotText(group.dish.unitName, names, names)}`
                   }</span
                 >
                 ${r.invoiceType === "F1" && group.dish.net !== undefined ? nothing : lineGross(group.dish, format)}
               </li>
-              ${r.invoiceType === "F1" ? netFacts(group.dish, language, format, labels) : nothing}
-              ${optionAnswers(group.dish.optionSnapshots, { reads: "customer", locale: language }).map((answer) => html`<li class="line option modifier-answer"><span class="line-name">${answer}</span></li>`)}
+              ${r.invoiceType === "F1" ? netFacts(group.dish, names, format, labels) : nothing}
+              ${optionAnswers(group.dish.optionSnapshots, { reads: "customer", locale: names }).map((answer) => html`<li class="line option modifier-answer"><span class="line-name">${answer}</span></li>`)}
               ${group.options.map((option) => {
                 let amount: string;
                 if (r.invoiceType === "F1") {
                   const unit =
                     option.unitName == null
                       ? ""
-                      : ` ${resolveSnapshotText(option.unitName, language, language)}`;
+                      : ` ${resolveSnapshotText(option.unitName, names, names)}`;
                   amount = ` ${option.quantity}${unit}`;
                 } else if (option.unitName == null || option.soldInEach === true) {
                   const perDish = perDishOptionQuantity(option.quantity, group.dish.quantity);
                   amount = perDish > 1 ? ` x${perDish}` : "";
                 } else {
-                  amount = ` ${option.quantity} ${resolveSnapshotText(option.unitName, language, language)}`;
+                  amount = ` ${option.quantity} ${resolveSnapshotText(option.unitName, names, names)}`;
                 }
                 return html`
                   <li class="line option">
-                    <span class="line-name"
-                      >${lineName(option.descriptions, language)}${amount}</span
-                    >
+                    <span class="line-name">${lineName(option.descriptions, names)}${amount}</span>
                     ${r.invoiceType === "F1" && option.net !== undefined ? nothing : lineGross(option, format)}
                   </li>
-                  ${r.invoiceType === "F1" ? netFacts(option, language, format, labels) : nothing}
+                  ${r.invoiceType === "F1" ? netFacts(option, names, format, labels) : nothing}
                 `;
               })}
               ${[group.dish, ...group.options].flatMap((line) =>

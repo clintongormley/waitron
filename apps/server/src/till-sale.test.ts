@@ -40,6 +40,7 @@ import {
   updateExtraList,
   updateProduct,
   units,
+  writeContentLanguages,
   writeProductModifiers,
   rateLines,
 } from "@waitron/catalogue";
@@ -830,7 +831,7 @@ describe("priceOrderLines re-keys bare catalogue content to the venue invoice_lo
     expect(slLines[0]!.descriptions).toEqual({ "es-ES": "Café" });
   });
 
-  it("re-keys a bilingual bare product to both venue locales", async () => {
+  it("keys a bilingual bare product to both venue locales, each holding the default content language's text", async () => {
     const { cfg, zoneId, menuItemId } = await setupBareVenue(["es-ES", "ca-ES"], {
       es: "Café",
       ca: "Cafè",
@@ -844,13 +845,60 @@ describe("priceOrderLines re-keys bare catalogue content to the venue invoice_lo
       tender: { method: "cash", amount: "1.50" },
     });
 
-    const lines = await withTransaction(suite.db, async (tx) => {
-      return tx
+    const { lines, defaultLanguage } = await withTransaction(suite.db, async (tx) => ({
+      lines: await tx
         .select({ descriptions: workingOrderLines.descriptions })
         .from(workingOrderLines)
-        .where(eq(workingOrderLines.workingOrderId, workingOrderId));
+        .where(eq(workingOrderLines.workingOrderId, workingOrderId)),
+      defaultLanguage: (await readContentLanguages(tx, cfg.locale)).defaultLanguage,
+    }));
+    expect(defaultLanguage).toBe("es");
+    expect(lines[0]!.descriptions).toEqual({ "es-ES": "Café", "ca-ES": "Café" });
+  });
+
+  it("stores a walk-up line's names and unit in the default content language, on the order and the sale", async () => {
+    // Catalan is the first receipt language and Spanish the default, so a line keyed or worded by
+    // the first receipt language reads differently from one worded by the default.
+    const { cfg, zoneId, menuItemId } = await setupBareVenue(["ca-ES", "es-ES"], {
+      es: "Café",
+      ca: "Cafè",
     });
-    expect(lines[0]!.descriptions).toEqual({ "es-ES": "Café", "ca-ES": "Cafè" });
+    const defaultLanguage = await withTransaction(suite.db, async (tx) => {
+      await writeContentLanguages(tx, { defaultLanguage: "es", languages: ["es", "ca"] });
+      return (await readContentLanguages(tx, cfg.locale)).defaultLanguage;
+    });
+    expect(defaultLanguage).toBe("es");
+    const workingOrderId = randomUUID();
+
+    await payWorkingOrder({ db: suite.db, backend, clock }, cfg, {
+      id: workingOrderId,
+      zoneId,
+      lines: [{ menuItemId, quantity: "1" }],
+      tender: { method: "cash", amount: "1.50" },
+    });
+
+    const { woLines, slLines } = await withTransaction(suite.db, async (tx) => {
+      const [sale] = await tx
+        .select({ id: sales.id })
+        .from(sales)
+        .where(eq(sales.workingOrderId, workingOrderId));
+      return {
+        woLines: await tx
+          .select({
+            descriptions: workingOrderLines.descriptions,
+            unitName: workingOrderLines.unitName,
+          })
+          .from(workingOrderLines)
+          .where(eq(workingOrderLines.workingOrderId, workingOrderId)),
+        slLines: await tx
+          .select({ descriptions: saleLines.descriptions, unitName: saleLines.unitName })
+          .from(saleLines)
+          .where(eq(saleLines.saleId, sale!.id)),
+      };
+    });
+    const stored = { descriptions: { "ca-ES": "Café", "es-ES": "Café" }, unitName: { es: "ud" } };
+    expect(woLines).toEqual([stored]);
+    expect(slLines).toEqual([stored]);
   });
 
   it("credits a walk-up's lines to the operator who rang it, in no group", async () => {

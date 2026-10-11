@@ -164,9 +164,11 @@ export const saleLines = table(
     name: label("name").notNull(),
     descriptions: json<Record<string, string>>("descriptions").notNull(),
     variantName: label("variant_name"),
-    // Snapshotted under the venue's invoice locales like `descriptions`. Nothing in the database
-    // checks the locales here: the trigger is on `working_order_lines`, whose lines the till copies
-    // across, so a caller that builds its own lines keeps the invoice locales right by itself.
+    // Keyed like `descriptions`. A sale filed from an order copies both from `working_order_lines`,
+    // where every key holds the text of the default content language when the line was written, or
+    // another stored language's where the default had none.
+    // Nothing in the database checks the locales here: the trigger is on `working_order_lines`, so
+    // a caller that builds its own lines keeps the invoice locales right by itself.
     variantDescriptions: json<Record<string, string>>("variant_descriptions"),
     variantKitchenName: label("variant_kitchen_name"),
     kitchenName: label("kitchen_name"),
@@ -174,7 +176,8 @@ export const saleLines = table(
     // list or a label, so a later catalogue edit cannot rewrite a filed sale. EXTRAS are not in
     // here: an extras pick is filed as its own child line of the dish (`parent_line_id`).
     optionSnapshots: json<OptionSnapshot[]>("option_snapshots").notNull().default([]),
-    // The printed unit label (the unit's abbreviation), frozen at add-time — presentation only.
+    // The printed unit label (the unit's abbreviation), frozen at add-time as one entry under the
+    // default content language of that time — presentation only.
     unitName: json<Record<string, string>>("unit_name"),
     unitPrecision: count("unit_precision"),
     quantity: quantity("quantity").notNull(),

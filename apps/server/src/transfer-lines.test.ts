@@ -349,7 +349,7 @@ describe("transfer — partial split", () => {
         quantity: "1.000",
         unitPriceGross: "1.50",
         lineTotal: "1.50",
-        unitName: expect.objectContaining({ en: "ea" }),
+        unitName: { es: "ud" },
         unitPrecision: 0,
       }),
     ]);

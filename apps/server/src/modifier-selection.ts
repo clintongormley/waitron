@@ -1,5 +1,10 @@
 import { isDeepStrictEqual } from "node:util";
-import { EACH_UNIT, validateExtraSelections, validateOptionSelections } from "@waitron/catalogue";
+import {
+  EACH_UNIT,
+  defaultLanguageText,
+  validateExtraSelections,
+  validateOptionSelections,
+} from "@waitron/catalogue";
 import type { OptionList, ResolvedExtraList, VatClass } from "@waitron/catalogue";
 import { AppError, compareDecimal, decimal, multiplyDecimal } from "@waitron/shared";
 import type { OptionSnapshot } from "@waitron/shared";
@@ -48,11 +53,35 @@ export interface ExtraChild {
 }
 
 /**
+ * One function per validated options answer, in the offered order, freezing that answer in the
+ * language it is given.
+ */
+function answerFreezers(
+  offered: readonly OptionList[],
+  requested: unknown,
+): ((language: string) => OptionSnapshot)[] {
+  // The validator answers with ids drawn from the lists it was handed, so both lookups resolve.
+  return validateOptionSelections(offered, requested ?? []).map((selection) => {
+    const list = offered.find((candidate) => candidate.id === selection.listId)!;
+    const label = list.labels.find((candidate) => candidate.id === selection.labelId)!;
+    return (language) => ({
+      listName: { [language]: list.name },
+      listCustomerName: defaultLanguageText(list.customerName, language),
+      listKitchenName: list.kitchenName,
+      labelName: { [language]: label.name },
+      labelCustomerName: defaultLanguageText(label.customerName, language),
+      labelKitchenName: label.kitchenName,
+    });
+  });
+}
+
+/**
  * Validate one line's answers to the extras and options lists its dish offers, and freeze them:
  * options into `OptionSnapshot`s for the dish line's own column, extras into child lines.
  *
  * `defaultLanguage` is the language the plain staff names widen under, because an `OptionSnapshot`
- * holds locale -> text maps where an `OptionList`/`OptionLabel` holds a `string`.
+ * holds locale -> text maps where an `OptionList`/`OptionLabel` holds a `string`, and the one
+ * language the two customer maps are narrowed to.
  *
  * `products` must hold every product an ACTIVE list in `offered.extras` offers. A missing one is
  * refused with `product.not_found` rather than skipped, because dropping a picked extra would serve
@@ -64,23 +93,12 @@ export function buildLineExtras(
   requested: { extras?: unknown; options?: unknown },
   defaultLanguage: string,
 ): { extraChildren: ExtraChild[]; optionSnapshots: OptionSnapshot[] } {
-  // Both validators answer with ids drawn from the lists they were handed, so every lookup below
-  // that re-finds one of those ids resolves.
-  const optionSnapshots = validateOptionSelections(offered.options, requested.options ?? []).map(
-    (selection): OptionSnapshot => {
-      const list = offered.options.find((candidate) => candidate.id === selection.listId)!;
-      const label = list.labels.find((candidate) => candidate.id === selection.labelId)!;
-      return {
-        listName: { [defaultLanguage]: list.name },
-        listCustomerName: list.customerName,
-        listKitchenName: list.kitchenName,
-        labelName: { [defaultLanguage]: label.name },
-        labelCustomerName: label.customerName,
-        labelKitchenName: label.kitchenName,
-      };
-    },
+  const optionSnapshots = answerFreezers(offered.options, requested.options).map((freeze) =>
+    freeze(defaultLanguage),
   );
 
+  // `validateExtraSelections` answers with ids drawn from the lists it was handed, so every lookup
+  // below that re-finds one of those ids resolves.
   const extraChildren = validateExtraSelections(offered.extras, requested.extras ?? []).flatMap(
     (selection): ExtraChild[] => {
       const list = offered.extras.find((candidate) => candidate.id === selection.listId)!;
@@ -118,39 +136,56 @@ export function buildLineExtras(
 }
 
 /**
- * Answers the matched candidates IN ENTRY ORDER, or `null`.
- *
- * Greedy is exact only because every caller's `matches` is equality of a derived KEY: two entries
- * that could take the same candidate match the same set, so no early choice strands a later entry.
- * A merely overlapping predicate would need a real bipartite matching.
+ * The candidate each entry pairs with, `undefined` where it pairs with none, pairing as many entries
+ * as any assignment can: an entry takes a free candidate, or one whose holder can move to another.
  */
-function pairOff<Entry, Candidate>(
+function pairEach<Entry, Candidate>(
   entries: readonly Entry[],
   candidates: readonly Candidate[],
   matches: (entry: Entry, candidate: Candidate) => boolean,
-): Candidate[] | null {
-  if (entries.length !== candidates.length) return null;
-  const remaining = [...candidates];
-  const matched: Candidate[] = [];
-  for (const entry of entries) {
-    const index = remaining.findIndex((candidate) => matches(entry, candidate));
-    if (index < 0) return null;
-    matched.push(remaining[index]!);
-    remaining.splice(index, 1);
-  }
-  return matched;
+): (Candidate | undefined)[] {
+  const holder: (number | undefined)[] = candidates.map(() => undefined);
+  const claim = (entry: number, tried: Set<number>): boolean =>
+    candidates.some((candidate, index) => {
+      if (tried.has(index) || !matches(entries[entry]!, candidate)) return false;
+      tried.add(index);
+      const current = holder[index];
+      if (current !== undefined && !claim(current, tried)) return false;
+      holder[index] = entry;
+      return true;
+    });
+  entries.forEach((_, entry) => claim(entry, new Set()));
+  const paired: (Candidate | undefined)[] = entries.map(() => undefined);
+  holder.forEach((entry, index) => {
+    if (entry !== undefined) paired[entry] = candidates[index];
+  });
+  return paired;
 }
 
 /**
+ * The options answer to an edit of a SAVED line, or `null` when the edit gives the answers the line
+ * already holds. A stored answer is kept as it is when an answer of the edit, frozen in the language
+ * the stored one was frozen in (the one key of its staff list name), equals it; so a later change of
+ * the venue's default content language moves no unchanged answer. Every other answer is frozen in
+ * `defaultLanguage`.
+ *
  * Compared BY VALUE — not by JSON key order, send order or offered order, because the offered
  * order is a stored position a save re-numbers. A RENAMED list still differs, deliberately.
  * Receipt: docs/developers/modifiers.md.
  */
-export function sameOptionSelections(
-  frozen: readonly OptionSnapshot[],
+export function editLineOptions(
+  offered: readonly OptionList[],
+  requested: unknown,
   stored: readonly OptionSnapshot[],
-): boolean {
-  return pairOff(frozen, stored, isDeepStrictEqual) !== null;
+  defaultLanguage: string,
+): OptionSnapshot[] | null {
+  const answers = answerFreezers(offered, requested);
+  const kept = pairEach(answers, stored, (freeze, answer) => {
+    const [language] = Object.keys(answer.listName);
+    return language !== undefined && isDeepStrictEqual(freeze(language), answer);
+  });
+  if (answers.length === stored.length && kept.every((answer) => answer !== undefined)) return null;
+  return answers.map((freeze, index) => kept[index] ?? freeze(defaultLanguage));
 }
 
 /** One pick as a request names it, read leniently: a malformed one is left to the validator. */

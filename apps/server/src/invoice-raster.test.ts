@@ -3,6 +3,7 @@ import jsQR from "jsqr";
 import { getDocument } from "pdfjs-dist/legacy/build/pdf.mjs";
 import { describe, expect, it } from "vitest";
 import { renderInvoicePdf } from "./invoice-pdf.js";
+import { layoutInvoicePages } from "./invoice-page.js";
 import { FULL_INVOICE_DOCUMENT_FIXTURE as fixture } from "./testing/full-invoice-fixture.js";
 
 describe("invoice glyph-outline raster", () => {
@@ -96,12 +97,39 @@ describe("department A4 office raster", () => {
       );
       const scale = resolution / 300;
       let ink = 0;
-      for (let y = 215 * scale; y < 260 * scale; y++)
+      for (let y = 244 * scale; y < 289 * scale; y++)
         for (let x = 1190 * scale; x < 1290 * scale; x++)
           if (page!.pixels[y * page!.width + x]! < 128) ink++;
       expect(ink).toBe(4500 * scale * scale);
-      expect(page!.pixels[215 * scale * page!.width + 1150 * scale]).toBe(255);
-      expect(page!.pixels[215 * scale * page!.width + 1330 * scale]).toBe(255);
+      expect(page!.pixels[244 * scale * page!.width + 1150 * scale]).toBe(255);
+      expect(page!.pixels[244 * scale * page!.width + 1330 * scale]).toBe(255);
+    },
+  );
+});
+
+describe("A4 office raster rule", () => {
+  it.each([300, 600] as const)(
+    "draws the line above TOTAL across the content width at %s dpi",
+    async (resolution) => {
+      const { renderInvoiceRaster } = await import("./invoice-raster.js");
+      const rule = layoutInvoicePages(fixture)[0]!.elements.find(
+        (element) => element.kind === "rule",
+      );
+      if (rule?.kind !== "rule") throw new Error("Missing rule");
+      const [page] = await renderInvoiceRaster(fixture, resolution);
+      const dots = resolution / 72;
+      const row = Math.floor((rule.y + rule.thickness / 2) * dots);
+      const dark = (x: number) => page!.pixels[row * page!.width + x]! < 128;
+      const left = Math.ceil(36 * dots);
+      const right = Math.floor((595.28 - 36) * dots);
+      let drawn = 0;
+      for (let x = left; x < right; x++) if (dark(x)) drawn++;
+      expect(drawn).toBe(right - left);
+      expect(dark(left - 2)).toBe(false);
+      expect(dark(right + 2)).toBe(false);
+      expect(
+        page!.pixels[Math.floor((rule.y - 2) * dots) * page!.width + 1240 * (resolution / 300)],
+      ).toBe(255);
     },
   );
 });

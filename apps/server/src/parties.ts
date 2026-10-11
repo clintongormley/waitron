@@ -53,7 +53,8 @@ export interface PartyBill {
   hasPayments: boolean;
   /** A sale has been filed for the bill, so its receipt can be printed again. */
   receiptAvailable: boolean;
-  /** The language the bill's sale was filed in; absent while no sale is filed. */
+  /** The language the bill's sale was filed in, else the one staff chose for it; absent when
+   * neither is set. */
   receiptLanguage?: string;
   /** The number the bill's sale was filed under ("A/1"); absent while no sale is filed. */
   invoiceNumber?: string;
@@ -446,6 +447,7 @@ export async function readPartyBills(tx: Transaction, partyId: string): Promise<
             legalName: workingOrders.recipientLegalName,
             address: workingOrders.recipientAddress,
             countryCode: workingOrders.recipientCountryCode,
+            receiptLocale: workingOrders.receiptLocale,
           })
           .from(workingOrders)
           .where(
@@ -483,6 +485,7 @@ export async function readPartyBills(tx: Transaction, partyId: string): Promise<
   return bills.map((bill) => {
     const sale = filed.get(bill.workingOrderId);
     const choice = choiceByBill.get(bill.workingOrderId)!;
+    const receiptLanguage = sale?.locale ?? choice.receiptLocale;
     return {
       workingOrderId: bill.workingOrderId,
       revision: choice.revision,
@@ -507,10 +510,10 @@ export async function readPartyBills(tx: Transaction, partyId: string): Promise<
       outstanding: bill.outstanding,
       hasPayments: bill.hasPayments,
       receiptAvailable: sale !== undefined,
+      ...(receiptLanguage === null ? {} : { receiptLanguage }),
       ...(sale === undefined
         ? {}
         : {
-            receiptLanguage: sale.locale,
             invoiceNumber: formatInvoiceNumber(sale.code, sale.number),
             creditNotes: notes.get(sale.id) ?? [],
             amountDue: issued.get(bill.workingOrderId)!.amountDue,

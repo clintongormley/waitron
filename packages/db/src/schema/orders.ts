@@ -52,8 +52,8 @@ export type StagedInvoiceDelivery =
  * (`working_orders_enforce_transition`): an `open` order may change freely or
  * advance to any next state; a `placed` order may be settled or abandoned, or
  * stay placed changing its `party_id`, `delivery_table_id` and `revision`,
- * or change its invoice choice and recipient with a revision advance before a sale exists,
- * or only take its handover stamp; `settled` and `abandoned` are terminal,
+ * or change its invoice choice, recipient and receipt language with a revision advance before a
+ * sale exists, or only take its handover stamp; `settled` and `abandoned` are terminal,
  * save the handover stamp on a settled order. In any state, an order holding a
  * `delivery_table_id` and no `delivery_table_label` may let go of the id,
  * keeping the name in the label; the label is otherwise free only while the
@@ -102,6 +102,8 @@ export const workingOrders = table(
     recipientCountryCode: label("recipient_country_code"),
     // Null means no explicit delivery choice has been staged.
     invoiceDelivery: json<StagedInvoiceDelivery>("invoice_delivery"),
+    // Null means the location's receipt language.
+    receiptLocale: label("receipt_locale"),
     paymentAttemptAt: tsString("payment_attempt_at"),
     // The seated party this bill belongs to; a counter order has none.
     partyId: id("party_id"),
@@ -144,7 +146,8 @@ export const workingOrders = table(
  *
  * `descriptions` is a locale→string map holding exactly the location's invoice locales as they
  * were when the line was written or last moved, checked by trigger against
- * locations.invoice_locales.
+ * locations.invoice_locales; every key holds the text of the venue's default content language at the
+ * time the line was written, or another stored language's where the default had none.
  */
 export const workingOrderLines = table(
   "working_order_lines",
@@ -159,7 +162,7 @@ export const workingOrderLines = table(
     // PICKED product.
     productId: id("product_id"),
     variantName: label("variant_name"),
-    // Keyed like `descriptions`, and checked by trigger the same way.
+    // Keyed and filled like `descriptions`, and checked by trigger the same way.
     // Null = the variant has no customer name.
     variantDescriptions: json<Record<string, string>>("variant_descriptions"),
     variantKitchenName: label("variant_kitchen_name"),
@@ -169,7 +172,8 @@ export const workingOrderLines = table(
     // list or a label, so editing or deleting a list cannot rewrite a saved order. EXTRAS are not
     // here: a pick becomes its own child line.
     optionSnapshots: json<OptionSnapshot[]>("option_snapshots").notNull().default([]),
-    // The printed unit label (the unit's abbreviation), frozen at add-time — presentation only.
+    // The printed unit label (the unit's abbreviation), frozen at add-time as one entry under the
+    // default content language of that time — presentation only.
     unitName: json<Record<string, string>>("unit_name"),
     unitPrecision: count("unit_precision"),
     quantity: quantity("quantity").notNull(),

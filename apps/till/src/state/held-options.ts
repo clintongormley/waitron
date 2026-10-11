@@ -5,10 +5,11 @@ import type { OptionSelection, OptionSnapshot } from "@waitron/shared";
 type Names = Pick<OfferedOptionsList, "name" | "customerName" | "kitchenName">;
 
 /**
- * An answer frozen the way the order path freezes it (`buildLineExtras`,
+ * An answer in the shape the order path freezes (`buildLineExtras`,
  * `apps/server/src/modifier-selection.ts`): the list's three names and the chosen label's three, and
- * no ids at all. The two plain staff names widen under the venue's default content language, which
- * is what the server widens them under too, so the map holds exactly one entry either way.
+ * no ids at all. The two plain staff names widen under the venue's default content language, as the
+ * server's do. The two customer maps stay whole here, where the server narrows its own copy to the
+ * default language; no request sends this copy.
  */
 export function optionSnapshotOf(list: Names, label: Names): OptionSnapshot {
   const language = currentContentLanguages().defaultLanguage;

@@ -133,6 +133,25 @@ describe("TillApi", () => {
     );
   });
 
+  it.each([["es-ES"], [null]])(
+    "saves the order's receipt language %j under its revision",
+    async (language) => {
+      const fetchStub = vi.fn().mockResolvedValue(jsonResponse({ revision: 4 }));
+      const api = new TillApi("", fetchStub);
+
+      expect(await api.setOrderReceiptLanguage("order-1", { revision: 3, language })).toEqual({
+        revision: 4,
+      });
+      expect(fetchStub).toHaveBeenCalledWith(
+        "/api/working-orders/order-1/receipt-language",
+        expect.objectContaining({
+          method: "PUT",
+          body: JSON.stringify({ revision: 3, language }),
+        }),
+      );
+    },
+  );
+
   it("reports made-here items from a successful answer and ignores an answer without them", async () => {
     const item = {
       lineId: "line-1",
@@ -296,6 +315,26 @@ describe("TillApi", () => {
         }),
       }),
     );
+  });
+
+  it("sends the chosen receipt language with a sale, a card payment and a collect", async () => {
+    const fetchStub = vi.fn().mockImplementation(() => Promise.resolve(jsonResponse({})));
+    const api = new TillApi("", fetchStub);
+    const tender = { method: "cash", amount: "5.00" } as const;
+    const lines = [{ menuItemId: "mi-cafe", quantity: "1" }];
+
+    await api.recordSale(lines, tender, "wo1", undefined, undefined, "es-ES");
+    await api.pay({ id: "wo2", lines, receiptLanguage: "es-ES" });
+    await api.collectOrder("wo3", tender, "es-ES");
+
+    const bodies = fetchStub.mock.calls.map(
+      ([, init]) => JSON.parse((init as RequestInit).body as string) as unknown,
+    );
+    expect(bodies).toEqual([
+      { lines, tender, workingOrderId: "wo1", receiptLanguage: "es-ES" },
+      { id: "wo2", lines, receiptLanguage: "es-ES" },
+      { tender, receiptLanguage: "es-ES" },
+    ]);
   });
 
   it("cancels a pending pretend reader payment for the current order", async () => {
