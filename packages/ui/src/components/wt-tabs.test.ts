@@ -534,7 +534,10 @@ test("a click from a tab that has since been removed still reports that tab", as
 
 /** A resize is reported after layout and before the next paint, so read a few frames later. */
 async function frames(): Promise<void> {
-  for (let i = 0; i < 3; i += 1) await new Promise((resolve) => requestAnimationFrame(resolve));
+  for (let i = 0; i < 3; i += 1) await frame();
+}
+function frame(): Promise<unknown> {
+  return new Promise((resolve) => requestAnimationFrame(resolve));
 }
 function tablist(el: WtTabs) {
   return el.shadowRoot!.querySelector<HTMLElement>('[role="tablist"]')!;
@@ -737,11 +740,11 @@ test("a marked tab is drawn in the primary text colour, selected or not", async 
   expect(getComputedStyle(plain!).color).toBe("rgb(90, 90, 90)");
 });
 
-/** Resolves once the strip has delivered its next scroll event, which the strip handles first. */
+/** Resolves after the frame the strip's next scroll event asks for, in which the strip measures. */
 async function scrollStrip(el: WtTabs, to: number): Promise<void> {
   const strip = tablist(el);
   const scrolled = new Promise((resolve) =>
-    strip.addEventListener("scroll", resolve, { once: true }),
+    strip.addEventListener("scroll", () => void frame().then(resolve), { once: true }),
   );
   strip.scrollLeft = to;
   await scrolled;
@@ -841,6 +844,12 @@ test("right to left, the strip reports end at its start and start at its far end
 
 function fade(el: WtTabs): string {
   return getComputedStyle(tablist(el)).maskImage;
+}
+/** The faded width at each cut end, read from the strip's mask. */
+function fadeStops(el: WtTabs): number[] {
+  return [...fade(el).matchAll(/rgb\([\d, ]+\) (?:calc\(100% - )?([\d.]+)px/g)].map((match) =>
+    Number(match[1]),
+  );
 }
 
 test("fades only the cut end of the strip, over twice the space-6 token", async () => {
@@ -998,9 +1007,7 @@ test.each(["ltr", "rtl"] as const)(
     const box = buttons(el)[1]!.getBoundingClientRect();
     expect(el.dataset.overflow).toBe("both");
     const room = strip.width - box.width;
-    const stops = [...fade(el).matchAll(/rgb\([\d, ]+\) (?:calc\(100% - )?([\d.]+)px/g)].map(
-      (match) => Number(match[1]),
-    );
+    const stops = fadeStops(el);
     expect(stops).toHaveLength(2);
     for (const stop of stops) expect(stop).toBeLessThanOrEqual(room / 2 + 0.5);
     expect(box.left - strip.left).toBeGreaterThanOrEqual(stops[0]! - 1);
@@ -1012,4 +1019,139 @@ test("control: in a roomy strip the fade keeps its full width", async () => {
   const el = await middleWithSlack("ltr", 160, "a");
   expect(tablist(el).scrollWidth).toBeGreaterThan(tablist(el).clientWidth);
   expect(fade(el)).toContain(` ${fadeWidth(el)}px`);
+});
+
+test("scrolling measures the strip once per frame, and never the tabs' boxes", async () => {
+  const el = await setup();
+  host.style.width = "220px";
+  await frames();
+  const strip = tablist(el);
+  const styleReads = vi.spyOn(window, "getComputedStyle");
+  const boxReads = vi.spyOn(Element.prototype, "getBoundingClientRect");
+  onTestFinished(() => {
+    styleReads.mockRestore();
+    boxReads.mockRestore();
+  });
+  for (let i = 0; i < 3; i += 1) strip.dispatchEvent(new Event("scroll"));
+  await frame();
+  expect(styleReads.mock.calls.filter(([read]) => read === strip)).toHaveLength(1);
+  expect(boxReads).not.toHaveBeenCalled();
+});
+
+test("a scroll just before the strip leaves the page leaves its overflow mark as it was", async () => {
+  const el = await setup();
+  host.style.width = "220px";
+  await frames();
+  expect(el.dataset.overflow).toBe("end");
+  tablist(el).dispatchEvent(new Event("scroll"));
+  el.remove();
+  await frames();
+  expect(el.dataset.overflow).toBe("end");
+});
+
+test("a strip put back in the page after a scroll was pending still reports a later scroll", async () => {
+  const el = await setup();
+  host.style.width = "220px";
+  await frames();
+  tablist(el).dispatchEvent(new Event("scroll"));
+  el.remove();
+  host.append(el);
+  await frames();
+  expect(el.dataset.overflow).toBe("end");
+  await scrollStrip(el, maxScroll(el));
+  expect(el.dataset.overflow).toBe("start");
+});
+
+function roomBesideSelected(el: WtTabs): number {
+  const selected = buttons(el).find((tab) => tab.getAttribute("aria-selected") === "true")!;
+  return tablist(el).getBoundingClientRect().width - selected.getBoundingClientRect().width;
+}
+/** The last tab selected in a 260 px strip, where the room beside it narrows the fade. */
+async function selectedWithLittleRoom(list: readonly { key: string; label: string }[] = items) {
+  const el = await setup();
+  el.items = list;
+  host.style.width = "260px";
+  el.value = "routes";
+  await el.updateComplete;
+  await frames();
+  expect(el.dataset.overflow).toBe("start");
+  const [stop] = fadeStops(el);
+  expect(stop).toBeGreaterThan(10);
+  expect(stop).toBeCloseTo(roomBesideSelected(el) / 2, 0);
+  return { el, stop: stop! };
+}
+
+test.each([
+  ["font-size", "22px"],
+  ["padding-inline", "40px"],
+])(
+  "a selected tab that grows by its %s, in a strip whose width stays, narrows the fade to half the room beside it",
+  async (property, value) => {
+    const { el, stop } = await selectedWithLittleRoom();
+    const width = tablist(el).getBoundingClientRect().width;
+    buttons(el)[2]!.style.setProperty(property, value);
+    await frames();
+    expect(tablist(el).getBoundingClientRect().width).toBe(width);
+    const room = roomBesideSelected(el);
+    expect(room / 2).toBeLessThan(stop - 1);
+    expect(fadeStops(el)[0]).toBeCloseTo(Math.max(0, room / 2), 0);
+  },
+);
+
+test("a selected tab whose label grows, with the same list of tabs, narrows the fade to half the room beside it", async () => {
+  const own = items.map((item) => ({ ...item }));
+  const { el, stop } = await selectedWithLittleRoom(own);
+  own[2]!.label = "Preparation routing and stations";
+  el.requestUpdate();
+  await el.updateComplete;
+  await frames();
+  const room = roomBesideSelected(el);
+  expect(room / 2).toBeLessThan(stop - 1);
+  expect(fadeStops(el)[0]).toBeCloseTo(Math.max(0, room / 2), 0);
+});
+
+test("control: a selected tab that shrinks back widens the fade again", async () => {
+  const { el, stop } = await selectedWithLittleRoom();
+  buttons(el)[2]!.style.fontSize = "17px";
+  await frames();
+  expect(fadeStops(el)[0]).toBeLessThan(stop - 1);
+  buttons(el)[2]!.style.fontSize = "";
+  await frames();
+  expect(fadeStops(el)).toEqual([stop]);
+});
+
+test("a selected tab that grows after the strip was taken out of the page and put back narrows the fade", async () => {
+  const { el, stop } = await selectedWithLittleRoom();
+  el.remove();
+  host.append(el);
+  await frames();
+  buttons(el)[2]!.style.fontSize = "17px";
+  await frames();
+  const room = roomBesideSelected(el);
+  expect(room / 2).toBeLessThan(stop - 1);
+  expect(fadeStops(el)[0]).toBeCloseTo(Math.max(0, room / 2), 0);
+});
+
+test("a selected tab that grows leaves a strip the reader scrolled where it is", async () => {
+  const { el } = await selectedWithLittleRoom();
+  tablist(el).scrollLeft = 0;
+  await frames();
+  buttons(el)[2]!.style.fontSize = "22px";
+  await frames();
+  expect(tablist(el).scrollLeft).toBe(0);
+});
+
+test("stops watching a tab once another is selected, and watches the new one", async () => {
+  const { el } = await selectedWithLittleRoom();
+  const old = buttons(el)[2]!;
+  const observe = vi.spyOn(ResizeObserver.prototype, "observe");
+  const unobserve = vi.spyOn(ResizeObserver.prototype, "unobserve");
+  onTestFinished(() => {
+    observe.mockRestore();
+    unobserve.mockRestore();
+  });
+  el.value = "status";
+  await el.updateComplete;
+  expect(unobserve).toHaveBeenCalledWith(old);
+  expect(observe).toHaveBeenCalledWith(buttons(el)[0], { box: "border-box" });
 });
