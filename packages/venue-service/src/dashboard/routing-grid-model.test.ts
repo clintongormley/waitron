@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { currentLocale, setLocale } from "@waitron/dashboard-kit";
+import { foldForSearch, textSearch } from "@waitron/shared";
 import {
   selectRoutingCell,
   selectionRulesFromModel,
@@ -14,14 +15,18 @@ import {
   type RoutingSelectionRules,
 } from "../routing.js";
 import {
+  blankZoneCell,
   cellPeriodLines,
   collapseAll,
   collapseCategory,
   expandAll,
   expandCategory,
+  matchRanges,
   pruneExpanded,
   rowInModel,
+  searchRows,
   visibleRoutingRows,
+  type SearchRow,
 } from "./routing-grid-model.js";
 
 const kitchen: RouteTarget = { kind: "station", stationId: "kitchen" };
@@ -1104,5 +1109,337 @@ describe("cellPeriodLines", () => {
         ]),
       ]),
     ).toEqual(["Lunch: Downstairs bar"]);
+  });
+});
+
+describe("blankZoneCell", () => {
+  const at = (zoneId: string | null, target: RouteTarget, row: RoutingRow): RoutingCell => ({
+    row,
+    zoneId,
+    target,
+  });
+  const drinks: RoutingRow = { kind: "category", categoryId: "drinks" };
+  const cocktails: RoutingRow = { kind: "category", categoryId: "cocktails" };
+  const food: RoutingRow = { kind: "category", categoryId: "food" };
+  const all: RoutingRow = { kind: "all" };
+  const product = (productId: string): RoutingRow => ({ kind: "product", productId });
+  const terraceBar: RouteTarget = { kind: "station", stationId: "tbar" };
+  const old: RouteTarget = { kind: "station", stationId: "old" };
+
+  // The routing-grid.test.ts fixture: Drinks to the Bar everywhere, Cocktails to the Terrace bar
+  // on the Terrace, Burger set to Kitchen, Food on the Inside to the disabled Old kitchen, and
+  // nothing on the Terrace prepared unless a row says otherwise.
+  const grid = (): RoutingModel => ({
+    ...model(
+      [folder("drinks"), folder("cocktails", "drinks"), folder("food")],
+      [
+        item("mojito", "cocktails"),
+        item("cola", "drinks"),
+        item("burger", "food"),
+        item("bread", null),
+      ],
+      [
+        at(null, bar, drinks),
+        at("terrace", terraceBar, cocktails),
+        at(null, kitchen, product("burger")),
+        at("inside", old, food),
+        at("terrace", noPreparation, all),
+      ],
+    ),
+    zones: [
+      { id: "terrace", name: "Terrace", departmentId: null },
+      { id: "inside", name: "Inside", departmentId: null },
+    ],
+  });
+
+  it("is blank where the zone and the row's Every zone are decided by the same cell", () => {
+    expect(blankZoneCell(grid())(product("cola"), "terrace")).toBe(true);
+  });
+
+  it("is not blank where a parent's zone cell differs from the row's Every zone", () => {
+    expect(blankZoneCell(grid())(product("mojito"), "terrace")).toBe(false);
+  });
+
+  it("is blank where the row's own Every zone decides the zone", () => {
+    expect(blankZoneCell(grid())(product("burger"), "terrace")).toBe(true);
+  });
+
+  it("is not blank where All categories' zone cell differs from the default station", () => {
+    expect(blankZoneCell(grid())(product("bread"), "terrace")).toBe(false);
+  });
+
+  it("is blank on an unset All categories zone cell, which inherits the default", () => {
+    expect(blankZoneCell(grid())(all, "inside")).toBe(true);
+  });
+
+  it("judges what the coordinate inherits, setting aside its own cell", () => {
+    // Food × Inside holds Old kitchen; without it, both sides fall to the default Kitchen.
+    expect(blankZoneCell(grid())(food, "inside")).toBe(true);
+  });
+
+  it("a row's own Every zone beats a parent's zone cell (the CLANDESTINA case)", () => {
+    const venue: RoutingModel = {
+      ...model(
+        [folder("agave"), folder("clandestina", "agave")],
+        [],
+        [
+          at("front", bar, { kind: "category", categoryId: "agave" }),
+          at(null, kitchen, { kind: "category", categoryId: "clandestina" }),
+        ],
+      ),
+      zones: [{ id: "front", name: "Front Bar", departmentId: null }],
+    };
+    const blank = blankZoneCell(venue);
+    expect(blank({ kind: "category", categoryId: "clandestina" }, "front")).toBe(true);
+    expect(blank({ kind: "category", categoryId: "agave" }, "front")).toBe(true);
+  });
+
+  describe("period lines", () => {
+    const period = (id: string, departmentId: string): RoutingPeriod => ({
+      id,
+      departmentId,
+      departmentName: departmentId,
+      name: id,
+      colour: "red",
+      productIds: [],
+    });
+    const downstairs: RouteTarget = { kind: "station", stationId: "downstairs" };
+    const lined = (
+      cell: RoutingCell,
+      lines: [string, RouteTarget][],
+    ): RoutingModel["cells"][number] => ({
+      ...cell,
+      periods: lines.map(([periodId, target]) => ({ periodId, target })),
+    });
+    // Drinks × Terrace and Drinks × Every zone both send to the Bar, so only their lines can
+    // make Cola × Terrace differ.
+    const venue = (
+      zoneLines: [string, RouteTarget][],
+      everyLines: [string, RouteTarget][],
+    ): RoutingModel => ({
+      ...model(
+        [folder("drinks")],
+        [item("cola", "drinks")],
+        [lined(at("terrace", bar, drinks), zoneLines), lined(at(null, bar, drinks), everyLines)],
+      ),
+      periods: [period("lunch", "dining"), period("aperitivo", "bar")],
+    });
+    const blank = (model: RoutingModel) => blankZoneCell(model)(product("cola"), "terrace");
+
+    it("an Every-zone line for another department's period leaves the zone blank", () => {
+      expect(blank(venue([], [["aperitivo", downstairs]]))).toBe(true);
+    });
+
+    it("a line the model does not list leaves the zone blank", () => {
+      expect(blank(venue([], [["gone", downstairs]]))).toBe(true);
+    });
+
+    it("the same lines in the zone's department leave the zone blank", () => {
+      expect(blank(venue([["lunch", downstairs]], [["lunch", downstairs]]))).toBe(true);
+    });
+
+    it("the same station with a different line in the zone's department is not blank", () => {
+      expect(blank(venue([["lunch", downstairs]], [["lunch", kitchen]]))).toBe(false);
+      expect(blank(venue([], [["lunch", kitchen]]))).toBe(false);
+      expect(blank(venue([["lunch", kitchen]], []))).toBe(false);
+    });
+
+    it("a zone the model does not list inherits the row's Every zone, so it is blank", () => {
+      expect(blankZoneCell(venue([], [["lunch", kitchen]]))(product("cola"), "nowhere")).toBe(true);
+    });
+
+    it("the default station has no lines, so a zone cell's line on the same station differs from it", () => {
+      const lunchOnAll: RoutingModel = {
+        ...model(
+          [folder("drinks")],
+          [item("cola", "drinks")],
+          [lined(at("terrace", kitchen, all), [["lunch", downstairs]])],
+        ),
+        periods: [period("lunch", "dining")],
+      };
+      expect(blankZoneCell(lunchOnAll)(product("cola"), "terrace")).toBe(false);
+    });
+  });
+});
+
+describe("matchRanges", () => {
+  const marked = (name: string, query: string) =>
+    matchRanges(name, query).map(({ start, end }) => name.slice(start, end));
+
+  it("marks nothing for a blank query or one with no words", () => {
+    expect(matchRanges("Café con leche", "  ")).toEqual([]);
+    expect(matchRanges("Café con leche", "!!")).toEqual([]);
+  });
+
+  it("marks the word being typed anywhere, accent- and case-blind, in the original text", () => {
+    expect(matchRanges("Café con leche", "cafe")).toEqual([{ start: 0, end: 4 }]);
+    expect(marked("Decafeinado", "CAFÉ")).toEqual(["cafe"]);
+    expect(marked("Clandestina Reposado", "clan")).toEqual(["Clan"]);
+  });
+
+  it("marks a finished last word only where it is whole", () => {
+    expect(marked("Café con leche", "café ")).toEqual(["Café"]);
+    expect(matchRanges("Decafeinado", "café ")).toEqual([]);
+    expect(marked("Rojo y rojos", "rojo ")).toEqual(["Rojo"]);
+  });
+
+  it("marks every word but the last only where it is whole, so a part of a word marks nothing", () => {
+    expect(matchRanges("Clandestina Reposado", "clan d")).toEqual([]);
+    expect(marked("Clandestina Reposado", "reposado clan")).toEqual(["Clan", "Reposado"]);
+  });
+
+  it("counts a digit as part of a word", () => {
+    expect(matchRanges("Mesa 12", "2 ")).toEqual([]);
+    expect(marked("Mesa 12", "2")).toEqual(["2"]);
+  });
+
+  it("marks every occurrence, merging ranges that overlap or touch", () => {
+    expect(marked("Rojo y rojo", "rojo ")).toEqual(["Rojo", "rojo"]);
+    expect(matchRanges("aaa", "aa")).toEqual([{ start: 0, end: 3 }]);
+    expect(matchRanges("abab", "ab")).toEqual([{ start: 0, end: 4 }]);
+  });
+
+  it("maps folded positions back through decomposed accents, final sigma and surrogate pairs", () => {
+    expect(marked("Café solo", "cafe")).toEqual(["Café"]);
+    expect(marked("ΟΔΟΣ", "οδος")).toEqual(["ΟΔΟΣ"]);
+    expect(marked("🍔 Burger", "burger")).toEqual(["Burger"]);
+    expect(marked("\u0301abc", "abc")).toEqual(["abc"]);
+  });
+
+  it("marks something exactly when textSearch matches the folded name", () => {
+    const names = [
+      "Clandestina Reposado",
+      "CLANDESTINA",
+      "Café con leche",
+      "Decafeinado",
+      "Café solo",
+      "Mesa 12",
+      "ΟΔΟΣ",
+      "🍔 Burger",
+      "Rojo y rojo",
+    ];
+    const queries = [
+      "clan",
+      "clan ",
+      "clan d",
+      "reposado clan",
+      "clandestina repo",
+      "café",
+      "café ",
+      "cafe solo",
+      "12",
+      "2 ",
+      "οδοσ",
+      "rojo rojo",
+      "!!",
+      "zzz",
+    ];
+    for (const name of names) {
+      for (const query of queries) {
+        const matches = textSearch(query)?.rank(foldForSearch(name)) !== undefined;
+        expect([name, query, matchRanges(name, query).length > 0]).toEqual([name, query, matches]);
+      }
+    }
+  });
+});
+
+describe("searchRows", () => {
+  const deli = (): RoutingModel =>
+    model(
+      [
+        folder("santet", null, "Santet Deli Co"),
+        folder("agave", "santet", "AGAVE"),
+        folder("clandestina", "agave", "CLANDESTINA"),
+        folder("mezcal", "agave", "MEZCAL"),
+        folder("food", null, "Food"),
+      ],
+      [
+        item("reposado", "agave", "Clandestina Reposado"),
+        item("blanco", "agave", "Tequila Blanco"),
+        item("shot", "clandestina", "Shot"),
+        item("burger", "food", "Burger"),
+        item("coffee", null, "Café con leche"),
+        item("water", null, "Water"),
+      ],
+    );
+  /** One line per row: indentation is depth, then the label, then match or parent. */
+  const lines = (rows: readonly SearchRow[]) =>
+    outline(rows.map((row) => row.entry)).map(
+      (line, i) => `${line}${rows[i]!.match ? " match" : ""}${rows[i]!.parent ? " parent" : ""}`,
+    );
+
+  it("is undefined for a blank query: no search", () => {
+    expect(searchRows(deli(), "")).toBeUndefined();
+    expect(searchRows(deli(), "   ")).toBeUndefined();
+  });
+
+  it("lists each match under every ancestor, in tree order; ancestors open, matches closed", () => {
+    const found = searchRows(deli(), "clan")!;
+    expect(lines(found.rows)).toEqual([
+      "[All] parent",
+      "  C:Santet Deli Co parent",
+      "    C:AGAVE <Santet Deli Co> parent",
+      "      C:CLANDESTINA <Santet Deli Co/AGAVE> match",
+      "      P:Clandestina Reposado <Santet Deli Co/AGAVE> match",
+    ]);
+    expect(found.count).toBe(2);
+    expect([...found.open].sort()).toEqual(["agave", "santet"]);
+    expect(found.rows.map((row) => row.ranges)).toEqual([
+      [],
+      [],
+      [],
+      [{ start: 0, end: 4 }],
+      [{ start: 0, end: 4 }],
+    ]);
+  });
+
+  it("an opened match lists all its children; an open ancestor only the way to a match", () => {
+    const opened = new Set([...searchRows(deli(), "clan")!.open, "clandestina"]);
+    expect(lines(searchRows(deli(), "clan", opened)!.rows)).toEqual([
+      "[All] parent",
+      "  C:Santet Deli Co parent",
+      "    C:AGAVE <Santet Deli Co> parent",
+      "      C:CLANDESTINA <Santet Deli Co/AGAVE> match",
+      "        P:Shot <Santet Deli Co/AGAVE/CLANDESTINA>",
+      "      P:Clandestina Reposado <Santet Deli Co/AGAVE> match",
+    ]);
+  });
+
+  it("a closed ancestor hides the matches under it, and the count still includes them", () => {
+    const found = searchRows(deli(), "clan", collapseAll())!;
+    expect(lines(found.rows)).toEqual(["[All] parent", "  C:Santet Deli Co parent"]);
+    expect(found.count).toBe(2);
+    expect(found.open.size).toBe(0);
+  });
+
+  it("every word must match", () => {
+    const found = searchRows(deli(), "clandestina repo")!;
+    expect(lines(found.rows).at(-1)).toBe(
+      "      P:Clandestina Reposado <Santet Deli Co/AGAVE> match",
+    );
+    expect(found.count).toBe(1);
+    expect(found.rows.filter((row) => row.match)).toHaveLength(1);
+  });
+
+  it("lists an uncategorised match under No category, with its accent-blind range", () => {
+    const found = searchRows(deli(), "cafe")!;
+    expect(lines(found.rows)).toEqual([
+      "[All] parent",
+      "[No category] parent",
+      "  P:Café con leche match",
+    ]);
+    expect(found.rows.at(-1)!.ranges).toEqual([{ start: 0, end: 4 }]);
+    expect(found.count).toBe(1);
+  });
+
+  it("with no match lists All categories alone", () => {
+    const found = searchRows(deli(), "zzz")!;
+    expect(lines(found.rows)).toEqual(["[All] parent"]);
+    expect(found.count).toBe(0);
+  });
+
+  it("adds no rows for a cell of a row's own", () => {
+    const routed = { ...deli(), cells: [categoryCell("food"), productCell("water")] };
+    expect(lines(searchRows(routed, "zzz")!.rows)).toEqual(["[All] parent"]);
   });
 });

@@ -1,4 +1,4 @@
-import { createLabelComparator } from "@waitron/shared";
+import { createLabelComparator, foldForSearch, textSearch } from "@waitron/shared";
 import {
   cellKey,
   selectionRulesFromModel,
@@ -11,6 +11,7 @@ import {
   type RoutingModel,
   type RoutingPeriod,
   type RoutingRow,
+  type SelectedCell,
 } from "../routing.js";
 import type { PeriodLine, RoutingModelCell } from "../routing-types.js";
 import { format } from "./hours-view.js";
@@ -318,4 +319,178 @@ export function cellPeriodLines(
     const deciding = decidedBy?.kind === "cell" ? cells.get(cellKey(decidedBy.address)) : undefined;
     return { inherited: true, lines: linesOf(deciding?.periods ?? [], zoneId, false) };
   };
+}
+
+/**
+ * Whether a zone cell, judged without any setting of its own, draws blank: it inherits the same
+ * target as the row's own Every zone, and the same (period, target) lines that apply in the zone —
+ * each side's lines being those its deciding cell stores, for periods the model lists and of the
+ * zone's department. The grid draws a cell set here, or a waiting choice, before asking.
+ */
+export function blankZoneCell(model: RoutingModel): (row: RoutingRow, zoneId: string) => boolean {
+  const rules = selectionRulesFromModel(model);
+  const cells = new Map(model.cells.map((cell) => [cellKey(cell), cell]));
+  const periodDepartment = new Map(model.periods.map(({ id, departmentId }) => [id, departmentId]));
+  const categoryOf = new Map(model.products.map(({ id, categoryId }) => [id, categoryId]));
+  const zoneDepartment = new Map(model.zones.map(({ id, departmentId }) => [id, departmentId]));
+  return (row, zoneId) => {
+    const category = row.kind === "product" ? categoryOf.get(row.productId) : null;
+    const zone = selectRoutingCell(rules, row, zoneId, category, { skipOwn: true });
+    const every = selectRoutingCell(rules, row, null, category);
+    if (targetKey(zone.target) !== targetKey(every.target)) return false;
+    const departmentId = zoneDepartment.get(zoneId) ?? null;
+    const linesOf = ({ decidedBy }: SelectedCell): Set<string> => {
+      const deciding =
+        decidedBy?.kind === "cell" ? cells.get(cellKey(decidedBy.address)) : undefined;
+      return new Set(
+        (deciding?.periods ?? [])
+          .filter(({ periodId }) => periodDepartment.get(periodId) === departmentId)
+          .map(({ periodId, target }) => `${periodId} ${targetKey(target)}`),
+      );
+    };
+    const zoneLines = linesOf(zone);
+    const everyLines = linesOf(every);
+    return (
+      zoneLines.size === everyLines.size && [...zoneLines].every((line) => everyLines.has(line))
+    );
+  };
+}
+
+/** UTF-16 offsets into the name as given: `start` inclusive, `end` exclusive. */
+export interface MatchRange {
+  readonly start: number;
+  readonly end: number;
+}
+
+// textSearch's word rules (packages/shared/src/text-search.ts), copied rather than exported from
+// there: a word is letters and digits, and a query still being typed ends in one.
+const WORD = "[\\p{L}\\p{N}]";
+
+/**
+ * Where in `name` each query word sits, by `textSearch`'s rules: the word still being typed
+ * anywhere, every other word only where it is whole. Sorted, with ranges that overlap or touch
+ * merged. Empty exactly when `textSearch(query)` does not match the folded name.
+ */
+export function matchRanges(name: string, query: string): readonly MatchRange[] {
+  const folded = foldForSearch(name);
+  if (textSearch(query)?.rank(folded) === undefined) return [];
+  const foldedQuery = foldForSearch(query);
+  // A match means the query has at least one word.
+  const words = foldedQuery.match(new RegExp(`${WORD}+`, "gu"))!;
+  const typing = new RegExp(`${WORD}$`, "u").test(foldedQuery);
+  // Folding one code point at a time gives the same length as folding the whole name: only the
+  // final sigma depends on its neighbours, and both sigmas are one unit long.
+  const starts: number[] = [];
+  const ends: number[] = [];
+  let offset = 0;
+  for (const character of name) {
+    const piece = foldForSearch(character);
+    for (let i = 0; i < piece.length; i++) {
+      starts.push(offset);
+      ends.push(offset + character.length);
+    }
+    // A combining mark folds to nothing; it belongs with the letter before it.
+    if (piece.length === 0 && ends.length > 0) ends[ends.length - 1] = offset + character.length;
+    offset += character.length;
+  }
+  const found: [number, number][] = [];
+  words.forEach((word, i) => {
+    if (typing && i === words.length - 1) {
+      for (let at = folded.indexOf(word); at !== -1; at = folded.indexOf(word, at + 1))
+        found.push([at, at + word.length]);
+    } else {
+      for (const { index } of folded.matchAll(new RegExp(`(?<!${WORD})${word}(?!${WORD})`, "gu")))
+        found.push([index, index + word.length]);
+    }
+  });
+  found.sort((a, b) => a[0] - b[0]);
+  const ranges: { start: number; end: number }[] = [];
+  for (const [from, to] of found) {
+    const start = starts[from]!;
+    const end = ends[to - 1]!;
+    const last = ranges.at(-1);
+    if (last !== undefined && start <= last.end) last.end = Math.max(last.end, end);
+    else ranges.push({ start, end });
+  }
+  return ranges;
+}
+
+export interface SearchRow {
+  readonly entry: GridRow;
+  /** The category's or product's own name matches the query. */
+  readonly match: boolean;
+  /** Not a match, but leads to one: All categories always, an ancestor, No category over its matches. */
+  readonly parent: boolean;
+  /** Empty unless `match`. */
+  readonly ranges: readonly MatchRange[];
+}
+
+export interface RoutingSearch {
+  /** Tree order, as `visibleRoutingRows` sorts it. */
+  readonly rows: readonly SearchRow[];
+  /** Every match, shown or under a closed category. */
+  readonly count: number;
+  /** The open categories the rows were drawn with. */
+  readonly open: ReadonlySet<string>;
+}
+
+/**
+ * The rows a search shows: All categories, then each category or product whose own name matches
+ * and each of its ancestors (No category over an uncategorised match). `open` defaults to every
+ * category that is an ancestor of a match, so matched categories start closed. An open ancestor
+ * lists only its children that match or lead to a match; any other open category lists all its
+ * children. A cell of a row's own adds no row. Undefined for a blank query: no search.
+ */
+export function searchRows(
+  model: RoutingModel,
+  query: string,
+  open?: ReadonlySet<string>,
+): RoutingSearch | undefined {
+  const search = textSearch(query);
+  if (search === undefined) return undefined;
+  const tree = visibleRoutingRows(model, expandAll(model));
+  // With every category expanded, a row's parent is the nearest row above it one level up.
+  const parentOf: number[] = [];
+  const stack: number[] = [];
+  tree.forEach((entry, i) => {
+    while (stack.length > 0 && tree[stack.at(-1)!]!.depth >= entry.depth) stack.pop();
+    parentOf.push(stack.at(-1) ?? -1);
+    stack.push(i);
+  });
+  const match = tree.map(
+    ({ row, name }) =>
+      (row.kind === "category" || row.kind === "product") &&
+      search.rank(foldForSearch(name)) !== undefined,
+  );
+  const leads = new Set<number>([0]);
+  match.forEach((matched, i) => {
+    if (!matched) return;
+    for (let up = parentOf[i]!; up !== -1 && !leads.has(up); up = parentOf[up]!) leads.add(up);
+  });
+  const opened =
+    open ??
+    new Set(
+      [...leads].flatMap((i) => {
+        const { row } = tree[i]!;
+        return row.kind === "category" ? [row.categoryId] : [];
+      }),
+    );
+  const isOpen = ({ row }: GridRow) => row.kind !== "category" || opened.has(row.categoryId);
+  const shown: boolean[] = [];
+  const rows: SearchRow[] = [];
+  tree.forEach((entry, i) => {
+    const up = parentOf[i]!;
+    const relevant = match[i]! || leads.has(i);
+    const visible =
+      up === -1 ? relevant : shown[up]! && isOpen(tree[up]!) && (relevant || !leads.has(up));
+    shown.push(visible);
+    if (!visible) return;
+    rows.push({
+      entry,
+      match: match[i]!,
+      parent: !match[i]! && leads.has(i),
+      ranges: match[i]! ? matchRanges(entry.name, query) : [],
+    });
+  });
+  return { rows, count: match.filter(Boolean).length, open: opened };
 }
