@@ -1,5 +1,10 @@
 # Venue details implementation plan (A261 step 7)
 
+> **2026-10-11, A495:** the [dated business-day design](../specs/2026-10-11-a495-business-day-history-design.md) replaces the
+> scalar start edit and its history lock. The time-zone lock remains. Reports and actual-date
+> service views resolve each date through the retained timeline; pending changes pause hours
+> edits. Earlier scalar-clock decisions below remain historical.
+
 > **2026-10-10, A366 slice 7:** C10 and the W111 reprint receipt below describe the earlier
 > current-address path. The [slice 7 plan](2026-10-08-a366-slice-7-receipts-per-department.md)
 > keeps one venue-wide address switch for thermal and till presentation and omits the optional

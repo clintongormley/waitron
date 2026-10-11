@@ -1012,18 +1012,15 @@ in the sweep below are retired. The booking writer remains; the account below re
   period, `CLOCK_TIME` in `packages/venue-service/src/hours-rules.ts`). The interval tables
   `station_hours` and `department_hours` this line named until 2026-10-06 are dropped by
   venue-service `0022_retire_legacy_hours`.
-- **`locations.day_cutover`** is written during creation through `normalizeDayCutover`
-  (`packages/provisioning/src/venue-plan.ts`), which pads `HH:MM` and stores any other string
-  unchanged. Its one text comparison (`packages/venue-service/src/routing-store.ts`, `todayEnds`)
-  reads only the stored value's first five characters, which `readLocationClock`
-  (`packages/reporting/src/business-day.ts`) keeps. It runs only when those five pass the `HH:MM`
-  check there, so a value whose first five characters are not a time switches it off, while
-  anything after them is dropped unread (`06:00garbage` reads as `06:00`) — traced by reading. The
-  detail editor (`apps/server/src/venue-details.ts`) separately validates a changed cutover as
-  `HH:MM` or `HH:MM:00` and stores its whole-second spelling. Its real-database validation cases
-  are in `apps/server/src/venue-details.test.ts`; an unrelated edit preserves the saved spelling.
-  This editor displays malformed saved cutovers in full so an eligible correction is a real change;
-  its preview reports the current clock as unavailable for that value.
+- **`locations.day_cutover`** keeps the initial business-day start, written by
+  `normalizeDayCutover` during provisioning. Dated starts live in `location_day_cutover_changes`;
+  `readLocationClock` returns both, and the shared resolver selects each date's boundary. The
+  general venue-details PATCH refuses a changed start. The dated writer stores `HH:MM:00` and
+  validates its effective date, revision, retained history and authored schedules inside the
+  write transaction. Unrelated venue edits preserve the baseline spelling. The editor shows an
+  unreadable clock but provides no repair path. The request cases are in
+  `apps/server/src/business-day-start.test.ts`; historical reports and frozen close/fiscal rows
+  are compared in `apps/server/src/business-day-history.test.ts`.
 - **Writers that skip the helpers.** The configuration import
   (`importConfigurationTables`, `apps/server/src/configuration-transfer.ts`) copies the time values
   in a bundle's rows as written, without the normalising helpers. Several `created_at` columns that

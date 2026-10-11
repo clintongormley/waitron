@@ -1302,11 +1302,6 @@ _Formerly entries spread across the old sections, A261's venue-operations steps 
   carries the old name, and a later cancellation of an earlier invoice carries the new one. Waits
   on the asesor's answer to Q37(d), S18 in `docs/compliance/asesor-questions.md`.
 
-- **A495. Change the business-day start from a future date (owner, 2026-10-11).** Refused today once
-  a venue has sales, because reports would regroup old days. Store the start with the date it takes
-  effect. Fiscal-adjacent: the owner lands it.
-  [Detail](backlog/service-periods.md#a495-change-the-business-day-start-from-a-future-date)
-
 - **A506. Opening hours rebuilt around seasons and special days (owner, 2026-10-11).** One
   standard week becomes four seasons that cover the whole year and repeat every year; special days
   are painted on top of the season, a stretch at a time. The page opens on a year calendar, and
@@ -1364,10 +1359,6 @@ _Formerly entries spread across the old sections, A261's venue-operations steps 
 - **Who authorised today's station or period change** — A366 slice 3 decision 14 leaves
   the authorising person's identity unstored. Decide whether to retain that identity before
   adding a history view. [Detail](backlog/service-periods.md#who-authorised-todays-station-or-period-change)
-
-- **Changing the business-day start after saving service hours** — open review follow-up from
-  A366-1. Reproduce through the real settings route before choosing a fix; the reviewer changed
-  the setting directly in the database. [Detail](backlog/service-periods.md#changing-the-business-day-start-after-saving-service-hours)
 
 - **Departments, service styles and opening hours (A254, owner 2026-10-03) — residuals.**
   Tabs without tables, the remaining department-name survey, and advisor questions stay open.

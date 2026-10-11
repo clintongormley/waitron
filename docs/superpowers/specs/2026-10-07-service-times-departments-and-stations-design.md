@@ -1,5 +1,10 @@
 # Service times, departments, zones and prep stations
 
+> **2026-10-11, A495:** the [dated business-day design](2026-10-11-a495-business-day-history-design.md) replaces the
+> scalar start edit and its history lock. The time-zone lock remains. Reports and actual-date
+> service views resolve each date through the retained timeline; pending changes pause hours
+> edits. Earlier scalar-clock decisions below remain historical.
+
 > **2026-10-11 supersession.** A435 step 6 replaces zone/department Disable and Enable with permanent Delete. Deleted configuration maintenance is refused; internal receipt printing and retained media usage remain. See the
 > [step 6 reconciliation](../plans/2026-10-11-a435-6-tables-zones-departments-delete.md). Earlier behavior and receipts below remain historical.
 

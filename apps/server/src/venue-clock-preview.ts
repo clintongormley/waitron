@@ -1,6 +1,6 @@
 import { businessDayStart, civilDateOf as civilDate, venueMomentAt } from "@waitron/reporting";
 import type { BusinessDayClock } from "@waitron/shared";
-import { AppError } from "@waitron/shared";
+import { AppError, cutoverForBusinessDay } from "@waitron/shared";
 import type { VenueClockPreview, VenueClockView } from "./venue-detail-types.js";
 import "./errors.js";
 
@@ -56,7 +56,7 @@ function view(at: Date, clock: Clock): VenueClockView | null {
   }
   return {
     timeZone: clock.timeZone,
-    dayCutover: clock.dayCutover.slice(0, 5),
+    dayCutover: cutoverForBusinessDay(clock, moment.businessDay),
     civilDate: civilDate(at, clock.timeZone),
     timeOfDay: moment.timeOfDay,
     businessDay: moment.businessDay,

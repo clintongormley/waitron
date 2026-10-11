@@ -609,3 +609,21 @@ describe("dated start schedule refusal", () => {
     expect(await clockRows()).toEqual(saved);
   });
 });
+
+it("the general clock preview shows the dated start in force at the supplied instant", async () => {
+  await inTx((tx) =>
+    tx.insert(locationDayCutoverChanges).values({
+      locationId: venue.cfg.locationId,
+      effectiveBusinessDay: "2026-11-04",
+      dayCutover: "07:00:00",
+    }),
+  );
+  at = new Date("2026-11-04T06:00:00.000Z");
+  const response = await request(
+    "GET",
+    "/clock-preview?timeZone=Europe%2FMadrid&dayCutover=07%3A00",
+  );
+  expect(response.status).toBe(200);
+  const answer = await response.json();
+  expect(answer.current).toMatchObject({ businessDay: "2026-11-04", dayCutover: "07:00" });
+});
