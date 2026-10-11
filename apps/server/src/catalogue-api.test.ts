@@ -1110,6 +1110,93 @@ describe("mountCatalogueApi — catalogues", () => {
     const res = await send(mountApp(), "GET", "/management-api/catalogues", { cookie: null });
     expect(res.status).toBe(401);
   });
+
+  const duplicatePath = (id: string) => `/management-api/catalogues/${id}/duplicate`;
+  const catalogueCount = async () =>
+    (await suite.db.execute<{ n: number }>(sql`select count(*) as n from catalogues`)).rows[0]!.n;
+
+  it("POST /management-api/catalogues/:id/duplicate answers 201 with the copy, which GET then lists", async () => {
+    const app = mountApp();
+    const source = await createCatalogueVia(app, "Duplicable lunch");
+    const res = await send(app, "POST", duplicatePath(source), {
+      body: { name: "Duplicable lunch (copy)" },
+    });
+    expect(res.status).toBe(201);
+    const copy = (await res.json()) as { id: string; name: string; active: boolean };
+    expect(copy).toMatchObject({ name: "Duplicable lunch (copy)", active: true });
+    expect(copy.id).toMatch(/^[0-9a-f-]{36}$/);
+    expect(copy.id).not.toBe(source);
+    const rows = (await (await send(app, "GET", "/management-api/catalogues")).json()) as {
+      id: string;
+      name: string;
+    }[];
+    expect(rows.find((r) => r.id === copy.id)?.name).toBe("Duplicable lunch (copy)");
+    expect(rows.find((r) => r.id === source)?.name).toBe("Duplicable lunch");
+  });
+
+  it("POST /management-api/catalogues/:id/duplicate unauthenticated → 401, nothing written", async () => {
+    const app = mountApp();
+    const source = await createCatalogueVia(app, "Unauthenticated source");
+    const before = await catalogueCount();
+    const res = await send(app, "POST", duplicatePath(source), {
+      body: { name: "Copy" },
+      cookie: null,
+    });
+    expect(res.status).toBe(401);
+    expect(await res.json()).toMatchObject({ error: { code: "management_session.required" } });
+    expect(await catalogueCount()).toBe(before);
+  });
+
+  it("POST /management-api/catalogues/:id/duplicate as a staff-role session → 403 authorization.not_permitted, nothing written", async () => {
+    const app = mountApp();
+    const source = await createCatalogueVia(app, "Staff source");
+    const before = await catalogueCount();
+    const res = await send(app, "POST", duplicatePath(source), {
+      body: { name: "Copy" },
+      cookie: staffCookie,
+    });
+    expect(res.status).toBe(403);
+    expect(await res.json()).toMatchObject({ error: { code: "authorization.not_permitted" } });
+    expect(await catalogueCount()).toBe(before);
+  });
+
+  it("POST /management-api/catalogues/:id/duplicate of an unknown menu → 404 catalogue.not_found, nothing written", async () => {
+    const before = await catalogueCount();
+    const missing = crypto.randomUUID();
+    const res = await send(mountApp(), "POST", duplicatePath(missing), {
+      body: { name: "Copy" },
+    });
+    expect(res.status).toBe(404);
+    expect(await res.json()).toMatchObject({
+      error: { code: "catalogue.not_found", params: { catalogueId: missing } },
+    });
+    expect(await catalogueCount()).toBe(before);
+  });
+
+  it("POST /management-api/catalogues/:id/duplicate with a malformed id → 400 shared.invalid_id, nothing written", async () => {
+    const before = await catalogueCount();
+    const res = await send(mountApp(), "POST", duplicatePath("bad-id"), { body: { name: "Copy" } });
+    expect(res.status).toBe(400);
+    expect(await res.json()).toMatchObject({
+      error: { code: "shared.invalid_id", params: { kind: "MenuId", value: "bad-id" } },
+    });
+    expect(await catalogueCount()).toBe(before);
+  });
+
+  it.each([undefined, 123, "", "   "])(
+    "POST /management-api/catalogues/:id/duplicate with the name %j → 400 management.request_invalid, nothing written",
+    async (name) => {
+      const app = mountApp();
+      const source = await createCatalogueVia(app, "Blank-name source");
+      const before = await catalogueCount();
+      const res = await send(app, "POST", duplicatePath(source), { body: { name } });
+      expect(res.status).toBe(400);
+      expect(await res.json()).toMatchObject({
+        error: { code: "management.request_invalid", params: { field: "name" } },
+      });
+      expect(await catalogueCount()).toBe(before);
+    },
+  );
 });
 
 describe("mountCatalogueApi — location menus", () => {

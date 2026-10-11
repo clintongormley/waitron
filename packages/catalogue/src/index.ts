@@ -82,6 +82,7 @@ export {
   syncMenuOffers,
   type MenuStructureNode,
 } from "./menu-structure.js";
+export { duplicateMenu } from "./menu-copy.js";
 export {
   MENU_DOCUMENT_FORMAT,
   applyLiveFields,

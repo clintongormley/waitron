@@ -308,6 +308,52 @@ it("does not close for disabled actions or already handled Escape", async () => 
   expect(popup.matches(":popover-open")).toBe(false);
 });
 
+describe("an action judged before its own click listeners run", () => {
+  it("closes when the action disables itself in its own click handler", async () => {
+    const { edit, popup } = await mountActions();
+    edit.addEventListener("click", () => edit.setAttribute("disabled", ""));
+    popup.showPopover();
+    edit.click();
+    expect(edit.hasAttribute("disabled")).toBe(true);
+    expect(popup.matches(":popover-open")).toBe(false);
+  });
+
+  it("closes under a real pointer click when the handler disables the action through a later update", async () => {
+    const { edit, trigger, popup } = await mountActions();
+    edit.addEventListener("click", () => queueMicrotask(() => (edit.disabled = true)));
+    await userEvent.click(trigger);
+    await userEvent.click(edit);
+    expect(edit.disabled).toBe(true);
+    expect(popup.matches(":popover-open")).toBe(false);
+  });
+
+  it("stays open when the action was disabled before the click, even if its handler enables it", async () => {
+    const { el, popup } = await mountActions();
+    const action = document.createElement("a");
+    action.href = "#";
+    action.textContent = "Unavailable action";
+    action.setAttribute("aria-disabled", "true");
+    action.addEventListener("click", (event) => {
+      event.preventDefault();
+      action.removeAttribute("aria-disabled");
+    });
+    el.append(action);
+    popup.showPopover();
+    action.click();
+    expect(action.hasAttribute("aria-disabled")).toBe(false);
+    expect(popup.matches(":popover-open")).toBe(true);
+  });
+
+  it("stays open for a data-keep-open action that disables itself in its own click handler", async () => {
+    const { edit, popup } = await mountActions();
+    edit.setAttribute("data-keep-open", "");
+    edit.addEventListener("click", () => edit.setAttribute("disabled", ""));
+    popup.showPopover();
+    edit.click();
+    expect(popup.matches(":popover-open")).toBe(true);
+  });
+});
+
 test("puts a badge-slotted element inside the trigger button", async () => {
   const el = (await mount(
     '<wt-row-actions label="Alerts"><span slot="badge">3</span><wt-button>See all</wt-button></wt-row-actions>',

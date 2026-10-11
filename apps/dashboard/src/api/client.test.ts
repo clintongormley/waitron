@@ -593,6 +593,19 @@ describe("DashboardApi", () => {
     });
   });
 
+  it("duplicateCatalogue POSTs the copy's name to the menu's duplicate route and returns the copy", async () => {
+    const copy = { id: "c3", name: "Cena (copia)", active: true, version: 1 };
+    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(copy, true, 201));
+    const api = new DashboardApi("", fetchImpl);
+    expect(await api.duplicateCatalogue("c2", "Cena (copia)")).toEqual(copy);
+    expect(fetchImpl).toHaveBeenCalledWith("/management-api/catalogues/c2/duplicate", {
+      method: "POST",
+      credentials: "include",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ name: "Cena (copia)" }),
+    });
+  });
+
   it("listLocationCatalogues GETs a location's menu membership with credentials", async () => {
     const rows = [
       { id: "c1", name: "Casa", active: true, version: 1, sellable: true, isDefault: true },

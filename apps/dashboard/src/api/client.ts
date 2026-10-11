@@ -2161,6 +2161,14 @@ export class DashboardApi {
     });
   }
 
+  duplicateCatalogue(id: string, name: string): Promise<CatalogueSummary> {
+    return this.#request<CatalogueSummary>(
+      `/management-api/catalogues/${encodeURIComponent(id)}/duplicate`,
+      "POST",
+      { name },
+    );
+  }
+
   renameCatalogue(id: string, name: string): Promise<void> {
     return this.#request<void>(`/management-api/catalogues/${id}`, "PATCH", { name });
   }

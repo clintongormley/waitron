@@ -339,6 +339,11 @@ describe("Catalogue API — option groups, gates, by-id FKs", () => {
     );
     const ZERO_UUID = "00000000-0000-0000-0000-000000000000";
     await expect403(
+      await send(app, "POST", `/management-api/catalogues/${ZERO_UUID}/duplicate`, staffCookie, {
+        name: "Refused",
+      }),
+    );
+    await expect403(
       await send(app, "POST", `/management-api/locations/${ZERO_UUID}/catalogues`, staffCookie, {
         catalogueId: ZERO_UUID,
       }),
@@ -535,4 +540,41 @@ describe("sections and the reporting and routing they do not touch", () => {
     expect(await categoryOf()).toBe(categoryId);
     expect(await rules()).toEqual(before);
   });
+});
+
+it("duplicating a menu leaves every menu period naming the source and none naming the copy", async () => {
+  const v = await setupVenue();
+  const app = mountApp();
+  const source = await createCatalogue(app, v.managerCookie, "Dinner to duplicate");
+  const department = (
+    await suite.db.execute<{ id: string }>(
+      sql`select id from departments where location_id = ${v.locationId} limit 1`,
+    )
+  ).rows[0]!.id;
+  const periodId = crypto.randomUUID();
+  await suite.db.execute(
+    sql`insert into menu_periods (id, department_id, name, menu_id)
+        values (${periodId}, ${department}, ${`Dinner period ${periodId}`}, ${source})`,
+  );
+  const periodsNaming = async (menuId: string) =>
+    (
+      await suite.db.execute<{ id: string }>(
+        sql`select id from menu_periods where menu_id = ${menuId} order by id`,
+      )
+    ).rows.map((row) => row.id);
+  const before = await periodsNaming(source);
+  expect(before).toContain(periodId);
+
+  const res = await send(
+    app,
+    "POST",
+    `/management-api/catalogues/${source}/duplicate`,
+    v.managerCookie,
+    { name: "Dinner to duplicate (copy)" },
+  );
+  expect(res.status).toBe(201);
+  const copy = ((await res.json()) as { id: string }).id;
+
+  expect(await periodsNaming(source)).toEqual(before);
+  expect(await periodsNaming(copy)).toEqual([]);
 });

@@ -304,11 +304,14 @@ export async function createCatalogue(
     image: input.image,
     color: input.color,
   });
-  const [row] = await tx
-    .insert(catalogues)
-    .values({ name: presentation.internalName! })
-    .returning(CATALOGUE_COLUMNS);
-  await createMenuShell(tx, row!.id, row!.name, presentation);
+  const row = await insertCatalogue(tx, presentation.internalName!);
+  await createMenuShell(tx, row.id, row.name, presentation);
+  return row;
+}
+
+/** The menu's own row alone; the caller writes its root and home sections and its `menu_details` row. */
+export async function insertCatalogue(tx: Transaction, name: string): Promise<Catalogue> {
+  const [row] = await tx.insert(catalogues).values({ name }).returning(CATALOGUE_COLUMNS);
   return row!;
 }
 
