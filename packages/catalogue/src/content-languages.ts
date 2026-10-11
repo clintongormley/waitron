@@ -105,22 +105,27 @@ export async function readContentTranslationCandidates(
     with include_folders as materialized (
       select m.id, json_patch(s.names, json_extract(m.folder_overrides, '$.names')) as translations
         from section_members m join sections s on s.id = m.child_section_id
-        where s.role = 'menu_root'
+          join sections owner on owner.id = m.section_id
+          join catalogues c on c.id = owner.owner_menu_id
+        where s.role = 'menu_root' and c.active = 1
     )
     select 'product' as kind, id, null as product_id, customer_name as translations from products
-      where parent_id is null and customer_name is not null and customer_name <> '{}'
+      where parent_id is null and active = 1 and customer_name is not null and customer_name <> '{}'
     union all select 'unit' as kind, id, null, name as translations from units
     union all select 'variant' as kind, id, parent_id, customer_name as translations from products
       where parent_id is not null and active = 1
+        and exists (select 1 from products parent where parent.id = products.parent_id and parent.active = 1)
         and customer_name is not null and customer_name <> '{}'
     union all select 'option_list' as kind, id, null, customer_name as translations
-      from option_lists where customer_name is not null and customer_name <> '{}'
+      from option_lists where active = 1 and customer_name is not null and customer_name <> '{}'
     union all select 'option_label' as kind, id, null, customer_name as translations
       from option_labels where customer_name is not null and customer_name <> '{}'
+        and exists (select 1 from option_lists l where l.id = option_labels.list_id and l.active = 1)
     union all select 'extra_list' as kind, id, null, customer_name as translations
-      from extra_lists where customer_name is not null and customer_name <> '{}'
+      from extra_lists where active = 1 and customer_name is not null and customer_name <> '{}'
     union all select 'menu_section' as kind, id, null, names as translations
       from sections where role in ('section', 'menu_root') and names <> '{}'
+        and exists (select 1 from catalogues c where c.id = sections.owner_menu_id and c.active = 1)
     union all select 'menu_include' as kind, id, null, translations from include_folders
       where exists (select 1 from json_each(translations) where trim(value) <> '')
   `);

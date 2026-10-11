@@ -907,13 +907,6 @@ _Formerly the catalogue and menus entries in the opening part of the old Track A
   language before it gets there (`apps/server/src/working-order.ts`), so whether any surface shows
   the difference is unknown; reproduce before fixing. [Detail](backlog/catalogue.md#joincustomerpresentationtext-passes-the-requested-language-where-the-default-belongs--open-found-2026-10-02-by-a172-not-measured)
 
-- **The default-change check counts deleted and switched-off things — OPEN (noted 2026-10-01 by
-  C122; I believe this predates the branch).** `listContentTranslationGaps`
-  (`packages/catalogue/src/content-languages.ts`) has no `active` filter on top-level products,
-  options lists, extras lists or a menu's sections, and keeps a variant whose product is deleted, so
-  a deleted product's partly translated name blocks a change of default while the Missing
-  translations list leaves it out. [Detail](backlog/catalogue.md#the-default-change-check-counts-deleted-and-switched-off-things--open-noted-2026-10-01-by-c122-i-believe-this-predates-the-branch)
-
 - **Menu draft/published state** and time-of-day / seasonal scheduling.
 
 - **Language resolution follow-ons** — there is still no single shared rule: the receipt's
