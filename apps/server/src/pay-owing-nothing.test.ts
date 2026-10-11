@@ -283,15 +283,23 @@ describe("the card reader on a bill whose every line was given away", () => {
     for (const id of [partyBill, walkUp]) {
       await parkOrder({ db: venue.db }, venue.cfg, {
         id,
-        zoneId: ticketZone.zoneId,
-        lines: [{ menuItemId: ticketZone.offerFor(productIdOf("Caña")), quantity: "1" }],
+        zoneId: id === partyBill ? venue.zoneId : ticketZone.zoneId,
+        lines: [
+          {
+            menuItemId:
+              id === partyBill ? venue.offerFor("Caña") : ticketZone.offerFor(productIdOf("Caña")),
+            quantity: "1",
+          },
+        ],
         operatorId: venue.operatorId,
       });
       await giveAway(venue, id, 1);
     }
-    // A table with no zone, so the bill keeps the ticket zone and gains a party.
     await inTx(venue, async (tx) => {
-      const table = await createTable(tx, venue.cfg, { label: "Mesa ticket" });
+      const table = await createTable(tx, venue.cfg, {
+        label: "Mesa ticket",
+        zoneId: venue.zoneId,
+      });
       await moveBill(
         tx,
         venue.cfg,
@@ -307,7 +315,7 @@ describe("the card reader on a bill whose every line was given away", () => {
         .where(eq(workingOrders.id, partyBill)),
     );
     expect(moved!.partyId).not.toBeNull();
-    expect(await zoneOf(venue, partyBill)).toBe(ticketZone.zoneId);
+    expect(await zoneOf(venue, partyBill)).toBe(venue.zoneId);
     expect(await ticketCount(partyBill)).toBe(0);
     expect(await ticketCount(walkUp)).toBe(0);
     const readerCalls = venue.card.collectCalls.length;

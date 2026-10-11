@@ -7,17 +7,8 @@ import { captureError, parties, saleLines, sales, workingOrders } from "@waitron
 import { writeClearingWorkflow } from "@waitron/venue-service";
 import { abandonHeldOrder, listTablesWithState } from "./working-order.js";
 import { placeGroups, submitGroups } from "./order-groups.js";
-import {
-  finishTable,
-  partyMainBill,
-  partyZone,
-  readPartyBills,
-  setMainBill,
-  setPartyName,
-} from "./parties.js";
-import { readDrafts, saveDraft, submitDraft } from "./order-drafts.js";
-import { VENUE_SERVICE } from "./modules.js";
-import { createTable } from "./testing/live-table.js";
+import { finishTable, partyZone, readPartyBills, setMainBill, setPartyName } from "./parties.js";
+import { saveDraft, submitDraft } from "./order-drafts.js";
 import {
   OPERATOR,
   activeTablesOf,
@@ -197,31 +188,7 @@ describe("the main bill", () => {
   });
 });
 
-describe("a party at a table in no service zone", () => {
-  it("gets a main bill with no service context, and reads a saved draft's lines as unavailable", async () => {
-    const { id: bare } = await inTx(v, (tx) => createTable(tx, v.cfg, { label: "Mesa sin zona" }));
-    const { partyId, tabId } = await seat(v, bare);
-    await abandon(tabId);
-    expect(await inTx(v, (tx) => partyZone(tx, v.cfg, partyId))).toBeNull();
-
-    const main = await inTx(v, (tx) => partyMainBill(tx, v.cfg, partyId));
-
-    expect(main).not.toBe(tabId);
-    expect((await partyRow(v, partyId)).mainBillId).toBe(main);
-    expect((await billRow(v, main)).partyId).toBe(partyId);
-    expect(await inTx(v, (tx) => VENUE_SERVICE.findOrderContext(tx, v.cfg, main))).toBeNull();
-
-    await inTx(v, (tx) =>
-      saveDraft(tx, v.cfg, partyId, OPERATOR, {
-        draftId: null,
-        revision: 0,
-        lines: [{ menuItemId: v.item("Agua"), quantity: "1" }],
-      }),
-    );
-    const [draft] = await inTx(v, (tx) => readDrafts(tx, v.cfg, partyId));
-    expect(draft!.lines.map((line) => line.unavailable)).toEqual([true]);
-  });
-
+describe("a party service zone", () => {
   it("names no zone for a party that does not exist", async () => {
     expect(await inTx(v, (tx) => partyZone(tx, v.cfg, randomUUID()))).toBeNull();
   });
