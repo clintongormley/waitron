@@ -7,7 +7,11 @@ import { VerifactuBackend } from "./backend.js";
 import { aeatClientResolver, aeatEndpointFor, mtlsFetch } from "./aeat-transport.js";
 import { drain as runDrain, resetInFlightClaims } from "./drain.js";
 import { parseAeatCert, sealAeatSecret } from "./provisioning-secret.js";
-import { validateVenueFiscalFields, validateOperationDescription } from "./venue-fields.js";
+import {
+  validateLegalName,
+  validateOperationDescription,
+  validateVenueFiscalFields,
+} from "./venue-fields.js";
 
 /**
  * The sale path never contacts AEAT — only `drain`/`reconcile` do, and the backend built here is
@@ -87,6 +91,7 @@ export const FISCAL_SLOT: FiscalContribution = {
   // operator fixes them in the wizard — the alternative is the chain-append guard refusing the
   // venue's first sale at the till, which is the worst place to learn a series code has a space.
   venueFields: {
+    validateLegalName,
     validateOperationDescription,
     defaults: { operationDescription: "Venta en establecimiento" },
     validate: validateVenueFiscalFields,

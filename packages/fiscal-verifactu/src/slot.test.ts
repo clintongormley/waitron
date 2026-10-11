@@ -169,6 +169,13 @@ it("validates a changed operation description through its own seat", () => {
   ).not.toThrow();
 });
 
+it("validates a changed legal name through its own seat", () => {
+  expect(() => FISCAL_SLOT.venueFields!.validateLegalName("x".repeat(121))).toThrow(
+    expect.objectContaining({ code: "setup.request_invalid", params: { field: "legalName" } }),
+  );
+  expect(() => FISCAL_SLOT.venueFields!.validateLegalName("Waitron SL")).not.toThrow();
+});
+
 describe("the fiscal deployment history probe", () => {
   const suite = useVenueDb({ migrations: TEST_MIGRATIONS });
 

@@ -78,6 +78,7 @@ export interface FiscalContribution {
   readonly venueFields?: {
     readonly defaults?: { readonly operationDescription: string };
     validateOperationDescription(description: string): void;
+    validateLegalName(name: string): void;
     validate(venue: {
       readonly legalName: string;
       readonly seriesCode: string;
