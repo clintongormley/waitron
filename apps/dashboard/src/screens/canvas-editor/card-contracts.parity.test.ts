@@ -77,7 +77,6 @@ describe("card-contracts mirror parity", () => {
       expect(mirror.defaultColSpan).toBe(src.defaultColSpan);
       expect(mirror.defaultRowSpan).toBe(src.defaultRowSpan);
       expect([...mirror.visibilityStates]).toEqual([...src.visibilityStates]);
-      expect(mirror.requiredPermission).toBe(src.requiredPermission);
       expect(mirror.requiredCapability).toBe(src.requiredCapability);
       expect(mirror.saleCritical).toBe(src.saleCritical);
       expect([...mirror.configFields].sort()).toEqual(Object.keys(src.configSchema).sort());

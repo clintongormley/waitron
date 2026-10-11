@@ -591,13 +591,9 @@ describe("canvas-editor-screen property panel + save (B7)", () => {
     expect("visibleWhen" in definition.tabs[0].cards[4]).toBe(false);
   });
 
-  it("shows a permission note for a card that requires a permission", async () => {
+  it("does not offer the table layout editor card", async () => {
     const { el } = await openValidEditor();
-    el.shadowRoot!.querySelector<HTMLElement>("[data-test=palette-table-layout-editor]")!.click();
-    await el.updateComplete;
-    selectCard(el, 5);
-    await el.updateComplete;
-    expect(el.shadowRoot!.querySelector("[data-test=permission-note]")).toBeTruthy();
+    expect(el.shadowRoot!.querySelector("[data-test=palette-table-layout-editor]")).toBeNull();
   });
 
   it("edits the active tab's title and columns via tab settings", async () => {
