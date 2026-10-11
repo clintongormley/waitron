@@ -582,6 +582,64 @@ describe("remote agents with an aged print queue", () => {
       });
     }
   });
+  it.each(["lost report", "uncertain write"] as const)(
+    "does not repeat the actual drawer pulse after a %s",
+    async (mode) => {
+      const app = mountApp();
+      app.get("/api/node", (c) =>
+        c.json({ nodeId: cfg.nodeId, term: 1, acceptingSales: true, environment: "preproduction" }),
+      );
+      const a = await joinAndAccept(app, "Agent A");
+      const b = await joinAndAccept(app, "Agent B");
+      const printerId = await createPrinterVia(app, a.agentId);
+      const pulse = await withTransaction(suite.db, (tx) =>
+        enqueuePrintJob(tx, { locationId }, printerId, esc().kick().bytes(), "drawer"),
+      );
+      const sink = new FakeSink();
+      const serverUrl = "http://box.test";
+      const fetchA: typeof globalThis.fetch = async (url, init) => {
+        if (mode === "lost report" && String(url).endsWith("/result"))
+          return new Response(null, { status: 503 });
+        return app.request(String(url), init);
+      };
+      const first = createAgent({
+        host: fakeHost({
+          token: a.token,
+          fetch: fetchA,
+          config: { serverUrl, name: "Agent A" },
+          transport: {
+            send: async (target, bytes) => {
+              await sink.send(target, bytes);
+              if (mode === "uncertain write") throw new Error("connection reset after pulse");
+            },
+          },
+        }),
+      });
+      await first.runOnce();
+      await suite.db
+        .update(printJobs)
+        .set({ claimedAt: "2026-01-01T00:00:00.000Z" })
+        .where(eq(printJobs.id, pulse.jobId));
+      const fetchB: typeof globalThis.fetch = async (url, init) => app.request(String(url), init);
+      const second = createAgent({
+        host: fakeHost({
+          token: b.token,
+          fetch: fetchB,
+          config: { serverUrl, name: "Agent B" },
+          transport: sink,
+        }),
+      });
+      await second.runOnce();
+      await first.runOnce();
+      expect(sink.written.map((entry) => [...entry.bytes])).toEqual([[27, 112, 0, 25, 250]]);
+      expect(await jobRow(pulse.jobId)).toMatchObject(
+        mode === "lost report"
+          ? { status: "printing", attempts: 0 }
+          : { status: "failed", attempts: 1, last_error: "connection reset after pulse" },
+      );
+    },
+  );
+
   it("preserves failed-ticket order on one printer while another printer proceeds", async () => {
     const app = mountApp();
     app.get("/api/node", (c) =>
