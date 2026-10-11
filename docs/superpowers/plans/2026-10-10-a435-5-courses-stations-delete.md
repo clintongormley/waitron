@@ -1,5 +1,9 @@
 # Courses and kitchen stations deletion implementation plan
 
+> **2026-10-11 supersession.** A435 step 6 now replaces the zone/department disabled presentation deliberately left by step 5. Hardware still keeps Disable and Enable. See the
+> [step 6 reconciliation](2026-10-11-a435-6-tables-zones-departments-delete.md). Earlier behavior and receipts below remain historical.
+
+
 > 2026-10-10 implementation pointer: course and station permanent deletion, retained
 > historical course labels and configuration export rules are documented in
 > [the current data contract](../../developers/conventions-data.md#permanent-course-and-station-deletion).

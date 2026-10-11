@@ -79,7 +79,6 @@ export interface RoutingPeriod {
   name: string;
   colour: CalendarColour;
   productIds: string[];
-  /** Present only while the period's department is switched off. */
   departmentInactive?: true;
 }
 

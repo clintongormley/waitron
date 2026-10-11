@@ -1317,18 +1317,6 @@ _Formerly entries spread across the old sections, A261's venue-operations steps 
   [docs/backlog/mockups/a506-opening-hours-seasons/](backlog/mockups/a506-opening-hours-seasons/).
   [Detail](backlog/service-periods.md#a506-opening-hours-rebuilt-around-seasons-and-special-days)
 
-- **Enabling a department leaves its zones disabled; enabling a zone leaves routing exceptions removed.**
-  Found along the way by W110e (#1290). A zone's tables on today's plan come back with the zone
-  (A429 slice 5). A profile's starting zone is
-  kept since W97, 2026-10-06: `readProfileZones` falls back to the profile's first usable zone while
-  it is disabled.
-
-- **What a kitchen screen shows after its zone is switched off is unchecked.** Switching a zone off
-  (`deactivateServiceZone`, `packages/venue-service/src/operations.ts`) clears its routing cells
-  and takes its tables out of service; it does not clear kitchen screens' zone rows (`device_kitchen_screen_zones`,
-  `device_profile_kitchen_screen_zones`). What a pass screen or the device editor shows for that
-  zone was read, not run. Left open by A366 slice 5 Part B.
-
 - **Test stubs answer the Zones tab's floor plan read with something that is not a plan.** Several
   tests that mount the Departments screen, `apps/dashboard/src/dashboard-app.test.ts` among them,
   answer every request with one body, so the zone panel's floor plan read
@@ -1873,11 +1861,6 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
 
 - **The bookings list shows no table for any booking, and a past booking's kept table name
   (`bookings.table_label`) is stored but shown nowhere.** Left open by A429 slice 1 (#1493).
-
-- **Should switching a planned zone back on rebuild today's plan from the master?** Today it
-  switches back on the tables still on today's plan, as today's plan has them (`tableInService`,
-  `packages/db/src/table-in-service.ts`, through the zone's enabled state); a table waiting for its removal stays off, and master edits wait
-  for the next day's reset. Left open by A429 slice 1 (#1493).
 
 - **A stray row that blocks a table's final delete keeps that table's reset row waiting forever**,
   and each catch-up quietly re-runs the release (reasoned, not run). Left open by A429 slice 1 (#1493).
@@ -4897,16 +4880,6 @@ _Formerly parts of B9 and Track C._ Detail: [backlog/dependencies.md](backlog/de
 ### Modules, data and code health
 
 _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._ Detail: [backlog/architecture.md](backlog/architecture.md).
-
-- **A435 — permanent delete for hardware and venue setup (owner, 2026-10-08; step 6 open).**
-  Tables, zones and departments are next.
-  [Spec](superpowers/specs/2026-10-08-delete-and-archive-design.md),
-  [product archive plan](superpowers/plans/2026-10-08-a435-1-product-archive.md).
-- **A435 step 6 — tables, zones and departments: open, following courses and stations in the build order.**
-  [Reviewed implementation plan](superpowers/plans/2026-10-11-a435-6-tables-zones-departments-delete.md). Replace
-  Disable with Delete, and drop each list's Status column and Status filter as in step 5 (owner, 2026-10-10).
-  Printers, card readers and devices keep both, because they keep Disable. Each remaining step follows the
-  linked spec and preserves recorded history.
 
 - **Station deletion's draft-location filter needs a discriminating test.** In A435 step 5's
   second run-it review, deleting the `working_orders` location `exists` clause in

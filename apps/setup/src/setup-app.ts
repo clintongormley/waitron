@@ -342,7 +342,6 @@ const DEPARTMENT_OFF_MESSAGES: Record<string, StringKey> = {
 
 const isName = (value: unknown): value is string => typeof value === "string" && value !== "";
 
-/** The sentence for a routing cell on a zone whose department is switched off, when it says which. */
 function describeDepartmentOff(params: Record<string, unknown> | undefined): Message | undefined {
   const { zoneName: zone, departmentName: department, row, name } = params ?? {};
   if (!isName(zone) || !isName(department) || typeof row !== "string") return undefined;

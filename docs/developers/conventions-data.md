@@ -1506,7 +1506,7 @@ The missing guard is an item in `docs/backlog.md`, under "Modules, data and code
 
 Edit the master plan on the dashboard; work from today's plan on the till. Saving an existing
 master does not rearrange tables during service. The first save builds today's plan immediately
-(`apps/server/src/floor-plan.ts:390`). Thereafter `ensureToday` resets an enabled zone at the first
+(`apps/server/src/floor-plan.ts:390`). Thereafter `ensureToday` resets a live zone at the first
 floor read or change that sees a new business day, or catches up its pending reset rows
 (`apps/server/src/floor-today-store.ts:425`). Reset to saved plan takes a fresh copy explicitly.
 
@@ -1522,7 +1522,7 @@ A closing party keeps its table names as text and releases its `party_tables` ro
 each module's `TableRemoval` seat before deleting the table
 (`apps/server/src/table-removal.ts:74`). Bookings copies the table label and clears its pointer
 (`packages/bookings/src/table-removal.ts:42`); the delivery release copies the label onto referenced orders
-(`apps/server/src/delivery-release.ts:10`). A table is in service through `tableInService`: it has a today's row in an enabled zone.
+(`apps/server/src/delivery-release.ts:10`). A table is in service through `tableInService`: it has a today's row in a live zone.
 That test does not exclude a table taken off today. There is no active column on `dining_tables`
 (`packages/db/src/table-in-service.ts:4`).
 
@@ -1551,6 +1551,35 @@ measurement above is separate. Saving master plans does not remove this reset re
 
 The schema guards passed 497 tests; `packages/db/src/schema/dining-tables.test.ts` also checks
 that a zoneless insert is refused and only the eight kept columns exist.
+
+## Permanent hierarchy deletion
+
+You delete a zone or department permanently. Preview and Delete use the same impact rules, and
+Delete recomputes that impact inside the one write transaction before changing rows. Open parties,
+unpaid or uncollected deliveries, booked or seated bookings, open or placed orders, pending
+transfers and affected ordering profiles can refuse the whole change. No live work is ended to make
+Delete succeed. A successful hierarchy Delete clears its saved, today, reset and join floor state,
+including tables with no today row and reset targets with no live table. Shared menus, venue dates
+and holidays remain; owned routing, periods, opening overrides and transfer settings are removed.
+
+Ordering profiles keep one department. A nonretired ordering profile bound to the department
+refuses its deletion, even without an active device. Removing its only usable zone also refuses.
+When a removed starting zone has a permitted survivor, its replacement follows the declared order.
+Default department and counter-zone replacements use surviving configuration; deletion creates no
+menu or zone. An explicit empty kitchen-screen parent stays empty, and Every stays Every, so
+cleanup cannot widen access.
+
+Deleted names become available for a new id. Current configuration reads and writes refuse the old
+id; export omits deleted hierarchy and its owned settings, and import refuses deleted hierarchy
+rows. Department receipt configuration and media remain available to internal printing, with no
+configuration-editor access. Changing a default does not rewrite a recorded sale's department.
+Fiscal, sales, issued receipt, order and line contexts, finished transfer and chain facts stay as
+recorded. Terminal booking and delivery table pointers may clear with copied labels through the
+existing floor release path. Individual table Delete still follows the master/today lifecycle above.
+
+These limits follow the owner-approved
+[A435 step 6 reconciliation](../superpowers/plans/2026-10-11-a435-6-tables-zones-departments-delete.md),
+which gives the later floor design precedence over the original immediate-table Delete proposal.
 
 ## A read taken while ANOTHER caller's write transaction is open sees committed rows only
 

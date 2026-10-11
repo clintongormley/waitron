@@ -452,7 +452,6 @@ export async function ensureToday(
     .where(
       and(
         eq(floorZones.locationId, cfg.locationId),
-        // A reset switches tables on; a disabled zone's tables must stay off.
         eq(floorZones.active, true),
         or(
           isNull(floorTodayZones.businessDay),

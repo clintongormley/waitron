@@ -1,5 +1,9 @@
 # W69 editable-form inventory
 
+> **2026-10-11 supersession.** The later floor design retires the old floor checkpoint’s immediate zone Enable/Disable and placement actions. A435 step 6 uses shared-impact hierarchy Delete and invalidates deleted editor targets; individual-table draft rules remain. See the
+> [step 6 reconciliation](2026-10-11-a435-6-tables-zones-departments-delete.md). Earlier behavior and receipts below remain historical.
+
+
 ## 2026-10-06 receipt language and operation-description checkpoint
 
 The receipt page registers language and operation description independently beneath the page,

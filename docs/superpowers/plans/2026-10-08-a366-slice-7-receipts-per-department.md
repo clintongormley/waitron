@@ -1,5 +1,9 @@
 # Receipts per department, slice 7 — implementation plan (A366)
 
+> **2026-10-11 supersession.** A435 step 6 refuses deleted department management reads, writes and editor links, and replaces a deleted default. Internal recorded-sale/reprint readers retain department receipt configuration and media; the editable disabled-department contract below is historical. See the
+> [step 6 reconciliation](2026-10-11-a435-6-tables-zones-departments-delete.md). Earlier behavior and receipts below remain historical.
+
+
 > 2026-10-10, Part B: department receipt links now open
 > `/manage/venue-operations/department/:id/view/receipt`. Venue settings is global-only;
 > Part A's picker and same-page department navigation below describe its intermediate host.

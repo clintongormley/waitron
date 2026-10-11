@@ -1,5 +1,9 @@
 # Delete hardware and venue setup, archive products for good (design)
 
+> **2026-10-11 supersession.** The later floor design supersedes this record’s table active flag, immediate table routes, within-zone label reuse and blanket history-link claims. A435 step 6 makes zone/department Delete permanent, with complete refusals, profile/default replacement and retained internal receipt settings. See the
+> [step 6 reconciliation](../plans/2026-10-11-a435-6-tables-zones-departments-delete.md). Earlier behavior and receipts below remain historical.
+
+
 > 2026-10-10 implementation pointer: course and station permanent deletion, retained
 > historical course labels and configuration export rules are documented in
 > [the current data contract](../../developers/conventions-data.md#permanent-course-and-station-deletion).

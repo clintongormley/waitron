@@ -246,15 +246,10 @@ function sameExceptions(a: readonly PersonException[], b: readonly PersonExcepti
   );
 }
 
-/** The department's switched-on zones, by position. */
 function activeZones(choices: ProfileScopeChoices, departmentId: string | null) {
   return choices.zones.filter((zone) => zone.departmentId === departmentId && zone.active);
 }
 
-/**
- * A stored subset and starting zone less the zones switched off since, as the till reads them: the
- * start moves to the first zone left, or is empty when none is.
- */
 function liveZones(
   scope: ProfileServiceScope,
   choices: ProfileScopeChoices,
@@ -554,8 +549,7 @@ export class DeviceProfilesScreen extends LitElement {
   /** The chosen zones while `draftEveryZone` is off, by the zones' position. */
   @state() private draftZoneIds: string[] = [];
   @state() private draftStartingZoneId = "";
-  /** Set once the manager changes the department, zones or starting zone; until then an edit keeps
-   * the stored scope, zones switched off since included. */
+  /** Until the service scope changes, unrelated edits leave its stored fields untouched. */
   #scopeEdited = false;
   @state() private draftRoles: PersonRole[] = [...ROLES];
   @state() private draftExceptions: PersonException[] = [];
@@ -845,7 +839,6 @@ export class DeviceProfilesScreen extends LitElement {
 
   // ── Where it serves ──────────────────────────────────────────────────────────────────────────────
 
-  /** The department's switched-on zones, by position. */
   #departmentZones(departmentId: string): ProfileScopeChoices["zones"] {
     return activeZones(this.scopeChoices, departmentId);
   }

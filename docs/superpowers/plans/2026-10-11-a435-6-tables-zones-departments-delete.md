@@ -296,3 +296,28 @@ Spec coverage: Tasks 1/7 own deleted ids/name reuse/active refusal; 2/3/5/6 own 
 Interface check: one `FloorDeletion` seat and four venue-service methods are used consistently across module/server/client boundaries; module code never imports server/bookings. Zone and department permissions remain distinct. Shared impact shape remains unchanged; optional booking events are carried by always-present dining-table interests. Settings keys and refusal registries/copy have an explicit owning task.
 
 Evidence check: main/clean-tree and in-memory metadata were executed; source paths/callchains, fiscal case count and future behaviour are readings/planned checks, not passing-test claims. The original spec conflicts are exposed with later owner-approved pointers. Source-derived defaults for profile/default selection and retained receipt config are stated for driver review. The driver still owes the fresh-context plan review, product TDD/control/CI/visual receipts and landing; no author commit/review/execution is implied.
+
+
+## 2026-10-11 Task 12 execution inventory
+
+The driver captured execution base `f61b45837bbcf5d672e79fab65d29a0165d766dc`. The older plan-base
+fiscal comparison also includes main's A482 comment shortening (`ebafad790`, #1529); it does not
+identify a fiscal change made by this branch. Compare the captured execution base for branch
+immutability, while retaining the older-base diff as provenance. No fiscal source, test or golden
+is changed by Task 12.
+
+Separate signed changed-check commit `3db26268` replaces impossible hierarchy Enable recovery and
+deleted-department editor links. Setup keeps exact bilingual department/zone/routing names and no
+staged import on refusal. Media keeps every retained usage and live editor link, asserts no deleted
+editor link, and still refuses image Delete while used. Department readiness keeps its exact
+bilingual correction sentence. Commits `c5cb3751` and `9917d0d2` only strengthen the correct zone-policy
+id, actual selected-table removal, successful ordered cleanup and live receipt link controls;
+original assertions stay.
+
+The retained Task 12 review package contains the complete base-to-candidate test source inventory,
+a case-level table for every separate changed-check commit, per-task authority, function/source
+hashes and installed strict-failure/legitimate-operation/restored-pass receipts. New cases,
+fixture-only adaptations, extra whole-shape fields and deliberately replaced assertions are listed
+separately. Task 11's combined live-zone/pending-reset query controls supersede the older catch-up
+shape. The later Tasks 13/14 still own both Claude reviews, current-head CI and the final measured
+visual matrix.

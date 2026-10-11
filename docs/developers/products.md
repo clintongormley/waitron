@@ -250,7 +250,9 @@ left the department, the first by position of the profile's zones still usable â
 `device_profile.no_service_zone` when none is; a profile with no
 department takes the venue's counter-default zone, refused `service_zone.default_missing` when the
 venue has none (`resolveHttpOrderZone`, `apps/server/src/till-api.ts`; `resolveNewOrderZone` and
-`readProfileZones`, `packages/venue-service/src/`).
+`readProfileZones`, `packages/venue-service/src/`). Public hierarchy Delete
+refuses removal of the last usable profile zone and replaces a removed starting zone with a
+permitted survivor. The fallback above still handles moved or invalid stored scope.
 
 The top-sellers report groups lines under the parent's staff name, `sale_lines.name`, ranks those
 products by quantity sold (name breaks a tie), and lists

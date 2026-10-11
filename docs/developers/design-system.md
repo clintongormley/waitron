@@ -3562,24 +3562,22 @@ also passes `align="end"`, since a modal has no margin beside the table.
 Open create and edit forms in `wt-modal`, with `wt-form-actions` in its footer. Keep validation
 messages inside the modal, retain entered values after a failed save, and refresh the table after
 success. Use the existing Forms contract for required markers, field errors and keyboard submission.
-Only offer operations your domain supports: Disable on a department switches it off and keeps it;
+Only offer operations your domain supports: Delete permanently removes a department from service;
 removing a product from a menu removes that offer.
 
 ### Switching off versus deleting
 
-Something switched off but kept — an options or extras list, a zone, a
-department, a table status, an adjustment reason, a user, a printer, a print
+Something switched off but kept — an options or extras list, a table status, an adjustment reason, a user, a printer, a print
 agent, a device or a card reader — is switched off with **Disable** (options and extras lists and
 table statuses are switched back on with an **Active** switch in their form), and where a screen has
 an action that brings it back, that action is **Enable**. Its status reads **Active**
-or **Disabled**; there is no "Enabled" status. **Delete** is only for something really deleted, and **Remove** for taking a row out of a list or a link off a record,
+or **Disabled**; there is no "Enabled" status. **Delete** permanently removes a record from current use, and **Remove** for taking a row out of a list or a link off a record,
 which may delete that row (Remove from this list, Remove image, a passkey). "Restore", "Add again", "Deactivate", "Reactivate" and
 "Inactive" are not used for a record that is kept.
 
 In Spanish the action is **Deshabilitar** and **Habilitar**, and the status agrees with the noun the
-screen uses: **Activo** or **Deshabilitado** for a departamento, estado, motivo, usuario,
-lector, agente or dispositivo; **Activa** or **Deshabilitada** for a lista, zona,
-mesa or impresora. "Desactivar", "Reactivar", "Restaurar", "Volver a añadir" and
+screen uses: **Activo** or **Deshabilitado** for an estado, motivo, usuario,
+lector, agente or dispositivo; **Activa** or **Deshabilitada** for a lista or impresora. "Desactivar", "Reactivar", "Restaurar", "Volver a añadir" and
 "Inactivo" are not used for a record that is kept. A setting turned off (backups, a toggle) is not a record and keeps its own
 words.
 
@@ -3778,18 +3776,16 @@ You open a department from the list, even when the venue has only one. Its page 
 Departments parent link above the name and offers Settings, Zones and, with `layout.configure`,
 Receipt tabs. Settings holds the
 name, trading name, service settings and transfers. Zones shows the department's zones and the
-selected zone's settings. With `layout.configure`, Edit the receipt opens that department's Receipt tab, including an
-explicitly addressed disabled department. Venue settings keeps the global logo, subtitle,
+selected zone's settings. With `layout.configure`, Edit the receipt opens a live department's Receipt tab. Venue settings keeps the global logo, subtitle,
 footer, address switch, receipt language and sales description. Department contacts never
 inherit the stored global phone or email. The Zones tab shows the selected zone's normal-week closed times under its name, with a link
 that opens that zone in Opening hours. Identical ranges share a day group; more than two groups
 show a day count. A week without closed ranges says the zone opens with its department. Named-day
-exceptions stay in Opening hours. Disabled zones have no hours summary or link.
+exceptions stay in Opening hours.
 Under it, a zone whose master floor plan has placed tables shows a small read-only preview
 (`wt-floor-plan-preview`, refreshed live) above Edit floor plan, which opens the zone's floor plan
 editor, whose Close returns to the zone. A zone with no placed tables shows Add a floor plan to the
-same editor instead, and a failed read adds an alert line above the link. A disabled zone has
-neither, and the zone's ⋮ menu does not offer the link.
+same editor instead, and a failed read adds an alert line above the link.
 
 How orders start chooses Table service or Counter service. Counter service has a separate
 paid-when choice and collection-ticket choice. Print a receipt offers Always (`auto`) or
@@ -3797,9 +3793,27 @@ On request (`on_request`). A zone's empty choice follows its department: the pla
 contains only the inherited value, without a Follow prefix. Explicit choices remain overrides,
 even when equal to the department's value. Cancel precedes Save in the forms and dialogs.
 
-The list's disabled note and the Zones tab's disabled note use the muted text token.
 The list's row menus stay pinned at the end. The dialogs ignore Escape and close requests
 while their write is pending. Regression cases live in
 `packages/venue-service/src/dashboard/department-dialogs.test.ts`,
 `packages/venue-service/src/dashboard/departments-list.test.ts` and
 `packages/venue-service/src/dashboard/department-zones.test.ts`.
+
+
+### Permanent department and zone Delete
+
+Departments and zones offer Delete, with no Enable or Disable action and no availability Status
+column or filter. The shared dialog names its target in bold and loads the complete current impact.
+It lists refusals and removed settings before “This can't be undone.” Live work refuses deletion;
+the dialog never offers to abandon it. Delete stays quiet and disabled while impact is loading or
+refused. It becomes dangerous only when ready, or while its own write is pending.
+
+After deletion, the target disappears from current choices and its open editors close. A stale id
+cannot open or save its configuration. Internal receipt printing keeps the deleted department's
+recorded receipt settings and media; image usage names that department without linking to its editor.
+Closed today and opening hours keep their own actions. Hardware keeps Disable and Enable.
+
+Individual tables follow the master floor plan contract: Delete has Undo until Save. Saving a
+master edit preserves today's deferred removal rules. See the
+[A435 step 6 reconciliation](../superpowers/plans/2026-10-11-a435-6-tables-zones-departments-delete.md)
+for the hierarchy's separate immediate cleanup and retained-history limits.

@@ -283,19 +283,6 @@ function validateDepartmentTransfers(tables: Tables): void {
   }
 }
 
-/**
- * Refuses (`setup.request_invalid`) a zone whose `active` flag is not 0 or 1 (`field`
- * `floor_zones.active`), and routing cells a save could not have written (`field` naming
- * `routing_cells.<column>`, or `departments.active` when the department of a cell's zone holds a
- * flag that is not 0 or 1): a bad coordinate or target shape, the All categories × Every zone cell, a
- * second cell at one coordinate, a variant or a product, category, zone or station the bundle does
- * not hold, and a zone that is switched off or has no service configuration. A zone whose
- * department is switched off is refused with the grid's own `service_zone.not_found`, its params
- * carrying the zone and department ids, the row, and each name the export holds as non-empty text.
- * A cell's period choice is refused (`routing_cell_periods.<column>`) for a cell, period or station
- * the bundle does not hold, a department that is not the period's, a zone cell's period of any
- * department but its zone's, a second choice for one cell and period, and a bad target.
- */
 export function validateRoutingConfiguration(tables: Tables): void {
   const categories = ids(tables.categories);
   const products = new Set(

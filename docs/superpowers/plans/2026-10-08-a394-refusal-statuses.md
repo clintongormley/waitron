@@ -1,5 +1,9 @@
 # A394 — refusal statuses by one rule: the audit and its follow-ups
 
+> **2026-10-11 supersession.** A435 step 6 changes deleted hierarchy target and import refusals. The HTTP survey below records its earlier contract; table in-service and hardware refusals remain separate. See the
+> [step 6 reconciliation](2026-10-11-a435-6-tables-zones-departments-delete.md). Earlier behavior and receipts below remain historical.
+
+
 > Naming update, 2026-10-08 (A354): current menu-price code calls product variants “variants”;
 > the old `size` names below record the names used when this plan was written.
 

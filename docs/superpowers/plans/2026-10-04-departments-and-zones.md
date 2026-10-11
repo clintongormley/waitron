@@ -1,5 +1,9 @@
 # Departments and zones: implementation plan (A261 step 2)
 
+> **2026-10-11 supersession.** A435 step 6 supersedes hierarchy reactivation, retained current menus/settings, active-table-only impact and clearing a removed starting zone without replacement. Recorded historical facts remain. See the
+> [step 6 reconciliation](2026-10-11-a435-6-tables-zones-departments-delete.md). Earlier behavior and receipts below remain historical.
+
+
 > **2026-10-10, A366 slice 7 Part A:** Receipt previews now send authored department and
 > venue drafts through POST. The GET preview and its query parameters below describe
 > the earlier implementation. Follow

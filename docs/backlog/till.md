@@ -1339,6 +1339,14 @@ From **Variants as products (#511–#556) — what is left open.** How the model
 
 ## Decisions and deliberate limits
 
+- **Individual tables keep the later floor contract (A435 step 6, 2026-10-11).** Delete is a master
+  draft edit with Undo until Save; today's release remains deferred. There is no table active flag
+  or immediate table write route. Labels remain unique across the location. Hierarchy Delete is
+  separate and removes saved/today/reset state after refusing live work. Only terminal booking
+  and delivery table pointers may release with copied labels; recorded fiscal, sale, receipt,
+  order/line context and finished transfer facts stay. See the
+  [reconciliation](../superpowers/plans/2026-10-11-a435-6-tables-zones-departments-delete.md).
+
 - **The old small floor-token work waited (owner, 2026-09-30, C82).** The owner said "wait on
   this" about its cramped labels, party names and chips. A429 slice 5 removes that map and its
   capacity-based sizing. On 2026-10-11 the surviving tray was looked at with `Terrace 123`,
