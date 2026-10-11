@@ -119,7 +119,8 @@ import {
   menusOfVersions,
   readOptionListsByIds,
   readProductModifiers,
-  toInvoiceLineDescriptions,
+  defaultLanguageDescriptions,
+  defaultLanguageText,
   readContentLanguages,
   readSavedContentLanguages,
   readInvoiceLocales,
@@ -710,24 +711,27 @@ export async function priceOrderLines(
   ]);
   const classifications = lineMeta.map((meta) => classifyLine(classification, meta.productId));
 
-  // New lines snapshot the location's receipt languages; locked and issued lines keep their stored
-  // text. A locale a variant's text leaves blank takes the variant's own staff name, never the
-  // parent's.
+  // A new line's customer text and unit are frozen in the default content language; the
+  // descriptions keep the location's receipt languages as their keys. A variant's blank text takes
+  // the variant's own staff name, never the parent's.
   for (const line of gross.lines) {
-    line.descriptions = toInvoiceLineDescriptions(
+    line.descriptions = defaultLanguageDescriptions(
       line.descriptions,
       invoiceLocales,
       contentConfig.defaultLanguage,
     );
     if (line.variantDescriptions != null) {
       line.variantDescriptions = fillBlankLocalesWithStaffName(
-        toInvoiceLineDescriptions(
+        defaultLanguageDescriptions(
           line.variantDescriptions,
           invoiceLocales,
           contentConfig.defaultLanguage,
         ),
         line.variantName ?? "",
       );
+    }
+    if (line.unitName != null) {
+      line.unitName = defaultLanguageText(line.unitName, contentConfig.defaultLanguage);
     }
   }
 

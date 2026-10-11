@@ -1,5 +1,10 @@
 import { isDeepStrictEqual } from "node:util";
-import { EACH_UNIT, validateExtraSelections, validateOptionSelections } from "@waitron/catalogue";
+import {
+  EACH_UNIT,
+  defaultLanguageText,
+  validateExtraSelections,
+  validateOptionSelections,
+} from "@waitron/catalogue";
 import type { OptionList, ResolvedExtraList, VatClass } from "@waitron/catalogue";
 import { AppError, compareDecimal, decimal, multiplyDecimal } from "@waitron/shared";
 import type { OptionSnapshot } from "@waitron/shared";
@@ -52,7 +57,10 @@ export interface ExtraChild {
  * options into `OptionSnapshot`s for the dish line's own column, extras into child lines.
  *
  * `defaultLanguage` is the language the plain staff names widen under, because an `OptionSnapshot`
- * holds locale -> text maps where an `OptionList`/`OptionLabel` holds a `string`.
+ * holds locale -> text maps where an `OptionList`/`OptionLabel` holds a `string`, and the one
+ * language the two customer maps are narrowed to. The narrowing is here rather than in the order
+ * path because an edit compares the answer it rebuilds here with the stored one by value
+ * (`sameOptionSelections`).
  *
  * `products` must hold every product an ACTIVE list in `offered.extras` offers. A missing one is
  * refused with `product.not_found` rather than skipped, because dropping a picked extra would serve
@@ -72,10 +80,10 @@ export function buildLineExtras(
       const label = list.labels.find((candidate) => candidate.id === selection.labelId)!;
       return {
         listName: { [defaultLanguage]: list.name },
-        listCustomerName: list.customerName,
+        listCustomerName: defaultLanguageText(list.customerName, defaultLanguage),
         listKitchenName: list.kitchenName,
         labelName: { [defaultLanguage]: label.name },
-        labelCustomerName: label.customerName,
+        labelCustomerName: defaultLanguageText(label.customerName, defaultLanguage),
         labelKitchenName: label.kitchenName,
       };
     },

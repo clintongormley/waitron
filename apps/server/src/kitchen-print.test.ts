@@ -1118,8 +1118,9 @@ describe("a dish sold by the piece prints no unit", () => {
     expect(lines).toContain(`${thousandthsToDecimal(3000)} x Bomba`);
     expect(lines).toContain(`${thousandthsToDecimal(500)} kg x Pulpo`);
     expect(lines).toContain(`${thousandthsToDecimal(200_000)} g x Almendras`);
-    // Spelled like Each, but a unit of the venue's own: its abbreviation still prints.
-    expect(lines).toContain(`${thousandthsToDecimal(1000)} ea x Pan`);
+    // Spelled like Each, but a unit of the venue's own: its abbreviation still prints, in the
+    // default content language the line stored it in.
+    expect(lines).toContain(`${thousandthsToDecimal(1000)} ud x Pan`);
   });
 
   it("a correction slip also leaves out the Each unit", async () => {
@@ -1169,14 +1170,14 @@ describe("a dish sold by the piece prints no unit", () => {
       dish: "pan",
       name: "Pan",
       sold: ["1", "1"],
-      printed: [at(1000, "ea x Pan"), at(1000, "ea x Pan")],
+      printed: [at(1000, "ud x Pan"), at(1000, "ud x Pan")],
     },
     {
       grouping: "separate",
       dish: "pan",
       name: "Pan",
       sold: ["2"],
-      printed: [at(2000, "ea x Pan")],
+      printed: [at(2000, "ud x Pan")],
     },
     {
       grouping: "combined",

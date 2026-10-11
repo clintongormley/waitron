@@ -146,6 +146,7 @@ export * from "./dietary-declarations.js";
 export * from "./product-editor.js";
 export * from "./product-presentation.js";
 export * from "./option-snapshot-labels.js";
+export * from "./default-language-text.js";
 export type { ProductRouting, ProductEditorBody } from "./product-types.js";
 
 export * from "./catalogue-items.js";

@@ -1534,7 +1534,7 @@ describe("getHeldOrder", () => {
       {
         quantity: 300,
         price_quantity: 50,
-        unit_name: JSON.stringify({ en: "kg" }),
+        unit_name: JSON.stringify({ [CONTENT_LANGUAGE]: "kg" }),
         unit_precision: 3,
         unit_price_gross: 1,
         line_total: 6,
@@ -1614,7 +1614,7 @@ describe("getHeldOrder", () => {
       {
         quantity: "375",
         line_total: 450,
-        unit_name: { [LOCALE]: "kg" },
+        unit_name: { [CONTENT_LANGUAGE]: "kg" },
         unit_precision: 3,
       },
     ]);
@@ -2077,6 +2077,84 @@ describe("updateHeldOrder", () => {
       }),
     ).rejects.toMatchObject({ code: "product.unavailable", params: { productId: cafeId } });
     expect(await readLines(id)).toEqual(before);
+  });
+
+  it("keeps a fired options line as fired when a save sends it back unchanged, its answer worded differently in each language", async () => {
+    const { cfg, cafeId } = await setupVenue();
+    const seeded = await withTransaction(db, async (tx) => {
+      await catalogue.writeContentLanguages(tx, {
+        defaultLanguage: CONTENT_LANGUAGE,
+        languages: [CONTENT_LANGUAGE, "ca"],
+      });
+      await createStation(tx, cfg, { name: "Kitchen", isDefault: true });
+      const list = await catalogue.createOptionList(
+        tx,
+        {
+          name: "Punto list staff",
+          customerName: { [CONTENT_LANGUAGE]: "Punto cliente", ca: "Punt client" },
+          kitchenName: "Punto list kitchen",
+          defaultLabelId: null,
+          active: true,
+          labels: [
+            {
+              name: "Poco staff",
+              customerName: { [CONTENT_LANGUAGE]: "Poco hecho cliente", ca: "Poc fet client" },
+              kitchenName: "Poco kitchen",
+              available: true,
+            },
+          ],
+        },
+        LOCALE,
+      );
+      await attachModifierList(tx, cafeId, { kind: "options", id: list.id });
+      const options = [{ listId: list.id, labelId: list.labels[0]!.id }];
+      const tableId = await makeTable(tx, cfg);
+      const { tabId } = await openPartyTab(tx, cfg, { tableId });
+      await addRound(tx, cfg, tabId, [{ productId: cafeId, quantity: "1", options }]);
+      return { tabId, options, offers: await tableOffers(tx, cfg) };
+    });
+    const linesOf = () =>
+      db
+        .select({ id: workingOrderLines.id, optionSnapshots: workingOrderLines.optionSnapshots })
+        .from(workingOrderLines)
+        .where(eq(workingOrderLines.workingOrderId, seeded.tabId));
+    const itemsOf = () =>
+      db
+        .select({ id: ticketItems.id, firedAt: ticketItems.firedAt })
+        .from(ticketItems)
+        .where(eq(ticketItems.workingOrderId, seeded.tabId));
+    const before = await linesOf();
+    const firedBefore = await itemsOf();
+    expect(before).toHaveLength(1);
+    expect(firedBefore).toHaveLength(1);
+    expect(firedBefore[0]!.firedAt).not.toBeNull();
+    expect(before[0]!.optionSnapshots).toEqual([
+      {
+        listName: { [CONTENT_LANGUAGE]: "Punto list staff" },
+        listCustomerName: { [CONTENT_LANGUAGE]: "Punto cliente" },
+        listKitchenName: "Punto list kitchen",
+        labelName: { [CONTENT_LANGUAGE]: "Poco staff" },
+        labelCustomerName: { [CONTENT_LANGUAGE]: "Poco hecho cliente" },
+        labelKitchenName: "Poco kitchen",
+      },
+    ]);
+
+    await updateHeldOrder({ db }, cfg, seeded.tabId, {
+      revision: await revisionOf(seeded.tabId),
+      operatorId: OPERATOR,
+      lines: [
+        {
+          workingOrderLineId: before[0]!.id,
+          menuItemId: seeded.offers.offerFor(cafeId),
+          quantity: "1",
+          options: seeded.options,
+        },
+      ],
+    });
+
+    // The same line, the same fired ticket item, and the same one-entry answer.
+    expect(await linesOf()).toEqual(before);
+    expect(await itemsOf()).toEqual(firedBefore);
   });
 
   it.each(["dish", "variant", "extras item"] as const)(
@@ -4341,13 +4419,13 @@ describe("advanceTicketItem / advanceTicket / listStationQueue (bump + queue)", 
       // Neither product carries a kitchen name of its own, so each falls back to its staff name.
       expect(group!.items[0]).toMatchObject({
         name: "Café",
-        unitName: { en: "ea" },
+        unitName: { [CONTENT_LANGUAGE]: EACH_UNIT.abbreviation.es },
         unitPrecision: 0,
         quantity: "2.000",
       });
       expect(group!.items[1]).toMatchObject({
         name: "Agua",
-        unitName: { en: "ea" },
+        unitName: { [CONTENT_LANGUAGE]: EACH_UNIT.abbreviation.es },
         unitPrecision: 0,
         quantity: "3.000",
       });
@@ -7533,6 +7611,81 @@ describe("order path — extras and options", () => {
     });
   });
 
+  it("stores a changed answer's customer wording in the default content language alone", async () => {
+    const { cfg, cafeId } = await setupVenue();
+    await withTransaction(db, async (tx) => {
+      await catalogue.writeContentLanguages(tx, {
+        defaultLanguage: CONTENT_LANGUAGE,
+        languages: [CONTENT_LANGUAGE, "ca"],
+      });
+      await createStation(tx, cfg, { name: "Kitchen", isDefault: true });
+      const list = await catalogue.createOptionList(
+        tx,
+        {
+          name: "Leche list staff",
+          customerName: { [CONTENT_LANGUAGE]: "Leche cliente", ca: "Llet client" },
+          kitchenName: "Leche list kitchen",
+          defaultLabelId: null,
+          active: true,
+          labels: [
+            {
+              name: "Entera staff",
+              customerName: { [CONTENT_LANGUAGE]: "Entera cliente", ca: "Sencera client" },
+              kitchenName: "Entera kitchen",
+              available: true,
+            },
+            {
+              name: "Avena staff",
+              customerName: { [CONTENT_LANGUAGE]: "Avena cliente", ca: "Civada client" },
+              kitchenName: "Avena kitchen",
+              available: true,
+            },
+          ],
+        },
+        LOCALE,
+      );
+      await attachModifierList(tx, cafeId, { kind: "options", id: list.id });
+      const tableId = await makeTable(tx, cfg);
+      const { tabId } = await openPartyTab(tx, cfg, { tableId });
+      await addRound(tx, cfg, tabId, [
+        {
+          productId: cafeId,
+          quantity: "1",
+          options: [{ listId: list.id, labelId: list.labels[0]!.id }],
+        },
+      ]);
+      const [{ revision }] = await tx
+        .select({ revision: workingOrders.revision })
+        .from(workingOrders)
+        .where(eq(workingOrders.id, tabId));
+      await updateOrderLine(
+        tx,
+        cfg,
+        tabId,
+        1,
+        { options: [{ listId: list.id, labelId: list.labels[1]!.id }] },
+        revision!,
+        OPERATOR,
+      );
+      const lines = await tx
+        .select({ optionSnapshots: workingOrderLines.optionSnapshots })
+        .from(workingOrderLines)
+        .where(eq(workingOrderLines.workingOrderId, tabId));
+      expect(lines.map((line) => line.optionSnapshots)).toEqual([
+        [
+          {
+            listName: { [CONTENT_LANGUAGE]: "Leche list staff" },
+            listCustomerName: { [CONTENT_LANGUAGE]: "Leche cliente" },
+            listKitchenName: "Leche list kitchen",
+            labelName: { [CONTENT_LANGUAGE]: "Avena staff" },
+            labelCustomerName: { [CONTENT_LANGUAGE]: "Avena cliente" },
+            labelKitchenName: "Avena kitchen",
+          },
+        ],
+      ]);
+    });
+  });
+
   it("refuses a dish whose options list is left unanswered", async () => {
     const seeded = await seedDish();
     await expect(
@@ -8684,10 +8837,10 @@ describe("a variant is sold as the product it is", () => {
       .from(workingOrderLines)
       .where(eq(workingOrderLines.workingOrderId, id));
     expect(stored).toEqual([
-      // A line freezes the unit's abbreviation as its unit name.
+      // A line freezes the unit's abbreviation, in the default content language, as its unit name.
       {
         productId: wine.wine175,
-        unitName: EACH_UNIT.abbreviation,
+        unitName: { [CONTENT_LANGUAGE]: EACH_UNIT.abbreviation.es },
         unitPrecision: EACH_UNIT.precision,
       },
     ]);
@@ -9059,7 +9212,7 @@ describe("a variant is sold as the product it is", () => {
     });
   });
 
-  it("stores a variant's own staff name in each invoice locale its customer text leaves blank", async () => {
+  it("stores a variant's text in another language in each invoice locale when the default content language has none", async () => {
     const { cfg, zoneId, catalogueId } = await setupVenue();
     const locales = [LOCALE, "en-GB"];
     await db
@@ -9070,8 +9223,8 @@ describe("a variant is sold as the product it is", () => {
     const id = randomUUID();
     const wine = await withTransaction(db, async (tx) => {
       const seeded = await seedWine(tx, twoLocales, catalogueId);
-      // Text in a language neither invoice locale nor the default resolves to, so both come out
-      // blank and each takes the variant's staff name, not the parent's "Vino de la casa".
+      // Text only in a language that is neither an invoice locale nor the default: each locale
+      // takes it rather than the variant's staff name or the parent's "Vino de la casa".
       await tx
         .update(products)
         .set({ customerName: { "fr-FR": "Grand verre" } })
@@ -9088,7 +9241,10 @@ describe("a variant is sold as the product it is", () => {
       .select({ variantDescriptions: workingOrderLines.variantDescriptions })
       .from(workingOrderLines)
       .where(eq(workingOrderLines.workingOrderId, id));
-    expect(stored!.variantDescriptions).toEqual({ [LOCALE]: "175 ml", "en-GB": "175 ml" });
+    expect(stored!.variantDescriptions).toEqual({
+      [LOCALE]: "Grand verre",
+      "en-GB": "Grand verre",
+    });
   });
 
   it("re-prices a kept line whose variant alone changed", async () => {

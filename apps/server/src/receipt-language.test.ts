@@ -1209,12 +1209,12 @@ describe("a sale files in the receipt language saved on its order", () => {
   const SPANISH = {
     locale: "es-ES",
     invoiceLocales: ["ca-ES", "es-ES"],
-    lines: [{ "ca-ES": "CA Tarta" }, { "ca-ES": "CA Caña" }],
+    lines: [{ "ca-ES": "ES Tarta" }, { "ca-ES": "ES Caña" }],
   };
   const CATALAN = {
     locale: "ca-ES",
     invoiceLocales: ["ca-ES"],
-    lines: [{ "ca-ES": "CA Tarta" }, { "ca-ES": "CA Caña" }],
+    lines: [{ "ca-ES": "ES Tarta" }, { "ca-ES": "ES Caña" }],
   };
   const CHOICES = [
     ["es-ES", SPANISH],
@@ -1362,7 +1362,7 @@ describe("a sale files in the receipt language saved on its order", () => {
       expect(paid.status).toBe(200);
       expect(paid.json.locale).toBe(expected.locale);
       expect(paid.json.namesLocale).toBe("ca-ES");
-      expect(await filed(venue, id)).toEqual({ ...expected, lines: [{ "ca-ES": "CA Tarta" }] });
+      expect(await filed(venue, id)).toEqual({ ...expected, lines: [{ "ca-ES": "ES Tarta" }] });
     });
 
     it("files a parked order a card reader captures", async () => {
@@ -1387,7 +1387,7 @@ describe("a sale files in the receipt language saved on its order", () => {
         locale: expected.locale,
         namesLocale: "ca-ES",
       });
-      expect(await filed(venue, id)).toEqual({ ...expected, lines: [{ "ca-ES": "CA Tarta" }] });
+      expect(await filed(venue, id)).toEqual({ ...expected, lines: [{ "ca-ES": "ES Tarta" }] });
     });
 
     it("files a card payment captured before a lost response", async () => {
@@ -1419,7 +1419,7 @@ describe("a sale files in the receipt language saved on its order", () => {
         locale: expected.locale,
         namesLocale: "ca-ES",
       });
-      expect(await filed(venue, id)).toEqual({ ...expected, lines: [{ "ca-ES": "CA Tarta" }] });
+      expect(await filed(venue, id)).toEqual({ ...expected, lines: [{ "ca-ES": "ES Tarta" }] });
     });
   });
 
@@ -1433,7 +1433,7 @@ describe("a sale files in the receipt language saved on its order", () => {
     expect(await filed(venue, billId)).toEqual({
       locale: "es-ES",
       invoiceLocales: ["ca-ES", "es-ES"],
-      lines: [{ "ca-ES": "CA Tarta", "es-ES": "ES Tarta" }],
+      lines: [{ "ca-ES": "ES Tarta", "es-ES": "ES Tarta" }],
     });
   });
 
@@ -1447,7 +1447,7 @@ describe("a sale files in the receipt language saved on its order", () => {
     expect(await filed(venue, billId)).toEqual({
       locale: "ca-ES",
       invoiceLocales: ["ca-ES"],
-      lines: [{ "ca-ES": "CA Tarta" }],
+      lines: [{ "ca-ES": "ES Tarta" }],
     });
   });
 
@@ -1478,7 +1478,7 @@ describe("a sale files in the receipt language saved on its order", () => {
     expect(await filed(venue, billId)).toEqual({
       locale: "ca-ES",
       invoiceLocales: ["ca-ES"],
-      lines: [{ "ca-ES": "CA Tarta" }],
+      lines: [{ "ca-ES": "ES Tarta" }],
     });
     expect(logged.filter((entry) => entry.level === "warn")).toEqual([
       {
@@ -1511,7 +1511,7 @@ describe("a sale files in the receipt language saved on its order", () => {
     expect(await filed(venue, id)).toEqual({
       locale: "ca-ES",
       invoiceLocales: ["ca-ES"],
-      lines: [{ "ca-ES": "CA Tarta" }],
+      lines: [{ "ca-ES": "ES Tarta" }],
     });
   });
 
@@ -1569,8 +1569,8 @@ describe("a sale files in the receipt language saved on its order", () => {
   });
 
   describe("the language the counter sends with the sale", () => {
-    const SPANISH_TARTA = { ...SPANISH, lines: [{ "ca-ES": "CA Tarta" }] };
-    const CATALAN_TARTA = { ...CATALAN, lines: [{ "ca-ES": "CA Tarta" }] };
+    const SPANISH_TARTA = { ...SPANISH, lines: [{ "ca-ES": "ES Tarta" }] };
+    const CATALAN_TARTA = { ...CATALAN, lines: [{ "ca-ES": "ES Tarta" }] };
     const CASH = { method: "cash", amount: "20.00" };
 
     /** A counter basket of one Tarta, in a counter zone. */

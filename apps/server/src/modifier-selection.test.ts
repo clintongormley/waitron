@@ -199,10 +199,10 @@ describe("buildLineExtras", () => {
     expect(optionSnapshots).toEqual([
       {
         listName: { en: "Cooked staff" },
-        listCustomerName: { en: "How cooked? diner", es: "Punto cliente" },
+        listCustomerName: { en: "How cooked? diner" },
         listKitchenName: "Cook kitchen",
         labelName: { en: "Medium rare staff" },
-        labelCustomerName: { en: "Medium rare diner", es: "Al punto cliente" },
+        labelCustomerName: { en: "Medium rare diner" },
         labelKitchenName: "MR kitchen",
       },
     ]);
@@ -221,6 +221,51 @@ describe("buildLineExtras", () => {
     );
     expect(optionSnapshots[0]!.listName).toEqual({ es: "Cooked staff" });
     expect(optionSnapshots[0]!.labelName).toEqual({ es: "Medium rare staff" });
+  });
+
+  it("narrows each customer map to one entry under the default language, leaving staff and kitchen names", () => {
+    const trilingual: OptionList = {
+      ...cooked,
+      customerName: { ca: "Punt client", en: "How cooked? diner", es: "Punto cliente" },
+      labels: [
+        {
+          ...mediumRare,
+          customerName: { ca: "Al punt client", en: "Medium rare diner", es: "Al punto cliente" },
+        },
+      ],
+    };
+    const { optionSnapshots } = buildLineExtras(
+      { extras: [], options: [trilingual] },
+      products,
+      { options: [{ listId: "list-cooked", labelId: "label-medium-rare" }] },
+      "es",
+    );
+    expect(optionSnapshots).toEqual([
+      {
+        listName: { es: "Cooked staff" },
+        listCustomerName: { es: "Punto cliente" },
+        listKitchenName: "Cook kitchen",
+        labelName: { es: "Medium rare staff" },
+        labelCustomerName: { es: "Al punto cliente" },
+        labelKitchenName: "MR kitchen",
+      },
+    ]);
+  });
+
+  it("keeps a missing customer map missing", () => {
+    const unnamed: OptionList = {
+      ...cooked,
+      customerName: null,
+      labels: [{ ...mediumRare, customerName: null }],
+    };
+    const { optionSnapshots } = buildLineExtras(
+      { extras: [], options: [unnamed] },
+      products,
+      { options: [{ listId: "list-cooked", labelId: "label-medium-rare" }] },
+      "es",
+    );
+    expect(optionSnapshots[0]!.listCustomerName).toBeNull();
+    expect(optionSnapshots[0]!.labelCustomerName).toBeNull();
   });
 
   it("turns a pick into a child carrying the product's own three names, VAT class and the resolved price", () => {
@@ -400,6 +445,38 @@ describe("sameOptionSelections", () => {
     // else here shows the two arrays actually came back transposed.
     expect(frozen).not.toEqual(stored);
     expect(sameOptionSelections(frozen, stored)).toBe(true);
+  });
+
+  it("finds an answer rebuilt from a catalogue with three customer languages equal to the stored one", () => {
+    const trilingual: OptionList = {
+      ...cooked,
+      customerName: { ca: "Punt client", en: "How cooked? diner", es: "Punto cliente" },
+      labels: [
+        {
+          ...mediumRare,
+          customerName: { ca: "Al punt client", en: "Medium rare diner", es: "Al punto cliente" },
+        },
+      ],
+    };
+    // The row a line priced earlier from the same catalogue holds.
+    const stored = [
+      {
+        listName: { es: "Cooked staff" },
+        listCustomerName: { es: "Punto cliente" },
+        listKitchenName: "Cook kitchen",
+        labelName: { es: "Medium rare staff" },
+        labelCustomerName: { es: "Al punto cliente" },
+        labelKitchenName: "MR kitchen",
+      },
+    ];
+    const rebuilt = buildLineExtras(
+      { extras: [], options: [trilingual] },
+      products,
+      { options: [{ listId: cooked.id, labelId: mediumRare.id }] },
+      "es",
+    ).optionSnapshots;
+
+    expect(sameOptionSelections(rebuilt, stored)).toBe(true);
   });
 
   it("differs when the label chosen from one list changed", () => {
