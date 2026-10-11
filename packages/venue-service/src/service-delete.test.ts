@@ -370,7 +370,7 @@ describe("service deletion", () => {
     ).toBe("zone.profile_in_use");
   });
 
-  it("an already-empty explicit bound does not refuse its department deletion", async () => {
+  it("an already-empty explicit bound refuses its department deletion", async () => {
     const f = await fixture();
     const profileId = await run(async (tx) => {
       const [profile] = await tx
@@ -388,8 +388,24 @@ describe("service deletion", () => {
     const impact = await run((tx) =>
       serviceDelete.readDepartmentDeleteImpact(tx, f.cfg, noFloor, f.dining, NOW),
     );
-    expect(impact.refusals.filter((row) => row.code === "department.profile_in_use")).toEqual([]);
-    await run((tx) => serviceDelete.deleteDepartment(tx, f.cfg, noFloor, f.dining, NOW));
+    expect(impact.refusals.filter((row) => row.code === "department.profile_in_use")).toEqual([
+      {
+        code: "department.profile_in_use",
+        params: { departmentId: f.dining, profileId },
+        targets: [{ id: profileId, name: expect.any(String) }],
+      },
+    ]);
+    expect(
+      await refusal(run((tx) => serviceDelete.deleteDepartment(tx, f.cfg, noFloor, f.dining, NOW))),
+    ).toBe("department.profile_in_use");
+    expect(
+      await run((tx) =>
+        tx
+          .select({ active: departments.active })
+          .from(departments)
+          .where(eq(departments.id, f.dining)),
+      ),
+    ).toEqual([{ active: true }]);
     expect(
       await run((tx) =>
         tx
@@ -398,6 +414,39 @@ describe("service deletion", () => {
           .where(eq(deviceProfileServiceAccess.deviceProfileId, profileId)),
       ),
     ).toEqual([{ deviceProfileId: profileId }]);
+  });
+
+  it("an already-empty explicit bound refuses deletion of its starting zone", async () => {
+    const f = await fixture();
+    const profileId = await run(async (tx) => {
+      const [profile] = await tx
+        .insert(deviceProfiles)
+        .values({ name: randomUUID(), formFactor: "till" })
+        .returning();
+      await tx.insert(deviceProfileServiceAccess).values({
+        deviceProfileId: profile!.id,
+        departmentId: f.dining,
+        everyZone: false,
+        startingZoneId: f.alpha,
+      });
+      return profile!.id;
+    });
+    const impact = await run((tx) =>
+      serviceDelete.readZoneDeleteImpact(tx, f.cfg, noFloor, f.alpha, NOW),
+    );
+    expect(impact.refusals).toContainEqual({
+      code: "zone.profile_in_use",
+      params: { zoneId: f.alpha, profileId },
+      targets: [{ id: profileId, name: expect.any(String) }],
+    });
+    expect(
+      await refusal(run((tx) => serviceDelete.deleteZone(tx, f.cfg, noFloor, f.alpha, NOW))),
+    ).toBe("zone.profile_in_use");
+    expect(
+      await run((tx) =>
+        tx.select({ active: floorZones.active }).from(floorZones).where(eq(floorZones.id, f.alpha)),
+      ),
+    ).toEqual([{ active: true }]);
   });
 
   it("rolls back floor and service cleanup when a later step throws", async () => {
