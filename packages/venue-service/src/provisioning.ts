@@ -65,6 +65,7 @@ export const VENUE_SERVICE_PROVISIONING: ModuleProvisioning = {
           .values({ locationId: node.locationId, name: "Counter", displayOrder: 0, active: true })
           .onConflictDoUpdate({
             target: [floorZones.locationId, floorZones.name],
+            targetWhere: sql`${floorZones.active} = 1`,
             set: { name: sql`excluded.name` },
           })
           .returning({ id: floorZones.id });

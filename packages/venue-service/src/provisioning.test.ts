@@ -4,6 +4,8 @@ import { beforeAll, describe, expect, it } from "vitest";
 import { CATALOGUE_MIGRATIONS } from "@waitron/catalogue";
 import {
   CORE_MIGRATIONS,
+  floorZones,
+  withTransaction,
   catalogues,
   deviceProfiles,
   kitchenStations,
@@ -523,4 +525,36 @@ describe("VENUE_SERVICE_PROVISIONING", () => {
       expect(before.allowedZoneIds).toEqual([terrace.id]);
     });
   });
+});
+
+it("seeds a new Counter id while retaining a deleted Counter", async () => {
+  await seedTenant(db);
+  const [location] = await db
+    .insert(locations)
+    .values({ name: "Venue", invoiceLocales: ["en-GB"], operationDescription: "Hospitality" })
+    .returning();
+  const locationId = brandLocationId(location!.id);
+  const node = { locationId, nodeId: await seedNode(db, locationId) };
+  const [old] = await db
+    .insert(floorZones)
+    .values({ locationId, name: "Counter", active: false })
+    .returning();
+  await withTransaction(db, (tx) => VENUE_SERVICE_PROVISIONING.seed!.run(tx, node));
+  const rows = await db.select().from(floorZones).where(eq(floorZones.locationId, locationId));
+  expect(rows).toHaveLength(2);
+  expect(rows).toContainEqual(old);
+  const replacement = rows.find((row) => row.active)!;
+  expect(replacement.name).toBe("Counter");
+  expect(replacement.id).not.toBe(old!.id);
+  expect(
+    (
+      await db.execute<{ zone_id: string }>(
+        sql`select zone_id from zone_service_policies where is_counter_default = 1`,
+      )
+    ).rows,
+  ).toEqual([{ zone_id: replacement.id }]);
+  await withTransaction(db, (tx) => VENUE_SERVICE_PROVISIONING.seed!.run(tx, node));
+  expect(await db.select().from(floorZones).where(eq(floorZones.locationId, locationId))).toEqual(
+    rows,
+  );
 });

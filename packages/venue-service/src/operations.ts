@@ -154,18 +154,17 @@ async function requireDepartmentName(
   ownId?: string,
 ): Promise<void> {
   const [other] = await tx
-    .select({ id: departments.id, active: departments.active })
+    .select({ id: departments.id })
     .from(departments)
     .where(
       and(
         eq(departments.locationId, cfg.locationId),
         eq(departments.name, name),
+        eq(departments.active, true),
         ownId === undefined ? undefined : ne(departments.id, ownId),
       ),
     );
   if (other === undefined) return;
-  if (!other.active)
-    throw new AppError("department.name_disabled", { name, departmentId: other.id });
   throw new AppError("department.name_taken", { name });
 }
 
@@ -588,12 +587,6 @@ export async function createServiceZone(
         columns: ["location_id", "name"],
       })
     ) {
-      const [other] = await tx
-        .select({ id: floorZones.id, active: floorZones.active })
-        .from(floorZones)
-        .where(and(eq(floorZones.locationId, cfg.locationId), eq(floorZones.name, input.name)));
-      if (other?.active === false)
-        throw new AppError("zone.name_disabled", { name: input.name, zoneId: other.id });
       throw new AppError("zone.name_taken", { name: input.name });
     }
     throw error;
