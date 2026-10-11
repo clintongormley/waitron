@@ -593,6 +593,7 @@ it("A498 gives the single phone column room for a short customer name", async ()
   doc.offers.juice!.name = "Fresh orange juice";
   const el = await mount(doc);
   el.style.width = "310px";
+  await expect.poll(() => table(el).hasAttribute("narrow")).toBe(true);
   const name = row(el, "juice")!.querySelector('[data-test="name"]')!;
   expect(name.getBoundingClientRect().width).toBeGreaterThan(100);
 });
