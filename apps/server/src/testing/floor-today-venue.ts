@@ -57,11 +57,9 @@ export async function plannedZone(
   const tables: ZonePlanSave["tables"] = [];
   for (const entry of entries) {
     const label = `${entry.label ?? entry.key} ${randomUUID().slice(0, 6)}`;
-    table[entry.key] = await v.table(label, zoneId);
     const place = entry.place === undefined ? { x: 0, y: 0 } : entry.place;
     tables.push({
       key: entry.key,
-      liveTableId: table[entry.key],
       label,
       seats: entry.seats === undefined ? 4 : entry.seats,
       fixed: entry.fixed ?? false,
@@ -92,6 +90,10 @@ export async function plannedZone(
       now,
     ),
   );
+  const plan = await inTx(v, (tx) => readZonePlan(tx, v.cfg, zoneId));
+  for (const entry of entries) {
+    table[entry.key] = plan.tables.find((t) => t.id === ids[entry.key])!.liveTableId!;
+  }
   return { zoneId, table, master: ids, revision };
 }
 

@@ -763,11 +763,10 @@ describe("saveZonePlan", () => {
     const z = await zone();
     const t1 = fresh("T1");
     const bar = fresh("Bar 1");
-    const live = await liveTable(z, t1);
     const result = await save(z, {
       revision: 0,
       tables: [
-        entry("t1", t1, { liveTableId: live }),
+        entry("t1", t1),
         entry("bar", bar, {
           seats: null,
           fixed: true,
@@ -776,6 +775,7 @@ describe("saveZonePlan", () => {
       ],
       joins: [],
     });
+    const live = (await liveOf(result.ids.t1!))!.id;
     return { z, t1, bar, live, result };
   }
 

@@ -5,7 +5,7 @@ import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { floorTodayJoins, floorTodayJoinTables, floorTodayTables, floorZones } from "@waitron/db";
 import { zoneSalePolicies, zoneServicePolicies } from "@waitron/venue-service";
-import { saveZonePlan, type ZonePlanSave } from "./floor-plan.js";
+import { readZonePlan, saveZonePlan, type ZonePlanSave } from "./floor-plan.js";
 import { ALL_MODULES, enabledTableRemovals } from "./modules.js";
 import { inTx, setupPartyVenue, type PartyVenue } from "./testing/party-venue.js";
 import { listTablesWithState, type TableState } from "./working-order.js";
@@ -64,26 +64,24 @@ describe("the till's table-state answer carries today's plan", () => {
   it("gives each planned table its today's row, a spare no placement, and a merge's tables one join", async () => {
     const zoneId = await zone();
     const [la, lb, ls, lo] = [fresh("A"), fresh("B"), fresh("S"), fresh("O")];
-    const a = await v.table(la, zoneId);
-    const b = await v.table(lb, zoneId);
-    const spare = await v.table(ls, zoneId);
-    const off = await v.table(lo, zoneId);
     const entries: Entry[] = [
-      { key: "a", liveTableId: a, label: la, seats: 4, fixed: true, placement: place(3, 5) },
+      { key: "a", label: la, seats: 4, fixed: true, placement: place(3, 5) },
       {
         key: "b",
-        liveTableId: b,
         label: lb,
         seats: 2,
         fixed: false,
         placement: place(20, 5, { width: 10, rotation: 45 }),
       },
-      { key: "s", liveTableId: spare, label: ls, seats: null, fixed: false, placement: null },
-      { key: "o", liveTableId: off, label: lo, seats: 6, fixed: false, placement: place(40, 0) },
+      { key: "s", label: ls, seats: null, fixed: false, placement: null },
+      { key: "o", label: lo, seats: 6, fixed: false, placement: place(40, 0) },
     ];
     await inTx(v, (tx) =>
       saveZonePlan(tx, v.cfg, REMOVALS, zoneId, { revision: 0, tables: entries, joins: [] }, NOW),
     );
+    const plan = await inTx(v, (tx) => readZonePlan(tx, v.cfg, zoneId));
+    const liveId = (label: string) => plan.tables.find((t) => t.label === label)!.liveTableId!;
+    const [a, b, spare, off] = [la, lb, ls, lo].map(liveId) as [string, string, string, string];
     const joinId = await inTx(v, async (tx) => {
       await tx
         .update(floorTodayTables)

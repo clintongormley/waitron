@@ -262,7 +262,6 @@ describe("today's changes", () => {
       {
         key: "a",
         id: master.a!,
-        liveTableId: table.a!,
         label: label!,
         seats: 2,
         fixed: false,

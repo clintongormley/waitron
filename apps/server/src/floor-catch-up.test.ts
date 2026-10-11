@@ -14,7 +14,7 @@ import {
 } from "@waitron/db";
 import type { TrustedClock } from "@waitron/fiscal";
 import { hashPin, loginWithPin, persons } from "@waitron/identity";
-import { saveZonePlan, type ZonePlanSave } from "./floor-plan.js";
+import { readZonePlan, saveZonePlan, type ZonePlanSave } from "./floor-plan.js";
 import { resetZone } from "./floor-today-store.js";
 import { ALL_MODULES, enabledTableRemovals } from "./modules.js";
 import { mountTillApi } from "./till-api.js";
@@ -166,8 +166,9 @@ async function generationOf(zoneId: string): Promise<number | undefined> {
 /** A zone whose first saved master holds one live table; answers both ids. */
 async function plannedTable(label: string) {
   const zoneId = await zone();
-  const tableId = await v.table(label, zoneId);
-  const { revision, ids } = await save(zoneId, 0, [entry("t", label, { liveTableId: tableId })]);
+  const { revision, ids } = await save(zoneId, 0, [entry("t", label)]);
+  const plan = await inTx(v, (tx) => readZonePlan(tx, v.cfg, zoneId));
+  const tableId = plan.tables.find((t) => t.id === ids.t)!.liveTableId!;
   return { zoneId, tableId, masterId: ids.t!, revision };
 }
 

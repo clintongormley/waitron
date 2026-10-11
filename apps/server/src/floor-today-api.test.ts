@@ -204,7 +204,6 @@ describe("today's routes", () => {
           {
             id: master.t!,
             key: "t",
-            liveTableId: table.t!,
             label,
             seats: 4,
             fixed: false,
