@@ -627,13 +627,6 @@ _Formerly the catalogue and menus entries in the opening part of the old Track A
   A461 shows existing placements only. This work is not queued.
 
 
-- **The Products list builds a new list of rows on every redraw, so its table prepares every
-  product's search text again on each keystroke.** Found by A454's review (#1491); I believe it
-  predates that branch (not checked with `git blame`). **Next action:** keep the rows array stable
-  between redraws that do not change the products (`apps/dashboard/src/widgets/product-list.ts`), so
-  `wt-data-table`'s per-rows cache holds.
-
-
 - **The Products tree's hidden counts may be placed against the page at narrow width** — not
   measured; left open by A453. At 440px or less the tree hides its counts visually
   (`wt-data-table[narrow]::part(count)`, `apps/dashboard/src/widgets/product-list.ts`) as the menu's

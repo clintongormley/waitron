@@ -425,6 +425,9 @@ export class ProductList extends LitElement {
   /** Set once the box has sent its name or its cancel, until a refusal or a new box. */
   #nameSent = false;
   #emptyChecked = false;
+  /** Rebuilt in willUpdate only when a property #rows() reads changes, and a new read there joins
+   * that list; kept otherwise so wt-data-table keeps the search text it prepared for each row. */
+  #rowList: ListRow[] = [];
   #rowByKey = new Map<string, ListRow>();
   #counts = new Map<string | null, { categories: number; products: number }>();
   #categoryById: ReadonlyMap<string, CategorySummary> = new Map();
@@ -702,7 +705,7 @@ export class ProductList extends LitElement {
     };
   }
 
-  protected override willUpdate(changed: PropertyValues<this>): void {
+  protected override willUpdate(changed: Map<PropertyKey, unknown>): void {
     if (changed.has("reordering") && !this.reordering && this.#pointerDrag) {
       const active = this.#pointerDrag.active;
       this.#finishDrag();
@@ -711,6 +714,15 @@ export class ProductList extends LitElement {
     if (changed.has("extraLists") || changed.has("optionLists"))
       this.#listNames = modifierListNames(this.extraLists, this.optionLists);
     if (changed.has("categories") || changed.has("products")) this.#counts = this.#count();
+    if (
+      changed.has("categories") ||
+      changed.has("products") ||
+      changed.has("nameDraft") ||
+      changed.has("showArchived")
+    ) {
+      this.#rowList = this.#rows();
+      this.#rowByKey = new Map(this.#rowList.map((row) => [row.key, row]));
+    }
     // The Made at filter offers the stations the read names.
     if (changed.has("madeAt")) this.#columnLocale = "";
     if (changed.has("categories")) {
@@ -1608,8 +1620,6 @@ export class ProductList extends LitElement {
   }
 
   override render() {
-    const rows = this.#rows();
-    this.#rowByKey = new Map(rows.map((row) => [row.key, row]));
     return html`<wt-data-table
         noMatchesMessage=${tableNoMatches()}
         filterSearchPlaceholder=${t("categories.combobox_search")}
@@ -1676,7 +1686,7 @@ export class ProductList extends LitElement {
         }}
         .rowClickLabel=${(row: ListRow) =>
           row.kind === "product" ? `${t("action.edit")}: ${(row.variant ?? row.product).name}` : ""}
-        .rows=${rows}
+        .rows=${this.#rowList}
         .columns=${this.#columns()}
         .rowKey=${(row: ListRow) => row.key}
         .rowParent=${(row: ListRow) => row.parentKey}
