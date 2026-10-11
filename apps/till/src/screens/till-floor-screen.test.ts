@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import { currentLocale, setLocale, t } from "../i18n/t.js";
 import { TillFloorScreen } from "./till-floor-screen.js";
-import type { FloorZone, TableState, TillApi } from "../api/client.js";
+import type { FloorZone, TableState, TableToday, TillApi } from "../api/client.js";
 
 function zone(over: Partial<FloorZone> = {}): FloorZone {
   return {
@@ -18,6 +18,17 @@ function zone(over: Partial<FloorZone> = {}): FloorZone {
 }
 
 /** Defaults to a free, unstatused, UNPLACED table in zone z1, so the screen defaults to the LIST view. */
+function today(): TableToday {
+  return {
+    placement: { x: 2, y: 3, width: 2, height: 2, shape: "round", rotation: 0 },
+    seats: 4,
+    fixed: false,
+    takenOff: false,
+    joinId: null,
+    joinSeats: null,
+  };
+}
+
 function table(over: Partial<TableState> = {}): TableState {
   return {
     id: "t1",
@@ -46,7 +57,7 @@ function table(over: Partial<TableState> = {}): TableState {
 }
 
 function placed(id: string, over: Partial<TableState> = {}): TableState {
-  return table({ id, posX: 250, posY: 400, shape: "round", rotation: 0, ...over });
+  return table({ id, today: today(), ...over });
 }
 
 async function mountFloor(

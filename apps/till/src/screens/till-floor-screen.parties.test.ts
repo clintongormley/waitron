@@ -4,7 +4,18 @@ import { setLocale, t } from "../i18n/t.js";
 import "./till-floor-screen.js";
 import type { TillFloorScreen } from "./till-floor-screen.js";
 import type { TillSeatDialog } from "../widgets/seat-dialog.js";
-import type { TableState, TableParty } from "../api/client.js";
+import type { TableState, TableParty, TableToday } from "../api/client.js";
+
+function today(): TableToday {
+  return {
+    placement: { x: 2, y: 3, width: 2, height: 2, shape: "round", rotation: 0 },
+    seats: 4,
+    fixed: false,
+    takenOff: false,
+    joinId: null,
+    joinSeats: null,
+  };
+}
 
 function table(over: Partial<TableState> = {}): TableState {
   return {
@@ -221,7 +232,7 @@ describe("till-floor-screen: what a seated party owes", () => {
     const el = await mountFloor([
       seated(),
       seated(
-        { id: "t5", label: "5", posX: 200, posY: 200, shape: "round", rotation: 0 },
+        { id: "t5", label: "5", today: today() },
         { id: "v5", outstanding: "30.00", tableIds: ["t5"] },
       ),
     ]);
@@ -307,7 +318,7 @@ describe("till-floor-screen: a table needing clearing", () => {
 });
 
 describe("till-floor-screen: a table's unsent orders", () => {
-  const onMap = { posX: 200, posY: 200, shape: "round" as const, rotation: 0 };
+  const onMap = { today: today() };
   const marks = (el: TillFloorScreen, id: string) =>
     [...card(el, id).querySelectorAll<HTMLElement>("[data-unsent]")].map((mark) =>
       mark.textContent!.replace(/\s+/g, " ").trim(),
@@ -450,7 +461,7 @@ describe("till-floor-screen: a table's unsent orders", () => {
 describe("till-floor-screen: a party's release reminder", () => {
   const now = Date.parse("2026-09-29T20:00:00.000Z");
   const at = (offsetMs: number) => new Date(now + offsetMs).toISOString();
-  const onMap = { posX: 200, posY: 200, shape: "round" as const, rotation: 0 };
+  const onMap = { today: today() };
   type Token = HTMLElement & { updateComplete: Promise<unknown> };
 
   /** `clock: "real"` leaves the screen on its own clock. */

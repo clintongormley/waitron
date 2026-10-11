@@ -439,17 +439,15 @@ for (const locale of ["en-GB", "es-ES"]) {
                 tables: [
                   {
                     ...tables[2]!,
-                    ...(view === "map"
-                      ? { posX: 250, posY: 400, shape: "round", rotation: 0 }
-                      : {}),
+                    ...(view === "map" ? { today: todayRow(2) } : {}),
                   },
                 ],
               },
               theme,
             );
             if (view === "map") {
-              el.shadowRoot!.querySelector("wt-floor-canvas")!.dispatchEvent(
-                new CustomEvent("wt-open-table", {
+              el.shadowRoot!.querySelector("wt-floor-map")!.dispatchEvent(
+                new CustomEvent("wt-table-tap", {
                   detail: { tableId: "t3" },
                   bubbles: true,
                   composed: true,

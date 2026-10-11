@@ -3,7 +3,7 @@ import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import { setLocale } from "../i18n/t.js";
 import "./till-floor-screen.js";
 import type { TillFloorScreen } from "./till-floor-screen.js";
-import type { TableParty, TableState } from "../api/client.js";
+import type { TableParty, TableState, TableToday } from "../api/client.js";
 import type { TableSignal } from "@waitron/shared";
 
 const now = Date.parse("2026-09-30T20:00:00.000Z");
@@ -24,6 +24,17 @@ function party(over: Partial<TableParty> = {}): TableParty {
     unsentDrafts: [],
     reminder: null,
     ...over,
+  };
+}
+
+function today(): TableToday {
+  return {
+    placement: { x: 2, y: 3, width: 2, height: 2, shape: "round", rotation: 0 },
+    seats: 4,
+    fixed: false,
+    takenOff: false,
+    joinId: null,
+    joinSeats: null,
   };
 }
 
@@ -117,7 +128,7 @@ describe("till-floor-screen: the signals at a table", () => {
   });
 
   it("shows the same chips on an unplaced table's token in the map's tray", async () => {
-    const placed = table({ id: "t9", label: "9", party: null, posX: 300, posY: 300 });
+    const placed = table({ id: "t9", label: "9", party: null, today: today() });
     const el = await mountFloor([placed, mesa2]);
     const token = el.shadowRoot!.querySelector<HTMLElement & { updateComplete: Promise<unknown> }>(
       '[data-tray-table="t2"] wt-table-token',
