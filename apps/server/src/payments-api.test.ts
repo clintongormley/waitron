@@ -1778,6 +1778,33 @@ describe("screens and unknown ids", () => {
     },
   );
 
+  it("answers a reader id the provider does not know with 422 reader.reference_unknown, writing no reader", async () => {
+    const venue = await seedVenue();
+    const seat: CardProviderContribution = {
+      ...stripeSeat,
+      readers: {
+        ...stripeSeat.readers,
+        add: async () => {
+          throw new AppError("reader.reference_unknown", {
+            providerId: "stripe",
+            field: "reference",
+          });
+        },
+      },
+    };
+    const app = mountApp(venue, [seat]);
+    await connectStripe(app, venue);
+    const res = await addReader(app, venue, "tmr_bad");
+    expect(res.status).toBe(422);
+    expect(await res.json()).toEqual({
+      error: {
+        code: "reader.reference_unknown",
+        params: { providerId: "stripe", field: "reference" },
+      },
+    });
+    expect(await suite.db.select().from(cardReaders)).toEqual([]);
+  });
+
   it("hands the seat a pairing code without a reference when only a code is given", async () => {
     const venue = await seedVenue();
     const calls: unknown[] = [];

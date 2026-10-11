@@ -1,9 +1,12 @@
 import { describe, expect, it } from "vitest";
+import { createServer } from "node:http";
+import type { AddressInfo } from "node:net";
 import Stripe from "stripe";
 import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { CREDENTIALS_MIGRATIONS, loadKeyRing, putCredential } from "@waitron/credentials";
 import type { IncidentSink } from "@waitron/payments";
+import { AppError } from "@waitron/shared";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 import {
   STRIPE_CARD_PROVIDER,
@@ -294,6 +297,59 @@ describe("STRIPE_CARD_PROVIDER.readers", () => {
     expect(calls.secretKeys).toEqual(["sk_test_key"]);
   });
 
+  it("add refuses a reader id Stripe answers as an invalid request", async () => {
+    const { deps, seat } = await readerDeps(
+      fakeMakeStripe(
+        {
+          reader: async (id) => {
+            throw new Stripe.errors.StripeInvalidRequestError({
+              message: `No such terminal.reader: '${id}'`,
+              code: "resource_missing",
+            });
+          },
+        },
+        freshCalls(),
+      ),
+    );
+    const error = await seat.readers
+      .add(deps, { name: "Counter", reference: "tmr_bad" })
+      .catch((e: unknown) => e);
+    expect(error).toMatchObject({
+      code: "reader.reference_unknown",
+      params: { providerId: "stripe", field: "reference" },
+    });
+  });
+
+  it("add refuses a reader id Stripe answers with a deleted reader", async () => {
+    const { deps, seat } = await readerDeps(
+      fakeMakeStripe({ reader: async (id) => ({ id, deleted: true }) }, freshCalls()),
+    );
+    const error = await seat.readers
+      .add(deps, { name: "Counter", reference: "tmr_gone" })
+      .catch((e: unknown) => e);
+    expect(error).toMatchObject({
+      code: "reader.reference_unknown",
+      params: { providerId: "stripe", field: "reference" },
+    });
+  });
+
+  it("add rethrows any other Stripe failure unchanged, as a fault", async () => {
+    const failure = new Stripe.errors.StripeAuthenticationError({ message: "Invalid API Key" });
+    const { deps, seat } = await readerDeps(
+      fakeMakeStripe(
+        {
+          reader: async () => {
+            throw failure;
+          },
+        },
+        freshCalls(),
+      ),
+    );
+    await expect(seat.readers.add(deps, { name: "Counter", reference: "tmr_abc" })).rejects.toBe(
+      failure,
+    );
+  });
+
   it("add rejects a call with no reader reference (a caller-contract violation)", async () => {
     const { deps, seat } = await readerDeps(fakeMakeStripe({}, freshCalls()));
     await expect(seat.readers.add(deps, { name: "Counter" })).rejects.toThrow(/reference/);
@@ -432,5 +488,74 @@ describe("deferredStripeClient", () => {
     );
     await client.cancelReaderAction("tmr_abc");
     expect(calls.cancelled).toEqual(["tmr_abc"]);
+  });
+});
+
+describe("STRIPE_CARD_PROVIDER.readers.add through the real Stripe client", () => {
+  /** Answers every request with one status and body, standing in for Stripe's API. */
+  async function stripeStandIn(
+    status: number,
+    body: unknown,
+  ): Promise<{ makeStripe: (secretKey: string) => Stripe; paths: string[]; close: () => void }> {
+    const paths: string[] = [];
+    const server = createServer((req, res) => {
+      paths.push(`${req.method} ${req.url}`);
+      res.writeHead(status, { "content-type": "application/json" });
+      res.end(JSON.stringify(body));
+    });
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+    const { port } = server.address() as AddressInfo;
+    return {
+      makeStripe: (secretKey) =>
+        new Stripe(secretKey, {
+          host: "127.0.0.1",
+          port,
+          protocol: "http",
+          maxNetworkRetries: 0,
+        }),
+      paths,
+      close: () => server.close(),
+    };
+  }
+
+  it("refuses a reader id Stripe answers 404 resource_missing", async () => {
+    await seedStripe(FOUR_FIELDS);
+    const standIn = await stripeStandIn(404, {
+      error: {
+        type: "invalid_request_error",
+        code: "resource_missing",
+        message: "No such terminal.reader: 'tmr_bad'",
+        param: "id",
+      },
+    });
+    try {
+      const seat = createStripeCardProvider(standIn.makeStripe);
+      const error = await seat.readers
+        .add({ db: suite.db, ring }, { name: "Counter", reference: "tmr_bad" })
+        .catch((e: unknown) => e);
+      expect(error).toMatchObject({
+        code: "reader.reference_unknown",
+        params: { providerId: "stripe", field: "reference" },
+      });
+      expect(standIn.paths).toEqual(["GET /v1/terminal/readers/tmr_bad"]);
+    } finally {
+      standIn.close();
+    }
+  });
+
+  it("leaves a Stripe server error a fault, not a refused reader id", async () => {
+    await seedStripe(FOUR_FIELDS);
+    const standIn = await stripeStandIn(500, { error: { type: "api_error", message: "boom" } });
+    try {
+      const seat = createStripeCardProvider(standIn.makeStripe);
+      const error = await seat.readers
+        .add({ db: suite.db, ring }, { name: "Counter", reference: "tmr_abc" })
+        .catch((e: unknown) => e);
+      expect(error).toBeInstanceOf(Stripe.errors.StripeAPIError);
+      expect(error).not.toBeInstanceOf(AppError);
+      expect(standIn.paths).toEqual(["GET /v1/terminal/readers/tmr_abc"]);
+    } finally {
+      standIn.close();
+    }
   });
 });

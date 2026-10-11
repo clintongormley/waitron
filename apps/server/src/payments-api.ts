@@ -121,6 +121,7 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "reader.provider_disconnected": 409,
   "reader.not_found": 404,
   "reader.not_listed": 422,
+  "reader.reference_unknown": 422,
   "reader.payment_in_progress": 409,
   "reader.unpair_failed": 502,
   "reader.unpair_in_progress": 409,

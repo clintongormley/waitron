@@ -7,5 +7,6 @@ declare module "@waitron/shared" {
       keyEnvironment: string;
       hostEnvironment: string;
     };
+    "reader.reference_unknown": { providerId: string; field: "reference" };
   }
 }

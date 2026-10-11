@@ -560,3 +560,9 @@ it("explains why an extra cannot move independently in both languages", () => {
     "Los extras no se pueden pasar por separado",
   );
 });
+
+it("has its own English and Spanish copy for a reader id the provider does not know", () => {
+  const code = "reader.reference_unknown";
+  expect(codeMessage(code, "en")).toBe("Stripe has no reader with this ID");
+  expect(codeMessage(code, "es")).toBe("Stripe no tiene ningún lector con este ID");
+});
