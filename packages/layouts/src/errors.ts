@@ -17,7 +17,14 @@ declare module "@waitron/shared" {
         | "not_boolean"
         | "invalid_logo"
         | "image_not_found";
-      field?: "headerSubtitle" | "footerMessage" | "phone" | "email" | "printAddress" | "logo";
+      field?:
+        | "headerSubtitle"
+        | "footerMessage"
+        | "phone"
+        | "email"
+        | "printAddress"
+        | "logo"
+        | "operationDescription";
       language?: string;
       maxLength?: number;
     };

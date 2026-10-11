@@ -131,7 +131,7 @@ export function validateDepartmentReceipt(
   languages: readonly string[],
 ): DepartmentReceiptConfig {
   const authored = requireAuthoredObject(input);
-  requireKnownFields(authored, RECEIPT_STRING_FIELDS);
+  requireKnownFields(authored, [...RECEIPT_STRING_FIELDS, "printAddress", "operationDescription"]);
   const contact: Record<string, unknown> = {};
   for (const field of ["logo", "phone", "email"] as const) {
     if (Object.hasOwn(authored, field)) contact[field] = authored[field];
@@ -145,6 +145,20 @@ export function validateDepartmentReceipt(
     if (authored[field] === undefined) continue;
     const text = validateReceiptText(authored[field], field, languages);
     if (text !== undefined) result[field] = text;
+  }
+  if (authored.printAddress !== undefined) {
+    if (typeof authored.printAddress !== "boolean")
+      throw new AppError("receipt.invalid", { reason: "not_boolean", field: "printAddress" });
+    result.printAddress = authored.printAddress;
+  }
+  if (authored.operationDescription !== undefined) {
+    if (typeof authored.operationDescription !== "string")
+      throw new AppError("receipt.invalid", {
+        reason: "not_string",
+        field: "operationDescription",
+      });
+    if (authored.operationDescription.trim() !== "")
+      result.operationDescription = authored.operationDescription;
   }
   return result;
 }

@@ -4,6 +4,8 @@ import {
 } from "./business-day-schedule.js";
 import {
   readDepartmentReceipt,
+  readDepartmentReceiptPolicy,
+  saveDepartmentReceiptSettings,
   readRetainedDepartmentReceipt,
   readPrintedDepartmentReceipt,
   readDepartmentLogoRasters,
@@ -135,6 +137,8 @@ export const VENUE_SERVICE: VenueServiceContribution = {
   recordSaleReceiptHeader,
   readSaleReceiptHeader,
   readDepartmentReceipt,
+  readDepartmentReceiptPolicy,
+  saveDepartmentReceiptSettings,
   readRetainedDepartmentReceipt,
   readPrintedDepartmentReceipt,
   readDepartmentLogoRasters,

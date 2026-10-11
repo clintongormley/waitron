@@ -7,14 +7,21 @@ import {
   isValidTelephone,
   MEDIA_FILENAME,
   type DepartmentReceiptConfig,
+  type DepartmentReceiptPolicy,
+  type DepartmentReceiptWrite,
   type DepartmentReceiptScope,
   type ReceiptLogoRaster,
   type ReceiptLogoRasters,
   type ReceiptPaperWidth,
 } from "@waitron/shared";
 import { departmentReceipts } from "./schema/department-receipts.js";
-import { departments, orderServiceContexts, saleReceiptHeaders } from "./schema/service.js";
-import type { VenueScope } from "./operations.js";
+import {
+  departments,
+  departmentSalePolicies,
+  orderServiceContexts,
+  saleReceiptHeaders,
+} from "./schema/service.js";
+import { setDepartmentSalePolicyField, type VenueScope } from "./operations.js";
 import "./errors.js";
 
 const BASE64 = /^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/;
@@ -34,7 +41,7 @@ function stringField(field: string, max: number) {
   const value = sql`json_extract(${validDocument(departmentReceipts.receipt)}, ${`$.${field}`})`;
   return sql<
     string | null
-  >`case when typeof(${value}) = 'text' and length(cast(${value} as blob)) <= ${max} then ${value} else null end`;
+  >`case when json_type(${validDocument(departmentReceipts.receipt)}, ${`$.${field}`}) = 'text' and length(cast(${value} as blob)) <= ${max} then ${value} else null end`;
 }
 
 function textMap(field: string, languages: readonly string[]) {
@@ -63,6 +70,10 @@ function picture(paper: ReceiptPaperWidth) {
 function trimProjection(cfg: DepartmentReceiptScope) {
   return {
     departmentId: departments.id,
+    printAddress: sql<
+      string | null
+    >`json_type(${validDocument(departmentReceipts.receipt)}, '$.printAddress')`,
+    operationDescription: stringField("operationDescription", 2000),
     logo: stringField("logo", 255),
     phone: stringField("phone", 120),
     email: stringField("email", 1016),
@@ -88,6 +99,8 @@ function parseMap(text: string): Record<string, string> | undefined {
 }
 
 function parseReceipt(row: {
+  printAddress: string | null;
+  operationDescription: string | null;
   logo: string | null;
   phone: string | null;
   email: string | null;
@@ -95,6 +108,17 @@ function parseReceipt(row: {
   footerMessage: string;
 }): DepartmentReceiptConfig {
   const receipt: DepartmentReceiptConfig = {};
+  if (row.printAddress === "true" || row.printAddress === "false")
+    receipt.printAddress = row.printAddress === "true";
+  if (
+    row.operationDescription &&
+    row.operationDescription.length <= 500 &&
+    !Array.from(row.operationDescription).some(
+      (character) => character < " " && !"\t\n\r".includes(character),
+    ) &&
+    row.operationDescription.trim() !== ""
+  )
+    receipt.operationDescription = row.operationDescription;
   if (row.logo && MEDIA_FILENAME.test(row.logo)) receipt.logo = row.logo;
   if (row.phone && row.phone.length <= 30 && isValidTelephone(row.phone)) receipt.phone = row.phone;
   if (
@@ -287,4 +311,48 @@ export async function receiptDefaultDepartment(
       ),
     );
   return row?.id ?? null;
+}
+
+export async function readDepartmentReceiptPolicy(
+  tx: Transaction,
+  cfg: VenueScope,
+  departmentId: string,
+): Promise<DepartmentReceiptPolicy> {
+  const [row] = await tx
+    .select({
+      receiptPrintMode: departmentSalePolicies.receiptPrintMode,
+      printTradingName: departmentSalePolicies.printTradingName,
+    })
+    .from(departments)
+    .leftJoin(departmentSalePolicies, eq(departmentSalePolicies.departmentId, departments.id))
+    .where(and(rowQuery(cfg, departmentId), eq(departments.active, true)));
+  if (!row) throw new AppError("department.not_found", { departmentId });
+  return {
+    receiptPrintMode: row.receiptPrintMode ?? "auto",
+    printTradingName: row.printTradingName ?? true,
+  };
+}
+
+export async function saveDepartmentReceiptSettings(
+  tx: Transaction,
+  cfg: DepartmentReceiptScope,
+  departmentId: string,
+  input: DepartmentReceiptWrite,
+  rasters?: ReceiptLogoRasters,
+): Promise<void> {
+  await writeDepartmentReceipt(tx, cfg, departmentId, input.receipt, rasters);
+  await setDepartmentSalePolicyField(
+    tx,
+    cfg,
+    departmentId,
+    "receiptPrintMode",
+    input.policy.receiptPrintMode,
+  );
+  await setDepartmentSalePolicyField(
+    tx,
+    cfg,
+    departmentId,
+    "printTradingName",
+    input.policy.printTradingName,
+  );
 }

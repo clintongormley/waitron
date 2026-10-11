@@ -2157,7 +2157,7 @@ describe("independent department and global defaults routes", () => {
       { headerSubtitle: { unknown: "Text" } },
       { reason: "invalid_language", field: "headerSubtitle" },
     ],
-    [{ printAddress: false }, { reason: "unknown_field" }],
+    [{ printAddress: "false" }, { reason: "not_boolean", field: "printAddress" }],
     [null, { reason: "not_object" }],
   ])("refuses a department invalid value without writes (%j)", async (receipt, params) => {
     await setupTenant();
@@ -2169,6 +2169,22 @@ describe("independent department and global defaults routes", () => {
     expect(await res.json()).toEqual({ error: { code: "receipt.invalid", params } });
     expect(await suite.db.select().from(departmentReceipts)).toEqual([]);
   });
+
+  it.each([false, true])(
+    "round trips department address %s and its authored description",
+    async (printAddress) => {
+      await setupTenant();
+      const app = mountApp();
+      const cookie = await login(app, MANAGER_EMAIL);
+      const id = await departmentFixture();
+      const receipt = { printAddress, operationDescription: "Dining service" };
+      expect((await putTrim(app, cookie, departmentReceiptPath(id), { receipt })).status).toBe(204);
+      const response = await app.request(departmentReceiptPath(id), { headers: { cookie } });
+      expect(response.status).toBe(200);
+      expect((await response.json()).receipt).toEqual(receipt);
+      expect((await suite.db.select().from(departmentReceipts))[0]?.receipt).toEqual(receipt);
+    },
+  );
 
   it.each(["missing", "other-location"])("refuses %s department on GET and PUT", async (kind) => {
     await setupTenant();

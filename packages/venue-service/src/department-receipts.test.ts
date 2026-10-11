@@ -16,8 +16,13 @@ import { locationId } from "@waitron/shared";
 import { seedNode } from "@waitron/db/testing/seed.js";
 import { eq, sql } from "drizzle-orm";
 import { VENUE_SERVICE_MIGRATIONS } from "./migrations.js";
-import { departments, orderServiceContexts, saleReceiptHeaders } from "./schema/service.js";
-import { listDepartments } from "./operations.js";
+import {
+  departments,
+  departmentSalePolicies,
+  orderServiceContexts,
+  saleReceiptHeaders,
+} from "./schema/service.js";
+import { createDepartment, listDepartments } from "./operations.js";
 import * as receipts from "./index.js";
 
 const suite = useVenueDb({
@@ -184,6 +189,7 @@ describe("department receipt storage", () => {
       }),
     );
     expect(await scoped((tx) => receipts.readDepartmentReceipt(tx, f.cfg, f.id))).toEqual({
+      printAddress: false,
       headerSubtitle: { "es-ES": "Hola" },
       footerMessage: { "ca-ES": "Gràcies" },
     });
@@ -528,5 +534,187 @@ describe("receipt department lookups", () => {
     expect(
       await scoped((tx) => receipts.VENUE_SERVICE.readDepartmentLogoRasters(tx, f.cfg, f.id)),
     ).toBeNull();
+  });
+});
+
+describe("department-owned address and fiscal description", () => {
+  it.each([true, false])(
+    "round trips the department address switch %s and description",
+    async (printAddress) => {
+      const f = await fixture();
+      const receipt = { printAddress, operationDescription: "Dining service" };
+      await scoped((tx) => receipts.writeDepartmentReceipt(tx, f.cfg, f.id, receipt));
+      expect(await scoped((tx) => receipts.readDepartmentReceipt(tx, f.cfg, f.id))).toEqual(
+        receipt,
+      );
+      expect(
+        await scoped((tx) => receipts.readPrintedDepartmentReceipt(tx, f.cfg, f.id, "80mm")),
+      ).toEqual({ receipt, logo: null });
+      await suite.db.update(departments).set({ active: false }).where(eq(departments.id, f.id));
+      expect(await scoped((tx) => receipts.readRetainedDepartmentReceipt(tx, f.cfg, f.id))).toEqual(
+        receipt,
+      );
+    },
+  );
+  it("clears both fields without taking the other department or location value", async () => {
+    const f = await fixture();
+    await scoped((tx) =>
+      receipts.writeDepartmentReceipt(tx, f.cfg, f.id, {
+        printAddress: true,
+        operationDescription: "Dining service",
+      }),
+    );
+    expect(await scoped((tx) => receipts.readDepartmentReceipt(tx, f.cfg, f.id))).toEqual({
+      printAddress: true,
+      operationDescription: "Dining service",
+    });
+    const other = await scoped((tx) => createDepartment(tx, f.cfg, { name: "Deli" }));
+    await scoped((tx) =>
+      receipts.writeDepartmentReceipt(tx, f.cfg, other.id, {
+        printAddress: true,
+        operationDescription: "Other department",
+      }),
+    );
+    await scoped((tx) => receipts.writeDepartmentReceipt(tx, f.cfg, f.id, {}));
+    expect(await scoped((tx) => receipts.readDepartmentReceipt(tx, f.cfg, f.id))).toEqual({});
+  });
+  it.each([
+    { printAddress: 1 },
+    { printAddress: "true" },
+    { printAddress: null },
+    { operationDescription: null },
+    { operationDescription: [] },
+    { operationDescription: "x".repeat(501) },
+    { operationDescription: "bad\u0000text" },
+  ])("omits malformed optional imported fields %j", async (receipt) => {
+    const f = await fixture();
+    await imported(f.id, JSON.stringify(receipt));
+    expect(await scoped((tx) => receipts.readDepartmentReceipt(tx, f.cfg, f.id))).toEqual({});
+  });
+});
+
+describe("receipt and printing policy transaction", () => {
+  it("reads the department creation policy even before an authored receipt exists", async () => {
+    const f = await fixture();
+    expect(await scoped((tx) => receipts.readDepartmentReceiptPolicy(tx, f.cfg, f.id))).toEqual({
+      receiptPrintMode: "auto",
+      printTradingName: true,
+    });
+  });
+  it("saves receipt and policy while preserving the department's other service choices", async () => {
+    const f = await fixture();
+    await suite.db.insert(departmentSalePolicies).values({
+      departmentId: f.id,
+      orderStart: "table",
+      paidWhen: "ticket_then_pay",
+      collectionNumber: "numbered",
+    });
+    const receipt = { printAddress: false, operationDescription: "Dining service" };
+    const policy = { receiptPrintMode: "on_request" as const, printTradingName: false };
+    await scoped((tx) =>
+      receipts.saveDepartmentReceiptSettings(tx, f.cfg, f.id, { receipt, policy }),
+    );
+    expect(await scoped((tx) => receipts.readDepartmentReceipt(tx, f.cfg, f.id))).toEqual(receipt);
+    expect(await scoped((tx) => receipts.readDepartmentReceiptPolicy(tx, f.cfg, f.id))).toEqual(
+      policy,
+    );
+    expect(
+      await suite.db
+        .select()
+        .from(departmentSalePolicies)
+        .where(eq(departmentSalePolicies.departmentId, f.id)),
+    ).toEqual([
+      {
+        departmentId: f.id,
+        orderStart: "table",
+        paidWhen: "ticket_then_pay",
+        collectionNumber: "numbered",
+        ...policy,
+      },
+    ]);
+  });
+  it("rolls receipt and department state back when the subsequent policy write is refused", async () => {
+    const f = await fixture();
+    await scoped((tx) =>
+      receipts.writeDepartmentReceipt(tx, f.cfg, f.id, { operationDescription: "Old description" }),
+    );
+    await suite.db.execute(
+      sql`CREATE TRIGGER test_receipt_policy_refusal AFTER UPDATE OF receipt ON department_receipts BEGIN UPDATE departments SET active = 0 WHERE id = NEW.department_id; END`,
+    );
+    try {
+      await expect(
+        scoped((tx) =>
+          receipts.saveDepartmentReceiptSettings(tx, f.cfg, f.id, {
+            receipt: { operationDescription: "New description" },
+            policy: { receiptPrintMode: "on_request", printTradingName: false },
+          }),
+        ),
+      ).rejects.toMatchObject({ code: "department.not_found", params: { departmentId: f.id } });
+      expect(await scoped((tx) => receipts.readDepartmentReceipt(tx, f.cfg, f.id))).toEqual({
+        operationDescription: "Old description",
+      });
+      expect(
+        (await suite.db.select().from(departments).where(eq(departments.id, f.id)))[0]?.active,
+      ).toBe(true);
+      expect(
+        await suite.db
+          .select()
+          .from(departmentSalePolicies)
+          .where(eq(departmentSalePolicies.departmentId, f.id)),
+      ).toEqual([]);
+    } finally {
+      await suite.db.execute(sql`DROP TRIGGER test_receipt_policy_refusal`);
+    }
+  });
+  it("refuses a policy read or write for an unknown or deleted department", async () => {
+    const f = await fixture(false);
+    for (const id of [f.id, randomUUID()]) {
+      await expect(
+        scoped((tx) => receipts.readDepartmentReceiptPolicy(tx, f.cfg, id)),
+      ).rejects.toMatchObject({ code: "department.not_found" });
+      await expect(
+        scoped((tx) =>
+          receipts.saveDepartmentReceiptSettings(tx, f.cfg, id, {
+            receipt: {},
+            policy: { receiptPrintMode: "auto", printTradingName: true },
+          }),
+        ),
+      ).rejects.toMatchObject({ code: "department.not_found" });
+    }
+  });
+});
+
+it("keeps a JSON-looking string distinct from a JSON array", async () => {
+  const f = await fixture();
+  await scoped((tx) =>
+    receipts.writeDepartmentReceipt(tx, f.cfg, f.id, { operationDescription: "[]" }),
+  );
+  expect(await scoped((tx) => receipts.readDepartmentReceipt(tx, f.cfg, f.id))).toEqual({
+    operationDescription: "[]",
+  });
+});
+
+it("refuses another location's receipt policy while serving its owning location", async () => {
+  const own = await fixture();
+  const other = await fixture();
+  await expect(
+    scoped((tx) => receipts.readDepartmentReceiptPolicy(tx, own.cfg, other.id)),
+  ).rejects.toMatchObject({ code: "department.not_found", params: { departmentId: other.id } });
+  expect(
+    await scoped((tx) => receipts.readDepartmentReceiptPolicy(tx, other.cfg, other.id)),
+  ).toEqual({ receiptPrintMode: "auto", printTradingName: true });
+});
+
+it.each([
+  { label: "500 characters", value: "x".repeat(500) },
+  { label: "250 supplementary characters", value: "😀".repeat(250) },
+  { label: "permitted text whitespace", value: "Dining\tand drinks\n" },
+])("reads a valid $label description without changing its spelling", async ({ value }) => {
+  const f = await fixture();
+  await scoped((tx) =>
+    receipts.writeDepartmentReceipt(tx, f.cfg, f.id, { operationDescription: value }),
+  );
+  expect(await scoped((tx) => receipts.readDepartmentReceipt(tx, f.cfg, f.id))).toEqual({
+    operationDescription: value,
   });
 });

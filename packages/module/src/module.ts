@@ -4,6 +4,8 @@ import { AppError } from "@waitron/shared";
 import type {
   BusinessDayClock,
   DepartmentReceiptConfig,
+  DepartmentReceiptPolicy,
+  DepartmentReceiptWrite,
   DepartmentReceiptScope,
   ReceiptLogoRaster,
   ReceiptLogoRasters,
@@ -715,6 +717,18 @@ export interface VenueServiceContribution {
     cfg: { locationId: LocationId },
     saleId: string,
     zoneId: string | null,
+  ): Promise<void>;
+  readDepartmentReceiptPolicy(
+    tx: Transaction,
+    cfg: { locationId: LocationId },
+    departmentId: string,
+  ): Promise<DepartmentReceiptPolicy>;
+  saveDepartmentReceiptSettings(
+    tx: Transaction,
+    cfg: DepartmentReceiptScope,
+    departmentId: string,
+    input: DepartmentReceiptWrite,
+    rasters?: ReceiptLogoRasters,
   ): Promise<void>;
   readDepartmentReceipt(
     tx: Transaction,

@@ -2,11 +2,23 @@ import type { LocationId } from "./ids.js";
 export type ReceiptText = Readonly<Record<string, string>>;
 
 export interface DepartmentReceiptConfig {
+  printAddress?: boolean;
+  operationDescription?: string;
   logo?: string;
   phone?: string;
   email?: string;
   headerSubtitle?: ReceiptText;
   footerMessage?: ReceiptText;
+}
+
+export interface DepartmentReceiptPolicy {
+  receiptPrintMode: "auto" | "on_request";
+  printTradingName: boolean;
+}
+
+export interface DepartmentReceiptWrite {
+  receipt: DepartmentReceiptConfig;
+  policy: DepartmentReceiptPolicy;
 }
 
 export interface PrintedReceiptTrim {

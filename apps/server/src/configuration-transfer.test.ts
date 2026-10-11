@@ -5336,6 +5336,8 @@ it("transfers department receipt maps and pictures with remapped ids and unchang
     printAddress: false,
   };
   const authored = {
+    printAddress: true,
+    operationDescription: "Dining service",
     logo,
     email: "dining@example.com",
     headerSubtitle: { "es-ES": "Hola", "ca-ES": "Bon dia" },

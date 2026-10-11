@@ -635,6 +635,33 @@ function validateReceiptModes(tables: Tables): void {
   }
 }
 
+function validateReceiptFields(tables: Tables): void {
+  for (const row of tables.department_receipts ?? []) {
+    let receipt = row.receipt;
+    if (typeof receipt === "string") {
+      try {
+        receipt = JSON.parse(receipt) as unknown;
+      } catch {
+        refuse("department_receipts.receipt");
+      }
+    }
+    if (typeof receipt !== "object" || receipt === null || Array.isArray(receipt))
+      refuse("department_receipts.receipt");
+    const value = receipt as Record<string, unknown>;
+    if (value.printAddress !== undefined && typeof value.printAddress !== "boolean")
+      refuse("department_receipts.receipt");
+    if (
+      value.operationDescription !== undefined &&
+      (typeof value.operationDescription !== "string" ||
+        value.operationDescription.length > 500 ||
+        Array.from(value.operationDescription).some(
+          (character) => character < " " && !"\t\n\r".includes(character),
+        ))
+    )
+      refuse("department_receipts.receipt");
+  }
+}
+
 function validateOrderStarts(tables: Tables): void {
   for (const table of ["department_sale_policies", "zone_sale_policies"] as const) {
     for (const row of tables[table] ?? []) {
@@ -653,6 +680,7 @@ function validateVenueServiceConfiguration(
   validateReceiptModes(tables);
   validateOrderStarts(tables);
   validateServiceHierarchy(tables);
+  validateReceiptFields(tables);
   validateNamedDaysConfiguration(tables);
   validateHolidayConfiguration(tables);
   validateMenuTimetables(tables, bundle);

@@ -2091,3 +2091,39 @@ describe("season weeks in a configuration bundle", () => {
     expect(() => validate(zoneOnly)).toThrowError(refusal("zone_day_ranges"));
   });
 });
+
+describe("department receipt configuration fields", () => {
+  function tables(receipt: unknown): Tables {
+    return {
+      departments: [{ id: RESTAURANT, active: 1 }],
+      department_receipts: [{ department_id: RESTAURANT, receipt }],
+    };
+  }
+  it.each([
+    {},
+    { printAddress: false, operationDescription: "Dining service" },
+    { printAddress: true, operationDescription: "x".repeat(500) },
+  ])("accepts own receipt fields %j as an object or stored JSON", (receipt) => {
+    expect(() => VENUE_SERVICE_CONFIGURATION_TRANSFER.validate(tables(receipt))).not.toThrow();
+    expect(() =>
+      VENUE_SERVICE_CONFIGURATION_TRANSFER.validate(tables(JSON.stringify(receipt))),
+    ).not.toThrow();
+  });
+  it.each([
+    [null],
+    [[]],
+    ["{bad"],
+    [3],
+    [{ printAddress: null }],
+    [{ printAddress: "false" }],
+    [{ printAddress: 0 }],
+    [{ operationDescription: null }],
+    [{ operationDescription: [] }],
+    [{ operationDescription: "x".repeat(501) }],
+    [{ operationDescription: "bad\u0000text" }],
+  ])("refuses invalid receipt configuration %j", (receipt) => {
+    expect(() => VENUE_SERVICE_CONFIGURATION_TRANSFER.validate(tables(receipt))).toThrowError(
+      refusal("department_receipts.receipt"),
+    );
+  });
+});
