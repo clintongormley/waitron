@@ -2,7 +2,7 @@ import { afterEach, expect, it } from "vitest";
 import { setLocale } from "@waitron/dashboard-kit";
 import type { DeleteDialogCopy } from "@waitron/ui";
 afterEach(() => setLocale("en"));
-import { serviceDeleteCopy } from "./service-delete-copy.js";
+import { serviceDeleteCopy, serviceDeleteError } from "./service-delete-copy.js";
 async function copy(kind: "zone" | "department") {
   return serviceDeleteCopy(kind) as DeleteDialogCopy;
 }
@@ -231,5 +231,44 @@ it.each(["zone", "department"] as const)(
     expect(serviceDeleteCopy(kind).irreversible).toBe("This can't be undone.");
     setLocale("es");
     expect(serviceDeleteCopy(kind).irreversible).toBe("Esta acción no se puede deshacer.");
+  },
+);
+
+it.each([
+  [
+    "en",
+    "The default department is cleared.",
+    "This could not be deleted. Try again.",
+    "Keep at least one department.",
+  ],
+  [
+    "es",
+    "Se borra el departamento predeterminado.",
+    "No se pudo eliminar. Vuelve a intentarlo.",
+    "Conserva al menos un departamento.",
+  ],
+] as const)(
+  "explains absent replacements and safe error fallbacks in %s",
+  (locale, empty, fallback, last) => {
+    setLocale(locale);
+    const c = serviceDeleteCopy("department");
+    expect(c.item({ key: "default_department", count: 1, targets: [] })).toBe(empty);
+    expect(
+      c.item({
+        key: "unrecognised-impact",
+        count: 1,
+        targets: [{ id: "private-id", name: "Private target" }],
+      }),
+    ).toBe(fallback);
+    expect(
+      c.refusal({ code: "unrecognised-refusal", params: { privateId: "private-id" }, targets: [] }),
+    ).toBe(fallback);
+    expect(serviceDeleteError("department", { code: "department.last_active" })).toBe(last);
+    expect(serviceDeleteError("zone", { code: "zone.order_in_progress", params: {} })).toBe(
+      locale === "en"
+        ? "An order is still open or placed in this zone."
+        : "Hay un pedido abierto o enviado en esta zona.",
+    );
+    expect(serviceDeleteError("zone", new Error("private diagnostic"))).toBe(fallback);
   },
 );

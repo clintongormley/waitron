@@ -341,6 +341,52 @@ describe("service deletion", () => {
     ).toEqual([profiles[0]!.id, profiles[1]!.id].sort());
   });
 
+  it("a selected zone protects an explicit profile even when its starting zone is elsewhere", async () => {
+    const f = await fixture();
+    const profile = await run(async (tx) => {
+      const [row] = await tx
+        .insert(deviceProfiles)
+        .values({ name: "Selected Alpha", formFactor: "till" })
+        .returning();
+      await tx.insert(deviceProfileServiceAccess).values({
+        deviceProfileId: row!.id,
+        departmentId: f.dining,
+        everyZone: false,
+        startingZoneId: f.beta,
+      });
+      await tx.insert(deviceProfileZones).values({ deviceProfileId: row!.id, zoneId: f.alpha });
+      return row!;
+    });
+    const impact = await run((tx) =>
+      serviceDelete.readZoneDeleteImpact(tx, f.cfg, noFloor, f.alpha, NOW),
+    );
+    expect(impact.refusals.filter((row) => row.code === "zone.profile_in_use")).toEqual([
+      {
+        code: "zone.profile_in_use",
+        params: { zoneId: f.alpha, profileId: profile.id },
+        targets: [{ id: profile.id, name: "Selected Alpha" }],
+      },
+    ]);
+    expect(
+      await refusal(run((tx) => serviceDelete.deleteZone(tx, f.cfg, noFloor, f.alpha, NOW))),
+    ).toBe("zone.profile_in_use");
+    expect(
+      await run((tx) =>
+        tx.select({ active: floorZones.active }).from(floorZones).where(eq(floorZones.id, f.alpha)),
+      ),
+    ).toEqual([{ active: true }]);
+    const unrelated = await run((tx) =>
+      serviceDelete.readZoneDeleteImpact(tx, f.cfg, noFloor, f.gamma, NOW),
+    );
+    expect(unrelated.refusals.filter((row) => row.code === "zone.profile_in_use")).toEqual([]);
+    const otherDepartment = await run((tx) =>
+      serviceDelete.readDepartmentDeleteImpact(tx, f.cfg, noFloor, f.bar, NOW),
+    );
+    expect(
+      otherDepartment.refusals.filter((row) => row.code === "department.profile_in_use"),
+    ).toEqual([]);
+  });
+
   it("an Every profile refuses deletion of its last live zone", async () => {
     const f = await fixture();
     const profileId = await run(async (tx) => {

@@ -1,6 +1,6 @@
 import { afterEach, expect, it } from "vitest";
 import { setLocale } from "@waitron/dashboard-kit";
-import { stationDeleteCopy } from "./station-delete-copy.js";
+import { stationDeleteCopy, stationDeleteError } from "./station-delete-copy.js";
 afterEach(() => setLocale("en"));
 it.each([
   [
@@ -119,3 +119,33 @@ it.each([
     ).toBe(line);
   }
 });
+
+it.each([
+  [
+    "en",
+    "Choose another default station first.",
+    "Move the bound screens first.",
+    "3 dishes are still waiting or being prepared.",
+    "The change could not be saved.",
+  ],
+  [
+    "es",
+    "Elige otra estación predeterminada primero.",
+    "Cambia primero las pantallas vinculadas.",
+    "3 platos siguen pendientes o en preparación.",
+    "No se pudo guardar el cambio.",
+  ],
+] as const)(
+  "explains delete action refusals and unexpected failures in %s",
+  (locale, defaultLine, screens, work, fallback) => {
+    setLocale(locale);
+    expect(stationDeleteError({ code: "station.is_default" })).toBe(defaultLine);
+    expect(stationDeleteError({ code: "station.screen_in_use", params: { count: 2 } })).toBe(
+      screens,
+    );
+    expect(stationDeleteError({ code: "station.work_in_progress", params: { count: 3 } })).toBe(
+      work,
+    );
+    expect(stationDeleteError(new Error("private diagnostic"))).toBe(fallback);
+  },
+);
