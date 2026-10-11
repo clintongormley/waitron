@@ -1,11 +1,12 @@
 import { LitElement, css, html, nothing, type TemplateResult } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { baseStyles } from "../base-styles.js";
+import { delegatesFocusShadowRootOptions } from "../interactive.js";
 
 /** A full-width strip with one message and, when given an action label, one action. */
 @customElement("wt-banner")
 export class WtBanner extends LitElement {
-  static override shadowRootOptions = { ...LitElement.shadowRootOptions, delegatesFocus: true };
+  static override shadowRootOptions = delegatesFocusShadowRootOptions;
 
   static override styles = [
     baseStyles,

@@ -864,7 +864,7 @@ async function bootServer(
 
   const health = createHealthState(now());
   const app = healthApp(health, now, { venueDir: config.venueDir });
-  // Registered before every surface below, so they wrap all of them; `/health`, registered above, is
+  // Registered before every surface below, so each wraps all of them; `/health`, registered above, is
   // deliberately left out of the request log and names no build.
   app.use("*", requestIdMiddleware(log, now));
   app.use("*", buildHeaderMiddleware(applicationVersion(process.env)));
