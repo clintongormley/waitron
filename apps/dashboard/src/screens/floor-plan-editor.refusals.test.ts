@@ -507,7 +507,7 @@ it("a booked table refused with no date or time is marked with the code's own se
     .mockRejectedValueOnce(booked({ tableId: "l2" }))
     .mockRejectedValueOnce(booked({ tableId: "l2", time: "21:00" }));
   const el = await openPlaced(saveFloorPlan);
-  const sentence = "This table has an upcoming booking. Move the booking first";
+  const sentence = "Move or cancel this table’s bookings before deleting it.";
   for (let i = 0; i < 2; i++) {
     await change(el, deleteTable(draftFromPlan(placedM2()), "m2"));
     await press(el, "save");
@@ -531,7 +531,7 @@ it("a booked table the opened plan does not hold shows the code's own sentence",
   const el = await open(refusing({ code: "table.booked", params: { tableId: "l7" } }));
   await change(el, deleteTable(opened(), "m2"));
   await press(el, "save");
-  expect(message(el)).toBe("This table has an upcoming booking. Move the booking first");
+  expect(message(el)).toBe("Move or cancel this table’s bookings before deleting it.");
 });
 
 it("a failure with no field shows the server's sentence and leaves Save enabled", async () => {
