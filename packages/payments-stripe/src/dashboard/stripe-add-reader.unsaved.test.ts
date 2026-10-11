@@ -146,7 +146,10 @@ it("accepted registration commits before the host refresh notification", async (
 });
 it("a refused registration retains its draft and Cancel still asks", async () => {
   const form = await mount((async () => {
-    throw { code: "reader.not_found" };
+    throw {
+      code: "reader.reference_unknown",
+      params: { providerId: "stripe", field: "reference" },
+    };
   }) as DashboardRequest);
   await field(form, "reader-name", "Bar");
   await field(form, "reader-id", "tmr_bad");
@@ -231,7 +234,7 @@ for (const accepted of [true, false])
       await form.updateComplete;
       await field(form, "reader-name", "Replacement");
       if (accepted) reply.resolve({ id: "reader-one", status: "paired" });
-      else reply.reject({ code: "reader.not_found" });
+      else reply.reject({ code: "reader.reference_unknown", params: { providerId: "stripe" } });
       await new Promise((r) => setTimeout(r, 30));
       await form.updateComplete;
       expect(native(form).open).toBe(true);

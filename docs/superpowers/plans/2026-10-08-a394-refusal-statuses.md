@@ -1,5 +1,9 @@
 # A394 — refusal statuses by one rule: the audit and its follow-ups
 
+> **2026-10-11 (A519).** `stripe-add-reader.ts` no longer reads `reader.not_found`; an unknown
+> Stripe reader id on `POST /management-api/payments/readers` now answers `reader.reference_unknown`
+> with 400, by the rule.
+
 > **2026-10-11 supersession.** A435 step 6 changes deleted hierarchy target and import refusals. The HTTP survey below records its earlier contract; table in-service and hardware refusals remain separate. See the
 > [step 6 reconciliation](2026-10-11-a435-6-tables-zones-departments-delete.md). Earlier behavior and receipts below remain historical.
 

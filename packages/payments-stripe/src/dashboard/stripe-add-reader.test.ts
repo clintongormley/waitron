@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { userEvent } from "vitest/browser";
-import { registerCodeMessages, type DashboardRequest } from "@waitron/dashboard-kit";
+import { codeMessage, registerCodeMessages, type DashboardRequest } from "@waitron/dashboard-kit";
 import { formMessageOf } from "@waitron/ui/src/test-helpers.js";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import { t } from "./strings.js";
@@ -42,12 +42,32 @@ function focused(el: StripeAddReader, testId: string): boolean {
   return field.shadowRoot!.activeElement === field.shadowRoot!.querySelector("input");
 }
 
-function deferred<T>(): { promise: Promise<T>; resolve: (value: T) => void } {
+function deferred<T>(): {
+  promise: Promise<T>;
+  resolve: (value: T) => void;
+  reject: (reason: unknown) => void;
+} {
   let resolve!: (value: T) => void;
-  const promise = new Promise<T>((r) => {
-    resolve = r;
+  let reject!: (reason: unknown) => void;
+  const promise = new Promise<T>((res, rej) => {
+    resolve = res;
+    reject = rej;
   });
-  return { promise, resolve };
+  return { promise, resolve, reject };
+}
+
+/** The text of `node` and of every shadow root beneath it, as the operator would read it. */
+function deepText(node: Node): string {
+  let text = "";
+  for (const child of Array.from(node.childNodes)) {
+    if (child.nodeType === Node.TEXT_NODE) text += child.textContent;
+    else if (child.nodeType === Node.ELEMENT_NODE) {
+      const shadow = (child as Element).shadowRoot;
+      if (shadow) text += deepText(shadow);
+      if (!["STYLE", "SCRIPT"].includes((child as Element).tagName)) text += deepText(child);
+    }
+  }
+  return text;
 }
 
 async function add(el: StripeAddReader): Promise<void> {
@@ -55,6 +75,15 @@ async function add(el: StripeAddReader): Promise<void> {
   await el.updateComplete;
   await el.updateComplete;
 }
+
+// The dashboard's code table is not loaded here; without this the code reads as the generic
+// server-failure sentence, which a misplaced message would also show.
+registerCodeMessages({
+  "reader.reference_unknown": {
+    en: "Unknown reader ID copy for this test",
+    es: "Unknown reader ID copy for this test",
+  },
+});
 
 describe("stripe-add-reader", () => {
   it("posts the reader reference and emits onAdded then closes", async () => {
@@ -71,7 +100,6 @@ describe("stripe-add-reader", () => {
     });
 
     expect(q(el, "[data-test=reader-id]")).not.toBeNull();
-    expect(q(el, "[data-test=reader-id-help]")).not.toBeNull();
 
     await setInput(el, "reader-name", "Bar terminal");
     await setInput(el, "reader-id", "tmr_ABC123");
@@ -97,9 +125,23 @@ describe("stripe-add-reader", () => {
     expect(fieldError(el, "reader-id")).toBe(t("payments.stripe.reader_id_required"));
   });
 
-  it("shows the not-accepted copy when the reference is rejected", async () => {
+  it("names the Reader ID field once and gives its help as the field's placeholder", async () => {
+    const request = vi.fn() as unknown as DashboardRequest;
+    const { el } = await mountWidget<StripeAddReader>("stripe-add-reader", { request });
+
+    const label = t("payments.stripe.reader_id");
+    expect(deepText(el.shadowRoot!).split(label).length - 1).toBe(1);
+    expect(q(el, "wt-help-tooltip")).toBeNull();
+    const input = q(el, "[data-test=reader-id]")!.shadowRoot!.querySelector("input")!;
+    expect(input.placeholder).toBe(t("payments.stripe.reader_id_hint"));
+  });
+
+  it("puts a reader id Stripe does not know under the Reader ID field, leaving Add working", async () => {
     const request = vi.fn(async () => {
-      throw { code: "reader.not_found" };
+      throw {
+        code: "reader.reference_unknown",
+        params: { providerId: "stripe", field: "reference" },
+      };
     }) as unknown as DashboardRequest;
     const onAdded = vi.fn();
     const { el } = await mountWidget<StripeAddReader>("stripe-add-reader", { request, onAdded });
@@ -108,8 +150,115 @@ describe("stripe-add-reader", () => {
     await setInput(el, "reader-id", "tmr_bad");
     await add(el);
 
-    expect(await bottomOf(el)).toBe(t("payments.stripe.add_failed"));
+    await vi.waitFor(() =>
+      expect(fieldError(el, "reader-id")).toBe(t("payments.stripe.reader_id_unknown")),
+    );
+    expect(fieldError(el, "reader-name")).toBe("");
+    expect(await bottomOf(el)).toBe(t("payments.stripe.fix_fields"));
+    expect(addDisabled(el)).toBe(false);
+    await vi.waitFor(() => expect(focused(el, "reader-id")).toBe(true));
     expect(onAdded).not.toHaveBeenCalled();
+
+    await setInput(el, "reader-name", "Bar 2");
+    expect(fieldError(el, "reader-id")).toBe(t("payments.stripe.reader_id_unknown"));
+
+    await setInput(el, "reader-id", "tmr_good");
+    expect(fieldError(el, "reader-id")).toBe("");
+    expect(await bottomOf(el)).toBe("");
+    expect(addDisabled(el)).toBe(false);
+  });
+
+  it("drops the Reader ID refusal on the next press", async () => {
+    const request = vi
+      .fn()
+      .mockImplementationOnce(async () => {
+        throw {
+          code: "reader.reference_unknown",
+          params: { providerId: "stripe", field: "reference" },
+        };
+      })
+      .mockImplementationOnce(() => new Promise(() => {})) as unknown as DashboardRequest;
+    const { el } = await mountWidget<StripeAddReader>("stripe-add-reader", { request });
+
+    await setInput(el, "reader-name", "Bar");
+    await setInput(el, "reader-id", "tmr_bad");
+    await add(el);
+    await vi.waitFor(() =>
+      expect(fieldError(el, "reader-id")).toBe(t("payments.stripe.reader_id_unknown")),
+    );
+
+    await add(el);
+    expect(request).toHaveBeenCalledTimes(2);
+    expect(fieldError(el, "reader-id")).toBe("");
+    expect(await bottomOf(el)).toBe("");
+  });
+
+  it("drops a Reader ID refusal that arrives after the Reader ID was changed", async () => {
+    const pending = deferred<{ id: string; status: string }>();
+    const request = vi.fn(() => pending.promise) as unknown as DashboardRequest;
+    const { el } = await mountWidget<StripeAddReader>("stripe-add-reader", { request });
+
+    await setInput(el, "reader-name", "Bar");
+    await setInput(el, "reader-id", "tmr_bad");
+    q(el, "[data-test=add]")!.click();
+    await el.updateComplete;
+    await setInput(el, "reader-id", "tmr_good");
+
+    pending.reject({
+      code: "reader.reference_unknown",
+      params: { providerId: "stripe", field: "reference" },
+    });
+    await vi.waitFor(() =>
+      expect((q(el, "[data-test=add]") as unknown as { loading: boolean }).loading).toBe(false),
+    );
+    await el.updateComplete;
+    await new Promise((r) => requestAnimationFrame(() => r(undefined)));
+
+    expect(fieldError(el, "reader-id")).toBe("");
+    expect(focused(el, "reader-id")).toBe(false);
+    expect(await bottomOf(el)).toBe("");
+    expect((q(el, "[data-test=reader-id]") as unknown as { value: string }).value).toBe("tmr_good");
+    expect(addDisabled(el)).toBe(false);
+  });
+
+  it("shows the server-failure sentence at the bottom when the request rejects with null", async () => {
+    const request = vi.fn(async () => {
+      throw null;
+    }) as unknown as DashboardRequest;
+    const rejections: unknown[] = [];
+    const onReject = (e: PromiseRejectionEvent): void => {
+      e.preventDefault();
+      rejections.push(e.reason);
+    };
+    window.addEventListener("unhandledrejection", onReject);
+    const { el } = await mountWidget<StripeAddReader>("stripe-add-reader", { request });
+    try {
+      await setInput(el, "reader-name", "Bar");
+      await setInput(el, "reader-id", "tmr_bad");
+      await add(el);
+      await new Promise((r) => setTimeout(r, 50));
+    } finally {
+      window.removeEventListener("unhandledrejection", onReject);
+    }
+
+    expect(rejections).toEqual([]);
+    expect(await bottomOf(el)).toBe(codeMessage("server.internal"));
+    expect(fieldError(el, "reader-id")).toBe("");
+  });
+
+  it("puts the refusal's own sentence at the bottom when it names no field the form shows", async () => {
+    const request = vi.fn(async () => {
+      throw { code: "reader.reference_unknown", params: { providerId: "stripe" } };
+    }) as unknown as DashboardRequest;
+    const { el } = await mountWidget<StripeAddReader>("stripe-add-reader", { request });
+
+    await setInput(el, "reader-name", "Bar");
+    await setInput(el, "reader-id", "tmr_bad");
+    await add(el);
+
+    expect(await bottomOf(el)).toBe(codeMessage("reader.reference_unknown"));
+    expect(fieldError(el, "reader-id")).toBe("");
+    expect(addDisabled(el)).toBe(false);
   });
 
   it("closes without adding when cancelled", async () => {
@@ -250,7 +399,7 @@ describe("stripe-add-reader", () => {
     expect(onClose).not.toHaveBeenCalled();
   });
 
-  it("shows the not-accepted copy when the server fails internally", async () => {
+  it("shows the shared server-failure copy at the bottom when the server fails internally", async () => {
     const request = vi.fn(async () => {
       throw { code: "server.internal" };
     }) as unknown as DashboardRequest;
@@ -261,7 +410,8 @@ describe("stripe-add-reader", () => {
     await setInput(el, "reader-id", "tmr_bad");
     await add(el);
 
-    expect(await bottomOf(el)).toBe(t("payments.stripe.add_failed"));
+    expect(await bottomOf(el)).toBe(codeMessage("server.internal"));
+    expect(fieldError(el, "reader-id")).toBe("");
     expect(onAdded).not.toHaveBeenCalled();
   });
 
@@ -350,7 +500,7 @@ describe("stripe-add-reader", () => {
     await setInput(el, "reader-id", "tmr_bad");
     await add(el);
 
-    expect(await bottomOf(el)).toBe(t("payments.stripe.add_failed"));
+    expect(await bottomOf(el)).toBe(codeMessage("server.internal"));
     expect(fieldError(el, "reader-id")).toBe("");
     expect(addDisabled(el)).toBe(false);
 

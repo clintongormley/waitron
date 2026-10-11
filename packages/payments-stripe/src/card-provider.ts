@@ -202,7 +202,18 @@ export function createStripeCardProvider(
         if (input.reference === undefined)
           throw new Error("stripe readers.add requires a reader reference");
         const secretKey = await sealedSecretKey(deps);
-        await makeStripe(secretKey).terminal.readers.retrieve(input.reference);
+        const refused = () =>
+          new AppError("reader.reference_unknown", { providerId: PROVIDER_ID, field: "reference" });
+        let reader: Stripe.Terminal.Reader | Stripe.Terminal.DeletedReader;
+        try {
+          reader = await makeStripe(secretKey).terminal.readers.retrieve(input.reference);
+        } catch (error) {
+          // An authentication, network or server failure leaves the reader's existence unknown,
+          // so it stays a fault.
+          if (error instanceof Stripe.errors.StripeInvalidRequestError) throw refused();
+          throw error;
+        }
+        if ("deleted" in reader && reader.deleted) throw refused();
         return { providerRef: input.reference, status: "paired" };
       },
 

@@ -967,6 +967,10 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "That card reader no longer exists",
     es: "Ese lector de tarjetas ya no existe",
   },
+  "reader.reference_unknown": {
+    en: "The payment provider has no reader with this ID",
+    es: "El proveedor de pagos no tiene ningún lector con este ID",
+  },
   "reader.provider_disconnected": {
     en: "Connect this payment provider first",
     es: "Conecta primero este proveedor de pagos",
