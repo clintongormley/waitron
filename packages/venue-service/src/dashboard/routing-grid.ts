@@ -160,7 +160,7 @@ export class RoutingGrid extends LitElement {
         z-index: 1;
         border-inline-end: 1px solid var(--wt-color-border);
       }
-      /* The label or its toggle carries the block padding, so the toggle is the whole row tall. */
+      /* The label or its toggle carries the block padding, so the padding is inside the toggle's tap area. */
       tbody th {
         font-weight: var(--wt-font-weight-normal);
         padding-block: 0;
@@ -324,9 +324,9 @@ export class RoutingGrid extends LitElement {
   #categories = new Map<string, GridCategory>();
   #allRows: ReadonlyMap<string, GridRow> | null = null;
   #blank: ReturnType<typeof blankZoneCell> | null = null;
-  /** Rebuilt with the model and the language, which the lines' words are in. */
   #search: RoutingSearch | undefined;
   #found = new Map<string, SearchRow>();
+  /** Rebuilt with the model and the language, which the lines' words are in. */
   #lines: {
     model: RoutingView;
     locale: string;

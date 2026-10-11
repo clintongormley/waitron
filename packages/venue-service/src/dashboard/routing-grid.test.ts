@@ -298,7 +298,7 @@ describe("venue-routing-grid", () => {
     ]);
   });
 
-  it("shows inherited results muted and explicit ones normal, including explicit-equal", async () => {
+  it("shows inherited results muted, blank where they repeat the row's Every zone, and explicit ones unmuted, including explicit-equal", async () => {
     const { el } = await mount(routing(), {});
     root(el).querySelector<HTMLElement>('[data-test="expand-all"]')!.click();
     await el.updateComplete;

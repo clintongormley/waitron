@@ -437,7 +437,7 @@ export interface RoutingSearch {
 /**
  * The rows a search shows: All categories, then each category or product whose own name matches
  * and each of its ancestors (No category over an uncategorised match). `open` defaults to every
- * category that is an ancestor of a match, so matched categories start closed. An open ancestor
+ * category that is an ancestor of a match. An open ancestor
  * lists only its children that match or lead to a match; any other open category lists all its
  * children. A cell of a row's own adds no row. Undefined for a blank query: no search.
  */

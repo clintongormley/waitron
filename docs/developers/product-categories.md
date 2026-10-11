@@ -56,7 +56,7 @@ today's station closures. A category with no Every zone cell on its own row or a
 at the active default station, and reads Nowhere when none is set. A route to No preparation
 carries no asterisk. The asterisk's tooltip explains the
 warning. To clear it, set the Every zone cell of the category or one of its parents on Prep
-stations' Routing tab; or choose an active station for that cell.
+stations' Routes tab; or choose an active station for that cell.
 If no active default is set, use Make default on Prep stations.
 
 A variant is always in its product's reporting category. Its effective category
@@ -459,7 +459,7 @@ keeps its dialog open with a message at the bottom.
 Deleting a category removes every routing cell on its row, because `routing_cells_category_fk`
 cascades. The dialog counts the routing rules each answer
 removes; it does not list products whose station would change. **Move to…** also has no routing preview. Check
-Prep stations' Routing tab after changing the category tree. A variant is routed by its product's
+Prep stations' Routes tab after changing the category tree. A variant is routed by its product's
 category, and a variant still storing a deleted category has it cleared.
 
 ## API

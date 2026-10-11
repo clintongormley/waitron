@@ -53,7 +53,7 @@ with **Move to…**. The main category also plays a part in choosing the kitchen
 to, as described below.
 
 Use the **Default course** field under **Kitchen** to decide when the product fires. It saves with
-the product. Where the dish is made is set in the routing grid, on the **Routing** tab of **Prep
+the product. Where the dish is made is set in the routing grid, on the **Routes** tab of **Prep
 stations**. The product's own row decides first, then its category's row and each parent
 category's in turn (the **No category** row for a product with no category), then **All
 categories**. Within a row, a cell for the order's service zone comes before the row's **Every
