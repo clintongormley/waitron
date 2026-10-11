@@ -372,7 +372,7 @@ export const en = {
   "receipts.language": "Receipt language",
   "receipts.language_invalid": "Choose one of the languages offered.",
   "receipts.language_save_error": "The receipt language could not be saved.",
-  "receipts.language_stored": "Receipts print in {stored} until you switch to {fixed}.",
+  "receipts.language_stored": "By default, receipts print in {stored} until you switch to {fixed}.",
   "receipts.language_use": "Use {fixed}",
   "receipt_language.warning":
     "By default, receipts print in {receipt}, which is not one of your content languages. Product names on them print in {default}, the default language.",
@@ -3025,7 +3025,8 @@ export const es: Record<StringKey, string> = {
   "receipts.language": "Idioma del recibo",
   "receipts.language_invalid": "Elige uno de los idiomas ofrecidos.",
   "receipts.language_save_error": "No se ha podido guardar el idioma del recibo.",
-  "receipts.language_stored": "Los recibos se imprimen en {stored} hasta que cambies a {fixed}.",
+  "receipts.language_stored":
+    "Por defecto, los recibos se imprimen en {stored} hasta que cambies a {fixed}.",
   "receipts.language_use": "Usar {fixed}",
   "receipt_language.warning":
     "Por defecto, los recibos se imprimen en {receipt}, que no es uno de tus idiomas del contenido. Los nombres de los productos salen en {default}, el idioma predeterminado.",

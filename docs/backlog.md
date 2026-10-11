@@ -1655,7 +1655,7 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
 _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
 
 - **An unpaid table bill shows two "Full invoice" buttons**: the payment panel's own
-  (`till-tender-pay`) and the bill's smaller one (`#fullInvoiceChoice`,
+  (`till-tender-pay`) and the bill's smaller one (`#billChoices`,
   `apps/till/src/screens/till-table-order-screen.ts`), both drawn since A231 (#1256). **Next action
   (owner decision):** which one stays.
 
@@ -2671,7 +2671,9 @@ _Formerly A3, A8 and B6; part of A9._ Detail: [backlog/printers.md](backlog/prin
 
 - **The legal name and tax ID share one printed line, unchecked against what a receipt must show**
   — left open by A497. A receipt's and an A4 invoice's top block print the legal name, then " · ",
-  then the tax ID with its label, as one line (`apps/server/src/receipt-document.ts`).
+  then the tax ID with its label, as one line where it fits; a narrow roll breaks it at the
+  separator (`apps/server/src/receipt-document.ts`, `textLines` in
+  `apps/server/src/receipt-ticket.ts`), and the A4 page wraps it by width.
 
 - **Show a failed automatic invoice copy to staff.** A recoverable email or office-printer
   reservation refusal commits the sale with no delivery row or paper fallback; the diagnostic

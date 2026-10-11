@@ -1425,10 +1425,9 @@ it("shows saved nonprice modifier answers literally without inventing charge row
 });
 
 it("resolves a filed line's unit abbreviation from a BARE content-language key", async () => {
-  // Only `descriptions` is re-keyed onto the venue's invoice locales
-  // (`toInvoiceLineDescriptions`, `packages/catalogue/src/invoice-descriptions.ts`); a line's
-  // `unit_name` keeps the bare content-language keys it was stored under, so an exact-key lookup
-  // against "es-ES" misses every one of them and shows whichever language happens to come first.
+  // Only `descriptions` is keyed by the venue's invoice locales; a line's `unit_name` keeps the
+  // bare content-language keys it was stored under, so an exact-key lookup against "es-ES" misses
+  // every one of them and shows whichever language happens to come first.
   const { el } = await mount({
     lines: [
       {

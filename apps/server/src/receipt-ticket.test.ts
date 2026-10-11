@@ -1172,10 +1172,10 @@ describe("formatReceipt — the faithful, legally-complete customer receipt", ()
   });
 
   it("prints the unit abbreviation of the invoice language, not whichever one is stored first", () => {
-    // Nothing re-keys a unit's abbreviation map onto the invoice locales (as
-    // `toInvoiceLineDescriptions` does a line's `descriptions`), so the receipt must match the tag
-    // "es-ES" against the bare key "es"; reading the first entry prints whichever language happens
-    // to come first. The pairs are `EACH_UNIT`'s (`packages/catalogue/src/units.ts`).
+    // A unit's abbreviation map keeps bare content-language keys, never the invoice locales a line's
+    // `descriptions` are keyed by, so the receipt must match the tag "es-ES" against the bare key
+    // "es"; reading the first entry prints whichever language happens to come first. The pairs are
+    // `EACH_UNIT`'s (`packages/catalogue/src/units.ts`).
     const result: TillSaleResult = {
       ...FILED_SALE,
       lines: [
