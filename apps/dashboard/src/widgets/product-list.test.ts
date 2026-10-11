@@ -244,6 +244,51 @@ describe("product-list", () => {
     expect(await searchFor("bebidas")).toEqual(["folder:beb"]);
   });
 
+  it("hands the table the same rows until the products, categories, draft or Show archived change", async () => {
+    const { el, table } = await mountTree({
+      products: [...treeProducts(), product({ id: "gone", name: "Anchoas", active: false })],
+    });
+    const redraw = async (change: () => void | Promise<void>) => {
+      const before = table.rows;
+      await change();
+      await el.updateComplete;
+      await table.updateComplete;
+      return table.rows === before;
+    };
+    expect(await redraw(() => void (el.search = "cer"))).toBe(true);
+    expect(await redraw(() => void (el.search = "cerv"))).toBe(true);
+    expect(await redraw(() => void (el.extraLists = [{ id: "ex-1", name: "Tapas" }]))).toBe(true);
+    expect(await redraw(() => void (el.selecting = true))).toBe(true);
+    expect(await redraw(() => void (el.products = [...el.products]))).toBe(false);
+    expect(await redraw(() => void (el.categories = [...el.categories]))).toBe(false);
+    expect(await redraw(() => void (el.nameDraft = { kind: "create", parentId: null }))).toBe(
+      false,
+    );
+    expect((table.rows as readonly { key: string }[]).map(({ key }) => key)).toContain("draft:new");
+    expect(await redraw(() => void (el.nameDraft = null))).toBe(false);
+    expect(await redraw(() => showArchived(el))).toBe(false);
+    expect((table.rows as readonly { key: string }[]).map(({ key }) => key)).toContain("gone");
+  });
+
+  it("redraws a cell from a renamed modifier list while the rows stay the same", async () => {
+    const { el, table, root } = await mountTree({
+      categories: [{ id: "comida", name: "Comida", parentId: null, color: null }],
+      products: [
+        product({ primaryCategoryId: "comida", modifiers: [{ kind: "extras", id: "ex-1" }] }),
+      ],
+      extraLists: [{ id: "ex-1", name: "Salsas" }],
+    });
+    await openRow(el, "folder:comida");
+    const rows = table.rows;
+    el.extraLists = [{ id: "ex-1", name: "Salsas caseras" }];
+    await el.updateComplete;
+    await table.updateComplete;
+    expect(table.rows).toBe(rows);
+    expect(cellUnder(root, "prod-1", t("editor.modifiers")).textContent!.trim()).toBe(
+      "Salsas caseras",
+    );
+  });
+
   it("A461 Products shows own matches with inline paths", async () => {
     const { el, table, root } = await mountTree({
       categories: [
