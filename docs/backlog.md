@@ -1660,10 +1660,6 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   (`apps/server/src/station-move.ts`) does so whoever moved it. Should it? A question for the owner.
   Left open by A439.
 
-- **The move route does not refuse an extra (an add-on line)** — `moveDishesToStation`
-  (`apps/server/src/station-move.ts`) never checks that a line is a dish, so only the buttons keep
-  extras out, on the till and the kitchen display alike. Left open by A439.
-
 ### The till, devices and table service
 
 - **Investigate a null device identity during profile switching.** A432’s full till coverage run

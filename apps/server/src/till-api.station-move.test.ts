@@ -8,6 +8,7 @@ import {
   ticketItems,
   workingOrderLines,
   workingOrders,
+  printJobs,
 } from "@waitron/db";
 import { persons } from "@waitron/identity";
 import { listStationQueues } from "./working-order.js";
@@ -58,6 +59,48 @@ describe("GET /api/stations", () => {
 });
 
 describe("POST /api/working-orders/:id/lines/move-station", () => {
+  it.each([false, true])(
+    "refuses an extra without changing the request's dishes (mixed: %s)",
+    async (mixed) => {
+      const { tabId } = await seatedWith(venue, "Paella", "Caña");
+      const items = await inTx(venue, (tx) =>
+        tx.select().from(ticketItems).where(eq(ticketItems.workingOrderId, tabId)),
+      );
+      const [dish, extra] = items as [(typeof items)[0], (typeof items)[0]];
+      await inTx(venue, (tx) =>
+        tx
+          .update(workingOrderLines)
+          .set({ parentLineId: dish.workingOrderLineId })
+          .where(eq(workingOrderLines.id, extra.workingOrderLineId)),
+      );
+      const snapshot = () =>
+        inTx(venue, async (tx) => ({
+          items: await tx.select().from(ticketItems).where(eq(ticketItems.workingOrderId, tabId)),
+          lines: await tx
+            .select()
+            .from(workingOrderLines)
+            .where(eq(workingOrderLines.workingOrderId, tabId)),
+          order: await tx.select().from(workingOrders).where(eq(workingOrders.id, tabId)),
+          moves: await tx.select().from(ticketItemMoves),
+          jobs: await tx.select().from(printJobs),
+        }));
+      const before = await snapshot();
+      const answer = await call(`/api/working-orders/${tabId}/lines/move-station`, {
+        submissionId: randomUUID(),
+        lineIds: mixed
+          ? [dish.workingOrderLineId, extra.workingOrderLineId]
+          : [extra.workingOrderLineId],
+        stationId: grill,
+      });
+      expect({ status: answer.status, ...answer.json }).toMatchObject({
+        status: 400,
+        code: "ticket.extra_not_movable",
+        params: { workingOrderId: tabId, lineId: extra.workingOrderLineId },
+      });
+      expect(await snapshot()).toEqual(before);
+    },
+  );
+
   it("records the session's device and person as the mover", async () => {
     const { tabId } = await seatedWith(venue, "Paella");
     const [item] = await inTx(venue, (tx) =>

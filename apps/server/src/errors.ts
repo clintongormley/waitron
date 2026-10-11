@@ -703,6 +703,7 @@ declare module "@waitron/shared" {
      * Before a send, `make_at_station_id` chooses where a dish will be made.
      */
     "ticket.not_sent": { workingOrderId: string; lineId: string };
+    "ticket.extra_not_movable": { workingOrderId: string; lineId: string };
     /** A move named a dish made at the sending till, always fired and ready; its station is its maker. */
     "ticket.made_here": { ticketItemId: string };
     /**
