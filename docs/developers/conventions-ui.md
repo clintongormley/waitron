@@ -386,7 +386,7 @@ deployment database has one tenant and that tenant can contain several locations
 
 ## An open page notices a box update from one response header
 
-Every response from the main HTTPS listener after `/health` carries `x-waitron-build`
+Every response from the main listener after `/health` carries `x-waitron-build`
 (`BUILD_HEADER`, `@waitron/shared`), set by `buildHeaderMiddleware` (`apps/server/src/build-header.ts`) after the
 handler runs, because a handler that returns its own `Response` does not keep a header set before
 it. Two other apps never use the middleware, so they name no build: the
@@ -419,8 +419,10 @@ build-header lines in `apps/server/src/boot.test.ts`, the "build updates" cases 
 checks the wiring in either app's `main.ts`. It was run once instead, on 2026-10-11, on the demo
 stack (`wa-wt demo`) in Playwright's Chromium, with a route that swapped the header's value for
 another build: the header reached both pages through the Vite dev servers (`0.0.0`, not `null`);
-the signed-in dashboard showed the bar 26 ms after the tab came back into view, which sends its
-session read (`/management-api/session/me`), and after Reload showed none; a till on its lock screen with nobody signed
+the signed-in dashboard showed the bar 26 ms after the script faked the tab coming back into view
+(it set `document.visibilityState` to `visible` and sent a synthetic `visibilitychange`), which
+makes the dashboard send its session read (`/management-api/session/me`); after Reload it showed
+none; a till on its lock screen with nobody signed
 in loaded again 3711 ms after the swap began, first brought by `/api/node`; a signed-in till showed
 the bar instead, had not reloaded 15 s later, and after Reload came back on the lock screen,
 signed out. The limits kept on purpose are in `docs/backlog/dashboard.md` → "Decisions and
