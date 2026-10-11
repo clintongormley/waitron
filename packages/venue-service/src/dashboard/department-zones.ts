@@ -135,7 +135,7 @@ export class DepartmentZones extends LitElement {
   }
   private get zones() {
     return (
-      this.model?.zones.filter(
+      (this.department?.active ? this.model?.zones : undefined)?.filter(
         (z) =>
           z.departmentId === this.departmentId &&
           z.active !== false &&

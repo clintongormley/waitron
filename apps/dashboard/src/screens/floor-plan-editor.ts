@@ -25,6 +25,7 @@ import "./floor-plan-add-tables.js";
 import "./floor-plan-table-panel.js";
 import "./floor-plan-tables-panel.js";
 import { bookedReason } from "./floor-plan-booked.js";
+import { DashboardQueries } from "../api/query-controller.js";
 import { dashboardPath } from "../navigation.js";
 import { currentLocale, t } from "../i18n/t.js";
 import { LocaleChangeController } from "../state/locale-controller.js";
@@ -314,6 +315,13 @@ export class FloorPlanEditor extends LitElement {
   #scope?: DraftScope<StagedPlan>;
   readonly #scopeId = {};
 
+  readonly #queries = new DashboardQueries(
+    this,
+    () => this.api,
+    (error) => this.#showReadFailure(error),
+    () => this.#clearReadMessage(),
+  );
+
   readonly #url = new UrlStateController(this, () => this.#route(), dashboardPath);
 
   /** Watches a zero-height probe, not the host: the host's height changes when `narrow` flips. */
@@ -359,6 +367,13 @@ export class FloorPlanEditor extends LitElement {
   override connectedCallback(): void {
     super.connectedCallback();
     this.requestUpdate();
+    if (this.api.liveData)
+      void this.#queries
+        .watch("listZones", [], (zones) => {
+          if (this.#zoneId && !zones.some((zone) => zone.id === this.#zoneId && zone.active))
+            this.#retireZone();
+        })
+        .catch(() => {});
     window.addEventListener("pointerdown", this.#userScrolls, { capture: true, passive: true });
     window.addEventListener("wheel", this.#userScrolls, { capture: true, passive: true });
     window.addEventListener("scroll", this.#userScrolls, { passive: true });
@@ -368,6 +383,7 @@ export class FloorPlanEditor extends LitElement {
   }
 
   override disconnectedCallback(): void {
+    this.#request++;
     this.#cancelPending();
     this.#resize.disconnect();
     this.#sheetResize.disconnect();
@@ -451,6 +467,20 @@ export class FloorPlanEditor extends LitElement {
   #disposeScope(): void {
     this.#scope?.dispose();
     this.#scope = undefined;
+  }
+
+  #retireZone(): void {
+    this.#request++;
+    this.#cancelPending();
+    this.#disposeScope();
+    this.plan = null;
+    this.draft = null;
+    this.#opened = null;
+    this.#history = null;
+    this.#liveFrom = null;
+    this.selected = null;
+    this.#clearFeedback();
+    this.loadError = "zone.not_found";
   }
 
   #route(): void {
@@ -672,7 +702,15 @@ export class FloorPlanEditor extends LitElement {
   }
 
   readonly #save = async (): Promise<void> => {
-    if (this.saving || this.loadingNewer || saveActionState(this.#scope).unchanged) return;
+    if (
+      !this.isConnected ||
+      !this.draft ||
+      !this.#scope ||
+      this.saving ||
+      this.loadingNewer ||
+      saveActionState(this.#scope).unchanged
+    )
+      return;
     if (this.typedMarks.length > 0) return;
     if (this.#markCheck(this.draft!)) {
       this.#selectFlagged(this.mark!.key);

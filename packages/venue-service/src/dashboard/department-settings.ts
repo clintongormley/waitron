@@ -157,7 +157,18 @@ export class DepartmentSettings extends LitElement {
   }
   protected override willUpdate() {
     const row = this.department;
-    if (!row || !row.active) return;
+    if (!row || !row.active) {
+      this.scope?.dispose();
+      this.scope = undefined;
+      this.leave = undefined;
+      this.opened = "";
+      this.generation = {};
+      this.transferGeneration = {};
+      this.transferLoading = false;
+      this.busy = false;
+      this.draft = undefined;
+      return;
+    }
     const policy = this.model!.salePolicies.departments.find((p) => p.departmentId === row.id);
     const source: DepartmentSettingsInput = {
       name: row.name,
@@ -255,13 +266,23 @@ export class DepartmentSettings extends LitElement {
       void this.loadTransfers(row.id, this.transferGeneration);
   }
   private current(id: string, generation: object) {
-    return this.isConnected && this.departmentId === id && this.generation === generation;
+    return (
+      this.isConnected &&
+      this.department?.active &&
+      this.departmentId === id &&
+      this.generation === generation
+    );
   }
   private async loadTransfers(id: string, generation: object) {
     this.transferLoading = true;
     try {
       const settings = await this.api!.background.loadDepartmentTransfers(id);
-      if (this.isConnected && this.departmentId === id && this.transferGeneration === generation) {
+      if (
+        this.isConnected &&
+        this.department?.active &&
+        this.departmentId === id &&
+        this.transferGeneration === generation
+      ) {
         const transfers = {
           receivingProfileId: settings.receivingProfileId,
           destinationDepartmentIds: [...settings.destinationDepartmentIds],
@@ -277,12 +298,22 @@ export class DepartmentSettings extends LitElement {
         this.transfersLoaded = true;
       }
     } catch {
-      if (this.isConnected && this.departmentId === id && this.transferGeneration === generation) {
+      if (
+        this.isConnected &&
+        this.department?.active &&
+        this.departmentId === id &&
+        this.transferGeneration === generation
+      ) {
         this.transferFailure = t("venue.transfers_load_error");
         this.transfersLoaded = true;
       }
     } finally {
-      if (this.isConnected && this.departmentId === id && this.transferGeneration === generation) {
+      if (
+        this.isConnected &&
+        this.department?.active &&
+        this.departmentId === id &&
+        this.transferGeneration === generation
+      ) {
         this.transferLoading = false;
         this.requestUpdate();
       }
