@@ -202,7 +202,10 @@ describe.each(["en", "es"])("Retained date save contract (%s)", (locale) => {
       [
         "/management-api/venue-service/special-dates/s1/menu-timetables/d1",
         "PUT",
-        { slots: [{ periodId: "p1", startsAt: "12:00", endsAt: "17:00" }] },
+        {
+          expectedClockRevision: 0,
+          slots: [{ periodId: "p1", startsAt: "12:00", endsAt: "17:00" }],
+        },
       ],
     ]);
     expect(unload()).toBe(false);
@@ -231,7 +234,10 @@ describe.each(["en", "es"])("Retained date save contract (%s)", (locale) => {
       [
         "/management-api/venue-service/special-dates/s1/menu-timetables/d1",
         "PUT",
-        { slots: [{ periodId: "p1", startsAt: "12:00", endsAt: "17:00" }] },
+        {
+          expectedClockRevision: 0,
+          slots: [{ periodId: "p1", startsAt: "12:00", endsAt: "17:00" }],
+        },
       ],
     ]);
     expect(unload()).toBe(true);

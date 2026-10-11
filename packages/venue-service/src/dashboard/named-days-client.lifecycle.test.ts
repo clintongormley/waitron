@@ -48,6 +48,8 @@ describe("NamedDaysApi.watchNamedDays", () => {
       "departments",
       "tenants",
       "locations",
+      "location_business_day_settings",
+      "location_day_cutover_changes",
       "holiday_geographies",
     ]);
     expect(request.mock.calls).toEqual([[NAMED_PATH, "GET", undefined, { passive: true }]]);

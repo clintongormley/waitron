@@ -122,7 +122,10 @@ it("saves one own date while the other remains staged and independently savable"
       [
         "/management-api/venue-service/special-dates/annual%2Fday/menu-timetables/d1",
         "PUT",
-        { slots: [{ periodId: "p1", startsAt: "12:00", endsAt: "17:00" }] },
+        {
+          expectedClockRevision: 0,
+          slots: [{ periodId: "p1", startsAt: "12:00", endsAt: "17:00" }],
+        },
       ],
     ]);
   await expect.poll(() => save(2).disabled).toBe(true);
@@ -174,7 +177,7 @@ it("shows dated department periods behind dated zone closures and saves only tha
       [
         "/management-api/venue-service/special-dates/annual%2Fday/zone-closed-times/z1",
         "PUT",
-        { ranges: [{ startsAt: "22:30", endsAt: "06:00" }] },
+        { expectedClockRevision: 0, ranges: [{ startsAt: "22:30", endsAt: "06:00" }] },
       ],
     ]);
 });
@@ -402,7 +405,10 @@ it("keeps a staged date's original named-day target through a replacement snapsh
       [
         "/management-api/venue-service/special-dates/annual%2Fday/menu-timetables/d1",
         "PUT",
-        { slots: [{ periodId: "p1", startsAt: "12:00", endsAt: "17:00" }] },
+        {
+          expectedClockRevision: 0,
+          slots: [{ periodId: "p1", startsAt: "12:00", endsAt: "17:00" }],
+        },
       ],
     ]);
 });

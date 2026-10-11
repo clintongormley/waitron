@@ -51,6 +51,19 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     es: "Cloud rechazó la solicitud de sustitución. Comprueba la recuperación aprobada y la instalación anterior en Cloud, y después comprueba la reconexión aquí.",
   },
 
+  "venue.business_day_invalid": {
+    en: "Check the future date and start time.",
+    es: "Revisa la fecha futura y la hora de inicio.",
+  },
+  "venue.business_day_changed": {
+    en: "The business-day clock changed. Reopen the editor.",
+    es: "El inicio del día ha cambiado. Vuelve a abrir el editor.",
+  },
+  "venue.business_day_locked": { en: "This change is locked.", es: "Este cambio está bloqueado." },
+  "venue.business_day_hours_conflict": {
+    en: "Review conflicting opening hours first.",
+    es: "Revisa primero los horarios incompatibles.",
+  },
   "connection.failed": {
     en: "This browser could not connect to Waitron. Check your connection and try again.",
     es: "Este navegador no pudo conectar con Waitron. Comprueba tu conexión e inténtalo de nuevo.",

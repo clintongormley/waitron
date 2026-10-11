@@ -1,3 +1,4 @@
+import { serviceDayContext } from "../service-day-context.js";
 import { LitElement, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { baseStyles } from "@waitron/ui";
@@ -83,6 +84,7 @@ export class OpeningHoursStation extends LitElement {
       const day = times.days.find((day) => day.date === date);
       return departments.map((department) => ({
         key: `${date}:${department.id}`,
+        clock: this.normal ? undefined : serviceDayContext(this.model.businessDayClock, date),
         label: realDayLabel(this.normal ? "" : this.weekStart, weekdayOf(date)),
         slots: day?.departments.find((row) => row.departmentId === department.id)?.ranges ?? [],
         periods: department.periods,

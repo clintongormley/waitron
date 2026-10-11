@@ -114,7 +114,7 @@ it("draws semantic shared fields, explicit unset text and a locked province expl
   const el = await editing(rig(venueDetailsFixture({ province: null, addressLine2: null })).api);
   expect(
     [...el.shadowRoot!.querySelectorAll("wt-input")].map((input) => input.getAttribute("name")),
-  ).toEqual(["venueName", "addressLine1", "addressLine2", "city", "timeZone", "dayCutover"]);
+  ).toEqual(["venueName", "addressLine1", "addressLine2", "city", "timeZone"]);
   expect(q(el, "[data-test=locked-province]")?.textContent).toContain("Not set");
   expect(q(el, "[data-test=locked-postalCode]")?.textContent).toContain("28001");
   expect(q(el, "[data-test=locked-notes]")?.textContent?.split("setup")).toHaveLength(2);
@@ -363,7 +363,7 @@ it("keeps the opening read generation separate from a reopened panel", async () 
   complete(venueDetailsFixture({ name: "Old generation" }));
   await flush(el);
   expect(q(el, "[data-test=saved-name]")?.textContent?.trim()).toBe("Reopened");
-  expect(api.liveData!.interests).toHaveLength(5);
+  expect(api.liveData!.interests).toHaveLength(7);
   el.remove();
   expect(api.liveData!.interests).toEqual([]);
 });
@@ -508,16 +508,16 @@ it("allows a failed clock preview to retry without losing the draft", async () =
   expect(save(el).disabled).toBe(false);
 });
 
-it("previews the latest saved zone when only the cutover is changed, preserving the opening draft", async () => {
+it("previews the latest saved start when only the zone is changed, preserving the opening draft", async () => {
   const r = rig();
   const el = await editing(r.api);
-  change(el, "dayCutover", "02:30");
+  change(el, "timeZone", "UTC");
   await flush(el);
-  r.set(venueDetailsFixture({ timeZone: "Europe/London" }));
+  r.set(venueDetailsFixture({ dayCutover: "02:30" }));
   await r.notify(el);
-  expect(field(el, "timeZone").value).toBe("Europe/Madrid");
+  expect(field(el, "timeZone").value).toBe("UTC");
   expect(r.api.getVenueClockPreview).toHaveBeenLastCalledWith({
-    timeZone: "Europe/London",
+    timeZone: "UTC",
     dayCutover: "02:30",
   });
   expect(save(el).disabled).toBe(true);

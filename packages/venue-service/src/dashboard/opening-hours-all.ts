@@ -1,9 +1,11 @@
+import type { BusinessDayClock } from "@waitron/shared";
+import { serviceDayContext } from "../service-day-context.js";
 import { LitElement, css, html } from "lit";
 import { customElement, property } from "lit/decorators.js";
 import { baseStyles } from "@waitron/ui";
 import type { OpeningHoursModel } from "../menu-timetable-types.js";
 import { t } from "./strings.js";
-import { namedOn, realDayLabel } from "./real-week.js";
+import { dateInWeek, namedOn, realDayLabel } from "./real-week.js";
 import "./service-grid.js";
 
 @customElement("opening-hours-all")
@@ -23,6 +25,7 @@ export class OpeningHoursAll extends LitElement {
     `,
   ];
   @property({ attribute: false }) departments: OpeningHoursModel["departments"] = [];
+  @property({ attribute: false }) businessDayClock?: BusinessDayClock;
   @property() dayCutover = "06:00";
   @property() weekStart = "";
   @property({ attribute: false }) namedDays: OpeningHoursModel["namedDays"] = [];
@@ -34,6 +37,10 @@ export class OpeningHoursAll extends LitElement {
         const named = this.weekStart ? namedOn(this.namedDays, this.weekStart, weekday) : undefined;
         return {
           key: `${weekday}:${department.id}`,
+          clock:
+            this.weekStart && this.businessDayClock
+              ? serviceDayContext(this.businessDayClock, dateInWeek(this.weekStart, weekday))
+              : undefined,
           label: this.weekStart
             ? realDayLabel(this.weekStart, weekday, named)
             : t(`hours.day.${weekday}` as Parameters<typeof t>[0]),

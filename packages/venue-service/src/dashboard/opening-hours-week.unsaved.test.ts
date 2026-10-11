@@ -205,6 +205,7 @@ describe.each(["en", "es"])("Retained week save contract (%s)", (locale) => {
         "/management-api/venue-service/departments/d1/menu-week",
         "PUT",
         {
+          expectedClockRevision: 0,
           days: [
             { weekday: 0, slots: [] },
             { weekday: 1, slots: [{ periodId: "p1", startsAt: "10:00", endsAt: "15:00" }] },
@@ -238,6 +239,7 @@ describe.each(["en", "es"])("Retained week save contract (%s)", (locale) => {
         "/management-api/venue-service/departments/d1/menu-week",
         "PUT",
         {
+          expectedClockRevision: 0,
           days: [
             { weekday: 0, slots: [] },
             { weekday: 1, slots: [{ periodId: "p1", startsAt: "10:00", endsAt: "15:00" }] },

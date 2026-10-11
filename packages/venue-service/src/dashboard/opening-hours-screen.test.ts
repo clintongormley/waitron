@@ -238,6 +238,7 @@ it("creates the changed draft and closes it before refreshing the list", async (
       path: "/management-api/venue-service/departments/restaurant/menu-periods",
       method: "POST",
       body: {
+        expectedClockRevision: 0,
         name: "Dinner",
         colour: "red",
         menuId: "lunch",
@@ -264,6 +265,7 @@ it("updates the existing period and preserves every other submitted value", asyn
       path: "/management-api/venue-service/menu-periods/p1",
       method: "PATCH",
       body: {
+        expectedClockRevision: 0,
         name: "Late lunch",
         colour: "green",
         menuId: "lunch",
@@ -807,6 +809,7 @@ it.each([
         path: "/management-api/venue-service/departments/restaurant/menu-periods",
         method: "POST",
         body: {
+          expectedClockRevision: 0,
           name: "Breakfast",
           colour: expected,
           menuId: "lunch",
@@ -898,6 +901,7 @@ it("places a refused period name under Name with the bottom explanation and retr
   await expect.poll(() => writes.length).toBe(2);
   expect(writes).toEqual([
     {
+      expectedClockRevision: 0,
       name: "Dinner",
       colour: "green",
       menuId: "lunch",
@@ -905,6 +909,7 @@ it("places a refused period name under Name with the bottom explanation and retr
       endOffsetMinutes: 0,
     },
     {
+      expectedClockRevision: 0,
       name: "Dinner",
       colour: "green",
       menuId: "lunch",
@@ -941,7 +946,11 @@ it("names every weekday and special date preventing deletion in one sentence", a
       "Madrugada is still placed on Friday, Saturday, Thu, 25 Dec 2025. Take it off those days first.",
     );
   expect(writes).toEqual([
-    { path: "/management-api/venue-service/menu-periods/p1", method: "DELETE", body: undefined },
+    {
+      path: "/management-api/venue-service/menu-periods/p1",
+      method: "DELETE",
+      body: undefined,
+    },
   ]);
   expect(el.shadowRoot!.querySelector("wt-dialog")).not.toBeNull();
 });
@@ -1021,6 +1030,7 @@ it("sends an offset-only edit through the real period client and closes before a
         path: "/management-api/venue-service/menu-periods/p1",
         method: "PATCH",
         body: {
+          expectedClockRevision: 0,
           name: "Lunch",
           colour: "green",
           menuId: "lunch",
@@ -1461,7 +1471,7 @@ describe("Calendar named-day actions", () => {
         [
           "/management-api/venue-service/special-dates/annual%2Fday/duplicate",
           "POST",
-          { dates: ["2026-10-20"] },
+          { expectedClockRevision: 0, dates: ["2026-10-20"] },
         ],
       ]);
     await expect.poll(() => el.shadowRoot!.querySelector("named-day-copy")).toBeNull();
@@ -1482,6 +1492,7 @@ describe("Calendar named-day actions", () => {
           "/management-api/venue-service/special-dates/annual%2Fday",
           "PUT",
           {
+            expectedClockRevision: 0,
             date: "2025-10-13",
             name: "New anniversary",
             kind: "holiday",
@@ -1521,6 +1532,7 @@ describe("Calendar named-day actions", () => {
             "/management-api/venue-service/special-dates/annual%2Fday",
             "PUT",
             {
+              expectedClockRevision: 0,
               date: "2025-10-13",
               name: "Anniversary",
               kind: "holiday",
@@ -1548,6 +1560,7 @@ describe("Calendar named-day actions", () => {
           "/management-api/venue-service/special-dates",
           "POST",
           {
+            expectedClockRevision: 0,
             date: "2026-10-12",
             name: "Public feast",
             kind: "holiday",
@@ -1573,6 +1586,7 @@ describe("Calendar named-day actions", () => {
           "/management-api/venue-service/special-dates",
           "POST",
           {
+            expectedClockRevision: 0,
             date: "2026-10-16",
             name: "World cup final",
             kind: "working_day",
@@ -1606,7 +1620,7 @@ describe("Calendar named-day actions", () => {
         [
           "/management-api/venue-service/special-dates/annual%2Fday/duplicate",
           "POST",
-          { dates: ["2026-10-20"] },
+          { expectedClockRevision: 0, dates: ["2026-10-20"] },
         ],
       ]);
     await expect.poll(() => el.shadowRoot!.querySelector("named-day-copy")).toBeNull();
@@ -1624,7 +1638,13 @@ describe("Calendar named-day actions", () => {
     el.shadowRoot!.querySelector<HTMLElement>("[data-test=confirm-named-delete]")!.click();
     await expect
       .poll(() => writes)
-      .toEqual([["/management-api/venue-service/special-dates/annual%2Fday", "DELETE", undefined]]);
+      .toEqual([
+        [
+          "/management-api/venue-service/special-dates/annual%2Fday",
+          "DELETE",
+          { expectedClockRevision: 0 },
+        ],
+      ]);
     await expect.poll(reads).toBe(2);
   });
 });

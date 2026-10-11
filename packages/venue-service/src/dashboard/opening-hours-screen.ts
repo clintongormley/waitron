@@ -46,7 +46,7 @@ import { t } from "./strings.js";
 type Department = OpeningHoursModel["departments"][number];
 type Period = Department["periods"][number];
 type View = "week" | "periods" | "day" | "calendar";
-type Editor = { department: Department; period?: Period };
+type Editor = { department: Department; period?: Period; clockRevision: number };
 type Deletion = { period: Period };
 
 @customElement("dashboard-opening-hours-screen")
@@ -110,7 +110,7 @@ export class OpeningHoursScreen extends LitElement {
   @state() private deleting?: Deletion;
   @state() private deleteError = "";
   @state() private busy = false;
-  @state() private namedAction?: NamedCalendarAction;
+  @state() private namedAction?: NamedCalendarAction & { clockRevision: number };
   @state() private namedDeleteError = "";
   private detach?: () => void;
   private generation = {};
@@ -428,7 +428,7 @@ export class OpeningHoursScreen extends LitElement {
   }
   private openPeriod(department: Department, period?: Period) {
     if (this.readOnly || this.busy || !this.isConnected || this.editor || this.deleting) return;
-    this.editor = { department, period };
+    this.editor = { department, period, clockRevision: this.model!.clockRevision };
   }
   private async savePeriod(
     event: CustomEvent<{ periodId: string | null; input: MenuPeriodInput }>,
@@ -448,8 +448,9 @@ export class OpeningHoursScreen extends LitElement {
     this.busy = true;
     component.refusal = undefined;
     try {
-      if (periodId === null) await this.api.createPeriod(editor.department.id, input);
-      else await this.api.updatePeriod(periodId, input);
+      if (periodId === null)
+        await this.api.createPeriod(editor.department.id, input, editor.clockRevision);
+      else await this.api.updatePeriod(periodId, input, editor.clockRevision);
     } catch (error) {
       if (this.editor === editor && this.isConnected) {
         component.refusal = {
@@ -559,7 +560,11 @@ export class OpeningHoursScreen extends LitElement {
     const holidays =
       this.namedWeek?.days?.find((day) => day.date === event.detail.date)?.holidays ??
       event.detail.holidays;
-    this.namedAction = { ...event.detail, holidays };
+    this.namedAction = {
+      ...event.detail,
+      holidays,
+      clockRevision: this.namedWeek?.clockRevision ?? this.model!.clockRevision,
+    };
   }
   private closeNamedDay(action: NamedCalendarAction) {
     if (!this.isConnected || this.namedAction !== action || this.busy) return;
@@ -587,12 +592,14 @@ export class OpeningHoursScreen extends LitElement {
     this.busy = true;
     component.refusal = undefined;
     try {
-      if ("dates" in detail) await this.api.namedDays.copyDay(detail.id, detail.dates);
+      if ("dates" in detail)
+        await this.api.namedDays.copyDay(detail.id, detail.dates, action.clockRevision);
       else
         await this.api.namedDays.saveDay(
           detail.id,
           detail.input,
           () => this.isConnected && generation === this.generation && this.namedAction === action,
+          action.clockRevision,
         );
     } catch (error) {
       if (this.isConnected && generation === this.generation && this.namedAction === action)
@@ -616,7 +623,7 @@ export class OpeningHoursScreen extends LitElement {
     this.api.namedDays.rereadWatches();
     this.api.rereadWatches();
   }
-  private async deleteNamedDay(action: NamedCalendarAction) {
+  private async deleteNamedDay(action: NamedCalendarAction & { clockRevision: number }) {
     if (
       !this.isConnected ||
       this.readOnly ||
@@ -629,7 +636,7 @@ export class OpeningHoursScreen extends LitElement {
     this.busy = true;
     this.namedDeleteError = "";
     try {
-      await this.api.namedDays.deleteDay(action.day.id);
+      await this.api.namedDays.deleteDay(action.day.id, action.clockRevision);
     } catch {
       if (this.isConnected && generation === this.generation && this.namedAction === action)
         this.namedDeleteError = t("hours.save_error");
@@ -853,6 +860,8 @@ export class OpeningHoursScreen extends LitElement {
                       : this.view === "week" && this.departmentId === "all"
                         ? html`<opening-hours-all
                             .departments=${this.model.departments}
+                            .clockRevision=${this.model.clockRevision}
+                            .businessDayClock=${this.model.businessDayClock}
                             .dayCutover=${this.model.dayCutover}
                             .weekStart=${this.weekStart}
                             .namedDays=${this.model.namedDays}
@@ -868,6 +877,8 @@ export class OpeningHoursScreen extends LitElement {
                                 .api=${this.api}
                                 .department=${department!}
                                 .zone=${this.zone()!}
+                                .clockRevision=${this.model.clockRevision}
+                                .businessDayClock=${this.model.businessDayClock}
                                 .dayCutover=${this.model.dayCutover}
                                 .readOnly=${this.readOnly}
                                 .weekStart=${this.weekStart}
@@ -883,6 +894,8 @@ export class OpeningHoursScreen extends LitElement {
                                   .api=${this.api}
                                   .department=${department}
                                   .menus=${this.model!.menus}
+                                  .clockRevision=${this.model!.clockRevision}
+                                  .businessDayClock=${this.model!.businessDayClock}
                                   .dayCutover=${this.model!.dayCutover}
                                   .timeZone=${this.model!.clockReadable ? this.model!.timeZone : undefined}
                                   .weekStart=${this.weekStart}

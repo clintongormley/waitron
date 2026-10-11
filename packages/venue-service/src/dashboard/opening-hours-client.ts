@@ -94,44 +94,71 @@ export class OpeningHoursApi {
   rereadWatches(): void {
     this.#watches.reread(QUERY_DEPENDENCIES["opening-hours"]);
   }
-  createPeriod(departmentId: string, input: MenuPeriodInput): Promise<{ id: string }> {
-    return this.request(`${BASE}/departments/${at(departmentId)}/menu-periods`, "POST", input);
+  createPeriod(
+    departmentId: string,
+    input: MenuPeriodInput,
+    expectedClockRevision: number,
+  ): Promise<{ id: string }> {
+    return this.request(`${BASE}/departments/${at(departmentId)}/menu-periods`, "POST", {
+      ...input,
+      expectedClockRevision,
+    });
   }
-  updatePeriod(periodId: string, input: Partial<MenuPeriodInput>): Promise<void> {
-    return this.request(`${BASE}/menu-periods/${at(periodId)}`, "PATCH", input);
+  updatePeriod(
+    periodId: string,
+    input: Partial<MenuPeriodInput>,
+    expectedClockRevision: number,
+  ): Promise<void> {
+    return this.request(`${BASE}/menu-periods/${at(periodId)}`, "PATCH", {
+      ...input,
+      expectedClockRevision,
+    });
   }
   deletePeriod(periodId: string): Promise<void> {
     return this.request(`${BASE}/menu-periods/${at(periodId)}`, "DELETE");
   }
-  saveWeek(departmentId: string, days: readonly MenuWeekDay[]): Promise<void> {
-    return this.request(`${BASE}/departments/${at(departmentId)}/menu-week`, "PUT", { days });
+  saveWeek(
+    departmentId: string,
+    days: readonly MenuWeekDay[],
+    expectedClockRevision: number,
+  ): Promise<void> {
+    return this.request(`${BASE}/departments/${at(departmentId)}/menu-week`, "PUT", {
+      days,
+      expectedClockRevision,
+    });
   }
   saveZoneWeek(
     zoneId: string,
     days: readonly { weekday: number; ranges: readonly ClosedRange[] }[],
+    expectedClockRevision: number,
   ): Promise<void> {
-    return this.request(`${BASE}/zones/${at(zoneId)}/closed-week`, "PUT", { days });
+    return this.request(`${BASE}/zones/${at(zoneId)}/closed-week`, "PUT", {
+      days,
+      expectedClockRevision,
+    });
   }
   saveZoneDate(
     specialDateId: string,
     zoneId: string,
     ranges: readonly ClosedRange[],
+    expectedClockRevision: number,
   ): Promise<void> {
     return this.request(
       `${BASE}/special-dates/${at(specialDateId)}/zone-closed-times/${at(zoneId)}`,
       "PUT",
-      { ranges },
+      { ranges, expectedClockRevision },
     );
   }
   saveDateMenus(
     specialDateId: string,
     departmentId: string,
     slots: readonly MenuSlot[],
+    expectedClockRevision: number,
   ): Promise<void> {
     return this.request(
       `${BASE}/special-dates/${at(specialDateId)}/menu-timetables/${at(departmentId)}`,
       "PUT",
-      { slots },
+      { slots, expectedClockRevision },
     );
   }
 }

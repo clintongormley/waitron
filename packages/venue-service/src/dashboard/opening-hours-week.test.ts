@@ -134,6 +134,7 @@ it("stages an added range and submits the seven days together only on Save", asy
     url: "/management-api/venue-service/departments/d1/menu-week",
     method: "PUT",
     body: {
+      expectedClockRevision: 0,
       days: [
         { weekday: 0, slots: [] },
         { weekday: 1, slots: [{ periodId: "p1", startsAt: "10:00", endsAt: "14:00" }] },
@@ -763,6 +764,7 @@ it("preserves all six other weekdays when staging a Sunday range", async () => {
       "/management-api/venue-service/departments/d1/menu-week",
       "PUT",
       {
+        expectedClockRevision: 0,
         days: [
           { weekday: 0, slots: [{ periodId: "p1", startsAt: "13:00", endsAt: "17:00" }] },
           { weekday: 1, slots: [{ periodId: "p1", startsAt: "10:00", endsAt: "14:00" }] },
@@ -825,7 +827,14 @@ it("keeps a created period's signed offset in its wire body and nested range cho
     [
       "/management-api/venue-service/departments/d1/menu-periods",
       "POST",
-      { name: "Tea", colour: "red", menuId: "m1", staffMenuIds: [], endOffsetMinutes: -15 },
+      {
+        expectedClockRevision: 0,
+        name: "Tea",
+        colour: "red",
+        menuId: "m1",
+        staffMenuIds: [],
+        endOffsetMinutes: -15,
+      },
     ],
   ]);
   expect(

@@ -117,6 +117,7 @@ it("a Friday drag through changeover stages closed times and Save sends all seve
       "/management-api/venue-service/zones/z1/closed-week",
       "PUT",
       {
+        expectedClockRevision: 0,
         days: [
           { weekday: 0, ranges: [] },
           { weekday: 1, ranges: [{ startsAt: "10:00", endsAt: "11:00" }] },

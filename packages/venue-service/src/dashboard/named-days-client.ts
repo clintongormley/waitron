@@ -38,28 +38,37 @@ export class NamedDaysApi {
   async saveDay(
     id: string | null,
     input: NamedDayInput,
-    current: () => boolean = () => true,
+    current: () => boolean,
+    expectedClockRevision: number,
   ): Promise<unknown> {
     if (!current()) return;
     return id === null
-      ? this.request("/management-api/venue-service/special-dates", "POST", input)
+      ? this.request("/management-api/venue-service/special-dates", "POST", {
+          ...input,
+          expectedClockRevision,
+        })
       : this.request(
           `/management-api/venue-service/special-dates/${encodeURIComponent(id)}`,
           "PUT",
-          input,
+          { ...input, expectedClockRevision },
         );
   }
-  copyDay(id: string, dates: readonly LocalDate[]): Promise<unknown> {
+  copyDay(
+    id: string,
+    dates: readonly LocalDate[],
+    expectedClockRevision: number,
+  ): Promise<unknown> {
     return this.request(
       `/management-api/venue-service/special-dates/${encodeURIComponent(id)}/duplicate`,
       "POST",
-      { dates },
+      { dates, expectedClockRevision },
     );
   }
-  deleteDay(id: string): Promise<void> {
+  deleteDay(id: string, expectedClockRevision: number): Promise<void> {
     return this.request(
       `/management-api/venue-service/special-dates/${encodeURIComponent(id)}`,
       "DELETE",
+      { expectedClockRevision },
     );
   }
   saveHolidayArea(areaKey: string): Promise<void> {

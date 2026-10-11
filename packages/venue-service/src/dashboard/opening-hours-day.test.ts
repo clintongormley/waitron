@@ -195,6 +195,7 @@ it("stages a weekday edit and preserves every other day in its seven-day PUT", a
       "/management-api/venue-service/departments/d1/menu-week",
       "PUT",
       {
+        expectedClockRevision: 0,
         days: [
           { weekday: 0, slots: [] },
           { weekday: 1, slots: [{ periodId: "p1", startsAt: "10:00", endsAt: "15:00" }] },
@@ -233,12 +234,12 @@ it("navigates dates and writes a named date's ranges only, including an inherite
     [
       "/management-api/venue-service/special-dates/s%2F1/menu-timetables/d1",
       "PUT",
-      { slots: [{ periodId: "p1", startsAt: "12:00", endsAt: "17:00" }] },
+      { expectedClockRevision: 0, slots: [{ periodId: "p1", startsAt: "12:00", endsAt: "17:00" }] },
     ],
     [
       "/management-api/venue-service/special-dates/s%2F1/menu-timetables/d2",
       "PUT",
-      { slots: [{ periodId: "p2", startsAt: "09:00", endsAt: "19:00" }] },
+      { expectedClockRevision: 0, slots: [{ periodId: "p2", startsAt: "09:00", endsAt: "19:00" }] },
     ],
   ]);
   day.shadowRoot!.querySelector<HTMLElement>("[data-test=previous-day]")!.click();
@@ -425,7 +426,7 @@ it("creates a nested period once and selects it in the same range with its times
     [
       "/management-api/venue-service/departments/d1/menu-periods",
       "POST",
-      { ...periodInput, endOffsetMinutes: 0 },
+      { expectedClockRevision: 0, ...periodInput, endOffsetMinutes: 0 },
     ],
   ]);
   expect(
@@ -736,7 +737,14 @@ it("keeps a created period's signed offset in its wire body and department range
     [
       "/management-api/venue-service/departments/d1/menu-periods",
       "POST",
-      { name: "Tea", colour: "red", menuId: "m1", staffMenuIds: [], endOffsetMinutes: 14 },
+      {
+        expectedClockRevision: 0,
+        name: "Tea",
+        colour: "red",
+        menuId: "m1",
+        staffMenuIds: [],
+        endOffsetMinutes: 14,
+      },
     ],
   ]);
   expect(
@@ -771,7 +779,10 @@ it("applies an old repeating named day's own hours on the later occurrence", asy
       [
         "/management-api/venue-service/special-dates/s%2F1/menu-timetables/d1",
         "PUT",
-        { slots: [{ periodId: "p1", startsAt: "12:00", endsAt: "17:00" }] },
+        {
+          expectedClockRevision: 0,
+          slots: [{ periodId: "p1", startsAt: "12:00", endsAt: "17:00" }],
+        },
       ],
     ]);
 });
@@ -813,6 +824,7 @@ it.each([true, false])(
           "/management-api/venue-service/departments/d1/menu-week",
           "PUT",
           {
+            expectedClockRevision: 0,
             days: [
               { weekday: 0, slots: [] },
               { weekday: 1, slots: [{ periodId: "p1", startsAt: "10:00", endsAt: "14:00" }] },

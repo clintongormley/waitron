@@ -116,6 +116,7 @@ it("stages a closed range and saves the weekday while preserving other weekdays"
       "/management-api/venue-service/zones/z1/closed-week",
       "PUT",
       {
+        expectedClockRevision: 0,
         days: [
           { weekday: 0, ranges: [{ startsAt: "23:00", endsAt: "06:00" }] },
           {
@@ -166,12 +167,13 @@ it("saves department and zone changes to the named occurrence and retains comple
     [
       "/management-api/venue-service/special-dates/annual%2Fday/menu-timetables/d1",
       "PUT",
-      { slots: [{ periodId: "p1", startsAt: "12:00", endsAt: "17:00" }] },
+      { expectedClockRevision: 0, slots: [{ periodId: "p1", startsAt: "12:00", endsAt: "17:00" }] },
     ],
     ...[0, 1].map(() => [
       "/management-api/venue-service/special-dates/annual%2Fday/zone-closed-times/z1",
       "PUT",
       {
+        expectedClockRevision: 0,
         ranges: [
           { startsAt: "13:00", endsAt: "14:00" },
           { startsAt: "22:00", endsAt: "06:00" },
@@ -406,6 +408,7 @@ it("keeps the opened department, zone and named-day facts when the same source o
     "/management-api/venue-service/special-dates/annual%2Fday/zone-closed-times/z1",
     "PUT",
     {
+      expectedClockRevision: 0,
       ranges: [
         { startsAt: "13:00", endsAt: "14:00" },
         { startsAt: "22:00", endsAt: "06:00" },
