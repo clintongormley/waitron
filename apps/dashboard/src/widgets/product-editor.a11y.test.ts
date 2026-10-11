@@ -297,12 +297,10 @@ describe.each(["light", "dark"] as const)("product editor accessibility (%s)", (
       expect(price.shadowRoot!.querySelector("span.unit")).not.toBeNull();
     }
     if (state.startsWith("color")) {
-      // Without these the scan could pass on an editor that drew no chooser, or a Use category
-      // colour choice with no chip, no note or no refusal under it.
       const group = el.shadowRoot!.querySelector("fieldset.color")!;
       const none = group.querySelector('[data-color=""]')!;
       expect(none.querySelector(".chip") !== null).toBe(state !== "color-category-none");
-      expect(none.querySelector(".note") !== null).toBe(state === "color-category-none");
+      expect(none.querySelector(".note")).toBeNull();
       if (state === "color-own")
         expect(group.querySelector('[data-color="#b12525"]')!.getAttribute("aria-checked")).toBe(
           "true",

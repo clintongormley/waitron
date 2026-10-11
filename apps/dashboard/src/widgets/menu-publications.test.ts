@@ -1852,6 +1852,7 @@ describe("changing a queued version's time", () => {
 });
 
 it("A498 shows only waiting schedules without a status column and opens a compact publication dialog", async () => {
+  await page.viewport(1280, 900);
   const el = await mount(stubApi(), { preview: draftPreview() });
   expect(
     [...table(el).shadowRoot!.querySelectorAll("tbody tr[data-row-key]")].map((row) =>
