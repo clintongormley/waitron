@@ -756,6 +756,8 @@ request per batch: [plan](../superpowers/plans/2026-10-07-a331-save-follows-chan
   dialog's and department Settings' save handlers failed 1 and 4 tests.
 - **2026-10-10, A366 slice 4 Part B:** the fallback editor and its checks below are retired;
   Settings retains rest-of-order and timing editors. The batch 4d account records its earlier scope.
+  (2026-10-11: A507 part 1 removed the Settings tab; a station's three timings are edited in the
+  station editor.)
 - **Batch 4d — LANDED in #1426 (A331-4d, 2026-10-08).** Preparation stations' New/Rename, station printer
   choices, watcher Rename/follows/zones/pass/printer choices, and Settings rest/fallback/minutes
   use the shared Save state. An untouched fallback stays open without a confirmation or write;

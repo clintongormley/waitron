@@ -155,16 +155,9 @@ list does not exist.
 
 ## A507. Prep stations made lighter
 
-**A507 (owner, 2026-10-11) — PART 1 DONE (this PR); PARTS 2 AND 3 OPEN.** Part 1 (this PR) made
-changes 2, 3 and 4 and the "Taken in" point: the Stations table's row menu has its own Actions
-column pinned to the end, the three timings are in each station's edit dialog and saved with the
-rest of the station in one request, the Settings tab and `#saveSettingsCell` are gone, the empty
-station cards under the Routes grid are gone, and the station table always draws its Printed on
-and Shown on columns. Changes 1 and 5 remain, in the owner's words below.
-
-Five changes to the Prep stations page
-(`packages/venue-service/src/dashboard/prep-stations-screen.ts`), bundled because they share the
-screen. Mockups in [mockups/a507-prep-stations/](mockups/a507-prep-stations/): `0-routes-today.png`
+**A507 (owner, 2026-10-11) — OPEN: changes 1 and 5, left open by A507 part 1 (#PRNUM).** Two
+changes to the Prep stations page (`packages/venue-service/src/dashboard/prep-stations-screen.ts`),
+bundled because they share the screen. Mockups in [mockups/a507-prep-stations/](mockups/a507-prep-stations/): `0-routes-today.png`
 is the grid before, `1-routes-option-a-chosen.png` the chosen default view, `3-routes-search.png`
 search, `4-period-lines-option-1-chosen.png` how a cell's period lines look, `7-cell-hover.png`
 pointing at a cell, and `8-`, `9-` and `10-dialog-*.png` the cell dialog over the new grid. The
