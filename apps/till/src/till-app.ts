@@ -2017,11 +2017,10 @@ export class TillApp extends LitElement {
   @state() private invoiceLocale = "es-ES";
   /** The receipt languages staff may choose, the location's own first. */
   @state() private receiptLanguages: string[] = [];
-  /** Each counter order's receipt language, by order id: the one staff chose, or the one stored with
-   * a retrieved order. An order with none prints in the location's. */
-  @state() private receiptLanguageChoices: ReadonlyMap<string, string> = new Map();
-  /** Orders whose chosen language the server does not hold yet: baskets not yet saved. */
-  #unsavedReceiptLanguages = new Set<string>();
+  /** The counter basket's receipt language: the one staff chose, or the one stored with a retrieved
+   * order. `saved` is false while the server does not hold it yet. With none, or one naming another
+   * order, the basket prints in the location's. */
+  @state() private receiptLanguageChoice?: { orderId: string; language: string; saved: boolean };
   /** The order whose receipt language is being asked: the counter's, or a party bill as it was read
    * when asked. */
   @state() private receiptLanguageAsking: { orderId: string; bill?: AskedBill } | null = null;
@@ -4316,10 +4315,10 @@ export class TillApp extends LitElement {
     else if (extraNotOffered) this.errorKey = "held.extra_not_offered";
     else if (mustChooseAgain) this.errorKey = "held.options_changed";
     this.#store.loadFrom(order.id, lines, order.label ?? undefined, order.revision);
-    this.#unsavedReceiptLanguages.delete(order.id);
     this.#rememberReceiptLanguage(
       order.id,
       offeredReceiptLanguage(order.receiptLanguage, this.receiptLanguages),
+      true,
     );
     this.#clearUnlistedCounterStations();
     this.counterLines = listed;
@@ -4458,18 +4457,16 @@ export class TillApp extends LitElement {
 
   /** The language staff chose or the order stored; undefined while the location's applies. */
   #chosenReceiptLanguage(orderId: string): string | undefined {
-    return this.receiptLanguageChoices.get(orderId);
+    const choice = this.receiptLanguageChoice;
+    return choice?.orderId === orderId ? choice.language : undefined;
   }
 
   #receiptLanguageShown(orderId: string): string {
     return shownReceiptLanguage(this.#chosenReceiptLanguage(orderId), this.receiptLanguages);
   }
 
-  #rememberReceiptLanguage(orderId: string, language: string | undefined): void {
-    const choices = new Map(this.receiptLanguageChoices);
-    if (language === undefined) choices.delete(orderId);
-    else choices.set(orderId, language);
-    this.receiptLanguageChoices = choices;
+  #rememberReceiptLanguage(orderId: string, language: string | undefined, saved: boolean): void {
+    this.receiptLanguageChoice = language === undefined ? undefined : { orderId, language, saved };
   }
 
   /**
@@ -4489,8 +4486,7 @@ export class TillApp extends LitElement {
     if (asking === null || asking.orderId !== id) return;
     if (language === this.#receiptLanguageShown(id)) return;
     if (!this.#store.persisted) {
-      this.#rememberReceiptLanguage(id, language);
-      this.#unsavedReceiptLanguages.add(id);
+      this.#rememberReceiptLanguage(id, language, false);
       return;
     }
     if (this.submitting || this.placing || this.parking) return;
@@ -4506,7 +4502,7 @@ export class TillApp extends LitElement {
       });
       if (this.#hasLeftCounterOrder(id, session)) return;
       this.#store.markSaved(saved.revision);
-      this.#rememberReceiptLanguage(id, language);
+      this.#rememberReceiptLanguage(id, language, true);
     } catch (error) {
       if (this.#hasLeftCounterOrder(id, session)) return;
       if ((error as { code?: string }).code === "working_order.out_of_date") outOfDate = true;
@@ -4573,13 +4569,14 @@ export class TillApp extends LitElement {
 
   /** Saves a chosen language the server does not hold yet, once the basket has been saved. */
   async #saveUnsavedReceiptLanguage(id: string): Promise<void> {
-    const language = this.#chosenReceiptLanguage(id);
-    if (!this.#unsavedReceiptLanguages.has(id) || language === undefined) return;
+    const choice = this.receiptLanguageChoice;
+    if (choice?.orderId !== id || choice.saved) return;
     const saved = await this.api.setOrderReceiptLanguage(id, {
       revision: this.#store.revision,
-      language,
+      language: choice.language,
     });
-    this.#unsavedReceiptLanguages.delete(id);
+    if (this.receiptLanguageChoice === choice)
+      this.receiptLanguageChoice = { ...choice, saved: true };
     if (this.#store.id === id) this.#store.markSaved(saved.revision);
   }
 
@@ -5098,6 +5095,7 @@ export class TillApp extends LitElement {
     this.#dismissStationChoices();
     this.#clearBasket();
     this.invoiceChoice = undefined;
+    this.receiptLanguageChoice = undefined;
     this.invoiceRecipientOpen = false;
     this.invoiceRecipientOrderId = undefined;
     this.ticketWorkingOrderId = undefined;
