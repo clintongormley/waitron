@@ -12,7 +12,6 @@ import {
   floorZones,
   isStatusColor,
   isUniqueViolation,
-  newId,
   refusalOn,
   UNIQUE_VIOLATION,
   tableServiceStatuses,
@@ -21,43 +20,6 @@ import type { Transaction } from "@waitron/db";
 import type { TillConfig } from "./till-config.js";
 
 export type FloorTableShape = (typeof floorTableShape.enumValues)[number];
-
-const COORD_MAX = 1000;
-const ROTATION_MAX = 359;
-
-/** Names the FIELD, never the value. */
-function requirePlacementInt(value: number, max: number, field: string): void {
-  if (!Number.isInteger(value) || value < 0 || value > max) {
-    throw new AppError("placement.invalid", { field });
-  }
-}
-
-/**
- * Asked BEFORE the write because the engine's foreign-key refusal names no constraint
- * (`packages/db/src/constraint-target.ts`), and `dining_tables` has other foreign keys beside the
- * zone one.
- * `dining_tables_zone_fk` still enforces the reference; this only decides what the caller is told.
- */
-async function requireZone(tx: Transaction, zoneId: string): Promise<void> {
-  const [zone] = await tx
-    .select({ id: floorZones.id })
-    .from(floorZones)
-    .where(eq(floorZones.id, zoneId))
-    .limit(1);
-  if (zone === undefined) throw new AppError("zone.not_found", { zoneId });
-}
-
-async function requireZoneInService(tx: Transaction, tableId: string, zoneId: string) {
-  const [row] = await tx
-    .select({ zoneActive: floorZones.active, departmentActive: departments.active })
-    .from(floorZones)
-    .leftJoin(zoneServicePolicies, eq(zoneServicePolicies.zoneId, floorZones.id))
-    .leftJoin(departments, eq(departments.id, zoneServicePolicies.departmentId))
-    .where(eq(floorZones.id, zoneId));
-  if (!row!.zoneActive || row!.departmentActive !== true) {
-    throw new AppError("table.zone_inactive", { tableId, zoneId });
-  }
-}
 
 /** `createdAt` is an ISO string. */
 export interface DiningTable {
@@ -72,40 +34,6 @@ export interface DiningTable {
   posY: number | null;
   shape: FloorTableShape | null;
   rotation: number | null;
-}
-
-/**
- * A duplicate `(location, label)` is `table.label_taken`: `dining_tables_location_label_key` is the
- * only unique an insert with a fresh `id` can trip.
- */
-export async function createTable(
-  tx: Transaction,
-  cfg: TillConfig,
-  input: { label: string; zoneId?: string; capacity?: number },
-): Promise<{ id: string }> {
-  const id = newId();
-  if (input.zoneId !== undefined) {
-    await requireZone(tx, input.zoneId);
-    await requireZoneInService(tx, id, input.zoneId);
-  }
-  try {
-    const [row] = await tx
-      .insert(diningTables)
-      .values({
-        id,
-        locationId: cfg.locationId,
-        label: input.label,
-        zoneId: input.zoneId ?? null,
-        capacity: input.capacity ?? null,
-      })
-      .returning({ id: diningTables.id });
-    return { id: row!.id };
-  } catch (error) {
-    if (isUniqueViolation(error)) {
-      throw new AppError("table.label_taken", { label: input.label });
-    }
-    throw error;
-  }
 }
 
 export async function listTables(
@@ -134,163 +62,6 @@ export async function listTables(
       ),
     )
     .orderBy(diningTables.label);
-}
-
-export async function updateTable(
-  tx: Transaction,
-  // Unused; kept for the uniform `(tx, cfg, …)` verb surface.
-  _cfg: TillConfig,
-  id: string,
-  input: { label?: string; zoneId?: string; capacity?: number; active?: boolean },
-): Promise<void> {
-  const patch: {
-    label?: string;
-    zoneId?: string | null;
-    capacity?: number | null;
-    active?: boolean;
-  } = {};
-  if (input.zoneId !== undefined) await requireZone(tx, input.zoneId);
-  const current =
-    input.label !== undefined || input.zoneId !== undefined || input.active !== undefined
-      ? await refuseFloorPlanChange(tx, id, input)
-      : undefined;
-  if (input.label !== undefined) patch.label = input.label;
-  if (input.capacity !== undefined) patch.capacity = input.capacity;
-  if (input.active !== undefined) patch.active = input.active;
-  if (input.zoneId !== undefined) patch.zoneId = input.zoneId;
-  if (input.active === true || (input.zoneId !== undefined && input.active !== false)) {
-    const zoneId = input.zoneId ?? current?.zoneId ?? null;
-    if (current !== undefined && (input.active ?? current.active) && zoneId !== null) {
-      await requireZoneInService(tx, id, zoneId);
-    }
-  }
-
-  let updated: { id: string }[];
-  try {
-    updated = await tx
-      .update(diningTables)
-      .set(patch)
-      .where(eq(diningTables.id, id))
-      .returning({ id: diningTables.id });
-  } catch (error) {
-    if (isUniqueViolation(error)) {
-      // Only `label` participates in the unique, so it was necessarily supplied when this fires.
-      throw new AppError("table.label_taken", { label: input.label! });
-    }
-    throw error;
-  }
-  if (updated.length === 0) {
-    throw new AppError("table.not_found", { tableId: id });
-  }
-}
-
-/**
- * A planned table's name, zone and on/off state belong to its zone's floor plan: a reset would
- * revert a change made here. Compared by value, because the old floor screen resends the
- * unchanged name with every capacity edit and the current zone with every placement. Returns the
- * row it read, so `updateTable` need not read it again.
- */
-async function refuseFloorPlanChange(
-  tx: Transaction,
-  id: string,
-  input: { label?: string; zoneId?: string; active?: boolean },
-): Promise<{ zoneId: string | null; active: boolean } | undefined> {
-  const [table] = await tx
-    .select({
-      label: diningTables.label,
-      zoneId: diningTables.zoneId,
-      active: diningTables.active,
-      planned: diningTables.planned,
-    })
-    .from(diningTables)
-    .where(eq(diningTables.id, id));
-  if (table === undefined || !table.planned) return table;
-  if (
-    (input.label !== undefined && input.label !== table.label) ||
-    (input.zoneId !== undefined && input.zoneId !== table.zoneId) ||
-    (input.active !== undefined && input.active !== table.active)
-  ) {
-    throw new AppError("table.in_floor_plan", { tableId: id });
-  }
-  return table;
-}
-
-export async function deactivateTable(
-  tx: Transaction,
-  _cfg: TillConfig,
-  id: string,
-): Promise<void> {
-  await refuseFloorPlanChange(tx, id, { active: false });
-  const updated = await tx
-    .update(diningTables)
-    .set({ active: false })
-    .where(eq(diningTables.id, id))
-    .returning({ id: diningTables.id });
-  if (updated.length === 0) {
-    throw new AppError("table.not_found", { tableId: id });
-  }
-}
-
-/**
- * Both the table and the zone must be active and in `cfg.locationId`. The zone is checked by an
- * explicit read because `dining_tables_zone_fk` sees neither `active` nor the location.
- */
-export async function setTablePlacement(
-  tx: Transaction,
-  cfg: TillConfig,
-  tableId: string,
-  p: { zoneId: string; posX: number; posY: number; shape: FloorTableShape; rotation: number },
-): Promise<void> {
-  const { rows } = await tx.execute<{
-    table_active: boolean | null;
-    zone_active: boolean | null;
-  }>(
-    sql`select
-      (select ${diningTables.active} from ${diningTables} where ${diningTables.id} = ${tableId} and ${diningTables.locationId} = ${cfg.locationId}) as table_active,
-      (select ${floorZones.active} from ${floorZones} where ${floorZones.id} = ${p.zoneId} and ${floorZones.locationId} = ${cfg.locationId}) as zone_active`,
-  );
-  const row = rows[0]!;
-  if (!row.table_active) {
-    throw new AppError("table.not_found", { tableId });
-  }
-  if (!row.zone_active) {
-    throw new AppError("zone.not_found", { zoneId: p.zoneId });
-  }
-
-  await refuseFloorPlanChange(tx, tableId, { zoneId: p.zoneId });
-  await requireZoneInService(tx, tableId, p.zoneId);
-
-  requirePlacementInt(p.posX, COORD_MAX, "posX");
-  requirePlacementInt(p.posY, COORD_MAX, "posY");
-  if (!floorTableShape.enumValues.includes(p.shape)) {
-    throw new AppError("placement.invalid", { field: "shape" });
-  }
-  requirePlacementInt(p.rotation, ROTATION_MAX, "rotation");
-
-  const updated = await tx
-    .update(diningTables)
-    .set({ zoneId: p.zoneId, posX: p.posX, posY: p.posY, shape: p.shape, rotation: p.rotation })
-    .where(and(eq(diningTables.id, tableId), eq(diningTables.locationId, cfg.locationId)))
-    .returning({ id: diningTables.id });
-  if (updated.length === 0) {
-    throw new AppError("table.not_found", { tableId });
-  }
-}
-
-/** Leaves `zone_id`: a table may belong to a zone without being placed on the canvas. */
-export async function clearPlacement(
-  tx: Transaction,
-  cfg: TillConfig,
-  tableId: string,
-): Promise<void> {
-  const updated = await tx
-    .update(diningTables)
-    .set({ posX: null, posY: null, shape: null, rotation: null })
-    .where(and(eq(diningTables.id, tableId), eq(diningTables.locationId, cfg.locationId)))
-    .returning({ id: diningTables.id });
-  if (updated.length === 0) {
-    throw new AppError("table.not_found", { tableId });
-  }
 }
 
 export interface FloorZone {

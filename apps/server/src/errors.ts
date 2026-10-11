@@ -324,14 +324,7 @@ declare module "@waitron/shared" {
     // `table.not_found` is declared in @waitron/db's errors.ts.
     /** A dining table label already exists in this venue. `label` is the operator's own text. */
     "table.label_taken": { label: string };
-    /** A dining table exists but is deactivated, so no tab may be opened on it. */
     "table.inactive": { tableId: string };
-    "table.zone_inactive": { tableId: string; zoneId: string };
-    /**
-     * A floor-screen or layout write tried to rename, rezone or switch on or off a table its
-     * zone's floor plan owns (`dining_tables.planned`).
-     */
-    "table.in_floor_plan": { tableId: string };
     /** A change to today's plan named a table with no today's row, or a spare where it needs a place. */
     "table.not_in_floor_plan": { tableId: string };
     /** A change to today's plan named a table taken off for today. */
@@ -726,11 +719,6 @@ declare module "@waitron/shared" {
      * (`requireLiveCourse`, `moveCourse`), also a deleted one.
      */
     "course.not_found": { courseId: string };
-    /**
-     * A table-placement field failed validation (`setTablePlacement`): a coordinate or rotation out
-     * of range, or an unknown shape. `field` carries the field NAME only, never the value.
-     */
-    "placement.invalid": { field: string };
     // `management.request_invalid` is declared in `@waitron/shared` (`src/errors.ts`).
     /**
      * A request to a device-authenticated route carried no usable device identity — the

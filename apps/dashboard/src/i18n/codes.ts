@@ -518,14 +518,6 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "That table no longer exists",
     es: "Esa mesa ya no existe",
   },
-  "table.zone_inactive": {
-    en: "That table's zone or its department is disabled. Enable them, or move the table to another zone",
-    es: "La zona de esa mesa o su departamento están deshabilitados. Habilítalos o pasa la mesa a otra zona",
-  },
-  "table.in_floor_plan": {
-    en: "This table is in a floor plan; change it in the floor plan editor",
-    es: "Esta mesa está en un plano de sala; cámbiala en el editor del plano",
-  },
   "table.fixed": {
     en: "That table is fixed in place",
     es: "Esa mesa está fija",
@@ -561,10 +553,6 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
   "table.needs_clearing": {
     en: "That table needs clearing first. Mark it cleared on the till, then try again",
     es: "Esa mesa está por recoger. Márcala como recogida en la caja e inténtalo de nuevo",
-  },
-  "placement.invalid": {
-    en: "That table position isn't valid",
-    es: "Esa posición de la mesa no es válida",
   },
   "station.name_taken": {
     en: "A station with that name already exists",

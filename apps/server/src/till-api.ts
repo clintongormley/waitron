@@ -97,15 +97,7 @@ import {
   readOriginalReceiptPrint,
   resolveDrawerPrinter,
 } from "./receipt-print.js";
-import {
-  clearPlacement,
-  listServiceStatuses,
-  listTables,
-  listZones,
-  setTablePlacement,
-  setTableStatus,
-  type FloorTableShape,
-} from "./tables.js";
+import { listServiceStatuses, listTables, listZones, setTableStatus } from "./tables.js";
 import {
   abandonHeldOrder,
   advanceTicket,
@@ -501,8 +493,6 @@ export const STATUS: Record<string, ContentfulStatusCode> = {
   "reader.payment_in_progress": 409,
   "table.not_found": 404,
   "table.inactive": 409,
-  "table.zone_inactive": 409,
-  "table.in_floor_plan": 409,
   "table.not_in_floor_plan": 409,
   "table.taken_off": 409,
   "table.fixed": 409,
@@ -510,7 +500,6 @@ export const STATUS: Record<string, ContentfulStatusCode> = {
   "table.delivery_pending": 409,
   "floor_plan.invalid": 400,
   "zone.not_found": 404,
-  "placement.invalid": 400,
   "tab.already_open": 409,
   "tab.not_open": 409,
   "tab.line_not_found": 404,
@@ -3071,65 +3060,6 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
         await setTableStatus(tx, cfg, id, statusId);
       });
       return c.body(null, 200);
-    }),
-  );
-
-  // Unlike the sibling table routes, placement is a manager-level venue-config write: `authorize`
-  // checks the operator's own `venue.configure`, with no supervisor override, before any write.
-  app.put("/api/tables/:id/placement", (c) =>
-    run(c, log, async () => {
-      const session = await requireSession(deps, c);
-      const { sessionId } = session;
-      const cfg = requestCfg(deps.cfg, session);
-      const id = c.req.param("id");
-      if (!isUuid(id)) throw new AppError("table.not_found", { tableId: id });
-      const body = await readJsonBody<{
-        zoneId?: unknown;
-        posX?: unknown;
-        posY?: unknown;
-        shape?: unknown;
-        rotation?: unknown;
-      }>(c);
-      if (typeof body !== "object" || body === null || Array.isArray(body)) {
-        throw new AppError("management.request_invalid", { field: "body" });
-      }
-      if (typeof body.zoneId !== "string")
-        throw new AppError("management.request_invalid", { field: "zoneId" });
-      if (!isUuid(body.zoneId)) throw new AppError("zone.not_found", { zoneId: body.zoneId });
-      if (typeof body.posX !== "number")
-        throw new AppError("management.request_invalid", { field: "posX" });
-      if (typeof body.posY !== "number")
-        throw new AppError("management.request_invalid", { field: "posY" });
-      if (typeof body.shape !== "string")
-        throw new AppError("management.request_invalid", { field: "shape" });
-      if (typeof body.rotation !== "number")
-        throw new AppError("management.request_invalid", { field: "rotation" });
-      // The narrowings above do not survive into the closure; the verb re-validates `shape`.
-      const { zoneId, posX, posY, rotation } = body;
-      const shape = body.shape as FloorTableShape;
-      await withTransaction(deps.db, async (tx) => {
-        await checkZones(tx, deps.cfg, session, [{ tableId: id }, { zoneId }]);
-        await authorize(tx, { sessionId, permission: "venue.configure" });
-        await setTablePlacement(tx, cfg, id, { zoneId, posX, posY, shape, rotation });
-      });
-      return c.body(null, 204);
-    }),
-  );
-
-  // The same gate as the PUT.
-  app.delete("/api/tables/:id/placement", (c) =>
-    run(c, log, async () => {
-      const session = await requireSession(deps, c);
-      const { sessionId } = session;
-      const cfg = requestCfg(deps.cfg, session);
-      const id = c.req.param("id");
-      if (!isUuid(id)) throw new AppError("table.not_found", { tableId: id });
-      await withTransaction(deps.db, async (tx) => {
-        await checkZones(tx, deps.cfg, session, [{ tableId: id }]);
-        await authorize(tx, { sessionId, permission: "venue.configure" });
-        await clearPlacement(tx, cfg, id);
-      });
-      return c.body(null, 204);
     }),
   );
 
