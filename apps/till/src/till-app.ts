@@ -88,6 +88,7 @@ import "@waitron/ui/src/components/wt-toast.js";
 import "@waitron/ui/src/components/wt-banner.js";
 import type { WtToast } from "@waitron/ui/src/components/wt-toast.js";
 import "./screens/till-station-screen.js";
+import type { HoldReloadDetail } from "./screens/till-station-screen.js";
 import { CROSS_ICON_PATH } from "./widgets/station-queue.js";
 import "./screens/till-enrol-screen.js";
 import "./screens/till-device-chooser.js";
@@ -1275,6 +1276,11 @@ export class TillApp extends LitElement {
     }
   }
 
+  readonly #onHoldReload = (event: Event): void => {
+    const { until } = (event as CustomEvent<HoldReloadDetail>).detail;
+    void this.#holdingReload(() => until.catch(() => undefined));
+  };
+
   #resend<T>(
     send: (signal: AbortSignal) => Promise<T>,
     signal: AbortSignal,
@@ -1530,6 +1536,7 @@ export class TillApp extends LitElement {
     this.addEventListener("keydown", this.#onInteraction);
     document.addEventListener("visibilitychange", this.#onVisibility);
     window.addEventListener(BUILD_CHANGED_EVENT, this.#onBuildChanged);
+    this.addEventListener("hold-reload", this.#onHoldReload);
     void this.sessionActivity.start();
     this.#syncDepartmentTransfers();
   }
@@ -1559,6 +1566,7 @@ export class TillApp extends LitElement {
     this.removeEventListener("keydown", this.#onInteraction);
     document.removeEventListener("visibilitychange", this.#onVisibility);
     window.removeEventListener(BUILD_CHANGED_EVENT, this.#onBuildChanged);
+    this.removeEventListener("hold-reload", this.#onHoldReload);
     void this.sessionActivity.stop();
     super.disconnectedCallback();
   }

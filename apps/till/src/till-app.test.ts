@@ -5,6 +5,7 @@ import { chooseOption } from "@waitron/ui/src/test-helpers.js";
 import indexHtml from "../index.html?raw";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { formatMoney } from "@waitron/shared";
+import { BUILD_CHANGED_EVENT } from "@waitron/diagnostics";
 import {
   adjustmentStubs,
   cancelThroughDialog,
@@ -18742,5 +18743,108 @@ describe("closed floor zone counter refusals", () => {
     answer([{ ...floorZone, name: "Previous session", closed: true }]);
     await flush(el);
     expect(floor(el)!.zones[0]).toMatchObject({ name: "Fresh floor", closed: false });
+  });
+});
+
+describe("till-app: a box update while a kitchen display's dish move still waits for the server", () => {
+  const today = { open: true, isDefault: false, byHand: null, sendsTo: null, why: "open" as const };
+
+  /** An enrolled kitchen display with one queued dish, whose Move has been sent to Barra. */
+  async function movedOnKitchenDisplay(deviceMoveDishStation: () => Promise<unknown>) {
+    const { el } = await mountApp({
+      getTill: vi.fn().mockResolvedValue({
+        ...till,
+        canvas: kdsCanvasDef,
+        capabilities: ["act-as-kds", "take-orders"],
+      }),
+      getDeviceIdentity: vi.fn().mockResolvedValue({
+        deviceId: "dev-1",
+        formFactor: "kds",
+        kitchenScreens: [stationScreen],
+      }),
+      getDeviceStationScreen: vi.fn().mockResolvedValue({
+        stations: [
+          {
+            id: "st-dev",
+            name: "Cocina",
+            available: true,
+            today,
+            printersDown: [],
+            notices: [],
+            queue: [
+              {
+                orderId: "wo-1",
+                orderNumber: 5,
+                label: "Mesa 4",
+                queuedAt: "2026-08-17T10:00:00.000Z",
+                status: "placed",
+                thresholds: {
+                  warmAfterMinutes: 5,
+                  overdueAfterMinutes: 10,
+                  forgottenAfterMinutes: 15,
+                },
+                items: [
+                  {
+                    id: "ti-1",
+                    workingOrderLineId: "wol-1",
+                    state: "queued",
+                    name: "Paella",
+                    quantity: "2.000",
+                    course: null,
+                    firedAt: "2026-08-17T10:00:00.000Z",
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      }),
+      deviceStations: vi.fn().mockResolvedValue([
+        { id: "st-dev", name: "Cocina", displayOrder: 0, active: true, ...today },
+        { id: "st-2", name: "Barra", displayOrder: 1, active: true, ...today },
+      ]),
+      deviceMoveDishStation,
+    });
+    await flush(el);
+    const reload = vi.fn();
+    el.reload = reload;
+    const screen = station(el)!;
+    const queue = () => screen.shadowRoot!.querySelector("till-station-queue")!;
+    await expect
+      .poll(() => queue()?.shadowRoot!.querySelector('[data-move-station="ti-1"]'))
+      .not.toBeNull();
+    queue().shadowRoot!.querySelector<HTMLElement>('[data-move-station="ti-1"]')!.click();
+    const dialog = () => screen.shadowRoot!.querySelector("till-station-choice-dialog");
+    await expect.poll(dialog).not.toBeNull();
+    dialog()!.dispatchEvent(
+      new CustomEvent("station-chosen", {
+        detail: { stationId: "st-2" },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+    await flush(el);
+    expect(deviceMoveDishStation).toHaveBeenCalledOnce();
+    return { el, reload };
+  }
+
+  it("shows the bar instead of reloading while the move is unanswered", async () => {
+    const { el, reload } = await movedOnKitchenDisplay(vi.fn(() => new Promise(() => {})));
+    window.dispatchEvent(new Event(BUILD_CHANGED_EVENT));
+    await flush(el);
+    expect(reload).not.toHaveBeenCalled();
+    expect(el.shadowRoot!.querySelector("wt-banner[data-test=update-bar]")).not.toBeNull();
+  });
+
+  it("reloads once the move has been answered", async () => {
+    let answer!: (value: unknown) => void;
+    const { el, reload } = await movedOnKitchenDisplay(
+      vi.fn(() => new Promise((resolve) => (answer = resolve))),
+    );
+    answer({ revision: 2, stationId: "st-2", moved: [] });
+    await flush(el);
+    window.dispatchEvent(new Event(BUILD_CHANGED_EVENT));
+    await flush(el);
+    expect(reload).toHaveBeenCalledOnce();
   });
 });
