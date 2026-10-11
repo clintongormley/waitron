@@ -1594,8 +1594,9 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       if (body.workingOrderId !== undefined) {
         requireUuidParam(body.workingOrderId, "WorkingOrderId");
       }
-      if (body.receiptLanguage !== undefined)
+      if (body.receiptLanguage !== undefined) {
         requireString(body.receiptLanguage, "receiptLanguage");
+      }
       if (body.zoneId !== undefined) {
         requireUuidParam(body.zoneId, "ServiceZoneId");
       }
@@ -1646,8 +1647,9 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       if (body.zoneId !== undefined) {
         requireUuidParam(body.zoneId, "ServiceZoneId");
       }
-      if (body.receiptLanguage !== undefined)
+      if (body.receiptLanguage !== undefined) {
         requireString(body.receiptLanguage, "receiptLanguage");
+      }
       const zoneId = await resolveHttpOrderZone(deps, session, body.lines.length, body.zoneId);
       await gateZones(
         deps,
@@ -2207,8 +2209,9 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       const id = requireUuidId(c.req.param("id"), "working_order.not_placed");
       await gateZones(deps, session, [{ orderId: id }]);
       const body = await readJsonBody<{ tender: TillTender; receiptLanguage?: string }>(c);
-      if (body.receiptLanguage !== undefined)
+      if (body.receiptLanguage !== undefined) {
         requireString(body.receiptLanguage, "receiptLanguage");
+      }
       assertTakesTender(session.device, tillTenderKind(body.tender));
       const result = await collectOrder(
         { db: deps.db, backend: deps.backend, clock: deps.clock, log },

@@ -167,8 +167,7 @@ export interface TillSaleRequest {
    * `table.not_found`.
    */
   deliveryTableId?: string;
-  /** The receipt language staff chose, stored on the order before it is filed when the order is
-   *  new, or open or placed with no sale yet; otherwise ignored. A string by the route's check. */
+  /** Stored on the order before filing; see `storeSentReceiptLanguage`. */
   receiptLanguage?: string;
 }
 
@@ -441,8 +440,7 @@ export interface PayWorkingOrderRequest {
   deliveryTableId?: string;
   /** The selected service zone for a new counter order. Existing orders use their stored context. */
   zoneId?: string;
-  /** The receipt language staff chose, stored on the order before it is filed when the order is
-   *  new, or open or placed with no sale yet; otherwise ignored. A string by the route's check. */
+  /** Stored on the order before filing; see `storeSentReceiptLanguage`. */
   receiptLanguage?: string;
 }
 
@@ -512,8 +510,7 @@ export interface IntegratedPayRequest {
   simulationOutcome?: "captured" | "declined";
   /** One pretend-reader attempt, shared with its cancellation request. */
   demoAttemptId?: string;
-  /** The receipt language staff chose, stored on the order before it is filed when the order is
-   *  new, or open or placed with no sale yet; otherwise ignored. A string by the route's check. */
+  /** Stored on the order before filing; see `storeSentReceiptLanguage`. */
   receiptLanguage?: string;
 }
 
