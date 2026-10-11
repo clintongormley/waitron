@@ -237,8 +237,15 @@ async function drainDue(
           maxPorEnvio,
           waitPending,
         );
+        if (c.deferred) return c;
         const kept = await haltOpenChainClaims(tx, c.sendable, now, counts);
-        const probes = await claimProbes(tx, now, environment, maxPorEnvio - kept.length);
+        const probes = await claimProbes(
+          tx,
+          now,
+          environment,
+          maxPorEnvio - kept.length,
+          kept[0]?.nombre_razon_emisor ?? null,
+        );
         return { sendable: [...kept, ...probes], rawCount: c.rawCount, deferred: c.deferred };
       });
       if (claimed.deferred || claimed.sendable.length > 0 || claimed.rawCount === 0) break;
@@ -818,12 +825,20 @@ async function claimProbes(
   now: Date,
   environment: Entorno,
   room: number,
+  name: string | null,
 ): Promise<DueRow[]> {
   const { rows } = await tx.execute<Record<string, unknown>>(sql`
+    with due as materialized (${dueProbes(now, environment)}), target as (
+      select r.nombre_razon_emisor from due
+      join registros_facturacion r on r.id = due.id
+      order by r.fecha_hora_huso_gen_registro, r.sif_id
+      limit 1
+    )
     select r.*, e.intentos, due.run_code as probe_run_code
-    from (${dueProbes(now, environment)}) due
+    from due
     join registros_facturacion r on r.id = due.id
     join envios e on e.registro_id = r.id
+    where r.nombre_razon_emisor = coalesce(${name}, (select nombre_razon_emisor from target))
     order by r.sif_id
     limit ${room}
   `);
