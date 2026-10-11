@@ -11,6 +11,7 @@ import {
   printers,
   sales,
   withTransaction,
+  workingOrders,
   type Database,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -686,5 +687,209 @@ describe("an issued receipt reprinted in another receipt language", () => {
     expect(startsWith(copy!, "IVE"), "IVE").toBe(true);
     expect(startsWith(copy!, "IVA")).toBe(false);
     expect(copy).toContain("DUPLICADO");
+  });
+});
+
+describe("the receipt language staff choose is saved on the order", () => {
+  /** A Madrid venue saved as Catalan, with Spanish and Catalan content: it offers ca-ES and es-ES. */
+  async function choosingVenue(): Promise<BillVenue> {
+    const venue = await catalanBillVenue();
+    await inTx(venue, async (tx) => {
+      await tx.execute(
+        sql`insert into content_languages (id, default_language, languages) values (1, 'es', '["es","ca"]')
+            on conflict (id) do update set default_language = excluded.default_language, languages = excluded.languages`,
+      );
+    });
+    return venue;
+  }
+
+  function orderRow(venue: BillVenue, id: string) {
+    return inTx(venue, async (tx) => {
+      const [row] = await tx.select().from(workingOrders).where(eq(workingOrders.id, id));
+      return row!;
+    });
+  }
+
+  function choose(venue: BillVenue, id: string, body: Record<string, unknown>) {
+    return send(venue.app, venue.cookie, "PUT", `/api/working-orders/${id}/receipt-language`, body);
+  }
+
+  async function billOf(venue: BillVenue, billId: string) {
+    const { partyId } = await orderRow(venue, billId);
+    const read = await send(venue.app, venue.cookie, "GET", `/api/parties/${partyId}/bills`);
+    expect(read.status).toBe(200);
+    const bills = read.json as unknown as { workingOrderId: string }[];
+    return bills.find((bill) => bill.workingOrderId === billId)!;
+  }
+
+  /** A counter order parked, and placed when asked, through the working-order functions. */
+  async function counterOrder(venue: BillVenue, placed: boolean): Promise<string> {
+    const { zoneId } = await inTx(venue, (tx) =>
+      offerProducts(tx, venue.cfg, { zone: "counter", orderStart: "counter" }),
+    );
+    const id = randomUUID();
+    const deps = { db: venue.db, backend: venue.backend, clock: venue.clock };
+    await parkOrder(deps, venue.cfg, {
+      id,
+      lines: [{ menuItemId: venue.offerFor("Tarta"), quantity: "1" }],
+      zoneId,
+      operatorId: venue.operatorId,
+    });
+    if (placed) await placeOrder(deps, venue.cfg, id, venue.operatorId);
+    return id;
+  }
+
+  it("saves Spanish on a party bill, answers the next revision and lists it on the bill", async () => {
+    const venue = await choosingVenue();
+    const billId = await tabWith(venue, "Tarta");
+    const before = await orderRow(venue, billId);
+    expect((await billOf(venue, billId)) as object).not.toHaveProperty("receiptLanguage");
+
+    const saved = await choose(venue, billId, { revision: before.revision, language: "es-ES" });
+
+    expect(saved).toEqual({ status: 200, json: { revision: before.revision + 1 } });
+    expect(await orderRow(venue, billId)).toEqual({
+      ...before,
+      receiptLocale: "es-ES",
+      revision: before.revision + 1,
+    });
+    expect(await billOf(venue, billId)).toMatchObject({ receiptLanguage: "es-ES" });
+  });
+
+  it("clears the choice when sent null", async () => {
+    const venue = await choosingVenue();
+    const billId = await tabWith(venue, "Tarta");
+    const first = await choose(venue, billId, {
+      revision: (await orderRow(venue, billId)).revision,
+      language: "es-ES",
+    });
+    expect(first.status).toBe(200);
+
+    const cleared = await choose(venue, billId, { revision: first.json.revision, language: null });
+
+    expect(cleared).toEqual({
+      status: 200,
+      json: { revision: (first.json.revision as number) + 1 },
+    });
+    expect((await orderRow(venue, billId)).receiptLocale).toBeNull();
+    expect((await billOf(venue, billId)) as object).not.toHaveProperty("receiptLanguage");
+  });
+
+  it("refuses a stale revision, leaving the order as it was", async () => {
+    const venue = await choosingVenue();
+    const billId = await tabWith(venue, "Tarta");
+    const before = await orderRow(venue, billId);
+
+    expect(
+      await choose(venue, billId, { revision: before.revision + 5, language: "es-ES" }),
+    ).toEqual({
+      status: 409,
+      json: {
+        code: "working_order.out_of_date",
+        params: { workingOrderId: billId, revision: before.revision },
+      },
+    });
+    expect(await orderRow(venue, billId)).toEqual(before);
+  });
+
+  it.each([["gl-ES"], ["en-GB"], [5], [["es-ES"]], [undefined]])(
+    "refuses the language %j, which is not an offered receipt language",
+    async (language) => {
+      const venue = await choosingVenue();
+      const billId = await tabWith(venue, "Tarta");
+      const before = await orderRow(venue, billId);
+
+      expect(await choose(venue, billId, { revision: before.revision, language })).toEqual({
+        status: 400,
+        json: { code: "management.request_invalid", params: { field: "language" } },
+      });
+      expect(await orderRow(venue, billId)).toEqual(before);
+    },
+  );
+
+  it("refuses a settled bill", async () => {
+    const venue = await choosingVenue();
+    const billId = await tabWith(venue, "Caña");
+    const paid = await send(
+      venue.app,
+      venue.cookie,
+      "POST",
+      `/api/working-orders/${billId}/payments`,
+      {
+        submissionId: randomUUID(),
+        kind: "contribution",
+        amount: "3.00",
+        method: "cash",
+        tendered: "3.00",
+        applied: "3.00",
+        tip: "0.00",
+      },
+    );
+    expect(paid.status).toBe(200);
+    const before = await orderRow(venue, billId);
+    expect(before.status).toBe("settled");
+
+    expect(await choose(venue, billId, { revision: before.revision, language: "es-ES" })).toEqual({
+      status: 409,
+      json: { code: "working_order.not_open", params: { workingOrderId: billId } },
+    });
+    expect(await orderRow(venue, billId)).toEqual(before);
+  });
+
+  it("refuses a placed order once it has a sale", async () => {
+    const venue = await choosingVenue();
+    const id = await counterOrder(venue, true);
+    const deps = { db: venue.db, backend: venue.backend, clock: venue.clock };
+    await issueOrderInvoice(deps, venue.cfg, id, venue.operatorId);
+    const before = await orderRow(venue, id);
+    expect(before.status).toBe("placed");
+
+    expect(await choose(venue, id, { revision: before.revision, language: "es-ES" })).toEqual({
+      status: 409,
+      json: { code: "working_order.not_open", params: { workingOrderId: id } },
+    });
+    expect(await orderRow(venue, id)).toEqual(before);
+  });
+
+  it("refuses while a payment of the order is in flight", async () => {
+    const venue = await choosingVenue();
+    const billId = await tabWith(venue, "Tarta");
+    await inTx(venue, (tx) =>
+      tx
+        .update(workingOrders)
+        .set({ paymentAttemptAt: new Date().toISOString() })
+        .where(eq(workingOrders.id, billId)),
+    );
+    const before = await orderRow(venue, billId);
+
+    expect(await choose(venue, billId, { revision: before.revision, language: "es-ES" })).toEqual({
+      status: 409,
+      json: { code: "order.payment_in_flight", params: { workingOrderId: billId } },
+    });
+    expect(await orderRow(venue, billId)).toEqual(before);
+  });
+
+  it("returns the saved choice when the till retrieves a held or a placed order", async () => {
+    const venue = await choosingVenue();
+    const held = await counterOrder(venue, false);
+    const placed = await counterOrder(venue, true);
+    const retrieve = (path: string) => send(venue.app, venue.cookie, "GET", path);
+    expect((await retrieve(`/api/working-orders/${held}`)).json).not.toHaveProperty(
+      "receiptLanguage",
+    );
+
+    for (const id of [held, placed]) {
+      const { revision } = await orderRow(venue, id);
+      expect((await choose(venue, id, { revision, language: "es-ES" })).status).toBe(200);
+    }
+
+    expect((await retrieve(`/api/working-orders/${held}`)).json).toMatchObject({
+      id: held,
+      receiptLanguage: "es-ES",
+    });
+    expect((await retrieve(`/api/working-orders/${placed}/placed`)).json).toMatchObject({
+      id: placed,
+      receiptLanguage: "es-ES",
+    });
   });
 });

@@ -133,6 +133,25 @@ describe("TillApi", () => {
     );
   });
 
+  it.each([["es-ES"], [null]])(
+    "saves the order's receipt language %j under its revision",
+    async (language) => {
+      const fetchStub = vi.fn().mockResolvedValue(jsonResponse({ revision: 4 }));
+      const api = new TillApi("", fetchStub);
+
+      expect(await api.setOrderReceiptLanguage("order-1", { revision: 3, language })).toEqual({
+        revision: 4,
+      });
+      expect(fetchStub).toHaveBeenCalledWith(
+        "/api/working-orders/order-1/receipt-language",
+        expect.objectContaining({
+          method: "PUT",
+          body: JSON.stringify({ revision: 3, language }),
+        }),
+      );
+    },
+  );
+
   it("reports made-here items from a successful answer and ignores an answer without them", async () => {
     const item = {
       lineId: "line-1",

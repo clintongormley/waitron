@@ -122,6 +122,7 @@ import {
   sendLines,
   sendToPrep,
   setOrderInvoiceChoice,
+  setOrderReceiptLanguage,
   setLineCourse,
   unmarkServed,
   readOrderRevision,
@@ -1820,6 +1821,21 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
         },
         { personId: session.personId, emailAvailable, now: deps.clock.now().instant },
       );
+      return c.json({ revision });
+    }),
+  );
+
+  app.put("/api/working-orders/:id/receipt-language", (c) =>
+    run(c, log, async () => {
+      const session = await requireSession(deps, c, { action: "take-orders" });
+      const cfg = requestCfg(deps.cfg, session);
+      const id = requireUuidId(c.req.param("id"), "working_order.not_open");
+      await gateZones(deps, session, [{ orderId: id }]);
+      const body = await readJsonBody<{ revision?: unknown; language?: unknown }>(c);
+      const revision = await setOrderReceiptLanguage(deps.db, cfg, id, {
+        revision: requireRevision(body.revision),
+        language: body.language,
+      });
       return c.json({ revision });
     }),
   );

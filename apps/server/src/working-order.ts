@@ -204,6 +204,7 @@ import { readReceiptOrder } from "./receipt-order.js";
 import { enqueueCollectionTicket } from "./receipt-print.js";
 import { ordersWithUnfiledPayment, paymentAttemptIsLive } from "./till-sale.js";
 import { readIssuedSales } from "./sale-due.js";
+import { readOfferedReceiptLanguages } from "./venue-locale.js";
 import { creditWholeInvoice, readOrderInvoice } from "./cancel-credit.js";
 import { overrideToCheck, withCheck, withPinCheckAhead } from "./pin-check-ahead.js";
 import {
@@ -3512,6 +3513,65 @@ export async function setOrderInvoiceChoice(
 }
 
 /**
+ * Save the language the order's receipt prints in, or clear it with `null` so the location's own
+ * receipt language applies. Refused as {@link setOrderInvoiceChoice} refuses, and refused for a
+ * language the location does not offer.
+ */
+export async function setOrderReceiptLanguage(
+  db: Database,
+  cfg: Pick<TillConfig, "nodeId">,
+  orderId: string,
+  request: { revision: number; language: unknown },
+): Promise<number> {
+  const { language } = request;
+  if (language !== null && typeof language !== "string") {
+    throw new AppError("management.request_invalid", { field: "language" });
+  }
+  return withTransaction(db, async (tx) => {
+    const [order] = await tx
+      .select({
+        status: workingOrders.status,
+        revision: workingOrders.revision,
+        locationId: workingOrders.locationId,
+      })
+      .from(workingOrders)
+      .where(and(eq(workingOrders.id, orderId), eq(workingOrders.nodeId, cfg.nodeId)));
+    if (order === undefined || (order.status !== "open" && order.status !== "placed")) {
+      throw new AppError("working_order.not_open", { workingOrderId: orderId });
+    }
+    if (order.status === "placed") {
+      const [issued] = await tx
+        .select({ id: sales.id })
+        .from(sales)
+        .where(eq(sales.workingOrderId, orderId))
+        .limit(1);
+      if (issued !== undefined) {
+        throw new AppError("working_order.not_open", { workingOrderId: orderId });
+      }
+    }
+    if (order.revision !== request.revision) {
+      throw new AppError("working_order.out_of_date", {
+        workingOrderId: orderId,
+        revision: order.revision,
+      });
+    }
+    await refusePaymentInFlight(tx, [orderId]);
+    if (
+      language !== null &&
+      !(await readOfferedReceiptLanguages(tx, { locationId: order.locationId })).includes(language)
+    ) {
+      throw new AppError("management.request_invalid", { field: "language" });
+    }
+    const revision = order.revision + 1;
+    await tx
+      .update(workingOrders)
+      .set({ receiptLocale: language, revision })
+      .where(and(eq(workingOrders.id, orderId), eq(workingOrders.nodeId, cfg.nodeId)));
+    return revision;
+  });
+}
+
+/**
  * The same composition `grossRows` uses for a line's gross total, so a split line's `line_total` is
  * identical to an add-time line's.
  */
@@ -3973,6 +4033,8 @@ export interface HeldOrder {
   label: string | null;
   /** What an edit of this copy sends back, so a save from a copy since changed is refused. */
   revision: number;
+  /** The receipt language staff chose for the order; absent while the location's own applies. */
+  receiptLanguage?: string;
   /**
    * PARENT rows only, each dish's child lines nested as `extras`. A row carries its stored offer and
    * display snapshot, so retrieval does not depend on the offer still being active; a row with no
@@ -4120,6 +4182,7 @@ async function readBasketOrder(
         orderNumber: workingOrders.orderNumber,
         label: workingOrders.label,
         revision: workingOrders.revision,
+        receiptLocale: workingOrders.receiptLocale,
       })
       .from(workingOrders)
       .where(and(eq(workingOrders.id, id), which));
@@ -4245,6 +4308,7 @@ async function readBasketOrder(
       orderNumber: order.orderNumber,
       label: order.label,
       revision: order.revision,
+      ...(order.receiptLocale === null ? {} : { receiptLanguage: order.receiptLocale }),
       lines,
     };
   });

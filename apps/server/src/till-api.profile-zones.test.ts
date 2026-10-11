@@ -80,6 +80,7 @@ import { offerProducts } from "./testing/zone-offers.js";
  * | GET  /api/working-orders/:id/placed                     | order                  | refuses GET /api/working-orders/:id/placed           |
  * | PUT  /api/working-orders/:id                            | order                  | refuses PUT /api/working-orders/:id                  |
  * | PUT  /api/working-orders/:id/invoice-choice             | order                  | refuses PUT .../invoice-choice                       |
+ * | PUT  /api/working-orders/:id/receipt-language           | order                  | refuses PUT .../receipt-language                     |
  * | DELETE /api/working-orders/:id                          | order                  | refuses DELETE /api/working-orders/:id               |
  * | POST /api/working-orders/:id/place                      | order                  | refuses POST .../place                               |
  * | POST /api/working-orders/:id/prep                       | order                  | refuses POST .../prep                                |
@@ -162,7 +163,7 @@ import { offerProducts } from "./testing/zone-offers.js";
  * Where the check runs: first inside the route's own transaction, except where the route's work
  * runs in a helper that opens its own transaction — `/api/sales`, `/api/pay`, POST
  * `/api/working-orders`, GET, PUT and DELETE `/api/working-orders/:id`, `/placed`,
- * `/invoice-choice`, `/place`, `/prep`, `/collect`, `/cancel`, `/api/sales/:id/receipt`,
+ * `/invoice-choice`, `/receipt-language`, `/place`, `/prep`, `/collect`, `/cancel`, `/api/sales/:id/receipt`,
  * `/payment-slip`, `/reprint` and the four bill-payment routes — where it reads just before, outside
  * any transaction.
  *
@@ -555,6 +556,13 @@ const ROUTES: readonly Row[] = [
     "PUT /api/working-orders/:id/invoice-choice",
     "PUT",
     (x) => `/api/working-orders/${x.deliOrder}/invoice-choice`,
+    () => ({}),
+    deliOrderZone,
+  ],
+  [
+    "PUT /api/working-orders/:id/receipt-language",
+    "PUT",
+    (x) => `/api/working-orders/${x.deliOrder}/receipt-language`,
     () => ({}),
     deliOrderZone,
   ],

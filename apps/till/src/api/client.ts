@@ -1112,6 +1112,8 @@ export interface HeldOrder {
   label: string | null;
   /** What a save of this copy sends back, so a save from a copy since changed is refused. */
   revision: number;
+  /** The receipt language staff chose for the order; absent while the location's own applies. */
+  receiptLanguage?: string;
   lines: (Omit<SaleLine, "extras" | "options"> & {
     productId?: string;
     /**
@@ -1776,7 +1778,8 @@ export interface PartyBill {
   /** A payment is pending or received on the bill, which the single payment refuses. */
   hasPayments: boolean;
   receiptAvailable: boolean;
-  /** The language the bill's sale was filed in; absent while no sale is filed. */
+  /** The language the bill's sale was filed in, else the one staff chose for it; absent when
+   * neither is set. */
   receiptLanguage?: string;
   /** The issued invoice's number ("A/1"); absent while no sale is filed. */
   invoiceNumber?: string;
@@ -2467,6 +2470,19 @@ export class TillApi {
   ): Promise<{ revision: number }> {
     return this.#request<{ revision: number }>(
       `/api/working-orders/${id}/invoice-choice`,
+      "PUT",
+      choice,
+    );
+  }
+
+  /** Save the language the order's receipt prints in, one of {@link TillInfo.receiptLanguages};
+   * `null` goes back to the location's own → `PUT /api/working-orders/:id/receipt-language`. */
+  setOrderReceiptLanguage(
+    id: string,
+    choice: { revision: number; language: string | null },
+  ): Promise<{ revision: number }> {
+    return this.#request<{ revision: number }>(
+      `/api/working-orders/${id}/receipt-language`,
       "PUT",
       choice,
     );
