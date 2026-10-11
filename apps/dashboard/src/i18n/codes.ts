@@ -316,6 +316,10 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "This account is disabled — ask a manager",
     es: "Esta cuenta está deshabilitada. Avisa a un responsable",
   },
+  "node.reset": {
+    en: "This box was reset.",
+    es: "Este equipo se ha restablecido.",
+  },
   "person.not_found": {
     en: "That person could not be found",
     es: "No se ha encontrado a esa persona",

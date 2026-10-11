@@ -253,6 +253,7 @@ export class LoginScreen extends LitElement {
   @property({ attribute: false }) navigate: (url: string) => void = (url) =>
     window.location.assign(url);
   @property({ attribute: false }) noticeCode: string | null = null;
+  @property({ attribute: false }) reload: () => void = () => location.reload();
   private readonly rememberedLogin = new URLSearchParams(window.location.search).has("token")
     ? null
     : readLoginPreference();
@@ -392,6 +393,7 @@ export class LoginScreen extends LitElement {
     super.connectedCallback();
     this.#trackForm();
     window.addEventListener("waitron-session-invalid", this.#onSessionInvalid);
+    if (this.noticeCode === "node.reset") return;
     if (this.token !== null && this.actionPurpose !== null) void this.#inspectAccountAction();
     else if (this.rememberedLogin === null) void this.#conditionalPasskeyLogin();
     else if (this.step === "password") this.#focusField("password");
@@ -1285,6 +1287,18 @@ export class LoginScreen extends LitElement {
   override render() {
     const form = this.#formState();
     const fieldError = (name: string) => form.fields[name] ?? "";
+    if (this.noticeCode === "node.reset") {
+      return html`
+        <div class="screen">
+          <p class="notice" role="status">${codeMessage(this.noticeCode)}</p>
+          <wt-form-actions>
+            <wt-button variant="primary" data-test="reload" @click=${() => this.reload()}
+              >${t("login.reload")}</wt-button
+            >
+          </wt-form-actions>
+        </div>
+      `;
+    }
     if (this.token !== null) {
       return html`
         <div class="screen">

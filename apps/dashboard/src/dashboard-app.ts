@@ -805,7 +805,8 @@ export class DashboardApp extends LitElement {
     if (
       code === "management_session.expired" ||
       code === "management_session.required" ||
-      code === "person.suspended"
+      code === "person.suspended" ||
+      code === "node.reset"
     ) {
       this.#returnToLogin(code);
     }

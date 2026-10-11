@@ -3112,6 +3112,73 @@ describe("login-screen: the sign-in card", () => {
     },
   );
 
+  describe("after the box was reset", () => {
+    it.each(themes)(
+      "says so as plain text and offers only a Reload button (%s theme)",
+      async (theme) => {
+        setLocale("en-GB");
+        const reload = vi.fn();
+        const { el } = await mountWidget<LoginScreen>(
+          "dashboard-login-screen",
+          { api: stubApi(), noticeCode: "node.reset", reload },
+          theme,
+        );
+        await flush(el);
+        const notice = card(el).querySelector<HTMLElement>(".notice")!;
+        expect(notice.textContent!.trim()).toBe("This box was reset.");
+        expect(notice.dataset.tone).toBeUndefined();
+        expect(getComputedStyle(notice).color).toBe(
+          tokenValue(el, "color", "var(--wt-color-text)"),
+        );
+        expect(card(el).querySelector("wt-input")).toBeNull();
+        expect(card(el).querySelector("[data-test=continue]")).toBeNull();
+        const button = card(el).querySelector<HTMLElement>("wt-button[data-test=reload]")!;
+        expect(button.textContent!.trim()).toBe("Reload");
+        expect(button.getAttribute("variant")).toBe("primary");
+        expect(reload).not.toHaveBeenCalled();
+        click(el, "reload");
+        expect(reload).toHaveBeenCalledOnce();
+      },
+    );
+
+    it("reads Spanish copy for the notice and the button", async () => {
+      setLocale("es-ES");
+      const { el } = await mountWidget<LoginScreen>("dashboard-login-screen", {
+        api: stubApi(),
+        noticeCode: "node.reset",
+      });
+      await flush(el);
+      expect(card(el).querySelector(".notice")!.textContent!.trim()).toBe(
+        "Este equipo se ha restablecido.",
+      );
+      expect(card(el).querySelector("[data-test=reload]")!.textContent!.trim()).toBe("Recargar");
+    });
+
+    it("starts no passkey autofill and reads no Google settings", async () => {
+      conditionalMediationAvailable.mockResolvedValue(true);
+      vi.mocked(navigator.credentials.get).mockImplementation(() => new Promise(() => undefined));
+      // Control: the same stubs on the plain sign-in screen do both.
+      const plainApi = stubApi();
+      const plain = await mountWidget<LoginScreen>("dashboard-login-screen", { api: plainApi });
+      await flush(plain.el);
+      await vi.waitFor(() => expect(navigator.credentials.get).toHaveBeenCalledOnce());
+      expect(plainApi.getGoogleConfig).toHaveBeenCalledOnce();
+      cleanupWidgets();
+      vi.mocked(navigator.credentials.get).mockClear();
+
+      const api = stubApi();
+      const { el } = await mountWidget<LoginScreen>("dashboard-login-screen", {
+        api,
+        noticeCode: "node.reset",
+      });
+      await flush(el);
+      await flush(el);
+      expect(navigator.credentials.get).not.toHaveBeenCalled();
+      expect(api.passkeyAuthOptions).not.toHaveBeenCalled();
+      expect(api.getGoogleConfig).not.toHaveBeenCalled();
+    });
+  });
+
   const methodPages = [
     ["email", undefined, ["continue", "login-or", "google-login"]],
     ["password", openPassword, ["submit", "login-or", "passkey-login", "google-login"]],

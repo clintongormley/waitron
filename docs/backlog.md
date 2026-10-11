@@ -3158,12 +3158,20 @@ _Formerly A7, and the dashboard entries in the opening part of the old Track A (
   column being dragged is invisible while it moves, and a typed PIN brings up the unsaved-changes
   question. [Detail](backlog/dashboard.md#a499-dragging-in-the-column-chooser-and-leaving-a-sign-in-screen)
 
-- **A449 — a dashboard tab left open through a box reset keeps retrying every request.** Seen
-  2026-10-09 on the owner's box: across `waitron.sh reset`, the setup wizard and a new venue, the
-  open tab's console filled with 401s, refused connections, then 404s from every route (the wizard
-  serves no `/management-api`), then 401s again, until reloaded by hand. At the least it should sign
-  the person out and return them to the login screen (owner, 2026-10-09); better still, say the box
-  was reset and offer a reload.
+- **After a box reset, the dashboard's banner can still show the old venue's name until the page
+  is reloaded.** The venue name comes from a locale read that `DashboardApi` keeps for the page's
+  life (`#localesPromise`, `apps/dashboard/src/api/client.ts`) — inferred, not traced.
+
+- **A dashboard tab that never meets the box in setup mode gets plain sign-in, not the "box was
+  reset" notice** — for example one asleep through the reset and the new venue's setup. There is no
+  venue identity to compare. Other open tabs are first sent to sign-in by the shared session
+  deadline with the "session expired" notice; by reading, not run, their sign-in screen's own reads
+  then find setup mode and switch it to the reset notice.
+
+- **`waitron.sh reset --all` replaces the box's certificate folder** (`deploy/waitron.sh`, the
+  `rm_volume waitron_state` branch), so a tab left open fails the certificate check, reports
+  `connection.failed` on every request and is never signed out. A page cannot tell this apart from
+  the box being down.
 
 - **A398 — device-profile editor heading remains to align with the sub-page pattern.**
   The editor repeats the list title and has no parent link above the heading

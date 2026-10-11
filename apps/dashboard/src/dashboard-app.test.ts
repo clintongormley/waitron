@@ -5707,6 +5707,14 @@ describe("dashboard-app: session signals", () => {
     expect(notice(el)).toBe(codeMessage("person.suspended"));
   });
 
+  it("returns to login with the reset notice when the box was reset", async () => {
+    const { el } = await signedIn();
+    sessionInvalid("node.reset");
+    await flush(el);
+    expect(overview(el)).toBeNull();
+    expect((login(el) as unknown as { noticeCode?: string }).noticeCode).toBe("node.reset");
+  });
+
   it("does not re-check a signed-out tab when it comes back into view", async () => {
     const getMe = vi.fn().mockRejectedValue({ code: "management_session.required" });
     const { el } = await mountWidget<DashboardApp>("dashboard-app", { api: stubApi({ getMe }) });

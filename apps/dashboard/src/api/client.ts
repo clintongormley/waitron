@@ -1790,7 +1790,7 @@ export class DashboardApi {
     return this.#menuRevision.value;
   }
   #background?: DashboardApi;
-  #onError?: (code: string) => void;
+  #onError?: (code: string, status?: number) => void;
 
   get background(): DashboardApi {
     if (this.#background) return this.#background;
@@ -1812,7 +1812,7 @@ export class DashboardApi {
   constructor(
     baseUrl = "",
     fetchImpl: FetchLike = fetch,
-    onError?: (code: string) => void,
+    onError?: (code: string, status?: number) => void,
     onSuccess?: (path: string) => void,
     passive = false,
   ) {
