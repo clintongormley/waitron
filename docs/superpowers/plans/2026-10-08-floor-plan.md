@@ -320,8 +320,23 @@ cases it changes; a case found while running that is on neither list is a STOP.
   `partyBillInTicketZone`, `:1073-1110`, whose table at `:1099` has no zone);
   `apps/server/src/floor-today-merges.test.ts:164-180`, `:182-217` (a merge refusing a table with no
   zone); `apps/server/src/made-here.routes.test.ts:1675-1687`, `:1689-1707` (a zone-less party's
-  unsent drink, through `bareParty()`, `:235-246`, whose table gets a zone for its other users,
-  `:1710`, `:1776`); and the half of `apps/server/src/watch-zones.test.ts:126-170` at `:164-169`
+  unsent drink, deleted). The two other users of their helper `bareParty()` (`:235-246`, a parked
+  counter drink moved onto a table in no zone, so nothing is sent) need that same setup, which
+  cannot exist once every table needs a zone; giving its table a zone does not keep them (the plan's
+  re-check ran it: in a table-service zone the move sends the drink, `move-bill.ts:345` →
+  `adoptZone` → `moveWouldSend`, `:436`, so `:1736-1740` finds 17 ticket items where it expects
+  none, and the move inside `bareParty()` at `:1776` answers 409; in any other zone `refuseUnseatable`, `move-bill.ts:239-247`,
+  refuses the move with `service_zone.mode_incompatible`). `:1775-1835` ("split-table sends the
+  selected bill when it enters table service") is deleted: a bill can enter table service through a
+  split only from a table in no zone (read, not run), since a party's tables share one zone (`joinTables` refuses
+  `service_zone.join_mismatch`, `apps/server/src/table-actions.ts:122-128`) and a split starts the new
+  party at one of them. `:1709-1773` ("PUT … makes added adjusted units here even from a held
+  group"): the implementer decides between rebuilding it with another way to leave a made-here drink
+  unsent in a party's bill, if one exists, and deleting it — `release: "hold"` (`:294`) holds a
+  group, but a made-here drink in a held group is made at once (`:324`, `:447`; read, not run), so it
+  may not leave the drink unsent. Deleting either case needs the same strictness as the others: if
+  the per-file coverage table then shows a branch only that case reached, it is a null-zone branch
+  for Task 5.3 (decision 24), and anything else is a STOP. `bareParty()` goes with its last user. And the half of `apps/server/src/watch-zones.test.ts:126-170` at `:164-169`
   that sets a delivery table's zone to null.
 - **`planned` and adoption** (the plan's decisions 16 and 17, slice 2 decision 20; slice 5
   decision 6): `apps/server/src/floor-plan.test.ts:218-281`, `:306-325`, `:339-350`, `:425-453`,
@@ -5830,9 +5845,11 @@ if it is wrong.
     `:91`, `:101`), so `scripts/live-subscriptions.test.ts` accepts them. Read, not run. The other
     queries naming `dining_tables` — `getOverdueOrders`, `listOrderPages`, `getOrder`,
     `getStationDeleteImpact` (`apps/dashboard/src/api/live-queries.ts:357`; venue-service's
-    `station-delete-impact`, `packages/venue-service/src/dashboard/live-queries.ts:7`) and
-    `getFloorPlan` (`:390`; venue-service's `floor-plan`, `:79`) — read no table's `active` (the "Who
-    reads `active`" list above), so they change nothing here; the dashboard's `listTables` (`:383`) is
+    `station-delete-impact`, `packages/venue-service/src/dashboard/live-queries.ts:7`) — read no
+    table's `active` (the "Who reads `active`" list above), so they change nothing here; `getFloorPlan`
+    (`:390`; venue-service's `floor-plan`, `:79`) reads `active` only in adoption
+    (`apps/server/src/floor-plan.ts:105`), which Task 5.2j removes, so it needs no new dependency
+    either; the dashboard's `listTables` (`:383`) is
     watched only by the old floor screen, which Task 5.1a removes. The zone and department removal
     counts are one-off reads in no dependency list. Cost: the two queries refresh on every
     today's-plan change.
@@ -6228,7 +6245,9 @@ code, so every suite stays green with no assertion changed.
   `apps/server/scripts/demo-seed/seed-floor.ts` (its import went in Task 5.2a) and
   `apps/server/src/tables.test.ts`, which stays on `./tables.js` because its cases at `:157`, `:165`
   and `:220` test refusals the moved helper drops (`zone.not_found`, `table.label_taken`, an
-  unrelated database error re-thrown) and Task 5.2c deletes them; and the test files that use
+  unrelated database error re-thrown) and Task 5.2c deletes them; the four test venues that import
+  it from `../tables.js` (`apps/server/src/testing/party-venue.ts:39`, `adjustment-venue.ts:42`,
+  `bill-venue.ts:38`, `split-extras-venue.ts:27`), which switch to `./live-table.js`; and the test files that use
   `deactivateTable` as setup (`party-table-actions.test.ts:23`, `:481`; `party-move-bill.test.ts:23`,
   `:487`), `updateTable` to rename a table (`party-table-names.test.ts:10`, `:105`, `:149`), or
   `updateTable` to move one to another zone (`tabs.test.ts:48`, `:1026`)
@@ -6251,7 +6270,12 @@ Behaviour: none in the product. The moved `createTable` writes the same row as `
 `createTable` stays until Task 5.2c, for the routes that still call it.
 
 - [ ] **Step 1:** Write `live-table.ts`; point those imports at it with a scripted replace of the
-  import line (the typecheck then lists any file left); replace the `deactivateTable` setups with
+  import line. The typecheck cannot list a file left behind, because `tables.ts`' `createTable` still
+  exists during this task, so check with a grep instead:
+  `grep -rln 'createTable' apps/server/src apps/server/scripts | xargs grep -l 'tables.js'` prints only
+  `apps/server/src/tables.ts`, `apps/server/src/management-api.ts` and `apps/server/src/tables.test.ts`,
+  plus any file that imports something else from `tables.js` beside the helper's `createTable`,
+  which is read to confirm. Replace the `deactivateTable` setups with
   `switchOff`, the `updateTable` renames with `update(diningTables).set({ label })` and the zone move
   in `tabs.test.ts:1026` with `update(diningTables).set({ zoneId })`.
 - [ ] **Step 2: Run** `pnpm --filter @waitron/server exec vitest run src/tabs.test.ts src/party-table-actions.test.ts src/party-move-bill.test.ts src/party-table-names.test.ts`,
@@ -6360,8 +6384,9 @@ switched on, so every test table needs a zone first.
   onwards stay); `apps/server/src/party-move-bill.test.ts:337-352`, `:798-811`, `:1054-1068`,
   `:1112-1123`, `:1125-1136` (with the helper `partyBillInTicketZone`, `:1073-1110`, if nothing else
   uses it); `apps/server/src/floor-today-merges.test.ts:164-180`, `:182-217`;
-  `apps/server/src/made-here.routes.test.ts:1675-1687`, `:1689-1707` (deleted; `bareParty()`,
-  `:235-246`, gives its table a zone for its other users, `:1710`, `:1776`); and the half of
+  `apps/server/src/made-here.routes.test.ts:1675-1687`, `:1689-1707`, `:1775-1835`, and `:1709-1773`
+  (rebuilt or deleted, the implementer's choice), with `bareParty()` (`:235-246`) — the Behaviour
+  list gives each one's fate and why; and the half of
   `apps/server/src/watch-zones.test.ts:126-170` at `:164-169` that sets a delivery table's zone to
   null (deleted; the rest of the case stays)
 
@@ -6630,10 +6655,11 @@ already works, so this task changes only test setup, and every suite stays green
   tables and reads each live table back from `readZonePlan`'s `liveTableId`, instead of making live
   tables and adopting them at `:64`), and the other helpers and setups that adopt: `masterOf` in
   `apps/server/src/floor-today-store.test.ts`, and the first-save setups in `floor-plan.test.ts`,
-  `floor-catch-up.test.ts`, `floor-today-state.test.ts`, `boot.test.ts`, `management-api.test.ts`,
-  `floor-today-api.test.ts:200` and `floor-today-changes.test.ts:264`
+  `floor-catch-up.test.ts`, `floor-today-state.test.ts`, `boot.test.ts` and `management-api.test.ts`
   (`grep -rln liveTableId apps/server/src`), except the cases Task 5.2j deletes because adoption is
-  what they test
+  what they test; and the later saves at `floor-today-api.test.ts:200` and
+  `floor-today-changes.test.ts:264`, which do not adopt but send a master table's own `liveTableId`
+  beside its `id`: that key goes here, before Task 5.2j drops the field
 
 Behaviour: none in the product. A helper that took a live table's id now gets it back from the
 first save, which creates it.
@@ -6735,7 +6761,8 @@ Existing tests that change: `till-api.tables.test.ts:264-272` (`active: true` le
 `rotation` leave the matcher and `planTableId: null` joins it; its `capacity: 4` argument to
 `createTable` stays until Task 5.3 drops the column); `management-api.test.ts:1654` (its
 `toMatchObject({ active: true })` is deleted, `active` having left the answer; the case's `PATCH` row
-went in Task 5.2c, so nothing is left for that line to guard);
+went in Task 5.2c, so nothing is left for that line to guard), with the `const id = await newTable()`
+at `:1642` that only it then uses (`newTable()` itself stays, for `:1092`);
 any `/api/tables/state` or table-list case pinning a whole row with `toEqual` (grep the server
 suites for `"/api/tables/state"`, `listTablesWithState(` and `"/management-api/tables"`; a key
 removed from such a pin is listed in the changed-test commit). Fixture only:
