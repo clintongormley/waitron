@@ -92,8 +92,8 @@ and hours proposals; the historical spec keeps its dated pointers.
 
 ## A493. Departments and zones as one list, edited in dialogs
 
-**A493 (owner, 2026-10-11) — OPEN. Starts after A435 step 6 lands** (lane E, in progress). That step
-changes the same screens and replaces a zone's and a department's Disable with Delete
+**A493 (owner, 2026-10-11) — OPEN (lane D).** A435 step 6 replaces a zone's and a department's
+Disable with permanent Delete in the same screens
 ([plan](../superpowers/plans/2026-10-11-a435-6-tables-zones-departments-delete.md)). The owner's
 mockup is the private canvas https://claude.ai/artifact/Tya5FcmK39ESBkQ2hTaA7s, which has four
 boards: the list, Edit department, Edit zone and Edit receipt.

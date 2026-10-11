@@ -1294,7 +1294,7 @@ _Formerly entries spread across the old sections, A261's venue-operations steps 
 
 - **A493. Departments and zones as one list, edited in dialogs (owner, 2026-10-11).** Zones
   indented under their departments, a row menu on each, a dialog to edit, and the venue receipt
-  page folded into each department's receipt. Starts after A435 step 6 lands.
+  page folded into each department's receipt.
   [Detail](backlog/service-periods.md#a493-departments-and-zones-as-one-list-edited-in-dialogs)
 
 - **Which name a record sent across a legal-name change carries** (A494 follow-up, 2026-10-11). A
@@ -4905,8 +4905,8 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
   `deleted_at`**; one test pinning "deleted means switched off with no live jobs" could replace the
   copies. Left open by A435 step 2.
 - **The devices and payments screens copy the printers screen's delete-dialog logic**
-  (`apps/dashboard/src/screens/devices-screen.ts`, and since A435 step 3 `payments-screen.ts`);
-  steps 5 and 6 would add more copies. Pull it into one shared piece, with the `names` helper that
+  (`apps/dashboard/src/screens/devices-screen.ts`, and since A435 step 3 `payments-screen.ts`).
+  Pull it into one shared piece, with the `names` helper that
   `printer-delete-copy.ts`, `reader-delete-copy.ts` and `device-delete-copy.ts` each repeat and the
   `line` helper the first two share. Left open by A435 step 4 (#1519) and step 3.
 - **"A device that is not deleted" is written by hand** as `isNull(devices.deletedAt)` in several
