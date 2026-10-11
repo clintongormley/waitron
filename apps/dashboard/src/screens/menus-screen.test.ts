@@ -333,6 +333,7 @@ function variantProducts(): Product[] {
 
 const WRITES = [
   "createCatalogue",
+  "duplicateCatalogue",
   "updateMenuDetails",
   "createSectionIn",
   "updateSection",
@@ -524,6 +525,12 @@ function api(overrides: Partial<Record<keyof DashboardApi, unknown>> = {}) {
     ),
     createCatalogue: vi.fn(async (name: string) => ({
       id: "menu-new",
+      name,
+      active: true,
+      version: 1,
+    })),
+    duplicateCatalogue: vi.fn(async (_id: string, name: string) => ({
+      id: "menu-copy",
       name,
       active: true,
       version: 1,
@@ -2008,6 +2015,141 @@ it("renames a menu, refusing an empty name", async () => {
   expect(client.createCatalogue).not.toHaveBeenCalled();
   await vi.waitFor(() => expect(client.listCatalogues).toHaveBeenCalledTimes(2));
   expect(client.getMenuStructure).toHaveBeenCalled();
+});
+
+describe("duplicating a menu from the list", () => {
+  const copy: CatalogueSummary = {
+    id: "menu-copy",
+    name: "Lunch Menu (copy)",
+    active: true,
+    version: 1,
+  };
+
+  function rowMenu(el: MenusScreen, id: string) {
+    return table(el).shadowRoot.querySelector<HTMLElementTagNameMap["wt-row-actions"]>(
+      `tr[data-row-key="${id}"] wt-row-actions`,
+    )!;
+  }
+
+  function duplicateItem(el: MenusScreen, id: string) {
+    return table(el).shadowRoot.querySelector<HTMLElementTagNameMap["wt-button"]>(
+      `[data-test="duplicate-${id}"]`,
+    )!;
+  }
+
+  it("offers Duplicate after Open and Rename in each row's menu", async () => {
+    const el = await mount();
+    await table(el).updateComplete;
+    const items = [...rowMenu(el, "menu-lunch").querySelectorAll("wt-button")];
+    expect(items.map((item) => item.dataset.test)).toEqual([
+      "edit-menu-lunch",
+      "rename-menu-lunch",
+      "duplicate-menu-lunch",
+    ]);
+    expect(text(duplicateItem(el, "menu-lunch"))).toBe(t("menus.duplicate"));
+    expect(duplicateItem(el, "menu-lunch").variant).toBe("ghost");
+  });
+
+  it("copies the menu as '<name> (copy)', stays on the list and lists the copy", async () => {
+    const client = api({
+      listCatalogues: vi
+        .fn()
+        .mockResolvedValueOnce(menus)
+        .mockResolvedValue([...menus, copy]),
+    });
+    const el = await mount(client);
+    await at([1280, 900], "en", async () => {
+      await inTable(el, "duplicate-menu-lunch");
+      expect(client.duplicateCatalogue).toHaveBeenCalledExactlyOnceWith(
+        "menu-lunch",
+        "Lunch Menu (copy)",
+      );
+      await vi.waitFor(() =>
+        expect(table(el).shadowRoot.querySelector('tr[data-row-key="menu-copy"]')).not.toBeNull(),
+      );
+    });
+    expect(location.pathname).toBe("/manage/menus");
+    expect(q(el, '[data-test="member-error"]')).toBeNull();
+    expect(writeCalls(client)).toEqual(["duplicateCatalogue"]);
+  });
+
+  it("names the copy in Spanish as '<name> (copia)'", async () => {
+    const client = api();
+    const el = await mount(client);
+    await at([1280, 900], "es-ES", async () => {
+      await el.updateComplete;
+      await inTable(el, "duplicate-menu-dinner");
+    });
+    expect(client.duplicateCatalogue).toHaveBeenCalledExactlyOnceWith(
+      "menu-dinner",
+      "Dinner Menu (copia)",
+    );
+  });
+
+  it("disables the row's Duplicate while its copy is being made, and enables it after", async () => {
+    let finish!: (value: CatalogueSummary) => void;
+    const client = api({
+      duplicateCatalogue: vi.fn(
+        () => new Promise<CatalogueSummary>((resolve) => (finish = resolve)),
+      ),
+    });
+    const el = await mount(client);
+    await inTable(el, "duplicate-menu-lunch");
+    rowMenu(el, "menu-lunch").show();
+    await table(el).updateComplete;
+    expect(duplicateItem(el, "menu-lunch").disabled).toBe(true);
+    expect(duplicateItem(el, "menu-dinner").disabled).toBe(false);
+    duplicateItem(el, "menu-lunch").click();
+    expect(client.duplicateCatalogue).toHaveBeenCalledOnce();
+    finish(copy);
+    await vi.waitFor(() => expect(duplicateItem(el, "menu-lunch").disabled).toBe(false));
+  });
+
+  it("says why a copy was refused beside the list, and leaves the list as it was", async () => {
+    const client = api({
+      duplicateCatalogue: vi.fn().mockRejectedValue({
+        code: "menu_section.invalid",
+        params: { field: "internalName" },
+      }),
+    });
+    const el = await mount(client);
+    await inTable(el, "duplicate-menu-lunch");
+    await vi.waitFor(() =>
+      expect(text(q(el, '[data-test="member-error"]'))).toBe(codeMessage("menu_section.invalid")),
+    );
+    const rows = [...table(el).shadowRoot.querySelectorAll("tr[data-row-key]")].map((row) =>
+      row.getAttribute("data-row-key"),
+    );
+    expect(rows).toEqual(["menu-dinner", "menu-lunch"]);
+    expect(client.listCatalogues).toHaveBeenCalledOnce();
+    expect(duplicateItem(el, "menu-lunch").disabled).toBe(false);
+  });
+
+  it("clears an earlier refusal when Duplicate is chosen again", async () => {
+    const client = api({
+      duplicateCatalogue: vi
+        .fn()
+        .mockRejectedValueOnce({ code: "catalogue.not_found" })
+        .mockResolvedValue(copy),
+    });
+    const el = await mount(client);
+    await inTable(el, "duplicate-menu-lunch");
+    await vi.waitFor(() => expect(q(el, '[data-test="member-error"]')).not.toBeNull());
+    await inTable(el, "duplicate-menu-lunch");
+    await vi.waitFor(() => expect(client.duplicateCatalogue).toHaveBeenCalledTimes(2));
+    expect(q(el, '[data-test="member-error"]')).toBeNull();
+  });
+
+  it("reports a failed reload after a copy as a load failure, not a failed copy", async () => {
+    const client = api({
+      listCatalogues: vi.fn().mockResolvedValueOnce(menus).mockRejectedValue(new Error("down")),
+    });
+    const el = await mount(client);
+    await inTable(el, "duplicate-menu-lunch");
+    await vi.waitFor(() => expect(q(el, '[data-test="load-error"]')).not.toBeNull());
+    expect(q(el, '[data-test="member-error"]')).toBeNull();
+    expect(client.duplicateCatalogue).toHaveBeenCalledOnce();
+  });
 });
 
 it("reopens menu details with customer names, image and colour and retains them when renamed", async () => {

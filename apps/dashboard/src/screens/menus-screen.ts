@@ -671,6 +671,7 @@ export class MenusScreen extends LitElement {
   @state() private previewResetRequired = false;
   /** The menus whose publish is out. Replaced, never mutated, so a change re-renders. */
   @state() private publishing: ReadonlySet<string> = new Set();
+  @state() private duplicating: ReadonlySet<string> = new Set();
   /** From the probes' container queries: "narrow" at 30rem or less, where each status sits under
    * its menu's name; "wide" from 50rem, where the changes link has a column of its own; "middle"
    * between, where the link sits under the status. */
@@ -1377,6 +1378,23 @@ export class MenusScreen extends LitElement {
     // The empty table's Add menu is gone once the menu it made is listed.
     if (opener?.isConnected === false)
       this.renderRoot.querySelector<HTMLElement>('.header [data-test="add-menu"]')?.focus();
+    this.#followStatus(true);
+  }
+
+  /** Stays on the list: the copy is listed by the refresh, and a failed refresh is a load failure. */
+  async #duplicate(menu: CatalogueSummary): Promise<void> {
+    if (this.duplicating.has(menu.id)) return;
+    this.memberError = null;
+    this.duplicating = new Set([...this.duplicating, menu.id]);
+    try {
+      await this.api.duplicateCatalogue(menu.id, `${menu.name}${t("menus.copy_suffix")}`);
+    } catch (error) {
+      this.memberError = codeMessage(codeOf(error));
+      return;
+    } finally {
+      this.duplicating = new Set([...this.duplicating].filter((id) => id !== menu.id));
+    }
+    await this.#watchMenus().catch(() => undefined);
     this.#followStatus(true);
   }
 
@@ -2184,6 +2202,13 @@ export class MenusScreen extends LitElement {
               data-test=${`rename-${menu.id}`}
               @click=${() => this.#openMenuForm(menu)}
               >${t("menus.rename")}</wt-button
+            ><wt-button
+              align="start"
+              variant="ghost"
+              data-test=${`duplicate-${menu.id}`}
+              ?disabled=${this.duplicating.has(menu.id)}
+              @click=${() => void this.#duplicate(menu)}
+              >${t("menus.duplicate")}</wt-button
             ></wt-row-actions
           >`,
       },
