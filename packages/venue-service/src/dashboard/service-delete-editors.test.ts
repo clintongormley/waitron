@@ -469,3 +469,135 @@ it("a late period save cannot revive the removed department's retained dialog", 
   expect(screen.shadowRoot!.querySelector("period-editor")).toBeNull();
   expect(app.leave.coordinator.isDirty()).toBe(false);
 });
+it.each(["success", "refusal"] as const)(
+  "a retired day save's late %s cannot release the same owner's surviving save",
+  async (result) => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-10-12T12:00:00Z"));
+    const pending: { resolve(): void; reject(reason: unknown): void }[] = [];
+    const { screen, model, replace, writes } = await hours(
+      "day",
+      hoursFixture(),
+      () => new Promise<void>((resolve, reject) => pending.push({ resolve, reject })),
+    );
+    const day = screen.shadowRoot!.querySelector("opening-hours-day")!;
+    await day.updateComplete;
+    const grid = day.shadowRoot!.querySelector("service-grid")!;
+    await grid.updateComplete;
+    for (const id of ["d1", "d2"])
+      emit(grid, "grid-block-change", {
+        columnKey: id,
+        index: 0,
+        startsAt: "10:00",
+        endsAt: "16:00",
+      });
+    await day.updateComplete;
+    const save =
+      day.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>("[data-test=save-day]")!;
+    save.click();
+    await expect.poll(() => pending.length).toBe(1);
+    expect(writes.map(([path]) => path)).toEqual([
+      "/management-api/venue-service/departments/d1/menu-week",
+    ]);
+    await replace({ ...model, departments: model.departments.slice(1) });
+    await day.updateComplete;
+    expect(screen.shadowRoot!.querySelector("opening-hours-day")).toBe(day);
+    await grid.updateComplete;
+    expect(grid.columns[0]!.slots).toEqual([
+      { periodId: "p2", startsAt: "10:00", endsAt: "16:00" },
+    ]);
+    expect(save.disabled).toBe(false);
+    save.click();
+    await expect.poll(() => pending.length).toBe(2);
+    expect(save.disabled).toBe(true);
+    if (result === "success") pending[0]!.resolve();
+    else
+      pending[0]!.reject({
+        code: "menu_timetable.invalid",
+        params: { field: "days.1.slots.0.endsAt" },
+      });
+    await new Promise((done) => setTimeout(done, 0));
+    await day.updateComplete;
+    expect(save.disabled).toBe(true);
+    save.click();
+    await day.updateComplete;
+    expect(writes.map(([path]) => path)).toEqual([
+      "/management-api/venue-service/departments/d1/menu-week",
+      "/management-api/venue-service/departments/d2/menu-week",
+    ]);
+    pending[1]!.resolve();
+    await new Promise((done) => setTimeout(done, 0));
+    await day.updateComplete;
+    emit(grid, "grid-block-change", {
+      columnKey: "d2",
+      index: 0,
+      startsAt: "10:00",
+      endsAt: "17:00",
+    });
+    await day.updateComplete;
+    expect(save.disabled).toBe(false);
+    save.click();
+    await expect.poll(() => pending.length).toBe(3);
+    expect(writes.map(([path]) => path)).toEqual([
+      "/management-api/venue-service/departments/d1/menu-week",
+      "/management-api/venue-service/departments/d2/menu-week",
+      "/management-api/venue-service/departments/d2/menu-week",
+    ]);
+    pending[2]!.resolve();
+    await new Promise((done) => setTimeout(done, 0));
+  },
+);
+it("a reconnected day owner can save its retained draft after an old pending write is retired", async () => {
+  vi.useFakeTimers({ toFake: ["Date"] });
+  vi.setSystemTime(new Date("2026-10-12T12:00:00Z"));
+  const pending: (() => void)[] = [];
+  const { screen, writes } = await hours(
+    "day",
+    hoursFixture(),
+    () => new Promise<void>((done) => pending.push(done)),
+  );
+  const day = screen.shadowRoot!.querySelector("opening-hours-day")!;
+  await day.updateComplete;
+  const grid = day.shadowRoot!.querySelector("service-grid")!;
+  await grid.updateComplete;
+  emit(grid, "grid-block-change", {
+    columnKey: "d1",
+    index: 0,
+    startsAt: "10:00",
+    endsAt: "16:00",
+  });
+  await day.updateComplete;
+  const save =
+    day.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>("[data-test=save-day]")!;
+  save.click();
+  await expect.poll(() => pending.length).toBe(1);
+  const parent = day.parentNode!;
+  day.remove();
+  parent.append(day);
+  await day.updateComplete;
+  expect(screen.shadowRoot!.querySelector("opening-hours-day")).toBe(day);
+  expect(save.disabled).toBe(false);
+  save.click();
+  await expect.poll(() => pending.length).toBe(2);
+  pending[0]!();
+  await new Promise((done) => setTimeout(done, 0));
+  await day.updateComplete;
+  expect(save.disabled).toBe(true);
+  save.click();
+  await day.updateComplete;
+  expect(writes.map(([path]) => path)).toEqual([
+    "/management-api/venue-service/departments/d1/menu-week",
+    "/management-api/venue-service/departments/d1/menu-week",
+  ]);
+  pending[1]!();
+  await new Promise((done) => setTimeout(done, 0));
+  await day.updateComplete;
+  emit(grid, "grid-block-change", {
+    columnKey: "d1",
+    index: 0,
+    startsAt: "10:00",
+    endsAt: "17:00",
+  });
+  await day.updateComplete;
+  expect(save.disabled).toBe(false);
+});

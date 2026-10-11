@@ -166,6 +166,7 @@ export class OpeningHoursDay extends LitElement {
     this.scope?.dispose();
     this.scope = undefined;
     this.generation = {};
+    this.saving = false;
     super.disconnectedCallback();
   }
   protected override willUpdate() {
@@ -605,7 +606,7 @@ export class OpeningHoursDay extends LitElement {
         }
       this.api.rereadWatches();
     } finally {
-      this.saving = false;
+      if (generation === this.generation && this.isConnected) this.saving = false;
     }
   }
   private async savePeriod(
