@@ -21,12 +21,15 @@ export function watchBuild(
   return (async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
     const response = await baseFetch(input, init);
     if (told || !fromOrigin(input, origin)) return response;
+    // fetch follows redirects, so the answer can come from another origin than the one asked.
+    if (response.url !== "" && !fromOrigin(response.url, origin)) return response;
     const build = response.headers.get(BUILD_HEADER);
     if (build === null || build === "") return response;
     if (own === undefined) own = build;
     else if (build !== own) {
       told = true;
-      onChange(build);
+      // A listener that throws must not turn an answered request into a failed one.
+      queueMicrotask(() => onChange(build));
     }
     return response;
   }) as typeof fetch;

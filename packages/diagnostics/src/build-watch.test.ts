@@ -103,4 +103,71 @@ describe("watchBuild", () => {
     await expect(fetch("/api/node")).rejects.toBe(failure);
     expect(onChange).not.toHaveBeenCalled();
   });
+
+  it("hands back the response when onChange throws, and the error is thrown on its own", async () => {
+    const realQueue = globalThis.queueMicrotask;
+    const thrown: unknown[] = [];
+    vi.stubGlobal("queueMicrotask", (task: () => void) =>
+      realQueue(() => {
+        try {
+          task();
+        } catch (error) {
+          thrown.push(error);
+        }
+      }),
+    );
+    try {
+      const failure = new Error("listener failed");
+      const response = new Response("{}", { headers: { "x-waitron-build": "b" } });
+      const base = vi
+        .fn()
+        .mockResolvedValueOnce(new Response("{}", { headers: { "x-waitron-build": "a" } }))
+        .mockResolvedValueOnce(response);
+      const fetch = watchBuild(base as unknown as typeof globalThis.fetch, {
+        origin: ORIGIN,
+        onChange: () => {
+          throw failure;
+        },
+      });
+      await fetch("/api/node");
+      await expect(fetch("/api/node")).resolves.toBe(response);
+      await Promise.resolve();
+      expect(thrown).toEqual([failure]);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+});
+
+describe("watchBuild when fetch followed a redirect", () => {
+  /** What fetch hands back after following redirects: `url` names where the answer came from. */
+  function answeredFrom(url: string, build: string): Response {
+    const response = new Response("{}", { headers: { "x-waitron-build": build } });
+    Object.defineProperty(response, "url", { value: url });
+    return response;
+  }
+
+  it("ignores the build of another origin a redirect led to", async () => {
+    const base = vi
+      .fn()
+      .mockResolvedValueOnce(answeredFrom(`${ORIGIN}/api/node`, "own"))
+      .mockResolvedValueOnce(answeredFrom("https://elsewhere.test/api/node", "other"));
+    const { fetch, onChange } = watched(base as unknown as typeof globalThis.fetch);
+    await fetch("/api/node");
+    await fetch("/redirect");
+    await Promise.resolve();
+    expect(onChange).not.toHaveBeenCalled();
+  });
+
+  it("still reads the build of the page's own origin after a redirect within it", async () => {
+    const base = vi
+      .fn()
+      .mockResolvedValueOnce(answeredFrom(`${ORIGIN}/api/node`, "a"))
+      .mockResolvedValueOnce(answeredFrom(`${ORIGIN}/api/node`, "b"));
+    const { fetch, onChange } = watched(base as unknown as typeof globalThis.fetch);
+    await fetch("/api/node");
+    await fetch("/redirect");
+    await Promise.resolve();
+    expect(onChange).toHaveBeenCalledWith("b");
+  });
 });
