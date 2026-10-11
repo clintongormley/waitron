@@ -695,8 +695,15 @@ describe.each(["light", "dark"] as const)("wt-data-table a11y (%s theme)", (them
         }),
       );
       await el.updateComplete;
-      expect(panel.querySelector(".column-drag-preview")).not.toBeNull();
-      expect(destination.hasAttribute("data-drop-target")).toBe(true);
+      const dragged = panel.querySelector<HTMLElement>('[data-column-row="status"]')!;
+      expect(dragged.hasAttribute("data-dragging")).toBe(true);
+      const box = dragged.getBoundingClientRect();
+      expect(box.top).toBeCloseTo(end.top, 0);
+      expect(
+        el
+          .shadowRoot!.elementFromPoint(box.left + box.width / 2, box.top + box.height / 2)
+          ?.closest("[data-column-row]"),
+      ).toBe(dragged);
       await expectNoA11yViolations(host);
     } finally {
       document.dispatchEvent(new PointerEvent("pointercancel", { pointerId: 12 }));

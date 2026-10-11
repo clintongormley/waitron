@@ -1345,9 +1345,10 @@ column that can never be hidden — the first column, any
 `alwaysShownColumnLabel` ("Always shown") in muted text where the eye would be. The first and the
 pinned columns are fixed in place, with no drag handle; an empty space of the handle's width stands
 in its place, so every column name starts at the same point. Other columns move by pointer drag or
-by the handle's arrow keys. While a pointer drags a column, its name follows the pointer and the row
-it can land on is highlighted. The preview and highlight disappear when the drag ends or the dialog
-closes. The dialog's Restore defaults button resets order and visibility. Escape closes it and
+by the handle's arrow keys. While a pointer drags a column, its row is lifted and follows the pointer,
+held between the first and the pinned rows, and the rows it passes slide out of its way to open the
+gap it will land in. Releasing there moves the column; releasing anywhere else, cancelling or closing
+the dialog puts every row back. The dialog's Restore defaults button resets order and visibility. Escape closes it and
 returns focus to the trigger. The first column remains shown, and the last visible movable column
 cannot be hidden: its eye stays, checked and disabled, with `lastShownColumnLabel` ("Keep at least
 one shown") under its name, which the eye names as its description (`aria-describedby`). Being a

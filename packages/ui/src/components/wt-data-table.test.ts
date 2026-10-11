@@ -13,6 +13,12 @@ import {
 import type {} from "../a11y-helpers.js";
 import type { WtCombobox } from "./wt-combobox.js";
 import type { DataTableColumn, WtDataTable } from "./wt-data-table.js";
+
+declare module "vitest/browser" {
+  interface BrowserCommands {
+    emulateReducedMotion: (reducedMotion: "reduce" | "no-preference" | null) => Promise<void>;
+  }
+}
 import "./wt-button.js";
 import "./wt-data-table.js";
 import { registerIcons } from "./wt-icon.js";
@@ -4495,46 +4501,178 @@ test("dragging a column handle moves it to the pointed movable row", async () =>
   expect(headers(el)).toEqual(["Name", "Extra", "Count"]);
 });
 
-test("a dragged column follows the pointer and shows its drop destination", async () => {
-  const columns = [choosable[0]!, choosable[1]!, { ...choosable[2]!, choosable: "shown" as const }];
-  const el = await table({ columns });
-  await userEvent.click(trigger(el));
-  const source = panel(el).querySelector<HTMLButtonElement>('[data-reorder="extra"]')!;
-  const destination = panel(el).querySelector<HTMLElement>('[data-column-row="count"]')!;
-  const start = source.getBoundingClientRect();
-  const end = destination.getBoundingClientRect();
-  const x = end.left + end.width / 2;
-  const y = end.top + end.height / 2;
-  source.dispatchEvent(
+const dragColumns: DataTableColumn<Row>[] = [
+  choosable[0]!,
+  ...["m1", "m2", "m3", "m4"].map((key) => ({
+    key,
+    label: key.toUpperCase(),
+    cell: () => key,
+    choosable: "shown" as const,
+  })),
+  { key: "actions", label: "Actions", cell: () => "Edit", pinned: "end" },
+];
+
+function columnRow(el: AnyTable, key: string): HTMLElement {
+  return panel(el).querySelector<HTMLElement>(`[data-column-row="${key}"]`)!;
+}
+
+function columnRests(el: AnyTable): Record<string, DOMRect> {
+  return Object.fromEntries(
+    [...panel(el).querySelectorAll<HTMLElement>("[data-column-row]")].map((row) => [
+      row.dataset.columnRow!,
+      row.getBoundingClientRect(),
+    ]),
+  );
+}
+
+/** Grabs `key`'s handle at its centre and returns the pointer's starting point. */
+function grabColumn(el: AnyTable, key: string, pointerId: number): { x: number; y: number } {
+  const handle = panel(el).querySelector<HTMLElement>(`[data-reorder="${key}"]`)!;
+  const box = handle.getBoundingClientRect();
+  const point = { x: box.left + box.width / 2, y: box.top + box.height / 2 };
+  handle.dispatchEvent(
     new PointerEvent("pointerdown", {
-      pointerId: 11,
+      pointerId,
       button: 0,
-      clientX: start.left + start.width / 2,
-      clientY: start.top + start.height / 2,
+      bubbles: true,
+      composed: true,
+      clientX: point.x,
+      clientY: point.y,
     }),
   );
-  document.dispatchEvent(
-    new PointerEvent("pointermove", { pointerId: 11, clientX: x, clientY: y }),
-  );
+  return point;
+}
+
+function sendColumnPointer(type: string, pointerId: number, x: number, y: number): void {
+  document.dispatchEvent(new PointerEvent(type, { pointerId, clientX: x, clientY: y }));
+}
+
+test("a dragged column's row is lifted and follows the pointer, and the rows it passes slide out of its way", async () => {
+  const el = await table({ columns: dragColumns });
+  await userEvent.click(trigger(el));
+  const rest = columnRests(el);
+  const height = rest.m1!.height;
+  const start = grabColumn(el, "m1", 11);
+  const y = rest.m3!.top + rest.m3!.height / 2;
+  sendColumnPointer("pointermove", 11, start.x, y);
   await el.updateComplete;
-  const preview = panel(el).querySelector<HTMLElement>(".column-drag-preview");
-  expect(preview?.textContent?.trim()).toBe("Extra");
-  expect(preview?.checkVisibility({ checkOpacity: true, checkVisibilityCSS: true })).toBe(true);
-  expect(destination.hasAttribute("data-drop-target")).toBe(true);
-  const before = preview!.getBoundingClientRect();
-  expect(before.left + before.width / 2).toBeCloseTo(x, 0);
-  expect(before.top + before.height / 2).toBeCloseTo(y, 0);
-  document.dispatchEvent(
-    new PointerEvent("pointermove", { pointerId: 11, clientX: x + 12, clientY: y + 8 }),
-  );
-  await el.updateComplete;
-  const after = preview!.getBoundingClientRect();
-  expect(after.left - before.left).toBeCloseTo(12, 0);
+  const dragged = columnRow(el, "m1");
+  expect(dragged.hasAttribute("data-dragging")).toBe(true);
+  const style = getComputedStyle(dragged);
+  expect(style.boxShadow).not.toBe("none");
+  expect(style.zIndex).toBe("1");
+  const before = dragged.getBoundingClientRect();
+  expect(before.top - rest.m1!.top).toBeCloseTo(y - start.y, 0);
+  expect(before.left).toBeCloseTo(rest.m1!.left, 0);
+  expect(
+    el
+      .shadowRoot!.elementFromPoint(before.left + before.width / 2, before.top + before.height / 2)
+      ?.closest("[data-column-row]"),
+  ).toBe(dragged);
+  for (const key of ["m2", "m3"]) {
+    expect(getComputedStyle(columnRow(el, key)).transitionDuration).not.toBe("0s");
+  }
+  await vi.waitFor(() => {
+    expect(columnRow(el, "m2").getBoundingClientRect().top).toBeCloseTo(rest.m2!.top - height, 0);
+    expect(columnRow(el, "m3").getBoundingClientRect().top).toBeCloseTo(rest.m3!.top - height, 0);
+  });
+  for (const key of ["name", "m4", "actions"]) {
+    expect(columnRow(el, key).getBoundingClientRect().top).toBeCloseTo(rest[key]!.top, 0);
+    expect(columnRow(el, key).hasAttribute("data-dragging")).toBe(false);
+  }
+  sendColumnPointer("pointermove", 11, start.x + 12, y + 8);
+  const after = dragged.getBoundingClientRect();
   expect(after.top - before.top).toBeCloseTo(8, 0);
+  expect(after.left).toBeCloseTo(before.left, 0);
   document.dispatchEvent(new PointerEvent("pointercancel", { pointerId: 11 }));
   await el.updateComplete;
-  expect(panel(el).querySelector(".column-drag-preview")).toBeNull();
-  expect(destination.hasAttribute("data-drop-target")).toBe(false);
+  for (const key of Object.keys(rest)) {
+    const row = columnRow(el, key);
+    expect(row.hasAttribute("data-dragging")).toBe(false);
+    expect(row.style.transform).toBe("");
+  }
+  await vi.waitFor(() => {
+    for (const key of Object.keys(rest)) {
+      expect(columnRow(el, key).getBoundingClientRect().top).toBeCloseTo(rest[key]!.top, 0);
+    }
+  });
+  expect(headers(el)).toEqual(["Name", "M1", "M2", "M3", "M4", "Actions"]);
+});
+
+test("releasing a lifted column row moves the column once and lands every row in the new order", async () => {
+  const el = await table({ columns: dragColumns, viewKey: "test.lifted-drop" });
+  onTestFinished(() => localStorage.removeItem("test.lifted-drop:column-order"));
+  const changes: string[][] = [];
+  el.addEventListener("wt-columns-change", (event) =>
+    changes.push((event as CustomEvent<{ shown: string[] }>).detail.shown),
+  );
+  await userEvent.click(trigger(el));
+  const rest = columnRests(el);
+  const start = grabColumn(el, "m1", 13);
+  const y = rest.m3!.top + rest.m3!.height / 2;
+  sendColumnPointer("pointermove", 13, start.x, y);
+  sendColumnPointer("pointerup", 13, start.x, y);
+  await el.updateComplete;
+  expect(changes).toEqual([["name", "m2", "m3", "m1", "m4", "actions"]]);
+  expect(localStorage.getItem("test.lifted-drop:column-order")).toBe('["m2","m3","m1","m4"]');
+  expect(headers(el)).toEqual(["Name", "M2", "M3", "M1", "M4", "Actions"]);
+  for (const key of Object.keys(rest)) {
+    const row = columnRow(el, key);
+    expect(row.hasAttribute("data-dragging")).toBe(false);
+    expect(row.style.transform).toBe("");
+  }
+  await vi.waitFor(() => {
+    expect(columnRow(el, "m2").getBoundingClientRect().top).toBeCloseTo(rest.m1!.top, 0);
+    expect(columnRow(el, "m3").getBoundingClientRect().top).toBeCloseTo(rest.m2!.top, 0);
+    expect(columnRow(el, "m1").getBoundingClientRect().top).toBeCloseTo(rest.m3!.top, 0);
+    expect(columnRow(el, "m4").getBoundingClientRect().top).toBeCloseTo(rest.m4!.top, 0);
+  });
+});
+
+test("a dragged column's row stays within the movable rows and never covers the fixed ones", async () => {
+  const el = await table({ columns: dragColumns });
+  await userEvent.click(trigger(el));
+  const rest = columnRests(el);
+  const start = grabColumn(el, "m2", 14);
+  const dragged = columnRow(el, "m2");
+  sendColumnPointer("pointermove", 14, start.x, 1);
+  await el.updateComplete;
+  expect(dragged.hasAttribute("data-dragging")).toBe(true);
+  expect(dragged.getBoundingClientRect().top).toBeCloseTo(rest.m1!.top, 0);
+  expect(dragged.getBoundingClientRect().top).toBeGreaterThanOrEqual(rest.name!.bottom - 0.5);
+  expect(columnRow(el, "m1").style.transform).toBe("");
+  sendColumnPointer("pointermove", 14, start.x, innerHeight - 1);
+  expect(dragged.getBoundingClientRect().bottom).toBeCloseTo(rest.m4!.bottom, 0);
+  expect(dragged.getBoundingClientRect().bottom).toBeLessThanOrEqual(rest.actions!.top + 0.5);
+  expect(columnRow(el, "m4").style.transform).toBe("");
+  sendColumnPointer("pointerup", 14, start.x, innerHeight - 1);
+  await el.updateComplete;
+  expect(headers(el)).toEqual(["Name", "M1", "M2", "M3", "M4", "Actions"]);
+});
+
+test("under reduced motion the passed column rows move at once, while the dragged row still follows the pointer", async () => {
+  await commands.emulateReducedMotion("reduce");
+  try {
+    const el = await table({ columns: dragColumns });
+    await userEvent.click(trigger(el));
+    const rest = columnRests(el);
+    const height = rest.m1!.height;
+    const start = grabColumn(el, "m1", 15);
+    const y = rest.m3!.top + rest.m3!.height / 2;
+    sendColumnPointer("pointermove", 15, start.x, y);
+    for (const key of ["m2", "m3"]) {
+      const row = columnRow(el, key);
+      expect(getComputedStyle(row).transitionDuration).toBe("0s");
+      expect(row.getBoundingClientRect().top).toBeCloseTo(rest[key]!.top - height, 0);
+    }
+    expect(columnRow(el, "m1").getBoundingClientRect().top - rest.m1!.top).toBeCloseTo(
+      y - start.y,
+      0,
+    );
+    document.dispatchEvent(new PointerEvent("pointercancel", { pointerId: 15 }));
+  } finally {
+    await commands.emulateReducedMotion(null);
+  }
 });
 
 test("a secondary pointer cannot start a column drag", async () => {
