@@ -3413,3 +3413,123 @@ describe("a hand-keyed card payment opens the drawer of the device that took it,
     expect((await jobs()).drawer).toHaveLength(1);
   });
 });
+
+describe("a sale cannot hand over settled extras or options", () => {
+  async function recorded() {
+    return (
+      await suite.db.execute(sql`
+        select (select count(*) from sales) as sales,
+               (select count(*) from working_orders) as orders,
+               (select count(*) from registros_facturacion) as registros`)
+    ).rows[0];
+  }
+
+  it.each([
+    ["/api/sales", "frozenExtras"],
+    ["/api/sales", "frozenOptions"],
+    ["/api/pay", "frozenExtras"],
+    ["/api/pay", "frozenOptions"],
+  ] as const)("%s refuses a line carrying %s and files nothing", async (path, key) => {
+    const { cfg, catalogueId, available, operatorId } = await setupVenue();
+    const product = available.find((item) => item.pricingUnit === "each")!;
+    const lists = await withTransaction(suite.db, async (tx) => {
+      const queso = await createProduct(tx, {
+        catalogueId,
+        categoryId: null,
+        name: "Queso",
+        pricingUnit: "each",
+        unitPrice: "9.00",
+        vatClass: "general",
+      });
+      const extras = await createExtraList(
+        tx,
+        {
+          name: "Extras",
+          customerName: null,
+          kitchenName: null,
+          minPicks: 0,
+          maxPicks: 2,
+          active: true,
+          items: [{ productId: queso.id, maxQuantity: 2, preselected: false, price: "0.35" }],
+        },
+        LOCALE,
+      );
+      const options = await createOptionList(
+        tx,
+        {
+          name: "Preparación",
+          customerName: null,
+          kitchenName: null,
+          defaultLabelId: null,
+          active: true,
+          labels: [{ name: "Frío", customerName: null, kitchenName: null, available: true }],
+        },
+        LOCALE,
+      );
+      await writeProductModifiers(tx, product.id, [
+        { kind: "extras", id: extras.id },
+        { kind: "options", id: options.id },
+      ]);
+      await publishWorkingMenu(tx, catalogueId);
+      return { queso, extras, options };
+    });
+    // The list sells this cheese at 0.35, two at most.
+    const settled = {
+      frozenExtras: [
+        {
+          productId: lists.queso.id,
+          name: "Queso",
+          descriptions: {},
+          kitchenName: null,
+          price: "0.00",
+          listId: lists.extras.id,
+          vatClass: "general",
+          quantity: 7,
+        },
+      ],
+      frozenOptions: [
+        {
+          listName: { [LOCALE]: "Preparación" },
+          listCustomerName: null,
+          listKitchenName: null,
+          labelName: { [LOCALE]: "Frío" },
+          labelCustomerName: null,
+          labelKitchenName: null,
+        },
+      ],
+    };
+    const app = new Hono();
+    mountTillApi(
+      app,
+      { ...apiDeps(cfg), cardProvider: new SimulatorPaymentProvider(suite.db) },
+      noopLog,
+    );
+    const deviceCookie = await enrolTillCookie(cfg, await createTillProfile());
+    const cookie = await loginSession(app, cfg, operatorId, deviceCookie);
+    const before = await recorded();
+    const id = randomUUID();
+    const response = await app.request(path, {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie: `${cookie}; ${deviceCookie}` },
+      body: JSON.stringify({
+        id,
+        workingOrderId: id,
+        lines: [
+          {
+            menuItemId: product.menuItemId,
+            quantity: "1",
+            options: [{ listId: lists.options.id, labelId: lists.options.labels[0]!.id }],
+            [key]: settled[key],
+          },
+        ],
+        tender: { method: "cash", amount: "10.00" },
+        simulationOutcome: "captured",
+      }),
+    });
+    expect(response.status, await response.clone().text()).toBe(400);
+    expect(await response.json()).toMatchObject({
+      error: { code: "management.request_invalid", params: { field: "lines" } },
+    });
+    expect(await recorded()).toEqual(before);
+  });
+});

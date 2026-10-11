@@ -2153,12 +2153,6 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   currency. How a comp or discount appears on the invoice is still asesor Q29. Left open by service
   Task 11 (#916).
 
-- **A till request's `frozenExtras` and `frozenOptions` are taken as already settled, prices
-  included** (found in #903's review; I believe it predates that branch). **Next action:** send such
-  a line through `POST` park and the held-order edit route; if it is stored, re-price or refuse
-  client-sent frozen selections at the route boundary.
-  [Detail](backlog/till.md#a-till-requests-frozenextras-and-frozenoptions-are-taken-as-already-settled-prices-included)
-
 - `apps/server/src/orders-list.ts` (#1027) sorts bill payments and their refunds by `created_at, id`
   and tenders by `id` alone; ids are `randomUUID()`, so a tie, and the tenders' whole order, comes
   out random. The plan asked for `created_at, rowid` in `readBillPayments`. **Next action:** a

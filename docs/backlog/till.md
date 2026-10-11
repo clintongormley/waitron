@@ -544,17 +544,6 @@ screen is designed.
   - The till's "Amount off (€)" writes the euro sign into the label rather than taking the
     venue's currency. How a comp or discount appears on the invoice is still asesor Q29.
 
-## A till request's `frozenExtras` and `frozenOptions` are taken as already settled, prices included
-
-- **A till request's `frozenExtras` and `frozenOptions` are taken as already settled, prices
-  included** (found in #903's review; I believe it predates that branch). `priceOrderLines`
-  (`apps/server/src/working-order.ts`) trusts them as sent: a unit-level `parkOrder` call given
-  an extra priced `"0.00"` at quantity 7 stored it at price 0, over its list's limit of 2. Read,
-  not run: the park and held-order edit routes in `apps/server/src/till-api.ts` appear to pass
-  `body.lines` through unchanged. **Next action:** send such a line through `POST` park and the
-  held-order edit route; if it is stored, re-price or refuse client-sent frozen selections at the
-  route boundary.
-
 ## Task 16 (#981, counter handover; with B25, B26, B29, B30)
 
 - **Task 16 (#981, counter handover; with B25, B26, B29, B30).** Open:

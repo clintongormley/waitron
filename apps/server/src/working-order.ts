@@ -407,6 +407,10 @@ const ADDED_EXTRAS_ONLY = Symbol("addedExtrasOnly");
 // Only server-derived stored quantity increases require the selection window.
 const REQUIRES_PERIOD_SELECTION = Symbol("requiresPeriodSelection");
 
+// Answers an edit has already settled: symbols, so no JSON body can set them.
+const FROZEN_OPTIONS = Symbol("frozenOptions");
+const FROZEN_EXTRAS = Symbol("frozenExtras");
+
 /**
  * Price requested lines from the order's zone's live menu versions — the dish, variant, extras and
  * options alike, each at the VAT class the version froze — and classify each line's product as it
@@ -421,16 +425,14 @@ export async function priceOrderLines(
   // `courseId` absent or null = the offer's default course; a string is an override.
   // Each extras pick becomes a CHILD row taxed at the picked product's frozen class, never the dish's.
   // An ACTIVE options list must be answered even when `options` is absent.
-  // `frozenOptions` and `frozenExtras` stand for answers an edit has already settled: an options
-  // answer or an extras pick given that way is not validated or looked up again.
   requestedLines: ({
     menuItemId: string;
     quantity: string;
     courseId?: string | null;
     extras?: ExtraSelection[];
     options?: OptionSelection[];
-    frozenOptions?: OptionSnapshot[];
-    frozenExtras?: ExtraChild[];
+    [FROZEN_OPTIONS]?: OptionSnapshot[];
+    [FROZEN_EXTRAS]?: ExtraChild[];
     [ADDED_EXTRAS_ONLY]?: true;
     [REQUIRES_PERIOD_SELECTION]?: true;
   } & LineExtras &
@@ -492,8 +494,14 @@ export async function priceOrderLines(
   const offerById = new Map(offers.offers.map((offer) => [offer.id, offer]));
   const versionOf = new Map(offers.menus.map((menu) => [menu.id, menu.versionId]));
   const lines = requestedLines.map((line) => {
-    // The wire body is JSON, so a line may still name a product the types no longer carry.
-    if (typeof line.menuItemId !== "string" || Object.hasOwn(line, "productId")) {
+    // The wire body is JSON, so a line may still name a product the types no longer carry, or the
+    // string spelling of an answer only the server settles.
+    if (
+      typeof line.menuItemId !== "string" ||
+      Object.hasOwn(line, "productId") ||
+      Object.hasOwn(line, "frozenOptions") ||
+      Object.hasOwn(line, "frozenExtras")
+    ) {
       throw new AppError("management.request_invalid", { field: "lines" });
     }
     const offer = offerById.get(line.menuItemId);
@@ -545,7 +553,7 @@ export async function priceOrderLines(
   // A product with an Active variant is never sold as itself, and an extras pick cannot name a
   // variant, so a pick of such a product is refused below, before the published lists are asked:
   // a version published after the variant was switched on no longer offers the product at all.
-  const picksOf = (line: (typeof lines)[number]) => line.frozenExtras ?? namedPicks(line.extras);
+  const picksOf = (line: (typeof lines)[number]) => line[FROZEN_EXTRAS] ?? namedPicks(line.extras);
   const requiresVariant = await parentsWithActiveVariants(tx, [
     ...new Set(lines.flatMap((line) => picksOf(line).map((pick) => pick.productId))),
   ]);
@@ -625,18 +633,18 @@ export async function priceOrderLines(
     const modifiers = modifiersByOffer.get(offer.id)!;
     const built = buildLineExtras(
       {
-        extras: line.frozenExtras === undefined ? modifiers.extras : [],
-        options: line.frozenOptions === undefined ? modifiers.options : [],
+        extras: line[FROZEN_EXTRAS] === undefined ? modifiers.extras : [],
+        options: line[FROZEN_OPTIONS] === undefined ? modifiers.options : [],
       },
       modifiers.extraProducts,
       {
-        extras: line.frozenExtras === undefined ? line.extras : [],
-        options: line.frozenOptions === undefined ? line.options : [],
+        extras: line[FROZEN_EXTRAS] === undefined ? line.extras : [],
+        options: line[FROZEN_OPTIONS] === undefined ? line.options : [],
       },
       contentConfig.defaultLanguage,
     );
-    const extraChildren = line.frozenExtras ?? built.extraChildren;
-    const optionSnapshots = line.frozenOptions ?? built.optionSnapshots;
+    const extraChildren = line[FROZEN_EXTRAS] ?? built.extraChildren;
+    const optionSnapshots = line[FROZEN_OPTIONS] ?? built.optionSnapshots;
 
     // A child is priced at dish quantity × pick quantity, so a dish sold by weight would bill a
     // fraction of each extra.
@@ -4840,7 +4848,7 @@ async function applyLineEdits(
       quantity,
       makeAt: inheritMakeAt ? parent.makeAtStationId : intent.makeAt,
       ...(intent.note === null ? {} : { note: intent.note }),
-      frozenOptions: optionSnapshots,
+      [FROZEN_OPTIONS]: optionSnapshots,
       extras: picks,
     });
     if (action === "raise" || (action === "change" && rise > 0) || addedApart) {
@@ -4880,8 +4888,8 @@ async function applyLineEdits(
         menuItemId: menuItemOf(parent),
         ...variantOf(parent),
         quantity,
-        frozenOptions: [],
-        frozenExtras: extras.added,
+        [FROZEN_OPTIONS]: [],
+        [FROZEN_EXTRAS]: extras.added,
         [ADDED_EXTRAS_ONLY]: true,
       });
       pricedAs.push({ kind: "extras" });
@@ -5459,10 +5467,12 @@ export async function updateHeldOrder(
       }
       claimed.add(parent.id);
       // An offer line sells the variant it names, else the offer's own product. A line naming a
-      // product goes to the new-line path, which refuses it.
+      // product or carrying a settled answer goes to the new-line path, which refuses it.
       const sameItem =
         parent.menuItemId === line.menuItemId &&
         !Object.hasOwn(line, "productId") &&
+        !Object.hasOwn(line, "frozenOptions") &&
+        !Object.hasOwn(line, "frozenExtras") &&
         (line.variantId ?? parent.parentProductId ?? parent.productId) === parent.productId;
       if (!sameItem) {
         claimed.delete(parent.id);
