@@ -2153,6 +2153,17 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   currency. How a comp or discount appears on the invoice is still asesor Q29. Left open by service
   Task 11 (#916).
 
+- `PUT /api/working-orders/:id/lines/:lineNo` reads only the fields it names, so a `frozenExtras`,
+  `frozenOptions` or `productId` sent there is ignored rather than refused as the other till routes
+  now do (#1531); nothing is priced from them. **Next action:** decide whether it should refuse them
+  too.
+
+- The sale-route cases "refuses a line naming a product rather than an offer"
+  (`apps/server/src/till-api.zone-required.test.ts`) send a line with `productId` and no
+  `menuItemId`, so the missing-`menuItemId` check gives the same refusal. Read, not run: deleting
+  the `productId` check may leave them green. **Next action:** delete it and see; if they stay
+  green, give the line a real `menuItemId` too.
+
 - `apps/server/src/orders-list.ts` (#1027) sorts bill payments and their refunds by `created_at, id`
   and tenders by `id` alone; ids are `randomUUID()`, so a tie, and the tenders' whole order, comes
   out random. The plan asked for `created_at, rowid` in `readBillPayments`. **Next action:** a
