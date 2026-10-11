@@ -246,7 +246,14 @@ const en = {
   "prep.cancel": "Cancel",
   "prep.confirm": "Confirm",
   "prep.preview_title": "Review route change",
-  "prep.preview_moves": "These products will be made somewhere else:",
+  "prep.preview_group_one": "{row}, {zone}: 1 product moves from {from} to {to}.",
+  "prep.preview_group_many": "{row}, {zone}: {count} products move from {from} to {to}.",
+  "prep.preview_group_one_during":
+    "{row}, {zone}: 1 product moves from {from} to {to} during {periods}.",
+  "prep.preview_group_many_during":
+    "{row}, {zone}: {count} products move from {from} to {to} during {periods}.",
+  "prep.preview_show_products": "Show products",
+  "prep.preview_variant": "{product} ({variant})",
   "prep.preview_none": "No product changes where it is made.",
   "prep.preview_product": "Product",
   "prep.preview_extra": "{extra} — with {dish}",
@@ -1006,7 +1013,14 @@ const es: Record<keyof typeof en, string> = {
   "prep.cancel": "Cancelar",
   "prep.confirm": "Confirmar",
   "prep.preview_title": "Revisar cambio de ruta",
-  "prep.preview_moves": "Estos productos se prepararán en otro lugar:",
+  "prep.preview_group_one": "{row}, {zone}: 1 producto pasa de {from} a {to}.",
+  "prep.preview_group_many": "{row}, {zone}: {count} productos pasan de {from} a {to}.",
+  "prep.preview_group_one_during":
+    "{row}, {zone}: 1 producto pasa de {from} a {to} durante {periods}.",
+  "prep.preview_group_many_during":
+    "{row}, {zone}: {count} productos pasan de {from} a {to} durante {periods}.",
+  "prep.preview_show_products": "Ver productos",
+  "prep.preview_variant": "{product} ({variant})",
   "prep.preview_none": "Ningún producto cambia de lugar de preparación.",
   "prep.preview_product": "Producto",
   "prep.preview_extra": "{extra} — con {dish}",

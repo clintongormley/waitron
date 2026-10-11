@@ -3244,6 +3244,135 @@ describe("Routing grid", () => {
     expect(a.setCell).not.toHaveBeenCalled();
   });
 
+  describe("the notice's summary", () => {
+    const lunch = {
+      id: "lunch",
+      departmentId: "dining",
+      departmentName: "Dining",
+      colour: "blue" as const,
+      name: "Lunch",
+      productIds: [],
+    };
+    const barTarget = { kind: "station", stationId: "bar" };
+    const move = (id: string, extra: object = {}) => ({
+      productId: id,
+      productName: id,
+      zoneId: "terrace",
+      zoneName: "Terrace",
+      from: kitchenTarget,
+      to: barTarget,
+      toNoReplacement: false,
+      periodIds: null,
+      ...extra,
+    });
+    const atLunch = { periodIds: ["lunch"] };
+    /** CLANDESTINA, its variant DOUBLE and 13 more products, all moving at Lunch, in the server's order. */
+    const lunchMoves = [
+      move("CLANDESTINA", atLunch),
+      move("CREMA", atLunch),
+      move("DOUBLE", {
+        ...atLunch,
+        variantOf: { productId: "CLANDESTINA", productName: "CLANDESTINA" },
+      }),
+      ...Array.from({ length: 12 }, (_, i) => move(`P${String(i + 1).padStart(2, "0")}`, atLunch)),
+    ];
+    function summaryView(): PrepStationsView {
+      const next = gridView();
+      next.routing.periods = [lunch];
+      next.routing.zones = [
+        { id: "patio", name: "Patio", departmentId: null },
+        { id: "terrace", name: "Terrace", departmentId: null },
+      ];
+      return next;
+    }
+    async function openNotice(moves: object[]) {
+      const { el } = await mountGrid({
+        load: vi.fn().mockResolvedValue(summaryView()),
+        preview: vi.fn().mockResolvedValue(moves),
+      });
+      await chooseCell(el, "c:food", "every", "Bar");
+      return { el, preview: q(el, '[data-test="routing-preview"]')! };
+    }
+    const sentences = (preview: Element) =>
+      [...preview.querySelectorAll('[data-test="preview-group"]')].map((p) =>
+        p.textContent!.replace(/\s+/g, " ").trim(),
+      );
+    const rowNames = (preview: Element) =>
+      [...preview.querySelectorAll("tbody tr")].map((row) =>
+        row.querySelector("td")!.textContent!.replace(/\s+/g, " ").trim(),
+      );
+
+    it("counts a variant under its product: one sentence for the group", async () => {
+      setLocale("en");
+      const { preview } = await openNotice(lunchMoves);
+      expect(sentences(preview)).toEqual([
+        "Food, Terrace: 14 products move from Kitchen to Bar during Lunch.",
+      ]);
+      expect(preview.textContent).not.toContain("These products will be made somewhere else");
+    });
+
+    it("one sentence per zone, periods, from and to: no zone first, then the model's zones, all day before timed", async () => {
+      setLocale("en");
+      const { preview } = await openNotice([
+        move("Bread", atLunch),
+        move("Bread"),
+        move("Bread", { zoneId: "patio", zoneName: "Patio", to: null, toNoReplacement: true }),
+        move("Bread", { zoneId: null, zoneName: null, from: null }),
+        move("Cake", { zoneId: null, zoneName: null, from: null }),
+      ]);
+      expect(sentences(preview)).toEqual([
+        "Food, Any service zone: 2 products move from No station to Bar.",
+        "Food, Patio: 1 product moves from Kitchen to No replacement.",
+        "Food, Terrace: 1 product moves from Kitchen to Bar.",
+        "Food, Terrace: 1 product moves from Kitchen to Bar during Lunch.",
+      ]);
+    });
+
+    it("an extra counts once in its group whatever dishes carry it", async () => {
+      setLocale("en");
+      const { preview } = await openNotice([
+        move("Burger"),
+        move("Cheese", { dish: { productId: "Burger", productName: "Burger" } }),
+        move("Cheese", { dish: { productId: "Pizza", productName: "Pizza" } }),
+      ]);
+      expect(sentences(preview)).toEqual(["Food, Terrace: 2 products move from Kitchen to Bar."]);
+    });
+
+    it("keeps the list behind a closed Show products, a variant named after its product", async () => {
+      setLocale("en");
+      const { preview } = await openNotice(lunchMoves);
+      const disclosure = preview.querySelector("wt-disclosure")!;
+      expect(disclosure.heading).toBe("Show products");
+      expect(disclosure.open).toBe(false);
+      const table = disclosure.querySelector("table")!;
+      expect(table.checkVisibility()).toBe(false);
+      disclosure.shadowRoot!.querySelector<HTMLElement>(".header")!.click();
+      await disclosure.updateComplete;
+      expect(table.checkVisibility()).toBe(true);
+      expect(rowNames(preview).slice(0, 3)).toEqual([
+        "CLANDESTINA during Lunch",
+        "CLANDESTINA (DOUBLE) during Lunch",
+        "CREMA during Lunch",
+      ]);
+      expect(rowNames(preview)).toHaveLength(15);
+    });
+
+    it("says it in Spanish", async () => {
+      setLocale("es");
+      const { preview } = await openNotice([...lunchMoves, move("Bread")]);
+      expect(sentences(preview)).toEqual([
+        "Food, Terrace: 1 producto pasa de Kitchen a Bar.",
+        "Food, Terrace: 14 productos pasan de Kitchen a Bar durante Lunch.",
+      ]);
+      expect(preview.querySelector("wt-disclosure")!.heading).toBe("Ver productos");
+      expect(rowNames(preview).slice(0, 3)).toEqual([
+        "Bread",
+        "CLANDESTINA durante Lunch",
+        "CLANDESTINA (DOUBLE) durante Lunch",
+      ]);
+    });
+  });
+
   describe("period lines", () => {
     const dining = { departmentId: "dining", departmentName: "Dining", colour: "blue" as const };
     const lunch = { id: "lunch", ...dining, name: "Lunch", productIds: ["bread"] };

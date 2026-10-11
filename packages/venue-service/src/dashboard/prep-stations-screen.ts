@@ -26,6 +26,7 @@ import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-input.js";
 import "@waitron/ui/src/components/wt-modal.js";
 import "@waitron/ui/src/components/wt-combobox.js";
+import "@waitron/ui/src/components/wt-disclosure.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import "@waitron/ui/src/components/wt-row-actions.js";
 import "@waitron/ui/src/components/wt-switch.js";
@@ -1270,14 +1271,7 @@ export class PrepStationsScreen extends LitElement {
           });
     };
     return format("routing.preview_change", {
-      row:
-        row.kind === "all"
-          ? t("routing.all_categories")
-          : row.kind === "no_category"
-            ? t("routing.no_category")
-            : row.kind === "category"
-              ? (model.categories.find((c) => c.id === row.categoryId)?.name ?? row.categoryId)
-              : (product?.name ?? row.productId),
+      row: this.#rowName(row),
       zone:
         zoneId === null
           ? t("routing.every_zone")
@@ -1289,28 +1283,108 @@ export class PrepStationsScreen extends LitElement {
       ),
     });
   }
+  #rowName(row: RoutingChange["address"]["row"]): string {
+    const model = this.view!.routing;
+    return row.kind === "all"
+      ? t("routing.all_categories")
+      : row.kind === "no_category"
+        ? t("routing.no_category")
+        : row.kind === "category"
+          ? (model.categories.find((c) => c.id === row.categoryId)?.name ?? row.categoryId)
+          : (model.products.find((p) => p.id === row.productId)?.name ?? row.productId);
+  }
+  /** In the model's order; the department is added only where two periods share a name. */
+  #periodNames(periodIds: readonly string[]): string {
+    const during = new Set(periodIds);
+    const periods = this.view!.routing.periods.filter((period) => during.has(period.id));
+    const names = periods.map((period) => period.name);
+    return periods
+      .map((period) =>
+        names.indexOf(period.name) === names.lastIndexOf(period.name)
+          ? period.name
+          : format("routing.period_in_department", {
+              period: period.name,
+              department: period.departmentName,
+            }),
+      )
+      .join(", ");
+  }
+  #moveFrom(move: RoutingMove): string {
+    return move.from ? this.#targetName(move.from) : t("prep.no_station");
+  }
+  #moveTo(move: RoutingMove): string {
+    return move.to
+      ? this.#targetName(move.to)
+      : t(move.toNoReplacement ? "prep.no_replacement" : "prep.no_station");
+  }
   /** The moved product, its dish for an extra, and the periods during which it moves. */
   #moveName(move: RoutingMove): string {
     const name = move.dish
       ? format("prep.preview_extra", { extra: move.productName, dish: move.dish.productName })
-      : move.productName;
+      : move.variantOf
+        ? format("prep.preview_variant", {
+            product: move.variantOf.productName,
+            variant: move.productName,
+          })
+        : move.productName;
     if (move.periodIds === null || move.periodIds === undefined) return name;
-    const during = new Set(move.periodIds);
-    const periods = this.view!.routing.periods.filter((period) => during.has(period.id));
-    const names = periods.map((period) => period.name);
     return format("prep.preview_during", {
       move: name,
-      periods: periods
-        .map((period) =>
-          names.indexOf(period.name) === names.lastIndexOf(period.name)
-            ? period.name
-            : format("routing.period_in_department", {
-                period: period.name,
-                department: period.departmentName,
-              }),
-        )
-        .join(", "),
+      periods: this.#periodNames(move.periodIds),
     });
+  }
+  /**
+   * One sentence per zone, periods, from and to, counting products: a variant counts as its
+   * product, and an extra once whatever dishes carry it.
+   */
+  #moveSummary(moves: readonly RoutingMove[], row: RoutingChange["address"]["row"]): string[] {
+    const zoneOrder = new Map(this.view!.routing.zones.map((zone, index) => [zone.id, index]));
+    const groups = new Map<
+      string,
+      { move: RoutingMove; periods: string | null; products: Set<string> }
+    >();
+    for (const move of moves) {
+      const periods = move.periodIds ? this.#periodNames(move.periodIds) : null;
+      const key = JSON.stringify([
+        move.zoneId,
+        periods,
+        move.from,
+        move.to,
+        move.to === null && move.toNoReplacement,
+      ]);
+      const group = groups.get(key) ?? { move, periods, products: new Set<string>() };
+      group.products.add(move.variantOf?.productId ?? move.productId);
+      groups.set(key, group);
+    }
+    const zoneRank = ({ move }: { move: RoutingMove }) =>
+      move.zoneId === null ? -1 : (zoneOrder.get(move.zoneId) ?? zoneOrder.size);
+    return [...groups.values()]
+      .sort(
+        (a, b) =>
+          zoneRank(a) - zoneRank(b) ||
+          Number(a.periods !== null) - Number(b.periods !== null) ||
+          this.#moveFrom(a.move).localeCompare(this.#moveFrom(b.move)) ||
+          this.#moveTo(a.move).localeCompare(this.#moveTo(b.move)),
+      )
+      .map(({ move, periods, products }) =>
+        format(
+          products.size === 1
+            ? periods === null
+              ? "prep.preview_group_one"
+              : "prep.preview_group_one_during"
+            : periods === null
+              ? "prep.preview_group_many"
+              : "prep.preview_group_many_during",
+          {
+            row: this.#rowName(row),
+            zone: move.zoneName ?? t("prep.any_zone"),
+            from: this.#moveFrom(move),
+            to: this.#moveTo(move),
+            count: String(products.size),
+            periods: periods ?? "",
+          },
+        ),
+      );
   }
   #previewDialog() {
     const pending = this.pending;
@@ -1327,32 +1401,40 @@ export class PrepStationsScreen extends LitElement {
       <p>${this.#cellSentence(pending.change)}</p>
       ${
         pending.moves.length
-          ? html`<p>${t("prep.preview_moves")}</p>
-              <div class="table-wrap" tabindex="0">
-                <table>
-                  <thead>
-                    <tr>
-                      <th>${t("prep.preview_product")}</th>
-                      <th>${t("prep.service_zone")}</th>
-                      <th>${t("prep.preview_from")}</th>
-                      <th>${t("prep.preview_to")}</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    ${pending.moves.map(
-                      (move) =>
-                        html`<tr>
-                          <td>${this.#moveName(move)}</td>
-                          <td>${move.zoneName ?? t("prep.any_zone")}</td>
-                          <td>${move.from ? this.#targetName(move.from) : t("prep.no_station")}</td>
-                          <td>
-                            ${move.to ? this.#targetName(move.to) : t(move.toNoReplacement ? "prep.no_replacement" : "prep.no_station")}
-                          </td>
-                        </tr>`,
-                    )}
-                  </tbody>
-                </table>
-              </div>`
+          ? html`${this.#moveSummary(pending.moves, pending.change.address.row).map(
+                (sentence) => html`<p data-test="preview-group">${sentence}</p>`,
+              )}
+              <wt-disclosure heading=${t("prep.preview_show_products")}>
+                <div class="table-wrap" tabindex="0">
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>${t("prep.preview_product")}</th>
+                        <th>${t("prep.service_zone")}</th>
+                        <th>${t("prep.preview_from")}</th>
+                        <th>${t("prep.preview_to")}</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      ${[...pending.moves]
+                        .sort((a, b) =>
+                          (a.variantOf?.productName ?? a.productName).localeCompare(
+                            b.variantOf?.productName ?? b.productName,
+                          ),
+                        )
+                        .map(
+                          (move) =>
+                            html`<tr>
+                              <td>${this.#moveName(move)}</td>
+                              <td>${move.zoneName ?? t("prep.any_zone")}</td>
+                              <td>${this.#moveFrom(move)}</td>
+                              <td>${this.#moveTo(move)}</td>
+                            </tr>`,
+                        )}
+                    </tbody>
+                  </table>
+                </div>
+              </wt-disclosure>`
           : html`<p>${t("prep.preview_none")}</p>`
       }
       ${unavailable ? html`<p class="error" role="alert" data-test="routing-unavailable">${t("routing.target_unavailable")}</p>` : nothing}
