@@ -27,7 +27,7 @@ export const ALLERGEN_NAMES: Record<AllergenCode, { en: string; es: string }> = 
 
 /** `locale` may be a full BCP-47 tag ("es-ES"). A code outside the EU-14 renders as itself. */
 export function allergenName(code: string, locale: string): string {
+  if (!Object.hasOwn(ALLERGEN_NAMES, code)) return code;
   const entry = (ALLERGEN_NAMES as Record<string, { en: string; es: string }>)[code];
-  if (!entry) return code;
   return pickLocale(entry, locale);
 }

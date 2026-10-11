@@ -19,6 +19,14 @@ describe("allergen names", () => {
     expect(allergenName("unknown", "es")).toBe("unknown");
   });
 
+  it.each(["constructor", "toString", "__proto__"])(
+    "renders inherited key %s as the raw code",
+    (code) => {
+      expect(allergenName(code, "en")).toBe(code);
+      expect(allergenName(code, "es-ES")).toBe(code);
+    },
+  );
+
   it("strips a BCP-47 region subtag before the lookup (es-ES → Spanish)", () => {
     expect(allergenName("milk", "es-ES")).toBe("Leche");
   });
