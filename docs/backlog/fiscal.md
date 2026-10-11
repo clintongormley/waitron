@@ -396,11 +396,10 @@ invoice still owed; and what happens when the customer never pays. An F1 also ne
 **Update, 2026-10-11: queued again in Lane E, after A435-6.** The owner resumed W41s-3d
 first, then W41s-4, -5, -6, -1b, -7, -8, -9, -10a, -10b, -11 and -C in campaign order.
 Each fiscal implementation still needs the owner's approval to land. W41s-3d is on draft
-PR [#1309](https://github.com/clintongormley/waitron/pull/1309), branch
-`feat/w41s-brake-hourly-probe`. The local candidate is rebased over W41s-3c's reply identity
-checks and A494's one-taxpayer-name batching. One existing missing-reply incident assertion
-needs owner approval before fresh reviews and CI; the remote PR still has the earlier candidate.
-The resumed tests add separate ordinary/probe and probe-only name batches and check that a
+PR [#1309](https://github.com/clintongormley/waitron/pull/1309), awaiting the owner's landing
+approval. Its candidate preserves W41s-3c's reply identity checks and A494's one-taxpayer-name
+batching. The owner approved retaining missing-reply incidents for probes. The resumed tests
+add separate ordinary/probe and probe-only name batches and check that a
 deferred batch does not stamp an unsent probe. Receipt commands and results are retained in
 the lane's `receipts/w41s-3d-resume/` directory.
 

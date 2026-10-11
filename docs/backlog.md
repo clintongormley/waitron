@@ -309,11 +309,9 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   again).** — left open by W41s-3b (#1303), which says "Nothing releases the hold yet." Task 8 as
   planned resolves records that have a case of their own; a record the brake holds has none. While
   held, those records are not retried hourly. W41s-3d (a chain held by repeated same-code refusals
-  sends its first held record once an hour) is on draft PR
-  [#1309](https://github.com/clintongormley/waitron/pull/1309), branch
-  `feat/w41s-brake-hourly-probe`. The local candidate is rebased; one existing missing-reply
-  incident assertion needs owner approval before fresh reviews and CI. The remote PR still
-  has the earlier candidate.
+  sends its first held record once an hour) is implemented on
+  [#1309](https://github.com/clintongormley/waitron/pull/1309), awaiting the owner's landing approval.
+  A manual release remains Task 8.
   [Detail](backlog/fiscal.md#w41s-fiscal-prevention-and-offline-recovery--design-and-revised-plan-approved-2026-10-04)
 
 - **Still open after W41s-3c (#1304)** — in AEAT's preproduction environment two runs of shuffled
