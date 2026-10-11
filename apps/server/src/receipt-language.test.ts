@@ -1,11 +1,12 @@
 import { issueOrderInvoice } from "./testing/issue-order.js";
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
-import { eq, sql } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import {
   deviceProfiles,
   devices,
+  invoiceSeries,
   locations,
   printJobs,
   printers,
@@ -22,7 +23,9 @@ import { hashPassword, hashPin, loginWithPin, persons } from "@waitron/identity"
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { insertCapturedPayment, SimulatorPaymentProvider } from "@waitron/payments";
 import { createPrinter } from "@waitron/printing";
-import { decimal } from "@waitron/shared";
+import { createAdjustmentReason } from "@waitron/adjustments";
+import { recordCorrection } from "@waitron/core";
+import { decimal, saleId as brandSaleId, seriesId as brandSeriesId } from "@waitron/shared";
 import { applyVenue, planVenue } from "@waitron/provisioning";
 import { deploymentEnvironment } from "./config.js";
 import { DEVICE_COOKIE } from "./device-session.js";
@@ -38,7 +41,17 @@ import { createOpenOrder, parkOrder, placeOrder } from "./working-order.js";
 import { enrolDeviceForTest } from "./testing/enrol.js";
 import { printedCommands, printedLines } from "./testing/decode-ticket.js";
 import { offerProducts } from "./testing/zone-offers.js";
-import { inTx, provisionBillVenue, send, tabWith, type BillVenue } from "./testing/bill-venue.js";
+import {
+  inTx,
+  provisionBillVenue,
+  seatedWith,
+  send,
+  statusOf,
+  tabWith,
+  type BillVenue,
+} from "./testing/bill-venue.js";
+import { REASONS } from "./testing/adjustment-venue.js";
+import { settlePendingBillPayments } from "./bill-payments-loop.js";
 import { BASIC_ACTIONS, seedSessionDevice, deviceRequestCfg } from "./testing/session-device.js";
 import { SESSION_COOKIE } from "./till-session.js";
 import "./errors.js";
@@ -924,5 +937,437 @@ describe("the receipt language staff choose is saved on the order", () => {
       id: placed,
       receiptLanguage: "es-ES",
     });
+  });
+});
+
+describe("a sale files in the receipt language saved on its order", () => {
+  /** What a sale of the order filed: its language, its list, and its lines' names by language. */
+  async function filed(venue: BillVenue, id: string) {
+    const row = await saleRow(venue.db, id);
+    return { ...row, lines: lineDescriptions(venue.db, id) };
+  }
+
+  /**
+   * A Barcelona venue saved as `locales` with Spanish and Catalan content, whose dishes' customer
+   * names differ by language. Its till offers Catalan and Spanish receipts.
+   */
+  async function barcelonaVenue(locales: string[] = ["ca-ES"]): Promise<BillVenue> {
+    const venue = await provisionBillVenue(suite.db);
+    await inTx(venue, async (tx) => {
+      await tx
+        .update(locations)
+        .set({ invoiceLocales: locales, province: "Barcelona", city: "Barcelona" })
+        .where(eq(locations.id, venue.cfg.locationId));
+      await tx.execute(
+        sql`insert into content_languages (id, default_language, languages) values (1, 'es', '["es","ca"]')
+            on conflict (id) do update set default_language = excluded.default_language, languages = excluded.languages`,
+      );
+      await tx.execute(
+        sql`update products set customer_name = json_object('es', 'ES ' || name, 'ca', 'CA ' || name)`,
+      );
+      await offerProducts(tx, venue.cfg, { zone: "tables" });
+    });
+    return venue;
+  }
+
+  async function revisionOfOrder(venue: BillVenue, id: string): Promise<number> {
+    const [row] = await inTx(venue, (tx) =>
+      tx
+        .select({ revision: workingOrders.revision })
+        .from(workingOrders)
+        .where(eq(workingOrders.id, id)),
+    );
+    return row!.revision;
+  }
+
+  /** Saves `language` as the order's receipt language through the till's route. */
+  async function choose(venue: BillVenue, id: string, language: string): Promise<void> {
+    const saved = await send(
+      venue.app,
+      venue.cookie,
+      "PUT",
+      `/api/working-orders/${id}/receipt-language`,
+      { revision: await revisionOfOrder(venue, id), language },
+    );
+    expect(saved.status).toBe(200);
+  }
+
+  function cash(venue: BillVenue, billId: string, amount: string, app = venue.app) {
+    return send(app, venue.cookie, "POST", `/api/working-orders/${billId}/payments`, {
+      submissionId: randomUUID(),
+      kind: "contribution",
+      amount,
+      method: "cash",
+      tendered: amount,
+      applied: amount,
+      tip: "0.00",
+    });
+  }
+
+  /** A counter order parked with one Tarta, through the working-order functions. */
+  async function parkedTarta(venue: BillVenue): Promise<{ id: string; zoneId: string }> {
+    const { zoneId } = await inTx(venue, (tx) =>
+      offerProducts(tx, venue.cfg, { zone: "counter", orderStart: "counter" }),
+    );
+    const id = randomUUID();
+    await parkOrder({ db: venue.db }, venue.cfg, {
+      id,
+      lines: [{ menuItemId: venue.offerFor("Tarta"), quantity: "1" }],
+      zoneId,
+      operatorId: venue.operatorId,
+    });
+    return { id, zoneId };
+  }
+
+  const SPANISH = {
+    locale: "es-ES",
+    invoiceLocales: ["ca-ES", "es-ES"],
+    lines: [{ "ca-ES": "CA Tarta" }, { "ca-ES": "CA Caña" }],
+  };
+  const CATALAN = {
+    locale: "ca-ES",
+    invoiceLocales: ["ca-ES"],
+    lines: [{ "ca-ES": "CA Tarta" }, { "ca-ES": "CA Caña" }],
+  };
+  const CHOICES = [
+    ["es-ES", SPANISH],
+    [null, CATALAN],
+  ] as const;
+
+  describe.each(CHOICES)("with %s saved", (stored, expected) => {
+    async function billWith(venue: BillVenue, ...names: string[]): Promise<string> {
+      const billId = await tabWith(venue, ...names);
+      if (stored !== null) await choose(venue, billId, stored);
+      return billId;
+    }
+
+    it("files a bill paid in two parts", async () => {
+      const venue = await barcelonaVenue();
+      const billId = await billWith(venue, "Tarta", "Caña");
+
+      expect((await cash(venue, billId, "10.00")).status).toBe(200);
+      const last = await cash(venue, billId, "11.00");
+
+      expect(last.status).toBe(200);
+      expect(await filed(venue, billId)).toEqual(expected);
+    });
+
+    it("files a bill a discount leaves paid", async () => {
+      const venue = await barcelonaVenue();
+      const billId = await billWith(venue, "Tarta", "Caña");
+      expect((await cash(venue, billId, "18.00")).status).toBe(200);
+      const reasonId = await inTx(
+        venue,
+        async (tx) => (await createAdjustmentReason(tx, REASONS.house)).id,
+      );
+
+      const discounted = await send(
+        venue.app,
+        venue.cookie,
+        "POST",
+        `/api/working-orders/${billId}/adjustments`,
+        {
+          submissionId: randomUUID(),
+          expectedRevision: await revisionOfOrder(venue, billId),
+          lineId: null,
+          reasonId,
+          action: "discount_amount",
+          amount: "3.00",
+          note: null,
+        },
+      );
+
+      expect(discounted.status).toBe(200);
+      expect(await statusOf(venue, billId)).toBe("settled");
+      expect(await filed(venue, billId)).toEqual(expected);
+    });
+
+    it("files a bill a line edit leaves paid", async () => {
+      const venue = await barcelonaVenue();
+      const billId = await billWith(venue, "Tarta", "Caña");
+      const line = (quantity: string) =>
+        revisionOfOrder(venue, billId).then((revision) =>
+          send(venue.app, venue.cookie, "PUT", `/api/working-orders/${billId}/lines/2`, {
+            revision,
+            quantity,
+          }),
+        );
+      expect((await line("2")).status).toBe(200);
+      expect((await cash(venue, billId, "21.00")).status).toBe(200);
+
+      expect((await line("1")).status).toBe(200);
+
+      expect(await statusOf(venue, billId)).toBe("settled");
+      expect(await filed(venue, billId)).toEqual(expected);
+    });
+
+    it("files a bill a card the payment loop finishes leaves paid", async () => {
+      const venue = await barcelonaVenue();
+      const billId = await billWith(venue, "Tarta", "Caña");
+      expect((await cash(venue, billId, "18.00")).status).toBe(200);
+      venue.card.crashNextCollect("captured");
+      const crashed = await send(
+        venue.app,
+        venue.cookie,
+        "POST",
+        `/api/working-orders/${billId}/payments`,
+        {
+          submissionId: randomUUID(),
+          kind: "contribution",
+          amount: "3.00",
+          method: "card",
+          entry: "reader",
+          applied: "3.00",
+          tip: "0.00",
+        },
+      );
+      expect(crashed.status).toBe(500);
+      expect(await statusOf(venue, billId)).toBe("open");
+
+      const pass = await settlePendingBillPayments({
+        db: venue.db,
+        backend: venue.backend,
+        clock: venue.clock,
+        cfg: venue.cfg,
+      });
+
+      expect(pass).toMatchObject({ received: 1, errors: [] });
+      expect(await statusOf(venue, billId)).toBe("settled");
+      expect(await filed(venue, billId)).toEqual(expected);
+    });
+
+    it("files the invoice of a table that left without paying", async () => {
+      const venue = await barcelonaVenue();
+      const party = await seatedWith(venue, "Tarta", "Caña");
+      if (stored !== null) await choose(venue, party.tabId, stored);
+      const [row] = venue.db.all<{ revision: number }>(
+        sql`select revision from parties where id = ${party.partyId}`,
+      );
+
+      const departed = await send(
+        venue.app,
+        venue.cookie,
+        "POST",
+        `/api/parties/${party.partyId}/unpaid-departure`,
+        {
+          expectedPartyRevision: row!.revision,
+          reason: "Se fueron",
+          override: { personId: venue.adminId, pin: "1234" },
+        },
+      );
+
+      expect(departed.status).toBe(200);
+      expect(await filed(venue, party.tabId)).toEqual(expected);
+    });
+
+    it("files a parked order paid in cash", async () => {
+      const venue = await barcelonaVenue();
+      const { id } = await parkedTarta(venue);
+      if (stored !== null) await choose(venue, id, stored);
+
+      const paid = await send(venue.app, venue.cookie, "POST", "/api/sales", {
+        workingOrderId: id,
+        lines: [],
+        tender: { method: "cash", amount: "20.00" },
+      });
+
+      expect(paid.status).toBe(200);
+      expect(paid.json.locale).toBe(expected.locale);
+      expect(await filed(venue, id)).toEqual({ ...expected, lines: [{ "ca-ES": "CA Tarta" }] });
+    });
+
+    it("files a parked order a card reader captures", async () => {
+      const venue = await barcelonaVenue();
+      const { id } = await parkedTarta(venue);
+      if (stored !== null) await choose(venue, id, stored);
+      const deps = {
+        db: venue.db,
+        backend: venue.backend,
+        clock: venue.clock,
+        provider: new SimulatorPaymentProvider(venue.db),
+      };
+
+      const out = await payWorkingOrderIntegrated(deps, venue.cfg, {
+        id,
+        lines: [],
+        simulationOutcome: "captured",
+      });
+
+      expect(out.outcome).toBe("captured");
+      expect(await filed(venue, id)).toEqual({ ...expected, lines: [{ "ca-ES": "CA Tarta" }] });
+    });
+
+    it("files a card payment captured before a lost response", async () => {
+      const venue = await barcelonaVenue();
+      const { id } = await parkedTarta(venue);
+      if (stored !== null) await choose(venue, id, stored);
+      await inTx(venue, (tx) =>
+        insertCapturedPayment(tx, {
+          origin: venue.cfg.origin,
+          workingOrderId: id,
+          provider: "simulator",
+          paymentRef: `sim-ref-${randomUUID()}`,
+          amount: decimal("18.00"),
+          settledAt: new Date(),
+          externalRef: `sim-lost-${randomUUID()}`,
+        }),
+      );
+      const deps = {
+        db: venue.db,
+        backend: venue.backend,
+        clock: venue.clock,
+        provider: new SimulatorPaymentProvider(venue.db),
+      };
+
+      const out = await payWorkingOrderIntegrated(deps, venue.cfg, { id, lines: [] });
+
+      expect(out.outcome).toBe("captured");
+      expect(await filed(venue, id)).toEqual({ ...expected, lines: [{ "ca-ES": "CA Tarta" }] });
+    });
+  });
+
+  it("keeps a location's two languages as they are when the saved one is among them", async () => {
+    const venue = await barcelonaVenue(["ca-ES", "es-ES"]);
+    const billId = await tabWith(venue, "Tarta");
+    await choose(venue, billId, "es-ES");
+
+    expect((await cash(venue, billId, "18.00")).status).toBe(200);
+
+    expect(await filed(venue, billId)).toEqual({
+      locale: "es-ES",
+      invoiceLocales: ["ca-ES", "es-ES"],
+      lines: [{ "ca-ES": "CA Tarta", "es-ES": "ES Tarta" }],
+    });
+  });
+
+  it("files the location's own language, saved as the choice, as if nothing were saved", async () => {
+    const venue = await barcelonaVenue();
+    const billId = await tabWith(venue, "Tarta");
+    await choose(venue, billId, "ca-ES");
+
+    expect((await cash(venue, billId, "18.00")).status).toBe(200);
+
+    expect(await filed(venue, billId)).toEqual({
+      locale: "ca-ES",
+      invoiceLocales: ["ca-ES"],
+      lines: [{ "ca-ES": "CA Tarta" }],
+    });
+  });
+
+  it("files the location's language, and logs one warning, when the saved one is no longer offered", async () => {
+    const venue = await barcelonaVenue();
+    const billId = await tabWith(venue, "Tarta");
+    await choose(venue, billId, "es-ES");
+    venue.db.run(sql`update content_languages set default_language = 'ca', languages = '["ca"]'`);
+    const logged: { level: string; event: string; fields: unknown }[] = [];
+    const app = new Hono();
+    mountTillApi(
+      app,
+      {
+        db: venue.db,
+        backend: venue.backend,
+        clock: venue.clock,
+        cfg: venue.cfg,
+        secureCookies: false,
+        venueLocale: "es-ES",
+        pool: venue.pool,
+      },
+      (level, event, fields) => logged.push({ level, event, fields }),
+    );
+
+    const paid = await cash(venue, billId, "18.00", app);
+
+    expect(paid.status).toBe(200);
+    expect(await filed(venue, billId)).toEqual({
+      locale: "ca-ES",
+      invoiceLocales: ["ca-ES"],
+      lines: [{ "ca-ES": "CA Tarta" }],
+    });
+    expect(logged.filter((entry) => entry.level === "warn")).toEqual([
+      {
+        level: "warn",
+        event: "receipt_language.not_offered",
+        fields: { workingOrderId: billId, language: "es-ES", filedIn: "ca-ES" },
+      },
+    ]);
+  });
+
+  it("files a card the reader has charged in the location's language when the saved one is no longer offered", async () => {
+    const venue = await barcelonaVenue();
+    const { id } = await parkedTarta(venue);
+    await choose(venue, id, "es-ES");
+    venue.db.run(sql`update content_languages set default_language = 'ca', languages = '["ca"]'`);
+    const deps = {
+      db: venue.db,
+      backend: venue.backend,
+      clock: venue.clock,
+      provider: new SimulatorPaymentProvider(venue.db),
+    };
+
+    const out = await payWorkingOrderIntegrated(deps, venue.cfg, {
+      id,
+      lines: [],
+      simulationOutcome: "captured",
+    });
+
+    expect(out.outcome).toBe("captured");
+    expect(await filed(venue, id)).toEqual({
+      locale: "ca-ES",
+      invoiceLocales: ["ca-ES"],
+      lines: [{ "ca-ES": "CA Tarta" }],
+    });
+  });
+
+  it("files a correction of a Spanish sale in Spanish", async () => {
+    const venue = await barcelonaVenue();
+    const billId = await tabWith(venue, "Tarta");
+    await choose(venue, billId, "es-ES");
+    expect((await cash(venue, billId, "18.00")).status).toBe(200);
+    const [original] = await inTx(venue, (tx) =>
+      tx.select({ id: sales.id }).from(sales).where(eq(sales.workingOrderId, billId)),
+    );
+
+    await inTx(venue, async (tx) => {
+      const [series] = await tx
+        .select({ id: invoiceSeries.id })
+        .from(invoiceSeries)
+        .where(
+          and(
+            eq(invoiceSeries.nodeId, venue.cfg.nodeId),
+            eq(invoiceSeries.purpose, "rectificative"),
+          ),
+        );
+      const session = await loginWithPin(tx, {
+        deviceId: venue.deviceId,
+        personId: venue.adminId,
+        pin: "1234",
+      });
+      await recordCorrection(tx, venue.backend, {
+        origin: venue.cfg.origin,
+        nodeId: venue.cfg.nodeId,
+        seriesId: brandSeriesId(series!.id),
+        correctsSaleId: brandSaleId(original!.id),
+        total: "-2.42",
+        lines: [
+          {
+            lineNo: 1,
+            name: "Descuento",
+            descriptions: { "ca-ES": "Descompte", "es-ES": "Descuento" },
+            quantity: "-1",
+            unitPrice: "2.00",
+            vatRate: "21.00",
+            lineTotal: "-2.00",
+          },
+        ],
+        clock: venue.clock,
+        authz: { sessionId: session.id },
+      });
+    });
+
+    expect(
+      venue.db.all(
+        sql`select locale, invoice_locales as invoiceLocales from sales where corrects_sale_id = ${original!.id}`,
+      ),
+    ).toEqual([{ locale: "es-ES", invoiceLocales: '["ca-ES","es-ES"]' }]);
   });
 });

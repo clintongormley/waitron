@@ -112,7 +112,14 @@ export async function recordUnpaidDeparture(
 
   const saleOf = new Map<string, SaleId>([...invoiced].map(([id, sale]) => [id, sale.saleId]));
   for (const invoice of invoices) {
-    const { saleId } = await issueUnpaidInvoice(tx, deps.backend, cfg, invoice, operator.personId);
+    const { saleId } = await issueUnpaidInvoice(
+      tx,
+      deps.backend,
+      cfg,
+      invoice,
+      operator.personId,
+      deps.log,
+    );
     saleOf.set(invoice.id, saleId);
     if (openIds.has(invoice.id)) {
       await markOrderPlaced(tx, deps.clock, cfg, invoice.id, operator.personId);

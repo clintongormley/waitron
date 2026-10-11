@@ -123,7 +123,6 @@ import {
   readContentLanguages,
   readSavedContentLanguages,
   readInvoiceLocales,
-  readReceiptLanguage,
   parentsWithActiveVariants,
   selectMenuVariant,
   customerPresentationText,
@@ -204,7 +203,7 @@ import { readReceiptOrder } from "./receipt-order.js";
 import { enqueueCollectionTicket } from "./receipt-print.js";
 import { ordersWithUnfiledPayment, paymentAttemptIsLive } from "./till-sale.js";
 import { readIssuedSales } from "./sale-due.js";
-import { readOfferedReceiptLanguages } from "./venue-locale.js";
+import { readOfferedReceiptLanguages, readSaleLanguage } from "./venue-locale.js";
 import { creditWholeInvoice, readOrderInvoice } from "./cancel-credit.js";
 import { overrideToCheck, withCheck, withPinCheckAhead } from "./pin-check-ahead.js";
 import {
@@ -5727,11 +5726,12 @@ export async function issueUnpaidInvoice(
   cfg: DeviceRequestConfig,
   invoice: PricedInvoice,
   operatorId: string,
+  log?: Logger,
 ): Promise<IssuedInvoice> {
   const { id, priced, clock } = invoice;
   await refuseUnavailableFullInvoice(tx, id);
   const selected = await selectOrderInvoice(tx, backend, cfg, id, priced.total);
-  const language = await readReceiptLanguage(tx, cfg.locationId);
+  const language = await readSaleLanguage(tx, cfg.locationId, id, log);
   const { saleId, fiscal } = await recordSale(tx, backend, {
     origin: cfg.origin,
     nodeId: cfg.nodeId,

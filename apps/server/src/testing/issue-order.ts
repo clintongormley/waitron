@@ -12,6 +12,6 @@ export async function issueOrderInvoice(
 ): Promise<void> {
   await withTransaction(deps.db, async (tx) => {
     const invoice = await priceForIssuance(tx, deps.clock, cfg, id);
-    await issueUnpaidInvoice(tx, deps.backend, cfg, invoice, operatorId);
+    await issueUnpaidInvoice(tx, deps.backend, cfg, invoice, operatorId, deps.log);
   });
 }
