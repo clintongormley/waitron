@@ -1014,18 +1014,21 @@ export class TillFloorScreen extends LitElement {
             color: "var(--wt-color-warning)",
           }
         : table.status;
-    return toFloorTable(table, {
-      ...table,
-      // The server reads a table no party holds as free; one needing clearing must not look ready to seat.
-      state: needsClearing(table) ? "open-tab" : table.state,
-      tabTotal,
-      status,
-      reservedTime: table.nextReservation?.time ?? null,
-      unsentDrafts: table.party?.unsentDrafts.map((draft) => draft.ownerName),
-      partyName: shownPartyName(table),
-      fireDue: this.#fireDue(table),
-      chips: tableChips(table),
-    });
+    return toFloorTable(
+      { id: table.id, label: table.label, seats: seatsFor(table) },
+      {
+        ...table,
+        // The server reads a table no party holds as free; one needing clearing must not look ready to seat.
+        state: needsClearing(table) ? "open-tab" : table.state,
+        tabTotal,
+        status,
+        reservedTime: table.nextReservation?.time ?? null,
+        unsentDrafts: table.party?.unsentDrafts.map((draft) => draft.ownerName),
+        partyName: shownPartyName(table),
+        fireDue: this.#fireDue(table),
+        chips: tableChips(table),
+      },
+    );
   }
 
   #zoneOnScreen(): ZoneOnScreen {

@@ -42,8 +42,6 @@ export { WtTableToken } from "./components/wt-table-token.js";
 export type { TableTokenLabels } from "./components/wt-table-token.js";
 export { WtDataTable } from "./components/wt-data-table.js";
 export type { DataTableColumn } from "./components/wt-data-table.js";
-export { WtFloorCanvas } from "./components/wt-floor-canvas.js";
-export type { FloorCanvasCopy } from "./components/wt-floor-canvas.js";
 export { WtFloorPlanCanvas } from "./components/wt-floor-plan-canvas.js";
 export type {
   FloorPlanCanvasCopy,
@@ -64,16 +62,10 @@ export type {
 } from "./components/wt-floor-map.js";
 export { WtSheet } from "./components/wt-sheet.js";
 export {
-  FLOOR_ASPECT,
-  GRID_STEP,
   ROTATION_STEP,
   buildZoneTabs,
-  clampPermille,
-  defaultTraySlot,
   resolveActiveTabKey,
-  sizeForCapacity,
   snapRotation,
-  snapToGrid,
   toFloorTable,
 } from "./floor.js";
 export type {
@@ -82,12 +74,8 @@ export type {
   FloorOccupancyInput,
   FloorPlacementInput,
   FloorTable,
-  Placement,
-  PlacementChange,
-  PlacementClear,
   TableOccupancyState,
   TableServiceStatus,
-  TableShape,
   ZoneTab,
 } from "./floor.js";
 export {
