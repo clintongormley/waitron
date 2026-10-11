@@ -18,7 +18,6 @@ export class LiveConnection {
   #unsubscribe?: () => void;
   #retry?: ReturnType<typeof setTimeout>;
   #retryMs = 1000;
-  #refreshedSinceOpen = false;
 
   constructor(
     private readonly data: LiveData,
@@ -28,7 +27,6 @@ export class LiveConnection {
   start(): void {
     if (this.#active) return;
     this.#active = true;
-    this.#refreshedSinceOpen = false;
     this.#unsubscribe = this.data.subscribeToInterests(() => this.#schedule());
     this.#schedule();
   }
@@ -65,6 +63,7 @@ export class LiveConnection {
         this.options.open ?? ((url: string) => new EventSource(url, { withCredentials: true }));
       const stream = open(`/management-api/events?resources=${encodeURIComponent(key)}`);
       this.#stream = stream;
+      let refreshed = false;
       const listen = (name: string, action: (event: Event) => void): void => {
         stream.addEventListener(name, (event) => {
           if (this.#active && this.#stream === stream) action(event);
@@ -72,21 +71,18 @@ export class LiveConnection {
       };
       listen("open", () => {
         this.#retryMs = 1000;
-        this.#refreshedSinceOpen = false;
+        refreshed = false;
         this.data.refresh();
       });
       listen("error", () => {
         // EventSource retries transport interruptions itself, but HTTP failures can leave it CLOSED.
-        if (stream.readyState !== 2) {
-          // Chromium fires `error` on every one of its own retries (about every 3 s while the box is
-          // down), so only the first since a stream last opened, or the connection started, re-reads
-          // everything.
-          if (this.#refreshedSinceOpen) return;
-          this.#refreshedSinceOpen = true;
-          this.data.refresh();
-          return;
-        }
+        // Chromium fires `error` on every one of its own retries, so only this stream's first error,
+        // or its first since it last opened, re-reads everything.
+        const closed = stream.readyState === 2;
+        if (!closed && refreshed) return;
+        if (!closed) refreshed = true;
         this.data.refresh();
+        if (!closed) return;
         this.#close();
         this.#retry = setTimeout(() => {
           this.#retry = undefined;

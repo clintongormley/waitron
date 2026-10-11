@@ -394,6 +394,41 @@ describe("live connection events", () => {
     }
   });
 
+  it("refreshes on the first retried error of a stream that replaced one mid-outage", async () => {
+    vi.useFakeTimers();
+    const data = new LiveData();
+    const open = vi.fn(() => Object.assign(new Stream(), { readyState: 0 }));
+    const connection = new LiveConnection(data, { open });
+    const read = vi.fn(async () => 1);
+    const observed = data.observe(
+      { key: "printers", dependencies: [{ type: "printers" }], read },
+      () => {},
+    );
+    connection.start();
+    let other: { unsubscribe: () => void } | undefined;
+    try {
+      await vi.advanceTimersByTimeAsync(0);
+      open.mock.results[0]!.value.dispatchEvent(new Event("error"));
+      await vi.advanceTimersByTimeAsync(0);
+      expect(read).toHaveBeenCalledTimes(2);
+      other = data.observe(
+        { key: "tables", dependencies: [{ type: "tables" }], read: async () => 1 },
+        () => {},
+      );
+      await vi.advanceTimersByTimeAsync(0);
+      expect(open).toHaveBeenCalledTimes(2);
+      const reads = read.mock.calls.length;
+      open.mock.results[1]!.value.dispatchEvent(new Event("error"));
+      await vi.advanceTimersByTimeAsync(0);
+      expect(read).toHaveBeenCalledTimes(reads + 1);
+    } finally {
+      other?.unsubscribe();
+      observed.unsubscribe();
+      connection.stop();
+      vi.useRealTimers();
+    }
+  });
+
   it("refreshes on every error of a stream the browser has closed, and retries it", async () => {
     vi.useFakeTimers();
     const data = new LiveData();
