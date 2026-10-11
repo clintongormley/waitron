@@ -2853,42 +2853,49 @@ describe("moveDishesToStation", () => {
     expect(decodeTicket((await splitJobs(downstairs.printerId)).at(-1)!.payload)).toContain(
       "with CHIPS from Fryer",
     );
-    const fryerJobsBeforeChipsMove = (await splitJobs(split.printers.fryer)).length;
-    const grillJobsBeforeChipsMove = (await splitJobs(split.printers.grill)).length;
-    const chipsMove = await splitTx((tx) =>
-      moveDishesToStation(
-        tx,
-        split.cfg,
-        split.party.tabId,
-        {
-          submissionId: randomUUID(),
-          lineIds: [chips.id],
-          stationId: split.stations.grill,
-        },
-        { deviceId: split.cfg.origin.deviceId, personId: null },
-      ),
-    );
-    expect(chipsMove.moved).toEqual([
-      { workingOrderLineId: chips.id, fromStationId: split.stations.fryer },
-    ]);
-    const afterChipsMove = await splitTx((tx) =>
-      tx
-        .select({ lineId: ticketItems.workingOrderLineId, stationId: ticketItems.stationId })
+    const beforeExtraMove = await splitTx(async (tx) => ({
+      items: await tx
+        .select()
         .from(ticketItems)
         .where(eq(ticketItems.workingOrderId, split.party.tabId)),
-    );
-    expect(afterChipsMove.find((row) => row.lineId === dish.id)!.stationId).toBe(
-      downstairs.stationId,
-    );
-    expect(afterChipsMove.find((row) => row.lineId === chips.id)!.stationId).toBe(
-      split.stations.grill,
-    );
-    expect(
-      decodeTicket((await splitJobs(split.printers.fryer))[fryerJobsBeforeChipsMove]!.payload),
-    ).toContain("MOVED TO GRILL");
-    expect(
-      decodeTicket((await splitJobs(split.printers.grill))[grillJobsBeforeChipsMove]!.payload),
-    ).toContain("From Fryer");
+      lines: await tx
+        .select()
+        .from(workingOrderLines)
+        .where(eq(workingOrderLines.workingOrderId, split.party.tabId)),
+      order: await tx.select().from(workingOrders).where(eq(workingOrders.id, split.party.tabId)),
+      moves: await tx.select().from(ticketItemMoves),
+      jobs: await tx.select().from(printJobs),
+    }));
+    for (const stationId of [split.stations.grill, split.stations.fryer]) {
+      await expect(
+        splitTx((tx) =>
+          moveDishesToStation(
+            tx,
+            split.cfg,
+            split.party.tabId,
+            { submissionId: randomUUID(), lineIds: [chips.id], stationId },
+            { deviceId: split.cfg.origin.deviceId, personId: null },
+          ),
+        ),
+      ).rejects.toMatchObject({
+        code: "ticket.extra_not_movable",
+        params: { workingOrderId: split.party.tabId, lineId: chips.id },
+      });
+    }
+    const afterExtraMove = await splitTx(async (tx) => ({
+      items: await tx
+        .select()
+        .from(ticketItems)
+        .where(eq(ticketItems.workingOrderId, split.party.tabId)),
+      lines: await tx
+        .select()
+        .from(workingOrderLines)
+        .where(eq(workingOrderLines.workingOrderId, split.party.tabId)),
+      order: await tx.select().from(workingOrders).where(eq(workingOrders.id, split.party.tabId)),
+      moves: await tx.select().from(ticketItemMoves),
+      jobs: await tx.select().from(printJobs),
+    }));
+    expect(afterExtraMove).toEqual(beforeExtraMove);
   });
 
   it("prints one destination ticket per old station in a two-dish move", async () => {
