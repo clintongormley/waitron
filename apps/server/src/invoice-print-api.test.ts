@@ -588,13 +588,13 @@ describe("invoice receipt API attempt boundary", () => {
     ).toBe(204);
     expect(
       (await suite.db.select().from(printJobs).where(eq(printJobs.id, ordinary.jobId)))[0],
-    ).toMatchObject({ status: "failed", attempts: 5, lastError: "ordinary connection detail" });
+    ).toMatchObject({ status: "failed", attempts: 1, lastError: "ordinary connection detail" });
     const retried = await ctx.pull();
     expect(retried.map((job) => job.id)).toEqual([]);
     expect((await ctx.result({ status: "done" }, ordinary.jobId)).status).toBe(204);
     expect(
       (await suite.db.select().from(printJobs).where(eq(printJobs.id, ordinary.jobId)))[0],
-    ).toMatchObject({ status: "failed", attempts: 5, lastError: "ordinary connection detail" });
+    ).toMatchObject({ status: "failed", attempts: 1, lastError: "ordinary connection detail" });
     expect(await ctx.row()).toMatchObject({ status: "sending", reportedOutcome: null });
   });
   it("rolls back the print claim if its invoice token cannot be attached", async () => {

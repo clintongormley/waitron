@@ -116,6 +116,8 @@ describe("endDeletedPrinterJobs", () => {
     const otherAgentLease = await job(cfg, printerId, "drawer");
     const failedNone = await job(cfg, printerId);
     const failedFour = await job(cfg, printerId, "drawer");
+    const failedDocumentFour = await job(cfg, printerId);
+    await setJob(failedDocumentFour, { status: "failed", attempts: 4, lastError: "paper" });
     const exhausted = await job(cfg, printerId);
     const done = await job(cfg, printerId);
     const doneDrawer = await job(cfg, printerId, "drawer");
@@ -148,9 +150,9 @@ describe("endDeletedPrinterJobs", () => {
       nullLease,
       otherAgentLease,
       failedNone,
-      failedFour,
+      failedDocumentFour,
     ];
-    const finished = [exhausted, done, doneDrawer, keptQueued];
+    const finished = [failedFour, exhausted, done, doneDrawer, keptQueued];
     const before = await rows([...live, ...finished]);
 
     const read = await withTransaction(suite.db, (tx) => readPrinterDeleteJobIds(tx, printerId));
