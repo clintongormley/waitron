@@ -42,9 +42,11 @@ async function venue() {
     const zone = async (name: string, displayOrder: number, active = true) => {
       const [z] = await db
         .insert(floorZones)
-        .values({ locationId: cfg.locationId, name, displayOrder, active })
+        .values({ locationId: cfg.locationId, name, displayOrder })
         .returning();
       await configureZone(db, cfg, { zoneId: z!.id, departmentId });
+      if (!active)
+        await db.update(floorZones).set({ active: false }).where(eq(floorZones.id, z!.id));
       return z!.id;
     };
     const terrace = await zone("Terrace", 2);

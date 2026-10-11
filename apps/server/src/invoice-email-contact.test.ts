@@ -45,7 +45,7 @@ async function fixture(nullHeader = false) {
       name: "Default",
       tradingName: "Default",
       isDefault: true,
-      active: false,
+      active: true,
     })
     .returning();
   const [order] = await suite.db
@@ -218,4 +218,11 @@ describe("contact imported-row boundaries", () => {
       email: "local@example.com",
     });
   });
+});
+
+it("does not choose a deleted default when the recorded source has no contact", async () => {
+  const f = await fixture();
+  await authored(f.fallback, { email: "deleted-default@example.com" });
+  await suite.db.update(departments).set({ active: false }).where(eq(departments.id, f.fallback));
+  expect(await read(f.cfg, { kind: "sale", saleId: f.saleId })).toBeNull();
 });

@@ -2014,11 +2014,10 @@ describe("the editor's model", () => {
       week: restaurantWeek(periods),
       dates: [{ specialDateId: christmas.id, slots: [slot(periods.brunch, "11:00", "15:00")] }],
     });
-    const deli = model.departments.find((department) => department.id === v.deli)!;
-    expect(deli).toMatchObject({
-      active: false,
-      periods: [{ id: periods.mediodiaDeli }],
-    });
+    expect(model.departments.find((department) => department.id === v.deli)).toBeUndefined();
+    expect(
+      await db.select().from(menuPeriods).where(eq(menuPeriods.id, periods.mediodiaDeli)),
+    ).toContainEqual(expect.objectContaining({ id: periods.mediodiaDeli, departmentId: v.deli }));
     expect(model.namedDays).toEqual([
       {
         kind: "working_day",
@@ -2697,7 +2696,7 @@ describe("department service periods", () => {
     await scoped((tx) => deactivateDepartment(tx, v.cfg, v.deli));
     const model = await scoped((tx) => readOpeningHoursModel(tx, v.cfg, AT));
     expect(model.dayCutover).toBe("06:00");
-    expect(model.departments.map((department) => department.id)).toEqual([v.deli, v.restaurant]);
+    expect(model.departments.map((department) => department.id)).toEqual([v.restaurant]);
     expect(
       model.departments.find((department) => department.id === other.restaurant),
     ).toBeUndefined();
@@ -2768,15 +2767,7 @@ describe("department service periods", () => {
       ),
       dates: [{ specialDateId: date.id, slots: [] }],
     });
-    expect(model.departments.find((department) => department.id === v.deli)).toEqual({
-      id: v.deli,
-      name: "Deli",
-      active: false,
-      zones: [],
-      periods: [],
-      week: weekOf(() => []),
-      dates: [],
-    });
+    expect(model.departments.find((department) => department.id === v.deli)).toBeUndefined();
     expect(model.namedDays).toEqual([
       {
         kind: "holiday",

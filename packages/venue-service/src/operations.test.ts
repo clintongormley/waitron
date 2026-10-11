@@ -54,7 +54,7 @@ import { VENUE_SERVICE_MIGRATIONS } from "./migrations.js";
 
 import { resolveMakers, setRoutingCell } from "./routing-store.js";
 import { routingCells } from "./schema/routing.js";
-import { zoneSalePolicies } from "./schema/service.js";
+import { departments, zoneSalePolicies } from "./schema/service.js";
 import { menuPeriods } from "./schema/menus.js";
 import {
   type Department,
@@ -1643,9 +1643,10 @@ describe("departments", () => {
 
     await scoped((tx) => deactivateDepartment(tx, cfg, restaurant.id));
     const departmentsAfter = await scoped((tx) => listDepartments(tx, cfg));
-    expect(departmentsAfter).toContainEqual(
-      expect.objectContaining({ id: restaurant.id, active: false }),
-    );
+    expect(departmentsAfter).not.toContainEqual(expect.objectContaining({ id: restaurant.id }));
+    expect(
+      await db.select().from(departments).where(eq(departments.id, restaurant.id)),
+    ).toContainEqual(expect.objectContaining({ id: restaurant.id, active: false }));
     expect(departmentsAfter).toContainEqual(expect.objectContaining({ id: bar.id, active: true }));
     expect(await scoped((tx) => listServiceZones(tx, cfg))).toEqual([
       expect.objectContaining({ id: dining, departmentId: bar.id }),
@@ -3537,9 +3538,11 @@ it.each(["create", "rename"])("allows department %s onto a deleted name", async 
       }),
     );
   expect(replacement.id).not.toBe(old.id);
+  expect(await db.select().from(departments).where(eq(departments.id, old.id))).toContainEqual(
+    expect.objectContaining({ id: old.id, name: "Deli", active: false }),
+  );
   expect(await scoped((tx) => listDepartments(tx, cfg))).toEqual(
     expect.arrayContaining([
-      expect.objectContaining({ id: old.id, name: "Deli", active: false }),
       expect.objectContaining({
         id: replacement.id,
         name: "Deli",

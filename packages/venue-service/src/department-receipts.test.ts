@@ -14,7 +14,7 @@ import {
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { locationId } from "@waitron/shared";
 import { seedNode } from "@waitron/db/testing/seed.js";
-import { sql } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { VENUE_SERVICE_MIGRATIONS } from "./migrations.js";
 import { departments, orderServiceContexts, saleReceiptHeaders } from "./schema/service.js";
 import { listDepartments } from "./operations.js";
@@ -107,17 +107,25 @@ describe("department receipt storage", () => {
     ).rows;
     expect(rows).toHaveLength(1);
   });
-  it("reads a disabled recorded department and lists its default flag", async () => {
-    const f = await fixture(false);
+  it("keeps recorded receipt settings internally while hiding deleted departments from management", async () => {
+    const f = await fixture();
     await scoped((tx) =>
       receipts.writeDepartmentReceipt(tx, f.cfg, f.id, { email: "old@example.com" }),
     );
-    expect(await scoped((tx) => receipts.readDepartmentReceipt(tx, f.cfg, f.id))).toEqual({
+    await suite.db.update(departments).set({ active: false }).where(eq(departments.id, f.id));
+    await expect(
+      scoped((tx) => receipts.readDepartmentReceipt(tx, f.cfg, f.id)),
+    ).rejects.toMatchObject({ code: "department.not_found" });
+    expect(
+      (await scoped((tx) => receipts.readPrintedDepartmentReceipt(tx, f.cfg, f.id, "80mm")))
+        .receipt,
+    ).toEqual({
       email: "old@example.com",
     });
-    expect(await scoped((tx) => listDepartments(tx, f.cfg))).toContainEqual(
-      expect.objectContaining({ id: f.id, isDefault: true, active: false }),
-    );
+    expect(await scoped((tx) => listDepartments(tx, f.cfg))).toEqual([]);
+    expect(
+      await suite.db.select().from(departments).where(eq(departments.id, f.id)),
+    ).toContainEqual(expect.objectContaining({ id: f.id, isDefault: true, active: false }));
   });
   it("refuses another location and unknown ids without changing the saved row", async () => {
     const a = await fixture();
@@ -423,7 +431,7 @@ describe("receipt department lookups", () => {
     } finally {
       spy.mockRestore();
     }
-    expect(await scoped((tx) => receipts.receiptDefaultDepartment(tx, f.cfg))).toBe(f.id);
+    expect(await scoped((tx) => receipts.receiptDefaultDepartment(tx, f.cfg))).toBeNull();
   });
   it("reads the recorded disabled sale department within its location", async () => {
     const f = await fixture(false);
@@ -489,11 +497,11 @@ describe("receipt department lookups", () => {
       await scoped((tx) => receipts.receiptDepartmentForOrder(tx, other.cfg, order!.id)),
     ).toBeNull();
   });
-  it("returns a disabled designated default and no department for a location with none", async () => {
+  it("ignores a deleted designated default and returns no department for an empty location", async () => {
     const f = await fixture(false);
-    expect(await scoped((tx) => receipts.VENUE_SERVICE.receiptDefaultDepartment(tx, f.cfg))).toBe(
-      f.id,
-    );
+    expect(
+      await scoped((tx) => receipts.VENUE_SERVICE.receiptDefaultDepartment(tx, f.cfg)),
+    ).toBeNull();
     const [empty] = await suite.db
       .insert(locations)
       .values({ name: "Empty", invoiceLocales: ["es-ES"], operationDescription: "Hospitality" })

@@ -747,8 +747,8 @@ describe("building today's plan from a zone's master plan", () => {
   });
 });
 
-describe("a disabled zone", () => {
-  it("switches a zone off and on without rewriting a table or its today's state", async () => {
+describe("a deleted zone", () => {
+  it("refuses restoring a deleted zone without rewriting a table or its today's state", async () => {
     const z = await zone();
     const tableId = await v.table("Unchanged", z);
     await masterOf(z, [{ label: "Unchanged", live: tableId }]);
@@ -758,7 +758,9 @@ describe("a disabled zone", () => {
     await inTx(v, (tx) => deactivateZone(tx, v.cfg, z));
     expect(await tableRow(v, tableId)).toEqual(before);
     expect(await todayRow(tableId)).toEqual(todayBefore);
-    await inTx(v, (tx) => updateZone(tx, v.cfg, z, { active: true }));
+    await expect(inTx(v, (tx) => updateZone(tx, v.cfg, z, { active: true }))).rejects.toMatchObject(
+      { code: "zone.not_found" },
+    );
     expect(await tableRow(v, tableId)).toEqual(before);
     expect(await todayRow(tableId)).toEqual(todayBefore);
   });
@@ -782,7 +784,7 @@ describe("a disabled zone", () => {
     expect(await todayZone(on)).toMatchObject({ businessDay: "2026-10-11", generation: 2 });
   });
 
-  it("switches its tables on today's plan back on when it is enabled again the same day", async () => {
+  it("keeps its tables out of service when restoring the deleted zone is refused", async () => {
     const z = await zone();
     const planned = await v.table("Reopen 1", z);
     const hidden = await v.table("Reopen 2", z);
@@ -799,14 +801,16 @@ describe("a disabled zone", () => {
     });
     await inTx(v, (tx) => deactivateZone(tx, v.cfg, z));
 
-    await inTx(v, (tx) => updateZone(tx, v.cfg, z, { active: true }));
+    await expect(inTx(v, (tx) => updateZone(tx, v.cfg, z, { active: true }))).rejects.toMatchObject(
+      { code: "zone.not_found" },
+    );
 
-    expect(await inService(planned)).toBe(true);
+    expect(await inService(planned)).toBe(false);
     expect(await inService(hidden)).toBe(false);
     expect(await inService(never)).toBe(false);
     await inTx(v, (tx) => ensureToday(tx, v.cfg, NONE, NOW));
     const floor = await inTx(v, (tx) => listTablesWithState(tx, v.cfg, [], undefined, NOW));
-    expect(floor.map((t) => t.id)).toContain(planned);
+    expect(floor.map((t) => t.id)).not.toContain(planned);
   });
 });
 

@@ -147,14 +147,15 @@ describe("zone CRUD", () => {
     expect(z).toEqual({ id, name: "Comedor", displayOrder: 3, active: true });
   });
 
-  it("can include inactive zones for management without changing the active-only list", async () => {
+  it("hides deleted zones even when management requests inactive entries", async () => {
     const cfg = await setupVenue();
     const { id } = await asApp(cfg, (tx) => createZone(tx, cfg, { name: "Closed room" }));
     await asApp(cfg, (tx) => deactivateZone(tx, cfg, id));
     expect(await asApp(cfg, (tx) => listZones(tx, cfg))).toEqual([]);
-    expect(await asApp(cfg, (tx) => listZones(tx, cfg, { includeInactive: true }))).toEqual([
-      { id, name: "Closed room", displayOrder: 0, active: false },
-    ]);
+    expect(await asApp(cfg, (tx) => listZones(tx, cfg, { includeInactive: true }))).toEqual([]);
+    expect(await db.select().from(floorZones).where(eq(floorZones.id, id))).toContainEqual(
+      expect.objectContaining({ id, name: "Closed room", displayOrder: 0, active: false }),
+    );
   });
 
   it("createZone defaults displayOrder to 0 when omitted", async () => {
@@ -255,17 +256,19 @@ describe("zone CRUD", () => {
     });
   });
 
-  it("updateZone reactivates and reorders (the active + displayOrder patch branches)", async () => {
+  it("updateZone refuses to restore or reorder a deleted zone", async () => {
     const cfg = await setupVenue();
     const { id } = await asApp(cfg, (tx) =>
       createZone(tx, cfg, { name: "Patio", displayOrder: 5 }),
     );
     await asApp(cfg, (tx) => deactivateZone(tx, cfg, id));
     expect(await asApp(cfg, (tx) => listZones(tx, cfg))).toEqual([]);
-    await asApp(cfg, (tx) => updateZone(tx, cfg, id, { active: true, displayOrder: 9 }));
-    expect(await asApp(cfg, (tx) => listZones(tx, cfg))).toEqual([
-      { id, name: "Patio", displayOrder: 9, active: true },
-    ]);
+    const before = await db.select().from(floorZones).where(eq(floorZones.id, id));
+    await expect(
+      asApp(cfg, (tx) => updateZone(tx, cfg, id, { active: true, displayOrder: 9 })),
+    ).rejects.toMatchObject({ code: "zone.not_found" });
+    expect(await db.select().from(floorZones).where(eq(floorZones.id, id))).toEqual(before);
+    expect(await asApp(cfg, (tx) => listZones(tx, cfg))).toEqual([]);
   });
 
   it("deactivateZone throws zone.not_found for an unknown id", async () => {
@@ -699,10 +702,12 @@ it("renames a zone onto a deleted name while retaining the deleted row", async (
   await asApp(cfg, (tx) => deactivateZone(tx, cfg, target.id));
   await asApp(cfg, (tx) => updateZone(tx, cfg, source.id, { name: "Terrace" }));
   expect(source.id).not.toBe(target.id);
+  expect(await db.select().from(floorZones).where(eq(floorZones.id, target.id))).toContainEqual(
+    expect.objectContaining({ id: target.id, name: "Terrace", active: false }),
+  );
   expect(await asApp(cfg, (tx) => listZones(tx, cfg, { includeInactive: true }))).toEqual(
     expect.arrayContaining([
       expect.objectContaining({ id: source.id, name: "Terrace", active: true }),
-      expect.objectContaining({ id: target.id, name: "Terrace", active: false }),
     ]),
   );
   await asApp(cfg, (tx) => updateZone(tx, cfg, source.id, { name: "Dining" }));
