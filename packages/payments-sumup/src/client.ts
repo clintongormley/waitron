@@ -91,8 +91,9 @@ export interface SumUpClient {
   getReader(readerId: string): Promise<SumUpReader | null>;
   /** The reader's connectivity and device telemetry, mapped from SumUp's status response. */
   readerStatus(readerId: string): Promise<ReaderStatus>;
-  /** Unpairs a reader from the merchant account; a reader SumUp no longer knows counts as unpaired.
-   * A refusal, an outage or no answer throws `ProviderCallFailed`. */
+  /** Unpairs a reader from the merchant account; a reader SumUp no longer knows (404) counts as
+   * unpaired. Any other answer from 400 up, or no answer at all, throws `ProviderCallFailed`. The
+   * answer's body is never read, so the status alone decides. */
   deleteReader(readerId: string): Promise<void>;
   /** The merchant accounts this API key can act as — the SumUp connect seat's picker. */
   memberships(): Promise<{ merchantCode: string; name: string }[]>;

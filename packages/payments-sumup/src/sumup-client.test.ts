@@ -384,6 +384,69 @@ describe("sumupClient reader management", () => {
     expect((error as ProviderCallFailed).reason).toBe(reason);
   });
 
+  const htmlPage = "<html><body><h1>Gateway says no</h1></body></html>";
+  const answering =
+    (status: number, body: BodyInit | null): typeof fetch =>
+    () =>
+      Promise.resolve(new Response(body, { status, headers: { "content-type": "text/html" } }));
+
+  it.each([
+    [401, "credential_rejected"],
+    [403, "credential_rejected"],
+    [429, "http_429"],
+  ])(
+    "tells why a reader deletion failed on HTTP %s from its status alone",
+    async (status, reason) => {
+      const client = sumupClient({
+        apiKey: "k",
+        merchantCode: "MC",
+        fetch: answering(status, htmlPage),
+      });
+      const error: unknown = await client.deleteReader("rdr_1").catch((e: unknown) => e);
+      expect(error).toBeInstanceOf(ProviderCallFailed);
+      expect((error as ProviderCallFailed).reason).toBe(reason);
+      expect((error as ProviderCallFailed).message).not.toContain("Gateway");
+    },
+  );
+
+  it("accepts deletion of an already absent reader whose 404 is not JSON", async () => {
+    const client = sumupClient({
+      apiKey: "k",
+      merchantCode: "MC",
+      fetch: answering(404, htmlPage),
+    });
+    await expect(client.deleteReader("rdr_1")).resolves.toBeUndefined();
+  });
+
+  it("tells a 401 whose body breaks off as credential_rejected, not unreachable", async () => {
+    const breaksOff = new ReadableStream<Uint8Array>({
+      pull(controller) {
+        controller.error(new TypeError("terminated"));
+      },
+    });
+    const client = sumupClient({
+      apiKey: "k",
+      merchantCode: "MC",
+      fetch: answering(401, breaksOff),
+    });
+    const error: unknown = await client.deleteReader("rdr_1").catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(ProviderCallFailed);
+    expect((error as ProviderCallFailed).reason).toBe("credential_rejected");
+  });
+
+  it("releases the body of a reader deletion's answer it does not read", async () => {
+    let cancelled = false;
+    const unread = new ReadableStream<Uint8Array>({
+      cancel() {
+        cancelled = true;
+      },
+    });
+    const client = sumupClient({ apiKey: "k", merchantCode: "MC", fetch: answering(409, unread) });
+    await client.deleteReader("rdr_1").catch(() => undefined);
+    expect(cancelled).toBe(true);
+    // This stream never ends, so a client that reads the body hangs here and trips the bound.
+  }, 2_000);
+
   it.each([
     ["a dropped connection", new TypeError("fetch failed")],
     ["the deadline", Object.assign(new Error("aborted"), { name: "AbortError" })],

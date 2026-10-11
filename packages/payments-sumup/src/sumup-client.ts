@@ -85,8 +85,24 @@ export function sumupClient(opts: SumUpClientOptions): SumUpClient {
   const doFetch = opts.fetch ?? fetch;
   const timeoutMs = opts.timeoutMs ?? 20_000;
   const mc = encodeURIComponent(opts.merchantCode);
-  const call = async (
+  const send = (
     method: "GET" | "POST" | "DELETE",
+    path: string,
+    signal: AbortSignal,
+    body?: unknown,
+  ): Promise<Response> =>
+    doFetch(`${base}${path}`, {
+      method,
+      headers: {
+        authorization: `Bearer ${opts.apiKey}`,
+        "content-type": "application/json",
+        accept: "application/json",
+      },
+      signal,
+      ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+    });
+  const call = async (
+    method: "GET" | "POST",
     path: string,
     body?: unknown,
     { answerServerErrors = false }: { answerServerErrors?: boolean } = {},
@@ -97,22 +113,27 @@ export function sumupClient(opts: SumUpClientOptions): SumUpClient {
     // after the headers arrive, so the timer stays alive until the body is read (CLAUDE.md §5:
     // nothing external may freeze a sale).
     try {
-      const res = await doFetch(`${base}${path}`, {
-        method,
-        headers: {
-          authorization: `Bearer ${opts.apiKey}`,
-          "content-type": "application/json",
-          accept: "application/json",
-        },
-        signal: controller.signal,
-        ...(body === undefined ? {} : { body: JSON.stringify(body) }),
-      });
+      const res = await send(method, path, controller.signal, body);
       if (res.status >= 500) {
         if (answerServerErrors) return { status: res.status, json: null };
         throw new Error(`sumup ${method} ${path}: HTTP ${res.status}`);
       }
       const text = await res.text();
       return { status: res.status, json: text === "" ? null : (JSON.parse(text) as unknown) };
+    } finally {
+      clearTimeout(timer);
+    }
+  };
+  /** The answer's status alone: the body is never read, so a body that is not JSON or that breaks
+   * off cannot change what the status says. */
+  const callForStatus = async (method: "DELETE", path: string): Promise<number> => {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+      const res = await send(method, path, controller.signal);
+      // Cancelling the unread body hands the connection back; its rejection carries nothing we use.
+      res.body?.cancel().catch(() => undefined);
+      return res.status;
     } finally {
       clearTimeout(timer);
     }
@@ -275,29 +296,26 @@ export function sumupClient(opts: SumUpClientOptions): SumUpClient {
       };
     },
     async deleteReader(readerId: string): Promise<void> {
-      let r: { status: number };
+      let status: number;
       try {
-        r = await call(
+        status = await callForStatus(
           "DELETE",
           `/v0.1/merchants/${mc}/readers/${encodeURIComponent(readerId)}`,
-          undefined,
-          { answerServerErrors: true },
         );
       } catch (error) {
-        if (error instanceof SyntaxError) throw error;
         throw new ProviderCallFailed("unreachable", "sumup DELETE reader: no answer", {
           cause: error,
         });
       }
       // A retry may find the reader already removed; other refusals must not look like success.
-      if (r.status < 400 || r.status === 404) return;
+      if (status < 400 || status === 404) return;
       const reason =
-        r.status === 401 || r.status === 403
+        status === 401 || status === 403
           ? "credential_rejected"
-          : r.status >= 500
+          : status >= 500
             ? "provider_unavailable"
-            : (`http_${r.status}` as const);
-      throw new ProviderCallFailed(reason, `sumup DELETE reader: HTTP ${r.status}`);
+            : (`http_${status}` as const);
+      throw new ProviderCallFailed(reason, `sumup DELETE reader: HTTP ${status}`);
     },
     async memberships() {
       const r = await call("GET", "/v0.1/memberships");
