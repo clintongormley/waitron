@@ -5,7 +5,7 @@ import "./done-screen.js";
 import { BACKUP_SETUP_URL, SetupDoneScreen } from "./done-screen.js";
 import "./review-screen.js";
 import type { SetupReviewScreen } from "./review-screen.js";
-import type { SetupApi } from "../api/client.js";
+import { SetupApi } from "../api/client.js";
 
 const q = (el: SetupDoneScreen, sel: string) => el.shadowRoot!.querySelector<HTMLElement>(sel);
 
@@ -197,7 +197,7 @@ describe("setup-done-screen", () => {
   });
 
   it("reports ready once getStatus rejects with a non-2xx code", async () => {
-    const getStatus = vi.fn().mockRejectedValue({ code: "server.internal" });
+    const getStatus = vi.fn().mockRejectedValue({ code: "server.internal", status: 404 });
     const el = await mountDone(getStatus);
     await vi.waitFor(() => expect(q(el, "[data-test=status]")?.textContent?.trim()).toBe(READY_EN));
     expect(q(el, "[data-test=reload]")).toBeNull();
@@ -208,7 +208,7 @@ describe("setup-done-screen", () => {
       .fn()
       .mockRejectedValueOnce(new TypeError("Failed to fetch"))
       .mockRejectedValueOnce(new TypeError("Failed to fetch"))
-      .mockRejectedValue({ code: "server.internal" });
+      .mockRejectedValue({ code: "server.internal", status: 404 });
     const el = await mountDone(getStatus);
     await vi.waitFor(() => expect(q(el, "[data-test=status]")?.textContent?.trim()).toBe(READY_EN));
   });
@@ -218,7 +218,7 @@ describe("setup-done-screen", () => {
       .fn()
       .mockResolvedValueOnce({ provisioned: false, environment: "preproduction", needs: ["venue"] })
       .mockResolvedValueOnce({ provisioned: false, environment: "preproduction", needs: ["venue"] })
-      .mockRejectedValue({ code: "server.internal" });
+      .mockRejectedValue({ code: "server.internal", status: 404 });
     const el = await mountDone(getStatus);
     await vi.waitFor(() => expect(q(el, "[data-test=status]")?.textContent?.trim()).toBe(READY_EN));
   });
@@ -240,6 +240,36 @@ describe("setup-done-screen", () => {
     await vi.waitFor(() => expect(q(el, "[data-test=status]")?.textContent?.trim()).toBe(READY_EN));
     expect(getStatus.mock.calls.length).toBeGreaterThanOrEqual(3);
   });
+
+  it.each([
+    ["a JSON error envelope", 503, '{"error":{"code":"setup.not_ready"}}', "application/json"],
+    ["an HTML page", 502, "<html>Bad gateway</html>", "text/html"],
+    ["an empty body", 503, null, undefined],
+  ] as const)(
+    "through the real client, waits on a 5xx with %s, then reports ready on a bare 404",
+    async (_label, status, body, contentType) => {
+      let routeGone = false;
+      const fetchImpl = vi.fn(async () =>
+        routeGone
+          ? new Response(null, { status: 404 })
+          : new Response(body, {
+              status,
+              headers: contentType === undefined ? {} : { "content-type": contentType },
+            }),
+      );
+      const { el } = await mountWidget<SetupDoneScreen>("setup-done-screen", {
+        api: new SetupApi("", fetchImpl),
+        startDelayMs: 0,
+        pollIntervalMs: 3,
+      });
+      await vi.waitFor(() => expect(fetchImpl.mock.calls.length).toBeGreaterThan(1));
+      expect(q(el, "[data-test=status]")?.textContent?.trim()).toBe(RESTART_EN);
+      routeGone = true;
+      await vi.waitFor(() =>
+        expect(q(el, "[data-test=status]")?.textContent?.trim()).toBe(READY_EN),
+      );
+    },
+  );
 
   // The removed element still renders once and arms its first-poll timer after it has left the page.
   // The attached control arms an identical zero-delay timer AFTER it, and same-delay timers fire in
@@ -415,7 +445,7 @@ describe("setup-done-screen", () => {
 
   it("reports ready in Spanish once the setup route is gone", async () => {
     setLocale("es-ES");
-    const el = await mountDone(() => Promise.reject(new Error("404")));
+    const el = await mountDone(() => Promise.reject({ code: "server.internal", status: 404 }));
     await vi.waitFor(() =>
       expect(q(el, "[data-test=status]")?.textContent?.trim()).toBe(
         "El servidor está listo. Ábrelo desde aquí:",
