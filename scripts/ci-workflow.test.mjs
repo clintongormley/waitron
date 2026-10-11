@@ -1439,6 +1439,46 @@ describe("the lint and root-guards jobs", () => {
 });
 
 /**
+ * Holds that the step running a job's `test:shard` line has an `env:` key of its own, before its
+ * `run:` key, setting TMPDIR to the in-memory /dev/shm. Reads the job's lines as TEXT.
+ */
+function expectTestShardStepTmpdirInMemory(body, what) {
+  const run = body.findIndex((line) => !line.trim().startsWith("#") && line.includes("test:shard"));
+  const stepStart = body.findLastIndex((line, at) => at < run && /^ {6}- /.test(line));
+  expect(stepStart, `no step runs ${what}`).toBeGreaterThan(-1);
+  const runKey = body.findIndex((line, at) => at > stepStart && /^ {8}run:/.test(line));
+  expect(
+    runKey,
+    "the step's own run: key must come at or before its test:shard line",
+  ).toBeGreaterThan(stepStart);
+  expect(
+    runKey,
+    "the step's own run: key must come at or before its test:shard line",
+  ).toBeLessThanOrEqual(run);
+  const keys = body.slice(stepStart, runKey);
+  const env = keys.findIndex((line) => /^ {8}env:\s*$/.test(line));
+  expect(env, "the step needs an env: key of its own, before its run: key").toBeGreaterThan(-1);
+  const after = keys.slice(env + 1);
+  const end = after.findIndex((line) => !/^ {10}/.test(line));
+  const mapping = end === -1 ? after : after.slice(0, end);
+  expect(mapping, "the step's env: must set TMPDIR to the in-memory /dev/shm").toContain(
+    "          TMPDIR: /dev/shm",
+  );
+}
+
+/**
+ * Each venue-service shard keeps its test databases (made by `useVenueDb` under `os.tmpdir()`) in
+ * memory; why: ci-and-gates.md, "The venue-service shards keep their test databases in memory".
+ * Read from ci.yml as TEXT, so a step an `if:` switches off, or a `run:` that sets TMPDIR again,
+ * still passes.
+ */
+describe("the venue-service shards' test databases", () => {
+  it("live in memory, not on the runner's disk", () => {
+    expectTestShardStepTmpdirInMemory(job("test-venue-service").body, "the venue-service shard");
+  });
+});
+
+/**
  * The stream loop and pause tests, and the S3 test server's own suite, run in a job of their own,
  * beside the apps/server shards: between them they need two downloaded binaries. Their blob joins
  * the server's coverage merge. Read from ci.yml as TEXT, so a step an `if:` switches off still
@@ -1476,30 +1516,7 @@ describe("the stream loop and pause tests' and the S3 test server suite's own jo
   });
 
   it("runs them with their temporary files in memory, not on the runner's disk", () => {
-    const body = stream().body;
-    const run = body.findIndex(
-      (line) => !line.trim().startsWith("#") && line.includes("test:shard"),
-    );
-    const stepStart = body.findLastIndex((line, at) => at < run && /^ {6}- /.test(line));
-    expect(stepStart, "no step runs the stream tests").toBeGreaterThan(-1);
-    const runKey = body.findIndex((line, at) => at > stepStart && /^ {8}run:/.test(line));
-    expect(
-      runKey,
-      "the step's own run: key must come at or before its test:shard line",
-    ).toBeGreaterThan(stepStart);
-    expect(
-      runKey,
-      "the step's own run: key must come at or before its test:shard line",
-    ).toBeLessThanOrEqual(run);
-    const keys = body.slice(stepStart, runKey);
-    const env = keys.findIndex((line) => /^ {8}env:\s*$/.test(line));
-    expect(env, "the step needs an env: key of its own, before its run: key").toBeGreaterThan(-1);
-    const after = keys.slice(env + 1);
-    const end = after.findIndex((line) => !/^ {10}/.test(line));
-    const mapping = end === -1 ? after : after.slice(0, end);
-    expect(mapping, "the step's env: must set TMPDIR to the in-memory /dev/shm").toContain(
-      "          TMPDIR: /dev/shm",
-    );
+    expectTestShardStepTmpdirInMemory(stream().body, "the stream tests");
   });
 
   it("gives loopback a 1500-byte packet size before it runs them", () => {

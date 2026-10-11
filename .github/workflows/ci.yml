@@ -1317,7 +1317,10 @@ jobs:
 
       - run: pnpm --filter @waitron/venue-service exec playwright install chromium
 
+      # Why: ci-and-gates.md, "The venue-service shards keep their test databases in memory".
       - name: Run the venue-service shard
+        env:
+          TMPDIR: /dev/shm
         run: |
           set -euo pipefail
           pnpm --filter "@waitron/venue-service" test:shard \

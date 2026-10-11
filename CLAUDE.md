@@ -207,12 +207,14 @@ hook, or how tests are scheduled:
   which picks `/dev/shm` when it exists, because every commit waits for the disk.** Cost: it timed
   out in CI five times. Nothing guards it. Receipt:
   [ci-and-gates.md](docs/developers/ci-and-gates.md#the-upgrade-test-keeps-its-database-in-memory-on-linux).
-- **The stream loop and pause tests' CI step sets `TMPDIR=/dev/shm`, in CI only.** Cost: a main
-  run failed the pause test's bound of at least 1000 ms; a probe reproduced it on one runner in 20,
-  catching a disk stall that held one commit for about a second. Guard:
-  `scripts/ci-workflow.test.mjs`, weaker than its name — it reads `ci.yml` as text and never reads
-  the step's test files. Receipt: [testing-guide.md](docs/developers/testing-guide.md), "In CI their
-  temporary files are in memory".
+- **The CI steps that run the stream loop and pause tests and each `test-venue-service` shard set
+  `TMPDIR=/dev/shm`, in CI only.** Cost: a main run failed the pause test's bound of at least
+  1000 ms; a probe reproduced it on one runner in 20, catching a disk stall that held one commit for
+  about a second. A main run's venue-service shard 4 hit its 10-minute limit on a slow runner; that
+  the disk caused it is an inference. Guard: `scripts/ci-workflow.test.mjs`, weaker than its name — it reads
+  `ci.yml` as text and never reads the steps' test files. Receipts:
+  [testing-guide.md](docs/developers/testing-guide.md), "In CI their temporary files are in memory",
+  and [ci-and-gates.md](docs/developers/ci-and-gates.md#the-venue-service-shards-keep-their-test-databases-in-memory).
 - **The stream tests' CI job sets loopback's MTU to 1500 before they run, in CI only.** Cost: the
   pause test's last restore failed twice in CI, each about 31 s after the stream resumed, just past
   its 30 s ceiling.

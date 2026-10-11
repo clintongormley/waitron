@@ -325,11 +325,16 @@ null, empty or blank. Lane D RUNNER §7 bars this campaign from editing the rule
 - **Job-sharding levers:** `--shard` splits by FILE COUNT; bump `shard: [1..N]` and the denominator
   together with N at or below the file count; rebalance `LIGHT_A/B_PACKAGES` when one light shard
   dominates.
-- **The package suites' databases stay on the runner's disk.** With `TMPDIR=/dev/shm` on
-  every database test job (A441, #1477: run 37945937673 against main run 37938947421, one run each),
-  no job's time moved consistently: the server shards took 219, 330 and 424 s against 297, 273 and
-  438 s, and `apps/server/src/bill-payments.test.ts` 175.8 s against 174.6 s. The root suites were
-  not measured.
+- **The package suites' databases stay on the runner's disk, except in `test-venue-service` and
+  `test-server-stream`.** With
+  `TMPDIR=/dev/shm` on every database test job (A441, #1477: run 37945937673 against main run
+  37938947421, one run each), no job's time moved consistently: the server shards took 219, 330 and
+  424 s against 297, 273 and 438 s, and `apps/server/src/bill-payments.test.ts` 175.8 s against
+  174.6 s. The root suites were not measured. The exceptions: `test-server-stream`'s step sets
+  `TMPDIR=/dev/shm` (`docs/developers/testing-guide.md`, "In CI their temporary files are in
+  memory"), and so does `test-venue-service`'s since A500 (2026-10-11), after main run 38142687186's
+  shard 4 hit its 10-minute limit on a slow runner.
+  [Receipt](../developers/ci-and-gates.md#the-venue-service-shards-keep-their-test-databases-in-memory).
 
 **The development stack:**
 
