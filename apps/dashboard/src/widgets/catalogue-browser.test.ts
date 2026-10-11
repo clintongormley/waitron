@@ -2089,9 +2089,9 @@ it("deletes only completely summarised empty folders without asking", async () =
   expect(count(el)).toBe("0 selected");
 });
 it.each([
-  ["en-GB", 2, "2 kitchen routing rules name these categories and will be removed."],
-  ["en-GB", 1, "1 kitchen routing rule names these categories and will be removed."],
-  ["es", 2, "2 reglas de envío a cocina nombran estas categorías y se eliminarán."],
+  ["en-GB", 2, "2 kitchen routing rules name these categories and are removed."],
+  ["en-GB", 1, "1 kitchen routing rule names these categories and is removed."],
+  ["es", 2, "2 reglas de envío a cocina nombran estas categorías y se eliminan."],
 ] as const)(
   "asks before deleting a category whose only contents are routing rules, saying how many go with it and asking nothing about contents (%s, %i rules)",
   async (locale, rules, sentence) => {
@@ -2140,7 +2140,7 @@ it("still asks what happens to the contents when a category holding only routing
   expect(el.shadowRoot!.querySelector("input[value=move_up]")).not.toBeNull();
   expect(el.shadowRoot!.querySelector("input[value=delete]")).not.toBeNull();
   expect(el.shadowRoot!.textContent).toContain(
-    "2 kitchen routing rules name these categories and will be removed.",
+    "2 kitchen routing rules name these categories and are removed.",
   );
 });
 it.each(["network", "missing", "partial"])(
@@ -2302,6 +2302,25 @@ it.each([
     expect(contentsLabels(el)).toEqual([keep, deleteToo]);
   },
 );
+it.each([
+  ["en-GB", "Categories to delete:"],
+  ["es", "Categorías a eliminar:"],
+] as const)(
+  "heads the categories a delete removes without a future tense (%s)",
+  async (locale, heading) => {
+    setLocale(locale);
+    const el = await mountBrowser();
+    await selectKeys(el, ["folder:d"]);
+    await press(el, "delete");
+    await vi.waitFor(() =>
+      expect(el.shadowRoot!.querySelector('[data-test="deleting"]')).not.toBeNull(),
+    );
+    const paragraphs = [...el.shadowRoot!.querySelector("form")!.querySelectorAll("p")].map(
+      (paragraph) => paragraph.textContent!.trim(),
+    );
+    expect(paragraphs).toContain(heading);
+  },
+);
 it("shows the delete dialog at the compact size", async () => {
   const el = await mountBrowser();
   await selectKeys(el, ["folder:d"]);
@@ -2314,7 +2333,7 @@ it.each([
   [
     "en-GB",
     contents(0, 0, 1, 1, 1),
-    "1 kitchen routing rule names these categories and will be removed.",
+    "1 kitchen routing rule names these categories and is removed.",
     /disabl/i,
   ],
   ["es", contents(0, 0, 0, 0, 1), "", /deshabilit/i],
@@ -2352,12 +2371,12 @@ it.each([
 it.each([
   [
     "en-GB",
-    "1 kitchen routing rule names these categories and will be removed.",
+    "1 kitchen routing rule names these categories and is removed.",
     "Also: deletes 1 category and 2 kitchen routing rules and archives 2 products. They move to No category.",
   ],
   [
     "es",
-    "1 regla de envío a cocina nombra estas categorías y se eliminará.",
+    "1 regla de envío a cocina nombra estas categorías y se elimina.",
     "También: elimina 1 categoría y 2 reglas de envío a cocina y archiva 2 productos. Pasan a Sin categoría.",
   ],
 ] as const)(
@@ -2409,12 +2428,12 @@ it("counts the own rules of every selected category under either answer, a subca
   await press(el, "delete");
   await vi.waitFor(() => expect(dialog(el)).not.toBeNull());
   expect(el.shadowRoot!.textContent).toContain(
-    "3 kitchen routing rules name these categories and will be removed.",
+    "3 kitchen routing rules name these categories and are removed.",
   );
   el.shadowRoot!.querySelector<HTMLInputElement>("input[value=delete]")!.click();
   await el.updateComplete;
   expect(el.shadowRoot!.textContent).toContain(
-    "3 kitchen routing rules name these categories and will be removed.",
+    "3 kitchen routing rules name these categories and are removed.",
   );
   expect(contentsLabels(el)[1]).toBe(
     "Also: deletes 1 category and 1 kitchen routing rule and archives 2 products. They move to No category.",
@@ -2747,7 +2766,7 @@ it.each(["the read at Delete", "the server's refusal"])(
     await vi.waitFor(() => expect(el.shadowRoot!.querySelector("[role=alert]")).not.toBeNull());
     expect(el.shadowRoot!.querySelector("fieldset")).toBeNull();
     expect(dialog(el)?.textContent).toContain(
-      "2 kitchen routing rules name these categories and will be removed.",
+      "2 kitchen routing rules name these categories and are removed.",
     );
     vi.mocked(el.api.deleteCatalogueItems).mockClear();
     await press(el, "confirm");

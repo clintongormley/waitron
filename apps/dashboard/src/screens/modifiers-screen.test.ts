@@ -1562,9 +1562,7 @@ it("previews the products a deleted extras list would touch, and NO order count"
   const warning = dialog.querySelector('[data-test="delete-warning"]')!;
   expect(warning.getAttribute("role")).toBe("alert");
   expect(warning.textContent).toContain(t("modifiers.delete_warning_intro"));
-  expect(warning.textContent).toContain(
-    t("modifiers.delete_warning_products").replace("{count}", "1"),
-  );
+  expect(warning.textContent).toContain(t("modifiers.delete_warning_products_one"));
   const deleteProducts = table(el, "list-delete-products");
   await vi.waitFor(() => expect(deleteProducts.shadowRoot.textContent).toContain("Café"));
   expect(deleteProducts.searchLabel).toBe(t("modifiers.search_products"));
@@ -1572,6 +1570,32 @@ it("previews the products a deleted extras list would touch, and NO order count"
   expect(dialog.querySelector('[data-test="orders-block"]')).toBeNull();
   expect(confirmDelete(el).disabled).toBe(false);
 });
+
+it.each([
+  ["en-GB", 3, "3 products lose this list."],
+  ["en-GB", 1, "1 product loses this list."],
+  ["es-ES", 3, "3 productos pierden esta lista."],
+  ["es-ES", 1, "1 producto pierde esta lista."],
+] as const)(
+  "says in the present tense what deleting a list does (%s, count %i)",
+  async (locale, count, sentence) => {
+    setLocale(locale);
+    const products = ["Café", "Tostada", "Zumo"]
+      .slice(0, count)
+      .map((name, index) => ({ id: `p${index + 1}`, name }));
+    const el = await mount(
+      api({ getExtraListDependants: vi.fn().mockResolvedValue({ products }) }),
+    );
+    await clickInTable(el, "extra-lists", "delete-extra-e1");
+    const dialog = deleteDialog(el);
+    await vi.waitFor(() =>
+      expect(dialog.querySelector('[data-test="delete-warning"]')).not.toBeNull(),
+    );
+    expect(dialog.querySelector('[data-test="delete-warning"]')!.textContent!.trim()).toBe(
+      [t("modifiers.delete_warning_intro"), sentence].join(" "),
+    );
+  },
+);
 
 it("previews only the products a deleted options list would touch, and NO order count", async () => {
   const client = api({
@@ -1587,10 +1611,7 @@ it("previews only the products a deleted options list would touch, and NO order 
     expect(dialog.querySelector('[data-test="delete-warning"]')).not.toBeNull(),
   );
   expect(dialog.querySelector('[data-test="delete-warning"]')!.textContent!.trim()).toBe(
-    [
-      t("modifiers.delete_warning_intro"),
-      t("modifiers.delete_warning_products").replace("{count}", "1"),
-    ].join(" "),
+    [t("modifiers.delete_warning_intro"), t("modifiers.delete_warning_products_one")].join(" "),
   );
   expect(table(el, "list-delete-products").rows).toEqual([{ id: "p1", name: "Solomillo" }]);
   expect(dialog.querySelector('[data-test="list-delete-menus"]')).toBeNull();

@@ -28,15 +28,15 @@ describe("a printer's delete dialog copy, in English", () => {
       copy.cancel,
     ]).toEqual([
       "Delete printer?",
-      "Work that will end",
-      "Settings that will be removed",
+      "Work that ends",
+      "Settings that are removed",
       "This can't be undone.",
       "Delete",
       "Cancel",
     ]);
     expect(copy.refusals).not.toBe("");
     expect(copy.retry).not.toBe("");
-    expect(copy.loading).not.toBe("");
+    expect(copy.loading).toBe("Checking what changes…");
   });
 
   it.each([
@@ -89,12 +89,13 @@ describe("a printer's delete dialog copy, in Spanish", () => {
       copy.cancel,
     ]).toEqual([
       "¿Eliminar la impresora?",
-      "Trabajo que finalizará",
-      "Configuración que se eliminará",
+      "Trabajo que finaliza",
+      "Configuración que se elimina",
       "Esta acción no se puede deshacer.",
       "Eliminar",
       "Cancelar",
     ]);
+    expect(copy.loading).toBe("Comprobando qué cambia…");
   });
 
   it.each([

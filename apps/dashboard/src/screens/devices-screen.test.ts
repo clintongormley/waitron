@@ -6078,12 +6078,12 @@ describe("Delete", () => {
     const before = currentLocale();
     try {
       for (const [locale, del, heading, ends, irreversible, cancel] of [
-        ["en", "Delete", "Delete device?", "Work that will end", "This can't be undone.", "Cancel"],
+        ["en", "Delete", "Delete device?", "Work that ends", "This can't be undone.", "Cancel"],
         [
           "es-ES",
           "Eliminar",
           "¿Eliminar el dispositivo?",
-          "Trabajo que finalizará",
+          "Trabajo que finaliza",
           "Esta acción no se puede deshacer.",
           "Cancelar",
         ],

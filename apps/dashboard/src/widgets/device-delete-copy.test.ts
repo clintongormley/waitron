@@ -33,11 +33,11 @@ describe("a device's delete dialog copy, in English", () => {
     ]).toEqual([
       "Delete device?",
       "Why it can't be deleted",
-      "Work that will end",
-      "Settings that will be removed",
+      "Work that ends",
+      "Settings that are removed",
       "This can't be undone.",
       "Try again",
-      "Checking what will change…",
+      "Checking what changes…",
       "Delete",
       "Cancel",
     ]);
@@ -104,11 +104,11 @@ describe("a device's delete dialog copy, in Spanish", () => {
     ]).toEqual([
       "¿Eliminar el dispositivo?",
       "Por qué no se puede eliminar",
-      "Trabajo que finalizará",
-      "Configuración que se eliminará",
+      "Trabajo que finaliza",
+      "Configuración que se elimina",
       "Esta acción no se puede deshacer.",
       "Reintentar",
-      "Comprobando qué cambiará…",
+      "Comprobando qué cambia…",
       "Eliminar",
       "Cancelar",
     ]);
