@@ -123,7 +123,7 @@ at Waitron's red. Set each one too, with a light and a dark value (see Tokens �
 `--wt-color-google-button-text`, `--wt-color-stepper-button`, and the calendar's
 `--wt-color-palette-{red,amber,grey,blue,green,purple}`, `--wt-color-day-standard` and
 `--wt-color-day-closed`, and the table map's `--wt-color-table-{free,seated,bill,clearing,reserved}`,
-each with an `--wt-color-on-…` text colour
+and the search result's `--wt-color-highlight`, each with an `--wt-color-on-…` text colour
 
 `--wt-color-stepper-button` is the hover tint of `wt-number-stepper`'s − and + buttons: `#e8f0ff`
 in the light theme and `#172946` in the dark.
@@ -227,6 +227,17 @@ themes, that each text colour is 4.5:1 or more on its fill, that the five fills 
 
 `--wt-color-warning` is the amber for a warning that is not yet an error, such as the alerts count
 badge when no open alert is an error. Text on it uses `--wt-color-on-warning`.
+
+`--wt-color-highlight` is the background of matched text in a search result, and
+`--wt-color-on-highlight` its text colour:
+
+| Fill                   | Light     | Text on it | Dark      | Text on it |
+| ---------------------- | --------- | ---------- | --------- | ---------- |
+| `--wt-color-highlight` | `#fff3b0` | `#241500`  | `#614a0f` | `#fff3b0`  |
+
+The "search highlight" cases in `packages/ui-core/src/tokens/colors.test.ts` hold, in both themes,
+that `--wt-color-on-highlight` and `--wt-color-text` are each 4.5:1 or more on the fill, and that
+the `prefers-color-scheme` blocks give the same values as the explicit themes.
 
 The five `--wt-color-field-*` tokens paint the filled form field (see "The field box" under Forms):
 
