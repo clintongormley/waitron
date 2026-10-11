@@ -1884,6 +1884,151 @@ describe("a sale files in the receipt language saved on its order", () => {
       return id;
     }
 
+    /**
+     * Starts a card payment of placed order `id` sending `language`, and holds it at the reader
+     * until `release` is called.
+     */
+    async function payHeldAtReader(venue: BillVenue, id: string, language: string) {
+      const simulator = new SimulatorPaymentProvider(venue.db);
+      const collect = simulator.collect.bind(simulator);
+      let atReader!: () => void;
+      let release!: () => void;
+      const reached = new Promise<void>((resolve) => (atReader = resolve));
+      const gate = new Promise<void>((resolve) => (release = resolve));
+      simulator.collect = async (params) => {
+        atReader();
+        await gate;
+        return collect(params);
+      };
+      const pay = payWorkingOrderIntegrated(
+        { db: venue.db, backend: venue.backend, clock: venue.clock, provider: simulator },
+        venue.cfg,
+        { id, lines: [], receiptLanguage: language, simulationOutcome: "captured" },
+      );
+      await reached;
+      return { pay, release };
+    }
+
+    describe("a placed order whose card is at the reader keeps its choices until the card resolves", () => {
+      const refused = (id: string) => ({
+        status: 409,
+        json: { code: "order.payment_in_flight", params: { workingOrderId: id } },
+      });
+
+      it.each([
+        [
+          "a saved receipt language",
+          (id: string, revision: number) =>
+            [
+              "PUT",
+              `/api/working-orders/${id}/receipt-language`,
+              { revision, language: "ca-ES" },
+            ] as const,
+        ],
+        [
+          "a saved invoice choice",
+          (id: string, revision: number) =>
+            [
+              "PUT",
+              `/api/working-orders/${id}/invoice-choice`,
+              { revision, invoiceType: "F2", recipient: null },
+            ] as const,
+        ],
+        [
+          "the language a second card payment sends",
+          (id: string) =>
+            ["POST", "/api/pay", { id, lines: [], receiptLanguage: "ca-ES" }] as const,
+        ],
+        [
+          "the language a collect sends",
+          (id: string) =>
+            [
+              "POST",
+              `/api/working-orders/${id}/collect`,
+              { tender: CASH, receiptLanguage: "ca-ES" },
+            ] as const,
+        ],
+      ] as const)(
+        "refuses %s, and files the language the payment started with",
+        async (_name, request) => {
+          const venue = await barcelonaVenue();
+          const id = await placedTarta(venue);
+          await choose(venue, id, "es-ES");
+          const { pay, release } = await payHeldAtReader(venue, id, "es-ES");
+          const before = await orderRow(venue, id);
+
+          let answer;
+          try {
+            const [method, path, body] = request(id, before!.revision);
+            answer = await send(venue.app, venue.cookie, method, path, body);
+          } finally {
+            release();
+          }
+          const result = await pay;
+
+          expect(answer).toEqual(refused(id));
+          expect(result.outcome === "captured" && result.ticket.locale).toBe("es-ES");
+          expect(saleCount(venue, id)).toBe(1);
+          expect(await filed(venue, id)).toEqual(SPANISH_TARTA);
+        },
+      );
+
+      it("refuses a saved receipt language while a captured card payment waits to be filed", async () => {
+        const venue = await barcelonaVenue();
+        const id = await placedTarta(venue);
+        await inTx(venue, (tx) =>
+          insertCapturedPayment(tx, {
+            origin: venue.cfg.origin,
+            workingOrderId: id,
+            provider: "simulator",
+            paymentRef: `sim-ref-${randomUUID()}`,
+            amount: decimal("18.00"),
+            settledAt: new Date(),
+            externalRef: `sim-lost-${randomUUID()}`,
+          }),
+        );
+        const before = await orderRow(venue, id);
+
+        const answer = await send(
+          venue.app,
+          venue.cookie,
+          "PUT",
+          `/api/working-orders/${id}/receipt-language`,
+          { revision: before!.revision, language: "es-ES" },
+        );
+
+        expect(answer).toEqual(refused(id));
+        expect(await orderRow(venue, id)).toEqual(before);
+      });
+
+      it("takes the language again once the card has resolved", async () => {
+        const venue = await barcelonaVenue();
+        const id = await placedTarta(venue);
+        const declined = await payWorkingOrderIntegrated(
+          {
+            db: venue.db,
+            backend: venue.backend,
+            clock: venue.clock,
+            provider: new SimulatorPaymentProvider(venue.db),
+          },
+          venue.cfg,
+          { id, lines: [], receiptLanguage: "es-ES", simulationOutcome: "declined" },
+        );
+        expect(declined.outcome).toBe("declined");
+
+        const { revision } = (await orderRow(venue, id))!;
+        const saved = await send(
+          venue.app,
+          venue.cookie,
+          "PUT",
+          `/api/working-orders/${id}/receipt-language`,
+          { revision, language: "ca-ES" },
+        );
+
+        expect(saved).toEqual({ status: 200, json: { revision: revision + 1 } });
+      });
+    });
+
     it("stores and files the language a counter cash sale sends", async () => {
       const venue = await barcelonaVenue();
       const id = randomUUID();

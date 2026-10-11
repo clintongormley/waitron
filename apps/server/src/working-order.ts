@@ -202,7 +202,11 @@ import type { Logger } from "./logger.js";
 import type { DeviceRequestConfig, OriginConfig, TillConfig } from "./till-config.js";
 import { readReceiptOrder } from "./receipt-order.js";
 import { enqueueCollectionTicket } from "./receipt-print.js";
-import { ordersWithUnfiledPayment, paymentAttemptIsLive } from "./till-sale.js";
+import {
+  ordersWithUnfiledPayment,
+  paymentAttemptIsLive,
+  refusePlacedPaymentInFlight,
+} from "./till-sale.js";
 import { readIssuedSales } from "./sale-due.js";
 import { readOfferedReceiptLanguages, saleLanguageFor } from "./venue-locale.js";
 import { creditWholeInvoice, readOrderInvoice } from "./cancel-credit.js";
@@ -3442,6 +3446,7 @@ export async function refuseUnavailableFullInvoice(
  * placed with no sale yet, at the revision the caller read, with no payment in flight.
  */
 async function readChoiceChangeableOrder(
+  db: Database,
   tx: Transaction,
   cfg: Pick<TillConfig, "nodeId">,
   orderId: string,
@@ -3476,6 +3481,7 @@ async function readChoiceChangeableOrder(
     });
   }
   await refusePaymentInFlight(tx, [orderId]);
+  if (order.status === "placed") await refusePlacedPaymentInFlight(db, tx, orderId);
   return order;
 }
 
@@ -3499,7 +3505,7 @@ export async function setOrderInvoiceChoice(
     throw new AppError("management.request_invalid", { field: "recipient" });
   }
   return withTransaction(db, async (tx) => {
-    const order = await readChoiceChangeableOrder(tx, cfg, orderId, request.revision);
+    const order = await readChoiceChangeableOrder(db, tx, cfg, orderId, request.revision);
     if (order.invoiceType === "F1" && request.invoiceType === "F2") {
       const [paid] = await tx
         .select({ id: billPayments.id })
@@ -3544,7 +3550,7 @@ export async function setOrderReceiptLanguage(
 ): Promise<number> {
   const language = requireNullableString(request.language, "language");
   return withTransaction(db, async (tx) => {
-    const order = await readChoiceChangeableOrder(tx, cfg, orderId, request.revision);
+    const order = await readChoiceChangeableOrder(db, tx, cfg, orderId, request.revision);
     if (
       language !== null &&
       !(await readOfferedReceiptLanguages(tx, { locationId: order.locationId })).includes(language)

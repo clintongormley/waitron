@@ -461,15 +461,18 @@ function refuseUnavailableInvoiceRequest(invoiceType: unknown, recipient: unknow
  * Store the receipt language a pay request sent on an existing order that has no sale yet, as its
  * own update one revision on: `working_orders_enforce_transition` refuses a placed order's language
  * changing in the update that settles it. `order` is the row as the caller read it in this
- * transaction, with nothing written to it since.
+ * transaction, with nothing written to it since. A different language is refused while another
+ * card payment of a placed order is underway, since that payment files in the stored one.
  */
 async function storeSentReceiptLanguage(
+  db: Database,
   tx: Transaction,
   workingOrderId: string,
-  order: { revision: number; receiptLocale: string | null },
+  order: { status: string; revision: number; receiptLocale: string | null },
   language: string | undefined,
 ): Promise<void> {
   if (language === undefined || order.receiptLocale === language) return;
+  if (order.status === "placed") await refusePlacedPaymentInFlight(db, tx, workingOrderId);
   await tx
     .update(workingOrders)
     .set({ receiptLocale: language, revision: order.revision + 1 })
@@ -638,7 +641,7 @@ async function runPayWorkingOrder(
           },
         });
       } else {
-        await storeSentReceiptLanguage(tx, req.id, locked, req.receiptLanguage);
+        await storeSentReceiptLanguage(deps.db, tx, req.id, locked, req.receiptLanguage);
         order = await priceStoredOrderForIssuance(tx, req.id);
       }
 
@@ -1113,7 +1116,7 @@ async function payIntegrated(
     }
 
     if (locked !== undefined) {
-      await storeSentReceiptLanguage(tx, req.id, locked, req.receiptLanguage);
+      await storeSentReceiptLanguage(deps.db, tx, req.id, locked, req.receiptLanguage);
     }
     const order: GrossOrder =
       locked === undefined
@@ -1256,6 +1259,25 @@ const liveAttemptsOf = perDatabase(() => new Map<string, string>());
 /** Whether an integrated card attempt on this order is running in this process. */
 export function paymentAttemptIsLive(db: Database, workingOrderId: string): boolean {
   return liveAttemptsOf(db).has(workingOrderId);
+}
+
+/**
+ * Refuse `order.payment_in_flight` while a card payment of PLACED order `workingOrderId` could
+ * still file its sale: an integrated collection of it running in this process, or a payment its
+ * provider has not resolved or no sale records yet. A placed order's collection writes no mark, so
+ * `refusePaymentInFlight` does not see one.
+ */
+export async function refusePlacedPaymentInFlight(
+  db: Database,
+  tx: Transaction,
+  workingOrderId: string,
+): Promise<void> {
+  if (
+    paymentAttemptIsLive(db, workingOrderId) ||
+    (await ordersWithUnfiledPayment(tx, [workingOrderId])).has(workingOrderId)
+  ) {
+    throw new AppError("order.payment_in_flight", { workingOrderId });
+  }
 }
 
 /** A placed order writes no mark, so its entry in the live map carries this instead of one. */
@@ -1969,7 +1991,7 @@ async function runCollectOrder(
     }
 
     await refuseUnavailableFullInvoice(tx, req.id);
-    await storeSentReceiptLanguage(tx, req.id, locked, req.receiptLanguage);
+    await storeSentReceiptLanguage(deps.db, tx, req.id, locked, req.receiptLanguage);
     const order = await priceStoredOrderForIssuance(tx, req.id);
     return fileImmediateSale(tx, deps, cfg, req.id, req.tender, order, operatorId);
   });
