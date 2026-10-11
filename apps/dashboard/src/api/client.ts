@@ -930,6 +930,7 @@ export interface RosterBreach {
 export interface LocationSummary {
   id: string;
   name: string;
+  timeZone: string;
 }
 
 export interface PendingSwap {

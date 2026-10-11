@@ -109,7 +109,9 @@ export function mountWorkforceApi(app: Hono, deps: WorkforceApiDeps, log: Logger
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
       const rows = await gated(sessionId, SCHEDULE_PERMISSION, (tx) =>
-        tx.select({ id: locations.id, name: locations.name }).from(locations),
+        tx
+          .select({ id: locations.id, name: locations.name, timeZone: locations.timeZone })
+          .from(locations),
       );
       return c.json(rows);
     }),

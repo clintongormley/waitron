@@ -3780,12 +3780,6 @@ _Formerly A5, and the logging part of A9._ Detail: [backlog/alerts.md](backlog/a
 
 _Formerly A10; part of A9._ Detail: [backlog/workforce.md](backlog/workforce.md).
 
-- **A shift that runs past midnight (22:00–02:00) is refused as `shift.invalid`** — left open by W22
-  (#1134), found by #1134's review. And an edit keeps the shift's stored offsets, so moving a shift
-  across a summer-time change keeps the old offset. Next action: let the dialog put the end on the
-  next day when it is not after the start, and derive each offset from the venue's time zone for the
-  date.
-  [Detail](backlog/workforce.md#a-shift-that-runs-past-midnight-22000200-is-refused-as-shiftinvalid)
 
 - **Wages / labour cost (SP16)** — a per-person pay-rule set (hourly or fixed salary for N contracted
   hours, rate overrides by condition of the hour, paid non-worked states) turning recorded and

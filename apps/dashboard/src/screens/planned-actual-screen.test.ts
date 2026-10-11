@@ -19,7 +19,7 @@ const staff: PersonSummary[] = [
     email: null,
   },
 ];
-const locations = [{ id: "loc-1", name: "Main" }];
+const locations = [{ id: "loc-1", name: "Main", timeZone: "UTC" }];
 const rows: PlannedVsActualRow[] = [
   {
     personId: "p1",
@@ -98,8 +98,8 @@ describe("planned-actual-screen", () => {
   it("reloads on a location change", async () => {
     const api = stubApi({
       getLocations: vi.fn().mockResolvedValue([
-        { id: "loc-1", name: "Main" },
-        { id: "loc-2", name: "Annex" },
+        { id: "loc-1", name: "Main", timeZone: "UTC" },
+        { id: "loc-2", name: "Annex", timeZone: "UTC" },
       ]),
     });
     const { el } = await mountWidget<PlannedActualScreen>("dashboard-planned-actual-screen", {
@@ -186,8 +186,8 @@ describe("planned-actual-screen", () => {
   it("surfaces a rejected location change as the error banner", async () => {
     const api = stubApi({
       getLocations: vi.fn().mockResolvedValue([
-        { id: "loc-1", name: "Main" },
-        { id: "loc-2", name: "Annex" },
+        { id: "loc-1", name: "Main", timeZone: "UTC" },
+        { id: "loc-2", name: "Annex", timeZone: "UTC" },
       ]),
       getPlannedVsActual: vi
         .fn()
@@ -235,8 +235,8 @@ describe("planned-actual-screen", () => {
     // there is no selection yet.
     const api = stubApi({
       getLocations: vi.fn().mockResolvedValue([
-        { id: "loc-1", name: "Main" },
-        { id: "loc-2", name: "Annex" },
+        { id: "loc-1", name: "Main", timeZone: "UTC" },
+        { id: "loc-2", name: "Annex", timeZone: "UTC" },
       ]),
     });
     const { el, host } = await mountWidget<PlannedActualScreen>("dashboard-planned-actual-screen", {
@@ -279,8 +279,8 @@ it("refreshes displayed rows when their data changes elsewhere", async () => {
 
 describe("planned-actual-screen — location refreshes", () => {
   const twoLocations = [
-    { id: "loc-1", name: "Main" },
-    { id: "loc-2", name: "Annex" },
+    { id: "loc-1", name: "Main", timeZone: "UTC" },
+    { id: "loc-2", name: "Annex", timeZone: "UTC" },
   ];
 
   it("moves to a remaining location when a refresh removes the selected one", async () => {
@@ -301,8 +301,8 @@ describe("planned-actual-screen — location refreshes", () => {
       expect.any(String),
     );
     vi.mocked(api.getLocations).mockResolvedValue([
-      { id: "loc-1", name: "Main" },
-      { id: "loc-3", name: "Terrace" },
+      { id: "loc-1", name: "Main", timeZone: "UTC" },
+      { id: "loc-3", name: "Terrace", timeZone: "UTC" },
     ]);
     liveData.invalidate([{ type: "locations", id: "loc-2" }]);
     await vi.waitFor(() =>
@@ -333,7 +333,7 @@ describe("planned-actual-screen — location refreshes", () => {
     const rowLoads = vi.mocked(api.getPlannedVsActual).mock.calls.length;
     vi.mocked(api.getLocations).mockResolvedValue([
       ...twoLocations,
-      { id: "loc-3", name: "Terrace" },
+      { id: "loc-3", name: "Terrace", timeZone: "UTC" },
     ]);
     liveData.invalidate([{ type: "locations", id: "loc-3" }]);
     await vi.waitFor(() => expect(api.getLocations).toHaveBeenCalledTimes(2));

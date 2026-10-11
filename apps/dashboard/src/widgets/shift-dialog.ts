@@ -1,13 +1,22 @@
 import { LitElement, type PropertyValues, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
-import { submitOnEnter, baseStyles, draftScopeFor, saveActionState } from "@waitron/ui";
+import {
+  submitOnEnter,
+  baseStyles,
+  draftScopeFor,
+  saveActionState,
+  formMessage,
+  formMessageStyles,
+} from "@waitron/ui";
 import type { DraftScope, LeaveCoordinator, LeaveReason } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-dialog.js";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-input.js";
 import { t } from "../i18n/t.js";
-import { instantAt, wallClock } from "../date-utils.js";
+import { MS_PER_DAY, wallClock } from "../date-utils.js";
 import type { Shift, ShiftPatch } from "../api/client.js";
+import { localTimeOccurrences, offsetMinutes } from "@waitron/venue-service/hours-occurrences";
+import { codeMessage } from "../i18n/codes.js";
 import { sameValue } from "./product-editor-model.js";
 
 interface ShiftDraft {
@@ -38,6 +47,7 @@ export interface UpdateShiftDetail {
 export class ShiftDialog extends LitElement {
   static override styles = [
     baseStyles,
+    formMessageStyles,
     css`
       :host {
         display: block;
@@ -52,6 +62,7 @@ export class ShiftDialog extends LitElement {
   @property({ type: Boolean, reflect: true }) open = false;
   /** YYYY-MM-DD */
   @property() day = "";
+  @property() timeZone = "UTC";
   @property() personId = "";
   @property({ attribute: false }) shift: Shift | null = null;
   @property({ type: Boolean }) busy = false;
@@ -67,8 +78,7 @@ export class ShiftDialog extends LitElement {
   #baseline?: ShiftDraft;
   #leave?: LeaveCoordinator;
   #submitted?: ShiftDraft;
-  #startsOffsetMinutes = 0;
-  #endsOffsetMinutes = 0;
+  @state() private attempted = false;
   readonly #beforeClose = async (reason: LeaveReason): Promise<boolean> =>
     !this.busy &&
     (await this.#leave!.request({ scopes: [this], reason, proceed() {} })) === "proceeded";
@@ -127,8 +137,7 @@ export class ShiftDialog extends LitElement {
       this.#identity = identity;
       this.#opening = {};
       this.#baseline = undefined;
-      this.#startsOffsetMinutes = this.shift?.startsOffsetMinutes ?? 0;
-      this.#endsOffsetMinutes = this.shift?.endsOffsetMinutes ?? 0;
+      this.attempted = false;
       this.start = this.shift
         ? wallClock(this.shift.startsAt, this.shift.startsOffsetMinutes).time
         : "";
@@ -163,13 +172,45 @@ export class ShiftDialog extends LitElement {
     return this.start === "" || this.end === "";
   }
 
+  #moments(): { start?: Date; end?: Date } {
+    if (!this.timeZone) return {};
+    const endDay =
+      this.end > this.start
+        ? this.day
+        : new Date(Date.parse(`${this.day}T00:00:00Z`) + MS_PER_DAY).toISOString().slice(0, 10);
+    const pick = (day: string, time: string, stored?: string) => {
+      if (!time) return undefined;
+      const occurrences = localTimeOccurrences(day, time, this.timeZone);
+      // A role-only edit must retain the chosen occurrence of a repeated clock minute.
+      return occurrences.find((at) => at.getTime() === Date.parse(stored ?? "")) ?? occurrences[0];
+    };
+    return {
+      start: pick(this.day, this.start, this.shift?.startsAt),
+      end: pick(endDay, this.end, this.shift?.endsAt),
+    };
+  }
+
+  #times() {
+    const { start, end } = this.#moments();
+    if (!start || !end) return null;
+    return {
+      startsAt: `${start.toISOString().slice(0, 19)}Z`,
+      startsOffsetMinutes: offsetMinutes(start.getTime(), this.timeZone),
+      endsAt: `${end.toISOString().slice(0, 19)}Z`,
+      endsOffsetMinutes: offsetMinutes(end.getTime(), this.timeZone),
+    };
+  }
+
   #confirm(event: Event): void {
     event.stopPropagation();
-    if (this.busy || this.#incomplete() || saveActionState(this.#scope).unchanged) return;
-    const startsOffsetMinutes = this.#startsOffsetMinutes;
-    const endsOffsetMinutes = this.#endsOffsetMinutes;
-    const startsAt = instantAt(this.day, this.start, startsOffsetMinutes);
-    const endsAt = instantAt(this.day, this.end, endsOffsetMinutes);
+    if (this.busy || !this.timeZone || this.#incomplete() || saveActionState(this.#scope).unchanged)
+      return;
+    const times = this.#times();
+    if (!times) {
+      this.attempted = true;
+      return;
+    }
+    const { startsAt, startsOffsetMinutes, endsAt, endsOffsetMinutes } = times;
     const role = this.shiftRole.trim() === "" ? null : this.shiftRole.trim();
     this.#submitted = this.#value();
     if (this.shift) {
@@ -190,9 +231,9 @@ export class ShiftDialog extends LitElement {
         detail: {
           personId: this.personId,
           startsAt,
-          startsOffsetMinutes: 0,
+          startsOffsetMinutes,
           endsAt,
-          endsOffsetMinutes: 0,
+          endsOffsetMinutes,
           role,
         },
         bubbles: true,
@@ -216,6 +257,9 @@ export class ShiftDialog extends LitElement {
 
   override render() {
     const s = saveActionState(this.#scope);
+    const clockMissing = !this.timeZone;
+    const moments = this.attempted && !clockMissing ? this.#moments() : null;
+    const invalid = moments !== null && (!moments.start || !moments.end);
     return html` <wt-dialog
       @keydown=${(e: KeyboardEvent) => submitOnEnter(e, this.shadowRoot!.querySelector<HTMLElement>("[data-test=confirm]"))}
       heading=${this.shift ? t("roster.edit_shift") : t("roster.new_shift")}
@@ -229,8 +273,10 @@ export class ShiftDialog extends LitElement {
         data-test="shift-start"
         name="startsAt"
         type="time"
+        required
         label=${t("roster.shift_start")}
         .value=${this.start}
+        .error=${moments && !moments.start ? t(this.start ? "roster.time_skipped" : "roster.time_required") : ""}
         ?disabled=${this.busy}
         @wt-change=${(e: CustomEvent<{ value: string }>) => this.#change("start", e)}
       ></wt-input>
@@ -239,8 +285,10 @@ export class ShiftDialog extends LitElement {
         data-test="shift-end"
         name="endsAt"
         type="time"
+        required
         label=${t("roster.shift_end")}
         .value=${this.end}
+        .error=${moments && !moments.end ? t(this.end ? "roster.time_skipped" : "roster.time_required") : ""}
         ?disabled=${this.busy}
         @wt-change=${(e: CustomEvent<{ value: string }>) => this.#change("end", e)}
       ></wt-input>
@@ -254,11 +302,12 @@ export class ShiftDialog extends LitElement {
         @wt-change=${(e: CustomEvent<{ value: string }>) => this.#change("shiftRole", e)}
       ></wt-input>
       ${this.shift ? html`<wt-button slot="footer" variant="secondary" data-test="remove" ?disabled=${this.busy} @click=${(e: Event) => this.#remove(e)}>${t("action.remove")}</wt-button>` : nothing}
+      ${formMessage(clockMissing ? t("roster.clock_unavailable") : invalid ? codeMessage("shift.invalid") : "")}
       <wt-button
         slot="footer"
         variant=${s.variant}
         data-test="confirm"
-        ?disabled=${s.unchanged || this.busy || this.#incomplete()}
+        ?disabled=${s.unchanged || this.busy || this.#incomplete() || invalid || clockMissing}
         @click=${(e: Event) => this.#confirm(e)}
       >
         ${this.shift ? t("action.save") : t("action.create")}

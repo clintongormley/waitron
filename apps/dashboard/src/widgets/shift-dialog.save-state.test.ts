@@ -31,6 +31,7 @@ async function mount(shift: Shift | null = stored) {
     day: "2027-01-04",
     personId: "p1",
     shift,
+    timeZone: shift ? "Etc/GMT-2" : "UTC",
   });
   await el.shadowRoot!.querySelector("wt-dialog")!.updateComplete;
   const sent = vi.fn<(type: string, detail: unknown) => void>();

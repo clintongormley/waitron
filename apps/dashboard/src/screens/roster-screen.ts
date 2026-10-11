@@ -320,6 +320,7 @@ export class RosterScreen extends LitElement {
       <dashboard-shift-dialog
         .open=${this.dialogOpen}
         .day=${this.dialogDay}
+        .timeZone=${this.locations.find((location) => location.id === this.locationId)?.timeZone ?? ""}
         .personId=${this.dialogPersonId}
         .shift=${this.dialogShift}
         .busy=${this.busy}

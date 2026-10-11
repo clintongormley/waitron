@@ -56,10 +56,11 @@ function unload() {
 async function mount(
   write: (method: string, body: unknown) => Promise<unknown>,
   refresh: () => void = () => {},
+  timeZone = "Etc/GMT-2",
 ) {
   let reads = 0;
   const api = {
-    getLocations: async () => [{ id: "loc-1", name: "Main" }],
+    getLocations: async () => [{ id: "loc-1", name: "Main", timeZone }],
     listStaff: async () => [],
     getRoster: async () => {
       if (reads++ > 0) refresh();
@@ -113,6 +114,7 @@ for (const method of ["add", "update", "remove"]) {
       () => {
         warnedDuringRefresh = unload();
       },
+      method === "add" ? "UTC" : "Etc/GMT-2",
     );
     const form = await editor(screen, method === "add");
     expect(unload()).toBe(true);
