@@ -1290,16 +1290,15 @@ _Formerly the catalogue and menus entries in the opening part of the old Track A
 
 _Formerly entries spread across the old sections, A261's venue-operations steps among them; part of A9._ Detail: [backlog/service-periods.md](backlog/service-periods.md).
 
-- **Enabling a zone or a department leaves what disabling switched off as it is** — found along the
-  way by W110e (#1290), each left as it is: a department's zones stay disabled, a zone's tables stay
-  disabled (except a floor-plan zone's tables on today's plan, which come back since A429 slice 1),
-  and its routing exceptions stay gone (a profile's starting zone is
+- **Enabling a department leaves its zones disabled; enabling a zone leaves routing exceptions removed.**
+  Found along the way by W110e (#1290). A zone's tables on today's plan come back with the zone
+  (A429 slice 5). A profile's starting zone is
   kept since W97, 2026-10-06: `readProfileZones` falls back to the profile's first usable zone while
-  it is disabled).
+  it is disabled.
 
 - **What a kitchen screen shows after its zone is switched off is unchecked.** Switching a zone off
   (`deactivateServiceZone`, `packages/venue-service/src/operations.ts`) clears its routing cells
-  and disables its tables; it does not clear kitchen screens' zone rows (`device_kitchen_screen_zones`,
+  and takes its tables out of service; it does not clear kitchen screens' zone rows (`device_kitchen_screen_zones`,
   `device_profile_kitchen_screen_zones`). What a pass screen or the device editor shows for that
   zone was read, not run. Left open by A366 slice 5 Part B.
 
