@@ -131,8 +131,8 @@ hook, or how tests are scheduled:
   of about 3 minutes each, one of them slow only in Vitest comparing byte arrays element by
   element. Guards, weaker than the rule: the reporter's warning on a file over 90 s, which never
   fails a job, the shard-count pin in `scripts/ci-workflow.test.mjs`, and each test job's 10-minute
-  `timeout-minutes` (its "bounds every test job" case), the only one that fails a job. Receipt:
-  [ci-and-gates.md](docs/developers/ci-and-gates.md#every-ci-test-job-finishes-in-about-4-minutes).
+  `timeout-minutes` (its "bounds every test job" case). Receipt:
+  [ci-and-gates.md](docs/developers/ci-and-gates.md#every-ci-test-job-should-finish-in-about-4-minutes).
 - **A browser package's shard coverage merges through `scripts/vitest-shard-coverage-merge.mjs`,
   never a plain `--merge-reports`**, which on Vitest 4.1.11 counts a file some shards never loaded
   twice and reads functions low. Cost: the venue-service merge failed at 97.44% functions against

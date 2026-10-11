@@ -520,7 +520,7 @@ command only in a `Run the … shard` step or the stream step.
 
 A file whose `end` line comes more than 90 seconds after its `start` line also gets a GitHub
 warning annotation (`::warning title=Slow test file::`), because one file that long holds up its
-shard (see "Every CI test job finishes in about 4 minutes" below). In browser mode that time can
+shard (see "Every CI test job should finish in about 4 minutes" below). In browser mode that time can
 include waiting to be loaded (above). It warns and never fails the job.
 
 ### The `ci` check passes only when every needed job succeeded or was skipped
@@ -813,13 +813,13 @@ repository's history does not contain (an image built outside CI, or a rewritten
 wedge every later publish identically until `:main` is deleted or retagged by hand. Its suite,
 `scripts/main-tag-guard.test.mjs`, runs the real script against a stubbed `docker` and `gh`.
 
-### Every CI test job finishes in about 4 minutes
+### Every CI test job should finish in about 4 minutes
 
 Owner decision (2026-10-09, restated 2026-10-11 in the watcher session: "if something regularly
 takes 10 minutes it is not good, we want tests to max out at around 4 minutes" — "Each test group
-≤ 4 min"): each CI test job, one shard of one package, takes about 4 minutes at most on a normal
-runner. The whole run's wall time is not the target. The fix for a job over it is at its cause: a
-shard holding one slow file (split the file or find why it is slow), too few shards for the
+≤ 4 min"): each CI test job, one shard of one package, should take about 4 minutes at most on a
+normal runner. The whole run's wall time is not the target. The fix for a job over it is at its
+cause: a shard holding one slow file (split the file or find why it is slow), too few shards for the
 package, or slow setup. Never cut what a test checks to save time, and never move coverage or
 mutation out of CI.
 
@@ -867,8 +867,8 @@ lines in runs 38177927525, 38171667214 and 38170124439: `src/bill-payments.test.
 Guards, each weaker than the rule: the 90-second warning above names a slow FILE but never fails a
 job; the "pin each sharded package's shard count" case in `scripts/ci-workflow.test.mjs` holds the
 counts, not the times; and each test job's 10-minute `timeout-minutes` (the "bounds every test job"
-case in the same file) is the only one that fails a job, and only at 10 minutes. Nothing measures a
-job's time against 4 minutes.
+case in the same file) is the only one that stops a job: GitHub cancels it at 10 minutes, which fails
+the `ci` check. Nothing measures a job's time against 4 minutes.
 
 ### A cheap job can still be the critical path
 
