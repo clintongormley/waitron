@@ -293,10 +293,10 @@ describe("zones and their tables", () => {
     expect(mapTables([off])).toEqual([]);
   });
 
-  it("reads a table's seats for today, a merge's for the merge, and the old capacity without a plan", () => {
+  it("reads seats only from today or its merge, with none without a today row", () => {
     expect(seatsFor(table({ today: today({ seats: 6 }) }))).toBe(6);
     expect(seatsFor(table({ today: today({ seats: 6, joinId: "j1", joinSeats: 10 }) }))).toBe(10);
-    expect(seatsFor(table({ capacity: 4 }))).toBe(4);
+    expect(seatsFor(table({ capacity: 4 }))).toBeNull();
     expect(seatsFor(table({ capacity: 4, today: today({ seats: null }) }))).toBeNull();
   });
 });
