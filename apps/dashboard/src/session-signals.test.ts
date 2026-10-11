@@ -8,7 +8,10 @@ function setupModeAnswer(): Response {
   });
 }
 
-function harness(fetchImpl: (path: string, init: RequestInit) => Promise<Response>) {
+function harness(
+  fetchImpl: (path: string, init: RequestInit) => Promise<Response>,
+  probeTimeLimitMs?: number,
+) {
   const target = new EventTarget();
   const invalid: unknown[] = [];
   let active = 0;
@@ -25,6 +28,7 @@ function harness(fetchImpl: (path: string, init: RequestInit) => Promise<Respons
     target,
     minProbeIntervalMs: 10_000,
     now: () => clock,
+    probeTimeLimitMs,
   });
   return {
     signals,
@@ -67,6 +71,7 @@ describe("session signals", () => {
     expect(h.fetchMock).toHaveBeenCalledExactlyOnceWith("/setup-api/status", {
       method: "GET",
       credentials: "same-origin",
+      signal: expect.any(AbortSignal),
     });
     expect(h.invalid).toEqual([{ code: "node.reset" }]);
   });
@@ -142,6 +147,39 @@ describe("session signals", () => {
     expect(h.fetchMock).toHaveBeenCalledOnce();
     answer(new Response(null, { status: 404 }));
     await settle();
+  });
+
+  it("gives up on a status read that never answers, aborts it, and asks again on a later 404", async () => {
+    const signals: AbortSignal[] = [];
+    // Ignores its signal, so only racing the time limit can settle the read.
+    const h = harness((_path, init) => {
+      signals.push(init.signal!);
+      return new Promise<Response>(() => undefined);
+    }, 20);
+    h.signals.reportError("server.internal", 404);
+    await settle();
+    expect(signals[0]!.aborted).toBe(false);
+    await new Promise((resolve) => setTimeout(resolve, 40));
+    expect(signals[0]!.aborted).toBe(true);
+    h.advance(10_000);
+    h.signals.reportError("server.internal", 404);
+    await settle();
+    expect(h.fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("gives up on a status answer whose body never finishes, and asks again on a later 404", async () => {
+    const h = harness(
+      () => Promise.resolve(new Response(new ReadableStream({ start: () => undefined }))),
+      20,
+    );
+    h.signals.reportError("server.internal", 404);
+    await settle();
+    await new Promise((resolve) => setTimeout(resolve, 40));
+    h.advance(10_000);
+    h.signals.reportError("server.internal", 404);
+    await settle();
+    expect(h.fetchMock).toHaveBeenCalledTimes(2);
+    expect(h.invalid).toEqual([]);
   });
 
   it("asks again after the interval has passed", async () => {

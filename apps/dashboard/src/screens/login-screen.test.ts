@@ -3154,6 +3154,27 @@ describe("login-screen: the sign-in card", () => {
       expect(card(el).querySelector("[data-test=reload]")!.textContent!.trim()).toBe("Recargar");
     });
 
+    it("switches a sign-in screen already showing the expired notice to the reset view", async () => {
+      setLocale("en-GB");
+      const { el } = await mountWidget<LoginScreen>("dashboard-login-screen", {
+        api: stubApi(),
+        noticeCode: "management_session.expired",
+      });
+      await flush(el);
+      expect(card(el).querySelector(".notice")!.textContent!.trim()).toBe(
+        codeMessage("management_session.expired"),
+      );
+      expect(card(el).querySelector("wt-input")).not.toBeNull();
+      expect(card(el).querySelector("[data-test=reload]")).toBeNull();
+
+      el.noticeCode = "node.reset";
+      await flush(el);
+      expect(card(el).querySelector(".notice")!.textContent!.trim()).toBe("This box was reset.");
+      expect(card(el).querySelectorAll("[data-test=reload]")).toHaveLength(1);
+      expect(card(el).querySelector("wt-input")).toBeNull();
+      expect(card(el).querySelector("[data-test=continue]")).toBeNull();
+    });
+
     it("starts no passkey autofill and reads no Google settings", async () => {
       conditionalMediationAvailable.mockResolvedValue(true);
       vi.mocked(navigator.credentials.get).mockImplementation(() => new Promise(() => undefined));

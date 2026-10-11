@@ -3158,20 +3158,23 @@ _Formerly A7, and the dashboard entries in the opening part of the old Track A (
   column being dragged is invisible while it moves, and a typed PIN brings up the unsaved-changes
   question. [Detail](backlog/dashboard.md#a499-dragging-in-the-column-chooser-and-leaving-a-sign-in-screen)
 
-- **After a box reset, the dashboard's banner can still show the old venue's name until the page
-  is reloaded.** The venue name comes from a locale read that `DashboardApi` keeps for the page's
-  life (`#localesPromise`, `apps/dashboard/src/api/client.ts`) — inferred, not traced.
+- **After a box reset, the reset page's own banner still shows the old venue's name.** By reading,
+  not run: `#returnToLogin` (`apps/dashboard/src/dashboard-app.ts`) never clears the `venueName` that
+  `getMe` set, and the locale read meant to replace it repeats the old name once made, since it is
+  kept for the page's life (`#localesPromise`, `apps/dashboard/src/api/client.ts`).
 
 - **A dashboard tab that never meets the box in setup mode gets plain sign-in, not the "box was
-  reset" notice** — for example one asleep through the reset and the new venue's setup. There is no
-  venue identity to compare. Other open tabs are first sent to sign-in by the shared session
-  deadline with the "session expired" notice; by reading, not run, their sign-in screen's own reads
-  then find setup mode and switch it to the reset notice.
+  reset" notice** — for example one asleep through the reset and the new venue's setup; there is no
+  venue identity to compare. By reading, not run: a tab already on sign-in (sent by the shared
+  session deadline, or by a failed check on coming back into view) switches to the reset notice only
+  when a later status check finds setup mode, after its passkey autofill and Google settings read
+  have started; the switch stops neither.
 
-- **`waitron.sh reset --all` replaces the box's certificate folder** (`deploy/waitron.sh`, the
-  `rm_volume waitron_state` branch), so a tab left open fails the certificate check, reports
-  `connection.failed` on every request and is never signed out. A page cannot tell this apart from
-  the box being down.
+- **`waitron.sh reset --all` deletes the box's own minted certificate** (`deploy/waitron.sh`, the
+  `rm_volume waitron_state` branch; minted by `apps/server/src/box-secrets.ts`), so — by reading,
+  not run — a tab left open fails the certificate check, reports `connection.failed` on every request
+  and is never signed out, indistinguishable from the box being down. This holds only for the minted
+  certificate; when the operator supplies one through `WAITRON_TLS_*`, the box serves that instead.
 
 - **A398 — device-profile editor heading remains to align with the sub-page pattern.**
   The editor repeats the list title and has no parent link above the heading
