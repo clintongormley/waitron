@@ -1166,3 +1166,66 @@ describe("saveZonePlan", () => {
     ]);
   });
 });
+
+describe("floor plans without adoption", () => {
+  it("reads a zone with live tables and no master plan as an empty draft", async () => {
+    const z = await zone();
+    await liveTable(z, fresh("Unplanned"));
+    expect(await inTx(v, (tx) => readZonePlan(tx, v.cfg, z))).toEqual({
+      zoneId: z,
+      revision: 0,
+      savedAt: null,
+      tables: [],
+      joins: [],
+    });
+  });
+
+  it("does not read a save entry's liveTableId", async () => {
+    const z = await zone();
+    const other = await zone();
+    const live = await liveTable(other, fresh("Other"));
+    const label = fresh("New");
+    const input = {
+      revision: 0,
+      tables: [{ key: "a", liveTableId: live, label, seats: 4, fixed: false, placement: PLACE }],
+      joins: [],
+    };
+    const saved = await inTx(v, (tx) => saveZonePlan(tx, v.cfg, NONE, z, input, NOW));
+    const plan = await inTx(v, (tx) => readZonePlan(tx, v.cfg, z));
+    expect(plan.tables).toEqual([
+      {
+        id: saved.ids.a,
+        liveTableId: expect.any(String),
+        label,
+        seats: 4,
+        fixed: false,
+        placement: PLACE,
+      },
+    ]);
+    expect(plan.tables[0]!.liveTableId).not.toBe(live);
+    expect((await tableRow(v, live)).zoneId).toBe(other);
+    expect((await tableRow(v, live)).planTableId).toBeNull();
+  });
+
+  it("allows this zone's unlinked live name but refuses another zone's live and master names", async () => {
+    const z = await zone();
+    const own = fresh("Own");
+    await liveTable(z, own);
+    const input = (label: string): ZonePlanSave => ({
+      revision: 0,
+      tables: [{ key: "a", label, seats: 4, fixed: false, placement: PLACE }],
+      joins: [],
+    });
+    await expect(check(z, input(own))).resolves.toBeUndefined();
+    const other = await zone();
+    const held = fresh("Held");
+    const master = fresh("Master");
+    await liveTable(other, held);
+    await masterOf(other, [{ label: master }]);
+    for (const label of [held, master]) {
+      const error = await refusal(check(z, input(label)));
+      expect(error.code).toBe("table.label_taken");
+      expect(error.params).toEqual({ label });
+    }
+  });
+});

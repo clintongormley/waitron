@@ -207,6 +207,21 @@ describe("planReset", () => {
 });
 
 describe("targetsFromMaster", () => {
+  it("makes every live table of the zone a target: one that follows no master table goes", () => {
+    const live = [{ id: "c", label: "Old 3", planTableId: null, planned: false }];
+    expect(targetsFromMaster([], live)).toEqual([
+      {
+        tableId: "c",
+        planTableId: null,
+        label: "Old 3",
+        seats: null,
+        fixed: false,
+        placement: null,
+        remove: true,
+      },
+    ]);
+  });
+
   it("builds targets from the master, leaving out a table the master never had", () => {
     const master = [
       { id: "m1", label: "T1", seats: 4, fixed: false, placement: null },

@@ -826,3 +826,30 @@ async function inService(tableId: string): Promise<boolean> {
   );
   return table!.inService;
 }
+
+it("removes a free live table of a planned zone that follows no master table, at the next reset", async () => {
+  const z = await zone();
+  const tableId = await v.table("Unlinked free", z);
+  await masterOf(z, [{ label: "Saved new" }]);
+  await reset(z);
+  expect((await liveTablesOf(z)).map((t) => t.id)).not.toContain(tableId);
+  expect(await todayRow(tableId)).toBeUndefined();
+  expect((await liveTablesOf(z)).map((t) => t.label)).toEqual(["Saved new"]);
+  expect(await pendingRows(z)).toEqual([]);
+});
+
+it("keeps an unlinked live table seated until it is free, then removes it", async () => {
+  const z = await zone();
+  const tableId = await v.table("Unlinked seated", z);
+  const { partyId } = await seat(v, tableId);
+  await masterOf(z, [{ label: "Saved beside" }]);
+  await reset(z);
+  expect((await liveTablesOf(z)).map((t) => t.id)).toContain(tableId);
+  expect(await todayRow(tableId)).toBeDefined();
+  expect(await pendingRows(z)).toMatchObject([{ tableId, remove: true }]);
+  await finish(partyId);
+  await catchUp(z);
+  expect((await liveTablesOf(z)).map((t) => t.id)).not.toContain(tableId);
+  expect(await todayRow(tableId)).toBeUndefined();
+  expect(await pendingRows(z)).toEqual([]);
+});

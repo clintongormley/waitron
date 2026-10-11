@@ -428,10 +428,8 @@ function parseZonePlanSave(body: unknown): ZonePlanSave {
       if (typeof table.fixed !== "boolean") refuse(`${at}.fixed`);
       if (table.placement !== null && !isRecord(table.placement)) refuse(`${at}.placement`);
       const id = optionalId(table.id, `${at}.id`);
-      const liveTableId = optionalId(table.liveTableId, `${at}.liveTableId`);
       return {
         ...(id === undefined ? {} : { id }),
-        ...(liveTableId === undefined ? {} : { liveTableId }),
         key: table.key as string,
         label: table.label as string,
         seats: table.seats as number | null,

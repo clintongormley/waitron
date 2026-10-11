@@ -196,7 +196,6 @@ function zoneTables(tx: Transaction, cfg: TillConfig, zoneId: string) {
       id: diningTables.id,
       label: diningTables.label,
       planTableId: diningTables.planTableId,
-      planned: diningTables.planned,
     })
     .from(diningTables)
     .where(and(eq(diningTables.locationId, cfg.locationId), eq(diningTables.zoneId, zoneId)));
@@ -328,7 +327,6 @@ async function catchUpPass(
         zoneId,
         label: target.label,
         planTableId: target.planTableId,
-        planned: true,
       })
       .returning({ id: diningTables.id });
     createdIds.set(target, created!.id);

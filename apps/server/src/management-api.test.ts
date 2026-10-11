@@ -2795,6 +2795,35 @@ describe("floor plans", () => {
   const get = (zoneId: string, cookie: string | undefined = managerCookie) =>
     req(`/zones/${zoneId}/floor-plan`, { method: "GET" }, cookie);
 
+  it("accepts a save whose master entry carries another table's liveTableId, and ignores it", async () => {
+    const zoneId = await createZone(unique("IgnoreLiveId"));
+    const label = unique("Master");
+    const first = await put(zoneId, { revision: 0, tables: [entry("a", label)], joins: [] });
+    const { ids } = (await first.json()) as { ids: Record<string, string> };
+    const { id: otherId } = await withTransaction(suite.db, (tx) =>
+      createTable(tx, tillConfigFromVenue(venue), { label: unique("Unrelated"), zoneId }),
+    );
+    const read = (await (await get(zoneId)).json()) as { tables: { liveTableId: string }[] };
+    const response = await put(zoneId, {
+      revision: 1,
+      tables: [{ ...entry("a", label), id: ids.a, liveTableId: otherId }],
+      joins: [],
+    });
+    expect(response.status).toBe(200);
+    const after = (await (await get(zoneId)).json()) as {
+      tables: { id: string; liveTableId: string }[];
+    };
+    expect(after.tables).toEqual([
+      expect.objectContaining({ id: ids.a, liveTableId: read.tables[0]!.liveTableId }),
+    ]);
+    const malformed = await put(zoneId, {
+      revision: 2,
+      tables: [{ ...entry("a", label), id: ids.a, liveTableId: 7 }],
+      joins: [],
+    });
+    expect(malformed.status).toBe(200);
+  });
+
   it("reads a zone with no plan as an empty first draft", async () => {
     const zoneId = await createZone(unique("PlanFirst"));
     const res = await get(zoneId);

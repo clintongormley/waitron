@@ -1,4 +1,4 @@
-import { and, asc, eq, inArray, isNull, ne } from "drizzle-orm";
+import { and, asc, eq, inArray, ne } from "drizzle-orm";
 import {
   diningTables,
   floorPlanJoins,
@@ -20,8 +20,7 @@ import type { TillConfig } from "./till-config.js";
 import "./errors.js";
 
 export interface PlanTable {
-  /** The master table; null for a live table offered for adoption. */
-  id: string | null;
+  id: string;
   liveTableId: string | null;
   label: string;
   seats: number | null;
@@ -49,7 +48,6 @@ export interface ZonePlanSave {
   revision: number;
   tables: {
     id?: string;
-    liveTableId?: string;
     key: string;
     label: string;
     seats: number | null;
@@ -93,24 +91,6 @@ async function followersOf(tx: Transaction, masterIds: string[]): Promise<Map<st
   return new Map(rows.map((row) => [row.planTableId!, row.id]));
 }
 
-/** The zone's active live tables that follow no master table and never did. */
-async function adoptableOf(tx: Transaction, cfg: TillConfig, zoneId: string) {
-  return tx
-    .select({ id: diningTables.id, label: diningTables.label, capacity: diningTables.capacity })
-    .from(diningTables)
-    .where(
-      and(
-        eq(diningTables.locationId, cfg.locationId),
-        eq(diningTables.zoneId, zoneId),
-        eq(diningTables.active, true),
-        isNull(diningTables.planTableId),
-        eq(diningTables.planned, false),
-      ),
-    )
-    .orderBy(asc(diningTables.label));
-}
-
-/** The zone's master plan for the editor, with the live tables it could adopt (decision 16). */
 export async function readZonePlan(
   tx: Transaction,
   cfg: TillConfig,
@@ -153,16 +133,6 @@ export async function readZonePlan(
     for (const join of joinRows) {
       joins.push({ id: join.id, seats: join.seats, tableIds: membersOf.get(join.id)! });
     }
-  }
-  for (const live of await adoptableOf(tx, cfg, zoneId)) {
-    tables.push({
-      id: null,
-      liveTableId: live.id,
-      label: live.label,
-      seats: live.capacity,
-      fixed: false,
-      placement: null,
-    });
   }
   return {
     zoneId,
@@ -210,10 +180,9 @@ function checkEntries(input: ZonePlanSave): void {
     if (typeof table.label !== "string" || table.label.trim() === "") throw invalid(`${at}.label`);
     if (table.seats !== null && !wholeIn(table.seats, 0, 999)) throw invalid(`${at}.seats`);
     if (table.placement !== null) checkPlacement(table.placement, at);
-    if (table.id !== undefined && table.liveTableId !== undefined) throw invalid(`${at}.id`);
-    const ref = table.id ?? table.liveTableId;
+    const ref = table.id;
     if (ref !== undefined) {
-      if (ids.has(ref)) throw invalid(`${at}.${table.id === undefined ? "liveTableId" : "id"}`);
+      if (ids.has(ref)) throw invalid(`${at}.id`);
       ids.add(ref);
     }
   });
@@ -235,17 +204,7 @@ function checkEntries(input: ZonePlanSave): void {
   });
 }
 
-/**
- * Names a table of this save may not take: other zones' master names, every live table's name in
- * another zone, and this zone's never-planned tables the save does not adopt. This zone's planned
- * tables do not count: its own reset frees their names, a removed table's once its removal succeeds.
- */
-async function namesTaken(
-  tx: Transaction,
-  cfg: TillConfig,
-  zoneId: string,
-  adopted: ReadonlySet<string>,
-): Promise<Set<string>> {
+async function namesTaken(tx: Transaction, cfg: TillConfig, zoneId: string): Promise<Set<string>> {
   const masters = await tx
     .select({ label: floorPlanTables.label })
     .from(floorPlanTables)
@@ -253,18 +212,10 @@ async function namesTaken(
     .innerJoin(floorZones, eq(floorZones.id, floorPlans.zoneId))
     .where(and(eq(floorZones.locationId, cfg.locationId), ne(floorPlans.zoneId, zoneId)));
   const live = await tx
-    .select({
-      id: diningTables.id,
-      label: diningTables.label,
-      zoneId: diningTables.zoneId,
-      planned: diningTables.planned,
-    })
+    .select({ label: diningTables.label })
     .from(diningTables)
-    .where(eq(diningTables.locationId, cfg.locationId));
-  const blocking = live.filter((t) =>
-    t.zoneId === zoneId ? !t.planned && !adopted.has(t.id) : true,
-  );
-  return new Set([...masters.map((m) => m.label), ...blocking.map((t) => t.label)]);
+    .where(and(eq(diningTables.locationId, cfg.locationId), ne(diningTables.zoneId, zoneId)));
+  return new Set([...masters.map((m) => m.label), ...live.map((t) => t.label)]);
 }
 
 type MasterRow = typeof floorPlanTables.$inferSelect;
@@ -274,16 +225,9 @@ interface CheckedZonePlanSave {
   plan: Awaited<ReturnType<typeof planOf>>;
   /** The plan's tables, by label. */
   masters: MasterRow[];
-  /** The save's tables, each master entry's `liveTableId` dropped when it names that table's own live table. */
   tables: ZonePlanSave["tables"];
 }
 
-/**
- * Every check of a save; throws the first refusal, writes nothing. Labels compare by exact
- * characters, as the `dining_tables` and `floor_plan_tables` unique keys do (plain `text`, the
- * engine's default binary collation). A master entry may carry its own live table, as
- * `readZonePlan` sends it; that is not an adoption.
- */
 export async function checkZonePlanSave(
   tx: Transaction,
   cfg: TillConfig,
@@ -314,28 +258,15 @@ async function checkSave(
   const followers = await followersOf(tx, [
     ...new Set([...masterIds, ...input.tables.flatMap((t) => t.id ?? [])]),
   ]);
-  const tables = input.tables.map(({ liveTableId, ...table }): ZonePlanSave["tables"][number] =>
-    table.id !== undefined && liveTableId === followers.get(table.id)
-      ? table
-      : { ...table, ...(liveTableId === undefined ? {} : { liveTableId }) },
-  );
-  checkEntries({ ...input, tables });
-
-  const adoptable = new Set((await adoptableOf(tx, cfg, zoneId)).map((t) => t.id));
-  const adopted = new Set<string>();
+  const tables = input.tables;
+  checkEntries(input);
   for (const table of tables) {
     if (table.id !== undefined && !masterIds.has(table.id)) {
       throw new AppError("table.not_found", { tableId: table.id });
     }
-    if (table.liveTableId !== undefined) {
-      if (!adoptable.has(table.liveTableId)) {
-        throw new AppError("table.not_found", { tableId: table.liveTableId });
-      }
-      adopted.add(table.liveTableId);
-    }
   }
 
-  const taken = await namesTaken(tx, cfg, zoneId, adopted);
+  const taken = await namesTaken(tx, cfg, zoneId);
   const seen = new Set<string>();
   for (const table of tables) {
     const label = table.label.trim();
@@ -395,7 +326,6 @@ export async function saveZonePlan(
   const kept = new Set(tables.flatMap((t) => (t.id === undefined ? [] : [t.id])));
   const deleted = masters.filter((m) => !kept.has(m.id)).map((m) => m.id);
   if (deleted.length > 0) {
-    // `planned` stays true, so the next reset removes the live table.
     await tx
       .update(diningTables)
       .set({ planTableId: null })
@@ -448,14 +378,6 @@ export async function saveZonePlan(
           join.tableKeys.map((key) => ({ joinId: joinRows[i]!.id, planTableId: ids.get(key)! })),
         ),
       );
-  }
-
-  for (const table of tables) {
-    if (table.liveTableId === undefined) continue;
-    await tx
-      .update(diningTables)
-      .set({ planTableId: ids.get(table.key)!, planned: true })
-      .where(eq(diningTables.id, table.liveTableId));
   }
 
   const revision = plan!.revision + 1;
