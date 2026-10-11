@@ -20,12 +20,14 @@ export default class FileProgressReporter {
     setInterval: startInterval = globalThis.setInterval,
     clearInterval: stopInterval = globalThis.clearInterval,
     intervalMs = 60_000,
+    slowFileMs = 90_000,
   } = {}) {
     this.now = now;
     this.write = write;
     this.startInterval = startInterval;
     this.stopInterval = stopInterval;
     this.intervalMs = intervalMs;
+    this.slowFileMs = slowFileMs;
     this.running = new Map();
     this.timer = undefined;
   }
@@ -49,8 +51,18 @@ export default class FileProgressReporter {
     const key = label(testModule);
     const startedAt = this.running.get(key);
     this.running.delete(key);
-    const took = startedAt === undefined ? "" : ` ${seconds(this.now() - startedAt)}`;
-    this.write(`${PREFIX} end ${key} ${testModule.state()}${took}`);
+    if (startedAt === undefined) {
+      this.write(`${PREFIX} end ${key} ${testModule.state()}`);
+      return;
+    }
+    const elapsed = this.now() - startedAt;
+    this.write(`${PREFIX} end ${key} ${testModule.state()} ${seconds(elapsed)}`);
+    if (elapsed > this.slowFileMs) {
+      this.write(
+        `::warning title=Slow test file::${key} took ${seconds(elapsed)}; a file over ` +
+          `${this.slowFileMs / 1000}s holds up its CI shard (docs/developers/ci-and-gates.md)`,
+      );
+    }
   }
 
   onTestRunEnd() {
