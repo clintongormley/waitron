@@ -19,12 +19,14 @@ import {
   departmentReceipts,
   departments,
   departmentSalePolicies,
+  deviceProfileServiceAccess,
   departmentTransferRequests,
   orderServiceContexts,
   workingLineContexts,
   saleReceiptHeaders,
   zoneServicePolicies,
   readDepartmentTransfer,
+  setProfileServiceScope,
   listSentDepartmentTransfers,
 } from "@waitron/venue-service";
 import { setupPartyVenue, counterOrder, pay } from "./testing/party-venue.js";
@@ -64,12 +66,10 @@ it("deleted department reprints its original receipt configuration and frozen he
       .update(departmentSalePolicies)
       .set({ printTradingName: true })
       .where(eq(departmentSalePolicies.departmentId, departmentId));
-    await tx
-      .insert(departmentReceipts)
-      .values({
-        departmentId,
-        receipt: { headerSubtitle: { "es-ES": "Retained service subtitle" }, phone: "911111111" },
-      });
+    await tx.insert(departmentReceipts).values({
+      departmentId,
+      receipt: { headerSubtitle: { "es-ES": "Retained service subtitle" }, phone: "911111111" },
+    });
     return survivor.id;
   });
   const billId = await counterOrder(venue, "Paella");
@@ -137,6 +137,22 @@ it("deleted department reprints its original receipt configuration and frozen he
   expect(sent[0]!.summary.sourceDepartmentName).toBe(original!.name);
   const detail = await run((tx) => readOrderDetail(tx, billId, "all"));
   const grouping = await run((tx) => readReceiptOrder(tx, venue.cfg, billId));
+  await run(async (tx) => {
+    const profiles = await tx
+      .select()
+      .from(deviceProfileServiceAccess)
+      .where(eq(deviceProfileServiceAccess.departmentId, departmentId));
+    const survivorZone = await createServiceZone(tx, venue.cfg, {
+      name: "Survivor zone",
+      departmentId: survivorId,
+    });
+    for (const profile of profiles)
+      await setProfileServiceScope(tx, venue.cfg, profile.deviceProfileId, {
+        departmentId: survivorId,
+        allowedZoneIds: null,
+        startingZoneId: survivorZone.id,
+      });
+  });
   await run((tx) =>
     deleteDepartment(
       tx,
@@ -152,12 +168,10 @@ it("deleted department reprints its original receipt configuration and frozen he
       tradingName: "Replacement brand",
     });
     await createServiceZone(tx, venue.cfg, { name: "counter", departmentId: reused.id });
-    await tx
-      .insert(departmentReceipts)
-      .values({
-        departmentId: reused.id,
-        receipt: { headerSubtitle: { "es-ES": "Replacement subtitle" } },
-      });
+    await tx.insert(departmentReceipts).values({
+      departmentId: reused.id,
+      receipt: { headerSubtitle: { "es-ES": "Replacement subtitle" } },
+    });
   });
   await run((tx) => enqueueReceiptReprint(tx, venue.cfg, ticket, sale!.id));
   const afterPrint = (await run((tx) => tx.select().from(printJobs)))[1]!;

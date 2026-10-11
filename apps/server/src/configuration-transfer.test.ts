@@ -5803,12 +5803,10 @@ it("round-trips a deleted service hierarchy while remapping only its live namesa
       name: "Shared zone name",
       departmentId: old.id,
     });
-    await tx
-      .insert(departmentReceipts)
-      .values({
-        departmentId: old.id,
-        receipt: { headerSubtitle: { "es-ES": "Retained subtitle" } },
-      });
+    await tx.insert(departmentReceipts).values({
+      departmentId: old.id,
+      receipt: { headerSubtitle: { "es-ES": "Retained subtitle" } },
+    });
     await createTable(tx, cfg, { label: "Old table", zoneId: zone.id });
     await deleteDepartment(
       tx,
@@ -5828,7 +5826,7 @@ it("round-trips a deleted service hierarchy while remapping only its live namesa
     await tx
       .insert(departmentReceipts)
       .values({ departmentId: live.id, receipt: { headerSubtitle: { "es-ES": "Live subtitle" } } });
-    const table = await createTable(tx, cfg, { label: "Live table", zoneId: liveZone.id });
+    await createTable(tx, cfg, { label: "Live table", zoneId: liveZone.id });
     await saveZonePlan(
       tx,
       cfg,
@@ -5838,7 +5836,6 @@ it("round-trips a deleted service hierarchy while remapping only its live namesa
         revision: 0,
         tables: [
           {
-            liveTableId: table.id,
             key: "live",
             label: "Live table",
             fixed: false,

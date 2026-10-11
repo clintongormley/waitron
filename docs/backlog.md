@@ -5223,16 +5223,6 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
   the installed module list is unverified; distinguish that local build defect from an incompatible
   artifact if it can reach setup.
 
-- **The configuration import answers a routing cell's `service_zone.not_found` 400, while the grid's
-  save answers the same code 404** — left open by A374 (#1403). The owner answered on 2026-10-08
-  that every API answers a refusal by one rule based on what it means; A394-8 settles it (above).
-  [Detail](backlog/architecture.md#the-configuration-import-answers-a-routing-cells-service_zonenot_found-400-while-the-grids-save-answers-the-same-code-404)
-
-- **The configuration import answers `zone.department_inactive` 400, while the dashboard's saves
-  answer the same code 409** — left open by A393 (#1425) (`packages/venue-service/src/routes.ts`,
-  `apps/server/src/management-api.ts`), which A394's audit covers too.
-  [Detail](backlog/architecture.md#the-configuration-import-answers-zonedepartment_inactive-400-while-the-dashboards-saves-answer-the-same-code-409)
-
 - **`listOrders`'s `orderIn` filter (`apps/server/src/orders-list.ts`) is applied to `r.id`**,
   which for a sale row of the union is the sale's id, not its order's: today's only caller
   asks for collectable rows, so nothing reaches it, but a caller without `collectable: true`
