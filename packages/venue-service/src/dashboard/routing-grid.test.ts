@@ -1429,4 +1429,117 @@ describe("venue-routing-grid", () => {
       expect(lines(el, "c:drinks", "every")).toEqual(["Lunch: Kitchen"]);
     });
   });
+
+  describe("search", () => {
+    const searchField = (el: RoutingGrid) =>
+      root(el).querySelector<HTMLElementTagNameMap["wt-input"]>('wt-input[name="search"]')!;
+    const searchInput = (el: RoutingGrid) =>
+      searchField(el).shadowRoot!.querySelector<HTMLInputElement>("input")!;
+    async function search(el: RoutingGrid, query: string) {
+      await searchField(el).updateComplete;
+      await userEvent.fill(searchInput(el), query);
+      await el.updateComplete;
+    }
+    const status = (el: RoutingGrid) =>
+      root(el).querySelector<HTMLElement>('[role="status"]')!.textContent!.trim();
+    const parentOnly = (el: RoutingGrid) =>
+      bodyRows(el).map((row) => row.querySelector(".label")!.classList.contains("parent"));
+    const marks = (el: RoutingGrid, row: number) =>
+      [...bodyRows(el)[row]!.querySelectorAll("th mark")].map((mark) => mark.textContent);
+    const toggle = (el: RoutingGrid, id: string) =>
+      root(el).querySelector<HTMLButtonElement>(`button[data-category="${id}"]`)!;
+
+    it("is a wt-input named search, labelled, before Expand all", async () => {
+      const { el } = await mount();
+      const field = searchField(el);
+      expect(field.type).toBe("search");
+      expect(field.hideLabel).toBe(true);
+      expect(field.autocomplete).toBe("off");
+      expect(field.label).toBe("Search categories and products");
+      expect(field.placeholder).toBe("Search categories and products");
+      await field.updateComplete;
+      expect(searchInput(el).getAttribute("aria-label")).toBe("Search categories and products");
+      const toolbar = [...root(el).querySelector(".toolbar")!.children];
+      expect(toolbar.indexOf(field)).toBeLessThan(
+        toolbar.indexOf(root(el).querySelector('[data-test="expand-all"]')!),
+      );
+      expect(status(el)).toBe("");
+    });
+
+    it("shows a match with its parents muted, its text marked, and the count", async () => {
+      const { el } = await mount();
+      await search(el, "coc");
+      expect(rowLabels(el)).toEqual(["All categories", "▾ Drinks", "▸ Cocktails"]);
+      expect(parentOnly(el)).toEqual([true, true, false]);
+      expect(marks(el, 2)).toEqual(["Coc"]);
+      expect(marks(el, 1)).toEqual([]);
+      expect(status(el)).toBe("1 match");
+      await search(el, "co");
+      expect(status(el)).toBe("2 matches");
+      await search(el, "zzz");
+      expect(status(el)).toBe("No matches");
+    });
+
+    it("counts in Spanish", async () => {
+      setLocale("es");
+      const { el } = await mount();
+      await search(el, "coc");
+      expect(status(el)).toBe("1 coincidencia");
+      await search(el, "co");
+      expect(status(el)).toBe("2 coincidencias");
+      await search(el, "zzz");
+      expect(status(el)).toBe("Sin coincidencias");
+    });
+
+    it("opens a matched category to show its children", async () => {
+      const { el } = await mount();
+      await search(el, "coc");
+      await userEvent.click(toggle(el, "cocktails"));
+      await el.updateComplete;
+      expect(rowLabels(el)).toEqual(["All categories", "▾ Drinks", "▾ Cocktails", "Mojito"]);
+    });
+
+    it("a new query starts from its own default opening", async () => {
+      const { el } = await mount();
+      await search(el, "coc");
+      await userEvent.click(toggle(el, "cocktails"));
+      await el.updateComplete;
+      await search(el, "cock");
+      expect(rowLabels(el)).toEqual(["All categories", "▾ Drinks", "▸ Cocktails"]);
+    });
+
+    it("clearing the field restores the rows exactly as they were open before searching", async () => {
+      const { el } = await mount();
+      await userEvent.click(toggle(el, "food"));
+      await el.updateComplete;
+      const before = rowLabels(el);
+      expect(before).toEqual([
+        "All categories",
+        "▸ Drinks",
+        "▸ Cocktails",
+        "▾ Food",
+        "Burger",
+        "No category",
+        "Bread",
+      ]);
+      await search(el, "coc");
+      await userEvent.click(root(el).querySelector<HTMLElement>('[data-test="expand-all"]')!);
+      await el.updateComplete;
+      expect(rowLabels(el)).toEqual(["All categories", "▾ Drinks", "▾ Cocktails", "Mojito"]);
+      await userEvent.click(toggle(el, "drinks"));
+      await el.updateComplete;
+      await search(el, "");
+      expect(rowLabels(el)).toEqual(before);
+      expect(parentOnly(el).some(Boolean)).toBe(false);
+      expect(status(el)).toBe("");
+    });
+
+    it("Collapse all during search closes every category of the search", async () => {
+      const { el } = await mount();
+      await search(el, "coc");
+      await userEvent.click(root(el).querySelector<HTMLElement>('[data-test="collapse-all"]')!);
+      await el.updateComplete;
+      expect(rowLabels(el)).toEqual(["All categories", "▸ Drinks"]);
+    });
+  });
 });

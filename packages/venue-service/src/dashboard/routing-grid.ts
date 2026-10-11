@@ -6,6 +6,7 @@ import { currentLocale } from "@waitron/dashboard-kit";
 import { baseStyles } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
+import "@waitron/ui/src/components/wt-input.js";
 import {
   cellKey,
   followFallbacks,
@@ -38,9 +39,13 @@ import {
   expandCategory,
   pruneExpanded,
   rowInModel,
+  searchRows,
   visibleRoutingRows,
   type CellPeriodLines,
+  type MatchRange,
   type PeriodLineText,
+  type RoutingSearch,
+  type SearchRow,
 } from "./routing-grid-model.js";
 import { t } from "./strings.js";
 
@@ -101,8 +106,20 @@ export class RoutingGrid extends LitElement {
       .toolbar {
         display: flex;
         flex-wrap: wrap;
+        align-items: center;
         gap: var(--wt-space-2);
         margin-block-end: var(--wt-space-3);
+      }
+      .toolbar wt-input {
+        flex: 1 1 calc(var(--wt-space-6) * 8);
+        max-inline-size: calc(var(--wt-space-6) * 12);
+      }
+      .count {
+        color: var(--wt-color-text-muted);
+      }
+      mark {
+        background: var(--wt-color-highlight);
+        color: var(--wt-color-on-highlight);
       }
       .scroll {
         overflow-x: auto;
@@ -179,6 +196,10 @@ export class RoutingGrid extends LitElement {
       .note {
         color: var(--wt-color-text-muted);
         font-size: var(--wt-font-size-sm);
+      }
+      /* The No category heading keeps its colour: muted text is under 4.5:1 on its sunken fill. */
+      tbody tr:not(.heading) .label.parent {
+        color: var(--wt-color-text-muted);
       }
       .label {
         display: flex;
@@ -271,7 +292,11 @@ export class RoutingGrid extends LitElement {
   @property({ attribute: false }) pending: RoutingPending | null = null;
   @property({ attribute: false }) defaultRefusal: RoutingDefaultRefusal | null = null;
 
+  /** Never written while a search is shown, so clearing the search restores the tree as it was. */
   @state() private expanded: ReadonlySet<string> = new Set();
+  @state() private query = "";
+  /** The categories open in the search view; `null` until the person opens or closes one. */
+  @state() private searchOpen: ReadonlySet<string> | null = null;
   /** The cell whose editor is open. */
   @state() private editing: CellAddress | null = null;
 
@@ -283,6 +308,8 @@ export class RoutingGrid extends LitElement {
   #allRows: ReadonlyMap<string, GridRow> | null = null;
   #blank: ReturnType<typeof blankZoneCell> | null = null;
   /** Rebuilt with the model and the language, which the lines' words are in. */
+  #search: RoutingSearch | undefined;
+  #found = new Map<string, SearchRow>();
   #lines: {
     model: RoutingView;
     locale: string;
@@ -690,21 +717,24 @@ export class RoutingGrid extends LitElement {
 
   #rowLabel(entry: GridRow) {
     if (entry.row.kind === "all" || entry.row.kind === "no_category") return this.#rowName(entry);
-    if (entry.row.kind === "product") return entry.name;
+    const name = highlighted(entry.name, this.#found.get(rowKey(entry.row))?.ranges ?? []);
+    if (entry.row.kind === "product") return name;
     const id = entry.row.categoryId;
-    const expanded = this.expanded.has(id);
+    const search = this.#search;
+    const open = search === undefined ? this.expanded : search.open;
+    const expanded = open.has(id);
     return html`<button
       type="button"
       class="toggle"
       data-category=${id}
       aria-expanded=${expanded ? "true" : "false"}
       @click=${() => {
-        this.expanded = expanded
-          ? collapseCategory(this.expanded, id)
-          : expandCategory(this.expanded, id);
+        const next = expanded ? collapseCategory(open, id) : expandCategory(open, id);
+        if (search === undefined) this.expanded = next;
+        else this.searchOpen = next;
       }}
     >
-      <span class="arrow" aria-hidden="true">${expanded ? "▾" : "▸"}</span> ${entry.name}
+      <span class="arrow" aria-hidden="true">${expanded ? "▾" : "▸"}</span> ${name}
     </button>`;
   }
 
@@ -715,7 +745,9 @@ export class RoutingGrid extends LitElement {
         scope=${heading ? "rowgroup" : "row"}
         style=${styleMap({ "--routing-depth": String(entry.path.length) })}
       >
-        <span class="label">${this.#rowLabel(entry)}</span>
+        <span class=${this.#found.get(rowKey(entry.row))?.parent ? "label parent" : "label"}
+          >${this.#rowLabel(entry)}</span
+        >
       </th>
       ${repeat(
         zones,
@@ -743,22 +775,48 @@ export class RoutingGrid extends LitElement {
   override render() {
     const model = this.model;
     if (model === null) return nothing;
-    const entries = visibleRoutingRows(model, this.expanded);
+    const search = (this.#search = searchRows(model, this.query, this.searchOpen ?? undefined));
+    this.#found = new Map(search?.rows.map((found) => [rowKey(found.entry.row), found]));
+    const entries =
+      search === undefined
+        ? visibleRoutingRows(model, this.expanded)
+        : search.rows.map((found) => found.entry);
     const zones: Zone[] = [{ id: null, name: t("routing.every_zone") }, ...model.zones];
     const heading = entries.findIndex((entry) => entry.row.kind === "no_category");
     const tree = heading < 0 ? entries : entries.slice(0, heading);
     const uncategorised = heading < 0 ? [] : entries.slice(heading);
     return html`<div class="toolbar">
-        <wt-button
+        <wt-input
+          type="search"
+          name="search"
+          hide-label
+          autocomplete="off"
+          label=${t("routing.search")}
+          placeholder=${t("routing.search")}
+          .value=${this.query}
+          @wt-change=${(event: CustomEvent<{ value: string }>) => {
+            this.query = event.detail.value;
+            this.searchOpen = null;
+          }}
+        ></wt-input
+        ><wt-button
           variant="secondary"
           data-test="expand-all"
-          @click=${() => (this.expanded = expandAll(model))}
+          @click=${() => {
+            if (search === undefined) this.expanded = expandAll(model);
+            else this.searchOpen = expandAll(model);
+          }}
           >${t("routing.expand_all")}</wt-button
         ><wt-button
           variant="secondary"
           data-test="collapse-all"
-          @click=${() => (this.expanded = collapseAll())}
+          @click=${() => {
+            if (search === undefined) this.expanded = collapseAll();
+            else this.searchOpen = collapseAll();
+          }}
           >${t("routing.collapse_all")}</wt-button
+        ><span class="count" role="status"
+          >${search === undefined ? "" : matchCount(search.count)}</span
         >
       </div>
       <div class="scroll" data-test="grid-scroll">
@@ -793,6 +851,24 @@ export class RoutingGrid extends LitElement {
       ></wt-form-actions>
       ${this.#editorDialog()}`;
   }
+}
+
+function matchCount(count: number): string {
+  if (count === 0) return t("routing.matches_none");
+  if (count === 1) return t("routing.matches_one");
+  return format("routing.matches_many", { count: String(count) });
+}
+
+function highlighted(name: string, ranges: readonly MatchRange[]) {
+  if (ranges.length === 0) return name;
+  const parts = [];
+  let at = 0;
+  for (const { start, end } of ranges) {
+    parts.push(name.slice(at, start), html`<mark>${name.slice(start, end)}</mark>`);
+    at = end;
+  }
+  parts.push(name.slice(at));
+  return parts;
 }
 
 declare global {

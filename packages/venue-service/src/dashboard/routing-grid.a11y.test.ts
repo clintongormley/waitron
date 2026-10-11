@@ -136,6 +136,8 @@ const states: Record<
   {
     model: RoutingView;
     expand?: boolean;
+    /** Typed into the search field before the scan, with the number of marks it must draw. */
+    search?: { query: string; marks: number };
     open?: string;
     refusal?: RoutingGrid["refusal"];
     /** Cells and whether each must carry a period line's not-on-menus mark before the scan. */
@@ -183,6 +185,12 @@ const states: Record<
     model: disabledTarget,
     open: 'td[data-row="c:drinks"][data-zone="inside"]',
   },
+  "search with matches": { model: mockupTree, search: { query: "mo", marks: 1 } },
+  "search matching an uncategorised product": {
+    model: routing(),
+    search: { query: "bread", marks: 1 },
+  },
+  "search, no matches": { model: routing(), search: { query: "zzz", marks: 0 } },
   refusal: {
     model: routing(),
     refusal: {
@@ -203,6 +211,13 @@ describe.each(["light", "dark"] as const)("routing grid accessibility (%s)", (th
     if (state.expand) {
       el.shadowRoot!.querySelector<HTMLElement>('[data-test="expand-all"]')!.click();
       await el.updateComplete;
+    }
+    if (state.search) {
+      const field = el.shadowRoot!.querySelector<HTMLElement>('wt-input[name="search"]')!;
+      await userEvent.fill(field.shadowRoot!.querySelector("input")!, state.search.query);
+      await el.updateComplete;
+      const marks = el.shadowRoot!.querySelectorAll("tbody mark").length;
+      if (marks !== state.search.marks) throw new Error(`search drew ${marks} marks`);
     }
     if (state.open) {
       el.shadowRoot!.querySelector<HTMLButtonElement>(
@@ -226,6 +241,26 @@ describe.each(["light", "dark"] as const)("routing grid accessibility (%s)", (th
       if (drawn !== style) throw new Error(`${selector}: drawn ${drawn}, not ${style}`);
     }
     await expectNoA11yViolations(host);
+  });
+});
+
+describe.each(["light", "dark"] as const)("a highlighted match (%s)", (theme) => {
+  test("keeps its text at 4.5:1 against the highlight", async () => {
+    await mountThemed("<div></div>", theme);
+    const el = document.createElement("venue-routing-grid");
+    Object.assign(el, { model: routing() });
+    host.append(el);
+    await el.updateComplete;
+    const field = el.shadowRoot!.querySelector<HTMLElement>('wt-input[name="search"]')!;
+    await userEvent.fill(field.shadowRoot!.querySelector("input")!, "coc");
+    await el.updateComplete;
+    const mark = el.shadowRoot!.querySelector("tbody mark")!;
+    const style = getComputedStyle(mark);
+    const probe = document.createElement("div");
+    probe.style.background = "var(--wt-color-highlight)";
+    host.append(probe);
+    expect(style.backgroundColor).toBe(getComputedStyle(probe).backgroundColor);
+    expect(contrastRatio(style.color, style.backgroundColor)).toBeGreaterThanOrEqual(4.5);
   });
 });
 
