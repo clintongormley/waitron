@@ -30,12 +30,21 @@ export async function withPinCheckAhead<T>(
   const refused = (personId: string) => attempts.throttle.wouldRefuse(attempts.slot, personId);
   if (credential === undefined || refused(credential.personId)) return transaction(undefined);
   const { personId, pin } = credential;
-  return inTurn(attempts.throttle, JSON.stringify([attempts.slot, personId]), async () => {
+  return inPinTurn(attempts, personId, async () => {
     const checked = refused(personId)
       ? undefined
       : await checkPin(db, personId, pin).catch(() => undefined);
     return transaction(checked);
   });
+}
+
+/** Runs `attempt` in the turn `withPinCheckAhead` takes for `personId` on `attempts.slot`. */
+export function inPinTurn<T>(
+  attempts: PinAttempts,
+  personId: string,
+  attempt: () => Promise<T>,
+): Promise<T> {
+  return inTurn(attempts.throttle, JSON.stringify([attempts.slot, personId]), attempt);
 }
 
 /**

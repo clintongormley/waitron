@@ -31,7 +31,6 @@ import type { Database, Transaction } from "@waitron/db";
 import {
   authorize,
   authorizeManager,
-  checkPin,
   createPinThrottle,
   endSession,
   listActivePersonsWithPermission,
@@ -77,7 +76,7 @@ import type { Logger } from "./logger.js";
 import type { OnboardingIntent } from "./trading-config.js";
 import { VENUE_SERVICE } from "./modules.js";
 import type { OriginConfig, TillConfig } from "./till-config.js";
-import { overrideToCheck, withCheck, withPinCheckAhead } from "./pin-check-ahead.js";
+import { inPinTurn, overrideToCheck, withCheck, withPinCheckAhead } from "./pin-check-ahead.js";
 import { moveDishesToStation, type StationMoveRequest } from "./station-move.js";
 import { madeHereAnswer, sendingCfg } from "./made-here.js";
 import { requestCfg } from "./request-config.js";
@@ -1133,9 +1132,10 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
   // evade it.
   app.post("/api/session", (c) =>
     run(c, log, async () => {
-      const { personId: rawPersonId, pin } = await readJsonBody<{ personId: string; pin: string }>(
-        c,
-      );
+      const { personId: rawPersonId, pin } = await readJsonBody<{
+        personId: string;
+        pin?: unknown;
+      }>(c);
       // Canonicalised before it keys the throttle and the lookup: the throttle keys on the string,
       // and the `text` id column folds no spellings (`canonicaliseUuid`).
       const personId = canonicaliseUuid(rawPersonId);
@@ -1147,25 +1147,36 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       // checked.
       refuseKitchenSignIn(device);
       pinThrottle.check(device.deviceId, personId);
-      const checked = await checkPin(deps.db, personId, pin);
-      let session;
-      try {
-        session = await withTransaction(deps.db, async (tx) => {
-          refuseKitchenSignIn(await assertDeviceStillProven(tx, proof));
-          return loginWithPin(tx, {
-            deviceId: device.deviceId,
-            personId,
-            pin,
-            checked,
-          });
-        });
-      } catch (err) {
-        if (isAppError(err) && err.code === "pin.invalid") {
+      const attempts = { throttle: pinThrottle, slot: device.deviceId };
+      if (typeof pin !== "string") {
+        // In turn, so it is counted after the attempts already being checked, not before them.
+        return inPinTurn(attempts, personId, async () => {
+          pinThrottle.check(device.deviceId, personId);
           pinThrottle.recordFailure(device.deviceId, personId);
-        }
-        throw err;
+          throw new AppError("pin.invalid", {});
+        });
       }
-      pinThrottle.clear(device.deviceId, personId);
+      const session = await withPinCheckAhead(
+        deps.db,
+        { personId, pin },
+        attempts,
+        async (checked) => {
+          pinThrottle.check(device.deviceId, personId);
+          try {
+            const opened = await withTransaction(deps.db, async (tx) => {
+              refuseKitchenSignIn(await assertDeviceStillProven(tx, proof));
+              return loginWithPin(tx, { deviceId: device.deviceId, personId, pin, checked });
+            });
+            pinThrottle.clear(device.deviceId, personId);
+            return opened;
+          } catch (err) {
+            if (isAppError(err) && err.code === "pin.invalid") {
+              pinThrottle.recordFailure(device.deviceId, personId);
+            }
+            throw err;
+          }
+        },
+      );
       setSessionCookie(c, session.token, deps.secureCookies);
       // Display only: the server checks each permission itself, so a tampered client list grants
       // nothing.
