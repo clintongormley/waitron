@@ -115,7 +115,7 @@ export function layoutInvoicePages(input: ReceiptDocumentInput): InvoicePage[] {
         y += LINE_HEIGHT / 2;
         break;
       case "rule":
-        room(LINE_HEIGHT / 2);
+        room(LINE_HEIGHT / 2 + LINE_HEIGHT);
         pages.at(-1)!.elements.push({
           kind: "rule",
           x: MARGIN,

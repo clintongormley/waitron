@@ -267,8 +267,47 @@ describe("A4 line above the total and space around the logo", () => {
     expect(rule.thickness).toBeLessThanOrEqual(1);
     const above = elements[total - 2]!;
     expect(above.kind).toBe("text");
-    expect(rule.y).toBeGreaterThan(above.y + LINE - 1);
+    expect(rule.y).toBeCloseTo(above.y + LINE + (LINE / 2 - rule.thickness) / 2, 5);
     expect(rule.y + rule.thickness).toBeLessThan(elements[total]!.y);
+  });
+
+  it("keeps the rule on the same page as TOTAL when the invoice runs onto a second page", () => {
+    const ruleThenTotal = (input: ReceiptDocumentInput) => {
+      const pages = layoutInvoicePages(input);
+      const page = pages.findIndex((candidate) =>
+        candidate.elements.some(
+          (element) => element.kind === "text" && element.text.startsWith("TOTAL"),
+        ),
+      );
+      const elements = pages[page]!.elements;
+      const total = elements.findIndex(
+        (element) => element.kind === "text" && element.text.startsWith("TOTAL"),
+      );
+      return { page, before: elements[total - 1]?.kind };
+    };
+    const longInvoice = (count: number, simulated: boolean, qr: string, subtitle?: string) => ({
+      ...fixture,
+      simulated,
+      receipt: { ...fixture.receipt, headerSubtitle: subtitle },
+      result: {
+        ...fixture.result,
+        qr,
+        lines: Array.from({ length: count }, () => fixture.result.lines[1]!),
+      },
+    });
+
+    expect(ruleThenTotal(longInvoice(20, false, fixture.result.qr))).toEqual({
+      page: 2,
+      before: "rule",
+    });
+    for (const simulated of [false, true])
+      for (const qr of [fixture.result.qr, ""])
+        for (const subtitle of [undefined, "Sub"])
+          for (let count = 1; count < 120; count++)
+            expect(
+              ruleThenTotal(longInvoice(count, simulated, qr, subtitle)).before,
+              `${count} lines, simulated ${simulated}, QR ${qr !== ""}, subtitle ${subtitle}`,
+            ).toBe("rule");
   });
 
   it("draws the rule as a dark line in the PDF and never as a QR", async () => {
