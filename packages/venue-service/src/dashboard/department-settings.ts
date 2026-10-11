@@ -23,7 +23,6 @@ import type {
   VenueServiceView,
 } from "./client.js";
 import { t } from "./strings.js";
-import { format } from "./hours-view.js";
 
 type Field = keyof DepartmentSettingsInput | "receivingProfileId" | "destinationDepartmentIds";
 const copy = (value: DepartmentSettingsInput): DepartmentSettingsInput => ({
@@ -118,7 +117,6 @@ export class DepartmentSettings extends LitElement {
   @property({ attribute: false }) api?: VenueServiceApi;
   @property({ attribute: false }) model?: VenueServiceView;
   @property() departmentId = "";
-  @property({ type: Boolean }) showEnable = true;
   @property({ type: Boolean }) showReceipt = true;
   @state() private draft?: DepartmentSettingsInput;
   @state() private busy = false;
@@ -127,7 +125,6 @@ export class DepartmentSettings extends LitElement {
   @state() private failure = "";
   @state() private transferFailure = "";
   @state() private profiles: DepartmentTransfersView["profiles"] = [];
-  @state() private clash?: { id: string; name: string };
   private opened = "";
   private baseline?: DepartmentSettingsInput;
   private scope?: DraftScope<DepartmentSettingsInput>;
@@ -160,7 +157,7 @@ export class DepartmentSettings extends LitElement {
   }
   protected override willUpdate() {
     const row = this.department;
-    if (!row) return;
+    if (!row || !row.active) return;
     const policy = this.model!.salePolicies.departments.find((p) => p.departmentId === row.id);
     const source: DepartmentSettingsInput = {
       name: row.name,
@@ -182,7 +179,6 @@ export class DepartmentSettings extends LitElement {
       this.attempted = false;
       this.refused = {};
       this.failure = "";
-      this.clash = undefined;
       this.transferFailure = "";
       this.profiles = [];
       this.transferLoading = false;
@@ -234,7 +230,6 @@ export class DepartmentSettings extends LitElement {
           this.attempted = false;
           this.refused = {};
           this.failure = "";
-          this.clash = undefined;
         },
       });
       this.scope = scope;
@@ -312,7 +307,6 @@ export class DepartmentSettings extends LitElement {
     const refused = { ...this.refused };
     delete refused[field];
     this.refused = refused;
-    if (field === "name") this.clash = undefined;
     this.scope?.changed();
     if (saveActionState(this.scope).unchanged) this.failure = "";
   }
@@ -342,17 +336,7 @@ export class DepartmentSettings extends LitElement {
       field = params!.field as Field;
     if (code === "department.name_taken" || code === "department.name_disabled") {
       field = "name";
-      message = t(
-        code === "department.name_disabled"
-          ? "venue.department_name_disabled"
-          : "venue.department_name_taken",
-      );
-      if (
-        code === "department.name_disabled" &&
-        typeof params?.departmentId === "string" &&
-        typeof params.name === "string"
-      )
-        this.clash = { id: params.departmentId, name: params.name };
+      message = t("venue.department_name_taken");
     }
     if (
       code === "department_transfer.settings_invalid" &&
@@ -386,7 +370,6 @@ export class DepartmentSettings extends LitElement {
     this.attempted = true;
     this.refused = {};
     this.failure = "";
-    this.clash = undefined;
     if (Object.keys(this.errors).length) {
       void this.updateComplete.then(() => focusFirstInvalid(this.shadowRoot!));
       return;
@@ -424,7 +407,6 @@ export class DepartmentSettings extends LitElement {
         this.attempted = false;
         this.refused = {};
         this.failure = "";
-        this.clash = undefined;
         this.emit("cancelled", { departmentId: id });
       }
     };
@@ -474,7 +456,7 @@ export class DepartmentSettings extends LitElement {
   override render() {
     const row = this.department,
       draft = this.draft;
-    if (!row || !draft) return nothing;
+    if (!row || !row.active || !draft) return nothing;
     const errors = { ...(this.attempted ? this.errors : {}), ...this.refused },
       disabled = !row.active,
       state = saveActionState(this.scope);
@@ -487,8 +469,7 @@ export class DepartmentSettings extends LitElement {
     >
       ${
         !row.active
-          ? html`<p class="readonly">${t("venue.enable_department_settings")}</p>
-              ${this.showEnable ? html`<wt-button data-test="enable-department" @click=${() => this.emit("enable-department", { departmentId: row.id })}>${t("venue.enable")}</wt-button>` : nothing}`
+          ? html`<p class="readonly">${t("venue.enable_department_settings")}</p> `
           : nothing
       }
       <wt-input
@@ -503,7 +484,7 @@ export class DepartmentSettings extends LitElement {
           this.changed("name", e.detail.value);
         }}
       ></wt-input>
-      ${this.clash ? html`<wt-button variant="secondary" data-test="enable-name-clash" ?disabled=${this.busy} @click=${() => this.emit("enable-department", { departmentId: this.clash!.id })}>${format("venue.enable_name", { name: this.clash.name })}</wt-button>` : nothing}
+
       <section aria-label=${t("venue.service_settings")}>
         <h2>${t("venue.service_settings")}</h2>
         <dashboard-service-settings-fields

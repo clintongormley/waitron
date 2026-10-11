@@ -96,17 +96,7 @@ export class DepartmentsList extends LitElement {
     const actions = [
       { key: `open-department-${row.id}`, label: t("venue.open"), event: "open-department" },
       { key: `rename-department-${row.id}`, label: t("venue.rename"), event: "rename-department" },
-      row.active
-        ? {
-            key: `deactivate-department-${row.id}`,
-            label: t("venue.disable_department"),
-            event: "disable-department",
-          }
-        : {
-            key: `enable-department-${row.id}`,
-            label: t("venue.enable"),
-            event: "enable-department",
-          },
+      { key: `delete-department-${row.id}`, label: t("venue.delete"), event: "delete-department" },
     ];
     return html`<wt-row-actions label=${`${row.name}: ${t("venue.actions")}`} align="end">
       ${actions.map((action) => html`<wt-button variant="secondary" data-test=${action.key} @click=${() => this.#emit(action.event, { departmentId: row.id })}>${action.label}</wt-button>`)}
@@ -189,7 +179,7 @@ export class DepartmentsList extends LitElement {
       <wt-data-table
         viewKey="waitron.venue.departments"
         aria-label=${t("venue.departments")}
-        .rows=${model.departments}
+        .rows=${model.departments.filter((row) => row.active)}
         .columns=${columns}
         .rowKey=${(row: Department) => row.id}
         .emptyMessage=${t("venue.no_departments")}
