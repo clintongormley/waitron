@@ -386,18 +386,18 @@ deployment database has one tenant and that tenant can contain several locations
 
 ## An open page notices a box update from one response header
 
-Every server response after `/health` carries `x-waitron-build` (`BUILD_HEADER`,
-`@waitron/shared`), set by `buildHeaderMiddleware` (`apps/server/src/build-header.ts`) after the
+Every response from the main HTTPS listener after `/health` carries `x-waitron-build`
+(`BUILD_HEADER`, `@waitron/shared`), set by `buildHeaderMiddleware` (`apps/server/src/build-header.ts`) after the
 handler runs, because a handler that returns its own `Response` does not keep a header set before
-it. The failed-start recovery page is a separate app (`recoveryApp`,
-`apps/server/src/recovery-surface.ts`) that does not use the middleware, so it names no build; that
-is read, not tested.
+it. Two other apps never use the middleware, so they name no build: the
+failed-start recovery page (`recoveryApp`, `apps/server/src/recovery-surface.ts`) and the plain-HTTP
+landing listener (`buildLandingApp`, `apps/server/src/landing-app.ts`); both read, not tested.
 
 Each app's fetch passes through `watchBuild` (`@waitron/diagnostics`): the first build a response
 from the page's own origin names is the page's; the first different one sends
 `BUILD_CHANGED_EVENT` once. A missing or empty header changes nothing. Another origin's build is
 ignored, because a till's router can point at another server whose build says nothing about this
-page — comparing it would reload an idle till in a loop. No request is added for it: the
+page; by reasoning, not by a run, comparing it would reload an idle till in a loop. No request is added for it: the
 dashboard's automatic reads and the till router's 5 s probe of `/api/node` carry the header.
 
 The dashboard shows the update bar. The till reloads by itself only when `#busyForReload()`
@@ -419,8 +419,8 @@ build-header lines in `apps/server/src/boot.test.ts`, the "build updates" cases 
 checks the wiring in either app's `main.ts`. It was run once instead, on 2026-10-11, on the demo
 stack (`wa-wt demo`) in Playwright's Chromium, with a route that swapped the header's value for
 another build: the header reached both pages through the Vite dev servers (`0.0.0`, not `null`);
-the signed-in dashboard showed the bar 26 ms after its session read (`/management-api/session/me`)
-brought the new build, and after Reload showed none; a till on its lock screen with nobody signed
+the signed-in dashboard showed the bar 26 ms after the tab came back into view, which sends its
+session read (`/management-api/session/me`), and after Reload showed none; a till on its lock screen with nobody signed
 in loaded again 3711 ms after the swap began, first brought by `/api/node`; a signed-in till showed
 the bar instead, had not reloaded 15 s later, and after Reload came back on the lock screen,
 signed out. The limits kept on purpose are in `docs/backlog/dashboard.md` → "Decisions and

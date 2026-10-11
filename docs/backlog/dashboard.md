@@ -895,17 +895,17 @@ From **Variants as products (#511–#556) — what is left open.** How the model
   new build as its own and never shows the bar; a till with nobody signed in reloads even while
   someone is typing a PIN (typed digits are not a draft); a signed-in till with nothing open shows
   the bar rather than signing its operator out; once the till shows the bar it does not reload later
-  by itself; an idle till that once had a bill payment or refund refused shows the bar rather than
-  reloading, because it keeps that send's id for a resend. Every response after `/health` names the
-  box's build to whoever can reach it, signed in or not. The failed-start recovery page sends no
-  build header (read, not tested). Also known, and left:
+  by itself; an idle till whose bill payment or refund kept its send for a resend that must reuse its
+  id shows the bar rather than reloading. Every response from the main HTTPS listener after
+  `/health` names the box's build to whoever can reach it, signed in or not. The failed-start
+  recovery page and the plain-HTTP landing listener send no build header (read, not tested). Also known, and left:
   - An automatic reload clears a notice the till was showing on its lock screen, such as "Moved to
     another server. Enter your PIN." (`server.switched`, held only in the page's memory; read, not
     run).
   - A bar added while the tab is hidden is believed to show only its button until the tab is seen
     again: `wt-banner` puts its message in two animation frames after it joins the page. Not run in
     a hidden tab.
-  - After an idle sign-out the till's other requests that resend until answered — a collection, a
+  - After an idle sign-out the till's other requests that resend until answered — a hand-over, a
     draft's submit, a bill request, a station move, an adjustment, an unpaid departure — do not
     count as busy, so a reload can land while one is out. Believed safe from reading (none keeps
     anything only in the page's memory that a reload would lose); not tested.
