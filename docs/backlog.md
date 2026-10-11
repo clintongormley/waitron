@@ -3175,6 +3175,20 @@ _Formerly A6, and the old Track C's payments items; part of A9._ Detail: [backlo
 
 _Formerly A7, and the dashboard entries in the opening part of the old Track A (before A1); part of A9._ Detail: [backlog/dashboard.md](backlog/dashboard.md).
 
+- **A form's bottom message in a full-height dialog sits far above its buttons** (found by A507's
+  look, owner decision needed). `wt-modal` keeps standard and wide dialogs at full height
+  (`packages/ui/src/components/wt-modal.ts:17`) and `wt-dialog` puts the form's message at the end of
+  the body (`packages/ui/src/components/wt-dialog.ts:459`), so a short form leaves a gap of about
+  150 px between the message and the buttons (seen in the Prep stations station editor; the same at
+  main 8dcc265ae with a blank name). The Forms rule wants it "on its own line above the buttons".
+  Options: push the message to the bottom of the body, or into the footer.
+
+- **A disabled primary button reads as clickable in dark** (found by A507's look). `wt-button` only
+  fades a disabled button (`packages/ui-core/src/components/wt-button.ts:44-45`, opacity
+  `--wt-opacity-disabled`), and on a dark surface a faded primary stays a solid mid-blue, so a Save
+  held back by an invalid field looks pressable (station editor, dark, 390 and 1280). Fix: a
+  disabled colour pair in the tokens, or a quiet style while disabled, plus a dark contrast test.
+
 - **In the Customise dialog, a released column row jumps into its slot instead of sliding.** The
   house rule for a dragged row (design-system.md, the `--wt-color-surface-lifted` paragraph) has it
   slide into its slot over `--wt-duration-move`; here every row lands at once (`#endColumnDrag`,
