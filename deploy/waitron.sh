@@ -26,6 +26,8 @@ usage() {
   cat >&2 <<'USAGE'
 waitron.sh: usage:
   waitron.sh install [ref]     install or upgrade the box (ref defaults to main)
+  waitron.sh update [ref]      same as install
+  waitron.sh status            show each running Waitron image and its build time
   waitron.sh reset [--all]     wipe the box to a clean state (keeps the certificate; --all drops it too)
   waitron.sh --reset [--all] [--yes] [--force-production] install [ref]
                                build or pull ref's images, then wipe the box as reset does and start it
@@ -327,13 +329,26 @@ select_image() {
     docker compose -f "$WAITRON_DIR/compose.yml" pull \
       || die "could not pull the box's images: check the network and that the image registries (GHCR, Docker Hub) are reachable, or whether an image is published for this machine's architecture ($(uname -m))"
   else
-    local safe tag agent_tag
+    local safe tag agent_tag sha created url
     safe="$(printf '%s' "$ref" | tr -c 'A-Za-z0-9._-' '-')"; safe="${safe:0:100}"
     tag="waitron:${safe}"; agent_tag="waitron-print-agent:${safe}"
-    # Full git URL inline (not via a variable) so the guard can pin `waitron.git#<ref>` as text.
-    # Docker fetches the ref itself; -f is relative to the fetched repo root, not the local checkout.
-    docker build -t "$tag" -f deploy/Dockerfile "https://github.com/clintongormley/waitron.git#${ref}"
-    docker build -t "$agent_tag" -f deploy/Dockerfile --target print-agent "https://github.com/clintongormley/waitron.git#${ref}"
+    url="https://api.github.com/repos/clintongormley/waitron/commits/${ref//%/%25}"
+    url="${url//#/%23}"
+    if command -v curl >/dev/null 2>&1; then
+      sha="$(curl -fsSL --connect-timeout 15 --max-time 60 -H 'Accept: application/vnd.github.sha' "$url")" \
+        || die "could not resolve $ref to a commit — check the network and the ref"
+    else
+      sha="$(wget -qO- --timeout=60 --tries=1 --header='Accept: application/vnd.github.sha' "$url")" \
+        || die "could not resolve $ref to a commit — check the network and the ref"
+    fi
+    [[ "$sha" =~ ^[0-9a-f]{40}$ ]] || die "could not resolve $ref to a commit — GitHub returned no full SHA"
+    created="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
+    docker build -t "$tag" -f deploy/Dockerfile --build-arg "WAITRON_BUILD_ID=$sha" \
+      --build-arg "WAITRON_IMAGE_CREATED=$created" --build-arg "WAITRON_IMAGE_REF=$ref" \
+      "https://github.com/clintongormley/waitron.git#${sha}"
+    docker build -t "$agent_tag" -f deploy/Dockerfile --target print-agent --build-arg "WAITRON_BUILD_ID=$sha" \
+      --build-arg "WAITRON_IMAGE_CREATED=$created" --build-arg "WAITRON_IMAGE_REF=$ref" \
+      "https://github.com/clintongormley/waitron.git#${sha}"
     env_set WAITRON_IMAGE "$tag"
     env_set WAITRON_PRINT_AGENT_IMAGE "$agent_tag"
   fi
@@ -375,10 +390,44 @@ EOF
   if command -v qrencode >/dev/null 2>&1; then qrencode -t ANSIUTF8 "http://waitron.local/setup/trust"; echo; fi
 }
 
+print_image_versions() {
+  local service container image labels sha created ref local_time epoch
+  for service in app print-agent; do
+    container="$(docker compose -f "$WAITRON_DIR/compose.yml" ps -q "$service")"
+    if [ -z "$container" ]; then
+      echo "$service: not running"
+      continue
+    fi
+    # Inspect the container's immutable image id: its tag may have moved since it started.
+    image="$(docker inspect -f '{{.Image}}' "$container")"
+    labels="$(docker image inspect --format '{{printf "%s|%s|%s" (index .Config.Labels "org.opencontainers.image.revision") (index .Config.Labels "org.opencontainers.image.created") (index .Config.Labels "org.opencontainers.image.ref.name")}}' "$image")"
+    IFS='|' read -r sha created ref <<<"$labels"
+    if ! [[ "$sha" =~ ^[0-9a-f]{40}$ ]] || [ -z "$created" ] || [ -z "$ref" ]; then
+      echo "$service: unknown — built before A490"
+      continue
+    fi
+    if ! local_time="$(date -d "$created" '+%Y-%m-%d %H:%M:%S %Z' 2>/dev/null)"; then
+      if epoch="$(date -j -u -f '%Y-%m-%dT%H:%M:%SZ' "$created" '+%s' 2>/dev/null)"; then
+        local_time="$(date -r "$epoch" '+%Y-%m-%d %H:%M:%S %Z')" || local_time="unknown"
+      else
+        local_time="unknown"
+      fi
+    fi
+    echo "$service: running ${sha:0:12} ($ref), built $local_time https://github.com/clintongormley/waitron/commit/$sha"
+  done
+}
+
+cmd_status() {
+  [ -f "$WAITRON_DIR/compose.yml" ] || die "no box at $WAITRON_DIR — run 'waitron.sh install' first"
+  cd "$WAITRON_DIR"
+  print_image_versions
+}
+
 # Show the ready banner on stdout, and — on a headless box wired to a monitor — also on the physical
 # console (/dev/tty1), so whoever is standing at the box sees the setup QR without a keyboard or SSH.
 # Guarded on writability so a box with no tty1 (a container, a serial console) stays silent there.
 announce_ready() {
+  print_image_versions
   print_links
   if [ -w /dev/tty1 ]; then print_links >/dev/tty1 2>/dev/null || true; fi
 }
@@ -658,7 +707,7 @@ main() {
   done
   local verb="${1:-}"
   case "$verb" in
-    install | reset | "" | -h | --help) ;;
+    install | update | status | reset | "" | -h | --help) ;;
     *) die "unknown command '$verb'" 2 ;;
   esac
   if [ -n "$first" ]; then
@@ -667,7 +716,8 @@ main() {
     [ "$verb" = "install" ] || die "--reset goes only with install: 'waitron.sh --reset install [ref]'" 2
   fi
   case "$verb" in
-    install) shift; cmd_install "$@" ;;
+    install | update) shift; cmd_install "$@" ;;
+    status) shift; cmd_status "$@" ;;
     reset)   shift; cmd_reset "$@" ;;
     *) usage ;;
   esac

@@ -2,6 +2,8 @@
 #   docker build -f deploy/Dockerfile -t waitron:dev .   (`pnpm build:image`)
 
 ARG WAITRON_BUILD_ID=development
+ARG WAITRON_IMAGE_CREATED
+ARG WAITRON_IMAGE_REF
 
 # ---------------------------------------------------------------------------
 # Build stage — install the workspace and run the builds that already exist.
@@ -66,6 +68,12 @@ RUN set -eux; \
 # Runs as the unprivileged `node` user the base image already ships (uid 1000).
 # ---------------------------------------------------------------------------
 FROM node:26-slim AS print-agent
+ARG WAITRON_BUILD_ID
+ARG WAITRON_IMAGE_CREATED
+ARG WAITRON_IMAGE_REF
+LABEL org.opencontainers.image.revision="${WAITRON_BUILD_ID}" \
+      org.opencontainers.image.created="${WAITRON_IMAGE_CREATED}" \
+      org.opencontainers.image.ref.name="${WAITRON_IMAGE_REF}"
 # python3-minimal goes in alone and first, so the packages it adds to the base image can be listed:
 # their Debian copyright files ship in /app/third-party/python3-minimal (deploy/third-party/README.md).
 # apt's own read timeout did not end a wait on a mirror sending a byte every 5 s, so each apt-get runs
@@ -140,6 +148,11 @@ RUN set -eux; \
 FROM node:26-slim AS runtime
 
 ARG WAITRON_BUILD_ID
+ARG WAITRON_IMAGE_CREATED
+ARG WAITRON_IMAGE_REF
+LABEL org.opencontainers.image.revision="${WAITRON_BUILD_ID}" \
+      org.opencontainers.image.created="${WAITRON_IMAGE_CREATED}" \
+      org.opencontainers.image.ref.name="${WAITRON_IMAGE_REF}"
 
 # libcap2-bin is here for the setcap below. apt-get is bounded as in the print-agent stage.
 RUN set -eux; \

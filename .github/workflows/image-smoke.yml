@@ -103,6 +103,10 @@ jobs:
       # which must not publish.
       # No remote layer cache: it reused only the layers before `COPY . .`, and a download of it
       # once stalled 46 min. Receipt: docs/developers/ci-and-gates.md.
+      - name: Record image build time
+        id: provenance
+        run: echo "created=$(date -u '+%Y-%m-%dT%H:%M:%SZ')" >> "$GITHUB_OUTPUT"
+
       - name: Build the image
         uses: docker/build-push-action@v7
         with:
@@ -112,6 +116,10 @@ jobs:
           load: true
           tags: waitron:ci
           build-args: WAITRON_BUILD_ID=${{ github.sha }}
+          labels: |
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.created=${{ steps.provenance.outputs.created }}
+            org.opencontainers.image.ref.name=${{ github.head_ref || github.ref_name }}
 
       - name: Build the print-agent image
         uses: docker/build-push-action@v7
@@ -123,10 +131,31 @@ jobs:
           load: true
           tags: waitron-print-agent:ci
           build-args: WAITRON_BUILD_ID=${{ github.sha }}
+          labels: |
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.created=${{ steps.provenance.outputs.created }}
+            org.opencontainers.image.ref.name=${{ github.head_ref || github.ref_name }}
 
       # `--wait` blocks on the compose healthcheck, which passes on EITHER /health or
       # /setup-api/status — /health is 503 by design on a setup box, so waiting on that alone would
       # sit here for the whole timeout and then call a healthy box broken.
+      - name: Inspect both images' source labels
+        env:
+          EXPECTED_SHA: ${{ github.sha }}
+          EXPECTED_CREATED: ${{ steps.provenance.outputs.created }}
+          EXPECTED_REF: ${{ github.head_ref || github.ref_name }}
+        run: |
+          set -euo pipefail
+          for image in waitron:ci waitron-print-agent:ci; do
+            labels=$(docker image inspect --format '{{json .Config.Labels}}' "$image")
+            echo "$image: $labels"
+            jq -e --arg sha "$EXPECTED_SHA" --arg created "$EXPECTED_CREATED" --arg ref "$EXPECTED_REF" '
+              .["org.opencontainers.image.revision"] == $sha and
+              .["org.opencontainers.image.created"] == $created and
+              .["org.opencontainers.image.ref.name"] == $ref
+            ' <<< "$labels"
+          done
+
       - name: Bring the node up on blank volumes
         run: docker compose up -d --wait --wait-timeout 300
 

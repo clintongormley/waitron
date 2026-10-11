@@ -5220,6 +5220,10 @@ shipping-style wizard; `wa-wt reset demo|onboarding [worktree-name]` wipes and r
 
 ## Standing decisions
 
+- **Box image identity (A490, owner 2026-10-11):** the script reports the commit and build time
+  of each running Waitron image. [Decision](backlog/box.md#decisions-and-deliberate-limits).
+
+
 From the 2026-09-05 whole-project design review and since. They supersede older spec text where they
 conflict.
 

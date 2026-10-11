@@ -1674,3 +1674,23 @@ A shell sequence separated by newlines reports only its last command's status. U
 validation steps, or capture each status separately. Cost: the A3 review-fix command ran a successful
 build after a failed server typecheck and reported success; the pre-push hook correctly refused the
 test's incomplete response type. Receipt: #335.
+
+
+## The box reports the running image's identity
+
+A490 stamps the revision and UTC creation time on both final Dockerfile targets; CI also labels
+the published and smoke images with the requested ref. The smoke job prints each image's complete
+labels and compares revision, creation time and ref against that build's inputs.
+`waitron.sh status` reads the running containers' immutable image IDs, rather than the tags that
+may have been pulled since those containers started. Branch installs resolve one commit for both
+builds through the commit API, without requiring git on the box.
+
+| Source | Source wording | Use |
+| --- | --- | --- |
+| [GitHub, Get a commit](https://docs.github.com/en/rest/commits/commits#get-a-commit), checked 2026-10-11 | “Returns the commit's SHA-1 hash.” (`application/vnd.github.sha`) | Resolve a branch, tag or abbreviated commit before building. |
+
+Probe on 2026-10-11: `curl -fsSL -H 'Accept: application/vnd.github.sha' https://api.github.com/repos/clintongormley/waitron/commits/main`
+printed `fb6a474b830ceb51ce96babd133a6a635e5f725d`. The shell regressions cover resolution failure,
+both pinned builds, status without labels or running containers, different revisions for the two
+services, and UTC-to-local conversion. The source guards read text; the smoke job inspects the
+built images.
