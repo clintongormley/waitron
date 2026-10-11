@@ -14,8 +14,6 @@ import { PHONE_WIDTH } from "../widgets/language-chooser-styles.js";
 import { customElement, property, state } from "lit/decorators.js";
 import { trackDialog } from "../widgets/track-dialog.js";
 import type { TimingBand } from "@waitron/shared";
-// Importing the `@waitron/ui` barrel also registers `<wt-floor-canvas>`, `<wt-floor-map>` and
-// `<wt-table-token>`, which the map views and the tray use by tag.
 import {
   baseStyles,
   cropToTables,
@@ -29,13 +27,7 @@ import {
   resolveActiveTabKey,
   toFloorTable,
 } from "@waitron/ui";
-import type {
-  FloorCanvasCopy,
-  FloorMapDrop,
-  FloorMapTable,
-  FloorTable,
-  ZoneTab,
-} from "@waitron/ui";
+import type { FloorMapDrop, FloorMapTable, FloorTable, ZoneTab } from "@waitron/ui";
 import { decimal, formatMoney, isZeroDecimal } from "@waitron/shared";
 import { currentLocale, t } from "../i18n/t.js";
 import "../widgets/seat-dialog.js";
@@ -57,13 +49,7 @@ import {
 } from "../state/floor-today.js";
 import { partyPaid, unsentText } from "../widgets/table-details-sheet.js";
 import type { SeatConfirmDetail } from "../widgets/seat-dialog.js";
-import {
-  drawnGroupKey,
-  isPlannedZone,
-  listedTables,
-  mapTables,
-  seatsFor,
-} from "../state/floor-map.js";
+import { drawnGroupKey, listedTables, mapTables, seatsFor } from "../state/floor-map.js";
 import type { FloorZone, TableState, TableParty, TillApi, TodayPlacement } from "../api/client.js";
 import { delayUntil, reminderDueAt } from "../state/release-reminder.js";
 import { readyByStation, signalOf, type StationReady } from "../state/table-signals.js";
@@ -90,8 +76,6 @@ export interface FloorRefreshDetail {
   poll: true;
 }
 
-type PlacedTable = TableState & { posX: number; posY: number };
-
 type JoinAction = Extract<DropAction, { kind: "join" }>;
 
 const asksSeats = (refused: { code?: string; field?: unknown }): boolean =>
@@ -114,7 +98,6 @@ interface ZoneOnScreen {
   view: "map" | "list";
   listed: TableState[];
   onMap: FloorMapTable[];
-  placed: PlacedTable[];
   unplaced: TableState[];
 }
 
@@ -156,10 +139,7 @@ export class TillFloorScreen extends LitElement {
         font-weight: var(--wt-font-weight-bold);
       }
 
-      /* The floor-body control cluster: the view toggle and the manager-only edit toggle. A sibling of
-         the header (never inside it), so it survives when the standalone header is dropped in an
-         embedded card host (SP-B2.1) — these toggles are floor function, not shell chrome. Back lives
-         in the header instead. */
+      /* The view toggle stays visible in an embedded card without its own header. */
       .actions {
         display: flex;
         flex-wrap: wrap;
@@ -173,8 +153,6 @@ export class TillFloorScreen extends LitElement {
         gap: var(--wt-space-2);
       }
 
-      /* The map view: the shared canvas with the unplaced-tables tray stacked beneath it. The tray's
-         own rules (.tray / .tray-label / .tray-item) live in @waitron/ui's shared floorTrayStyles. */
       .map {
         display: flex;
         flex-direction: column;
@@ -562,10 +540,8 @@ export class TillFloorScreen extends LitElement {
     this.#watchFloor();
   }
 
-  /** A planned map shows statuses other tills change, so it asks for the floor every 15 s. */
   #watchFloor(): void {
-    const drawsPlannedMap = this.#zone.planned && this.#zone.view === "map";
-    if (!drawsPlannedMap || !this.isConnected) {
+    if (this.#zone.view !== "map" || !this.isConnected) {
       clearInterval(this.#rereadTimer);
       this.#rereadTimer = undefined;
       return;
@@ -1056,25 +1032,6 @@ export class TillFloorScreen extends LitElement {
     });
   }
 
-  /** Only the overridden keys are supplied; the canvas fills the rest from its English defaults. */
-  #canvasCopy(): Partial<FloorCanvasCopy> {
-    return {
-      floor: t("floor.title"),
-      covers: t("floor.capacity"),
-      toServe: t("floor.to_serve"),
-      reserved: t("floor.reserved"),
-      unsent: t("floor.unsent_mark"),
-      fireDue: t("floor.fire_due"),
-      zone: t("floor.zone"),
-      rotate: t("floor.rotate"),
-      remove: t("floor.remove"),
-      shape: t("floor.shape"),
-      shapeRound: t("floor.shape_round"),
-      shapeSquare: t("floor.shape_square"),
-      shapeRect: t("floor.shape_rect"),
-    };
-  }
-
   #zoneOnScreen(): ZoneOnScreen {
     const inputs = [
       this.tables,
@@ -1102,22 +1059,14 @@ export class TillFloorScreen extends LitElement {
     const visible = this.tables.filter((table) =>
       activeKey === null ? isTableZoneless(table, knownZoneIds) : table.zoneId === activeKey,
     );
-    const planned = isPlannedZone(visible);
-    const listed = planned ? listedTables(visible) : visible;
+    const planned = visible.some((table) => table.today !== null);
+    const listed = listedTables(visible);
     const pending = this.#pending;
     const drawn = pending === null ? visible : visible.map((table) => placedAt(table, pending));
-    const onMap = planned ? mapTables(drawn) : [];
-    // The server writes and nulls the four placement columns together, so `posX` alone tells placed
-    // from unplaced.
-    const placed = planned
-      ? []
-      : visible.filter((table): table is PlacedTable => table.posX != null && table.posY != null);
+    const onMap = mapTables(drawn);
     const mapIds = new Set(onMap.map((table) => table.id));
-    const unplaced = planned
-      ? listed.filter((table) => !mapIds.has(table.id))
-      : visible.filter((table) => table.posX == null);
-    const drawnCount = planned ? onMap.length : placed.length;
-    const view = this.viewOverride ?? (drawnCount > 0 ? "map" : "list");
+    const unplaced = listed.filter((table) => !mapIds.has(table.id));
+    const view = this.viewOverride ?? (onMap.length > 0 ? "map" : "list");
     return {
       tabs,
       refusedZone,
@@ -1127,7 +1076,6 @@ export class TillFloorScreen extends LitElement {
       view,
       listed,
       onMap,
-      placed,
       unplaced,
     };
   }
@@ -1141,8 +1089,7 @@ export class TillFloorScreen extends LitElement {
   }
 
   override render() {
-    const { tabs, refusedZone, activeKey, planned, view, listed, onMap, placed, unplaced } =
-      this.#zone;
+    const { tabs, refusedZone, activeKey, planned, view, listed, onMap, unplaced } = this.#zone;
     return html`
       <section class="screen" aria-label=${t("floor.title")}>
         ${
@@ -1196,27 +1143,11 @@ export class TillFloorScreen extends LitElement {
         ${
           view === "list"
             ? html`<div class="grid">${listed.map((table) => this.#card(table))}</div>`
-            : planned
-              ? this.#plannedMap(onMap, unplaced, activeKey)
-              : this.#map(placed, unplaced)
+            : this.#plannedMap(onMap, unplaced, activeKey)
         }
         ${this.#seatDialog()} ${this.#clearDialog()} ${this.#detailsSheet()} ${this.#seatsPrompt()}
         ${this.#billChoice()} ${this.#joinWith()}
       </section>
-    `;
-  }
-
-  #map(placed: PlacedTable[], unplaced: TableState[]): TemplateResult {
-    return html`
-      <div class="map">
-        <wt-floor-canvas
-          .tables=${placed.map((table) => this.#toFloorTable(table))}
-          .copy=${this.#canvasCopy()}
-          .locale=${currentLocale()}
-          @wt-open-table=${(event: Event) => this.#onCanvasOpen(event)}
-        ></wt-floor-canvas>
-        ${this.#tray(unplaced)}
-      </div>
     `;
   }
 
