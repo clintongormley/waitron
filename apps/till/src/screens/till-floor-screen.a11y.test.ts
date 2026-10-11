@@ -178,58 +178,6 @@ const tables: TableState[] = [
   },
 ];
 
-// One PLACED table (on the canvas) and one UNPLACED (the tray).
-const placedTables: TableState[] = [
-  {
-    id: "t1",
-    label: "1",
-    zoneId: "z1",
-    capacity: 4,
-    state: "open-tab",
-    condition: "free",
-    hasOpenTab: true,
-    tabLineCount: 3,
-    tabTotal: "47.50",
-    pendingDeliveries: 0,
-    pendingToServe: 2,
-    readyToServe: 1,
-    enRoute: 0,
-    timingBand: "fresh",
-    status: { id: "s1", label: "Reservada", color: "#8b5cf6" },
-    nextReservation: { time: "20:30" },
-    posX: 250,
-    posY: 400,
-    shape: "round",
-    rotation: 0,
-    today: null,
-    signals: [],
-    party: null,
-  },
-  {
-    id: "t4",
-    label: "4",
-    zoneId: "z1",
-    capacity: 2,
-    state: "free",
-    condition: "free",
-    hasOpenTab: false,
-    pendingDeliveries: 0,
-    pendingToServe: 0,
-    readyToServe: 0,
-    enRoute: 0,
-    timingBand: "fresh",
-    status: null,
-    nextReservation: null,
-    posX: null,
-    posY: null,
-    shape: null,
-    rotation: null,
-    today: null,
-    signals: [],
-    party: null,
-  },
-];
-
 const party = {
   revision: 4,
   guestCount: 3,
@@ -558,27 +506,6 @@ describe.each(["light", "dark"] as const)("till-floor-screen a11y (%s theme)", (
       }),
     );
     await el.updateComplete;
-    await expectNoA11yViolations(host);
-  });
-
-  it("has no violations rendering the MAP view with the tray + Editar plano + the Spanish edit inspector", async () => {
-    const { el, host } = await mountWidget<TillFloorScreen>(
-      "till-floor-screen",
-      { zones, tables: placedTables, canEdit: true },
-      theme,
-    );
-    el.shadowRoot!.querySelector<HTMLElement>("[data-edit-toggle]")!.click();
-    await el.updateComplete;
-    // SELECT a table on the canvas so its edit inspector is in the tree for axe; the inspector needs the
-    // canvas's own `selectedId`, which its `#onTap` sets.
-    const canvas = el.shadowRoot!.querySelector("wt-floor-canvas") as HTMLElement & {
-      shadowRoot: ShadowRoot;
-      updateComplete: Promise<unknown>;
-    };
-    canvas.shadowRoot.querySelector<HTMLElement>("[data-table]")!.click();
-    await canvas.updateComplete;
-    await el.updateComplete;
-    expect(canvas.shadowRoot.querySelector(".inspector")).not.toBeNull();
     await expectNoA11yViolations(host);
   });
 });

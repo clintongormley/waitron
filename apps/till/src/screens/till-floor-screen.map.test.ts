@@ -7,7 +7,7 @@ import { mapTables } from "../state/floor-map.js";
 import { currentLocale, setLocale } from "../i18n/t.js";
 import type { TillFloorScreen } from "./till-floor-screen.js";
 import "./till-floor-screen.js";
-import type { FloorZone, TableState, TableToday, TillApi } from "../api/client.js";
+import type { FloorZone, TableState, TableToday } from "../api/client.js";
 
 function zone(over: Partial<FloorZone> = {}): FloorZone {
   return {
@@ -244,37 +244,15 @@ describe("till-floor-screen on the new map", () => {
     );
   });
 
-  it("hides Edit plan while a planned zone shows", async () => {
+  it("offers no Edit plan, and a tray table tapped opens it", async () => {
     const el = await mount({
-      canEdit: true,
-      zones: [zone(), zone({ id: "z2", name: "Terraza", displayOrder: 1 })],
-      tables: [planned("t1"), placed("t2", { zoneId: "z2" })],
+      tables: [planned("t1"), planned("t4", { ...seated, today: today({ placement: null }) })],
     });
+    expect("canEdit" in el).toBe(false);
     expect(el.shadowRoot!.querySelector("[data-edit-toggle]")).toBeNull();
-    await click(el, '[data-zone="z2"]');
-    expect(el.shadowRoot!.querySelector("[data-edit-toggle]")).not.toBeNull();
-  });
-
-  it("an Edit plan left on in another zone does not place a planned zone's tray table", async () => {
-    const setTablePlacement = vi.fn().mockResolvedValue(undefined);
-    const api = { setTablePlacement } as unknown as TillApi;
-    const el = await mount({
-      canEdit: true,
-      api,
-      zones: [zone(), zone({ id: "z2", name: "Terraza", displayOrder: 1 })],
-      tables: [
-        planned("t1"),
-        planned("t4", { ...seated, today: today({ placement: null }) }),
-        placed("t2", { zoneId: "z2" }),
-      ],
-    });
-    await click(el, '[data-zone="z2"]');
-    await click(el, "[data-edit-toggle]");
-    await click(el, '[data-zone="z1"]');
     const seen = captureOpenTable(el);
     await click(el, "[data-tray-table=t4]");
     expect(seen.detail).toEqual({ tableId: "t4", seated: true });
-    expect(setTablePlacement).not.toHaveBeenCalled();
   });
 
   it("gives the map the active zone as its fitKey", async () => {

@@ -2684,67 +2684,6 @@ describe("TillApi", () => {
     ).rejects.toMatchObject({ code: "bill.presented", workingOrderId: "wo-from" });
   });
 
-  // --- Floor-plan placement (the on-till routes, not the management ones) ---
-
-  it("setTablePlacement PUTs the placement body to the TABLE's /placement route (empty 204 body)", async () => {
-    const fetchStub = vi.fn().mockResolvedValue(new Response(null, { status: 204 }));
-    const api = new TillApi("", fetchStub);
-
-    await expect(
-      api.setTablePlacement("tbl-1", {
-        posX: 100,
-        posY: 200,
-        shape: "round",
-        rotation: 0,
-        zoneId: "z1",
-      }),
-    ).resolves.toBeUndefined();
-
-    expect(fetchStub).toHaveBeenCalledWith(
-      "/api/tables/tbl-1/placement",
-      expect.objectContaining({
-        method: "PUT",
-        credentials: "include",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ posX: 100, posY: 200, shape: "round", rotation: 0, zoneId: "z1" }),
-      }),
-    );
-  });
-
-  it("clearPlacement DELETEs the TABLE's /placement route (empty 204 body, no request body)", async () => {
-    const fetchStub = vi.fn().mockResolvedValue(new Response(null, { status: 204 }));
-    const api = new TillApi("", fetchStub);
-
-    await expect(api.clearPlacement("tbl-1")).resolves.toBeUndefined();
-
-    expect(fetchStub).toHaveBeenCalledWith(
-      "/api/tables/tbl-1/placement",
-      expect.objectContaining({ method: "DELETE", credentials: "include" }),
-    );
-    // An un-place carries neither a request body nor a content-type header.
-    const init = fetchStub.mock.calls[0]![1] as RequestInit;
-    expect(init.body).toBeUndefined();
-    expect(init.headers).toBeUndefined();
-  });
-
-  it("setTablePlacement surfaces { code } when the placement value is invalid", async () => {
-    const fetchStub = vi
-      .fn()
-      .mockResolvedValue(
-        new Response(JSON.stringify({ error: { code: "placement.invalid" } }), { status: 400 }),
-      );
-
-    await expect(
-      new TillApi("", fetchStub).setTablePlacement("tbl-1", {
-        posX: 9999,
-        posY: 0,
-        shape: "round",
-        rotation: 0,
-        zoneId: "z1",
-      }),
-    ).rejects.toMatchObject({ code: "placement.invalid" });
-  });
-
   // --- Device mode: the httpOnly device cookie rides `credentials: "include"`, so these never send a
   // token themselves. ---
 
