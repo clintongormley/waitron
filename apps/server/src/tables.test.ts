@@ -1,3 +1,6 @@
+import { closePartyTables } from "./parties.js";
+import { deleteZone } from "@waitron/venue-service";
+import { floorDeletionFor } from "./floor-delete.js";
 import { createTable } from "./testing/live-table.js";
 import { createZone } from "./testing/service-zone.js";
 import { randomUUID } from "node:crypto";
@@ -8,6 +11,8 @@ import {
   DEFAULT_TIME_ZONE,
   diningTables,
   floorZones,
+  parties,
+  partyTables,
   kitchenTimingDefaults,
   locations,
   nowIso,
@@ -631,4 +636,90 @@ it("renames a zone onto a deleted name while retaining the deleted row", async (
     ]),
   );
   await asApp(cfg, (tx) => updateZone(tx, cfg, source.id, { name: "Dining" }));
+});
+
+it("refuses zone removal while an open party occupies a table there", async () => {
+  const cfg = await setupVenue();
+  const { id: zoneId } = await asApp(cfg, (tx) => createZone(tx, cfg, { name: "Terrace" }));
+  const { id: tableId } = await asApp(cfg, (tx) => createTable(tx, cfg, { label: "T9", zoneId }));
+  await asApp(cfg, async (tx) => {
+    const [party] = await tx
+      .insert(parties)
+      .values({ openedBy: randomUUID() })
+      .returning({ id: parties.id });
+    await tx.insert(partyTables).values({ partyId: party!.id, tableId });
+  });
+
+  await expect(
+    asApp(cfg, (tx) =>
+      deleteZone(tx, cfg, floorDeletionFor(cfg, []), zoneId, new Date("2026-10-11T12:00:00Z")),
+    ),
+  ).rejects.toMatchObject({
+    code: "zone.table_in_use",
+    params: { zoneId, tableId, tableName: "T9" },
+  });
+  expect(
+    (
+      await db
+        .select({ active: floorZones.active })
+        .from(floorZones)
+        .where(eq(floorZones.id, zoneId))
+    )[0],
+  ).toEqual({ active: true });
+});
+
+it("allows removing a zone with a closed party while another zone has an open party", async () => {
+  const cfg = await setupVenue();
+  const { id: removedZone } = await asApp(cfg, (tx) => createZone(tx, cfg, { name: "Dining" }));
+  const { id: otherZone } = await asApp(cfg, (tx) => createZone(tx, cfg, { name: "Bar" }));
+  const { id: removedTable } = await asApp(cfg, (tx) =>
+    createTable(tx, cfg, { label: "D1", zoneId: removedZone }),
+  );
+  const { id: otherTable } = await asApp(cfg, (tx) =>
+    createTable(tx, cfg, { label: "B1", zoneId: otherZone }),
+  );
+  await asApp(cfg, async (tx) => {
+    const [closed] = await tx
+      .insert(parties)
+      .values({
+        openedBy: randomUUID(),
+        state: "closed",
+        closedAt: new Date().toISOString(),
+      })
+      .returning({ id: parties.id });
+    const [open] = await tx
+      .insert(parties)
+      .values({ openedBy: randomUUID() })
+      .returning({ id: parties.id });
+    await tx.insert(partyTables).values([
+      { partyId: closed!.id, tableId: removedTable },
+      { partyId: open!.id, tableId: otherTable },
+    ]);
+    await closePartyTables(tx, closed!.id);
+  });
+
+  await expect(
+    asApp(cfg, (tx) =>
+      deleteZone(tx, cfg, floorDeletionFor(cfg, []), removedZone, new Date("2026-10-11T12:00:00Z")),
+    ),
+  ).resolves.toMatchObject({ target: { id: removedZone, name: "Dining" }, refusals: [], ends: [] });
+  expect(
+    (
+      await db
+        .select({ active: floorZones.active })
+        .from(floorZones)
+        .where(eq(floorZones.id, otherZone))
+    )[0],
+  ).toEqual({ active: true });
+  expect(
+    (
+      await db
+        .select({
+          id: diningTables.id,
+          inService: tableInService(diningTables.id).mapWith(Boolean),
+        })
+        .from(diningTables)
+        .where(eq(diningTables.id, otherTable))
+    )[0],
+  ).toEqual({ id: otherTable, inService: true });
 });
