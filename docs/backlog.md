@@ -1522,12 +1522,15 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   (`packages/venue-service/src/dashboard/routing-client.ts`) are called only by their own tests.
   Decide whether to remove them or use them; slice 4 Part A leaves both.
 
-- **Spanish and nested routing-grid labels split mid-word at 390 px** — the grid breaks words with
-  `overflow-wrap: anywhere` and sets no `hyphens`
-  (`packages/venue-service/src/dashboard/routing-grid.ts`); hyphenating would need `hyphens: auto`
-  and a `lang` on the grid or an element above it, and the dashboard sets none
-  (`apps/dashboard/index.html`'s `<html>` has none). Left open by
-  A366 slice 4 Part A.
+- **A long word in a routing-grid row name still splits at 390 px** — since A507 part 2 a name
+  breaks between words where each word fits ("AGAVE", "Café con / leche" stay whole), but a word
+  wider than what is left of the capped first column beside the indent and the arrow still breaks
+  inside itself ("BOCAD/ILLOS", "CLAN/DESTI/NA" one level down). The column is held at 96 px by the
+  phone-width case "at phone width the row label column is capped and the zones take most of the width"
+  (`packages/venue-service/src/dashboard/routing-grid.test.ts`). Options: widen the cap (the zone
+  columns still fit up to about 180 px — measured by the A507 part 2 fix, not re-run), shrink the
+  arrow at phone width, or hyphenate (`hyphens: auto` needs a `lang` on the grid or above it; the
+  dashboard sets none — `apps/dashboard/index.html`'s `<html>` has none).
 
 - **The station editor's Printers read-out (no `printer.manage`) is reachable only at component
   level** — module screens are not told the person's permissions, so Prep stations always passes
