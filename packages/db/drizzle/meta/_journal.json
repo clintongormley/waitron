@@ -995,6 +995,20 @@
       "when": 1791751013329,
       "tag": "0141_fair_miss_america",
       "breakpoints": true
+    },
+    {
+      "idx": 142,
+      "version": "6",
+      "when": 1791760965579,
+      "tag": "0142_working_order_receipt_locale",
+      "breakpoints": true
+    },
+    {
+      "idx": 143,
+      "version": "6",
+      "when": 1791760966938,
+      "tag": "0143_working_order_receipt_locale_transition",
+      "breakpoints": true
     }
   ]
 }

@@ -52,8 +52,8 @@ export type StagedInvoiceDelivery =
  * (`working_orders_enforce_transition`): an `open` order may change freely or
  * advance to any next state; a `placed` order may be settled or abandoned, or
  * stay placed changing its `party_id`, `delivery_table_id` and `revision`,
- * or change its invoice choice and recipient with a revision advance before a sale exists,
- * or only take its handover stamp; `settled` and `abandoned` are terminal,
+ * or change its invoice choice, recipient and receipt language with a revision advance before a
+ * sale exists, or only take its handover stamp; `settled` and `abandoned` are terminal,
  * save the handover stamp on a settled order. In any state, an order holding a
  * `delivery_table_id` and no `delivery_table_label` may let go of the id,
  * keeping the name in the label; the label is otherwise free only while the
@@ -102,6 +102,8 @@ export const workingOrders = table(
     recipientCountryCode: label("recipient_country_code"),
     // Null means no explicit delivery choice has been staged.
     invoiceDelivery: json<StagedInvoiceDelivery>("invoice_delivery"),
+    // Null means the location's receipt language.
+    receiptLocale: label("receipt_locale"),
     paymentAttemptAt: tsString("payment_attempt_at"),
     // The seated party this bill belongs to; a counter order has none.
     partyId: id("party_id"),
