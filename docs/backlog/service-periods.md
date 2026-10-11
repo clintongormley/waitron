@@ -200,7 +200,8 @@ open entry: "Changing the business-day start after saving service hours" (A366-1
 
 ## A506. Opening hours rebuilt around seasons and special days
 
-**A506 (owner, 2026-10-11) — OPEN.** Agreed with the owner over mockups; no spec yet. Supersedes
+**A506 (owner, 2026-10-11) — OPEN.** Agreed with the owner over mockups. Spec (2026-10-11, three defaults asked of the owner):
+[opening hours seasons design](../superpowers/specs/2026-10-11-opening-hours-seasons-design.md). Supersedes
 section 9.2, and the named-day hours of section 7, of
 [the 2026-10-07 service times spec](../superpowers/specs/2026-10-07-service-times-departments-and-stations-design.md).
 Pre-live, so venues reset rather than carry today's hours across (CLAUDE.md §3).
@@ -301,7 +302,9 @@ closed, as today.
   general refusal beside unrelated dates' Save actions (`opening-hours-week.ts`,
   `opening-hours-zone-week.ts`). Receipt: Lane D `receipts/a366-2/task22-review.md`.
 
-**For the spec to settle.**
+**For the spec to settle** (settled in the spec's sections 8, 9, 10.2, 12 and 14; its review found the
+kind has three readers, not one, and that `station-times.ts` reads the week only through routing's
+period order — spec section 2).
 - What reads hours today and must read seasons and special days instead. A search for the
   special-days table outside tests found `menu-timetable.ts`, `zone-closed-times.ts`,
   `holidays.ts`, `hours.ts`, `named-days.ts`, `configuration-transfer.ts`, `routes.ts` and the
