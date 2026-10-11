@@ -1346,7 +1346,7 @@ column that can never be hidden — the first column, any
 pinned columns are fixed in place, with no drag handle; an empty space of the handle's width stands
 in its place, so every column name starts at the same point. Other columns move by pointer drag or
 by the handle's arrow keys. While a pointer drags a column, its row is lifted and follows the pointer,
-held between the first and the pinned rows, and the rows it passes slide out of its way to open the
+held within the movable rows, and the rows it passes slide out of its way to open the
 gap it will land in. Releasing there moves the column; releasing anywhere else, cancelling or closing
 the dialog puts every row back. The dialog's Restore defaults button resets order and visibility. Escape closes it and
 returns focus to the trigger. The first column remains shown, and the last visible movable column
@@ -2232,7 +2232,7 @@ checks cover reload, external navigation and closing with a Schedule draft. The
 platform limits; mobile process termination and every-platform reliability are unverified.
 Sign-in screens — the dashboard's sign-in screen, including the account set-up and password-reset
 form an emailed link opens, and the till's PIN sign-in — take no part in the leave check: they
-register no draft scope, never ask, and never request the unload warning (owner, A499).
+register no draft scope, never ask, and never request the unload warning (owner, 2026-10-11, A499).
 
 #### A value saved from its own table row
 

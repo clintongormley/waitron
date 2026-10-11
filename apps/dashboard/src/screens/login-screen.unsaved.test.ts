@@ -488,7 +488,7 @@ function registrationApi(seen: Promise<void>, verifies: unknown[]): Partial<Dash
     passkeyOfferSeen: async () => seen,
   } as Partial<DashboardApi>;
 }
-it("a saved passkey name is clean before the offer bookkeeping answers", async () => {
+it("a saved passkey name is sent, with no unload warning, before the offer bookkeeping answers", async () => {
   const seen = deferred<void>();
   const verifies: unknown[] = [];
   const { screen } = await mount("/manage/", registrationApi(seen.promise, verifies));

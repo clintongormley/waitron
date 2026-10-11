@@ -133,8 +133,7 @@ department is shown in grey italic, and a value it sets itself in normal text. T
 offers "Same as department (…)" as a choice for each setting. Each zone row has a drag handle, and
 dropping a zone on another department moves it there, replacing today's "Move to department". The
 row being dragged must stay visible while it moves: it follows the house rule for a dragged row
-(design-system.md, the `--wt-color-surface-lifted` paragraph), as the Customise dialog's column
-rows do since A499.
+(design-system.md, the `--wt-color-surface-lifted` paragraph).
 
 **Edit department dialog.** Department name, then trading name (moved up from "On the receipt"),
 how orders start, when counter service is used, and the collection-ticket switch. "Print a receipt"
