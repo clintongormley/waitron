@@ -70,7 +70,6 @@ export {
   buildZoneTabs,
   clampPermille,
   defaultTraySlot,
-  isTableZoneless,
   resolveActiveTabKey,
   sizeForCapacity,
   snapRotation,

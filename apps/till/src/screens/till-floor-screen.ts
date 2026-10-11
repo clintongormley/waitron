@@ -21,7 +21,6 @@ import {
   buildZoneTabs,
   floorTrayStyles,
   inNumberOrder,
-  isTableZoneless,
   mergeLabel,
   renderFloorChips,
   resolveActiveTabKey,
@@ -91,7 +90,7 @@ function placedAt(table: TableState, pending: Map<string, TodayPlacement>): Tabl
 interface ZoneOnScreen {
   tabs: ZoneTab[];
   refusedZone: FloorZone | undefined;
-  activeKey: string | null | undefined;
+  activeKey: string | undefined;
   planned: boolean;
   /** The active zone's tables as the server last read them, before `#pending` is applied. */
   visible: TableState[];
@@ -461,7 +460,7 @@ export class TillFloorScreen extends LitElement {
    * A zone id, `null` for the no-zone tab, or `undefined` before the operator has picked one — kept
    * distinct so the default tracks the current tab order even before the zones prop has settled.
    */
-  @state() private activeZone: string | null | undefined = undefined;
+  @state() private activeZone: string | undefined = undefined;
   /** `undefined` DERIVES the view per active zone; a toggle tap pins it for the session, not persisted. */
   @state() private viewOverride: "map" | "list" | undefined = undefined;
   /** The free table whose guest count is being asked for, with the tables seated beside it. */
@@ -490,7 +489,7 @@ export class TillFloorScreen extends LitElement {
     this,
     () => {
       const zone = this.#url.read("till-zone");
-      this.activeZone = zone === null ? undefined : zone === "" ? null : zone;
+      this.activeZone = zone === null || zone === "" ? undefined : zone;
     },
     tillPath,
   );
@@ -671,11 +670,11 @@ export class TillFloorScreen extends LitElement {
     this.dispatchEvent(new CustomEvent("back-to-counter", { bubbles: true, composed: true }));
   }
 
-  #selectZone(key: string | null): void {
+  #selectZone(key: string): void {
     this.refusedZoneId = null;
     this.refusal = null;
     this.activeZone = key;
-    this.#url.write({ "till-tab": this.#url.read("till-tab") ?? "floor", "till-zone": key ?? "" });
+    this.#url.write({ "till-tab": this.#url.read("till-tab") ?? "floor", "till-zone": key });
   }
 
   #toggleView(current: "map" | "list"): void {
@@ -966,10 +965,7 @@ export class TillFloorScreen extends LitElement {
    * has gained. `planned` covers a zone list read before the plan was saved: a floor refresh re-reads
    * the tables, not the zones.
    */
-  #zoneMenu(
-    planned: boolean,
-    activeKey: string | null | undefined,
-  ): TemplateResult | typeof nothing {
+  #zoneMenu(planned: boolean, activeKey: string | undefined): TemplateResult | typeof nothing {
     const zone = this.zones.find((each) => each.id === activeKey);
     if (zone === undefined || !(planned || zone.hasPlan) || !this.canChangeToday) return nothing;
     return html`<till-floor-zone-menu
@@ -1044,21 +1040,15 @@ export class TillFloorScreen extends LitElement {
     ];
     if (this.#zoneInputs?.every((input, i) => input === inputs[i])) return this.#zone;
     this.#zoneInputs = inputs;
-    const knownZoneIds = new Set(this.zones.map((z) => z.id));
     const tabs = buildZoneTabs(
       this.zones.map((zone) => ({
         ...zone,
         name: zone.closed ? `${zone.name} · ${t("floor.closed")}` : zone.name,
       })),
-      this.tables,
-      t("floor.no_zone"),
     );
     const refusedZone = this.zones.find((zone) => zone.id === this.refusedZoneId && zone.closed);
     const activeKey = resolveActiveTabKey(this.activeZone, tabs);
-    // The no-zone tab (activeKey === null) gathers the zoneless AND the deactivated-zone tables.
-    const visible = this.tables.filter((table) =>
-      activeKey === null ? isTableZoneless(table, knownZoneIds) : table.zoneId === activeKey,
-    );
+    const visible = this.tables.filter((table) => table.zoneId === activeKey);
     const planned = visible.some((table) => table.today !== null);
     const listed = listedTables(visible);
     const pending = this.#pending;
@@ -1155,7 +1145,7 @@ export class TillFloorScreen extends LitElement {
   #plannedMap(
     onMap: FloorMapTable[],
     unplaced: TableState[],
-    activeKey: string | null | undefined,
+    activeKey: string | undefined,
   ): TemplateResult {
     const crop = cropToTables(onMap.map((table) => table.placement));
     const ratio = crop === null ? 1 : crop.width / crop.height;
@@ -1207,11 +1197,11 @@ export class TillFloorScreen extends LitElement {
     </button>`;
   }
 
-  #tab(tab: ZoneTab, activeKey: string | null | undefined): TemplateResult {
+  #tab(tab: ZoneTab, activeKey: string | undefined): TemplateResult {
     const active = tab.key === activeKey;
     return html`<wt-button
       class="tab"
-      data-zone=${tab.key ?? "none"}
+      data-zone=${tab.key}
       variant=${active ? "primary" : "secondary"}
       @click=${() => this.#selectZone(tab.key)}
     >

@@ -106,41 +106,24 @@ export function defaultTraySlot(placedCount: number): { posX: number; posY: numb
   return { posX: clampPermille(500 + placedCount * GRID_STEP), posY: 500 };
 }
 
-/**
- * Deactivating a zone leaves its tables' `zoneId` set, so a table pointing at an inactive zone also
- * belongs under the "no zone" tab; otherwise it would match no tab and vanish.
- */
-export function isTableZoneless(
-  table: { zoneId: string | null },
-  knownZoneIds: ReadonlySet<string>,
-): boolean {
-  return table.zoneId === null || !knownZoneIds.has(table.zoneId);
-}
-
-/** `key` is `null` for the trailing "no zone" tab. */
 export interface ZoneTab {
-  key: string | null;
+  key: string;
   name: string;
 }
 
 export function buildZoneTabs(
   zones: readonly { id: string; name: string; displayOrder: number }[],
-  tables: readonly { zoneId: string | null }[],
-  noZoneLabel: string,
 ): ZoneTab[] {
-  const knownZoneIds = new Set(zones.map((z) => z.id));
-  const zoneTabs: ZoneTab[] = [...zones]
+  return [...zones]
     .sort((a, b) => a.displayOrder - b.displayOrder)
-    .map((z) => ({ key: z.id as string | null, name: z.name }));
-  const hasZoneless = tables.some((table) => isTableZoneless(table, knownZoneIds));
-  return hasZoneless ? [...zoneTabs, { key: null, name: noZoneLabel }] : zoneTabs;
+    .map((zone) => ({ key: zone.id, name: zone.name }));
 }
 
 /** A pick naming a tab that no longer exists falls back to the first tab, or the floor would go blank. */
 export function resolveActiveTabKey(
-  requested: string | null | undefined,
+  requested: string | undefined,
   tabs: readonly ZoneTab[],
-): string | null | undefined {
+): string | undefined {
   if (requested !== undefined && tabs.some((tab) => tab.key === requested)) return requested;
   return tabs[0]?.key;
 }
