@@ -48,6 +48,7 @@ export const RECUPERACION_ENVIANDO_MS = 5 * 60_000;
  */
 export const DEFAULT_SKIP_RETRY_MS = 5 * 60 * 1000;
 const MAX_CONSULTA_PAGES = 10;
+const deferredBatch = new Error("Wait for a full sending batch");
 
 /** How many records immediately before a never-sent record on its chain must all be refused
  * with one code for `haltOpenChainClaims` to hold it. A record still awaiting its answer among
@@ -227,27 +228,38 @@ async function drainDue(
     // to `detenido` (`haltOpenChainClaims`), and the next SELECT sees neither.
     let claimed: { sendable: DueRow[]; rawCount: number; deferred: boolean };
     for (;;) {
-      claimed = await countOnCommit(db, result, async (tx, counts) => {
-        const c = await claimBatch(
-          tx,
-          now,
-          environment,
-          counts,
-          blockedSifIds,
-          maxPorEnvio,
-          waitPending,
-        );
-        if (c.deferred) return c;
-        const kept = await haltOpenChainClaims(tx, c.sendable, now, counts);
-        const probes = await claimProbes(
-          tx,
-          now,
-          environment,
-          maxPorEnvio - kept.length,
-          kept[0]?.nombre_razon_emisor ?? null,
-        );
-        return { sendable: [...kept, ...probes], rawCount: c.rawCount, deferred: c.deferred };
-      });
+      try {
+        claimed = await countOnCommit(db, result, async (tx, counts) => {
+          const c = await claimBatch(
+            tx,
+            now,
+            environment,
+            counts,
+            blockedSifIds,
+            maxPorEnvio,
+            waitPending,
+          );
+          if (c.deferred) return c;
+          const kept = await haltOpenChainClaims(tx, c.sendable, now, counts);
+          const probes = await claimProbes(
+            tx,
+            now,
+            environment,
+            maxPorEnvio - kept.length,
+            kept[0]?.nombre_razon_emisor ?? null,
+          );
+          // Queue counts include rows that a hold or taxpayer-name boundary can exclude. Roll the
+          // claim back before committing attempt stamps unless the early send really fills the cap.
+          const sendable = [...kept, ...probes];
+          if (waitPending && sendable.length > 0 && sendable.length < maxPorEnvio) {
+            throw deferredBatch;
+          }
+          return { sendable, rawCount: c.rawCount, deferred: c.deferred };
+        });
+      } catch (error) {
+        if (error !== deferredBatch) throw error;
+        claimed = { sendable: [], rawCount: 0, deferred: true };
+      }
       if (claimed.deferred || claimed.sendable.length > 0 || claimed.rawCount === 0) break;
     }
     if (claimed.deferred) {
