@@ -40,11 +40,11 @@ import { deploymentEnvironment } from "./config.js";
 import { ALL_MODULES } from "./modules.js";
 import { systemClock } from "./till-backend.js";
 import {
-  collectOrder,
+  collectOrderOrchestration as collectOrder,
   payWorkingOrder,
-  payWorkingOrderIntegrated,
+  payWorkingOrderIntegratedOrchestration as payWorkingOrderIntegrated,
   printSaleReceipt,
-  recordTillSale,
+  recordTillSaleOrchestration as recordTillSale,
   reprintSale,
 } from "./till-sale.js";
 import type { IntegratedPayDeps } from "./till-sale.js";

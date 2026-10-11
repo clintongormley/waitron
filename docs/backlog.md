@@ -3027,13 +3027,6 @@ _Formerly A3, A8 and B6; part of A9._ Detail: [backlog/printers.md](backlog/prin
 
 _Formerly A6, and the old Track C's payments items; part of A9._ Detail: [backlog/payments.md](backlog/payments.md).
 
-- **The counter sale, `/api/pay` and collecting a placed order do not re-check the device and the
-  sign-in inside their write, and bill refunds do not re-check the device**, as a bill payment does
-  since A471. A probe recorded
-  a sale, a captured card or a completed refund from a till switched off after its sign-in was
-  checked. Left open by A471.
-  [Detail](backlog/payments.md#the-counter-sale-apipay-collecting-a-placed-order-and-bill-refunds-do-not-re-check-the-device-inside-their-write)
-
 - **Two concurrent passes over `listAttempting` (`packages/payments/src/store.ts`; its one caller is
   the SumUp provider's `resolvePending`) do not both succeed**: #558's review measured
   `["fulfilled","payment.not_found"]`, so the second pass throws partway instead of skipping the

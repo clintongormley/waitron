@@ -37,7 +37,7 @@ import { formatReceipt } from "./receipt-ticket.js";
 import { printedLines } from "./testing/decode-ticket.js";
 import {
   payWorkingOrder,
-  payWorkingOrderIntegrated,
+  payWorkingOrderIntegratedOrchestration as payWorkingOrderIntegrated,
   readSettledTicket,
   type TillSaleResult,
 } from "./till-sale.js";

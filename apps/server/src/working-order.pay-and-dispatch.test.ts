@@ -71,7 +71,11 @@ import type { PrintConfig } from "@waitron/printing";
 import { attachPrinterToStation } from "./station-printers.js";
 import { decodeTicket } from "./testing/decode-ticket.js";
 import { offerProducts } from "./testing/zone-offers.js";
-import { collectOrder, fireDishesAtPayment, payWorkingOrder } from "./till-sale.js";
+import {
+  collectOrderOrchestration as collectOrder,
+  fireDishesAtPayment,
+  payWorkingOrder,
+} from "./till-sale.js";
 import { overridePinAttempts } from "./till-api.js";
 import "./errors.js";
 import { openPartyTab } from "./testing/serve-line.js";

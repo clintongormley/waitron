@@ -11,7 +11,7 @@ import { offerProducts, type ZoneOffers } from "./testing/zone-offers.js";
 import { mountLocationSettingsApi } from "./location-settings-api.js";
 import { VerifactuBackend } from "@waitron/fiscal-verifactu";
 import type { TrustedClock } from "@waitron/fiscal";
-import { recordTillSale } from "./till-sale.js";
+import { recordTillSaleOrchestration as recordTillSale } from "./till-sale.js";
 import type { FiscalContribution } from "@waitron/fiscal";
 import { AppError } from "@waitron/shared";
 import { getCountryPack } from "@waitron/country-packs";

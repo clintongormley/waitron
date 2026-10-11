@@ -69,7 +69,7 @@ import {
 import {
   clearPaymentAttemptMark,
   paymentAttemptIsLive,
-  payWorkingOrderIntegrated,
+  payWorkingOrderIntegratedOrchestration,
 } from "./till-sale.js";
 import { storedDeviceOrigin } from "./request-config.js";
 import { readReaderHolders, selectDeviceEquipment } from "./device-equipment.js";
@@ -1015,7 +1015,7 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
       }
 
       // The payment is captured with no sale, so the pay takes its recovery branch and files it.
-      const paid = await payWorkingOrderIntegrated(
+      const paid = await payWorkingOrderIntegratedOrchestration(
         {
           db: deps.db,
           backend: deps.backend,

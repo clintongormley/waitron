@@ -77,7 +77,7 @@ import { descendingIds } from "./testing/descending-ids.js";
 import { offerProducts, type ZoneOffers } from "./testing/zone-offers.js";
 import type { DeviceRequestConfig } from "./till-config.js";
 import {
-  collectOrder,
+  collectOrderOrchestration as collectOrder,
   payWorkingOrder,
   readBillTenderLines,
   readSettledTicket,

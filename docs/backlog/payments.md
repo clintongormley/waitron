@@ -167,26 +167,6 @@ their full text.
   Solo actually does on a signature-required card (it belongs with the SumUp Solo experiments above),
   because if the reader owns the whole step there may be nothing for us to build.
 
-## The counter sale, `/api/pay`, collecting a placed order and bill refunds do not re-check the device inside their write
-
-Since A471 a bill payment re-checks, first inside the transaction that writes it, that the
-operator's session is still open on the device and the device is still active and not deleted
-(`assertStillSignedIn`, `apps/server/src/till-session.ts`). Four neighbouring money paths do not.
-A471's throwaway probe (2026-10-10, real database, each function called directly as its route
-calls it once `requireSession` has passed, after `update devices set active = false` with the
-session left open, or after the session was ended) printed:
-
-| Function | Route | Till switched off | Session ended |
-| --- | --- | --- | --- |
-| `recordTillSale` (`apps/server/src/till-sale.ts`), cash | `POST /api/sales` | sale written, invoice issued | the same |
-| `payWorkingOrderIntegrated` (`till-sale.ts`), fake reader | `POST /api/pay` | reader asked once, payment captured, sale written | the same |
-| `collectOrder` (`till-sale.ts`), cash on a placed order | `POST /api/working-orders/:id/collect` | invoice issued, order settled | the same |
-| `refundBillPayment` (`apps/server/src/bill-refunds.ts`), cash | `POST /api/working-orders/:id/payments/:paymentId/refunds` | refund completed | refused `session.not_open` by `authorize` (`packages/identity/src/authorize.ts`), nothing written |
-
-The first three take only the operator's person id, not the session id, so they have nothing to
-check a sign-out against; the fix is A471's: pass `{ personId, sessionId }` and call
-`assertStillSignedIn` first in the write's transaction. Left open by A471.
-
 ## Decisions and deliberate limits
 
 - **A reader still paired at a provider that can unpair it (SumUp) is deleted in Waitron only

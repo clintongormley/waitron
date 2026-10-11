@@ -78,10 +78,10 @@ import { deploymentEnvironment } from "./config.js";
 import { ALL_MODULES } from "./modules.js";
 import type { OrderFlow, TillConfig, DeviceRequestConfig } from "./till-config.js";
 import {
-  collectOrder,
+  collectOrderOrchestration as collectOrder,
   printSaleReceipt,
   readSettledTicket,
-  recordTillSale,
+  recordTillSaleOrchestration as recordTillSale,
   reprintSale,
 } from "./till-sale.js";
 import { createOpenOrder, parkOrder, placeOrder } from "./working-order.js";

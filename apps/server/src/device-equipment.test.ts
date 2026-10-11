@@ -43,7 +43,7 @@ import { acceptDeviceJoinRequest, createJoinRequest } from "./join-requests.js";
 import type { Logger } from "./logger.js";
 import { createPairingMode } from "./pairing-mode.js";
 import { resolvePaymentSlipPrinter } from "./receipt-print.js";
-import { recordTillSale } from "./till-sale.js";
+import { recordTillSaleOrchestration as recordTillSale } from "./till-sale.js";
 import { enrolDeviceForTest } from "./testing/enrol.js";
 import { setupVenue, type Venue } from "./testing/venue-fixtures.js";
 import { offerProducts } from "./testing/zone-offers.js";

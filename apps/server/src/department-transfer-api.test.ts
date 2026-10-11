@@ -42,8 +42,8 @@ import {
 } from "./working-order.js";
 import {
   payWorkingOrder,
-  payWorkingOrderIntegrated,
-  collectOrder,
+  payWorkingOrderIntegratedOrchestration as payWorkingOrderIntegrated,
+  collectOrderOrchestration as collectOrder,
   settleIssuedOwingNothing,
 } from "./till-sale.js";
 import { takeBillPayment } from "./bill-payments.js";

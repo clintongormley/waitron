@@ -1614,7 +1614,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
         { db: deps.db, backend: deps.backend, clock: deps.clock, log },
         saleCfg,
         { ...body, zoneId },
-        personId,
+        { personId, sessionId: session.sessionId },
       );
       return c.json(result);
     }),
@@ -1673,7 +1673,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
         },
         saleCfg,
         { ...body, zoneId },
-        personId,
+        { personId, sessionId: session.sessionId },
       );
       return c.json(outcome); // 200 with the discriminated outcome — even a decline.
     }),
@@ -2182,7 +2182,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
         { db: deps.db, backend: deps.backend, clock: deps.clock, log },
         cfg,
         { id, lines: [], tender: body.tender },
-        personId,
+        { personId, sessionId: session.sessionId },
       );
       return c.json(result);
     }),

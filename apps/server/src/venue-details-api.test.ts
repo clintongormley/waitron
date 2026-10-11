@@ -13,7 +13,7 @@ import { setupVenue, type Venue } from "./testing/venue-fixtures.js";
 import { readVenueDetails } from "./venue-details.js";
 import { VerifactuBackend } from "@waitron/fiscal-verifactu";
 import type { TrustedClock } from "@waitron/fiscal";
-import { recordTillSale } from "./till-sale.js";
+import { recordTillSaleOrchestration as recordTillSale } from "./till-sale.js";
 import { offerProducts } from "./testing/zone-offers.js";
 import { deviceRequestCfg } from "./testing/session-device.js";
 
