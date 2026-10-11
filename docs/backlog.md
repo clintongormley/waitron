@@ -1407,7 +1407,7 @@ _Formerly entries spread across the old sections, A261's venue-operations steps 
 _Formerly the kitchen entries in the opening part of the old Track A (before A1), and kitchen entries elsewhere; part of A9._ Detail: [backlog/kitchen.md](backlog/kitchen.md).
 
 - **A507. Prep stations made lighter: a Routes grid you can scan and search, and a shorter
-  route-change notice (owner, 2026-10-11)** — left open by A507 part 1 (#PRNUM). The Routes grid
+  route-change notice (owner, 2026-10-11)** — left open by A507 part 1 (#1564). The Routes grid
   loses its cell boxes, its "N more products" counts and its parent paths; a routing set on a row is
   bold blue, an inherited one grey, and a zone cell is blank unless what it inherits differs from
   the row's own Every zone. Rows with their own routing show with every category above them, even
