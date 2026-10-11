@@ -297,7 +297,7 @@ describe("openTab", () => {
       code: "table.not_found",
       params: { tableId: missing },
     });
-    await db.execute(sql`update dining_tables set active = false where id = ${tableId}`);
+    await db.execute(sql`delete from floor_today_tables where table_id = ${tableId}`);
     await expect(asApp(cfg, (tx) => openPartyTab(tx, cfg, { tableId }))).rejects.toMatchObject({
       code: "table.inactive",
       params: { tableId },

@@ -293,7 +293,7 @@ describe("removing a live table the master no longer has", () => {
 
     await reset(zoneId);
 
-    expect(await tableRow(v, t1!)).toMatchObject({ active: false });
+    expect(await tableRow(v, t1!)).toMatchObject({ id: t1! });
     expect(await todayRow(t1!)).toBeUndefined();
     expect(await resetRowOf(t1!)).toMatchObject({ remove: true, pending: true });
 
@@ -336,7 +336,7 @@ describe("removing a live table the master no longer has", () => {
 
     await reset(zoneId);
 
-    expect(await tableRow(v, t1!)).toMatchObject({ active: false });
+    expect(await tableRow(v, t1!)).toMatchObject({ id: t1! });
     expect(await todayRow(t1!)).toBeUndefined();
     const kept = await resetRowOf(t1!);
     expect(kept).toMatchObject({ remove: true, pending: true });
@@ -395,7 +395,7 @@ describe("a catch-up that changes nothing", () => {
     // today's merges, and the two tie checks.
     expect(statements).toBe(9);
     expect(await pendingOf(zoneId)).toEqual(before);
-    expect(await tableRow(v, tied!)).toMatchObject({ active: false });
+    expect(await tableRow(v, tied!)).toMatchObject({ id: tied! });
     expect(await todayRow(tied!)).toBeUndefined();
   });
 });

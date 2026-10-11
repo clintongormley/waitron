@@ -787,10 +787,10 @@ describe("/management-api/tables", () => {
       return (await res.json()) as { id: string; label: string; active: boolean }[];
     }
 
-    it("GET ?includeDisabled=true lists a disabled table with active: false; the plain GET still drops it", async () => {
+    it("GET ?includeDisabled=true lists a table missing from today; the plain GET still drops it", async () => {
       const id = await newTable();
       await switchOff(suite, id);
-      expect((await listAll()).find((t) => t.id === id)).toMatchObject({ active: false });
+      expect((await listAll()).find((t) => t.id === id)).toMatchObject({ id });
       const plain = (await (await req("/tables", { method: "GET" }, managerCookie)).json()) as {
         id: string;
       }[];

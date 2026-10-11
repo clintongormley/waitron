@@ -119,7 +119,7 @@ async function seedDiningTables(db: Database): Promise<void> {
     .values([
       { locationId, zoneId: zone!.id, label: "Mesa 1" },
       { locationId, zoneId: zone!.id, label: "Mesa 2" },
-      { locationId, zoneId: zone!.id, label: "Mesa 3 (baja)", active: false },
+      { locationId, zoneId: zone!.id, label: "Mesa 3 (baja)" },
     ])
     .returning({ id: diningTables.id });
   await db.insert(floorTodayTables).values([{ tableId: held!.id }, { tableId: left!.id }]);

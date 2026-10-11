@@ -167,7 +167,7 @@ describe("setTableStatus", () => {
       params: { tableId: missing },
     });
     // A deactivated table is not in service — also table.not_found (design §3b lists table.not_found).
-    await db.execute(sql`update dining_tables set active = false where id = ${tableId}`);
+    await db.execute(sql`delete from floor_today_tables where table_id = ${tableId}`);
     await expect(
       asApp(cfg, (tx) => setTableStatus(tx, cfg, tableId, activeStatusId)),
     ).rejects.toMatchObject({
