@@ -363,6 +363,56 @@ section 6.1, `docs/superpowers/specs/2026-10-08-floor-plan-design.md`; `floor_pl
   deciding how a change of layout meets tables that are occupied when the period changes. A506's
   Periods page and period dialog already leave a Floor plan column and field for it.
 
+## A508. A table's QR code: order, call a waiter, ask for the bill or pay
+
+**A508 (owner, 2026-10-11) — backlog only.** When guests sit down and a tab is opened for them, a
+QR code is printed for the table. Scanning it opens a page on the guest's own phone where they can:
+
+- read the menu and order from it;
+- call a waiter to the table;
+- say they want the bill, or pay it online.
+
+This grows the parked [A guest paying from their own phone](payments.md#a-guest-paying-from-their-own-phone),
+which holds two owner decisions taken on 2026-09-18 while pricing the payment part: the phone
+reaches us over the public internet through the venue's cloud instance, not the restaurant's wifi;
+and Waitron runs several payment providers at once.
+
+**It needs the internet (owner, 2026-10-11).** The guest's phone is on mobile data, so the page is
+served through the venue's cloud instance, and nothing serves it yet: public hosting and ingress
+are open deployment work under _Replication, failover and the cloud_, and Waitron Cloud, which would
+host the instance, has not been started. While the venue's internet is down the QR page does not
+work; the till and the waiters carry on, because nothing external may block a sale (CLAUDE.md §5).
+
+To decide before building:
+
+- **What the code stands for.** It has to open this tab and no other and stop working when the tab
+  closes, so it cannot be the table's number. A code that lets its holder order on a tab works as a
+  live login, so CLAUDE.md §3's rule applies: the box stores it only as a hash.
+- Whether an order from the phone goes straight to the kitchen or waits for a waiter to accept it.
+- How a call or a bill request reaches staff: on the till, on the handhelds, or both.
+- Which printer prints the code, and whether it prints when the tab opens or on request.
+- What the page shows when the cloud instance is up but the box cannot be reached.
+
+## A509. Online ordering for collection at the counter
+
+**A509 (owner, 2026-10-11) — backlog only.** A customer orders from the venue's online menu and
+collects the order at the counter. This was _online ordering (SP15)_ in _Later and parked_; it
+shares A508's customer-facing menu, and its online payment is the same provider question as
+[A guest paying from their own phone](payments.md#a-guest-paying-from-their-own-phone).
+
+**It needs the internet (owner, 2026-10-11)**, for the same reason as A508: the customer is not in
+the venue, so the page is served through the venue's cloud instance, which does not exist yet.
+While the box cannot be reached no online order can be taken; sales on the till carry on.
+
+To decide before building:
+
+- Paying when ordering or at collection. The split of an order's service mode
+  ([service-periods.md](service-periods.md#split-an-orders-recorded-service-mode-into-two-facts))
+  already names "at collection" as one of the times payment can fall due.
+- Choosing a collection time, and whether the venue can pause online orders when it is busy.
+- How the customer learns the order is ready, and how the counter finds it when they arrive.
+- When the fiscal record is made: when the customer pays online, or when the order is handed over.
+
 ## Small floor-plan refusals still missing
 
 - **Small floor-plan refusals still missing.** Left open by A429 slice 1 (#1493).

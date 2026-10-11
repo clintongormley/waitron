@@ -138,7 +138,8 @@ their full text.
   account and one settlement reconciliation per provider, and one adapter each to write and keep
   working. Prices and receipts:
   [2026-09-18-online-payment-providers-bizum.md](../research/2026-09-18-online-payment-providers-bizum.md).
-  The ordering surface itself is parked under _online ordering (SP15)_ and the customer-facing menu.
+  This is now the payment part of [A508](till.md#a508-a-tables-qr-code-order-call-a-waiter-ask-for-the-bill-or-pay);
+  the ordering surface is A508 and [A509](till.md#a509-online-ordering-for-collection-at-the-counter).
 
 ## Routing by BILL SIZE is allowed but is the smallest lever
 

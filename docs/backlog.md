@@ -1865,6 +1865,18 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   different layouts for different periods. Backlog only, not queued to a lane.
   [Detail](backlog/till.md#a504-floor-plans-published-for-a-future-date-and-one-per-service-period)
 
+- **A508. A table's QR code: order, call a waiter, ask for the bill or pay (owner, 2026-10-11).**
+  When a tab is opened for seated guests, a QR code is printed for them; on their own phone it
+  opens the menu to order from, a button to call a waiter, and one to ask for the bill or pay
+  online. Needs the internet, through the venue's cloud instance, which does not exist yet.
+  Backlog only, not queued to a lane.
+  [Detail](backlog/till.md#a508-a-tables-qr-code-order-call-a-waiter-ask-for-the-bill-or-pay)
+
+- **A509. Online ordering for collection at the counter (owner, 2026-10-11).** A customer orders
+  from the venue's online menu and collects at the counter. Needs the internet, as A508 does.
+  Backlog only, not queued to a lane.
+  [Detail](backlog/till.md#a509-online-ordering-for-collection-at-the-counter)
+
 - **The bookings list shows no table for any booking, and a past booking's kept table name
   (`bookings.table_label`) is stored but shown nowhere.** Left open by A429 slice 1 (#1493).
 
@@ -3125,8 +3137,8 @@ _Formerly A6, and the old Track C's payments items; part of A9._ Detail: [backlo
 - **A guest paying from their own phone** (owner idea 2026-09-18, parked — the surface it needs does
   not exist). The waiter hands a greeted table a QR code standing for its newly opened tab; the
   diner scans it, reads the menu, orders, watches what has been served and what is still coming, and
-  settles at the end. The ordering surface itself is parked under _online ordering (SP15)_ and the
-  customer-facing menu. [Detail](backlog/payments.md#a-guest-paying-from-their-own-phone)
+  settles at the end. This is now the payment part of A508; the ordering surface is A508 and A509.
+  [Detail](backlog/payments.md#a-guest-paying-from-their-own-phone)
 
 - **Routing by BILL SIZE is allowed but is the smallest lever** (owner idea 2026-09-18, arithmetic
   in the research note). The card mix moves the crossover further than the bill size does, and the
@@ -5266,7 +5278,7 @@ _Formerly the "Later and parked" paragraph under What's built._
 
 **Later and parked** (no owner decision pending; reopen when work reaches them): Square and
 generic CSV menu import · accounting export (SP17) · opening hours and channel sync (SP19) · tip
-payroll (SP13) · online ordering (SP15) · per-seat ordering and multiple tabs per table (each reopens a
+payroll (SP13) · per-seat ordering and multiple tabs per table (each reopens a
 settled decision — specced with the owner, never landed unattended) · KDS ops polish (routing
 audit view, station kind, definable kitchen statuses) · recipes depth (nested
 sub-recipes, plate costing, stock depletion, variants, customer-facing browse) · inventory and

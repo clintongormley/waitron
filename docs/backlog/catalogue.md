@@ -469,7 +469,7 @@ flow replaces §2's copy.
   check will not see it.
 - **The online language selector has nothing to select for yet.** The setting and the rule for
   choosing a language are built and tested; the customer-facing online ordering surface they were
-  built for does not exist.
+  built for does not exist (A508 and A509, [till.md](till.md#a509-online-ordering-for-collection-at-the-counter)).
 - **Left by A157's review:** the upgrade test `packages/media/src/schema/name-only-upgrade.test.ts`
   makes its scratch folder with `tmpdir()` rather than `scratchParent()` (`scripts/scratch-dir.mjs`),
   unmeasured either way; the list of hand-written migrations in
