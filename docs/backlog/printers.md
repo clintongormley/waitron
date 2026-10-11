@@ -157,6 +157,18 @@ email delivery or legal requirement was verified at runtime by this documentatio
   `claimPrintJobs` and then `reportPrintJob` per job, each report in its own transaction, as
   `apps/server/src/print-api.ts` already does, rather than one `runAgentOnce` in one transaction.
 
+## Measure one-job print pulls on the box
+
+A517 uses one job per pull to eliminate unsent leased tails. Every job now repeats the agent's
+inventory cycle. Measure a burst on the box before choosing inventory caching or another
+lease design; the controlled Hono/transport probe is not a hardware throughput measurement.
+
+## Make an unreported drawer outcome explicit without repeating its pulse
+
+A drawer whose claim or done report was lost stays listed as “printing”, without Resend or an
+automatic expiry. Preserve single-attempt delivery while deciding how to show that unknown
+outcome. A517's lost-report route case pins the current row and its non-resendable listing.
+
 ## A printer rethrow test calls a different CHECK a non-CHECK error
 
 `packages/printing/src/printers.test.ts`'s “a driver error that is NEITHER the UNIQUE NOR the CHECK”
@@ -164,6 +176,10 @@ case supplies `carrier_pigeon`, which its comment identifies as refused by `prin
 Reconcile the case name with the boundary it tests. This is a source reading, not a new probe.
 
 ## Waitron carries two QR encoders; consolidate on `qrcode-generator`
+
+When consolidating, check the receipt's `qrRaster` path separately from `EscBuilder.qr`, and
+retain the error-correction choice documented in `apps/server/src/qr-matrix.ts`. These are the
+two QR audit pointers carried forward from the old aged-batch detail; A517 changes neither.
 
 **Waitron carries two QR encoders; consolidate on `qrcode-generator` — Small.** `apps/server` imports
 `qrcode` (in `qr-matrix.ts`, `print-job-preview.ts`, `discovery-api.ts`) while `apps/till` uses

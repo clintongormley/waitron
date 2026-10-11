@@ -1017,7 +1017,8 @@ Documents can retry after a failed send or an expired claim, accepting a duplica
 completion report is lost. A drawer pulse cannot use that policy: a rejected write may already
 have opened it. `claimPrintJobs` hands out one job per pull and admits a drawer only while it is
 queued. A failed drawer report retains its actual failed-attempt count and ends delivery; a lost claim
-stays unreported and is not reclaimed. If it never arrived, you can request a new manual open through the normal permission
+stays unreported and is not reclaimed. It remains listed as “printing” with no resend action;
+there is no automatic expiry for that drawer claim. If it never arrived, you can request a new manual open through the normal permission
 and audit path. The claim must commit before transport; `runAgentOnce`'s caller-owned transaction
 cannot provide that guarantee and has no production caller (the separate backlog item remains).
 
@@ -1027,3 +1028,9 @@ a lost report or uncertain send. The remote-agent cases in `apps/server/src/prin
 exercise the real client, agent loop and mounted routes while the first transport waits behind a
 promise gate. They compare emitted bytes, not just claim counts. No suite here measures the
 throughput of a physical printer.
+
+The single-job default runs the agent's inventory and pull cycle for every job. It prevents a
+leased but unsent tail without a heartbeat or a new send-admission protocol. It costs more cycles
+than a batch; physical throughput remains unmeasured. Failed tickets keep creation order within
+their printer, while eligible work at other printers can pass that printer's failed queue.
+Invoice receipts keep their separate eligibility checks in both the pull and that ordering.

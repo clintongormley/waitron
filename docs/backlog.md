@@ -2720,6 +2720,13 @@ _Formerly A3, A8 and B6; part of A9._ Detail: [backlog/printers.md](backlog/prin
 - **On-device agent** — a till hosting a print agent, the single-box venue's box-death printing path.
   Needs a native app; parked behind the go-native decision.
 
+- **Measure one-job print pulls on the box** — A517 repeats the agent's inventory cycle per job.
+  Physical throughput is unmeasured. [Detail](backlog/printers.md#measure-one-job-print-pulls-on-the-box)
+
+- **Make an unreported drawer outcome explicit without repeating its pulse** — a lost claim or
+  done report remains “printing”, with no resend or automatic expiry.
+  [Detail](backlog/printers.md#make-an-unreported-drawer-outcome-explicit-without-repeating-its-pulse)
+
 - **A printer rethrow test calls a different CHECK a non-CHECK error** — reconcile the
   `carrier_pigeon` case name in `packages/printing/src/printers.test.ts` with its own comment.
   [Detail](backlog/printers.md#a-printer-rethrow-test-calls-a-different-check-a-non-check-error)

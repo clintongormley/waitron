@@ -564,7 +564,7 @@ describe("invoice receipt API attempt boundary", () => {
       "private customer transport detail",
     );
   });
-  it("keeps ordinary jobs claimable and reportable without an invoice token", async () => {
+  it("reports an ordinary drawer without an invoice token and does not retry it", async () => {
     const ctx = await setup();
     const ordinary = await withTransaction(suite.db, (tx) =>
       enqueuePrintJob(
@@ -597,6 +597,37 @@ describe("invoice receipt API attempt boundary", () => {
     ).toMatchObject({ status: "failed", attempts: 1, lastError: "ordinary connection detail" });
     expect(await ctx.row()).toMatchObject({ status: "sending", reportedOutcome: null });
   });
+  it("retries and completes an ordinary document without an invoice token", async () => {
+    const ctx = await setup();
+    const ordinary = await withTransaction(suite.db, (tx) =>
+      enqueuePrintJob(
+        tx,
+        { locationId: ctx.locationId },
+        ctx.printer.id,
+        new Uint8Array([3]),
+        "document",
+      ),
+    );
+    expect((await ctx.pull()).map((job) => job.id)).toEqual([ctx.job.jobId]);
+    const pulled = await ctx.pull();
+    expect(pulled.map((job) => job.id)).toEqual([ordinary.jobId]);
+    expect(pulled[0]).not.toHaveProperty("invoiceClaim");
+    expect(
+      (await ctx.result({ status: "failed", error: "printer offline" }, ordinary.jobId)).status,
+    ).toBe(204);
+    expect(
+      (await suite.db.select().from(printJobs).where(eq(printJobs.id, ordinary.jobId)))[0],
+    ).toMatchObject({ status: "failed", attempts: 1, lastError: "printer offline" });
+    const retry = await ctx.pull();
+    expect(retry.map((job) => job.id)).toEqual([ordinary.jobId]);
+    expect(retry[0]).not.toHaveProperty("invoiceClaim");
+    expect((await ctx.result({ status: "done" }, ordinary.jobId)).status).toBe(204);
+    expect(
+      (await suite.db.select().from(printJobs).where(eq(printJobs.id, ordinary.jobId)))[0],
+    ).toMatchObject({ status: "done", attempts: 1, deliveredAt: expect.any(String) });
+    expect(await ctx.row()).toMatchObject({ status: "sending", reportedOutcome: null });
+  });
+
   it("rolls back the print claim if its invoice token cannot be attached", async () => {
     const ctx = await setup();
     await suite.db.execute(

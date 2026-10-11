@@ -97,6 +97,16 @@ export async function claimPrintJobs(
     ctx.visibleKeys.length > 0
       ? sql`(p.transport in ('usb','bluetooth') and p.local_key in ${ctx.visibleKeys})`
       : sql`false`;
+  const invoiceDue = (jobId: SQL) => sql`(
+    not exists (select 1 from invoice_deliveries d where d.print_job_id = ${jobId})
+    or ${
+      ctx.invoiceReceiptsAt === undefined
+        ? sql`false`
+        : sql`exists (
+      select 1 from invoice_deliveries d where d.print_job_id = ${jobId}
+        and d.status = 'queued' and d.next_attempt_at <= ${ctx.invoiceReceiptsAt})`
+    }
+  )`;
   return claimRows<ClaimedJob>(tx, {
     table: "print_jobs",
     key: "id",
@@ -104,17 +114,16 @@ export async function claimPrintJobs(
     claimable: sql`p.active = true and p.deleted_at is null
       and ( (p.transport = 'network_tcp' and p.location_id = ${ctx.locationId}) or ${usbBt} )
       ${ctx.printerId === undefined ? sql`` : sql`and p.id = ${ctx.printerId}`}
-      and (not exists (select 1 from invoice_deliveries d where d.print_job_id = j.id)
-        or ${
-          ctx.invoiceReceiptsAt === undefined
-            ? sql`false`
-            : sql`exists (
-          select 1 from invoice_deliveries d where d.print_job_id = j.id
-            and d.status = 'queued' and d.next_attempt_at <= ${ctx.invoiceReceiptsAt})`
-        })
+      and ${invoiceDue(sql`j.id`)}
       and (j.kind = 'document' or j.status = 'queued')
       and ${due}`,
-    order: sql`case when j.status = 'failed' then 1 else 0 end, j.created_at`,
+    order: sql`case when j.status = 'failed' or exists (
+        select 1 from print_jobs f
+        where f.printer_id = j.printer_id and f.kind = 'document'
+          and f.status = 'failed' and f.attempts < ${MAX_DELIVERY_ATTEMPTS}
+          and (f.created_at < j.created_at or (f.created_at = j.created_at and f.rowid < j.rowid))
+          and ${invoiceDue(sql`f.id`)}
+      ) then 1 else 0 end, j.created_at, j.rowid`,
     limit: 1,
     set: sql`status = 'printing', claimed_at = ${claimedAt}, claimed_by = ${agentId}`,
     // Correlated subqueries: SQLite refuses a RETURNING column from a table an `UPDATE … FROM` joins.
@@ -226,8 +235,6 @@ export async function runAgentOnce(deps: AgentRuntimeDeps): Promise<AgentRunResu
 
   const claimed = await claimPrintJobs(tx, agentId, { locationId, visibleKeys });
 
-  // The push is serial, so one dead printer blocks the rest of the batch unless each
-  // `transport.send` is bounded — `NetworkTcpTransport` arms a per-send timeout for that.
   let delivered = 0;
   let failed = 0;
   for (const job of claimed) {

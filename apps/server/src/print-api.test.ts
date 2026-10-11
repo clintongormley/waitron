@@ -570,7 +570,83 @@ describe("remote agents with an aged print queue", () => {
     await secondAgent.runOnce();
     expect(sink.written.map((entry) => [...entry.bytes])).toEqual(expected);
     expect((await jobRow(job.jobId)).status).toBe(status);
+    if (kind === "drawer") {
+      const listed = await send(app, "GET", "/management-api/print-jobs", {
+        cookie: managerCookie,
+      });
+      expect(listed.status).toBe(200);
+      const rows = (await listed.json()) as { id: string; status: string; canResend: boolean }[];
+      expect(rows.find((row) => row.id === job.jobId)).toMatchObject({
+        status: "printing",
+        canResend: false,
+      });
+    }
   });
+  it("preserves failed-ticket order on one printer while another printer proceeds", async () => {
+    const app = mountApp();
+    app.get("/api/node", (c) =>
+      c.json({ nodeId: cfg.nodeId, term: 1, acceptingSales: true, environment: "preproduction" }),
+    );
+    const a = await joinAndAccept(app, "Agent A");
+    const b = await joinAndAccept(app, "Agent B");
+    const printerId = await createPrinterVia(app, a.agentId);
+    const first = await enqueue(printerId, new Uint8Array([1]));
+    const tail = await enqueue(printerId, new Uint8Array([2]));
+    await suite.db
+      .update(printJobs)
+      .set({ createdAt: "2026-01-01T00:00:00.000Z" })
+      .where(eq(printJobs.id, first));
+    await suite.db
+      .update(printJobs)
+      .set({ createdAt: "2026-01-01T00:00:01.000Z" })
+      .where(eq(printJobs.id, tail));
+    const fetch: typeof globalThis.fetch = async (url, init) => app.request(String(url), init);
+    const serverUrl = "http://box.test";
+    const failed = createAgent({
+      host: fakeHost({
+        token: a.token,
+        fetch,
+        config: { serverUrl, name: "Agent A" },
+        transport: {
+          send: async () => {
+            throw new Error("paper out");
+          },
+        },
+      }),
+    });
+    await failed.runOnce();
+    expect(await jobRow(first)).toMatchObject({
+      status: "failed",
+      attempts: 1,
+      last_error: "paper out",
+    });
+    const created = await send(app, "POST", "/management-api/printers", {
+      cookie: managerCookie,
+      body: { name: "Other", transport: "network_tcp", host: "10.0.0.10" },
+    });
+    expect(created.status).toBe(201);
+    const { id } = (await created.json()) as { id: string };
+    const other = await enqueue(id, new Uint8Array([9]));
+    await suite.db
+      .update(printJobs)
+      .set({ createdAt: "2026-01-01T00:00:02.000Z" })
+      .where(eq(printJobs.id, other));
+    const sink = new FakeSink();
+    const recovered = createAgent({
+      host: fakeHost({
+        token: b.token,
+        fetch,
+        config: { serverUrl, name: "Agent B" },
+        transport: sink,
+      }),
+    });
+    for (let tick = 0; tick < 3; tick += 1) await recovered.runOnce();
+    expect(sink.written.map((entry) => [...entry.bytes])).toEqual([[9], [1], [2]]);
+    expect(await jobRow(first)).toMatchObject({ status: "done", attempts: 1 });
+    expect((await jobRow(tail)).status).toBe("done");
+    expect((await jobRow(other)).status).toBe("done");
+  });
+
   it("bounds failed drawer history without pretending five sends failed", async () => {
     const app = mountApp();
     const a = await joinAndAccept(app);

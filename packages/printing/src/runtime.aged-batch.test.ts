@@ -10,7 +10,7 @@ import { enqueuePrintJob } from "./outbox.js";
 
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
 
-async function fixture(kind: "document" | "drawer") {
+async function fixture(kind: "document" | "drawer", separatePrinter = false) {
   await seedTenant(suite.db);
   const [location] = await suite.db
     .insert(locations)
@@ -39,7 +39,20 @@ async function fixture(kind: "document" | "drawer") {
       },
     );
     const first = await enqueuePrintJob(tx, { locationId }, printer.id, new Uint8Array([1]));
-    const tail = await enqueuePrintJob(tx, { locationId }, printer.id, new Uint8Array([2]), kind);
+    const tailPrinter = separatePrinter
+      ? await createPrinter(
+          tx,
+          { locationId },
+          { name: "Other", transport: "network_tcp", host: "10.0.0.10" },
+        )
+      : printer;
+    const tail = await enqueuePrintJob(
+      tx,
+      { locationId },
+      tailPrinter.id,
+      new Uint8Array([2]),
+      kind,
+    );
     await tx
       .update(printJobs)
       .set({ createdAt: "2026-10-11T00:00:00.000Z" })
@@ -188,8 +201,8 @@ describe("aged print batches", () => {
     expect(row!.lastError).toBe("connection reset after write");
   });
 
-  it("lets queued work pass a failed document on the next pull", async () => {
-    const ctx = await fixture("document");
+  it("lets another printer pass a failed document on the next pull", async () => {
+    const ctx = await fixture("document", true);
     const pull = () =>
       withTransaction(suite.db, (tx) =>
         claimPrintJobs(tx, ctx.a, {
@@ -207,4 +220,39 @@ describe("aged print batches", () => {
     );
     expect((await pull()).map((job) => job.id)).toEqual([ctx.tail]);
   });
+  it.each([false, true])(
+    "keeps the older failed ticket ahead on the same printer (same timestamp: %s)",
+    async (sameTime) => {
+      const ctx = await fixture("document");
+      if (sameTime)
+        await suite.db
+          .update(printJobs)
+          .set({ createdAt: "2026-10-11T00:00:00.000Z" })
+          .where(eq(printJobs.id, ctx.tail));
+      const pull = () =>
+        withTransaction(suite.db, (tx) =>
+          claimPrintJobs(tx, ctx.a, {
+            locationId: ctx.locationId,
+            visibleKeys: [],
+          }),
+        );
+      expect((await pull()).map((job) => job.id)).toEqual([ctx.first]);
+      await withTransaction(suite.db, (tx) =>
+        reportPrintJob(tx, {
+          agentId: ctx.a,
+          jobId: ctx.first,
+          outcome: { status: "failed", error: "paper out" },
+        }),
+      );
+      expect((await pull()).map((job) => job.id)).toEqual([ctx.first]);
+      await withTransaction(suite.db, (tx) =>
+        reportPrintJob(tx, {
+          agentId: ctx.a,
+          jobId: ctx.first,
+          outcome: { status: "done" },
+        }),
+      );
+      expect((await pull()).map((job) => job.id)).toEqual([ctx.tail]);
+    },
+  );
 });
