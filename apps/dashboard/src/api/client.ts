@@ -3099,6 +3099,34 @@ export class DashboardApi {
     });
   }
 
+  copyDeviceProfile(
+    sourceId: string,
+    ...[
+      name,
+      canvasId,
+      capabilities,
+      formFactor,
+      inactivityTimeoutSeconds,
+      printerLists,
+      extras,
+    ]: Parameters<DashboardApi["createDeviceProfile"]>
+  ): Promise<DeviceProfile> {
+    return this.#request<DeviceProfile>(
+      `/management-api/device-profiles/${encodeURIComponent(sourceId)}/copy`,
+      "POST",
+      {
+        name,
+        canvasId,
+        capabilities,
+        formFactor,
+        inactivityTimeoutSeconds,
+        receiptPrinterIds: printerLists.receiptPrinterIds,
+        paymentSlipPrinterIds: printerLists.paymentSlipPrinterIds,
+        ...extras,
+      },
+    );
+  }
+
   updateDeviceProfile(
     id: string,
     name: string,

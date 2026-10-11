@@ -370,6 +370,7 @@ export const QUERY_DEPENDENCIES = {
     "device_profile_admission_roles",
     "device_profile_admission_persons",
   ],
+  getProfileScopeChoices: ["departments", "floor_zones"],
   listProfileKitchenScreens: [
     "device_profiles",
     "device_profile_kitchen_screens",

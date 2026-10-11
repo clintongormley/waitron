@@ -1,4 +1,4 @@
-import { page } from "vitest/browser";
+import { page, userEvent } from "vitest/browser";
 import { LiveData } from "@waitron/dashboard-kit";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { chooseOption } from "@waitron/ui/src/test-helpers.js";
@@ -18,6 +18,7 @@ import type {
   ReaderRow,
   Station,
 } from "../api/client.js";
+import { DashboardApi as RealDashboardApi } from "../api/client.js";
 import { currentLocale, setLocale, t } from "../i18n/t.js";
 import { codeMessage } from "../i18n/codes.js";
 
@@ -3159,4 +3160,109 @@ describe("the printer lists while the venue's printers are not read", () => {
     await flush(el);
     expect(bottom(el)).toBe(codeMessage("connection.failed"));
   });
+});
+
+it("service deletion refreshes native profile zones and chooses a permitted starting replacement", async () => {
+  const before = currentLocale();
+  try {
+    setLocale("en");
+    const api = Object.assign(stubApi(), { liveData: new LiveData() });
+    const el = await mount(api);
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=edit-p1]")!.click();
+    await flush(el);
+    rename(el, "Retained draft");
+    vi.mocked(api.getProfileScopeChoices).mockResolvedValue({
+      ...scopeChoices,
+      zones: scopeChoices.zones.filter((z) => z.id !== "z1"),
+    });
+    api.liveData.invalidate([{ type: "floor_zones", id: "z1" }]);
+    await vi.waitFor(() =>
+      expect(
+        el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-combobox"]>(
+          "[data-test=profile-starting-zone]",
+        )!.value,
+      ).toBe("z2"),
+    );
+    expect(el.shadowRoot!.querySelector("[data-test=profile-zone-z1]")).toBeNull();
+    const start = el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-combobox"]>(
+      "[data-test=profile-starting-zone]",
+    )!;
+    await start.updateComplete;
+    expect(start.shadowRoot!.querySelector("button")!.textContent).toContain("Terraza");
+    expect(start.value).toBe("z2");
+    expect(
+      el
+        .shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>("[data-test=profile-name]")!
+        .shadowRoot!.querySelector("input")!.value,
+    ).toBe("Retained draft");
+  } finally {
+    setLocale(before);
+  }
+});
+it("service deletion empty zone bound survives native unrelated save and actual UI Copy endpoint", async () => {
+  const before = currentLocale();
+  try {
+    setLocale("en");
+    const kitchen = { ...profiles[1]!, id: "p2" };
+    const screens = [
+      { profileId: "p2", screens: { pass_monitor: { stationIds: null, zoneIds: [] } } },
+    ];
+    const writes: [string, unknown][] = [];
+    const real = new RealDashboardApi("", async (path, init) => {
+      writes.push([String(path), JSON.parse(init.body as string)]);
+      return new Response(JSON.stringify({ ...kitchen, id: "copy" }), {
+        status: 201,
+        headers: { "content-type": "application/json" },
+      });
+    });
+    const api = Object.assign(
+      stubApi({
+        listDeviceProfiles: vi.fn().mockResolvedValue([kitchen]),
+        getDeviceProfile: vi.fn().mockResolvedValue(kitchen),
+        listProfileKitchenScreens: vi.fn().mockResolvedValue(screens),
+      }),
+      {
+        createDeviceProfile: vi.fn(real.createDeviceProfile.bind(real)),
+        copyDeviceProfile: real.copyDeviceProfile.bind(real),
+      },
+    );
+    const el = await mount(api);
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=edit-p2]")!.click();
+    await flush(el);
+    const every = el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-switch"]>(
+      "[data-test=profile-pass-monitor-every-zone]",
+    )!;
+    await every.updateComplete;
+    expect(every.shadowRoot!.querySelector("input")!.checked).toBe(false);
+    const name = el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>(
+      "[data-test=profile-name]",
+    )!;
+    await name.updateComplete;
+    await userEvent.fill(
+      page.elementLocator(name.shadowRoot!.querySelector("input")!),
+      "Renamed kitchen",
+    );
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=profile-save]")!.click();
+    await vi.waitFor(() => expect(api.updateDeviceProfile).toHaveBeenCalledOnce());
+    expect(vi.mocked(api.updateDeviceProfile).mock.calls[0]![7]).toBeUndefined();
+    await vi.waitFor(() =>
+      expect(el.shadowRoot!.querySelector("[data-test=duplicate-p2]")).not.toBeNull(),
+    );
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=duplicate-p2]")!.click();
+    await vi.waitFor(() => expect(writes.length).toBe(1));
+    expect(writes[0]![0]).toBe("/management-api/device-profiles/p2/copy");
+    expect(writes[0]![1]).toEqual({
+      name: "Kitchen (copy)",
+      canvasId: null,
+      capabilities: [],
+      formFactor: "kds",
+      inactivityTimeoutSeconds: null,
+      receiptPrinterIds: [],
+      paymentSlipPrinterIds: [],
+      kitchenScreens: { pass_monitor: { stationIds: null, zoneIds: [] } },
+    });
+    expect(api.createDeviceProfile).not.toHaveBeenCalled();
+  } finally {
+    setLocale(before);
+  }
 });

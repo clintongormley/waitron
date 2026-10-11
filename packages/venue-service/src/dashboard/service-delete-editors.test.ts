@@ -601,3 +601,34 @@ it("a reconnected day owner can save its retained draft after an old pending wri
   await day.updateComplete;
   expect(save.disabled).toBe(false);
 });
+
+it("department deletion removes its contributed receipt panel while another department draft survives", async () => {
+  await mount();
+  const survivor = await settings("d2");
+  const page = document.createElement("department-page");
+  page.api = new VenueServiceApi((async (path) =>
+    path.endsWith("/profiles")
+      ? []
+      : { receivingProfileId: null, destinationDepartmentIds: [] }) as DashboardRequest);
+  page.model = structuredClone(zonesModel);
+  page.departmentId = "d1";
+  page.view = "receipt";
+  page.renderPanel = (panel, subject) =>
+    html`<section data-test="contributed-receipt" data-department=${subject.id}>${panel}</section>`;
+  app.append(page);
+  await page.updateComplete;
+  expect(
+    page
+      .shadowRoot!.querySelector("[data-test=contributed-receipt]")
+      ?.getAttribute("data-department"),
+  ).toBe("d1");
+  page.model = { ...page.model, departments: page.model.departments.filter((d) => d.id !== "d1") };
+  await page.updateComplete;
+  expect(page.shadowRoot!.querySelector("[data-test=contributed-receipt]")).toBeNull();
+  expect(
+    survivor
+      .shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>("[name=name]")!
+      .shadowRoot!.querySelector("input")!.value,
+  ).toBe("Staged d2");
+  expect(app.leave.coordinator.isDirty([survivor])).toBe(true);
+});

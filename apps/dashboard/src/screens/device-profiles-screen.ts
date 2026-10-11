@@ -1,3 +1,5 @@
+import { QueryController } from "@waitron/dashboard-kit";
+import { dashboardQuery } from "../api/live-queries.js";
 import { DashboardQueries } from "../api/query-controller.js";
 import { LitElement, type TemplateResult, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
@@ -206,7 +208,6 @@ function comparableScreens(
 /** Empty explicit station bounds survive copying so the copy cannot widen them to Every. */
 function switchedOnScreens(
   screens: ProfileKitchenScreens,
-  sharedDisplay: boolean,
   stationOn: (id: string) => boolean,
   zoneOn: (id: string) => boolean,
 ): ProfileKitchenScreens {
@@ -216,8 +217,6 @@ function switchedOnScreens(
     if (scope === undefined) continue;
     const stationIds = scope.stationIds === null ? null : scope.stationIds.filter(stationOn);
     const zoneIds = scope.zoneIds === null ? null : scope.zoneIds.filter(zoneOn);
-    const noRowBoundsNothing = !sharedDisplay && kind !== "pass_monitor";
-    if (stationIds?.length !== 0 && zoneIds?.length === 0 && !noRowBoundsNothing) continue;
     out[kind] = { stationIds, zoneIds };
   }
   return out;
@@ -954,6 +953,7 @@ export class DeviceProfilesScreen extends LitElement {
   // ── New / Edit ─────────────────────────────────────────────────────────────────────────────────
 
   #clearDraft(): void {
+    this.#scopeQueries.release("choices");
     this.#saveTurn++;
     this.saving = false;
     this.#draftScope?.dispose();
@@ -994,8 +994,38 @@ export class DeviceProfilesScreen extends LitElement {
    * on changes nothing. */
   #opened = 0;
 
-  /** A venue with one department starts the profile there, at its first zone. The departments and
-   * zones are read when the editor opens rather than kept live: the editor is the only reader. */
+  readonly #scopeQueries = new QueryController(
+    this,
+    () => this.api.liveData,
+    (error) => this.#showReadError(error),
+  );
+
+  #watchScopeChoices(): Promise<ProfileScopeChoices> {
+    const opened = this.#opened;
+    const first = this.api.getProfileScopeChoices();
+    let initial = true;
+    const query = dashboardQuery(this.api.background ?? this.api, "getProfileScopeChoices", []);
+    void this.#scopeQueries
+      .watch(
+        "choices",
+        {
+          ...query,
+          read: () => {
+            if (!initial) return query.read();
+            initial = false;
+            return first;
+          },
+        },
+        (choices) => {
+          if (opened !== this.#opened) return;
+          this.scopeChoices = choices;
+          if (this.mode === "editor") this.#settleStartingZone();
+        },
+      )
+      .catch(() => {});
+    return first;
+  }
+
   #openCreate(): void {
     this.#clearDraft();
     this.#clearErrorOnOpen();
@@ -1005,7 +1035,7 @@ export class DeviceProfilesScreen extends LitElement {
     const scope = this.#draftScope;
     const opened = this.#opened;
     void this.#loadReaders(null, opened);
-    this.api.getProfileScopeChoices().then(
+    this.#watchScopeChoices().then(
       (choices) => {
         if (opened !== this.#opened) return;
         this.scopeChoices = choices;
@@ -1030,15 +1060,15 @@ export class DeviceProfilesScreen extends LitElement {
    * delivered yet. */
   async #openEditor(id: string): Promise<void> {
     this.#clearErrorOnOpen();
-    const opened = ++this.#opened;
+    this.#clearDraft();
+    const opened = this.#opened;
     try {
       const [profile, kitchenScreens, choices] = await Promise.all([
         this.api.getDeviceProfile(id),
         this.api.listProfileKitchenScreens(),
-        this.api.getProfileScopeChoices(),
+        this.#watchScopeChoices(),
       ]);
       if (opened !== this.#opened) return;
-      this.#clearDraft();
       this.scopeChoices = choices;
       this.editingId = id;
       this.#loaded = profile;
@@ -1553,7 +1583,6 @@ export class DeviceProfilesScreen extends LitElement {
       const stored = this.kitchenScreens.find((entry) => entry.profileId === profile.id)?.screens;
       const screens = switchedOnScreens(
         stored ?? {},
-        isSharedDisplay(profile.formFactor),
         (id) => this.stations.some((station) => station.id === id && station.active),
         (id) => choices.zones.some((zone) => zone.id === id && zone.active),
       );
@@ -1575,7 +1604,8 @@ export class DeviceProfilesScreen extends LitElement {
       for (const { defaultKey } of PRINTER_LISTS)
         if (profile[defaultKey] !== null) extras[defaultKey] = profile[defaultKey];
       const extrasArg = Object.keys(extras).length === 0 ? [] : ([extras] as const);
-      const created = await this.api.createDeviceProfile(
+      const created = await this.api.copyDeviceProfile(
+        profile.id,
         name,
         profile.canvasId,
         profile.capabilities,
@@ -1892,18 +1922,15 @@ export class DeviceProfilesScreen extends LitElement {
     return pass && this.draftKitchenScreens.pass_monitor !== undefined;
   }
 
-  /** The venue's switched-on entries in their order, plus any switched off the list still holds,
-   * marked, so a save keeps them. */
   #listChoices(
     all: readonly { id: string; name: string; active: boolean }[],
     listed: readonly string[],
-    mark: string,
   ): { id: string; label: string; on: boolean }[] {
     return all
-      .filter((entry) => entry.active || listed.includes(entry.id))
+      .filter((entry) => entry.active)
       .map((entry) => ({
         id: entry.id,
-        label: entry.active ? entry.name : `${entry.name} (${mark})`,
+        label: entry.name,
         on: listed.includes(entry.id),
       }));
   }
@@ -1933,7 +1960,6 @@ export class DeviceProfilesScreen extends LitElement {
         handler: (e: CustomEvent<{ checked: boolean }>) => void;
       },
       all: readonly { id: string; name: string; active: boolean }[],
-      mark: string,
       item: string,
       heading: string,
     ) => {
@@ -1959,7 +1985,7 @@ export class DeviceProfilesScreen extends LitElement {
             : []),
           ...(listed === null
             ? []
-            : this.#listChoices(all, listed, mark).map(
+            : this.#listChoices(all, listed).map(
                 (choice) =>
                   html`<wt-switch
                     data-test="profile-${slug}-${item}-${choice.id}"
@@ -1983,7 +2009,6 @@ export class DeviceProfilesScreen extends LitElement {
           handler: (e) => this.#onScreenEveryStation(e, kind),
         },
         this.stations.filter((station) => station.active),
-        t("devices.station_disabled_mark"),
         "station",
         t("device_profiles.kitchen_stations"),
       )}
@@ -1999,7 +2024,6 @@ export class DeviceProfilesScreen extends LitElement {
                 handler: (e) => this.#onScreenEveryZone(e, kind),
               },
               this.scopeChoices.zones,
-              t("device_profiles.zone_disabled_mark"),
               "zone",
               t("device_profiles.kitchen_zones"),
             )

@@ -1,6 +1,13 @@
 import { afterEach, expect, it, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
-import { LiveData } from "@waitron/dashboard-kit";
+import { html, LitElement } from "lit";
+import { LeaveController } from "@waitron/ui";
+import { DASHBOARD_MODULES } from "@waitron/dashboard-modules";
+import {
+  LiveData,
+  type DashboardScreenHandle,
+  type DashboardRequest,
+} from "@waitron/dashboard-kit";
 import { chooseOption } from "@waitron/ui/src/test-helpers.js";
 import type { DashboardApi, DepartmentReceiptSettings, ReceiptPreview } from "../api/client.js";
 import { cleanupWidgets, mountWidget, expectNoA11yViolations } from "../widgets/test-helpers.js";
@@ -578,3 +585,157 @@ it("the department read supplies receipt language when Venue settings is forbidd
   await chooseOption(choice!, "es-ES");
   await vi.waitFor(() => expect(api.previewReceiptDraft.mock.lastCall?.[0].language).toBe("es-ES"));
 });
+
+it.each(["success", "refusal"] as const)(
+  "service deletion replacement ignores the retained receipt screen's late preview %s",
+  async (result) => {
+    url("bar");
+    const api = apiFixture();
+    const { el } = await mount(api);
+    const child = await loadedEditor(el);
+    await vi.waitFor(() =>
+      expect(el.shadowRoot!.querySelector(".paper")?.textContent).toContain("bar:"),
+    );
+    const old = heldPreview();
+    const replacement = heldPreview();
+    api.previewReceiptDraft
+      .mockImplementationOnce(() => old.promise)
+      .mockImplementation(() => replacement.promise);
+    await fill(child, "email", "deleted@example.com");
+    await vi.waitFor(() => expect(api.previewReceiptDraft).toHaveBeenCalledTimes(2));
+    el.departmentId = "closed";
+    el.departmentName = "Replacement";
+    await vi.waitFor(() => expect(editor(el)!.departmentId).toBe("closed"));
+    await vi.waitFor(() =>
+      expect(
+        editor(el)!.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>("[name=email]")
+          ?.value,
+      ).toBe(""),
+    );
+    await fill(editor(el)!, "email", "replacement@example.com");
+    await vi.waitFor(() =>
+      expect(api.previewReceiptDraft.mock.lastCall?.[0].departmentId).toBe("closed"),
+    );
+    if (result === "success") old.resolve(preview("Deleted department's old paper"));
+    else old.reject({ code: "department.not_found" });
+    await old.promise.catch(() => undefined);
+    await vi.waitFor(() =>
+      expect(api.previewReceiptDraft.mock.lastCall?.[0].departmentId).toBe("closed"),
+    );
+    await el.updateComplete;
+    expect(el.shadowRoot!.querySelector(".paper")).toBeNull();
+    expect(el.shadowRoot!.querySelector("[data-test=preview-error]")).toBeNull();
+    replacement.resolve(preview("closed: replacement paper"));
+    await vi.waitFor(() =>
+      expect(el.shadowRoot!.querySelector(".paper")?.textContent).toContain("closed:"),
+    );
+    expect(el.shadowRoot!.querySelector("[data-test=preview-error]")).toBeNull();
+    expect(
+      editor(el)!
+        .shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>("[name=email]")!
+        .shadowRoot!.querySelector("input")!.value,
+    ).toBe("replacement@example.com");
+  },
+);
+
+class ServiceReceiptHost extends LitElement {
+  readonly leave = new LeaveController(this);
+  handle!: DashboardScreenHandle;
+  api!: DashboardApi;
+  override render() {
+    return html`${this.handle.render()}<dashboard-receipts-screen
+        .api=${this.api}
+        departmentId="d2"
+        departmentName="Survivor"
+      ></dashboard-receipts-screen
+      >${this.leave.render({ heading: "Unsaved", message: "Discard?", keepLabel: "Keep", discardLabel: "Discard" })}`;
+  }
+}
+customElements.define("service-receipt-owner-host", ServiceReceiptHost);
+it.each(["success", "refusal"] as const)(
+  "service deletion live parent retires a dirty receipt and preserves another dirty receipt after late %s",
+  async (result) => {
+    history.replaceState(null, "", "/manage/venue-operations/department/d1/view/receipt");
+    let model = {
+      departments: [
+        { id: "d1", name: "Deleted department", tradingName: "Deleted", active: true },
+        { id: "d2", name: "Survivor", tradingName: "Surviving", active: true },
+      ],
+      zones: [],
+      floorZones: [],
+      readiness: [],
+      salePolicies: { departments: [], zones: [] },
+      settings: { editSentLines: true },
+      kitchenTicketGrouping: "combined",
+      printHeldWork: false,
+      releaseReminderMinutes: null,
+      clearingWorkflow: false,
+    };
+    const api = apiFixture();
+    let finish!: () => void;
+    let refuse!: (error: unknown) => void;
+    const write = new Promise<void>((yes, no) => {
+      finish = yes;
+      refuse = no;
+    });
+    api.putDepartmentReceipt.mockImplementationOnce(() => write);
+    const contribution = DASHBOARD_MODULES.find((c) => c.module === "venue-service")!;
+    const handle = contribution.create({
+      request: (async (path) =>
+        path === "/management-api/venue-service"
+          ? model
+          : path.endsWith("/profiles")
+            ? []
+            : path.includes("transfer")
+              ? { receivingProfileId: null, destinationDepartmentIds: [] }
+              : []) as DashboardRequest,
+      liveData: api.liveData,
+      renderPanel: (_panel, subject) =>
+        html`<dashboard-receipts-screen
+          .api=${api as unknown as DashboardApi}
+          .departmentId=${subject.id}
+          .departmentName=${subject.name}
+        ></dashboard-receipts-screen>`,
+    });
+    const { el: host } = await mountWidget<ServiceReceiptHost>("service-receipt-owner-host", {
+      handle,
+      api: api as unknown as DashboardApi,
+    });
+    const loader = host.shadowRoot!.querySelector("dashboard-venue-operations-screen")!;
+    await vi.waitFor(() =>
+      expect(loader.shadowRoot?.querySelector("venue-departments-shell")).not.toBeNull(),
+    );
+    const shell = loader.shadowRoot!.querySelector("venue-departments-shell")!;
+    await vi.waitFor(() =>
+      expect(shell.shadowRoot?.querySelector("department-page")).not.toBeNull(),
+    );
+    const parent = shell.shadowRoot!.querySelector("department-page")!;
+    await vi.waitFor(() =>
+      expect(parent.shadowRoot?.querySelector("dashboard-receipts-screen")).not.toBeNull(),
+    );
+    const deleted = parent.shadowRoot!.querySelector<ReceiptsScreen>("dashboard-receipts-screen")!;
+    const oldEditor = await loadedEditor(deleted);
+    const survivor = host.shadowRoot!.querySelector<ReceiptsScreen>("dashboard-receipts-screen")!;
+    const survivingEditor = await loadedEditor(survivor);
+    await fill(oldEditor, "email", "deleted@example.com");
+    await fill(survivingEditor, "email", "surviving@example.com");
+    oldEditor.shadowRoot!.querySelector<HTMLElement>("[data-test=department-save]")!.click();
+    await vi.waitFor(() => expect(api.putDepartmentReceipt).toHaveBeenCalledOnce());
+    model = { ...model, departments: model.departments.filter((d) => d.id !== "d1") };
+    api.liveData.invalidate([{ type: "departments", id: "d1" }]);
+    await vi.waitFor(() => expect(deleted.isConnected).toBe(false));
+    expect(host.leave.coordinator.isDirty([deleted])).toBe(false);
+    expect(host.leave.coordinator.isDirty([survivor])).toBe(true);
+    if (result === "success") finish();
+    else refuse({ code: "receipt.invalid", params: { field: "email", reason: "invalid_email" } });
+    await write.catch(() => undefined);
+    await survivingEditor.updateComplete;
+    expect(
+      survivingEditor
+        .shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>("[name=email]")!
+        .shadowRoot!.querySelector("input")!.value,
+    ).toBe("surviving@example.com");
+    expect(host.leave.coordinator.isDirty([survivor])).toBe(true);
+    expect(shell.shadowRoot!.querySelector("department-page")).toBeNull();
+  },
+);

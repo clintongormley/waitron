@@ -117,3 +117,35 @@ it("reconnect preserves an edit made before removal and registers it against its
   await edit(editor, "second@example.com");
   expect(unload()).toBe(true);
 });
+
+it.each(["keep", "discard"] as const)(
+  "service deletion retires pending %s for the same retained receipt owner",
+  async (decision) => {
+    const { app, editor } = await mount();
+    await edit(editor, "deleted@example.com");
+    let proceeded = false;
+    const request = app.leave.coordinator.request({
+      scopes: "all",
+      reason: "navigation",
+      proceed() {
+        proceeded = true;
+      },
+    });
+    await vi.waitFor(() =>
+      expect(app.shadowRoot!.querySelector("wt-unsaved-changes")?.open).toBe(true),
+    );
+    const question = app.shadowRoot!.querySelector("wt-unsaved-changes")!;
+    await question.updateComplete;
+    const stale = question.shadowRoot!.querySelector<HTMLElement>(`[data-choice=${decision}]`)!;
+    editor.departmentId = "replacement";
+    await vi.waitFor(() =>
+      expect(input(editor)?.shadowRoot?.querySelector("input")?.value).toBe(""),
+    );
+    await edit(editor, "replacement@example.com");
+    stale.click();
+    expect(await request).toBe("stale");
+    expect(proceeded).toBe(false);
+    expect(input(editor).shadowRoot!.querySelector("input")!.value).toBe("replacement@example.com");
+    expect(unload()).toBe(true);
+  },
+);
