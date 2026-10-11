@@ -93,6 +93,7 @@ function paymentIdOf(paid: Answer): string {
 
 function closeInput(businessDay: string) {
   return {
+    cutoverChanges: [],
     nodeId: venue.cfg.nodeId,
     businessDay,
     timeZone: "Europe/Madrid",

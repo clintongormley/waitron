@@ -1,3 +1,4 @@
+import { readLocationClock } from "@waitron/reporting";
 import type { Hono } from "hono";
 import { eq, sql } from "drizzle-orm";
 import { readInvoiceLocales } from "@waitron/catalogue";
@@ -121,13 +122,20 @@ export function mountLocationSettingsApi(
     run(c, log, async () => {
       const model = await gated(
         requireManagementSession(c),
-        (tx) => readVenueDetails(tx, deps.cfg),
+        async (tx) => ({
+          details: await readVenueDetails(tx, deps.cfg),
+          clock: await readLocationClock(tx, deps.cfg.locationId),
+        }),
         "venue.view",
       );
       const preview = venueClockPreview(
         (deps.now ?? (() => new Date()))(),
-        model.details,
-        { timeZone: c.req.query("timeZone") ?? "", dayCutover: c.req.query("dayCutover") ?? "" },
+        model.clock,
+        {
+          ...model.clock,
+          timeZone: c.req.query("timeZone") ?? "",
+          dayCutover: c.req.query("dayCutover") ?? "",
+        },
         deps.readBackupDeadlines?.() ?? { archive: null, cloud: null },
       );
       return c.json(preview);

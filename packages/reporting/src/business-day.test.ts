@@ -43,7 +43,7 @@ describe("validateCutover", () => {
 });
 
 describe("venueMomentAt", () => {
-  const madrid = { timeZone: "Europe/Madrid", dayCutover: "06:00" };
+  const madrid = { cutoverChanges: [], timeZone: "Europe/Madrid", dayCutover: "06:00" };
 
   it("gives the venue's weekday, not UTC's, just after local midnight", () => {
     expect(venueMomentAt(new Date("2026-10-02T22:30:00Z"), madrid)).toEqual({
@@ -66,15 +66,25 @@ describe("venueMomentAt", () => {
   });
 
   it("answers null for a zone or cutover it cannot read", () => {
-    expect(venueMomentAt(new Date(), { timeZone: "Mars/Base", dayCutover: "06:00" })).toBeNull();
-    expect(venueMomentAt(new Date(), { timeZone: "+02:00", dayCutover: "06:00" })).toBeNull();
-    expect(venueMomentAt(new Date(), { timeZone: "Europe/Madrid", dayCutover: "6am" })).toBeNull();
+    expect(
+      venueMomentAt(new Date(), { cutoverChanges: [], timeZone: "Mars/Base", dayCutover: "06:00" }),
+    ).toBeNull();
+    expect(
+      venueMomentAt(new Date(), { cutoverChanges: [], timeZone: "+02:00", dayCutover: "06:00" }),
+    ).toBeNull();
+    expect(
+      venueMomentAt(new Date(), {
+        cutoverChanges: [],
+        timeZone: "Europe/Madrid",
+        dayCutover: "6am",
+      }),
+    ).toBeNull();
   });
 });
 
 describe("civilDateOf", () => {
   it("gives the venue's calendar date, which turns at midnight and not at the cutover", () => {
-    const madrid = { timeZone: "Europe/Madrid", dayCutover: "06:00" };
+    const madrid = { cutoverChanges: [], timeZone: "Europe/Madrid", dayCutover: "06:00" };
     const at = new Date("2026-10-02T22:30:00Z");
     expect(civilDateOf(at, "Europe/Madrid")).toBe("2026-10-03");
     expect(venueMomentAt(at, madrid)?.businessDay).toBe("2026-10-02");
@@ -118,8 +128,14 @@ describe("businessDayRangeWindow", () => {
       // Written the way a stored stamp is written: a timestamp column is TEXT in `toISOString()`'s
       // spelling.
       const column = sql`${instant}`;
-      const dayInput = { businessDay: day, timeZone: TZ, dayCutover: CUTOVER } as DailyCloseInput;
+      const dayInput = {
+        cutoverChanges: [],
+        businessDay: day,
+        timeZone: TZ,
+        dayCutover: CUTOVER,
+      } as DailyCloseInput;
       const rangeInput = {
+        cutoverChanges: [],
         fromBusinessDay: day,
         toBusinessDay: day,
         timeZone: TZ,
@@ -152,7 +168,7 @@ describe("readLocationClock", () => {
 
     const clock = await withTransaction(suite.db, (tx) => readLocationClock(tx, location!.id));
 
-    expect(clock).toEqual({ timeZone: "Atlantic/Canary", dayCutover: "04:30" });
+    expect(clock).toEqual({ cutoverChanges: [], timeZone: "Atlantic/Canary", dayCutover: "04:30" });
   });
 
   it("throws a plain Error for a location the database does not hold", async () => {
@@ -166,6 +182,7 @@ describe("readLocationClock", () => {
 describe("validatedRangeWindow", () => {
   const suite = useVenueDb({ migrations: [CORE_MIGRATIONS], timeoutMs: 60_000 });
   const input = {
+    cutoverChanges: [],
     fromBusinessDay: "2026-08-04",
     toBusinessDay: "2026-08-05",
     timeZone: "Europe/Madrid",
@@ -208,7 +225,11 @@ describe("businessDayStart", () => {
     ["2026-08-04T04:00:00.000Z", "2026-08-04T04:00:00.000Z"],
   ])("puts %s in the business day that began at %s", (instant, expected) => {
     expect(
-      businessDayStart(new Date(instant), { timeZone: "Europe/Madrid", dayCutover: "06:00" }),
+      businessDayStart(new Date(instant), {
+        cutoverChanges: [],
+        timeZone: "Europe/Madrid",
+        dayCutover: "06:00",
+      }),
     ).toBe(expected);
   });
 
@@ -234,7 +255,7 @@ describe("businessDayStart", () => {
     ])(
       "with a %s cutover, %s is in the day the daily close starts at %s",
       async (dayCutover, instant, expected) => {
-        const clock = { timeZone: "Europe/Madrid", dayCutover };
+        const clock = { cutoverChanges: [], timeZone: "Europe/Madrid", dayCutover };
         const start = businessDayStart(new Date(instant), clock);
         expect(start).toBe(expected);
         expect(start <= instant).toBe(true);
@@ -255,10 +276,18 @@ describe("businessDayStart", () => {
 
   it("validates the clock before computing (caller precondition, plain Error)", () => {
     expect(() =>
-      businessDayStart(new Date(), { timeZone: "Mars/Olympus", dayCutover: "06:00" }),
+      businessDayStart(new Date(), {
+        cutoverChanges: [],
+        timeZone: "Mars/Olympus",
+        dayCutover: "06:00",
+      }),
     ).toThrow(/time zone/i);
     expect(() =>
-      businessDayStart(new Date(), { timeZone: "Europe/Madrid", dayCutover: "6:00" }),
+      businessDayStart(new Date(), {
+        cutoverChanges: [],
+        timeZone: "Europe/Madrid",
+        dayCutover: "6:00",
+      }),
     ).toThrow(/cutover/i);
   });
 });
@@ -268,6 +297,7 @@ describe("currentBusinessDay / businessDayOf", () => {
     // 2026-03-01 04:30 UTC = 05:30 Madrid (CET, UTC+1 in winter). With a 06:00 cutover, 05:30 local
     // still belongs to the PREVIOUS business day; without the cutover shift it would be 2026-03-01.
     const day = businessDayOf(new Date("2026-03-01T04:30:00.000Z"), {
+      cutoverChanges: [],
       timeZone: "Europe/Madrid",
       dayCutover: "06:00",
     });
@@ -285,6 +315,7 @@ describe("currentBusinessDay / businessDayOf", () => {
   ])("reads a venue west of UTC: %s is business day %s", (instant, expected) => {
     expect(
       businessDayOf(new Date(instant), {
+        cutoverChanges: [],
         timeZone: "America/New_York",
         dayCutover: "04:00",
       }),
@@ -292,19 +323,23 @@ describe("currentBusinessDay / businessDayOf", () => {
   });
 
   it("returns a valid YYYY-MM-DD business day against the real clock", () => {
-    const day = currentBusinessDay({ timeZone: "Europe/Madrid", dayCutover: "06:00" });
+    const day = currentBusinessDay({
+      cutoverChanges: [],
+      timeZone: "Europe/Madrid",
+      dayCutover: "06:00",
+    });
     expect(() => validateBusinessDay(day)).not.toThrow();
   });
 
   it("validates the time zone before computing (caller precondition, plain Error)", () => {
-    expect(() => currentBusinessDay({ timeZone: "Mars/Olympus", dayCutover: "06:00" })).toThrow(
-      /time zone/i,
-    );
+    expect(() =>
+      currentBusinessDay({ cutoverChanges: [], timeZone: "Mars/Olympus", dayCutover: "06:00" }),
+    ).toThrow(/time zone/i);
   });
 
   it("validates the cutover before computing (caller precondition, plain Error)", () => {
-    expect(() => currentBusinessDay({ timeZone: "Europe/Madrid", dayCutover: "6:00" })).toThrow(
-      /cutover/i,
-    );
+    expect(() =>
+      currentBusinessDay({ cutoverChanges: [], timeZone: "Europe/Madrid", dayCutover: "6:00" }),
+    ).toThrow(/cutover/i);
   });
 });

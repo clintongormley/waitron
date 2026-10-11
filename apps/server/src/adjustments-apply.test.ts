@@ -2702,6 +2702,7 @@ describe("part of a dish with extras (B11d)", () => {
     const report = () =>
       inTx(venue, (tx) =>
         computeAdjustmentReport(tx, {
+          cutoverChanges: [],
           fromBusinessDay: day(-2),
           toBusinessDay: day(2),
           timeZone: "Europe/Madrid",

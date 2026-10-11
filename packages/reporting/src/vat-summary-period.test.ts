@@ -23,6 +23,7 @@ beforeEach(async () => {
 
 function run(overrides: Partial<PeriodVatInput> = {}): Promise<VatSummary> {
   const input: PeriodVatInput = {
+    cutoverChanges: [],
     nodeId: venue.nodeId,
     fromBusinessDay: FROM,
     toBusinessDay: TO,

@@ -1,3 +1,4 @@
+import type { BusinessDayClock } from "@waitron/shared";
 import { venueMomentAt } from "@waitron/reporting";
 import { AppError, isUuid } from "@waitron/shared";
 import { addDays, weekdayOf } from "./hours-rules.js";
@@ -108,10 +109,7 @@ export function parseClosedRanges(value: unknown, field: string, cutover: string
   );
 }
 
-export function serviceMomentAt(
-  at: Date,
-  clock: { timeZone: string; dayCutover: string },
-): ServiceMoment | null {
+export function serviceMomentAt(at: Date, clock: BusinessDayClock): ServiceMoment | null {
   const moment = venueMomentAt(at, clock);
   if (moment === null) return null;
   return {

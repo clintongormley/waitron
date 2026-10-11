@@ -40,6 +40,7 @@ beforeEach(async () => {
 
 function run(overrides: Partial<TopSellersInput> = {}): Promise<TopSeller[]> {
   const input: TopSellersInput = {
+    cutoverChanges: [],
     nodeId: venue.nodeId,
     fromBusinessDay: DAY,
     toBusinessDay: DAY,

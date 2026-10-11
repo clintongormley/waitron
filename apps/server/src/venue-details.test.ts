@@ -310,7 +310,6 @@ describe("venue history locks", () => {
         nodeId: venue.cfg.nodeId,
         businessDay: "2026-10-01",
         timeZone: "Europe/Madrid",
-        dayCutover: "05:00",
         closedBy: rows[0]!.id,
         cashCounts: [],
       }),
@@ -545,7 +544,9 @@ describe("existing clock-change cutover mapping", () => {
     ["2026-10-25T12:00:00Z", "Europe/Madrid", "2026-10-25T01:30:00.000Z"],
     ["2026-03-29T12:00:00Z", "UTC", "2026-03-29T02:30:00.000Z"],
   ])("resolves %s in %s", (instant, timeZone, expected) => {
-    expect(businessDayStart(new Date(instant), { timeZone, dayCutover: "02:30" })).toBe(expected);
+    expect(
+      businessDayStart(new Date(instant), { timeZone, dayCutover: "02:30", cutoverChanges: [] }),
+    ).toBe(expected);
   });
 });
 
@@ -1060,7 +1061,6 @@ describe("venue detail consumer reads", () => {
         nodeId: venue.cfg.nodeId,
         businessDay: "2026-10-06",
         timeZone: "Europe/Madrid",
-        dayCutover: "05:00",
         closedBy: rows[0]!.id,
         cashCounts: [
           {
@@ -1454,9 +1454,12 @@ it("accepts a named Etc zone containing a sign and passes it to the reporting cl
   );
   expect(saved.changed).toBe(true);
   expect(saved.model.details.timeZone).toBe("Etc/GMT+2");
-  expect(businessDayStart(new Date("2026-10-06T12:00:00Z"), saved.model.details)).toBe(
-    "2026-10-06T07:00:00.000Z",
-  );
+  expect(
+    businessDayStart(new Date("2026-10-06T12:00:00Z"), {
+      ...saved.model.details,
+      cutoverChanges: [],
+    }),
+  ).toBe("2026-10-06T07:00:00.000Z");
 });
 
 describe("reviewed legacy geography and clock repairs", () => {

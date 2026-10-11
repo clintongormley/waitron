@@ -447,6 +447,7 @@ describe("dates and pages", () => {
       listOrders(tx, {
         status: "all",
         dates: {
+          cutoverChanges: [],
           from: "2026-03-14",
           to: "2026-03-14",
           timeZone: "Europe/Madrid",

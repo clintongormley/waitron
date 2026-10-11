@@ -1,9 +1,10 @@
 import { businessDayStart, civilDateOf as civilDate, venueMomentAt } from "@waitron/reporting";
+import type { BusinessDayClock } from "@waitron/shared";
 import { AppError } from "@waitron/shared";
 import type { VenueClockPreview, VenueClockView } from "./venue-detail-types.js";
 import "./errors.js";
 
-type Clock = { timeZone: string; dayCutover: string };
+type Clock = BusinessDayClock;
 const DAY = 86400000;
 function view(at: Date, clock: Clock): VenueClockView | null {
   if (!/^([01]\d|2[0-3]):[0-5]\d(?::00)?$/.test(clock.dayCutover)) return null;
@@ -78,7 +79,7 @@ export function venueClockPreview(
   }
   if (!/^([01]\d|2[0-3]):[0-5]\d(?::00)?$/.test(proposed.dayCutover))
     throw new AppError("venue.detail_invalid", { field: "dayCutover", reason: "cutover" });
-  const candidate = { timeZone, dayCutover: proposed.dayCutover.slice(0, 5) };
+  const candidate = { ...proposed, timeZone, dayCutover: proposed.dayCutover.slice(0, 5) };
   return {
     at: at.toISOString(),
     current: view(at, current),

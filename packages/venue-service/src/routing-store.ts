@@ -379,7 +379,7 @@ export async function clearRoutingCell(
   await tx.delete(routingCells).where(cellAt(cfg, valid.address));
 }
 
-type VenueClock = { timeZone: string; dayCutover: string };
+type VenueClock = Awaited<ReturnType<typeof readLocationClock>>;
 
 /** The venue's clock, read once, and its wall-clock moment at `at`, or null when unreadable. */
 async function clockAt(tx: Transaction, cfg: VenueScope, at: Date) {

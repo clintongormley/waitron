@@ -1,3 +1,4 @@
+import { resolveVenueClock } from "@waitron/reporting";
 // Demonstrates `@waitron/reporting`'s VAT roll-ups and the DR303 "por fichero" file over a month of
 // sales rung up through the real write path against the fake `FiscalBackend`, in a throwaway venue
 // directory. Each figure is checked against an expectation summed independently from the seeded
@@ -61,8 +62,6 @@ import { scriptSessionDevice } from "./script-device.js";
 const SETS = ["core", "identity"];
 
 const LOCALE = "es-ES";
-const TIME_ZONE = "Europe/Madrid";
-const CUTOVER = "05:00";
 const YEAR = 2026;
 const MONTH = 8;
 
@@ -541,8 +540,7 @@ async function main(): Promise<void> {
       db,
       async (tx) => {
         const base = {
-          timeZone: TIME_ZONE,
-          dayCutover: CUTOVER,
+          ...(await resolveVenueClock(tx, venue.nodes[0]!.nodeId)),
           ...period,
         };
         return {

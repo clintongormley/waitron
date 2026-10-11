@@ -1,4 +1,5 @@
-import { civilDateOf, validateTimeZone, venueMomentAt } from "@waitron/reporting";
+import type { BusinessDayClock } from "@waitron/shared";
+import { civilDateOf, validateCutover, validateTimeZone, venueMomentAt } from "@waitron/reporting";
 import { offsetMinutes } from "./hours-occurrences.js";
 import type { LocalDate } from "./hours-types.js";
 
@@ -14,10 +15,7 @@ export interface VenueLocalMoment {
  * business day, which turns at the cutover and owns manual station overrides. `null` for a clock
  * that cannot be read.
  */
-export function venueLocalMoment(
-  at: Date,
-  clock: { timeZone: string; dayCutover: string },
-): VenueLocalMoment | null {
+export function venueLocalMoment(at: Date, clock: BusinessDayClock): VenueLocalMoment | null {
   const moment = venueMomentAt(at, clock);
   if (moment === null) return null;
   return { civilDate: civilDateOf(at, clock.timeZone), ...moment };
@@ -25,7 +23,13 @@ export function venueLocalMoment(
 
 /** Whether the venue's zone and cutover can be read at all. */
 export function isReadableClock(clock: { timeZone: string; dayCutover: string }): boolean {
-  return venueMomentAt(new Date(0), clock) !== null;
+  try {
+    validateTimeZone(clock.timeZone);
+    validateCutover(clock.dayCutover);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 /** Whether a zone alone can be read, by the rule {@link isReadableClock} applies to it. */

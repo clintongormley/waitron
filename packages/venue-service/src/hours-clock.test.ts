@@ -3,7 +3,7 @@ import { clockChangesBetween, venueLocalMoment } from "./hours-clock.js";
 import { localTimeOccurrences } from "./hours-occurrences.js";
 import { clockChangeAfter, minutesAfter } from "./testing/clock-change.js";
 
-const madrid = { timeZone: "Europe/Madrid", dayCutover: "06:00" };
+const madrid = { cutoverChanges: [], timeZone: "Europe/Madrid", dayCutover: "06:00" };
 
 describe("venueLocalMoment", () => {
   it("carries the calendar date beside the business day, which still belongs to the night before", () => {
@@ -28,9 +28,19 @@ describe("venueLocalMoment", () => {
   });
 
   it("answers null for a zone or cutover it cannot read", () => {
-    expect(venueLocalMoment(new Date(), { timeZone: "Mars/Base", dayCutover: "06:00" })).toBeNull();
     expect(
-      venueLocalMoment(new Date(), { timeZone: "Europe/Madrid", dayCutover: "6am" }),
+      venueLocalMoment(new Date(), {
+        cutoverChanges: [],
+        timeZone: "Mars/Base",
+        dayCutover: "06:00",
+      }),
+    ).toBeNull();
+    expect(
+      venueLocalMoment(new Date(), {
+        cutoverChanges: [],
+        timeZone: "Europe/Madrid",
+        dayCutover: "6am",
+      }),
     ).toBeNull();
   });
 });

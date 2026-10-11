@@ -101,12 +101,14 @@ describe("service day", () => {
   it("puts Saturday morning in Friday's business day and weekday", () => {
     expect(
       serviceMomentAt(new Date("2026-10-10T00:30:00Z"), {
+        cutoverChanges: [],
         timeZone: "Europe/Madrid",
         dayCutover: "06:00",
       }),
     ).toEqual({ businessDay: "2026-10-09", weekday: 5, minute: 1230 });
     expect(
       serviceMomentAt(new Date("2026-10-10T04:00:00Z"), {
+        cutoverChanges: [],
         timeZone: "Europe/Madrid",
         dayCutover: "06:00",
       }),
@@ -114,8 +116,8 @@ describe("service day", () => {
   });
 
   it.each([
-    { timeZone: "Not/AZone", dayCutover: "06:00" },
-    { timeZone: "Europe/Madrid", dayCutover: "24:00" },
+    { cutoverChanges: [], timeZone: "Not/AZone", dayCutover: "06:00" },
+    { cutoverChanges: [], timeZone: "Europe/Madrid", dayCutover: "24:00" },
   ])("returns null for a clock it cannot read: %j", (clock) => {
     expect(serviceMomentAt(new Date("2026-10-10T00:30:00Z"), clock)).toBeNull();
   });

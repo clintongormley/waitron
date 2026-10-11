@@ -62,8 +62,6 @@ export interface RecordDailyCloseInput {
   businessDay: string;
   /** IANA timezone, e.g. "Europe/Madrid". Required; never defaulted to UTC. */
   timeZone: string;
-  /** "HH:MM" time-of-day in `timeZone` at which the business day starts, e.g. "05:00". */
-  dayCutover: string;
   /** The counting actor (identity person id). */
   closedBy: string;
   cashCounts: CashCountInput[];

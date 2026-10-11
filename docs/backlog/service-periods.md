@@ -152,6 +152,9 @@ venue defaults may be dropped rather than carried over (CLAUDE.md §3, last rule
 
 **A495 (owner, 2026-10-11) — OPEN.** Fiscal-adjacent: the owner lands it.
 
+[Design](../superpowers/specs/2026-10-11-a495-business-day-history-design.md) ·
+[Implementation plan](../superpowers/plans/2026-10-11-a495-business-day-history.md).
+
 Today the time zone and the business-day start cannot be changed once the venue has a sale, an
 order or a daily close (`apps/server/src/venue-details.ts`, A261 step 7, #1281). The reason is in
 [the venue details plan](../superpowers/plans/2026-10-05-venue-details.md), items C4 and C5:

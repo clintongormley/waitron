@@ -208,7 +208,11 @@ describe("the category report reconciles with the till's sales", () => {
     });
 
     // Every sale this venue filed, whichever business day the wall clock put it in.
-    const today = currentBusinessDay({ timeZone: "Europe/Madrid", dayCutover: "05:00" });
+    const today = currentBusinessDay({
+      cutoverChanges: [],
+      timeZone: "Europe/Madrid",
+      dayCutover: "05:00",
+    });
     const from = shiftDay(today, -1);
     const to = shiftDay(today, 1);
     const { rows } = await suite.db.execute<{ total: string; n: string }>(
@@ -218,6 +222,7 @@ describe("the category report reconciles with the till's sales", () => {
     const salesTotal = rawCentsToDecimal(rows[0]!.total);
     const vat = await withTransaction(suite.db, (tx) =>
       computeVatSummaryForPeriod(tx, {
+        cutoverChanges: [],
         nodeId: cfg.nodeId,
         fromBusinessDay: from,
         toBusinessDay: to,

@@ -7,6 +7,7 @@ import { and, asc, eq, inArray, sql } from "drizzle-orm";
 import {
   AppError,
   nodeId as brandNodeId,
+  type BusinessDayClock,
   type NodeId,
   type SupportedLocale,
 } from "@waitron/shared";
@@ -27,6 +28,7 @@ import {
   computeVatReturn,
   computeVatSummaryForPeriod,
   currentBusinessDay,
+  resolveVenueClock,
   mapModelo303,
   parsePeriodToken,
   toDr303Record,
@@ -136,26 +138,7 @@ function requireDeclarationType(raw: string | undefined): string {
   return raw;
 }
 
-/** The data node's location clock, with `day_cutover` trimmed to HH:MM. */
-export async function resolveVenueClock(
-  tx: Transaction,
-  nodeId: string,
-): Promise<{ timeZone: string; dayCutover: string }> {
-  const { rows } = await tx.execute<{ time_zone: string; day_cutover: string }>(sql`
-    select l.time_zone, l.day_cutover
-    from nodes n join locations l on l.id = n.location_id
-    where n.id = ${nodeId}
-  `);
-  const row = rows[0];
-  /* v8 ignore start */
-  if (row === undefined) {
-    // Unreachable on a primary: its node row exists and `nodes.location_id` is a not-null foreign
-    // key. On a mirror the origin's rows may be absent. Either way, a server fault.
-    throw new Error(`report-api: no node/location row for ${nodeId}`);
-  }
-  /* v8 ignore stop */
-  return { timeZone: row.time_zone, dayCutover: row.day_cutover.slice(0, 5) };
-}
+export { resolveVenueClock } from "@waitron/reporting";
 
 async function countOpenTables(
   tx: Transaction,
@@ -198,7 +181,7 @@ export function mountReportApi(app: Hono, deps: ReportApiDeps, log: Logger): voi
     tx: Transaction,
   ): Promise<{
     nodeId: NodeId;
-    clock: { timeZone: string; dayCutover: string };
+    clock: BusinessDayClock;
   }> => {
     const nodeId = brandNodeId(deps.cfg.nodeId);
     const clock = await resolveVenueClock(tx, deps.cfg.nodeId);
@@ -215,6 +198,7 @@ export function mountReportApi(app: Hono, deps: ReportApiDeps, log: Logger): voi
         toBusinessDay: req.to,
         timeZone: clock.timeZone,
         dayCutover: clock.dayCutover,
+        cutoverChanges: clock.cutoverChanges,
         mode: req.mode,
         extrasIntoDish: req.extrasIntoDish,
       },
@@ -278,6 +262,7 @@ export function mountReportApi(app: Hono, deps: ReportApiDeps, log: Logger): voi
           businessDay,
           timeZone: clock.timeZone,
           dayCutover: clock.dayCutover,
+          cutoverChanges: clock.cutoverChanges,
         };
         // Awaited in turn, never `Promise.all`: they share one transaction (CLAUDE.md §3).
         const close = await computeDailyClose(tx, input);
@@ -286,6 +271,7 @@ export function mountReportApi(app: Hono, deps: ReportApiDeps, log: Logger): voi
           toBusinessDay: businessDay,
           timeZone: clock.timeZone,
           dayCutover: clock.dayCutover,
+          cutoverChanges: clock.cutoverChanges,
           limit: 5,
         });
         const openTables = await countOpenTables(tx, nodeId);
@@ -317,6 +303,7 @@ export function mountReportApi(app: Hono, deps: ReportApiDeps, log: Logger): voi
           businessDay,
           timeZone: clock.timeZone,
           dayCutover: clock.dayCutover,
+          cutoverChanges: clock.cutoverChanges,
         };
         // Sequential, not Promise.all: both reads share ONE transaction (see the overview route).
         const close = await computeDailyClose(tx, input);
@@ -326,6 +313,7 @@ export function mountReportApi(app: Hono, deps: ReportApiDeps, log: Logger): voi
           toBusinessDay: businessDay,
           timeZone: clock.timeZone,
           dayCutover: clock.dayCutover,
+          cutoverChanges: clock.cutoverChanges,
           limit: 10,
         });
         const cash = await namedCashUp(tx, close.cash);
@@ -348,6 +336,7 @@ export function mountReportApi(app: Hono, deps: ReportApiDeps, log: Logger): voi
           toBusinessDay: to,
           timeZone: clock.timeZone,
           dayCutover: clock.dayCutover,
+          cutoverChanges: clock.cutoverChanges,
         };
         // Sequential, not Promise.all: both reads share ONE transaction (see the overview route).
         const vat = await computeVatSummaryForPeriod(tx, common);

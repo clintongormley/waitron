@@ -42,7 +42,7 @@ beforeAll(() => {
 
 // Business day 2026-09-15 in Madrid, cut over at 05:00 local (03:00 UTC in summer), runs from
 // 2026-09-15T03:00:00.000Z up to, not including, 2026-09-16T03:00:00.000Z.
-const CLOCK = { timeZone: "Europe/Madrid", dayCutover: "05:00" };
+const CLOCK = { cutoverChanges: [], timeZone: "Europe/Madrid", dayCutover: "05:00" };
 const DAY = "2026-09-15";
 const EVENING = "2026-09-15T18:00:00.000Z";
 const range = (from = DAY, to = from) => ({ fromBusinessDay: from, toBusinessDay: to, ...CLOCK });

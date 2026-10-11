@@ -28,6 +28,7 @@ beforeEach(async () => {
 
 function run(overrides: Partial<DailyCloseInput> = {}): Promise<import("./types.js").VatSummary> {
   const input: DailyCloseInput = {
+    cutoverChanges: [],
     nodeId: venue.nodeId,
     businessDay: DAY,
     timeZone: TZ,

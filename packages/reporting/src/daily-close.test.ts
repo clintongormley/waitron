@@ -13,6 +13,7 @@ beforeEach(async () => {
 });
 function input(overrides: Partial<DailyCloseInput> = {}): DailyCloseInput {
   return {
+    cutoverChanges: [],
     nodeId: venue.nodeId,
     businessDay: "2026-08-04",
     timeZone: "Europe/Madrid",
@@ -80,13 +81,23 @@ describe("computeDailyClose", () => {
     );
 
     const day4 = await run(
-      input({ businessDay: "2026-08-04", dayCutover: "05:00", timeZone: "Europe/Madrid" }),
+      input({
+        cutoverChanges: [],
+        businessDay: "2026-08-04",
+        dayCutover: "05:00",
+        timeZone: "Europe/Madrid",
+      }),
     );
     expect(day4.vat.byRate).toEqual([{ rate: "21.00", base: "100.00", tax: "21.00" }]); // VAT on the placing day
     expect(day4.cash.byOrigin).toEqual([]); // no cash yet — not settled until D2
 
     const day5 = await run(
-      input({ businessDay: "2026-08-05", dayCutover: "05:00", timeZone: "Europe/Madrid" }),
+      input({
+        cutoverChanges: [],
+        businessDay: "2026-08-05",
+        dayCutover: "05:00",
+        timeZone: "Europe/Madrid",
+      }),
     );
     expect(day5.vat.byRate).toEqual([]); // no VAT on the settlement day — it was already booked on D1
     expect(day5.cash.byOrigin).toHaveLength(1); // the cash lands here
