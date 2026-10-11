@@ -1,3 +1,4 @@
+import type { DeleteImpact } from "@waitron/shared";
 import type { DashboardRequest, LiveData } from "@waitron/dashboard-kit";
 import type { PlanPlacement, PreviewTable } from "@waitron/ui";
 import { QUERY_DEPENDENCIES } from "./live-queries.js";
@@ -140,6 +141,71 @@ export class VenueServiceApi {
       () =>
         this.request<ZoneFloorPlan>(
           `/management-api/zones/${encodeURIComponent(zoneId)}/floor-plan`,
+          "GET",
+          undefined,
+          { passive: true },
+        ),
+      apply,
+      failed,
+      recovered,
+    );
+  }
+
+  getZoneDeleteImpact(id: string): Promise<DeleteImpact> {
+    return this.#read(`/management-api/zones/${encodeURIComponent(id)}/delete-impact`);
+  }
+
+  deleteZone(id: string): Promise<DeleteImpact> {
+    return this.request<DeleteImpact>(`/management-api/zones/${encodeURIComponent(id)}`, "DELETE");
+  }
+
+  watchZoneDeleteImpact(
+    id: string,
+    apply: (impact: DeleteImpact) => void,
+    failed: (error: unknown) => void,
+    recovered: () => void,
+  ): () => void {
+    return this.#watches.watch(
+      `venue-service:zone-delete-impact:${id}`,
+      QUERY_DEPENDENCIES["zone-delete-impact"],
+      () =>
+        this.request<DeleteImpact>(
+          `/management-api/zones/${encodeURIComponent(id)}/delete-impact`,
+          "GET",
+          undefined,
+          { passive: true },
+        ),
+      apply,
+      failed,
+      recovered,
+    );
+  }
+
+  getDepartmentDeleteImpact(id: string): Promise<DeleteImpact> {
+    return this.#read(
+      `/management-api/venue-service/departments/${encodeURIComponent(id)}/delete-impact`,
+    );
+  }
+
+  deleteDepartment(id: string): Promise<DeleteImpact> {
+    return this.request<DeleteImpact>(
+      `/management-api/venue-service/departments/${encodeURIComponent(id)}`,
+      "DELETE",
+    );
+  }
+
+  watchDepartmentDeleteImpact(
+    id: string,
+    apply: (impact: DeleteImpact) => void,
+    failed: (error: unknown) => void,
+    recovered: () => void,
+  ): () => void {
+    return this.#watches.watch(
+      `venue-service:department-delete-impact:${id}`,
+      QUERY_DEPENDENCIES["department-delete-impact"],
+      () =>
+        this.request<DeleteImpact>(
+          `/management-api/venue-service/departments/${encodeURIComponent(id)}/delete-impact`,
           "GET",
           undefined,
           { passive: true },

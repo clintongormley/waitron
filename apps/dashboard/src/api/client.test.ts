@@ -3286,3 +3286,41 @@ describe("department receipt client contracts", () => {
     ]);
   });
 });
+
+it.each(["Zone", "Department"] as const)(
+  "hierarchy %s uses encoded impact GET and active DELETE with complete 200 responses",
+  async (kind) => {
+    const impact = {
+      target: { id: "a/b", name: "Garden" },
+      refusals: [
+        {
+          code: "zone.profile_in_use",
+          params: { zoneId: "a/b", profileId: "p1" },
+          targets: [{ id: "p1", name: "Terrace till" }],
+        },
+      ],
+      ends: [],
+      removes: [{ key: "tables", count: 1, targets: [{ id: "t1", name: "Table 1" }] }],
+    };
+    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(impact));
+    const active = vi.fn();
+    const api = new DashboardApi("", fetchImpl, undefined, active);
+    const path =
+      kind === "Zone"
+        ? "/management-api/zones/a%2Fb"
+        : "/management-api/venue-service/departments/a%2Fb";
+    expect(await api[`get${kind}DeleteImpact`]("a/b")).toEqual(impact);
+    expect(fetchImpl.mock.calls[0]).toEqual([
+      `${path}/delete-impact`,
+      { method: "GET", credentials: "include", signal: expect.any(AbortSignal) },
+    ]);
+    expect(await api.background[`get${kind}DeleteImpact`]("a/b")).toEqual(impact);
+    expect(new Headers(fetchImpl.mock.calls[1]![1].headers).get("x-waitron-live")).toBe("1");
+    expect(active).toHaveBeenCalledOnce();
+    expect(await api[`delete${kind}`]("a/b")).toEqual(impact);
+    expect(fetchImpl.mock.calls[2]).toEqual([path, { method: "DELETE", credentials: "include" }]);
+    expect(active).toHaveBeenCalledTimes(2);
+    expect(await api.background[`delete${kind}`]("a/b")).toEqual(impact);
+    expect(fetchImpl.mock.calls[3]).toEqual([path, { method: "DELETE", credentials: "include" }]);
+  },
+);

@@ -906,3 +906,99 @@ it("kitchen delete receives an arriving blocker and removed binding through pass
     observed.unsubscribe();
   }
 });
+
+it.each(["Zone", "Department"] as const)(
+  "hierarchy %s query refreshes every dependency passively and disposes its interests",
+  async (kind) => {
+    const reads = [
+      "floor_zones",
+      "dining_tables",
+      "floor_plans",
+      "floor_plan_tables",
+      "floor_plan_joins",
+      "floor_plan_join_tables",
+      "floor_reset_tables",
+      "floor_reset_joins",
+      "floor_reset_join_tables",
+      "floor_today_zones",
+      "floor_today_tables",
+      "floor_today_joins",
+      "floor_today_join_tables",
+      "parties",
+      "party_tables",
+      "working_orders",
+      "working_order_lines",
+      "ticket_items",
+      "order_service_contexts",
+      "departments",
+      "device_profiles",
+      "devices",
+      "device_profile_service_access",
+      "device_profile_zones",
+      "device_kitchen_screens",
+      "device_kitchen_screen_stations",
+      "device_kitchen_screen_zones",
+      "device_kitchen_screen_removals",
+      "device_profile_kitchen_screens",
+      "device_profile_kitchen_screen_stations",
+      "device_profile_kitchen_screen_zones",
+      "routing_cells",
+      "routing_cell_periods",
+      "zone_service_policies",
+      "zone_sale_policies",
+      "zone_closed_times",
+      "zone_extensions",
+      "department_sale_policies",
+      "menu_periods",
+      "menu_period_staff_menus",
+      "menu_day_timetables",
+      "menu_slots",
+      "period_extensions",
+      "department_transfer_desks",
+      "department_transfer_destinations",
+      "department_transfer_requests",
+    ];
+    let revision = 0;
+    const fetchImpl = vi.fn<(path: string, init: RequestInit) => Promise<Response>>(
+      async () =>
+        new Response(
+          JSON.stringify({
+            target: { id: "a/b", name: `Garden ${revision}` },
+            refusals: [],
+            ends: [],
+            removes: [],
+          }),
+        ),
+    );
+    const active = vi.fn();
+    const api = new DashboardApi("", fetchImpl, undefined, active);
+    const query = dashboardQuery(
+      api,
+      kind === "Zone" ? "getZoneDeleteImpact" : "getDepartmentDeleteImpact",
+      ["a/b"],
+    );
+    expect(query.dependencies).toEqual(reads.map((type) => ({ type })));
+    const observed = api.liveData.observe(query, () => {});
+    try {
+      await vi.waitFor(() => expect(observed.snapshot.value?.target.name).toBe("Garden 0"));
+      for (const type of reads) {
+        revision++;
+        api.liveData.invalidate([{ type, id: "changed" }]);
+        await vi.waitFor(() =>
+          expect(observed.snapshot.value?.target.name).toBe(`Garden ${revision}`),
+        );
+      }
+      expect(active).toHaveBeenCalledOnce();
+      expect(
+        fetchImpl.mock.calls
+          .slice(1)
+          .every(
+            ([, init]) => new Headers((init as RequestInit).headers).get("x-waitron-live") === "1",
+          ),
+      ).toBe(true);
+    } finally {
+      observed.unsubscribe();
+    }
+    expect(api.liveData.interests).toEqual([]);
+  },
+);

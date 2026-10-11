@@ -510,6 +510,54 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "That zone needs an active department. Enable its department or assign it to an active one first",
     es: "Esa zona necesita un departamento habilitado. Habilita su departamento o asígnala primero a uno habilitado",
   },
+  "service_zone.not_found": {
+    en: "That zone no longer exists",
+    es: "Esa zona ya no existe",
+  },
+  "department.not_found": {
+    en: "That department no longer exists",
+    es: "Ese departamento ya no existe",
+  },
+  "department.last_active": {
+    en: "Keep at least one department. Create another before deleting this one.",
+    es: "Mantén al menos un departamento. Crea otro antes de eliminar este.",
+  },
+  "zone.order_in_progress": {
+    en: "Finish the open orders in this zone before deleting it.",
+    es: "Termina los pedidos abiertos de esta zona antes de eliminarla.",
+  },
+  "zone.transfer_pending": {
+    en: "Resolve the pending transfers to this zone before deleting it.",
+    es: "Resuelve los traslados pendientes a esta zona antes de eliminarla.",
+  },
+  "zone.profile_in_use": {
+    en: "Choose another service zone for the device profile before deleting this zone.",
+    es: "Elige otra zona de servicio para el perfil de dispositivo antes de eliminar esta zona.",
+  },
+  "department.order_in_progress": {
+    en: "Finish the open orders in this department before deleting it.",
+    es: "Termina los pedidos abiertos de este departamento antes de eliminarlo.",
+  },
+  "department.transfer_pending": {
+    en: "Resolve the pending transfers involving this department before deleting it.",
+    es: "Resuelve los traslados pendientes de este departamento antes de eliminarlo.",
+  },
+  "department.profile_in_use": {
+    en: "Move the device profile to another department before deleting this one.",
+    es: "Asigna el perfil de dispositivo a otro departamento antes de eliminar este.",
+  },
+  "zone.table_in_use": {
+    en: "Finish the visits at this zone’s tables before deleting it.",
+    es: "Termina las visitas en las mesas de esta zona antes de eliminarla.",
+  },
+  "table.delivery_in_progress": {
+    en: "Finish the delivery to this table before deleting it.",
+    es: "Termina la entrega a esta mesa antes de eliminarla.",
+  },
+  "table.booked": {
+    en: "Move or cancel this table’s bookings before deleting it.",
+    es: "Cambia de mesa o cancela las reservas de esta mesa antes de eliminarla.",
+  },
   "zone.not_found": {
     en: "That zone no longer exists",
     es: "Esa zona ya no existe",

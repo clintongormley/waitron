@@ -1,10 +1,23 @@
 import { randomUUID } from "node:crypto";
+import { Hono } from "hono";
 import { sql } from "drizzle-orm";
-import { describe, expect, it } from "vitest";
-import { diningTables, floorZones, locations, withTransaction } from "@waitron/db";
+import { describe, expect, it, vi } from "vitest";
+import {
+  diningTables,
+  floorZones,
+  floorTodayTables,
+  locations,
+  withTransaction,
+  installChangeFeed,
+  subscribeToChanges,
+} from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 import { bookings } from "@waitron/bookings";
+import { hashPin, persons, startManagementSession } from "@waitron/identity";
+import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
+import { LiveEvents, changeSubscriber, mountLiveApi } from "./live-api.js";
+import { liveResourceTypes } from "./live-resources.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import type { TableRemoval } from "@waitron/module";
 import { AppError, locationId } from "@waitron/shared";
@@ -21,6 +34,129 @@ for (const enabled of [true, false]) {
         manifestSets().filter((set) => enabled || set.name !== "bookings"),
         null,
       ),
+    });
+    it("streams hierarchy interests without optional bookings and delivers installed booking table events", async () => {
+      await seedTenant(suite.db);
+      const session = await withTransaction(suite.db, async (tx) => {
+        const [person] = await tx
+          .insert(persons)
+          .values({ displayName: "Hierarchy manager", pinHash: hashPin("1234"), role: "manager" })
+          .returning();
+        return startManagementSession(tx, { personId: person!.id });
+      });
+      const [loc] = await suite.db
+        .insert(locations)
+        .values({ name: "Stream hierarchy", invoiceLocales: ["es"], operationDescription: "test" })
+        .returning();
+      const cfg = { locationId: locationId(loc!.id) };
+      const [zone] = await suite.db
+        .insert(floorZones)
+        .values({ locationId: cfg.locationId, name: "Stream hierarchy" })
+        .returning();
+      const [table] = await suite.db
+        .insert(diningTables)
+        .values({ locationId: cfg.locationId, zoneId: zone!.id, label: "T1" })
+        .returning();
+      await suite.db.insert(floorTodayTables).values({ tableId: table!.id });
+      const sources = modules.flatMap((module) => module.changes ?? []);
+      await installChangeFeed(suite.db, sources);
+      const bus = new LiveEvents();
+      const unsubscribe = subscribeToChanges(changeSubscriber(bus, () => {}));
+      const app = new Hono();
+      mountLiveApi(app, { db: suite.db, bus, resourceTypes: liveResourceTypes(sources) }, () => {});
+      const interests = [
+        "floor_zones",
+        "dining_tables",
+        "floor_plans",
+        "floor_plan_tables",
+        "floor_plan_joins",
+        "floor_plan_join_tables",
+        "floor_reset_tables",
+        "floor_reset_joins",
+        "floor_reset_join_tables",
+        "floor_today_zones",
+        "floor_today_tables",
+        "floor_today_joins",
+        "floor_today_join_tables",
+        "parties",
+        "party_tables",
+        "working_orders",
+        "working_order_lines",
+        "ticket_items",
+        "order_service_contexts",
+        "departments",
+        "device_profiles",
+        "devices",
+        "device_profile_service_access",
+        "device_profile_zones",
+        "device_kitchen_screens",
+        "device_kitchen_screen_stations",
+        "device_kitchen_screen_zones",
+        "device_kitchen_screen_removals",
+        "device_profile_kitchen_screens",
+        "device_profile_kitchen_screen_stations",
+        "device_profile_kitchen_screen_zones",
+        "routing_cells",
+        "routing_cell_periods",
+        "zone_service_policies",
+        "zone_sale_policies",
+        "zone_closed_times",
+        "zone_extensions",
+        "department_sale_policies",
+        "menu_periods",
+        "menu_period_staff_menus",
+        "menu_day_timetables",
+        "menu_slots",
+        "period_extensions",
+        "department_transfer_desks",
+        "department_transfer_destinations",
+        "department_transfer_requests",
+      ].map((type) => ({ type }));
+      const response = await app.request(
+        `/management-api/events?resources=${encodeURIComponent(JSON.stringify(interests))}`,
+        { headers: { cookie: `${MANAGEMENT_COOKIE}=${session.token}` } },
+      );
+      expect(response.status).toBe(200);
+      expect(response.headers.get("content-type")).toContain("text/event-stream");
+      const reader = response.body!.getReader();
+      try {
+        expect(new TextDecoder().decode((await reader.read()).value)).toContain("event: ready");
+        expect(bus.subscriberCount).toBe(1);
+        if (enabled) {
+          await withTransaction(suite.db, (tx) =>
+            tx
+              .insert(bookings)
+              .values({
+                locationId: cfg.locationId,
+                tableId: table!.id,
+                bookingDate: "2026-10-11",
+                bookingTime: "20:00",
+                partySize: 2,
+                contactName: "Ana",
+                createdBy: randomUUID(),
+              }),
+          );
+        } else {
+          expect(
+            suite.db.execute(sql`select name from sqlite_master where name = 'bookings'`).rows,
+          ).toEqual([]);
+          await withTransaction(suite.db, (tx) =>
+            tx
+              .update(diningTables)
+              .set({ label: "Renamed" })
+              .where(sql`${diningTables.id} = ${table!.id}`),
+          );
+        }
+        expect(new TextDecoder().decode((await reader.read()).value)).toBe(
+          `event: change\ndata: [{"type":"dining_tables","id":"${table!.id}"}]\n\n`,
+        );
+        expect(bus.subscriberCount).toBe(1);
+      } finally {
+        await reader.cancel();
+        unsubscribe();
+        bus.close();
+      }
+      await vi.waitFor(() => expect(bus.subscriberCount).toBe(0));
     });
     it(
       enabled

@@ -533,3 +533,23 @@ it("says a card reader another request is unpairing or deleting can be tried aga
     "Ese lector de tarjetas se está desvinculando o eliminando. Vuelve a intentarlo cuando termine.",
   );
 });
+
+it.each(["en", "es"])("hierarchy deletion refusals have actionable %s messages", (language) => {
+  for (const code of [
+    "service_zone.not_found",
+    "department.not_found",
+    "department.last_active",
+    "zone.order_in_progress",
+    "zone.transfer_pending",
+    "zone.profile_in_use",
+    "department.order_in_progress",
+    "department.transfer_pending",
+    "department.profile_in_use",
+    "zone.table_in_use",
+    "table.delivery_in_progress",
+    "table.booked",
+  ]) {
+    expect(codeMessage(code, language)).not.toBe(codeMessage("test.unmapped_code", language));
+    expect(codeMessage(code, language)).not.toBe(code);
+  }
+});

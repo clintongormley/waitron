@@ -1,5 +1,10 @@
 import { describe, expect, it, vi } from "vitest";
-import { LiveData, createRequest, type DashboardRequest } from "@waitron/dashboard-kit";
+import {
+  LiveConnection,
+  LiveData,
+  createRequest,
+  type DashboardRequest,
+} from "@waitron/dashboard-kit";
 import { VenueServiceApi } from "./client.js";
 
 function jsonResponse(body: unknown, status = 200): Response {
@@ -531,3 +536,143 @@ it("watches one zone's master floor plan passively and rereads it when a plan ta
   }
   expect(live.interests).toEqual([]);
 });
+
+it.each(["Zone", "Department"] as const)(
+  "hierarchy %s uses encoded impact GET and active DELETE with complete 200 responses",
+  async (kind) => {
+    const impact = {
+      target: { id: "a/b", name: "Garden" },
+      refusals: [
+        {
+          code: "zone.profile_in_use",
+          params: { zoneId: "a/b", profileId: "p1" },
+          targets: [{ id: "p1", name: "Terrace till" }],
+        },
+      ],
+      ends: [],
+      removes: [{ key: "tables", count: 1, targets: [{ id: "t1", name: "Table 1" }] }],
+    };
+    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(impact));
+    const active = vi.fn();
+    const api = new VenueServiceApi(
+      createRequest({ fetchImpl: fetchImpl as typeof fetch, onSuccess: active }),
+    );
+    const path =
+      kind === "Zone"
+        ? "/management-api/zones/a%2Fb"
+        : "/management-api/venue-service/departments/a%2Fb";
+    expect(await api[`get${kind}DeleteImpact`]("a/b")).toEqual(impact);
+    expect(fetchImpl.mock.calls[0]).toEqual([
+      `${path}/delete-impact`,
+      { method: "GET", credentials: "include", signal: expect.any(AbortSignal) },
+    ]);
+    expect(await api.background[`get${kind}DeleteImpact`]("a/b")).toEqual(impact);
+    expect(new Headers(fetchImpl.mock.calls[1]![1].headers).get("x-waitron-live")).toBe("1");
+    expect(active).toHaveBeenCalledOnce();
+    expect(await api.background[`delete${kind}`]("a/b")).toEqual(impact);
+    expect(fetchImpl.mock.calls[2]).toEqual([path, { method: "DELETE", credentials: "include" }]);
+    expect(active).toHaveBeenCalledTimes(2);
+  },
+);
+
+it.each(["Zone", "Department"] as const)(
+  "hierarchy %s watch receives booking-related table changes, recovers from errors and disposes",
+  async (kind) => {
+    const before = { target: { id: "a/b", name: "Garden" }, refusals: [], ends: [], removes: [] };
+    const blocked = {
+      ...before,
+      refusals: [
+        {
+          code: "table.booked",
+          params: { tableId: "t1", date: "2026-10-11", time: "20:00" },
+          targets: [{ id: "b1", name: "Ana · 2026-10-11 20:00" }],
+        },
+      ],
+    };
+    let model = before as import("@waitron/shared").DeleteImpact;
+    let fail = false;
+    const fetchImpl = vi.fn(async () =>
+      fail
+        ? jsonResponse({ error: { code: "management_session.expired" } }, 401)
+        : jsonResponse(model),
+    );
+    const active = vi.fn();
+    const live = new LiveData();
+    const api = new VenueServiceApi(
+      createRequest({ fetchImpl: fetchImpl as typeof fetch, onSuccess: active }),
+      live,
+    );
+    const apply = vi.fn();
+    const failed = vi.fn();
+    const recovered = vi.fn();
+    const stream = Object.assign(new EventTarget(), { close: vi.fn() });
+    const open = vi.fn(() => stream);
+    const connection = new LiveConnection(live, { open });
+    const stop = api[`watch${kind}DeleteImpact`]("a/b", apply, failed, recovered);
+    connection.start();
+    try {
+      await vi.waitFor(() => expect(apply).toHaveBeenLastCalledWith(before));
+      expect(live.interests.some(({ type }) => type === "bookings")).toBe(false);
+      expect(live.interests).toContainEqual({ type: "dining_tables" });
+      model = blocked;
+      stream.dispatchEvent(
+        new MessageEvent("change", { data: JSON.stringify([{ type: "dining_tables", id: "t1" }]) }),
+      );
+      await vi.waitFor(() => expect(apply).toHaveBeenLastCalledWith(blocked));
+      fail = true;
+      live.invalidate([{ type: "department_transfer_requests" }]);
+      await vi.waitFor(() =>
+        expect(failed).toHaveBeenCalledWith(
+          expect.objectContaining({ code: "management_session.expired" }),
+        ),
+      );
+      fail = false;
+      model = before;
+      live.invalidate([{ type: "device_profile_zones" }]);
+      await vi.waitFor(() => expect(recovered).toHaveBeenCalledOnce());
+      expect(apply).toHaveBeenLastCalledWith(before);
+      expect(active).not.toHaveBeenCalled();
+      expect(fetchImpl.mock.calls).toHaveLength(4);
+      expect(open).toHaveBeenCalledOnce();
+      expect(stream.close).not.toHaveBeenCalled();
+    } finally {
+      stop();
+      connection.stop();
+    }
+    expect(live.interests).toEqual([]);
+    const count = fetchImpl.mock.calls.length;
+    live.invalidate([{ type: "floor_zones" }]);
+    await Promise.resolve();
+    expect(fetchImpl.mock.calls).toHaveLength(count);
+  },
+);
+
+it.each(["Zone", "Department"] as const)(
+  "hierarchy %s watch ignores a disposed generation's late answer",
+  async (kind) => {
+    const pending: ((model: import("@waitron/shared").DeleteImpact) => void)[] = [];
+    const request = (() =>
+      new Promise<import("@waitron/shared").DeleteImpact>((resolve) =>
+        pending.push(resolve),
+      )) as unknown as DashboardRequest;
+    const api = new VenueServiceApi(request, new LiveData());
+    const oldApply = vi.fn();
+    const apply = vi.fn();
+    const stopOld = api[`watch${kind}DeleteImpact`]("a/b", oldApply, vi.fn(), vi.fn());
+    await vi.waitFor(() => expect(pending).toHaveLength(1));
+    stopOld();
+    const stop = api[`watch${kind}DeleteImpact`]("a/b", apply, vi.fn(), vi.fn());
+    try {
+      await vi.waitFor(() => expect(pending).toHaveLength(2));
+      const newest = { target: { id: "new", name: "New" }, refusals: [], ends: [], removes: [] };
+      pending[1]!(newest);
+      await vi.waitFor(() => expect(apply).toHaveBeenCalledWith(newest));
+      pending[0]!({ ...newest, target: { id: "a/b", name: "Old" } });
+      await Promise.resolve();
+      expect(oldApply).not.toHaveBeenCalled();
+      expect(apply).toHaveBeenCalledOnce();
+    } finally {
+      stop();
+    }
+  },
+);

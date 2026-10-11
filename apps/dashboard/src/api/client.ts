@@ -2793,6 +2793,31 @@ export class DashboardApi {
     return this.#request<void>(`/management-api/zones/${id}`, "DELETE");
   }
 
+  getZoneDeleteImpact(id: string): Promise<DeleteImpact> {
+    return this.#request<DeleteImpact>(
+      `/management-api/zones/${encodeURIComponent(id)}/delete-impact`,
+      "GET",
+    );
+  }
+
+  deleteZone(id: string): Promise<DeleteImpact> {
+    return this.#request<DeleteImpact>(`/management-api/zones/${encodeURIComponent(id)}`, "DELETE");
+  }
+
+  getDepartmentDeleteImpact(id: string): Promise<DeleteImpact> {
+    return this.#request<DeleteImpact>(
+      `/management-api/venue-service/departments/${encodeURIComponent(id)}/delete-impact`,
+      "GET",
+    );
+  }
+
+  deleteDepartment(id: string): Promise<DeleteImpact> {
+    return this.#request<DeleteImpact>(
+      `/management-api/venue-service/departments/${encodeURIComponent(id)}`,
+      "DELETE",
+    );
+  }
+
   getFloorPlan(zoneId: string): Promise<FloorPlan> {
     return this.#request<FloorPlan>(`/management-api/zones/${zoneId}/floor-plan`, "GET");
   }
