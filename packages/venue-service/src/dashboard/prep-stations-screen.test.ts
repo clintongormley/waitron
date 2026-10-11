@@ -2383,6 +2383,23 @@ it("Stations names each station's printers and the screens that show it, with a 
   expect(bar.querySelector("wt-combobox")).toBeNull();
 });
 
+it.each(["light", "dark"] as const)(
+  "paints the Devices link in the link token, as the When it gets orders link is (%s)",
+  async (theme) => {
+    history.replaceState(null, "", "/manage/prep-stations/view/stations");
+    const el = await mount(api({ load: vi.fn().mockResolvedValue(ticketView) }), theme);
+    await settle(el);
+    const probe = document.createElement("span");
+    probe.style.color = "var(--wt-color-primary-text)";
+    el.parentElement!.append(probe);
+    const token = getComputedStyle(probe).color;
+    const devices = q(el, '[data-test="screens-bar"] a[href="/manage/devices"]')!;
+    const serviceTimes = q(el, '[part="service-times"]')!;
+    expect(getComputedStyle(serviceTimes).color).toBe(token);
+    expect(getComputedStyle(devices).color).toBe(token);
+  },
+);
+
 it.each([
   {
     locale: "en",

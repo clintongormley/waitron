@@ -844,7 +844,7 @@ export class PrepStationsScreen extends LitElement {
           {
             printedOn: printers.join(", ") || t("prep.no_printer"),
             shownOn: html`${screenDevices(view.devices, station.id)}
-              <a href="/manage/devices">${t("prep.devices")}</a>`,
+              <a part="devices-link" href="/manage/devices">${t("prep.devices")}</a>`,
           },
         ];
       }),

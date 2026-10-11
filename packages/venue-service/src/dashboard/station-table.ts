@@ -50,7 +50,8 @@ export class StationTable extends LitElement {
         display: block;
         white-space: normal;
       }
-      wt-data-table::part(service-times) {
+      wt-data-table::part(service-times),
+      wt-data-table::part(devices-link) {
         color: var(--wt-color-primary-text);
       }
       wt-data-table::part(badge) {
