@@ -122,6 +122,7 @@ describe("seedSales", () => {
       // Business day = yesterday (UTC), which the generator always fills fully and in the past.
       const businessDay = new Date(start - DAY_MS).toISOString().slice(0, 10);
       const close = await computeDailyClose(tx, {
+        cutoverChanges: [],
         nodeId: brandNodeId(venue.nodeId),
         businessDay,
         timeZone: "Europe/Madrid",

@@ -19,6 +19,7 @@ export interface GridColumn {
   layer?: "periods" | "closed";
   closed?: readonly ClosedRange[];
   narrow?: boolean;
+  clock?: { dayCutover: string; endMinute: number; startAt?: string; endAt?: string };
 }
 
 export interface GridRangeSelection {
@@ -86,7 +87,7 @@ export class ServiceGrid extends LitElement {
     .times,
     .day {
       position: relative;
-      height: calc(var(--wt-space-6) * 96);
+      height: var(--grid-height);
     }
     .times {
       position: sticky;
@@ -135,6 +136,13 @@ export class ServiceGrid extends LitElement {
       text-align: start;
       font-size: var(--wt-font-size-sm);
       overflow: hidden;
+    }
+    .bounds,
+    .transition {
+      display: block;
+      font-size: var(--wt-font-size-sm);
+      font-weight: var(--wt-font-weight-normal);
+      overflow-wrap: anywhere;
     }
     .faded::before {
       content: "";
@@ -268,14 +276,15 @@ export class ServiceGrid extends LitElement {
   #occupied(column: GridColumn, minute: number): number {
     return this.#ranges(column).findIndex(
       (slot) =>
-        this.#minute(slot.startsAt) <= minute && minute < (this.#minute(slot.endsAt) || DAY),
+        this.#minute(slot.startsAt, column) <= minute &&
+        minute < this.#rangeEnd(slot.endsAt, column),
     );
   }
   #gap(column: GridColumn, anchor: number): { min: number; max: number } {
-    let { min, max } = this.#limits();
+    let { min, max } = this.#limits(column);
     for (const slot of this.#ranges(column)) {
-      const start = this.#minute(slot.startsAt);
-      const end = this.#minute(slot.endsAt) || DAY;
+      const start = this.#minute(slot.startsAt, column);
+      const end = this.#rangeEnd(slot.endsAt, column);
       if (end <= anchor) min = Math.max(min, end);
       if (start > anchor) max = Math.min(max, start);
     }
@@ -288,15 +297,15 @@ export class ServiceGrid extends LitElement {
     event.stopPropagation();
     this.#cancel();
     const slot = index === undefined ? undefined : this.#ranges(column)[index]!;
-    const start = slot === undefined ? anchor : this.#minute(slot.startsAt);
+    const start = slot === undefined ? anchor : this.#minute(slot.startsAt, column);
     const gap = this.#gap(column, start);
     if (slot !== undefined) {
       gap.min = start + STEP;
       gap.max = Math.min(
-        this.#limits().max,
+        this.#limits(column).max,
         ...this.#ranges(column)
           .filter((_, i) => i !== index)
-          .map((other) => this.#minute(other.startsAt))
+          .map((other) => this.#minute(other.startsAt, column))
           .filter((minute) => minute > start),
       );
     }
@@ -310,7 +319,7 @@ export class ServiceGrid extends LitElement {
     this.selection = {
       columnKey: column.key,
       start,
-      end: slot === undefined ? start + STEP : this.#minute(slot.endsAt) || DAY,
+      end: slot === undefined ? start + STEP : this.#rangeEnd(slot.endsAt, column),
       ...(index === undefined ? {} : { index }),
     };
     this.#focus(column.key, start);
@@ -325,9 +334,10 @@ export class ServiceGrid extends LitElement {
       (el) => el.dataset.column === gesture.column.key,
     )!;
     const box = day.getBoundingClientRect();
-    const offset = ((event.clientY - box.top) / box.height) * DAY;
+    const offset = ((event.clientY - box.top) / box.height) * this.#extent();
     const target =
-      Math.round((offset + minutes(this.dayCutover)) / STEP) * STEP - minutes(this.dayCutover);
+      Math.round((offset + minutes(this.#cutover(gesture.column))) / STEP) * STEP -
+      minutes(this.#cutover(gesture.column));
     const minute = Math.max(gesture.min, Math.min(gesture.max, target));
     this.selection =
       gesture.index === undefined
@@ -351,15 +361,15 @@ export class ServiceGrid extends LitElement {
     this.#cancel();
     const detail = {
       columnKey: selected.columnKey,
-      startsAt: this.#time(selected.start),
-      endsAt: this.#time(selected.end),
+      startsAt: this.#time(selected.start, gesture.column),
+      endsAt: this.#time(selected.end, gesture.column),
     };
     if (gesture.index === undefined) this.#emit("grid-range-select", detail);
     else if (detail.endsAt !== this.#ranges(gesture.column)[gesture.index]!.endsAt)
       this.#emit("grid-block-change", { ...detail, index: gesture.index });
   };
   #focus(columnKey: string, minute: number): void {
-    const { min, max } = this.#limits();
+    const { min, max } = this.#limits(this.columns.find((column) => column.key === columnKey));
     this.focusCell = { columnKey, minute: Math.max(min, Math.min(max - STEP, minute)) };
     void this.updateComplete.then(() => {
       const cell = [...this.renderRoot.querySelectorAll<HTMLElement>(".step")].find(
@@ -390,8 +400,8 @@ export class ServiceGrid extends LitElement {
         this.#cancel();
         this.#emit("grid-range-select", {
           columnKey: column.key,
-          startsAt: this.#time(selected.start),
-          endsAt: this.#time(selected.end),
+          startsAt: this.#time(selected.start, column),
+          endsAt: this.#time(selected.end, column),
         });
       } else {
         const index = this.#occupied(column, minute);
@@ -399,8 +409,8 @@ export class ServiceGrid extends LitElement {
         else
           this.#emit("grid-range-select", {
             columnKey: column.key,
-            startsAt: this.#time(minute),
-            endsAt: this.#time(minute + STEP),
+            startsAt: this.#time(minute, column),
+            endsAt: this.#time(minute + STEP, column),
           });
       }
       return;
@@ -440,19 +450,48 @@ export class ServiceGrid extends LitElement {
     this.#emit("grid-block-open", { columnKey: column.key, index });
   }
 
-  #limits(): { min: number; max: number } {
-    const remainder = minutes(this.dayCutover) % STEP;
-    return { min: remainder === 0 ? 0 : STEP - remainder, max: DAY - remainder };
+  #cutover(column?: GridColumn): string {
+    return column?.clock?.dayCutover ?? this.dayCutover;
   }
-  #minute(time: string): number {
-    return (minutes(time) - minutes(this.dayCutover) + DAY) % DAY;
+  #extent(): number {
+    return Math.max(DAY, ...this.columns.map((column) => column.clock?.endMinute ?? DAY));
   }
-  #time(minute: number): string {
-    const clock = (minutes(this.dayCutover) + minute) % DAY;
+  #limits(column?: GridColumn): { min: number; max: number } {
+    const remainder = minutes(this.#cutover(column)) % STEP;
+    return {
+      min: remainder === 0 ? 0 : STEP - remainder,
+      max: Math.min(DAY, column?.clock?.endMinute ?? DAY) - remainder,
+    };
+  }
+  #minute(time: string, column?: GridColumn): number {
+    return (minutes(time) - minutes(this.#cutover(column)) + DAY) % DAY;
+  }
+  #rangeEnd(time: string, column: GridColumn): number {
+    return this.#minute(time, column) || Math.min(DAY, column.clock?.endMinute ?? DAY);
+  }
+  #time(minute: number, column?: GridColumn): string {
+    const clock = (minutes(this.#cutover(column)) + minute) % DAY;
     return `${String(Math.floor(clock / 60)).padStart(2, "0")}:${String(clock % 60).padStart(2, "0")}`;
   }
   #position(start: number, end: number) {
-    return styleMap({ top: `${(start / DAY) * 100}%`, height: `${((end - start) / DAY) * 100}%` });
+    return styleMap({
+      top: `${(start / this.#extent()) * 100}%`,
+      height: `${((end - start) / this.#extent()) * 100}%`,
+    });
+  }
+  #steps(column: GridColumn): readonly { start: number; end: number }[] {
+    const { min, max } = this.#limits(column);
+    const boundaries = [
+      ...new Set([
+        0,
+        ...Array.from(
+          { length: Math.floor((max - min) / STEP) + 1 },
+          (_, index) => min + index * STEP,
+        ),
+        Math.min(DAY, column.clock?.endMinute ?? DAY),
+      ]),
+    ];
+    return boundaries.slice(0, -1).map((start, index) => ({ start, end: boundaries[index + 1]! }));
   }
   #cellLabel(column: GridColumn, minute: number): string {
     const index = this.#occupied(column, minute);
@@ -461,16 +500,16 @@ export class ServiceGrid extends LitElement {
       column.layer === "closed"
         ? t("hours.closed")
         : column.periods.find(({ id }) => id === column.slots[index]?.periodId)?.name;
-    return `${column.label}, ${this.#time(minute)}${slot === undefined ? "" : `, ${name}, ${slot.startsAt}–${slot.endsAt}`}`;
+    return `${column.label}, ${this.#time(minute, column)}${slot === undefined ? "" : `, ${name}, ${slot.startsAt}–${slot.endsAt}`}`;
   }
   #block(column: GridColumn, slot: ClosedRange, index: number, period?: GridPeriod, faded = false) {
     const name = period?.name ?? t("hours.closed");
     const classes = `block${faded ? " faded" : period ? "" : " closed"}`;
-    const start = this.#minute(slot.startsAt);
+    const start = this.#minute(slot.startsAt, column);
     const end =
       !faded && this.selection?.columnKey === column.key && this.selection.index === index
         ? this.selection.end
-        : this.#minute(slot.endsAt) || DAY;
+        : this.#rangeEnd(slot.endsAt, column);
     const text = html`<span>${name}</span><span>${slot.startsAt}–${slot.endsAt}</span>`;
     return faded || this.readOnly || !column.editable
       ? html`<div
@@ -498,7 +537,7 @@ export class ServiceGrid extends LitElement {
             tabindex="-1"
             data-index=${index}
             aria-label=${`${column.label}, ${t("service.adjust_range").replace("{name}", name)}, ${slot.startsAt}–${slot.endsAt}`}
-            style=${styleMap({ top: `${(end / DAY) * 100}%` })}
+            style=${styleMap({ top: `${(end / this.#extent()) * 100}%` })}
             @pointerdown=${(event: PointerEvent) => this.#start(event, column, start, index)}
             @click=${(event: MouseEvent) => {
               event.stopPropagation();
@@ -507,21 +546,15 @@ export class ServiceGrid extends LitElement {
           ></button>`;
   }
   override render() {
-    const { min, max } = this.#limits();
-    const boundaries = [
-      ...new Set([
-        0,
-        ...Array.from({ length: Math.floor((max - min) / STEP) + 1 }, (_, i) => min + i * STEP),
-        DAY,
-      ]),
-    ];
-    const steps = boundaries.slice(0, -1);
     const hourStart = (60 - (minutes(this.dayCutover) % 60)) % 60;
     const hours = [
       ...new Set([
         0,
-        ...Array.from({ length: Math.ceil((DAY - hourStart) / 60) }, (_, i) => hourStart + i * 60),
-        DAY,
+        ...Array.from(
+          { length: Math.ceil((this.#extent() - hourStart) / 60) },
+          (_, i) => hourStart + i * 60,
+        ),
+        this.#extent(),
       ]),
     ];
     return html`<div
@@ -532,12 +565,29 @@ export class ServiceGrid extends LitElement {
     >
       <div
         class="layout"
-        style=${styleMap({ "--column-tracks": this.columns.map((column) => (column.narrow ? "minmax(calc(var(--wt-space-6) * 3), .6fr)" : "minmax(calc(var(--wt-space-6) * 5), 1fr)")).join(" ") })}
+        style=${styleMap({ "--grid-height": `calc(var(--wt-space-6) * ${this.#extent() / STEP})`, "--column-tracks": this.columns.map((column) => (column.narrow ? "minmax(calc(var(--wt-space-6) * 3), .6fr)" : "minmax(calc(var(--wt-space-6) * 5), 1fr)")).join(" ") })}
       >
         <div class="heading"></div>
-        ${this.columns.map((column) => html`<div class="heading">${column.label}<slot name=${`header-${column.key}`}></slot></div>`)}
+        ${this.columns.map(
+          (column) =>
+            html`<div class="heading">
+              ${column.label}<slot name=${`header-${column.key}`}></slot>${
+                column.clock
+                  ? html`<span class="bounds"
+                        ><time datetime=${column.clock.startAt ?? nothing}
+                          >${column.clock.dayCutover.slice(0, 5)}</time
+                        >
+                        →
+                        <time datetime=${column.clock.endAt ?? nothing}
+                          >${this.#time(column.clock.endMinute, column)}</time
+                        ></span
+                      >${column.clock.endMinute !== DAY ? html`<span class="transition">${t(column.clock.endMinute < DAY ? "hours.short_day" : "hours.long_day").replace("{hours}", String(column.clock.endMinute / 60))}</span>` : nothing}`
+                  : nothing
+              }
+            </div>`,
+        )}
         <div class="times" aria-hidden="true">
-          ${hours.map((minute) => html`<span class="hour" style=${styleMap({ top: `${(minute / DAY) * 100}%` })}>${this.#time(minute)}</span>`)}
+          ${hours.map((minute) => html`<span class="hour" style=${styleMap({ top: `${(minute / this.#extent()) * 100}%` })}>${this.#time(minute)}</span>`)}
         </div>
         ${this.columns.map(
           (column) =>
@@ -549,25 +599,26 @@ export class ServiceGrid extends LitElement {
               ?data-editable=${!this.readOnly && column.editable}
               @keydown=${(event: KeyboardEvent) => this.#keydown(event, column)}
             >
-              ${steps.map((start, row) =>
-                this.readOnly || !column.editable || start < min || start >= max
-                  ? html`<div
-                      class="step"
-                      style=${this.#position(start, boundaries[row + 1]!)}
-                    ></div>`
+              ${this.#steps(column).map(({ start, end }) =>
+                this.readOnly ||
+                !column.editable ||
+                start < this.#limits(column).min ||
+                start >= this.#limits(column).max
+                  ? html`<div class="step" style=${this.#position(start, end)}></div>`
                   : html`<button
                       type="button"
                       class="step"
                       data-minute=${start}
                       tabindex=${column.key === this.focusCell.columnKey && start === this.focusCell.minute ? 0 : -1}
                       aria-label=${this.#cellLabel(column, start)}
-                      style=${this.#position(start, boundaries[row + 1]!)}
+                      style=${this.#position(start, end)}
                       @focus=${() => {
                         this.focusCell = { columnKey: column.key, minute: start };
                       }}
                       @pointerdown=${(event: PointerEvent) => this.#start(event, column, start)}
                     ></button>`,
               )}
+              ${(column.clock?.endMinute ?? DAY) > DAY ? html`<div class="block closed" data-test="closed-tail" style=${this.#position(DAY, column.clock!.endMinute)}>${t("hours.closed")}</div>` : nothing}
               ${column.slots.map((slot, index) =>
                 this.#block(
                   column,
@@ -578,7 +629,7 @@ export class ServiceGrid extends LitElement {
                 ),
               )}
               ${column.layer === "closed" ? (column.closed ?? []).map((slot, index) => this.#block(column, slot, index)) : nothing}
-              ${this.selection?.columnKey === column.key && this.selection.index === undefined ? html`<div class="selection" role="status" style=${this.#position(this.selection.start, this.selection.end)}>${this.#time(this.selection.start)}–${this.#time(this.selection.end)}</div>` : nothing}
+              ${this.selection?.columnKey === column.key && this.selection.index === undefined ? html`<div class="selection" role="status" style=${this.#position(this.selection.start, this.selection.end)}>${this.#time(this.selection.start, column)}–${this.#time(this.selection.end, column)}</div>` : nothing}
             </div>`,
         )}
       </div>

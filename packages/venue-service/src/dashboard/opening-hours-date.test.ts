@@ -19,6 +19,10 @@ const special = {
 };
 function fixture(own = true): OpeningHoursModel {
   return {
+    businessDayClock: { timeZone: "Europe/Madrid", dayCutover: "06:00", cutoverChanges: [] },
+    clockRevision: 0,
+    currentBusinessDay: "2026-10-12",
+    pending: null,
     timeZone: "Europe/Madrid",
     clockReadable: true,
     dayCutover: "06:00",
@@ -134,7 +138,10 @@ it("stages a date resize then writes only its date timetable", async () => {
     {
       url: "/management-api/venue-service/special-dates/s%2F1/menu-timetables/d1",
       method: "PUT",
-      body: { slots: [{ periodId: "p1", startsAt: "12:00", endsAt: "17:00" }] },
+      body: {
+        expectedClockRevision: 0,
+        slots: [{ periodId: "p1", startsAt: "12:00", endsAt: "17:00" }],
+      },
     },
   ]);
   await expect.poll(() => save(week).disabled).toBe(true);
@@ -154,7 +161,7 @@ it("stages Closed all day and saves an empty override even when the weekday is e
     {
       url: "/management-api/venue-service/special-dates/s%2F1/menu-timetables/d1",
       method: "PUT",
-      body: { slots: [] },
+      body: { expectedClockRevision: 0, slots: [] },
     },
   ]);
 });
@@ -334,6 +341,7 @@ it("adds a date range through the shared dialog without changing its weekday", a
     url: "/management-api/venue-service/special-dates/s%2F1/menu-timetables/d1",
     method: "PUT",
     body: {
+      expectedClockRevision: 0,
       slots: [
         { periodId: "p1", startsAt: "12:00", endsAt: "16:00" },
         { periodId: "p1", startsAt: "16:00", endsAt: "18:00" },

@@ -5,6 +5,10 @@ import { NamedDaysApi } from "./named-days-client.js";
 import { QUERY_DEPENDENCIES } from "./live-queries.js";
 
 const model = (civilDate: string): NamedDaysModel => ({
+  businessDayClock: { timeZone: "Europe/Madrid", dayCutover: "06:00", cutoverChanges: [] },
+  clockRevision: 0,
+  currentBusinessDay: "2026-10-12",
+  pending: null,
   timeZone: "Europe/Madrid",
   dayCutover: "06:00",
   civilDate,
@@ -44,6 +48,8 @@ describe("NamedDaysApi.watchNamedDays", () => {
       "departments",
       "tenants",
       "locations",
+      "location_business_day_settings",
+      "location_day_cutover_changes",
       "holiday_geographies",
     ]);
     expect(request.mock.calls).toEqual([[NAMED_PATH, "GET", undefined, { passive: true }]]);

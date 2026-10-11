@@ -213,20 +213,26 @@ describe("service-period writers", () => {
         .find((department) => department.id === v.restaurant)!
         .periods.map((period) => ({ name: period.name, offset: period.endOffsetMinutes }));
     const created = await scoped((tx) =>
-      saveMenuPeriod(tx, v.cfg, v.restaurant, {
-        name: "Lunch",
-        menuId: v.menus.Almuerzo,
-        staffMenuIds: [],
-      }),
+      saveMenuPeriod(
+        tx,
+        v.cfg,
+        v.restaurant,
+        {
+          name: "Lunch",
+          menuId: v.menus.Almuerzo,
+          staffMenuIds: [],
+        },
+        0,
+      ),
     );
     expect(await offsets()).toEqual([{ name: "Lunch", offset: 0 }]);
     for (const endOffsetMinutes of [-15, 14]) {
-      await scoped((tx) => updateMenuPeriod(tx, v.cfg, created.id, { endOffsetMinutes }));
+      await scoped((tx) => updateMenuPeriod(tx, v.cfg, created.id, { endOffsetMinutes }, 0));
       expect(await offsets()).toEqual([{ name: "Lunch", offset: endOffsetMinutes }]);
     }
-    await scoped((tx) => updateMenuPeriod(tx, v.cfg, created.id, { name: "Afternoon" }));
+    await scoped((tx) => updateMenuPeriod(tx, v.cfg, created.id, { name: "Afternoon" }, 0));
     expect(await offsets()).toEqual([{ name: "Afternoon", offset: 14 }]);
-    await scoped((tx) => updateMenuPeriod(tx, v.cfg, created.id, { endOffsetMinutes: 0 }));
+    await scoped((tx) => updateMenuPeriod(tx, v.cfg, created.id, { endOffsetMinutes: 0 }, 0));
     expect(await offsets()).toEqual([{ name: "Afternoon", offset: 0 }]);
   });
 
@@ -235,14 +241,20 @@ describe("service-period writers", () => {
     async (endOffsetMinutes) => {
       const v = await venue({ timetable: false });
       const input = { name: "Lunch", menuId: v.menus.Almuerzo, staffMenuIds: [] };
-      const created = await scoped((tx) => saveMenuPeriod(tx, v.cfg, v.restaurant, input));
+      const created = await scoped((tx) => saveMenuPeriod(tx, v.cfg, v.restaurant, input, 0));
       const before = await db.select().from(menuPeriods).where(eq(menuPeriods.id, created.id));
       await expect(
         scoped((tx) =>
-          updateMenuPeriod(tx, v.cfg, created.id, {
-            name: "Changed",
-            endOffsetMinutes: endOffsetMinutes as number,
-          }),
+          updateMenuPeriod(
+            tx,
+            v.cfg,
+            created.id,
+            {
+              name: "Changed",
+              endOffsetMinutes: endOffsetMinutes as number,
+            },
+            0,
+          ),
         ),
       ).rejects.toMatchObject({
         code: "menu_period.invalid",
@@ -263,15 +275,21 @@ describe("service-period writers", () => {
   it("returns only the new period id and updates without a response body", async () => {
     const v = await venue({ timetable: false });
     const created = await scoped((tx) =>
-      saveMenuPeriod(tx, v.cfg, v.restaurant, {
-        name: "Lunch",
-        menuId: v.menus.Almuerzo,
-        staffMenuIds: [],
-      }),
+      saveMenuPeriod(
+        tx,
+        v.cfg,
+        v.restaurant,
+        {
+          name: "Lunch",
+          menuId: v.menus.Almuerzo,
+          staffMenuIds: [],
+        },
+        0,
+      ),
     );
     expect(created).toEqual({ id: expect.any(String) });
     await expect(
-      scoped((tx) => updateMenuPeriod(tx, v.cfg, created.id, { name: "Afternoon" })),
+      scoped((tx) => updateMenuPeriod(tx, v.cfg, created.id, { name: "Afternoon" }, 0)),
     ).resolves.toBeUndefined();
     expect(
       await db
@@ -281,7 +299,7 @@ describe("service-period writers", () => {
     ).toEqual([{ name: "Afternoon" }]);
   });
 
-  it("checks an end equal to the changeover on the following calendar date", async () => {
+  it("resolves an end equal to the changeover at the actual following boundary", async () => {
     expect(localTimeOccurrences("2026-03-28", "02:30", ZONE)).toHaveLength(1);
     expect(localTimeOccurrences("2026-03-29", "02:30", ZONE)).toEqual([]);
     const v = await venue();
@@ -292,10 +310,25 @@ describe("service-period writers", () => {
     const date = await makeDate(v, "2026-03-28");
     await expect(
       dateMenus(v, date.id, [slot(v.periods!.noches, "21:00", "02:30")]),
-    ).rejects.toMatchObject({
-      code: "menu_timetable.invalid",
-      params: { field: "slots.0.endsAt", reason: "clock_skips" },
-    });
+    ).resolves.toBeUndefined();
+    const stored = await db
+      .select({ startsAt: menuSlots.startsAt, endsAt: menuSlots.endsAt })
+      .from(menuSlots)
+      .innerJoin(menuDayTimetables, eq(menuDayTimetables.id, menuSlots.timetableId))
+      .where(eq(menuDayTimetables.specialDateId, date.id));
+    expect(stored).toEqual([{ startsAt: "21:00:00", endsAt: "02:30:00" }]);
+    const running = await scoped((tx) =>
+      resolveDepartmentService(tx, v.cfg, v.restaurant, new Date("2026-03-29T01:10:00Z")),
+    );
+    expect(running).toMatchObject({ open: true, periodId: v.periods!.noches });
+    expect(running.sendableMenuIds).toContain(running.customerMenuId);
+    expect(
+      (
+        await scoped((tx) =>
+          resolveDepartmentService(tx, v.cfg, v.restaurant, new Date("2026-03-29T01:30:00Z")),
+        )
+      ).periodId,
+    ).not.toBe(v.periods!.noches);
   });
 
   it("checks a start equal to the changeover on the business date", async () => {
@@ -322,7 +355,7 @@ describe("service-period writers", () => {
   });
 
   it.each(["copy", "move"] as const)(
-    "checks changeover ends on the next calendar date during a %s",
+    "resolves a final boundary during a %s across a skipped hour",
     async (action) => {
       expect(localTimeOccurrences("2027-03-27", "02:30", ZONE)).toHaveLength(1);
       expect(localTimeOccurrences("2027-03-28", "02:30", ZONE)).toEqual([]);
@@ -343,6 +376,7 @@ describe("service-period writers", () => {
                 ["2027-03-25", "2027-03-27"],
                 AT,
                 VENUE_SERVICE_CALENDAR_PARTICIPANTS,
+                0,
               )
             : saveSpecialDate(
                 tx,
@@ -351,22 +385,29 @@ describe("service-period writers", () => {
                 dateInput("2027-03-27"),
                 AT,
                 VENUE_SERVICE_CALENDAR_PARTICIPANTS,
+                0,
               ),
         );
-      await expect(change()).rejects.toMatchObject({
-        code: "menu_timetable.invalid",
-        params: {
-          field: "date",
-          date: "2027-03-27",
-          departmentId: v.restaurant,
-          reason: "clock_skips",
-        },
-      });
+      await expect(change()).resolves.toBeDefined();
       const dates = await db
         .select({ date: specialDates.date })
         .from(specialDates)
         .where(eq(specialDates.locationId, v.locationId));
-      expect(dates).toEqual([{ date: "2027-03-20" }]);
+      expect(dates.map((row) => row.date).sort()).toEqual(
+        action === "copy" ? ["2027-03-20", "2027-03-25", "2027-03-27"] : ["2027-03-27"],
+      );
+      const running = await scoped((tx) =>
+        resolveDepartmentService(tx, v.cfg, v.restaurant, new Date("2027-03-28T01:10:00Z")),
+      );
+      expect(running).toMatchObject({ open: true, periodId: v.periods!.noches });
+      expect(running.sendableMenuIds).toContain(running.customerMenuId);
+      expect(
+        (
+          await scoped((tx) =>
+            resolveDepartmentService(tx, v.cfg, v.restaurant, new Date("2027-03-28T01:30:00Z")),
+          )
+        ).periodId,
+      ).not.toBe(v.periods!.noches);
       const stored = await db
         .select({ startsAt: menuSlots.startsAt, endsAt: menuSlots.endsAt })
         .from(menuSlots)
@@ -379,19 +420,31 @@ describe("service-period writers", () => {
   it("always creates a new period even if an untyped caller sends an existing id", async () => {
     const v = await venue({ timetable: false });
     const original = await scoped((tx) =>
-      saveMenuPeriod(tx, v.cfg, v.restaurant, {
-        name: "Lunch",
-        menuId: v.menus.Almuerzo,
-        staffMenuIds: [],
-      }),
+      saveMenuPeriod(
+        tx,
+        v.cfg,
+        v.restaurant,
+        {
+          name: "Lunch",
+          menuId: v.menus.Almuerzo,
+          staffMenuIds: [],
+        },
+        0,
+      ),
     );
     const created = await scoped((tx) =>
-      saveMenuPeriod(tx, v.cfg, v.restaurant, {
-        id: original.id,
-        name: "Afternoon",
-        menuId: v.menus.Café,
-        staffMenuIds: [],
-      } as never),
+      saveMenuPeriod(
+        tx,
+        v.cfg,
+        v.restaurant,
+        {
+          id: original.id,
+          name: "Afternoon",
+          menuId: v.menus.Café,
+          staffMenuIds: [],
+        } as never,
+        0,
+      ),
     );
     expect(created.id).not.toBe(original.id);
     expect(
@@ -409,15 +462,21 @@ describe("service-period writers", () => {
   it("refuses explicit null fields rather than treating them as omitted", async () => {
     const v = await venue({ timetable: false });
     const { id } = await scoped((tx) =>
-      saveMenuPeriod(tx, v.cfg, v.restaurant, {
-        name: "Lunch",
-        menuId: v.menus.Bebidas,
-        staffMenuIds: [],
-      }),
+      saveMenuPeriod(
+        tx,
+        v.cfg,
+        v.restaurant,
+        {
+          name: "Lunch",
+          menuId: v.menus.Bebidas,
+          staffMenuIds: [],
+        },
+        0,
+      ),
     );
     for (const field of ["colour", "staffMenuIds"] as const) {
       await expect(
-        scoped((tx) => updateMenuPeriod(tx, v.cfg, id, { [field]: null } as never)),
+        scoped((tx) => updateMenuPeriod(tx, v.cfg, id, { [field]: null } as never, 0)),
       ).rejects.toMatchObject({ code: "menu_period.invalid", params: { field } });
     }
   });
@@ -436,6 +495,7 @@ describe("service-period writers", () => {
           v.restaurant,
           weekOf((day) => (day === 1 ? [slot(v.periods!.mananas, "07:00", "09:00")] : [])),
           AT,
+          0,
         ),
       ),
     ).rejects.toMatchObject({
@@ -454,6 +514,7 @@ describe("service-period writers", () => {
           v.restaurant,
           weekOf((day) => (day === 1 ? [slot(v.periods!.mananas, "12:10", "14:00")] : [])),
           AT,
+          0,
         ),
       ),
     ).rejects.toMatchObject({
@@ -493,12 +554,18 @@ describe("service-period writers", () => {
     const v = await venue({ timetable: false });
     await expect(
       scoped((tx) =>
-        saveMenuPeriod(tx, v.cfg, v.restaurant, {
-          name: "Lunch",
-          menuId: v.menus.Bebidas,
-          staffMenuIds: [],
-          colour: colour as never,
-        }),
+        saveMenuPeriod(
+          tx,
+          v.cfg,
+          v.restaurant,
+          {
+            name: "Lunch",
+            menuId: v.menus.Bebidas,
+            staffMenuIds: [],
+            colour: colour as never,
+          },
+          0,
+        ),
       ),
     ).rejects.toMatchObject({ code: "menu_period.invalid", params: { field: "colour" } });
   });
@@ -506,15 +573,21 @@ describe("service-period writers", () => {
   it("refuses changing the customer menu to a retained staff menu and leaves the period untouched", async () => {
     const v = await venue({ timetable: false });
     const { id } = await scoped((tx) =>
-      saveMenuPeriod(tx, v.cfg, v.restaurant, {
-        name: "Lunch",
-        menuId: v.menus.Bebidas,
-        staffMenuIds: [v.menus.Café],
-        colour: "blue",
-      }),
+      saveMenuPeriod(
+        tx,
+        v.cfg,
+        v.restaurant,
+        {
+          name: "Lunch",
+          menuId: v.menus.Bebidas,
+          staffMenuIds: [v.menus.Café],
+          colour: "blue",
+        },
+        0,
+      ),
     );
     await expect(
-      scoped((tx) => updateMenuPeriod(tx, v.cfg, id, { menuId: v.menus.Café })),
+      scoped((tx) => updateMenuPeriod(tx, v.cfg, id, { menuId: v.menus.Café }, 0)),
     ).rejects.toMatchObject({ code: "menu_period.invalid", params: { field: "staffMenuIds" } });
     expect(
       await db
@@ -527,11 +600,17 @@ describe("service-period writers", () => {
   it("saves an active customer menu outside the old list, trims the name and keeps staff-menu order", async () => {
     const v = await venue({ timetable: false });
     const period = await scoped((tx) =>
-      saveMenuPeriod(tx, v.cfg, v.restaurant, {
-        name: " Lunch ",
-        menuId: v.menus["Deli para llevar"],
-        staffMenuIds: [v.menus.Café, v.menus.Bebidas],
-      }),
+      saveMenuPeriod(
+        tx,
+        v.cfg,
+        v.restaurant,
+        {
+          name: " Lunch ",
+          menuId: v.menus["Deli para llevar"],
+          staffMenuIds: [v.menus.Café, v.menus.Bebidas],
+        },
+        0,
+      ),
     );
     expect(
       await db
@@ -553,12 +632,18 @@ describe("service-period writers", () => {
       { menuId: v.menus.Bebidas, position: 1 },
     ]);
     await scoped((tx) =>
-      updateMenuPeriod(tx, v.cfg, period.id, {
-        staffMenuIds: [v.menus.Bebidas, v.menus.Café],
-        colour: "purple",
-      }),
+      updateMenuPeriod(
+        tx,
+        v.cfg,
+        period.id,
+        {
+          staffMenuIds: [v.menus.Bebidas, v.menus.Café],
+          colour: "purple",
+        },
+        0,
+      ),
     );
-    await scoped((tx) => updateMenuPeriod(tx, v.cfg, period.id, { name: " Afternoon " }));
+    await scoped((tx) => updateMenuPeriod(tx, v.cfg, period.id, { name: " Afternoon " }, 0));
     expect(await staff()).toEqual([
       { menuId: v.menus.Bebidas, position: 0 },
       { menuId: v.menus.Café, position: 1 },
@@ -569,7 +654,7 @@ describe("service-period writers", () => {
         .from(menuPeriods)
         .where(eq(menuPeriods.id, period.id)),
     ).toEqual([{ name: "Afternoon", colour: "purple", menuId: v.menus["Deli para llevar"] }]);
-    await scoped((tx) => updateMenuPeriod(tx, v.cfg, period.id, { staffMenuIds: [] }));
+    await scoped((tx) => updateMenuPeriod(tx, v.cfg, period.id, { staffMenuIds: [] }, 0));
     expect(await staff()).toEqual([]);
   });
 
@@ -578,11 +663,17 @@ describe("service-period writers", () => {
     const colours = [];
     for (let index = 0; index < 7; index++) {
       const { id } = await scoped((tx) =>
-        saveMenuPeriod(tx, v.cfg, v.restaurant, {
-          name: `Period ${index}`,
-          menuId: v.menus.Bebidas,
-          staffMenuIds: [],
-        }),
+        saveMenuPeriod(
+          tx,
+          v.cfg,
+          v.restaurant,
+          {
+            name: `Period ${index}`,
+            menuId: v.menus.Bebidas,
+            staffMenuIds: [],
+          },
+          0,
+        ),
       );
       const [row] = await db
         .select({ colour: menuPeriods.colour })
@@ -600,11 +691,17 @@ describe("service-period writers", () => {
       await db.update(catalogues).set({ active: false }).where(eq(catalogues.id, v.menus.Café));
       await expect(
         scoped((tx) =>
-          saveMenuPeriod(tx, v.cfg, v.restaurant, {
-            name: "Lunch",
-            menuId: kind === "customer" ? v.menus.Café : v.menus.Bebidas,
-            staffMenuIds: kind === "staff" ? [v.menus.Café] : [],
-          }),
+          saveMenuPeriod(
+            tx,
+            v.cfg,
+            v.restaurant,
+            {
+              name: "Lunch",
+              menuId: kind === "customer" ? v.menus.Café : v.menus.Bebidas,
+              staffMenuIds: kind === "staff" ? [v.menus.Café] : [],
+            },
+            0,
+          ),
         ),
       ).rejects.toMatchObject({
         code: "catalogue.not_found",
@@ -622,11 +719,17 @@ describe("service-period writers", () => {
       const v = await venue({ timetable: false });
       await expect(
         scoped((tx) =>
-          saveMenuPeriod(tx, v.cfg, v.restaurant, {
-            name: "Lunch",
-            menuId: v.menus.Bebidas,
-            staffMenuIds: kind === "customer" ? [v.menus.Bebidas] : [v.menus.Café, v.menus.Café],
-          }),
+          saveMenuPeriod(
+            tx,
+            v.cfg,
+            v.restaurant,
+            {
+              name: "Lunch",
+              menuId: v.menus.Bebidas,
+              staffMenuIds: kind === "customer" ? [v.menus.Bebidas] : [v.menus.Café, v.menus.Café],
+            },
+            0,
+          ),
         ),
       ).rejects.toMatchObject({ code: "menu_period.invalid", params: { field: "staffMenuIds" } });
       expect(
@@ -676,8 +779,15 @@ async function venue(options: { timetable?: boolean; unpublished?: MenuName[] } 
     const v = { cfg, locationId, restaurant, deli, barra, sala, terraza, mostrador, menus };
     if (options.timetable === false) return { ...v, periods: null };
     const period = async (departmentId: string, name: string, menu: MenuName) =>
-      (await saveMenuPeriod(tx, cfg, departmentId, { name, menuId: menus[menu], staffMenuIds: [] }))
-        .id;
+      (
+        await saveMenuPeriod(
+          tx,
+          cfg,
+          departmentId,
+          { name, menuId: menus[menu], staffMenuIds: [] },
+          0,
+        )
+      ).id;
     const periods = {
       mananas: await period(restaurant, "Mañanas", "Desayunos"),
       mediodia: await period(restaurant, "Mediodía", "Almuerzo"),
@@ -686,13 +796,14 @@ async function venue(options: { timetable?: boolean; unpublished?: MenuName[] } 
       brunch: await period(restaurant, "Brunch navideño", "Brunch de Navidad"),
       mediodiaDeli: await period(deli, "Mediodía deli", "Deli para llevar"),
     };
-    await replaceMenuWeek(tx, cfg, restaurant, restaurantWeek(periods), AT);
+    await replaceMenuWeek(tx, cfg, restaurant, restaurantWeek(periods), AT, 0);
     await replaceMenuWeek(
       tx,
       cfg,
       deli,
       weekOf(() => [slot(periods.mediodiaDeli, "12:00", "15:00")]),
       AT,
+      0,
     );
     return { ...v, periods };
   });
@@ -743,7 +854,15 @@ const dateInput = (date: string, overrides: Partial<SpecialDateInput> = {}): Spe
 });
 const makeDate = (v: Venue, date: string, overrides: Partial<SpecialDateInput> = {}) =>
   scoped(async (tx) => {
-    const saved = await saveSpecialDate(tx, v.cfg, null, dateInput(date, overrides), AT);
+    const saved = await saveSpecialDate(
+      tx,
+      v.cfg,
+      null,
+      dateInput(date, overrides),
+      AT,
+      undefined,
+      0,
+    );
     await tx
       .update(specialDates)
       .set({ ownHours: !overrides.closeWholeVenue })
@@ -760,10 +879,11 @@ const turnOffOwnHours = (v: { cfg: VenueScope }, id: string) =>
       { ...day, ownHours: false, cells: [] },
       AT,
       VENUE_SERVICE_CALENDAR_PARTICIPANTS,
+      0,
     );
   });
 const dateMenus = (v: Venue, specialDateId: string, slots: MenuSlot[], at = AT) =>
-  scoped((tx) => saveSpecialDateMenus(tx, v.cfg, specialDateId, v.restaurant, slots, at));
+  scoped((tx) => saveSpecialDateMenus(tx, v.cfg, specialDateId, v.restaurant, slots, at, 0));
 
 const invalid = (field: string, extra: Record<string, string> = {}) => ({
   code: "menu_timetable.invalid",
@@ -812,9 +932,15 @@ describe("the menu a zone starts on", () => {
   it("uses the department's customer menu in every zone, with the same ordered staff menus", async () => {
     const v = await timed();
     await scoped((tx) =>
-      updateMenuPeriod(tx, v.cfg, v.periods.mananas, {
-        staffMenuIds: [v.menus.Café, v.menus.Bebidas],
-      }),
+      updateMenuPeriod(
+        tx,
+        v.cfg,
+        v.periods.mananas,
+        {
+          staffMenuIds: [v.menus.Café, v.menus.Bebidas],
+        },
+        0,
+      ),
     );
     for (const zoneId of [v.barra, v.sala, v.terraza]) {
       const offers = await scoped((tx) =>
@@ -847,6 +973,7 @@ describe("the menu a zone starts on", () => {
             : null,
         ),
         AT,
+        0,
       );
     });
     expect(await choice(v, v.barra, madrid(TUESDAY, "10:00"))).toEqual({
@@ -910,6 +1037,7 @@ describe("the menu a zone starts on", () => {
         v.restaurant,
         precedingBusinessDay([slot(periods.madrugada, skipped, "04:00")]),
         AT,
+        0,
       ),
     );
     expect(await choice(v, v.sala, forward.instant)).toEqual({
@@ -932,6 +1060,7 @@ describe("the menu a zone starts on", () => {
           slot(periods.mananas, boundary, "05:00"),
         ]),
         AT,
+        0,
       ),
     );
     for (const occurrence of [0, 1]) {
@@ -1032,6 +1161,7 @@ describe("a special date's menu timetable", () => {
         v.restaurant,
         [slot(periods.mananas, "09:00", "11:00")],
         AT,
+        0,
       );
     });
     expect(await choice(v, v.barra, at("10:00"))).toEqual({
@@ -1114,7 +1244,7 @@ describe("a special date's menu timetable", () => {
       ],
     ] as const) {
       await expect(
-        scoped((tx) => saveSpecialDateMenus(tx, cfg, specialDateId, departmentId, [], AT)),
+        scoped((tx) => saveSpecialDateMenus(tx, cfg, specialDateId, departmentId, [], AT, 0)),
       ).rejects.toMatchObject(refusal);
     }
   });
@@ -1143,10 +1273,12 @@ describe("the timetable's writers", () => {
     const { menus, periods } = v;
     const absentMenu = randomUUID();
     await scoped((tx) =>
-      updateMenuPeriod(tx, v.cfg, periods.noches, { name: "Cenas", menuId: menus.Cena }),
+      updateMenuPeriod(tx, v.cfg, periods.noches, { name: "Cenas", menuId: menus.Cena }, 0),
     );
     expect(
-      await scoped((tx) => updateMenuPeriod(tx, v.cfg, periods.noches, { menuId: menus.Cócteles })),
+      await scoped((tx) =>
+        updateMenuPeriod(tx, v.cfg, periods.noches, { menuId: menus.Cócteles }, 0),
+      ),
     ).toBeUndefined();
     expect(
       await db
@@ -1155,7 +1287,9 @@ describe("the timetable's writers", () => {
         .where(eq(menuPeriods.id, periods.noches)),
     ).toEqual([{ name: "Cenas", menuId: menus.Cócteles }]);
     expect(
-      await scoped((tx) => updateMenuPeriod(tx, v.cfg, periods.noches, { name: "Noches tarde" })),
+      await scoped((tx) =>
+        updateMenuPeriod(tx, v.cfg, periods.noches, { name: "Noches tarde" }, 0),
+      ),
     ).toBeUndefined();
     expect(
       await db
@@ -1171,23 +1305,29 @@ describe("the timetable's writers", () => {
     });
     // A partial update is still checked like a whole one.
     await expect(
-      scoped((tx) => updateMenuPeriod(tx, v.cfg, periods.noches, { menuId: absentMenu })),
+      scoped((tx) => updateMenuPeriod(tx, v.cfg, periods.noches, { menuId: absentMenu }, 0)),
     ).rejects.toMatchObject({
       code: "catalogue.not_found",
       params: { catalogueId: absentMenu },
     });
     await expect(
-      scoped((tx) => updateMenuPeriod(tx, v.cfg, periods.noches, { name: "  " })),
+      scoped((tx) => updateMenuPeriod(tx, v.cfg, periods.noches, { name: "  " }, 0)),
     ).rejects.toMatchObject(invalid("name"));
   });
 
   it("changes a period's menus without a department membership list and preserves other periods", async () => {
     const v = await timed();
     await scoped((tx) =>
-      updateMenuPeriod(tx, v.cfg, v.periods.mananas, {
-        menuId: v.menus.Café,
-        staffMenuIds: [v.menus.Bebidas],
-      }),
+      updateMenuPeriod(
+        tx,
+        v.cfg,
+        v.periods.mananas,
+        {
+          menuId: v.menus.Café,
+          staffMenuIds: [v.menus.Bebidas],
+        },
+        0,
+      ),
     );
     for (const zoneId of [v.barra, v.sala, v.terraza])
       expect(await choice(v, zoneId, madrid(MONDAY, "10:00"))).toEqual({
@@ -1212,8 +1352,8 @@ describe("the timetable's writers", () => {
     // Saturday 3 October is past at AT: its clash with the Friday before is history.
     const past = await makeDate(v, "2026-10-03");
     await dateMenus(v, past.id, [slot(periods.mananas, "01:00", "03:00")]);
-    await scoped((tx) => replaceMenuWeek(tx, v.cfg, v.restaurant, fridayTail("03:00"), AT));
-    await scoped((tx) => replaceMenuWeek(tx, v.cfg, v.restaurant, fridayTail("02:00"), AT));
+    await scoped((tx) => replaceMenuWeek(tx, v.cfg, v.restaurant, fridayTail("03:00"), AT, 0));
+    await scoped((tx) => replaceMenuWeek(tx, v.cfg, v.restaurant, fridayTail("02:00"), AT, 0));
     // Tuesday 6 October is yesterday at AT, so it is read, but its pair with Monday is past.
     const yesterday = await makeDate(v, "2026-10-06");
     await dateMenus(v, yesterday.id, [slot(periods.mananas, "01:00", "03:00")]);
@@ -1226,19 +1366,20 @@ describe("the timetable's writers", () => {
           weekday === 1 ? [slot(periods.madrugada, "22:00", "03:00")] : null,
         ),
         AT,
+        0,
       ),
     );
-    await scoped((tx) => replaceMenuWeek(tx, v.cfg, v.restaurant, fridayTail("02:00"), AT));
+    await scoped((tx) => replaceMenuWeek(tx, v.cfg, v.restaurant, fridayTail("02:00"), AT, 0));
 
     const coming = await makeDate(v, "2026-10-24");
     await dateMenus(v, coming.id, [slot(periods.mananas, "02:30", "05:00")]);
-    await scoped((tx) => replaceMenuWeek(tx, v.cfg, v.restaurant, fridayTail("03:00"), AT));
+    await scoped((tx) => replaceMenuWeek(tx, v.cfg, v.restaurant, fridayTail("03:00"), AT, 0));
     // The replacement week was written.
     expect((await resolve(v, v.sala, madrid("2026-10-31", "02:30"))).periodId).toBe(
       periods.madrugada,
     );
     await expect(
-      scoped((tx) => replaceMenuWeek(tx, v.cfg, v.restaurant, weekOf(() => []).slice(1), AT)),
+      scoped((tx) => replaceMenuWeek(tx, v.cfg, v.restaurant, weekOf(() => []).slice(1), AT, 0)),
     ).rejects.toMatchObject(invalid("days"));
     await expect(
       scoped((tx) =>
@@ -1248,6 +1389,7 @@ describe("the timetable's writers", () => {
           v.restaurant,
           weekOf(() => []),
           AT,
+          0,
         ),
       ),
     ).resolves.toBeUndefined();
@@ -1259,6 +1401,7 @@ describe("the timetable's writers", () => {
           randomUUID(),
           weekOf(() => []),
           AT,
+          0,
         ),
       ),
     ).rejects.toMatchObject({ code: "department.not_found" });
@@ -1268,7 +1411,7 @@ describe("the timetable's writers", () => {
     const v = await timed();
     const { menus, periods } = v;
     await scoped((tx) =>
-      updateMenuPeriod(tx, v.cfg, periods.noches, { staffMenuIds: [menus.Cócteles] }),
+      updateMenuPeriod(tx, v.cfg, periods.noches, { staffMenuIds: [menus.Cócteles] }, 0),
     );
     expect(
       await db
@@ -1292,6 +1435,7 @@ describe("the timetable's writers", () => {
         v.restaurant,
         weekOf(() => [slot(periods.mananas, "09:00", "12:00")]),
         AT,
+        0,
       );
       await deleteMenuPeriod(tx, v.cfg, periods.noches);
     });
@@ -1428,7 +1572,7 @@ describe("the calendar participant", () => {
     const v = await timed();
     const { menus, periods } = v;
     await scoped((tx) =>
-      updateMenuPeriod(tx, v.cfg, periods.mananas, { staffMenuIds: [menus.Café] }),
+      updateMenuPeriod(tx, v.cfg, periods.mananas, { staffMenuIds: [menus.Café] }, 0),
     );
     const christmas = await makeDate(v, CHRISTMAS);
     await scoped(async (tx) => {
@@ -1439,6 +1583,7 @@ describe("the calendar participant", () => {
         v.restaurant,
         [slot(periods.mananas, "09:00", "11:00")],
         AT,
+        0,
       );
     });
     // A Saturday and a Sunday, whose weeks have no Mañanas.
@@ -1451,6 +1596,7 @@ describe("the calendar participant", () => {
         targets,
         AT,
         VENUE_SERVICE_CALENDAR_PARTICIPANTS,
+        0,
       ),
     );
     for (const date of targets)
@@ -1508,6 +1654,7 @@ describe("the calendar participant", () => {
           [twoWeeksEarlier, addDays(forward.date, -1)],
           AT,
           VENUE_SERVICE_CALENDAR_PARTICIPANTS,
+          0,
         ),
       ),
     ).rejects.toMatchObject(
@@ -1532,6 +1679,7 @@ describe("the calendar participant", () => {
         ["2026-12-19", "2026-12-20"],
         AT,
         VENUE_SERVICE_CALENDAR_PARTICIPANTS,
+        0,
       ),
     );
     const stored = await db
@@ -1570,7 +1718,7 @@ describe("the calendar participant", () => {
 
     await turnOffOwnHours(v, boxingDay.id);
     await scoped((tx) =>
-      deleteSpecialDate(tx, v.cfg, christmas.id, AT, VENUE_SERVICE_CALENDAR_PARTICIPANTS),
+      deleteSpecialDate(tx, v.cfg, christmas.id, AT, VENUE_SERVICE_CALENDAR_PARTICIPANTS, 0),
     );
     expect(
       await db
@@ -1609,6 +1757,7 @@ describe("the calendar participant", () => {
           dateInput(date, { name }),
           AT,
           VENUE_SERVICE_CALENDAR_PARTICIPANTS,
+          0,
         ),
       );
     await move(sunday.id, "2026-12-23", "Fiesta");
@@ -1657,6 +1806,7 @@ describe("the calendar participant", () => {
         dateInput("2026-12-31"),
         AT,
         VENUE_SERVICE_CALENDAR_PARTICIPANTS,
+        0,
       ),
     );
     expect(
@@ -1677,6 +1827,7 @@ describe("the calendar participant", () => {
         dateInput("2027-01-07", { name: "Reyes" }),
         AT,
         VENUE_SERVICE_CALENDAR_PARTICIPANTS,
+        0,
       ),
     );
   });
@@ -1701,9 +1852,15 @@ describe("the offers a zone lists at an instant", () => {
 
     const unpublished = await timed({ unpublished: ["Desayunos"] });
     await scoped((tx) =>
-      updateMenuPeriod(tx, unpublished.cfg, unpublished.periods.mananas, {
-        staffMenuIds: [unpublished.menus.Bebidas],
-      }),
+      updateMenuPeriod(
+        tx,
+        unpublished.cfg,
+        unpublished.periods.mananas,
+        {
+          staffMenuIds: [unpublished.menus.Bebidas],
+        },
+        0,
+      ),
     );
     const fallback = await scoped((tx) =>
       listZoneOffers(tx, unpublished.cfg, unpublished.barra, { at }),
@@ -1814,14 +1971,21 @@ describe("statements", () => {
         v.restaurant,
         weekOf((weekday) => (weekday === 1 ? [slot(v.periods.mananas, "09:00", "12:00")] : [])),
         AT,
+        0,
       ),
     );
     const few = await statementsOf((tx) => resolveDepartmentService(tx, v.cfg, v.restaurant, at));
     await scoped(async (tx) => {
-      await replaceMenuWeek(tx, v.cfg, v.restaurant, twentySlots(v.periods), AT);
-      await updateMenuPeriod(tx, v.cfg, v.periods.noches, {
-        staffMenuIds: [v.menus.Café, v.menus.Cócteles, v.menus.Bebidas],
-      });
+      await replaceMenuWeek(tx, v.cfg, v.restaurant, twentySlots(v.periods), AT, 0);
+      await updateMenuPeriod(
+        tx,
+        v.cfg,
+        v.periods.noches,
+        {
+          staffMenuIds: [v.menus.Café, v.menus.Cócteles, v.menus.Bebidas],
+        },
+        0,
+      );
     });
     const many = await statementsOf((tx) => resolveDepartmentService(tx, v.cfg, v.restaurant, at));
     expect(many).toHaveLength(few.length);
@@ -1852,15 +2016,22 @@ describe("statements", () => {
     const busy = await timed();
     await scoped(async (tx) => {
       for (const v of [plain, busy])
-        await updateMenuPeriod(tx, v.cfg, v.periods.mananas, { staffMenuIds: [v.menus.Bebidas] });
+        await updateMenuPeriod(
+          tx,
+          v.cfg,
+          v.periods.mananas,
+          { staffMenuIds: [v.menus.Bebidas] },
+          0,
+        );
       await replaceMenuWeek(
         tx,
         plain.cfg,
         plain.restaurant,
         weekOf(() => []),
         AT,
+        0,
       );
-      await replaceMenuWeek(tx, busy.cfg, busy.restaurant, twentySlots(busy.periods), AT);
+      await replaceMenuWeek(tx, busy.cfg, busy.restaurant, twentySlots(busy.periods), AT, 0);
     });
     const read = (v: Timed) =>
       statementsOf((tx) =>
@@ -2083,6 +2254,7 @@ describe("a duplicate onto neighbouring days in one request", () => {
               : null,
         ),
         AT,
+        0,
       ),
     );
     const source = await makeDate(v, "2026-12-02");
@@ -2096,6 +2268,7 @@ describe("a duplicate onto neighbouring days in one request", () => {
           dates,
           AT,
           VENUE_SERVICE_CALENDAR_PARTICIPANTS,
+          0,
         ),
       );
     return { v, duplicate };
@@ -2147,6 +2320,7 @@ describe("why a calendar change is refused", () => {
           [target],
           AT,
           VENUE_SERVICE_CALENDAR_PARTICIPANTS,
+          0,
         ),
       ),
     ).rejects.toMatchObject(refused(v, target, "clock_skips"));
@@ -2159,6 +2333,7 @@ describe("why a calendar change is refused", () => {
           dateInput(target, { name: "Marzo" }),
           AT,
           VENUE_SERVICE_CALENDAR_PARTICIPANTS,
+          0,
         ),
       ),
     ).rejects.toMatchObject(refused(v, target, "clock_skips"));
@@ -2193,7 +2368,7 @@ describe("the venue's clock", () => {
     const { periods } = v;
     const christmas = await makeDate(v, CHRISTMAS);
     const at = (slots: MenuSlot[]) => (tx: Transaction) =>
-      saveSpecialDateMenus(tx, v.cfg, christmas.id, v.restaurant, slots, AT);
+      saveSpecialDateMenus(tx, v.cfg, christmas.id, v.restaurant, slots, AT, 0);
     expect(await clockReads(at([slot(periods.brunch, "11:00", "15:00")]))).toBe(1);
     await scoped((tx) =>
       saveSpecialDateMenus(
@@ -2203,6 +2378,7 @@ describe("the venue's clock", () => {
         v.deli,
         [slot(periods.mediodiaDeli, "12:00", "15:00")],
         AT,
+        0,
       ),
     );
     const participant = MENU_TIMETABLE_CALENDAR_PARTICIPANT;
@@ -2225,7 +2401,7 @@ describe("the venue's clock", () => {
     ).toBe(1);
     expect(
       await clockReads((tx) =>
-        replaceMenuWeek(tx, v.cfg, v.restaurant, restaurantWeek(periods), AT),
+        replaceMenuWeek(tx, v.cfg, v.restaurant, restaurantWeek(periods), AT, 0),
       ),
     ).toBe(1);
   });
@@ -2240,7 +2416,7 @@ describe("the editor's model of two venues", () => {
     const theirPast = await makeDate(other, "2025-12-25");
     await dateMenus(other, theirs.id, []);
     await scoped((tx) =>
-      saveSpecialDateMenus(tx, other.cfg, theirPast.id, other.restaurant, [], AT),
+      saveSpecialDateMenus(tx, other.cfg, theirPast.id, other.restaurant, [], AT, 0),
     );
     const model = await scoped((tx) => readOpeningHoursModel(tx, v.cfg, AT));
     expect(model.namedDays).toEqual([
@@ -2267,28 +2443,46 @@ describe("department service periods", () => {
       .where(eq(locations.id, v.locationId));
     return scoped(async (tx) => {
       const lunch = (
-        await saveMenuPeriod(tx, v.cfg, v.restaurant, {
-          name: "Lunch",
-          colour: "blue",
-          menuId: v.menus.Almuerzo,
-          staffMenuIds: [v.menus.Bebidas, v.menus.Café],
-        })
+        await saveMenuPeriod(
+          tx,
+          v.cfg,
+          v.restaurant,
+          {
+            name: "Lunch",
+            colour: "blue",
+            menuId: v.menus.Almuerzo,
+            staffMenuIds: [v.menus.Bebidas, v.menus.Café],
+          },
+          0,
+        )
       ).id;
       const afternoon = (
-        await saveMenuPeriod(tx, v.cfg, v.restaurant, {
-          name: "Afternoon",
-          colour: "amber",
-          menuId: v.menus.Café,
-          staffMenuIds: [],
-        })
+        await saveMenuPeriod(
+          tx,
+          v.cfg,
+          v.restaurant,
+          {
+            name: "Afternoon",
+            colour: "amber",
+            menuId: v.menus.Café,
+            staffMenuIds: [],
+          },
+          0,
+        )
       ).id;
       const night = (
-        await saveMenuPeriod(tx, v.cfg, v.restaurant, {
-          name: "Night",
-          colour: "grey",
-          menuId: v.menus.Cena,
-          staffMenuIds: [],
-        })
+        await saveMenuPeriod(
+          tx,
+          v.cfg,
+          v.restaurant,
+          {
+            name: "Night",
+            colour: "grey",
+            menuId: v.menus.Cena,
+            staffMenuIds: [],
+          },
+          0,
+        )
       ).id;
       await replaceMenuWeek(
         tx,
@@ -2304,6 +2498,7 @@ describe("department service periods", () => {
             : [],
         ),
         AT,
+        0,
       );
       return { ...v, lunch, afternoon, night };
     });
@@ -2327,7 +2522,9 @@ describe("department service periods", () => {
 
   it("keeps Lunch running and delays Afternoon until the stored extension ends", async () => {
     const v = await serviceVenue();
-    await scoped((tx) => updateMenuPeriod(tx, v.cfg, v.lunch, { staffMenuIds: [v.menus.Bebidas] }));
+    await scoped((tx) =>
+      updateMenuPeriod(tx, v.cfg, v.lunch, { staffMenuIds: [v.menus.Bebidas] }, 0),
+    );
     await extend(v, v.lunch, "14:00:00", "14:30:00");
     expect(await read(v, FRIDAY, "14:15")).toMatchObject({
       periodId: v.lunch,
@@ -2366,7 +2563,9 @@ describe("department service periods", () => {
 
   it("never marks a wholly displaced period's menus ended", async () => {
     const v = await serviceVenue();
-    await scoped((tx) => updateMenuPeriod(tx, v.cfg, v.lunch, { staffMenuIds: [v.menus.Bebidas] }));
+    await scoped((tx) =>
+      updateMenuPeriod(tx, v.cfg, v.lunch, { staffMenuIds: [v.menus.Bebidas] }, 0),
+    );
     await extend(v, v.lunch, "14:00:00", "20:00:00");
     expect(await read(v, FRIDAY, "20:10")).toMatchObject({
       open: false,
@@ -2427,6 +2626,7 @@ describe("department service periods", () => {
             : [],
         ),
         AT,
+        0,
       ),
     );
     expect(await read(v, FRIDAY, "11:59")).toMatchObject({ keepOpen: null });
@@ -2535,7 +2735,7 @@ describe("department service periods", () => {
   it("falls back only to a served menu of the running period when its customer menu is unpublished", async () => {
     const v = await timed({ unpublished: ["Desayunos"] });
     await scoped((tx) =>
-      updateMenuPeriod(tx, v.cfg, v.periods.mananas, { staffMenuIds: [v.menus.Bebidas] }),
+      updateMenuPeriod(tx, v.cfg, v.periods.mananas, { staffMenuIds: [v.menus.Bebidas] }, 0),
     );
     const result = await scoped((tx) =>
       listZoneOffers(tx, v.cfg, v.barra, { at: madrid(MONDAY, "10:00") }),
@@ -2548,7 +2748,7 @@ describe("department service periods", () => {
       isDefault: false,
       orderable: false,
     });
-    await scoped((tx) => updateMenuPeriod(tx, v.cfg, v.periods.mananas, { staffMenuIds: [] }));
+    await scoped((tx) => updateMenuPeriod(tx, v.cfg, v.periods.mananas, { staffMenuIds: [] }, 0));
     const unserved = await scoped((tx) =>
       listZoneOffers(tx, v.cfg, v.barra, { at: madrid(MONDAY, "10:00") }),
     );
@@ -2577,10 +2777,16 @@ describe("department service periods", () => {
       orderable: true,
     });
     await scoped((tx) =>
-      updateMenuPeriod(tx, v.cfg, v.lunch, {
-        menuId: v.menus.Café,
-        staffMenuIds: [v.menus.Bebidas],
-      }),
+      updateMenuPeriod(
+        tx,
+        v.cfg,
+        v.lunch,
+        {
+          menuId: v.menus.Café,
+          staffMenuIds: [v.menus.Bebidas],
+        },
+        0,
+      ),
     );
     await expect(
       scoped((tx) => listZoneOffers(tx, v.cfg, v.barra, { asserted, withDefault: false })),
@@ -2668,6 +2874,7 @@ describe("department service periods", () => {
         v.restaurant,
         weekOf(() => []),
         AT,
+        0,
       ),
     );
     const issues = await scoped((tx) => listVenueReadiness(tx, v.cfg));
@@ -2708,7 +2915,7 @@ describe("department service periods", () => {
     const v = await serviceVenue();
     const other = await venue({ timetable: false });
     const date = await makeDate(v, FRIDAY);
-    await scoped((tx) => saveSpecialDateMenus(tx, v.cfg, date.id, v.restaurant, [], AT));
+    await scoped((tx) => saveSpecialDateMenus(tx, v.cfg, date.id, v.restaurant, [], AT, 0));
     await db.update(specialDates).set({ kind: "holiday" }).where(eq(specialDates.id, date.id));
     await db.update(menuPeriods).set({ colour: "blue" }).where(eq(menuPeriods.id, v.lunch));
     await scoped((tx) =>
@@ -2811,7 +3018,7 @@ describe("department service periods", () => {
     const used = await makeDate(v, "2026-10-04");
     const unused = await makeDate(v, "2026-10-05");
     const yesterday = await makeDate(v, "2026-10-06");
-    await scoped((tx) => saveSpecialDateMenus(tx, v.cfg, used.id, v.restaurant, [], AT));
+    await scoped((tx) => saveSpecialDateMenus(tx, v.cfg, used.id, v.restaurant, [], AT, 0));
     expect(
       (await scoped((tx) => readOpeningHoursModel(tx, v.cfg, AT))).namedDays.map((date) => date.id),
     ).toEqual([used.id, yesterday.id]);
@@ -2885,8 +3092,9 @@ describe("department service periods", () => {
           v.restaurant,
           weekOf((day) => (day === 5 ? [slot(v.lunch, "12:00", "14:00")] : [])),
           AT,
+          0,
         );
-        await updateMenuPeriod(tx, v.cfg, v.lunch, { endOffsetMinutes: offset });
+        await updateMenuPeriod(tx, v.cfg, v.lunch, { endOffsetMinutes: offset }, 0);
       });
       const service = await read(v, FRIDAY, time);
       const menus = [v.menus.Almuerzo, v.menus.Bebidas, v.menus.Café];
@@ -2905,8 +3113,9 @@ describe("department service periods", () => {
         v.restaurant,
         weekOf((day) => (day === 5 ? [slot(v.night, "21:00", "06:00")] : [])),
         AT,
+        0,
       );
-      await updateMenuPeriod(tx, v.cfg, v.night, { endOffsetMinutes: 15 });
+      await updateMenuPeriod(tx, v.cfg, v.night, { endOffsetMinutes: 15 }, 0);
     });
     await makeDate(v, SATURDAY, { closeWholeVenue: true });
     expect(await read(v, SATURDAY, "06:14")).toMatchObject({
@@ -2923,7 +3132,7 @@ describe("department service periods", () => {
 
   it("end-offset unions a shared staff menu without reviving its ended selling root", async () => {
     const v = await serviceVenue();
-    await scoped((tx) => updateMenuPeriod(tx, v.cfg, v.lunch, { endOffsetMinutes: -15 }));
+    await scoped((tx) => updateMenuPeriod(tx, v.cfg, v.lunch, { endOffsetMinutes: -15 }, 0));
     expect(await read(v, FRIDAY, "13:45")).toMatchObject({
       open: true,
       periodName: "Lunch",
@@ -2945,8 +3154,9 @@ describe("department service periods", () => {
         v.restaurant,
         weekOf((day) => (day === 6 ? [slot(v.night, "21:00", "03:00")] : [])),
         AT,
+        0,
       );
-      await updateMenuPeriod(tx, v.cfg, v.night, { endOffsetMinutes: -30 });
+      await updateMenuPeriod(tx, v.cfg, v.night, { endOffsetMinutes: -30 }, 0);
     });
     const repeated = localTimeOccurrences("2026-10-25", "02:20", ZONE);
     expect(repeated).toHaveLength(2);
@@ -2968,8 +3178,9 @@ describe("department service periods", () => {
         v.restaurant,
         weekOf((day) => (day === 6 ? [slot(v.night, "21:00", "04:00")] : [])),
         AT,
+        0,
       );
-      await updateMenuPeriod(tx, v.cfg, v.night, { endOffsetMinutes: -90 });
+      await updateMenuPeriod(tx, v.cfg, v.night, { endOffsetMinutes: -90 }, 0);
     });
     expect(await read(v, "2027-03-28", "01:59")).toMatchObject({
       orderableMenuIds: [v.menus.Cena],
@@ -3105,7 +3316,15 @@ describe("department service periods", () => {
     const v = await serviceVenue();
     const date = await makeDate(v, FRIDAY);
     await scoped((tx) =>
-      saveSpecialDateMenus(tx, v.cfg, date.id, v.restaurant, [slot(v.lunch, "13:00", "03:00")], AT),
+      saveSpecialDateMenus(
+        tx,
+        v.cfg,
+        date.id,
+        v.restaurant,
+        [slot(v.lunch, "13:00", "03:00")],
+        AT,
+        0,
+      ),
     );
     expect(await read(v, FRIDAY, "12:30")).toMatchObject({
       open: false,
@@ -3130,7 +3349,7 @@ describe("department service periods", () => {
     const v = await serviceVenue();
     const date = await makeDate(v, FRIDAY);
     expect(await read(v, FRIDAY, "13:00")).toMatchObject({ open: true, periodId: v.lunch });
-    await scoped((tx) => saveSpecialDateMenus(tx, v.cfg, date.id, v.restaurant, [], AT));
+    await scoped((tx) => saveSpecialDateMenus(tx, v.cfg, date.id, v.restaurant, [], AT, 0));
     expect(await read(v, FRIDAY, "13:00")).toMatchObject({
       open: false,
       orderableMenuIds: [],
@@ -3145,7 +3364,15 @@ describe("department service periods", () => {
     const v = await serviceVenue();
     const date = await makeDate(v, FRIDAY);
     await scoped((tx) =>
-      saveSpecialDateMenus(tx, v.cfg, date.id, v.restaurant, [slot(v.lunch, "12:00", "16:00")], AT),
+      saveSpecialDateMenus(
+        tx,
+        v.cfg,
+        date.id,
+        v.restaurant,
+        [slot(v.lunch, "12:00", "16:00")],
+        AT,
+        0,
+      ),
     );
     await db
       .update(specialDates)
@@ -3222,15 +3449,22 @@ describe("period end-offset placement bounds", () => {
             slot(v.periods.noches, next, "18:00"),
           ]),
           AT,
+          0,
         ),
       );
       const before = await scoped((tx) => readOpeningHoursModel(tx, v.cfg, AT));
       await expect(
         scoped((tx) =>
-          updateMenuPeriod(tx, v.cfg, v.periods.mediodia, {
-            endOffsetMinutes: offset,
-            staffMenuIds: [v.menus.Café],
-          }),
+          updateMenuPeriod(
+            tx,
+            v.cfg,
+            v.periods.mediodia,
+            {
+              endOffsetMinutes: offset,
+              staffMenuIds: [v.menus.Café],
+            },
+            0,
+          ),
         ),
       ).rejects.toMatchObject({
         code: "menu_period.invalid",
@@ -3258,11 +3492,12 @@ describe("period end-offset placement bounds", () => {
           slot(v.periods.noches, "14:15", "18:00"),
         ]),
         AT,
+        0,
       ),
     );
     for (const offset of [14, -119, 0]) {
       await scoped((tx) =>
-        updateMenuPeriod(tx, v.cfg, v.periods.mediodia, { endOffsetMinutes: offset }),
+        updateMenuPeriod(tx, v.cfg, v.periods.mediodia, { endOffsetMinutes: offset }, 0),
       );
       const model = await scoped((tx) => readOpeningHoursModel(tx, v.cfg, AT));
       expect(
@@ -3271,7 +3506,9 @@ describe("period end-offset placement bounds", () => {
           .periods.find((p) => p.id === v.periods.mediodia)!.endOffsetMinutes,
       ).toBe(offset);
     }
-    await scoped((tx) => updateMenuPeriod(tx, v.cfg, v.periods.brunch, { endOffsetMinutes: 1439 }));
+    await scoped((tx) =>
+      updateMenuPeriod(tx, v.cfg, v.periods.brunch, { endOffsetMinutes: 1439 }, 0),
+    );
     expect(
       (await scoped((tx) => readOpeningHoursModel(tx, v.cfg, AT))).departments
         .find((d) => d.id === v.restaurant)!
@@ -3282,7 +3519,7 @@ describe("period end-offset placement bounds", () => {
   it("checks a shorter repeated placement, rejecting the entire replacement week", async () => {
     const v = await timed();
     await scoped((tx) =>
-      updateMenuPeriod(tx, v.cfg, v.periods.mediodia, { endOffsetMinutes: -119 }),
+      updateMenuPeriod(tx, v.cfg, v.periods.mediodia, { endOffsetMinutes: -119 }, 0),
     );
     const before = await scoped((tx) => readOpeningHoursModel(tx, v.cfg, AT));
     await expect(
@@ -3300,6 +3537,7 @@ describe("period end-offset placement bounds", () => {
               : [],
           ),
           AT,
+          0,
         ),
       ),
     ).rejects.toMatchObject({
@@ -3326,14 +3564,17 @@ describe("period end-offset placement bounds", () => {
                 : [],
           ),
           AT,
+          0,
         ),
       );
       await scoped((tx) =>
-        updateMenuPeriod(tx, v.cfg, v.periods.madrugada, { endOffsetMinutes: 179 }),
+        updateMenuPeriod(tx, v.cfg, v.periods.madrugada, { endOffsetMinutes: 179 }, 0),
       );
       const before = await scoped((tx) => readOpeningHoursModel(tx, v.cfg, AT));
       await expect(
-        scoped((tx) => updateMenuPeriod(tx, v.cfg, v.periods.madrugada, { endOffsetMinutes: 180 })),
+        scoped((tx) =>
+          updateMenuPeriod(tx, v.cfg, v.periods.madrugada, { endOffsetMinutes: 180 }, 0),
+        ),
       ).rejects.toMatchObject({
         code: "menu_period.invalid",
         params: { field: "endOffsetMinutes", reason: "placement", weekday },
@@ -3351,6 +3592,7 @@ describe("period end-offset placement bounds", () => {
         v.restaurant,
         weekOf(() => []),
         AT,
+        0,
       ),
     );
     const past = await makeDate(v, "2026-01-01");
@@ -3358,9 +3600,11 @@ describe("period end-offset placement bounds", () => {
       slot(v.periods.mediodia, "12:00", "14:00"),
       slot(v.periods.noches, "14:15", "18:00"),
     ]);
-    await scoped((tx) => updateMenuPeriod(tx, v.cfg, v.periods.mediodia, { endOffsetMinutes: 14 }));
+    await scoped((tx) =>
+      updateMenuPeriod(tx, v.cfg, v.periods.mediodia, { endOffsetMinutes: 14 }, 0),
+    );
     await expect(
-      scoped((tx) => updateMenuPeriod(tx, v.cfg, v.periods.mediodia, { endOffsetMinutes: 15 })),
+      scoped((tx) => updateMenuPeriod(tx, v.cfg, v.periods.mediodia, { endOffsetMinutes: 15 }, 0)),
     ).rejects.toMatchObject({
       code: "menu_period.invalid",
       params: { field: "endOffsetMinutes", reason: "placement", date: "2026-01-01" },
@@ -3373,10 +3617,11 @@ describe("period end-offset placement bounds", () => {
         v.restaurant,
         weekOf(() => [slot(v.periods.mediodia, "12:00", "14:00")]),
         AT,
+        0,
       ),
     );
     await scoped((tx) =>
-      updateMenuPeriod(tx, v.cfg, v.periods.mediodia, { endOffsetMinutes: 180 }),
+      updateMenuPeriod(tx, v.cfg, v.periods.mediodia, { endOffsetMinutes: 180 }, 0),
     );
     expect(
       (await scoped((tx) => readOpeningHoursModel(tx, v.cfg, AT))).departments
@@ -3399,10 +3644,11 @@ describe("calendar end-offset revalidation", () => {
           slot(v.periods.madrugada, "21:00", "06:00"),
         ]),
         AT,
+        0,
       ),
     );
     await scoped((tx) =>
-      updateMenuPeriod(tx, v.cfg, v.periods.madrugada, { endOffsetMinutes: 120 }),
+      updateMenuPeriod(tx, v.cfg, v.periods.madrugada, { endOffsetMinutes: 120 }, 0),
     );
     return v;
   }
@@ -3424,6 +3670,7 @@ describe("calendar end-offset revalidation", () => {
               dateInput(SATURDAY),
               AT,
               VENUE_SERVICE_CALENDAR_PARTICIPANTS,
+              0,
             ),
           ),
         ).rejects.toMatchObject({ code: "hours.invalid", params: { field: "closeWholeVenue" } });
@@ -3444,6 +3691,7 @@ describe("calendar end-offset revalidation", () => {
             dateInput("2026-10-20"),
             AT,
             VENUE_SERVICE_CALENDAR_PARTICIPANTS,
+            0,
           ),
         ),
       ).rejects.toMatchObject({ code: "hours.invalid", params: { field: "date" } });
@@ -3463,7 +3711,7 @@ describe("calendar end-offset revalidation", () => {
         clear: () => turnOffOwnHours(v, previous.id),
         delete: () =>
           scoped((tx) =>
-            deleteSpecialDate(tx, v.cfg, previous.id, AT, VENUE_SERVICE_CALENDAR_PARTICIPANTS),
+            deleteSpecialDate(tx, v.cfg, previous.id, AT, VENUE_SERVICE_CALENDAR_PARTICIPANTS, 0),
           ),
         save: () =>
           scoped((tx) =>
@@ -3474,6 +3722,7 @@ describe("calendar end-offset revalidation", () => {
               v.restaurant,
               [slot(v.periods.madrugada, "21:00", "06:00")],
               AT,
+              0,
             ),
           ),
         copy: () =>
@@ -3485,6 +3734,7 @@ describe("calendar end-offset revalidation", () => {
               ["2026-10-22", "2026-10-23"],
               AT,
               VENUE_SERVICE_CALENDAR_PARTICIPANTS,
+              0,
             ),
           ),
       };
@@ -3598,6 +3848,7 @@ describe("the routing that names a period", () => {
         v.restaurant,
         weekOf(() => [slot(periods.mediodia, "12:00", "16:00")]),
         AT,
+        0,
       );
       await deleteMenuPeriod(tx, v.cfg, periods.noches);
     });

@@ -371,7 +371,7 @@ describe("runBackupSweep (loop logic, injected archive + sleep)", () => {
     retain: 7,
     retainDays: 30,
     jitterSeed: "loop-node",
-    readClock: async () => ({ timeZone: "UTC", dayCutover: "00:00" }),
+    readClock: async () => ({ timeZone: "UTC", dayCutover: "00:00", cutoverChanges: [] }),
     archive: async (outFile: string) => {
       await writeFile(outFile, "DUMP-BYTES");
     },
@@ -554,7 +554,7 @@ describe("runBackupSweep (loop logic, injected archive + sleep)", () => {
         readClock: async () => {
           clockCalls += 1;
           if (clockCalls === 1) throw new Error("clock read failed");
-          return { timeZone: "Europe/Madrid", dayCutover: "05:00" };
+          return { timeZone: "Europe/Madrid", dayCutover: "05:00", cutoverChanges: [] };
         },
         archive: async (outFile) => {
           dumpCalls += 1;
@@ -631,7 +631,7 @@ describe("runBackupSweep (loop logic, injected archive + sleep)", () => {
             await withTransaction(suite.db, (tx) =>
               writeVenueDetails(tx, venue.cfg, {
                 expected: initial.details,
-                changes: { timeZone: "UTC", dayCutover: "04:30" },
+                changes: { timeZone: "UTC" },
               }),
             );
             edited = true;
@@ -644,9 +644,9 @@ describe("runBackupSweep (loop logic, injected archive + sleep)", () => {
     expect(archivedAt).toEqual([
       "2026-10-06T00:00:00.000Z",
       "2026-10-06T03:36:00.000Z",
-      "2026-10-06T05:06:00.000Z",
+      "2026-10-06T05:36:00.000Z",
     ]);
-    expect(sleeps.slice(0, 6)).toEqual([3600000, 3600000, 3600000, 2160000, 3600000, 1800000]);
+    expect(sleeps.slice(0, 6)).toEqual([3600000, 3600000, 3600000, 2160000, 3600000, 3600000]);
     expect(backend.objects.size).toBe(3);
   });
 
@@ -682,7 +682,7 @@ describe("runBackupSweep (loop logic, injected archive + sleep)", () => {
         schedule: { kind: "wall-clock", days: "daily", at: { hour: 3, minute: 0 } },
         readClock: async () => {
           clockReads += 1;
-          return { timeZone: "Europe/Madrid", dayCutover: "05:00" };
+          return { timeZone: "Europe/Madrid", dayCutover: "05:00", cutoverChanges: [] };
         },
         archive: async (outFile) => {
           await writeFile(outFile, "DUMP-BYTES");
@@ -695,6 +695,83 @@ describe("runBackupSweep (loop logic, injected archive + sleep)", () => {
 
     expect(clockReads).toBe(1);
     expect(backend.objects.size).toBe(1);
+  });
+  it("takes an immediate archive after restart even before the last advertised deadline", async () => {
+    const backend = new FakeBackend("restart");
+    const archived: string[] = [];
+    const advertised: Array<number | null> = [];
+    for (const stamp of ["2026-11-03T12:00:00Z", "2026-11-03T12:00:01Z"]) {
+      const controller = new AbortController();
+      await runBackupSweep(
+        loopDeps(backend, {
+          signal: controller.signal,
+          now: () => new Date(stamp),
+          log: vi.fn(),
+          schedule: { kind: "wall-clock", days: "daily", at: "auto" },
+          readClock: async () => ({
+            timeZone: "Europe/Madrid",
+            dayCutover: "05:00",
+            cutoverChanges: [{ effectiveBusinessDay: "2026-11-04", dayCutover: "07:00" }],
+          }),
+          onScheduled: (at) => advertised.push(at),
+          archive: async (path) => {
+            archived.push(stamp);
+            await writeFile(path, "DUMP-BYTES");
+          },
+          sleep: async () => {
+            expect(advertised.at(-1)).toBe(Date.parse("2026-11-04T06:36:00Z"));
+            controller.abort();
+          },
+        }),
+      );
+    }
+    expect(archived).toEqual(["2026-11-03T12:00:00Z", "2026-11-03T12:00:01Z"]);
+    expect(backend.objects.size).toBe(2);
+  });
+
+  it("keeps an advertised archive deadline through dated replace/cancel and recomputes from the next date", async () => {
+    const controller = new AbortController();
+    const backend = new FakeBackend("dated");
+    let now = new Date("2026-11-03T12:00:00Z");
+    let changes = [{ effectiveBusinessDay: "2026-11-04", dayCutover: "07:00" }];
+    const archived: string[] = [];
+    const deadlines: Array<number | null> = [];
+    let waits = 0;
+    await runBackupSweep(
+      loopDeps(backend, {
+        signal: controller.signal,
+        now: () => now,
+        log: vi.fn(),
+        schedule: { kind: "wall-clock", days: "daily", at: "auto" },
+        readClock: async () => ({
+          timeZone: "Europe/Madrid",
+          dayCutover: "05:00",
+          cutoverChanges: changes,
+        }),
+        onScheduled: (at) => deadlines.push(at),
+        archive: async (outFile) => {
+          archived.push(now.toISOString());
+          await writeFile(outFile, "DUMP-BYTES");
+          if (archived.length === 3) controller.abort();
+        },
+        sleep: async (ms) => {
+          waits++;
+          if (waits === 1) changes = [{ effectiveBusinessDay: "2026-11-04", dayCutover: "03:00" }];
+          if (waits === 2) changes = [];
+          if (waits === 3) changes = [{ effectiveBusinessDay: "2026-11-04", dayCutover: "03:00" }];
+          expect(deadlines.at(-1)).toBe(
+            Date.parse(archived.length === 1 ? "2026-11-04T06:36:00Z" : "2026-11-05T02:36:00Z"),
+          );
+          now = new Date(now.getTime() + ms);
+        },
+      }),
+    );
+    expect(archived).toEqual([
+      "2026-11-03T12:00:00.000Z",
+      "2026-11-04T06:36:00.000Z",
+      "2026-11-05T02:36:00.000Z",
+    ]);
+    expect(backend.objects.size).toBe(3);
   });
 });
 

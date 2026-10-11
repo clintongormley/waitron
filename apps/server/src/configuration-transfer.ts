@@ -1,11 +1,17 @@
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
-import { AppError, locationId as brandLocationId } from "@waitron/shared";
+import {
+  AppError,
+  businessDayAt,
+  cutoverForBusinessDay,
+  locationId as brandLocationId,
+} from "@waitron/shared";
 import type { Database, Transaction } from "@waitron/db";
 import type { ConfigurationTransferTable, WaitronModule } from "@waitron/module";
 import { decryptArtifact, encryptArtifact } from "./artifact-cipher.js";
 import { packArchive, unpackArchive } from "./backup-archive.js";
 import "./errors.js";
+import { readLocationClock } from "@waitron/reporting";
 import { assertKitchenTimingStations, getKitchenTimingDefaults } from "./kitchen-timing.js";
 
 const ENTRY = "configuration.json";
@@ -116,7 +122,15 @@ export async function buildConfigurationBundle(
     invoiceLocales,
     ...rest
   } = row;
-  const location = { ...rest, invoiceLocales: parseLocaleList(invoiceLocales) };
+  const clock = await readLocationClock(db, source.locationId);
+  const businessDay = businessDayAt(clock, now);
+  if (clock.cutoverChanges.some((change) => change.effectiveBusinessDay > businessDay))
+    throw new AppError("setup.request_invalid", { field: "businessDayStart" });
+  const location = {
+    ...rest,
+    dayCutover: `${cutoverForBusinessDay(clock, businessDay)}:00`,
+    invoiceLocales: parseLocaleList(invoiceLocales),
+  };
   const transferred = await exportConfigurationTables(db, modules);
   return {
     version: 2,

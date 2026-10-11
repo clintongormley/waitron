@@ -1,7 +1,8 @@
-import { eq, sql } from "drizzle-orm";
+import { asc, eq, sql } from "drizzle-orm";
 import type { SQL } from "drizzle-orm";
-import { locations, type Transaction } from "@waitron/db";
-import type { NodeId } from "@waitron/shared";
+import { locations, nodes, locationDayCutoverChanges, type Transaction } from "@waitron/db";
+import { businessDayAt, businessDayBoundaryAt, businessDayBounds } from "@waitron/shared";
+import type { BusinessDayClock, NodeId } from "@waitron/shared";
 import type { DailyCloseInput, PeriodVatInput } from "./types.js";
 
 const CUTOVER_RE = /^([01]\d|2[0-3]):[0-5]\d$/;
@@ -104,76 +105,18 @@ function wallClockMs(utcMs: number, timeZone: string): number {
   return utcMs + zoneOffsetMinutes(utcMs, timeZone) * 60_000;
 }
 
-/**
- * The inverse of {@link wallClockMs}: the instant whose venue-local wall clock reads `wallMs`.
- *
- * Two passes, because the offset that converts the answer is the offset AT the answer, not at the
- * guess: the first subtraction lands within a day of the target and the second uses that day's own
- * offset.
- */
-function instantOfWallClock(wallMs: number, timeZone: string): number {
-  const guess = wallMs - zoneOffsetMinutes(wallMs, timeZone) * 60_000;
-  return wallMs - zoneOffsetMinutes(guess, timeZone) * 60_000;
-}
-
-/** The cutover `"HH:MM"` as whole minutes past local midnight. `validateCutover` has run first. */
-function cutoverMinutes(dayCutover: string): number {
-  const [hours, minutes] = dayCutover.split(":").map(Number) as [number, number];
-  return hours * 60 + minutes;
-}
-
-/**
- * The instant at which business day `day` BEGINS in the venue's zone — the moment its local wall
- * clock reads `day` at `dayCutover` — as the canonical ISO-8601 string this engine's timestamp
- * columns hold. `dayOffset` moves the answer whole calendar days (1 gives the day's exclusive upper
- * bound); `Date.UTC` normalises a month or year rollover.
- */
-function businessDayBoundary(
-  day: string,
-  dayOffset: number,
-  clock: { timeZone: string; dayCutover: string },
-): string {
-  const [year, month, date] = day.split("-").map(Number) as [number, number, number];
-  const wallMs = Date.UTC(year, month - 1, date + dayOffset, 0, cutoverMinutes(clock.dayCutover));
-  return new Date(instantOfWallClock(wallMs, clock.timeZone)).toISOString();
-}
-
 /** A timestamp column's business-day window predicate. */
 export type WindowClause = (column: SQL) => SQL;
 
-/**
- * The DST-aware business-day predicate: the half-open instant window
- * `[start of from, start of the day after to)`, compared against a timestamp column. The two
- * boundary instants are computed once, here, rather than each row's instant being mapped to a local
- * date. Measured against such a per-row mapping, the two differed only where a cutover sits inside
- * the zone's DST transition hour, on the two change days a year, by up to the transition's length.
- *
- * A timestamp column is TEXT, so this compares strings. That is correct only while the stored value
- * is in `toISOString()`'s canonical spelling, as both boundaries are; a value stored with a `+02:00`
- * offset, or written `2026-08-04 03:00:00`, would sort wrong against them.
- */
-function windowBetween(
-  from: string,
-  to: string,
-  clock: { timeZone: string; dayCutover: string },
-): WindowClause {
-  const start = businessDayBoundary(from, 0, clock);
-  const end = businessDayBoundary(to, 1, clock);
+/** Stored timestamps must use the same canonical UTC spelling as these bounds: SQLite compares text. */
+function windowBetween(from: string, to: string, clock: BusinessDayClock): WindowClause {
+  const start = businessDayBoundaryAt(clock, from);
+  const end = businessDayBounds(clock, to).endAt;
   return (column) => sql`${column} >= ${start} and ${column} < ${end}`;
 }
 
-/**
- * The venue-local business DATE of an instant, as `"YYYY-MM-DD"`. The core of `currentBusinessDay`,
- * split out so the cutover maths can be tested against a literal instant rather than the live
- * clock; not in the public barrel. The caller validates `timeZone` and `dayCutover` first.
- */
-export function businessDayOf(
-  instant: Date,
-  input: { timeZone: string; dayCutover: string },
-): string {
-  const shifted =
-    wallClockMs(instant.getTime(), input.timeZone) - cutoverMinutes(input.dayCutover) * 60_000;
-  return new Date(shifted).toISOString().slice(0, 10);
+export function businessDayOf(instant: Date, input: BusinessDayClock): string {
+  return businessDayAt(input, instant);
 }
 
 /**
@@ -196,45 +139,67 @@ export interface VenueMoment {
   readonly timeOfDay: string;
 }
 
-/** The venue's wall-clock weekday and time, and its business day, at `instant`; `null` for unreadable clock settings. */
-export function venueMomentAt(
-  instant: Date,
-  clock: { timeZone: string; dayCutover: string },
-): VenueMoment | null {
+/** The venue's civil weekday/time and chronological business day; null for an unreadable clock. */
+export function venueMomentAt(instant: Date, clock: BusinessDayClock): VenueMoment | null {
   try {
-    validateTimeZone(clock.timeZone);
-    validateCutover(clock.dayCutover);
+    const businessDay = businessDayAt(clock, instant);
+    const wall = new Date(wallClockMs(instant.getTime(), clock.timeZone));
+    return { businessDay, weekday: wall.getUTCDay(), timeOfDay: wall.toISOString().slice(11, 16) };
   } catch {
     return null;
   }
-
-  const wall = new Date(wallClockMs(instant.getTime(), clock.timeZone));
-  return {
-    businessDay: businessDayOf(instant, clock),
-    weekday: wall.getUTCDay(),
-    timeOfDay: wall.toISOString().slice(11, 16),
-  };
 }
 
-/** A location's zone and business-day cutover, the cutover as the `"HH:MM"` this file reads. */
+function storedCutover(value: string): string {
+  return /^([01]\d|2[0-3]):[0-5]\d:00$/.test(value) ? value.slice(0, 5) : value;
+}
+
 export async function readLocationClock(
   tx: Transaction,
   locationId: string,
-): Promise<{ timeZone: string; dayCutover: string }> {
-  const [location] = await tx
-    .select({ timeZone: locations.timeZone, dayCutover: locations.dayCutover })
+): Promise<BusinessDayClock> {
+  const rows = await tx
+    .select({
+      timeZone: locations.timeZone,
+      dayCutover: locations.dayCutover,
+      effectiveBusinessDay: locationDayCutoverChanges.effectiveBusinessDay,
+      changedCutover: locationDayCutoverChanges.dayCutover,
+    })
     .from(locations)
-    .where(eq(locations.id, locationId));
+    .leftJoin(locationDayCutoverChanges, eq(locationDayCutoverChanges.locationId, locations.id))
+    .where(eq(locations.id, locationId))
+    .orderBy(asc(locationDayCutoverChanges.effectiveBusinessDay));
+  const location = rows[0];
   if (location === undefined) throw new Error(`reporting: no location ${locationId}`);
-  return { timeZone: location.timeZone, dayCutover: location.dayCutover.slice(0, 5) };
+  return {
+    timeZone: location.timeZone,
+    dayCutover: storedCutover(location.dayCutover),
+    cutoverChanges: rows.flatMap((row) =>
+      row.effectiveBusinessDay === null
+        ? []
+        : [
+            {
+              effectiveBusinessDay: row.effectiveBusinessDay,
+              dayCutover: storedCutover(row.changedCutover!),
+            },
+          ],
+    ),
+  };
 }
 
-/**
- * Today's venue-local business day (cutover-shifted) as `"YYYY-MM-DD"`. Anchors the `/reports`
- * overview's default period. Invalid inputs are a caller precondition and throw a plain `Error`
- * (matching this file's validators — no registered error code), before anything is computed.
- */
-export function currentBusinessDay(input: { timeZone: string; dayCutover: string }): string {
+export async function resolveVenueClock(
+  tx: Transaction,
+  nodeId: string,
+): Promise<BusinessDayClock> {
+  const [node] = await tx
+    .select({ locationId: nodes.locationId })
+    .from(nodes)
+    .where(eq(nodes.id, nodeId));
+  if (node === undefined) throw new Error(`reporting: no node ${nodeId}`);
+  return readLocationClock(tx, node.locationId);
+}
+
+export function currentBusinessDay(input: BusinessDayClock): string {
   validateTimeZone(input.timeZone);
   validateCutover(input.dayCutover);
   return businessDayOf(new Date(), input);
@@ -244,17 +209,10 @@ export function currentBusinessDay(input: { timeZone: string; dayCutover: string
  * The start of the daily close's window ({@link businessDayWindow}) that holds `instant`, as the
  * canonical ISO-8601 string this engine's timestamp columns hold.
  */
-export function businessDayStart(
-  instant: Date,
-  input: { timeZone: string; dayCutover: string },
-): string {
+export function businessDayStart(instant: Date, input: BusinessDayClock): string {
   validateTimeZone(input.timeZone);
   validateCutover(input.dayCutover);
-  const day = businessDayOf(instant, input);
-  const start = businessDayBoundary(day, 0, input);
-  // `businessDayOf` reads the offset at the instant and the boundary the offset at the cutover; a
-  // cutover inside a clock change's hour can put that boundary after the instant.
-  return start <= instant.toISOString() ? start : businessDayBoundary(day, -1, input);
+  return businessDayBoundaryAt(input, businessDayAt(input, instant));
 }
 
 /**
@@ -275,7 +233,6 @@ export function businessDayRangeWindow(input: PeriodVatInput): WindowClause {
 
 /**
  * {@link businessDayRangeWindow} over a range whose zone, cutover and days are checked first.
- * Invalid inputs are a caller precondition and throw a plain `Error` before anything is computed.
  */
 export function validatedRangeWindow(input: PeriodVatInput): WindowClause {
   validateTimeZone(input.timeZone);

@@ -104,16 +104,20 @@ it("refreshes Calendar and routing from named days, clock and daily station stat
           closeWholeVenue: false,
         },
         at,
+        undefined,
+        0,
       )
     ).id;
   });
   const dateTables = ["special_dates"];
   expect(reaches(created, calendar)).toEqual(dateTables);
   expect(reaches(created, routing)).toEqual(dateTables);
-  const copied = await announced((tx) => duplicateSpecialDate(tx, cfg, id, ["2030-10-22"], at));
+  const copied = await announced((tx) =>
+    duplicateSpecialDate(tx, cfg, id, ["2030-10-22"], at, undefined, 0),
+  );
   expect(reaches(copied, calendar)).toEqual(["special_dates"]);
   expect(reaches(copied, routing)).toEqual(["special_dates"]);
-  const removed = await announced((tx) => deleteSpecialDate(tx, cfg, id, at));
+  const removed = await announced((tx) => deleteSpecialDate(tx, cfg, id, at, undefined, 0));
   expect(reaches(removed, calendar)).toEqual(dateTables);
   expect(reaches(removed, routing)).toEqual(dateTables);
 
@@ -176,6 +180,8 @@ it("refreshes Calendar and holiday coverage after every named day, area, address
       null,
       { date: "2026-06-17", name: "Arán", kind: "holiday", closeWholeVenue: false },
       new Date("2026-01-01T12:00:00Z"),
+      undefined,
+      0,
     ),
   );
   expect(both(named)).toEqual([["special_dates"], ["special_dates"]]);
@@ -219,6 +225,8 @@ it("daily station status refreshes routing and named days refresh Opening hours"
         closeWholeVenue: false,
       },
       at,
+      undefined,
+      0,
     );
     return { cfg, bar: bar!.id, dateId: date.id };
   });
@@ -236,6 +244,8 @@ it("daily station status refreshes routing and named days refresh Opening hours"
         closeWholeVenue: false,
       },
       at,
+      undefined,
+      0,
     ),
   );
   expect(reaches(named, sources[1]!)).toEqual(["special_dates"]);

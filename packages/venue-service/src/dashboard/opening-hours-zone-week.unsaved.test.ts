@@ -42,6 +42,10 @@ class ZoneWeekLeaveApp extends LitElement {
       }
       if (this.failRead) throw new Error("offline");
       return {
+        businessDayClock: { timeZone: "Europe/Madrid", dayCutover: "06:00", cutoverChanges: [] },
+        clockRevision: 0,
+        currentBusinessDay: "2026-10-12",
+        pending: null,
         timeZone: "Europe/Madrid",
         clockReadable: true,
         dayCutover: "06:00",
@@ -239,6 +243,7 @@ describe.each(["en", "es"])("Retained zone week save contract (%s)", (locale) =>
         "/management-api/venue-service/zones/z1/closed-week",
         "PUT",
         {
+          expectedClockRevision: 0,
           days: [
             { weekday: 0, ranges: [] },
             { weekday: 1, ranges: [{ startsAt: "10:00", endsAt: "15:00" }] },
@@ -272,6 +277,7 @@ describe.each(["en", "es"])("Retained zone week save contract (%s)", (locale) =>
         "/management-api/venue-service/zones/z1/closed-week",
         "PUT",
         {
+          expectedClockRevision: 0,
           days: [
             { weekday: 0, ranges: [] },
             { weekday: 1, ranges: [{ startsAt: "10:00", endsAt: "15:00" }] },
@@ -315,7 +321,7 @@ it("a real-zone date save retains another staged date and asks before stepping w
       [
         "/management-api/venue-service/special-dates/s1/zone-closed-times/z1",
         "PUT",
-        { ranges: [{ startsAt: "10:00", endsAt: "15:00" }] },
+        { expectedClockRevision: 0, ranges: [{ startsAt: "10:00", endsAt: "15:00" }] },
       ],
     ]);
   await expect

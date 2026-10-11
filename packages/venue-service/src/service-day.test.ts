@@ -1,3 +1,5 @@
+import * as serviceDay from "./service-day.js";
+import { serviceDayContext } from "./service-day-context.js";
 import { describe, expect, it } from "vitest";
 import {
   calendarDateOfTime,
@@ -101,12 +103,14 @@ describe("service day", () => {
   it("puts Saturday morning in Friday's business day and weekday", () => {
     expect(
       serviceMomentAt(new Date("2026-10-10T00:30:00Z"), {
+        cutoverChanges: [],
         timeZone: "Europe/Madrid",
         dayCutover: "06:00",
       }),
     ).toEqual({ businessDay: "2026-10-09", weekday: 5, minute: 1230 });
     expect(
       serviceMomentAt(new Date("2026-10-10T04:00:00Z"), {
+        cutoverChanges: [],
         timeZone: "Europe/Madrid",
         dayCutover: "06:00",
       }),
@@ -114,8 +118,8 @@ describe("service day", () => {
   });
 
   it.each([
-    { timeZone: "Not/AZone", dayCutover: "06:00" },
-    { timeZone: "Europe/Madrid", dayCutover: "24:00" },
+    { cutoverChanges: [], timeZone: "Not/AZone", dayCutover: "06:00" },
+    { cutoverChanges: [], timeZone: "Europe/Madrid", dayCutover: "24:00" },
   ])("returns null for a clock it cannot read: %j", (clock) => {
     expect(serviceMomentAt(new Date("2026-10-10T00:30:00Z"), clock)).toBeNull();
   });
@@ -237,4 +241,63 @@ describe("closed ranges", () => {
       expect.objectContaining({ code: "zone_closed_time.invalid", params: { field } }),
     );
   });
+});
+
+describe("dated service-day coordinates", () => {
+  const clock = (dayCutover: string) => ({
+    timeZone: "Europe/Madrid",
+    dayCutover: "05:00",
+    cutoverChanges: [{ effectiveBusinessDay: "2026-11-04", dayCutover }],
+  });
+  it.each([
+    ["2026-11-04T04:00:00Z", "2026-11-03", 1440],
+    ["2026-11-04T05:59:00Z", "2026-11-03", 1559],
+    ["2026-11-04T06:00:00Z", "2026-11-04", 0],
+    ["2026-11-04T08:00:00Z", "2026-11-04", 120],
+  ])("keeps %s on the chronological day without replaying its start", (at, businessDay, minute) => {
+    expect(serviceMomentAt(new Date(at), clock("07:00"))).toEqual({
+      businessDay,
+      weekday: businessDay === "2026-11-03" ? 2 : 3,
+      minute,
+    });
+  });
+  it("starts the shorter day at its own cutover", () => {
+    expect(serviceMomentAt(new Date("2026-11-04T02:00:00Z"), clock("03:00"))).toEqual({
+      businessDay: "2026-11-04",
+      weekday: 3,
+      minute: 0,
+    });
+  });
+});
+
+it.each([
+  ["03:00", 1320, "2026-11-04T02:00:00.000Z"],
+  ["07:00", 1560, "2026-11-04T06:00:00.000Z"],
+])("resolves a date-specific %s ending", (dayCutover, endMinute, endAt) => {
+  const clock = {
+    timeZone: "Europe/Madrid",
+    dayCutover: "05:00",
+    cutoverChanges: [{ effectiveBusinessDay: "2026-11-04", dayCutover }],
+  };
+  expect(serviceDayContext(clock, "2026-11-03")).toEqual({
+    dayCutover: "05:00",
+    startAt: "2026-11-03T04:00:00.000Z",
+    endAt,
+    endMinute,
+  });
+  expect(serviceDayContext(clock, "2026-11-04").dayCutover).toBe(dayCutover);
+  expect(clock.dayCutover).toBe("05:00");
+});
+
+it("treats a skipped final cutover as the chronological boundary while checking other endpoints", () => {
+  const clock = { timeZone: "Europe/Madrid", dayCutover: "02:30", cutoverChanges: [] };
+  expect(serviceDay.clockTimeSkippedInDay(clock, "2026-03-28", "02:30", true)).toBe(false);
+  expect(serviceDay.clockTimeSkippedInDay(clock, "2026-03-28", "02:15", true)).toBe(true);
+  expect(serviceDay.clockTimeSkippedInDay(clock, "2026-03-28", "02:30", false)).toBe(false);
+  const dated = {
+    ...clock,
+    dayCutover: "05:00",
+    cutoverChanges: [{ effectiveBusinessDay: "2026-03-01", dayCutover: "02:30" }],
+  };
+  expect(serviceDay.clockTimeSkippedInDay(dated, "2026-03-28", "02:15", true)).toBe(true);
 });

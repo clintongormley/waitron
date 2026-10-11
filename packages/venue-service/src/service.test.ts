@@ -22,6 +22,8 @@ describe("VENUE_SERVICE", () => {
       "acceptDepartmentTransfer",
       "acknowledgeKitchenNotice",
       "addProfileKitchenScreen",
+      "assertBusinessDayClockChange",
+      "assertBusinessDayScheduleWrite",
       "assertDeviceKitchenScreens",
       "assertKitchenDisplayHasScreen",
       "assertPassScreenZone",

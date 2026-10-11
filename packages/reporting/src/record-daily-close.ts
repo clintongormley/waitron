@@ -5,6 +5,7 @@ import { AppError, addDecimal, compareDecimal, decimal, subtractDecimal } from "
 import type { Decimal, DeviceId, NodeId } from "@waitron/shared";
 import type { ConstraintTarget, Transaction } from "@waitron/db";
 import { UNIQUE_VIOLATION, dailyCloseChain, dailyCloses, refusalOn } from "@waitron/db";
+import { resolveVenueClock } from "./business-day.js";
 import { computeDailyClose } from "./daily-close.js";
 import { computeCloseEntryHash } from "./daily-close-hash.js";
 import type {
@@ -34,13 +35,15 @@ export async function recordDailyClose(
 ): Promise<DailyCloseRecord> {
   const counts = validateCashCounts(input.cashCounts);
 
+  const clock = await resolveVenueClock(tx, input.nodeId);
+  if (input.timeZone !== clock.timeZone)
+    throw new Error("reporting: supplied time zone must match the node location");
   const head = await readChainHead(tx, input.nodeId);
 
   const close = await computeDailyClose(tx, {
     nodeId: input.nodeId,
     businessDay: input.businessDay,
-    timeZone: input.timeZone,
-    dayCutover: input.dayCutover,
+    ...clock,
   });
 
   const snapshot = reconcile(close, counts);

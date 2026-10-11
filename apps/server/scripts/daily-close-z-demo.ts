@@ -50,7 +50,6 @@ const SETS = ["core"];
 
 const LOCALE = "es-ES";
 const TIME_ZONE = "Europe/Madrid";
-const DAY_CUTOVER = "05:00";
 const DAY_ONE = "2026-08-04";
 const DAY_TWO = "2026-08-05";
 
@@ -194,7 +193,6 @@ function closeDay(
       nodeId: venue.nodeId,
       businessDay,
       timeZone: TIME_ZONE,
-      dayCutover: DAY_CUTOVER,
       closedBy: CLOSED_BY,
       cashCounts,
     });

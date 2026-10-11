@@ -56,7 +56,12 @@ export async function seedVenue(db: Database): Promise<SeededVenue> {
   await seedTenant(db);
   const [location] = await db
     .insert(locations)
-    .values({ name: "Main", invoiceLocales: ["es-ES"], operationDescription: "Test op" })
+    .values({
+      name: "Main",
+      invoiceLocales: ["es-ES"],
+      operationDescription: "Test op",
+      dayCutover: "05:00:00",
+    })
     .returning({ id: locations.id });
   const locationId = location!.id;
   await db.insert(kitchenTimingDefaults).values({ locationId });

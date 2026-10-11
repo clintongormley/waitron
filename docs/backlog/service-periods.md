@@ -49,14 +49,6 @@ at 06:05 despite its +15-minute offset. These probes measured the current behavi
 settle which behavior you want. Retaining an earlier or yesterday's effective end needs a decision
 about the row's meaning and cleanup before changing the reader or writer.
 
-## Changing the business-day start after saving service hours
-
-The second A366-1 review directly changed the stored setting from 05:00 to 03:00. A saved
-22:00–04:30 range and an all-day 05:00–05:00 range then reported closed; re-saving the latter
-returned `menu_timetable.invalid` (`empty`). The settings route was not run. Reproduce through
-that route before deciding whether to remap, refuse the change, or require re-authoring the hours.
-Receipt: campaign lane D `receipts/a366-1/finish-second-report.md`, finding 2 (2026-10-08).
-
 ## Departments, service styles and opening hours (A254, owner 2026-10-03) — DRAFT SPEC, partly implemented through A261
 
 Tabs without tables and the remaining department-name survey stay open. Re-check the advisor
@@ -147,24 +139,6 @@ That replaces "Catalan (receipts)" and "Spanish (copies)"
 logo, subtitle, footer, address switch and tax-agency description. A new department starts with an
 empty receipt. The venue's receipt language moves to Venue settings. Nothing is live, so stored
 venue defaults may be dropped rather than carried over (CLAUDE.md §3, last rule).
-
-## A495. Change the business-day start from a future date
-
-**A495 (owner, 2026-10-11) — OPEN.** Fiscal-adjacent: the owner lands it.
-
-Today the time zone and the business-day start cannot be changed once the venue has a sale, an
-order or a daily close (`apps/server/src/venue-details.ts`, A261 step 7, #1281). The reason is in
-[the venue details plan](../superpowers/plans/2026-10-05-venue-details.md), items C4 and C5:
-- reports work out each day's window from the CURRENT time zone and start, so a change would
-  regroup old sales;
-- a daily close is append-only and hash-chained, and it stores its business day but not the start
-  used to work it out, so recomputed reports would disagree with recorded closes.
-
-The owner wants the start to be changeable. Store it with the date it takes effect, so earlier days
-keep the start they had, and have reports, closes and anything else keyed by business day read the
-start in force on each day. The same plan lists those other readers: station overrides (C6), and
-backups and email (C8). Whether the time zone takes the same route is part of the design. Related
-open entry: "Changing the business-day start after saving service hours" (A366-1 follow-up).
 
 ## A506. Opening hours rebuilt around seasons and special days
 
@@ -288,6 +262,20 @@ period order — spec section 2).
   midnight.
 
 ## Decisions and deliberate limits
+
+- **Business-day changes are dated (A495, 2026-10-11).** You schedule one future start, from
+  two to 366 business-calendar dates ahead. You can replace or cancel it before the preceding
+  business day begins. Time-zone edits remain locked after history or a dated start. A pending
+  change pauses time-affecting hours edits; names, colours and menus remain editable. Recurring
+  hours must remain valid under retained starts; an all-day range or a conflicting endpoint
+  needs re-authoring before scheduling. Reports keep historical date boundaries, not snapshots
+  of authored hours. Full backups retain the timeline; configuration export refuses a pending
+  change and otherwise exports the active start with no history. The
+  [design](../superpowers/specs/2026-10-11-a495-business-day-history-design.md) records DST and
+  UTC-clock limits. `apps/server/src/business-day-history.test.ts` compares recorded fiscal,
+  invoice-series and close rows before and after scheduling; it does not establish external
+  filing behavior.
+
 
 - **Hierarchy Delete is permanent (A435 step 6, 2026-10-11).** One complete impact is rechecked
   inside the write transaction. Live work refuses; no work is abandoned. All saved, today, reset

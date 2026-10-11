@@ -1,3 +1,4 @@
+import { readBusinessDayScheduleRevision } from "@waitron/venue-service";
 // Statuses are inserted directly because the management helper requires a session.
 
 import { randomUUID } from "node:crypto";
@@ -181,21 +182,39 @@ export async function seedFloor(
       .where(and(eq(menuPeriods.departmentId, restaurantId), eq(menuPeriods.name, "Open")));
     const restaurant =
       existing ??
-      (await saveMenuPeriod(tx, cfg, restaurantId, {
-        name: "Open",
-        menuId: menuIds.restaurant,
-        staffMenuIds: [menuIds.lunch],
-      }));
+      (await saveMenuPeriod(
+        tx,
+        cfg,
+        restaurantId,
+        {
+          name: "Open",
+          menuId: menuIds.restaurant,
+          staffMenuIds: [menuIds.lunch],
+        },
+        await readBusinessDayScheduleRevision(tx, cfg),
+      ));
     if (existing !== undefined)
-      await updateMenuPeriod(tx, cfg, existing.id, {
-        menuId: menuIds.restaurant,
-        staffMenuIds: [menuIds.lunch],
-      });
-    const deli = await saveMenuPeriod(tx, cfg, deliDepartmentId, {
-      name: "Open",
-      menuId: menuIds.deli,
-      staffMenuIds: [],
-    });
+      await updateMenuPeriod(
+        tx,
+        cfg,
+        existing.id,
+        {
+          menuId: menuIds.restaurant,
+          staffMenuIds: [menuIds.lunch],
+        },
+        await readBusinessDayScheduleRevision(tx, cfg),
+      );
+    const deli = await saveMenuPeriod(
+      tx,
+      cfg,
+      deliDepartmentId,
+      {
+        name: "Open",
+        menuId: menuIds.deli,
+        staffMenuIds: [],
+      },
+      await readBusinessDayScheduleRevision(tx, cfg),
+    );
     await replaceMenuWeek(
       tx,
       cfg,
@@ -205,6 +224,7 @@ export async function seedFloor(
         slots: [{ periodId: restaurant.id, startsAt: "09:00", endsAt: "00:00" }],
       })),
       new Date(),
+      await readBusinessDayScheduleRevision(tx, cfg),
     );
     await replaceMenuWeek(
       tx,
@@ -215,6 +235,7 @@ export async function seedFloor(
         slots: weekday === 0 ? [] : [{ periodId: deli.id, startsAt: "09:00", endsAt: "18:00" }],
       })),
       new Date(),
+      await readBusinessDayScheduleRevision(tx, cfg),
     );
   }
 

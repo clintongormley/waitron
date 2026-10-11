@@ -41,6 +41,7 @@ beforeEach(async () => {
 
 function closeInput(businessDay: string) {
   return {
+    cutoverChanges: [],
     nodeId: venue.nodeId,
     businessDay,
     timeZone: "Europe/Madrid",

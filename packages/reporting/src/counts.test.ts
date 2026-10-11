@@ -18,6 +18,7 @@ beforeEach(async () => {
 });
 function input(overrides: Partial<DailyCloseInput> = {}): DailyCloseInput {
   return {
+    cutoverChanges: [],
     nodeId: venue.nodeId,
     businessDay: "2026-08-04",
     timeZone: "Europe/Madrid",

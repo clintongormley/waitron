@@ -51,11 +51,17 @@ async function fixture() {
       departmentId: live.id,
     });
     const [menu] = await tx.insert(catalogues).values({ name: randomUUID() }).returning();
-    const period = await service.saveMenuPeriod(tx, cfg, gone.id, {
-      name: "Lunch",
-      menuId: menu!.id,
-      staffMenuIds: [],
-    });
+    const period = await service.saveMenuPeriod(
+      tx,
+      cfg,
+      gone.id,
+      {
+        name: "Lunch",
+        menuId: menu!.id,
+        staffMenuIds: [],
+      },
+      0,
+    );
     const [day] = await tx
       .insert(specialDates)
       .values({ ...cfg, name: "Event", date: "2026-10-12", ownHours: true })
@@ -135,16 +141,22 @@ const actions: [string, string, (tx: Transaction, f: Fixture) => Promise<unknown
     "menu period create",
     "department.not_found",
     (tx, f) =>
-      service.saveMenuPeriod(tx, f.cfg, f.gone, {
-        name: "Dinner",
-        menuId: f.menu,
-        staffMenuIds: [],
-      }),
+      service.saveMenuPeriod(
+        tx,
+        f.cfg,
+        f.gone,
+        {
+          name: "Dinner",
+          menuId: f.menu,
+          staffMenuIds: [],
+        },
+        0,
+      ),
   ],
   [
     "menu period update derived department",
     "department.not_found",
-    (tx, f) => service.updateMenuPeriod(tx, f.cfg, f.period, { name: "Dinner" }),
+    (tx, f) => service.updateMenuPeriod(tx, f.cfg, f.period, { name: "Dinner" }, 0),
   ],
   [
     "menu period delete derived department",
@@ -159,12 +171,12 @@ const actions: [string, string, (tx: Transaction, f: Fixture) => Promise<unknown
   [
     "menu week",
     "department.not_found",
-    (tx, f) => service.replaceMenuWeek(tx, f.cfg, f.gone, week, at),
+    (tx, f) => service.replaceMenuWeek(tx, f.cfg, f.gone, week, at, 0),
   ],
   [
     "menu date",
     "department.not_found",
-    (tx, f) => service.saveSpecialDateMenus(tx, f.cfg, f.day, f.gone, [], at),
+    (tx, f) => service.saveSpecialDateMenus(tx, f.cfg, f.day, f.gone, [], at, 0),
   ],
   [
     "receipt read",
@@ -215,12 +227,12 @@ const actions: [string, string, (tx: Transaction, f: Fixture) => Promise<unknown
   [
     "zone closed week",
     "service_zone.not_found",
-    (tx, f) => service.replaceZoneClosedWeek(tx, f.cfg, f.zone, closedWeek),
+    (tx, f) => service.replaceZoneClosedWeek(tx, f.cfg, f.zone, closedWeek, 0, at),
   ],
   [
     "zone closed date",
     "service_zone.not_found",
-    (tx, f) => saveZoneClosedDate(tx, f.cfg, f.day, f.zone, []),
+    (tx, f) => saveZoneClosedDate(tx, f.cfg, f.day, f.zone, [], 0, at),
   ],
 ];
 describe("deleted service targets", () => {
@@ -259,7 +271,7 @@ describe("deleted service targets", () => {
     await run(async (tx) => {
       await service.updateDepartment(tx, f.cfg, f.live, { tradingName: "Edited" });
       await service.configureZone(tx, f.cfg, { zoneId: f.liveZone, departmentId: f.live });
-      await service.replaceZoneClosedWeek(tx, f.cfg, f.liveZone, closedWeek);
+      await service.replaceZoneClosedWeek(tx, f.cfg, f.liveZone, closedWeek, 0, at);
       await service.writeDepartmentReceipt(tx, f.cfg, f.live, { email: "live@example.com" });
     });
     expect(await run((tx) => service.readDepartmentReceipt(tx, f.cfg, f.live))).toEqual({

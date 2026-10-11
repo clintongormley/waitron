@@ -15,6 +15,7 @@ import {
   floorTodayZones,
   floorZones,
   locations,
+  locationDayCutoverChanges,
 } from "@waitron/db";
 import type { TableRemoval } from "@waitron/module";
 import { AppError } from "@waitron/shared";
@@ -939,3 +940,51 @@ describe("catch-up containing-zone validation", () => {
     },
   );
 });
+
+it.each(["03:00", "07:00"])(
+  "resets today's plan at the actual %s transition boundary",
+  async (cutover) => {
+    const z = await zone();
+    await masterOf(z, [{ label: "Dated reset" }]);
+    const [clock] = await inTx(v, (tx) =>
+      tx.select().from(locations).where(eq(locations.id, v.cfg.locationId)),
+    );
+    await inTx(v, async (tx) => {
+      await tx
+        .update(locations)
+        .set({ timeZone: "UTC", dayCutover: "05:00:00" })
+        .where(eq(locations.id, v.cfg.locationId));
+      await tx.insert(locationDayCutoverChanges).values({
+        locationId: v.cfg.locationId,
+        effectiveBusinessDay: "2026-11-04",
+        dayCutover: `${cutover}:00`,
+      });
+    });
+    try {
+      await inTx(v, (tx) => ensureToday(tx, v.cfg, NONE, new Date("2026-11-03T12:00:00Z")));
+      const original = await todayZone(z);
+      expect(original).toMatchObject({ businessDay: "2026-11-03" });
+      for (const time of cutover === "07:00"
+        ? ["2026-11-04T05:00:00Z", "2026-11-04T06:59:00Z"]
+        : ["2026-11-04T02:59:00Z"]) {
+        await inTx(v, (tx) => ensureToday(tx, v.cfg, NONE, new Date(time)));
+        expect(await todayZone(z)).toEqual(original);
+      }
+      await inTx(v, (tx) => ensureToday(tx, v.cfg, NONE, new Date(`2026-11-04T${cutover}:00Z`)));
+      expect(await todayZone(z)).toMatchObject({
+        businessDay: "2026-11-04",
+        generation: original!.generation + 1,
+      });
+    } finally {
+      await inTx(v, async (tx) => {
+        await tx
+          .delete(locationDayCutoverChanges)
+          .where(eq(locationDayCutoverChanges.locationId, v.cfg.locationId));
+        await tx
+          .update(locations)
+          .set({ timeZone: clock!.timeZone, dayCutover: clock!.dayCutover })
+          .where(eq(locations.id, v.cfg.locationId));
+      });
+    }
+  },
+);

@@ -1,3 +1,4 @@
+import { readLocationClock } from "@waitron/reporting";
 import type { Hono } from "hono";
 import { eq, sql } from "drizzle-orm";
 import { readInvoiceLocales } from "@waitron/catalogue";
@@ -15,6 +16,12 @@ import {
   readVenueDetails,
   writeVenueDetails,
 } from "./venue-details.js";
+import {
+  previewBusinessDayStart,
+  writeBusinessDayStart,
+  cancelBusinessDayStart,
+} from "./business-day-start.js";
+
 import { venueClockPreview } from "./venue-clock-preview.js";
 import type { VenueClockPreview, VenueDetailWrite } from "./venue-detail-types.js";
 import "./errors.js";
@@ -28,6 +35,10 @@ const run = createErrorBoundary(
     "management.request_invalid": 400,
     "receipt.language_fixed": 400,
     "receipt.language_orders_open": 409,
+    "venue.business_day_invalid": 400,
+    "venue.business_day_changed": 409,
+    "venue.business_day_locked": 409,
+    "venue.business_day_hours_conflict": 409,
     "venue.detail_invalid": 400,
     "venue.detail_read_only": 409,
     "venue.detail_locked": 409,
@@ -111,23 +122,75 @@ export function mountLocationSettingsApi(
     run(c, log, async () => {
       const model = await gated(
         requireManagementSession(c),
-        (tx) => readVenueDetails(tx, deps.cfg),
+        (tx) => readVenueDetails(tx, deps.cfg, (deps.now ?? (() => new Date()))()),
         "venue.view",
       );
       return c.json(model);
+    }),
+  );
+  app.get("/management-api/venue-details/business-day-start/preview", (c) =>
+    run(c, log, async () => {
+      const query = c.req.query();
+      const model = await gated(
+        requireManagementSession(c),
+        (tx) =>
+          previewBusinessDayStart(
+            tx,
+            deps.cfg,
+            {
+              ...query,
+              expectedClockRevision: /^\d+$/.test(query.expectedClockRevision ?? "")
+                ? Number(query.expectedClockRevision)
+                : query.expectedClockRevision,
+            },
+            (deps.now ?? (() => new Date()))(),
+          ),
+        "venue.view",
+      );
+      return c.json({
+        ...model,
+        backupDeadlines: deps.readBackupDeadlines?.() ?? model.backupDeadlines,
+      });
+    }),
+  );
+  app.put("/management-api/venue-details/business-day-start", (c) =>
+    run(c, log, async () => {
+      const session = requireManagementSession(c);
+      const body = await readJsonBody<unknown>(c);
+      const result = await gated(session, (tx) =>
+        writeBusinessDayStart(tx, deps.cfg, body, (deps.now ?? (() => new Date()))()),
+      );
+      return c.json(result);
+    }),
+  );
+  app.delete("/management-api/venue-details/business-day-start", (c) =>
+    run(c, log, async () => {
+      const session = requireManagementSession(c);
+      const body = await readJsonBody<unknown>(c);
+      const result = await gated(session, (tx) =>
+        cancelBusinessDayStart(tx, deps.cfg, body, (deps.now ?? (() => new Date()))()),
+      );
+      return c.json(result);
     }),
   );
   app.get("/management-api/venue-details/clock-preview", (c) =>
     run(c, log, async () => {
       const model = await gated(
         requireManagementSession(c),
-        (tx) => readVenueDetails(tx, deps.cfg),
+        async (tx) => ({
+          details: await readVenueDetails(tx, deps.cfg),
+          clock: await readLocationClock(tx, deps.cfg.locationId),
+        }),
         "venue.view",
       );
       const preview = venueClockPreview(
         (deps.now ?? (() => new Date()))(),
-        model.details,
-        { timeZone: c.req.query("timeZone") ?? "", dayCutover: c.req.query("dayCutover") ?? "" },
+        model.clock,
+        {
+          ...model.clock,
+          timeZone: c.req.query("timeZone") ?? "",
+          dayCutover: c.req.query("dayCutover") ?? "",
+        },
         deps.readBackupDeadlines?.() ?? { archive: null, cloud: null },
       );
       return c.json(preview);
@@ -138,7 +201,12 @@ export function mountLocationSettingsApi(
       const sessionId = requireManagementSession(c);
       const body = await readJsonBody<unknown>(c);
       const result = await gated(sessionId, (tx) =>
-        writeVenueDetails(tx, deps.cfg, body as VenueDetailWrite),
+        writeVenueDetails(
+          tx,
+          deps.cfg,
+          body as VenueDetailWrite,
+          (deps.now ?? (() => new Date()))(),
+        ),
       );
       return c.json(result);
     }),

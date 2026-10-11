@@ -13,6 +13,7 @@ import "@waitron/ui/src/components/wt-combobox.js";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import "@waitron/ui/src/components/wt-help-tooltip.js";
+import "./business-day-start-editor.js";
 import { DashboardQueries } from "../api/query-controller.js";
 import type {
   DashboardApi,
@@ -488,7 +489,7 @@ export class VenueDetailsPanel extends LitElement {
     };
     const value = this.draft![field] ?? "";
     const locked = this.model!.policy[field].decision === "refuse";
-    if (locked && this.#patch()[field] === undefined)
+    if (field === "dayCutover" || (locked && this.#patch()[field] === undefined))
       return html`<div data-test=${`locked-${field}`}>
         <strong>${t(LABELS[field])}</strong>
         <p>${value || t("venue_details.unset")}</p>
@@ -562,6 +563,17 @@ export class VenueDetailsPanel extends LitElement {
                   if (generation === this.#generation) this.model = event.detail.model;
                 }}
               ></dashboard-legal-name-dialog>
+              <dashboard-business-day-start-editor
+                .api=${this.api}
+                .model=${model.businessDayClock}
+                .readOnly=${this.readOnly}
+                @saved=${(event: CustomEvent<VenueDetailsModel>) => {
+                  event.stopPropagation();
+                  this.model = event.detail;
+                  void this.#load();
+                }}
+              ></dashboard-business-day-start-editor>
+
               ${
                 this.draft && !this.readOnly
                   ? html`<form

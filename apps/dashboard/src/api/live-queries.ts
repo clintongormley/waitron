@@ -184,6 +184,8 @@ export const QUERY_DEPENDENCIES = {
     "floor_zones",
     "products",
     "locations",
+    "location_business_day_settings",
+    "location_day_cutover_changes",
   ],
   getOverdueOrders: [
     "ticket_items",
@@ -202,6 +204,8 @@ export const QUERY_DEPENDENCIES = {
     "sale_voids",
     "tenders",
     "sale_settlements",
+    "location_business_day_settings",
+    "location_day_cutover_changes",
   ],
   getSalesPeriod: [
     "sale_substitutions",
@@ -212,6 +216,8 @@ export const QUERY_DEPENDENCIES = {
     "tenders",
     "sale_settlements",
     "products",
+    "location_business_day_settings",
+    "location_day_cutover_changes",
   ],
   listOrderPages: [
     "working_orders",
@@ -229,6 +235,8 @@ export const QUERY_DEPENDENCIES = {
     "bill_payments",
     "bill_payment_refunds",
     "persons",
+    "location_business_day_settings",
+    "location_day_cutover_changes",
   ],
   listOrderStaff: ["persons"],
   getOrder: [
@@ -252,6 +260,8 @@ export const QUERY_DEPENDENCIES = {
     "receipt_reprints",
     "print_jobs",
     "printers",
+    "location_business_day_settings",
+    "location_day_cutover_changes",
   ],
   getOrderPrinters: ["printers"],
   // The current mode's list; `dependenciesOf` narrows it at time of sale.
@@ -262,6 +272,8 @@ export const QUERY_DEPENDENCIES = {
     "sale_substitutions",
     "locations",
     ...CURRENT_CLASSIFICATION_READS,
+    "location_business_day_settings",
+    "location_day_cutover_changes",
   ],
   getReportPrinters: ["printers"],
   listStaff: ["persons", "webauthn_credentials"],
@@ -342,6 +354,8 @@ export const QUERY_DEPENDENCIES = {
     "station_day_states",
     "special_dates",
     "locations",
+    "location_business_day_settings",
+    "location_day_cutover_changes",
   ],
   // The extras and options lists: the list table, then its children (`listOptionLists` and
   // `getOptionList` in packages/catalogue/src/options.ts, `listExtraLists` and `getExtraList` in
@@ -458,7 +472,15 @@ export const QUERY_DEPENDENCIES = {
   getVenueReceiptSettings: ["tenant_receipts"],
   getDepartmentReceipt: ["department_receipts", "tenant_receipts", "departments", "locations"],
   getLocationSettings: ["locations"],
-  getVenueDetails: ["locations", "tenants", "sales", "working_orders", "daily_closes"],
+  getVenueDetails: [
+    "locations",
+    "tenants",
+    "sales",
+    "working_orders",
+    "daily_closes",
+    "location_business_day_settings",
+    "location_day_cutover_changes",
+  ],
   getReceiptLanguage: ["locations"],
   getProductRecipe: ["recipe_lines", "ingredients", "products"],
   listIngredients: ["ingredients"],

@@ -33,6 +33,10 @@ describe.each(["light", "dark"] as const)("Named month accessibility (%s)", (the
     });
     await mountThemed("<div></div>", theme);
     const model: NamedDaysModel = {
+      businessDayClock: { timeZone: "Europe/Madrid", dayCutover: "06:00", cutoverChanges: [] },
+      clockRevision: 0,
+      currentBusinessDay: "2026-10-07",
+      pending: null,
       timeZone: "Europe/Madrid",
       dayCutover: "06:00",
       civilDate: "2026-10-07",

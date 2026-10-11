@@ -20,6 +20,10 @@ describe.each(["light", "dark"] as const)("Opening special date (%s)", (theme) =
     const screen = document.createElement("dashboard-opening-hours-screen");
     screen.readOnly = state === "viewer";
     const model = {
+      businessDayClock: { timeZone: "Europe/Madrid", dayCutover: "06:00", cutoverChanges: [] },
+      clockRevision: 0,
+      currentBusinessDay: "2026-10-12",
+      pending: null,
       timeZone: "Europe/Madrid",
       clockReadable: true,
       dayCutover: "06:00",

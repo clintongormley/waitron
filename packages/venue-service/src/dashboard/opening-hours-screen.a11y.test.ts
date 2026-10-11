@@ -36,6 +36,10 @@ describe.each(["light", "dark"] as const)("Opening hours (%s)", (theme) => {
         if (method !== "GET")
           throw { code: "menu_period.in_use", params: { uses: [{ kind: "week", weekday: 1 }] } };
         return {
+          businessDayClock: { timeZone: "Europe/Madrid", dayCutover: "06:00", cutoverChanges: [] },
+          clockRevision: 0,
+          currentBusinessDay: "2026-10-12",
+          pending: null,
           timeZone: "Europe/Madrid",
           clockReadable: state !== "unreadable-viewer",
           dayCutover: "06:00",
@@ -119,6 +123,14 @@ describe.each(["en", "es"] as const)("Signed offset list (%s)", (locale) => {
         ) as OpeningHoursScreen;
         screen.api = new OpeningHoursApi(
           withOpeningStations((async () => ({
+            businessDayClock: {
+              timeZone: "Europe/Madrid",
+              dayCutover: "06:00",
+              cutoverChanges: [],
+            },
+            clockRevision: 0,
+            currentBusinessDay: "2026-10-12",
+            pending: null,
             timeZone: "Europe/Madrid",
             clockReadable: true,
             dayCutover: "06:00",

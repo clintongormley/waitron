@@ -94,7 +94,6 @@ for (const [name, value, original] of [
   ["city", "Barcelona", "Madrid"],
   ["postalCode", "28002", " 28001 "],
   ["timeZone", "invalid-zone", "Europe/Madrid"],
-  ["dayCutover", "not a time", "06:00:00"],
 ] as const) {
   it(`protects ${name}, including invalid values, and exempts its normalized revert`, async () => {
     const { app, panel } = await mount();

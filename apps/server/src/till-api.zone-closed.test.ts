@@ -55,6 +55,7 @@ async function venue() {
         slots: [{ periodId: period!.id, startsAt: "06:00", endsAt: "06:00" }],
       })),
       new Date(),
+      0,
     );
     await tx.insert(zoneClosedTimes).values(
       [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({

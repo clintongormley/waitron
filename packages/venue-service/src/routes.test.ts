@@ -3003,12 +3003,18 @@ describe("a routing cell's period choices on the routes", () => {
         vatClass: "general",
       });
       await addProductToMenu(tx, { menuId: fx.menuId, productId: product.id });
-      const period = await saveMenuPeriod(tx, cfg, dining.id, {
-        name: "Lunch",
-        menuId: fx.menuId,
-        staffMenuIds: [],
-        colour: "green",
-      });
+      const period = await saveMenuPeriod(
+        tx,
+        cfg,
+        dining.id,
+        {
+          name: "Lunch",
+          menuId: fx.menuId,
+          staffMenuIds: [],
+          colour: "green",
+        },
+        0,
+      );
       const [station] = await tx
         .insert(kitchenStations)
         .values({ locationId: fx.locationId, name: "Downstairs bar" })
@@ -3379,12 +3385,18 @@ it("the station planning route returns the configured period ranges for a non-de
     });
     await addProductToMenu(tx, { menuId: f.menuId, productId: product.id });
     const periodId = (
-      await saveMenuPeriod(tx, cfg, departmentId, {
-        name: "Lunch",
-        menuId: f.menuId,
-        staffMenuIds: [],
-        colour: "blue",
-      })
+      await saveMenuPeriod(
+        tx,
+        cfg,
+        departmentId,
+        {
+          name: "Lunch",
+          menuId: f.menuId,
+          staffMenuIds: [],
+          colour: "blue",
+        },
+        0,
+      )
     ).id;
     const ranges = [{ periodId, startsAt: "12:00", endsAt: "16:00" }];
     await replaceMenuWeek(
@@ -3393,6 +3405,7 @@ it("the station planning route returns the configured period ranges for a non-de
       departmentId,
       Array.from({ length: 7 }, (_, weekday) => ({ weekday, slots: weekday === 1 ? ranges : [] })),
       new Date("2026-10-10T10:00:00Z"),
+      0,
     );
     const [station] = await tx
       .insert(kitchenStations)

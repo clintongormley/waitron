@@ -3,7 +3,11 @@ import { describe, expect, it } from "vitest";
 import { ALL_MODULES } from "@waitron/composition";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { fakeModule } from "@waitron/module/src/testing/fake-module.js";
-import { deviceProfiles } from "@waitron/db";
+import {
+  deviceProfiles,
+  locationDayCutoverChanges,
+  locationBusinessDaySettings,
+} from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { planVenue, type VenueAction, type VenueRequest } from "./venue-plan.js";
 import { applyVenue } from "./venue-apply.js";
@@ -834,3 +838,33 @@ it.each([
       );
   },
 );
+
+it("reuses the current dated start without clearing the location timeline", async () => {
+  const original = request("B10000008");
+  const first = await applyVenue(planVenue(original, ALL_MODULES), {
+    db: suite.db,
+    modules: ALL_MODULES,
+  });
+  await suite.db.insert(locationDayCutoverChanges).values([
+    { locationId: first.locationId, effectiveBusinessDay: "2000-01-01", dayCutover: "07:00:00" },
+    { locationId: first.locationId, effectiveBusinessDay: "2099-01-01", dayCutover: "03:00:00" },
+  ]);
+  await suite.db
+    .insert(locationBusinessDaySettings)
+    .values({ locationId: first.locationId, revision: 3 });
+  const current = request("B10000008");
+  current.location.dayCutover = "07:00";
+  await expect(
+    applyVenue(planVenue(current, ALL_MODULES), {
+      db: suite.db,
+      modules: ALL_MODULES,
+    }),
+  ).resolves.toMatchObject({ locationId: first.locationId, nodeId: first.nodeId });
+  expect(await suite.db.select().from(locationDayCutoverChanges)).toHaveLength(2);
+  expect(await suite.db.select().from(locationBusinessDaySettings)).toEqual([
+    { locationId: first.locationId, revision: 3 },
+  ]);
+  await expect(
+    applyVenue(planVenue(original, ALL_MODULES), { db: suite.db, modules: ALL_MODULES }),
+  ).rejects.toMatchObject({ code: "provisioning.second_venue" });
+});

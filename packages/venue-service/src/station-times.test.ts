@@ -6,6 +6,7 @@ import {
   CORE_MIGRATIONS,
   kitchenStations,
   locations,
+  locationDayCutoverChanges,
   tenants,
   type Database,
   type Transaction,
@@ -207,6 +208,8 @@ async function saveDate(tx: Transaction, cfg: VenueScope, date: string, closeWho
     null,
     { date, name: `Special ${date}`, closeWholeVenue },
     SAVED_AT,
+    undefined,
+    0,
   );
 }
 
@@ -730,4 +733,35 @@ describe("station today controls", () => {
       expect(await todayRows(f.upstairs)).toEqual(before);
     },
   );
+});
+
+it("keeps today's station closure and actual expiry through the 26-hour tail", async () => {
+  await db.transaction(async (tx) => {
+    const f = await fixture(tx);
+    await tx
+      .update(locations)
+      .set({ dayCutover: "05:00:00" })
+      .where(eq(locations.id, f.cfg.locationId));
+    await tx.insert(locationDayCutoverChanges).values({
+      locationId: f.cfg.locationId,
+      effectiveBusinessDay: "2026-11-04",
+      dayCutover: "07:00:00",
+    });
+    await setStationToday(tx, f.cfg, f.upstairs, "closed", new Date("2026-11-03T12:00:00Z"));
+    for (const time of ["2026-11-04T04:00:00Z", "2026-11-04T05:59:00Z"]) {
+      expect((await venueMoment(tx, f.cfg, new Date(time)))?.businessDay).toBe("2026-11-03");
+      const model = await routingModel(tx, f.cfg, new Date(time));
+      expect(model.stationTimes.find((s) => s.stationId === f.upstairs)).toMatchObject({
+        today: "closed",
+        status: { open: false },
+      });
+      expect(model.todayEnds).toEqual({ timeOfDay: "07:00", tomorrow: false });
+    }
+    const next = await routingModel(tx, f.cfg, new Date("2026-11-04T06:00:00Z"));
+    expect(next.stationTimes.find((s) => s.stationId === f.upstairs)).toMatchObject({
+      today: null,
+      status: { open: true },
+    });
+    expect(next.todayEnds).toEqual({ timeOfDay: "07:00", tomorrow: true });
+  });
 });

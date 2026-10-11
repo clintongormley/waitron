@@ -1161,6 +1161,56 @@ it("renames the taxpayer with the new legal name and the one the page showed", a
   ]);
 });
 
+it("previews a dated business-day start passively and writes with the loaded revision", async () => {
+  const input = {
+    effectiveBusinessDay: "2026-11-05",
+    dayCutover: "07:00",
+    expectedClockRevision: 4,
+  };
+  const preview = {
+    revision: 4,
+    previousDay: {
+      businessDay: "2026-11-04",
+      dayCutover: "05:00",
+      startAt: "2026-11-04T04:00:00.000Z",
+      endAt: "2026-11-05T06:00:00.000Z",
+    },
+    effectiveDay: {
+      businessDay: "2026-11-05",
+      dayCutover: "07:00",
+      startAt: "2026-11-05T06:00:00.000Z",
+      endAt: "2026-11-06T06:00:00.000Z",
+    },
+    locksAt: "2026-11-04T04:00:00.000Z",
+    conflicts: [],
+    conflictCount: 0,
+    backupDeadlines: { archive: null, cloud: null },
+  };
+  const result = { changed: true, model: venueDetailsFixture() };
+  const fetchImpl = vi
+    .fn()
+    .mockResolvedValueOnce(jsonResponse(preview))
+    .mockResolvedValueOnce(jsonResponse(result))
+    .mockResolvedValueOnce(jsonResponse(result));
+  const api = new DashboardApi("", fetchImpl);
+  expect(typeof api.previewBusinessDayStart).toBe("function");
+  expect(await api.previewBusinessDayStart(input)).toEqual(preview);
+  expect(await api.putBusinessDayStart(input)).toEqual(result);
+  expect(await api.cancelBusinessDayStart({ expectedClockRevision: 5 })).toEqual(result);
+  expect(callsOf(fetchImpl)).toEqual([
+    [
+      "/management-api/venue-details/business-day-start/preview?effectiveBusinessDay=2026-11-05&dayCutover=07%3A00&expectedClockRevision=4",
+      "GET",
+      undefined,
+    ],
+    ["/management-api/venue-details/business-day-start", "PUT", input],
+    ["/management-api/venue-details/business-day-start", "DELETE", { expectedClockRevision: 5 }],
+  ]);
+  expect(
+    fetchImpl.mock.calls.map(([, init]) => new Headers(init.headers).get("x-waitron-live")),
+  ).toEqual(["1", null, null]);
+});
+
 it("reads a venue clock preview passively with encoded clock values", async () => {
   const response = {
     at: "2026-10-06T02:00:00.000Z",

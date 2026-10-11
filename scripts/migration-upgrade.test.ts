@@ -472,6 +472,8 @@ type Row = Record<string, Value>;
  * trigger refuses every generic value. Keyed `table.column`.
  */
 const CANDIDATES: Record<string, readonly Value[]> = {
+  "location_day_cutover_changes.effective_business_day": ["2026-01-01", "2026-01-02"],
+  "location_day_cutover_changes.day_cutover": ["05:00:00", "07:00:00"],
   // The CHECK wants 64 lowercase hex digits and an image extension.
   "media_images.filename": [`${"0".repeat(63)}1.jpg`, `${"0".repeat(63)}2.jpg`],
   // A trigger refuses a filename `media_images` does not hold.

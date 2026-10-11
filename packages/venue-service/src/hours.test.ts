@@ -131,11 +131,17 @@ async function fixture(): Promise<Fixture> {
       .insert(catalogues)
       .values({ name: `Calendar ${randomUUID()}` })
       .returning();
-    const calendarPeriod = await saveMenuPeriod(tx, cfg, restaurant!.id, {
-      name: "Open",
-      menuId: calendarMenu!.id,
-      staffMenuIds: [],
-    });
+    const calendarPeriod = await saveMenuPeriod(
+      tx,
+      cfg,
+      restaurant!.id,
+      {
+        name: "Open",
+        menuId: calendarMenu!.id,
+        staffMenuIds: [],
+      },
+      0,
+    );
     await replaceMenuWeek(
       tx,
       cfg,
@@ -145,6 +151,7 @@ async function fixture(): Promise<Fixture> {
         slots: [{ periodId: calendarPeriod.id, startsAt: "06:00", endsAt: "06:00" }],
       })),
       new Date(),
+      0,
     );
     return {
       cfg,
@@ -175,7 +182,9 @@ const specialInput = (overrides: Partial<SpecialDateInput> = {}): SpecialDateInp
 });
 
 const saveDate = (f: Fixture, id: string | null, input: unknown) =>
-  withTransaction(db, (tx) => saveSpecialDate(tx, f.cfg, id, input as SpecialDateInput, AT));
+  withTransaction(db, (tx) =>
+    saveSpecialDate(tx, f.cfg, id, input as SpecialDateInput, AT, undefined, 0),
+  );
 
 const seedNamedDate = (f: Fixture, input: SpecialDateInput) => saveDate(f, null, input);
 
@@ -647,11 +656,11 @@ const duplicate = (
   participants?: readonly SpecialDateParticipant[],
 ) =>
   withTransaction(db, (tx) =>
-    duplicateSpecialDate(tx, f.cfg, id, dates as LocalDate[], AT, participants),
+    duplicateSpecialDate(tx, f.cfg, id, dates as LocalDate[], AT, participants, 0),
   );
 
 const remove = (f: Fixture, id: string, participants?: readonly SpecialDateParticipant[]) =>
-  withTransaction(db, (tx) => deleteSpecialDate(tx, f.cfg, id, AT, participants));
+  withTransaction(db, (tx) => deleteSpecialDate(tx, f.cfg, id, AT, participants, 0));
 
 const makeDefault = (f: Fixture, station: HoursSubject) =>
   withTransaction(db, async (tx) => {
@@ -941,16 +950,28 @@ describe("the calendar's Closed colour", () => {
     const f = await fixture();
     const deliPeriod = await withTransaction(db, async (tx) => {
       const [menu] = await tx.insert(catalogues).values({ name: randomUUID() }).returning();
-      const restaurantPeriod = await saveMenuPeriod(tx, f.cfg, f.departmentIds.restaurant, {
-        name: "Lunch",
-        menuId: menu!.id,
-        staffMenuIds: [],
-      });
-      const deliPeriod = await saveMenuPeriod(tx, f.cfg, f.departmentIds.deli, {
-        name: "Deli",
-        menuId: menu!.id,
-        staffMenuIds: [],
-      });
+      const restaurantPeriod = await saveMenuPeriod(
+        tx,
+        f.cfg,
+        f.departmentIds.restaurant,
+        {
+          name: "Lunch",
+          menuId: menu!.id,
+          staffMenuIds: [],
+        },
+        0,
+      );
+      const deliPeriod = await saveMenuPeriod(
+        tx,
+        f.cfg,
+        f.departmentIds.deli,
+        {
+          name: "Deli",
+          menuId: menu!.id,
+          staffMenuIds: [],
+        },
+        0,
+      );
       await replaceMenuWeek(
         tx,
         f.cfg,
@@ -963,6 +984,7 @@ describe("the calendar's Closed colour", () => {
               : [],
         })),
         AT,
+        0,
       );
       return deliPeriod;
     });
@@ -991,6 +1013,7 @@ describe("the calendar's Closed colour", () => {
             f.departmentIds.deli,
             [{ periodId: deliPeriod.id, startsAt: "10:00", endsAt: "14:00" }],
             AT,
+            0,
           ),
         );
       expect(await tone(f, date)).toBe(open ? "blue" : "closed");
@@ -999,11 +1022,17 @@ describe("the calendar's Closed colour", () => {
     expect(await tone(f, "2026-10-21")).toBe("closed");
     await withTransaction(db, async (tx) => {
       const [menu] = await tx.insert(catalogues).values({ name: randomUUID() }).returning();
-      const period = await saveMenuPeriod(tx, f.cfg, terrace.id, {
-        name: "Terrace",
-        menuId: menu!.id,
-        staffMenuIds: [],
-      });
+      const period = await saveMenuPeriod(
+        tx,
+        f.cfg,
+        terrace.id,
+        {
+          name: "Terrace",
+          menuId: menu!.id,
+          staffMenuIds: [],
+        },
+        0,
+      );
       await replaceMenuWeek(
         tx,
         f.cfg,
@@ -1013,6 +1042,7 @@ describe("the calendar's Closed colour", () => {
           slots: weekday === 3 ? [{ periodId: period.id, startsAt: "09:00", endsAt: "17:00" }] : [],
         })),
         AT,
+        0,
       );
     });
     expect(await tone(f, "2026-10-21")).toBe("blue");
@@ -1115,7 +1145,7 @@ describe("holiday facts beside the calendar", () => {
     expect(days[1]!.specialDate?.name).toBe("Renamed party");
     expect(holidaysOn(days, "2026-10-14")).toEqual(before);
 
-    await withTransaction(db, (tx) => deleteSpecialDate(tx, f.cfg, added.id, AT));
+    await withTransaction(db, (tx) => deleteSpecialDate(tx, f.cfg, added.id, AT, undefined, 0));
     days = await calendar(f, reader);
     expect(days[1]!.specialDate).toBeNull();
     expect(holidaysOn(days, "2026-10-14")).toEqual(before);
@@ -1687,6 +1717,7 @@ describe("calendar participants", () => {
         ["2026-10-20", "2026-10-21", "2026-10-22"],
         AT,
         [menus.participant, wages.participant],
+        0,
       );
     });
     const targetIds = copies.map((copy) => copy.id);
@@ -1749,7 +1780,7 @@ describe("calendar participants", () => {
     let outer: Transaction | undefined;
     await withTransaction(db, (tx) => {
       outer = tx;
-      return deleteSpecialDate(tx, f.cfg, date.id, AT, [menus.participant, wages.participant]);
+      return deleteSpecialDate(tx, f.cfg, date.id, AT, [menus.participant, wages.participant], 0);
     });
     for (const { calls } of [menus, wages]) {
       expect(calls.map(({ kind, id }) => ({ kind, id }))).toEqual([
@@ -1921,6 +1952,7 @@ describe("Hours with the holiday store", () => {
         dates as LocalDate[],
         AT,
         participants,
+        0,
       ),
     );
 
@@ -2051,6 +2083,7 @@ describe("Hours with the holiday store", () => {
         ["2026-12-25", "2026-12-29"],
         AT,
         [menus.value],
+        0,
       );
     });
     expect(copies).toEqual([
@@ -2122,6 +2155,8 @@ describe("Hours with the holiday store", () => {
         source.id,
         ["2026-12-25", "2028-01-05", "2026-11-02", "2026-12-29"],
         AT,
+        undefined,
+        0,
       ),
     );
     expect(reads.sort()).toEqual(["2026-11-02..2026-12-29", "2028-01-05..2028-01-05"]);
@@ -2552,7 +2587,7 @@ describe("named-day writes", () => {
       ownHours: true,
     });
     const [copy] = await withTransaction(db, (tx) =>
-      duplicateSpecialDate(tx, f.cfg, source.id, ["2027-12-26"], AT),
+      duplicateSpecialDate(tx, f.cfg, source.id, ["2027-12-26"], AT, undefined, 0),
     );
     const [row] = await db.select().from(specialDates).where(eq(specialDates.id, copy!.id));
     expect(row).toMatchObject({
@@ -2572,7 +2607,7 @@ describe("named-day writes", () => {
     await saveDate(f, null, { ...specialInput({ date: "2026-12-25" }), repeats: true });
     await expect(
       withTransaction(db, (tx) =>
-        duplicateSpecialDate(tx, f.cfg, source.id, ["2027-12-24", "2027-12-25"], AT),
+        duplicateSpecialDate(tx, f.cfg, source.id, ["2027-12-24", "2027-12-25"], AT, undefined, 0),
       ),
     ).rejects.toMatchObject({ code: "special_date.date_taken", params: { date: "2027-12-25" } });
     expect(
@@ -2629,22 +2664,34 @@ describe("named-day own-hours switching", () => {
     const other = await fixture();
     const seeded = await withTransaction(db, async (tx) => {
       const [menu] = await tx.insert(catalogues).values({ name: randomUUID() }).returning();
-      const lunch = await saveMenuPeriod(tx, f.cfg, f.departmentIds.restaurant, {
-        name: "Lunch",
-        menuId: menu!.id,
-        staffMenuIds: [],
-      });
+      const lunch = await saveMenuPeriod(
+        tx,
+        f.cfg,
+        f.departmentIds.restaurant,
+        {
+          name: "Lunch",
+          menuId: menu!.id,
+          staffMenuIds: [],
+        },
+        0,
+      );
       for (const [cfg, departmentId, periodId] of [
         [f.cfg, f.departmentIds.restaurant, lunch.id],
         [
           other.cfg,
           other.departmentIds.restaurant,
           (
-            await saveMenuPeriod(tx, other.cfg, other.departmentIds.restaurant, {
-              name: "Other lunch",
-              menuId: menu!.id,
-              staffMenuIds: [],
-            })
+            await saveMenuPeriod(
+              tx,
+              other.cfg,
+              other.departmentIds.restaurant,
+              {
+                name: "Other lunch",
+                menuId: menu!.id,
+                staffMenuIds: [],
+              },
+              0,
+            )
           ).id,
         ],
       ] as const) {
@@ -2657,6 +2704,7 @@ describe("named-day own-hours switching", () => {
             slots: weekday === 5 ? [{ periodId, startsAt: "12:00", endsAt: "15:00" }] : [],
           })),
           AT,
+          0,
         );
         const [zone] = await tx
           .insert(floorZones)
@@ -2737,7 +2785,7 @@ describe("named-day own-hours switching", () => {
     const { f } = await setup();
     const day = await saveDate(f, null, specialInput({ ownHours: true }));
     await withTransaction(db, async (tx) => {
-      await saveSpecialDateMenus(tx, f.cfg, day.id, f.departmentIds.deli, [], AT);
+      await saveSpecialDateMenus(tx, f.cfg, day.id, f.departmentIds.deli, [], AT, 0);
       const [zone] = await tx
         .select()
         .from(zoneServicePolicies)
@@ -2777,6 +2825,7 @@ describe("named-day own-hours switching", () => {
         f.departmentIds.restaurant,
         [{ periodId: lunch.id, startsAt: "16:00", endsAt: "18:00" }],
         AT,
+        0,
       ),
     );
     const before = await snapshot(day.id);
@@ -2789,20 +2838,28 @@ describe("named-day own-hours switching", () => {
     const day = await saveDate(f, null, specialInput());
     await expect(
       withTransaction(db, (tx) =>
-        saveSpecialDate(tx, f.cfg, day.id, specialInput({ ownHours: true }), AT, [
-          {
-            async copy() {},
-            async beforeDelete() {},
-            async afterChange(tx) {
-              const rows = await tx
-                .select()
-                .from(menuDayTimetables)
-                .where(eq(menuDayTimetables.specialDateId, day.id));
-              expect(rows).toHaveLength(1);
-              throw new Error("participant refusal");
+        saveSpecialDate(
+          tx,
+          f.cfg,
+          day.id,
+          specialInput({ ownHours: true }),
+          AT,
+          [
+            {
+              async copy() {},
+              async beforeDelete() {},
+              async afterChange(tx) {
+                const rows = await tx
+                  .select()
+                  .from(menuDayTimetables)
+                  .where(eq(menuDayTimetables.specialDateId, day.id));
+                expect(rows).toHaveLength(1);
+                throw new Error("participant refusal");
+              },
             },
-          },
-        ]),
+          ],
+          0,
+        ),
       ),
     ).rejects.toThrow("participant refusal");
     expect(await snapshot(day.id)).toEqual({ days: [], slots: [], closures: [] });

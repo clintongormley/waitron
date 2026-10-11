@@ -98,7 +98,7 @@ function makeSupervisor(refs: Refs, stateDir: string): BackupSupervisor {
     environment: "production",
     stateDir,
     jitterSeed: "seed",
-    readClock: async () => ({ timeZone: "UTC", dayCutover: "00:00" }),
+    readClock: async () => ({ timeZone: "UTC", dayCutover: "00:00", cutoverChanges: [] }),
     log: (level, event) => refs.logs.push({ level, event }),
   });
 }
@@ -320,7 +320,7 @@ describe("BackupSupervisor lifecycle (a real migrated venue directory)", () => {
       environment: "production",
       stateDir: await makeStateDir(),
       jitterSeed: "seed",
-      readClock: async () => ({ timeZone: "UTC", dayCutover: "00:00" }),
+      readClock: async () => ({ timeZone: "UTC", dayCutover: "00:00", cutoverChanges: [] }),
       log: (level, event) => refs.logs.push({ level, event }),
       // Only the copy fails, so the tick reaches it.
       openVenue: async (dir) => {
@@ -377,7 +377,7 @@ describe("BackupSupervisor lifecycle (a real migrated venue directory)", () => {
       environment: "production",
       stateDir: await makeStateDir(),
       jitterSeed: "seed",
-      readClock: async () => ({ timeZone: "UTC", dayCutover: "00:00" }),
+      readClock: async () => ({ timeZone: "UTC", dayCutover: "00:00", cutoverChanges: [] }),
       log: (level, event) => refs.logs.push({ level, event }),
       // The first sweep's copy is held until the second reload is waiting for it; the second
       // sweep's copy fails, so nothing is ever stored under the new key.
@@ -485,7 +485,7 @@ describe("BackupSupervisor lifecycle (a real migrated venue directory)", () => {
       environment: "production",
       stateDir: await makeStateDir(),
       jitterSeed: "seed",
-      readClock: async () => ({ timeZone: "UTC", dayCutover: "00:00" }),
+      readClock: async () => ({ timeZone: "UTC", dayCutover: "00:00", cutoverChanges: [] }),
       log: () => {},
     });
     const first = sup.reload();
@@ -517,7 +517,7 @@ describe("BackupSupervisor lifecycle (a real migrated venue directory)", () => {
       environment: "production",
       stateDir: await makeStateDir(),
       jitterSeed: "seed",
-      readClock: async () => ({ timeZone: "UTC", dayCutover: "00:00" }),
+      readClock: async () => ({ timeZone: "UTC", dayCutover: "00:00", cutoverChanges: [] }),
       log: (level, event) => refs.logs.push({ level, event }),
       openVenue: async (dir): Promise<VenueDatabase> => {
         const store = await openVenueDatabase(dir);
@@ -573,7 +573,7 @@ describe("BackupSupervisor — stop() landing inside a reload, and a worker that
       environment: "production",
       stateDir: await makeStateDir(),
       jitterSeed: "seed",
-      readClock: async () => ({ timeZone: "UTC", dayCutover: "00:00" }),
+      readClock: async () => ({ timeZone: "UTC", dayCutover: "00:00", cutoverChanges: [] }),
       log: () => {},
       openVenue: async (dir) => {
         opens += 1;
@@ -604,7 +604,7 @@ describe("BackupSupervisor — stop() landing inside a reload, and a worker that
       environment: "production",
       stateDir: await makeStateDir(),
       jitterSeed: "seed",
-      readClock: async () => ({ timeZone: "UTC", dayCutover: "00:00" }),
+      readClock: async () => ({ timeZone: "UTC", dayCutover: "00:00", cutoverChanges: [] }),
       log: (level, event) => logs.push({ level, event }),
       openVenue: async () => {
         opening.entered();
@@ -641,7 +641,7 @@ describe("BackupSupervisor — stop() landing inside a reload, and a worker that
       environment: "production",
       stateDir: await makeStateDir(),
       jitterSeed: "seed",
-      readClock: async () => ({ timeZone: "UTC", dayCutover: "00:00" }),
+      readClock: async () => ({ timeZone: "UTC", dayCutover: "00:00", cutoverChanges: [] }),
       log: (level, event, fields) => lines.push({ level, event, fields }),
       openVenue: async (dir) => {
         const store = await openVenueDatabase(dir);

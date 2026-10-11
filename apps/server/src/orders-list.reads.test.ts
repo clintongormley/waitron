@@ -116,6 +116,7 @@ describe("ranking work", () => {
       return { rows: page.rows.length, calls: rankCalls };
     }
     const oneDay = {
+      cutoverChanges: [],
       from: "2026-04-04",
       to: "2026-04-04",
       timeZone: "Europe/Madrid",
@@ -154,6 +155,7 @@ describe("which index a read starts from", () => {
         status: "all",
         scope: {
           today: {
+            cutoverChanges: [],
             from: "2026-10-02",
             to: "2026-10-02",
             timeZone: "Europe/Madrid",
@@ -168,6 +170,7 @@ describe("which index a read starts from", () => {
     expect(
       await plan({
         dates: {
+          cutoverChanges: [],
           from: "2026-03-01",
           to: "2026-03-02",
           timeZone: "Europe/Madrid",

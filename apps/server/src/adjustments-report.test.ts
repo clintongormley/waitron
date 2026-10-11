@@ -185,7 +185,11 @@ function dayOffset(day: string, days: number): string {
 
 /** The report over the business days either side of today, through the module's route. */
 async function readReport(): Promise<AdjustmentReport> {
-  const today = currentBusinessDay({ timeZone: "Europe/Madrid", dayCutover: "05:00" });
+  const today = currentBusinessDay({
+    cutoverChanges: [],
+    timeZone: "Europe/Madrid",
+    dayCutover: "05:00",
+  });
   const response = await reports.request(
     `/management-api/adjustments/report?from=${dayOffset(today, -1)}&to=${dayOffset(today, 1)}`,
     { headers: { cookie: reader } },

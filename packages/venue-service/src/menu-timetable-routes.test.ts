@@ -10,6 +10,8 @@ import {
 } from "@waitron/catalogue";
 import {
   CORE_MIGRATIONS,
+  locationBusinessDaySettings,
+  locationDayCutoverChanges,
   floorZones,
   kitchenStations,
   locations,
@@ -41,6 +43,7 @@ registerModulePermissions(VENUE_SERVICE_PERMISSIONS);
 const suite = useVenueDb({
   migrations: [
     CORE_MIGRATIONS,
+
     CATALOGUE_MIGRATIONS,
     VENUE_SERVICE_MIGRATIONS,
     IDENTITY_MIGRATIONS,
@@ -92,11 +95,17 @@ async function routed() {
     const cafe = await menu("Café");
     const deliParaLlevar = await menu("Deli para llevar");
     const mananas = (
-      await saveMenuPeriod(tx, cfg, restaurant, {
-        name: "Mañanas",
-        menuId: desayunos,
-        staffMenuIds: [],
-      })
+      await saveMenuPeriod(
+        tx,
+        cfg,
+        restaurant,
+        {
+          name: "Mañanas",
+          menuId: desayunos,
+          staffMenuIds: [],
+        },
+        0,
+      )
     ).id;
     const christmas = (
       await saveSpecialDate(
@@ -111,6 +120,8 @@ async function routed() {
           cells: [],
         },
         new Date(),
+        undefined,
+        0,
       )
     ).id;
     const person = async (role: "manager" | "supervisor" | "staff") => {
@@ -148,7 +159,17 @@ async function routed() {
         cookie,
         ...(body === undefined ? {} : { "content-type": "application/json" }),
       },
-      ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+      ...(body === undefined
+        ? method === "DELETE" && path.startsWith("/special-dates/")
+          ? { body: JSON.stringify({ expectedClockRevision: 0 }) }
+          : {}
+        : {
+            body: JSON.stringify(
+              body !== null && typeof body === "object" && !Array.isArray(body)
+                ? { expectedClockRevision: 0, ...body }
+                : body,
+            ),
+          }),
     });
   const model = () => scoped((tx) => readOpeningHoursModel(tx, cfg, new Date()));
   return { ...made, cfg, barra, mostrador, app, send, model };
@@ -799,4 +820,27 @@ describe("zone closed-time routes", () => {
     );
     expect(restaurantOf(await r.model(), r).zones[0]!.week).toEqual(days);
   });
+});
+
+it("returns the pending and stale clock refusals through real hours routes", async () => {
+  const r = await routed();
+  await scoped(async (tx) => {
+    await tx
+      .insert(locationBusinessDaySettings)
+      .values({ locationId: r.cfg.locationId, revision: 1 });
+    await tx.insert(locationDayCutoverChanges).values({
+      locationId: r.cfg.locationId,
+      effectiveBusinessDay: "2026-11-04",
+      dayCutover: "07:00:00",
+    });
+  });
+  const path = `/departments/${r.restaurant}/menu-week`;
+  const days = week([{ periodId: r.mananas, startsAt: "09:00", endsAt: "14:00" }]);
+  const pending = await r.send("PUT", path, r.manager, { days, expectedClockRevision: 1 });
+  await answers(pending, 409, {
+    code: "hours.clock_change_pending",
+    params: { effectiveBusinessDay: "2026-11-04" },
+  });
+  const stale = await r.send("PUT", path, r.manager, { days, expectedClockRevision: 0 });
+  await answers(stale, 409, { code: "hours.clock_changed", params: {} });
 });

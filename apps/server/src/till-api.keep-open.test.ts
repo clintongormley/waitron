@@ -86,11 +86,17 @@ beforeEach(async () => {
         grossPrice: name === "Lunch" ? "12.00" : "15.00",
       });
       await publishWorkingMenu(tx, menu.id);
-      const period = await saveMenuPeriod(tx, v.cfg, department, {
-        name,
-        menuId: menu.id,
-        staffMenuIds: [],
-      });
+      const period = await saveMenuPeriod(
+        tx,
+        v.cfg,
+        department,
+        {
+          name,
+          menuId: menu.id,
+          staffMenuIds: [],
+        },
+        0,
+      );
       menus.push({ period: period.id, item: item.id });
     }
     await replaceMenuWeek(
@@ -105,6 +111,7 @@ beforeEach(async () => {
         ],
       })),
       new Date(),
+      0,
     );
     const [admin] = await tx
       .select({ id: persons.id })
@@ -415,6 +422,7 @@ describe("the till keeps a zone open today", () => {
           slots: [{ periodId: lunch, startsAt: "21:00", endsAt: "03:00" }],
         })),
         new Date(),
+        0,
       );
       await replaceZoneClosedWeek(
         tx,
@@ -424,6 +432,7 @@ describe("the till keeps a zone open today", () => {
           weekday,
           ranges: [{ startsAt: "23:30", endsAt: "05:00" }],
         })),
+        0,
       );
     });
   });
@@ -472,6 +481,7 @@ describe("the till keeps a zone open today", () => {
           slots: [{ periodId: lunch, startsAt: "21:00", endsAt: "01:00" }],
         })),
         new Date(),
+        0,
       ),
     );
     expect((await call("PUT", write(), { periodId: lunch, until: "02:00" })).status).toBe(204);
@@ -498,6 +508,7 @@ describe("the till keeps a zone open today", () => {
           slots: [{ periodId: lunch, startsAt: "21:00", endsAt: "01:00" }],
         })),
         new Date(),
+        0,
       ),
     );
     const answer = await call("PUT", writeZone(), { until: "01:30" });
@@ -587,6 +598,7 @@ describe("the till keeps a zone open today", () => {
         v.cfg,
         zone,
         [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({ weekday, ranges: [] })),
+        0,
       ),
     );
     expect(await zoneState()).toMatchObject({ closed: false, closesAt: null });

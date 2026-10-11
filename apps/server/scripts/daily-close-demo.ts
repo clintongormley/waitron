@@ -1,3 +1,4 @@
+import { resolveVenueClock } from "@waitron/reporting";
 // Rings up a day of trade through the real write path against the fake `FiscalBackend`, in a
 // throwaway venue directory, and prints `@waitron/reporting`'s `DailyClose` for a human to check.
 //
@@ -43,7 +44,6 @@ import { scriptSessionDevice } from "./script-device.js";
 const SETS = ["core", "identity"];
 
 const LOCALE = "es-ES";
-const TIME_ZONE = "Europe/Madrid";
 const BUSINESS_DAY = "2026-08-04";
 
 // 2026-08-04 12:00 Madrid, so every write lands on business day 2026-08-04.
@@ -238,8 +238,7 @@ async function main(): Promise<void> {
       return computeDailyClose(tx, {
         nodeId: venue.nodeId,
         businessDay: BUSINESS_DAY,
-        timeZone: TIME_ZONE,
-        dayCutover: "05:00",
+        ...(await resolveVenueClock(tx, venue.nodeId)),
       });
     });
 

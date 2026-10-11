@@ -1,3 +1,4 @@
+import type { BusinessDayClock } from "@waitron/shared";
 import { and, asc, eq, inArray, isNotNull, sql, type SQL } from "drizzle-orm";
 import { formatInvoiceNumber } from "@waitron/core";
 import {
@@ -54,7 +55,7 @@ export interface OrderCursor {
 }
 export interface OrderListFilter {
   status: OrderStatusFilter;
-  dates: "any" | { from: string; to: string; timeZone: string; dayCutover: string };
+  dates: "any" | ({ from: string; to: string } & BusinessDayClock);
   credited: boolean;
   staffId?: string;
   table?: string;
@@ -69,7 +70,7 @@ export interface OrderListFilter {
    * alone.
    */
   orderIn?: (orderId: SQL) => SQL;
-  scope: "all" | { today: { from: string; to: string; timeZone: string; dayCutover: string } };
+  scope: "all" | { today: { from: string; to: string } & BusinessDayClock };
 }
 export interface OrderRow {
   kind: "bill" | "sale";
@@ -134,12 +135,13 @@ const LIVE_FILTERS: readonly OrderStatusFilter[] = [
  */
 function billScope(filter: OrderListFilter): SQL {
   if (filter.scope !== "all") {
-    const { from, to, timeZone, dayCutover } = filter.scope.today;
+    const { from, to, timeZone, dayCutover, cutoverChanges } = filter.scope.today;
     const today = validatedRangeWindow({
       fromBusinessDay: from,
       toBusinessDay: to,
       timeZone,
       dayCutover,
+      cutoverChanges,
     })(sql`wo.opened_at`);
     return sql` and (wo.status in ('open', 'placed') or ${today})`;
   }
@@ -277,12 +279,13 @@ function filterClauses(filter: OrderListFilter): SQL[] {
   if (filter.only !== undefined) clauses.push(sql`r.id = ${filter.only}`);
   // An invoice with no bill can be waiting for payment, but is outside a staff session's scope.
   if (filter.scope !== "all") {
-    const { from, to, timeZone, dayCutover } = filter.scope.today;
+    const { from, to, timeZone, dayCutover, cutoverChanges } = filter.scope.today;
     const today = validatedRangeWindow({
       fromBusinessDay: from,
       toBusinessDay: to,
       timeZone,
       dayCutover,
+      cutoverChanges,
     })(sql`r.at`);
     clauses.push(
       sql`r.kind = 'bill' and (r.status in ('open', 'waiting_for_payment', 'left_without_paying') or ${today})`,
@@ -292,11 +295,15 @@ function filterClauses(filter: OrderListFilter): SQL[] {
     clauses.push(sql`r.status in ('waiting_for_payment', 'left_without_paying')`);
   else if (filter.status !== "all") clauses.push(sql`r.status = ${filter.status}`);
   if (filter.dates !== "any") {
-    const { from, to, timeZone, dayCutover } = filter.dates;
+    const { from, to, timeZone, dayCutover, cutoverChanges } = filter.dates;
     clauses.push(
-      validatedRangeWindow({ fromBusinessDay: from, toBusinessDay: to, timeZone, dayCutover })(
-        sql`r.at`,
-      ),
+      validatedRangeWindow({
+        fromBusinessDay: from,
+        toBusinessDay: to,
+        timeZone,
+        dayCutover,
+        cutoverChanges,
+      })(sql`r.at`),
     );
   }
   if (filter.credited)

@@ -10,6 +10,10 @@ let screen: HTMLElementTagNameMap["dashboard-opening-hours-screen"];
 const originalUrl = location.href;
 export function dayFixture(): OpeningHoursModel {
   return {
+    businessDayClock: { timeZone: "Europe/Madrid", dayCutover: "06:00", cutoverChanges: [] },
+    clockRevision: 0,
+    currentBusinessDay: "2026-10-12",
+    pending: null,
     timeZone: "Europe/Madrid",
     clockReadable: true,
     dayCutover: "06:00",
@@ -191,6 +195,7 @@ it("stages a weekday edit and preserves every other day in its seven-day PUT", a
       "/management-api/venue-service/departments/d1/menu-week",
       "PUT",
       {
+        expectedClockRevision: 0,
         days: [
           { weekday: 0, slots: [] },
           { weekday: 1, slots: [{ periodId: "p1", startsAt: "10:00", endsAt: "15:00" }] },
@@ -229,12 +234,12 @@ it("navigates dates and writes a named date's ranges only, including an inherite
     [
       "/management-api/venue-service/special-dates/s%2F1/menu-timetables/d1",
       "PUT",
-      { slots: [{ periodId: "p1", startsAt: "12:00", endsAt: "17:00" }] },
+      { expectedClockRevision: 0, slots: [{ periodId: "p1", startsAt: "12:00", endsAt: "17:00" }] },
     ],
     [
       "/management-api/venue-service/special-dates/s%2F1/menu-timetables/d2",
       "PUT",
-      { slots: [{ periodId: "p2", startsAt: "09:00", endsAt: "19:00" }] },
+      { expectedClockRevision: 0, slots: [{ periodId: "p2", startsAt: "09:00", endsAt: "19:00" }] },
     ],
   ]);
   day.shadowRoot!.querySelector<HTMLElement>("[data-test=previous-day]")!.click();
@@ -421,7 +426,7 @@ it("creates a nested period once and selects it in the same range with its times
     [
       "/management-api/venue-service/departments/d1/menu-periods",
       "POST",
-      { ...periodInput, endOffsetMinutes: 0 },
+      { expectedClockRevision: 0, ...periodInput, endOffsetMinutes: 0 },
     ],
   ]);
   expect(
@@ -732,7 +737,14 @@ it("keeps a created period's signed offset in its wire body and department range
     [
       "/management-api/venue-service/departments/d1/menu-periods",
       "POST",
-      { name: "Tea", colour: "red", menuId: "m1", staffMenuIds: [], endOffsetMinutes: 14 },
+      {
+        expectedClockRevision: 0,
+        name: "Tea",
+        colour: "red",
+        menuId: "m1",
+        staffMenuIds: [],
+        endOffsetMinutes: 14,
+      },
     ],
   ]);
   expect(
@@ -767,7 +779,10 @@ it("applies an old repeating named day's own hours on the later occurrence", asy
       [
         "/management-api/venue-service/special-dates/s%2F1/menu-timetables/d1",
         "PUT",
-        { slots: [{ periodId: "p1", startsAt: "12:00", endsAt: "17:00" }] },
+        {
+          expectedClockRevision: 0,
+          slots: [{ periodId: "p1", startsAt: "12:00", endsAt: "17:00" }],
+        },
       ],
     ]);
 });
@@ -809,6 +824,7 @@ it.each([true, false])(
           "/management-api/venue-service/departments/d1/menu-week",
           "PUT",
           {
+            expectedClockRevision: 0,
             days: [
               { weekday: 0, slots: [] },
               { weekday: 1, slots: [{ periodId: "p1", startsAt: "10:00", endsAt: "14:00" }] },
@@ -871,4 +887,38 @@ it("uses the later occurrence's date for a repeating named day's clock warning",
     "02:00",
   );
   expect(range.businessDate).toBe("2027-10-30");
+});
+
+it("a clean Day draft adopts a clock-only model change before its first edit", async () => {
+  const writes: unknown[] = [];
+  const model = dayFixture();
+  const day = await mount(async (_url, _method, body) => {
+    writes.push(body);
+  }, model);
+  model.clockRevision = 8;
+  day.requestUpdate();
+  await day.updateComplete;
+  resize(day);
+  await day.updateComplete;
+  save(day).click();
+  await expect.poll(() => writes.length).toBe(1);
+  expect(writes[0]).toMatchObject({ expectedClockRevision: 8 });
+});
+it("a dirty Day draft keeps its opened revision and hours through a passive clock replacement", async () => {
+  const writes: unknown[] = [];
+  const day = await mount(async (_url, _method, body) => {
+    writes.push(body);
+  });
+  resize(day);
+  await day.updateComplete;
+  day.model = { ...dayFixture(), clockRevision: 8 };
+  await day.updateComplete;
+  save(day).click();
+  await expect.poll(() => writes.length).toBe(1);
+  expect(writes[0]).toMatchObject({
+    expectedClockRevision: 0,
+    days: expect.arrayContaining([
+      { weekday: 1, slots: [{ periodId: "p1", startsAt: "10:00", endsAt: "15:00" }] },
+    ]),
+  });
 });

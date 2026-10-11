@@ -15,6 +15,7 @@ import {
   CORE_MIGRATIONS,
   kitchenStations,
   locations,
+  locationDayCutoverChanges,
   withTransaction,
   workingOrderLines,
   workingOrders,
@@ -1303,3 +1304,42 @@ describe("the release-reminder setting", () => {
     expect(await inTx((tx) => readReleaseReminderMinutes(tx))).toBe(10);
   });
 });
+
+it.each(["03:00", "07:00"])(
+  "keeps the notice lower bound until the actual %s transition",
+  async (cutover) => {
+    const v = await venue();
+    await db
+      .update(locations)
+      .set({ dayCutover: "05:00:00" })
+      .where(eq(locations.id, v.locationId));
+    await db.insert(locationDayCutoverChanges).values({
+      locationId: v.locationId,
+      effectiveBusinessDay: "2026-11-04",
+      dayCutover: `${cutover}:00`,
+    });
+    const order = await seedOrder(v.locationId, 1, null);
+    await noticeAt(v.grill, order.orderId, "2026-11-03T04:59:59.000Z");
+    const kept = await noticeAt(v.grill, order.orderId, "2026-11-03T05:00:00.000Z");
+    vi.useFakeTimers({ toFake: ["Date"] });
+    try {
+      for (const time of cutover === "07:00"
+        ? ["2026-11-04T05:00:00Z", "2026-11-04T06:59:00Z"]
+        : ["2026-11-04T02:59:00Z"]) {
+        vi.setSystemTime(new Date(time));
+        expect(
+          (await inTx((tx) => listStationNotices(tx, v.cfg, v.grill))).map((n) => n.id),
+        ).toEqual([kept]);
+        expect(
+          (await inTx((tx) => listStationsNotices(tx, v.cfg, [v.grill])))
+            .get(v.grill)!
+            .map((n) => n.id),
+        ).toEqual([kept]);
+      }
+      vi.setSystemTime(new Date(`2026-11-04T${cutover}:00Z`));
+      expect(await inTx((tx) => listStationNotices(tx, v.cfg, v.grill))).toEqual([]);
+    } finally {
+      vi.useRealTimers();
+    }
+  },
+);

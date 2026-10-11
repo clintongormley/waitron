@@ -30,26 +30,34 @@ describe("Named Days writes after Hours retirement", () => {
       ownHours: false,
       closeWholeVenue: false,
     };
-    expect(await api.saveDay(null, input)).toEqual(saved);
-    expect(await api.saveDay("d1", input)).toEqual(saved);
-    expect(await api.copyDay("d1", ["2030-10-22"])).toEqual([saved]);
-    expect(await api.deleteDay("d1")).toBeUndefined();
+    expect(await api.saveDay(null, input, () => true, 0)).toEqual(saved);
+    expect(await api.saveDay("d1", input, () => true, 0)).toEqual(saved);
+    expect(await api.copyDay("d1", ["2030-10-22"], 0)).toEqual([saved]);
+    expect(await api.deleteDay("d1", 0)).toBeUndefined();
     expect(request.mock.calls).toEqual([
-      ["/management-api/venue-service/special-dates", "POST", input],
-      ["/management-api/venue-service/special-dates/d1", "PUT", input],
+      [
+        "/management-api/venue-service/special-dates",
+        "POST",
+        { ...input, expectedClockRevision: 0 },
+      ],
+      [
+        "/management-api/venue-service/special-dates/d1",
+        "PUT",
+        { ...input, expectedClockRevision: 0 },
+      ],
       [
         "/management-api/venue-service/special-dates/d1/duplicate",
         "POST",
-        { dates: ["2030-10-22"] },
+        { expectedClockRevision: 0, dates: ["2030-10-22"] },
       ],
-      ["/management-api/venue-service/special-dates/d1", "DELETE"],
+      ["/management-api/venue-service/special-dates/d1", "DELETE", { expectedClockRevision: 0 }],
     ]);
   });
 
   it("encodes ids and range values into the path", async () => {
     const request = vi.fn<(path: string) => Promise<undefined>>(async () => undefined);
     const api = new NamedDaysApi(request as DashboardRequest);
-    await api.deleteDay("a/b");
+    await api.deleteDay("a/b", 0);
     api.watchNamedDays("2030-10-01&x=1", "2030-10-31", vi.fn(), vi.fn(), vi.fn())();
     expect(request.mock.calls.map((call) => call[0])).toEqual([
       "/management-api/venue-service/special-dates/a%2Fb",

@@ -1,3 +1,5 @@
+import type { BusinessDayClock } from "@waitron/shared";
+import { serviceDayContext } from "../service-day-context.js";
 import { LitElement, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { keyed } from "lit/directives/keyed.js";
@@ -100,6 +102,10 @@ export class OpeningHoursWeek extends LitElement {
   @property({ attribute: false }) menus: OpeningHoursModel["menus"] = [];
   @property({ attribute: false }) timeZone?: string;
   @property() dayCutover = "06:00";
+  @property({ attribute: false }) clockRevision!: number;
+  private draftRevision!: number;
+  @property({ attribute: false }) businessDayClock?: BusinessDayClock;
+  private draftClock?: BusinessDayClock;
   @property() weekStart = "";
   @property({ attribute: false }) namedDays: OpeningHoursModel["namedDays"] = [];
   @property({ type: Boolean }) dateActionsReady = true;
@@ -140,17 +146,26 @@ export class OpeningHoursWeek extends LitElement {
     if (!this.source) {
       this.seedDraft();
       this.baseline = copyDraft(this.snapshot());
+      this.draftRevision = this.clockRevision;
+      this.draftClock = this.businessDayClock;
       this.source = this.department;
       this.sourceNamedDays = this.namedDays;
     }
     this.registerScopes();
-    if (this.source !== this.department || this.sourceNamedDays !== this.namedDays) {
+    if (
+      this.source !== this.department ||
+      this.sourceNamedDays !== this.namedDays ||
+      this.draftRevision !== this.clockRevision ||
+      this.draftClock !== this.businessDayClock
+    ) {
       if (this.dirty()) {
         this.source = this.department;
         this.sourceNamedDays = this.namedDays;
       } else if (!this.saving) {
         this.seedDraft();
         this.baseline = copyDraft(this.snapshot());
+        this.draftRevision = this.clockRevision;
+        this.draftClock = this.businessDayClock;
         this.scope?.commit(this.baseline);
         for (const [weekday, scope] of this.dateScopes)
           scope.commit({
@@ -312,11 +327,12 @@ export class OpeningHoursWeek extends LitElement {
     const slots = this.draft[opening.weekday]!.slots.map((slot) => ({ ...slot }));
     if (opening.index === undefined) slots.push({ ...event.detail.input });
     else slots[opening.index] = { ...event.detail.input };
+    const cutover = this.dayContext(opening.weekday)?.dayCutover ?? this.dayCutover;
     const minute = (time: string) =>
       (Number(time.slice(0, 2)) * 60 +
         Number(time.slice(3)) -
-        Number(this.dayCutover.slice(0, 2)) * 60 -
-        Number(this.dayCutover.slice(3)) +
+        Number(cutover.slice(0, 2)) * 60 -
+        Number(cutover.slice(3)) +
         1440) %
       1440;
     slots.sort((a, b) => minute(a.startsAt) - minute(b.startsAt));
@@ -349,8 +365,13 @@ export class OpeningHoursWeek extends LitElement {
       if (this.weekStart && weekday !== undefined) {
         const named = this.namedDay(weekday);
         if (!named?.ownHours || named.closeWholeVenue) return;
-        await this.api.saveDateMenus(named.id, this.department.id, input[weekday]!.slots);
-      } else await this.api.saveWeek(this.department.id, input);
+        await this.api.saveDateMenus(
+          named.id,
+          this.department.id,
+          input[weekday]!.slots,
+          this.draftRevision,
+        );
+      } else await this.api.saveWeek(this.department.id, input, this.draftRevision);
     } catch (error) {
       if (generation !== this.generation || !this.isConnected) return;
       this.error =
@@ -404,7 +425,7 @@ export class OpeningHoursWeek extends LitElement {
     this.creating = true;
     component.refusal = undefined;
     try {
-      const { id } = await this.api.createPeriod(this.department.id, input);
+      const { id } = await this.api.createPeriod(this.department.id, input, this.draftRevision);
       if (
         generation !== this.generation ||
         !this.isConnected ||
@@ -441,6 +462,11 @@ export class OpeningHoursWeek extends LitElement {
       this.creating = false;
     }
   }
+  private dayContext(weekday: number) {
+    return this.weekStart && this.draftClock
+      ? serviceDayContext(this.draftClock, dateInWeek(this.weekStart, weekday))
+      : undefined;
+  }
   override render() {
     const opening = this.opening,
       period = this.periodOpening,
@@ -448,7 +474,7 @@ export class OpeningHoursWeek extends LitElement {
       state = saveActionState(this.scope);
     return html`<service-grid
         .dayCutover=${this.dayCutover}
-        .columns=${this.displayedDays().map((weekday) => ({ key: String(weekday), label: this.dayLabel(weekday), slots: this.draft[weekday]?.slots ?? [], periods: this.periods(), editable: this.canEditDay(weekday) && !this.readOnly && !this.saving && !this.opening && !this.copying }))}
+        .columns=${this.displayedDays().map((weekday) => ({ key: String(weekday), label: this.dayLabel(weekday), clock: this.dayContext(weekday), slots: this.draft[weekday]?.slots ?? [], periods: this.periods(), editable: this.canEditDay(weekday) && !this.readOnly && !this.saving && !this.opening && !this.copying }))}
         @grid-range-select=${this.openRange}
         @grid-block-open=${this.openRange}
         @grid-block-change=${this.resize}
@@ -543,7 +569,8 @@ export class OpeningHoursWeek extends LitElement {
                 .open=${true}
                 .range=${opening.input}
                 .periods=${this.periods()}
-                .dayCutover=${this.dayCutover}
+                .dayCutover=${this.dayContext(opening.weekday)?.dayCutover ?? this.dayCutover}
+                .endMinute=${this.dayContext(opening.weekday)?.endMinute ?? 1440}
                 .businessDate=${this.weekStart ? dateInWeek(this.weekStart, opening.weekday) : undefined}
                 .timeZone=${this.timeZone}
                 .occupied=${this.draft[opening.weekday]!.slots.filter((_, index) => index !== opening.index)}

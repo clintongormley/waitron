@@ -10,6 +10,10 @@ function settingsApi(request: DashboardRequest) {
   return new VenueServiceApi(((path, method, body, options) => {
     if (path === "/management-api/venue-service/opening-hours")
       return Promise.resolve({
+        businessDayClock: { timeZone: "Europe/Madrid", dayCutover: "06:00", cutoverChanges: [] },
+        clockRevision: 0,
+        currentBusinessDay: "2026-10-12",
+        pending: null,
         timeZone: "Europe/Madrid",
         clockReadable: true,
         dayCutover: "06:00",

@@ -316,6 +316,8 @@ it.each([
       "products",
       "categories",
       "category_details",
+      "location_business_day_settings",
+      "location_day_cutover_changes",
     ],
   ],
   // At time of sale names each line's category from the snapshot the line recorded, so no
@@ -323,7 +325,15 @@ it.each([
   [
     "getCategorySales",
     ["2026-09-01", "2026-09-11", "at_time_of_sale", false],
-    ["sales", "sale_lines", "sale_voids", "sale_substitutions", "locations"],
+    [
+      "sales",
+      "sale_lines",
+      "sale_voids",
+      "sale_substitutions",
+      "locations",
+      "location_business_day_settings",
+      "location_day_cutover_changes",
+    ],
   ],
   ["getReportPrinters", [], ["printers"]],
   // A device's ask also carries a returning device's own row and whether its profile was retired
@@ -513,6 +523,8 @@ it.each(["locations", "tenants", "sales", "working_orders", "daily_closes"])(
       { type: "sales" },
       { type: "working_orders" },
       { type: "daily_closes" },
+      { type: "location_business_day_settings" },
+      { type: "location_day_cutover_changes" },
     ]);
     const observed = api.liveData.observe(query, () => {});
     try {
@@ -1002,3 +1014,24 @@ it.each(["Zone", "Department"] as const)(
     expect(api.liveData.interests).toEqual([]);
   },
 );
+
+for (const type of ["location_business_day_settings", "location_day_cutover_changes"]) {
+  it(`an order detail is refreshed passively when ${type} changes its today's-order visibility`, async () => {
+    let reads = 0;
+    const fetchImpl = vi.fn<(path: string, init: RequestInit) => Promise<Response>>(
+      async () => new Response(JSON.stringify({ id: "order", snapshot: ++reads }), { status: 200 }),
+    );
+    const active = vi.fn();
+    const api = new DashboardApi("", fetchImpl, undefined, active);
+    const observed = api.liveData.observe(dashboardQuery(api, "getOrder", ["order"]), () => {});
+    try {
+      await expect.poll(() => observed.snapshot.value).toEqual({ id: "order", snapshot: 1 });
+      api.liveData.invalidate([{ type }]);
+      await expect.poll(() => observed.snapshot.value).toEqual({ id: "order", snapshot: 2 });
+      expect(new Headers(fetchImpl.mock.calls[1]![1].headers).get("x-waitron-live")).toBe("1");
+      expect(active).toHaveBeenCalledOnce();
+    } finally {
+      observed.unsubscribe();
+    }
+  });
+}

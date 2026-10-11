@@ -68,6 +68,14 @@ describe.each(["en", "es"] as const)("Calendar actions visual (%s)", (locale) =>
         screen.api = new OpeningHoursApi((async (path) => {
           if (path.includes("/named-days?"))
             return {
+              businessDayClock: {
+                timeZone: "Europe/Madrid",
+                dayCutover: "06:00",
+                cutoverChanges: [],
+              },
+              clockRevision: 0,
+              currentBusinessDay: "2026-10-07",
+              pending: null,
               timeZone: "Europe/Madrid",
               dayCutover: "06:00",
               civilDate: "2026-10-07",
@@ -118,6 +126,14 @@ describe.each(["en", "es"] as const)("Calendar actions visual (%s)", (locale) =>
               holidaySources: [],
             };
           return {
+            businessDayClock: {
+              timeZone: "Europe/Madrid",
+              dayCutover: "06:00",
+              cutoverChanges: [],
+            },
+            clockRevision: 0,
+            currentBusinessDay: "2026-10-12",
+            pending: null,
             timeZone: "Europe/Madrid",
             dayCutover: "06:00",
             clockReadable: true,

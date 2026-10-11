@@ -287,8 +287,17 @@ export function createHolidayStore(findPack: PackLookup = getCountryPack) {
     dates: readonly LocalDate[],
     at: Date,
     participants: readonly SpecialDateParticipant[] = [],
+    expectedClockRevision: number,
   ): Promise<SpecialDate[]> {
-    const copies = await duplicateSpecialDate(tx, cfg, sourceId, dates, at, participants);
+    const copies = await duplicateSpecialDate(
+      tx,
+      cfg,
+      sourceId,
+      dates,
+      at,
+      participants,
+      expectedClockRevision,
+    );
     const byYear = new Map<number, LocalDate[]>();
     for (const { date } of copies)
       byYear.set(yearOf(date), [...(byYear.get(yearOf(date)) ?? []), date]);

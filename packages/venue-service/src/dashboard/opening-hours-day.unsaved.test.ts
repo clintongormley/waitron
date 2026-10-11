@@ -20,6 +20,10 @@ class DayLeaveApp extends LitElement {
       }
       if (this.failRead) throw new Error("offline");
       return {
+        businessDayClock: { timeZone: "Europe/Madrid", dayCutover: "06:00", cutoverChanges: [] },
+        clockRevision: 0,
+        currentBusinessDay: "2026-10-12",
+        pending: null,
         timeZone: "Europe/Madrid",
         clockReadable: true,
         dayCutover: "06:00",
@@ -187,6 +191,7 @@ describe.each(["en", "es"])("Day draft (%s)", (locale) => {
       "/management-api/venue-service/departments/d1/menu-week",
       "PUT",
       {
+        expectedClockRevision: 0,
         days: [
           { weekday: 0, slots: [] },
           { weekday: 1, slots: [{ periodId: "p1", startsAt: "10:00", endsAt: "15:00" }] },

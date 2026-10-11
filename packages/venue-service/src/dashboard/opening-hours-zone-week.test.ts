@@ -20,6 +20,10 @@ afterEach(() => {
   history.replaceState(null, "", originalUrl);
 });
 const model: OpeningHoursModel = {
+  businessDayClock: { timeZone: "Europe/Madrid", dayCutover: "06:00", cutoverChanges: [] },
+  clockRevision: 0,
+  currentBusinessDay: "2026-10-12",
+  pending: null,
   timeZone: "Europe/Madrid",
   clockReadable: true,
   dayCutover: "06:00",
@@ -113,6 +117,7 @@ it("a Friday drag through changeover stages closed times and Save sends all seve
       "/management-api/venue-service/zones/z1/closed-week",
       "PUT",
       {
+        expectedClockRevision: 0,
         days: [
           { weekday: 0, ranges: [] },
           { weekday: 1, ranges: [{ startsAt: "10:00", endsAt: "11:00" }] },

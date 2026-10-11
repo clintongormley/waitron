@@ -1,4 +1,4 @@
-import type { Decimal, DeviceId, NodeId, Source, TimingBand } from "@waitron/shared";
+import type { CutoverChange, Decimal, DeviceId, NodeId, Source, TimingBand } from "@waitron/shared";
 import type { LiquidationPeriod } from "./period.js";
 
 /** A tender method, mirroring `tenderMethod` in packages/db/src/schema/sales.ts. */
@@ -13,6 +13,7 @@ export interface DailyCloseInput {
   timeZone: string;
   /** "HH:MM" time-of-day in `timeZone` at which the business day starts, e.g. "05:00". */
   dayCutover: string;
+  cutoverChanges: readonly CutoverChange[];
 }
 
 export interface PeriodVatInput {
@@ -26,6 +27,7 @@ export interface PeriodVatInput {
   timeZone: string;
   /** "HH:MM" time-of-day in `timeZone` at which the business day starts, e.g. "05:00". */
   dayCutover: string;
+  cutoverChanges: readonly CutoverChange[];
 }
 
 /** The top-sellers query: the same (optional node, business-day range, clock) scope as a

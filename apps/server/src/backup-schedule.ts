@@ -1,11 +1,9 @@
 import { createHash } from "node:crypto";
 import type { BackupSchedule } from "./backup-config.js";
 
-export interface ScheduleClock {
-  timeZone: string;
-  /** "HH:MM", the anchor `at: "auto"` schedules off. */
-  dayCutover: string;
-}
+import { businessDayBoundaryAt, type BusinessDayClock } from "@waitron/shared";
+
+export type ScheduleClock = BusinessDayClock;
 
 export const AUTO_MARGIN_MINUTES = 30;
 /** The longest single sleep, so a clock jump is noticed within the hour. */
@@ -67,33 +65,25 @@ export function nextFireMs(
 ): number {
   if (schedule.kind === "interval") return now.getTime() + schedule.ms;
 
-  let hour: number;
-  let minute: number;
-  if (schedule.at === "auto") {
-    const [ch, cm] = clock.dayCutover.split(":").map(Number);
-    const total = ch * 60 + cm + AUTO_MARGIN_MINUTES + jitterMinutes(jitterSeed);
-    hour = Math.floor(total / 60) % 24;
-    minute = total % 60;
-  } else {
-    hour = schedule.at.hour;
-    minute = schedule.at.minute;
-  }
-
   const allowed = (wd: number) => schedule.days === "daily" || schedule.days.includes(wd);
   // Steps the local CIVIL date, not elapsed 24h: a spring-forward day is shorter than 24h, and
   // elapsed days can skip its date and could jump a week past an allowed weekday.
   const start = localParts(now, clock.timeZone);
-  for (let add = 0; add <= 7; add++) {
+  for (let add = schedule.at === "auto" ? -1 : 0; add <= 7; add++) {
     const civil = new Date(Date.UTC(start.year, start.month - 1, start.day + add));
     if (!allowed(civil.getUTCDay())) continue;
-    const fire = instantOfLocal(
-      civil.getUTCFullYear(),
-      civil.getUTCMonth() + 1,
-      civil.getUTCDate(),
-      hour,
-      minute,
-      clock.timeZone,
-    );
+    const fire =
+      schedule.at === "auto"
+        ? Date.parse(businessDayBoundaryAt(clock, civil.toISOString().slice(0, 10))) +
+          (AUTO_MARGIN_MINUTES + jitterMinutes(jitterSeed)) * 60000
+        : instantOfLocal(
+            civil.getUTCFullYear(),
+            civil.getUTCMonth() + 1,
+            civil.getUTCDate(),
+            schedule.at.hour,
+            schedule.at.minute,
+            clock.timeZone,
+          );
     if (fire > now.getTime()) return fire;
   }
   // Reached when no weekday is allowed.

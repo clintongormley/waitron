@@ -1,3 +1,4 @@
+import { serviceDayContext } from "./service-day-context.js";
 import { and, eq, ne } from "drizzle-orm";
 import type { Transaction } from "@waitron/db";
 import type { KeepOpenSubject } from "@waitron/module";
@@ -14,9 +15,10 @@ import {
 import { zoneExtensions } from "./schema/zone-extensions.js";
 import { periodExtensions } from "./schema/period-extensions.js";
 import {
-  clockTimeSkipped,
+  clockTimeSkippedInDay,
   minuteOfServiceDay,
   rangeSpan,
+  rangeSpanInDay,
   serviceMomentAt,
   withExtension,
   SERVICE_STEP_MINUTES,
@@ -30,10 +32,15 @@ async function context(tx: Transaction, cfg: VenueScope, zoneId: string, at: Dat
   const clock = await readLocationClock(tx, cfg.locationId);
   const moment = serviceMomentAt(at, clock);
   const day = await departmentDay(tx, cfg, departmentId, moment, clock);
-  const ranges = withExtension(day.ranges, day.extension, clock.dayCutover);
+  const dayContext = moment === null ? null : serviceDayContext(clock, moment.businessDay);
+  const cutover = dayContext?.dayCutover ?? clock.dayCutover;
+  const limit = Math.min(dayContext?.endMinute ?? 1440, 1440);
+  const ranges = withExtension(day.ranges, day.extension, cutover);
   const subject =
-    day.ranges.length === 0 ? null : keepOpenSubject(ranges, day, moment, clock.dayCutover);
-  return { departmentId, clock, moment, day, subject };
+    day.ranges.length === 0
+      ? null
+      : keepOpenSubject(ranges, day, moment, cutover, dayContext ?? undefined);
+  return { departmentId, clock, moment, day, subject, dayContext, cutover, limit };
 }
 
 function endMinute(time: string, cutover: string): number {
@@ -60,28 +67,25 @@ export async function readKeepOpen(
   const c = await context(tx, cfg, zoneId, at);
   const zone = await readZoneKeepOpen(tx, cfg, zoneId, at);
   if (c.subject === null || c.moment === null) return { period: null, zone };
-  const start = Math.max(c.moment.minute, endMinute(scheduledEnd(c), c.clock.dayCutover));
-  const cutoverMinute =
-    Number(c.clock.dayCutover.slice(0, 2)) * 60 + Number(c.clock.dayCutover.slice(3, 5));
+  const start = Math.max(c.moment.minute, endMinute(scheduledEnd(c), c.cutover));
+  const cutoverMinute = Number(c.cutover.slice(0, 2)) * 60 + Number(c.cutover.slice(3, 5));
   const choices: string[] = [];
   for (
     let minute =
       (Math.floor((start + cutoverMinute) / SERVICE_STEP_MINUTES) + 1) * SERVICE_STEP_MINUTES -
       cutoverMinute;
-    minute <= 1440;
+    minute <= c.limit;
     minute += SERVICE_STEP_MINUTES
   ) {
-    const time = clockTime(minute, c.clock.dayCutover);
-    if (!clockTimeSkipped(c.moment.businessDay, time, c.clock.dayCutover, c.clock.timeZone, true))
-      choices.push(time);
+    const time = clockTime(minute, c.cutover);
+    if (!clockTimeSkippedInDay(c.clock, c.moment.businessDay, time, true)) choices.push(time);
   }
   const next = serviceRuns(c.day.ranges).find(
     (range) =>
       range.periodId !== c.subject!.periodId &&
-      rangeSpan(range, c.clock.dayCutover).start >=
-        endMinute(scheduledEnd(c), c.clock.dayCutover) &&
-      rangeSpan(range, c.clock.dayCutover).start <
-        (choices.length === 0 ? 0 : endMinute(choices.at(-1)!, c.clock.dayCutover)),
+      rangeSpan(range, c.cutover).start >= endMinute(scheduledEnd(c), c.cutover) &&
+      rangeSpan(range, c.cutover).start <
+        (choices.length === 0 ? 0 : endMinute(choices.at(-1)!, c.cutover)),
   );
   return {
     zone,
@@ -91,7 +95,7 @@ export async function readKeepOpen(
       endsAt: c.subject.endsAt,
       running: c.subject.running,
       extendedUntil: c.subject.extendedUntil,
-      dayEndsAt: c.clock.dayCutover,
+      dayEndsAt: clockTime(c.dayContext?.endMinute ?? 1440, c.cutover),
       choices,
       next:
         next === undefined
@@ -122,18 +126,10 @@ export async function keepPeriodOpen(
       throw new AppError("period_extension.invalid", { field: "until", reason });
     };
     if (!/^(?:[01]\d|2[0-3]):(?:00|15|30|45)$/.test(input.until)) invalid("step");
-    const end = endMinute(input.until, c.clock.dayCutover);
-    if (end <= c.moment.minute || end <= endMinute(startsAt, c.clock.dayCutover))
+    const end = endMinute(input.until, c.cutover);
+    if (end > c.limit || end <= c.moment.minute || end <= endMinute(startsAt, c.cutover))
       invalid("not_later");
-    if (
-      clockTimeSkipped(
-        c.moment.businessDay,
-        input.until,
-        c.clock.dayCutover,
-        c.clock.timeZone,
-        true,
-      )
-    )
+    if (clockTimeSkippedInDay(c.clock, c.moment.businessDay, input.until, true))
       invalid("clock_skips");
   }
   await tx
@@ -177,15 +173,21 @@ async function zoneContext(tx: Transaction, cfg: VenueScope, zoneId: string, at:
   const closure =
     c.moment === null
       ? undefined
-      : c.ranges.find((range) => rangeSpan(range, c.clock.dayCutover).end > c.moment!.minute);
+      : c.ranges.find((range) => rangeSpanInDay(range, c.dayContext).end > c.moment!.minute);
   const day = await departmentDay(tx, cfg, departmentId, c.moment, c.clock);
   const openRanges =
-    day.ranges.length === 0 ? [] : withExtension(day.ranges, day.extension, c.clock.dayCutover);
+    day.ranges.length === 0 ? [] : withExtension(day.ranges, day.extension, c.cutover);
   const extended =
     c.moment === null || closure === undefined
       ? null
-      : zoneExtensionForRange(c.extension, closure, c.clock.dayCutover);
-  return { ...c, closure, openRanges, extended };
+      : zoneExtensionForRange(c.extension, closure, c.cutover);
+  return {
+    ...c,
+    closure,
+    openRanges,
+    extended,
+    limit: Math.min(c.dayContext?.endMinute ?? 1440, 1440),
+  };
 }
 
 function departmentCovers(
@@ -217,27 +219,26 @@ export async function readZoneKeepOpen(
     .select({ name: floorZones.name })
     .from(floorZones)
     .where(eq(floorZones.id, zoneId));
-  const start = Math.max(c.moment.minute, rangeSpan(c.closure, c.clock.dayCutover).start);
+  const start = Math.max(c.moment.minute, rangeSpan(c.closure, c.cutover).start);
   const choices: string[] = [];
-  for (let minute = start + 1; minute <= 1440; minute++) {
-    const time = clockTime(minute, c.clock.dayCutover);
+  for (let minute = start + 1; minute <= c.limit; minute++) {
+    const time = clockTime(minute, c.cutover);
     if (!/:(00|15|30|45)$/.test(time)) continue;
-    if (!departmentCovers(c.openRanges, start, minute, c.clock.dayCutover)) continue;
-    if (!clockTimeSkipped(c.moment.businessDay, time, c.clock.dayCutover, c.clock.timeZone, true))
-      choices.push(time);
+    if (!departmentCovers(c.openRanges, start, minute, c.cutover)) continue;
+    if (!clockTimeSkippedInDay(c.clock, c.moment.businessDay, time, true)) choices.push(time);
   }
   const extended = c.extended;
-  const effective = withoutZoneExtension(c.ranges, c.extension, c.clock.dayCutover);
+  const effective = withoutZoneExtension(c.ranges, c.extension, c.cutover);
   return {
     id: zoneId,
     name: zone!.name,
     endsAt: extended?.endsAt ?? c.closure.startsAt,
     running: !effective.some((range) => {
-      const span = rangeSpan(range, c.clock.dayCutover);
+      const span = rangeSpanInDay(range, c.dayContext);
       return span.start <= c.moment!.minute && c.moment!.minute < span.end;
     }),
     extendedUntil: extended?.endsAt ?? null,
-    dayEndsAt: c.clock.dayCutover.slice(0, 5),
+    dayEndsAt: clockTime(c.dayContext?.endMinute ?? 1440, c.cutover),
     choices,
     next: null,
   };
@@ -259,20 +260,12 @@ export async function keepZoneOpen(
       throw new AppError("zone_extension.invalid", { field: "until", reason });
     };
     if (!/^(?:[01]\d|2[0-3]):(?:00|15|30|45)$/.test(input.until)) invalid("step");
-    const end = endMinute(input.until, c.clock.dayCutover);
-    const start = Math.max(c.moment.minute, rangeSpan(c.closure, c.clock.dayCutover).start);
-    if (end <= start) invalid("not_later");
-    if (
-      clockTimeSkipped(
-        c.moment.businessDay,
-        input.until,
-        c.clock.dayCutover,
-        c.clock.timeZone,
-        true,
-      )
-    )
+    const end = endMinute(input.until, c.cutover);
+    const start = Math.max(c.moment.minute, rangeSpan(c.closure, c.cutover).start);
+    if (end > c.limit || end <= start) invalid("not_later");
+    if (clockTimeSkippedInDay(c.clock, c.moment.businessDay, input.until, true))
       invalid("clock_skips");
-    if (!departmentCovers(c.openRanges, start, end, c.clock.dayCutover))
+    if (!departmentCovers(c.openRanges, start, end, c.cutover))
       throw new AppError("zone_extension.not_allowed", { zoneId, reason: "department_closed" });
   }
   await tx
@@ -296,8 +289,7 @@ export async function keepZoneOpen(
     businessDay: c.moment.businessDay,
     startsAt: storedTime(
       c.extended !== null &&
-        rangeSpan(c.extended, c.clock.dayCutover).start <
-          rangeSpan(c.closure!, c.clock.dayCutover).start
+        rangeSpan(c.extended, c.cutover).start < rangeSpan(c.closure!, c.cutover).start
         ? c.extended.startsAt
         : c.closure!.startsAt,
     ),

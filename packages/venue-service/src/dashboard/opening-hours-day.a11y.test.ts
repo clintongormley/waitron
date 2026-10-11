@@ -37,6 +37,10 @@ describe.each(["light", "dark"] as const)("Opening Day (%s)", (theme) => {
         if (method !== "GET")
           throw { code: "menu_timetable.invalid", params: { field: "days.1.slots" } };
         return {
+          businessDayClock: { timeZone: "Europe/Madrid", dayCutover: "06:00", cutoverChanges: [] },
+          clockRevision: 0,
+          currentBusinessDay: "2026-10-12",
+          pending: null,
           timeZone: "Europe/Madrid",
           clockReadable: state !== "clock",
           dayCutover: "06:00",

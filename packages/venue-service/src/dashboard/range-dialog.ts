@@ -55,6 +55,7 @@ export class RangeDialog extends LitElement {
   @property({ attribute: false }) businessDate?: string;
   @property({ attribute: false }) timeZone?: string;
   @property() dayCutover = "06:00";
+  @property({ attribute: false }) endMinute = 1440;
   @property({ attribute: false }) range: ClosedRange | ServiceRange = {
     startsAt: "",
     endsAt: "",
@@ -126,7 +127,8 @@ export class RangeDialog extends LitElement {
     }
     if (!errors.startsAt && !errors.endsAt) {
       const current = span(this.draft, this.dayCutover);
-      if (current.end <= current.start) errors.endsAt = t("opening.range_order");
+      if (current.end <= current.start || current.end > Math.min(1440, this.endMinute))
+        errors.endsAt = t("opening.range_order");
       else if (
         this.occupied.some((range) => {
           const neighbour = span(range, this.dayCutover);

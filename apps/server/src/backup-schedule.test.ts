@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { AUTO_MARGIN_MINUTES, MAX_SLEEP_MS, nextFireMs } from "./backup-schedule.js";
 
-const MADRID = { timeZone: "Europe/Madrid", dayCutover: "05:00" };
+const MADRID = { timeZone: "Europe/Madrid", dayCutover: "05:00", cutoverChanges: [] };
 
 // Mirrors the scheduler's `Intl` view so an assertion does not trust the implementation.
 function localHour(ms: number, timeZone: string): { hour: number; minute: number; day: number } {
@@ -135,5 +135,89 @@ describe("nextFireMs", () => {
     expect(
       nextFireMs({ kind: "wall-clock", days: [], at: { hour: 3, minute: 0 } }, MADRID, now, "n1"),
     ).toBe(now.getTime() + 24 * 60 * 60 * 1000);
+  });
+});
+
+describe("automatic backups use each candidate business-day boundary", () => {
+  it.each([
+    ["03:00", "2026-11-04T02:36:00.000Z"],
+    ["07:00", "2026-11-04T06:36:00.000Z"],
+  ])("uses tomorrow's %s start while today's start is unchanged", (dayCutover, expected) => {
+    const clock = {
+      ...MADRID,
+      cutoverChanges: [{ effectiveBusinessDay: "2026-11-04", dayCutover }],
+    };
+    expect(
+      new Date(
+        nextFireMs(
+          { kind: "wall-clock", days: "daily", at: "auto" },
+          clock,
+          new Date("2026-11-03T23:00:00Z"),
+          "node-A",
+        ),
+      ).toISOString(),
+    ).toBe(expected);
+  });
+
+  it.each([
+    ["2026-03-29T00:00:00Z", "2026-03-29T02:06:00.000Z"],
+    ["2026-10-25T00:00:00Z", "2026-10-25T02:06:00.000Z"],
+  ])("adds elapsed margin after the DST boundary at %s", (now, expected) => {
+    const clock = { timeZone: "Europe/Madrid", dayCutover: "02:30", cutoverChanges: [] };
+    expect(
+      new Date(
+        nextFireMs(
+          { kind: "wall-clock", days: "daily", at: "auto" },
+          clock,
+          new Date(now),
+          "node-A",
+        ),
+      ).toISOString(),
+    ).toBe(expected);
+  });
+
+  it("includes yesterday's late boundary and filters by its weekday", () => {
+    const clock = { timeZone: "UTC", dayCutover: "23:50", cutoverChanges: [] };
+    expect(
+      new Date(
+        nextFireMs(
+          { kind: "wall-clock", days: [3], at: "auto" },
+          clock,
+          new Date("2026-11-05T00:05:00Z"),
+          "node-A",
+        ),
+      ).toISOString(),
+    ).toBe("2026-11-05T00:26:00.000Z");
+    expect(
+      new Date(
+        nextFireMs(
+          { kind: "wall-clock", days: [4], at: "auto" },
+          clock,
+          new Date("2026-11-05T00:05:00Z"),
+          "node-A",
+        ),
+      ).toISOString(),
+    ).toBe("2026-11-06T00:26:00.000Z");
+  });
+
+  it("keeps explicit wall time and intervals independent of cutover changes", () => {
+    const clock = {
+      ...MADRID,
+      cutoverChanges: [{ effectiveBusinessDay: "2026-11-04", dayCutover: "07:00" }],
+    };
+    const now = new Date("2026-11-03T23:00:00Z");
+    expect(
+      new Date(
+        nextFireMs(
+          { kind: "wall-clock", days: "daily", at: { hour: 3, minute: 15 } },
+          clock,
+          now,
+          "node-A",
+        ),
+      ).toISOString(),
+    ).toBe("2026-11-04T02:15:00.000Z");
+    expect(nextFireMs({ kind: "interval", ms: 1234 }, clock, now, "node-A")).toBe(
+      now.getTime() + 1234,
+    );
   });
 });

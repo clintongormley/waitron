@@ -1,3 +1,4 @@
+import { readBusinessDayScheduleRevision } from "../business-day-schedule.js";
 import { and, asc, eq } from "drizzle-orm";
 import { catalogues, locations, type Transaction } from "@waitron/db";
 import { AppError } from "@waitron/shared";
@@ -35,11 +36,17 @@ export async function offerMenuThroughZone(
     .where(and(eq(menuPeriods.departmentId, policy.departmentId), eq(menuPeriods.name, "Always")));
   const period =
     stored ??
-    (await saveMenuPeriod(tx, cfg, policy.departmentId, {
-      name: "Always",
-      menuId,
-      staffMenuIds: [],
-    }));
+    (await saveMenuPeriod(
+      tx,
+      cfg,
+      policy.departmentId,
+      {
+        name: "Always",
+        menuId,
+        staffMenuIds: [],
+      },
+      await readBusinessDayScheduleRevision(tx, cfg),
+    ));
   if (stored !== undefined) {
     const staff = await tx
       .select({
@@ -56,10 +63,16 @@ export async function offerMenuThroughZone(
       entries.push({ menuId: stored.menuId, displayOrder: 0 });
     if (menuId !== customer) entries.push({ menuId, displayOrder: options.displayOrder ?? 0 });
     entries.sort((a, b) => a.displayOrder - b.displayOrder || a.menuId.localeCompare(b.menuId));
-    await updateMenuPeriod(tx, cfg, period.id, {
-      menuId: customer,
-      staffMenuIds: entries.map((entry) => entry.menuId),
-    });
+    await updateMenuPeriod(
+      tx,
+      cfg,
+      period.id,
+      {
+        menuId: customer,
+        staffMenuIds: entries.map((entry) => entry.menuId),
+      },
+      await readBusinessDayScheduleRevision(tx, cfg),
+    );
     for (const entry of entries)
       await tx
         .update(menuPeriodStaffMenus)
@@ -89,5 +102,6 @@ export async function offerMenuThroughZone(
       ],
     })),
     new Date(),
+    await readBusinessDayScheduleRevision(tx, cfg),
   );
 }

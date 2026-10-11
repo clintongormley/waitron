@@ -1,8 +1,10 @@
-import { venueMomentAt } from "@waitron/reporting";
+import type { BusinessDayClock } from "@waitron/shared";
+import { civilDateOf, venueMomentAt } from "@waitron/reporting";
 import { AppError, isUuid } from "@waitron/shared";
 import { addDays, weekdayOf } from "./hours-rules.js";
 import { localTimeOccurrences } from "./hours-occurrences.js";
 import { invalidTimetable } from "./menu-timetable-rules.js";
+import { serviceDayContext, type ServiceDayContext } from "./service-day-context.js";
 import "./errors.js";
 
 export interface ServiceRange {
@@ -108,27 +110,43 @@ export function parseClosedRanges(value: unknown, field: string, cutover: string
   );
 }
 
-export function serviceMomentAt(
-  at: Date,
-  clock: { timeZone: string; dayCutover: string },
-): ServiceMoment | null {
+export function serviceMomentAt(at: Date, clock: BusinessDayClock): ServiceMoment | null {
   const moment = venueMomentAt(at, clock);
   if (moment === null) return null;
   return {
     businessDay: moment.businessDay,
     weekday: weekdayOf(moment.businessDay),
-    minute: minuteOfServiceDay(moment.timeOfDay, clock.dayCutover),
+    minute:
+      (Date.parse(`${civilDateOf(at, clock.timeZone)}T00:00:00Z`) -
+        Date.parse(`${moment.businessDay}T00:00:00Z`)) /
+        60_000 +
+      clockMinutes(moment.timeOfDay) -
+      clockMinutes(serviceDayContext(clock, moment.businessDay).dayCutover),
   };
+}
+
+export function rangeSpanInDay(
+  range: Pick<ServiceRange, "startsAt" | "endsAt">,
+  context: Pick<ServiceDayContext, "dayCutover" | "endMinute">,
+): { start: number; end: number } {
+  const span = rangeSpan(range, context.dayCutover);
+  // A chronological moment is still inside this day's boundary during a repeated/skipped hour.
+  if (range.endsAt.slice(0, 5) === context.dayCutover && context.endMinute === 1440)
+    span.end = Infinity;
+  else span.end = Math.min(span.end, context.endMinute);
+  return span;
 }
 
 export function rangeInForce(
   ranges: readonly ServiceRange[],
   minute: number,
   cutover: string,
+  context?: ServiceDayContext,
 ): ServiceRange | null {
   return (
     ranges.find((range) => {
-      const { start, end } = rangeSpan(range, cutover);
+      const { start, end } =
+        context === undefined ? rangeSpan(range, cutover) : rangeSpanInDay(range, context);
       return start <= minute && minute < end;
     }) ?? null
   );
@@ -177,4 +195,15 @@ export function clockTimeSkipped(
       ? addDays(businessDay, 1)
       : calendarDateOfTime(businessDay, time, cutover);
   return localTimeOccurrences(date, time, timeZone).length === 0;
+}
+
+export function clockTimeSkippedInDay(
+  clock: BusinessDayClock,
+  businessDay: string,
+  time: string,
+  asEnd: boolean,
+): boolean {
+  const context = serviceDayContext(clock, businessDay);
+  if (asEnd && time === context.dayCutover && context.endMinute === 1440) return false;
+  return clockTimeSkipped(businessDay, time, context.dayCutover, clock.timeZone, asEnd);
 }

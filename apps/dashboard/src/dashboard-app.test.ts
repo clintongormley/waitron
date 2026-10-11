@@ -7447,6 +7447,10 @@ describe("mounted public department pages", () => {
       if (url === "/management-api/venue-service") return structuredClone(model) as never;
       if (url === "/management-api/venue-service/opening-hours")
         return {
+          businessDayClock: { timeZone: "Europe/Madrid", dayCutover: "06:00", cutoverChanges: [] },
+          clockRevision: 0,
+          currentBusinessDay: "2026-10-12",
+          pending: null,
           timeZone: "Europe/Madrid",
           clockReadable: true,
           dayCutover: "06:00",

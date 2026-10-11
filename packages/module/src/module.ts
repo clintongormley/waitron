@@ -2,6 +2,7 @@ import semver from "semver";
 import type { Hono } from "hono";
 import { AppError } from "@waitron/shared";
 import type {
+  BusinessDayClock,
   DepartmentReceiptConfig,
   DepartmentReceiptScope,
   ReceiptLogoRaster,
@@ -536,8 +537,39 @@ export interface StationNotice {
   createdAt: string;
 }
 
+export interface BusinessDayClockConflict {
+  departmentId: string;
+  departmentName?: string;
+  zoneName?: string;
+  periodName?: string;
+  specialDateName?: string;
+  startsAt?: string;
+  endsAt?: string;
+  zoneId?: string;
+  weekday?: number;
+  specialDateId?: string;
+  date?: string;
+  periodId?: string;
+  rangeIndex: number;
+  reason: "range" | "endpoint_day" | "all_day" | "sending_cutoff" | "transition_strip";
+}
+
 /** Venue-service decisions consumed by generic ordering code inside its existing transaction. */
 export interface VenueServiceContribution {
+  assertBusinessDayClockChange(
+    tx: Transaction,
+    cfg: { locationId: LocationId },
+    before: BusinessDayClock,
+    candidate: BusinessDayClock,
+    effectiveBusinessDay: string,
+  ): Promise<void>;
+  assertBusinessDayScheduleWrite(
+    tx: Transaction,
+    cfg: { locationId: LocationId },
+    changeKind: "time" | "metadata",
+    at: Date,
+    expectedClockRevision: number,
+  ): Promise<void>;
   assertPeriodEndOffsets(tx: Transaction, cfg: { locationId: LocationId }): Promise<void>;
   listDepartmentTransferDestinations(
     tx: Transaction,

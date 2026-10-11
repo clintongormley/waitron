@@ -45,6 +45,7 @@ function run(
   overrides: Partial<CategorySalesInput> = {},
 ): Promise<CategoryReport> {
   const input: CategorySalesInput = {
+    cutoverChanges: [],
     nodeId: venue.nodeId,
     fromBusinessDay: "2026-08-01",
     toBusinessDay: "2026-08-31",

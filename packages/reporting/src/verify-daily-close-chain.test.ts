@@ -26,7 +26,6 @@ function record(businessDay: string, cashCounts: CashCountInput[]): Promise<Dail
       nodeId: venue.nodeId,
       businessDay,
       timeZone: "Europe/Madrid",
-      dayCutover: "05:00",
       closedBy: CLOSED_BY,
       cashCounts,
     });

@@ -2,6 +2,16 @@ import type { VenueDetailsModel, VenueDetailValues, VenueClockPreview } from "..
 
 export function venueDetailsFixture(details: Partial<VenueDetailValues> = {}): VenueDetailsModel {
   return {
+    businessDayClock: {
+      clock: {
+        timeZone: details.timeZone ?? "Europe/Madrid",
+        dayCutover: details.dayCutover ?? "06:00",
+        cutoverChanges: [],
+      },
+      revision: 0,
+      currentBusinessDay: "2026-10-06",
+      pending: null,
+    },
     details: {
       name: "Venue",
       addressLine1: "Calle Mayor 1",

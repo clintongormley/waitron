@@ -41,6 +41,7 @@ function run(
   classifier?: CurrentClassifier,
 ): Promise<CategoryReport> {
   const input: CategorySalesInput = {
+    cutoverChanges: [],
     nodeId: venue.nodeId,
     fromBusinessDay: "2026-08-01",
     toBusinessDay: "2026-08-31",
@@ -64,6 +65,7 @@ describe("computeCategorySales: preconditions", () => {
     const execute = vi.fn();
     const tx = { execute } as unknown as Transaction;
     const input: CategorySalesInput = {
+      cutoverChanges: [],
       fromBusinessDay: "2026-08-01",
       toBusinessDay: "2026-08-31",
       timeZone: TZ,

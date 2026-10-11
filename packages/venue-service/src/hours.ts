@@ -1,3 +1,4 @@
+import { assertBusinessDayScheduleWrite } from "./business-day-schedule.js";
 import { and, asc, eq, ne } from "drizzle-orm";
 import { newId, type Transaction } from "@waitron/db";
 import { AppError } from "@waitron/shared";
@@ -141,6 +142,7 @@ export async function saveSpecialDate<Input extends SpecialDateInput>(
   input: Input,
   at: Date,
   participants: readonly SpecialDateParticipant[] = [],
+  expectedClockRevision: number,
 ): Promise<SpecialDate> {
   const inputFields = parseSpecialDateInput(input);
   const current = id === null ? null : await requireSpecialDate(tx, cfg, id);
@@ -154,6 +156,19 @@ export async function saveSpecialDate<Input extends SpecialDateInput>(
     ownHours:
       inputFields.ownHours === undefined ? (current?.ownHours ?? false) : inputFields.ownHours,
   };
+  const timeChanged =
+    current === null ||
+    current.date !== parsed.date ||
+    (current.repeatOn !== null) !== parsed.repeats ||
+    current.ownHours !== parsed.ownHours ||
+    current.closeWholeVenue !== parsed.closeWholeVenue;
+  await assertBusinessDayScheduleWrite(
+    tx,
+    cfg,
+    timeChanged ? "time" : "metadata",
+    at,
+    expectedClockRevision,
+  );
   if (parsed.ownHours && parsed.closeWholeVenue) invalidHours("ownHours");
   await assertNamedDayAvailable(tx, cfg, parsed.date, parsed.repeats, id);
 
@@ -275,9 +290,11 @@ export async function duplicateSpecialDate(
   dates: readonly LocalDate[],
   at: Date,
   participants: readonly SpecialDateParticipant[] = [],
+  expectedClockRevision: number,
 ): Promise<SpecialDate[]> {
   const targets = parseDuplicateDates(dates);
   const source = await requireSpecialDate(tx, cfg, sourceId);
+  await assertBusinessDayScheduleWrite(tx, cfg, "time", at, expectedClockRevision);
   for (const date of targets) await assertNamedDayAvailable(tx, cfg, date, false, null);
 
   const values = {
@@ -321,8 +338,10 @@ export async function deleteSpecialDate(
   id: string,
   at: Date,
   participants: readonly SpecialDateParticipant[] = [],
+  expectedClockRevision: number,
 ): Promise<void> {
   await requireSpecialDate(tx, cfg, id);
+  await assertBusinessDayScheduleWrite(tx, cfg, "time", at, expectedClockRevision);
   for (const participant of participants) await participant.beforeDelete(tx, cfg, id, at);
   await tx.delete(specialDates).where(eq(specialDates.id, id));
   for (const participant of participants) await participant.afterChange?.(tx, cfg, "date", at);

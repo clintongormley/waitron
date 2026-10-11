@@ -1,3 +1,4 @@
+import { readBusinessDayScheduleRevision } from "@waitron/venue-service";
 // Sales are seeded after the main transaction commits, because each sale opens its own transaction
 // and reads the committed products.
 
@@ -146,6 +147,7 @@ export async function seedDemoRestaurant(
         weekday,
         ranges: [{ startsAt: "23:00", endsAt: dayCutover }],
       })),
+      await readBusinessDayScheduleRevision(tx, { locationId: brandLocationId(locationId) }),
     );
   });
   return { passStationIds };

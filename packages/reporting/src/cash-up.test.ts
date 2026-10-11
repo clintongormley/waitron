@@ -25,6 +25,7 @@ beforeEach(async () => {
 });
 function run(overrides: Partial<DailyCloseInput> = {}): Promise<CashUp> {
   const input: DailyCloseInput = {
+    cutoverChanges: [],
     nodeId: venue.nodeId,
     businessDay: DAY,
     timeZone: "Europe/Madrid",

@@ -20,9 +20,17 @@ it("edits named-day facts without reading station hours or sending station cells
     expect(parseSpecialDateInput(body)).toEqual(input);
     return { id: "named day", ...input };
   }) as DashboardRequest);
-  expect(await api.saveDay("named day", input)).toEqual({ id: "named day", ...input });
+  expect(await api.saveDay("named day", input, () => true, 0)).toEqual({
+    id: "named day",
+    ...input,
+  });
   expect(requests).toEqual([
-    ["/management-api/venue-service/special-dates/named%20day", "PUT", input, undefined],
+    [
+      "/management-api/venue-service/special-dates/named%20day",
+      "PUT",
+      { ...input, expectedClockRevision: 0 },
+      undefined,
+    ],
   ]);
 });
 
@@ -33,9 +41,14 @@ it("creates a named day with exactly its calendar facts", async () => {
     expect(parseSpecialDateInput(body)).toEqual(input);
     return { id: "created", ...input };
   }) as DashboardRequest);
-  expect(await api.saveDay(null, input)).toEqual({ id: "created", ...input });
+  expect(await api.saveDay(null, input, () => true, 0)).toEqual({ id: "created", ...input });
   expect(requests).toEqual([
-    ["/management-api/venue-service/special-dates", "POST", input, undefined],
+    [
+      "/management-api/venue-service/special-dates",
+      "POST",
+      { ...input, expectedClockRevision: 0 },
+      undefined,
+    ],
   ]);
 });
 
@@ -64,8 +77,13 @@ it("returns a calendar write refusal without a preceding station read", async ()
     if (method === "GET") throw new Error("retired station-hours reader");
     throw refusal;
   }) as DashboardRequest);
-  await expect(api.saveDay("source", input)).rejects.toEqual(refusal);
+  await expect(api.saveDay("source", input, () => true, 0)).rejects.toEqual(refusal);
   expect(requests).toEqual([
-    ["/management-api/venue-service/special-dates/source", "PUT", input, undefined],
+    [
+      "/management-api/venue-service/special-dates/source",
+      "PUT",
+      { ...input, expectedClockRevision: 0 },
+      undefined,
+    ],
   ]);
 });

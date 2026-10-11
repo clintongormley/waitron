@@ -151,6 +151,15 @@ export type {
 export type { ClassificationEntry, SaleLineClassification } from "./sale-line-classification.js";
 export { compareLabels, createLabelComparator } from "./compare-labels.js";
 export {
+  businessDayAt,
+  businessDayBoundaryAt,
+  businessDayBounds,
+  cutoverForBusinessDay,
+  type BusinessDayClock,
+  type BusinessDayBounds,
+  type CutoverChange,
+} from "./business-day-clock.js";
+export {
   compareSearchRanks,
   foldCache,
   foldForSearch,

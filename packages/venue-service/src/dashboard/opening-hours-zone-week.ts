@@ -1,3 +1,5 @@
+import type { BusinessDayClock } from "@waitron/shared";
+import { serviceDayContext } from "../service-day-context.js";
 import { LitElement, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { keyed } from "lit/directives/keyed.js";
@@ -76,6 +78,10 @@ export class OpeningHoursZoneWeek extends LitElement {
   @property({ attribute: false }) department!: Department;
   @property({ attribute: false }) zone!: Zone;
   @property() dayCutover = "06:00";
+  @property({ attribute: false }) clockRevision!: number;
+  private draftRevision!: number;
+  @property({ attribute: false }) businessDayClock?: BusinessDayClock;
+  private draftClock?: BusinessDayClock;
   @property({ type: Boolean }) readOnly = false;
   @property() weekStart = "";
   @property({ attribute: false }) namedDays: OpeningHoursModel["namedDays"] = [];
@@ -109,7 +115,10 @@ export class OpeningHoursZoneWeek extends LitElement {
     if (!this.source) this.seedDraft();
     this.registerScopes();
     if (
-      (this.source !== this.zone || this.sourceNamedDays !== this.namedDays) &&
+      (this.source !== this.zone ||
+        this.sourceNamedDays !== this.namedDays ||
+        this.draftRevision !== this.clockRevision ||
+        this.draftClock !== this.businessDayClock) &&
       !this.saving &&
       !this.dirty()
     )
@@ -119,6 +128,8 @@ export class OpeningHoursZoneWeek extends LitElement {
     this.registerScopes();
   }
   private seedDraft() {
+    this.draftRevision = this.clockRevision;
+    this.draftClock = this.businessDayClock;
     this.draft = Array.from({ length: 7 }, (_, weekday) => ({
       weekday,
       ranges: (this.zone.week.find((day) => day.weekday === weekday)?.ranges ?? []).map(
@@ -207,11 +218,12 @@ export class OpeningHoursZoneWeek extends LitElement {
   }
   private stage(weekday: number, ranges: readonly ClosedRange[]) {
     if (!this.canEditDay(weekday)) return;
+    const cutover = this.dayContext(weekday)?.dayCutover ?? this.dayCutover;
     const minute = (time: string) =>
       (Number(time.slice(0, 2)) * 60 +
         Number(time.slice(3)) -
-        Number(this.dayCutover.slice(0, 2)) * 60 -
-        Number(this.dayCutover.slice(3)) +
+        Number(cutover.slice(0, 2)) * 60 -
+        Number(cutover.slice(3)) +
         1440) %
       1440;
     this.draft = this.draft.map((day) =>
@@ -283,8 +295,13 @@ export class OpeningHoursZoneWeek extends LitElement {
       if (this.weekStart && weekday !== undefined) {
         const named = this.namedDay(weekday);
         if (!named?.ownHours || named.closeWholeVenue) return;
-        await this.api.saveZoneDate(named.id, this.zone.id, submitted[weekday]!.ranges);
-      } else await this.api.saveZoneWeek(this.zone.id, submitted);
+        await this.api.saveZoneDate(
+          named.id,
+          this.zone.id,
+          submitted[weekday]!.ranges,
+          this.draftRevision,
+        );
+      } else await this.api.saveZoneWeek(this.zone.id, submitted, this.draftRevision);
     } catch (error) {
       if (generation !== this.generation || !this.isConnected) return;
       const invalid = codeOf(error) === "zone_closed_time.invalid";
@@ -322,13 +339,18 @@ export class OpeningHoursZoneWeek extends LitElement {
       this.api.rereadWatches();
     }
   }
+  private dayContext(weekday: number) {
+    return this.weekStart && this.draftClock
+      ? serviceDayContext(this.draftClock, dateInWeek(this.weekStart, weekday))
+      : undefined;
+  }
   override render() {
     const opening = this.opening,
       copying = this.copying,
       state = saveActionState(this.scope);
     return html`<service-grid
         .dayCutover=${this.dayCutover}
-        .columns=${order.map((weekday) => ({ key: String(weekday), label: this.dayLabel(weekday), slots: this.slots(weekday), periods: this.department.periods, layer: "closed" as const, closed: this.draft[weekday]?.ranges ?? [], editable: this.canEditDay(weekday) && !this.readOnly && !this.saving && !opening && !copying }))}
+        .columns=${order.map((weekday) => ({ key: String(weekday), label: this.dayLabel(weekday), clock: this.dayContext(weekday), slots: this.slots(weekday), periods: this.department.periods, layer: "closed" as const, closed: this.draft[weekday]?.ranges ?? [], editable: this.canEditDay(weekday) && !this.readOnly && !this.saving && !opening && !copying }))}
         @grid-range-select=${this.select}
         @grid-block-open=${this.openRange}
         @grid-block-change=${this.resize}
@@ -423,7 +445,8 @@ export class OpeningHoursZoneWeek extends LitElement {
                 .closedTimes=${true}
                 .range=${opening.input}
                 .businessDate=${this.weekStart ? dateInWeek(this.weekStart, opening.weekday) : undefined}
-                .dayCutover=${this.dayCutover}
+                .dayCutover=${this.dayContext(opening.weekday)?.dayCutover ?? this.dayCutover}
+                .endMinute=${this.dayContext(opening.weekday)?.endMinute ?? 1440}
                 .occupied=${this.draft[opening.weekday]!.ranges.filter((_, index) => index !== opening.index)}
                 .deletable=${true}
                 @range-save=${(event: CustomEvent<{ input: ClosedRange }>) => {

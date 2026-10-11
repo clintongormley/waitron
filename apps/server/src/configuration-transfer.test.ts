@@ -58,6 +58,8 @@ import {
   kitchenStationTiming,
   kitchenTimingDefaults,
   locations,
+  locationDayCutoverChanges,
+  locationBusinessDaySettings,
   printAgents,
   printers,
   printerHolders,
@@ -3371,6 +3373,10 @@ describe("venue detail edits and configuration boundaries", () => {
       db: suite.db,
       modules: ALL_MODULES,
     });
+    await suite.db
+      .update(locations)
+      .set({ dayCutover: "04:30:00" })
+      .where(eq(locations.id, source.locationId));
     const initial = await withTransaction(suite.db, (tx) => readVenueDetails(tx, source));
     const saved = await withTransaction(suite.db, (tx) =>
       writeVenueDetails(tx, source, {
@@ -3379,7 +3385,6 @@ describe("venue detail edits and configuration boundaries", () => {
           name: "Corrected source",
           city: "Alcalá de Henares",
           timeZone: "UTC",
-          dayCutover: "04:30",
         },
       }),
     );
@@ -3624,12 +3629,18 @@ it("transfers a department's customer and staff period menus to its zone under n
     });
     const bebidas = await createCatalogue(tx, { name: "Bebidas transferidas" });
     const desayunos = await createCatalogue(tx, { name: "Desayunos transferidos" });
-    const period = await saveMenuPeriod(tx, scope, department.id, {
-      name: "Servicio de cartas",
-      colour: "red",
-      menuId: bebidas.id,
-      staffMenuIds: [desayunos.id],
-    });
+    const period = await saveMenuPeriod(
+      tx,
+      scope,
+      department.id,
+      {
+        name: "Servicio de cartas",
+        colour: "red",
+        menuId: bebidas.id,
+        staffMenuIds: [desayunos.id],
+      },
+      0,
+    );
     return [department.id, barra.id, bebidas.id, desayunos.id, period.id];
   });
   const versions = await schemaVersionsByModule(suite.db, ALL_MODULES);
@@ -3895,12 +3906,18 @@ it("carries a cell's period choices with their cell, including a period whose me
       vatClass: "general",
     });
     const vacia = await createCatalogue(tx, { name: "Carta vacía de periodos" });
-    const period = await saveMenuPeriod(tx, scope, department.id, {
-      name: "Comidas de periodos",
-      colour: "red",
-      menuId: vacia.id,
-      staffMenuIds: [],
-    });
+    const period = await saveMenuPeriod(
+      tx,
+      scope,
+      department.id,
+      {
+        name: "Comidas de periodos",
+        colour: "red",
+        menuId: vacia.id,
+        staffMenuIds: [],
+      },
+      0,
+    );
     const atBarra = { kind: "station" as const, stationId: barra!.id };
     await setRoutingCell(
       tx,
@@ -4119,6 +4136,8 @@ describe("named days in a configuration transfer", () => {
           ],
         },
         AT,
+        undefined,
+        0,
       );
       await saveSpecialDate(
         tx,
@@ -4131,6 +4150,8 @@ describe("named days in a configuration transfer", () => {
           cells: [{ subject: deli, cell: ALL_DAY }],
         },
         AT,
+        undefined,
+        0,
       );
       await saveSpecialDate(
         tx,
@@ -4143,6 +4164,8 @@ describe("named days in a configuration transfer", () => {
           cells: [{ subject: bar, cell: ALL_DAY }],
         },
         AT,
+        undefined,
+        0,
       );
       await setStationToday(tx, cfg, bar.id, "closed", AT);
     });
@@ -4190,6 +4213,8 @@ describe("named days in a configuration transfer", () => {
           cells: [],
         },
         AT,
+        undefined,
+        0,
       );
       await tx.execute(sql`insert into zone_closed_times (id, zone_id, weekday, special_date_id, starts_at, ends_at)
         values (${randomUUID()}, ${zone.id}, 5, null, '23:00:00', '04:00:00'),
@@ -4339,6 +4364,8 @@ describe("named days in a configuration transfer", () => {
           cells: [],
         },
         AT,
+        undefined,
+        0,
       ),
     );
     const versions = await schemaVersionsByModule(suite.db, ALL_MODULES);
@@ -4483,6 +4510,8 @@ describe("named days in a configuration transfer", () => {
           cells: [{ subject: pase, cell: CLOSED }],
         },
         AT,
+        undefined,
+        0,
       );
       await setDefaultStation(
         tx,
@@ -4553,6 +4582,8 @@ describe("named days in a configuration transfer", () => {
           ],
         },
         AT,
+        undefined,
+        0,
       );
     });
     const versions = await schemaVersionsByModule(suite.db, ALL_MODULES);
@@ -4714,6 +4745,8 @@ describe("public holidays in a configuration transfer", () => {
           cells: [],
         },
         AT,
+        undefined,
+        0,
       );
     });
     await moveTo(suite.db, source, "Lleida", "Vielha e Mijaran");
@@ -5061,13 +5094,19 @@ it.each([-15, 14])(
       const customer = await createCatalogue(tx, { name: "Period customer" });
       const staffFirst = await createCatalogue(tx, { name: "Period staff first" });
       const staffSecond = await createCatalogue(tx, { name: "Period staff second" });
-      const period = await saveMenuPeriod(tx, scope, department.id, {
-        name: "Night transfer",
-        endOffsetMinutes,
-        colour: "blue",
-        menuId: customer.id,
-        staffMenuIds: [staffSecond.id, staffFirst.id],
-      });
+      const period = await saveMenuPeriod(
+        tx,
+        scope,
+        department.id,
+        {
+          name: "Night transfer",
+          endOffsetMinutes,
+          colour: "blue",
+          menuId: customer.id,
+          staffMenuIds: [staffSecond.id, staffFirst.id],
+        },
+        0,
+      );
       await replaceMenuWeek(
         tx,
         scope,
@@ -5077,6 +5116,7 @@ it.each([-15, 14])(
           slots: weekday === 5 ? [{ periodId: period.id, startsAt: "21:00", endsAt: "03:00" }] : [],
         })),
         new Date("2026-10-07T10:00:00Z"),
+        0,
       );
       return [department.id, customer.id, staffFirst.id, staffSecond.id, period.id];
     });
@@ -5914,4 +5954,154 @@ it("round-trips a deleted service hierarchy while remapping only its live namesa
   );
   expect(links.rows).toEqual([{ zone_id: imported.zone, table_id: imported.table_id }]);
   expect(target.locationId).not.toBe(source.locationId);
+});
+
+describe("dated business-day configuration transfer", () => {
+  it("exports the active start, leaves history behind and imports a fresh clock", async () => {
+    const source = await applyVenue(planVenue(venue("B77112233"), ALL_MODULES), {
+      db: suite.db,
+      modules: ALL_MODULES,
+    });
+    await withTransaction(suite.db, async (tx) => {
+      const scope = { locationId: brandLocationId(source.locationId) };
+      const department = await createDepartment(tx, scope, {
+        name: "Clock service",
+        orderStart: "table",
+      });
+      const menu = await createCatalogue(tx, { name: "Clock menu" });
+      const period = await saveMenuPeriod(
+        tx,
+        scope,
+        department.id,
+        { name: "Clock period", menuId: menu.id, staffMenuIds: [], endOffsetMinutes: 14 },
+        0,
+      );
+      await replaceMenuWeek(
+        tx,
+        scope,
+        department.id,
+        [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({
+          weekday,
+          slots: [{ periodId: period.id, startsAt: "09:00", endsAt: "17:00" }],
+        })),
+        new Date("2026-11-02T12:00:00Z"),
+        0,
+      );
+    });
+    await suite.db.insert(locationDayCutoverChanges).values([
+      { locationId: source.locationId, effectiveBusinessDay: "2026-11-04", dayCutover: "03:00:00" },
+      { locationId: source.locationId, effectiveBusinessDay: "2026-11-10", dayCutover: "07:00:00" },
+    ]);
+    await suite.db
+      .insert(locationBusinessDaySettings)
+      .values({ locationId: source.locationId, revision: 4 });
+    const versions = await schemaVersionsByModule(suite.db, ALL_MODULES);
+    const exported = await buildConfigurationBundle(
+      suite.db,
+      source,
+      ALL_MODULES,
+      new Date("2026-11-10T08:00:00Z"),
+      versions,
+    );
+    expect(exported.venue.location.dayCutover).toBe("07:00:00");
+    expect(exported.tables).not.toHaveProperty("location_day_cutover_changes");
+    expect(exported.tables).not.toHaveProperty("location_business_day_settings");
+    const request = venue("B33221177");
+    request.location.dayCutover = exported.venue.location.dayCutover;
+    const target = await applyVenue(planVenue(request, ALL_MODULES), {
+      db: targetSuite.db,
+      modules: ALL_MODULES,
+      beforeCommit: (tx, created) =>
+        importConfigurationTables(tx, exported, created, ALL_MODULES, versions),
+    });
+    const model = await withTransaction(targetSuite.db, (tx) =>
+      readVenueDetails(tx, target, new Date("2026-11-10T08:00:00Z")),
+    );
+    expect(model.businessDayClock).toEqual({
+      clock: { timeZone: "Europe/Madrid", dayCutover: "07:00", cutoverChanges: [] },
+      revision: 0,
+      currentBusinessDay: "2026-11-10",
+      pending: null,
+    });
+    const slots = await targetSuite.db.execute<{
+      weekday: number;
+      startsAt: string;
+      endsAt: string;
+      offset: number;
+    }>(sql`
+      select d.weekday, s.starts_at as "startsAt", s.ends_at as "endsAt", p.end_offset_minutes as "offset"
+      from menu_slots s join menu_day_timetables d on d.id=s.timetable_id join menu_periods p on p.id=s.period_id
+      where p.name='Clock period' order by d.weekday`);
+    expect(slots.rows).toEqual(
+      [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({
+        weekday,
+        startsAt: "09:00:00",
+        endsAt: "17:00:00",
+        offset: 14,
+      })),
+    );
+    expect(await targetSuite.db.select().from(locationDayCutoverChanges)).toEqual([]);
+    expect(await targetSuite.db.select().from(locationBusinessDaySettings)).toEqual([]);
+    expect(await suite.db.select().from(locationDayCutoverChanges)).toHaveLength(2);
+    expect(await suite.db.select().from(locationBusinessDaySettings)).toEqual([
+      { locationId: source.locationId, revision: 4 },
+    ]);
+  });
+
+  it("keeps dated target history when prepared location metadata is applied", async () => {
+    const target = await applyVenue(planVenue(venue("B77112233"), ALL_MODULES), {
+      db: suite.db,
+      modules: ALL_MODULES,
+    });
+    await suite.db.insert(locationDayCutoverChanges).values({
+      locationId: target.locationId,
+      effectiveBusinessDay: "2026-11-04",
+      dayCutover: "03:00:00",
+    });
+    await suite.db
+      .insert(locationBusinessDaySettings)
+      .values({ locationId: target.locationId, revision: 1 });
+    const rows = await suite.db.select().from(locationDayCutoverChanges);
+    const model = await withTransaction(suite.db, (tx) =>
+      readVenueDetails(tx, target, new Date("2026-11-05T12:00:00Z")),
+    );
+    await withTransaction(suite.db, (tx) =>
+      applyPreparedLocation(tx, target, {
+        ...bundle.venue.location,
+        dayCutover: "07:00:00",
+        timeZone: "UTC",
+      }),
+    );
+    expect(
+      await withTransaction(suite.db, (tx) =>
+        readVenueDetails(tx, target, new Date("2026-11-05T12:00:00Z")),
+      ),
+    ).toEqual(model);
+    expect(await suite.db.select().from(locationDayCutoverChanges)).toEqual(rows);
+    expect(await suite.db.select().from(locationBusinessDaySettings)).toEqual([
+      { locationId: target.locationId, revision: 1 },
+    ]);
+  });
+
+  it("refuses pending export even before and during the transition lock", async () => {
+    const source = await applyVenue(planVenue(venue("B77112233"), ALL_MODULES), {
+      db: suite.db,
+      modules: ALL_MODULES,
+    });
+    await suite.db.insert(locationDayCutoverChanges).values({
+      locationId: source.locationId,
+      effectiveBusinessDay: "2026-11-04",
+      dayCutover: "07:00:00",
+    });
+    const versions = await schemaVersionsByModule(suite.db, ALL_MODULES);
+    for (const at of ["2026-11-02T12:00:00Z", "2026-11-04T05:59:59.999Z"]) {
+      await expect(
+        buildConfigurationBundle(suite.db, source, ALL_MODULES, new Date(at), versions),
+      ).rejects.toMatchObject({
+        code: "setup.request_invalid",
+        params: { field: "businessDayStart" },
+      });
+    }
+    expect(await suite.db.select().from(locationDayCutoverChanges)).toHaveLength(1);
+  });
 });

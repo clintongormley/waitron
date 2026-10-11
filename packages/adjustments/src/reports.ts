@@ -11,6 +11,7 @@ import {
   multiplyDecimal,
   rawCentsToDecimal,
   thousandthsToDecimal,
+  type BusinessDayClock,
   type Decimal,
 } from "@waitron/shared";
 import { DEFAULT_ENTRY_PAGE_SIZE, MAX_ENTRY_PAGE_SIZE } from "./entry-pages.js";
@@ -18,11 +19,9 @@ import { ADJUSTMENT_ACTIONS, type AdjustmentAction } from "./policy.js";
 import { adjustments, type AdjustmentStage } from "./schema/adjustments.js";
 
 /** An inclusive range of the venue's business days, and the clock that places them. */
-export interface AdjustmentReportInput {
+export interface AdjustmentReportInput extends BusinessDayClock {
   fromBusinessDay: string;
   toBusinessDay: string;
-  timeZone: string;
-  dayCutover: string;
 }
 
 /** How far the adjusted item had got; a discount on the whole bill has no stage of its own. */

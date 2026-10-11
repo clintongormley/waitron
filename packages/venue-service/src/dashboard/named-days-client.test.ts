@@ -4,6 +4,10 @@ import * as clients from "./named-days-client.js";
 import type { NamedDaysModel } from "../holiday-types.js";
 
 const model: NamedDaysModel = {
+  businessDayClock: { timeZone: "Europe/Madrid", dayCutover: "06:00", cutoverChanges: [] },
+  clockRevision: 0,
+  currentBusinessDay: "2026-10-09",
+  pending: null,
   timeZone: "Europe/Madrid",
   dayCutover: "06:00",
   civilDate: "2026-10-09",
@@ -53,6 +57,8 @@ describe("NamedDaysApi", () => {
           "departments",
           "tenants",
           "locations",
+          "location_business_day_settings",
+          "location_day_cutover_changes",
           "holiday_geographies",
         ].map((type) => ({ type })),
       );
@@ -84,9 +90,14 @@ it("edits calendar metadata without reading or resending retained station cells"
     ownHours: false,
     closeWholeVenue: false,
   };
-  await api.saveDay("source", input);
+  await api.saveDay("source", input, () => true, 0);
   expect(requests).toEqual([
-    ["/management-api/venue-service/special-dates/source", "PUT", input, undefined],
+    [
+      "/management-api/venue-service/special-dates/source",
+      "PUT",
+      { ...input, expectedClockRevision: 0 },
+      undefined,
+    ],
   ]);
 });
 it("a failed calendar write preserves its refusal without a station-source read", async () => {
@@ -96,14 +107,19 @@ it("a failed calendar write preserves its refusal without a station-source read"
     throw new Error("write offline");
   }) as DashboardRequest);
   await expect(
-    api.saveDay("source", {
-      date: "2026-10-02",
-      name: "Edited",
-      kind: "holiday",
-      repeats: false,
-      ownHours: false,
-      closeWholeVenue: false,
-    }),
+    api.saveDay(
+      "source",
+      {
+        date: "2026-10-02",
+        name: "Edited",
+        kind: "holiday",
+        repeats: false,
+        ownHours: false,
+        closeWholeVenue: false,
+      },
+      () => true,
+      0,
+    ),
   ).rejects.toThrow("write offline");
   expect(methods).toEqual(["PUT"]);
 });
@@ -124,6 +140,7 @@ it("an editor that has left cannot begin a calendar write", async () => {
       closeWholeVenue: false,
     },
     () => false,
+    0,
   );
   expect(methods).toEqual([]);
 });
@@ -145,9 +162,14 @@ it("calendar metadata edits need no station-cell snapshot", async () => {
     ownHours: false,
     closeWholeVenue: false,
   };
-  await api.saveDay("source", input);
+  await api.saveDay("source", input, () => true, 0);
   expect(requests).toEqual([
-    ["/management-api/venue-service/special-dates/source", "PUT", input, undefined],
+    [
+      "/management-api/venue-service/special-dates/source",
+      "PUT",
+      { ...input, expectedClockRevision: 0 },
+      undefined,
+    ],
   ]);
 });
 

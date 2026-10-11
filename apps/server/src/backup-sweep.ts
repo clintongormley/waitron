@@ -178,7 +178,7 @@ export async function runBackupSweep(deps: BackupSweepDeps): Promise<void> {
         const clock =
           deps.schedule.kind === "wall-clock"
             ? await deps.readClock()
-            : { timeZone: "UTC", dayCutover: "00:00" };
+            : { timeZone: "UTC", dayCutover: "00:00", cutoverChanges: [] };
         fireAt = nextFireMs(deps.schedule, clock, now(), deps.jitterSeed);
       } catch (err) {
         if (deps.signal.aborted) break;

@@ -1,3 +1,4 @@
+import type { BusinessDayClock } from "@waitron/shared";
 export interface VenueDetailValues {
   name: string;
   addressLine1: string | null;
@@ -17,8 +18,10 @@ export type DetailReason =
   | "geography_context"
   | "current_details_only"
   | "holiday_geography"
-  | "clock_effects";
+  | "clock_effects"
+  | "business_day_history";
 export interface VenueDetailsModel {
+  businessDayClock: BusinessDayClockModel;
   details: VenueDetailValues;
   issuer: { country: string; legalName: string; taxId: string };
   hasSales: boolean;
@@ -48,4 +51,31 @@ export interface VenueClockPreview {
   current: VenueClockView | null;
   proposed: VenueClockView;
   backupDeadlines: { archive: string | null; cloud: string | null };
+}
+
+export interface BusinessDayClockModel {
+  clock: BusinessDayClock;
+  revision: number;
+  currentBusinessDay: string | null;
+  pending: null | {
+    effectiveBusinessDay: string;
+    dayCutover: string;
+    startsAt: string;
+    locksAt: string;
+    editable: boolean;
+  };
+}
+export interface BusinessDayStartInput {
+  effectiveBusinessDay: string;
+  dayCutover: string;
+  expectedClockRevision: number;
+}
+export interface BusinessDayStartPreview {
+  revision: number;
+  previousDay: { businessDay: string; dayCutover: string; startAt: string; endAt: string };
+  effectiveDay: { businessDay: string; dayCutover: string; startAt: string; endAt: string };
+  locksAt: string;
+  conflicts: readonly unknown[];
+  conflictCount: number;
+  backupDeadlines: VenueClockPreview["backupDeadlines"];
 }
