@@ -1,8 +1,22 @@
 import { type SQL, sql } from "drizzle-orm";
 
+import type { RawResult } from "./node-sqlite-adapter.js";
+
 /** The one thing this module needs from a handle: somewhere to send a statement. */
 export interface StatementTarget {
   run: (query: SQL) => unknown;
+}
+
+/** What {@link appendOnlyTriggerFaults} needs from a handle: somewhere to read rows from. */
+export interface CatalogueTarget {
+  execute<TRow extends Record<string, unknown>>(query: SQL): RawResult<TRow>;
+}
+
+/** One trigger the installer creates; `definition` is its text after `create trigger`. */
+export interface AppendOnlyTrigger {
+  name: string;
+  table: string;
+  definition: string;
 }
 
 /**
@@ -45,18 +59,63 @@ export function installAppendOnlyTriggers(
   target: StatementTarget,
   tables: readonly string[],
 ): void {
+  for (const trigger of appendOnlyTriggers(tables)) {
+    target.run(sql.raw(`create trigger if not exists ${trigger.definition}`));
+  }
+}
+
+/** The triggers {@link installAppendOnlyTriggers} creates, every name checked before any is built. */
+export function appendOnlyTriggers(tables: readonly string[]): AppendOnlyTrigger[] {
   for (const table of tables) {
     if (!PLAIN_IDENTIFIER.test(table)) {
       throw new Error(`append-only trigger: ${table} is not a plain table name`);
     }
-    for (const event of ["update", "delete"] as const) {
-      target.run(
-        sql.raw(
-          `create trigger if not exists "${table}_append_only_${event}" ` +
-            `before ${event} on "${table}" for each row ` +
-            `begin select raise(abort, '${table} ${suffix}'); end`,
-        ),
-      );
-    }
   }
+  return tables.flatMap((table) =>
+    (["update", "delete"] as const).map((event) => {
+      const name = `${table}_append_only_${event}`;
+      return {
+        name,
+        table,
+        definition:
+          `"${name}" before ${event} on "${table}" for each row ` +
+          `begin select raise(abort, '${table} ${suffix}'); end`,
+      };
+    }),
+  );
+}
+
+/**
+ * Which of the named tables' triggers are absent, and which carry any other text than the
+ * installer's. `installAppendOnlyTriggers` cannot repair an altered one: `if not exists` leaves a
+ * same-name trigger in place whatever its body.
+ *
+ * SQLite stores a trigger's text with everything before its name rewritten to `CREATE TRIGGER `
+ * and the rest kept as sent (measured 2026-10-11, `node:sqlite` on Node v26.7.0), so that is the
+ * text compared. The text names the table, so a same-name trigger on another table is altered too.
+ * Trigger names ignore case in SQLite — `"T_APPEND_ONLY_DELETE"` is refused while
+ * `"t_append_only_delete"` exists — so names are matched lower-cased, and an upper-case
+ * replacement is reported altered rather than missing.
+ */
+export function appendOnlyTriggerFaults(
+  target: CatalogueTarget,
+  tables: readonly string[],
+): { missing: string[]; altered: string[] } {
+  const expected = appendOnlyTriggers(tables);
+  const faults = { missing: [] as string[], altered: [] as string[] };
+  if (expected.length === 0) return faults;
+  const names = expected.map((trigger) => sql`${trigger.name.toLowerCase()}`);
+  const stored = new Map(
+    target
+      .execute<{ name: string; sql: string }>(
+        sql`select name, sql from sqlite_master where type = 'trigger' and lower(name) in (${sql.join(names, sql`, `)})`,
+      )
+      .rows.map((row) => [row.name.toLowerCase(), row.sql]),
+  );
+  for (const trigger of expected) {
+    const text = stored.get(trigger.name.toLowerCase());
+    if (text === undefined) faults.missing.push(trigger.name);
+    else if (text !== `CREATE TRIGGER ${trigger.definition}`) faults.altered.push(trigger.name);
+  }
+  return faults;
 }
