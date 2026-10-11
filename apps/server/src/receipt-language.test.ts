@@ -29,7 +29,10 @@ import { ALL_MODULES } from "./modules.js";
 import { mountTillApi } from "./till-api.js";
 import { loadTillConfig } from "./till-config.js";
 import type { DeviceRequestConfig } from "./till-config.js";
-import { payWorkingOrderIntegrated, printSaleReceipt } from "./till-sale.js";
+import {
+  payWorkingOrderIntegratedOrchestration as payWorkingOrderIntegrated,
+  printSaleReceipt,
+} from "./till-sale.js";
 import { createOpenOrder, parkOrder, placeOrder } from "./working-order.js";
 import { enrolDeviceForTest } from "./testing/enrol.js";
 import { printedCommands, printedLines } from "./testing/decode-ticket.js";

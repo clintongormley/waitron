@@ -26,7 +26,7 @@ import type { Logger } from "./logger.js";
 import { mountTillApi } from "./till-api.js";
 import { enrolDeviceForTest } from "./testing/enrol.js";
 import { placeGroups } from "./order-groups.js";
-import { payWorkingOrderIntegrated } from "./till-sale.js";
+import { payWorkingOrderIntegratedOrchestration as payWorkingOrderIntegrated } from "./till-sale.js";
 import { OPERATOR, inTx, seat, setupPartyVenue, type PartyVenue } from "./testing/party-venue.js";
 import { offerProducts } from "./testing/zone-offers.js";
 import {

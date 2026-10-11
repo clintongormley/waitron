@@ -28,7 +28,11 @@ import { takeBillPayment, type BillPaymentRequest } from "./bill-payments.js";
 import { deploymentEnvironment } from "./config.js";
 import { ALL_MODULES } from "./modules.js";
 import type { OrderFlow } from "./till-config.js";
-import { collectOrder, payWorkingOrderIntegrated, recordTillSale } from "./till-sale.js";
+import {
+  collectOrderOrchestration as collectOrder,
+  payWorkingOrderIntegratedOrchestration as payWorkingOrderIntegrated,
+  recordTillSaleOrchestration as recordTillSale,
+} from "./till-sale.js";
 import { addTabRound, parkOrder, placeOrder } from "./working-order.js";
 import { offerProducts } from "./testing/zone-offers.js";
 import "./errors.js";

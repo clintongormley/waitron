@@ -1,3 +1,4 @@
+import { assertStillSignedIn } from "./till-session.js";
 import { and, eq, isNotNull, ne } from "drizzle-orm";
 import { billPaymentRefunds, billPayments, withTransaction } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
@@ -551,6 +552,11 @@ export async function refundBillPayment(
     const begun = await withPinCheckAhead(deps.db, toCheck, operator.attempts, (checked) => {
       const override = withCheck(req.override, checked);
       return withTransaction(deps.db, async (tx) => {
+        await assertStillSignedIn(tx, {
+          deviceId: cfg.origin.deviceId,
+          personId: operator.personId,
+          sessionId: operator.sessionId,
+        });
         const authorization = await authorize(
           tx,
           { sessionId: operator.sessionId, permission: "sale.refund", override },

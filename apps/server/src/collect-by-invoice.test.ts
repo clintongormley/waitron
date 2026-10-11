@@ -19,7 +19,7 @@ import { payments } from "@waitron/payments";
 import { saleId as brandSaleId, seriesId as brandSeriesId } from "@waitron/shared";
 import { VENUE_SERVICE } from "./modules.js";
 import { parkOrder, placeOrder } from "./working-order.js";
-import { collectOrder } from "./till-sale.js";
+import { collectOrderOrchestration as collectOrder } from "./till-sale.js";
 import { offerProducts } from "./testing/zone-offers.js";
 import {
   inTx,

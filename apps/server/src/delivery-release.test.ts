@@ -15,7 +15,7 @@ import {
   setupPartyVenue,
   type PartyVenue,
 } from "./testing/party-venue.js";
-import { collectOrder, payWorkingOrder } from "./till-sale.js";
+import { collectOrderOrchestration as collectOrder, payWorkingOrder } from "./till-sale.js";
 import { abandonHeldOrder, createOpenOrder, handOverOrder, placeOrder } from "./working-order.js";
 
 const suite = useVenueDb({

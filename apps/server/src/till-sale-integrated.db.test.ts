@@ -72,9 +72,9 @@ import {
 } from "./working-order.js";
 import { createTable } from "./tables.js";
 import {
-  collectOrder,
+  collectOrderOrchestration as collectOrder,
   payWorkingOrder,
-  payWorkingOrderIntegrated,
+  payWorkingOrderIntegratedOrchestration as payWorkingOrderIntegrated,
   releaseStalePaymentAttempts,
 } from "./till-sale.js";
 import type { IntegratedPayDeps } from "./till-sale.js";

@@ -65,7 +65,12 @@ import {
 import { deploymentEnvironment } from "./config.js";
 import { ALL_MODULES } from "./modules.js";
 import type { TillConfig, DeviceRequestConfig } from "./till-config.js";
-import { payWorkingOrder, receiptQr, recordTillSale, type TillSaleRequest } from "./till-sale.js";
+import {
+  payWorkingOrder,
+  receiptQr,
+  recordTillSaleOrchestration as recordTillSale,
+  type TillSaleRequest,
+} from "./till-sale.js";
 import { addTabRound, createOpenOrder, updateHeldOrder } from "./working-order.js";
 import * as venueAddressReads from "./venue-address.js";
 import { readReceiptPresentation } from "./receipt-presentation.js";

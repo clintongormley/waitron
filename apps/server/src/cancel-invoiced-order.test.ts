@@ -47,7 +47,7 @@ import {
 } from "./testing/bill-venue.js";
 import { mountTillApi } from "./till-api.js";
 import { SESSION_COOKIE } from "./till-session.js";
-import { payWorkingOrderIntegrated } from "./till-sale.js";
+import { payWorkingOrderIntegratedOrchestration as payWorkingOrderIntegrated } from "./till-sale.js";
 import "./errors.js";
 import { failingDerivationsOf, watchDerivations, watchedOrder } from "./testing/watched-scrypt.js";
 

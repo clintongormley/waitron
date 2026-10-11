@@ -1,3 +1,4 @@
+import { assertStillSignedIn } from "./till-session.js";
 import { selectOrderInvoice } from "./invoice-selection.js";
 import { withReceiptListPrices } from "./receipt-lines.js";
 import type { ExtraSelection, OptionSelection, OptionSnapshot } from "@waitron/shared";
@@ -77,6 +78,50 @@ import {
   enqueueSaleReceipt,
   printerLookup,
 } from "./receipt-print.js";
+
+export interface TillMoneyOperator {
+  personId: string;
+  sessionId: string;
+}
+
+type WriteAdmission = (tx: Transaction) => Promise<void>;
+const trustedWrite: WriteAdmission = async () => {};
+
+function signedInAdmission(cfg: DeviceRequestConfig, operator: TillMoneyOperator): WriteAdmission {
+  return (tx) =>
+    assertStillSignedIn(tx, {
+      deviceId: cfg.origin.deviceId,
+      personId: operator.personId,
+      sessionId: operator.sessionId,
+    });
+}
+
+export function recordTillSale(
+  deps: TillSaleDeps,
+  cfg: DeviceRequestConfig,
+  req: TillSaleRequest,
+  operator: TillMoneyOperator,
+): Promise<TillSaleResult> {
+  return runTillSale(deps, cfg, req, operator.personId, signedInAdmission(cfg, operator));
+}
+
+export function collectOrder(
+  deps: TillSaleDeps,
+  cfg: DeviceRequestConfig,
+  req: PayWorkingOrderRequest,
+  operator: TillMoneyOperator,
+): Promise<TillSaleResult> {
+  return runCollectOrder(deps, cfg, req, operator.personId, signedInAdmission(cfg, operator));
+}
+
+export function payWorkingOrderIntegrated(
+  deps: IntegratedPayDeps,
+  cfg: DeviceRequestConfig,
+  req: IntegratedPayRequest,
+  operator: TillMoneyOperator,
+): Promise<IntegratedPayOutcome> {
+  return runIntegratedPay(deps, cfg, req, operator.personId, signedInAdmission(cfg, operator));
+}
 
 /**
  * A `cash` or manual `card` tender. `externalRef` is the optional hand-keyed acquirer / terminal
@@ -498,8 +543,19 @@ export async function payWorkingOrder(
   req: PayWorkingOrderRequest,
   operatorId?: string,
 ): Promise<TillSaleResult> {
+  return runPayWorkingOrder(deps, cfg, req, operatorId, trustedWrite);
+}
+
+async function runPayWorkingOrder(
+  deps: TillSaleDeps,
+  cfg: DeviceRequestConfig,
+  req: PayWorkingOrderRequest,
+  operatorId: string | undefined,
+  admit: WriteAdmission,
+): Promise<TillSaleResult> {
   try {
     return await withTransaction(deps.db, async (tx) => {
+      await admit(tx);
       // Step 1; the doc comment says what serialises a concurrent pay against this read.
       const [locked] = await tx
         .select({ status: workingOrders.status, partyId: workingOrders.partyId })
@@ -570,6 +626,7 @@ export async function payWorkingOrder(
       throw error;
     }
     return withTransaction(deps.db, async (tx) => {
+      await admit(tx);
       const [row] = await tx
         .select({ status: workingOrders.status })
         .from(workingOrders)
@@ -884,11 +941,21 @@ async function readOutstandingSaleForOrder(
  *  - `settle` — a sale was already issued for the order: collect the amount due and SETTLE it.
  *  - `collect` — no sale yet: collect the priced total and file the sale.
  */
-export async function payWorkingOrderIntegrated(
+export function payWorkingOrderIntegratedOrchestration(
   deps: IntegratedPayDeps,
   cfg: DeviceRequestConfig,
   req: IntegratedPayRequest,
   operatorId?: string,
+): Promise<IntegratedPayOutcome> {
+  return runIntegratedPay(deps, cfg, req, operatorId, trustedWrite);
+}
+
+async function runIntegratedPay(
+  deps: IntegratedPayDeps,
+  cfg: DeviceRequestConfig,
+  req: IntegratedPayRequest,
+  operatorId: string | undefined,
+  admit: WriteAdmission,
 ): Promise<IntegratedPayOutcome> {
   const live = liveAttemptsOf(deps.db);
   // The mark this call wrote, once P1 has written it; unregistered however the call ends.
@@ -901,6 +968,7 @@ export async function payWorkingOrderIntegrated(
       req,
       operatorId,
       live,
+      admit,
       (attemptAt) => {
         marked = attemptAt;
         live.set(req.id, attemptAt);
@@ -922,11 +990,13 @@ async function payIntegrated(
   req: IntegratedPayRequest,
   operatorId: string | undefined,
   live: ReadonlyMap<string, string>,
+  admit: WriteAdmission,
   onMarked: (attemptAt: string) => void,
   onPlacedCollect: () => void,
 ): Promise<IntegratedPayOutcome> {
   // ---- P1 (tx A) ----
   const prepared = await withTransaction(deps.db, async (tx) => {
+    await admit(tx);
     const [locked] = await tx
       .select({
         status: workingOrders.status,
@@ -1756,13 +1826,24 @@ export function toPayOutcome(
  *
  * `req.lines` is IGNORED. `operatorId` is the collecting operator.
  */
-export async function collectOrder(
+export function collectOrderOrchestration(
   deps: TillSaleDeps,
   cfg: DeviceRequestConfig,
   req: PayWorkingOrderRequest,
   operatorId?: string,
 ): Promise<TillSaleResult> {
+  return runCollectOrder(deps, cfg, req, operatorId, trustedWrite);
+}
+
+async function runCollectOrder(
+  deps: TillSaleDeps,
+  cfg: DeviceRequestConfig,
+  req: PayWorkingOrderRequest,
+  operatorId: string | undefined,
+  admit: WriteAdmission,
+): Promise<TillSaleResult> {
   return withTransaction(deps.db, async (tx) => {
+    await admit(tx);
     const [locked] = await tx
       .select({ status: workingOrders.status })
       .from(workingOrders)
@@ -1876,11 +1957,21 @@ export async function settleIssuedOwingNothing(
  * that re-sends the same id after a lost response REPLAYS rather than filing a second record; sending
  * a parked order's id pays that order.
  */
-export async function recordTillSale(
+export function recordTillSaleOrchestration(
   deps: TillSaleDeps,
   cfg: DeviceRequestConfig,
   req: TillSaleRequest,
   operatorId?: string,
+): Promise<TillSaleResult> {
+  return runTillSale(deps, cfg, req, operatorId, trustedWrite);
+}
+
+async function runTillSale(
+  deps: TillSaleDeps,
+  cfg: DeviceRequestConfig,
+  req: TillSaleRequest,
+  operatorId: string | undefined,
+  admit: WriteAdmission,
 ): Promise<TillSaleResult> {
   // There is deliberately NO empty-basket guard here: a retrieved order is paid with `lines: []`,
   // and only `payWorkingOrder` knows whether the id names an existing order.
@@ -1888,7 +1979,7 @@ export async function recordTillSale(
     throw new AppError("sale.unsupported_tender", { method: req.tender.method });
   }
 
-  return payWorkingOrder(
+  return runPayWorkingOrder(
     deps,
     cfg,
     {
@@ -1901,6 +1992,7 @@ export async function recordTillSale(
       zoneId: req.zoneId,
     },
     operatorId,
+    admit,
   );
 }
 

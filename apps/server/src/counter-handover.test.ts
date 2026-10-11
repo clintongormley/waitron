@@ -24,7 +24,11 @@ import { runServiceCommand } from "./parties.js";
 import type { BillVenue } from "./testing/bill-venue.js";
 import { offerProducts } from "./testing/zone-offers.js";
 import { openTillSession } from "./testing/session-device.js";
-import { collectOrder, payWorkingOrder, payWorkingOrderIntegrated } from "./till-sale.js";
+import {
+  collectOrderOrchestration as collectOrder,
+  payWorkingOrder,
+  payWorkingOrderIntegratedOrchestration as payWorkingOrderIntegrated,
+} from "./till-sale.js";
 import "./errors.js";
 
 // Counter service (spec §5): a counter order may be handed over before or after it is paid.

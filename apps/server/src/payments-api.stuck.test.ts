@@ -66,7 +66,7 @@ import { ALL_MODULES } from "./modules.js";
 import type { DeviceRequestConfig } from "./till-config.js";
 import { systemClock } from "./till-backend.js";
 import { createOpenOrder } from "./working-order.js";
-import { payWorkingOrderIntegrated } from "./till-sale.js";
+import { payWorkingOrderIntegratedOrchestration as payWorkingOrderIntegrated } from "./till-sale.js";
 import { offerProducts } from "./testing/zone-offers.js";
 import { descendingIds } from "./testing/descending-ids.js";
 import "./errors.js";
@@ -520,6 +520,38 @@ describe("POST /management-api/payments/stuck/:id/resolve", () => {
     expect(await errorOf(res)).toMatchObject({ code: "origin.invalid" });
     expect(retrieve).not.toHaveBeenCalled();
     expect(saleIdsFor(orderId)).toEqual([]);
+  });
+
+  it("files a captured payment after its original till was switched off and its session ended", async () => {
+    const v = await setup();
+    const orderId = await openOrder(v);
+    const { paymentId } = await strandPayment(v, orderId, {
+      status: "succeeded",
+      amountReceived: 150,
+    });
+    const tillSession = await openTillSession(suite.db, {
+      deviceId: v.deviceId,
+      personId: v.managerId,
+    });
+    await suite.db.update(devices).set({ active: false }).where(eq(devices.id, v.deviceId));
+    await suite.db.execute(
+      sql`update sessions set ended_at = ${new Date().toISOString()} where id = ${tillSession}`,
+    );
+
+    const result = await send(v, "POST", resolvePath(paymentId));
+
+    expect(result.status).toBe(200);
+    expect(await result.json()).toMatchObject({ outcome: "filed" });
+    expect(saleIdsFor(orderId)).toHaveLength(1);
+    expect(await orderOf(orderId)).toEqual({ status: "settled", mark: null });
+    expect(
+      suite.db.all(sql`select device_id from sales where working_order_id = ${orderId}`),
+    ).toEqual([{ device_id: v.deviceId }]);
+    expect(await resolutionsFor(paymentId)).toMatchObject([
+      { personId: v.managerId, outcome: "captured" },
+    ]);
+    expect(v.client.lastCreateIntent).toBeUndefined();
+    expect(v.client.processedReaders).toEqual([]);
   });
 
   it("(a) files ONE sale for a payment Stripe captured, settles the order, and refuses a second resolve", async () => {

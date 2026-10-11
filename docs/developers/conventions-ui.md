@@ -589,9 +589,11 @@ operator's session is still open on that device, then the device is still active
 or it is refused `session.required` or `device.unauthorized` (`assertStillSignedIn`,
 `apps/server/src/till-session.ts`, called first in `beginBillPayment`,
 `apps/server/src/bill-payments.ts`; cases in `apps/server/src/bill-payments.signed-in.test.ts`).
-The counter sale, `/api/pay` and collecting a placed order do not yet, and a bill refund re-checks
-only that its session is still open (`authorize`, `packages/identity/src/authorize.ts`, refusing
-`session.not_open`; `docs/backlog/payments.md`). Enabling
+The counter sale, `/api/pay`, collecting a placed order and a bill refund use the same check
+first in their initial write transaction. Once a reader payment has begun, its outcome is recorded
+without another till sign-in check; the management recovery path can file a captured payment after
+the original till is switched off. Cases: `apps/server/src/till-money.write-session.test.ts` and
+`apps/server/src/payments-api.stuck.test.ts`. Enabling
 still ends any session open on the device, a second line for a device turned off outside the
 Disable route. A
 knock whose proof another knock or Pair overtook is refused `device.join_stale` with no new cookie,

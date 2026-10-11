@@ -31,7 +31,7 @@ import type { TillConfig, DeviceRequestConfig } from "./till-config.js";
 import { createTable } from "./tables.js";
 import { addTabRound, listStationQueue } from "./working-order.js";
 import { createCourse } from "./kitchen.js";
-import { payWorkingOrder, recordTillSale } from "./till-sale.js";
+import { payWorkingOrder, recordTillSaleOrchestration as recordTillSale } from "./till-sale.js";
 import { offerProducts, type ZoneOffers } from "./testing/zone-offers.js";
 import "./errors.js";
 import { openPartyTab, splitPartyBill } from "./testing/serve-line.js";
