@@ -23,8 +23,12 @@ afterAll(() => rmSync(predecessor, { recursive: true, force: true }));
 cpSync(VENUE_SERVICE_MIGRATIONS.migrationsFolder, predecessor, { recursive: true });
 const journalPath = join(predecessor, "meta", "_journal.json");
 const journal = JSON.parse(readFileSync(journalPath, "utf8")) as { entries: { tag: string }[] };
-const candidate = journal.entries.pop()!;
-rmSync(join(predecessor, `${candidate.tag}.sql`));
+const receiptIntroduction = journal.entries.findIndex(({ tag }) =>
+  /CREATE TABLE `department_receipts`/.test(readFileSync(join(predecessor, `${tag}.sql`), "utf8")),
+);
+if (receiptIntroduction < 0) throw new Error("Missing department receipt introduction migration");
+for (const candidate of journal.entries.splice(receiptIntroduction))
+  rmSync(join(predecessor, `${candidate.tag}.sql`));
 writeFileSync(journalPath, JSON.stringify(journal));
 const suite = useVenueDb({
   // This single-case probe changes the schema after the opener captures its reset table set.
