@@ -1441,6 +1441,7 @@ async function bootServer(
     incidents: recordIncidentOnce,
   });
   const tillClock = systemClock();
+  const tableRemovals = enabledTableRemovals(setsToMigrate);
   mountTillApi(
     app,
     {
@@ -1451,7 +1452,7 @@ async function bootServer(
       cfg: till,
       // From the ENABLED set: a disabled module's table is not migrated, so its annotator must not run.
       floorAnnotators: enabledFloorAnnotators(setsToMigrate),
-      tableRemovals: enabledTableRemovals(setsToMigrate),
+      tableRemovals,
       secureCookies,
       cardProvider,
       pool: cardPool,
@@ -1585,7 +1586,7 @@ async function bootServer(
       venueLocale,
       privacyNoticeUrl: config.privacyNoticeUrl,
       credentialKeyRing: totpKeyRing,
-      tableRemovals: enabledTableRemovals(setsToMigrate),
+      tableRemovals,
       // Resolved on every send, so a newly configured or rotated SMTP gateway takes effect at once.
       sendAccountEmail: async (message) => {
         // Queue both reads before an answered reset can reach shutdown's drain.
@@ -1660,7 +1661,7 @@ async function bootServer(
       contentDefaultLanguage: venueLocale,
     },
     maxUploadBytes: MAX_UPLOAD_BYTES,
-    core: moduleCoreServices(till),
+    core: moduleCoreServices(till, tableRemovals),
   };
   for (const m of setsToMigrate) m.routes?.mount(app, routeCtx, log);
   // `dataNodeId`, not this node's own id: see its declaration above.

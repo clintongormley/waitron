@@ -67,6 +67,20 @@ async function fixture(
       },
       ...(maxUploadBytes === null ? {} : { maxUploadBytes }),
       core: {
+        floorDeletion: {
+          readZoneImpact: async () => {
+            throw new Error("unused");
+          },
+          deleteZone: async () => {
+            throw new Error("unused");
+          },
+          readDepartmentImpact: async () => {
+            throw new Error("unused");
+          },
+          deleteDepartment: async () => {
+            throw new Error("unused");
+          },
+        },
         seatTable: async () => {
           throw new Error("unused");
         },

@@ -11,6 +11,7 @@ import type {
   LocationId,
   DeleteImpactRefusal,
   DeleteImpactItem,
+  DeleteImpact,
 } from "@waitron/shared";
 import type { ChangeSource } from "@waitron/shared";
 import type { Database, SQL, Transaction } from "@waitron/db";
@@ -33,6 +34,12 @@ export interface CoreServices {
     tx: Transaction,
     req: { tableId: string; guestCount: number | null; operatorId: string },
   ): Promise<{ tabId: string; partyId: string }>;
+  floorDeletion: {
+    readZoneImpact(tx: Transaction, zoneId: string, now: Date): Promise<DeleteImpact>;
+    deleteZone(tx: Transaction, zoneId: string, now: Date): Promise<DeleteImpact>;
+    readDepartmentImpact(tx: Transaction, departmentId: string, now: Date): Promise<DeleteImpact>;
+    deleteDepartment(tx: Transaction, departmentId: string, now: Date): Promise<DeleteImpact>;
+  };
 }
 
 /**

@@ -532,6 +532,7 @@ describe("seatBooking", () => {
     );
     const asked: unknown[] = [];
     const recording: CoreServices = {
+      ...core,
       async seatTable(tx, req) {
         asked.push(req);
         return core.seatTable(tx, req);

@@ -13,7 +13,7 @@ import {
   workingOrders,
 } from "@waitron/db";
 import type { StagedInvoiceDelivery, Transaction } from "@waitron/db";
-import type { CoreServices } from "@waitron/module";
+import type { CoreServices, TableRemoval } from "@waitron/module";
 import {
   AppError,
   centsToDecimal,
@@ -22,6 +22,13 @@ import {
   rawCentsToDecimal,
 } from "@waitron/shared";
 import { VENUE_SERVICE } from "./modules.js";
+import { floorDeletionFor } from "./floor-delete.js";
+import {
+  readZoneDeleteImpact,
+  deleteZone,
+  readDepartmentDeleteImpact,
+  deleteDepartment,
+} from "@waitron/venue-service";
 import type { OriginConfig, TillConfig } from "./till-config.js";
 import { createOpenOrder, openTab } from "./working-order.js";
 import { outstandingOf, readPaymentsByBill, refuseBillHoldingMoney } from "./bill-payments.js";
@@ -101,9 +108,21 @@ export async function seatTable(
 }
 
 /** The core verbs a module's routes reach, bound to `cfg`. A module's routes are the dashboard's. */
-export function moduleCoreServices(cfg: TillConfig): CoreServices {
+export function moduleCoreServices(
+  cfg: TillConfig,
+  removals: readonly TableRemoval[],
+): CoreServices {
   const dashboard: OriginConfig = { ...cfg, origin: jobOrigin("dashboard") };
-  return { seatTable: (tx, req) => seatTable(tx, dashboard, req) };
+  const floor = floorDeletionFor(cfg, removals);
+  return {
+    seatTable: (tx, req) => seatTable(tx, dashboard, req),
+    floorDeletion: {
+      readZoneImpact: (tx, id, now) => readZoneDeleteImpact(tx, cfg, floor, id, now),
+      deleteZone: (tx, id, now) => deleteZone(tx, cfg, floor, id, now),
+      readDepartmentImpact: (tx, id, now) => readDepartmentDeleteImpact(tx, cfg, floor, id, now),
+      deleteDepartment: (tx, id, now) => deleteDepartment(tx, cfg, floor, id, now),
+    },
+  };
 }
 
 /**

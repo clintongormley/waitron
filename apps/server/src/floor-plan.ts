@@ -61,7 +61,13 @@ async function requireZone(tx: Transaction, cfg: TillConfig, zoneId: string): Pr
   const [zone] = await tx
     .select({ id: floorZones.id })
     .from(floorZones)
-    .where(and(eq(floorZones.id, zoneId), eq(floorZones.locationId, cfg.locationId)));
+    .where(
+      and(
+        eq(floorZones.id, zoneId),
+        eq(floorZones.locationId, cfg.locationId),
+        eq(floorZones.active, true),
+      ),
+    );
   if (zone === undefined) throw new AppError("zone.not_found", { zoneId });
 }
 

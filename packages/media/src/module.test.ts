@@ -66,6 +66,20 @@ describe("the media module descriptor", () => {
         db: suite.db,
         cfg: { locationId: locationId("00000000-0000-4000-8000-000000000001") },
         core: {
+          floorDeletion: {
+            readZoneImpact: async () => {
+              throw new Error("unused");
+            },
+            deleteZone: async () => {
+              throw new Error("unused");
+            },
+            readDepartmentImpact: async () => {
+              throw new Error("unused");
+            },
+            deleteDepartment: async () => {
+              throw new Error("unused");
+            },
+          },
           seatTable: async () => {
             throw new Error("unused");
           },
