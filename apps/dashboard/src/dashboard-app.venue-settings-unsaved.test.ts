@@ -1,6 +1,6 @@
 import { afterEach, expect, it, vi } from "vitest";
 import { commands, page, userEvent } from "vitest/browser";
-import type { WtInput, WtTabs } from "@waitron/ui";
+import type { WtFormActions, WtInput, WtTabs } from "@waitron/ui";
 import { LiveData } from "@waitron/dashboard-kit";
 import type { DashboardApi } from "./api/client.js";
 import { venueDetailsFixture } from "./testing/venue-details-fixture.js";
@@ -684,6 +684,74 @@ it("leaving Venue details by Back and Discard closes a changed legal-name dialog
   await select(app, "kitchen");
   await expect.poll(() => selected(app)).toBe("kitchen");
   expect(app.shadowRoot!.querySelector("wt-unsaved-changes")!.open).toBe(false);
+});
+
+it("a rename answered after Back and Discard closed its dialog still updates the banner", async () => {
+  let legalName = "Venue";
+  const getMe = vi.fn(async () => ({
+    personId: "p1",
+    email: "ada@example.com",
+    role: "manager",
+    locale: "en-GB",
+    venueLocale: "en-GB",
+    sessionDefault: "en-GB",
+    venueName: legalName,
+    permissions: ["venue.view", "venue.configure"],
+    modules: [],
+  }));
+  let answer!: () => void;
+  const { app } = await mount(undefined, "en-GB", "light", {
+    getMe,
+    renameTaxpayer: (input: { legalName: string }) =>
+      new Promise((resolve) => {
+        answer = () => {
+          legalName = input.legalName;
+          const model = venueDetailsFixture();
+          resolve({ model: { ...model, issuer: { ...model.issuer, legalName } } });
+        };
+      }),
+  } as Partial<DashboardApi>);
+  const banner = () => app.shadowRoot!.querySelector("[data-test=venue-name]")!.textContent!.trim();
+  await expect.poll(banner).toBe("Venue");
+  const { host, dialog, native } = await openLegalName(app, "Nuevo SL");
+  dialog.querySelector<HTMLElement>("wt-button[data-test=save-legal-name]")!.click();
+  await expect.poll(() => answer).toBeTypeOf("function");
+  history.back();
+  await choose(app, "discard");
+  await expect.poll(() => selected(app)).toBe("tables");
+  await host.updateComplete;
+  expect(dialog.open).toBe(false);
+  expect(native.matches(":modal")).toBe(false);
+  answer();
+  await expect.poll(banner).toBe("Nuevo SL");
+  await host.updateComplete;
+  expect(dialog.open).toBe(false);
+  expect(native.matches(":modal")).toBe(false);
+  expect(await tabStillClickable(app, "kitchen")).toBe(true);
+});
+
+it("a rename refused after Back and Discard closed its dialog shows nothing", async () => {
+  let refuse!: () => void;
+  const { app } = await mount(undefined, "en-GB", "light", {
+    renameTaxpayer: () =>
+      new Promise((_, reject) => {
+        refuse = () =>
+          reject(Object.assign(new Error("changed"), { code: "venue.detail_changed" }));
+      }),
+  } as Partial<DashboardApi>);
+  const { host, dialog, native } = await openLegalName(app, "Nuevo SL");
+  dialog.querySelector<HTMLElement>("wt-button[data-test=save-legal-name]")!.click();
+  await expect.poll(() => refuse).toBeTypeOf("function");
+  history.back();
+  await choose(app, "discard");
+  await expect.poll(() => selected(app)).toBe("tables");
+  refuse();
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  await host.updateComplete;
+  expect(dialog.open).toBe(false);
+  expect(native.matches(":modal")).toBe(false);
+  expect(dialog.querySelector<WtFormActions>("wt-form-actions")!.error).toBe("");
+  expect(await tabStillClickable(app, "kitchen")).toBe(true);
 });
 
 it("leaving Venue details by Back and Keep leaves the legal-name dialog open with its draft", async () => {

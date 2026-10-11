@@ -145,8 +145,9 @@ export class LegalNameDialog extends LitElement {
     this.busy = true;
     try {
       const { model } = await this.api.renameTaxpayer({ legalName, expected });
-      if (opening !== this.#opening) return;
-      this.#scope?.commit(legalName);
+      const current = opening === this.#opening;
+      if (current) this.#scope?.commit(legalName);
+      // Announced even after a dismiss: the server has the new name either way.
       this.dispatchEvent(
         new CustomEvent<VenueIdentityChanged>("venue-identity-changed", {
           detail: { model },
@@ -154,6 +155,7 @@ export class LegalNameDialog extends LitElement {
           composed: true,
         }),
       );
+      if (!current) return;
       this.#dialog()?.closeAfter("saved");
       this.#close();
     } catch (error) {
