@@ -7,12 +7,14 @@ import {
   LiveData,
   type DashboardScreenHandle,
   type DashboardRequest,
+  type ObservedResource,
 } from "@waitron/dashboard-kit";
 import { chooseOption } from "@waitron/ui/src/test-helpers.js";
+import { dashboardQuery } from "../api/live-queries.js";
 import type { DashboardApi, DepartmentReceiptSettings, ReceiptPreview } from "../api/client.js";
 import { cleanupWidgets, mountWidget, expectNoA11yViolations } from "../widgets/test-helpers.js";
 import { setLocale } from "../i18n/t.js";
-import type { ReceiptsScreen } from "./receipts-screen.js";
+import { RECEIPT_PREVIEW_QUIET_MS, type ReceiptsScreen } from "./receipts-screen.js";
 import type { DepartmentReceiptEditor } from "./department-receipt-editor.js";
 import "./receipts-screen.js";
 
@@ -348,6 +350,26 @@ for (const refused of [false, true]) {
   });
 }
 
+function savedLanguageRead(api: ReturnType<typeof apiFixture>, language: string) {
+  const query = dashboardQuery(api as unknown as DashboardApi, "getReceiptLanguage", []);
+  type Snapshot = { saves: number; value: Awaited<ReturnType<DashboardApi["getReceiptLanguage"]>> };
+  let observation: ObservedResource<Snapshot>;
+  const ready = new Promise<void>((resolve) => {
+    observation = api.liveData.observe(
+      {
+        ...query,
+        key: `${query.key}:save-stamped`,
+        read: async () => ({ saves: 0, value: await query.read() }),
+      },
+      () => {
+        const snapshot = observation.snapshot;
+        if (!snapshot.loading && snapshot.value?.value.language === language) resolve();
+      },
+    );
+  });
+  return { ready, dispose: () => observation.unsubscribe() };
+}
+
 for (const venueOnly of [false, true]) {
   for (const refused of [false, true]) {
     it(`ignores an implicit-language ${refused ? "refusal" : "paper"} after saved language changes in a ${venueOnly ? "venue-only" : "department"} preview`, async () => {
@@ -365,15 +387,22 @@ for (const venueOnly of [false, true]) {
       request
         .mockImplementationOnce(() => old.promise)
         .mockImplementationOnce(() => current.promise);
+      const languageRead = savedLanguageRead(api, "ca-ES");
       try {
         if (venueOnly) await fill(el, "headerSubtitle", "Updated venue");
         else await fill(editor(el)!, "email", "bar@example.com");
         await vi.waitFor(() => expect(request).toHaveBeenCalledTimes(2));
-        api.getReceiptLanguage.mockResolvedValue({
-          language: "ca-ES",
-          choices: ["es-ES", "ca-ES"],
-          fixed: null,
-        });
+        vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+        let releaseSavedLanguage!: () => void;
+        const savedLanguage = { language: "ca-ES", choices: ["es-ES", "ca-ES"], fixed: null };
+        if (!venueOnly)
+          api.getReceiptLanguage.mockImplementationOnce(
+            () =>
+              new Promise((resolve) => {
+                releaseSavedLanguage = () => resolve(savedLanguage);
+              }),
+          );
+        else api.getReceiptLanguage.mockResolvedValue(savedLanguage);
         const departmentRead = api.getDepartmentReceipt.getMockImplementation()!;
         api.getDepartmentReceipt.mockImplementation(async (id) => ({
           ...(await departmentRead(id)),
@@ -381,6 +410,10 @@ for (const venueOnly of [false, true]) {
         }));
         api.liveData.invalidate([{ type: "locations" }]);
         await vi.waitFor(() => expect(previewLanguage(el)!.value).toBe("ca-ES"));
+        if (!venueOnly) releaseSavedLanguage();
+        await languageRead.ready;
+        await vi.advanceTimersByTimeAsync(RECEIPT_PREVIEW_QUIET_MS);
+        vi.useRealTimers();
         if (refused) old.reject({ code: "connection.failed" });
         else old.resolve(preview("Obsolete Spanish"));
         await vi.waitFor(() => expect(request).toHaveBeenCalledTimes(3));
@@ -394,6 +427,8 @@ for (const venueOnly of [false, true]) {
         expect(el.shadowRoot!.querySelector(".paper")?.textContent).toContain(initial);
         expect(api.putReceiptLanguage).not.toHaveBeenCalled();
       } finally {
+        vi.useRealTimers();
+        languageRead.dispose();
         old.resolve(preview("Old settled"));
         current.resolve(preview("Current settled"));
       }
