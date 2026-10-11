@@ -7,6 +7,11 @@
 
 **Status:** plan, 2026-10-11. Not started. Nothing here is built.
 
+(2026-10-12: built on `feat/service-reload-after-update`. The shipped busy rule, the till's
+reset handling and its one extra server check differ from Task 5's code; the current text is in
+`docs/developers/conventions-ui.md` → "An open page notices a box update from one response
+header".)
+
 **Goal:** after a box update, an already-open dashboard tab shows a bar "Waitron was updated.
 [Reload]" / "Waitron se ha actualizado. [Recargar]", and an open till reloads by itself when nothing
 would be lost, otherwise shows the same bar.

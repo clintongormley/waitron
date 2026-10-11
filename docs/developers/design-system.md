@@ -2639,8 +2639,8 @@ When the server reports a different build from the one the page first saw, an up
 (`wt-banner`, "Waitron was updated." / "Waitron se ha actualizado." with Reload / Recargar) appears
 directly under the banner, signed in and signed out, and stays until Reload. It never shows beside
 the box-reset notice, which has its own Reload. In Demo and Preparation `wt-demo-bar` stays above
-the banner. Looked at on 2026-10-11 in English and Spanish, both themes, at 390 and 1280 px wide:
-the message and its button fit on one row at 390, and at 320 the Spanish bar puts Recargar under the
+the banner. Looked at on 2026-10-11 in English and Spanish, both themes, at 390 and 1280 px wide
+(screenshots), and measured at 320: the message and its button fit on one row at 390, and at 320 the Spanish bar puts Recargar under the
 message without spilling sideways. Reload loads the page again; on the demo stack the reloaded page
 took the new build as its own and showed no bar.
 

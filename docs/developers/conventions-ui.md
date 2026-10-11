@@ -393,7 +393,7 @@ it. Two other apps never use the middleware, so they name no build: the
 failed-start recovery page (`recoveryApp`, `apps/server/src/recovery-surface.ts`) and the plain-HTTP
 landing listener (`buildLandingApp`, `apps/server/src/landing-app.ts`); both read, not tested.
 
-Each app's fetch passes through `watchBuild` (`@waitron/diagnostics`): the first build a response
+The dashboard's and the till's fetch pass through `watchBuild` (`@waitron/diagnostics`): the first build a response
 from the page's own origin names is the page's; the first different one sends
 `BUILD_CHANGED_EVENT` once, from its own microtask, so a listener that throws does not fail the
 request. A missing or empty header changes nothing. Another origin's build is ignored, and so is

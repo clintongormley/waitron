@@ -2664,6 +2664,10 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   **Next action (owner decision):** whether an unreviewed dish shows that warning always, then make
   `#allergenRow` depend on the review state alone and update the test.
 
+- **A till's automatic reload after a box update clears a notice its lock screen was showing**, such
+  as "Moved to another server. Enter your PIN." (`server.switched`, held only in the page's memory;
+  read, not run). Left open by A491.
+
 ### Printers, the print agent and receipts
 
 _Formerly A3, A8 and B6; part of A9._ Detail: [backlog/printers.md](backlog/printers.md).
@@ -3324,7 +3328,7 @@ _Formerly A7, and the dashboard entries in the opening part of the old Track A (
 
 - On the dashboard, the language chooser's menu is now a native popover in the top layer (A187), so
   it paints over the alert pop-up (`.alert-toast` in `apps/dashboard/src/dashboard-app.ts`, which
-  hangs below the banner at its trailing edge with `z-index: 40`, a stacking order the top layer
+  hangs below the banner's row at its trailing edge, under the update bar while that shows, with `z-index: 40`, a stacking order the top layer
   ignores): where the two overlap, an alert arriving while the menu is open is hidden under it, and
   its countdown keeps running, since `wt-toast` (`packages/ui/src/components/wt-toast.ts`) pauses it
   only while the pointer or keyboard focus is on the pop-up. Decide whether an arriving alert should
@@ -3729,6 +3733,10 @@ _Formerly A7, and the dashboard entries in the opening part of the old Track A (
 - **The service status screen's colour field label is cut to "C…" at 390 px** — seen on A450's
   look pass (#1484), not changed; not checked whether it predates that branch.
 
+- **An update bar added while the tab is hidden is believed to show only its button until the tab
+  is seen again**: `wt-banner` puts its message in two animation frames after it joins the page.
+  Not run in a hidden tab. Left open by A491.
+
 ### Interface languages
 
 _Formerly entries spread across the old sections, C125 among them; part of A9._ Detail: [backlog/languages.md](backlog/languages.md).
@@ -3827,6 +3835,11 @@ _Formerly A5, and the logging part of A9._ Detail: [backlog/alerts.md](backlog/a
 - **A provider call that ignores cancellation may continue after the server has answered**; the
   source's five-minute cache shares that in-flight call with reads during its lifetime. Left open
   by the A258 follow-up (the alerts list's battery check has its own deadline, W58, #1176).
+
+- **`x-request-id` may be missing from a response a route builds itself.** `requestIdMiddleware`
+  (`apps/server/src/request-id.ts`) sets it before the route runs; for A491's build header, a
+  header set before the route was measured missing on such a response (`build-header.test.ts`'s
+  raw case with the setter moved first). The request-id case was not run. Left open by A491.
 
 ### Working time and staff
 
