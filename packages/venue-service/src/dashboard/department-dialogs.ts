@@ -271,8 +271,7 @@ export class DepartmentDialogs extends LitElement {
         dialog.kind === "delete-department" ? "department" : "zone",
         error,
       );
-      if (/^(department|zone|table)\./.test((error as { code?: string })?.code ?? ""))
-        this.loadImpact(dialog, generation);
+      this.loadImpact(dialog, generation);
       return;
     }
     if (!this.current(dialog, generation)) return;

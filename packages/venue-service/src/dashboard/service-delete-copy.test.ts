@@ -224,3 +224,12 @@ it("counts physical tables independently of today placement and discloses retain
     "Removes 1 tables from the saved plan.",
   );
 });
+it.each(["zone", "department"] as const)(
+  "%s uses the approved irreversible sentence in both languages",
+  (kind) => {
+    setLocale("en");
+    expect(serviceDeleteCopy(kind).irreversible).toBe("This can't be undone.");
+    setLocale("es");
+    expect(serviceDeleteCopy(kind).irreversible).toBe("Esta acción no se puede deshacer.");
+  },
+);

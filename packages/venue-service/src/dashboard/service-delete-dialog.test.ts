@@ -590,3 +590,163 @@ it("a watch not-found during this dialog's Delete cannot end its pending write",
   write.resolve(allowedImpact);
   await expect.poll(() => screen.dialog).toBeUndefined();
 });
+it.each(["blocker", "read-failure"] as const)(
+  "transport failure refreshes a %s delivered during the pending Delete",
+  async (state) => {
+    let apply!: (impact: DeleteImpact) => void;
+    let fail!: (error: unknown) => void;
+    const write = deferred<DeleteImpact>();
+    const watch = vi.fn(
+      (_id: string, a: (impact: DeleteImpact) => void, f: (error: unknown) => void) => {
+        apply = a;
+        fail = f;
+        return () => {};
+      },
+    );
+    const { screen } = await mountDelete({
+      watchDepartmentDeleteImpact: watch,
+      deleteDepartment: vi.fn().mockReturnValue(write.promise),
+    });
+    const dialog = await openDelete(screen);
+    apply(allowedImpact);
+    await ready(dialog);
+    button(dialog).click();
+    await expect.poll(() => dialog.submitting).toBe(true);
+    const blocked = {
+      ...allowedImpact,
+      refusals: [{ code: "department.last_active", params: {}, targets: [] }],
+    };
+    if (state === "blocker") apply(blocked);
+    else fail({ code: "connection.failed" });
+    write.reject({ code: "connection.failed" });
+    await write.promise.catch(() => {});
+    await screen.updateComplete;
+    await dialog.updateComplete;
+    expect(watch).toHaveBeenCalledTimes(2);
+    expect(dialog.actionError).not.toBe("");
+    expect(button(dialog).disabled).toBe(true);
+    if (state === "blocker") apply(blocked);
+    else fail({ code: "connection.failed" });
+    await screen.updateComplete;
+    await dialog.updateComplete;
+    expect(button(dialog).disabled).toBe(true);
+    if (state === "blocker") expect(dialog.impact?.refusals).toEqual(blocked.refusals);
+    else expect(dialog.readError).not.toBe("");
+    apply(allowedImpact);
+    await ready(dialog);
+    expect(dialog.readError).toBe("");
+    expect(dialog.actionError).not.toBe("");
+    expect(button(dialog).disabled).toBe(false);
+  },
+);
+
+it.each(["department", "zone"] as const)(
+  "%s retained reconnect restarts pending impact and discards the old read",
+  async (kind) => {
+    const first = deferred<DeleteImpact>();
+    const fresh = deferred<DeleteImpact>();
+    const read = vi.fn().mockReturnValueOnce(first.promise).mockReturnValueOnce(fresh.promise);
+    const { screen, host, api } = await mountDelete(
+      { getDepartmentDeleteImpact: read, getZoneDeleteImpact: read },
+      "light",
+      kind,
+    );
+    const old = await openDelete(screen, kind);
+    const retained = screen.dialog;
+    const impact = {
+      ...allowedImpact,
+      target: kind === "zone" ? { id: "z1", name: "Patio" } : allowedImpact.target,
+    };
+    expect(button(old).disabled).toBe(true);
+    screen.remove();
+    host.append(screen);
+    await screen.updateComplete;
+    const next = screen.shadowRoot!.querySelector("wt-delete-dialog")!;
+    await next.updateComplete;
+    expect(screen.dialog).toBe(retained);
+    expect(read).toHaveBeenCalledTimes(2);
+    first.resolve({
+      ...impact,
+      removes: [{ key: "tables", count: 9, targets: [{ id: "old", name: "Old impact" }] }],
+    });
+    await first.promise;
+    await screen.updateComplete;
+    await next.updateComplete;
+    expect(next.shadowRoot!.textContent).not.toContain("Old impact");
+    expect(button(next).disabled).toBe(true);
+    fresh.resolve({
+      ...impact,
+      removes: [{ key: "tables", count: 2, targets: [{ id: "fresh", name: "Fresh impact" }] }],
+    });
+    await ready(next);
+    expect(next.shadowRoot!.textContent).toContain("Fresh impact");
+    expect(next.shadowRoot!.textContent).toContain("Deletes 2 tables.");
+    await button(next).updateComplete;
+    expect(button(next).shadowRoot!.querySelector("button")!.disabled).toBe(false);
+    button(next).click();
+    await expect.poll(() => screen.dialog).toBeUndefined();
+    expect(kind === "zone" ? api.deleteZone : api.deleteDepartment).toHaveBeenCalledExactlyOnceWith(
+      impact.target.id,
+    );
+  },
+);
+it.each(["department", "zone"] as const)(
+  "%s retained reconnect recovers a read error and preserves an action refusal",
+  async (kind) => {
+    const impact = {
+      ...allowedImpact,
+      target: kind === "zone" ? { id: "z1", name: "Patio" } : allowedImpact.target,
+    };
+    const fresh = deferred<DeleteImpact>();
+    const read = vi
+      .fn()
+      .mockRejectedValueOnce({ code: "connection.failed" })
+      .mockReturnValueOnce(fresh.promise)
+      .mockResolvedValue(impact);
+    const write = vi.fn().mockRejectedValue({ code: "connection.failed" });
+    const { screen, host } = await mountDelete(
+      {
+        getDepartmentDeleteImpact: read,
+        getZoneDeleteImpact: read,
+        deleteDepartment: write,
+        deleteZone: write,
+      },
+      "light",
+      kind,
+    );
+    const old = await openDelete(screen, kind);
+    await ready(old);
+    expect(old.readError).not.toBe("");
+    const retained = screen.dialog;
+    screen.remove();
+    host.append(screen);
+    await screen.updateComplete;
+    let next = screen.shadowRoot!.querySelector("wt-delete-dialog")!;
+    await next.updateComplete;
+    expect(screen.dialog).toBe(retained);
+    expect(read).toHaveBeenCalledTimes(2);
+    expect(button(next).disabled).toBe(true);
+    fresh.resolve({
+      ...impact,
+      removes: [{ key: "tables", count: 3, targets: [{ id: "fresh", name: "Recovered impact" }] }],
+    });
+    await ready(next);
+    expect(next.shadowRoot!.textContent).toContain("Recovered impact");
+    expect(next.readError).toBe("");
+    button(next).click();
+    await expect.poll(() => next.actionError).not.toBe("");
+    await ready(next);
+    const refusal = next.actionError;
+    screen.remove();
+    host.append(screen);
+    await screen.updateComplete;
+    next = screen.shadowRoot!.querySelector("wt-delete-dialog")!;
+    await ready(next);
+    expect(screen.dialog).toBe(retained);
+    expect(next.actionError).toBe(refusal);
+    expect(next.readError).toBe("");
+    await button(next).updateComplete;
+    expect(button(next).shadowRoot!.querySelector("button")!.disabled).toBe(false);
+    expect(write).toHaveBeenCalledOnce();
+  },
+);
