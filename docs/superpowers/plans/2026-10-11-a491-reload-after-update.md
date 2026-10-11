@@ -48,7 +48,15 @@ verbatim:
 **Audited base.** Every pointer below was READ on main `69fd9f0e1` (2026-10-11) in the worktree
 `/Users/clintongormley/workspace/worktrees/waitron-feat-service-reload-after-update`, branch
 `feat/service-reload-after-update`. Line numbers are approximate and drift; search by the quoted
-text. Nothing in this plan was RUN except the greps and file reads that found these pointers.
+text. The author ran only the greps and file reads that found these pointers. A fresh-context plan
+review on 2026-10-11 then ran probes where a claim decides the design; each is stated where it
+applies (Decision 1, Task 1 Step 8, Task 2 Step 5, Task 5 Step 1, Task 6 Step 2), and everything
+else is still reading.
+
+**Rebase first.** `main` moved to `a66e4f06a` after this base (#1557 and a docs commit). It touches
+`dashboard-app.test.ts`, the dashboard strings, `boot.ts`, the docs files and the END of
+`till-app-boot-and-counter.test.ts` (a new `describe`, where Task 5 also appends), but none of the
+lines the tasks anchor on. Rebase the branch onto `main` before Task 1.
 
 **Review path: FULL** (per-task reviews, then the full `/finish-branch` wave with the two Codex
 run-it reviews side by side). Risk triggers: a cross-package contract (a response header the server
@@ -71,10 +79,22 @@ Decisions 1–8 came from the lane runner; where this plan changes one it says *
    `start()`/`#probe`). So no request, poll or endpoint is added and passivity is unchanged.
    `/health` was rejected: neither app reads it. The live stream was rejected: `EventSource` exposes
    no response headers, and the till does not open one.
-   - **CHANGED — the header is set AFTER the handler runs**, not before like `x-request-id`. Reading
-     `hono@4.13.9` `dist/context.js` (`set res`, `header`), a header set before `next()` is held in
-     prepared headers that a handler returning its own `new Response(...)` does not inherit. Task 1's
-     raw-`Response` case is the test of that; nobody has run it yet.
+   - **CHANGED — the header is set AFTER the handler runs**, not before like `x-request-id`.
+     Measured 2026-10-11 by the plan reviewer with a Node script against the installed
+     `hono@4.13.9` (`node_modules/.pnpm/hono@4.13.9`), one `app.use("*")` middleware, `app.request`:
+     set BEFORE `next()`, `c.json`, `c.body`, a thrown error (500, with and without `onError`) and an
+     unmatched path (404) all carried the header, and a handler returning its own
+     `new Response("raw", { headers: { "x-own": "kept" } })` did NOT (`null`; `x-own` kept). Set
+     AFTER `next()`, all six carried it, including `/raw`, and so did a `Response.redirect(...)`
+     (immutable headers) and a `fetch()` response passed straight through (its own `x-up` kept).
+     Task 1's `/raw` case is the committed test of it.
+   - **Exposure, for the owner (FYI default: accepted).** Today no HTTP surface names the build
+     (`grep -rn "applicationVersion\|WAITRON_BUILD_ID" apps/server/src` outside tests finds only the
+     fiscal-readiness record and boot's own calls). With this header every response after `/health`
+     names the image's commit to anyone who can reach the box, signed in or not, including the cloud
+     public routes `mountCloudPublic` registers after the middleware. Limiting it to signed-in
+     responses would cost the idle till its only signal: its 5 s `/api/node` probe carries no
+     operator session.
    - **CHANGED — the `corsForVenue` `exposeHeaders` change is dropped.** The watcher compares only
      responses to requests for the page's own origin (decision 2), so a cross-origin response's
      header is never read. Reason: a till whose `ServerRouter` points at another server
@@ -102,6 +122,13 @@ Decisions 1–8 came from the lane runner; where this plan changes one it says *
    - **The till also hands the watched fetch to its `ServerRouter`** (decision added here), so its
      5 s probe of its own origin's `/api/node` is read too. That is what lets an idle till on the lock
      screen, which may make no other request, notice the update. It adds no request.
+   - **On a one-node box the till's API calls are own-origin too** (by reading
+     `apps/till/src/api/server-router.ts`): `current` starts at `opts.origin` (`location.origin`),
+     `#merge` always lists the page's own origin first, and `#runRound` moves only to a primary
+     whose `term` is strictly higher (`reduce` with `>`), so a box that lists itself under a second
+     URL with the same term does not move it. `withServerTarget` then turns `/api/...` into
+     `${location.origin}/api/...`, which the watcher reads. If the router ever does move, the 5 s
+     probe of the page's own origin still carries the header.
 3. **A new shared primitive, `wt-banner`, in `packages/ui/src/components/`.** A full-width strip:
    `message`, `action-label`; when an action label is set it draws one native button, and pressing
    it stops the click and sends `wt-banner-action` (`detail: {}`, `bubbles: true, composed: true`).
@@ -127,16 +154,31 @@ Decisions 1–8 came from the lane runner; where this plan changes one it says *
    the bar (till strings), which stays until someone presses Reload. The till never reloads later by
    itself.
    - **CHANGED — a signed-in person counts as busy.** A reload signs the operator out: the page
-     starts on `screen = "lock"` and the only writer of a non-empty `operatorName` is
-     `#enterSignedIn`, after a PIN sign-in or a profile switch (`till-app.ts`, `operatorName = ` —
-     found by grep, not run). So an idle till reloads by itself only with nobody signed in: on the
-     lock screen, or as a kitchen display (no sign-in at all).
+     starts on `screen = "lock"` (`till-app.ts`, `@state() private screen: Screen = "lock"`, and
+     `#boot` sets it again), and the only writer of a non-empty `operatorName` is `#enterSignedIn`.
+     Its two callers are `#onLoggedIn`, answering the lock screen's `logged-in` event, which only
+     `#submit` sends, after `api.login(personId, pin)` succeeds (`screens/till-lock-screen.ts`), and
+     `#enterSwitchedProfile`, which passes the name already signed in. `#boot` reads locales, the
+     till, the dev device list and the device identity; none of them restores a person. Found by
+     grep and reading on 2026-10-11, not run against a real reload; Task 6 Step 3.5 is that run.
+     So an idle till reloads by itself only with nobody signed in: on the lock screen, or as a
+     kitchen display (no sign-in at all).
+   - The spec's "reloads by itself only when no order, payment or unsaved draft is open" names
+     conditions a reload must meet, not a promise to reload whenever they hold, so adding "nobody
+     signed in" keeps to its words; it is still a product choice, and goes to the owner as an FYI
+     default (Task 7 Step 2). Alternative: reload a signed-in till with nothing open, and the
+     operator types their PIN again.
    - **Busy** = someone signed in (`operatorName !== ""`), or a sign-in still loading
      (`#loginPending`), or the basket or the table-free draft holds a line (`#store.lines`,
      `#partylessDraft.lines` — a retrieved held order is clean but still an order on screen), or any
      unsaved draft (`this.leave.coordinator.isDirty()` with no arguments, so the basket's scope
      counts), or a payment or refund not yet answered (`submitting`, `#cardAttemptsRunning > 0`,
-     `#unansweredPayment`, `#unansweredRefund`). A payment sent before an idle sign-out keeps
+     `#unansweredPayment`, `#unansweredRefund`). The last two are wider than "not yet answered":
+     `unansweredAfter` (`apps/till/src/state/bill-payment.ts`) keeps the submission after an
+     unanswered send AND after any refusal outside `FRESH_ID_AFTER`, and only a later send's answer
+     replaces it (`till-app.ts` writes the two fields nowhere else), so an
+     idle till that once had a bill payment or refund refused shows the bar instead of reloading.
+     Accepted: the bar loses nothing, and a reload would drop the id a resend must reuse. A payment sent before an idle sign-out keeps
      `submitting` true until the server answers (it is cleared only in each payment's `finally`, not
      by `#endOperatorSession`), which is why the in-flight terms are there even though sign-out
      already counts.
@@ -183,7 +225,7 @@ Decisions 1–8 came from the lane runner; where this plan changes one it says *
   task; `/finish-branch` pushes.
 - Browser runs: check `memory_pressure | grep free` first; run beside another session's browser run
   only when free memory is well above 15%. Kill only processes you started, by pid.
-- One-line FYI to the owner when it lands (Task 6 drafts it).
+- One-line FYI to the owner when it lands (Task 7 drafts it).
 
 ## Review Focus
 
@@ -205,10 +247,12 @@ the test that pins it in the task that owns the code:
 5. **Two updates in quick succession** (or a build read once and then again) — one decision, one bar.
    Pinned in Task 2: builds `a, b, b, c` call `onChange` once, with `b`.
 
-Known limits that are not tested, and are written into the backlog's deliberate limits in Task 6: a
+Known limits that are not tested, and are written into the backlog's deliberate limits in Task 7: a
 signed-out dashboard tab that makes no automatic read notices the update only on its next request; a
 page that first sees the new build records it as its own (decision 2); a half-typed PIN is lost to an
-automatic reload (decision 5).
+automatic reload (decision 5); an idle till that once had a bill payment or refund refused shows the
+bar instead of reloading (decision 5); every response
+after `/health` names the build to callers who are not signed in (decision 1).
 
 ---
 
@@ -383,10 +427,10 @@ Run: `pnpm --filter @waitron/server exec vitest run src/build-header.test.ts`
 Expected: PASS.
 
 Then, as an experiment and not a commit: move `c.header(BUILD_HEADER, build);` above
-`await next();`, run the same command, and record which cases fail (the plan expects at least
-`/raw`). Put the result in the commit message ("set before the handler, the /raw case failed" or
-whatever happened). If NO case fails, the comment in Step 7 is false: delete it, and say so in the
-commit message. Restore the line after `next`.
+`await next();`, run the same command, and record which cases fail. The plan reviewer's Node
+script against the same `hono@4.13.9` (Decision 1) predicts exactly one: `names the build on /raw`,
+with `null`. Put the result in the commit message. If NO case fails, the comment in Step 7 is
+false: delete it, and say so in the commit message. Restore the line after `next`.
 
 - [ ] **Step 9: Write the failing boot assertions**
 
@@ -435,8 +479,11 @@ existing `@waitron/db` import list), and add:
       expect(asset.headers.get("x-waitron-build")).toBe(applicationVersion(process.env));
    ```
 
-The failing case prints `null` against a non-empty expected value (`applicationVersion` never
-returns an empty string: it falls back to `"development"`), so the probe can tell the two apart.
+The failing case prints `null` against a non-empty expected value, so the probe can tell the two
+apart. `applicationVersion` is `env.WAITRON_BUILD_ID ?? env.npm_package_version ?? "development"`
+(`packages/db/src/venue-holder-identity.ts`): it is empty only when one of those variables is SET to
+the empty string, which none of these commands does. (On a box that happened, every response would
+carry an empty header, which the watcher ignores: no bar, ever.)
 
 - [ ] **Step 10: Run them and watch them fail**
 
@@ -683,7 +730,11 @@ export type { BuildWatchOptions } from "./build-watch.js";
 - [ ] **Step 5: Run them and watch them pass**
 
 Run: `pnpm --filter @waitron/diagnostics exec vitest run src/build-watch.test.ts`
-Expected: PASS, 8 tests.
+Expected: PASS, 8 tests. (The plan reviewer ran this step's code against Step 2's tests on
+2026-10-11, in a scratch copy with the header name inlined because the dependency was not added:
+8 passed, and `tsc --noEmit` was clean. Deleting `told ||` failed "tells once"; deleting
+`|| build === ""` failed "ignores a response with no build header or an empty one"; dropping the
+origin check failed the other-origin and unparseable-URL cases.)
 
 - [ ] **Step 6: Coverage and checks**
 
@@ -1393,6 +1444,14 @@ and a payment waiting with the basket cleared (`submitting`, with no line and no
 `#partylessDraft.lines`, `#cardAttemptsRunning`, `#unansweredPayment` and `#unansweredRefund` have
 no isolating case; they are held by reading only, and the review should know it.
 
+The plan reviewer ran the SETUP half of each busy case on 2026-10-11 (a scratch copy of this file's
+helpers, real Chromium, no build event, nothing committed): idle lock screen, `operatorName ""`,
+no unload guard; a sign-in left loading, still on the lock screen with `operatorName ""`; a
+retrieved order, 1 line before and after logout, lock screen, no unload guard; a typed label, 0
+lines, unload guarded before and after logout; a waiting cash payment, `recordSale` called once,
+lock screen after logout and `clear()`, 0 lines, no unload guard, `submitting` still `true`. So
+each case reaches the state it claims before the build event is sent.
+
 - [ ] **Step 2: Run them and watch them fail**
 
 Run (after `memory_pressure | grep free`):
@@ -1532,17 +1591,20 @@ git commit -s -m "The till reloads itself after a box update when nothing would 
 
 ---
 
-## Task 6: Look at it, prove the wiring end to end, and write the docs
+## Task 6: Look at it, and prove the wiring end to end
+
+Split from the docs (Task 7) so neither runs long: this task starts a dev stack, debugs a Playwright
+script and reads 16 screenshots. It commits nothing. Its outcomes go in the work's ledger,
+`docs/handoffs/2026-10-11-a491-reload-after-update.md` (gitignored), one line per Step 3
+experiment, for Task 7 to put in its commit message and docs.
 
 **Files:**
 - Scratch only, outside the worktree: `$(mktemp -d)/look.mjs` and its screenshots
-- Modify: `docs/developers/design-system.md` ("Dashboard banner" section, ~line 2593; and the till's
-  "Counter basket and payment space" section, ~line 3761, or the nearest till section)
-- Modify: `docs/developers/conventions-ui.md` (a new section after "The dashboard banner is persistent identity chrome", ~line 374)
-- Modify: `docs/backlog/dashboard.md` ("Decisions and deliberate limits", ~line 891)
+- Modify (not committed): the ledger above
 
 **Interfaces:**
 - Consumes: everything from Tasks 1–5, running in the dev stack.
+- Produces: one ledger line per Step 3 experiment, each saying what it printed.
 
 - [ ] **Step 1: Start this worktree's dev stack**
 
@@ -1573,6 +1635,8 @@ async function openWatched(url, { width, scheme, locale }) {
   const page = await context.newPage();
   const state = { faking: false, realBuild: null };
   await page.route("**/*", async (route) => {
+    // The dashboard's live stream never ends; route.fetch() on it starves the stream.
+    if (route.request().resourceType() === "eventsource") return route.continue();
     const response = await route.fetch();
     const headers = response.headers();
     if (headers["x-waitron-build"] !== undefined) {
@@ -1591,6 +1655,17 @@ await browser.close();
 
 Run it from `apps/dashboard`: `cd <worktree>/apps/dashboard && node <scratch>/look.mjs <dashboard-url> <till-url> <scratch>`.
 
+Two receipts behind this shape, from the plan reviewer on 2026-10-11:
+- The `eventsource` line: in real Playwright Chromium (the dashboard package's `playwright`), a page
+  whose `EventSource` reads a stream that never ends got no message within 3 s when every request
+  went through `route.fetch()`, and closing the page then threw `route.fetch: Request context
+  disposed`; with `eventsource` requests passed to `route.continue()` the message arrived.
+- The dev proxy keeps the header: a Node script starting Vite 8.3.1 (`createServer`, proxy
+  `/api` → a local server answering `x-waitron-build: 1c57940`) read `1c57940` through the proxy, and
+  `null` on Vite's own `index.html` (the control). The dev stack's till and dashboard call their
+  API through these same-origin proxies, so the page's own origin is the Vite port, and the
+  watcher's own-origin check holds there.
+
 - [ ] **Step 3: Run these experiments, and say beforehand what failing looks like**
 
 1. **The header reaches the browser through the dev servers.** Print `state.realBuild` after the
@@ -1604,12 +1679,18 @@ Run it from `apps/dashboard`: `cd <worktree>/apps/dashboard && node <scratch>/lo
 3. **Dashboard Reload loads the new build.** Press the bar's Reload; wait for the page's `load`
    event; with `faking` still set (the box "is" now on `a491-probe`), trigger step 2's read again and
    expect NO bar — the reloaded page took `a491-probe` as its own build.
-4. **Till idle on the lock screen reloads itself.** Open the till, wait for the lock screen, set
+4. **Till idle on the lock screen reloads itself.** Open the till (in dev mode a fresh tab first
+   shows the device picker: choose a till; the choice is kept in `sessionStorage`, which a reload
+   keeps), wait for the lock screen, set
    `faking = true`; expect a page navigation within about 10 s (the router probes every 5 s) and no
    bar afterwards. Failing looks like no navigation.
 5. **Till signed in shows the bar and does not reload.** Sign in with `5555`, set `faking = true`;
    expect the bar within about 10 s and NO navigation for 15 s after it. Press Reload; expect a
-   navigation and the lock screen.
+   navigation and the lock screen. This is also the receipt for Decision 5's "a reload signs the
+   operator out", which until now rests on reading: failing looks like the reloaded till coming
+   back signed in (the counter or the shell, not `till-lock-screen`). If it does, stop and report:
+   the "signed in counts as busy" term then has no reason, and `#busyForReload` and its first test
+   must change before this branch finishes.
 6. **LOOK.** Screenshot the dashboard bar (signed in) and the till bar (signed in) in English and
    Spanish (switch with each app's language chooser), light and dark, at 390 and 1280 wide: 16
    images. Open every one with the Read tool. Check: the dashboard bar sits directly under the brand
@@ -1617,11 +1698,24 @@ Run it from `apps/dashboard`: `cd <worktree>/apps/dashboard && node <scratch>/lo
    off-screen; the button wraps under the message at 390 rather than overflowing; text contrast is
    readable in dark.
 
-Write each experiment's outcome in one line for the commit message. Then stop the stack:
-`wa-wt down <slug>`, and kill any process this task started by the pid you recorded. Delete the
-scratch directory.
+Write each experiment's outcome in one line in the ledger (with the date and what it printed). Then
+stop the stack: `wa-wt down <slug>`, and kill any process this task started by the pid you
+recorded. Delete the scratch directory. No commit.
 
-- [ ] **Step 4: Write the docs**
+---
+
+## Task 7: Write the docs, and draft the FYI
+
+**Files:**
+- Modify: `docs/developers/design-system.md` ("Dashboard banner" section, ~line 2593; and the till's
+  "Counter basket and payment space" section, ~line 3761, or the nearest till section)
+- Modify: `docs/developers/conventions-ui.md` (a new section after "The dashboard banner is persistent identity chrome", ~line 374)
+- Modify: `docs/backlog/dashboard.md` ("Decisions and deliberate limits", ~line 891)
+
+**Interfaces:**
+- Consumes: Task 6's ledger lines, one per experiment.
+
+- [ ] **Step 1: Write the docs**
 
 1. `docs/developers/design-system.md`, "Dashboard banner": add a paragraph:
    "When the server reports a different build from the one the page first saw, an update bar
@@ -1650,8 +1744,8 @@ scratch directory.
    `till-app-boot-and-counter.test.ts`; `main.ts` wiring in both apps is checked by no test.
    ```
 
-   (Adjust the last sentence to what Task 6 Step 3 actually showed: name the probe and its date if it
-   passed.)
+   (Adjust the last sentence to what Task 6 Step 3 actually showed, read from the ledger: name the
+   probe and its date if it passed.)
 3. `docs/backlog/dashboard.md`, "Decisions and deliberate limits", add:
 
    ```markdown
@@ -1659,26 +1753,31 @@ scratch directory.
      purpose: a signed-out dashboard tab that makes no automatic read sees the update only on its
      next request; a page that first hears from the box after the update takes the new build as its
      own and never shows the bar; a till with nobody signed in reloads even while someone is typing a
-     PIN (typed digits are not a draft); once the till shows the bar it does not reload later by
-     itself. The failed-start recovery page sends no build header.
+     PIN (typed digits are not a draft); a signed-in till with nothing open shows the bar rather
+     than signing its operator out; once the till shows the bar it does not reload later by itself;
+     an idle till that once had a bill payment or refund refused shows the bar rather than
+     reloading, because it keeps that send's id for a resend. Every response after `/health` names
+     the box's build to whoever can reach it, signed in or not. The failed-start recovery page
+     sends no build header.
    ```
 
 4. Confirm the backlog has nothing to delete: `grep -rn "A491" docs/backlog.md docs/backlog/` lists
    only the new limits entry.
 
-- [ ] **Step 5: Commit and draft the FYI**
+- [ ] **Step 2: Commit and draft the FYI**
 
 ```bash
 git add docs/developers/design-system.md docs/developers/conventions-ui.md docs/backlog/dashboard.md
 git commit -s -m "Docs: the update bar, the build header and what a till counts as busy (A491)" \
-  -m "<one line per Step 3 experiment and what it showed>"
+  -m "<one line per Task 6 Step 3 experiment and what it showed, from the ledger>"
 ```
 
 Draft, for the PR description and the owner's one-line FYI when it lands: "A491 landed: after a box
 update an open dashboard shows 'Waitron was updated. [Reload]', and a till reloads by itself when
-nobody is signed in and nothing is open, otherwise shows the same bar." Put decision 5's two FYI
-defaults (a half-typed PIN; the bar does not turn into a reload later) in the PR description as
-questions the owner may answer.
+nobody is signed in and nothing is open, otherwise shows the same bar." Put these FYI defaults in
+the PR description as questions the owner may answer: a half-typed PIN is lost to an automatic
+reload; the bar does not turn into a reload later; a signed-in till with nothing open shows the bar
+instead of reloading (Decision 5); the build is named to unauthenticated callers (Decision 1).
 
 Then announce the branch ready for `/finish-branch` (FULL path).
 
@@ -1693,7 +1792,7 @@ Then announce the branch ready for `/finish-branch` (FULL path).
   build never does (Task 2 "stays quiet while it repeats"; Task 4 "no update bar"); the till's busy
   case shows the bar (Task 5); Reload loads the new build (Task 4/5 call `reload`; Task 6 Step 3.3
   shows a reloaded page takes the new build as its own); `wt-*` primitive with token and axe tests
-  (Task 3); LOOK EN/ES × themes × 390/1280 (Task 6); path by risk FULL (header); FYI (Task 6).
+  (Task 3); LOOK EN/ES × themes × 390/1280 (Task 6); path by risk FULL (header); docs and FYI (Task 7).
 - **Placeholders:** the only `<…>` left are commit-message bodies that depend on what an experiment
   prints, and the date in the a11y-verified line.
 - **Names used across tasks:** `BUILD_HEADER`, `buildHeaderMiddleware`, `watchBuild`,
