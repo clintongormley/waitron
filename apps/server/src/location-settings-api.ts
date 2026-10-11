@@ -9,7 +9,7 @@ import { AppError, hasCode, isAppError } from "@waitron/shared";
 import { createErrorBoundary, readJsonBody, requireManagementSession } from "@waitron/server-kit";
 import type { Logger } from "./logger.js";
 import { readVenueReceiptLanguageRules } from "./venue-locale.js";
-import { readVenueDetails, writeVenueDetails } from "./venue-details.js";
+import { readOnlyVenueFields, readVenueDetails, writeVenueDetails } from "./venue-details.js";
 import { venueClockPreview } from "./venue-clock-preview.js";
 import type { VenueClockPreview, VenueDetailWrite } from "./venue-detail-types.js";
 import "./errors.js";
@@ -62,17 +62,24 @@ function requestedLanguage(body: unknown): string {
   return language;
 }
 
+function text(value: string): string {
+  return value.normalize("NFC").trim();
+}
+
 function legalNameRequest(body: unknown): { legalName: string; expected: string } {
   const invalid = (field: string, reason: string) =>
     new AppError("venue.detail_invalid", { field, reason });
   if (typeof body !== "object" || body === null || Array.isArray(body))
     throw invalid("body", "type");
+  for (const key of Object.keys(body))
+    if (key !== "legalName" && readOnlyVenueFields.has(key))
+      throw new AppError("venue.detail_read_only", { field: key });
   if (Object.keys(body).some((key) => key !== "legalName" && key !== "expected"))
     throw invalid("body", "unknown_field");
   const { legalName, expected } = body as Record<string, unknown>;
   if (typeof legalName !== "string") throw invalid("legalName", "type");
   if (typeof expected !== "string") throw invalid("expected", "type");
-  return { legalName: legalName.normalize("NFC").trim(), expected };
+  return { legalName: text(legalName), expected: text(expected) };
 }
 
 export function mountLocationSettingsApi(
@@ -156,9 +163,13 @@ export function mountLocationSettingsApi(
           throw refuse("fiscal_format");
         }
         const { issuer } = await readVenueDetails(tx, deps.cfg);
-        if (legalName === issuer.legalName && expected === issuer.legalName)
-          throw refuse("unchanged");
-        const { renamed } = await renameTaxpayer(tx, { expected, legalName });
+        const stored = text(issuer.legalName);
+        if (legalName === stored && expected === stored) throw refuse("unchanged");
+        // A match after normalising stands for the stored spelling, which the write compares exactly.
+        const { renamed } = await renameTaxpayer(tx, {
+          expected: expected === stored ? issuer.legalName : expected,
+          legalName,
+        });
         if (!renamed) throw new AppError("venue.detail_changed", { field: "legalName" });
         return { model: await readVenueDetails(tx, deps.cfg) };
       });

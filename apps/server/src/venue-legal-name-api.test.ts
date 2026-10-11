@@ -92,7 +92,7 @@ describe("changing the taxpayer's legal name", () => {
 
   it.each([
     ["a non-object body", ["Deli Nueva SL"], "body", "type"],
-    ["an unknown key", { legalName: "X SL", expected: "", taxId: "B1" }, "body", "unknown_field"],
+    ["an unknown key", { legalName: "X SL", expected: "", colour: "red" }, "body", "unknown_field"],
     ["a non-string name", { legalName: 7, expected: "" }, "legalName", "type"],
     ["a missing expected name", { legalName: "X SL" }, "expected", "type"],
   ])("refuses %s", async (_label, body, field, reason) => {
@@ -102,6 +102,39 @@ describe("changing the taxpayer's legal name", () => {
       error: { code: "venue.detail_invalid", params: { field, reason } },
     });
     expect((await taxpayer()).legalName).toBe(original);
+  });
+
+  it.each(["taxId", "country", "locationId", "fiscalTerritory"])(
+    "refuses a body carrying the read-only %s by name and writes nothing",
+    async (field) => {
+      const response = await rename({
+        legalName: "Deli Nueva SL",
+        expected: original,
+        [field]: "ES",
+      });
+      expect(response.status).toBe(409);
+      expect(await response.json()).toEqual({
+        error: { code: "venue.detail_read_only", params: { field } },
+      });
+      expect((await taxpayer()).legalName).toBe(original);
+    },
+  );
+
+  it.each([
+    ["padded", (stored: string) => `  ${stored}  `],
+    ["decomposed", (stored: string) => stored.normalize("NFD")],
+  ])("accepts a %s copy of the stored name as the expected name", async (_label, copy) => {
+    await suite.db.execute(sql`update tenants set legal_name = ${"Caf\u00e9 SL"} where id = 1`);
+    const response = await rename({ legalName: "Deli Nueva SL", expected: copy("Caf\u00e9 SL") });
+    expect(response.status).toBe(200);
+    expect((await taxpayer()).legalName).toBe("Deli Nueva SL");
+  });
+
+  it("accepts the composed spelling as the expected name for a name stored decomposed", async () => {
+    await suite.db.execute(sql`update tenants set legal_name = ${"Cafe\u0301 SL"} where id = 1`);
+    const response = await rename({ legalName: "Deli Nueva SL", expected: "Caf\u00e9 SL" });
+    expect(response.status).toBe(200);
+    expect((await taxpayer()).legalName).toBe("Deli Nueva SL");
   });
 
   it("requires a session and the venue configuration permission", async () => {

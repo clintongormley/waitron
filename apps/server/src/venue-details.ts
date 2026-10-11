@@ -22,7 +22,13 @@ const fields: readonly VenueDetailField[] = [
   "timeZone",
   "dayCutover",
 ];
-const readOnly = new Set(["country", "legalName", "taxId", "locationId", "fiscalTerritory"]);
+export const readOnlyVenueFields: ReadonlySet<string> = new Set([
+  "country",
+  "legalName",
+  "taxId",
+  "locationId",
+  "fiscalTerritory",
+]);
 const nullable = new Set<VenueDetailField>([
   "addressLine1",
   "addressLine2",
@@ -40,7 +46,7 @@ function object(value: unknown, field: string): Record<string, unknown> {
 }
 function keys(value: Record<string, unknown>, allowed: readonly string[], field: string): void {
   for (const key of Object.keys(value)) {
-    if (readOnly.has(key)) throw new AppError("venue.detail_read_only", { field: key });
+    if (readOnlyVenueFields.has(key)) throw new AppError("venue.detail_read_only", { field: key });
   }
   for (const key of Object.keys(value)) {
     if (!allowed.includes(key)) invalid(field, "unknown_field");
