@@ -913,6 +913,7 @@ it.each([
         if (url === "/management-api/venue-service/routing")
           return {
             zones: [],
+            periods: [],
             categories: [],
             products: [],
             cells: [],
