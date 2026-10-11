@@ -204,14 +204,8 @@ classification entry — never an enum, CLAUDE.md §2); names (built-ins are tra
 
 ## What C47 part 2 found and did not fix
 
-  Found during C47 part 2 and not fixed: (a) a bad Stripe reader id reaches the add-reader dialog as
-  `server.internal`, so it cannot be told from a server fault — the Stripe seat's `readers.add`
-  (`packages/payments-stripe/src/card-provider.ts`) lets the Stripe library's own error through,
-  and the error boundary (`packages/server-kit/src/error-boundary.ts`) answers anything that is not
-  an `AppError` with `server.internal`; (b) the Stripe add-reader dialog
-  (`packages/payments-stripe/src/dashboard/stripe-add-reader.ts`) shows "Reader ID" twice, a
-  separate label carrying the help icon and then the input's own label, where `wt-input`'s `help`
-  slot would do; (c) a refused save of a venue service setting that saves at once shows twice,
+  Found during C47 part 2 and not fixed (its points (a) and (b), about the Stripe add-reader
+  dialog, were fixed by A519): (c) a refused save of a venue service setting that saves at once shows twice,
   beside the control and at the top of the panel (`render`,
   `packages/venue-service/src/dashboard/service-settings-panel.ts`), and the cases in
   `packages/venue-service/src/dashboard/service-settings-panel.test.ts` pin both;

@@ -3125,16 +3125,6 @@ _Formerly A6, and the old Track C's payments items; part of A9._ Detail: [backlo
   choose the right one; the current page shows amounts alone.** Left open by A247 (a pretend
   connected card reader in Demo mode, W38, #1172).
 
-- **A bad Stripe reader id reaches the add-reader dialog as `server.internal`, so it cannot be told
-  from a server fault** — found during C47 part 2 and not fixed: the Stripe seat's `readers.add`
-  (`packages/payments-stripe/src/card-provider.ts`) lets the Stripe library's own error through, and
-  the error boundary (`packages/server-kit/src/error-boundary.ts`) answers anything that is not an
-  `AppError` with `server.internal`.
-
-- **The Stripe add-reader dialog (`packages/payments-stripe/src/dashboard/stripe-add-reader.ts`)
-  shows "Reader ID" twice** — found during C47 part 2 and not fixed: a separate label carrying the
-  help icon and then the input's own label, where `wt-input`'s `help` slot would do.
-
 - **Tip-collection UI** — the only surface that COLLECTS a tip is the integrated-Stripe idle screen;
   cash, manual card and the handheld have none. A design decision per tender type. And `#onPayTab`
   flattens every server code but the two permanent fiscal refusals to one `sale.error` key, hiding
