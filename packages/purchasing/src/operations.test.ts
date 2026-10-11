@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
-import { purchaseInvoiceVat, purchaseInvoices, withTransaction } from "@waitron/db";
+import { checkFailed, purchaseInvoiceVat, purchaseInvoices, withTransaction } from "@waitron/db";
 import { usePurchasingDb } from "../test/fixtures.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 import { hasCode, isAppError } from "@waitron/shared";
@@ -356,15 +356,8 @@ describe("purchase-invoice operations", () => {
   });
 
   it("propagates a non-unique DB error from the header insert (not swallowed as a duplicate)", async () => {
-    // The rethrow branch of create's duplicate translation: a database refusal that is not a
-    // duplicate must surface as itself, never as a spurious purchase.duplicate. The refusal used
-    // here is a `regime` outside the column's vocabulary, which `createPurchaseInvoice` does not
-    // validate — only the proportion and the lines are checked before the header insert — so it
-    // reaches the database and comes back as a driver error rather than an AppError. What refuses
-    // is the `purchase_invoices_regime_ck` CHECK (`packages/db/src/schema/purchase-invoices.ts`).
-    //
-    // Caught OUTSIDE the transaction, so what is captured is the error `withTransaction` propagates
-    // rather than one read mid-flight.
+    // `createPurchaseInvoice` does not validate `regime`, so an unknown one reaches the database
+    // and is refused by its CHECK. Caught outside the transaction, as `withTransaction` propagates it.
     const error = await captureThrown(() =>
       asApp((tx) =>
         createPurchaseInvoice(tx, {
@@ -374,6 +367,7 @@ describe("purchase-invoice operations", () => {
       ),
     );
     expect(isAppError(error)).toBe(false);
+    expect(checkFailed(error, "purchase_invoices_regime_ck")).toBe(true);
   });
 
   it("maps a duplicate supplier invoice to purchase.duplicate", async () => {
@@ -451,6 +445,7 @@ describe("purchase-invoice operations", () => {
       ),
     );
     expect(isAppError(error)).toBe(false);
+    expect(checkFailed(error, "purchase_invoices_regime_ck")).toBe(true);
   });
 });
 
