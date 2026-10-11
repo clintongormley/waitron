@@ -211,8 +211,7 @@ import { mountStationTodayApi } from "./station-today-api.js";
 import { mountUnpaidDepartureApi } from "./unpaid-departure-api.js";
 import { mountBillLookupApi } from "./bill-lookup-api.js";
 import { mountInvoiceLookupApi } from "./invoice-lookup-api.js";
-import { resolveInstalledReceiptLanguageRules } from "@waitron/country-packs";
-import { geographyOf } from "./venue-locale.js";
+import { readOfferedReceiptLanguages } from "./venue-locale.js";
 import { resolveLoginLocale } from "./login-locale.js";
 // Side-effect only: loads this host's errors.ts augmentation.
 import "./errors.js";
@@ -1248,7 +1247,6 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
           .select({
             bumpMode: locations.bumpMode,
             fireControl: locations.fireControl,
-            province: locations.province,
           })
           .from(locations)
           .where(eq(locations.id, deps.cfg.locationId));
@@ -1300,8 +1298,9 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
         }
         return {
           invoiceLocale: (await readReceiptLanguage(tx, deps.cfg.locationId)).locale,
-          receiptLanguages: resolveInstalledReceiptLanguageRules(geographyOf(taxpayer, loc))
-            .choices,
+          receiptLanguages: await readOfferedReceiptLanguages(tx, {
+            locationId: deps.cfg.locationId,
+          }),
           issuer:
             taxpayer === null ? undefined : { venueName: taxpayer.legalName, nif: taxpayer.taxId },
           bumpMode: loc?.bumpMode,

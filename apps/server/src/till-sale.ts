@@ -69,7 +69,7 @@ import { VENUE_SERVICE } from "./modules.js";
 import { readReceiptOrder } from "./receipt-order.js";
 import { receiptLines } from "./receipt-adjustments.js";
 import type { DeviceRequestConfig, OriginConfig, TillConfig } from "./till-config.js";
-import { readVenueReceiptLanguageRules } from "./venue-locale.js";
+import { readOfferedReceiptLanguages } from "./venue-locale.js";
 import { storedDeviceOrigin } from "./request-config.js";
 import {
   enqueueSaleDrawer,
@@ -759,20 +759,18 @@ export async function printSaleReceipt(
   personId?: string,
 ): Promise<void> {
   await withTransaction(deps.db, async (tx) => {
-    if (language !== undefined) {
-      // Any of the pack's languages, even where the region fixes one (`fixed`), is a product
-      // choice (docs/backlog/printers.md, C114); it includes Spanish, which a customer there may
-      // ask for (TC 88/2017).
-      const { choices } = await readVenueReceiptLanguageRules(tx, { locationId: cfg.locationId });
-      if (!choices.includes(language)) {
+    const [existing] = await tx
+      .select({ id: sales.id, locale: sales.locale })
+      .from(sales)
+      .where(eq(sales.workingOrderId, workingOrderId));
+    if (language !== undefined && language !== existing?.locale) {
+      // The sale's own language stays accepted after the venue stops offering it.
+      const offered = await readOfferedReceiptLanguages(tx, { locationId: cfg.locationId });
+      if (!offered.includes(language)) {
         throw new AppError("management.request_invalid", { field: "language" });
       }
     }
     // No filed sale → nothing to print. This keeps `readSettledTicket`'s "no sale" throw unreachable.
-    const [existing] = await tx
-      .select({ id: sales.id })
-      .from(sales)
-      .where(eq(sales.workingOrderId, workingOrderId));
     if (existing === undefined) return;
     const ticket = await readSettledTicket(deps.backend, tx, cfg, workingOrderId);
     if (duplicate) await enqueueReceiptReprint(tx, cfg, ticket, existing.id, language, personId);

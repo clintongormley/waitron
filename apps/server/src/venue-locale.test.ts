@@ -6,6 +6,7 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 import { getCountryPack } from "@waitron/country-packs";
 import {
+  offeredReceiptLanguages,
   readVenueContentLanguageRules,
   readVenueLocale,
   readVenueReceiptLanguageRules,
@@ -154,5 +155,42 @@ describe("readVenueReceiptLanguageRules", () => {
     } finally {
       await seedTenant(suite.db);
     }
+  });
+});
+
+describe("offeredReceiptLanguages", () => {
+  const SPAIN_RECEIPT = ["es-ES", "ca-ES", "gl-ES", "eu-ES"];
+
+  it.each([
+    ["Madrid, content es and en", "es-ES", ["es", "en"], ["es-ES"]],
+    ["Barcelona, content ca, es and en", "ca-ES", ["ca", "es", "en"], ["ca-ES", "es-ES"]],
+    [
+      "content es, gl and eu, receipt Spanish",
+      "es-ES",
+      ["es", "gl", "eu"],
+      ["es-ES", "gl-ES", "eu-ES"],
+    ],
+    [
+      "a receipt language outside the content languages",
+      "gl-ES",
+      ["es", "ca"],
+      ["gl-ES", "es-ES", "ca-ES"],
+    ],
+    [
+      "a Valencian venue, which does not offer Catalan",
+      "es-ES",
+      ["ca-ES-valencia", "es"],
+      ["es-ES"],
+    ],
+  ])("%s", (_name, receiptLanguage, contentCodes, expected) => {
+    expect(offeredReceiptLanguages(receiptLanguage, SPAIN_RECEIPT, contentCodes)).toEqual(expected);
+  });
+
+  it("puts the receipt language first and repeats nothing", () => {
+    expect(offeredReceiptLanguages("eu-ES", SPAIN_RECEIPT, ["es", "eu", "ca"])).toEqual([
+      "eu-ES",
+      "es-ES",
+      "ca-ES",
+    ]);
   });
 });

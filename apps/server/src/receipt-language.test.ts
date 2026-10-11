@@ -265,6 +265,11 @@ async function tillInvoiceLocale(v: Venue): Promise<string | undefined> {
   return ((await res.json()) as { invoiceLocale?: string }).invoiceLocale;
 }
 
+async function tillReceiptLanguages(v: Venue): Promise<string[] | undefined> {
+  const res = await v.app.request("/api/till", { headers: { cookie: v.till } });
+  return ((await res.json()) as { receiptLanguages?: string[] }).receiptLanguages;
+}
+
 /** True when a printed line is the label alone or the label followed by its value. */
 const startsWith = (lines: string[], label: string) =>
   lines.some((line) => line === label || line.startsWith(`${label} `));
@@ -638,8 +643,9 @@ describe("an issued receipt reprinted in another receipt language", () => {
     }
   });
 
-  it.each([["en-GB"], [5], [null], [["es-ES"]]])(
-    "refuses a language %j outside the pack's receipt languages, printing nothing",
+  // `eu-ES` is a pack receipt language, but Basque is not one of this venue's content languages.
+  it.each([["eu-ES"], ["en-GB"], [5], [null], [["es-ES"]]])(
+    "refuses a language %j outside the offered receipt languages, printing nothing",
     async (language) => {
       const { v, sale } = await catalanSale();
       const before = saleTables(suite.db);
@@ -653,14 +659,32 @@ describe("an issued receipt reprinted in another receipt language", () => {
     },
   );
 
-  it("offers the till the pack's receipt languages", async () => {
+  it("offers the till the location's receipt language first, then the pack's receipt languages among the content languages", async () => {
     const v = await venueWith(suite.db, ["ca-ES"], BARCELONA);
-    const res = await v.app.request("/api/till", { headers: { cookie: v.till } });
-    expect(((await res.json()) as { receiptLanguages?: string[] }).receiptLanguages).toEqual([
-      "es-ES",
-      "ca-ES",
-      "gl-ES",
-      "eu-ES",
-    ]);
+    expect(await tillReceiptLanguages(v)).toEqual(["ca-ES", "es-ES", "gl-ES"]);
+  });
+
+  it("prints a copy in the sale's own language after that language stops being offered", async () => {
+    const v = await venueWith(suite.db, ["gl-ES"], MADRID);
+    const sale = await sell(v, { method: "cash", amount: "5.00" });
+    expect(sale.body.locale).toBe("gl-ES");
+    await takePrinted(suite.db);
+    await withTransaction(suite.db, async (tx) => {
+      await tx
+        .update(locations)
+        .set({ invoiceLocales: ["es-ES"] })
+        .where(eq(locations.id, v.cfg.locationId));
+      await tx.execute(
+        sql`update content_languages set default_language = 'es', languages = '["es","ca"]'`,
+      );
+    });
+    // The control: Galician is no longer offered.
+    expect(await tillReceiptLanguages(v)).toEqual(["es-ES", "ca-ES"]);
+
+    expect((await reprint(v, sale.id, { language: "gl-ES" })).status).toBe(200);
+    const [copy] = await takePrinted(suite.db);
+    expect(startsWith(copy!, "IVE"), "IVE").toBe(true);
+    expect(startsWith(copy!, "IVA")).toBe(false);
+    expect(copy).toContain("DUPLICADO");
   });
 });

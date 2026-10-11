@@ -7,6 +7,11 @@ import {
   type Database,
   type Transaction,
 } from "@waitron/db";
+import {
+  contentLanguagesOr,
+  readReceiptLanguage,
+  readSavedContentLanguages,
+} from "@waitron/catalogue";
 import type { ReceiptLanguageRules } from "@waitron/country";
 import {
   resolveInstalledContentLanguageRules,
@@ -14,19 +19,12 @@ import {
   resolveInstalledReceiptLanguageRules,
 } from "@waitron/country-packs";
 import {
+  contentLanguageCode,
   FALLBACK_LOCALE,
   SUPPORTED_LOCALE_CODES,
   type ContentLanguageRules,
   type SupportedLocale,
 } from "@waitron/shared";
-
-/** The venue's geography from its taxpayer and location rows, for a caller that has read them. */
-export function geographyOf(
-  taxpayer: { country: string | null } | null | undefined,
-  location: { province: string | null } | null | undefined,
-): { country: string | null; area: string | null } {
-  return { country: taxpayer?.country ?? null, area: location?.province ?? null };
-}
 
 async function geographyIn(
   tx: Transaction,
@@ -37,7 +35,7 @@ async function geographyIn(
     .select({ province: locations.province })
     .from(locations)
     .where(eq(locations.id, locationId));
-  return geographyOf(t, loc);
+  return { country: t?.country ?? null, area: loc?.province ?? null };
 }
 
 function readVenueGeography(
@@ -84,4 +82,35 @@ export async function readVenueReceiptLanguageRules(
   params: { locationId: string },
 ): Promise<ReceiptLanguageRules> {
   return resolveInstalledReceiptLanguageRules(await geographyIn(tx, params.locationId));
+}
+
+/**
+ * The receipt languages staff may print in: `receiptLanguage` first, then each of `packChoices`
+ * whose content-language code is one of `contentCodes`. Codes match exactly, so a Valencian
+ * (`ca-ES-valencia`) content language does not offer `ca-ES`.
+ */
+export function offeredReceiptLanguages(
+  receiptLanguage: string,
+  packChoices: readonly string[],
+  contentCodes: readonly string[],
+): string[] {
+  const offered = [receiptLanguage];
+  for (const choice of packChoices) {
+    if (!offered.includes(choice) && contentCodes.includes(contentLanguageCode(choice))) {
+      offered.push(choice);
+    }
+  }
+  return offered;
+}
+
+/** {@link offeredReceiptLanguages} for a location, read in the caller's transaction. With no saved
+ * content languages, only the location's receipt language is offered. */
+export async function readOfferedReceiptLanguages(
+  tx: Transaction,
+  params: { locationId: string },
+): Promise<string[]> {
+  const { locale } = await readReceiptLanguage(tx, params.locationId);
+  const { choices } = await readVenueReceiptLanguageRules(tx, params);
+  const { languages } = contentLanguagesOr(await readSavedContentLanguages(tx), locale);
+  return offeredReceiptLanguages(locale, choices, languages);
 }
