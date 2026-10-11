@@ -1826,7 +1826,9 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   planned zone drawn on a new map with status colours and dots, a details sheet, the seat dialog,
   a 15-second re-read, and the order screen's status pin and notice. Slice 4 is today's changes
   on the till: move, join, split, take off and reset tables for today. Left: removing the old
-  pieces. The map follows the zone's proportions;
+  pieces, planned to step level on 2026-10-11 with one question for the owner: the Floor plan nav
+  item is removed by default, or could open Departments and zones instead (slice 5 decision 1 in
+  the plan). The map follows the zone's proportions;
   Bill requested chips share its purple, and Guests has no placeholder.
   [Detail](backlog/till.md#a429--floor-plans-a-master-plan-per-zone-todays-plan-on-the-till)
 
