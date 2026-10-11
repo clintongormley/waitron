@@ -35,12 +35,6 @@ import { LocaleChangeController } from "../state/locale-controller.js";
 
 type Edition = MenuPublicationsAnswer["editions"][number];
 
-const STATE_KEYS: Record<Edition["state"], StringKey> = {
-  queued: "menu_publications.state_queued",
-  cancelled: "menu_publications.state_cancelled",
-  activated: "menu_publications.state_activated",
-};
-
 function screenLocale(): string {
   return currentLocale().startsWith("es") ? "es-ES" : "en-GB";
 }
@@ -182,8 +176,8 @@ function repeatedTime(params: Record<string, unknown>): RepeatedTime | null {
 }
 
 /**
- * A menu's scheduled versions, soonest first, then the latest settled ones, each with its
- * venue-local time and state. A queued version can be cancelled after a confirmation, or moved to
+ * A menu's waiting scheduled versions, soonest first, each with its
+ * venue-local time. A queued version can be cancelled after a confirmation, or moved to
  * another time through the schedule form.
  */
 @customElement("dashboard-menu-publications")
@@ -206,8 +200,8 @@ export class MenuPublicationsPanel extends LitElement {
       .retry {
         display: flex;
       }
-      wt-data-table::part(settled) {
-        color: var(--wt-color-text-muted);
+      wt-dialog[data-test="schedule-dialog"] {
+        --wt-dialog-max-width: min(90vw, var(--wt-modal-compact-width));
       }
       .question {
         margin: 0;
@@ -600,16 +594,6 @@ export class MenuPublicationsPanel extends LitElement {
           >`,
       },
       {
-        key: "state",
-        label: t("menu_publications.state_column"),
-        cell: (edition) =>
-          html`<span
-            part=${edition.state === "queued" ? "state" : "state settled"}
-            data-test=${`state-${edition.versionId}`}
-            >${t(STATE_KEYS[edition.state])}</span
-          >`,
-      },
-      {
         key: "actions",
         label: t("menu_publications.actions"),
         pinned: "end",
@@ -822,7 +806,7 @@ export class MenuPublicationsPanel extends LitElement {
         data-test="editions"
         aria-label=${t("menu_publications.heading")}
         noMatchesMessage=${tableNoMatches()}
-        .rows=${this.answer?.editions ?? []}
+        .rows=${this.answer?.editions.filter((edition) => edition.state === "queued") ?? []}
         .columns=${this.#columns()}
         .rowKey=${(edition: Edition) => edition.versionId}
         .loading=${this.loading}

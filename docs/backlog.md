@@ -639,10 +639,6 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
 
 _Formerly the catalogue and menus entries in the opening part of the old Track A (before A1), and the catalogue entries filed under A2; part of A9._ Detail: [backlog/catalogue.md](backlog/catalogue.md).
 
-- **A498. Menu screens: colour picker, menu preview and the Preview tab (owner, 2026-10-11).**
-  Shorter notes, fewer columns and a tighter Preview tab, "Publish now" and "Publish later", and a
-  narrower schedule dialog.
-  [Detail](backlog/catalogue.md#a498-menu-screens-colour-picker-menu-preview-and-the-preview-tab)
 
 - **A505. Duplicate a menu from the Menus list (owner, 2026-10-11).** A Duplicate item in each
   menu's row menu makes an unpublished copy called "<name> (copy)". Starts after A498 lands.

@@ -768,34 +768,6 @@ From **Allergens and nutrition (#370, #377, #385) — what is left open.**
   **Next action:** whoever adopts the shared picker for ingredients and the till picks ONE shape,
   and decides whether the product editor keeps both summaries.
 
-## A498. Menu screens: colour picker, menu preview and the Preview tab
-
-**A498 (owner, 2026-10-11) — OPEN.** English and Spanish strings both change.
-
-- **Colour picker** (`apps/dashboard/src/widgets/color-field.ts`). Remove the second line under
-  "Use category colour", "Its category has no colour." (`editor.color_category_none`). The ringed
-  Custom swatch is correct: it marks a colour that is not one of the palette's.
-- **Menu tree** (`apps/dashboard/src/widgets/menu-document-tree.ts`):
-  - centre each row's expand arrow on its swatch; today it sits level with the name's first line;
-  - replace the two grey notes, "Missing translation: ca" and "Staff name fallback"
-    (`customer_menu.missing_translation`, `customer_menu.staff_fallback`), with one: "No Catalan
-    name", the language spelt out;
-  - remove the Type and Available columns. Available is always "—" for a product and blank for a
-    section, and Type only says Section or Product, which the expand arrow already shows. That
-    leaves a single-column list with no headings.
-- **Preview tab** (`apps/dashboard/src/widgets/menu-preview.ts`):
-  - "Scheduled versions" moves into the left column above "Unpublished changes", so "The menu as it
-    is live" starts at the top on the right;
-  - "Expand all" sits on the language dropdown's line, to its right;
-  - "Show all changes" sits on the "Unpublished changes" heading's line, to its right;
-  - "Scheduled versions" lists only schedules still waiting, and its Status column goes. Today it
-    also lists up to ten past schedules, cancelled or already live (`SETTLED_LISTED`,
-    `packages/catalogue/src/menu-schedule.ts`);
-  - the note becomes "Current product availability is not shown." (`customer_menu.frozen_content`).
-- **Publishing.** "Publish Santet Deli Co" and "Schedule a publication…" (`menu_preview.publish`,
-  `menu_publications.schedule`) become two buttons, "Publish now" and "Publish later". The
-  "Schedule …" dialog (date, time and its buttons) is much narrower.
-
 ## A505. Duplicate a menu from the Menus list
 
 **A505 (owner, 2026-10-11) — OPEN. Starts after A498 lands** (lane D), which changes the same

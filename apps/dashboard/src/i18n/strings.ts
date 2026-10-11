@@ -226,7 +226,6 @@ export const en = {
   "editor.color_custom": "Custom",
   "editor.color_use_category": "Use category colour",
   "editor.color_use_default": "Use default colour",
-  "editor.color_category_none": "Its category has no colour.",
 
   "nav.modifiers": "Modifiers",
   "modifiers.title": "Modifiers",
@@ -2387,9 +2386,8 @@ export const en = {
     "{count} prices have clashes. Resolve them before publishing this menu.",
   "customer_menu.view": "Content view",
   "customer_menu.internal": "Internal names (staff only)",
-  "customer_menu.frozen_content": "Frozen publication content; current availability is not shown.",
-  "customer_menu.missing_translation": "Missing translation: {language}",
-  "customer_menu.staff_fallback": "Staff name fallback",
+  "customer_menu.frozen_content": "Current product availability is not shown.",
+  "customer_menu.missing_translation": "No {language} name",
   "customer_menu.unavailable_target": "This change target is unavailable.",
   "menu_preview.view_change": "View",
   "menu_preview.group_menu": "Menu",
@@ -2468,7 +2466,7 @@ export const en = {
     "{count} shortcuts on {menu}'s Device Home Page point at things no longer in this menu. They stay as empty spaces until you remove them.",
   "menu_preview.extra_portion_precision":
     "{product} in {list} has a saved portion of {amount}, which exceeds the unit's {precision} decimal places. Check it before publishing.",
-  "menu_preview.publish": "Publish {menu}",
+  "menu_preview.publish": "Publish now",
   "menu_preview.publishing": "Publishing {menu}…",
   "menu_preview.includer_note":
     "includes this menu. It keeps its live version until it is published.",
@@ -2497,7 +2495,7 @@ export const en = {
   "menu_publications.cancel_question":
     "Cancel version {number}, scheduled for {time}? Its number is not used again.",
   "menu_publications.keep": "Keep it",
-  "menu_publications.schedule": "Schedule a publication…",
+  "menu_publications.schedule": "Publish later",
   "menu_publications.schedule_heading": "Schedule {menu}",
   "menu_publications.schedule_intro":
     "The menu as this preview shows it goes live at the date and time you choose, on the venue's clock ({zone}).",
@@ -2844,7 +2842,6 @@ export const es: Record<StringKey, string> = {
   "editor.color_custom": "Personalizado",
   "editor.color_use_category": "Usar el color de la categoría",
   "editor.color_use_default": "Usar el color predeterminado",
-  "editor.color_category_none": "Su categoría no tiene color.",
 
   "nav.modifiers": "Modificadores",
   "modifiers.title": "Modificadores",
@@ -5021,10 +5018,8 @@ export const es: Record<StringKey, string> = {
     "{count} precios tienen conflictos. Resuélvelos antes de poder publicar esta carta.",
   "customer_menu.view": "Vista de contenido",
   "customer_menu.internal": "Nombres internos (solo personal)",
-  "customer_menu.frozen_content":
-    "Contenido de la publicación; no muestra la disponibilidad actual.",
-  "customer_menu.missing_translation": "Falta traducción: {language}",
-  "customer_menu.staff_fallback": "Nombre del personal como alternativa",
+  "customer_menu.frozen_content": "No se muestra la disponibilidad actual de los productos.",
+  "customer_menu.missing_translation": "Sin nombre en {language}",
   "customer_menu.unavailable_target": "El destino de este cambio no está disponible.",
   "menu_preview.view_change": "Ver",
   "menu_preview.group_menu": "Carta",
@@ -5105,7 +5100,7 @@ export const es: Record<StringKey, string> = {
     "{count} accesos directos de la página de inicio del dispositivo de {menu} apuntan a cosas que ya no están en esta carta. Quedan como espacios vacíos hasta que los quites.",
   "menu_preview.extra_portion_precision":
     "{product} en {list} tiene una porción guardada de {amount}, que supera los {precision} decimales de la unidad. Revísala antes de publicar.",
-  "menu_preview.publish": "Publicar {menu}",
+  "menu_preview.publish": "Publicar ahora",
   "menu_preview.publishing": "Publicando {menu}…",
   "menu_preview.includer_note":
     "incluye esta carta. Mantiene su versión publicada hasta que se publique.",
@@ -5134,7 +5129,7 @@ export const es: Record<StringKey, string> = {
   "menu_publications.cancel_question":
     "¿Cancelar la versión {number}, programada para el {time}? Su número no se vuelve a usar.",
   "menu_publications.keep": "Mantenerla",
-  "menu_publications.schedule": "Programar una publicación…",
+  "menu_publications.schedule": "Publicar más tarde",
   "menu_publications.schedule_heading": "Programar {menu}",
   "menu_publications.schedule_intro":
     "La carta tal como la muestra esta vista previa se publica en la fecha y la hora que elijas, según el reloj del local ({zone}).",

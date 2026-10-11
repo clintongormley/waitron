@@ -907,12 +907,11 @@ the two wider layouts: a choice made on a wide list does not hide Status or the 
 layout, and applies again once the list is wide. The key changed when Changes was added, so a choice
 saved before it, when Status was the only movable column, is not read.
 
-**A menu's queued versions sit on its Preview tab, under Publish.** The "Scheduled versions" panel
-lists every scheduled version, soonest first, then the ten most recently numbered settled ones, each
-with its time on the venue's clock and its state: "Scheduled", "Cancelled" or "Activated", the last
-two in the muted text colour. The time adds its UTC offset only when the venue's clock shows that
+**A menu's queued versions sit above Unpublished changes on its Preview tab.** The "Scheduled
+versions" panel lists only waiting schedules, soonest first, with their time on the venue's clock.
+Cancelled and activated editions stay in the API response but have no row or Status column here. The time adds its UTC offset only when the venue's clock shows that
 minute twice. The menus list does not show the queue: a menu whose only version is scheduled still
-reads "Unpublished" there until it goes live. "Schedule a publication…" opens a form with a date
+reads "Unpublished" there until it goes live. "Publish later" opens a compact form with a date
 and a time; it is offered only when the preview has loaded with no clashes and the draft
 differs from the version it would follow. Each scheduled row has a row menu, pinned at the end,
 with two separate actions: "Change time", which opens the same form starting at that version's date
@@ -3466,8 +3465,8 @@ language independently of the dashboard language, or select Internal names for s
 Keep the live version in the editor header rather than repeating it in Preview. Show price clashes
 as a red sentence, with each conflicting price and its source below it. A menu included by other
 menus names those includers as links to their Preview tabs beside Publish; omit that note when
-there are none. Keep publication actions outside the two scrolling panes. Put unpublished changes
-on the left and the proposed menu on the right. Stack the panes with changes first when the host
+there are none. Keep Publish now outside the scrolling panes. Put Scheduled versions and its
+Publish later action above unpublished changes on the left, and the proposed menu on the right. Stack the panes with changes first when the host
 has less than 800px available. Each pane has its own accessible name and keyboard focus.
 
 Group changes by type under small headings, with one plain bullet per change. Keep a source note
@@ -3479,12 +3478,14 @@ that menu's Home tab.
 
 Draw the proposed document as a read-only Structure-style tree. Share row presentation with
 Structure, including indentation and the swatch slot; an image occupies that same slot, with a
-colour fallback when absent. Read names from the frozen document, with visible requested/default/
-staff fallback notes and the actual translation's language tag. Internal names have an empty
+colour fallback when absent. Use one name column without headings; centre the expand arrow on the
+media slot. Read names from the frozen document; a missing requested name gets one note naming
+that language, even when the displayed fallback is a staff name. Keep the actual translation's language tag. Internal names have an empty
 language tag rather than inheriting the dashboard language. A replacement preview resets the
 tree's expansion and highlight without moving focus. Changing Content view makes no request.
 
-A Hide link removes a bullet and its group when the group becomes empty. Show all changes restores
+Put Expand all to the right of Content view. Put Show all changes to the right of the Unpublished
+changes heading. A Hide link removes a bullet and its group when the group becomes empty. Show all changes restores
 them and is disabled when nothing is hidden. Show the hidden count beside it and explain that
 Publish still includes every change. Keep hidden IDs in component state for the same menu,
 intersecting them with each refreshed change list; leaving the menu forgets them.

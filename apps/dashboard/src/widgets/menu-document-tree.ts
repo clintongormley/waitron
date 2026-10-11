@@ -14,7 +14,7 @@ import type {
   MenuTarget,
 } from "@waitron/catalogue/src/menu-document-types.js";
 import { indexMenuOccurrences } from "@waitron/catalogue/src/menu-navigation.js";
-import { t } from "../i18n/t.js";
+import { currentLocale, t } from "../i18n/t.js";
 import { LocaleChangeController } from "../state/locale-controller.js";
 import { productMedia, productMediaFrame, productMediaStyles } from "./product-media.js";
 import { swatchPartStyles } from "./swatch-styles.js";
@@ -39,19 +39,24 @@ export class MenuDocumentTree extends LitElement {
         min-width: 0;
         container-type: inline-size;
       }
+      wt-data-table::part(table-head) {
+        display: none;
+      }
+      wt-data-table::part(tree-cell) {
+        align-items: center;
+      }
+      wt-data-table::part(folder-stack) {
+        align-self: center;
+      }
       wt-data-table[narrow]::part(name-stack) {
         min-width: 0;
-        max-inline-size: min(
-          calc(var(--wt-tap-min) * 2),
-          max(var(--wt-tap-min), calc(100cqw - var(--wt-tap-min) * 5 - var(--wt-space-3) * 2))
-        );
+        max-inline-size: calc(100cqw - var(--wt-tap-min) * 2 - var(--wt-space-3) * 2);
         overflow-wrap: anywhere;
       }
       wt-data-table::part(target) {
         background: var(--wt-color-surface-lifted);
         outline: var(--wt-focus-ring);
       }
-      wt-data-table::part(kind),
       wt-data-table::part(note) {
         color: var(--wt-color-text-muted);
       }
@@ -183,8 +188,7 @@ export class MenuDocumentTree extends LitElement {
       aria-current=${row.key === this.highlightedKey ? "true" : nothing}
     >
       <span data-test="name" lang=${text.language ?? ""}>${text.text}</span>
-      ${text.missingRequested ? html`<span part="note">${t("customer_menu.missing_translation").replace("{language}", this.view.kind === "customer" ? this.view.language : this.languages.defaultLanguage)}</span>` : nothing}
-      ${text.missingRequested && text.origin === "staff" ? html`<span part="note">${t("customer_menu.staff_fallback")}</span>` : nothing}
+      ${text.missingRequested ? html`<span part="note">${t("customer_menu.missing_translation").replace("{language}", new Intl.DisplayNames([currentLocale()], { type: "language" }).of(this.view.kind === "customer" ? this.view.language : this.languages.defaultLanguage) ?? (this.view.kind === "customer" ? this.view.language : this.languages.defaultLanguage))}</span>` : nothing}
     </span>`;
     const media =
       member.kind === "section"
@@ -209,28 +213,7 @@ export class MenuDocumentTree extends LitElement {
   }
 
   #columns(): DataTableColumn<Row>[] {
-    return [
-      { key: "name", label: t("members.name"), cell: (row) => this.#nameCell(row) },
-      {
-        key: "kind",
-        label: t("members.kind"),
-        cell: (row) =>
-          row.member === null
-            ? nothing
-            : html`<span part="kind"
-                >${t(row.member.kind === "section" ? "members.kind_section" : "members.kind_product")}</span
-              >`,
-      },
-      // Availability is a live overlay, absent from the frozen document.
-      {
-        key: "available",
-        label: t("editor.available"),
-        cell: (row) =>
-          row.member?.kind === "product"
-            ? html`<span part="kind" data-test="available">—</span>`
-            : nothing,
-      },
-    ];
+    return [{ key: "name", label: t("members.name"), cell: (row) => this.#nameCell(row) }];
   }
 
   override render(): unknown {
@@ -249,6 +232,7 @@ export class MenuDocumentTree extends LitElement {
         .rowCollapsible=${(row: Row) => row.member !== null}
         .rowActivation=${(row: Row) => (row.member?.kind === "section" ? "toggle" : "none")}
         .rowToggleLabel=${(row: Row, expanded: boolean) => t(expanded ? "menus.collapse" : "menus.expand").replace("{name}", row.member === null ? this.#snapshot!.menuName : this.#text(row.member).text)}
+        ><div slot="toolbar-start"><slot name="view"></slot></div
       ></wt-data-table>`,
     );
   }
