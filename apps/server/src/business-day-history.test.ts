@@ -2,14 +2,7 @@ import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { eq, sql } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import {
-  dailyCloseChain,
-  dailyCloses,
-  locationDayCutoverChanges,
-  locations,
-  sales,
-  withTransaction,
-} from "@waitron/db";
+import { dailyCloseChain, dailyCloses, locations, sales, withTransaction } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { addDecimal, decimal, saleId as brandSaleId } from "@waitron/shared";
@@ -24,6 +17,7 @@ import {
 } from "@waitron/reporting";
 import { loginWithPin, startManagementSession } from "@waitron/identity";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
+import { recordKitchenNotices } from "@waitron/venue-service";
 import { settleSale } from "@waitron/core";
 import { SESSION_COOKIE } from "./till-session.js";
 import { send } from "./testing/bill-venue.js";
@@ -42,6 +36,9 @@ import {
   provisionOrderVenue,
   type OrderVenue,
 } from "./testing/order-venue.js";
+import { venueFiscalSelection } from "@waitron/provisioning";
+import { ALL_MODULES } from "./modules.js";
+import { mountLocationSettingsApi } from "./location-settings-api.js";
 import { mountReportApi } from "./report-api.js";
 import { listOrders } from "./orders-list.js";
 
@@ -54,6 +51,16 @@ beforeEach(async () => {
   venue = await provisionOrderVenue(suite.db);
   app = new Hono();
   mountReportApi(app, { db: suite.db, cfg: venue.cfg, venueLocale: "es-ES" }, () => {});
+  mountLocationSettingsApi(
+    app,
+    {
+      db: suite.db,
+      cfg: venue.cfg,
+      now: () => new Date("2026-11-02T12:00:00.000Z"),
+      fiscal: venueFiscalSelection(ALL_MODULES, "ES-common").contribution!,
+    },
+    () => {},
+  );
 });
 afterEach(() => vi.useRealTimers());
 const inTx = <T>(fn: Parameters<typeof withTransaction<T>>[1]) => withTransaction(suite.db, fn);
@@ -69,14 +76,19 @@ const report = async (path: string) => {
   return response.json() as Promise<Record<string, unknown>>;
 };
 async function schedule(cutover: string) {
-  await inTx(async (tx) => {
-    await tx.insert(locationDayCutoverChanges).values({
-      locationId: venue.cfg.locationId,
+  const response = await app.request("/management-api/venue-details/business-day-start", {
+    method: "PUT",
+    headers: { Cookie: await managerCookie(), "content-type": "application/json" },
+    body: JSON.stringify({
       effectiveBusinessDay: "2026-11-04",
-      dayCutover: `${cutover}:00`,
-    });
+      dayCutover: cutover,
+      expectedClockRevision: 0,
+    }),
   });
+  expect(response.status).toBe(200);
+  expect(await response.json()).toMatchObject({ changed: true });
 }
+
 async function frozen() {
   return inTx(async (tx) => {
     const result: Record<string, unknown> = {};
@@ -93,6 +105,8 @@ async function frozen() {
       "daily_closes",
       "daily_close_chain",
       "adjustments",
+      "working_orders",
+      "kitchen_notices",
     ]) {
       // Identifiers are fixed above; quote them through the engine's identifier builder.
       result[table] = (
@@ -343,3 +357,152 @@ describe("dated business-day reporting through real storage", () => {
     ).toBe("05:00:00");
   });
 });
+
+describe("recorded facts refuse retrospective boundary changes", () => {
+  it("refuses a close dated on the transitional day and preserves its complete chain", async () => {
+    await inTx((tx) =>
+      recordDailyClose(tx, {
+        nodeId: venue.cfg.nodeId,
+        businessDay: "2026-11-03",
+        timeZone: "Europe/Madrid",
+        closedBy: venue.adminId,
+        cashCounts: [],
+      }),
+    );
+    const before = await frozen();
+    const response = await app.request("/management-api/venue-details/business-day-start", {
+      method: "PUT",
+      headers: { Cookie: await managerCookie(), "content-type": "application/json" },
+      body: JSON.stringify({
+        effectiveBusinessDay: "2026-11-04",
+        dayCutover: "07:00",
+        expectedClockRevision: 0,
+      }),
+    });
+    expect(response.status).toBe(409);
+    expect(await response.json()).toEqual({
+      error: { code: "venue.business_day_locked", params: { reason: "daily_close" } },
+    });
+    expect(await frozen()).toEqual(before);
+  });
+  it("refuses future issuance without rewriting any sale, filing, number or close", async () => {
+    await billlessSale({
+      ...venue,
+      clock: {
+        ...venue.clock,
+        now: () => ({ ...venue.clock.now(), instant: new Date("2026-11-04T03:00:00.000Z") }),
+      },
+    });
+    const before = await frozen();
+    const response = await app.request("/management-api/venue-details/business-day-start", {
+      method: "PUT",
+      headers: { Cookie: await managerCookie(), "content-type": "application/json" },
+      body: JSON.stringify({
+        effectiveBusinessDay: "2026-11-04",
+        dayCutover: "03:00",
+        expectedClockRevision: 0,
+      }),
+    });
+    expect(response.status).toBe(409);
+    expect(await response.json()).toEqual({
+      error: { code: "venue.business_day_locked", params: { reason: "future_history" } },
+    });
+    expect(await frozen()).toEqual(before);
+  });
+});
+
+it.each(["void", "tender", "payment", "refund", "notice"])(
+  "refuses an isolated future %s anchor and preserves its rows",
+  async (kind) => {
+    let bill: string;
+    if (kind === "void" || kind === "tender") bill = await placedIssuedBill(venue, "Caña");
+    else bill = await parked(venue, "Tarta");
+    if (kind === "refund") await contribute(venue, bill, "5.00");
+    vi.setSystemTime(new Date("2026-11-04T02:00:00.000Z"));
+    if (kind === "void") await voidInvoice(venue, bill);
+    else if (kind === "tender")
+      await inTx(async (tx) => {
+        const [sale] = await tx
+          .select({ id: sales.id })
+          .from(sales)
+          .where(eq(sales.workingOrderId, bill));
+        await settleSale(tx, {
+          saleId: brandSaleId(sale!.id),
+          tenders: [{ method: "cash", amount: "3.00", tipAmount: "0.00", settledAt: new Date() }],
+        });
+      });
+    else if (kind === "notice")
+      await inTx(async (tx) => {
+        const line = (
+          await tx.execute<{ id: string }>(
+            sql`select id from working_order_lines where working_order_id = ${bill} limit 1`,
+          )
+        ).rows[0]!;
+        const station = (
+          await tx.execute<{ id: string }>(
+            sql`select id from kitchen_stations where location_id = ${venue.cfg.locationId} limit 1`,
+          )
+        ).rows[0]!;
+        await recordKitchenNotices(
+          tx,
+          venue.cfg,
+          bill,
+          [
+            {
+              workingOrderLineId: line.id,
+              stationId: station.id,
+              quantity: decimal("1"),
+              wasStarted: false,
+            },
+          ],
+          "recalled",
+        );
+      });
+    else {
+      const session = await inTx((tx) =>
+        loginWithPin(tx, { deviceId: venue.deviceId, personId: venue.operatorId, pin: "5555" }),
+      );
+      venue.cookie = venue.cookie.replace(
+        /waitron_till_session=[^;]+/,
+        `${SESSION_COOKIE}=${session.token}`,
+      );
+      if (kind === "payment") await contribute(venue, bill, "5.00");
+      else {
+        const payment = (
+          await suite.db.execute<{ id: string }>(
+            sql`select id from bill_payments where working_order_id = ${bill} limit 1`,
+          )
+        ).rows[0]!;
+        const refund = await send(
+          venue.app,
+          venue.cookie,
+          "POST",
+          `/api/working-orders/${bill}/payments/${payment.id}/refunds`,
+          {
+            submissionId: randomUUID(),
+            appliedAmount: "2.00",
+            tipAmount: "0.00",
+            reason: "Clock fixture",
+            override: { personId: venue.adminId, pin: "1234" },
+          },
+        );
+        expect(refund.status).toBe(200);
+      }
+    }
+    const before = await frozen();
+    const response = await app.request("/management-api/venue-details/business-day-start", {
+      method: "PUT",
+      headers: { Cookie: await managerCookie(), "content-type": "application/json" },
+      body: JSON.stringify({
+        effectiveBusinessDay: "2026-11-04",
+        dayCutover: "03:00",
+        expectedClockRevision: 0,
+      }),
+    });
+    expect(response.status).toBe(409);
+    expect(await response.json()).toEqual({
+      error: { code: "venue.business_day_locked", params: { reason: "future_history" } },
+    });
+    expect(await frozen()).toEqual(before);
+  },
+);

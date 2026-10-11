@@ -26,11 +26,14 @@ declare module "@waitron/shared" {
     "invoice_delivery.active": Record<string, never>;
     "invoice_delivery.not_found": Record<string, never>;
     "invoice_delivery.full_invoice_required": Record<string, never>;
+    "venue.business_day_invalid": { field: string; reason: string };
+    "venue.business_day_changed": Record<string, never>;
+    "venue.business_day_locked": { reason: string };
     "venue.detail_invalid": { field: string; reason: string };
     "venue.detail_read_only": { field: string };
     "venue.detail_locked": {
       field: string;
-      reason: "sales" | "orders" | "daily_close" | "geography_context";
+      reason: "sales" | "orders" | "daily_close" | "geography_context" | "business_day_history";
     };
     "venue.detail_changed": { field: string };
     "fiscal.clock_drift": { seconds: number };

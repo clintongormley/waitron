@@ -2,7 +2,8 @@ import { eq, sql } from "drizzle-orm";
 import { locations, tenants, type Transaction } from "@waitron/db";
 import { findAdministrativeArea, findAdministrativeAreaByPostalCode } from "@waitron/country";
 import { getCountryPack } from "@waitron/country-packs";
-import { AppError } from "@waitron/shared";
+import { readBusinessDayClockModel } from "./business-day-start.js";
+import { AppError, cutoverForBusinessDay } from "@waitron/shared";
 import type {
   VenueDetailField,
   VenueDetailsModel,
@@ -79,6 +80,7 @@ function equivalent(field: VenueDetailField, value: string | null, country: stri
 export async function readVenueDetails(
   tx: Transaction,
   cfg: { locationId: string },
+  at: Date = new Date(),
 ): Promise<VenueDetailsModel> {
   const [location] = await tx.select().from(locations).where(eq(locations.id, cfg.locationId));
   if (location === undefined)
@@ -95,18 +97,23 @@ export async function readVenueDetails(
       exists(select 1 from working_orders limit 1) as orders,
       exists(select 1 from daily_closes limit 1) as closes`);
   const history = rows[0]!;
-  const clockReason = history.sales
-    ? "sales"
-    : history.orders
-      ? "orders"
-      : history.closes
-        ? "daily_close"
-        : undefined;
+  const businessDayClock = await readBusinessDayClockModel(tx, cfg, at);
+  const clockReason =
+    businessDayClock.clock.cutoverChanges.length > 0
+      ? "business_day_history"
+      : history.sales
+        ? "sales"
+        : history.orders
+          ? "orders"
+          : history.closes
+            ? "daily_close"
+            : undefined;
   const clockPolicy: VenueDetailsModel["policy"]["timeZone"] =
     clockReason === undefined
       ? { decision: "allow_with_warning", reasons: ["clock_effects"] }
       : { decision: "refuse", reasons: [clockReason] };
   return {
+    businessDayClock,
     details: {
       name: location.name,
       addressLine1: location.addressLine1,
@@ -115,7 +122,10 @@ export async function readVenueDetails(
       city: location.city,
       province: location.province,
       timeZone: location.timeZone,
-      dayCutover: equivalent("dayCutover", location.dayCutover, issuer.country)!,
+      dayCutover:
+        businessDayClock.currentBusinessDay === null
+          ? equivalent("dayCutover", location.dayCutover, issuer.country)!
+          : cutoverForBusinessDay(businessDayClock.clock, businessDayClock.currentBusinessDay),
     },
     issuer,
     hasSales: Boolean(history.sales),
@@ -138,7 +148,7 @@ export async function readVenueDetails(
           : { decision: "allow_with_warning", reasons: ["current_details_only"] },
       province: { decision: "refuse", reasons: [history.sales ? "sales" : "geography_context"] },
       timeZone: clockPolicy,
-      dayCutover: clockPolicy,
+      dayCutover: { decision: "allow_with_warning", reasons: ["clock_effects"] },
     },
     provinces: pack?.administrativeAreas.map(({ code, name }) => ({ code, name })) ?? [],
   };
@@ -147,6 +157,7 @@ export async function writeVenueDetails(
   tx: Transaction,
   cfg: { locationId: string },
   input: VenueDetailWrite,
+  at: Date = new Date(),
 ): Promise<{ changed: boolean; model: VenueDetailsModel }> {
   const body = object(input, "body");
   keys(body, ["changes", "expected"], "body");
@@ -160,7 +171,7 @@ export async function writeVenueDetails(
     if (typeof value !== "string" && !(value === null && nullable.has(field)))
       invalid(field, "type");
   }
-  const model = await readVenueDetails(tx, cfg);
+  const model = await readVenueDetails(tx, cfg, at);
   const delta: Partial<VenueDetailValues> = {};
   for (const field of fields) {
     if (!Object.hasOwn(changes, field)) continue;
@@ -194,7 +205,10 @@ export async function writeVenueDetails(
     }
     if (field === "dayCutover") {
       if (!/^([01]\d|2[0-3]):[0-5]\d(?::00)?$/.test(normalized!)) invalid(field, "cutover");
-      normalized = normalized!.slice(0, 5);
+      throw new AppError("venue.business_day_invalid", {
+        field,
+        reason: "effective_date_required",
+      });
     }
     if (field === "postalCode" || field === "province" || field === "city") {
       const pack = getCountryPack(model.issuer.country);
@@ -225,27 +239,26 @@ export async function writeVenueDetails(
       equivalent(field, model.details[field], model.issuer.country)
     )
       throw new AppError("venue.detail_changed", { field });
-    if (field === "province" || field === "timeZone" || field === "dayCutover") {
-      const reason = model.hasSales
-        ? "sales"
-        : field === "province"
-          ? "geography_context"
-          : model.hasOrderHistory
-            ? "orders"
-            : model.hasDailyClose
-              ? "daily_close"
-              : undefined;
+    if (field === "province" || field === "timeZone") {
+      const reason =
+        field === "timeZone" && model.businessDayClock.clock.cutoverChanges.length > 0
+          ? "business_day_history"
+          : model.hasSales
+            ? "sales"
+            : field === "province"
+              ? "geography_context"
+              : model.hasOrderHistory
+                ? "orders"
+                : model.hasDailyClose
+                  ? "daily_close"
+                  : undefined;
       if (reason !== undefined) throw new AppError("venue.detail_locked", { field, reason });
     }
     Object.assign(delta, { [field]: normalized });
   }
   if (Object.keys(delta).length === 0) return { changed: false, model };
-  const update = {
-    ...delta,
-    ...(delta.dayCutover === undefined ? {} : { dayCutover: `${delta.dayCutover}:00` }),
-  };
-  await tx.update(locations).set(update).where(eq(locations.id, cfg.locationId));
-  if (delta.dayCutover !== undefined || delta.timeZone !== undefined) {
+  await tx.update(locations).set(delta).where(eq(locations.id, cfg.locationId));
+  if (delta.timeZone !== undefined) {
     try {
       await VENUE_SERVICE.assertPeriodEndOffsets(
         tx,
@@ -253,9 +266,9 @@ export async function writeVenueDetails(
       );
     } catch (error) {
       if (error instanceof AppError && error.code === "menu_timetable.invalid")
-        invalid(delta.dayCutover !== undefined ? "dayCutover" : "timeZone", "end_offset");
+        invalid("timeZone", "end_offset");
       throw error;
     }
   }
-  return { changed: true, model: await readVenueDetails(tx, cfg) };
+  return { changed: true, model: await readVenueDetails(tx, cfg, at) };
 }

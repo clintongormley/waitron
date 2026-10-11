@@ -16,6 +16,12 @@ import {
   readVenueDetails,
   writeVenueDetails,
 } from "./venue-details.js";
+import {
+  previewBusinessDayStart,
+  writeBusinessDayStart,
+  cancelBusinessDayStart,
+} from "./business-day-start.js";
+
 import { venueClockPreview } from "./venue-clock-preview.js";
 import type { VenueClockPreview, VenueDetailWrite } from "./venue-detail-types.js";
 import "./errors.js";
@@ -29,6 +35,9 @@ const run = createErrorBoundary(
     "management.request_invalid": 400,
     "receipt.language_fixed": 400,
     "receipt.language_orders_open": 409,
+    "venue.business_day_invalid": 400,
+    "venue.business_day_changed": 409,
+    "venue.business_day_locked": 409,
     "venue.detail_invalid": 400,
     "venue.detail_read_only": 409,
     "venue.detail_locked": 409,
@@ -112,10 +121,55 @@ export function mountLocationSettingsApi(
     run(c, log, async () => {
       const model = await gated(
         requireManagementSession(c),
-        (tx) => readVenueDetails(tx, deps.cfg),
+        (tx) => readVenueDetails(tx, deps.cfg, (deps.now ?? (() => new Date()))()),
         "venue.view",
       );
       return c.json(model);
+    }),
+  );
+  app.get("/management-api/venue-details/business-day-start/preview", (c) =>
+    run(c, log, async () => {
+      const query = c.req.query();
+      const model = await gated(
+        requireManagementSession(c),
+        (tx) =>
+          previewBusinessDayStart(
+            tx,
+            deps.cfg,
+            {
+              ...query,
+              expectedClockRevision: /^\d+$/.test(query.expectedClockRevision ?? "")
+                ? Number(query.expectedClockRevision)
+                : query.expectedClockRevision,
+            },
+            (deps.now ?? (() => new Date()))(),
+          ),
+        "venue.view",
+      );
+      return c.json({
+        ...model,
+        backupDeadlines: deps.readBackupDeadlines?.() ?? model.backupDeadlines,
+      });
+    }),
+  );
+  app.put("/management-api/venue-details/business-day-start", (c) =>
+    run(c, log, async () => {
+      const session = requireManagementSession(c);
+      const body = await readJsonBody<unknown>(c);
+      const result = await gated(session, (tx) =>
+        writeBusinessDayStart(tx, deps.cfg, body, (deps.now ?? (() => new Date()))()),
+      );
+      return c.json(result);
+    }),
+  );
+  app.delete("/management-api/venue-details/business-day-start", (c) =>
+    run(c, log, async () => {
+      const session = requireManagementSession(c);
+      const body = await readJsonBody<unknown>(c);
+      const result = await gated(session, (tx) =>
+        cancelBusinessDayStart(tx, deps.cfg, body, (deps.now ?? (() => new Date()))()),
+      );
+      return c.json(result);
     }),
   );
   app.get("/management-api/venue-details/clock-preview", (c) =>
@@ -146,7 +200,12 @@ export function mountLocationSettingsApi(
       const sessionId = requireManagementSession(c);
       const body = await readJsonBody<unknown>(c);
       const result = await gated(sessionId, (tx) =>
-        writeVenueDetails(tx, deps.cfg, body as VenueDetailWrite),
+        writeVenueDetails(
+          tx,
+          deps.cfg,
+          body as VenueDetailWrite,
+          (deps.now ?? (() => new Date()))(),
+        ),
       );
       return c.json(result);
     }),

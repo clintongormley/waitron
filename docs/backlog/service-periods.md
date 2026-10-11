@@ -57,6 +57,12 @@ returned `menu_timetable.invalid` (`empty`). The settings route was not run. Rep
 that route before deciding whether to remap, refuse the change, or require re-authoring the hours.
 Receipt: campaign lane D `receipts/a366-1/finish-second-report.md`, finding 2 (2026-10-08).
 
+2026-10-11: A495's pre-change PATCH probe refused both ranges with status 400 and
+`venue.detail_invalid/end_offset`; service remained unchanged and re-saving succeeded.
+The new cases in `apps/server/src/business-day-start.test.ts` retain those observations and
+require the dated-edit refusal. Date-aware hours and their compatibility checks remain in A495.
+
+
 ## Departments, service styles and opening hours (A254, owner 2026-10-03) — DRAFT SPEC, partly implemented through A261
 
 Tabs without tables and the remaining department-name survey stay open. Re-check the advisor
