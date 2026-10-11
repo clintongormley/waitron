@@ -3079,7 +3079,7 @@ Behaviour (slice 3 decisions 8 and 11):
 - A pan, pinch or wheel marks the view touched; a resize then keeps it (narrowing Task 3.2b's
   "every resize"), and a fit clears the mark.
 - `holdDrag` draws the held group moved by `snapToSquare(d, scale)` squares, its first member
-  clamped by `clampToGrid`; `holdDrop` sends `wt-table-drag-end` with that member's new `x`, `y`,
+  clamped by `clampToGrid` (slice 4, 2026-10-11: the whole group is held with `groupStep`); `holdDrop` sends `wt-table-drag-end` with that member's new `x`, `y`,
   and `targetId`: the `data-table-id` of the first other table under the release point
   (`this.shadowRoot.elementsFromPoint`), else null; then the drawn place returns to `tables`'.
   `cancel` drops a drawn drag.
@@ -3842,7 +3842,8 @@ if it is wrong.
    - **`table.not_in_floor_plan { tableId }`** (new): it has no today's row; or, for a move, turn or
      merge, it has no place (a spare); or, for Back to its saved place, its reset row is missing or
      says the table goes (its master table was deleted).
-   - **`table.taken_off { tableId }`** (new): a move, turn, place, seats or merge of a taken-off table.
+   - **`table.taken_off { tableId }`** (new): a move, turn, place, seats or merge of a taken-off table,
+     and (finish-branch review, 2026-10-11) a seat, join, Move guests or bill move onto one.
    - **`table.fixed { tableId }`** (new): a move, turn or merge of a fixed table, either side of a
      merge, and placing a fixed spare (decision 11). This is Review focus 5.
    - **`table.merged { tableId }`** (new): turning or taking off a table in a merge, or merging a
@@ -3880,7 +3881,7 @@ if it is wrong.
    server places it the same way. Cost: at a rotation that is not a multiple of 90°, or with an odd
    difference of sizes, rounding leaves a gap or an overlap under one square; a member turned
    another way than the target counts by its extents, which can cover more than it does; a table
-   overlaps a member only when all four sides are covered.
+   overlaps a member by a whole square or more only when all four sides are covered.
 5. **Who joins whom on a drop.** The dragged table goes to the target, so a join's path party is the
    TARGET's party when both are seated (the dragged party combines into it, the bill choice asked
    first, as the order screen asks), else whichever party sits there; the body's `tableId` is the
@@ -3940,7 +3941,10 @@ if it is wrong.
     needs clearing or has a delivery on its way (`listedTables`, `apps/till/src/state/floor-map.ts:168-175`),
     and such a take-off would hide nothing, so it is refused. A free table with a booking today may
     be taken off. Seating at a taken-off table is not refused: a stale till that does so makes the
-    table held, and the list shows it. Cost: a waiter clears the table first.
+    table held, and the list shows it. Cost: a waiter clears the table first. (Finish-branch review,
+    2026-10-11: seating, joining, Move guests and moving a bill onto a taken-off table are now
+    refused, `table.taken_off` through `refuseTakenOff`; the dashboard's bookings still seat through
+    `seatTable` without that check.)
 13. **A470's second slice 4 note** (a merge's members in different zones, while the map reads one
     zone): the join route already refuses tables in two zones (`table-actions.ts:122-128`) and the
     merge route refuses them too (decision 3), so a merge's members always share its zone. Cost: none.
@@ -4001,7 +4005,8 @@ if it is wrong.
     "That table is off today's plan. Put it back first" / "Esa mesa está quitada hoy. Vuelve a
     ponerla primero"; `table.not_in_floor_plan` "That table is not on today's plan" / "Esa mesa no
     está en el plano de hoy"; `table.delivery_pending` "Food is on its way to that table" / "Hay
-    comida en camino a esa mesa". Cost: the look pass may shorten more.
+    comida en camino a esa mesa". Cost: the look pass may shorten more. (The look pass shortened `floor.no_spares`
+    to "No spare tables" / "No hay mesas de reserva", 2026-10-11.)
 20. **STOP for the owner: the editor's note changes an assertion "Behaviour this plan removes" does
     not list.** Slice 2 decision 16 has `floor_plan_editor.note` ("Your changes will go live
     tomorrow." / "Tus cambios se aplicarán mañana.", `apps/dashboard/src/i18n/strings.ts:990`,
