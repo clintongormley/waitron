@@ -473,7 +473,7 @@ describe("remote agents with an aged print queue", () => {
       const sending = new Promise<void>((resolve) => {
         entered = resolve;
       });
-      const fetch: typeof globalThis.fetch = (url, init) => app.request(String(url), init);
+      const fetch: typeof globalThis.fetch = async (url, init) => app.request(String(url), init);
       const serverUrl = "http://box.test";
       const firstAgent = createAgent({
         host: fakeHost({
@@ -536,7 +536,7 @@ describe("remote agents with an aged print queue", () => {
     );
     const sink = new FakeSink();
     const serverUrl = "http://box.test";
-    const fetchA: typeof globalThis.fetch = (url, init) => {
+    const fetchA: typeof globalThis.fetch = async (url, init) => {
       if (String(url).endsWith("/result"))
         return Promise.resolve(new Response(null, { status: 503 }));
       return app.request(String(url), init);
@@ -557,7 +557,7 @@ describe("remote agents with an aged print queue", () => {
         .set({ claimedAt: "2026-01-01T00:00:00.000Z" })
         .where(eq(printJobs.id, job.jobId)),
     );
-    const fetchB: typeof globalThis.fetch = (url, init) => app.request(String(url), init);
+    const fetchB: typeof globalThis.fetch = async (url, init) => app.request(String(url), init);
     const secondAgent = createAgent({
       host: fakeHost({
         token: b.token,
