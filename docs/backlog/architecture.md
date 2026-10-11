@@ -289,16 +289,6 @@ local copy, leaving `firstCodeInCauseChain` with no product caller at all. **Nex
 one validator from `@waitron/shared`; `packages/store` depends only on `@waitron/shared`,
 which depends on nothing, so that edge closes no loop.
 
-## `resolveEnvironment` and `deploymentEnvironment` are two hand-maintained copies of one four-branch table
-
-**`resolveEnvironment` and `deploymentEnvironment` are two hand-maintained copies of one four-branch
-table — OPEN (found 2026-09-23, task F1's review wave).** `packages/provisioning/src/environment.ts`
-and `apps/server/src/config.ts`. They agree today, checked line for line. The stated reason — a
-package cannot import an app — is true and skips the third option: `@waitron/db` already owns the
-`DeploymentEnvironment` type and both sides depend on it. Nothing in the tree runs both over one
-input. This decides whether a box files against the real AEAT or the test one (`CLAUDE.md` §5), so
-two copies held together by hand is the wrong shape for it.
-
 ## Files that still spell the store's file names themselves
 
 **Files that still spell the store's file names themselves (left by #757, which exported them

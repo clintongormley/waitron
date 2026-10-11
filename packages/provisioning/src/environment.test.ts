@@ -2,10 +2,6 @@ import { describe, expect, it } from "vitest";
 import { AppError } from "@waitron/shared";
 import { resolveEnvironment } from "./environment.js";
 
-/**
- * `apps/server/src/config.ts`'s `deploymentEnvironment` is the twin, and nothing runs both over one
- * input: this table and `apps/server/src/config.test.ts`'s are all that keep them in step.
- */
 describe("resolveEnvironment", () => {
   it("defaults to preproduction when WAITRON_ENV is absent", () => {
     expect(resolveEnvironment({})).toBe("preproduction");

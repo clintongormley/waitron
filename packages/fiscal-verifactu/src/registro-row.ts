@@ -15,9 +15,8 @@ import { registrosFacturacion } from "./schema/registros.js";
 export type RegistroRowInsert = typeof registrosFacturacion.$inferInsert;
 
 /**
- * Which deployment a registro was generated for. A package-local union, deliberately NOT
- * `apps/server`'s `DeploymentEnvironment` type — this package must never import from `apps/server`
- * — but a union all the same, not a bare `string`, so an unrepresentable value is a `tsc` error
+ * Which deployment a registro was generated for. A package-local union, but a union all the same,
+ * not a bare `string`, so an unrepresentable value is a `tsc` error
  * instead of a `registros_entorno_ck` refusal inside a sale's transaction.
  */
 export type Entorno = "production" | "preproduction";
