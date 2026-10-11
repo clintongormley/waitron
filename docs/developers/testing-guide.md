@@ -1126,6 +1126,9 @@ failure was reproduced locally by running a file that hovers a `wt-button` immed
 untouched `floor-screen.a11y.test.ts` in one worker (`--no-file-parallelism`): the same one test of
 the eight failed, with the same element and the same two colours.
 
+2026-10-11: A429 slice 5 removes the old dashboard floor screen and its
+`floor-screen.a11y.test.ts`. The measurement above records the screen that existed at the time.
+
 The fix is a reset in the shared harness, not in the test that happened to be scanned:
 `apps/dashboard/src/widgets/test-helpers.ts` calls a `parkPointer` browser command
 (`apps/dashboard/vitest.config.ts`) in a `beforeEach`, which moves the Playwright cursor to `(-1, -1)`

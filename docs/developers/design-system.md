@@ -629,7 +629,9 @@ chips share the map's purple tokens. The order pin's swatch follows its displaye
 uses success, forgotten uses danger, and other statuses use their table fill. A single-table details
 heading says "Table 9" / "Mesa 9"; Guests has no placeholder.
 
-On a zone with today's plan, the floor screen hands the map each table's `fixed` and, for a party
+The floor screen uses today's plan for every zone's map. Its Unplaced tray uses a
+`wt-table-token` with the table's seat count (`apps/till/src/screens/till-floor-screen.ts:1183`).
+The floor screen hands the map each table's `fixed` and, for a party
 at two or more groups, its `linkId`, so a fixed stool being dragged leaves a copy, with a line to
 the table it is over, and a party's tables are joined by a line. `canDrag` and the details sheet's
 actions follow `canChangeToday` (the profile's take-orders): without it nothing on the map moves,
@@ -1975,7 +1977,7 @@ and nothing guards it across screens:
   Delete dialog and the image picker act on what is selected rather than save a draft, so they keep
   their own rules; the reason for each is in
   [the Batch 2a notes](../superpowers/plans/2026-10-07-a331-save-follows-changes.md#batch-2a--catalogue-and-menus-forms-outside-lane-ds-preview-bundle-15-files);
-- batch 3a: the floor plan's table rows and Add table; the service-status rows and Add; the
+- batch 3a: the service-status rows and Add; the
   kitchen's late flags; the venue details editor; My schedule's cover and time-off requests; the
   receipts page; the backup screen's turn-on form and settings editor; the bucket copy form; your
   profile's details and its credential dialogs; the edit-person and new-person dialogs; the purchase
@@ -2654,9 +2656,7 @@ address change or Back step leaves a manually opened group alone. Typing a searc
 those stored choices unchanged.
 
 A group draws no header when this session cannot open any of its pages. Search also hides a group
-when it removes all of its pages. A group may mix module pages with core pages: a core item listed in
-`itemsAmongModules` uses its `order` to sort among the module pages, with the core item first
-when orders match. Floor plan uses this order in Venue operations.
+when it removes all of its pages.
 
 A search box sits at the top of the sidebar, above the groups: a `wt-input type="search"` with
 `hide-label`, named `nav-search`, whose hidden label (its accessible name) and placeholder are both
@@ -3555,7 +3555,7 @@ removing a product from a menu removes that offer.
 ### Switching off versus deleting
 
 Something switched off but kept — an options or extras list, a zone, a
-department, a table, a table status, an adjustment reason, a user, a printer, a print
+department, a table status, an adjustment reason, a user, a printer, a print
 agent, a device or a card reader — is switched off with **Disable** (options and extras lists and
 table statuses are switched back on with an **Active** switch in their form), and where a screen has
 an action that brings it back, that action is **Enable**. Its status reads **Active**
@@ -3681,7 +3681,7 @@ Back stop; closing the editor, with Cancel or a save, drops it the same way. Cha
 too and, like any tab change, adds a Back stop.
 
 Use `/manage/<section>` for dashboard destinations and `/tabs/<key>` for till tabs. Nested views,
-zones and saved canvas tabs extend those paths, such as `/manage/floor/view/plano/zone/<id>`.
+zones and saved canvas tabs extend those paths, such as `/manage/floor-plan/zone/<id>`.
 Till Schedule, Kitchen, Pass and Allergens use `/tabs/<key>/view/<destination>`, with destinations
 `schedule`, `station`, `expo` and `allergens`. The operator Kitchen picker adds `/station/<id>`;
 embedded station cards keep their selection local to the enclosing tab. Restore these destinations

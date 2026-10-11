@@ -88,13 +88,10 @@ their full text.
   "KDS-2/3" and "(Copilot)" in the `till-api*` and `till-config` suites, and 29 titles
   saying "opaque 500".
 
-## A table with no shape is drawn as a rectangle and saved as round on its first edit
+## UI package notes left by the comments sweep
 
-- Found by #604 (`packages/ui`), not fixable in a comments-only change. **A table with no shape
-  is drawn as a rectangle and saved as round on its first edit**: `wt-table-token.ts` draws
-  `shape-${t.shape ?? "rect"}`, while `wt-floor-canvas.ts` marks Round as pressed and sends
-  `shape: t.shape ?? "round"` from `#placementOf`, so dragging, nudging or rotating a shapeless
-  table changes it (read from the code, not run). `packages/ui/brand/README.md`'s table omits
+- Found by #604, read from the code at the time, not rechecked by A429 slice 5.
+  `packages/ui/brand/README.md`'s table omits
   `public/icon-192.png` and `public/icon-512.png`, which the generator writes.
   `packages/ui/vitest.config.ts` and `stryker.config.json` still exclude
   `src/tokens/token-test-helpers.ts`, which moved to `packages/ui-core` in #519 (the
@@ -232,33 +229,6 @@ screen is designed.
   Legacy unit maps cover English and Spanish only. The default Kitchen title remains
   English when the tab shell is shown in a synthetic Spanish probe; check whether any
   real kitchen session shows that bar before widening the standard-tab translation.
-
-## A429 — floor plans: a master plan per zone, today's plan on the till
-
-- **A429 — floor plans: a master plan per zone, today's plan on the till (owner, 2026-10-08; slices
-  1 (#1493), 2 (#1506), 3 (#1517) and 4 (#1526) built; slice 5 open).** Slice 1 is the
-  storage and reads: the master plan's tables, today's plan, table names kept as text when a party
-  closes or a table is removed, today's plan in the till's table-state answer, the dashboard's
-  read and save routes for a zone's master plan, today's plan caught up on every floor read and
-  change, the old floor screen refusing to change a planned table, and the demo seed writing
-  master plans. Slice 2 is the dashboard editor at `/manage/floor-plan/zone/<id>`, opened from
-  the zone panel's "Edit floor plan". Slice 3 is the till's map: a planned zone drawn on a new
-  map with status colours and dots, a details sheet, the seat dialog, a 15-second
-  re-read, and the order screen's status pin and notice. Slice 4 is today's changes on the till:
-  move, join, split, take off and reset tables for today, with each reset copying the master's
-  saved joins into today's plan (owner, 2026-10-10). Left: slice 5 (removing the old pieces). A
-  Square-style editor on the
-  dashboard for each zone's master plan (tables created in bulk, saved joins, Undo/Redo), and a
-  till map whose job is status and rearranging. The master and today's plan are separate plans (owner, 2026-10-08): the master
-  is edited freely and is copied into today's plan at the day's reset or on a button; everything
-  live points at today's plan; staff move, join, split and take off tables on today's plan but
-  never add or rename one (they keep spares in reserve); a table a party sits at waits and catches
-  up when its tab closes. Table names are copied as text when a party closes, and onto past orders
-  and bookings when a table is removed, so a table the master no longer has can really go. Five
-  slices, each its own pull request; only slice 5 (removing the old floor screen tabs, placement
-  routes and columns) needs a venue reset. [Spec](../superpowers/specs/2026-10-08-floor-plan-design.md),
-  [plan](../superpowers/plans/2026-10-08-floor-plan.md). Overlaps: A182 (canvases retired) touches the till's floor
-  screen, where slice 3 added the map for planned zones and slice 5 removes the old pieces.
 
 ## A466 — floor plan editor follow-ups
 
@@ -767,12 +737,7 @@ screen is designed.
     queued. The till sends `otherPartyId: null` when its floor does not list the target table at
     all (a failed floor read empties the list); a table another party holds is then refused as out
     of date, never combined. On a 390 px phone the bill choice's buttons wrap ("Keep separate
-    bills" on three lines). Seen by C82 at 390 and 1280 px, not measured further: a token for four
-    seats or fewer, or with no seat count set, is so narrow that the party name shows only its
-    first few letters ("T…" at two seats), and the table's label, its covers and its "to serve"
-    chip spill past the token's edge; the map's token sizes (`sizeForCapacity`, `wt-floor-canvas`)
-    decide that (owner, 2026-09-30, on C82's question: "wait on this"; not queued). A tab total
-    does not fit either: see the entry below on a four-digit total.
+    bills" on three lines).
   - **Open, from C84's review (#913):** when a void or line change gets no answer,
     `#rereadAmounts()` can put on screen what the party still owes, taken from its bills after its
     own floor read failed, while the revision on screen stays where it was. A later floor read that
@@ -780,24 +745,6 @@ screen is designed.
     `#retakePartyFromFloor()` takes, and `#followDraft` → `#rememberOrderParty()` after a send with
     no answer takes too, putting the floor's older amount back (`apps/till/src/till-app.ts`). Traced
     in the code, not reproduced.
-
-## A four-digit total does not fit a small round table on the till's floor map
-
-- **A four-digit total does not fit a small round table on the till's floor map** (the old map,
-  `wt-floor-canvas`, drawn for a zone with no floor plan; a planned zone's map shows no totals since
-  A429 slice 3) (found
-  2026-10-03 by looking at the map while making its amounts follow the locale, lane C's W15). On a
-  four-seat round table at 1280 wide, dark theme, `1234,50 €` (the locale form, kept on one line by
-  the formatter's no-break space before `€`) runs past the token's right edge; with the form before
-  that change, `1234.50 €`, the amount still ran past the edge and `€` wrapped onto a second line.
-  Measured with throwaway screenshot tests; screenshots in `~/waitron-campaign-c/w15-shots/`
-  (`map-*` and `old-form-map-dark-1280.png`, not in the repository). W15 did not measure other
-  shapes and capacities, or amounts of five digits. The cause is the one C82 recorded in the
-  Task 11 note above, which the owner put on hold: the token is
-  `packages/ui/src/components/wt-table-token.ts`, its size comes from `sizeForCapacity` in
-  `packages/ui/src/floor.ts`, and the size rules are in
-  `packages/ui/src/components/wt-floor-canvas.ts`. **Next action:** the owner decides whether this
-  changes "wait on this"; a fix that lets a small token hold what it shows would cover both.
 
 ## Four till surfaces ask for a caution colour that is defined nowhere, so all four render as plain text
 
@@ -1296,6 +1243,19 @@ From **Variants as products (#511–#556) — what is left open.** How the model
   `held.product_gone`, and the first edit of the order removes such an extra.
 
 ## Decisions and deliberate limits
+
+- **The old small floor-token work waited (owner, 2026-09-30, C82).** The owner said "wait on
+  this" about its cramped labels, party names and chips. A429 slice 5 removes that map and its
+  capacity-based sizing. On 2026-10-11 the surviving tray was looked at with `Terrace 123`,
+  `The Fernández family`, six seats, twelve To serve and `1234.50`, in EN/ES, both themes,
+  at 390 and 1280 px. Those captured tokens held their text and four-digit total; the two old
+  layout entries are retired. Screenshots: `~/waitron-campaign/a429-5-shots/final-tray-crowded-*`.
+
+- **Floor plans use two separate plans (A429, owner 2026-10-08).** The dashboard edits the master;
+  the till works from today's copy. Service changes affect that copy. Table creation and renaming
+  belong to the master editor; reserve tables supply today's spares. See
+  [the design](../superpowers/specs/2026-10-08-floor-plan-design.md) and
+  [the plan](../superpowers/plans/2026-10-08-floor-plan.md) for the approved decisions.
 
 - **A presented bill moved to the counter keeps its recorded zone (A440, 2026-10-09, chosen in
   the branch's plan review, not an owner ruling).** A presented bill takes the new zone when it
