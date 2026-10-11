@@ -21,7 +21,6 @@ import {
   pointerElementsAt,
 } from "@waitron/ui/src/reorder-table.js";
 import { keyed } from "lit/directives/keyed.js";
-import "@waitron/ui/src/components/wt-card.js";
 import "@waitron/ui/src/components/wt-tabs.js";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-input.js";
@@ -138,16 +137,9 @@ export class PrepStationsScreen extends LitElement {
         justify-content: space-between;
         margin-bottom: var(--wt-space-4);
       }
-      .cards,
       .form {
         display: grid;
         gap: var(--wt-space-4);
-      }
-      .cards {
-        grid-template-columns: repeat(auto-fit, minmax(min(100%, var(--wt-field-max-width)), 1fr));
-      }
-      .muted {
-        color: var(--wt-color-text-muted);
       }
       .error {
         color: var(--wt-color-danger);
@@ -1166,13 +1158,6 @@ export class PrepStationsScreen extends LitElement {
     this.#stationGone(id);
     await this.#load();
   }
-  #stationCard(s: PrepStation) {
-    return html`<wt-card data-test=${`station-${s.id}`}
-      ><h2>
-        ${s.name} ${s.isDefault ? html`<span class="muted">${t("prep.default")}</span>` : nothing}
-      </h2>
-    </wt-card>`;
-  }
   #field(field: keyof StationInput, label: string, type = "number") {
     const identity = this.#stationIdentity;
     return html`<div>
@@ -1414,10 +1399,6 @@ export class PrepStationsScreen extends LitElement {
       ...source,
       stations: source.stations.filter((station) => station.active),
     };
-    const active =
-      view?.stations
-        .filter((s) => s.active)
-        .sort((a, b) => a.displayOrder - b.displayOrder || a.name.localeCompare(b.name)) ?? [];
     return html`<div class="toolbar">
         <h1>${t("prep.title")}</h1>
       </div>
@@ -1488,7 +1469,6 @@ export class PrepStationsScreen extends LitElement {
                   @routing-draft-lost=${(event: CustomEvent<{ address: CellAddress }>) =>
                     this.#dropDraft(event.detail.address)}
                 ></venue-routing-grid>
-                <div class="cards">${active.map((s) => this.#stationCard(s))}</div>
               </div>
             </wt-tabs>`
           : nothing

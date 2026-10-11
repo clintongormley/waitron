@@ -189,18 +189,15 @@ it.each([
   ['a[href="/manage/devices"]', ""],
   ["", "Warm 5 min"],
   ["", "Watched by:"],
-])(
-  "keeps assignment and late-flag settings %s %s out of the Routing cards",
-  async (selector, text) => {
-    setLocale("en");
-    const el = await mount(api({ load: vi.fn().mockResolvedValue(ticketView) }));
-    const routing = el.shadowRoot!.querySelector('[slot="routing"]')!;
-    expect(await routingGrid(el)).not.toBeNull();
-    expect(routing.querySelector('[data-test="station-bar"]')).not.toBeNull();
-    if (selector) expect(routing.querySelector(selector)).toBeNull();
-    else expect(routing.textContent).not.toContain(text);
-  },
-);
+])("keeps assignment and late-flag settings %s %s out of Routes", async (selector, text) => {
+  setLocale("en");
+  const el = await mount(api({ load: vi.fn().mockResolvedValue(ticketView) }));
+  const routing = el.shadowRoot!.querySelector('[slot="routing"]')!;
+  expect(await routingGrid(el)).not.toBeNull();
+  expect(routing.querySelector('wt-card, [data-test^="station-"]')).toBeNull();
+  if (selector) expect(routing.querySelector(selector)).toBeNull();
+  else expect(routing.textContent).not.toContain(text);
+});
 
 it.each(["[name^=fallback-]", "[data-test^=change-fallback-]"])(
   "keeps fallback editing %s out of Routing while preserving category cells",
@@ -227,7 +224,6 @@ it.each([
   const el = await mount(api({ load: vi.fn().mockResolvedValue(next) }));
   const routing = el.shadowRoot!.querySelector('[slot="routing"]')!;
   expect(await routingGrid(el)).not.toBeNull();
-  expect(routing.querySelector('[data-test="station-upstairs"]')).not.toBeNull();
   expect(routing.querySelector(`[data-test="${action}"]`)).toBeNull();
   const moved = action.replace("default-", "make-default-");
   expect(stationTable(el)!.querySelector(`[data-test="${moved}"]`)).not.toBeNull();
@@ -323,10 +319,6 @@ it.each(
     await page.screenshot({
       path: `__screenshots__/look/routing-handover-${locale}-${theme}-${width}-routing.png`,
       element: el,
-    });
-    el.shadowRoot!.querySelector('[data-test="station-upstairs"]')!.scrollIntoView();
-    await page.screenshot({
-      path: `__screenshots__/look/routing-fallback-${locale}-${theme}-${width}-station.png`,
     });
     expect(el.shadowRoot!.querySelector('[data-test="inactive-retired"]')).toBeNull();
     tabs.scrollIntoView();
@@ -484,7 +476,6 @@ it("keeps station status in Stations instead of repeating it in Routing", async 
   const routing = q(el, '[slot="routing"]')!;
   expect(routing.querySelector('[data-test="status-upstairs"]')).toBeNull();
   expect(stationRow(el, "upstairs").textContent).toContain("Closed for today → Bar");
-  expect(routing.querySelector('[data-test="station-upstairs"]')).not.toBeNull();
 });
 it("makes no outputs-down read", async () => {
   const a = api({
@@ -1016,16 +1007,14 @@ it("reports rejected station actions without exposing a code", async () => {
   expect(q(el, '[role="alert"]')?.textContent).toContain("could not be found");
   expect(q(el, '[role="alert"]')?.textContent).not.toContain("station.not_found");
 });
-it("refreshes station cards after a kitchen-stations live change", async () => {
+it("refreshes the Stations row after a kitchen-stations live change", async () => {
   const liveData = new LiveData();
   const changed = { ...view, stations: [{ ...view.stations[0]!, name: "New bar" }] };
   const load = vi.fn().mockResolvedValueOnce(view).mockResolvedValue(changed);
   const a = api({ liveData, load });
   const el = await mount(a);
   liveData.invalidate([{ type: "kitchen_stations", id: "bar" }]);
-  await vi.waitFor(() =>
-    expect(q(el, '[data-test="station-bar"]')?.textContent).toContain("New bar"),
-  );
+  await vi.waitFor(() => expect(stationRow(el, "bar").textContent).toContain("New bar"));
   expect(load).toHaveBeenCalledTimes(2);
 });
 it("creates a station with its name, order and thresholds when Enter is pressed in Order", async () => {
@@ -1110,7 +1099,9 @@ it("does not submit Enter for a rename draft whose station was removed by live r
   await settle(el);
   const input = q(el, 'wt-input[name="stationName"]')!.shadowRoot!.querySelector("input")!;
   liveData.invalidate([{ type: "kitchen_stations", id: "bar" }]);
-  await vi.waitFor(() => expect(q(el, '[data-test="station-bar"]')).toBeNull());
+  await vi.waitFor(() =>
+    expect(stationTable(el)?.querySelector('[data-test="station-menu-bar"]') ?? null).toBeNull(),
+  );
   input.dispatchEvent(
     new KeyboardEvent("keydown", { key: "Enter", bubbles: true, composed: true, cancelable: true }),
   );
@@ -1194,7 +1185,7 @@ it("reports an initial routing load failure and recovers when live data refreshe
   const el = await mount(a);
   expect(q(el, '[role="alert"]')?.textContent).toContain("could not be loaded");
   liveData.invalidate([{ type: "kitchen_stations", id: "bar" }]);
-  await vi.waitFor(() => expect(q(el, '[data-test="station-bar"]')).not.toBeNull());
+  await vi.waitFor(() => expect(stationRow(el, "bar")).not.toBeNull());
   expect(q(el, '[role="alert"]')).toBeNull();
 });
 
@@ -1476,7 +1467,7 @@ it.each([
     expect(location.pathname).toBe("/manage/prep-stations/view/routing");
     expect(q(el, '[data-test="route-tester"]')).toBeNull();
     expect(await routingGrid(el)).not.toBeNull();
-    expect(q(el, '[data-test="station-bar"]')!.closest('[slot="routing"]')).not.toBeNull();
+    expect((await routingGrid(el))!.closest('[slot="routing"]')).not.toBeNull();
   },
 );
 
