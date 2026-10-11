@@ -684,7 +684,7 @@ describe("the kitchen screens a device chooses", () => {
     expect(await storedKindsOf(till)).toEqual([]);
   });
 
-  it("refuses a deleted station while keeping a stored switched-off zone", async () => {
+  it("refuses deleted stations and a stored deleted zone on device save", async () => {
     const { venue, till } = await kitchen();
     const pass = { kind: "pass", stationIds: [venue.cold], zoneIds: [venue.terrace] } as const;
     await choose(venue, till, venue.till, [pass]);
@@ -698,7 +698,7 @@ describe("the kitchen screens a device chooses", () => {
     );
     await expect(
       outcome(choose(venue, till, venue.till, [{ ...pass, stationIds: [venue.grill] }])),
-    ).resolves.toEqual({ resolved: undefined });
+    ).resolves.toEqual(invalid("zoneIds", "not_found", "pass"));
     await expect(
       outcome(
         choose(venue, till, venue.till, [
