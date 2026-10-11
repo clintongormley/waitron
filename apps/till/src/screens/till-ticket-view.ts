@@ -33,9 +33,9 @@ export interface TicketIssuer {
 /**
  * A filed line's goods name (art. 7.1.e), looked up under the sale's names language.
  *
- * `descriptions` is keyed by the location's receipt languages when the line was added, every key
- * holding the venue's default content language's text (`defaultLanguageDescriptions`,
- * `packages/catalogue/src/default-language-text.ts`); a later change can leave them without the
+ * `descriptions` is keyed by the location's receipt languages when the line was added; a line added
+ * from an order holds the same text under every key (`defaultLanguageDescriptions`,
+ * `packages/catalogue/src/default-language-text.ts`). A later change can leave the keys without the
  * names language, so the lookup falls back to the first stored name. The line's `unitName` is keyed
  * by a content language such as `es`, never a receipt language, which is why the quantity below
  * resolves it through `resolveSnapshotText` instead, as the printed twin

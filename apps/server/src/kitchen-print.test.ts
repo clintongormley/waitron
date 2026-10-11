@@ -1290,8 +1290,9 @@ describe("dish extras on kitchen tickets", () => {
     expect(ticket).toContain("+ Jamón 0.150 kg");
   });
 
-  // The kitchen looks a unit up under its own `es-ES`, which no unit key is, so it prints the first
-  // stored entry: the unit here stores Catalan first.
+  // The kitchen looks the line's frozen `unit_name` up under its own `es-ES`, which is no key of it,
+  // so it prints that map's first entry. The unit row stores Catalan first, so a line that copied
+  // the unit's whole map would print `CA-g`.
   it("prints a measured extra's unit in the default content language, not the language its unit stores first", async () => {
     const { cfg, catalogueId } = await setupVenue();
     const { printerId, jobs } = await asApp(cfg, async (tx) => {

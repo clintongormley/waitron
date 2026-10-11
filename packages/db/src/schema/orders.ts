@@ -146,7 +146,8 @@ export const workingOrders = table(
  *
  * `descriptions` is a locale→string map holding exactly the location's invoice locales as they
  * were when the line was written or last moved, checked by trigger against
- * locations.invoice_locales; every key holds the venue's default content language's text.
+ * locations.invoice_locales; every key holds the text of the venue's default content language at the
+ * time the line was written.
  */
 export const workingOrderLines = table(
   "working_order_lines",
@@ -172,7 +173,7 @@ export const workingOrderLines = table(
     // here: a pick becomes its own child line.
     optionSnapshots: json<OptionSnapshot[]>("option_snapshots").notNull().default([]),
     // The printed unit label (the unit's abbreviation), frozen at add-time as one entry under the
-    // default content language — presentation only.
+    // default content language of that time — presentation only.
     unitName: json<Record<string, string>>("unit_name"),
     unitPrecision: count("unit_precision"),
     quantity: quantity("quantity").notNull(),
