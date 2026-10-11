@@ -2,7 +2,7 @@ import { sql, type SQL } from "drizzle-orm";
 import { claimRows, nowIso, type Transaction } from "@waitron/db";
 import type { PrintTransport, PrinterTarget, Transport } from "@waitron/print-agent";
 
-/** Jobs claimed per batch. A bound, not a tuning knob — the loop calls again while work remains. */
+/** Jobs ended per bounded Bluetooth failure pass; another pull handles the remainder. */
 export const PULL_BATCH_LIMIT = 50;
 
 /**
@@ -11,17 +11,9 @@ export const PULL_BATCH_LIMIT = 50;
  */
 export const MAX_DELIVERY_ATTEMPTS = 5;
 
-/**
- * The claim lease: a job still `printing` whose `claimed_at` is older than this is a dropped claim
- * (the agent crashed or the box died) and the pull re-claims it. Long enough not to reclaim a live
- * push, which takes seconds.
- *
- * `claimed_at` is stamped once per BATCH, so a large batch to a slow printer can age its unsent
- * tail past the lease. Another agent in the venue can then re-claim a network printer's unsent jobs
- * and print them while the first still sends every job it pulled, so those jobs print twice.
- * Delivery is deliberately at-least-once: a reclaim can also reprint a job that printed but whose
- * `done` report was lost. A double print is accepted over a dropped kitchen ticket.
- */
+/** Documents may be reclaimed after a lost report, accepting a duplicate over a dropped ticket.
+ * Each pull hands out one job so an unsent batch tail cannot outlive its lease. Drawer commands
+ * have one claim only: an uncertain send must not repeat the pulse. */
 export const PRINT_JOB_LEASE_MS = 60_000;
 
 export interface AgentRuntimeDeps {
@@ -78,16 +70,16 @@ function dueNow(): { claimedAt: string; due: SQL } {
 }
 
 /**
- * Claims a batch of this agent's due jobs and returns each with its printer's connection facts.
+ * Claims one due job with its printer's connection facts.
  * Separate from `runAgentOnce` so the server can commit the claim in one request and hand the jobs to
  * a remote agent without holding a transaction across that agent's socket write.
  *
- * A job is due when `queued`, `failed` under the attempt cap, or `printing` with no live claim. That
+ * Documents are due when `queued`, `failed` under the attempt cap, or `printing` with no live claim. That
  * last case covers `claimed_at IS NULL` too: every claim stamps it, so a `printing` row without one
  * is stuck, and `<` alone would never select it. A deactivated printer's jobs, stuck ones included,
  * are left unclaimed until it is reactivated.
  *
- * SQLite has no boolean type but reads `true` as 1, which is what the `active` column stores.
+ * A drawer is claimable only while queued; a lost claim or uncertain write never retries it.
  */
 export async function claimPrintJobs(
   tx: Transaction,
@@ -120,9 +112,10 @@ export async function claimPrintJobs(
           select 1 from invoice_deliveries d where d.print_job_id = j.id
             and d.status = 'queued' and d.next_attempt_at <= ${ctx.invoiceReceiptsAt})`
         })
+      and (j.kind = 'document' or j.status = 'queued')
       and ${due}`,
-    order: sql`j.created_at`,
-    limit: PULL_BATCH_LIMIT,
+    order: sql`case when j.status = 'failed' then 1 else 0 end, j.created_at`,
+    limit: 1,
     set: sql`status = 'printing', claimed_at = ${claimedAt}, claimed_by = ${agentId}`,
     // Correlated subqueries: SQLite refuses a RETURNING column from a table an `UPDATE … FROM` joins.
     returning: sql`print_jobs.id, print_jobs.printer_id, print_jobs.payload,
@@ -217,7 +210,9 @@ export async function reportPrintJob(
   const setClause =
     outcome.status === "done"
       ? sql`status = 'done', delivered_at = ${nowIso()}`
-      : sql`status = 'failed', last_error = ${outcome.error}, attempts = print_jobs.attempts + 1`;
+      : sql`status = 'failed', last_error = ${outcome.error},
+          attempts = case when print_jobs.kind = 'drawer' then ${MAX_DELIVERY_ATTEMPTS}
+            else print_jobs.attempts + 1 end`;
   const result = await tx.execute<{ id: string }>(sql`
     update print_jobs set ${setClause}
     where print_jobs.id = ${jobId}
