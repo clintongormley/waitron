@@ -297,9 +297,12 @@ screen is designed.
 ## A502. The floor plan editor as a big modal, with handles and a shorter form
 
 **A502 (owner, 2026-10-11) — OPEN.** The editor wastes space today: the dashboard's header and menu
-stay on screen, and a selected table's form is a long column of fields. The owner's mockup is the
-private canvas https://claude.ai/artifact/NkwkgPN6rjSu26P6qAjTyK; boards 1 to 4 are this job and
-board 5 is A503.
+stay on screen, and a selected table's form is a long column of fields. The owner's mockups, saved
+as images: [1, the editor with a table selected](mockups/a502-a503-floor-plan-editor/1-editor-table-selected.png),
+[2, the tables list](mockups/a502-a503-floor-plan-editor/2-tables-list-nothing-selected.png) (its
+joined-table rows are A503), [3, the handles](mockups/a502-a503-floor-plan-editor/3-handles.png),
+[4, the delete confirmation](mockups/a502-a503-floor-plan-editor/4-delete-confirmation.png). The
+canvas they came from is https://claude.ai/artifact/NkwkgPN6rjSu26P6qAjTyK.
 
 - **A big modal.** The editor opens over the whole window, so the dashboard's header and menu are
   hidden. The header holds the zone's name and the line 'Changes will go live tomorrow, unless you
@@ -310,7 +313,7 @@ board 5 is A503.
   plan and Delete leave the form. Joins leave it too once A503 lands; until then they stay.
 - **Handles on the selected table.** A dot in the middle of each side changes width or height. A
   two-headed quarter-circle arrow on the top-right corner turns the table, and turns with it, so it
-  stays at the same corner. The table's name stays upright. The arrow-key nudge and turn shortcuts
+  stays at the same corner. The arrow-key nudge and turn shortcuts
   stay. With the Width and Height fields gone, the plan needs a keyboard way to resize as well.
 - **The tables list.** Each row shows a marker (on the plan, or not placed; A503 adds a third for
   a table that is part of a joined table), the name, the seats, and a bin that deletes the table
@@ -336,7 +339,9 @@ section 6.1, `docs/superpowers/specs/2026-10-08-floor-plan-design.md`; `floor_pl
 `floor_reset_joins`, `packages/db/src/schema/floor-plans.ts`).
 
 - **Add joined table** in the editor asks for a name, a seat count, and the tables it is made of,
-  chosen from tables not on the plan (mockup board 5). The joined table is placed on the plan as
+  chosen from tables not on the plan
+  ([mockup 5](mockups/a502-a503-floor-plan-editor/5-add-joined-table.png); the tables list in
+  [mockup 2](mockups/a502-a503-floor-plan-editor/2-tables-list-nothing-selected.png)). The joined table is placed on the plan as
   one table; its parts are marked "in <joined table>" in the tables list and cannot be placed on
   their own. The list's last column shows what a joined table is made of.
 - **On the till a joined table can be split.** Its parts go side by side inside the outline the
