@@ -21,7 +21,6 @@ import {
   cropToTables,
   UrlStateController,
   buildZoneTabs,
-  defaultTraySlot,
   floorTrayStyles,
   inNumberOrder,
   isTableZoneless,
@@ -35,8 +34,6 @@ import type {
   FloorMapDrop,
   FloorMapTable,
   FloorTable,
-  PlacementChange,
-  PlacementClear,
   ZoneTab,
 } from "@waitron/ui";
 import { decimal, formatMoney, isZeroDecimal } from "@waitron/shared";
@@ -461,18 +458,14 @@ export class TillFloorScreen extends LitElement {
 
   @property({ attribute: false }) zones: FloorZone[] = [];
   @property({ attribute: false }) tables: TableState[] = [];
-  /** Used only by the placement writes, which no-op when it is absent. */
   @property({ attribute: false }) api?: TillApi;
-  /** Hides the plan-edit toggle. Convenience, not security: the server re-checks the permission on
-   * every placement write. */
-  @property({ attribute: false }) canEdit = false;
   @property({ attribute: false }) canExitToCounter = true;
   /** The device's profile allows `take-orders`, which every change to today's plan needs: the map's
    * drag and the details sheet's actions. */
   @property({ attribute: false }) canChangeToday = false;
   /** The device has a station view, so each station's ready work links into it. */
   @property({ attribute: false }) canOpenStation = false;
-  /** Mounted inside a card host, which supplies the header; the view/edit toggles stay. */
+  /** Mounted inside a card host, which supplies the header; the view toggle stays. */
   @property({ type: Boolean }) embedded = false;
   /**
    * `undefined` checks the live `prefers-reduced-motion` query on every render; a test injects a value.
@@ -493,7 +486,6 @@ export class TillFloorScreen extends LitElement {
   @state() private activeZone: string | null | undefined = undefined;
   /** `undefined` DERIVES the view per active zone; a toggle tap pins it for the session, not persisted. */
   @state() private viewOverride: "map" | "list" | undefined = undefined;
-  @state() private editing = false;
   /** The free table whose guest count is being asked for, with the tables seated beside it. */
   @state() private seating: { table: TableState; heading: string; withTableIds?: string[] } | null =
     null;
@@ -560,9 +552,7 @@ export class TillFloorScreen extends LitElement {
     this.#drawnAt = this.now ?? Date.now();
     if (this.details !== null && !this.tables.some((table) => table.id === this.details!.tableId))
       this.details = null;
-    // Edit plan's writes move the old placement columns, which a planned zone's map does not read.
     this.#zone = this.#zoneOnScreen();
-    if (this.#zone.planned) this.editing = false;
     if (this.joiningWith !== null && this.#joining(this.joiningWith.tableId) === undefined)
       this.joiningWith = null;
   }
@@ -716,12 +706,6 @@ export class TillFloorScreen extends LitElement {
     this.viewOverride = current === "map" ? "list" : "map";
   }
 
-  /** Entering edit mode also switches to the map: the canvas is what you edit. */
-  #toggleEdit(): void {
-    this.editing = !this.editing;
-    if (this.editing) this.viewOverride = "map";
-  }
-
   /**
    * Both maps send a table id only (the canvas's `wt-open-table`, the new map's `wt-table-tap`). The
    * table is looked up here, so a seated one resumes its party rather than being seated a second time.
@@ -731,32 +715,6 @@ export class TillFloorScreen extends LitElement {
     const { tableId } = (event as CustomEvent<{ tableId: string }>).detail;
     const found = this.tables.find((table) => table.id === tableId);
     if (found !== undefined) this.#openTable(found);
-  }
-
-  /** A rejected write is swallowed: the refresh reconciles the view to the server's truth. */
-  async #onPlacementChange(event: Event): Promise<void> {
-    event.stopPropagation();
-    const { tableId, posX, posY, shape, rotation, zoneId } = (event as CustomEvent<PlacementChange>)
-      .detail;
-    if (this.api === undefined) return;
-    try {
-      await this.api.setTablePlacement(tableId, { posX, posY, shape, rotation, zoneId });
-    } catch {
-      // Non-fatal — the refresh reconciles the view to server truth.
-    }
-    this.#requestFloorRefresh();
-  }
-
-  async #onPlacementClear(event: Event): Promise<void> {
-    event.stopPropagation();
-    const { tableId } = (event as CustomEvent<PlacementClear>).detail;
-    if (this.api === undefined) return;
-    try {
-      await this.api.clearPlacement(tableId);
-    } catch {
-      // Non-fatal — see #onPlacementChange.
-    }
-    this.#requestFloorRefresh();
   }
 
   #setPending(pending: Map<string, TodayPlacement> | null): void {
@@ -1210,18 +1168,6 @@ export class TillFloorScreen extends LitElement {
           >
             ${view === "map" ? t("floor.view_list") : t("floor.view_map")}
           </wt-button>
-          ${
-            this.canEdit && !planned
-              ? html`<wt-button
-                  class="edit-toggle"
-                  data-edit-toggle
-                  variant=${this.editing ? "primary" : "secondary"}
-                  @click=${() => this.#toggleEdit()}
-                >
-                  ${t("floor.edit_plan")}
-                </wt-button>`
-              : nothing
-          }
           ${this.#zoneMenu(planned, activeKey)}
         </div>
         ${
@@ -1265,14 +1211,11 @@ export class TillFloorScreen extends LitElement {
       <div class="map">
         <wt-floor-canvas
           .tables=${placed.map((table) => this.#toFloorTable(table))}
-          .editable=${this.editing}
           .copy=${this.#canvasCopy()}
           .locale=${currentLocale()}
           @wt-open-table=${(event: Event) => this.#onCanvasOpen(event)}
-          @wt-placement-change=${(event: Event) => void this.#onPlacementChange(event)}
-          @wt-placement-clear=${(event: Event) => void this.#onPlacementClear(event)}
         ></wt-floor-canvas>
-        ${this.#tray(unplaced, placed)}
+        ${this.#tray(unplaced)}
       </div>
     `;
   }
@@ -1299,26 +1242,25 @@ export class TillFloorScreen extends LitElement {
           @wt-table-details=${(event: Event) => this.#onDetails(event)}
           @wt-table-drag-end=${(event: Event) => this.#onDragEnd(event)}
         ></wt-floor-map>
-        ${this.#tray(unplaced, [])}
+        ${this.#tray(unplaced)}
       </div>
     `;
   }
 
-  #tray(unplaced: TableState[], placed: TableState[]): TemplateResult | typeof nothing {
+  #tray(unplaced: TableState[]): TemplateResult | typeof nothing {
     return unplaced.length > 0
       ? html`<div class="tray" aria-label=${t("floor.unplaced")}>
           <span class="tray-label">${t("floor.unplaced")}</span>
-          ${unplaced.map((table) => this.#trayItem(table, placed))}
+          ${unplaced.map((table) => this.#trayItem(table))}
         </div>`
       : nothing;
   }
 
-  /** `placed` is the active zone's already-placed tables, so the default slot can dodge them. */
-  #trayItem(table: TableState, placed: TableState[]): TemplateResult {
+  #trayItem(table: TableState): TemplateResult {
     return html`<button
       class="tray-item"
       data-tray-table=${table.id}
-      @click=${() => this.#onTrayTap(table, placed)}
+      @click=${() => this.#openTable(table)}
     >
       <wt-table-token
         .table=${this.#toFloorTable(table)}
@@ -1332,32 +1274,6 @@ export class TillFloorScreen extends LitElement {
         }}
       ></wt-table-token>
     </button>`;
-  }
-
-  #onTrayTap(table: TableState, placed: TableState[]): void {
-    if (this.editing) {
-      void this.#placeFromTray(table, placed);
-    } else {
-      this.#openTable(table);
-    }
-  }
-
-  /** Tap-to-place gives the table a DEFAULT position, which the operator then adjusts on the canvas. */
-  async #placeFromTray(table: TableState, placed: TableState[]): Promise<void> {
-    if (this.api === undefined) return;
-    const { posX, posY } = defaultTraySlot(placed.length);
-    try {
-      await this.api.setTablePlacement(table.id, {
-        posX,
-        posY,
-        shape: "round",
-        rotation: 0,
-        zoneId: table.zoneId,
-      });
-    } catch {
-      // Non-fatal — the refresh reconciles the view to server truth.
-    }
-    this.#requestFloorRefresh();
   }
 
   #tab(tab: ZoneTab, activeKey: string | null | undefined): TemplateResult {

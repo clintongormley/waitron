@@ -514,7 +514,6 @@ export const en = {
   // Spatial floor plan. The view toggles name the view they switch TO.
   "floor.view_map": "Map",
   "floor.view_list": "List",
-  "floor.edit_plan": "Edit plan",
   "floor.unplaced": "Unplaced",
   "floor.zone": "Zone",
   "floor.rotate": "Rotate",
@@ -1685,7 +1684,6 @@ export const es: Record<StringKey, string> = {
   "floor.unsent_mark": "Sin enviar",
   "floor.view_map": "Mapa",
   "floor.view_list": "Lista",
-  "floor.edit_plan": "Editar plano",
   "floor.unplaced": "Sin colocar",
   "floor.zone": "Zona",
   "floor.rotate": "Girar",
