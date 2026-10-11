@@ -1,5 +1,7 @@
 import { addDays, weekdayOf } from "./hours-rules.js";
 import { rangeSpan, type ServiceRange } from "./service-day.js";
+import { scheduleCutovers, serviceDayWallContext } from "./service-day-context.js";
+import type { BusinessDayClock } from "@waitron/shared";
 import { AppError } from "@waitron/shared";
 import "./errors.js";
 
@@ -18,21 +20,26 @@ export function periodOrderCutoff(range: ServiceRange, offset: number, cutover: 
   return rangeSpan(range, cutover).end + offset;
 }
 
+const wallMinutes = (time: string): number =>
+  Number(time.slice(0, 2)) * 60 + Number(time.slice(3, 5));
+
 export function findEndOffsetClash(
   days: readonly (readonly ServiceRange[])[],
   offsets: ReadonlyMap<string, number>,
   cutover: string,
+  dayCutovers: readonly string[] = days.map(() => cutover),
 ): { periodId: string; dayIndex: number; slotIndex: number } | null {
   const placements = days
     .flatMap((slots, dayIndex) =>
       slots.map((slot, slotIndex) => {
-        const span = rangeSpan(slot, cutover);
+        const span = rangeSpan(slot, dayCutovers[dayIndex]!);
+        const origin = dayIndex * 1440 + wallMinutes(dayCutovers[dayIndex]!) - wallMinutes(cutover);
         return {
           periodId: slot.periodId,
           dayIndex,
           slotIndex,
-          start: dayIndex * 1440 + span.start,
-          end: dayIndex * 1440 + span.end,
+          start: origin + span.start,
+          end: origin + span.end,
         };
       }),
     )
@@ -59,38 +66,93 @@ export interface OffsetScheduleDay {
 
 export function findScheduleEndOffsetClash(
   days: readonly OffsetScheduleDay[],
-  dates: readonly { date: string; closeWholeVenue: boolean }[],
+  dates: readonly {
+    date: string;
+    closeWholeVenue: boolean;
+    repeatOn?: string | null;
+    ownHours?: boolean;
+  }[],
   offsets: ReadonlyMap<string, number>,
-  cutover: string,
+  clock: string | BusinessDayClock,
 ): { periodId: string; slotIndex: number; weekday?: number; date?: string } | null {
   const week = Array.from(
     { length: 7 },
     (_, weekday) => days.find((day) => day.weekday === weekday)?.slots ?? [],
   );
-  for (let weekday = 0; weekday < 7; weekday++) {
-    const clash = findEndOffsetClash([week[weekday]!, week[(weekday + 1) % 7]!], offsets, cutover);
-    if (clash !== null)
-      return {
-        periodId: clash.periodId,
-        slotIndex: clash.slotIndex,
-        weekday: (weekday + clash.dayIndex) % 7,
-      };
+  const cutovers = typeof clock === "string" ? [clock] : scheduleCutovers(clock);
+  for (const cutover of cutovers)
+    for (let weekday = 0; weekday < 7; weekday++) {
+      const clash = findEndOffsetClash(
+        [week[weekday]!, week[(weekday + 1) % 7]!],
+        offsets,
+        cutover,
+      );
+      if (clash !== null)
+        return {
+          periodId: clash.periodId,
+          slotIndex: clash.slotIndex,
+          weekday: (weekday + clash.dayIndex) % 7,
+        };
+    }
+  const years = new Set(dates.map(({ date }) => Number(date.slice(0, 4))));
+  if (typeof clock !== "string")
+    for (const change of clock.cutoverChanges)
+      years.add(Number(change.effectiveBusinessDay.slice(0, 4)));
+  for (const day of dates) {
+    if (day.repeatOn == null) continue;
+    const firstYear = Number(day.date.slice(0, 4));
+    for (let year = firstYear; year < Math.min(firstYear + 400, 10000); year++) years.add(year);
+    if (typeof clock !== "string")
+      for (const change of clock.cutoverChanges) {
+        const start = Math.max(firstYear, Number(change.effectiveBusinessDay.slice(0, 4)));
+        for (let year = start; year < Math.min(start + 400, 10000); year++) years.add(year);
+      }
   }
-  const special = new Map(dates.map((date) => [date.date, date]));
+  const occurrences = dates.flatMap((day) =>
+    day.repeatOn == null
+      ? [day]
+      : [...years].flatMap((year) => {
+          const date = `${String(year).padStart(4, "0")}-${day.repeatOn}`;
+          return date >= day.date &&
+            new Date(`${date}T00:00:00Z`).toISOString().slice(0, 10) === date
+            ? [{ ...day, date }]
+            : [];
+        }),
+  );
+  const special = new Map(occurrences.map((day) => [day.date, day]));
   const overrides = new Map(
     days.filter((day) => day.date !== null).map((day) => [day.date!, day.slots]),
   );
-  const effective = (date: string): readonly ServiceRange[] =>
-    special.get(date)?.closeWholeVenue === true
-      ? []
-      : (overrides.get(date) ?? week[weekdayOf(date)]!);
+  const effective = (date: string): readonly ServiceRange[] => {
+    const day = special.get(date);
+    if (day?.closeWholeVenue === true) return [];
+    const stored = dates.find(
+      (entry) =>
+        entry.date === date ||
+        (entry.repeatOn != null && entry.repeatOn === date.slice(5) && entry.date <= date),
+    );
+    return day?.ownHours === false
+      ? week[weekdayOf(date)]!
+      : (overrides.get(stored?.date ?? date) ?? week[weekdayOf(date)]!);
+  };
   // Less than one day's grace can meet only a placement on this or the next business day.
-  const boundaries = new Set(dates.flatMap(({ date }) => [addDays(date, -1), date]));
+  const boundaries = new Set(occurrences.flatMap(({ date }) => [addDays(date, -1), date]));
+  if (typeof clock !== "string")
+    for (const change of clock.cutoverChanges) {
+      boundaries.add(addDays(change.effectiveBusinessDay, -1));
+      boundaries.add(change.effectiveBusinessDay);
+    }
   for (const date of [...boundaries].sort()) {
+    const next = addDays(date, 1);
+    const contexts =
+      typeof clock === "string"
+        ? [clock, clock]
+        : [date, next].map((day) => serviceDayWallContext(clock, day).dayCutover);
     const clash = findEndOffsetClash(
-      [effective(date), effective(addDays(date, 1))],
+      [effective(date), effective(next)],
       offsets,
-      cutover,
+      contexts[0]!,
+      contexts,
     );
     if (clash !== null)
       return {

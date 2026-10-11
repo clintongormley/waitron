@@ -1,3 +1,4 @@
+import { serviceDayContext } from "./service-day-context.js";
 import { and, asc, eq, inArray, isNull, or, sql } from "drizzle-orm";
 import { categories, floorZones, kitchenStations, products, type Transaction } from "@waitron/db";
 import {
@@ -644,7 +645,9 @@ async function periodsDeciding(
       }
   }
   if (named.size === 0) return [];
-  const { dayCutover } = await readLocationClock(tx, cfg.locationId);
+  const { clock, moment } = await clockAt(tx, cfg, new Date());
+  const dayCutover =
+    moment === null ? clock.dayCutover : serviceDayContext(clock, moment.businessDay).dayCutover;
   const ordered = await inPeriodOrder(
     tx,
     cfg,
@@ -1058,7 +1061,8 @@ export async function routingModel(
 ): Promise<RoutingModel> {
   const { clock, moment } = await clockAt(tx, cfg, at);
   const { rules, folders, stations } = await snapshot(tx, cfg, scopeAt(moment));
-  const cutover = clock.dayCutover.slice(0, 5);
+  const context = moment === null ? null : serviceDayContext(clock, moment.businessDay);
+  const cutover = context?.dayCutover ?? clock.dayCutover;
   const zoneDepartment = await zoneDepartments(tx, cfg);
   const zones = (await activeZones(tx, cfg)).map((zone) => ({
     ...zone,
@@ -1070,7 +1074,7 @@ export async function routingModel(
     .where(and(eq(products.active, true), isNull(products.parentId)))
     .orderBy(asc(products.name), asc(products.id));
   const shown = new Set(gridProducts.map((product) => product.id));
-  const periods = await readRoutingPeriods(tx, cfg, clock.dayCutover);
+  const periods = await readRoutingPeriods(tx, cfg, cutover);
   const periodOrder = new Map(periods.map((period, index) => [period.id, index]));
   const periodProducts = new Map(periods.map((period) => [period.id, period.productIds]));
   const active = (rules.cellPeriods?.size ?? 0) > 0 ? await activeProducts(tx) : [];
@@ -1121,7 +1125,12 @@ export async function routingModel(
         closedSendsTo: closedSendsTo(rules, id, moment),
       })),
     todayEnds:
-      moment === null ? null : { timeOfDay: cutover, tomorrow: moment.timeOfDay >= cutover },
+      moment === null || context === null
+        ? null
+        : (() => {
+            const end = venueLocalMoment(new Date(context.endAt), clock)!;
+            return { timeOfDay: end.timeOfDay, tomorrow: end.civilDate > moment.civilDate };
+          })(),
     clockReadable: moment !== null,
   };
 }

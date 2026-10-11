@@ -1,3 +1,4 @@
+import { readZoneKeepOpenState } from "./operations.js";
 import { replaceZoneClosedWeek, saveZoneClosedDate } from "./zone-closed-times.js";
 import { saveSpecialDate, duplicateSpecialDate } from "./hours.js";
 import {
@@ -6,9 +7,10 @@ import {
   updateMenuPeriod,
   readOpeningHoursModel,
   resolveDepartmentService,
+  MENU_TIMETABLE_CALENDAR_PARTICIPANT,
 } from "./menu-timetable.js";
 import { randomUUID } from "node:crypto";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { eq } from "drizzle-orm";
 import {
   CORE_MIGRATIONS,
@@ -596,4 +598,327 @@ describe("schedule authoring retains date-specific starts", () => {
       ),
     ).rejects.toMatchObject({ code: "zone_closed_time.invalid" });
   });
+});
+
+describe("dated calendar authoring after activation", () => {
+  const after = new Date("2026-11-05T12:00:00Z");
+  async function activated(v: Awaited<ReturnType<typeof fixture>>) {
+    await withTransaction(suite.db, async (tx) => {
+      await tx
+        .insert(locationBusinessDaySettings)
+        .values({ locationId: v.cfg.locationId, revision: 1 });
+      await tx
+        .insert(locationDayCutoverChanges)
+        .values({ locationId: v.cfg.locationId, effectiveBusinessDay: E, dayCutover: "07:00:00" });
+    });
+  }
+  it("allows a one-off all-day range with a negative offset under its own start", async () => {
+    const v = await fixture([], { date: "2026-12-25", offset: -1 });
+    await activated(v);
+    await expect(
+      withTransaction(suite.db, (tx) =>
+        saveSpecialDateMenus(
+          tx,
+          v.cfg,
+          v.specialDateId!,
+          v.departmentId,
+          [{ periodId: v.periodId, ...range("07:00", "07:00") }],
+          after,
+          1,
+        ),
+      ),
+    ).resolves.toBeUndefined();
+  });
+  it.each([false, true])(
+    "refuses copying incompatible menu/zone hours into the target date (zone=%s)",
+    async (zone) => {
+      const v = await fixture([range("05:00", "05:00")], { date: "2026-10-10", zone });
+      await activated(v);
+      await expect(
+        withTransaction(suite.db, (tx) =>
+          duplicateSpecialDate(
+            tx,
+            v.cfg,
+            v.specialDateId!,
+            ["2026-12-25"],
+            after,
+            [MENU_TIMETABLE_CALENDAR_PARTICIPANT],
+            1,
+          ),
+        ),
+      ).rejects.toMatchObject({
+        code: zone ? "zone_closed_time.invalid" : "menu_timetable.invalid",
+      });
+      const copies = await suite.db
+        .select()
+        .from(specialDates)
+        .where(eq(specialDates.locationId, v.cfg.locationId));
+      expect(copies.map((d) => d.date)).toEqual(["2026-10-10"]);
+    },
+  );
+  it("accepts a skipped final boundary at the reporting boundary instant", async () => {
+    const v = await fixture([], { date: "2026-03-28" });
+    await withTransaction(suite.db, (tx) =>
+      tx
+        .update(locations)
+        .set({ dayCutover: "02:30:00" })
+        .where(eq(locations.id, v.cfg.locationId)),
+    );
+    await expect(
+      withTransaction(suite.db, (tx) =>
+        saveSpecialDateMenus(
+          tx,
+          v.cfg,
+          v.specialDateId!,
+          v.departmentId,
+          [{ periodId: v.periodId, ...range("09:00", "02:30") }],
+          new Date("2026-03-20T12:00:00Z"),
+          0,
+        ),
+      ),
+    ).resolves.toBeUndefined();
+  });
+});
+
+describe("clock compatibility resolves neighboring named-day substitutions", () => {
+  async function neighbor(
+    ownHours: boolean,
+    closeWholeVenue: boolean,
+    ranges: { startsAt: string; endsAt: string }[],
+    annual = false,
+  ) {
+    const v = await fixture([range("22:00", "04:30")], { offset: 180, date: E });
+    await withTransaction(suite.db, async (tx) => {
+      const normal = randomUUID();
+      await tx
+        .insert(menuDayTimetables)
+        .values({ id: normal, departmentId: v.departmentId, weekday: 4 });
+      await tx.insert(menuSlots).values({
+        timetableId: normal,
+        departmentId: v.departmentId,
+        periodId: v.periodId,
+        startsAt: "07:15:00",
+        endsAt: "09:00:00",
+      });
+      const id = randomUUID();
+      await tx.insert(specialDates).values({
+        id,
+        locationId: v.cfg.locationId,
+        date: annual ? "2025-11-06" : "2026-11-05",
+        repeatOn: annual ? "11-06" : null,
+        name: "Neighbor",
+        ownHours,
+        closeWholeVenue,
+      });
+      if (ownHours) {
+        const timetableId = randomUUID();
+        await tx
+          .insert(menuDayTimetables)
+          .values({ id: timetableId, departmentId: v.departmentId, specialDateId: id });
+        if (ranges.length)
+          await tx.insert(menuSlots).values(
+            ranges.map((r) => ({
+              timetableId,
+              departmentId: v.departmentId,
+              periodId: v.periodId,
+              startsAt: `${r.startsAt}:00`,
+              endsAt: `${r.endsAt}:00`,
+            })),
+          );
+      }
+    });
+    return v;
+  }
+  it.each([
+    [true, false],
+    [false, true],
+  ])("honors an empty override or closed neighbor (%s,%s)", async (ownHours, closed) => {
+    await expect(check(await neighbor(ownHours, closed, []), "07:00")).resolves.toBeUndefined();
+  });
+  it("includes the next occurrence of an annual override beside a normal week", async () => {
+    const v = await fixture([range("22:00", "04:30")], { offset: 180 });
+    await withTransaction(suite.db, async (tx) => {
+      const id = randomUUID(),
+        timetableId = randomUUID();
+      await tx.insert(specialDates).values({
+        id,
+        locationId: v.cfg.locationId,
+        date: "2025-11-05",
+        repeatOn: "11-05",
+        name: "Annual neighbor",
+        ownHours: true,
+      });
+      await tx
+        .insert(menuDayTimetables)
+        .values({ id: timetableId, departmentId: v.departmentId, specialDateId: id });
+      await tx.insert(menuSlots).values({
+        timetableId,
+        departmentId: v.departmentId,
+        periodId: v.periodId,
+        startsAt: "07:15:00",
+        endsAt: "09:00:00",
+      });
+    });
+    await expect(check(v, "07:00")).rejects.toMatchObject({
+      code: "venue.business_day_hours_conflict",
+      params: { conflicts: [expect.objectContaining({ reason: "sending_cutoff", weekday: 3 })] },
+    });
+  });
+});
+
+describe("dated runtime service and yesterday sending", () => {
+  async function timeline(v: Awaited<ReturnType<typeof fixture>>, time: string) {
+    await withTransaction(suite.db, async (tx) => {
+      await tx.insert(locationDayCutoverChanges).values({
+        locationId: v.cfg.locationId,
+        effectiveBusinessDay: E,
+        dayCutover: `${time}:00`,
+      });
+      await tx
+        .update(menuDayTimetables)
+        .set({ weekday: 2 })
+        .where(eq(menuDayTimetables.departmentId, v.departmentId));
+    });
+  }
+  it.each(["07:00", "03:00"])(
+    "does not replay a completed service across the %s boundary",
+    async (time) => {
+      const v = await fixture([range("22:00", time === "07:00" ? "04:30" : "02:30")]);
+      await timeline(v, time);
+      const read = (instant: string) =>
+        withTransaction(suite.db, (tx) =>
+          resolveDepartmentService(tx, v.cfg, v.departmentId, new Date(instant)),
+        );
+      const instants =
+        time === "07:00"
+          ? ["2026-11-04T04:00:00Z", "2026-11-04T05:59:00Z"]
+          : ["2026-11-04T01:59:00Z"];
+      for (const instant of instants) {
+        const result = await read(instant);
+        expect(result.open).toBe(false);
+        expect(result.orderableMenuIds).toEqual([]);
+        expect(result.sendableMenuIds).toEqual([]);
+        expect(result.endedMenuIds).toHaveLength(1);
+      }
+      const boundary = time === "07:00" ? "2026-11-04T06:00:00Z" : "2026-11-04T02:00:00Z";
+      expect(await read(boundary)).toMatchObject({
+        open: false,
+        sendableMenuIds: [],
+        orderableMenuIds: [],
+      });
+    },
+  );
+  it("uses yesterday's own 05:00 start for positive grace after the 07:00 boundary", async () => {
+    const v = await fixture([range("22:00", "04:30")], { offset: 180 });
+    await timeline(v, "07:00");
+    const read = (instant: string) =>
+      withTransaction(suite.db, (tx) =>
+        resolveDepartmentService(tx, v.cfg, v.departmentId, new Date(instant)),
+      );
+    const grace = await read("2026-11-04T06:00:00Z");
+    expect(grace).toMatchObject({ open: false, orderableMenuIds: [] });
+    expect(grace.sendableMenuIds).toHaveLength(1);
+    expect((await read("2026-11-04T06:30:00Z")).sendableMenuIds).toEqual([]);
+  });
+  it("retains yesterday's negative offset and the exact early sending cutoff", async () => {
+    const v = await fixture([range("22:00", "04:30")], { offset: -60 });
+    await timeline(v, "07:00");
+    const read = (instant: string) =>
+      withTransaction(suite.db, (tx) =>
+        resolveDepartmentService(tx, v.cfg, v.departmentId, new Date(instant)),
+      );
+    expect((await read("2026-11-04T02:29:00Z")).sendableMenuIds).toHaveLength(1);
+    expect(await read("2026-11-04T02:30:00Z")).toMatchObject({
+      open: true,
+      orderableMenuIds: [],
+      sendableMenuIds: [],
+    });
+    expect((await read("2026-11-04T06:00:00Z")).sendableMenuIds).toEqual([]);
+  });
+});
+
+it.each([
+  ["2026-10-25T00:45:00Z", "2026-10-25T01:30:00Z"],
+  ["2026-03-29T01:10:00Z", "2026-03-29T01:30:00Z"],
+])("keeps zone closure through the actual DST boundary at %s", async (instant, boundary) => {
+  const v = await fixture([range("02:30", "02:30")], { zone: true });
+  await withTransaction(suite.db, async (tx) => {
+    await tx
+      .update(locations)
+      .set({ dayCutover: "02:30:00" })
+      .where(eq(locations.id, v.cfg.locationId));
+    await tx
+      .update(zoneClosedTimes)
+      .set({ weekday: 6 })
+      .where(eq(zoneClosedTimes.zoneId, v.zoneId!));
+  });
+  const read = (time: string) =>
+    withTransaction(suite.db, (tx) => readZoneKeepOpenState(tx, v.cfg, v.zoneId!, new Date(time)));
+  expect(await read(instant)).toMatchObject({
+    running: false,
+    closesAt: "02:30",
+    extendedUntil: null,
+  });
+  expect(await read(boundary)).toBeNull();
+});
+
+it("rechecks a time writer queued before a clock change commits", async () => {
+  const v = await fixture([range("09:00", "17:00")]);
+  const deferred = () => {
+    let resolve!: () => void;
+    const promise = new Promise<void>((r) => {
+      resolve = r;
+    });
+    return { promise, resolve };
+  };
+  const entered = deferred(),
+    release = deferred(),
+    queued = deferred();
+  const first = withTransaction(suite.db, async (tx) => {
+    entered.resolve();
+    await release.promise;
+    await tx
+      .insert(locationBusinessDaySettings)
+      .values({ locationId: v.cfg.locationId, revision: 1 });
+    await tx
+      .insert(locationDayCutoverChanges)
+      .values({ locationId: v.cfg.locationId, effectiveBusinessDay: E, dayCutover: "07:00:00" });
+  });
+  await entered.promise;
+  const realLock = suite.db.withWriteLock.bind(suite.db);
+  const spy = vi
+    .spyOn(suite.db, "withWriteLock")
+    .mockImplementation(<T>(body: () => Promise<T>) => {
+      queued.resolve();
+      return realLock(body);
+    });
+  let second!: Promise<void>;
+  let refused!: Promise<unknown>;
+  try {
+    second = withTransaction(suite.db, (tx) =>
+      replaceMenuWeek(
+        tx,
+        v.cfg,
+        v.departmentId,
+        Array.from({ length: 7 }, (_, weekday) => ({
+          weekday,
+          slots: weekday === 3 ? [{ periodId: v.periodId, ...range("09:00", "18:00") }] : [],
+        })),
+        at,
+        0,
+      ),
+    );
+    refused = expect(second).rejects.toMatchObject({ code: "hours.clock_changed" });
+    await queued.promise;
+  } finally {
+    spy.mockRestore();
+    release.resolve();
+  }
+  await first;
+  await refused;
+  const saved = await suite.db
+    .select({ endsAt: menuSlots.endsAt })
+    .from(menuSlots)
+    .where(eq(menuSlots.departmentId, v.departmentId));
+  expect(saved).toEqual([{ endsAt: "17:00:00" }]);
 });

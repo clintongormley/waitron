@@ -299,7 +299,7 @@ describe("service-period writers", () => {
     ).toEqual([{ name: "Afternoon" }]);
   });
 
-  it("checks an end equal to the changeover on the following calendar date", async () => {
+  it("resolves an end equal to the changeover at the actual following boundary", async () => {
     expect(localTimeOccurrences("2026-03-28", "02:30", ZONE)).toHaveLength(1);
     expect(localTimeOccurrences("2026-03-29", "02:30", ZONE)).toEqual([]);
     const v = await venue();
@@ -310,10 +310,25 @@ describe("service-period writers", () => {
     const date = await makeDate(v, "2026-03-28");
     await expect(
       dateMenus(v, date.id, [slot(v.periods!.noches, "21:00", "02:30")]),
-    ).rejects.toMatchObject({
-      code: "menu_timetable.invalid",
-      params: { field: "slots.0.endsAt", reason: "clock_skips" },
-    });
+    ).resolves.toBeUndefined();
+    const stored = await db
+      .select({ startsAt: menuSlots.startsAt, endsAt: menuSlots.endsAt })
+      .from(menuSlots)
+      .innerJoin(menuDayTimetables, eq(menuDayTimetables.id, menuSlots.timetableId))
+      .where(eq(menuDayTimetables.specialDateId, date.id));
+    expect(stored).toEqual([{ startsAt: "21:00:00", endsAt: "02:30:00" }]);
+    const running = await scoped((tx) =>
+      resolveDepartmentService(tx, v.cfg, v.restaurant, new Date("2026-03-29T01:10:00Z")),
+    );
+    expect(running).toMatchObject({ open: true, periodId: v.periods!.noches });
+    expect(running.sendableMenuIds).toContain(running.customerMenuId);
+    expect(
+      (
+        await scoped((tx) =>
+          resolveDepartmentService(tx, v.cfg, v.restaurant, new Date("2026-03-29T01:30:00Z")),
+        )
+      ).periodId,
+    ).not.toBe(v.periods!.noches);
   });
 
   it("checks a start equal to the changeover on the business date", async () => {
@@ -340,7 +355,7 @@ describe("service-period writers", () => {
   });
 
   it.each(["copy", "move"] as const)(
-    "checks changeover ends on the next calendar date during a %s",
+    "resolves a final boundary during a %s across a skipped hour",
     async (action) => {
       expect(localTimeOccurrences("2027-03-27", "02:30", ZONE)).toHaveLength(1);
       expect(localTimeOccurrences("2027-03-28", "02:30", ZONE)).toEqual([]);
@@ -373,20 +388,26 @@ describe("service-period writers", () => {
                 0,
               ),
         );
-      await expect(change()).rejects.toMatchObject({
-        code: "menu_timetable.invalid",
-        params: {
-          field: "date",
-          date: "2027-03-27",
-          departmentId: v.restaurant,
-          reason: "clock_skips",
-        },
-      });
+      await expect(change()).resolves.toBeDefined();
       const dates = await db
         .select({ date: specialDates.date })
         .from(specialDates)
         .where(eq(specialDates.locationId, v.locationId));
-      expect(dates).toEqual([{ date: "2027-03-20" }]);
+      expect(dates.map((row) => row.date).sort()).toEqual(
+        action === "copy" ? ["2027-03-20", "2027-03-25", "2027-03-27"] : ["2027-03-27"],
+      );
+      const running = await scoped((tx) =>
+        resolveDepartmentService(tx, v.cfg, v.restaurant, new Date("2027-03-28T01:10:00Z")),
+      );
+      expect(running).toMatchObject({ open: true, periodId: v.periods!.noches });
+      expect(running.sendableMenuIds).toContain(running.customerMenuId);
+      expect(
+        (
+          await scoped((tx) =>
+            resolveDepartmentService(tx, v.cfg, v.restaurant, new Date("2027-03-28T01:30:00Z")),
+          )
+        ).periodId,
+      ).not.toBe(v.periods!.noches);
       const stored = await db
         .select({ startsAt: menuSlots.startsAt, endsAt: menuSlots.endsAt })
         .from(menuSlots)

@@ -76,6 +76,39 @@ export async function businessDayClockConflicts(
     .leftJoin(specialDates, eq(specialDates.id, zoneClosedTimes.specialDateId))
     .where(eq(zoneServicePolicies.locationId, cfg.locationId))
     .orderBy(asc(zoneClosedTimes.id));
+  const calendar = await tx
+    .select()
+    .from(specialDates)
+    .where(eq(specialDates.locationId, cfg.locationId))
+    .orderBy(asc(specialDates.date), asc(specialDates.id));
+  const timetables = await tx
+    .select({
+      departmentId: menuDayTimetables.departmentId,
+      specialDateId: menuDayTimetables.specialDateId,
+    })
+    .from(menuDayTimetables)
+    .innerJoin(departments, eq(departments.id, menuDayTimetables.departmentId))
+    .where(eq(departments.locationId, cfg.locationId));
+  const annualDates = (date: string, repeatOn: string): string[] => {
+    const firstYear = Math.max(Number(date.slice(0, 4)), Number(effectiveBusinessDay.slice(0, 4)));
+    const years = new Set(
+      Array.from({ length: Math.min(400, 10000 - firstYear) }, (_, i) => firstYear + i),
+    );
+    for (const day of calendar)
+      if (day.repeatOn === null && day.date >= effectiveBusinessDay)
+        years.add(Number(day.date.slice(0, 4)));
+    return [...years].flatMap((year) => {
+      const occurrence = `${String(year).padStart(4, "0")}-${repeatOn}`;
+      return occurrence >= date &&
+        occurrence >= addDays(effectiveBusinessDay, -1) &&
+        new Date(`${occurrence}T00:00:00Z`).toISOString().slice(0, 10) === occurrence
+        ? [occurrence]
+        : [];
+    });
+  };
+  const namedOccurrences = calendar.flatMap((day) =>
+    day.repeatOn === null ? [day.date] : annualDates(day.date, day.repeatOn),
+  );
   const groups = new Map<string, Placement[]>();
   for (const placement of [...periods, ...closures.map((row) => ({ ...row, offset: 0 }))]) {
     if (
@@ -89,16 +122,36 @@ export async function businessDayClockConflicts(
   }
   const conflicts: BusinessDayClockConflict[] = [];
   const allPeriods = [...groups.values()].flat().filter((p) => p.periodId !== undefined);
-  const nextPlacements = (p: Placement): Placement[] => {
-    const own = allPeriods.filter((other) => other.departmentId === p.departmentId);
-    if (p.date === null) return own.filter((other) => other.weekday === (p.weekday! + 1) % 7);
-    const nextDate = addDays(p.date, 1);
-    const dated = own.filter(
-      (other) =>
-        other.date === nextDate ||
-        (other.repeatOn !== null && other.repeatOn === nextDate.slice(5)),
+  const onDate = (departmentId: string, date: string): Placement[] => {
+    const named = calendar.find(
+      (day) =>
+        day.date === date ||
+        (day.repeatOn !== null && day.repeatOn === date.slice(5) && day.date <= date),
     );
-    return dated.length > 0 ? dated : own.filter((other) => other.weekday === weekdayOf(nextDate));
+    if (named?.closeWholeVenue) return [];
+    if (
+      named?.ownHours &&
+      timetables.some((t) => t.departmentId === departmentId && t.specialDateId === named.id)
+    )
+      return allPeriods.filter(
+        (row) => row.departmentId === departmentId && row.specialDateId === named.id,
+      );
+    return allPeriods.filter(
+      (row) => row.departmentId === departmentId && row.weekday === weekdayOf(date),
+    );
+  };
+  const nextPlacements = (p: Placement): Placement[] => {
+    if (p.date !== null) {
+      const dates = p.repeatOn === null ? [p.date] : annualDates(p.date, p.repeatOn);
+      return dates.flatMap((date) => onDate(p.departmentId, addDays(date, 1)));
+    }
+    const normal = allPeriods.filter(
+      (other) => other.departmentId === p.departmentId && other.weekday === (p.weekday! + 1) % 7,
+    );
+    const overrides = namedOccurrences
+      .filter((date) => weekdayOf(addDays(date, -1)) === p.weekday)
+      .flatMap((date) => onDate(p.departmentId, date));
+    return [...normal, ...overrides];
   };
   for (const key of [...groups.keys()].sort()) {
     const placements = groups.get(key)!;

@@ -15,7 +15,7 @@ import {
 import { zoneExtensions } from "./schema/zone-extensions.js";
 import { periodExtensions } from "./schema/period-extensions.js";
 import {
-  clockTimeSkipped,
+  clockTimeSkippedInDay,
   minuteOfServiceDay,
   rangeSpan,
   rangeSpanInDay,
@@ -78,8 +78,7 @@ export async function readKeepOpen(
     minute += SERVICE_STEP_MINUTES
   ) {
     const time = clockTime(minute, c.cutover);
-    if (!clockTimeSkipped(c.moment.businessDay, time, c.cutover, c.clock.timeZone, true))
-      choices.push(time);
+    if (!clockTimeSkippedInDay(c.clock, c.moment.businessDay, time, true)) choices.push(time);
   }
   const next = serviceRuns(c.day.ranges).find(
     (range) =>
@@ -130,7 +129,7 @@ export async function keepPeriodOpen(
     const end = endMinute(input.until, c.cutover);
     if (end > c.limit || end <= c.moment.minute || end <= endMinute(startsAt, c.cutover))
       invalid("not_later");
-    if (clockTimeSkipped(c.moment.businessDay, input.until, c.cutover, c.clock.timeZone, true))
+    if (clockTimeSkippedInDay(c.clock, c.moment.businessDay, input.until, true))
       invalid("clock_skips");
   }
   await tx
@@ -226,8 +225,7 @@ export async function readZoneKeepOpen(
     const time = clockTime(minute, c.cutover);
     if (!/:(00|15|30|45)$/.test(time)) continue;
     if (!departmentCovers(c.openRanges, start, minute, c.cutover)) continue;
-    if (!clockTimeSkipped(c.moment.businessDay, time, c.cutover, c.clock.timeZone, true))
-      choices.push(time);
+    if (!clockTimeSkippedInDay(c.clock, c.moment.businessDay, time, true)) choices.push(time);
   }
   const extended = c.extended;
   const effective = withoutZoneExtension(c.ranges, c.extension, c.cutover);
@@ -265,7 +263,7 @@ export async function keepZoneOpen(
     const end = endMinute(input.until, c.cutover);
     const start = Math.max(c.moment.minute, rangeSpan(c.closure, c.cutover).start);
     if (end > c.limit || end <= start) invalid("not_later");
-    if (clockTimeSkipped(c.moment.businessDay, input.until, c.cutover, c.clock.timeZone, true))
+    if (clockTimeSkippedInDay(c.clock, c.moment.businessDay, input.until, true))
       invalid("clock_skips");
     if (!departmentCovers(c.openRanges, start, end, c.cutover))
       throw new AppError("zone_extension.not_allowed", { zoneId, reason: "department_closed" });

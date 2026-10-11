@@ -59,3 +59,29 @@ describe("wall-minute end offsets", () => {
     ).toBeNull();
   });
 });
+
+it("checks annual neighbors beyond their saved and following years", () => {
+  expect(
+    findScheduleEndOffsetClash(
+      [
+        {
+          weekday: 1,
+          date: null,
+          slots: [{ periodId: "late", startsAt: "22:00", endsAt: "04:30" }],
+        },
+        {
+          weekday: null,
+          date: "2026-11-06",
+          slots: [{ periodId: "early", startsAt: "07:15", endsAt: "09:00" }],
+        },
+      ],
+      [{ date: "2026-11-06", repeatOn: "11-06", ownHours: true, closeWholeVenue: false }],
+      new Map([["late", 180]]),
+      {
+        timeZone: "UTC",
+        dayCutover: "05:00",
+        cutoverChanges: [{ effectiveBusinessDay: "2026-11-04", dayCutover: "07:00" }],
+      },
+    ),
+  ).toEqual({ periodId: "late", slotIndex: 0, date: "2029-11-05" });
+});

@@ -196,3 +196,14 @@ export function clockTimeSkipped(
       : calendarDateOfTime(businessDay, time, cutover);
   return localTimeOccurrences(date, time, timeZone).length === 0;
 }
+
+export function clockTimeSkippedInDay(
+  clock: BusinessDayClock,
+  businessDay: string,
+  time: string,
+  asEnd: boolean,
+): boolean {
+  const context = serviceDayContext(clock, businessDay);
+  if (asEnd && time === context.dayCutover && context.endMinute === 1440) return false;
+  return clockTimeSkipped(businessDay, time, context.dayCutover, clock.timeZone, asEnd);
+}

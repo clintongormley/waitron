@@ -1,3 +1,4 @@
+import * as serviceDay from "./service-day.js";
 import { serviceDayContext } from "./service-day-context.js";
 import { describe, expect, it } from "vitest";
 import {
@@ -286,4 +287,17 @@ it.each([
   });
   expect(serviceDayContext(clock, "2026-11-04").dayCutover).toBe(dayCutover);
   expect(clock.dayCutover).toBe("05:00");
+});
+
+it("treats a skipped final cutover as the chronological boundary while checking other endpoints", () => {
+  const clock = { timeZone: "Europe/Madrid", dayCutover: "02:30", cutoverChanges: [] };
+  expect(serviceDay.clockTimeSkippedInDay(clock, "2026-03-28", "02:30", true)).toBe(false);
+  expect(serviceDay.clockTimeSkippedInDay(clock, "2026-03-28", "02:15", true)).toBe(true);
+  expect(serviceDay.clockTimeSkippedInDay(clock, "2026-03-28", "02:30", false)).toBe(false);
+  const dated = {
+    ...clock,
+    dayCutover: "05:00",
+    cutoverChanges: [{ effectiveBusinessDay: "2026-03-01", dayCutover: "02:30" }],
+  };
+  expect(serviceDay.clockTimeSkippedInDay(dated, "2026-03-28", "02:15", true)).toBe(true);
 });
