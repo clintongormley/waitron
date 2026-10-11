@@ -133,6 +133,29 @@ it("marks the table under a dragged table as the drop target, and clears it on r
   expect(drops).toEqual([{ tableId: "t1", x: 6, y: 5, targetId: "t2" }]);
 });
 
+it("draws a dragged table over the table it is dragged onto", async () => {
+  const el = await map([t1, t2]);
+  hold(el, 300, 150);
+  move(el, 150, 150);
+  await el.updateComplete;
+  const { clientX, clientY } = at(el, 150, 150);
+  const top = el.shadowRoot!.elementFromPoint(clientX, clientY)!.closest("[part='table']");
+  expect(top).toBe(button(el, "t1"));
+});
+
+it("lets the table it is dragged onto show through it, and is drawn whole again on release", async () => {
+  const el = await map([t1, t2]);
+  hold(el, 300, 150);
+  expect(getComputedStyle(button(el, "t1")).opacity).toBe("1");
+  move(el, 150, 150);
+  await el.updateComplete;
+  expect(getComputedStyle(button(el, "t1")).opacity).toBe("0.5");
+  expect(getComputedStyle(button(el, "t2")).opacity).toBe("1");
+  up(el, 150, 150);
+  await el.updateComplete;
+  expect(getComputedStyle(button(el, "t1")).opacity).toBe("1");
+});
+
 it("a cancelled drag clears the drop target", async () => {
   const el = await map([t1, t2]);
   hold(el, 300, 150);

@@ -247,8 +247,9 @@ export class WtFloorMap extends LitElement {
         outline-offset: var(--wt-focus-offset);
       }
 
-      /* Once around the whole merge, above a table touching it. */
-      [part="table"][data-held][data-merge] {
+      /* Above every other table, so a moving table is not hidden under the one it is dragged onto
+         and a held merge's ring is not cut by a table touching it. */
+      [part="table"][data-held] {
         z-index: 1;
       }
 
@@ -269,7 +270,8 @@ export class WtFloorMap extends LitElement {
         stroke-width: 1px;
       }
 
-      [part="ghost"] {
+      [part="ghost"],
+      [part="table"][data-moving] {
         opacity: 0.5;
       }
 
@@ -772,6 +774,7 @@ export class WtFloorMap extends LitElement {
       data-fill=${first.fill}
       ?data-merge=${merged}
       ?data-drop-target=${this.#drag?.targetId === first.id}
+      ?data-moving=${drag !== null}
       tabindex=${tabStop ? 0 : -1}
       aria-label=${`${label}, ${first.description}`}
       style=${styleMap({
