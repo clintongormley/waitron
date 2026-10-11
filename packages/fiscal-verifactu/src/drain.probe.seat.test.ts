@@ -84,7 +84,7 @@ async function refusalAlerts(now: Date) {
 }
 
 /** The run of three same-code refusals through the fake AEAT, then two records held behind it. */
-async function brakeHold(): Promise<{ first: string; second: string }> {
+async function brakeHold(): Promise<{ first: string; second: string; nif: string }> {
   const aeat = createFakeAeat({ serverNow: SERVER_NOW, tiempoEsperaInicial: 5 });
   const seeded = await seedPendingEnvios(suite.db, { count: 3 });
   for (const key of seeded.facturaKeys) aeat.reject(key, RUN_CODE, `Rechazo ${RUN_CODE}`);
@@ -92,7 +92,7 @@ async function brakeHold(): Promise<{ first: string; second: string }> {
   const first = (await appendPendingAlta(suite.db, seeded, 4)).registroId;
   const second = (await appendPendingAlta(suite.db, seeded, 5)).registroId;
   await drain(deps(aeat.client()), T);
-  return { first, second };
+  return { first, second, nif: seeded.nif };
 }
 
 const RUN_REFUSALS = [
@@ -188,7 +188,7 @@ describe("drain — the hourly probe's answers from a hand-built client seat (no
   });
 
   it("a reply with no line for the probe keeps it held, records missing-reply incidents, and probes again an hour later", async () => {
-    const { first, second } = await brakeHold();
+    const { first, second, nif } = await brakeHold();
     const lineless = seat({ EstadoRegistro: "Correcto" });
     const client: VerifactuClient = {
       submit: async (cabecera, registros) => ({
@@ -207,6 +207,34 @@ describe("drain — the hourly probe's answers from a hand-built client seat (no
       ...RUN_REFUSALS,
       "fiscal.estado_desconocido",
       "fiscal.respuesta_descuadrada",
+    ]);
+    const { rows: evidence } = await suite.db.execute<{ code: string; params: string }>(sql`
+      select code, params from incidents
+      where code in ('fiscal.estado_desconocido', 'fiscal.respuesta_descuadrada')
+      order by code
+    `);
+    expect(evidence.map(({ code, params }) => ({ code, params: JSON.parse(params) }))).toEqual([
+      {
+        code: "fiscal.estado_desconocido",
+        params: {
+          registroId: first,
+          csv: SEAT_CSV,
+          estado: null,
+          codigo: null,
+          mensaje: null,
+          operacionEnviada: "Alta",
+          identidadEnviada: {
+            idEmisorFactura: nif,
+            numSerieFactura: "S4/1",
+            fechaExpedicionFactura: "20-07-2026",
+          },
+          lineasEnRespuesta: 0,
+        },
+      },
+      {
+        code: "fiscal.respuesta_descuadrada",
+        params: { registroIds: [first], csv: SEAT_CSV, lineasRespuesta: [] },
+      },
     ]);
 
     const later = seat({ EstadoRegistro: "Correcto" });
