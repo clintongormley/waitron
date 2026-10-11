@@ -20,3 +20,4 @@ it("accepts the named-day editor's input without station cells", () => {
     closeWholeVenue: true,
   });
 });
+// A500 measurement probe: this line only makes CI select @waitron/venue-service. Never merged.
