@@ -42,12 +42,18 @@ function focused(el: StripeAddReader, testId: string): boolean {
   return field.shadowRoot!.activeElement === field.shadowRoot!.querySelector("input");
 }
 
-function deferred<T>(): { promise: Promise<T>; resolve: (value: T) => void } {
+function deferred<T>(): {
+  promise: Promise<T>;
+  resolve: (value: T) => void;
+  reject: (reason: unknown) => void;
+} {
   let resolve!: (value: T) => void;
-  const promise = new Promise<T>((r) => {
-    resolve = r;
+  let reject!: (reason: unknown) => void;
+  const promise = new Promise<T>((res, rej) => {
+    resolve = res;
+    reject = rej;
   });
-  return { promise, resolve };
+  return { promise, resolve, reject };
 }
 
 /** The text of `node` and of every shadow root beneath it, as the operator would read it. */
@@ -127,7 +133,7 @@ describe("stripe-add-reader", () => {
     expect(deepText(el.shadowRoot!).split(label).length - 1).toBe(1);
     expect(q(el, "wt-help-tooltip")).toBeNull();
     const input = q(el, "[data-test=reader-id]")!.shadowRoot!.querySelector("input")!;
-    expect(input.placeholder).toBe(t("payments.stripe.reader_id_help"));
+    expect(input.placeholder).toBe(t("payments.stripe.reader_id_hint"));
   });
 
   it("puts a reader id Stripe does not know under the Reader ID field, leaving Add working", async () => {
@@ -145,7 +151,7 @@ describe("stripe-add-reader", () => {
     await add(el);
 
     await vi.waitFor(() =>
-      expect(fieldError(el, "reader-id")).toBe(codeMessage("reader.reference_unknown")),
+      expect(fieldError(el, "reader-id")).toBe(t("payments.stripe.reader_id_unknown")),
     );
     expect(fieldError(el, "reader-name")).toBe("");
     expect(await bottomOf(el)).toBe(t("payments.stripe.fix_fields"));
@@ -154,7 +160,7 @@ describe("stripe-add-reader", () => {
     expect(onAdded).not.toHaveBeenCalled();
 
     await setInput(el, "reader-name", "Bar 2");
-    expect(fieldError(el, "reader-id")).toBe(codeMessage("reader.reference_unknown"));
+    expect(fieldError(el, "reader-id")).toBe(t("payments.stripe.reader_id_unknown"));
 
     await setInput(el, "reader-id", "tmr_good");
     expect(fieldError(el, "reader-id")).toBe("");
@@ -178,13 +184,66 @@ describe("stripe-add-reader", () => {
     await setInput(el, "reader-id", "tmr_bad");
     await add(el);
     await vi.waitFor(() =>
-      expect(fieldError(el, "reader-id")).toBe(codeMessage("reader.reference_unknown")),
+      expect(fieldError(el, "reader-id")).toBe(t("payments.stripe.reader_id_unknown")),
     );
 
     await add(el);
     expect(request).toHaveBeenCalledTimes(2);
     expect(fieldError(el, "reader-id")).toBe("");
     expect(await bottomOf(el)).toBe("");
+  });
+
+  it("drops a Reader ID refusal that arrives after the Reader ID was changed", async () => {
+    const pending = deferred<{ id: string; status: string }>();
+    const request = vi.fn(() => pending.promise) as unknown as DashboardRequest;
+    const { el } = await mountWidget<StripeAddReader>("stripe-add-reader", { request });
+
+    await setInput(el, "reader-name", "Bar");
+    await setInput(el, "reader-id", "tmr_bad");
+    q(el, "[data-test=add]")!.click();
+    await el.updateComplete;
+    await setInput(el, "reader-id", "tmr_good");
+
+    pending.reject({
+      code: "reader.reference_unknown",
+      params: { providerId: "stripe", field: "reference" },
+    });
+    await vi.waitFor(() =>
+      expect((q(el, "[data-test=add]") as unknown as { loading: boolean }).loading).toBe(false),
+    );
+    await el.updateComplete;
+    await new Promise((r) => requestAnimationFrame(() => r(undefined)));
+
+    expect(fieldError(el, "reader-id")).toBe("");
+    expect(focused(el, "reader-id")).toBe(false);
+    expect(await bottomOf(el)).toBe("");
+    expect((q(el, "[data-test=reader-id]") as unknown as { value: string }).value).toBe("tmr_good");
+    expect(addDisabled(el)).toBe(false);
+  });
+
+  it("shows the server-failure sentence at the bottom when the request rejects with null", async () => {
+    const request = vi.fn(async () => {
+      throw null;
+    }) as unknown as DashboardRequest;
+    const rejections: unknown[] = [];
+    const onReject = (e: PromiseRejectionEvent): void => {
+      e.preventDefault();
+      rejections.push(e.reason);
+    };
+    window.addEventListener("unhandledrejection", onReject);
+    const { el } = await mountWidget<StripeAddReader>("stripe-add-reader", { request });
+    try {
+      await setInput(el, "reader-name", "Bar");
+      await setInput(el, "reader-id", "tmr_bad");
+      await add(el);
+      await new Promise((r) => setTimeout(r, 50));
+    } finally {
+      window.removeEventListener("unhandledrejection", onReject);
+    }
+
+    expect(rejections).toEqual([]);
+    expect(await bottomOf(el)).toBe(codeMessage("server.internal"));
+    expect(fieldError(el, "reader-id")).toBe("");
   });
 
   it("puts the refusal's own sentence at the bottom when it names no field the form shows", async () => {

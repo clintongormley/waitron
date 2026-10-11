@@ -1778,7 +1778,7 @@ describe("screens and unknown ids", () => {
     },
   );
 
-  it("answers a reader id the provider does not know with 422 reader.reference_unknown, writing no reader", async () => {
+  it("answers a reader id the provider does not know with 400 reader.reference_unknown, writing no reader", async () => {
     const venue = await seedVenue();
     const seat: CardProviderContribution = {
       ...stripeSeat,
@@ -1795,7 +1795,7 @@ describe("screens and unknown ids", () => {
     const app = mountApp(venue, [seat]);
     await connectStripe(app, venue);
     const res = await addReader(app, venue, "tmr_bad");
-    expect(res.status).toBe(422);
+    expect(res.status).toBe(400);
     expect(await res.json()).toEqual({
       error: {
         code: "reader.reference_unknown",

@@ -122,11 +122,15 @@ export class StripeAddReader extends LitElement {
     };
   }
 
-  #refused(error: unknown): void {
+  #refused(error: unknown, reference: string): void {
     const code = codeOf(error);
-    const field = (error as { params?: { field?: unknown } }).params?.field;
+    const field =
+      typeof error === "object" && error !== null
+        ? (error as { params?: { field?: unknown } }).params?.field
+        : undefined;
     if (code === "reader.reference_unknown" && field === "reference") {
-      this.refusedReference = codeMessage(code);
+      if (this.reference !== reference) return;
+      this.refusedReference = t("payments.stripe.reader_id_unknown");
       void this.updateComplete.then(() => focusFirstInvalid(this.shadowRoot!));
     } else {
       this.refusal = codeMessage(code);
@@ -168,7 +172,7 @@ export class StripeAddReader extends LitElement {
       }
     } catch (error) {
       if (opening !== this.#opening || !this.isConnected || this.#closed) return;
-      this.#refused(error);
+      this.#refused(error, submitted.reference);
     } finally {
       if (opening === this.#opening) {
         this.busy = false;
@@ -211,7 +215,7 @@ export class StripeAddReader extends LitElement {
           name="reference"
           data-test="reader-id"
           label=${t("payments.stripe.reader_id")}
-          hint=${t("payments.stripe.reader_id_help")}
+          hint=${t("payments.stripe.reader_id_hint")}
           required
           error=${referenceError}
           .value=${this.reference}

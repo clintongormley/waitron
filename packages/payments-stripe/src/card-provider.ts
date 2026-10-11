@@ -208,8 +208,8 @@ export function createStripeCardProvider(
         try {
           reader = await makeStripe(secretKey).terminal.readers.retrieve(input.reference);
         } catch (error) {
-          // Only Stripe's refusal of the id itself is the operator's to fix; an authentication,
-          // network or server failure leaves the reader's existence unknown, so it stays a fault.
+          // An authentication, network or server failure leaves the reader's existence unknown,
+          // so it stays a fault.
           if (error instanceof Stripe.errors.StripeInvalidRequestError) throw refused();
           throw error;
         }
