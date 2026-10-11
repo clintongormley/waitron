@@ -37,7 +37,6 @@ import type { NamedDaysModel } from "./holiday-types.js";
 import { readCalendarDays } from "./hours.js";
 import { readNamedDaysModel } from "./named-days.js";
 import { readOpeningHoursModel } from "./menu-timetable.js";
-import { civilDateOf } from "@waitron/reporting";
 import { AppError, locationId } from "@waitron/shared";
 import { MANAGEMENT_COOKIE, type Logger } from "@waitron/server-kit";
 import { readSpecialDate, saveSpecialDate, type SpecialDateParticipant } from "./hours.js";
@@ -288,93 +287,100 @@ const createDate = (fx: Fixture, value: SpecialDateInput) =>
   withTransaction(db, (tx) => saveSpecialDate(tx, fx.cfg, null, value, new Date(), undefined, 0));
 
 describe("reading Hours", () => {
-  it("returns the whole page model for the range to anyone who may view the venue", async () => {
-    const fx = await fixture();
-    const party = await createDate(
-      fx,
-      input({ cells: [{ subject: fx.bar, cell: { mode: "closed", periods: [] } }] }),
-    );
-    const before = civilDateOf(new Date(), "Europe/Madrid");
-    const response = await send(
-      fx,
-      "GET",
-      "/named-days?from=2030-10-14&to=2030-10-16",
-      fx.supervisor,
-    );
-    const after = civilDateOf(new Date(), "Europe/Madrid");
-    expect(response.status).toBe(200);
-    const model = (await response.json()) as NamedDaysModel;
-    expect([before, after]).toContain(model.civilDate);
-    expect(model).toEqual({
-      businessDayClock: { timeZone: "Europe/Madrid", dayCutover: "06:00", cutoverChanges: [] },
-      clockRevision: 0,
-      currentBusinessDay: model.civilDate,
-      pending: null,
-      timeZone: "Europe/Madrid",
-      dayCutover: "06:00",
-      civilDate: model.civilDate,
-      clockReadable: true,
-      days: [
-        {
-          date: "2030-10-14",
-          namedDay: null,
-          holidays: [],
-          tone: "standard",
-          ownHours: false,
-          closed: false,
-        },
-        {
-          date: "2030-10-15",
-          namedDay: {
-            kind: "working_day",
-            repeats: false,
+  it.each([
+    { at: "2026-10-12T03:59:59.999Z", businessDay: "2026-10-11" },
+    { at: "2026-10-12T04:00:00.000Z", businessDay: "2026-10-12" },
+  ])(
+    "returns the whole page model for the range to anyone who may view the venue at $at",
+    async ({ at, businessDay }) => {
+      vi.useFakeTimers({ toFake: ["Date"] });
+      vi.setSystemTime(new Date(at));
+      onTestFinished(() => vi.useRealTimers());
+      const fx = await fixture();
+      const party = await createDate(
+        fx,
+        input({ cells: [{ subject: fx.bar, cell: { mode: "closed", periods: [] } }] }),
+      );
+      const response = await send(
+        fx,
+        "GET",
+        "/named-days?from=2030-10-14&to=2030-10-16",
+        fx.supervisor,
+      );
+      expect(response.status).toBe(200);
+      const model = (await response.json()) as NamedDaysModel;
+      expect(model.civilDate).toBe("2026-10-12");
+      expect(model).toEqual({
+        businessDayClock: { timeZone: "Europe/Madrid", dayCutover: "06:00", cutoverChanges: [] },
+        clockRevision: 0,
+        currentBusinessDay: businessDay,
+        pending: null,
+        timeZone: "Europe/Madrid",
+        dayCutover: "06:00",
+        civilDate: "2026-10-12",
+        clockReadable: true,
+        days: [
+          {
+            date: "2030-10-14",
+            namedDay: null,
+            holidays: [],
+            tone: "standard",
             ownHours: false,
-            id: party.id,
-            date: "2030-10-15",
-            name: "Staff party",
-            closeWholeVenue: false,
+            closed: false,
           },
-          holidays: [],
-          tone: "working_day",
-          ownHours: false,
-          closed: false,
+          {
+            date: "2030-10-15",
+            namedDay: {
+              kind: "working_day",
+              repeats: false,
+              ownHours: false,
+              id: party.id,
+              date: "2030-10-15",
+              name: "Staff party",
+              closeWholeVenue: false,
+            },
+            holidays: [],
+            tone: "working_day",
+            ownHours: false,
+            closed: false,
+          },
+          {
+            date: "2030-10-16",
+            namedDay: null,
+            holidays: [],
+            tone: "standard",
+            ownHours: false,
+            closed: false,
+          },
+        ],
+        // No tenant row is stored here, so there is no country to read holidays for.
+        holidayCoverage: [
+          {
+            year: 2030,
+            country: "",
+            provinceCode: null,
+            regionCode: null,
+            nationalRegional: "unsupported_country",
+            local: "address_unresolved",
+            dataVersion: null,
+            sourceIds: [],
+          },
+        ],
+        holidaySources: [],
+        area: {
+          readiness: "unsupported_country",
+          addressKey: '["",null,""]',
+          options: [],
+          required: false,
+          chosen: null,
         },
-        {
-          date: "2030-10-16",
-          namedDay: null,
-          holidays: [],
-          tone: "standard",
-          ownHours: false,
-          closed: false,
-        },
-      ],
-      // No tenant row is stored here, so there is no country to read holidays for.
-      holidayCoverage: [
-        {
-          year: 2030,
-          country: "",
-          provinceCode: null,
-          regionCode: null,
-          nationalRegional: "unsupported_country",
-          local: "address_unresolved",
-          dataVersion: null,
-          sourceIds: [],
-        },
-      ],
-      holidaySources: [],
-      area: {
-        readiness: "unsupported_country",
-        addressKey: '["",null,""]',
-        options: [],
-        required: false,
-        chosen: null,
-      },
-      localHolidaysPerYear: 0,
-    });
-    expect(
-      (await send(fx, "GET", "/named-days?from=2030-10-14&to=2030-10-16", fx.manager)).status,
-    ).toBe(200);
-  });
+        localHolidaysPerYear: 0,
+      });
+      expect(
+        (await send(fx, "GET", "/named-days?from=2030-10-14&to=2030-10-16", fx.manager)).status,
+      ).toBe(200);
+    },
+  );
 
   it("refuses staff, an absent and an expired session", async () => {
     const fx = await fixture();
