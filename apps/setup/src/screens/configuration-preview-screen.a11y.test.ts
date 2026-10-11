@@ -37,7 +37,7 @@ const preview: ConfigurationPreview = {
 describe.each(["light", "dark"] as const)(
   "setup-configuration-preview-screen a11y (%s theme)",
   (theme) => {
-    it("has no violations", async () => {
+    it("has no violations with the taxpayer choice showing", async () => {
       const { host } = await mountWidget<SetupConfigurationPreviewScreen>(
         "setup-configuration-preview-screen",
         { preview },

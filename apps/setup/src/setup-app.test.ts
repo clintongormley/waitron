@@ -619,10 +619,12 @@ describe("setup-app", () => {
     });
     expect((readDraft(el).venue?.location as Record<string, unknown>).id).toBeUndefined();
     el.shadowRoot!.querySelector<HTMLElement>("[data-test=screen-configuration-preview]")!
-      .shadowRoot!.querySelector<HTMLElement>("[data-test=continue]")!
+      .shadowRoot!.querySelector<HTMLElement>("wt-choice-row[data-test=same-tax-id]")!
       .click();
     await flush(el);
     expect(el.shadowRoot!.querySelector("[data-test=screen-admin]")).not.toBeNull();
+    expect(readDraft(el)).toMatchObject({ venue: { taxId: "B12345678" } });
+    expect(readDraft(el).newTaxpayer).toBeUndefined();
   });
 
   describe("the taxpayer choice after staging a configuration", () => {

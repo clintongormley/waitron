@@ -2,10 +2,11 @@ import { LitElement, type TemplateResult, css, html } from "lit";
 import { customElement, property } from "lit/decorators.js";
 import { baseStyles } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
+import "@waitron/ui/src/components/wt-choice-row.js";
 import type { ConfigurationPreview } from "../api/client.js";
 import { actionsStyles } from "../form-styles.js";
-import { dispatchSetupGoto } from "../events.js";
-import { t } from "../i18n/t.js";
+import { dispatchSetupGoto, dispatchTaxpayerChosen } from "../events.js";
+import { format, t } from "../i18n/t.js";
 import { LocaleChangeController } from "../i18n/locale-controller.js";
 
 @customElement("setup-configuration-preview-screen")
@@ -25,6 +26,9 @@ export class SetupConfigurationPreviewScreen extends LitElement {
       dd {
         margin: 0;
       }
+      .choices {
+        margin-top: var(--wt-space-3);
+      }
     `,
   ];
 
@@ -39,10 +43,6 @@ export class SetupConfigurationPreviewScreen extends LitElement {
     if (this.preview === undefined) return html`<h1>${t("config_preview.heading")}</h1>`;
     return html`
       <h1>${t("config_preview.heading")}</h1>
-      <p>
-        ${t("config_preview.creates_for")}
-        <strong>${this.preview.venue.legalName}</strong>${t("config_preview.not_included")}
-      </p>
       <h2>${t("config_preview.copy_heading")}</h2>
       <dl>
         ${Object.entries(this.preview.counts).map(
@@ -59,15 +59,28 @@ export class SetupConfigurationPreviewScreen extends LitElement {
             : this.preview.reconnect.join(", ")
         }
       </p>
+      <h2 data-test="choice-heading">${t("config_preview.choice_heading")}</h2>
+      <p>${t("config_preview.not_copied")}</p>
+      <div class="choices">
+        <wt-choice-row
+          data-test="same-tax-id"
+          heading=${t("config_preview.same.heading")}
+          @click=${() => dispatchTaxpayerChosen(this, false)}
+          >${format("config_preview.same.copy", {
+            legalName: this.preview.venue.legalName,
+            taxId: this.preview.venue.taxId,
+          })}</wt-choice-row
+        >
+        <wt-choice-row
+          data-test="new-tax-id"
+          heading=${t("config_preview.new.heading")}
+          @click=${() => dispatchTaxpayerChosen(this, true)}
+          >${t("config_preview.new.copy")}</wt-choice-row
+        >
+      </div>
       <div class="actions">
         <wt-button variant="ghost" @click=${() => dispatchSetupGoto(this, "live-source")}
           >${t("config_preview.back")}</wt-button
-        >
-        <wt-button
-          variant="primary"
-          data-test="continue"
-          @click=${() => dispatchSetupGoto(this, "admin")}
-          >${t("config_preview.continue")}</wt-button
         >
       </div>
     `;
