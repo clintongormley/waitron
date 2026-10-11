@@ -155,7 +155,7 @@ const sayWith =
   () =>
     format(key, params);
 
-/** The fields that belong to the taxpayer rather than the venue: a new tax ID enters them afresh. */
+/** The fields a new tax ID enters afresh rather than taking from the export. */
 const TAXPAYER_FIELDS = [
   "taxId",
   "legalName",
