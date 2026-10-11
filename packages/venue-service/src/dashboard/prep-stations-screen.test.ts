@@ -2971,7 +2971,7 @@ describe("Routing grid", () => {
     await settle(el);
   }
 
-  it("Routing shows the grid with no tester, claims, exceptions or Unassigned card", async () => {
+  it("Routes shows the grid with no tester, claims, exceptions or Unassigned card", async () => {
     const { el } = await mountGrid();
     const routing = el.shadowRoot!.querySelector('[slot="routing"]')!;
     expect(routing.querySelector("venue-routing-grid")).not.toBeNull();
