@@ -20,11 +20,6 @@ import { printers } from "./printers.js";
 import { sales } from "./sales.js";
 import { locations } from "./tenants.js";
 
-/**
- * `queued` → `printing` on an agent's claim → `done`, or `failed`, which is re-claimed until the
- * attempt cap (`packages/printing/src/runtime.ts`). `failUnprintableBluetoothJobs` and
- * `endUnpairedPrinterJobs` set a job to `failed` at the cap, without a claim.
- */
 export const printJobStatus = enumType(["queued", "printing", "done", "failed"]);
 
 /**

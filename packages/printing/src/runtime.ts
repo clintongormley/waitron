@@ -5,15 +5,10 @@ import type { PrintTransport, PrinterTarget, Transport } from "@waitron/print-ag
 /** Jobs handled per bounded Bluetooth failure pass or demo delivery pass. */
 export const PULL_BATCH_LIMIT = 50;
 
-/**
- * Delivery attempts before a `failed` job stops being re-claimed. An attempt bound, not a time
- * backoff: `print_jobs` carries no next-attempt timestamp.
- */
 export const MAX_DELIVERY_ATTEMPTS = 5;
 
-/** Documents may be reclaimed after a lost report, accepting a duplicate over a dropped ticket.
- * Each pull hands out one job so an unsent batch tail cannot outlive its lease. Drawer commands
- * have one claim only: an uncertain send must not repeat the pulse. */
+/** A lost document report may reprint rather than drop a ticket; an uncertain drawer pulse must
+ * not be repeated automatically. */
 export const PRINT_JOB_LEASE_MS = 60_000;
 
 export interface AgentRuntimeDeps {
@@ -69,18 +64,7 @@ function dueNow(): { claimedAt: string; due: SQL } {
   };
 }
 
-/**
- * Claims one due job with its printer's connection facts.
- * Separate from `runAgentOnce` so the server can commit the claim in one request and hand the jobs to
- * a remote agent without holding a transaction across that agent's socket write.
- *
- * Documents are due when `queued`, `failed` under the attempt cap, or `printing` with no live claim. That
- * last case covers `claimed_at IS NULL` too: every claim stamps it, so a `printing` row without one
- * is stuck, and `<` alone would never select it. A deactivated printer's jobs, stuck ones included,
- * are left unclaimed until it is reactivated.
- *
- * A drawer is claimable only while queued; a lost claim or uncertain write never retries it.
- */
+/** Remote callers must commit this claim before sending its payload. */
 export async function claimPrintJobs(
   tx: Transaction,
   agentId: string,
@@ -202,15 +186,7 @@ export async function endUnpairedPrinterJobs(
   return ended.rows.map(({ id }) => id);
 }
 
-/**
- * Records one job's outcome. Only the agent that claimed the job may report it, and only while it is
- * `printing`, so a retried report on a finished job is a no-op rather than a second `attempts` bump.
- * An unknown job, another agent's and a finished one all return the same `{ updated: false }`.
- *
- * Correlated invoice receipts report through the invoice adapter, which checks their attempt token.
- * For ordinary jobs, a duplicate report after the SAME agent re-claimed the job applies to the new claim:
- * telling the two apart would need a per-claim token the schema does not carry.
- */
+/** Invoice receipts report through their token-checking adapter. */
 export async function reportPrintJob(
   tx: Transaction,
   input: { agentId: string; jobId: string; outcome: JobOutcome },
