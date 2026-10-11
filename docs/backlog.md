@@ -3383,10 +3383,6 @@ _Formerly A7, and the dashboard entries in the opening part of the old Track A (
   the changed field's refusal); and the two staff forms turn the refusal into a field message
   inside the form, where other dashboard forms receive field messages from their parent screen.
 
-- **The purchase VAT line's other fields still use `min-width: 5rem`, which the design-token rule
-  forbids.** Left open by C43 (money in the dashboard shows its currency sign, #830) and its
-  decimal-entry work (A284).
-
 - **Every `wt-data-table` list lets each person choose its columns (C45, #834) — left open:**
   (3) nothing checks that a NEW dashboard table offers the chooser; … (6) the printers screen's
   view keys (`printers:agents`, `printers:table`, `printers:jobs`) are the only dashboard view keys
@@ -3897,10 +3893,6 @@ _Formerly entries spread across the old sections._ Detail: [backlog/back-office.
   recipe depth work (nested sub-recipes, plate costing, stock depletion) assumes an authoring
   surface that no longer exists. **Next action:** whoever reopens recipe depth decides first whether
   recipe authoring returns as its own surface.
-
-- **Once other fields in a purchase line show errors, its VAT-kind dropdown sits lower than its
-  neighbours** (`.line { align-items: flex-end }` in `purchase-form.ts`) — left open by A178 (#1010
-  to #1019), seen while building, not changed.
 
 ### The box: backups, upgrades and recovery
 
@@ -5062,9 +5054,6 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
   `docs/developers/conventions-data.md` (the "no column width left to measure" paragraph) has only
   the PostgreSQL raw-read table, not the SQLite one #579's commit message now carries.
   [Detail](backlog/architecture.md#decimaltocents-refuses-an-amount-over-the-bound-583-but-centstodecimal-itself-has-no-digit-bound)
-
-- **`product.not_found` has no dashboard wording, so the recipe screen shows the generic message for
-  it** — left open by A394-2 (#1444); still so after A394-3 (#1447).
 
 - **`GET …/locations/:locationId/catalogues` and the member `DELETE` answer as before for an unknown
   location** — left open by A394-3 (#1447).
