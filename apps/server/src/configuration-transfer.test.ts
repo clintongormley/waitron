@@ -5887,6 +5887,7 @@ it("round-trips a deleted service hierarchy while remapping only its live namesa
   ]);
   for (const table of ["department_sale_policies", "zone_service_policies", "zone_sale_policies"])
     expect(JSON.stringify(transferred.tables[table])).not.toContain(ids.old);
+  expect(JSON.stringify(transferred.tables.zone_sale_policies)).not.toContain(ids.oldZone);
   expect(transferred.tables.dining_tables!.map((row) => row.id)).toEqual([ids.table]);
   const target = await applyVenue(planVenue(venue("B98765431"), ALL_MODULES), {
     db: targetSuite.db,
