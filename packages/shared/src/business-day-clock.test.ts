@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import { AppError } from "./errors.js";
 import {
   businessDayAt,
   businessDayBoundaryAt,
@@ -14,6 +15,18 @@ const madrid = (dayCutover = "05:00"): BusinessDayClock => ({
 });
 
 describe("clock input refusal", () => {
+  it("reports an unreadable clock with a domain code and a reason", () => {
+    try {
+      businessDayBoundaryAt(madrid(), "not-a-day");
+      expect.fail("invalid date accepted");
+    } catch (error) {
+      expect(error).toBeInstanceOf(AppError);
+      expect(error).toMatchObject({
+        code: "business_day.clock_invalid",
+        params: { reason: "invalid_date" },
+      });
+    }
+  });
   it.each(["2026-02-30", "2026-13-01", "2026-1-01", "not-a-day"])(
     "refuses the invalid business date %s",
     (day) => expect(() => businessDayBoundaryAt(madrid(), day)).toThrow(/clock/),
@@ -46,7 +59,12 @@ describe("clock input refusal", () => {
   it("refuses a zero-length day across a skipped civil date", () => {
     expect(() =>
       businessDayBounds({ ...madrid(), timeZone: "Pacific/Apia" }, "2011-12-29"),
-    ).toThrow(/boundary/);
+    ).toThrow(
+      expect.objectContaining({
+        code: "business_day.clock_invalid",
+        params: { reason: "non_increasing_boundary" },
+      }),
+    );
   });
   it("accepts a real leap day", () => {
     expect(businessDayBoundaryAt(madrid(), "2024-02-29")).toBe("2024-02-29T04:00:00.000Z");

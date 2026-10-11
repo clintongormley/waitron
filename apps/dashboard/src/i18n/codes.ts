@@ -51,6 +51,10 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     es: "Cloud rechazó la solicitud de sustitución. Comprueba la recuperación aprobada y la instalación anterior en Cloud, y después comprueba la reconexión aquí.",
   },
 
+  "business_day.clock_invalid": {
+    en: "The venue’s business-day clock cannot be read.",
+    es: "No se puede leer el reloj del día del local.",
+  },
   "venue.business_day_invalid": {
     en: "Check the future date and start time.",
     es: "Revisa la fecha futura y la hora de inicio.",

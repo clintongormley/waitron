@@ -233,7 +233,6 @@ export function businessDayRangeWindow(input: PeriodVatInput): WindowClause {
 
 /**
  * {@link businessDayRangeWindow} over a range whose zone, cutover and days are checked first.
- * Invalid inputs are a caller precondition and throw a plain `Error` before anything is computed.
  */
 export function validatedRangeWindow(input: PeriodVatInput): WindowClause {
   validateTimeZone(input.timeZone);

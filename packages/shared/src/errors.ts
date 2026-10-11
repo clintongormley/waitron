@@ -25,6 +25,18 @@
  * an import written in a comment or string of another file the barrel reaches fakes an edge.
  */
 export interface ErrorParams {
+  "business_day.clock_invalid": {
+    reason:
+      | "invalid_date"
+      | "invalid_cutover"
+      | "invalid_time_zone"
+      | "invalid_named_time_zone"
+      | "changes_out_of_order"
+      | "unreadable_offset"
+      | "non_increasing_boundary"
+      | "invalid_instant"
+      | "outside_boundaries";
+  };
   /** A content language is not a recognised language identifier. */
   "content.language_invalid": Record<string, never>;
   "shared.invalid_id": { kind: string; value: string };
