@@ -1675,7 +1675,7 @@ it("shows Add station on the Stations tab alone, and no action on the other tabs
   }
 });
 
-it("at 320 px in Spanish, the tab row fades its cut end and keeps the selected tab whole", async () => {
+it("at 320 px in Spanish, both tabs show whole and the tab row does not overflow", async () => {
   setLocale("es");
   history.replaceState(null, "", "/manage/prep-stations");
   const el = await mount(api());
@@ -1686,17 +1686,17 @@ it("at 320 px in Spanish, the tab row fades its cut end and keeps the selected t
   await new Promise(requestAnimationFrame);
   const strip = tabs.shadowRoot!.querySelector<HTMLElement>("[role=tablist]")!;
   const bounds = strip.getBoundingClientRect();
-  const selected = tabs
-    .shadowRoot!.querySelector('[aria-selected="true"]')!
-    .getBoundingClientRect();
   expect(tabs.value).toBe("stations");
-  expect(strip.scrollWidth).toBeGreaterThan(strip.clientWidth);
-  expect(tabs.dataset.overflow).toBe("end");
-  expect(getComputedStyle(strip).maskImage).not.toBe("none");
-  expect(selected.left).toBeGreaterThanOrEqual(bounds.left - 1);
-  expect(selected.right).toBeLessThanOrEqual(
-    bounds.right - 2 * parseFloat(getComputedStyle(el).getPropertyValue("--wt-space-6")) + 1,
+  expect(strip.scrollWidth).toBeLessThanOrEqual(strip.clientWidth);
+  expect(tabs.hasAttribute("data-overflow")).toBe(false);
+  const boxes = [...strip.querySelectorAll<HTMLElement>('[role="tab"]')].map((tab) =>
+    tab.getBoundingClientRect(),
   );
+  expect(boxes).toHaveLength(2);
+  for (const box of boxes) {
+    expect(box.left).toBeGreaterThanOrEqual(bounds.left - 1);
+    expect(box.right).toBeLessThanOrEqual(bounds.right + 1);
+  }
   expect(q(el, '[data-test="new-station"]')!.getBoundingClientRect().left).toBeGreaterThanOrEqual(
     bounds.right - 1,
   );
