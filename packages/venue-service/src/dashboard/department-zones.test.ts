@@ -399,7 +399,7 @@ it.each([
       return {
         variant: save.variant,
         disabled: save.disabled,
-        innerDeleted: save.shadowRoot!.querySelector("button")!.disabled,
+        innerDisabled: save.shadowRoot!.querySelector("button")!.disabled,
       };
     };
     await fields().updateComplete;
@@ -419,8 +419,8 @@ it.each([
       await userEvent.click(page.elementLocator(option));
       await el.updateComplete;
     };
-    const quiet = { variant: "secondary", disabled: true, innerDeleted: true };
-    const ready = { variant: "primary", disabled: false, innerDeleted: false };
+    const quiet = { variant: "secondary", disabled: true, innerDisabled: true };
+    const ready = { variant: "primary", disabled: false, innerDisabled: false };
     expect(await state()).toEqual(quiet);
     button("save-zone").dispatchEvent(new MouseEvent("click"));
     await el.updateComplete;
@@ -441,7 +441,7 @@ it.each([
       await control.updateComplete;
       expect(control.disabled).toBe(false);
       expect(control.shadowRoot!.querySelector("button")!.disabled).toBe(false);
-      expect((await state()).innerDeleted).toBe(true);
+      expect((await state()).innerDisabled).toBe(true);
       await button("cancel-zone").updateComplete;
       expect(button("cancel-zone").shadowRoot!.querySelector("button")!.disabled).toBe(true);
       button("save-zone").dispatchEvent(new MouseEvent("click"));

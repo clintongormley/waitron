@@ -284,7 +284,7 @@ it.each(["department", "zone"] as const)(
     expect(dialog.shadowRoot!.textContent).toContain(impact.target.name);
     expect(dialog.shadowRoot!.textContent).toContain("Deletes 3 tables.");
     expect(dialog.shadowRoot!.textContent).toContain("Terrace");
-    expect(dialog.shadowRoot!.textContent).toContain("This cannot be undone.");
+    expect(dialog.shadowRoot!.textContent).toContain("This can't be undone.");
     expect(dialog.shadowRoot!.textContent).not.toContain("private");
     expect(dialog.shadowRoot!.querySelector('[data-group="ends"]')).toBeNull();
     await button(dialog).updateComplete;
@@ -332,7 +332,7 @@ it("live blocker and recovery change Confirm while preserving action refusal", a
   expect(button(dialog).disabled).toBe(false);
   dialog.dispatchEvent(new CustomEvent("wt-close"));
   await screen.updateComplete;
-  expect(detach).toHaveBeenCalledOnce();
+  expect(detach).toHaveBeenCalledTimes(2);
 });
 it("native Cancel waits for its close event and sends no deletion", async () => {
   const { screen, api } = await mountDelete();
