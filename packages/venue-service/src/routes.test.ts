@@ -264,6 +264,20 @@ async function settingsSnapshot(fx: Awaited<ReturnType<typeof settingsFixture>>)
   return { model: await model.json(), transfers: await transfers.json() };
 }
 
+async function rawSettingsSnapshot() {
+  return withTransaction(db, async (tx) => {
+    const tables = await tx.execute<{ name: string }>(
+      sql`select name from sqlite_master where type = 'table' and name not like 'sqlite_%' and name != 'management_sessions' order by name`,
+    );
+    const rows: Record<string, unknown[]> = {};
+    for (const { name } of tables.rows)
+      rows[name] = (
+        await tx.execute(sql`select * from ${sql.identifier(name)} order by rowid`)
+      ).rows;
+    return rows;
+  });
+}
+
 describe("whole service settings saves", () => {
   it("saves every department field and optional transfers in one PUT", async () => {
     const fx = await settingsFixture();
@@ -452,11 +466,20 @@ describe("whole service settings saves", () => {
         .update(departments)
         .set({ active: false })
         .where(eq(departments.id, fx.departmentId));
-    const before = await settingsSnapshot(fx);
+    const before = await rawSettingsSnapshot();
     const response = await send(fx.app, "PUT", path, fx.managerCookie, departmentSettings);
     expect(response.status).toBe(404);
     expect(await response.json()).toMatchObject({ error: { code: "department.not_found" } });
-    expect(await settingsSnapshot(fx)).toEqual(before);
+    expect(await rawSettingsSnapshot()).toEqual(before);
+    const transfers = await send(
+      fx.app,
+      "GET",
+      `/management-api/venue-service/departments/${fx.departmentId}/transfers`,
+      fx.managerCookie,
+    );
+    expect(transfers.status).toBe(kind === "disabled" ? 404 : 200);
+    if (kind === "disabled")
+      expect(await transfers.json()).toMatchObject({ error: { code: "department.not_found" } });
   });
 
   it("saves all four zone overrides and clears all four to inherit", async () => {
@@ -928,6 +951,7 @@ describe("venue service management routes", () => {
           .where(eq(departments.id, department.id));
         await tx.update(floorZones).set({ active }).where(eq(floorZones.id, fx.zoneId));
       });
+      const before = await rawSettingsSnapshot();
       const response = await send(
         fx.app,
         "PUT",
@@ -935,11 +959,13 @@ describe("venue service management routes", () => {
         fx.managerCookie,
         { departmentId: department.id },
       );
-      expect(response.status).toBe(active ? 409 : 404);
-      if (active)
-        expect(await response.json()).toMatchObject({
-          error: { code: "zone.department_inactive", params: { zoneId: fx.zoneId } },
-        });
+      expect(response.status).toBe(404);
+      expect(await response.json()).toMatchObject({
+        error: active
+          ? { code: "department.not_found", params: { departmentId: department.id } }
+          : { code: "service_zone.not_found", params: { zoneId: fx.zoneId } },
+      });
+      expect(await rawSettingsSnapshot()).toEqual(before);
       const policies = await db
         .select({ departmentId: zoneServicePolicies.departmentId })
         .from(zoneServicePolicies)
