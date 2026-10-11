@@ -974,6 +974,12 @@ found the next problem before it landed: a shift written at `+02:00` would have 
 UTC hour, because the roster and the shift dialog read the hour straight off the text. They now work it out from the
 stored offset (`wallClock` and `instantAt`, `apps/dashboard/src/date-utils.ts`).
 
+**Update, 2026-10-11 (A484).** Roster and dialog rendering still use the stored wall offset.
+The dialog now resolves each saved endpoint in the selected location's time zone with
+`localTimeOccurrences` (`packages/venue-service/src/hours-occurrences.ts`), using the next civil
+day when the end is at or before the start. The overnight storage case in
+`apps/server/src/workforce-api.test.ts` reads back distinct offsets across the spring clock change.
+
 **The siblings, swept 2026-10-03 at `575aff691`.** Every `ts`, `tsString` and `timeOfDay` column
 was listed with `grep -rn --include='*.ts' -E '\b(ts|tsString|timeOfDay)\("' packages apps`, then
 each column's name was searched across `packages/` and `apps/` for a text comparison (drizzle's

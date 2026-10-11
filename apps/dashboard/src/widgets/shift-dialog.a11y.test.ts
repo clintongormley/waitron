@@ -71,6 +71,22 @@ describe.each(["light", "dark"] as const)("shift-dialog a11y (%s theme)", (theme
     await expectNoA11yViolations(host);
   });
 
+  it("explains an unavailable venue clock accessibly", async () => {
+    const { el, host } = await mountWidget<ShiftDialog>(
+      "dashboard-shift-dialog",
+      {
+        open: true,
+        day: "2026-03-29",
+        personId: "p1",
+        timeZone: "",
+      },
+      theme,
+    );
+    await el.shadowRoot!.querySelector("wt-dialog")!.updateComplete;
+    expect(el.shadowRoot!.querySelector('[role="alert"]')).not.toBeNull();
+    await expectNoA11yViolations(host);
+  });
+
   it("with Save quiet and then ready", async () => {
     const { el, host } = await mountWidget<ShiftDialog>(
       "dashboard-shift-dialog",

@@ -1,6 +1,13 @@
 import { LitElement, type PropertyValues, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
-import { submitOnEnter, baseStyles, draftScopeFor, saveActionState } from "@waitron/ui";
+import {
+  submitOnEnter,
+  baseStyles,
+  draftScopeFor,
+  saveActionState,
+  formMessage,
+  formMessageStyles,
+} from "@waitron/ui";
 import type { DraftScope, LeaveCoordinator, LeaveReason } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-dialog.js";
 import "@waitron/ui/src/components/wt-button.js";
@@ -40,13 +47,10 @@ export interface UpdateShiftDetail {
 export class ShiftDialog extends LitElement {
   static override styles = [
     baseStyles,
+    formMessageStyles,
     css`
       :host {
         display: block;
-      }
-      .form-error {
-        color: var(--wt-color-danger);
-        margin: 0;
       }
       .field {
         display: block;
@@ -169,12 +173,13 @@ export class ShiftDialog extends LitElement {
   }
 
   #moments(): { start?: Date; end?: Date } {
-    if (this.#incomplete() || !this.timeZone) return {};
+    if (!this.timeZone) return {};
     const endDay =
       this.end > this.start
         ? this.day
         : new Date(Date.parse(`${this.day}T00:00:00Z`) + MS_PER_DAY).toISOString().slice(0, 10);
     const pick = (day: string, time: string, stored?: string) => {
+      if (!time) return undefined;
       const occurrences = localTimeOccurrences(day, time, this.timeZone);
       // A role-only edit must retain the chosen occurrence of a repeated clock minute.
       return occurrences.find((at) => at.getTime() === Date.parse(stored ?? "")) ?? occurrences[0];
@@ -198,7 +203,8 @@ export class ShiftDialog extends LitElement {
 
   #confirm(event: Event): void {
     event.stopPropagation();
-    if (this.busy || this.#incomplete() || saveActionState(this.#scope).unchanged) return;
+    if (this.busy || !this.timeZone || this.#incomplete() || saveActionState(this.#scope).unchanged)
+      return;
     const times = this.#times();
     if (!times) {
       this.attempted = true;
@@ -251,7 +257,8 @@ export class ShiftDialog extends LitElement {
 
   override render() {
     const s = saveActionState(this.#scope);
-    const moments = this.attempted ? this.#moments() : null;
+    const clockMissing = !this.timeZone;
+    const moments = this.attempted && !clockMissing ? this.#moments() : null;
     const invalid = moments !== null && (!moments.start || !moments.end);
     return html` <wt-dialog
       @keydown=${(e: KeyboardEvent) => submitOnEnter(e, this.shadowRoot!.querySelector<HTMLElement>("[data-test=confirm]"))}
@@ -269,7 +276,7 @@ export class ShiftDialog extends LitElement {
         required
         label=${t("roster.shift_start")}
         .value=${this.start}
-        .error=${moments && !moments.start ? codeMessage("shift.invalid") : ""}
+        .error=${moments && !moments.start ? t(this.start ? "roster.time_skipped" : "roster.time_required") : ""}
         ?disabled=${this.busy}
         @wt-change=${(e: CustomEvent<{ value: string }>) => this.#change("start", e)}
       ></wt-input>
@@ -281,7 +288,7 @@ export class ShiftDialog extends LitElement {
         required
         label=${t("roster.shift_end")}
         .value=${this.end}
-        .error=${moments && !moments.end ? codeMessage("shift.invalid") : ""}
+        .error=${moments && !moments.end ? t(this.end ? "roster.time_skipped" : "roster.time_required") : ""}
         ?disabled=${this.busy}
         @wt-change=${(e: CustomEvent<{ value: string }>) => this.#change("end", e)}
       ></wt-input>
@@ -295,12 +302,12 @@ export class ShiftDialog extends LitElement {
         @wt-change=${(e: CustomEvent<{ value: string }>) => this.#change("shiftRole", e)}
       ></wt-input>
       ${this.shift ? html`<wt-button slot="footer" variant="secondary" data-test="remove" ?disabled=${this.busy} @click=${(e: Event) => this.#remove(e)}>${t("action.remove")}</wt-button>` : nothing}
-      ${invalid ? html`<p class="form-error" role="alert">${codeMessage("shift.invalid")}</p>` : nothing}
+      ${formMessage(clockMissing ? t("roster.clock_unavailable") : invalid ? codeMessage("shift.invalid") : "")}
       <wt-button
         slot="footer"
         variant=${s.variant}
         data-test="confirm"
-        ?disabled=${s.unchanged || this.busy || this.#incomplete() || invalid}
+        ?disabled=${s.unchanged || this.busy || this.#incomplete() || invalid || clockMissing}
         @click=${(e: Event) => this.#confirm(e)}
       >
         ${this.shift ? t("action.save") : t("action.create")}
