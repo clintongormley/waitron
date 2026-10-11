@@ -22,7 +22,6 @@ function table(over: Partial<TableState> = {}): TableState {
     id: "t4",
     label: "4",
     zoneId: "z1",
-    capacity: 4,
     state: "free",
     condition: "free",
     hasOpenTab: false,
@@ -33,10 +32,6 @@ function table(over: Partial<TableState> = {}): TableState {
     timingBand: "fresh",
     status: null,
     nextReservation: null,
-    posX: null,
-    posY: null,
-    shape: null,
-    rotation: null,
     today: null,
     signals: [],
     party: null,
@@ -271,7 +266,7 @@ describe("till-floor-screen: a table needing clearing", () => {
   const clearing = (id: string, label: string) => table({ id, label, condition: "needs_clearing" });
 
   it("says so on each table that needs clearing, each with Mark cleared", async () => {
-    const el = await mountFloor([clearing("t4", "4"), { ...clearing("t5", "5"), capacity: null }]);
+    const el = await mountFloor([clearing("t4", "4"), { ...clearing("t5", "5") }]);
 
     for (const id of ["t4", "t5"]) {
       expect(card(el, id).querySelector("[data-needs-clearing]")!.textContent).toBe(

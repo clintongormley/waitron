@@ -27,7 +27,6 @@ function table(over: Partial<TableState> = {}): TableState {
     id: "t1",
     label: "1",
     zoneId: "z1",
-    capacity: 4,
     state: "free",
     condition: "free",
     hasOpenTab: false,
@@ -38,10 +37,6 @@ function table(over: Partial<TableState> = {}): TableState {
     timingBand: "fresh",
     status: null,
     nextReservation: null,
-    posX: null,
-    posY: null,
-    shape: null,
-    rotation: null,
     today: null,
     signals: [],
     party: null,
@@ -53,10 +48,7 @@ function placed(id: string, over: Partial<TableState> = {}): TableState {
   return table({
     id,
     label: id.slice(1),
-    posX: 250,
-    posY: 400,
-    shape: "round",
-    rotation: 0,
+
     ...over,
   });
 }

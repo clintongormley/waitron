@@ -61,7 +61,6 @@ const tables: TableState[] = ["t1", "t2"].map((id) => ({
   party,
   signals: [],
   zoneId: null,
-  capacity: null,
   state: "open-tab",
   hasOpenTab: true,
   condition: "held",
@@ -72,10 +71,6 @@ const tables: TableState[] = ["t1", "t2"].map((id) => ({
   timingBand: "fresh",
   status: null,
   nextReservation: null,
-  posX: null,
-  posY: null,
-  shape: null,
-  rotation: null,
   today: null,
 }));
 class ActionsLeaveApp extends LitElement {

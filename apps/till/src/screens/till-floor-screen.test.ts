@@ -34,7 +34,6 @@ function table(over: Partial<TableState> = {}): TableState {
     id: "t1",
     label: "1",
     zoneId: "z1",
-    capacity: 4,
     state: "free",
     condition: "free",
     hasOpenTab: false,
@@ -45,10 +44,6 @@ function table(over: Partial<TableState> = {}): TableState {
     timingBand: "fresh",
     status: null,
     nextReservation: null,
-    posX: null,
-    posY: null,
-    shape: null,
-    rotation: null,
     today: null,
     signals: [],
     party: null,
@@ -422,7 +417,7 @@ describe("till-floor-screen", () => {
 
   it("renders a table whose capacity is unknown without a pax count", async () => {
     const { el } = await mount({
-      tables: [table({ id: "t1", capacity: null })],
+      tables: [table({ id: "t1" })],
     });
     const card = el.shadowRoot!.querySelector('[data-table="t1"]')!;
     expect(card.querySelector(".capacity")).toBeNull();

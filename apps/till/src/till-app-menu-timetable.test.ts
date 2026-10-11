@@ -764,7 +764,6 @@ describe("an open table's order", () => {
     id: "t2",
     label: "2",
     zoneId: "zone-comedor",
-    capacity: 4,
     state: "open-tab",
     hasOpenTab: true,
     tabLineCount: 0,
@@ -776,10 +775,6 @@ describe("an open table's order", () => {
     timingBand: "fresh",
     status: null,
     nextReservation: null,
-    posX: null,
-    posY: null,
-    shape: null,
-    rotation: null,
     today: null,
     signals: [],
     party: {

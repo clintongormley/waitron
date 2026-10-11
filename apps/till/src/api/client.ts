@@ -1876,7 +1876,6 @@ export interface TableState {
   id: string;
   label: string;
   zoneId: string | null;
-  capacity: number | null;
   state: "free" | "open-tab" | "delivery-pending";
   hasOpenTab: boolean;
   /** `held` while a party holds the table; `needs_clearing` after Finish table with the clearing
@@ -1902,14 +1901,6 @@ export interface TableState {
    * is projected, so the party size and contact name are deliberately kept off every till device.
    */
   nextReservation: { time: string } | null;
-  /**
-   * Placement on the floor-plan canvas — coordinates in 0..1000 permille, `rotation` in degrees — or
-   * `null` for an unplaced table.
-   */
-  posX: number | null;
-  posY: number | null;
-  shape: "round" | "square" | "rect" | null;
-  rotation: number | null;
   /** `null` when the table has no today's row. */
   today: TableToday | null;
   party: TableParty | null;
