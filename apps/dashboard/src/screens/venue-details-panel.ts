@@ -30,6 +30,8 @@ import {
   venueDetailPatch,
   venueDetailProblems,
 } from "./venue-details-form.js";
+import "./legal-name-dialog.js";
+import type { VenueIdentityChanged } from "./legal-name-dialog.js";
 
 const LABELS: Record<VenueDetailField, StringKey> = {
   name: "venue_details.name",
@@ -538,7 +540,27 @@ export class VenueDetailsPanel extends LitElement {
                 <p data-test="issuer">
                   ${model.issuer.legalName} · ${model.issuer.taxId} · ${model.issuer.country}
                 </p>
+                ${
+                  this.readOnly
+                    ? nothing
+                    : html`<wt-button
+                        data-test="change-legal-name"
+                        @click=${() => {
+                          if (current() && this.model)
+                            this.renderRoot
+                              .querySelector("dashboard-legal-name-dialog")
+                              ?.show(this.model.issuer.legalName);
+                        }}
+                        >${t("venue_details.change_legal_name")}</wt-button
+                      >`
+                }
               </div>
+              <dashboard-legal-name-dialog
+                .api=${this.api}
+                @venue-identity-changed=${(event: CustomEvent<VenueIdentityChanged>) => {
+                  if (generation === this.#generation) this.model = event.detail.model;
+                }}
+              ></dashboard-legal-name-dialog>
               ${
                 this.draft && !this.readOnly
                   ? html`<form

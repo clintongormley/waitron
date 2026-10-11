@@ -662,6 +662,13 @@ export const en = {
   "venue_details.dayCutover": "Business day starts at",
   "venue_details.address": "Address",
   "venue_details.legal_name": "Legal name",
+  "venue_details.change_legal_name": "Change legal name",
+  "venue_details.legal_name_note":
+    "Register the new name with the tax agency first; it refuses a name it does not hold. Receipts and records already issued keep the old name.",
+  "venue_details.legal_name_unchanged": "This is already the legal name.",
+  "venue_details.legal_name_format": "Use at most 120 characters, without control characters.",
+  "venue_details.legal_name_changed":
+    "The legal name changed in another session. Close and try again.",
   "venue_details.unset": "Not set",
   "venue_details.loading": "Loading venue details…",
   "venue_details.required": "Enter a value.",
@@ -3244,6 +3251,13 @@ export const es: Record<StringKey, string> = {
   "venue_details.dayCutover": "El día de actividad empieza a las",
   "venue_details.address": "Dirección",
   "venue_details.legal_name": "Razón social",
+  "venue_details.change_legal_name": "Cambiar razón social",
+  "venue_details.legal_name_note":
+    "Registra antes el nuevo nombre en la Agencia Tributaria; rechaza un nombre que no tenga. Los recibos y registros ya emitidos conservan el nombre anterior.",
+  "venue_details.legal_name_unchanged": "Ya es la razón social.",
+  "venue_details.legal_name_format": "Usa como máximo 120 caracteres, sin caracteres de control.",
+  "venue_details.legal_name_changed":
+    "La razón social ha cambiado en otra sesión. Cierra e inténtalo de nuevo.",
   "venue_details.unset": "Sin definir",
   "venue_details.loading": "Cargando los datos del local…",
   "venue_details.required": "Introduce un valor.",

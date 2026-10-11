@@ -929,6 +929,17 @@ export class DashboardApp extends LitElement {
     }
   }
 
+  /** The banner's name alone; a failed read keeps the name it shows. */
+  async #rereadVenueName(): Promise<void> {
+    const generation = this.sessionGeneration;
+    try {
+      const { venueName } = await this.api.getMe();
+      if (this.isConnected && generation === this.sessionGeneration) this.venueName = venueName;
+    } catch {
+      // Keeps the name it shows.
+    }
+  }
+
   /**
    * `getMe()` resolves for every role, staff included. The catch is total: any rejection means no
    * usable session, and dropping to login is the safe default for every failure.
@@ -1989,6 +2000,7 @@ export class DashboardApp extends LitElement {
       case "venue-settings":
         return html`<dashboard-venue-settings-screen
           .panels=${this.#settingsPanels()}
+          @venue-identity-changed=${() => void this.#rereadVenueName()}
         ></dashboard-venue-settings-screen>`;
       case "roster":
         return html`<dashboard-roster-screen .api=${this.api}></dashboard-roster-screen>`;

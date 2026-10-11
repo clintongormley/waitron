@@ -1135,6 +1135,22 @@ it("reads current venue details and submits only the changed fields with the ori
   ]);
 });
 
+it("renames the taxpayer with the new legal name and the one the page showed", async () => {
+  const answer = { model: venueDetailsFixture() };
+  const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(answer));
+  const api = new DashboardApi("", fetchImpl);
+  await expect(
+    api.renameTaxpayer({ legalName: "Nuevo SL", expected: "Issuer SL" }),
+  ).resolves.toEqual(answer);
+  expect(callsOf(fetchImpl)).toEqual([
+    [
+      "/management-api/venue-details/legal-name",
+      "PUT",
+      { legalName: "Nuevo SL", expected: "Issuer SL" },
+    ],
+  ]);
+});
+
 it("reads a venue clock preview passively with encoded clock values", async () => {
   const response = {
     at: "2026-10-06T02:00:00.000Z",

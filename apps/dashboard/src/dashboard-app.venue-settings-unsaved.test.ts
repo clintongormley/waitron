@@ -1,4 +1,4 @@
-import { afterEach, expect, it } from "vitest";
+import { afterEach, expect, it, vi } from "vitest";
 import { commands, page, userEvent } from "vitest/browser";
 import type { WtInput, WtTabs } from "@waitron/ui";
 import { LiveData } from "@waitron/dashboard-kit";
@@ -597,4 +597,45 @@ it("an obsolete department query cannot bypass a venue draft leave decision", as
   await choose(app, "discard");
   await expect.poll(() => selected(app)).toBe("tables");
   expect(subtitle.value).toBe("Venue");
+});
+
+it("a legal-name change on Venue details re-reads the banner's name", async () => {
+  let legalName = "Issuer SL";
+  const getMe = vi.fn(async () => ({
+    personId: "p1",
+    email: "ada@example.com",
+    role: "manager",
+    locale: "en-GB",
+    venueLocale: "en-GB",
+    sessionDefault: "en-GB",
+    venueName: legalName,
+    permissions: ["venue.view", "venue.configure"],
+    modules: [],
+  }));
+  const { app } = await mount("/manage/venue-settings/view/venue-details", "en-GB", "light", {
+    getMe,
+    renameTaxpayer: async (input: { legalName: string }) => {
+      legalName = input.legalName;
+      const model = venueDetailsFixture();
+      return { model: { ...model, issuer: { ...model.issuer, legalName } } };
+    },
+  } as Partial<DashboardApi>);
+  const banner = () => app.shadowRoot!.querySelector("[data-test=venue-name]")!.textContent!.trim();
+  await expect.poll(banner).toBe("Issuer SL");
+  const panel = settings(app).shadowRoot!.querySelector("dashboard-venue-details-panel")!;
+  await expect
+    .poll(() => panel.shadowRoot?.querySelector("[data-test=change-legal-name]"))
+    .toBeTruthy();
+  panel.shadowRoot!.querySelector<HTMLElement>("[data-test=change-legal-name]")!.click();
+  const host = panel.shadowRoot!.querySelector("dashboard-legal-name-dialog")!;
+  await host.updateComplete;
+  const dialog = host.shadowRoot!.querySelector("wt-dialog")!;
+  const input = dialog.querySelector<WtInput>("wt-input[name=legalName]")!;
+  await input.updateComplete;
+  await userEvent.fill(page.elementLocator(input.shadowRoot!.querySelector("input")!), "Nuevo SL");
+  const calls = getMe.mock.calls.length;
+  dialog.querySelector<HTMLElement>("wt-button[data-test=save-legal-name]")!.click();
+  await expect.poll(banner).toBe("Nuevo SL");
+  expect(getMe.mock.calls.length).toBe(calls + 1);
+  expect(location.pathname).toBe("/manage/venue-settings/view/venue-details");
 });
