@@ -1010,3 +1010,20 @@ and CodeQL workflows completed successfully. The measurement limits above remain
 ### A toolbar without search keeps its trailing controls together
 
 The A462 whole-branch review (2026-10-10) measured Preview's Expand all at 448–540 px in a 1000 px toolbar. Both the retained end group and an empty search group had an automatic leading margin, so they split the free space. The base-file control put the button back at the trailing edge. The final shared table keeps an empty search group out of flex layout, preserving its slot for later assignment; a chooser without search sits beside the end controls rather than taking another automatic margin. The four no-search trailing-control cases in `packages/ui/src/components/wt-data-table.test.ts` check phone/desktop with and without a chooser; the Preview visual cases check its actual trailing edge.
+
+### A committed drawer claim gets one delivery attempt
+
+Documents can retry after a failed send or an expired claim, accepting a duplicate when a
+completion report is lost. A drawer pulse cannot use that policy: a rejected write may already
+have opened it. `claimPrintJobs` hands out one job per pull and admits a drawer only while it is
+queued. A failed drawer report ends at the attempt cap; a lost claim stays unreported and is not
+reclaimed. If it never arrived, you can request a new manual open through the normal permission
+and audit path. The claim must commit before transport; `runAgentOnce`'s caller-owned transaction
+cannot provide that guarantee and has no production caller (the separate backlog item remains).
+
+A517's real-store cases in `packages/printing/src/runtime.aged-batch.test.ts` reproduced duplicate
+unsent document and drawer tails after aging the tail's claim, and duplicate drawer pulses after
+a lost report or uncertain send. The remote-agent cases in `apps/server/src/print-api.test.ts`
+exercise the real client, agent loop and mounted routes while the first transport waits behind a
+promise gate. They compare emitted bytes, not just claim counts. No suite here measures the
+throughput of a physical printer.

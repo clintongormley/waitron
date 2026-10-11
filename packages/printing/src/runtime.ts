@@ -2,7 +2,7 @@ import { sql, type SQL } from "drizzle-orm";
 import { claimRows, nowIso, type Transaction } from "@waitron/db";
 import type { PrintTransport, PrinterTarget, Transport } from "@waitron/print-agent";
 
-/** Jobs ended per bounded Bluetooth failure pass; another pull handles the remainder. */
+/** Jobs handled per bounded Bluetooth failure pass or demo delivery pass. */
 export const PULL_BATCH_LIMIT = 50;
 
 /**

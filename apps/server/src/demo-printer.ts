@@ -14,6 +14,7 @@ import {
   type Transaction,
 } from "@waitron/db";
 import { readProfilePrinterLists, setProfilePrinterLists } from "@waitron/layouts";
+import { PULL_BATCH_LIMIT } from "@waitron/printing";
 import { claimInvoicePrintJobs, reportInvoicePrintJob } from "./invoice-print.js";
 
 export const DEMO_PRINTER_KEY = "WAITRON-DEMO-PRINTER";
@@ -178,24 +179,29 @@ export async function deliverDemoPrinterJobs(
   locationId: string,
   identity: DemoPrinterIdentity,
 ): Promise<number> {
-  const jobs = await withTransaction(db, (tx) =>
-    claimInvoicePrintJobs(tx, identity.agentId, {
-      locationId,
-      visibleKeys: [DEMO_PRINTER_KEY],
-      printerId: identity.printerId,
-    }),
-  );
-  for (const job of jobs) {
-    await withTransaction(db, (tx) =>
-      reportInvoicePrintJob(tx, {
-        agentId: identity.agentId,
-        jobId: job.id,
-        invoiceClaim: job.invoiceClaim,
-        outcome: { status: "done" },
+  let delivered = 0;
+  for (let pull = 0; pull < PULL_BATCH_LIMIT; pull += 1) {
+    const jobs = await withTransaction(db, (tx) =>
+      claimInvoicePrintJobs(tx, identity.agentId, {
+        locationId,
+        visibleKeys: [DEMO_PRINTER_KEY],
+        printerId: identity.printerId,
       }),
     );
+    if (jobs.length === 0) break;
+    for (const job of jobs) {
+      await withTransaction(db, (tx) =>
+        reportInvoicePrintJob(tx, {
+          agentId: identity.agentId,
+          jobId: job.id,
+          invoiceClaim: job.invoiceClaim,
+          outcome: { status: "done" },
+        }),
+      );
+      delivered += 1;
+    }
   }
-  return jobs.length;
+  return delivered;
 }
 
 export function startDemoPrinterLoop(

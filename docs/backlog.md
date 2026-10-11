@@ -2720,12 +2720,11 @@ _Formerly A3, A8 and B6; part of A9._ Detail: [backlog/printers.md](backlog/prin
 - **On-device agent** — a till hosting a print agent, the single-box venue's box-death printing path.
   Needs a native app; parked behind the go-native decision.
 
-- **`runAgentOnce` (`packages/printing/src/runtime.ts`) has no production caller in the tree** — C70, #866. A refused report still rolls back every job of its batch when the caller's transaction rolls back, so all of them print again (measured 2026-09-29 with a scratch probe). [Detail](backlog/printers.md#runagentonce-packagesprintingsrcruntimets-has-no-production-caller-in-the-tree)
+- **A printer rethrow test calls a different CHECK a non-CHECK error** — reconcile the
+  `carrier_pigeon` case name in `packages/printing/src/printers.test.ts` with its own comment.
+  [Detail](backlog/printers.md#a-printer-rethrow-test-calls-a-different-check-a-non-check-error)
 
-- **An aged batch can print twice** — found by #572 while pruning comments (`packages/printing`).
-  When a large batch to a slow printer outlives the one-minute lease, another agent in the venue can
-  re-claim the jobs not yet sent while the first agent still sends every job it pulled; the lease
-  comment in `runtime.ts` now says so. [Detail](backlog/printers.md#an-aged-batch-can-print-twice)
+- **`runAgentOnce` (`packages/printing/src/runtime.ts`) has no production caller in the tree** — C70, #866. A refused report still rolls back its job claim when the caller's transaction rolls back, so that job can print again (measured 2026-09-29 with a scratch probe). [Detail](backlog/printers.md#runagentonce-packagesprintingsrcruntimets-has-no-production-caller-in-the-tree)
 
 - **Waitron carries two QR encoders; consolidate on `qrcode-generator`** — Small. Switch the three
   server sites over and drop `qrcode`; hoist the receipt's hand-ported money/date/label formatters

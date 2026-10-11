@@ -53,7 +53,7 @@ export const printJobs = table(
     // Opaque ESC/POS bytes. A read through this column yields a `Uint8Array`; `claimPrintJobs`
     // (packages/printing/src/runtime.ts) reads it with raw SQL and gets the driver's value instead.
     payload: binary("payload").notNull(),
-    // Drawer pulses share transport delivery but cannot be repeated through document resend.
+    // Drawer pulses share transport delivery but are claimed once and cannot be resent.
     kind: label("kind").$type<"document" | "drawer">().notNull().default("document"),
     // Null for other documents and drawer jobs; false for a receipt original, true for a copy.
     receiptCopy: flag("receipt_copy"),
@@ -64,8 +64,8 @@ export const printJobs = table(
     lastError: label("last_error"),
     createdAt: tsString("created_at").notNull().$defaultFn(nowIso),
     // The claim lease anchor, stamped on each claim and by the functions `claimed_by` names. A
-    // `printing` row whose lease has expired, or whose `claimed_at` is NULL, is re-claimed, so
-    // delivery is at-least-once: a reclaim may reprint.
+    // `printing` document whose lease has expired, or whose `claimed_at` is NULL, is re-claimed.
+    // Drawer claims are not recovered: an uncertain pulse must not repeat.
     claimedAt: tsString("claimed_at"),
     deliveredAt: tsString("delivered_at"),
     // The job a resend copies, always the first of its chain: a resend of a resend names the same
