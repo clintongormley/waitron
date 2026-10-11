@@ -11,6 +11,7 @@ import {
   resolveMigrationsFolder,
 } from "../packages/migrations/src/manifest.js";
 import { orderedMigrationSets } from "../packages/module/src/module.js";
+import { migrationUpgradeBudget } from "./migration-upgrade-budget.mjs";
 import { scratchParent } from "./scratch-dir.mjs";
 import { createStepWatch, reportStallAfter } from "./step-watch.mjs";
 
@@ -61,8 +62,22 @@ interface JournalEntry {
  */
 const FLOOR = { set: "core", tag: "0003_variant_inherited_nullable" };
 
-const TEST_BOUND_MS = 120_000;
-const STALL_DEADLINE_MS = TEST_BOUND_MS - 10_000;
+const sets = orderedMigrationSets(ALL_MODULES);
+const journals = new Map(
+  sets.map((set) => [set.name, readJournal(resolveMigrationsFolder(set, null))]),
+);
+const floorEntry = journals.get(FLOOR.set)?.entries.find((entry) => entry.tag === FLOOR.tag);
+const floor = floorEntry?.when ?? 0;
+const cuts = [
+  ...new Set(
+    [...journals.values()].flatMap((journal) =>
+      journal.entries.filter((entry) => entry.when > floor).map((entry) => entry.when),
+    ),
+  ),
+].sort((a, b) => a - b);
+const { deadlineMs: STALL_DEADLINE_MS, timeoutMs: TEST_BOUND_MS } = migrationUpgradeBudget(
+  cuts.length + 1,
+);
 const SCRATCH_PARENT = scratchParent();
 
 const scratch: string[] = [];
@@ -93,6 +108,7 @@ describe("upgrading a venue one migration at a time", () => {
       }).toEqual({ RESETS: [], CANDIDATES: [], ONE_ROW: [] });
       console.log(
         `${watch.summary(5)}\n${held.size} tables hold rows after the last step.\n` +
+          `${cuts.length + 1} steps, ${STALL_DEADLINE_MS} ms deadline.\n` +
           `Scratch directory under ${SCRATCH_PARENT}.`,
       );
     },
@@ -101,31 +117,18 @@ describe("upgrading a venue one migration at a time", () => {
 });
 
 async function upgradeOneStepAtATime(watch: ReturnType<typeof createStepWatch>) {
-  const sets = orderedMigrationSets(ALL_MODULES);
   const sources = ALL_MODULES.flatMap((module) => module.changes ?? []);
 
   const root = mkdtempSync(join(SCRATCH_PARENT, "wt-migration-upgrade-"));
   scratch.push(root);
   const staged = join(root, "migrations");
   const venueDir = join(root, "venue");
-  const journals = new Map<string, ReturnType<typeof readJournal>>();
   for (const set of sets) {
     const from = resolveMigrationsFolder(set, null);
     cpSync(from, join(staged, set.name), { recursive: true });
-    journals.set(set.name, readJournal(from));
   }
 
-  const floorEntry = journals.get(FLOOR.set)?.entries.find((entry) => entry.tag === FLOOR.tag);
   expect(floorEntry).toBeDefined();
-  const floor = floorEntry?.when ?? 0;
-
-  const cuts = [
-    ...new Set(
-      [...journals.values()].flatMap((journal) =>
-        journal.entries.filter((entry) => entry.when > floor).map((entry) => entry.when),
-      ),
-    ),
-  ].sort((a, b) => a - b);
   expect(cuts.length).toBeGreaterThan(1);
 
   const bookkeeping = new Set(migrationOptionsFor(sets, staged).map((set) => set.migrationsTable));

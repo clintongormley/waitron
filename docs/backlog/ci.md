@@ -317,6 +317,11 @@ null, empty or blank. Lane D RUNNER §7 bars this campaign from editing the rule
 
 ## Decisions and deliberate limits
 
+- **Upgrade-test deadline follows the migration count (A489, 2026-10-11).** The captured
+  110.242-second walk exceeded the old fixed deadline near its final step. Keep the workload
+  budget and remeasure it when a new reset changes the cost of rebuilding the baseline.
+  [Receipt](../developers/ci-and-gates.md#the-upgrade-deadline-grows-with-the-walk).
+
 - **Job-sharding levers:** `--shard` splits by FILE COUNT; bump `shard: [1..N]` and the denominator
   together with N at or below the file count; rebalance `LIGHT_A/B_PACKAGES` when one light shard
   dominates.
