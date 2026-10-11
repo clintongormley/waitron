@@ -4,7 +4,6 @@ import {
   orderGroups,
   parties,
   partyTableLabels,
-  partyTables,
   workingOrderLines,
   workingOrders,
 } from "@waitron/db";
@@ -17,6 +16,7 @@ import { VENUE_SERVICE } from "./modules.js";
 import { groupArrivingDishes, printHoldTickets, type Firer } from "./order-groups.js";
 import {
   checkAndBumpParty,
+  holderOf,
   openParty,
   partyZone,
   readMainBill,
@@ -203,11 +203,7 @@ export async function readTargetTable(
   if (typeof otherPartyId !== "string" && expectedOtherPartyRevision !== undefined) {
     throw new AppError("management.request_invalid", { field: "otherPartyId" });
   }
-  const [holder] = await tx
-    .select({ partyId: partyTables.partyId })
-    .from(partyTables)
-    .where(and(eq(partyTables.tableId, tableId), isNull(partyTables.leftAt)));
-  const holding = holder?.partyId ?? null;
+  const holding = await holderOf(tx, tableId);
   if (otherPartyId === null && holding !== null && holding !== source) {
     await refuseMovedParty(tx, holding);
   }

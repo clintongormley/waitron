@@ -26,6 +26,7 @@ import type { OriginConfig, TillConfig } from "./till-config.js";
 import { createOpenOrder, openTab } from "./working-order.js";
 import { outstandingOf, readPaymentsByBill, refuseBillHoldingMoney } from "./bill-payments.js";
 import { discardPartyDrafts } from "./order-drafts.js";
+import { seatMergeMembers } from "./floor-today-merges.js";
 import { readCreditNotes, readPartyTables } from "./orders-list.js";
 import { readIssuedSales } from "./sale-due.js";
 import "./errors.js";
@@ -72,8 +73,9 @@ export interface PartyCommand {
 }
 
 /**
- * Seat a party at a free table: one party, its first table and its tab, in the caller's
- * transaction. A table that already belongs to a party is refused inside `openTab`.
+ * Seat a party at a free table: one party, its first table, every other table of that table's
+ * merge, and its tab, in the caller's transaction. A table that already belongs to a party is
+ * refused inside `openTab`.
  */
 export async function seatTable(
   tx: Transaction,
@@ -93,6 +95,7 @@ export async function seatTable(
     partyId,
   });
   await tx.insert(partyTables).values({ partyId, tableId: args.tableId });
+  await seatMergeMembers(tx, partyId, args.tableId);
   await setMainBill(tx, partyId, tabId);
   return { partyId, tabId, revision, orderNumber };
 }
@@ -286,13 +289,26 @@ export async function leaveTables(
     .where(and(inArray(partyTables.tableId, [...tableIds]), isNull(partyTables.leftAt)));
 }
 
+/** The party holding each of the tables now, by table id; a free table is absent. Reads by id alone. */
+export async function holdersOf(
+  tx: Transaction,
+  tableIds: readonly string[],
+): Promise<Map<string, string>> {
+  const rows = await tx
+    .select({ tableId: partyTables.tableId, partyId: partyTables.partyId })
+    .from(partyTables)
+    .where(and(inArray(partyTables.tableId, [...tableIds]), isNull(partyTables.leftAt)));
+  return new Map(rows.map((row) => [row.tableId, row.partyId]));
+}
+
+/** The party holding the table now, or null. Reads by id alone. */
+export async function holderOf(tx: Transaction, tableId: string): Promise<string | null> {
+  return (await holdersOf(tx, [tableId])).get(tableId) ?? null;
+}
+
 /** Whether a party holds the table: an active membership row. */
 export async function tableHeld(tx: Transaction, tableId: string): Promise<boolean> {
-  const [member] = await tx
-    .select({ id: partyTables.id })
-    .from(partyTables)
-    .where(and(eq(partyTables.tableId, tableId), isNull(partyTables.leftAt)));
-  return member !== undefined;
+  return (await holderOf(tx, tableId)) !== null;
 }
 
 /**

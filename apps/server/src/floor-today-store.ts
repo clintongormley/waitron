@@ -1,18 +1,24 @@
 import { and, eq, exists, inArray, isNull, lt, or } from "drizzle-orm";
 import {
   diningTables,
+  floorPlanJoins,
+  floorPlanJoinTables,
   floorPlans,
   floorPlanTables,
+  floorResetJoins,
+  floorResetJoinTables,
   floorResetTables,
+  floorTodayJoins,
   floorTodayJoinTables,
   floorTodayTables,
   floorTodayZones,
   floorZones,
-  partyTables,
+  workingOrders,
 } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import type { TableRemoval } from "@waitron/module";
 import { readLocationClock, venueMomentAt } from "@waitron/reporting";
+import { AppError, NEW_TABLE_SIZE, groupStep } from "@waitron/shared";
 import {
   planReset,
   targetsFromMaster,
@@ -20,9 +26,13 @@ import {
   type Placement,
   type Target,
 } from "./floor-reset-plan.js";
+import { foodOnItsWay } from "./delivery-release.js";
 import { leaveMerges } from "./floor-today-merges.js";
+import { holdersOf } from "./parties.js";
+import { refuseUnfree, refuseUnmovable, todayOf } from "./floor-today-table.js";
 import { refusedByAModule, removeLiveTables, tablesTied } from "./table-removal.js";
 import type { TillConfig } from "./till-config.js";
+import "./errors.js";
 
 type Placed = {
   x: number | null;
@@ -116,20 +126,68 @@ async function resetZoneFor(
     })),
     live,
   );
+  const copied = tx
+    .select({ id: floorResetJoins.id })
+    .from(floorResetJoins)
+    .where(eq(floorResetJoins.zoneId, zoneId));
+  await tx.delete(floorResetJoinTables).where(inArray(floorResetJoinTables.joinId, copied));
+  await tx.delete(floorResetJoins).where(eq(floorResetJoins.zoneId, zoneId));
   await tx.delete(floorResetTables).where(eq(floorResetTables.zoneId, zoneId));
   if (targets.length > 0) {
-    await tx.insert(floorResetTables).values(
-      targets.map((target) => ({
-        zoneId,
-        tableId: target.tableId,
-        planTableId: target.planTableId,
-        ...targetRow(target),
-        remove: target.remove,
-        pending: true,
-      })),
-    );
+    const written = await tx
+      .insert(floorResetTables)
+      .values(
+        targets.map((target) => ({
+          zoneId,
+          tableId: target.tableId,
+          planTableId: target.planTableId,
+          ...targetRow(target),
+          remove: target.remove,
+          pending: true,
+        })),
+      )
+      .returning({ id: floorResetTables.id, planTableId: floorResetTables.planTableId });
+    await copyJoins(tx, zoneId, written);
   }
   await catchUpZone(tx, cfg, removals, zoneId, now);
+}
+
+/** A join with a member that no reset row, or two, follow is not copied: a merge of those tables asks for its seats. */
+async function copyJoins(
+  tx: Transaction,
+  zoneId: string,
+  written: { id: string; planTableId: string | null }[],
+): Promise<void> {
+  const rowsOf = new Map<string, string[]>();
+  for (const { id, planTableId } of written) {
+    if (planTableId !== null) rowsOf.set(planTableId, [...(rowsOf.get(planTableId) ?? []), id]);
+  }
+  const members = await tx
+    .select({
+      joinId: floorPlanJoins.id,
+      seats: floorPlanJoins.seats,
+      planTableId: floorPlanJoinTables.planTableId,
+    })
+    .from(floorPlanJoinTables)
+    .innerJoin(floorPlanJoins, eq(floorPlanJoins.id, floorPlanJoinTables.joinId))
+    .innerJoin(floorPlans, eq(floorPlans.id, floorPlanJoins.planId))
+    .where(eq(floorPlans.zoneId, zoneId));
+  const joins = new Map<string, { seats: number; rows: (string[] | undefined)[] }>();
+  for (const { joinId, seats, planTableId } of members) {
+    const join = joins.get(joinId) ?? { seats, rows: [] };
+    join.rows.push(rowsOf.get(planTableId));
+    joins.set(joinId, join);
+  }
+  for (const { seats, rows } of joins.values()) {
+    if (!rows.every((r) => r?.length === 1)) continue;
+    const [join] = await tx
+      .insert(floorResetJoins)
+      .values({ zoneId, seats })
+      .returning({ id: floorResetJoins.id });
+    await tx
+      .insert(floorResetJoinTables)
+      .values(rows.map((r) => ({ joinId: join!.id, resetTableId: r![0]! })));
+  }
 }
 
 function zoneTables(tx: Transaction, cfg: TillConfig, zoneId: string) {
@@ -198,14 +256,7 @@ async function catchUpPass(
   );
   const ids = inZone.map((table) => table.id);
   const inZoneIds = new Set(ids);
-  const held = new Set(
-    (
-      await tx
-        .select({ tableId: partyTables.tableId })
-        .from(partyTables)
-        .where(and(inArray(partyTables.tableId, ids), isNull(partyTables.leftAt)))
-    ).map((row) => row.tableId),
-  );
+  const held = new Set((await holdersOf(tx, ids)).keys());
   const withToday = new Set(
     (
       await tx
@@ -420,4 +471,143 @@ export async function ensureToday(
       await catchUpZone(tx, cfg, removals, zoneId, now);
     }
   }
+}
+
+/** Moves the table's top-left corner to `at`; a merge's members all move by the same distance. */
+export async function moveToday(
+  tx: Transaction,
+  cfg: TillConfig,
+  tableId: string,
+  at: { x: number; y: number },
+): Promise<void> {
+  const today = await todayOf(tx, cfg, tableId);
+  refuseUnmovable(today);
+  const members = (today.merge?.members ?? [today.row]).filter((m) => m.x !== null);
+  const { dx, dy } = groupStep(
+    members.map((m) => ({ x: m.x!, y: m.y! })),
+    { x: at.x - today.row.x!, y: at.y - today.row.y! },
+  );
+  for (const member of members) {
+    await tx
+      .update(floorTodayTables)
+      .set({ x: member.x! + dx, y: member.y! + dy })
+      .where(eq(floorTodayTables.id, member.id));
+  }
+}
+
+/** Turns the table 15° clockwise about its centre: its corner, `x` and `y`, does not change. */
+export async function rotateToday(
+  tx: Transaction,
+  cfg: TillConfig,
+  tableId: string,
+): Promise<void> {
+  const today = await todayOf(tx, cfg, tableId);
+  refuseUnmovable(today);
+  if (today.merge !== null) throw new AppError("table.merged", { tableId });
+  await tx
+    .update(floorTodayTables)
+    .set({ rotation: (today.row.rotation! + 15) % 360 })
+    .where(eq(floorTodayTables.id, today.row.id));
+}
+
+/** Puts a spare on the map with its top-left corner at `at`; a table with a place is left alone. */
+export async function placeSpareToday(
+  tx: Transaction,
+  cfg: TillConfig,
+  tableId: string,
+  at: { x: number; y: number },
+): Promise<void> {
+  const { row } = await todayOf(tx, cfg, tableId);
+  if (row.takenOff) throw new AppError("table.taken_off", { tableId });
+  if (row.x !== null) return;
+  if (row.fixed) throw new AppError("table.fixed", { tableId });
+  await tx
+    .update(floorTodayTables)
+    .set({
+      x: at.x,
+      y: at.y,
+      width: NEW_TABLE_SIZE,
+      height: NEW_TABLE_SIZE,
+      shape: "rect",
+      rotation: 0,
+    })
+    .where(eq(floorTodayTables.id, row.id));
+}
+
+/** Takes a free table off today's plan, keeping its place; one already taken off is left as it is. */
+export async function takeOffToday(
+  tx: Transaction,
+  cfg: TillConfig,
+  tableId: string,
+): Promise<void> {
+  const today = await todayOf(tx, cfg, tableId);
+  if (today.row.takenOff) return;
+  if (today.merge !== null) throw new AppError("table.merged", { tableId });
+  await refuseUnfree(tx, [tableId]);
+  const [delivery] = await tx
+    .select({ id: workingOrders.id })
+    .from(workingOrders)
+    .where(and(eq(workingOrders.deliveryTableId, tableId), foodOnItsWay()));
+  if (delivery !== undefined) throw new AppError("table.delivery_pending", { tableId });
+  await tx
+    .update(floorTodayTables)
+    .set({ takenOff: true })
+    .where(eq(floorTodayTables.id, today.row.id));
+}
+
+export async function putBackToday(
+  tx: Transaction,
+  cfg: TillConfig,
+  tableId: string,
+): Promise<void> {
+  const { row } = await todayOf(tx, cfg, tableId);
+  await tx.update(floorTodayTables).set({ takenOff: false }).where(eq(floorTodayTables.id, row.id));
+}
+
+/** Today's seats for the table, or for its merge when it is in one. */
+export async function seatsToday(
+  tx: Transaction,
+  cfg: TillConfig,
+  tableId: string,
+  seats: number,
+): Promise<void> {
+  const today = await todayOf(tx, cfg, tableId);
+  if (today.row.takenOff) throw new AppError("table.taken_off", { tableId });
+  if (today.merge !== null) {
+    await tx
+      .update(floorTodayJoins)
+      .set({ seats })
+      .where(eq(floorTodayJoins.id, today.merge.joinId));
+    return;
+  }
+  await tx.update(floorTodayTables).set({ seats }).where(eq(floorTodayTables.id, today.row.id));
+}
+
+/**
+ * Sets the table's today's row from what the last reset copied for it, after it leaves any merge.
+ * Its name is left alone: names change only at a reset or a catch-up.
+ */
+export async function backToSaved(
+  tx: Transaction,
+  cfg: TillConfig,
+  tableId: string,
+): Promise<void> {
+  const { row } = await todayOf(tx, cfg, tableId);
+  const [saved] = await tx
+    .select()
+    .from(floorResetTables)
+    .where(eq(floorResetTables.tableId, tableId));
+  if (saved === undefined || saved.remove) {
+    throw new AppError("table.not_in_floor_plan", { tableId });
+  }
+  await leaveMerges(tx, [tableId]);
+  await tx
+    .update(floorTodayTables)
+    .set({
+      seats: saved.seats,
+      fixed: saved.fixed,
+      ...placementColumns(placementOf(saved)),
+      takenOff: false,
+    })
+    .where(eq(floorTodayTables.id, row.id));
 }

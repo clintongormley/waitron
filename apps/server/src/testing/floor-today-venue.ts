@@ -1,0 +1,172 @@
+import { randomUUID } from "node:crypto";
+import { eq } from "drizzle-orm";
+import { floorTodayJoinTables, floorTodayJoins, floorTodayTables, floorZones } from "@waitron/db";
+import { zoneSalePolicies, zoneServicePolicies } from "@waitron/venue-service";
+import { readZonePlan, saveZonePlan, type ZonePlanSave } from "../floor-plan.js";
+import { ALL_MODULES, enabledTableRemovals } from "../modules.js";
+import { inTx, type PartyVenue } from "./party-venue.js";
+
+export interface PlannedEntry {
+  key: string;
+  label?: string;
+  seats?: number | null;
+  fixed?: boolean;
+  place?: { x: number; y: number; width?: number; height?: number; rotation?: number } | null;
+}
+
+const REMOVALS = enabledTableRemovals(ALL_MODULES);
+
+/** A fresh table-service zone, so one case's plans never meet another's. */
+export async function tableServiceZone(v: PartyVenue): Promise<string> {
+  const id = randomUUID();
+  await inTx(v, async (tx) => {
+    const [tables] = await tx
+      .select({ departmentId: zoneServicePolicies.departmentId })
+      .from(zoneServicePolicies)
+      .where(eq(zoneServicePolicies.zoneId, v.tables.zoneId));
+    await tx
+      .insert(floorZones)
+      .values({ id, locationId: v.cfg.locationId, name: `Zone ${id.slice(0, 8)}` });
+    await tx.insert(zoneServicePolicies).values({
+      locationId: v.cfg.locationId,
+      zoneId: id,
+      departmentId: tables!.departmentId,
+    });
+    await tx.insert(zoneSalePolicies).values({ zoneId: id, orderStart: "table" });
+  });
+  return id;
+}
+
+/**
+ * A fresh table-service zone, its live tables, and a first saved master holding `entries` and
+ * `joins`, which builds today's plan. Labels are made unique.
+ */
+export async function plannedZone(
+  v: PartyVenue,
+  entries: PlannedEntry[],
+  joins: { seats: number; keys: string[] }[] = [],
+  now: Date = new Date(),
+): Promise<{
+  zoneId: string;
+  table: Record<string, string>;
+  master: Record<string, string>;
+  revision: number;
+}> {
+  const zoneId = await tableServiceZone(v);
+  const table: Record<string, string> = {};
+  const tables: ZonePlanSave["tables"] = [];
+  for (const entry of entries) {
+    const label = `${entry.label ?? entry.key} ${randomUUID().slice(0, 6)}`;
+    table[entry.key] = await v.table(label, zoneId);
+    const place = entry.place === undefined ? { x: 0, y: 0 } : entry.place;
+    tables.push({
+      key: entry.key,
+      liveTableId: table[entry.key],
+      label,
+      seats: entry.seats === undefined ? 4 : entry.seats,
+      fixed: entry.fixed ?? false,
+      placement:
+        place === null
+          ? null
+          : {
+              x: place.x,
+              y: place.y,
+              width: place.width ?? 8,
+              height: place.height ?? 8,
+              shape: "rect" as const,
+              rotation: place.rotation ?? 0,
+            },
+    });
+  }
+  const { revision, ids } = await inTx(v, (tx) =>
+    saveZonePlan(
+      tx,
+      v.cfg,
+      REMOVALS,
+      zoneId,
+      {
+        revision: 0,
+        tables,
+        joins: joins.map((join) => ({ seats: join.seats, tableKeys: join.keys })),
+      },
+      now,
+    ),
+  );
+  return { zoneId, table, master: ids, revision };
+}
+
+/** Saves the zone's master again as `readZonePlan` reads it, without `drop`, with exactly `joins` (by master table id). Runs no reset (the zone has a today's plan). */
+export async function resaveMaster(
+  v: PartyVenue,
+  zoneId: string,
+  change: { joins: { seats: number; masterIds: string[] }[]; drop?: string[] },
+  now: Date = new Date(),
+): Promise<number> {
+  return inTx(v, async (tx) => {
+    const plan = await readZonePlan(tx, v.cfg, zoneId);
+    const drop = new Set(change.drop ?? []);
+    const tables: ZonePlanSave["tables"] = plan.tables.flatMap((t) =>
+      t.id === null || drop.has(t.id)
+        ? []
+        : [
+            {
+              id: t.id,
+              key: t.id,
+              label: t.label,
+              seats: t.seats,
+              fixed: t.fixed,
+              placement: t.placement,
+            },
+          ],
+    );
+    const joins = change.joins.map((join) => ({ seats: join.seats, tableKeys: join.masterIds }));
+    const saved = await saveZonePlan(
+      tx,
+      v.cfg,
+      REMOVALS,
+      zoneId,
+      { revision: plan.revision, tables, joins },
+      now,
+    );
+    return saved.revision;
+  });
+}
+
+export async function todayRow(
+  v: PartyVenue,
+  tableId: string,
+): Promise<typeof floorTodayTables.$inferSelect | undefined> {
+  const [row] = await inTx(v, (tx) =>
+    tx.select().from(floorTodayTables).where(eq(floorTodayTables.tableId, tableId)),
+  );
+  return row;
+}
+
+export async function mergeOf(
+  v: PartyVenue,
+  tableId: string,
+): Promise<{
+  joinId: string;
+  seats: number;
+  members: { tableId: string; beforeX: number; beforeY: number; beforeRotation: number }[];
+} | null> {
+  return inTx(v, async (tx) => {
+    const [own] = await tx
+      .select({ joinId: floorTodayJoinTables.joinId, seats: floorTodayJoins.seats })
+      .from(floorTodayJoinTables)
+      .innerJoin(floorTodayJoins, eq(floorTodayJoins.id, floorTodayJoinTables.joinId))
+      .where(eq(floorTodayJoinTables.tableId, tableId));
+    if (own === undefined) return null;
+    const members = await tx
+      .select({
+        tableId: floorTodayJoinTables.tableId,
+        beforeX: floorTodayJoinTables.beforeX,
+        beforeY: floorTodayJoinTables.beforeY,
+        beforeRotation: floorTodayJoinTables.beforeRotation,
+      })
+      .from(floorTodayJoinTables)
+      .where(eq(floorTodayJoinTables.joinId, own.joinId));
+    members.sort((a, b) => a.tableId.localeCompare(b.tableId));
+    return { joinId: own.joinId, seats: own.seats, members };
+  });
+}

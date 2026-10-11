@@ -8,12 +8,15 @@ import {
   deviceOrigin,
   isAppError,
   isValidGuestCount,
+  JOIN_SIDES,
+  type JoinSide,
   SUPPORTED_LOCALES,
   thousandthsToDecimal,
   tillProviderForReader,
 } from "@waitron/shared";
 import type { FloorAnnotator, TableRemoval } from "@waitron/module";
 import {
+  floorPlans,
   locations,
   newId,
   readNodeMembership,
@@ -143,7 +146,9 @@ import type { LineExtras, OrderLinePatch, TicketState } from "./working-order.js
 import { listCourses, listStationsToday } from "./kitchen.js";
 import {
   finishTable,
+  holderOf,
   markTableCleared,
+  memberTables,
   readPartyBills,
   seatTable,
   setPartyName,
@@ -155,6 +160,13 @@ import type { BillCommand } from "./bill-actions.js";
 import { moveBill, moveWouldSend } from "./move-bill.js";
 import type { MoveBillOptions, MoveTarget, OtherPartyRead } from "./move-bill.js";
 import { joinTables, moveGuests, splitTable } from "./table-actions.js";
+import {
+  joinMergeMembers,
+  leaveMergesRestoring,
+  mergeMembers,
+  partyRevision,
+  writeMerge,
+} from "./floor-today-merges.js";
 import type { TableActionOptions } from "./table-actions.js";
 import {
   bumpGroupReady,
@@ -173,6 +185,7 @@ import { RETAINED_COURSE } from "./retained-course.js";
 import { readDrafts, saveDraft, submitDraft, takeOverDraft } from "./order-drafts.js";
 import { availableStations, findDeadEnds, requireMakeAtStation } from "./dead-ends.js";
 import { ensureToday } from "./floor-today-store.js";
+import { refuseTakenOff } from "./floor-today-table.js";
 import type { SubmitDraftInput } from "./order-drafts.js";
 import { invalid } from "./bill-allocation.js";
 import { printSalePaymentSlip } from "./payment-slip-print.js";
@@ -201,6 +214,7 @@ import { requireBodyUuid, requireUuidParam } from "@waitron/server-kit";
 import { requestBill } from "./bill-request.js";
 import { mountAdjustmentsApi } from "./adjustments-api.js";
 import { mountDepartmentTransferApi } from "./department-transfer-api.js";
+import { mountFloorTodayApi, requireTargetTable, whole } from "./floor-today-api.js";
 import { mountKeepOpenApi } from "./keep-open-api.js";
 import { mountStationTodayApi } from "./station-today-api.js";
 import { mountUnpaidDepartureApi } from "./unpaid-departure-api.js";
@@ -489,6 +503,12 @@ export const STATUS: Record<string, ContentfulStatusCode> = {
   "table.inactive": 409,
   "table.zone_inactive": 409,
   "table.in_floor_plan": 409,
+  "table.not_in_floor_plan": 409,
+  "table.taken_off": 409,
+  "table.fixed": 409,
+  "table.merged": 409,
+  "table.delivery_pending": 409,
+  "floor_plan.invalid": 400,
   "zone.not_found": 404,
   "placement.invalid": 400,
   "tab.already_open": 409,
@@ -809,13 +829,38 @@ function tableActionCommand(personId: string, body: Record<string, unknown>): Ta
   };
 }
 
-/** The table a move or join names, which the body must carry; a malformed id names no table. */
-function requireTargetTable(value: unknown, field: string): string {
-  if (value === undefined) throw invalid(field);
-  if (typeof value !== "string" || !isUuid(value)) {
-    throw new AppError("table.not_found", { tableId: String(value) });
-  }
-  return value.toLowerCase();
+/** The other tables a seat names, absent for none; none may be the path table. */
+function requireOtherTables(value: unknown, pathId: string): string[] {
+  if (value === undefined) return [];
+  if (!Array.isArray(value)) throw invalid("withTableIds");
+  const ids = value.map((item: unknown) => requireTargetTable(item, "withTableIds"));
+  if (ids.includes(pathId.toLowerCase())) throw invalid("withTableIds");
+  return [...new Set(ids)];
+}
+
+interface JoinMerge {
+  moving: string;
+  target: string;
+  side: JoinSide;
+  seats: number | null;
+}
+
+/** A join's merge, absent for none: `moving` or `target` is the joined table, the other one the party must hold. */
+function requireMerge(value: unknown, tableId: string): JoinMerge | null {
+  if (value === undefined) return null;
+  if (typeof value !== "object" || value === null || Array.isArray(value)) throw invalid("merge");
+  const { moving, target, side, seats } = value as Record<string, unknown>;
+  const movingId = requireTargetTable(moving, "merge.moving");
+  const targetId = requireTargetTable(target, "merge.target");
+  if (!JOIN_SIDES.includes(side as JoinSide)) throw invalid("merge.side");
+  const merge = {
+    moving: movingId,
+    target: targetId,
+    side: side as JoinSide,
+    seats: seats === undefined ? null : whole(seats, "merge.seats", 1, 999),
+  };
+  if ((merge.moving === tableId) === (merge.target === tableId)) throw invalid("merge");
+  return merge;
 }
 
 /**
@@ -1090,6 +1135,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
   mountStationTodayApi(app, deps, log, run, pinThrottle);
   mountKeepOpenApi(app, deps, log, run, pinThrottle);
   mountDepartmentTransferApi(app, deps, log, run);
+  mountFloorTodayApi(app, deps, log, run);
   mountBillLookupApi(app, deps, log, run);
   mountInvoiceLookupApi(app, deps, log, run);
 
@@ -2204,15 +2250,19 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       const zones = await withTransaction(deps.db, async (tx) => {
         const scope = await readZoneScope(tx, deps.cfg, device.deviceProfileId);
         const visible = (await listZones(tx, deps.cfg)).filter((zone) => inScope(scope, zone.id));
+        const ids = visible.map((zone) => zone.id);
         const at = new Date();
         const serviceZones = new Set(
           (await VENUE_SERVICE.listServiceZones(tx, deps.cfg)).map((zone) => zone.id),
         );
-        const closed = await VENUE_SERVICE.closedZoneIdsAt(
-          tx,
-          deps.cfg,
-          at,
-          visible.map((zone) => zone.id),
+        const closed = await VENUE_SERVICE.closedZoneIdsAt(tx, deps.cfg, at, ids);
+        const planned = new Set(
+          (
+            await tx
+              .select({ zoneId: floorPlans.zoneId })
+              .from(floorPlans)
+              .where(inArray(floorPlans.zoneId, ids))
+          ).map((row) => row.zoneId),
         );
         const answer = [];
         for (const zone of visible) {
@@ -2223,6 +2273,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
             ...zone,
             closed: closed.has(zone.id),
             closesAt: keepOpen?.closesAt ?? null,
+            hasPlan: planned.has(zone.id),
           });
         }
         return answer;
@@ -2248,12 +2299,31 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       const cfg = requestCfg(deps.cfg, session);
       const id = c.req.param("id");
       if (!isUuid(id)) throw new AppError("table.not_found", { tableId: id });
-      const body = await readJsonBody<{ guestCount?: unknown }>(c);
+      const body = await readJsonBody<{ guestCount?: unknown; withTableIds?: unknown }>(c);
       const guestCount = requireGuestCount(body.guestCount);
+      const withTableIds = requireOtherTables(body.withTableIds, id);
+      const sendCfg = sendingCfg(cfg, c, session.device);
       const result = await withTransaction(deps.db, async (tx) => {
         await catchUpFloor(tx);
-        await checkZones(tx, deps.cfg, session, [{ tableId: id }]);
-        return seatTable(tx, cfg, { tableId: id, guestCount, operatorId: personId });
+        await checkZones(tx, deps.cfg, session, [
+          { tableId: id },
+          ...withTableIds.map((tableId) => ({ tableId })),
+        ]);
+        const seated = await seatTable(tx, cfg, { tableId: id, guestCount, operatorId: personId });
+        for (const otherId of withTableIds) {
+          if ((await holderOf(tx, otherId)) === seated.partyId) continue;
+          await joinTables(tx, sendCfg, seated.partyId, otherId, {
+            bills: "merge",
+            expectedPartyRevision: await partyRevision(tx, seated.partyId),
+            operatorId: personId,
+            otherPartyId: null,
+          });
+          await joinMergeMembers(tx, sendCfg, seated.partyId, otherId, personId);
+        }
+        // After the writes, so a seat's and a join's own refusals answer first, as on the join route.
+        await refuseTakenOff(tx, [id, ...withTableIds]);
+        if (withTableIds.length === 0) return seated;
+        return { ...seated, revision: await partyRevision(tx, seated.partyId) };
       });
       return c.json(result);
     }),
@@ -2340,11 +2410,36 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
         const body = asObject(await readRawJsonBody<unknown>(c));
         const tableId = requireTargetTable(body[field], field);
         const command = tableActionCommand(personId, body);
+        const merge = path === "join" ? requireMerge(body.merge, tableId) : null;
         const sendCfg = sendingCfg(cfg, c, session.device);
         const result = await withTransaction(deps.db, async (tx) => {
           await catchUpFloor(tx);
           await checkZones(tx, deps.cfg, session, [{ partyId }, { tableId }]);
-          return act(tx, sendCfg, partyId, tableId, command);
+          const heldBefore = await memberTables(tx, partyId);
+          const acted = await act(tx, sendCfg, partyId, tableId, command);
+          if (path === "move") {
+            // Only a party staying on part of its merge breaks it up; a merge left whole stays, free.
+            const merged = await mergeMembers(tx, tableId);
+            await leaveMergesRestoring(
+              tx,
+              heldBefore.filter((id) => id !== tableId && merged.includes(id)),
+            );
+          }
+          await joinMergeMembers(tx, sendCfg, acted.partyId, tableId, personId);
+          if (merge !== null) {
+            const held = merge.moving === tableId ? merge.target : merge.moving;
+            if (!heldBefore.includes(held)) throw invalid("merge");
+            await writeMerge(tx, cfg, {
+              movingId: merge.moving,
+              targetId: merge.target,
+              side: merge.side,
+              seats: merge.seats,
+              free: false,
+            });
+          }
+          // Last, so the route's own refusals answer first.
+          await refuseTakenOff(tx, [tableId]);
+          return acted;
         });
         return c.json(result);
       }),
@@ -2374,10 +2469,12 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       const result = await withTransaction(deps.db, async (tx) => {
         await catchUpFloor(tx);
         await checkZones(tx, deps.cfg, session, [{ partyId }]);
-        return splitTable(tx, sendCfg, partyId, tableId.toLowerCase(), billId, {
+        const split = await splitTable(tx, sendCfg, partyId, tableId.toLowerCase(), billId, {
           expectedPartyRevision,
           operatorId: personId,
         });
+        await leaveMergesRestoring(tx, [tableId.toLowerCase()]);
+        return split;
       });
       return c.json(result);
     }),
@@ -3112,7 +3209,9 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
             "counter" in to && to.counter.zoneId !== null && { zoneId: to.counter.zoneId },
           ),
         ]);
-        return moveBill(tx, sendCfg, billId, to, command);
+        const moved = await moveBill(tx, sendCfg, billId, to, command);
+        if ("tableId" in to) await refuseTakenOff(tx, [to.tableId]);
+        return moved;
       });
       return c.json(result);
     }),

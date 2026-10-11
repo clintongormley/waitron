@@ -485,6 +485,7 @@ export class TillCardGrid extends LitElement {
           .api=${this.api}
           .canExitToCounter=${false}
           .canOpenStation=${this.canOpenStation}
+          .canChangeToday=${this.capabilities.includes("take-orders")}
         ></till-floor-screen>`;
       case "expo":
         return html`<till-expo-screen

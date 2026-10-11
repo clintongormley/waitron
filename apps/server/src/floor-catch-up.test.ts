@@ -8,14 +8,12 @@ import {
   diningTables,
   floorTodayTables,
   floorTodayZones,
-  floorZones,
   locations,
   withTransaction,
   workingOrders,
 } from "@waitron/db";
 import type { TrustedClock } from "@waitron/fiscal";
 import { hashPin, loginWithPin, persons } from "@waitron/identity";
-import { zoneSalePolicies, zoneServicePolicies } from "@waitron/venue-service";
 import { saveZonePlan, type ZonePlanSave } from "./floor-plan.js";
 import { resetZone } from "./floor-today-store.js";
 import { ALL_MODULES, enabledTableRemovals } from "./modules.js";
@@ -30,6 +28,7 @@ import {
   tableRow,
   type PartyVenue,
 } from "./testing/party-venue.js";
+import { tableServiceZone } from "./testing/floor-today-venue.js";
 import { seedSessionDevice } from "./testing/session-device.js";
 import { handOverOrder } from "./working-order.js";
 import "./errors.js";
@@ -110,24 +109,8 @@ async function finish(partyId: string): Promise<void> {
 }
 
 /** A fresh table-service zone, so one case's plans never meet another's. */
-async function zone(): Promise<string> {
-  const id = randomUUID();
-  await inTx(v, async (tx) => {
-    const [tables] = await tx
-      .select({ departmentId: zoneServicePolicies.departmentId })
-      .from(zoneServicePolicies)
-      .where(eq(zoneServicePolicies.zoneId, v.tables.zoneId));
-    await tx
-      .insert(floorZones)
-      .values({ id, locationId: v.cfg.locationId, name: `Zone ${id.slice(0, 8)}` });
-    await tx.insert(zoneServicePolicies).values({
-      locationId: v.cfg.locationId,
-      zoneId: id,
-      departmentId: tables!.departmentId,
-    });
-    await tx.insert(zoneSalePolicies).values({ zoneId: id, orderStart: "table" });
-  });
-  return id;
+function zone(): Promise<string> {
+  return tableServiceZone(v);
 }
 
 /** A label no other case uses: names are unique across the venue. */

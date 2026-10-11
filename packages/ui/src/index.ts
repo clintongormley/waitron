@@ -54,7 +54,7 @@ export type {
 } from "./components/wt-floor-plan-canvas.js";
 export { WtFloorPlanPreview } from "./components/wt-floor-plan-preview.js";
 export type { PreviewTable } from "./components/wt-floor-plan-preview.js";
-export { WtFloorMap, mergeLabel } from "./components/wt-floor-map.js";
+export { WtFloorMap, inNumberOrder, mergeLabel } from "./components/wt-floor-map.js";
 export type {
   FloorMapCopy,
   FloorMapDetails,

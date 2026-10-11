@@ -1,8 +1,8 @@
-import { LitElement, type TemplateResult, css, html, nothing } from "lit";
+import { LitElement, type TemplateResult, css, html, nothing, svg } from "lit";
 import { customElement, property } from "lit/decorators.js";
 import { repeat } from "lit/directives/repeat.js";
 import { styleMap } from "lit/directives/style-map.js";
-import { partyTablesName } from "@waitron/shared";
+import { groupStep, partyTablesName } from "@waitron/shared";
 import { baseStyles } from "../base-styles.js";
 import { DOUBLE_TAP_MS, type GesturePoint, Gestures } from "../gestures.js";
 import { type FloorMapDot, type FloorMapFill, floorMapFillStyles } from "../floor-map-fills.js";
@@ -10,14 +10,13 @@ import {
   type PlanPlacement,
   type PlanRect,
   bounds,
-  clampToGrid,
   cropToTables,
   fitScale,
   showsName,
   snapToSquare,
 } from "../floor-plan-geometry.js";
 
-/** A merge's members carry the same `fill`, `dot` and `description`. */
+/** A merge's members carry the same `fill`, `dot`, `linkId` and `description`. */
 export interface FloorMapTable {
   id: string;
   label: string;
@@ -25,6 +24,10 @@ export interface FloorMapTable {
   fill: FloorMapFill;
   dot: FloorMapDot | null;
   joinId: string | null;
+  /** A fixed table is not drawn moved by a drag: a copy follows the finger. Unset is movable. */
+  fixed?: boolean;
+  /** Groups sharing one are drawn linked by a line and named once: one party at several groups. */
+  linkId?: string | null;
   /** Read after the name: "Seated, 2 ready". */
   description: string;
 }
@@ -69,6 +72,8 @@ interface Drag {
   dy: number;
   x: number;
   y: number;
+  /** The first other table under the pointer. */
+  targetId: string | null;
 }
 
 const MIN_ZOOM = 1 / 2;
@@ -80,14 +85,19 @@ interface Group {
   key: string;
   members: FloorMapTable[];
   box: PlanRect;
+  /** Its tables' name, or its linked party's. */
   label: string;
+  /** False on a linked group after the first. */
+  drawsName: boolean;
+  fixed: boolean;
 }
 
 const DEFAULT_COPY: FloorMapCopy = { label: "Tables" };
 
 const collator = new Intl.Collator(undefined, { numeric: true });
 
-const inNumberOrder = (a: string, b: string): number => collator.compare(a, b);
+/** The order the map names a merge's labels in, and so the order a waiter reads them. */
+export const inNumberOrder = (a: string, b: string): number => collator.compare(a, b);
 
 /** Names the labels in the order given; `mergeLabel` is the map's own naming. */
 export const mapLabel = (labels: readonly string[]): string => partyTablesName(labels, "+");
@@ -125,11 +135,41 @@ function groupsOf(tables: readonly FloorMapTable[]): Group[] {
       members,
       box: bounds(members.map((m) => m.placement))!,
       label: mergeLabel(members.map((m) => m.label)),
+      drawsName: true,
+      fixed: members.some((m) => m.fixed === true),
     };
   });
 }
 
+/** Names each linked party's groups once, on the first; its groups in their first labels' order. */
+function linksOf(groups: readonly Group[]): Group[][] {
+  const byLink = new Map<string, Group[]>();
+  for (const group of groups) {
+    const linkId = group.members[0]!.linkId;
+    if (linkId === undefined || linkId === null) continue;
+    const linked = byLink.get(linkId);
+    if (linked) linked.push(group);
+    else byLink.set(linkId, [group]);
+  }
+  const links = [...byLink.values()].filter((linked) => linked.length > 1);
+  for (const linked of links) {
+    linked.sort((a, b) => inNumberOrder(a.members[0]!.label, b.members[0]!.label));
+    const label = mergeLabel(linked.flatMap((g) => g.members.map((m) => m.label)));
+    for (const group of linked) {
+      group.label = label;
+      group.drawsName = group === linked[0];
+    }
+  }
+  return links;
+}
+
 const px = (value: number): string => `${value}px`;
+
+/** A box's centre in host px, moved by (dx, dy) squares. */
+const centreOf = (box: PlanRect, view: View, dx = 0, dy = 0): { x: number; y: number } => ({
+  x: view.x + (box.x + dx + box.width / 2) * view.scale,
+  y: view.y + (box.y + dy + box.height / 2) * view.scale,
+});
 
 /** A wheel's delta in px; `page` is the host's size along the delta's axis. */
 const wheelPx = (delta: number, mode: number, page: number): number =>
@@ -199,14 +239,56 @@ export class WtFloorMap extends LitElement {
       /* Outside the edge, so --wt-focus-offset and not --wt-selected-ring-offset: the seated fill
          is the primary colour itself. */
       [part="table"][data-held]:not([data-merge]) [part="shape"],
-      [part="table"][data-held][data-merge] {
+      [part="table"][data-held][data-merge],
+      [part="table"][data-drop-target]:not([data-merge]) [part="shape"],
+      [part="table"][data-drop-target][data-merge] {
         outline: var(--wt-selected-ring);
         outline-offset: var(--wt-focus-offset);
       }
 
-      /* Once around the whole merge, above a table touching it. */
-      [part="table"][data-held][data-merge] {
+      /* Above every other table, so a moving table is not hidden under the one it is dragged onto
+         and a held merge's ring is not cut by a table touching it. */
+      [part="table"][data-held] {
         z-index: 1;
+      }
+
+      [part="ghost"],
+      [part="drag-link"] {
+        position: absolute;
+        z-index: 3;
+        pointer-events: none;
+      }
+
+      [part="links"] {
+        position: absolute;
+        pointer-events: none;
+      }
+
+      [part="links"] line {
+        stroke: var(--wt-color-field-line);
+        stroke-width: 1px;
+      }
+
+      [part="ghost"],
+      [part="table"][data-moving] {
+        opacity: 0.5;
+      }
+
+      [part="ghost"] [part="shape"] {
+        pointer-events: none;
+      }
+
+      [part="drag-link"],
+      [part="links"] {
+        inset: 0;
+        width: 100%;
+        height: 100%;
+        overflow: visible;
+      }
+
+      [part="drag-link"] line {
+        stroke: var(--wt-color-primary);
+        stroke-width: 1px;
       }
 
       [part="shape"][data-shape="round"] {
@@ -277,6 +359,9 @@ export class WtFloorMap extends LitElement {
   /** `undefined` reads `prefers-reduced-motion` on every render; a test sets it. */
   @property({ attribute: false }) reducedMotion?: boolean;
 
+  /** Read on each move: off, a held table does not move, though a drag already moved is still sent on release; a long press still works. */
+  @property({ attribute: false }) canDrag = true;
+
   #size: { width: number; height: number } | null = null;
 
   #view: View | null = null;
@@ -297,6 +382,9 @@ export class WtFloorMap extends LitElement {
   #readingOrder: Group[] = [];
 
   #groupOf = new Map<string, Group>();
+
+  /** Each linked party's groups, in their first labels' order. */
+  #links: Group[][] = [];
 
   /** The host's box, read when a pinch's first move needs it; a pointerdown clears it. */
   #pinchBox: DOMRect | null = null;
@@ -432,38 +520,54 @@ export class WtFloorMap extends LitElement {
     this.requestUpdate();
   }
 
-  readonly #onHoldDrag = ({ dx, dy }: { dx: number; dy: number }): void => {
+  readonly #onHoldDrag = (at: GesturePoint & { dx: number; dy: number }): void => {
+    if (!this.canDrag) return;
+    const { dx, dy } = at;
     const id = this.#held?.dataset["tableId"];
-    const first =
-      id === undefined ? undefined : this.#groupOf.get(id)?.members.find((m) => m.id === id);
+    const members = id === undefined ? undefined : this.#groupOf.get(id)?.members;
+    const first = members?.find((m) => m.id === id);
     if (first === undefined) return;
     const scale = this.#view!.scale;
-    const x = clampToGrid(first.placement.x + snapToSquare(dx, scale));
-    const y = clampToGrid(first.placement.y + snapToSquare(dy, scale));
-    const movedX = x - first.placement.x;
-    const movedY = y - first.placement.y;
+    // The whole group stays on the grid, as the server holds it when the move lands.
+    const { dx: movedX, dy: movedY } = groupStep(
+      members!.map((m) => m.placement),
+      { x: snapToSquare(dx, scale), y: snapToSquare(dy, scale) },
+    );
+    const x = first.placement.x + movedX;
+    const y = first.placement.y + movedY;
+    const targetId = this.#targetAt(at, first.id);
     const drag = this.#drag;
     if (
       drag?.tableId === first.id &&
       drag.x === x &&
       drag.y === y &&
       drag.dx === movedX &&
-      drag.dy === movedY
+      drag.dy === movedY &&
+      drag.targetId === targetId
     ) {
       return;
     }
-    this.#drag = { tableId: first.id, dx: movedX, dy: movedY, x, y };
+    this.#drag = { tableId: first.id, dx: movedX, dy: movedY, x, y, targetId };
     this.requestUpdate();
   };
 
-  #sendDrop(drag: Drag, at: GesturePoint): void {
-    const targetId =
+  #targetAt(at: GesturePoint, tableId: string): string | null {
+    return (
       this.shadowRoot!.elementsFromPoint(at.x, at.y)
         .map(idOf)
-        .find((id) => id !== drag.tableId) ?? null;
+        .find((id) => id !== tableId) ?? null
+    );
+  }
+
+  #sendDrop(drag: Drag, at: GesturePoint): void {
     this.dispatchEvent(
       new CustomEvent<FloorMapDrop>("wt-table-drag-end", {
-        detail: { tableId: drag.tableId, x: drag.x, y: drag.y, targetId },
+        detail: {
+          tableId: drag.tableId,
+          x: drag.x,
+          y: drag.y,
+          targetId: this.#targetAt(at, drag.tableId),
+        },
         bubbles: true,
         composed: true,
       }),
@@ -614,8 +718,11 @@ export class WtFloorMap extends LitElement {
   protected override willUpdate(changed: Map<PropertyKey, unknown>): void {
     if (changed.has("tables")) {
       this.#groups = groupsOf(this.tables);
+      this.#links = linksOf(this.#groups);
       this.#readingOrder = readingOrder(this.#groups);
       this.#groupOf = new Map(this.#groups.flatMap((g) => g.members.map((m) => [m.id, g])));
+      if (this.#held !== null && !this.#groupOf.has(this.#held.dataset["tableId"]!))
+        this.#endDrag();
     }
     if (changed.has("fitKey")) this.#needsFit = true;
     if (this.#needsFit) this.#fitView();
@@ -648,19 +755,19 @@ export class WtFloorMap extends LitElement {
     const tabStop =
       (this.#focusedId === null ? undefined : this.#groupOf.get(this.#focusedId)) ??
       this.#readingOrder[0];
-    return html`${repeat(
+    return html`${this.#links.map((linked) => this.#renderLink(linked, view))}${repeat(
       this.#groups,
       (g) => g.key,
       (g) => this.#renderGroup(g, view, still, g === tabStop),
-    )}`;
+    )}${this.#renderFixedDrag(view)}`;
   }
 
   #renderGroup(group: Group, view: View, still: boolean, tabStop: boolean): TemplateResult {
     const { box, members, label } = group;
     const [first] = members as [FloorMapTable, ...FloorMapTable[]];
     const merged = members.length > 1;
-    const named = showsName(merged ? box : first.placement, view.scale);
-    const drag = this.#drag?.tableId === first.id ? this.#drag : null;
+    const named = group.drawsName && showsName(merged ? box : first.placement, view.scale);
+    const drag = this.#drag?.tableId === first.id && !group.fixed ? this.#drag : null;
     const dot = members.find((m) => m.dot !== null)?.dot ?? null;
     return html`<button
       type="button"
@@ -668,6 +775,8 @@ export class WtFloorMap extends LitElement {
       data-table-id=${first.id}
       data-fill=${first.fill}
       ?data-merge=${merged}
+      ?data-drop-target=${this.#drag?.targetId === first.id}
+      ?data-moving=${drag !== null}
       tabindex=${tabStop ? 0 : -1}
       aria-label=${`${label}, ${first.description}`}
       style=${styleMap({
@@ -687,6 +796,52 @@ export class WtFloorMap extends LitElement {
         dot === null ? nothing : html`<span part="dot" data-dot=${dot} ?data-still=${still}></span>`
       }
     </button>`;
+  }
+
+  #renderLink(linked: readonly Group[], view: View): TemplateResult {
+    const drag = this.#drag;
+    const centres = linked.map((g) =>
+      drag?.tableId === g.members[0]!.id && !g.fixed
+        ? centreOf(g.box, view, drag.dx, drag.dy)
+        : centreOf(g.box, view),
+    );
+    // `svg`, not `html`: a separate `html` fragment makes an HTML-namespace <line> that draws nothing.
+    return html`<svg part="links" aria-hidden="true">
+      ${centres
+        .slice(1)
+        .map(
+          (to, i) =>
+            svg`<line x1=${centres[i]!.x} y1=${centres[i]!.y} x2=${to.x} y2=${to.y}></line>`,
+        )}
+    </svg>`;
+  }
+
+  /** A fixed group's copy where the drag would put it, and a line to the table under the pointer. */
+  #renderFixedDrag(view: View): TemplateResult | typeof nothing {
+    const drag = this.#drag;
+    const group = drag === null ? undefined : this.#groupOf.get(drag.tableId);
+    if (!group?.fixed) return nothing;
+    const { box, members } = group;
+    const target = drag!.targetId === null ? undefined : this.#groupOf.get(drag!.targetId);
+    const from = centreOf(box, view);
+    const to = target === undefined ? null : centreOf(target.box, view);
+    return html`<span
+        part="ghost"
+        aria-hidden="true"
+        style=${styleMap({
+          left: px(view.x + (box.x + drag!.dx) * view.scale),
+          top: px(view.y + (box.y + drag!.dy) * view.scale),
+          width: px(box.width * view.scale),
+          height: px(box.height * view.scale),
+        })}
+        >${members.map((m) => this.#renderShape(m, box, view.scale))}</span
+      >${
+        to === null
+          ? nothing
+          : html`<svg part="drag-link" aria-hidden="true">
+              <line x1=${from.x} y1=${from.y} x2=${to.x} y2=${to.y}></line>
+            </svg>`
+      }`;
   }
 
   #renderShape(table: FloorMapTable, box: PlanRect, scale: number): TemplateResult {

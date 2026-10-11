@@ -47,6 +47,7 @@ const zone: FloorZone = {
   active: true,
   closesAt: null,
   closed: false,
+  hasPlan: false,
 };
 
 function table(over: Partial<TableState> = {}): TableState {
@@ -458,6 +459,61 @@ describe("till-app: seating a party", () => {
       expectedPartyRevision: 0,
       otherPartyId: null,
     });
+  });
+
+  it("seats a party at two tables when the floor asks for both", async () => {
+    const seatAtTables = vi
+      .fn()
+      .mockResolvedValue({ partyId: "v-new", tabId: "wo-new", revision: 1, orderNumber: 12 });
+    const getTablesState = vi
+      .fn()
+      .mockResolvedValueOnce([mesa4, mesa9, table({ id: "t10", label: "10" })])
+      .mockRejectedValue(new TypeError("Failed to fetch"));
+    const { el } = await mountApp({
+      seatAtTables,
+      getTablesState,
+      getPartyBills: vi.fn().mockResolvedValue([]),
+    });
+    const screen = await toFloor(el);
+
+    emit(screen, "open-table", {
+      tableId: "t9",
+      seated: false,
+      guestCount: 2,
+      withTableIds: ["t10"],
+    });
+    await flush(el);
+
+    expect(seatAtTables).toHaveBeenCalledWith("t9", 2, ["t10"]);
+    expect(api.seatTable).not.toHaveBeenCalled();
+    expect(tableOrder(el)!.party!.tableIds).toEqual(["t9", "t10"]);
+  });
+
+  it("holds every table of a merge it seats", async () => {
+    const today = (joinId: string | null) => ({
+      placement: { x: 0, y: 0, width: 8, height: 8, shape: "rect" as const, rotation: 0 },
+      seats: 4,
+      fixed: false,
+      takenOff: false,
+      joinId,
+      joinSeats: joinId === null ? null : 8,
+    });
+    const getTablesState = vi
+      .fn()
+      .mockResolvedValueOnce([
+        table({ id: "t9", label: "9", today: today("j1") }),
+        table({ id: "t10", label: "10", today: today(null) }),
+        table({ id: "t11", label: "11", today: today("j1") }),
+      ])
+      .mockRejectedValue(new TypeError("Failed to fetch"));
+    const { el } = await mountApp({ getTablesState, getPartyBills: vi.fn().mockResolvedValue([]) });
+    const screen = await toFloor(el);
+
+    emit(screen, "open-table", { tableId: "t9", seated: false, guestCount: 2 });
+    await flush(el);
+
+    expect(api.seatTable).toHaveBeenCalledWith("t9", 2);
+    expect(tableOrder(el)!.party!.tableIds).toEqual(["t9", "t11"]);
   });
 
   it("says the table needs clearing when seating it is refused for that, and re-reads the floor", async () => {

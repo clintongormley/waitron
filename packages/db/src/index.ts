@@ -88,6 +88,8 @@ export {
   floorPlanShape,
   floorPlans,
   floorPlanTables,
+  floorResetJoinTables,
+  floorResetJoins,
   floorResetTables,
   floorTodayJoinTables,
   floorTodayJoins,

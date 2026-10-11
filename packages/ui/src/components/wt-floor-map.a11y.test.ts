@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, test } from "vitest";
+import { afterEach, describe, expect, test, vi } from "vitest";
 import { userEvent } from "vitest/browser";
 import { cleanup, host } from "../test-helpers.js";
 import { expectNoA11yViolations, mountThemed } from "../a11y-helpers.js";
@@ -7,7 +7,10 @@ import type { PlanPlacement } from "../floor-plan-geometry.js";
 import type { FloorMapTable, WtFloorMap } from "./wt-floor-map.js";
 import "./wt-floor-map.js";
 
-afterEach(cleanup);
+afterEach(() => {
+  vi.useRealTimers();
+  cleanup();
+});
 
 const t = (
   id: string,
@@ -23,6 +26,25 @@ const t = (
   description: "Free",
   ...over,
 });
+
+function press(type: string, target: EventTarget, at: { x: number; y: number }): void {
+  target.dispatchEvent(
+    new PointerEvent(type, {
+      bubbles: true,
+      composed: true,
+      cancelable: true,
+      pointerId: 1,
+      pointerType: "touch",
+      clientX: at.x,
+      clientY: at.y,
+    }),
+  );
+}
+
+const centreOf = (element: Element) => {
+  const box = element.getBoundingClientRect();
+  return { x: box.left + box.width / 2, y: box.top + box.height / 2 };
+};
 
 async function mountMap(theme: "light" | "dark", tables: FloorMapTable[]): Promise<void> {
   const el = (await mountThemed(
@@ -70,6 +92,36 @@ describe.each(["light", "dark"] as const)("wt-floor-map a11y (%s theme)", (theme
       .querySelector("wt-floor-map")!
       .shadowRoot!.querySelector('[data-table-id="T1"]')!
       .setAttribute("data-held", "");
+    await expectNoA11yViolations(host);
+  });
+
+  test("a fixed table's copy over a target", async () => {
+    await mountMap(theme, [t("T1", { x: 8 }, { fixed: true }), t("T2", { x: 0 })]);
+    const el = host.querySelector("wt-floor-map")!;
+    const root = el.shadowRoot!;
+    const shapeOf = (id: string) => root.querySelector(`[data-table-id="${id}"] [part="shape"]`)!;
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    press("pointerdown", shapeOf("T1"), centreOf(shapeOf("T1")));
+    vi.advanceTimersByTime(500);
+    press("pointermove", window, centreOf(shapeOf("T2")));
+    await el.updateComplete;
+    expect(root.querySelector('[part="ghost"]')).not.toBeNull();
+    expect(root.querySelector('[part="drag-link"]')).not.toBeNull();
+    expect(root.querySelector('[data-table-id="T2"]')!.hasAttribute("data-drop-target")).toBe(true);
+    vi.useRealTimers();
+    await expectNoA11yViolations(host);
+  });
+
+  test("a linked party", async () => {
+    await mountMap(theme, [
+      t("Bar 1", { x: 0 }, { linkId: "p1", fill: "seated" }),
+      t("Bar 2", { x: 12 }, { linkId: "p1", fill: "seated" }),
+      t("T3", { x: 0, y: 8 }),
+    ]);
+    const root = host.querySelector("wt-floor-map")!.shadowRoot!;
+    const lines = root.querySelectorAll('[part="links"] line');
+    expect(lines).toHaveLength(1);
+    expect(lines[0]).toBeInstanceOf(SVGLineElement);
     await expectNoA11yViolations(host);
   });
 

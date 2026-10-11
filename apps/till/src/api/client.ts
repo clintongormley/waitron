@@ -1,5 +1,5 @@
 import { readTransferEvents } from "./transfer-events.js";
-import type { ContentLanguages } from "@waitron/shared";
+import type { ContentLanguages, JoinSide } from "@waitron/shared";
 import { compareDecimal, decimal, subtractDecimal } from "@waitron/shared";
 
 /**
@@ -43,6 +43,8 @@ import type {
   MenuUnavailable,
   ServedMenu,
 } from "@waitron/catalogue/src/menu-document-types.js";
+
+export type { JoinSide } from "@waitron/shared";
 
 /** Re-exported, never re-declared, so a widget imports the offered-list shapes where it imports every
  * other wire type. */
@@ -1728,6 +1730,8 @@ export interface FloorZone {
   name: string;
   displayOrder: number;
   active: boolean;
+  /** The zone has a saved plan, which may have no tables. */
+  hasPlan: boolean;
 }
 
 /**
@@ -1782,6 +1786,15 @@ export interface PartyBill {
   /** Its sale's total plus its credit notes, whether or not the bill has been paid; absent while no
    * sale is filed. */
   amountDue?: string;
+}
+
+/** A join's merge: `moving` or `target` is the joined table, the other one a table the party holds.
+ * `seats` is left out when unset: the server refuses a null. */
+export interface JoinMerge {
+  moving: string;
+  target: string;
+  side: JoinSide;
+  seats?: number;
 }
 
 /**
@@ -3028,6 +3041,18 @@ export class TillApi {
     return this.#request<SeatResult>(`/api/tables/${tableId}/seat`, "POST", { guestCount });
   }
 
+  /** Seat a party at `tableId` and, in the same request, at each of `withTableIds`. */
+  seatAtTables(
+    tableId: string,
+    guestCount: number | null,
+    withTableIds: readonly string[],
+  ): Promise<SeatResult> {
+    return this.#request<SeatResult>(`/api/tables/${tableId}/seat`, "POST", {
+      guestCount,
+      withTableIds,
+    });
+  }
+
   /**
    * Finish a party's table → `POST /api/parties/:partyId/finish`. Rejects `party.bill_outstanding`
    * while a bill is unpaid, `bill.payments_received` while an open bill with no items left still
@@ -3544,8 +3569,78 @@ export class TillApi {
     tableId: string,
     bills: "merge" | "separate",
     revisions: TableActionRevisions,
+    merge?: JoinMerge,
   ): Promise<TableActionResult> {
-    return this.#request(`/api/parties/${partyId}/join`, "POST", { tableId, bills, ...revisions });
+    return this.#request(`/api/parties/${partyId}/join`, "POST", {
+      tableId,
+      bills,
+      ...revisions,
+      ...(merge === undefined ? {} : { merge }),
+    });
+  }
+
+  // --- Today's plan: each answers 204, and the caller re-reads the floor. ---
+
+  /** Move a table, with its merge, to a new top-left corner → `POST /api/tables/:id/today/move`. */
+  async moveToday(tableId: string, at: { x: number; y: number }): Promise<void> {
+    await this.#todayChange(tableId, "move", { x: at.x, y: at.y });
+  }
+
+  /** Turn a table 15° more, clockwise → `POST /api/tables/:id/today/rotate`. */
+  async rotateToday(tableId: string): Promise<void> {
+    await this.#todayChange(tableId, "rotate", {});
+  }
+
+  /** Take a table off the floor for today → `POST /api/tables/:id/today/take-off`. */
+  async takeOffToday(tableId: string): Promise<void> {
+    await this.#todayChange(tableId, "take-off", {});
+  }
+
+  /** Put a taken-off table back → `POST /api/tables/:id/today/put-back`. */
+  async putBackToday(tableId: string): Promise<void> {
+    await this.#todayChange(tableId, "put-back", {});
+  }
+
+  /** Put a spare on the map at a corner → `POST /api/tables/:id/today/place`. */
+  async placeSpareToday(tableId: string, at: { x: number; y: number }): Promise<void> {
+    await this.#todayChange(tableId, "place", { x: at.x, y: at.y });
+  }
+
+  /** A table's seats for today, or its merge's → `POST /api/tables/:id/today/seats`. */
+  async setSeatsToday(tableId: string, seats: number): Promise<void> {
+    await this.#todayChange(tableId, "seats", { seats });
+  }
+
+  /** Put a table back as the last reset left it → `POST /api/tables/:id/today/back`. */
+  async backToSavedToday(tableId: string): Promise<void> {
+    await this.#todayChange(tableId, "back", {});
+  }
+
+  /** Merge two free tables, `tableId` moving against `targetId` → `POST /api/tables/:id/today/merge`.
+   * `seats` is left out when unset: the server refuses a null. */
+  async mergeToday(
+    tableId: string,
+    merge: { targetId: string; side: JoinSide; seats?: number },
+  ): Promise<void> {
+    await this.#todayChange(tableId, "merge", {
+      targetId: merge.targetId,
+      side: merge.side,
+      ...(merge.seats === undefined ? {} : { seats: merge.seats }),
+    });
+  }
+
+  /** End a free merge → `POST /api/tables/:id/today/split`. */
+  async splitToday(tableId: string): Promise<void> {
+    await this.#todayChange(tableId, "split", {});
+  }
+
+  /** Reset a zone to its saved plan → `POST /api/zones/:id/today/reset`. */
+  async resetZoneToday(zoneId: string): Promise<void> {
+    await this.#request<void>(`/api/zones/${zoneId}/today/reset`, "POST", {});
+  }
+
+  async #todayChange(tableId: string, change: string, body: object): Promise<void> {
+    await this.#request<void>(`/api/tables/${tableId}/today/${change}`, "POST", body);
   }
 
   /**

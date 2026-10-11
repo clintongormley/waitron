@@ -130,7 +130,7 @@ it("says what a first save does, and when a saved plan's changes reach the till"
   cleanupWidgets();
   const saved = await open();
   expect(saved.shadowRoot!.querySelector("[data-note]")!.textContent!.trim()).toBe(
-    "Your changes will go live tomorrow.",
+    "Your changes go live tomorrow, or sooner with Reset to saved plan on the till.",
   );
 });
 

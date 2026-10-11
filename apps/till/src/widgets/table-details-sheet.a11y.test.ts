@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "./test-helpers.js";
 import { setLocale } from "../i18n/t.js";
 import "./table-details-sheet.js";
@@ -66,6 +66,15 @@ const everything = table({
   },
 });
 
+const placed: TableState["today"] = {
+  placement: { x: 10, y: 10, width: 8, height: 8, shape: "rect", rotation: 0 },
+  seats: 4,
+  fixed: false,
+  takenOff: false,
+  joinId: null,
+  joinSeats: null,
+};
+
 describe.each(["light", "dark"] as const)("till-table-details-sheet a11y (%s theme)", (theme) => {
   const cases: [string, TableState][] = [
     ["a free table", table()],
@@ -78,6 +87,20 @@ describe.each(["light", "dark"] as const)("till-table-details-sheet a11y (%s the
       { table: shown, heading: "Terraza 4", now: Date.parse("2026-10-10T12:00:00Z") },
       theme,
     );
+    await expectNoA11yViolations(host);
+  });
+
+  const withActions: [string, TableState][] = [
+    ["a free table's actions", table({ today: placed })],
+    ["a merge's actions", table({ today: { ...placed, joinId: "j1", joinSeats: 8 } })],
+  ];
+  it.each(withActions)("has no violations for %s", async (_name, shown) => {
+    const { el, host } = await mountWidget<TillTableDetailsSheet>(
+      "till-table-details-sheet",
+      { table: shown, heading: "Terraza 4", actions: true },
+      theme,
+    );
+    expect(el.shadowRoot!.querySelectorAll("[data-today-action]").length).toBeGreaterThan(0);
     await expectNoA11yViolations(host);
   });
 });

@@ -54,7 +54,7 @@ Chromium browser projects).
 
 **Spec:** [Floor plans](../specs/2026-10-08-floor-plan-design.md). Backlog: A429.
 
-**Risk path:** FULL ceremony on every slice: migrations (slices 1 and 5), a module-contract change
+**Risk path:** FULL ceremony on every slice: migrations (slices 1, 4 and 5), a module-contract change
 and a changed cross-package contract (the till's table-state answer, slice 1), and new till
 routes behind profile and zone checks (slice 4).
 
@@ -161,10 +161,12 @@ The owner confirms or overrides these when reviewing the plan.
     catch-up (and the day's reset) first. The till re-reads after its own actions and every 15
     seconds, and a delivery being paid or collected frees a table without any table route
     running.
-20. **A merge's seats come from the master's saved join as it is now** (added at slice 4's
-    expansion, slice 4 decision 7; the owner may override). A reset copies no joins, so a join saved
-    mid-service gives a merge its seats before the next reset, against decision 3; keeping decision 3
-    would take a migration recording each reset's joins, not built.
+20. **A merge's seats come from today's copy of the master's joins** (slice 4 decision 7, Tasks
+    4.3e and 4.3f). Owner override, 2026-10-10, of the default slice 4's expansion wrote here, which
+    read the master's saved join as it is now: each reset copies the master's saved joins into
+    today's plan (`floor_reset_joins`, `floor_reset_join_tables`), and a join saved, changed or
+    deleted in the editor mid-service waits for the next reset, as decision 3 has every other master
+    edit wait.
 21. **A fixed spare cannot be placed from the till** (added at slice 4's expansion, slice 4 decision
     11; the owner may override): a fixed table never moves on today's plan, so a spare stool is set
     out in the editor.
@@ -224,7 +226,7 @@ Tests pinning these may change, under the commit rule above.
   (a grep of `apps/` and `packages/` for the key and both sentences found only `strings.ts` and
   `seat-dialog.ts:151`).
 
-**Slice 4** (proposed at its expansion; not changed until the owner says yes to slice 4 decision 20):
+**Slice 4** (proposed at its expansion; not changed until the owner says yes to slice 4 decision 20 — the owner said yes on 2026-10-10):
 - The editor's note "Your changes will go live tomorrow." / "Tus cambios se aplicarán mañana."
   (`floor_plan_editor.note`, `apps/dashboard/src/i18n/strings.ts:990`, `:3599`), pinned by
   `apps/dashboard/src/screens/floor-plan-editor.test.ts:133` and
@@ -259,7 +261,7 @@ has its test in the task named.
    free, and nothing is refused (Tasks 1.2 and 1.12).
 4. **A master edit saved mid-service.** The owner renames, moves, adds and deletes tables while a
    party is seated elsewhere in the zone; the party finishes; nothing on the till changes until
-   the next reset (Task 1.8).
+   the next reset (Task 1.8), a saved join's seats included (Task 4.3f).
 5. **A fixed table sent a move anyway.** A move request for a fixed table, sent straight to the
    route, is refused and nothing moves (Task 4.3d).
 
@@ -267,8 +269,8 @@ has its test in the task named.
 
 | File | Slice | Responsibility |
 | --- | --- | --- |
-| `packages/db/src/schema/floor-plans.ts` | 1 | the master plan's and today's tables |
-| `packages/db/drizzle/01xx_*.sql` | 1, 5 | generated and custom migrations |
+| `packages/db/src/schema/floor-plans.ts` | 1, 4 | the master plan's and today's tables; today's copy of the master's joins (4) |
+| `packages/db/drizzle/01xx_*.sql` | 1, 4, 5 | generated and custom migrations |
 | `apps/server/src/floor-reset-plan.ts` | 1 | the pure reset planner |
 | `apps/server/src/floor-today-store.ts` | 1, 4 | building today's plan from the master (1), today's writes (4) |
 | `apps/server/src/floor-plan.ts` | 1 | read, check and save a zone's master plan |
@@ -3077,7 +3079,7 @@ Behaviour (slice 3 decisions 8 and 11):
 - A pan, pinch or wheel marks the view touched; a resize then keeps it (narrowing Task 3.2b's
   "every resize"), and a fit clears the mark.
 - `holdDrag` draws the held group moved by `snapToSquare(d, scale)` squares, its first member
-  clamped by `clampToGrid`; `holdDrop` sends `wt-table-drag-end` with that member's new `x`, `y`,
+  clamped by `clampToGrid` (slice 4, 2026-10-11: the whole group is held with `groupStep`); `holdDrop` sends `wt-table-drag-end` with that member's new `x`, `y`,
   and `targetId`: the `data-table-id` of the first other table under the release point
   (`this.shadowRoot.elementsFromPoint`), else null; then the drawn place returns to `tables`'.
   `cancel` drops a drawn drag.
@@ -3644,11 +3646,14 @@ Branch `feat/floor-plan-today`, after slice 3 (landed as #1517). Expanded to ste
 What the slice builds: on the server, today's writes (move, turn, take off, put back, place a spare,
 seats for today, back to its saved place, reset a zone), today's merges (two free tables, a party
 extending onto a table, two parties combining) and splitting them, behind new till routes gated like
-joining; on the till, the map's drag turned into moves and joins, the details sheet's actions, a
+joining, and today's own copy of the master's joins, written at each reset, from which a merge takes
+its seats (decision 7); on the till, the map's drag turned into moves and joins, the details sheet's actions, a
 seats prompt, Join with…, and the zone menu (⋮) with Add a spare table, Taken off today and Reset to
 saved plan. A zone with no today's plan keeps everything as it is.
 
-**No migration.** Every table and column these writes need already exists at `87a2741f2`: a table's
+**One migration, Task 4.3e's, added by the owner's override of decision 7 (2026-10-10).** As first
+expanded the slice needed none, and every other task still touches no schema. Every table and column
+the other writes need already exists at `87a2741f2`: a table's
 place, size, shape, turn, seats, fixed and taken-off flag (`floorTodayTables`,
 `packages/db/src/schema/floor-plans.ts:215-234`), a merge's zone and seats (`floorTodayJoins`,
 `:236-252`), each member with where it stood before (`floorTodayJoinTables`, `before_x`, `before_y`,
@@ -3658,8 +3663,8 @@ master's saved joins (`floorPlanJoins`, `floorPlanJoinTables`, `:118-155`). The 
 1, 10, 18, 42, 51, 79, 94, 102, 126; `before_rotation` at :85, `taken_off` at :113). Run on
 2026-10-10 in this worktree: `pnpm exec vitest run scripts/migrations-match-schema.test.ts` passed
 18 of 18, so the schema and the migrations agree. That the writes need no other column is read from
-the code, not run. Nothing in this slice touches the schema, so the schema guard list in the Global
-constraints does not apply; a task that finds it needs a column is a STOP.
+the code, not run. Only Task 4.3e touches the schema, and it runs the schema guard list; any other
+task that finds it needs a column is a STOP.
 
 **Existing tests that pin behaviour this slice changes** (a grep of `apps/` and `packages/` test
 files, 2026-10-10):
@@ -3680,6 +3685,11 @@ files, 2026-10-10):
   `apps/server/src/floor-today-store.test.ts`, `floor-today-state.test.ts`,
   `apps/server/src/table-removal.test.ts:444` and `packages/db/src/schema/floor-plans.test.ts:175`;
   read, not run), so seating every member of a merge (Task 4.3c) changes none of them.
+- Every existing server case that takes a merge's seats from a saved join saves that join on the
+  zone's FIRST save (`plannedZone`'s `joins`, `apps/server/src/testing/floor-today-venue.ts:81-93`),
+  which runs a reset (`apps/server/src/floor-plan.ts:468`) after writing the joins (`:443-450`), so
+  the reset copies it and Task 4.3f's reader finds it (read at `877c3f1b0`, not run). One that fails
+  after Task 4.3f is a STOP.
 
 **What earlier slices built that this slice works with** (read, not run):
 
@@ -3832,7 +3842,8 @@ if it is wrong.
    - **`table.not_in_floor_plan { tableId }`** (new): it has no today's row; or, for a move, turn or
      merge, it has no place (a spare); or, for Back to its saved place, its reset row is missing or
      says the table goes (its master table was deleted).
-   - **`table.taken_off { tableId }`** (new): a move, turn, place, seats or merge of a taken-off table.
+   - **`table.taken_off { tableId }`** (new): a move, turn, place, seats or merge of a taken-off table,
+     and (finish-branch review, 2026-10-11) a seat, join, Move guests or bill move onto one.
    - **`table.fixed { tableId }`** (new): a move, turn or merge of a fixed table, either side of a
      merge, and placing a fixed spare (decision 11). This is Review focus 5.
    - **`table.merged { tableId }`** (new): turning or taking off a table in a merge, or merging a
@@ -3844,9 +3855,9 @@ if it is wrong.
    - **`table.delivery_pending { tableId }`** (new): taking off a table with food on its way to it
      (decision 12).
    - `service_zone.join_mismatch` (existing): a merge of tables in two zones.
-   - `floor_plan.invalid { field: "seats" }` (existing; its comment widens): a merge whose tables'
-     master tables have no saved join with exactly them, sent without `seats`. The till answers it by
-     asking (decision 7).
+   - `floor_plan.invalid { field: "seats" }` (existing; its comment widens): a merge whose tables
+     have no join with exactly them in today's copy of the master's joins (Task 4.3f), sent without
+     `seats`. The till answers it by asking (decision 7).
    Each new code gets its `apps/server/src/errors.ts` entry beside `table.in_floor_plan`, 409 in the
    till's `STATUS` (and `floor_plan.invalid` 400 there), English and Spanish in
    `apps/till/src/i18n/codes.ts` and `apps/dashboard/src/i18n/codes.ts` (the Global constraints'
@@ -3859,12 +3870,18 @@ if it is wrong.
    bottom or top; a tie goes left–right, and centres that coincide give `right`. The server places
    the moving table so that, in the target's turned frame, the two boxes share that edge and their
    centres line up across it; the moving table takes the target's rotation; its corner is the nearest
-   whole square (`Math.round`), held to 0–999. Both live in one pure module,
-   `packages/shared/src/floor-join.ts` (`joinSide`, `touchingPlace`), so the till can draw the merge
-   before the server answers (decision 14) and the server places it the same way. Cost: at a
-   rotation that is not a multiple of 90°, or with an odd difference of sizes, rounding leaves a gap
-   or an overlap under one square; a table at the top or left edge dropped on that side overlaps its
-   target.
+   whole square (`Math.round`), held to 0–999. Where that place would cover a member of the target's
+   merge, the target included, by a square or more both ways (each box's extents in the target's
+   turned frame), the next side is tried: the two sides across the chosen one, top before bottom
+   and left before right, then its opposite (`freeSide`); with all four covered the chosen side
+   stands. The till sends the side `joinSide` picked and the server applies `freeSide` to the
+   merge's members as they stand, so a stale or hand-made side is checked like any other. All
+   of it lives in one pure module, `packages/shared/src/floor-join.ts` (`joinSide`, `touchingPlace`,
+   `freeSide`), so the till can draw the merge before the server answers (decision 14) and the
+   server places it the same way. Cost: at a rotation that is not a multiple of 90°, or with an odd
+   difference of sizes, rounding leaves a gap or an overlap under one square; a member turned
+   another way than the target counts by its extents, which can cover more than it does; a table
+   overlaps a member by a whole square or more only when all four sides are covered.
 5. **Who joins whom on a drop.** The dragged table goes to the target, so a join's path party is the
    TARGET's party when both are seated (the dragged party combines into it, the bill choice asked
    first, as the order screen asks), else whichever party sits there; the body's `tableId` is the
@@ -3879,17 +3896,24 @@ if it is wrong.
    `table-actions.ts:96-99`, so the move route runs `joinMergeMembers` for it too, Task 4.3d). A
    merge's members are all held by one party or all free: seating, joining, moving and splitting
    keep it so (reasoned, not run). Cost: dragging a merge onto a table does nothing; the waiter drags the table instead.
-7. **Seats for a merge.** From the master's saved join whose members are exactly the merge's
-   tables' master tables (`dining_tables.plan_table_id`), read as the master is NOW: a reset copies
-   no joins (`floor_reset_tables` holds none). Without one the route refuses `floor_plan.invalid
-   { field: "seats" }` before anything changes, and the till opens the seats prompt with the members'
-   seats for today added up (a table without seats counts 0) and sends again with `seats`. The same
-   holds when a merge grows: its seats are worked out again for all its members. This is the default
-   (controller's ruling); the owner may override it. Cost: a master join saved mid-service gives a
-   merge its seats before the next reset, against the plan's decision 3; the way that keeps decision
-   3 is a migration recording each reset's joins (a reset-joins table that `resetZone` and
-   `ensureToday` copy from the master), which this slice does not build. And growing a merge asks
-   again even when the waiter set its seats.
+7. **Seats for a merge.** From the join in today's copy of the master's joins whose members are
+   exactly the merge's tables (Tasks 4.3e and 4.3f). **Overridden by the owner on 2026-10-10**
+   (`~/waitron-campaign/questions.md`, "OWNER ANSWER 2026-10-10 ~23:16"): "today's floor plans should
+   be independent of the ones that will be published tomorrow." The default this replaced read the
+   master's saved join as it is now, because a reset copied no joins. Now every reset of a zone (the
+   day's first floor read or change, Reset to saved plan, and the zone's first save) replaces the
+   zone's copy with the master's saved joins, in the reset's transaction, and the merge reads only
+   the copy. A join saved, changed or deleted in the editor during the day waits for the next reset.
+   The owner's example: a join of 4+5 with 6 seats saved in the editor at 13:00, and a waiter merging
+   4 and 5 at 13:30, does NOT get 6 seats; today's copy has no such join, so the till asks. Without a
+   join in the copy the route refuses `floor_plan.invalid { field: "seats" }` before anything changes,
+   and the till opens the seats prompt with the members' seats for today added up (a table without
+   seats counts 0) and sends again with `seats`. The same holds when a merge grows: its seats are
+   worked out again for all its members. Cost: a join saved mid-service is not used until the next
+   reset; growing a merge asks again even when the waiter set its seats; and a today's plan built
+   before Task 4.3e's migration has no copy until its zone's next reset, so its merges ask until then
+   (pre-production, so nothing fills the copy in for it: CLAUDE.md §3, no data-migration code before
+   go-live).
 8. **Seating at a merge seats every member** (the plan's decision 18), in `seatTable`, so a booking
    seated through the core seam does too (`moduleCoreServices`, `parties.ts:101-104`). A member a
    party holds refuses `tab.already_open { tableId: <member> }`, one needing clearing
@@ -3917,7 +3941,10 @@ if it is wrong.
     needs clearing or has a delivery on its way (`listedTables`, `apps/till/src/state/floor-map.ts:168-175`),
     and such a take-off would hide nothing, so it is refused. A free table with a booking today may
     be taken off. Seating at a taken-off table is not refused: a stale till that does so makes the
-    table held, and the list shows it. Cost: a waiter clears the table first.
+    table held, and the list shows it. Cost: a waiter clears the table first. (Finish-branch review,
+    2026-10-11: seating, joining, Move guests and moving a bill onto a taken-off table are now
+    refused, `table.taken_off` through `refuseTakenOff`; the dashboard's bookings still seat through
+    `seatTable` without that check.)
 13. **A470's second slice 4 note** (a merge's members in different zones, while the map reads one
     zone): the join route already refuses tables in two zones (`table-actions.ts:122-128`) and the
     merge route refuses them too (decision 3), so a merge's members always share its zone. Cost: none.
@@ -3939,7 +3966,9 @@ if it is wrong.
     table, not a merge (decision 6). Cost: from the sheet a waiter cannot choose which table of a
     seated merge leaves, or move a bill with it; the order screen's Split a table still can.
 17. **The zone menu** is a `wt-row-actions` ("Today's plan", `floor.zone_menu`) in the floor screen's
-    action row, shown while the active zone is planned, in both views. Add a spare table and Taken
+    action row, shown while the active zone is planned, in both views (finish-branch review,
+    2026-10-11: or while the zone has a saved plan, `hasPlan` on `/api/zones`, so a saved plan with
+    no tables still offers Reset). Add a spare table and Taken
     off today open a list in a `wt-dialog`; each row acts at once. A spare is put in the middle of
     the zone's crop as the map first fits it (`cropToTables` of the placed tables; with none, at 0,
     0), not the middle of a zoomed view: the map does not tell the screen its view. Reset to saved plan
@@ -3978,7 +4007,8 @@ if it is wrong.
     "That table is off today's plan. Put it back first" / "Esa mesa está quitada hoy. Vuelve a
     ponerla primero"; `table.not_in_floor_plan` "That table is not on today's plan" / "Esa mesa no
     está en el plano de hoy"; `table.delivery_pending` "Food is on its way to that table" / "Hay
-    comida en camino a esa mesa". Cost: the look pass may shorten more.
+    comida en camino a esa mesa". Cost: the look pass may shorten more. (The look pass shortened `floor.no_spares`
+    to "No spare tables" / "No hay mesas de reserva", 2026-10-11.)
 20. **STOP for the owner: the editor's note changes an assertion "Behaviour this plan removes" does
     not list.** Slice 2 decision 16 has `floor_plan_editor.note` ("Your changes will go live
     tomorrow." / "Tus cambios se aplicarán mañana.", `apps/dashboard/src/i18n/strings.ts:990`,
@@ -3989,7 +4019,7 @@ if it is wrong.
     antes con Volver al plano guardado en el TPV." The entry is added to "Behaviour this plan removes"
     as proposed; Task 4.5c changes the note and those two assertions only after the owner says yes.
     Task 4.5c builds everything else either way. Cost: the editor's note stays unchanged until the
-    owner answers.
+    owner answers. The owner said yes on 2026-10-10.
 21. **The map's fixed drag.** While a fixed table is held and dragged, a copy (`part="ghost"`, the
     table's shape at half opacity) follows the finger in whole squares and the table stays; over
     another table the target is marked (`data-drop-target`) and a 1 px line (`part="drag-link"`)
@@ -4281,7 +4311,8 @@ zone> }` (two zones). It works out the merge's members after the join (the targe
 the target, plus the moving table); the seats are `args.seats`, else `savedJoinSeats(members)`, else
 `floor_plan.invalid { field: "seats" }`, thrown before anything is written. It then records the
 moving table's `before_x`, `before_y`, `before_rotation` as it stands (and the target's, for a new
-merge), places the moving table at `touchingPlace(target, moving, side)`, and writes or updates the
+merge), places the moving table at `touchingPlace(target, moving, freeSide(target, moving, <the
+target's members>, side))` (decision 4), and writes or updates the
 merge (`floor_today_joins` with the target's zone and the seats; `floor_today_join_tables` rows).
 
 - [ ] **Step 1: Write the failing tests:**
@@ -4497,6 +4528,283 @@ it("joining a fixed table without a merge links the party and moves nothing, and
   typecheck and lint, `prettier --check`.
 - [ ] **Step 5: Commit** — e.g. "Till floor: a join that merges the tables, a split that puts the
   table back, and no route moves a fixed table (A429 slice 4)".
+
+### Task 4.3e: Today's copy of the master's joins — the tables
+
+Added 2026-10-11 for the owner's override of decision 7, after Tasks 4.4a–4.4e were built; it and
+Task 4.3f change no till code. Every `file:line` in Tasks 4.3e and 4.3f was read at `877c3f1b0`
+(the branch rebased on `main` `f56a2d096`). Split from Task 4.3f to keep each task well under 100
+tool calls: this one is the schema, its migration and the guards; 4.3f writes and reads the copy.
+
+**Files:**
+- Modify: `packages/db/src/schema/floor-plans.ts` (two tables after `floorResetTables`, `:161-193`),
+  `packages/db/src/index.ts` (the export list, `:85-96`), `packages/db/src/classification.ts` (two
+  `classify` rows after `floor_reset_tables`, `:97`), `scripts/schema-constraints.test.ts` (three
+  foreign keys beside `floor_reset_tables`' at `:139-141`, one unique index beside
+  `floor_reset_tables_table_key` at `:356`, one check beside the `floor_reset_tables_*_ck` names at
+  `:540-547`), `packages/db/src/schema/floor-plans.test.ts`
+- Generated: one new core migration under `packages/db/drizzle/` with its snapshot and journal entry
+
+**Interfaces:**
+- Produces (exported from `@waitron/db`), with the column vocabulary of `./columns.js` only (`id`,
+  `count`, as the sibling tables in this file use them):
+
+```ts
+/** The master's saved joins as the zone's last reset copied them; a merge takes its seats from here. */
+export const floorResetJoins;      // floor_reset_joins: id, zone_id id not null (FK floor_zones, floor_reset_joins_zone_fk), seats count not null;
+                                   //   check floor_reset_joins_seats_ck (seats >= 1, as floor_today_joins_seats_ck); index floor_reset_joins_zone_idx (zone_id)
+/** One table of a copied join: the reset row the zone's last reset wrote for it. */
+export const floorResetJoinTables; // floor_reset_join_tables: id, join_id id not null (FK floor_reset_joins, floor_reset_join_tables_join_fk),
+                                   //   reset_table_id id not null (FK floor_reset_tables, floor_reset_join_tables_table_fk);
+                                   //   unique floor_reset_join_tables_join_table_key (join_id, reset_table_id); index floor_reset_join_tables_table_idx (reset_table_id)
+```
+
+The names: `floor_today_joins` is taken (today's merges, `floor-plans.ts:236-252`), and these rows
+are what the last reset copied, beside `floor_reset_tables` ("What the zone's last reset copied",
+`:157-160`).
+
+**Why each key points where it does.** Every key is a plain `foreignKey(...)` with no `onDelete`,
+so each is NO ACTION, as every key in this file is.
+- `zone_id` → `floor_zones`, as `floor_reset_tables.zone_id` (`:181-185`) and
+  `floor_today_joins.zone_id` (`:245-249`): the reset replaces one zone's copy, found by this column.
+- A member points at the RESET ROW (`floor_reset_tables.id`, its primary key), not at the master and
+  not at `dining_tables`:
+  - Not at `floor_plan_joins` or `floor_plan_tables`: `saveZonePlan` deletes and rewrites every
+    master join on every save (`apps/server/src/floor-plan.ts:384-393`, `:443-450`) and deletes
+    master tables (`:397-408`), so a key into either would refuse the save, and the copy must outlive
+    both until the next reset.
+  - Not at `dining_tables`: a reset can record a table it has not created yet (`table_id` null until
+    a catch-up creates it, `apps/server/src/floor-today-store.ts:279-293`), and the reset row keeps
+    its id when that catch-up fills its `table_id` in (`:318-325`). It also keeps this task clear of
+    the Global constraints' rule on keys into `dining_tables`, which slice 5 rebuilds.
+  - The two places that delete a reset row: `resetZoneFor` deletes all the zone's rows
+    (`floor-today-store.ts:125`), and Task 4.3f deletes the zone's copy first; `removeLiveTables`
+    deletes one table's row (`apps/server/src/table-removal.ts:96-99`), only for a table the reset
+    marked `remove`, whose row has `plan_table_id` null (`targetsFromMaster`,
+    `apps/server/src/floor-reset-plan.ts:155-164`), and Task 4.3f copies a member only through a
+    row's `plan_table_id`, so no copied join names it (reasoned, not run; Task 4.3f's case (f) runs
+    the path).
+  - No `ON DELETE CASCADE`: a cascade would quietly shrink a copied join when one of its rows went,
+    and the smaller join would then match a smaller merge with the larger join's seats. NO ACTION
+    refuses that delete instead.
+- Both tables are `state`, with the `STATE` reason (Global constraints); both are state like every
+  table they key into, so CLAUDE.md §3's local-to-ledger/state rule is not touched.
+
+**What else reads a table list** (a grep of `apps/`, `packages/` and `scripts/` for
+`floor_reset_tables` and `floor_today_join_tables`, 2026-10-11):
+- Change feed: every core-classified table becomes a change source (`CORE_CHANGE_SOURCES`,
+  `packages/db/src/classification.ts:236-244`), so the two `classify` rows put both tables in the
+  feed boot installs (`apps/server/src/boot.ts:1325-1326`), as they put slice 1's today's and reset
+  tables there. No live subscription names any today's or reset table (the dashboard's
+  `floor-plan` list is the master tables and `dining_tables`,
+  `packages/venue-service/src/dashboard/live-queries.ts:74-80`; the till re-reads, the plan's
+  decision 13), so no subscription list changes.
+- Configuration transfer: not added. The export carries the master plan only (the plan's decision
+  15; `packages/db/src/configuration-transfer.ts:43-53`), so `scripts/id-columns-are-references.test.ts`,
+  which reads only the declared transferred tables (`:63-65`), does not see these columns.
+- `packages/migrations/migrations.manifest.json`: not append-only, so no entry.
+- `scripts/schema-constraints.test.ts` lists keys, unique indexes and checks: the rows named under
+  Files.
+- Slice 5: `floor_reset_tables` gains a NO ACTION child here, so a rebuild of `floor_reset_tables`
+  would fail while copied rows exist (CLAUDE.md §3, "list the foreign keys that point at the table").
+
+**The migration.** `pnpm --filter @waitron/db db:generate --name floor_reset_joins`. drizzle-kit
+picks the number: the highest under `packages/db/drizzle/` at `877c3f1b0` is `0135`, so expect
+`0136`, but use the file it writes. Expected SQL: two `CREATE TABLE`, the three keys inside them, one
+`CREATE UNIQUE INDEX`, two `CREATE INDEX`, and no `ALTER TABLE` or rebuild of an existing table:
+`grep -l '__new_' <the new .sql>` prints nothing. CLAUDE.md §2's trap (a box with a trigger naming
+what a migration changes) does not apply: the migration only creates tables, which no existing
+trigger can name, and `applyMigrations` removes the change feed before migrating anyway. A number
+collision at rebase is fixed by regenerating (CLAUDE.md §3), never by editing the journal.
+
+- [ ] **Step 1: Write the failing tests** in `floor-plans.test.ts` (its existing setup: `ZONE`,
+  `OTHER_ZONE`, `TABLE_1`, `captureError` outside the transaction, `refusalOn` for a unique key,
+  `checkFailed` in the `it.each` of checks at `:224-312`):
+
+```ts
+it("keeps a reset row in one copied join only once", async () => {
+  /* a floor_reset_tables row in ZONE; a floor_reset_joins row (ZONE, seats 6); one member row; a second identical member row →
+     refusalOn(error, UNIQUE_VIOLATION, { table: "floor_reset_join_tables", columns: ["join_id", "reset_table_id"] }) */
+});
+it("refuses to delete a reset row a copied join names", async () => {
+  /* the same rows; deleting the reset row → isRefusal(error, FOREIGN_KEY_VIOLATION) (packages/db/src/unique-violation.ts:15,
+     sql-state.ts:24) */
+});
+// in the it.each of checks:
+["a copied join with no seats", () => inTx((tx) => tx.insert(floorResetJoins).values({ zoneId: ZONE, seats: 0 })), "floor_reset_joins_seats_ck"],
+// and the round trip at :313 gains one copied join with one member, read back
+```
+
+- [ ] **Step 2: Run and watch it fail** — `pnpm --filter @waitron/db exec vitest run src/schema/floor-plans.test.ts`.
+  Expected: the new cases fail with a `TypeError` (on Vitest 4.1.11 an import of a name the module
+  does not export arrives as `undefined`, so the file loads; the review ran this);
+  `pnpm --filter @waitron/db typecheck` names the missing exports.
+- [ ] **Step 3: Implement** the two tables, the exports, the two `classify("…", "state", STATE)` rows
+  and the `schema-constraints.test.ts` rows; generate the migration and read its SQL as above.
+- [ ] **Step 4: Run the tests and the guards** —
+  `pnpm --filter @waitron/db exec vitest run src/schema/floor-plans.test.ts src/classification.test.ts`,
+  then from the root
+  `pnpm exec vitest run scripts/schema-constraints.test.ts scripts/append-only-triggers.test.ts scripts/behavioural-triggers.test.ts scripts/classification-complete.test.ts scripts/two-file-foreign-keys.test.ts scripts/migrations-match-schema.test.ts scripts/id-columns-are-references.test.ts scripts/migration-upgrade.test.ts scripts/column-vocabulary.test.ts`
+  and `pnpm --filter @waitron/fiscal-verifactu exec vitest run inmutabilidad`; then
+  `pnpm --filter @waitron/db typecheck`, `pnpm --filter @waitron/db lint`, `pnpm exec prettier --check`
+  on the changed files. Read each `Tests` count. Expected: all pass. Then delete one of the new
+  `classify` rows and watch `scripts/classification-complete.test.ts` and `src/classification.test.ts` fail; restore.
+- [ ] **Step 5: Commit** — e.g. "Floor: tables for today's own copy of the master's joins (A429 slice
+  4, owner override)". The body says why the tables are core (Global constraints: tables and zones
+  are core, and the till's live floor reads them), names the migration file, and quotes the owner's
+  answer.
+
+### Task 4.3f: Today's copy of the master's joins — each reset writes it, and a merge reads it
+
+**Files:**
+- Modify: `apps/server/src/floor-today-store.ts` (`resetZoneFor`, `:88-139`; imports `:2-14`),
+  `apps/server/src/floor-today-merges.ts` (`savedJoinSeats`, `:164-206`; imports `:2-11`),
+  `apps/server/src/testing/floor-today-venue.ts` (a helper), `apps/server/src/floor-today-merges.test.ts`,
+  `apps/server/src/floor-today-merge-api.test.ts` (the owner's example through the routes; its
+  `twoTables`, `:90-100`, also returns `zoneId` and `master`)
+
+**Interfaces:**
+- Consumes: Task 4.3e's tables.
+- Produces: `savedJoinSeats(tx, tableIds)` keeps its signature; it now reads today's copy. In the test
+  helper:
+
+```ts
+/** Saves the zone's master again as `readZonePlan` reads it, without `drop`, with exactly `joins` (by master table id). Runs no reset (the zone has a today's plan). */
+export async function resaveMaster(v: PartyVenue, zoneId: string,
+  change: { joins: { seats: number; masterIds: string[] }[]; drop?: string[] }, now?: Date): Promise<number>; // the new revision
+```
+
+**Every path that builds or resets a zone's today's plan** goes through `resetZoneFor`
+(`floor-today-store.ts:88-139`), so the copy is written there and nowhere else:
+- `resetZone` (`:77-86`), from the zone reset route (Task 4.2a, the till's Reset to saved plan) and
+  from a zone's first master save (`floor-plan.ts:468`);
+- `ensureToday` (`:387-429`, the call at `:424`), the day's reset at the first floor read or change,
+  which every till floor route runs first (`catchUpFloor`).
+A grep for `floorResetTables` outside tests finds no other wholesale writer of a zone's reset rows:
+`table-removal.ts:96-105` deletes, and on a refused delete puts back, one `remove` row, and
+`floor-plan.ts:403-406` sets `plan_table_id` null on the rows of a deleted master table. A catch-up
+(`catchUpZone`, `:154-162`) leaves the copy alone: a table it creates later keeps the reset row the
+copy names.
+
+**Behaviour.** In `resetZoneFor`, in the reset's own transaction, queries awaited in turn:
+1. Before the zone's reset rows are deleted (`:125`): delete the `floor_reset_join_tables` rows of the
+   zone's `floor_reset_joins`, then those joins. (Rows that still named a reset row would make that
+   delete refuse, Task 4.3e.)
+2. Insert the reset rows as now (`:126-137`), with `.returning({ id, planTableId })`.
+3. Read the zone's master joins (`floor_plan_joins` through `floor_plans.zone_id`) and their members
+   (`floor_plan_join_tables.plan_table_id`). For each join, map each member to the new reset rows
+   with that `plan_table_id`. When every member maps to exactly one row, insert a `floor_reset_joins`
+   row (the zone, the join's seats) and one `floor_reset_join_tables` row per member. A join with a
+   member that maps to no row or to two is not copied (decision below).
+4. `catchUpZone`, as now (`:138`).
+
+`savedJoinSeats(tx, tableIds)`: the `floor_reset_tables` rows whose `table_id` is one of `tableIds`
+(at most one each, `floor_reset_tables_table_key`); fewer rows than distinct ids, or the same id
+twice, is null; then the copied joins with a member among those rows; the one whose members are
+exactly those rows gives its `seats`, else null. Its comment becomes "The seats of the join the
+zone's last reset copied with exactly these tables, or null. Reads by id alone: the caller checks
+the venue first." It stops importing `diningTables`, `floorPlanJoins` and `floorPlanJoinTables` if
+nothing else in the file uses them.
+
+**Every reader of the master's joins** (a grep of `apps/` and `packages/` outside tests for
+`floorPlanJoins`, `floorPlanJoinTables`, `floor_plan_join` and `savedJoinSeats`):
+- `savedJoinSeats` (`floor-today-merges.ts:169-206`) — **moves** to today's copy. Its one caller is
+  `writeMerge` (`:238`), which serves the merge route (Task 4.3b) and the join route's `merge`
+  (Task 4.3d); both follow it unchanged.
+- `readZonePlan` (`floor-plan.ts:139-151`) and `saveZonePlan` (`:384-393`, `:443-450`) — stay: they
+  are the dashboard editor's read and save of the master itself.
+- The dashboard's live subscription lists (`apps/dashboard/src/api/live-queries.ts:388-389`,
+  `packages/venue-service/src/dashboard/live-queries.ts:77-78`), the classification and the
+  configuration transfer — stay: the master's own tables.
+- Nothing in `apps/till` reads a join; the till acts on the refusal `floor_plan.invalid { field:
+  "seats" }` (Tasks 4.4f, 4.4g, 4.5b), so no till task changes.
+
+**At upgrade time.** A box's today's plans built before this task have no copy until their zone's
+next reset (the next business day's first floor read or change, or Reset to saved plan); until then
+`savedJoinSeats` answers null and the till asks for the seats. Nothing fills the copy in: no
+data-migration code before go-live (CLAUDE.md §3). Cost: at most one day of asking.
+
+**Decision this task makes that the owner did not** (the conservative default): a master join one of
+whose master tables two live tables follow is not copied, so a merge of those tables asks. Nothing
+makes `dining_tables.plan_table_id` unique (`floor-today-merges.ts:178`), so such a reset has two
+rows for one master table, and today's reader already answers null for that case (`:179-181`).
+
+An implementer past about 150 tool calls with this task unfinished stops at a passing or cleanly red
+point, commits, and hands over (done, left, files, each check's state).
+
+- [ ] **Step 1: Write the helper and the failing tests.** `floor-today-merges.test.ts` uses its
+  `threeTables` (`:56-67`, which returns `plannedZone`'s `zoneId`, `table` and `master`), `NOW`, and
+  `resetZone(tx, v.cfg, REMOVALS, zoneId, NOW)` inside `inTx`. That file has no `REMOVALS` yet: add
+  `const REMOVALS = enabledTableRemovals(ALL_MODULES);` with its import from `./modules.js`, as
+  `floor-today-merge-api.test.ts:9` and `:21` do.
+
+```ts
+// floor-today-merge-api.test.ts — the owner's example (case a)
+it("a join saved in the editor waits for the next reset", async () => {
+  /* twoTables() with no join; resaveMaster(zoneId, { joins: [{ seats: 6, masterIds: [master.a, master.b] }] });
+     POST …/a/today/merge { targetId: b, side: "right" } → 400 floor_plan.invalid { field: "seats" }, mergeOf(a) null;
+     POST /api/zones/:zoneId/today/reset → 204; the same merge → 204 and floorToday(a).joinSeats 6.
+     First check that the routes' catch-up cannot reset the zone between the save and the merge: build the zone and resave
+     it with the instant the app's clock answers, so both fall on one business day; a reset there would copy the new join and hide the case. */
+});
+// floor-today-merges.test.ts
+it("a join deleted from the master mid-day still gives today's merge its seats, until the next reset", async () => {
+  /* (b) threeTables([{ seats: 6, keys: ["a", "b"] }]); resaveMaster(zoneId, { joins: [] }) → savedJoinSeats([a, b]) 6;
+     resetZone → null */
+});
+it("a join whose master table was deleted mid-day still gives today's merge its seats", async () => {
+  /* (b) threeTables([{ seats: 6, keys: ["a", "b"] }]); resaveMaster(zoneId, { joins: [], drop: [master.b] }) → savedJoinSeats([a, b]) 6
+     (the save only sets the reset row's plan_table_id null, floor-plan.ts:403-406; the copy names the row) */
+});
+it("a reset replaces the zone's copy rather than adding to it", async () => {
+  /* (c) threeTables([{ seats: 6, keys: ["a", "b"] }, { seats: 9, keys: ["a", "c"] }]); resaveMaster(zoneId, { joins: [{ seats: 7, masterIds: [master.a, master.b] }] });
+     resetZone → savedJoinSeats([a, b]) 7, ([a, c]) null; the zone has exactly one floor_reset_joins row with two members */
+});
+it("resetting one zone leaves another zone's copy alone", async () => {
+  /* (d) two threeTables zones, each with a join of a, b at 6 seats; resaveMaster(zone2, { joins: [] }); resetZone(zone1) →
+     zone 2's savedJoinSeats([a2, b2]) still 6; resetZone(zone2) → null */
+});
+it("copies no join whose master table two live tables follow", async () => {
+  /* (e) threeTables([{ seats: 6, keys: ["a", "b"] }]); set c's dining_tables.plan_table_id to b's, as "finds no saved join when two
+     tables stand on one master table" (:137-153) does; resetZone → no floor_reset_joins row for the zone; savedJoinSeats([a, b]) null */
+});
+it("a reset after a copied member's master table was deleted replaces the copy without a refusal", async () => {
+  /* (f) threeTables([{ seats: 6, keys: ["a", "b"] }]); resaveMaster(zoneId, { joins: [], drop: [master.b] }); resetZone →
+     b's dining_tables row is gone (b is free, so the catch-up removes it), no floor_reset_join_tables row for the zone, savedJoinSeats([a, b]) null */
+});
+```
+
+- [ ] **Step 2: Run and watch them fail** —
+  `pnpm --filter @waitron/server exec vitest run src/floor-today-merges.test.ts src/floor-today-merge-api.test.ts`.
+  Expected, before the change:
+  - (a) the first merge answers 204 and takes 6 seats where 400 is expected (the reader reads the
+    master as it is now, `floor-today-merges.ts:173-205`).
+  - (b) both cases print null where 6 is expected (the join, or its member, is gone from the master).
+  - (c) the copied-join count is 0 where 1 is expected. Its seat lines alone would pass before the
+    change (the master as it is now answers 7 and null too), which is why the case counts rows.
+  - (d) zone 2's first read is null where 6 is expected.
+  - (e) `savedJoinSeats([a, b])` prints 6 where null is expected: the old reader refuses two tables
+    on one master table only when both are passed (`floor-today-merges.ts:179`), and here only b is.
+  - (f) passes before the change (b is removed; no copy exists): a guard on the order of step 1.
+- [ ] **Step 3: Implement** `resaveMaster`, the copy in `resetZoneFor` and the new `savedJoinSeats`.
+  Then prove each part by deletion, restoring each after:
+  - put back the old `savedJoinSeats` body (the read of `floor_plan_join_tables`) and watch (a) and
+    (b) fail;
+  - delete the insert of the copy and watch (a)'s last merge refuse `floor_plan.invalid` and (c) fail;
+  - move step 1's delete after the reset rows' delete and watch every case that resets a zone with a
+    copy fail on a foreign-key refusal (`isRefusal(error, FOREIGN_KEY_VIOLATION)`), (c) and (f) among
+    them;
+  - drop the zone filter from step 1's delete and watch (d) fail;
+  - copy a join whose member maps to two rows (take the first) and watch (e) fail.
+- [ ] **Step 4: Run** the same command, then
+  `pnpm --filter @waitron/server exec vitest run src/floor-today-store.test.ts src/floor-catch-up.test.ts src/floor-plan.test.ts src/table-removal.test.ts src/floor-today-state.test.ts src/floor-today-api.test.ts src/floor-today-changes.test.ts src/floor-today-moves.test.ts src/floor-today-seat-api.test.ts src/till-api.today-joins.test.ts`,
+  `pnpm --filter @waitron/server typecheck`, `pnpm --filter @waitron/server lint` and `pnpm exec
+  prettier --check` on the changed files. Read each `Tests` count. Expected: all pass with no
+  existing assertion changed; one that needs changing is a STOP (the Existing tests list above).
+- [ ] **Step 5: Commit** — e.g. "Till floor: each reset copies the master's joins into today's plan,
+  and a merge takes its seats from that copy (A429 slice 4, owner override)". The body quotes the
+  owner's answer and states that a today's plan built before the migration asks for seats until its
+  next reset.
 
 ### Task 4.4a: `wt-floor-map` — fixed tables, the drop target and a drop after a re-read
 
@@ -5020,7 +5328,9 @@ Add a spare table, Taken off today, Reset to saved plan. The first two open a `w
 button per table (`sparesOf`, `takenOffOf`; Put back for each taken-off table) or, with none, the
 words `floor.no_spares` / `floor.none_taken_off`; a press sends its event and closes. Reset opens a
 `wt-dialog` headed `floor.reset_title` with `floor.reset_body`, Cancel and Reset (`danger`), which
-sends `zone-reset`. The floor draws the menu in its action row while the active zone is planned, and
+sends `zone-reset`. The floor draws the menu in its action row while the active zone is planned (finish-branch
+review, 2026-10-11: or while the zone has a saved plan, `hasPlan` on `/api/zones`; see decision
+17), and
 answers the events with `api.placeSpareToday(tableId, spareSpot(zone))`, `api.putBackToday` and
 `api.resetZoneToday`, settling through Task 4.4f's `#settle`.
 
@@ -5096,7 +5406,9 @@ routes behind profile and zone checks are a risk trigger, so the run-it seat run
 on the head (`ui`'s and `shared`'s mutation floors run only weekly, so the per-file Stryker runs above
 are the check); design-system.md describes the map's fixed copy and linked parties; the backlog's
 A429 entry says slice 4 landed and what it left, and A470 loses its two slice 4 notes and the
-drop-after-re-read point, which this slice settles.
+drop-after-re-read point, which this slice settles. The PR description states the owner's override of
+decision 7 (today's plan keeps its own copy of the master's joins, copied at each reset) and that a
+today's plan built before Task 4.3e's migration asks for a merge's seats until its zone's next reset.
 
 ## Slice 5 — removing the old pieces (spec §11)
 
@@ -5120,12 +5432,13 @@ Branch `feat/floor-plan-retire-old`, after slice 4. PR first line: **"venue rese
   `zone_id` required (a rebuild), wrapped by custom migrations that drop and re-create
   `parties_clear_table_status` around it as `0043`/`0045` do. Before shipping: list every foreign
   key pointing at `dining_tables` (today `party_tables`, `working_orders`, `bookings`, and slice 1's
-  `floor_today_tables` and `floor_today_join_tables`) and read the generated SQL; add the step's expected refusal to
+  `floor_today_tables`, `floor_today_join_tables` and `floor_reset_tables` (`floor_reset_tables_table_fk`,
+  `packages/db/src/schema/floor-plans.ts:186-190`, no cascade)) and read the generated SQL; add the step's expected refusal to
   `scripts/migration-upgrade.test.ts` (as `core/0044_drop_table_bill_pointer`, `:279-282`); run
   the guards named in CLAUDE.md §3's regeneration rule. Seeds and test helpers that insert a table
   with no zone get one (`packages/reporting/test/fixtures.ts:496`, `:541`;
   `scripts/behavioural-triggers.test.ts:274`; the configuration fixture
   `apps/server/src/testing/fixtures/configuration-v1-before-printing-retirement.json:199-213`).
 - **Task 5.4: Docs** — `docs/developers/design-system.md` (the editor and the map),
-  `docs/developers/conventions-data.md` (the two plans, the reset and the catch-up; names copied as text; removal), the
+  `docs/developers/conventions-data.md` (the two plans, the reset and the catch-up, each reset copying the master's joins into `floor_reset_joins` and `floor_reset_join_tables`; names copied as text; removal), the
   backlog, and CLAUDE.md if a rule was paid for.

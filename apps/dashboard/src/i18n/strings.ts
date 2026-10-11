@@ -987,7 +987,8 @@ export const en = {
   "floor_plan_editor.already_joined": "Already joined.",
   "floor_plan_editor.booked": "Booked {date}, {time}",
   "floor_plan_editor.first_note": "Your first save goes live now; later changes, tomorrow.",
-  "floor_plan_editor.note": "Your changes will go live tomorrow.",
+  "floor_plan_editor.note":
+    "Your changes go live tomorrow, or sooner with Reset to saved plan on the till.",
   "floor.zones_title": "Zones",
   "floor.tables_title": "Tables",
   "floor.zone_name": "Name",
@@ -3639,7 +3640,8 @@ export const es: Record<StringKey, string> = {
   "floor_plan_editor.booked": "Reservada el {date}, {time}",
   "floor_plan_editor.first_note":
     "Tu primer guardado se aplica ya; los cambios posteriores, mañana.",
-  "floor_plan_editor.note": "Tus cambios se aplicarán mañana.",
+  "floor_plan_editor.note":
+    "Tus cambios se aplican mañana, o antes con Volver al plano guardado en el TPV.",
   "floor.zones_title": "Zonas",
   "floor.tables_title": "Mesas",
   "floor.zone_name": "Nombre",

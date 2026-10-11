@@ -155,11 +155,12 @@ import type { StringKey } from "./i18n/strings.js";
 import { TillHeldOrders, type MoveHeldOrderDetail } from "./widgets/held-orders.js";
 import { waitingScope, type PayWaitingOrderDetail } from "./widgets/counter-waiting.js";
 import { moveRefusalKey } from "./widgets/station-choice-dialog.js";
-import type { SeatedRead } from "./widgets/table-targets.js";
+import { otherPartyRead } from "./widgets/table-targets.js";
 import type { BillPayDetail, MoveBillDetail } from "./screens/till-table-order-screen.js";
 import type { TillTableOrderScreen } from "./screens/till-table-order-screen.js";
 import { billName, owing, paidInPart, shownBills } from "./state/bill-state.js";
 import { billRequestOf } from "./state/table-signals.js";
+import { mergeMembersOf } from "./state/floor-today.js";
 import type { BumpMode, FireControlMode } from "./widgets/station-queue.js";
 import type {
   AdjustmentAsk,
@@ -292,9 +293,12 @@ const REFRESH_RETRY_SECONDS = [5, 10, 30] as const;
 const FLOOR_POLL_LIMIT_MS = 25_000;
 
 // Icons shared primitives draw and their consuming app registers: wt-toast's `close`,
-// wt-combobox's, wt-row-actions' `kebab`, and the top bar's More menu's `hamburger`.
+// wt-combobox's, wt-row-actions' `kebab`, wt-number-stepper's `minus` and `plus`, and the top bar's
+// More menu's `hamburger`.
 registerIcons({
   close: CROSS_ICON_PATH,
+  minus: "M2.5 7.25H13.5V8.75H2.5Z",
+  plus: "M7.25 2.5H8.75V7.25H13.5V8.75H8.75V13.5H7.25V8.75H2.5V7.25H7.25Z",
   ...DROPDOWN_ICONS,
   hamburger: "M2 3.5H14V4.8H2ZM2 7.35H14V8.65H2ZM2 11.2H14V12.5H2Z",
   kebab:
@@ -372,6 +376,11 @@ const TABLE_REFUSALS = new Set([
   "group.held_leaves_party",
   "table.needs_clearing",
   "table.not_found",
+  "table.not_in_floor_plan",
+  "table.taken_off",
+  "table.fixed",
+  "table.merged",
+  "table.delivery_pending",
   "tab.already_open",
   "party.not_open",
   "party.bill_outstanding",
@@ -420,15 +429,16 @@ function billToOpen(bills: readonly PartyBill[]): string | undefined {
   return (unpaid ?? bills.at(-1))?.workingOrderId;
 }
 
-/** What a move or join sends of who it read at its target table: that party and its revision, null
- * for a table read free, and nothing for a table of the acting party itself. */
-function otherPartyRead(
-  seated: SeatedRead,
-  ownPartyId: string | null,
-): Pick<TableActionRevisions, "otherPartyId" | "expectedOtherPartyRevision"> {
-  if (seated === null) return { otherPartyId: null };
-  if (seated.id === ownPartyId) return {};
-  return { otherPartyId: seated.id, expectedOtherPartyRevision: seated.revision };
+/** The tables a seat holds: each one it named, with every member of that table's merge. */
+function seatedTables(tables: readonly TableState[], named: readonly string[]): string[] {
+  const held = new Set<string>();
+  for (const id of named) {
+    held.add(id);
+    const table = tables.find((each) => each.id === id);
+    if (table === undefined) continue;
+    for (const member of mergeMembersOf(tables, table)) held.add(member.id);
+  }
+  return [...held];
 }
 
 function isPartyOutOfDate(error: unknown): boolean {
@@ -5102,8 +5112,13 @@ export class TillApp extends LitElement {
 
   async #openTableFromEvent(event: Event): Promise<void> {
     if (!this.#inShell()) return;
-    const { tableId, seated, guestCount } = (
-      event as CustomEvent<{ tableId: string; seated: boolean; guestCount?: number | null }>
+    const { tableId, seated, guestCount, withTableIds } = (
+      event as CustomEvent<{
+        tableId: string;
+        seated: boolean;
+        guestCount?: number | null;
+        withTableIds?: string[];
+      }>
     ).detail;
     const offerRequest = ++this.#tableOfferRequest;
     this.#orderVisit++;
@@ -5118,17 +5133,24 @@ export class TillApp extends LitElement {
     try {
       await this.#flushDraft();
       if (session !== this.#operatorSession) return;
-      await this.#openTable(tableId, seated ? undefined : (guestCount ?? null), offerRequest);
+      await this.#openTable(
+        tableId,
+        seated ? undefined : (guestCount ?? null),
+        offerRequest,
+        withTableIds,
+      );
     } finally {
       this.#tableOpensPending--;
     }
   }
 
-  /** `guestCount` is `undefined` to resume a seated table, and a count or null to seat a free one. */
+  /** `guestCount` is `undefined` to resume a seated table, and a count or null to seat a free one,
+   * with each of `withTableIds` too when given. */
   async #openTable(
     tableId: string,
     guestCount: number | null | undefined,
     offerRequest: number,
+    withTableIds?: string[],
   ): Promise<void> {
     const session = this.#operatorSession;
     const table = this.tables.find((candidate) => candidate.id === tableId);
@@ -5206,7 +5228,10 @@ export class TillApp extends LitElement {
       this.#showDraft(opened);
     } else {
       try {
-        const { tabId, partyId, revision } = await this.api.seatTable(tableId, guestCount);
+        const { tabId, partyId, revision } =
+          withTableIds === undefined
+            ? await this.api.seatTable(tableId, guestCount)
+            : await this.api.seatAtTables(tableId, guestCount, withTableIds);
         // A table opened after this one has made its own table the active one, so this answer
         // would put this table's order beside that table.
         if (session !== this.#operatorSession || this.#openClaimed > offerRequest) return;
@@ -5222,7 +5247,7 @@ export class TillApp extends LitElement {
           mainBillId: tabId,
           outstanding: "0.00",
           billCount: 1,
-          tableIds: [tableId],
+          tableIds: seatedTables(this.tables, [tableId, ...(withTableIds ?? [])]),
           unsentDrafts: [],
           reminder: null,
         };

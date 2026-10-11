@@ -656,6 +656,21 @@ describe("till-card-grid", () => {
     expect(await floorOf()).toBe(false);
   });
 
+  it.each([
+    [["take-cash"], false],
+    [["take-cash", "take-orders"], true],
+  ] as const)("lets the floor change today's plan from %j", async (capabilities, can) => {
+    const { el } = await mountWidget<TillCardGrid>("till-card-grid", {
+      tab: floorTab,
+      store: new WorkingOrderStore(),
+      capabilities: [...capabilities],
+    });
+    const floor = el.shadowRoot!.querySelector<HTMLElement & { canChangeToday?: boolean }>(
+      "till-floor-screen",
+    )!;
+    expect(floor.canChangeToday).toBe(can);
+  });
+
   it("renders an embedded editable floor screen for a table-layout-editor card", async () => {
     const store = new WorkingOrderStore();
     const { el } = await mountWidget<TillCardGrid>("till-card-grid", {

@@ -7,8 +7,24 @@ import type { TillFloorScreen } from "./till-floor-screen.js";
 import type { FloorZone, TableState } from "../api/client.js";
 
 const zones: FloorZone[] = [
-  { id: "z1", name: "Comedor", displayOrder: 0, active: true, closesAt: null, closed: false },
-  { id: "z2", name: "Terraza", displayOrder: 1, active: true, closesAt: null, closed: false },
+  {
+    id: "z1",
+    name: "Comedor",
+    displayOrder: 0,
+    active: true,
+    closesAt: null,
+    closed: false,
+    hasPlan: false,
+  },
+  {
+    id: "z2",
+    name: "Terraza",
+    displayOrder: 1,
+    active: true,
+    closesAt: null,
+    closed: false,
+    hasPlan: false,
+  },
 ];
 
 // A spread of occupancy states + a zoneless table, plus one card for EACH of the three service hints
@@ -464,6 +480,34 @@ describe.each(["light", "dark"] as const)("till-floor-screen a11y (%s theme)", (
     await map.updateComplete;
     expect(map.shadowRoot!.querySelectorAll("[part=table]").length).toBe(2);
     expect(el.shadowRoot!.querySelector("[data-tray-table]")).not.toBeNull();
+    await expectNoA11yViolations(host);
+  });
+
+  it("has no violations with a refusal said on the floor", async () => {
+    const merged = { ...todayRow(2), joinId: "j1" };
+    const { el, host } = await mountWidget<TillFloorScreen>(
+      "till-floor-screen",
+      {
+        zones,
+        tables: [
+          { ...tables[2]!, id: "t1", label: "1", today: merged },
+          { ...tables[2]!, today: { ...merged, placement: { ...merged.placement!, x: 4 } } },
+          { ...tables[2]!, id: "t4", label: "4", today: todayRow(10) },
+        ],
+      },
+      theme,
+    );
+    el.shadowRoot!.querySelector("wt-floor-map")!.dispatchEvent(
+      new CustomEvent("wt-table-drag-end", {
+        detail: { tableId: "t1", x: 9, y: 3, targetId: "t4" },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+    await el.updateComplete;
+    expect(el.shadowRoot!.querySelector("[data-floor-refusal]")?.textContent).toContain(
+      "Drag the other table onto it",
+    );
     await expectNoA11yViolations(host);
   });
 

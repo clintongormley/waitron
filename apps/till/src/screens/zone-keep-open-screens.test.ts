@@ -85,8 +85,17 @@ it.each([true, false])(
           active: true,
           closed,
           closesAt: "22:00",
+          hasPlan: false,
         },
-        { id: "bar", name: "Bar", displayOrder: 1, active: true, closed: false, closesAt: null },
+        {
+          id: "bar",
+          name: "Bar",
+          displayOrder: 1,
+          active: true,
+          closed: false,
+          closesAt: null,
+          hasPlan: false,
+        },
       ],
       tables: [],
     } as Partial<TillFloorScreen>);

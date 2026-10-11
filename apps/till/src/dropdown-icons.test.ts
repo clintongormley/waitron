@@ -60,3 +60,20 @@ test("the till app registers the hamburger the top bar's More menu draws", async
   await icon.updateComplete;
   expect(icon.shadowRoot!.querySelector("path")?.getAttribute("d")).toBeTruthy();
 });
+
+test("the till app registers the minus and plus wt-number-stepper draws", async () => {
+  const el = document.createElement("wt-number-stepper") as HTMLElement & {
+    updateComplete: Promise<unknown>;
+  };
+  el.setAttribute("label", "Seats");
+  document.body.append(el);
+  mounted.push(el);
+  await el.updateComplete;
+  for (const name of ["minus", "plus"]) {
+    const icon = el.shadowRoot!.querySelector<HTMLElement & { updateComplete: Promise<unknown> }>(
+      `wt-icon[name=${name}]`,
+    )!;
+    await icon.updateComplete;
+    expect(icon.shadowRoot!.querySelector("path")?.getAttribute("d"), name).toBeTruthy();
+  }
+});

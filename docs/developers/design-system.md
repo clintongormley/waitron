@@ -591,7 +591,7 @@ this floor — removing the `min-width` regresses that guard.
 | `wt-floor-plan-canvas`  | `tables` (property; `{ key, label, fixed, placement, refused? }[]`, the placed tables only, `placement` in grid squares), `selected` (the selected table's key, or null; set by the parent), `copy` (property; `{ label, fixed, rotate }`, English by default); parts: `viewport`, `grid`, `table`, `fixed-marker`, `rotate-handle`, `refused-reason`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                | `wt-table-select` (`{ key }`, `null` for a click on empty grid), `wt-table-move` (`{ key, x, y }`), `wt-table-rotate` (`{ key, rotation }`)                                                                                                                                                                                         |
 | `wt-floor-plan-preview` | A zone's floor plan drawn small and read-only, fitted to its width and capped at `--wt-floor-plan-preview-max-height` (four `--wt-tap-min` at the theme root; a page or panel may set its own): `tables` (property; `{ key, fixed, placement }[]`, as the canvas takes them), `label` (the drawing's accessible name, default "Floor plan"); draws nothing for no tables; parts: `plan`, `table`, `fixed-marker` | — |
 | `wt-sheet`              | `heading` (the toggle's text), `expanded` (reflected; the page may set it); default slot (body); parts: `toggle`, `body` | `wt-sheet-toggle` (`{ expanded }`) |
-| `wt-floor-map`          | `tables` (property; `{ id, label, placement, fill, dot, joinId, description }[]`, the placed tables only, `placement` in grid squares, `fill` a `FloorMapFill`, `dot` a `FloorMapDot` or null), `fitKey` (a change fits the view again), `copy` (property; `{ label }`, the tables' group name, "Tables" by default), `reducedMotion` (property; unset reads `prefers-reduced-motion`); parts: `table`, `shape`, `name`, `dot` | `wt-table-tap` (`{ tableId }`), `wt-table-details` (`{ tableId }`), `wt-table-drag-end` (`{ tableId, x, y, targetId }`) |
+| `wt-floor-map`          | `tables` (property; `{ id, label, placement, fill, dot, joinId, fixed, linkId, description }[]`, the placed tables only, `placement` in grid squares, `fill` a `FloorMapFill`, `dot` a `FloorMapDot` or null, `fixed` optional, unset is movable, `linkId` optional, a party's id or null), `canDrag` (property; true by default), `fitKey` (a change fits the view again), `copy` (property; `{ label }`, the tables' group name, "Tables" by default), `reducedMotion` (property; unset reads `prefers-reduced-motion`); parts: `table`, `shape`, `name`, `dot`, `ghost`, `drag-link`, `links` | `wt-table-tap` (`{ tableId }`), `wt-table-details` (`{ tableId }`), `wt-table-drag-end` (`{ tableId, x, y, targetId }`) |
 
 `wt-floor-plan-canvas` draws a zone's floor plan on a scrolling grid of 12 px squares that fills its
 box and reaches at least 8 squares past the furthest table. A turned table reaching past the top or
@@ -629,6 +629,16 @@ chips share the map's purple tokens. The order pin's swatch follows its displaye
 uses success, forgotten uses danger, and other statuses use their table fill. A single-table details
 heading says "Table 9" / "Mesa 9"; Guests has no placeholder.
 
+On a zone with today's plan, the floor screen hands the map each table's `fixed` and, for a party
+at two or more groups, its `linkId`, so a fixed stool being dragged leaves a copy, with a line to
+the table it is over, and a party's tables are joined by a line. `canDrag` and the details sheet's
+actions follow `canChangeToday` (the profile's take-orders): without it nothing on the map moves,
+the sheet offers no changes for today and there is no zone menu. With it, on a zone with today's
+plan or a saved plan (the zone list's `hasPlan`, so a saved plan with no tables still offers Reset),
+a `wt-row-actions` ⋮ beside the List/Map toggle opens the zone menu: Add a spare table, Taken off today and Reset to
+saved plan. Each opens a `wt-dialog`; the two lists name their tables in number order (2, 9, 10),
+each list says so in one line when it is empty, and Reset asks before it resets.
+
 `wt-floor-map` draws the till's tables for a zone, fitted to its box: the tables' crop (two squares
 past them) is scaled to fit and centred, with no grid lines. Its size is its parent's choice. It fits
 when it first draws tables, when `fitKey` changes and on a double tap on empty space (both taps
@@ -640,7 +650,14 @@ about the pointer, the wheel event always prevented. A wheel reporting lines cou
 and one reporting pages the map's width (`deltaX`) or height (`deltaY`) a page. Zoom runs from half to four times the fitted
 scale, and a pan stops with the crop's centre at the map's edge. Tables sharing a `joinId` are one button covering their turned boxes, named by `mergeLabel`
 (its tables in number order, "Terrace 4+5", "4+10"), whose `data-table-id` is its first member's in number order; each table is
-drawn at its true size and angle, so a small one is below `--wt-tap-min`. Each shape is painted from
+drawn at its true size and angle, so a small one is below `--wt-tap-min`. Groups (a table, or a
+merge) sharing a `linkId` are one party at several groups: each stays its own button and is dragged
+alone, and one `<svg part="links">` per party, drawn under the buttons and taking no pointer, joins
+the centres of its groups in the number order of their first members' labels with 1 px
+`--wt-color-field-line` lines, a dragged movable group's end following it and going back with
+it on release (a fixed group's copy moves no end). They are named once: every one's accessible name starts with
+`mergeLabel` of all their tables' labels ("Bar 1+2"), and only the first draws it, when its own box
+is big enough for a name. A `linkId` on one group alone draws nothing more. Each shape is painted from
 its fill's `--wt-color-table-*` token, outlined in `--wt-color-field-line` with `--wt-radius-sm`
 corners (a round one is a circle), and the name in the fill's
 `--wt-color-on-table-*`. A name is drawn only when the table's own shorter side, before turning (a
@@ -656,10 +673,19 @@ double-click, which sends `wt-table-details`. A second tap on a different table 
 it. A press held 500 ms marks its table (`data-held`: each shape's edge in `--wt-color-primary`,
 plus `--wt-selected-ring` outside a single table's edge, or once around a merge's whole box, which
 is then raised above a table touching it) and its release sends `wt-table-details`; a second finger or a cancelled pointer clears the mark and sends
-nothing. A held table that is dragged is drawn moved by whole squares, its first member kept at 0 or
-more, and its release clears the mark and sends `wt-table-drag-end` instead: that member's new `x`
+nothing. A held table that is dragged is drawn moved by whole squares, the step held so every member's
+corner stays within 0–999 (`groupStep`, as the server holds a move), and its release clears the
+mark and sends `wt-table-drag-end` instead: the held table's new `x`
 and `y` and `targetId`, the `data-table-id` of the first other table under the release point, else
-null; the table is then drawn back where `tables` puts it. A right-click, a macOS Ctrl+click and the ContextMenu key send `wt-table-details` through
+null; the table is then drawn back where `tables` puts it. While a held table is dragged, the first
+other table under the pointer is marked `data-drop-target` (`--wt-selected-ring` outside its edge,
+as `data-held`'s), until the pointer leaves it or the drag ends. A held group with a `fixed` member
+is not drawn moved: a copy of its shapes at half opacity (`part="ghost"`) is drawn where the drag
+would put it, and over a target a 1 px `--wt-color-primary` line (`<svg part="drag-link">`) joins
+the group's centre and the target's; both go on release, with no animation, and the drop is sent as
+for any table. Neither takes a pointer, so the target is found through them. A movable group being dragged is drawn above every other table at half opacity (`data-moving`), so the table it is dragged onto, that table's fill and its `data-drop-target` ring show through it. `canDrag` is read on each move: while it is false a move changes nothing, so a drag that has not moved draws no copy and marks no target, and one that had already moved stays drawn where it last moved (a fixed group keeps its copy), keeps its target, and is still sent as `wt-table-drag-end` on release. A new `tables` that no
+longer has the held table ends the drag, and its release sends nothing; one that keeps it keeps the
+drag. A right-click, a macOS Ctrl+click and the ContextMenu key send `wt-table-details` through
 `contextmenu`, which the map always prevents and ignores while a press is under way; Shift+F10 is
 handled on its `keydown`, which the map prevents, and the next `contextmenu` is ignored unless a
 `keydown` or `pointerdown` comes first. On a table, a repeated `keydown` of Shift+F10 or of the
@@ -1987,7 +2013,8 @@ and nothing guards it across screens:
   [the Batch 2b table](../superpowers/plans/2026-10-07-a331-save-follows-changes.md#batch-2b--the-menus-screen-and-the-preview-bundles-files-lane-c-a331-2b);
 - batch 5, the till: the party name dialog; the schedule's cover and time-off requests; the full
   invoice recipient dialog; the extras picker when it edits a line (adding a dish never waits for a
-  change, through `savableAtOpen`); the station dialog's Make at (its Move keeps today's look).
+  change, through `savableAtOpen`); the station dialog's Make at (its Move keeps today's look); the
+  floor's seats dialog opened by Change seats (`apps/till/src/widgets/today-seats-dialog.ts`).
   Every other till dialog that tracks unsaved changes takes an action — pay, refund, override, sign
   in, seat, send — and keeps its own rules; the list, with the reason for each, is in
   [the Batch 5 table](../superpowers/plans/2026-10-07-a331-save-follows-changes.md#batch-5--the-till-app-lane-c-a331-5).
@@ -2016,6 +2043,10 @@ These open already savable:
   untouched gives the option back to the list, which clears that option's refusal (`#refusedAtOpen`
   in `apps/dashboard/src/widgets/option-label-form.ts`; owner, 2026-10-08, A410). Opened by Add
   option, or by Edit on an option with no refusal, it opens quiet;
+- the till floor's seats dialog when a merge opens it with a suggested number of seats above 0:
+  pressing Join confirms the suggestion (`savableAtOpen`,
+  `apps/till/src/widgets/today-seats-dialog.ts`). With no suggestion, or one of 0, it opens
+  empty, and Join waits for a number;
 - a new canvas's editor, with no flag: its draft has no stored canvas to compare with, so it counts
   as changed from the start.
 

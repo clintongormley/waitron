@@ -95,6 +95,8 @@ export const CORE_CLASSIFICATION: readonly ClassifiedTable[] = [
   classify("floor_plan_joins", "state", STATE),
   classify("floor_plan_join_tables", "state", STATE),
   classify("floor_reset_tables", "state", STATE),
+  classify("floor_reset_joins", "state", STATE),
+  classify("floor_reset_join_tables", "state", STATE),
   classify("floor_today_zones", "state", STATE),
   classify("floor_today_tables", "state", STATE),
   classify("floor_today_joins", "state", STATE),

@@ -1,5 +1,7 @@
+import { NEW_TABLE_SIZE } from "@waitron/shared";
+
+export { NEW_TABLE_SIZE };
 export const GRID_SQUARE_PX = 12;
-export const NEW_TABLE_SIZE = 8;
 export const NAME_MIN_PX = 28;
 
 const GRID_MAX = 999;
