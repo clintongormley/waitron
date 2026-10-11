@@ -123,6 +123,8 @@ const shown = (box: HTMLButtonElement) => {
   const value = box.querySelector(".station")!;
   return { text: value.textContent!.trim(), muted: value.classList.contains("inherited") };
 };
+/** The look the cell is drawn in: `set`, `inherited`, `differs` or `blank`. */
+const styleOf = (box: HTMLButtonElement) => box.dataset.style;
 const editorOf = (el: RoutingGrid) => root(el).querySelector<Editor>("routing-cell-editor");
 /** The open cell editor's `wt-close`; take it before the key or click that closes the editor. */
 function editorClosed(el: RoutingGrid) {
@@ -183,9 +185,9 @@ describe("venue-routing-grid", () => {
     expect(rowLabels(el)).toEqual([
       "All categories",
       "▸ Drinks",
-      "Drinks › ▸ Cocktails",
+      "▸ Cocktails",
       "▸ Food",
-      "Food › Burger",
+      "Burger",
       "No category",
       "Bread",
     ]);
@@ -201,7 +203,7 @@ describe("venue-routing-grid", () => {
       "▸ Cocktails",
       "Cola",
       "▸ Food",
-      "Food › Burger",
+      "Burger",
       "No category",
       "Bread",
     ]);
@@ -254,14 +256,14 @@ describe("venue-routing-grid", () => {
     await el.updateComplete;
     // Explicit.
     expect(shown(combo(el, "c:drinks", "every")!)).toEqual({ text: "Bar", muted: false });
-    // Inherited from Drinks × Every zone: a category's own Every zone beats All × Terrace.
-    expect(shown(combo(el, "p:cola", "terrace")!)).toEqual({ text: "Bar", muted: true });
+    // Inherited from Drinks × Every zone, as Cola's own Every zone is: blank.
+    expect(shown(combo(el, "p:cola", "terrace")!)).toEqual({ text: "", muted: true });
     // Inherited from Cocktails × Terrace.
     expect(shown(combo(el, "p:mojito", "terrace")!)).toEqual({ text: "Terrace bar", muted: true });
     // Explicit Kitchen, equal to the default it would otherwise inherit.
     expect(shown(combo(el, "p:burger", "every")!)).toEqual({ text: "Kitchen", muted: false });
-    // Same-row Every zone counts as inherited for a zone cell.
-    expect(shown(combo(el, "p:burger", "terrace")!)).toEqual({ text: "Kitchen", muted: true });
+    // Same-row Every zone counts as inherited for a zone cell, and is blank there.
+    expect(shown(combo(el, "p:burger", "terrace")!)).toEqual({ text: "", muted: true });
     // Inherited No preparation from All × Terrace; never blank.
     expect(shown(combo(el, "p:bread", "terrace")!)).toEqual({
       text: "No preparation",
@@ -277,6 +279,27 @@ describe("venue-routing-grid", () => {
     expect(trigger(combo(el, "c:drinks", "every")!).getAttribute("aria-label")).toBe(
       "Drinks, Every zone: Bar, set here",
     );
+    expect(
+      Object.fromEntries(
+        [
+          ["c:drinks", "every"],
+          ["p:cola", "terrace"],
+          ["p:mojito", "terrace"],
+          ["p:burger", "terrace"],
+          ["p:bread", "terrace"],
+          ["p:bread", "every"],
+          ["all", "terrace"],
+        ].map(([row, zone]) => [`${row}|${zone}`, styleOf(combo(el, row!, zone!)!)]),
+      ),
+    ).toEqual({
+      "c:drinks|every": "set",
+      "p:cola|terrace": "blank",
+      "p:mojito|terrace": "differs",
+      "p:burger|terrace": "blank",
+      "p:bread|terrace": "differs",
+      "p:bread|every": "inherited",
+      "all|terrace": "set",
+    });
   });
 
   it("the editor offers active stations, then No preparation, and no Clear for an inherited cell; an inactive saved station is described, not offered", async () => {
@@ -484,7 +507,7 @@ describe("venue-routing-grid", () => {
     });
     el.pending = null;
     await el.updateComplete;
-    expect(shown(bread)).toEqual({ text: "Kitchen", muted: true });
+    expect(shown(bread)).toEqual({ text: "", muted: true });
   });
 
   it("removing a zone destroys its open editor instead of handing it to the neighbouring zone", async () => {
@@ -745,8 +768,8 @@ describe("venue-routing-grid", () => {
   it("a No category cell inherits its own row's Every zone before All categories × its zone", async () => {
     const { el } = await mount(noCategoryAtBar());
     expect(shown(combo(el, "no_category", "every")!)).toEqual({ text: "Bar", muted: false });
-    expect(shown(combo(el, "no_category", "terrace")!)).toEqual({ text: "Bar", muted: true });
-    expect(shown(combo(el, "p:bread", "terrace")!)).toEqual({ text: "Bar", muted: true });
+    expect(shown(combo(el, "no_category", "terrace")!)).toEqual({ text: "", muted: true });
+    expect(shown(combo(el, "p:bread", "terrace")!)).toEqual({ text: "", muted: true });
     expect(shown(combo(el, "all", "terrace")!)).toEqual({ text: "No preparation", muted: false });
   });
 
@@ -895,6 +918,80 @@ describe("venue-routing-grid", () => {
     );
   });
 
+  describe("how a cell is drawn", () => {
+    /** The computed value a declared token gives `property` on a span beside the grid. */
+    const tokenValue = (el: RoutingGrid, property: "color" | "fontWeight", value: string) => {
+      const probe = document.createElement("span");
+      probe.style[property] = value;
+      el.parentElement!.append(probe);
+      const computed = getComputedStyle(probe)[property];
+      probe.remove();
+      return computed;
+    };
+
+    it("draws no path in the row labels, even under a closed parent", async () => {
+      const { el } = await mount();
+      expect(root(el).querySelector("tbody th .path")).toBeNull();
+      for (const label of rowLabels(el)) expect(label).not.toContain("›");
+    });
+
+    it("draws a station set here bold in the primary text colour, and a blank cell empty", async () => {
+      const { el } = await mount();
+      root(el).querySelector<HTMLElement>('[data-test="expand-all"]')!.click();
+      await el.updateComplete;
+      for (const [row, zone] of [
+        ["c:drinks", "every"],
+        ["all", "every"],
+        ["all", "terrace"],
+      ] as const) {
+        const value = getComputedStyle(combo(el, row, zone)!.querySelector(".station")!);
+        expect(value.fontWeight).toBe(tokenValue(el, "fontWeight", "var(--wt-font-weight-bold)"));
+        expect(value.color).toBe(tokenValue(el, "color", "var(--wt-color-primary-text)"));
+      }
+      const blank = combo(el, "p:cola", "terrace")!;
+      expect(styleOf(blank)).toBe("blank");
+      expect(blank.querySelector(".station")!.textContent).toBe("");
+      expect(blank.querySelectorAll(".line")).toHaveLength(0);
+    });
+
+    it("tints and outlines a hovered cell, and outlines a keyboard-focused one the same way", async () => {
+      const { el } = await mount();
+      const box = combo(el, "c:drinks", "terrace")!;
+      const atRest = getComputedStyle(box);
+      const restBackground = atRest.backgroundColor;
+      expect(atRest.outlineStyle).toBe("none");
+      await userEvent.hover(box);
+      expect(box.matches(":hover")).toBe(true);
+      const hovered = getComputedStyle(box);
+      expect(hovered.backgroundColor).not.toBe(restBackground);
+      expect(hovered.outlineStyle).toBe("solid");
+      expect(hovered.cursor).toBe("pointer");
+      const hoverOutline = [hovered.outlineStyle, hovered.outlineWidth, hovered.outlineColor];
+      await userEvent.unhover(box);
+      box.focus({ focusVisible: true } as FocusOptions);
+      await userEvent.keyboard("{Shift}");
+      expect(box.matches(":focus-visible")).toBe(true);
+      const focused = getComputedStyle(box);
+      expect([focused.outlineStyle, focused.outlineWidth, focused.outlineColor]).toEqual(
+        hoverOutline,
+      );
+    });
+
+    it("makes the whole cell the button", async () => {
+      const { el } = await mount();
+      for (const [row, zone] of [
+        ["c:drinks", "every"],
+        ["c:drinks", "terrace"],
+        ["p:bread", "terrace"],
+      ] as const) {
+        const td = cell(el, row, zone).getBoundingClientRect();
+        const button = combo(el, row, zone)!.getBoundingClientRect();
+        for (const side of ["left", "top", "width", "height"] as const)
+          expect(Math.abs(button[side] - td[side])).toBeLessThan(1.5);
+      }
+    });
+  });
+
   describe("the cell's button and its editor", () => {
     const dining = { departmentId: "dining", departmentName: "Dining", colour: "blue" as const };
     const lunch: RoutingPeriod = { id: "lunch", ...dining, name: "Lunch", productIds: ["mojito"] };
@@ -951,12 +1048,12 @@ describe("venue-routing-grid", () => {
       expect(bread.getAttribute("aria-label")).toBe(
         "Bread, Terrace: No preparation, set here. Staff lunch: Bar",
       );
-      // Inherited: italic, with the lines of the cell that decides it.
+      // Inherited in the Every zone column: muted, not italic, with the deciding cell's lines.
       root(el).querySelector<HTMLElement>('[data-test="expand-all"]')!.click();
       await el.updateComplete;
       const cola = combo(el, "p:cola", "every")!;
       expect(shown(cola)).toEqual({ text: "Bar", muted: true });
-      expect(getComputedStyle(cola.querySelector(".station")!).fontStyle).toBe("italic");
+      expect(getComputedStyle(cola.querySelector(".station")!).fontStyle).toBe("normal");
       expect(getComputedStyle(own.querySelector(".station")!).fontStyle).toBe("normal");
       expect(lines(el, "p:cola", "every")).toEqual(["Lunch: Kitchen"]);
       expect(cola.getAttribute("aria-label")).toBe(
@@ -1202,16 +1299,35 @@ describe("venue-routing-grid", () => {
         return { italic: style.fontStyle === "italic", color: style.color };
       });
 
-    it("draws inherited lines muted and italic, as the inherited station above them", async () => {
+    it("draws inherited lines muted, as the inherited station above them, and italic where a zone cell differs", async () => {
       const { el } = await expanded(withCola());
-      const station = combo(el, "p:mojito", "every")!.querySelector(".station")!;
-      const muted = getComputedStyle(station).color;
+      const mojito = combo(el, "p:mojito", "every")!.querySelector(".station")!;
+      const muted = getComputedStyle(mojito).color;
       expect(lines(el, "p:mojito", "every")).toEqual(["Lunch: Kitchen"]);
-      expect(lineStyles(el, "p:mojito", "every")).toEqual([{ italic: true, color: muted }]);
+      expect(lineStyles(el, "p:mojito", "every")).toEqual([{ italic: false, color: muted }]);
       const own = lineStyles(el, "p:cola", "every");
       expect(own).toHaveLength(1);
       expect(own[0]!.italic).toBe(false);
       expect(own[0]!.color).not.toBe(muted);
+      // Drinks × Terrace differs from Drinks × Every zone, so Cola × Terrace draws it, italic.
+      el.model = {
+        ...timed(),
+        cells: [
+          ...timed().cells,
+          {
+            row: { kind: "category", categoryId: "drinks" },
+            zoneId: "terrace",
+            target: station("kitchen"),
+            periods: [{ periodId: "lunch", target: station("bar") }],
+          } as RoutingCell,
+        ],
+      };
+      await el.updateComplete;
+      const differs = combo(el, "p:cola", "terrace")!;
+      expect(styleOf(differs)).toBe("differs");
+      expect(lines(el, "p:cola", "terrace")).toEqual(["Lunch: Bar"]);
+      expect(lineStyles(el, "p:cola", "terrace")).toEqual([{ italic: true, color: muted }]);
+      expect(getComputedStyle(differs.querySelector(".station")!).fontStyle).toBe("italic");
     });
 
     it("draws a waiting choice's own lines with its station, not the saved lines", async () => {
@@ -1242,7 +1358,7 @@ describe("venue-routing-grid", () => {
       const cola = combo(el, "p:cola", "every")!;
       expect(shown(cola)).toEqual({ text: "Bar", muted: true });
       expect(lines(el, "p:cola", "every")).toEqual(["Lunch: Kitchen"]);
-      expect(lineStyles(el, "p:cola", "every")[0]!.italic).toBe(true);
+      expect(lineStyles(el, "p:cola", "every")[0]!.italic).toBe(false);
       expect(cola.getAttribute("aria-label")).toBe(
         "Drinks › Cola, Every zone: Bar, inherited. Lunch: Kitchen",
       );

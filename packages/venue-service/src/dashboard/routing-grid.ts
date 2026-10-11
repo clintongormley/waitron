@@ -30,6 +30,7 @@ import type { PeriodLine, RoutingModelCell } from "../routing-types.js";
 import "./routing-cell-editor.js";
 import type { RoutingCellEditorCell, RoutingCellSave } from "./routing-cell-editor.js";
 import {
+  blankZoneCell,
   cellPeriodLines,
   collapseAll,
   collapseCategory,
@@ -71,6 +72,12 @@ export type RoutingPending = RoutingCellChange;
 type Zone = { id: string | null; name: string; departmentId?: string | null };
 
 const sameAddress = (a: CellAddress, b: CellAddress) => cellKey(a) === cellKey(b);
+
+/**
+ * Set here; inherited in the Every zone column; inherited in a zone column and differing from the
+ * row's own Every zone; or the same as it, drawn empty.
+ */
+type CellStyle = "set" | "inherited" | "differs" | "blank";
 
 @customElement("venue-routing-grid")
 export class RoutingGrid extends LitElement {
@@ -169,8 +176,6 @@ export class RoutingGrid extends LitElement {
         outline: var(--wt-focus-ring);
         outline-offset: var(--wt-focus-offset);
       }
-      .path,
-      .hidden,
       .note {
         color: var(--wt-color-text-muted);
         font-size: var(--wt-font-size-sm);
@@ -180,10 +185,7 @@ export class RoutingGrid extends LitElement {
         flex-wrap: wrap;
         align-items: center;
         column-gap: var(--wt-space-1);
-        min-block-size: var(--wt-field-height);
-      }
-      .hidden {
-        flex-basis: 100%;
+        min-block-size: var(--wt-tap-min);
       }
       .note,
       .warning,
@@ -204,30 +206,50 @@ export class RoutingGrid extends LitElement {
         flex-direction: column;
         align-items: stretch;
         gap: var(--wt-space-1);
-        inline-size: 100%;
-        min-block-size: var(--wt-field-height);
-        padding: var(--wt-space-2);
-        border: 1px solid var(--wt-color-border);
-        border-radius: var(--wt-radius-md);
-        background: var(--wt-color-surface);
+        /* The cell keeps its padding and the button spreads over it, so the whole cell is the target. */
+        inline-size: calc(100% + var(--routing-pad, var(--wt-space-2)) * 2);
+        min-block-size: var(--wt-tap-min);
+        margin: calc(var(--routing-pad, var(--wt-space-2)) * -1);
+        margin-block-end: 0;
+        padding: var(--routing-pad, var(--wt-space-2));
+        border: 0;
+        background: transparent;
         color: var(--wt-color-text);
         font: inherit;
         text-align: start;
         cursor: pointer;
       }
-      .cell:hover {
-        background: var(--wt-color-surface-lifted);
+      /* A definite height, which the row then grows, lets the button's percentage height resolve. */
+      td:has(> .cell:only-child) {
+        block-size: 1px;
       }
+      .cell:only-child {
+        block-size: calc(100% + var(--routing-pad, var(--wt-space-2)) * 2);
+        margin-block-end: calc(var(--routing-pad, var(--wt-space-2)) * -1);
+      }
+      /* Drawn inside the cell, so the outline never covers a neighbour. */
+      .cell:hover,
       .cell:focus-visible {
         outline: var(--wt-focus-ring);
-        outline-offset: var(--wt-focus-offset);
+        outline-offset: calc(var(--wt-focus-offset) * -1);
+      }
+      .cell:hover {
+        background: var(--wt-color-surface-lifted);
       }
       .cell .warning {
         margin: 0;
       }
+      .cell[data-style="set"] .station,
+      .cell[data-style="set"] .line {
+        font-weight: var(--wt-font-weight-bold);
+        color: var(--wt-color-primary-text);
+      }
       .station.inherited,
       .line.inherited {
         color: var(--wt-color-text-muted);
+      }
+      .station.differs,
+      .line.differs {
         font-style: italic;
       }
       .line {
@@ -259,6 +281,7 @@ export class RoutingGrid extends LitElement {
   #products = new Map<string, GridProduct>();
   #categories = new Map<string, GridCategory>();
   #allRows: ReadonlyMap<string, GridRow> | null = null;
+  #blank: ReturnType<typeof blankZoneCell> | null = null;
   /** Rebuilt with the model and the language, which the lines' words are in. */
   #lines: {
     model: RoutingView;
@@ -275,6 +298,7 @@ export class RoutingGrid extends LitElement {
     this.#products = new Map(model.products.map((product) => [product.id, product]));
     this.#categories = new Map(model.categories.map((category) => [category.id, category]));
     this.#allRows = null;
+    this.#blank = blankZoneCell(model);
     this.expanded = pruneExpanded(model, this.expanded);
     const editing = this.editing;
     if (
@@ -399,23 +423,32 @@ export class RoutingGrid extends LitElement {
     address: CellAddress,
     label: string,
     target: RouteTarget | null,
-    station: { text: string; inherited: boolean },
-    lines: { shown: readonly PeriodLineText[]; inherited: boolean },
+    style: CellStyle,
+    station: string,
+    lines: readonly PeriodLineText[],
   ) {
+    const blank = style === "blank";
+    const look = {
+      set: "",
+      inherited: " inherited",
+      differs: " inherited differs",
+      blank: " inherited",
+    }[style];
     return html`<button
       type="button"
       class="cell"
       data-test="routing-cell"
       data-target=${targetKey(target)}
+      data-style=${style}
       aria-label=${label}
       @click=${() => {
         this.editing = address;
       }}
     >
-      <span class=${station.inherited ? "station inherited" : "station"}>${station.text}</span>
-      ${lines.shown.map(
+      <span class=${`station${look}`}>${blank ? "" : station}</span>
+      ${(blank ? [] : lines).map(
         (line) =>
-          html`<span class=${lines.inherited ? "line inherited" : "line"}>${line.text}</span>${
+          html`<span class=${`line${look}`}>${line.text}</span>${
               line.flagText === undefined
                 ? nothing
                 : html`<span class="warning" data-test="period-flag">${line.flagText}</span>`
@@ -447,13 +480,15 @@ export class RoutingGrid extends LitElement {
       }),
       ...periodLines.lines.flatMap((line) => [line.text, line.flagText ?? null]),
     );
-    return html`${this.#button(
-      address,
-      label,
-      shown,
-      { text, inherited: shown === null },
-      { shown: periodLines.lines, inherited: periodLines.inherited },
-    )}${this.#error(address)}${
+    const style: CellStyle =
+      shown !== null
+        ? "set"
+        : zone.id === null
+          ? "inherited"
+          : this.#blank!(entry.row, zone.id)
+            ? "blank"
+            : "differs";
+    return html`${this.#button(address, label, shown, style, text, periodLines.lines)}${this.#error(address)}${
       disabled === null
         ? nothing
         : html`<span class="warning" data-test="disabled-target"
@@ -498,7 +533,7 @@ export class RoutingGrid extends LitElement {
         state: t("routing.default_state"),
       }),
     );
-    return html`${this.#button(address, label, target, { text, inherited: false }, { shown: [], inherited: false })}${this.#error(address)}${repair}`;
+    return html`${this.#button(address, label, target, "set", text, [])}${this.#error(address)}${repair}`;
   }
 
   /** The row's name as the grid draws it, whether or not the row is shown. */
@@ -653,43 +688,34 @@ export class RoutingGrid extends LitElement {
     )?.focus();
   }
 
-  #rowLabel(entry: GridRow, open: ReadonlySet<string>) {
+  #rowLabel(entry: GridRow) {
     if (entry.row.kind === "all" || entry.row.kind === "no_category") return this.#rowName(entry);
-    const row = entry.row;
-    const parent =
-      row.kind === "category"
-        ? (this.#categories.get(row.categoryId)?.parentId ?? null)
-        : this.#categoryOf(row);
-    const path =
-      entry.path.length > 0 && (parent === null || !open.has(parent))
-        ? html`<span class="path">${entry.path.join(" › ")} › </span>`
-        : nothing;
-    if (entry.row.kind === "product") return html`${path}${entry.name}`;
+    if (entry.row.kind === "product") return entry.name;
     const id = entry.row.categoryId;
     const expanded = this.expanded.has(id);
-    return html`${path}<button
-        type="button"
-        class="toggle"
-        data-category=${id}
-        aria-expanded=${expanded ? "true" : "false"}
-        @click=${() => {
-          this.expanded = expanded
-            ? collapseCategory(this.expanded, id)
-            : expandCategory(this.expanded, id);
-        }}
-      >
-        <span class="arrow" aria-hidden="true">${expanded ? "▾" : "▸"}</span> ${entry.name}
-      </button>`;
+    return html`<button
+      type="button"
+      class="toggle"
+      data-category=${id}
+      aria-expanded=${expanded ? "true" : "false"}
+      @click=${() => {
+        this.expanded = expanded
+          ? collapseCategory(this.expanded, id)
+          : expandCategory(this.expanded, id);
+      }}
+    >
+      <span class="arrow" aria-hidden="true">${expanded ? "▾" : "▸"}</span> ${entry.name}
+    </button>`;
   }
 
-  #row(entry: GridRow, zones: readonly Zone[], open: ReadonlySet<string>) {
+  #row(entry: GridRow, zones: readonly Zone[]) {
     const heading = entry.row.kind === "no_category";
     return html`<tr class=${heading ? "heading" : ""}>
       <th
         scope=${heading ? "rowgroup" : "row"}
         style=${styleMap({ "--routing-depth": String(entry.path.length) })}
       >
-        <span class="label">${this.#rowLabel(entry, open)}</span>
+        <span class="label">${this.#rowLabel(entry)}</span>
       </th>
       ${repeat(
         zones,
@@ -706,11 +732,11 @@ export class RoutingGrid extends LitElement {
     </tr>`;
   }
 
-  #rows(entries: readonly GridRow[], zones: readonly Zone[], open: ReadonlySet<string>) {
+  #rows(entries: readonly GridRow[], zones: readonly Zone[]) {
     return repeat(
       entries,
       (entry) => rowKey(entry.row),
-      (entry) => this.#row(entry, zones, open),
+      (entry) => this.#row(entry, zones),
     );
   }
 
@@ -719,14 +745,6 @@ export class RoutingGrid extends LitElement {
     if (model === null) return nothing;
     const entries = visibleRoutingRows(model, this.expanded);
     const zones: Zone[] = [{ id: null, name: t("routing.every_zone") }, ...model.zones];
-    // A category's children follow it in place only when it is shown and expanded.
-    const open = new Set(
-      entries.flatMap((entry) =>
-        entry.row.kind === "category" && this.expanded.has(entry.row.categoryId)
-          ? [entry.row.categoryId]
-          : [],
-      ),
-    );
     const heading = entries.findIndex((entry) => entry.row.kind === "no_category");
     const tree = heading < 0 ? entries : entries.slice(0, heading);
     const uncategorised = heading < 0 ? [] : entries.slice(heading);
@@ -759,13 +777,13 @@ export class RoutingGrid extends LitElement {
             </tr>
           </thead>
           <tbody>
-            ${this.#rows(tree, zones, open)}
+            ${this.#rows(tree, zones)}
           </tbody>
           ${
             heading < 0
               ? nothing
               : html`<tbody>
-                  ${this.#rows(uncategorised, zones, open)}
+                  ${this.#rows(uncategorised, zones)}
                 </tbody>`
           }
         </table>
