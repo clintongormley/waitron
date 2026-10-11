@@ -727,8 +727,9 @@ declare module "@waitron/shared" {
      */
     "device.unauthorized": Record<string, never>;
     /**
-     * A device tried to advance a ticket item on a station it is not bound to. `stationId` names the
-     * ITEM's station.
+     * Refused because of the station: a device's station screen does not offer it, or a till
+     * session advanced a dish that has since left the station the request named. `stationId` names
+     * the dish's current station when a dish is involved, otherwise the refused station.
      */
     "device.forbidden_station": { stationId: string };
     /**

@@ -258,13 +258,13 @@ describe("till-station-screen", () => {
     host.addEventListener("advance-ticket-item", escaped);
     queueWidget(el)!.dispatchEvent(
       new CustomEvent("advance-ticket-item", {
-        detail: { itemId: "ti-1", to: "preparing" },
+        detail: { itemId: "ti-1", stationId: "st-2", to: "preparing" },
         bubbles: true,
         composed: true,
       }),
     );
     await flush(el);
-    expect(api.advanceTicketItem).toHaveBeenCalledWith("ti-1", "preparing");
+    expect(api.advanceTicketItem).toHaveBeenCalledWith("ti-1", "st-2", "preparing");
     // Reloaded: once on connect, once after the advance.
     expect(api.getStationQueue).toHaveBeenCalledTimes(2);
     expect(escaped).not.toHaveBeenCalled();
@@ -318,7 +318,7 @@ describe("till-station-screen", () => {
     await flush(el);
     queueWidget(el)!.dispatchEvent(
       new CustomEvent("advance-ticket-item", {
-        detail: { itemId: "ti-1", to: "preparing" },
+        detail: { itemId: "ti-1", stationId: "st-1", to: "preparing" },
         bubbles: true,
         composed: true,
       }),
@@ -420,12 +420,14 @@ describe("till-station-screen", () => {
     await flush(el);
     el.shadowRoot!.querySelector(".empty")!.dispatchEvent(
       new CustomEvent("advance-ticket-item", {
-        detail: { itemId: "ti-1", to: "preparing" },
+        detail: { itemId: "ti-1", stationId: "st-1", to: "preparing" },
         bubbles: true,
         composed: true,
       }),
     );
-    await vi.waitFor(() => expect(api.advanceTicketItem).toHaveBeenCalledWith("ti-1", "preparing"));
+    await vi.waitFor(() =>
+      expect(api.advanceTicketItem).toHaveBeenCalledWith("ti-1", "st-1", "preparing"),
+    );
     await flush(el);
     expect(api.getStationQueue).not.toHaveBeenCalled();
   });
@@ -708,7 +710,7 @@ describe("till-station-screen device mode (device-identity-1 §5a)", () => {
     await flush(el);
     queueWidget(el)!.dispatchEvent(
       new CustomEvent("advance-ticket-item", {
-        detail: { itemId: "ti-1", to: "preparing" },
+        detail: { itemId: "ti-1", stationId: "st-dev", to: "preparing" },
         bubbles: true,
         composed: true,
       }),
@@ -872,7 +874,7 @@ describe("till-station-screen device mode (device-identity-1 §5a)", () => {
       await flush(el);
       queueWidget(el)!.dispatchEvent(
         new CustomEvent("advance-ticket-item", {
-          detail: { itemId: "ti-1", to: "preparing" },
+          detail: { itemId: "ti-1", stationId: "st-dev", to: "preparing" },
           bubbles: true,
           composed: true,
         }),
@@ -962,7 +964,12 @@ describe("till-station-screen device mode (device-identity-1 §5a)", () => {
   });
 
   it.each([
-    ["a bump", "line", "advance-ticket-item", { itemId: "ti-1", to: "preparing" }],
+    [
+      "a bump",
+      "line",
+      "advance-ticket-item",
+      { itemId: "ti-1", stationId: "st-dev", to: "preparing" },
+    ],
     [
       "a whole-ticket bump",
       "ticket",
@@ -1227,7 +1234,7 @@ describe("till-station-screen device mode with several stations (A366 decision 7
     });
     sectionQueue(sections(el)[1]!)!.dispatchEvent(
       new CustomEvent("advance-ticket-item", {
-        detail: { itemId: "ti-2", to: "ready" },
+        detail: { itemId: "ti-2", stationId: "st-2", to: "ready" },
         bubbles: true,
         composed: true,
       }),
@@ -1306,7 +1313,7 @@ describe("till-station-screen device mode with several stations (A366 decision 7
       expect(line.compareDocumentPosition(queue) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
       queue.dispatchEvent(
         new CustomEvent("advance-ticket-item", {
-          detail: { itemId: "ti-3", to: "preparing" },
+          detail: { itemId: "ti-3", stationId: "st-deli", to: "preparing" },
           bubbles: true,
           composed: true,
         }),
@@ -1328,7 +1335,7 @@ describe("till-station-screen device mode with several stations (A366 decision 7
       });
       queue.dispatchEvent(
         new CustomEvent("advance-ticket-item", {
-          detail: { itemId: "ti-3", to: "preparing" },
+          detail: { itemId: "ti-3", stationId: "st-deli", to: "preparing" },
           bubbles: true,
           composed: true,
         }),
@@ -1586,7 +1593,7 @@ describe("till-station-screen device mode with several stations (A366 decision 7
       expect(line.compareDocumentPosition(queue) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
       queue.dispatchEvent(
         new CustomEvent("advance-ticket-item", {
-          detail: { itemId: "ti-3", to: "preparing" },
+          detail: { itemId: "ti-3", stationId: "st-deli", to: "preparing" },
           bubbles: true,
           composed: true,
         }),
@@ -2973,7 +2980,7 @@ describe("till-station-screen 15-second refresh", () => {
     await flush(el);
     queueWidget(el)!.dispatchEvent(
       new CustomEvent("advance-ticket-item", {
-        detail: { itemId: "ti-1", to: "preparing" },
+        detail: { itemId: "ti-1", stationId: "st-dev", to: "preparing" },
         bubbles: true,
         composed: true,
       }),
@@ -3056,7 +3063,7 @@ describe("till-station-screen 15-second refresh", () => {
     await flush(el);
     queueWidget(el)!.dispatchEvent(
       new CustomEvent("advance-ticket-item", {
-        detail: { itemId: "ti-1", to: "preparing" },
+        detail: { itemId: "ti-1", stationId: "st-dev", to: "preparing" },
         bubbles: true,
         composed: true,
       }),
@@ -3565,7 +3572,7 @@ describe("till-station-screen out-of-date banner", () => {
       await flush(el);
       queueWidget(el)!.dispatchEvent(
         new CustomEvent("advance-ticket-item", {
-          detail: { itemId: "ti-1", to: "preparing" },
+          detail: { itemId: "ti-1", stationId: "st-dev", to: "preparing" },
           bubbles: true,
           composed: true,
         }),
@@ -4670,7 +4677,7 @@ describe("till-station-screen moves a dish to another station (A439)", () => {
     await expect.poll(() => moveError(el)).not.toBeNull();
     queueWidget(el)!.dispatchEvent(
       new CustomEvent("advance-ticket-item", {
-        detail: { itemId: "ti-1", to: "preparing" },
+        detail: { itemId: "ti-1", stationId: "st-dev", to: "preparing" },
         bubbles: true,
         composed: true,
       }),

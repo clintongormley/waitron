@@ -1814,7 +1814,7 @@ describe("place → station queue → per-line advance → collect (KDS-1 ticket
       const advance = await app.request(`/api/ticket-items/${itemId}/advance`, {
         method: "POST",
         headers: { "content-type": "application/json", cookie },
-        body: JSON.stringify({ to }),
+        body: JSON.stringify({ to, stationId: defaultStation.id }),
       });
       expect(advance.status).toBe(200);
     }
@@ -1996,7 +1996,7 @@ describe("POST /api/orders/:id/collect — Mode P's counter handover", () => {
       const bump = await app.request(`/api/ticket-items/${itemId}/advance`, {
         method: "POST",
         headers: { "content-type": "application/json", cookie },
-        body: JSON.stringify({ to }),
+        body: JSON.stringify({ to, stationId: station.id }),
       });
       expect(bump.status).toBe(200);
     }

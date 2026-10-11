@@ -3898,13 +3898,17 @@ export class TillApp extends LitElement {
 
   /** Refreshes on both paths, so a rejected advance (a race with another till) still corrects the queue. */
   async #onAdvanceTicketItem(event: Event): Promise<void> {
-    const { itemId, to } = (
-      event as CustomEvent<{ itemId: string; to: Exclude<TicketState, "queued"> }>
+    const { itemId, stationId, to } = (
+      event as CustomEvent<{
+        itemId: string;
+        stationId: string;
+        to: Exclude<TicketState, "queued">;
+      }>
     ).detail;
     const session = this.#operatorSession;
     this.errorKey = undefined;
     try {
-      await this.api.advanceTicketItem(itemId, to);
+      await this.api.advanceTicketItem(itemId, stationId, to);
     } catch {
       if (session !== this.#operatorSession) return;
       this.errorKey = "station.advance_error";

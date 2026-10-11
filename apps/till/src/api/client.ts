@@ -2687,10 +2687,15 @@ export class TillApi {
   /**
    * Advance ONE ticket item one kitchen step → `POST /api/ticket-items/:id/advance`. `to` is the NEXT
    * state; a skip, repeat or backwards move, or an unknown item, rejects with
-   * `ticket.invalid_transition`.
+   * `ticket.invalid_transition`. A dish now at a station other than `stationId` rejects with
+   * `device.forbidden_station`.
    */
-  async advanceTicketItem(itemId: string, to: Exclude<TicketState, "queued">): Promise<void> {
-    await this.#request<void>(`/api/ticket-items/${itemId}/advance`, "POST", { to });
+  async advanceTicketItem(
+    itemId: string,
+    stationId: string,
+    to: Exclude<TicketState, "queued">,
+  ): Promise<void> {
+    await this.#request<void>(`/api/ticket-items/${itemId}/advance`, "POST", { to, stationId });
   }
 
   /**

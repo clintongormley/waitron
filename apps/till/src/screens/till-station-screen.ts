@@ -567,11 +567,17 @@ export class TillStationScreen extends LitElement {
 
   async #onAdvanceTicketItem(event: Event): Promise<void> {
     event.stopPropagation();
-    const { itemId, to } = (
-      event as CustomEvent<{ itemId: string; to: Exclude<TicketState, "queued"> }>
+    const { itemId, stationId, to } = (
+      event as CustomEvent<{
+        itemId: string;
+        stationId: string;
+        to: Exclude<TicketState, "queued">;
+      }>
     ).detail;
     await this.#advance(() =>
-      this.deviceMode ? this.api.deviceAdvance(itemId, to) : this.api.advanceTicketItem(itemId, to),
+      this.deviceMode
+        ? this.api.deviceAdvance(itemId, to)
+        : this.api.advanceTicketItem(itemId, stationId, to),
     );
   }
 

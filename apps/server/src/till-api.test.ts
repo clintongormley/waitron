@@ -15,6 +15,7 @@ import {
   printJobs,
   stationPrinters,
   tenantReceipts,
+  ticketItems,
   withTransaction,
   writeNodeMembership,
 } from "@waitron/db";
@@ -3064,7 +3065,7 @@ describe("KDS-1 station-display operate routes", () => {
     const bump = await app.request(`/api/ticket-items/${itemId}/advance`, {
       method: "POST",
       headers: { "content-type": "application/json", cookie },
-      body: JSON.stringify({ to: "preparing" }),
+      body: JSON.stringify({ to: "preparing", stationId: cocina.id }),
     });
     expect(bump.status).toBe(200);
     expect(await bump.text()).toBe("");
@@ -3093,7 +3094,7 @@ describe("KDS-1 station-display operate routes", () => {
     const skip = await app.request(`/api/ticket-items/${itemId}/advance`, {
       method: "POST",
       headers: { "content-type": "application/json", cookie },
-      body: JSON.stringify({ to: "ready" }),
+      body: JSON.stringify({ to: "ready", stationId: cocina.id }),
     });
     expect(skip.status).toBe(409);
     expect(await skip.json()).toMatchObject({
@@ -3132,7 +3133,7 @@ describe("KDS-1 station-display operate routes", () => {
     const garbage = await app.request(`/api/ticket-items/${itemId}/advance`, {
       method: "POST",
       headers: { "content-type": "application/json", cookie },
-      body: JSON.stringify({ to: "garbage" }),
+      body: JSON.stringify({ to: "garbage", stationId: cocina.id }),
     });
     expect(garbage.status).toBe(409);
     expect(await garbage.json()).toMatchObject({
@@ -3155,7 +3156,7 @@ describe("KDS-1 station-display operate routes", () => {
       const refused = await app.request(`/api/ticket-items/${itemId}/advance`, {
         method: "POST",
         headers: { "content-type": "application/json", cookie },
-        body: JSON.stringify({ to }),
+        body: JSON.stringify({ to, stationId: cocina.id }),
       });
       expect({ to, status: refused.status }).toEqual({ to, status: 409 });
       expect(await refused.json()).toMatchObject({
@@ -3167,7 +3168,7 @@ describe("KDS-1 station-display operate routes", () => {
     const missing = await app.request(`/api/ticket-items/${itemId}/advance`, {
       method: "POST",
       headers: { "content-type": "application/json", cookie },
-      body: JSON.stringify({}),
+      body: JSON.stringify({ stationId: cocina.id }),
     });
     expect(missing.status).toBe(409);
     expect(await missing.json()).toMatchObject({
@@ -3179,6 +3180,92 @@ describe("KDS-1 station-display operate routes", () => {
       items: { orderId: string; items: { state: string }[] }[];
     };
     expect(afterGroups.find((g) => g.orderId === id)!.items[0]!.state).toBe("queued");
+  });
+
+  /** The one ticket item `placeFired` put on order `orderId`, read from the table. */
+  async function firedItem(orderId: string) {
+    const [item] = await suite.db
+      .select({
+        id: ticketItems.id,
+        stationId: ticketItems.stationId,
+        lineId: ticketItems.workingOrderLineId,
+        state: ticketItems.state,
+      })
+      .from(ticketItems)
+      .where(eq(ticketItems.workingOrderId, orderId));
+    return item!;
+  }
+
+  it("a dish moved to another station is refused 403 device.forbidden_station when bumped from its old station's view, and stays as it was", async () => {
+    const app = new Hono();
+    mountTillApi(app, deps(suite.db), collect([]));
+    const cookie = `${SESSION_COOKIE}=${await openSession(suite.db)}`;
+    const id = await placeFired(app, cookie);
+    const cocina = await defaultStation(app, cookie);
+    const grill = await seedKitchenStation(suite.db, {
+      locationId: cfg.locationId,
+      name: `Grill ${randomUUID()}`,
+      isDefault: false,
+    });
+    const before = await firedItem(id);
+    expect(before.stationId).toBe(cocina.id);
+
+    const moved = await app.request(`/api/working-orders/${id}/lines/move-station`, {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie },
+      body: JSON.stringify({
+        submissionId: randomUUID(),
+        lineIds: [before.lineId],
+        stationId: grill,
+      }),
+    });
+    expect(moved.status).toBe(200);
+
+    // Cocina's view still shows the dish until its next read, and presses it.
+    const stale = await app.request(`/api/ticket-items/${before.id}/advance`, {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie },
+      body: JSON.stringify({ to: "preparing", stationId: cocina.id }),
+    });
+    expect(stale.status).toBe(403);
+    expect(await stale.json()).toMatchObject({
+      error: { code: "device.forbidden_station", params: { stationId: grill } },
+    });
+    expect(await firedItem(id)).toMatchObject({ stationId: grill, state: "queued" });
+
+    // The dish's own station still bumps it.
+    const own = await app.request(`/api/ticket-items/${before.id}/advance`, {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie },
+      body: JSON.stringify({ to: "preparing", stationId: grill.toUpperCase() }),
+    });
+    expect(own.status).toBe(200);
+    expect(await firedItem(id)).toMatchObject({ stationId: grill, state: "preparing" });
+  });
+
+  it("POST /api/ticket-items/:id/advance with a missing or malformed `stationId` is 400 management.request_invalid", async () => {
+    const app = new Hono();
+    mountTillApi(app, deps(suite.db), collect([]));
+    const cookie = `${SESSION_COOKIE}=${await openSession(suite.db)}`;
+    const id = await placeFired(app, cookie);
+    const item = await firedItem(id);
+    for (const body of [
+      { to: "preparing" },
+      { to: "preparing", stationId: "not-a-uuid" },
+      { to: "preparing", stationId: 7 },
+      { to: "preparing", stationId: null },
+    ]) {
+      const res = await app.request(`/api/ticket-items/${item.id}/advance`, {
+        method: "POST",
+        headers: { "content-type": "application/json", cookie },
+        body: JSON.stringify(body),
+      });
+      expect({ body, status: res.status }).toEqual({ body, status: 400 });
+      expect(await res.json()).toMatchObject({
+        error: { code: "management.request_invalid", params: { field: "stationId" } },
+      });
+    }
+    expect(await firedItem(id)).toMatchObject({ state: "queued" });
   });
 
   it("GET /api/stations/:id/queue with a malformed id is 404 station.not_found, not a 500", async () => {
