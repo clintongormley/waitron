@@ -560,7 +560,7 @@ export class DashboardApp extends LitElement {
         margin-inline-start: auto;
       }
 
-      /* The pop-up hangs off the banner's real bottom edge, whatever the page margin or banner height. */
+      /* The pop-up hangs off the row's real bottom edge, whatever the page margin, banner height or update bar. */
       .banner-row {
         position: relative;
       }

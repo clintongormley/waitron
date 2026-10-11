@@ -384,6 +384,48 @@ Log out) at the trailing edge only when a session exists. Use the tenant name, n
 deployment database has one tenant and that tenant can contain several locations
 (`packages/db/src/schema/tenants.ts`).
 
+## An open page notices a box update from one response header
+
+Every server response after `/health` carries `x-waitron-build` (`BUILD_HEADER`,
+`@waitron/shared`), set by `buildHeaderMiddleware` (`apps/server/src/build-header.ts`) after the
+handler runs, because a handler that returns its own `Response` does not keep a header set before
+it. The failed-start recovery page is a separate app (`recoveryApp`,
+`apps/server/src/recovery-surface.ts`) that does not use the middleware, so it names no build; that
+is read, not tested.
+
+Each app's fetch passes through `watchBuild` (`@waitron/diagnostics`): the first build a response
+from the page's own origin names is the page's; the first different one sends
+`BUILD_CHANGED_EVENT` once. A missing or empty header changes nothing. Another origin's build is
+ignored, because a till's router can point at another server whose build says nothing about this
+page — comparing it would reload an idle till in a loop. No request is added for it: the
+dashboard's automatic reads and the till router's 5 s probe of `/api/node` carry the header.
+
+The dashboard shows the update bar. The till reloads by itself only when `#busyForReload()`
+(`apps/till/src/till-app.ts`) is false, and otherwise shows the same bar. It counts as busy when
+someone is signed in (`operatorName`), a sign-in is still loading (`#loginPending`), the basket or
+the table-free draft holds a line (`#store`, `#partylessDraft`), any draft is unsaved
+(`leave.coordinator.isDirty()`), a payment or an order is being sent (`submitting`), a card attempt
+is running (`#cardAttemptsRunning`), a bill payment or refund kept its send for a resend that must
+reuse its id — after no answer, or after a refusal that keeps the id (`#unansweredPayment`,
+`#unansweredRefund`), a bill payment or refund is still being sent (`#billMoneyInFlight`), or a
+sign-out's save of the draft is still being sent (`#signOutSavesInFlight`). A signed-in person
+counts because a reload signs them out.
+
+Guards: `packages/diagnostics/src/build-watch.test.ts`, `apps/server/src/build-header.test.ts`, the
+build-header lines in `apps/server/src/boot.test.ts`, the "build updates" cases in
+`apps/dashboard/src/dashboard-app.test.ts`, the "when the server reports another build" cases in
+`apps/till/src/till-app-boot-and-counter.test.ts`, and the box-update cases in
+`apps/till/src/till-app-bill-payments.test.ts` and `apps/till/src/till-app-drafts.test.ts`. No test
+checks the wiring in either app's `main.ts`. It was run once instead, on 2026-10-11, on the demo
+stack (`wa-wt demo`) in Playwright's Chromium, with a route that swapped the header's value for
+another build: the header reached both pages through the Vite dev servers (`0.0.0`, not `null`);
+the signed-in dashboard showed the bar 26 ms after its session read (`/management-api/session/me`)
+brought the new build, and after Reload showed none; a till on its lock screen with nobody signed
+in loaded again 3711 ms after the swap began, first brought by `/api/node`; a signed-in till showed
+the bar instead, had not reloaded 15 s later, and after Reload came back on the lock screen,
+signed out. The limits kept on purpose are in `docs/backlog/dashboard.md` → "Decisions and
+deliberate limits".
+
 ## The dashboard and pre-login till match the browser's `Accept-Language`
 
 The public locale response carries a separate `loginDefault`, and `venueDefault` still describes the
