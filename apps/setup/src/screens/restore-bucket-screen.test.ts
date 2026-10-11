@@ -151,6 +151,12 @@ describe("SetupRestoreBucketScreen", () => {
     );
   });
 
+  it("keeps the browser from offering to remember the kit", async () => {
+    const { el } = await mountWidget<SetupRestoreBucketScreen>("setup-restore-bucket-screen", {});
+    const control = q(el, "[data-test=kit]")!.shadowRoot!.querySelector("textarea")!;
+    expect(control.getAttribute("autocomplete")).toBe("off");
+  });
+
   it("picks the environment from the shared dropdown, with its help beside the box", async () => {
     const { el, host } = await mountWidget<SetupRestoreBucketScreen>(
       "setup-restore-bucket-screen",
