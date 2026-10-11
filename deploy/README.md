@@ -357,8 +357,9 @@ on a fresh database. Its menus, layouts, staff and settings can come from the ol
    whose modules are at different versions.
 2. After the old venue's last sale, open its dashboard, go to Backups, and use Configuration export.
    Note the passphrase.
-3. Leave the old box and its backups as they are. Do not reset it (`reset` refuses on a production
-   box anyway; see [Resetting a box](#resetting-a-box)).
+3. Leave the old box and its backups as they are, and do not reset it (see
+   [Resetting a box](#resetting-a-box)). Keep it switched on and online so it can send its last sales
+   to AEAT; its dashboard raises an alert once a sale has waited four hours to be sent.
 4. In the new box's setup wizard, choose Live, then on Import a configuration load the export with
    its passphrase. On Whose restaurant is this?, choose New tax ID, then enter the new taxpayer's
    tax ID, legal name, registered business address, invoice series and AEAT certificate.

@@ -429,13 +429,19 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
 - **How long, and in what form, an old taxpayer's database must be kept.** Not checked. Left open
   by A496; `deploy/README.md` → _Moving to a new tax ID_ says so.
 
+- **The new-tax-ID procedure cannot tell the operator when the old box has sent its last sales to
+  AEAT.** Step 3 of `deploy/README.md` → _Moving to a new tax ID_ keeps the box on so it can; the
+  only signal it names is the delay alert (`fiscal.submission_delayed`), raised after four hours.
+  Left open by A496.
+
 - **A change of country cannot import a configuration.** Setup refuses an export whose country
   differs from the new venue's (`provision`, `apps/server/src/boot.ts`); importing across countries
   needs its own design. Left open by A496.
 
-- **The dashboard shows the configuration export card on a demo box, where the export route is not
-  served**, so its download fails there. The route is mounted on a preparation or live box only
-  (`apps/server/src/boot.ts`). Left open by A496.
+- **The dashboard shows the configuration export card where the export route is not served**, so
+  its download fails there: on a demo box, and on a box whose settings name no onboarding intent,
+  such as a promoted mirror (`persistTradingEnv` writes none). The route is mounted only when the
+  intent is preparation or live (`apps/server/src/boot.ts`). Left open by A496.
 
 - **`#onGoto` in `setup-app.ts` keeps `fiscalTestStatus`** — found by #567 while pruning comments.
   The done screen treats a non-network status refusal as ready, so an HTTP 503 can announce "The
@@ -2843,8 +2849,7 @@ _Formerly A3, A8 and B6; part of A9._ Detail: [backlog/printers.md](backlog/prin
 - **A change is refused while an open order at the location holds a line**
   (`receipt.language_orders_open`; narrowed by C124, #1020, 2026-10-02, with core
   `0064_line_locale_triggers_text_only`). If a language is changed underneath an open bill by
-  another road (the configuration import writes `invoice_locales` directly), the bill's next split
-  answers an unmapped 500 `server.internal`. [Detail](backlog/printers.md#a-change-is-refused-while-an-open-order-at-the-location-holds-a-line)
+  direct SQL, the bill's next split answers an unmapped 500 `server.internal`. [Detail](backlog/printers.md#a-change-is-refused-while-an-open-order-at-the-location-holds-a-line)
 
 - After a change, a paid counter sale with one dish a station took and one it did not is not
   blocked, and its send-to-prep route (`/prep`) then answers 409 `ticket.already_fired`, as it
@@ -2859,9 +2864,9 @@ _Formerly A3, A8 and B6; part of A9._ Detail: [backlog/printers.md](backlog/prin
 - The refusal's count of blocking orders is not shown on the Receipts tab of Venue settings: `codeMessage` fills
   in no values.
 
-- The provisioning command (`waitron-provision`) and the configuration import can still store
-  two languages, or one no pack offers; the first entry is what prints. Neither holds Catalonia
-  to Catalan: only the Receipts route and setup do.
+- The provisioning command (`waitron-provision`) can still store two languages, or one no pack
+  offers; the first entry is what prints. It does not hold Catalonia to Catalan: only the Receipts
+  route and setup do.
 
 - `cfg.invoiceLocales` (`apps/server/src/till-config.ts`) is no longer read outside tests (by
   grep) and can be retired.

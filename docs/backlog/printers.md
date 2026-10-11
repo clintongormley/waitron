@@ -480,9 +480,8 @@ returns `null`. This checks those readers, not every sale path.
   party is still seated, a paid order with a dish no station took, and an open bill with no line
   no longer block. After the change, the tests serve a seated party's paid dish, take back a
   serve on one, send a paid sale's unsent dish and collect a placed order. If a language is
-  changed underneath an open bill by another road (the configuration import writes
-  `invoice_locales` directly), the bill's next split answers an unmapped 500
-  `server.internal`; the same test file pins it, changing the language by direct SQL.
+  changed underneath an open bill by direct SQL, the bill's next split answers an unmapped 500
+  `server.internal`; the same test file pins it.
 
 ## A placed order collected after a language change is filed in the new language
 
