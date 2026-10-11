@@ -128,9 +128,9 @@ export class SetupDoneScreen extends LitElement {
 
   /**
    * A resolved `getStatus` means the box has not restarted yet. A `TypeError` is `fetch` failing while
-   * the box is down mid-restart: expected, never shown. A 5xx is the box answering but not ready yet,
-   * so it waits too. Any other rejection (a 404 once the setup route is gone, another non-2xx, or a
-   * body that is not JSON) is taken to mean the box is trading.
+   * the box is down mid-restart: expected, never shown. A 5xx is read as not ready yet, so it waits
+   * too. Any other rejection (a 404 once the setup route is gone, another non-2xx, or a body that is
+   * not JSON) is taken to mean the box is trading.
    */
   async #pollOnce(): Promise<void> {
     try {
