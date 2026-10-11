@@ -450,6 +450,35 @@ describe("SetupRestoreScreen", () => {
       expect(getComputedStyle(box).boxShadow).toContain("rgb(4, 5, 6)");
     });
 
+    const expectDangerOutline = (input: HTMLInputElement): void => {
+      const style = getComputedStyle(input);
+      expect(style.outlineStyle).toBe("solid");
+      expect(style.outlineColor).toBe("rgb(4, 5, 6)");
+      expect(style.outlineWidth).not.toBe("0px");
+    };
+
+    it("outlines the backup file it names in the danger colour", async () => {
+      const { el, host } = await mountWidget<SetupRestoreScreen>("setup-restore-screen", {
+        request: REQUEST,
+        errorMessage: REFUSAL.artifact,
+        invalidField: "artifact",
+      });
+      host.style.setProperty("--wt-color-danger", "rgb(4, 5, 6)");
+      expectDangerOutline(q<HTMLInputElement>(el, "[data-test=artifact]")!);
+    });
+
+    it("outlines a missing backup file only after Restore is pressed, and not once one is chosen", async () => {
+      const { el, host } = await mountWidget<SetupRestoreScreen>("setup-restore-screen", {});
+      host.style.setProperty("--wt-color-danger", "rgb(4, 5, 6)");
+      const file = q<HTMLInputElement>(el, "[data-test=artifact]")!;
+      expect(getComputedStyle(file).outlineStyle).toBe("none");
+      q(el, "[data-test=restore]")!.click();
+      await el.updateComplete;
+      expectDangerOutline(file);
+      await fill(el, { artifact: true });
+      expect(getComputedStyle(file).outlineStyle).toBe("none");
+    });
+
     it("drops it when the named field changes", async () => {
       const { el } = await mountWidget<SetupRestoreScreen>("setup-restore-screen", {
         request: REQUEST,

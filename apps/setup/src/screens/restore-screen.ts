@@ -41,6 +41,11 @@ export class SetupRestoreScreen extends LitElement {
       :host {
         display: block;
       }
+      input[type="file"][aria-invalid="true"] {
+        outline: var(--wt-field-line-width-active) solid var(--wt-color-danger);
+        outline-offset: var(--wt-space-1);
+        border-radius: var(--wt-radius-sm);
+      }
     `,
   ];
 
