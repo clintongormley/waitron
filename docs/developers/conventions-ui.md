@@ -399,9 +399,9 @@ from the page's own origin names is the page's; the first different one sends
 request. A missing or empty header changes nothing. Another origin's build is ignored, and so is
 an answer a redirect brought from another origin (`response.url`), because a till's router can
 point at another server whose build says nothing about this page; by reasoning, not by a run,
-comparing it would reload an idle till in a loop. The dashboard adds no request for it: its
-automatic reads and the till router's 5 s probe of `/api/node` carry the header (read). The till
-adds at most one `/api/node` check per page, when a new build is seen: before deciding, it waits
+comparing it would reload an idle till in a loop. The dashboard adds no request: its automatic
+reads carry the header (read). On the till the router's 5 s probe of `/api/node` carries it, and
+the till adds at most one `/api/node` check per page, when a new build is seen: before deciding, it waits
 for the router's probe round in flight, or starts one, because the answer naming the new build may
 be a reset box's setup page, which the router reads after the watcher has seen it. "At most one"
 is read from the code (the event is sent once per page); a boot-suite case, where only a request
@@ -422,7 +422,8 @@ answered (`#resend`, around `resendUnanswered`, and the station screen's dish mo
 announces with a `hold-reload` event), a whole bill payment or refund, and a sign-out's save of
 the draft. A signed-in person counts because a reload signs them out. The bar's Reload
 waits only for requests still out (`#requestsOut()`: `submitting`, a card attempt, or a held
-request), then reloads once.
+request), then reloads once, unless the operator touches or types on the till, or the box stops
+serving it, first; then the press is dropped and the bar stays to be pressed again.
 
 Guards: `packages/diagnostics/src/build-watch.test.ts`, `apps/server/src/build-header.test.ts`, the
 build-header lines in `apps/server/src/boot.test.ts`, the "build updates" cases in

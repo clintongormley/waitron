@@ -894,8 +894,8 @@ From **Variants as products (#511–#556) — what is left open.** How the model
   update only on its next request; a page that first hears from the box after the update takes the
   new build as its own and never shows the bar; a till with nobody signed in reloads even while
   someone is typing a PIN (typed digits are not a draft); a signed-in till with nothing open shows
-  the bar rather than signing its operator out; once the till shows the bar it does not reload later
-  by itself; an idle till whose bill payment or refund kept its send for a resend that must reuse its
+  the bar rather than signing its operator out; once the till shows the bar it reloads only when
+  Reload is pressed (a press waiting for a request still out is the operator's reload); an idle till whose bill payment or refund kept its send for a resend that must reuse its
   id shows the bar rather than reloading. Every response from the main listener after
   `/health` names the box's build to whoever can reach it, signed in or not. The failed-start
   recovery page and the plain-HTTP landing listener send no build header (read, not tested). The

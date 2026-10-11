@@ -3808,8 +3808,9 @@ language changes, but not while More is open. While the transfers are in More, i
 
 After a box update a till with nobody signed in and nothing open reloads by itself; otherwise the
 same update bar the dashboard uses shows at the very top of the till, above the Demo or Preparation
-strip and the screens, and stays until Reload. What counts as "nothing open" is in
-`conventions-ui.md` → "An open page notices a box update from one response header". Seen on
+strip and the screens. When it hides (a reset box, a refused device), what Reload waits for, and
+what counts as "nothing open" are in `conventions-ui.md` → "An open page notices a box update from
+one response header". Seen on
 2026-10-11 on the demo stack: a till on its lock screen with nobody signed in reloaded 3.7 s after
 the build changed; a signed-in till showed the bar, had not reloaded 15 s later, and came back on
 the lock screen, signed out, after Reload. With the bar showing, the page itself did not scroll at
