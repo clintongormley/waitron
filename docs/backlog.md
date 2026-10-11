@@ -5040,13 +5040,6 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
   which depends on nothing, so that edge closes no loop.
   [Detail](backlog/architecture.md#three-copies-of-one-sql-identifier-validator-and-two-cause-chain-walkers)
 
-- **`resolveEnvironment` and `deploymentEnvironment` are two hand-maintained copies of one
-  four-branch table** — OPEN (found 2026-09-23, task F1's review wave).
-  `packages/provisioning/src/environment.ts` and `apps/server/src/config.ts`. This decides whether a
-  box files against the real AEAT or the test one (`CLAUDE.md` §5), so two copies held together by
-  hand is the wrong shape for it.
-  [Detail](backlog/architecture.md#resolveenvironment-and-deploymentenvironment-are-two-hand-maintained-copies-of-one-four-branch-table)
-
 - **Raw engine imports in `apps/server/src/recovery-lock.ts` and
   `apps/server/scripts/cloud-backup-fixture.ts`** — left open by W45 (#1155), which closed
   "`packages/migrations` opened its own raw `node:sqlite` connection": a 2026-10-03 search of

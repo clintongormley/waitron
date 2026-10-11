@@ -8,12 +8,22 @@ import { tableExists } from "./table-exists.js";
 import "./errors.js";
 
 /**
- * Which environment a database can be stamped for. A package-local union, deliberately NOT
- * `apps/server`'s identically-shaped `DeploymentEnvironment` type — this package must never import
- * from `apps/server` — but a union all the same, so an unrepresentable value is a `tsc` error
- * instead of a runtime `deployment_environment_ck` violation.
+ * Which environment a database can be stamped for. A union, not a bare `string`, so an
+ * unrepresentable value is a `tsc` error instead of a runtime `deployment_environment_ck` violation.
  */
 export type DeploymentEnvironment = "production" | "preproduction";
+
+/**
+ * The environment a `WAITRON_ENV` value names, or `null` when it names none; the caller refuses
+ * `null` with its own error code. Absent, `""` and `dev` mean `preproduction`; `production` must be
+ * typed out exactly, because a production invoice number can never be reused, so a mistake has to
+ * land on the harmless value. Nothing else is rounded to the nearer word.
+ */
+export function deploymentEnvironmentFor(raw: string | undefined): DeploymentEnvironment | null {
+  if (raw === undefined || raw === "" || raw === "dev") return "preproduction";
+  if (raw === "production" || raw === "preproduction") return raw;
+  return null;
+}
 
 /**
  * Whether the `deployment` table exists in the file behind this handle.

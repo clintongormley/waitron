@@ -1,5 +1,6 @@
 import { join, resolve } from "node:path";
-import { resolveLogDir } from "@waitron/db";
+import { deploymentEnvironmentFor, resolveLogDir } from "@waitron/db";
+import type { DeploymentEnvironment } from "@waitron/db";
 import { AppError } from "@waitron/shared";
 import { DEFAULTS } from "@waitron/scheduler";
 import { resolveLitestreamBin } from "@waitron/stream/litestream.js";
@@ -10,7 +11,7 @@ import { isUnset } from "./env-value.js";
 import type { OnboardingIntent } from "./trading-config.js";
 import "./errors.js";
 
-export type DeploymentEnvironment = "production" | "preproduction";
+export type { DeploymentEnvironment } from "@waitron/db";
 
 export interface SchedulerConfig {
   horizonDays: number;
@@ -337,19 +338,14 @@ function boundedPort(env: Env, variable: string, fallback: number): number {
  * invoices for money never taken.
  */
 export function deploymentEnvironment(env: Env): DeploymentEnvironment {
-  const raw = env.WAITRON_ENV;
-  // Unset means preproduction; production must be typed out, because production numbering can
-  // never be reused, even for a test invoice.
-  if (isUnset(raw)) return "preproduction";
-  // `dev` only switches on `isDevMode`; fiscally it is preproduction.
-  if (raw === "dev") return "preproduction";
-  if (raw !== "production" && raw !== "preproduction") {
+  const environment = deploymentEnvironmentFor(env.WAITRON_ENV);
+  if (environment === null) {
     throw new AppError("server.config_invalid", {
       variable: "WAITRON_ENV",
       reason: "not_a_deployment_environment",
     });
   }
-  return raw;
+  return environment;
 }
 
 /**

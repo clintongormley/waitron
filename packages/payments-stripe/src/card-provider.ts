@@ -1,6 +1,6 @@
 import Stripe from "stripe";
 import { withTransaction } from "@waitron/db";
-import type { Database } from "@waitron/db";
+import type { Database, DeploymentEnvironment } from "@waitron/db";
 import { getCredential } from "@waitron/credentials";
 import type { KeyRing } from "@waitron/credentials";
 import { AppError } from "@waitron/shared";
@@ -20,8 +20,6 @@ import "./errors.js";
 
 const PROVIDER_ID = "stripe";
 const CREDENTIAL_PURPOSE = "payments.stripe";
-
-type DeploymentEnvironment = "preproduction" | "production";
 
 const CLIENT_METHODS = [
   "createPaymentIntent",
