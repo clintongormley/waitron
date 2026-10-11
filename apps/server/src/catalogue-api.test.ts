@@ -1162,11 +1162,24 @@ describe("mountCatalogueApi — catalogues", () => {
 
   it("POST /management-api/catalogues/:id/duplicate of an unknown menu → 404 catalogue.not_found, nothing written", async () => {
     const before = await catalogueCount();
-    const res = await send(mountApp(), "POST", duplicatePath(crypto.randomUUID()), {
+    const missing = crypto.randomUUID();
+    const res = await send(mountApp(), "POST", duplicatePath(missing), {
       body: { name: "Copy" },
     });
     expect(res.status).toBe(404);
-    expect(await res.json()).toMatchObject({ error: { code: "catalogue.not_found" } });
+    expect(await res.json()).toMatchObject({
+      error: { code: "catalogue.not_found", params: { catalogueId: missing } },
+    });
+    expect(await catalogueCount()).toBe(before);
+  });
+
+  it("POST /management-api/catalogues/:id/duplicate with a malformed id → 400 shared.invalid_id, nothing written", async () => {
+    const before = await catalogueCount();
+    const res = await send(mountApp(), "POST", duplicatePath("bad-id"), { body: { name: "Copy" } });
+    expect(res.status).toBe(400);
+    expect(await res.json()).toMatchObject({
+      error: { code: "shared.invalid_id", params: { kind: "MenuId", value: "bad-id" } },
+    });
     expect(await catalogueCount()).toBe(before);
   });
 

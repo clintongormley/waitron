@@ -13,8 +13,8 @@ import "./errors.js";
  * A new menu holding the source's working copy as stored: its sections, their members, its details,
  * its menu items and their variant prices. Nothing published or scheduled is copied, and nothing
  * outside the menu is changed to point at the copy. A member naming a section another menu owns (an
- * include, or a shortcut reached through one) keeps naming it. Everything is read and checked
- * before the first write.
+ * include, or a shortcut reached through one) keeps naming it. The source is read, and the name
+ * checked, before the first write.
  */
 export async function duplicateMenu(
   tx: Transaction,
@@ -46,6 +46,20 @@ export async function duplicateMenu(
   const copy = await insertCatalogue(tx, internalName!);
   const sectionIds = new Map(owned.map((section) => [section.id, newId()]));
   const itemIds = new Map(items.map((item) => [item.id, newId()]));
+  // Readers break a position tie by member id, so the new ids keep the old ids' order.
+  const byId = (a: string, b: string) => (a < b ? -1 : 1);
+  const memberIds = members.map(() => newId()).sort(byId);
+  const copiedMembers = members
+    .sort((a, b) => byId(a.id, b.id))
+    .map((member, index) => ({
+      ...member,
+      id: memberIds[index]!,
+      sectionId: sectionIds.get(member.sectionId)!,
+      childSectionId:
+        member.childSectionId === null
+          ? null
+          : (sectionIds.get(member.childSectionId) ?? member.childSectionId),
+    }));
   for (const batch of batches(owned))
     await tx.insert(sections).values(
       batch.map((section) => ({
@@ -55,18 +69,7 @@ export async function duplicateMenu(
         internalName: section.id === details.rootSectionId ? copy.name : section.internalName,
       })),
     );
-  for (const batch of batches(members))
-    await tx.insert(sectionMembers).values(
-      batch.map((member) => ({
-        ...member,
-        id: newId(),
-        sectionId: sectionIds.get(member.sectionId)!,
-        childSectionId:
-          member.childSectionId === null
-            ? null
-            : (sectionIds.get(member.childSectionId) ?? member.childSectionId),
-      })),
-    );
+  for (const batch of batches(copiedMembers)) await tx.insert(sectionMembers).values(batch);
   await tx.insert(menuDetails).values({
     ...details,
     menuId: copy.id,

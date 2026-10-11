@@ -10,6 +10,8 @@ import { readMenuStructure, requireMenuRoot } from "./menu-structure.js";
 import { menuStatus, previewMenu, publishMenu } from "./menu-publication.js";
 import { setIncludeFolder } from "./include-folder.js";
 import { addMember, createSectionIn, deleteSection, removeMember } from "./sections.js";
+import { membersOf } from "./section-members.js";
+import type { TileRef } from "./section-types.js";
 import { setMenuVariants, setProductVariants } from "./variants.js";
 import { menuDetails, menuItems } from "./schema/menu.js";
 import { menuPublications, menuVersions } from "./schema/publication.js";
@@ -354,6 +356,68 @@ describe("duplicateMenu", () => {
     expect(relabelled(await home(copy.id), copyMenuIds)).toEqual(
       relabelled(await home(f.lunch), sourceMenuIds),
     );
+  });
+
+  it("keeps stored positions and the source's order where members share a position", async () => {
+    await seedTenant(fx.db);
+    const source = (await app((tx) => createCatalogue(tx, { name: "Tied" }))).id;
+    const entries = 20;
+    await app(async (tx) => {
+      const root = await requireMenuRoot(tx, source);
+      const [details] = await tx.select().from(menuDetails).where(eq(menuDetails.menuId, source));
+      await tx.insert(sections).values(
+        Array.from({ length: entries }, (_, i) => ({
+          id: `tie-section-${i}`,
+          internalName: `Entry ${i}`,
+          ownerMenuId: source,
+        })),
+      );
+      // Member ids sort in the reverse of the entries' numbering, so a reader's tie-break is seen.
+      const tied = (sectionId: string, kind: string) =>
+        Array.from({ length: entries }, (_, i) => ({
+          id: `tie-${kind}-${String(entries - i).padStart(2, "0")}`,
+          sectionId,
+          position: 3,
+          childSectionId: `tie-section-${i}`,
+        }));
+      await tx
+        .insert(sectionMembers)
+        .values([...tied(root, "member"), ...tied(details!.homeSectionId, "shortcut")]);
+    });
+
+    const copy = (await app((tx) => duplicateMenu(tx, source, "Tied copy"))).id;
+
+    const orders = (menuId: string) =>
+      app(async (tx) => {
+        const names = new Map(
+          (await tx.select().from(sections).where(eq(sections.ownerMenuId, menuId))).map(
+            (section) => [section.id, section.internalName],
+          ),
+        );
+        const named = (members: readonly { position: number; ref: TileRef }[]) =>
+          members.map(({ position, ref }) => [
+            position,
+            ref.kind === "section" ? names.get(ref.sectionId) : ref.kind,
+          ]);
+        const [details] = await tx.select().from(menuDetails).where(eq(menuDetails.menuId, menuId));
+        return {
+          structure: named((await readMenuStructure(tx, menuId)).root.members),
+          home: (await readMenuHome(tx, menuId)).shortcuts.map(({ position, name }) => [
+            position,
+            name,
+          ]),
+          rootRows: named(await membersOf(tx, details!.rootSectionId)),
+          homeRows: named(await membersOf(tx, details!.homeSectionId, "home_layout")),
+        };
+      });
+    const sourceOrders = await orders(source);
+    expect(sourceOrders.structure).toEqual(
+      Array.from({ length: entries }, (_, i) => [3, `Entry ${entries - 1 - i}`]),
+    );
+    expect(sourceOrders.home).toEqual(sourceOrders.structure);
+    expect(sourceOrders.rootRows).toEqual(sourceOrders.structure);
+    expect(sourceOrders.homeRows).toEqual(sourceOrders.structure);
+    expect(await orders(copy)).toEqual(sourceOrders);
   });
 
   it("refuses a menu that does not exist with catalogue.not_found", async () => {

@@ -339,6 +339,11 @@ describe("Catalogue API — option groups, gates, by-id FKs", () => {
     );
     const ZERO_UUID = "00000000-0000-0000-0000-000000000000";
     await expect403(
+      await send(app, "POST", `/management-api/catalogues/${ZERO_UUID}/duplicate`, staffCookie, {
+        name: "Refused",
+      }),
+    );
+    await expect403(
       await send(app, "POST", `/management-api/locations/${ZERO_UUID}/catalogues`, staffCookie, {
         catalogueId: ZERO_UUID,
       }),
