@@ -23,6 +23,7 @@ import {
 } from "@waitron/shared";
 import { carriedText, countText, currentLocale, named, setLocale, t } from "./i18n/t.js";
 import { codeMessage } from "./i18n/codes.js";
+import { BUILD_CHANGED_EVENT } from "@waitron/diagnostics";
 import { diag } from "./diagnostics.js";
 import {
   DepartmentTransferMonitor,
@@ -84,6 +85,7 @@ import type {
 } from "./screens/till-table-order-screen.js";
 import type { DraftGroup } from "./state/draft-groups.js";
 import "@waitron/ui/src/components/wt-toast.js";
+import "@waitron/ui/src/components/wt-banner.js";
 import type { WtToast } from "@waitron/ui/src/components/wt-toast.js";
 import "./screens/till-station-screen.js";
 import { CROSS_ICON_PATH } from "./widgets/station-queue.js";
@@ -1074,6 +1076,10 @@ export class TillApp extends LitElement {
         height: 100%;
       }
 
+      .app > wt-banner {
+        flex: none;
+      }
+
       till-tab-shell {
         min-height: 0;
       }
@@ -1187,6 +1193,29 @@ export class TillApp extends LitElement {
 
   /** Set by `main.ts`; undefined in tests that inject none. */
   @property({ attribute: false }) router?: ServerRouter;
+
+  @property({ attribute: false }) reload: () => void = () => location.reload();
+  @state() private updateAvailable = false;
+
+  readonly #onBuildChanged = (): void => {
+    if (this.#busyForReload()) this.updateAvailable = true;
+    else this.reload();
+  };
+
+  /** A reload signs the operator out and drops whatever is only in this page's memory. */
+  #busyForReload(): boolean {
+    return (
+      this.operatorName !== "" ||
+      this.#loginPending ||
+      this.#store.lines.length > 0 ||
+      this.#partylessDraft.lines.length > 0 ||
+      this.leave.coordinator.isDirty() ||
+      this.submitting ||
+      this.#cardAttemptsRunning > 0 ||
+      this.#unansweredPayment !== null ||
+      this.#unansweredRefund !== null
+    );
+  }
 
   sessionActivity: SessionActivity = new SessionActivity();
 
@@ -1431,6 +1460,7 @@ export class TillApp extends LitElement {
     this.addEventListener("pointerdown", this.#onInteraction);
     this.addEventListener("keydown", this.#onInteraction);
     document.addEventListener("visibilitychange", this.#onVisibility);
+    window.addEventListener(BUILD_CHANGED_EVENT, this.#onBuildChanged);
     void this.sessionActivity.start();
     this.#syncDepartmentTransfers();
   }
@@ -1459,6 +1489,7 @@ export class TillApp extends LitElement {
     this.removeEventListener("pointerdown", this.#onInteraction);
     this.removeEventListener("keydown", this.#onInteraction);
     document.removeEventListener("visibilitychange", this.#onVisibility);
+    window.removeEventListener(BUILD_CHANGED_EVENT, this.#onBuildChanged);
     void this.sessionActivity.stop();
     super.disconnectedCallback();
   }
@@ -9373,6 +9404,16 @@ export class TillApp extends LitElement {
         }}
         @menu-selected=${(e: CustomEvent<{ id: string }>) => this.#onMenuSelected(e)}
       >
+        ${
+          this.updateAvailable
+            ? html`<wt-banner
+                data-test="update-bar"
+                message=${t("update.message")}
+                action-label=${t("update.reload")}
+                @wt-banner-action=${() => this.reload()}
+              ></wt-banner>`
+            : nothing
+        }
         ${
           this.onboardingIntent
             ? html`<p class="mode-indicator" data-test="mode-indicator">

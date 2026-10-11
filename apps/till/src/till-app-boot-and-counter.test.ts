@@ -1,6 +1,7 @@
 import { page, userEvent } from "vitest/browser";
 import { applyTokens, currentContentLanguages } from "@waitron/ui";
 import type { ContentLanguages } from "@waitron/shared";
+import { BUILD_CHANGED_EVENT } from "@waitron/diagnostics";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   cleanupWidgets,
@@ -4604,4 +4605,137 @@ describe("hierarchy deletion service choices", () => {
       expect(api.recordSale).not.toHaveBeenCalled();
     },
   );
+});
+
+describe("till-app when the server reports another build", () => {
+  type Banner = HTMLElement & { message: string; actionLabel: string };
+  const updateBar = (el: TillApp) =>
+    el.shadowRoot!.querySelector<Banner>("wt-banner[data-test=update-bar]");
+  const updated = () => window.dispatchEvent(new Event(BUILD_CHANGED_EVENT));
+  function unloadGuarded(): boolean {
+    const event = new Event("beforeunload", { cancelable: true });
+    window.dispatchEvent(event);
+    return event.defaultPrevented;
+  }
+
+  it("reloads by itself on the lock screen with nobody signed in and nothing open", async () => {
+    const reload = vi.fn();
+    const { el } = await mountApp({}, { reload });
+    await flush(el);
+    expect(lock(el)).not.toBeNull();
+    updated();
+    await flush(el);
+    expect(reload).toHaveBeenCalledOnce();
+    expect(updateBar(el)).toBeNull();
+  });
+
+  it("shows the bar instead of reloading while someone is signed in", async () => {
+    const reload = vi.fn();
+    const { el } = await mountApp({}, { reload });
+    await toCounter(el);
+    updated();
+    await flush(el);
+    expect(reload).not.toHaveBeenCalled();
+    expect(updateBar(el)!.message).toBe("Waitron se ha actualizado.");
+    expect(updateBar(el)!.actionLabel).toBe("Recargar");
+  });
+
+  it("words the bar in English for an English till", async () => {
+    const { el } = await mountApp({}, { reload: vi.fn() });
+    await toCounter(el);
+    setLocale("en-GB");
+    updated();
+    await flush(el);
+    expect(updateBar(el)!.message).toBe("Waitron was updated.");
+    expect(updateBar(el)!.actionLabel).toBe("Reload");
+  });
+
+  it("shows the bar while a sign-in is still loading", async () => {
+    const reload = vi.fn();
+    const { el } = await mountApp(
+      { listDefaultZoneOffers: vi.fn(() => new Promise(() => {})) },
+      { reload },
+    );
+    await flush(el);
+    emit(lock(el)!, "logged-in", { personId: "p1", displayName: "Ana", permissions: [] });
+    await flush(el);
+    updated();
+    await flush(el);
+    expect(reload).not.toHaveBeenCalled();
+    expect(updateBar(el)).not.toBeNull();
+  });
+
+  it("shows the bar on the lock screen while a retrieved order is still in the basket", async () => {
+    const reload = vi.fn();
+    const { el } = await mountApp(
+      {
+        retrieveWorkingOrder: vi.fn().mockResolvedValue({
+          id: "wo-1",
+          orderNumber: 5,
+          label: null,
+          lines: [{ quantity: "1.000", product: cafe }],
+        }),
+      },
+      { reload },
+    );
+    const c = await toCounter(el);
+    emit(c, "retrieve-order", { id: "wo-1" });
+    await flush(el);
+    expect(c.store.lines).toHaveLength(1);
+    emit(shell(el)!, "logout");
+    await flush(el);
+    expect(lock(el)).not.toBeNull();
+    // A retrieved order is saved, so no draft guards the page: only its lines make the till busy.
+    expect(unloadGuarded()).toBe(false);
+    updated();
+    await flush(el);
+    expect(reload).not.toHaveBeenCalled();
+    expect(updateBar(el)).not.toBeNull();
+  });
+
+  it("shows the bar on the lock screen while the basket holds an unsaved change but no line", async () => {
+    const reload = vi.fn();
+    const { el } = await mountApp({}, { reload });
+    const c = await toCounter(el);
+    c.store.label = "Mesa 4";
+    await flush(el);
+    emit(shell(el)!, "logout");
+    await flush(el);
+    expect(c.store.lines).toHaveLength(0);
+    expect(unloadGuarded()).toBe(true);
+    updated();
+    await flush(el);
+    expect(reload).not.toHaveBeenCalled();
+    expect(updateBar(el)).not.toBeNull();
+  });
+
+  it("shows the bar while a payment still waits for the server after sign-out emptied the screen", async () => {
+    const reload = vi.fn();
+    const { el } = await mountApp({ recordSale: vi.fn(() => new Promise(() => {})) }, { reload });
+    const c = await toCounter(el);
+    c.store.addProduct(c.products[0]!, "1");
+    emit(c, "confirm-payment", { method: "cash", amount: "5" });
+    await flush(el);
+    expect(api.recordSale).toHaveBeenCalledOnce();
+    emit(shell(el)!, "logout");
+    await flush(el);
+    c.store.clear();
+    await flush(el);
+    expect(lock(el)).not.toBeNull();
+    expect(unloadGuarded()).toBe(false);
+    updated();
+    await flush(el);
+    expect(reload).not.toHaveBeenCalled();
+    expect(updateBar(el)).not.toBeNull();
+  });
+
+  it("reloads when Reload on the bar is pressed", async () => {
+    const reload = vi.fn();
+    const { el } = await mountApp({}, { reload });
+    await toCounter(el);
+    updated();
+    await flush(el);
+    await userEvent.click(updateBar(el)!.shadowRoot!.querySelector("button")!);
+    expect(reload).toHaveBeenCalledOnce();
+  });
 });

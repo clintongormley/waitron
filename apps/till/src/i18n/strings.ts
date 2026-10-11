@@ -1197,6 +1197,8 @@ export const en = {
   "server.waiting_promotion": "Local server unreachable — waiting for the standby to be promoted",
   "server.check_again": "Check again",
   "server.switched": "Moved to another server. Enter your PIN.",
+  "update.message": "Waitron was updated.",
+  "update.reload": "Reload",
   "sale.unconfirmed":
     "The server did not answer. Check whether the sale went through before trying again.",
 } as const;
@@ -2350,6 +2352,8 @@ export const es: Record<StringKey, string> = {
     "Servidor local sin conexión — esperando a que se promueva el de reserva",
   "server.check_again": "Comprobar de nuevo",
   "server.switched": "Cambiado a otro servidor. Introduce tu PIN.",
+  "update.message": "Waitron se ha actualizado.",
+  "update.reload": "Recargar",
   "sale.unconfirmed":
     "El servidor no respondió. Comprueba si la venta se registró antes de reintentar.",
 };
