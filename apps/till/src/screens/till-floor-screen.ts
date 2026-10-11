@@ -834,7 +834,7 @@ export class TillFloorScreen extends LitElement {
     }
   }
 
-  /** A seated merge loses the last member of its name, with a new empty bill (decision 16). */
+  /** A seated merge loses the last member of its name, with a new empty bill (slice 4 decision 16). */
   async #split(api: TillApi, table: TableState): Promise<void> {
     const party = table.party;
     if (party === null) return api.splitToday(table.id);

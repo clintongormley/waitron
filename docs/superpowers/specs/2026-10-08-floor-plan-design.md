@@ -155,17 +155,18 @@ undone at the next reset anyway.
     the bills separate (table-actions design).
   The merge stays after the party leaves, until it is split or reset.
 
-> Owner override, 2026-10-10 (A429 slice 4, plan decision 7): "the saved join" here means today's
-> copy of it. Each reset copies the saved plan's joins into today's plan, and a merge takes its
-> seats from that copy; a join saved during the day waits for the next reset.
 - **A join involving a fixed table** moves nothing. While dragging, a copy of the table follows the
   finger; over a target, a line links the two and the target is highlighted; on release the copy
-  springs back. The tables are joined as one party, drawn in one colour with a thin linking line
-  and one label. Two free fixed tables become one new party seated at both, through the seat
-  dialog. Fixed tables are never merged, so the link ends when the party leaves.
+  goes at once, with no animation. The tables are joined as one party, drawn in one colour with a
+  thin linking line and one label. Two free fixed tables become one new party seated at both,
+  through the seat dialog. Fixed tables are never merged, so the link ends when the party leaves.
 - **Join with…** in the details sheet does the same as dropping, chosen from a list, for keyboard
   and screen-reader users. A join across zones of different service areas is still refused
   (`service_zone.join_mismatch`).
+
+> Owner override, 2026-10-10 (A429 slice 4, plan decision 7): "the saved join" here means today's
+> copy of it. Each reset copies the saved plan's joins into today's plan, and a merge takes its
+> seats from that copy; a join saved during the day waits for the next reset.
 
 ### 6.2 The other changes
 
@@ -174,11 +175,10 @@ undone at the next reset anyway.
 - **Rotate** turns the table 15° for today.
 - **Change seats for today** sets the table's (or the merge's) seats for today.
 - **Take off for today** hides a free table from the map and the list. Refused while a tab is open
-  at it.
+  at it, while it needs clearing, while food is on its way to it, or while it is in a merge.
 - **The zone menu (⋮)** holds:
   - **Add a spare table:** lists the zone's spares; picking one places it in the middle of the map,
-    ready to drag. With none, it says "No spare tables — add some in the floor plan editor". Staff
-    never create tables.
+    ready to drag. With none, it says "No spare tables". Staff never create tables.
   - **Taken off today:** each taken-off table with Put back.
   - **Reset to saved plan:** asks first.
 - **Back to its saved place** undoes every change to that one table for today.

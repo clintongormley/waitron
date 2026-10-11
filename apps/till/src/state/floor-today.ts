@@ -137,7 +137,7 @@ function nearestMember(
   return best;
 }
 
-/** The placement the floor draws until the next read (decision 14): the moved group's members, or the merged table. */
+/** The placement the floor draws until the next read (slice 4 decision 14): the moved group's members, or the merged table. */
 export function pendingPlaces(
   zoneTables: readonly TableState[],
   action: DropAction,
@@ -187,7 +187,7 @@ export function takenOffOf(zoneTables: readonly TableState[]): TableState[] {
   return zoneTables.filter((table) => table.today?.takenOff === true);
 }
 
-/** Decision 17: a spare's corner, centred in the crop the map first fits; (0, 0) with nothing placed. */
+/** Slice 4 decision 17: a spare's corner, centred in the crop the map first fits; (0, 0) with nothing placed. */
 export function spareSpot(zoneTables: readonly TableState[]): { x: number; y: number } {
   const crop = cropToTables(
     zoneTables.flatMap((table) =>
@@ -203,7 +203,7 @@ export function spareSpot(zoneTables: readonly TableState[]): { x: number; y: nu
 
 export type SheetAction = "join-with" | "split" | "rotate" | "seats" | "back" | "take-off";
 
-/** Decisions 12 and 16: the details sheet's changes for today that apply to `table`, in order. */
+/** Slice 4 decisions 12 and 16: the details sheet's changes for today that apply to `table`, in order. */
 export function sheetActions(table: TableState): SheetAction[] {
   const today = table.today;
   if (today === null || today.placement === null || today.takenOff) return [];

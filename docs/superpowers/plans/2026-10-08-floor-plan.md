@@ -226,7 +226,7 @@ Tests pinning these may change, under the commit rule above.
   (a grep of `apps/` and `packages/` for the key and both sentences found only `strings.ts` and
   `seat-dialog.ts:151`).
 
-**Slice 4** (proposed at its expansion; not changed until the owner says yes to slice 4 decision 20):
+**Slice 4** (proposed at its expansion; not changed until the owner says yes to slice 4 decision 20 — the owner said yes on 2026-10-10):
 - The editor's note "Your changes will go live tomorrow." / "Tus cambios se aplicarán mañana."
   (`floor_plan_editor.note`, `apps/dashboard/src/i18n/strings.ts:990`, `:3599`), pinned by
   `apps/dashboard/src/screens/floor-plan-editor.test.ts:133` and
@@ -4006,7 +4006,7 @@ if it is wrong.
     antes con Volver al plano guardado en el TPV." The entry is added to "Behaviour this plan removes"
     as proposed; Task 4.5c changes the note and those two assertions only after the owner says yes.
     Task 4.5c builds everything else either way. Cost: the editor's note stays unchanged until the
-    owner answers.
+    owner answers. The owner said yes on 2026-10-10.
 21. **The map's fixed drag.** While a fixed table is held and dragged, a copy (`part="ghost"`, the
     table's shape at half opacity) follows the finger in whole squares and the table stays; over
     another table the target is marked (`data-drop-target`) and a 1 px line (`part="drag-link"`)

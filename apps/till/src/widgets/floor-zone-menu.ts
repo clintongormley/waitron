@@ -137,6 +137,7 @@ export class TillFloorZoneMenu extends LitElement {
         <wt-button
           data-menu-item="spares"
           variant="secondary"
+          align="start"
           @click=${() => (this.open = "spares")}
         >
           ${t("floor.add_spare")}
@@ -144,11 +145,17 @@ export class TillFloorZoneMenu extends LitElement {
         <wt-button
           data-menu-item="taken-off"
           variant="secondary"
+          align="start"
           @click=${() => (this.open = "taken-off")}
         >
           ${t("floor.taken_off")}
         </wt-button>
-        <wt-button data-menu-item="reset" variant="secondary" @click=${() => (this.open = "reset")}>
+        <wt-button
+          data-menu-item="reset"
+          variant="secondary"
+          align="start"
+          @click=${() => (this.open = "reset")}
+        >
           ${t("floor.reset_plan")}
         </wt-button>
       </wt-row-actions>

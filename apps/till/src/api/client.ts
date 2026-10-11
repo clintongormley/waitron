@@ -44,10 +44,10 @@ import type {
   ServedMenu,
 } from "@waitron/catalogue/src/menu-document-types.js";
 
-/** Re-exported, never re-declared, so a widget imports the offered-list shapes where it imports every
- * other wire type. */
 export type { JoinSide } from "@waitron/shared";
 
+/** Re-exported, never re-declared, so a widget imports the offered-list shapes where it imports every
+ * other wire type. */
 export type {
   OfferedExtraItem,
   OfferedExtrasList,
@@ -1786,11 +1786,6 @@ export interface PartyBill {
   amountDue?: string;
 }
 
-/**
- * What Move guests and Join tables send of the parties the till read (D19): the moving party's
- * revision, and what it read at the target table. `otherPartyId` is the party seated there, sent with
- * its revision, or null for a table read free; both are left out for a table of the party itself.
- */
 /** A join's merge: `moving` or `target` is the joined table, the other one a table the party holds.
  * `seats` is left out when unset: the server refuses a null. */
 export interface JoinMerge {
@@ -1800,6 +1795,11 @@ export interface JoinMerge {
   seats?: number;
 }
 
+/**
+ * What Move guests and Join tables send of the parties the till read (D19): the moving party's
+ * revision, and what it read at the target table. `otherPartyId` is the party seated there, sent with
+ * its revision, or null for a table read free; both are left out for a table of the party itself.
+ */
 export interface TableActionRevisions {
   expectedPartyRevision: number;
   otherPartyId?: string | null;
