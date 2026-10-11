@@ -283,7 +283,7 @@ all.
 `apps/server/scripts/dev-setup.ts` checks two table names in one query. The identifier validator is in
 `packages/db/src/testing/identifiers.ts`, `packages/db/src/change-feed.ts` and
 `packages/store/src/append-only.ts` — the first two are in the SAME package. The cause-chain walk is
-in `packages/shared/src/engine-failure.ts` and again in `packages/db/src/constraint-target.ts`, and
+in `packages/shared/src/cause-chain.ts` and again in `packages/db/src/constraint-target.ts`, and
 that one is a regression: `unique-violation.ts` used to import the shared walker and now uses the
 local copy, leaving `firstCodeInCauseChain` with no product caller at all. **Next action:** export
 one validator from `@waitron/shared`; `packages/store` depends only on `@waitron/shared`,
@@ -354,8 +354,7 @@ sent.
 **Correctness:**
 
 1. **Four order paths read `working_orders` by id alone, with nothing narrowing them to the caller's
-   location.** The TENANT half is retired — there is no tenant column (`CLAUDE.md` §3) — but the
-   location half is open and is NOT covered by item 2, which names a different set of verbs. All
+   location.** Scope these alongside the other by-id verbs when multi-location lands. All
    four are in `apps/server/src/working-order.ts`: `handOver`, which `POST /api/orders/:id/collect`
    reaches through `handOverOrder`, selects and updates on `eq(workingOrders.id, id)`, using its
    `TillConfig` only to read a placed order's service mode, through `findOrderServiceContext`, which

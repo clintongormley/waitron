@@ -115,10 +115,7 @@ spec → plan → PR; fiscal-adjacent ones take owner sign-off at land.
    - the bootable USB installer (B3), the last piece of "install without a terminal";
    - the degraded-but-trading recovery spec.
 
-5. **The till does not load its menu until a manual refresh** (_The till, devices and table
-   service_). Seen on the blank-box-to-selling run; the box and sale path worked.
-
-6. **The displays and the printers walked at the real box** (_The till, devices and table
+5. **The displays and the printers walked at the real box** (_The till, devices and table
    service_; _Printers, the print agent and receipts_) — till, handheld and KDS through
    [ui-review.md](ui-review.md), and the first physical print since #327: slips, duplicates, the
    drawer pulse, the feed-before-cut. Since C107 (#974) every printout
@@ -126,7 +123,7 @@ spec → plan → PR; fiscal-adjacent ones take owner sign-off at land.
    ticket) has been photographed or recorded as printed. A real sale's slip, the duplicates, the
    cash-settlement drawer job and the feed-before-cut are still unwalked.
 
-7. **Smaller, independent pieces**, in no fixed order: refusing requests from a device that is not
+6. **Smaller, independent pieces**, in no fixed order: refusing requests from a device that is not
    enrolled (_The till, devices and table service_); Logging Slice 2, the one-touch bug report
    (_Alerts, logging and diagnostics_); the first real Bluetooth pairing at the box through the
    dashboard (_Printers, the print agent and receipts_; the print agent's side, P2b, and the
@@ -212,9 +209,6 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   lookup, when the save reaches its line, still backs the whole batch off, discarding every line's
   outcome and the reply's receipt code (the CSV, one per submission), which AEAT does not send
   again. [Detail](backlog/fiscal.md#packagesfiscal-verifactu-code)
-
-- **Two 2026-07-26 specs still call the FNMT seal certificate's export unverified**, which
-  `docs/compliance/getting-to-production.md` §4 closed that day (found by #577).
 
 - **The three alta builders repeat their record assembly** — `recordSale`/`recordCorrection`/
   `recordSubstitution` in `packages/fiscal-verifactu/src/backend.ts`; the VAT lines already share
@@ -585,8 +579,8 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
   check**, like W109-3's text below. Left open by A321 (the demo's included Drinks menu opens onto
   four sections).
 
-- **The demo data carries Catalan and Galician text (W109-3, #1321, Task 3 of the same plan) — DONE;
-  the text is UNCHECKED by a speaker (owner decision 4, 2026-10-06) — OPEN.** A speaker of each
+- **The demo’s Catalan and Galician text needs a speaker’s check** (W109-3, #1321,
+  owner decision 4, 2026-10-06). A speaker of each
   should read it.
   [Detail](backlog/setup.md#the-demo-data-carries-catalan-and-galician-text-w109-3-1321-task-3-of-the-same-plan--done-the-text-is-unchecked-by-a-speaker-owner-decision-4-2026-10-06--open)
 
@@ -1190,8 +1184,8 @@ _Formerly the catalogue and menus entries in the opening part of the old Track A
   whole time that window is open, even once the refused field is edited back. Left open by A410
   (an options list's refused option opens its window with Save active, #1434), under A331 batch 2a.
 
-- **An edit typed BEFORE one of these forms is taken out of the page and put back stays on screen
-  but no longer counts as unsaved** — DONE for the unit form in A397 part 2 (#1439). Still untried:
+- **Re-check whether these forms keep an edit’s unsaved state when taken out of the page and
+  put back.** Left open after the unit-form fix in A397 part 2 (#1439):
   the "VAT class for new products" default, the ingredient form, the options list and its option
   window, the extras list, Add to menus, Add products, Schedule and Change time. It matters only if a
   screen ever moves an open form. Left open by A331 batch 2a (#1422).
@@ -1777,8 +1771,6 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   already issued instead of an error.
   [Detail](backlog/till.md#a-re-sent-place-on-an-already-placed-order-answers-409-rather-than-replaying-the-original-result--leave-it-or-build-the-replay)
 
-- **Till UX for the timed-out card case** — retry, alternative tender, or wait. [Detail](backlog/replication-cloud.md#replication-membership--failover--residuals-afterwards)
-
 - **`apps/till/src/till-app.ts` decides permanent-refusal / known-code / unknown at five call sites;
   a helper would collapse it.** Cosmetic, and cheapest alongside the tip-collection work that touches
   `#onPayTab`. Raised by the A1 review wave (A1d).
@@ -2349,10 +2341,6 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   tables to staff, including handover and how assignments appear on the floor dashboard. The current
   workflow discussion assumes no assignments; they are not a prerequisite for the dashboard.
 
-- **Later: change the working floor layout during service (owner, 2026-09-20) — covered by A429
-  (2026-10-08), whose spec §6 is this item.**
-  [Detail](backlog/till.md#later-change-the-working-floor-layout-during-service-owner-2026-09-20)
-
 - **Four till surfaces ask for a caution colour that is defined nowhere, so all four render as plain
   text.** **Next action:** whoever takes the till layout pass below decides whether these four want
   `--wt-color-warning`, a new `--wt-color-warning-text` defined in both themes, or the
@@ -2366,9 +2354,6 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
 - **Unchecked since the service plan's Task 8 (#806): whether a round entered while the floor was
   being re-read is still hidden when the till follows the party onto its next tab**
   [Detail](backlog/till.md#unchecked-since-the-service-plans-task-8-806-whether-a-round-entered-while-the-floor-was-being-re-read-is-still-hidden-when-the-till-follows-the-party-onto-its-next-tab)
-
-- **The till does not load its menu until a manual refresh**, and a dashboard menu change does not
-  appear live on it. A till-app fix.
 
 - **The three displays walked end to end** — [ui-review.md](ui-review.md)'s areas, at the real box.
 
@@ -2738,7 +2723,7 @@ _Formerly A3, A8 and B6; part of A9._ Detail: [backlog/printers.md](backlog/prin
 - **On-device agent** — a till hosting a print agent, the single-box venue's box-death printing path.
   Needs a native app; parked behind the go-native decision.
 
-- **`runAgentOnce` (`packages/printing/src/runtime.ts`) has no caller in the tree outside its own package's tests** — C70, #866. A refused report still rolls back every job of its batch when the caller's transaction rolls back, so all of them print again (measured 2026-09-29 with a scratch probe). [Detail](backlog/printers.md#runagentonce-packagesprintingsrcruntimets-has-no-caller-in-the-tree-outside-its-own-packages-tests)
+- **`runAgentOnce` (`packages/printing/src/runtime.ts`) has no production caller in the tree** — C70, #866. A refused report still rolls back every job of its batch when the caller's transaction rolls back, so all of them print again (measured 2026-09-29 with a scratch probe). [Detail](backlog/printers.md#runagentonce-packagesprintingsrcruntimets-has-no-production-caller-in-the-tree)
 
 - **An aged batch can print twice** — found by #572 while pruning comments (`packages/printing`).
   When a large batch to a slow printer outlives the one-minute lease, another agent in the venue can
@@ -2815,12 +2800,6 @@ _Formerly A3, A8 and B6; part of A9._ Detail: [backlog/printers.md](backlog/prin
 
 - **The virtual PDF printer**, and a `print_jobs` retention sweep — nothing deletes a job today.
   [Detail](backlog/printers.md#the-virtual-pdf-printer)
-
-- **Printing A4 invoices on an office printer** (owner, 2026-09-14): foundation landed in #1399;
-  transport and screens remain in A231q.
-  [Detail](backlog/printers.md#printing-a4-invoices-on-an-office-printer). The same remaining work
-  is A231d's part 2, under _Fiscal records, invoices and the asesor_
-  ([detail](backlog/fiscal.md#a231d-full-invoices-by-email-as-a-pdf-and-on-an-office-printer--part-1-landed-1399-part-2-open)).
 
 - **Office-printer greying is proven on one office printer only.** The owner's HP Color LaserJet
   MFP M181fw's real reply is a test fixture, and the live query marked it from a Mac on the owner's
@@ -3505,10 +3484,10 @@ _Formerly A7, and the dashboard entries in the opening part of the old Track A (
   by A261 step 5 (Hours). Found in #1298's review; I believe it predates the branch (not checked
   with `git blame`).
 
-- **Two blocking derivations remain OPEN** — left open by W1 (#1117), secret checks and the write
+- **Secret hashing still blocks the event loop** — left open by W1 (#1117), secret checks and the write
   lock. `hashSecret` derives with `scryptSync` (`packages/identity/src/secret-hash.ts`), so minting
-  a token or setting a PIN or password stops the event loop; and `deriveKey`
-  (`apps/server/src/scrypt-kdf.ts`) runs `scryptSync` too…
+  a token or setting a PIN or password stops the event loop. The `deriveKey` callers are listed
+  under [The box](backlog/box.md#every-synchronous-derivekey-caller-still-blocks-the-event-loop-while-it-derives).
   [Detail](backlog/dashboard.md#secret-checks-and-the-write-lock-the-pin-manager-login-and-profile-checks-moved--done-w1-1117-two-blocking-derivations-and-one-stale-answer-window-remain-open)
 
 - **`verifySecretAsync` could be renamed `verifySecret` (optional)** — left open by #912's review
@@ -3655,9 +3634,9 @@ _Formerly A7, and the dashboard entries in the opening part of the old Track A (
   unverified. Capture the current scroll/limit, pointer position, drag state and visible box
   before attributing it to the scroll helper.
 
-- **Re-check the venue-service screens for the save rule once after A366 slice 7 (A331, owner
+- **Re-check the venue-service screens for the save rule (A331, owner
   2026-10-08)** — OPEN. Each A366 slice builds the rule into the forms it creates or rewrites;
-  after slice 7 lands, run A331 batch 4b's audit once more over
+  run A331 batch 4b's audit once more over
   `packages/venue-service/src/dashboard/` and gate any form a slice missed.
   [Detail](backlog/dashboard.md#a-forms-save-stays-quiet-and-disabled-until-something-changes-a331-owner-2026-10-07)
 
@@ -4464,8 +4443,8 @@ _Formerly B9, and the old Track C's development-stack and house-rules items; par
   in CI.
 
 - **The table-service, boot-and-counter and three `tender-pay-*` suites are separate files** that
-  can be folded back into `till-app.test.ts` and `tender-pay.test.ts` once `feat/variants-sale-line`
-  lands. Left open by `apps/till`'s move to the high coverage bar (#536).
+  can be folded back into `till-app.test.ts` and `tender-pay.test.ts`. Left open by `apps/till`'s
+  move to the high coverage bar (#536).
 
 - **Nobody has timed `packages/db/src/testing/schema-conformance.ts` under a mutation run — OPEN
   (2026-09-23).** **The new file's runtime was not measured and no `HEAVY_FILES` entry was added**,
@@ -4485,8 +4464,9 @@ _Formerly B9, and the old Track C's development-stack and house-rules items; par
   kept; the cause is unexplained, so retain them again on the next sighting rather than re-running to
   green. [Detail](backlog/ci.md#three-unexplained-incidents-each-seen-once-or-twice-on-recurrence-retain-the-log-before-retrying)
 
-- **A fifth: a stray `:hover` state in `test-dashboard`'s browser a11y suite — FIXED in #350; two
-  pieces still open.** The `dashboard-app.a11y.test.ts` heading-order sighting is a different rule
+- **The unexplained dashboard heading-order failure and pointer resets in the UI and till
+  accessibility suites remain open** after #350. The `dashboard-app.a11y.test.ts` heading-order
+  sighting is a different rule
   with no colour evidence, so nothing here explains it — treat it as still unexplained. And
   `packages/ui` and `apps/till` have the same harness with no pointer reset, so the same flake is
   waiting there. [Detail](backlog/ci.md#a-fifth-a-stray-hover-state-in-test-dashboards-browser-a11y-suite)
@@ -5113,14 +5093,11 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
   and that is a print agent layering decision.
   [Detail](backlog/architecture.md#appsserver--appsprint-agent-is-the-first-app-to-app-workspace-edge-in-the-tree)
 
-- **Four order paths read `working_orders` by id alone, with nothing narrowing them to the caller's
-  location.** The TENANT half is retired — there is no tenant column (`CLAUDE.md` §3) — but the
-  location half is open and is NOT covered by item 2, which names a different set of verbs.
-  [Detail](backlog/architecture.md#four-order-paths-read-working_orders-by-id-alone-with-nothing-narrowing-them-to-the-callers-location)
-
 - **Location-scope the by-id verb family together** (`getHeldOrder`/`getPlacedCounterOrder`/
   `updateHeldOrder`/`abandonHeldOrder`, `updateTable`/`deactivateTable`/`openTab`) when multi-location lands —
-  together with the four paths in item 1, which are the same problem in the same file. Floor plans
+  alongside `handOver`, `cancelPlacedOrder`, `readLockedLines`, `priceStoredOrder` and
+  `priceStoredOrderForIssuance` in `apps/server/src/working-order.ts`.
+  [Order-path detail](backlog/architecture.md#four-order-paths-read-working_orders-by-id-alone-with-nothing-narrowing-them-to-the-callers-location). Floor plans
   slice 1 (A429) added more read and written by id alone: `refuseFloorPlanChange`
   (`apps/server/src/tables.ts`); in `apps/server/src/table-removal.ts`, `tablesTied` and
   `removeLiveTables`' label read and the deletes after it; `releaseDeliveries`

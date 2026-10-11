@@ -328,8 +328,8 @@ marks inherited receipt and email claims unknown before the pretend printer and 
 routes start, separately from fiscal drain recovery. Synthetic real-boot cases cover fresh
 claims, ordinary printable jobs, authenticated late email success/failure and a read-only
 mirror control. Bill staging, A4 printer registration and location selection, SMTP setup, office
-transport, delivery UI and image/box checks remain. It settles A3's open "Printing A4 invoices
-on an office printer" work when complete.
+transport, delivery UI and image/box checks remain. Office printing reverses the 2026-09-09
+provisioning design’s "raw ESC/POS only" decision.
 Task 1 font/build checks are still open: the standalone PDFKit 0.20.2/fontkit 2.0.4 probe
 throws when embedding the current Google Sans WOFF2 for “í”; Noto Sans rendered the same probe
 as PDF and glyph outlines. In the pre-alias bundle probe, PDFKit's ESM import collided with

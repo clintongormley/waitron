@@ -455,9 +455,8 @@ classification entry — never an enum, CLAUDE.md §2); names (built-ins are tra
 two blocking derivations and one stale-answer window remain OPEN.** Nothing makes a NEW route
 derive its key before the transaction opens or take turns (`docs/developers/conventions-data.md`).
 **Still open:** `hashSecret` derives with `scryptSync` (`packages/identity/src/secret-hash.ts`), so minting a token or setting a PIN or
-password stops the event loop; and `deriveKey` (`apps/server/src/scrypt-kdf.ts`) runs `scryptSync`
-too, reached when the server encrypts or decrypts a configuration bundle, decrypts a restore archive
-or a sealed node state, or encrypts a recovery bundle. Left by #912's review: the two join-status
+password stops the event loop. The `deriveKey` callers are tracked under
+[The box](box.md#every-synchronous-derivekey-caller-still-blocks-the-event-loop-while-it-derives). Left by #912's review: the two join-status
 readers answer from a hash read just before the key is derived, so a request denied or revoked in
 that window can get one stale `pending` or `approved` (both routes return only `{ status }` and issue
 no credential; the till and print-agent clients were not traced); and `verifySecretAsync` could be
@@ -764,8 +763,8 @@ request per batch: [plan](../superpowers/plans/2026-10-07-a331-save-follows-chan
   Native keyboard-order checks are in
   `packages/venue-service/src/dashboard/department-dialogs.test.ts`; reconnect checks live in
   each replacement form's sibling `*.unsaved.test.ts`. The post-slice-7 audit below remains open.
-- **Re-check the venue-service screens once after A366 slice 7.** Each A366 slice builds the rule
-  into the forms it creates or rewrites (owner, 2026-10-08); after slice 7 lands, run batch 4b's
+- **Re-check the venue-service screens for the save rule.** Each A366 slice builds the rule
+  into the forms it creates or rewrites (owner, 2026-10-08); run batch 4b's
   audit once more over `packages/venue-service/src/dashboard/` and gate any form a slice missed.
 - **2026-10-10, A366 slice 4 Part B:** the fallback editor and its checks below are retired;
   Settings retains rest-of-order and timing editors. The batch 4d account records its earlier scope.

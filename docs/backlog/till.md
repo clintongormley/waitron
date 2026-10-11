@@ -799,18 +799,6 @@ screen is designed.
   `packages/ui/src/components/wt-floor-canvas.ts`. **Next action:** the owner decides whether this
   changes "wait on this"; a fix that lets a small token hold what it shows would cover both.
 
-## Later: change the working floor layout during service (owner, 2026-09-20)
-
-- **Later: change the working floor layout during service (owner, 2026-09-20) — covered by A429
-  (2026-10-08), whose spec §6 is this item.** From the floor
-  plan, join or split tables, increase or decrease chair counts, move a whole tab or selected items
-  to another table, and add or remove tables. Each service day starts from a saved default layout;
-  changes during service affect that day's working layout. Define the service-day boundary and
-  handling of still-open tabs before implementing the reset. These are future requirements: audit
-  the existing floor editor and transfer operations before deciding what needs changing, and retain
-  order and kitchen progress when moving items (see A9's KDS correction). This operational floor
-  editor is distinct from the general screen-layout canvas editor under reconsideration.
-
 ## Four till surfaces ask for a caution colour that is defined nowhere, so all four render as plain text
 
 - **Four till surfaces ask for a caution colour that is defined nowhere, so all four render as plain

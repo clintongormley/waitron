@@ -148,10 +148,9 @@ email delivery or legal requirement was verified at runtime by this documentatio
   duration because the two clocks can differ. An agent on another machine whose clock is out by
   minutes scans for the wrong span; one on the box shares its clock.
 
-## `runAgentOnce` (`packages/printing/src/runtime.ts`) has no caller in the tree outside its own package's tests
+## `runAgentOnce` (`packages/printing/src/runtime.ts`) has no production caller in the tree
 
-- **`runAgentOnce` (`packages/printing/src/runtime.ts`) has no caller in the tree outside its own
-  package's tests** (C70, #866). A
+- **`runAgentOnce` (`packages/printing/src/runtime.ts`) has no production caller in the tree** (C70, #866). A
   refused report still rolls back every job of its batch when the caller's transaction rolls back,
   so all of them print again (measured 2026-09-29 with a scratch probe). A process that holds the
   venue database and runs the agent itself, and wants to confine a refused report, should call
@@ -291,14 +290,6 @@ just a green typecheck.
   (`packages/db/src/schema/receipt-reprints.ts`); include that audit link when designing retention.
   Whether a future replication drain can carry the audit row to a node without its print job is
   unverified and needs a test when that drain is built.
-
-## Printing A4 invoices on an office printer
-
-- **Printing A4 invoices on an office printer** (owner, 2026-09-14): foundation landed in #1399; transport and screens remain in A231q.
-  It reverses the 2026-09-09 provisioning design's "raw ESC/POS only" decision. Remaining work
-  discovers and registers invoice printers, selects them by location and sends the rendered PDF
-  or raster through IPP, with the delivery and send-again screens listed under A231d.
-  _2026-10-08: A231p part 1 landed (#1399), including the shared document, PDF/raster renderers and page-printer schema. Discovery, registration and IPP delivery remain open in A231q; office printing is not yet complete._
 
 ## A404 — adding and calibrating a printer
 
