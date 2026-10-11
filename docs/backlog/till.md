@@ -162,18 +162,6 @@ with their own "X succeeded, but…" strings, and what login and retrieve show w
 fails. Give both a11y cases' `getTill` a canvas and assert `till-counter-screen` exists before each
 scan.
 
-## Another till lookup reads inherited object properties
-
-**Another till lookup reads inherited object properties — OPEN (found by W24's review,
-2026-10-03, by reading, not run).** `allergenName` looks a string key up in a plain object, so a
-key such as `constructor` finds an inherited property — the defect `deviceKindLabel` had.
-
-- `allergenName` (`apps/till/src/i18n/allergen-names.ts:30`) finds `Object` for `constructor`, so
-  it returns `undefined` instead of the code itself.
-
-**Next action:** look `allergenName`'s key up on own properties only (`Object.hasOwn`, as
-`apps/till/src/i18n/codes.ts` does), with a test.
-
 ## Cash handed back for a voided cash sale is recorded nowhere
 
 **Cash handed back for a voided cash sale is recorded nowhere — OPEN (found 2026-09-24 by #605).**

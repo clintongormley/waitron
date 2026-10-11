@@ -1722,12 +1722,11 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   `getTill` a canvas and assert `till-counter-screen` exists before each scan.
   [Detail](backlog/till.md#five-till-handlers-still-leave-a-failed-list-refresh-unhandled-and-one-a11y-file-may-not-render-its-screen)
 
-- **Another till lookup reads inherited object properties** — OPEN (found by W24's review,
-  2026-10-03, by reading, not run). `allergenName` looks a string key up in a plain object, so a
-  key such as `constructor` finds an inherited property — the defect `deviceKindLabel` had. **Next
-  action:** look `allergenName`'s key up on own properties only (`Object.hasOwn`, as
-  `apps/till/src/i18n/codes.ts` does), with a test.
-  [Detail](backlog/till.md#another-till-lookup-reads-inherited-object-properties)
+- **The till's locale lookup reads inherited properties** — `pickLocale` in
+  `apps/till/src/i18n/t.ts` returns a function for `allergenName("milk", "constructor")`.
+  Reproduced in A487c's installed review candidate with a browser probe (1 passed, asserting
+  `typeof` is `"function"`). Whether a real caller admits that locale is unverified.
+  Check locale keys with `Object.hasOwn` and test the English fallback, then trace callers.
 
 - **The till's idle-timer check may be unreachable — OPEN (found by W24's review, 2026-10-03, by
   reading, not run).** `session-activity.ts`'s `#shouldRunIdleTimer` keeps the `this.#active &&` check
