@@ -153,36 +153,6 @@ list does not exist.
   (`apps/server/src/receipt-ticket.ts`) and the till's ticket view
   (`apps/till/src/screens/till-ticket-view.ts`) still show the Each unit.
 
-## A507. Prep stations made lighter
-
-**A507 (owner, 2026-10-11) — OPEN: change 5, left open by A507 part 1 (#1564) and A507 part 2
-(#1568).** A change to the Prep stations page
-(`packages/venue-service/src/dashboard/prep-stations-screen.ts`). Mockups of the Routes grid it sits
-on are in [mockups/a507-prep-stations/](mockups/a507-prep-stations/): `0-routes-today.png`
-is the grid before, `1-routes-option-a-chosen.png` the chosen default view, `3-routes-search.png`
-search, `4-period-lines-option-1-chosen.png` how a cell's period lines look, `7-cell-hover.png`
-pointing at a cell, and `8-`, `9-` and `10-dialog-*.png` the cell dialog over the new grid. The
-`*-not-chosen.png` boards are alternatives the owner turned down. The three `*-mockups.html` files
-are their source. The owner's grid decisions are under _Decisions and deliberate limits_ below.
-
-**5. The "Review route change" notice asks less and says less** (`#previewDialog`,
-`#cellSentence` and `#moveName` in `prep-stations-screen.ts`). Today it opens whenever a cell's save
-moves any product, and lists one line per product, zone and period moved; a variant is a line of
-its own under its own name ("DOUBLE during Lunch"), with nothing tying it to its product.
-
-- **A product's own edit never asks** (owner, 2026-10-11): what changes is the product clicked, its
-  own variants and the extras that move with it as their dish, which the person already chose. It
-  saves at once, as a change that moves nothing does today. A category, All categories or
-  "no category" edit still asks when it moves something.
-- **The notice summarises.** Moves are grouped by zone, periods, from and to, each group one
-  sentence with a count of products; a product's variants are counted under it, not listed
-  ("AGAVE, Counter: 14 products move from Kitchen to Bar during Lunch"). The full list stays
-  behind a "Show products" disclosure, closed by default.
-- **Its first sentence is wrong today** and is fixed either way: it compares only the "Any other
-  time" station, so adding a Lunch line to Bar on CLANDESTINA read "this changes Kitchen to
-  Kitchen" (the owner's screenshot). It names what changed, period lines included, and drops the
-  parent path ("Santet Deli Co › AGAVE ›") to match the grid.
-
 ## Decisions and deliberate limits
 
 - After approval the owner ruled that a dish made at the till is never held and the till lists
@@ -209,3 +179,8 @@ its own under its own name ("DOUBLE during Lunch"), with nothing tying it to its
   2026-10-11).** Those list matches flat with inline paths (A461, `catalogue.md` → _Decisions_);
   the Routes grid shows each match under every category above it, because those rows carry the
   stations being inherited.
+
+- **A product's own routing choice never asks (A507, owner 2026-10-11).** In the owner's words:
+  "what changes is the product clicked, its own variants and the extras that move with it as their
+  dish, which the person already chose." It saves at once; a category, All categories or No
+  category choice that moves products still opens the "Review route change" notice.

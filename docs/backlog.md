@@ -1394,11 +1394,6 @@ _Formerly entries spread across the old sections, A261's venue-operations steps 
 
 _Formerly the kitchen entries in the opening part of the old Track A (before A1), and kitchen entries elsewhere; part of A9._ Detail: [backlog/kitchen.md](backlog/kitchen.md).
 
-- **A507. Prep stations made lighter: a shorter route-change notice (owner, 2026-10-11)** — left
-  open by A507 part 1 (#1564) and A507 part 2 (#1568). The route-change notice no longer asks for a
-  product's own edit and summarises a category's.
-  [Detail](backlog/kitchen.md#a507-prep-stations-made-lighter)
-
 - **A routing period line naming another location's period is flagged but never drawn** (left open
   by A455, #1492): the server marks it `notOffered`, but the grid (`routing-grid-model.ts`) and the
   cell editor (`routing-cell-editor.ts`) drop a line whose period is not in the model's periods, so

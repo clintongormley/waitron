@@ -3438,9 +3438,14 @@ and "+ Add route" adds a line of periods with a station. A zone column offers on
 department's periods, and none when the zone has no department; a line offers only periods whose
 menus include the row's products, or one the cell already stores with the same choice as that line, a station or No preparation. An inherited cell opens holding
 what it inherits, with Save ready so it can be pinned, and names the inherited periods it did not
-copy. The default cell (All categories × Every zone) takes no period lines. A choice that moves
-products opens a preview listing each one with its old and new destination ("… during Lunch" for a
-period's move) before anything is saved; a choice that moves nothing saves at once. Edit, in a
+copy. The default cell (All categories × Every zone) takes no period lines. A category, All
+categories or No category choice that moves products opens a notice before anything is saved: a
+first sentence naming the change with each side's period lines ("Food, Every zone: this changes Bar
+to Bar (Lunch: Kitchen)."), then one sentence per zone, periods, from and to with a product count
+("Food, Terrace: 14 products move from Kitchen to Bar during Lunch.") — a variant counted under its
+product, an extra once per sentence — and the full list under a closed "Show products", where a
+variant reads "Product (Variant)" beside its product. A product's own choice, and a choice that
+moves nothing, saves at once. Edit, in a
 Stations row's menu, opens the station editor (`station-editor.ts`): name, Printers, the three
 late-flag minutes (Warm after, Overdue after and Forgotten after) and "Show the rest of the order".
 Save sends only what changed, in one request. A minutes field left blank follows the venue's
