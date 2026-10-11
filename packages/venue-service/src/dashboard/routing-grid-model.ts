@@ -1,6 +1,7 @@
 import { createLabelComparator, foldForSearch, textSearch } from "@waitron/shared";
 import {
   cellKey,
+  rowKey,
   selectionRulesFromModel,
   selectRoutingCell,
   targetKey,
@@ -11,6 +12,7 @@ import {
   type RoutingModel,
   type RoutingPeriod,
   type RoutingRow,
+  type RoutingSelectionRules,
   type SelectedCell,
 } from "../routing.js";
 import type { PeriodLine, RoutingModelCell } from "../routing-types.js";
@@ -241,22 +243,42 @@ export interface WaitingChoice {
   readonly periods?: readonly PeriodLine[];
 }
 
+/** What `cellPeriodLines` and `blankZoneCell` look up, built once per model and shared by both. */
+export interface RoutingLookups {
+  readonly rules: RoutingSelectionRules;
+  readonly cells: ReadonlyMap<string, RoutingModelCell>;
+  readonly categoryOf: ReadonlyMap<string, string | null>;
+  readonly zoneDepartment: ReadonlyMap<string, string | null>;
+}
+
+export function routingLookups(model: RoutingModel): RoutingLookups {
+  return {
+    rules: selectionRulesFromModel(model),
+    cells: new Map(model.cells.map((cell) => [cellKey(cell), cell])),
+    categoryOf: new Map(model.products.map(({ id, categoryId }) => [id, categoryId])),
+    zoneDepartment: new Map(model.zones.map(({ id, departmentId }) => [id, departmentId])),
+  };
+}
+
 /**
  * A coordinate's period lines, one per target, each ordered and ordered among themselves by the
  * model's period order. A coordinate with no cell of its own shows the lines of the cell that
- * decides it. A line's period the model does not list is left out, and so, in a zone column, is a
- * line of another department's period, which the server never applies there. A waiting choice
- * stands in for the coordinate's own cell.
+ * decides it, which `inherited` gives when the caller has already selected it with `skipOwn`. A
+ * line's period the model does not list is left out, and so, in a zone column, is a line of another
+ * department's period, which the server never applies there. A waiting choice stands in for the
+ * coordinate's own cell.
  */
 export function cellPeriodLines(
   model: RoutingModel,
   targetText: (target: RouteTarget) => string,
-): (row: RoutingRow, zoneId: string | null, waiting?: WaitingChoice) => CellPeriodLines {
-  const rules = selectionRulesFromModel(model);
-  const cells = new Map(model.cells.map((cell) => [cellKey(cell), cell]));
+  { rules, cells, categoryOf, zoneDepartment }: RoutingLookups = routingLookups(model),
+): (
+  row: RoutingRow,
+  zoneId: string | null,
+  waiting?: WaitingChoice,
+  inherited?: SelectedCell,
+) => CellPeriodLines {
   const order = new Map(model.periods.map((period, i) => [period.id, i]));
-  const categoryOf = new Map(model.products.map(({ id, categoryId }) => [id, categoryId]));
-  const zoneDepartment = new Map(model.zones.map(({ id, departmentId }) => [id, departmentId]));
 
   const linesOf = (
     stored: readonly StoredLine[],
@@ -305,7 +327,7 @@ export function cellPeriodLines(
     }));
   };
 
-  return (row, zoneId, waiting) => {
+  return (row, zoneId, waiting, inherited) => {
     const stored = cells.get(cellKey({ row, zoneId }));
     const own =
       waiting === undefined
@@ -315,7 +337,8 @@ export function cellPeriodLines(
           : (waiting.periods ?? []);
     if (own !== undefined) return { inherited: false, lines: linesOf(own, zoneId, true) };
     const category = row.kind === "product" ? (categoryOf.get(row.productId) ?? null) : null;
-    const { decidedBy } = selectRoutingCell(rules, row, zoneId, category, { skipOwn: true });
+    const { decidedBy } =
+      inherited ?? selectRoutingCell(rules, row, zoneId, category, { skipOwn: true });
     const deciding = decidedBy?.kind === "cell" ? cells.get(cellKey(decidedBy.address)) : undefined;
     return { inherited: true, lines: linesOf(deciding?.periods ?? [], zoneId, false) };
   };
@@ -325,31 +348,45 @@ export function cellPeriodLines(
  * Whether a zone cell, judged without any setting of its own, draws blank: it inherits the same
  * target as the row's own Every zone, and the same (period, target) lines that apply in the zone —
  * each side's lines being those its deciding cell stores, for periods the model lists and of the
- * zone's department. The grid draws a cell set here, or a waiting choice, before asking.
+ * zone's department. The grid draws a cell set here, or a waiting choice, before asking. `zone`,
+ * when given, is what the coordinate selects with `skipOwn`.
  */
-export function blankZoneCell(model: RoutingModel): (row: RoutingRow, zoneId: string) => boolean {
-  const rules = selectionRulesFromModel(model);
-  const cells = new Map(model.cells.map((cell) => [cellKey(cell), cell]));
+export function blankZoneCell(
+  model: RoutingModel,
+  { rules, cells, categoryOf, zoneDepartment }: RoutingLookups = routingLookups(model),
+): (row: RoutingRow, zoneId: string, zone?: SelectedCell) => boolean {
   const periodDepartment = new Map(model.periods.map(({ id, departmentId }) => [id, departmentId]));
-  const categoryOf = new Map(model.products.map(({ id, categoryId }) => [id, categoryId]));
-  const zoneDepartment = new Map(model.zones.map(({ id, departmentId }) => [id, departmentId]));
-  return (row, zoneId) => {
+  const lineSet = ({ decidedBy }: SelectedCell, departmentId: string | null): Set<string> => {
+    const deciding = decidedBy?.kind === "cell" ? cells.get(cellKey(decidedBy.address)) : undefined;
+    return new Set(
+      (deciding?.periods ?? [])
+        .filter(({ periodId }) => periodDepartment.get(periodId) === departmentId)
+        .map(({ periodId, target }) => `${periodId} ${targetKey(target)}`),
+    );
+  };
+  // A row's Every zone is the same for each of its zones; its lines differ only by department.
+  const everyOf = new Map<
+    string,
+    { selected: SelectedCell; target: string; lines: Map<string | null, Set<string>> }
+  >();
+  return (row, zoneId, zone) => {
     const category = row.kind === "product" ? categoryOf.get(row.productId) : null;
-    const zone = selectRoutingCell(rules, row, zoneId, category, { skipOwn: true });
-    const every = selectRoutingCell(rules, row, null, category);
-    if (targetKey(zone.target) !== targetKey(every.target)) return false;
+    zone ??= selectRoutingCell(rules, row, zoneId, category, { skipOwn: true });
+    const key = rowKey(row);
+    let every = everyOf.get(key);
+    if (every === undefined) {
+      const selected = selectRoutingCell(rules, row, null, category);
+      every = { selected, target: targetKey(selected.target), lines: new Map() };
+      everyOf.set(key, every);
+    }
+    if (targetKey(zone.target) !== every.target) return false;
     const departmentId = zoneDepartment.get(zoneId) ?? null;
-    const linesOf = ({ decidedBy }: SelectedCell): Set<string> => {
-      const deciding =
-        decidedBy?.kind === "cell" ? cells.get(cellKey(decidedBy.address)) : undefined;
-      return new Set(
-        (deciding?.periods ?? [])
-          .filter(({ periodId }) => periodDepartment.get(periodId) === departmentId)
-          .map(({ periodId, target }) => `${periodId} ${targetKey(target)}`),
-      );
-    };
-    const zoneLines = linesOf(zone);
-    const everyLines = linesOf(every);
+    let everyLines = every.lines.get(departmentId);
+    if (everyLines === undefined) {
+      everyLines = lineSet(every.selected, departmentId);
+      every.lines.set(departmentId, everyLines);
+    }
+    const zoneLines = lineSet(zone, departmentId);
     return (
       zoneLines.size === everyLines.size && [...zoneLines].every((line) => everyLines.has(line))
     );
@@ -374,45 +411,54 @@ const WORD = "[\\p{L}\\p{N}]";
 export function matchRanges(name: string, query: string): readonly MatchRange[] {
   const folded = foldForSearch(name);
   if (textSearch(query)?.rank(folded) === undefined) return [];
+  return rangesOf(query)(name, folded);
+}
+
+/** Compiles the query once, for names `textSearch(query)` matches; `folded` is the name folded. */
+function rangesOf(query: string): (name: string, folded: string) => MatchRange[] {
   const foldedQuery = foldForSearch(query);
   // A match means the query has at least one word.
   const words = foldedQuery.match(new RegExp(`${WORD}+`, "gu"))!;
   const typing = new RegExp(`${WORD}$`, "u").test(foldedQuery);
-  // Folding one code point at a time gives the same length as folding the whole name: only the
-  // final sigma depends on its neighbours, and both sigmas are one unit long.
-  const starts: number[] = [];
-  const ends: number[] = [];
-  let offset = 0;
-  for (const character of name) {
-    const piece = foldForSearch(character);
-    for (let i = 0; i < piece.length; i++) {
-      starts.push(offset);
-      ends.push(offset + character.length);
+  const wholeWords = words.map((word) => new RegExp(`(?<!${WORD})${word}(?!${WORD})`, "gu"));
+  return (name, folded) => {
+    // Folding one code point at a time gives the same length as folding the whole name: only the
+    // final sigma depends on its neighbours, and both sigmas are one unit long.
+    const starts: number[] = [];
+    const ends: number[] = [];
+    let offset = 0;
+    for (const character of name) {
+      const piece = foldForSearch(character);
+      for (let i = 0; i < piece.length; i++) {
+        starts.push(offset);
+        ends.push(offset + character.length);
+      }
+      // A combining mark folds to nothing; it belongs with the letter before it.
+      if (piece.length === 0 && ends.length > 0) ends[ends.length - 1] = offset + character.length;
+      offset += character.length;
     }
-    // A combining mark folds to nothing; it belongs with the letter before it.
-    if (piece.length === 0 && ends.length > 0) ends[ends.length - 1] = offset + character.length;
-    offset += character.length;
-  }
-  const found: [number, number][] = [];
-  words.forEach((word, i) => {
-    if (typing && i === words.length - 1) {
-      for (let at = folded.indexOf(word); at !== -1; at = folded.indexOf(word, at + 1))
-        found.push([at, at + word.length]);
-    } else {
-      for (const { index } of folded.matchAll(new RegExp(`(?<!${WORD})${word}(?!${WORD})`, "gu")))
-        found.push([index, index + word.length]);
+    const found: [number, number][] = [];
+    words.forEach((word, i) => {
+      if (typing && i === words.length - 1) {
+        for (let at = folded.indexOf(word); at !== -1; at = folded.indexOf(word, at + 1))
+          found.push([at, at + word.length]);
+      } else {
+        // matchAll iterates a copy, so the shared pattern's lastIndex never moves.
+        for (const { index } of folded.matchAll(wholeWords[i]!))
+          found.push([index, index + word.length]);
+      }
+    });
+    found.sort((a, b) => a[0] - b[0]);
+    const ranges: { start: number; end: number }[] = [];
+    for (const [from, to] of found) {
+      const start = starts[from]!;
+      const end = ends[to - 1]!;
+      const last = ranges.at(-1);
+      if (last !== undefined && start <= last.end) last.end = Math.max(last.end, end);
+      else ranges.push({ start, end });
     }
-  });
-  found.sort((a, b) => a[0] - b[0]);
-  const ranges: { start: number; end: number }[] = [];
-  for (const [from, to] of found) {
-    const start = starts[from]!;
-    const end = ends[to - 1]!;
-    const last = ranges.at(-1);
-    if (last !== undefined && start <= last.end) last.end = Math.max(last.end, end);
-    else ranges.push({ start, end });
-  }
-  return ranges;
+    return ranges;
+  };
 }
 
 export interface SearchRow {
@@ -446,51 +492,68 @@ export function searchRows(
   query: string,
   open?: ReadonlySet<string>,
 ): RoutingSearch | undefined {
-  const search = textSearch(query);
-  if (search === undefined) return undefined;
-  const tree = visibleRoutingRows(model, expandAll(model));
-  // With every category expanded, a row's parent is the nearest row above it one level up.
-  const parentOf: number[] = [];
-  const stack: number[] = [];
-  tree.forEach((entry, i) => {
-    while (stack.length > 0 && tree[stack.at(-1)!]!.depth >= entry.depth) stack.pop();
-    parentOf.push(stack.at(-1) ?? -1);
-    stack.push(i);
-  });
-  const match = tree.map(
-    ({ row, name }) =>
-      (row.kind === "category" || row.kind === "product") &&
-      search.rank(foldForSearch(name)) !== undefined,
-  );
-  const leads = new Set<number>([0]);
-  match.forEach((matched, i) => {
-    if (!matched) return;
-    for (let up = parentOf[i]!; up !== -1 && !leads.has(up); up = parentOf[up]!) leads.add(up);
-  });
-  const opened =
-    open ??
-    new Set(
-      [...leads].flatMap((i) => {
-        const { row } = tree[i]!;
-        return row.kind === "category" ? [row.categoryId] : [];
-      }),
-    );
-  const isOpen = ({ row }: GridRow) => row.kind !== "category" || opened.has(row.categoryId);
-  const shown: boolean[] = [];
-  const rows: SearchRow[] = [];
-  tree.forEach((entry, i) => {
-    const up = parentOf[i]!;
-    const relevant = match[i]! || leads.has(i);
-    const visible =
-      up === -1 ? relevant : shown[up]! && isOpen(tree[up]!) && (relevant || !leads.has(up));
-    shown.push(visible);
-    if (!visible) return;
-    rows.push({
-      entry,
-      match: match[i]!,
-      parent: !match[i]! && leads.has(i),
-      ranges: match[i]! ? matchRanges(entry.name, query) : [],
+  return routingSearch(model)(query, open);
+}
+
+/**
+ * `searchRows` over one model: the fully expanded tree and its folded names are built at the first
+ * search and kept for every later one.
+ */
+export function routingSearch(
+  model: RoutingModel,
+): (query: string, open?: ReadonlySet<string>) => RoutingSearch | undefined {
+  let index: { tree: GridRow[]; parentOf: number[]; folded: (string | null)[] } | undefined;
+  const indexed = () => {
+    const tree = visibleRoutingRows(model, expandAll(model));
+    // With every category expanded, a row's parent is the nearest row above it one level up.
+    const parentOf: number[] = [];
+    const stack: number[] = [];
+    tree.forEach((entry, i) => {
+      while (stack.length > 0 && tree[stack.at(-1)!]!.depth >= entry.depth) stack.pop();
+      parentOf.push(stack.at(-1) ?? -1);
+      stack.push(i);
     });
-  });
-  return { rows, count: match.filter(Boolean).length, open: opened };
+    const folded = tree.map(({ row, name }) =>
+      row.kind === "category" || row.kind === "product" ? foldForSearch(name) : null,
+    );
+    return { tree, parentOf, folded };
+  };
+  return (query, open) => {
+    const search = textSearch(query);
+    if (search === undefined) return undefined;
+    const { tree, parentOf, folded } = (index ??= indexed());
+    const match = folded.map((name) => name !== null && search.rank(name) !== undefined);
+    const leads = new Set<number>([0]);
+    match.forEach((matched, i) => {
+      if (!matched) return;
+      for (let up = parentOf[i]!; up !== -1 && !leads.has(up); up = parentOf[up]!) leads.add(up);
+    });
+    const opened =
+      open ??
+      new Set(
+        [...leads].flatMap((i) => {
+          const { row } = tree[i]!;
+          return row.kind === "category" ? [row.categoryId] : [];
+        }),
+      );
+    const isOpen = ({ row }: GridRow) => row.kind !== "category" || opened.has(row.categoryId);
+    let ranges: ReturnType<typeof rangesOf> | undefined;
+    const shown: boolean[] = [];
+    const rows: SearchRow[] = [];
+    tree.forEach((entry, i) => {
+      const up = parentOf[i]!;
+      const relevant = match[i]! || leads.has(i);
+      const visible =
+        up === -1 ? relevant : shown[up]! && isOpen(tree[up]!) && (relevant || !leads.has(up));
+      shown.push(visible);
+      if (!visible) return;
+      rows.push({
+        entry,
+        match: match[i]!,
+        parent: !match[i]! && leads.has(i),
+        ranges: match[i]! ? (ranges ??= rangesOf(query))(entry.name, folded[i]!) : [],
+      });
+    });
+    return { rows, count: match.filter(Boolean).length, open: opened };
+  };
 }

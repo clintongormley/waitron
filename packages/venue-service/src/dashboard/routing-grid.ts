@@ -14,7 +14,6 @@ import {
   targetKey,
   zoneKey,
   selectRoutingCell,
-  selectionRulesFromModel,
   type CellAddress,
   type GridCategory,
   type GridProduct,
@@ -38,12 +37,14 @@ import {
   expandAll,
   expandCategory,
   pruneExpanded,
+  routingLookups,
+  routingSearch,
   rowInModel,
-  searchRows,
   visibleRoutingRows,
   type CellPeriodLines,
   type MatchRange,
   type PeriodLineText,
+  type RoutingLookups,
   type RoutingSearch,
   type SearchRow,
 } from "./routing-grid-model.js";
@@ -321,15 +322,21 @@ export class RoutingGrid extends LitElement {
   /** The cell whose editor is open. */
   @state() private editing: CellAddress | null = null;
 
+  #lookups: RoutingLookups | null = null;
   #rules: RoutingSelectionRules | null = null;
   #fallbackRules: RoutingRules | null = null;
-  #cells = new Map<string, RoutingModelCell>();
+  #cells: ReadonlyMap<string, RoutingModelCell> = new Map();
   #products = new Map<string, GridProduct>();
   #categories = new Map<string, GridCategory>();
   #allRows: ReadonlyMap<string, GridRow> | null = null;
   #blank: ReturnType<typeof blankZoneCell> | null = null;
-  #search: RoutingSearch | undefined;
-  #found = new Map<string, SearchRow>();
+  #searchOf: ReturnType<typeof routingSearch> | null = null;
+  /** The last search, kept while the model, the query and the search's open set stay the same. */
+  #searched: {
+    query: string;
+    open: ReadonlySet<string> | null;
+    result: RoutingSearch | undefined;
+  } | null = null;
   /** Rebuilt with the model and the language, which the lines' words are in. */
   #lines: {
     model: RoutingView;
@@ -340,13 +347,16 @@ export class RoutingGrid extends LitElement {
   override willUpdate(changed: Map<PropertyKey, unknown>): void {
     if (!changed.has("model") || this.model === null) return;
     const model = this.model;
-    this.#rules = selectionRulesFromModel(model);
+    const lookups = (this.#lookups = routingLookups(model));
+    this.#rules = lookups.rules;
     this.#fallbackRules = null;
-    this.#cells = new Map(model.cells.map((c) => [cellKey(c), c]));
+    this.#cells = lookups.cells;
     this.#products = new Map(model.products.map((product) => [product.id, product]));
     this.#categories = new Map(model.categories.map((category) => [category.id, category]));
     this.#allRows = null;
-    this.#blank = blankZoneCell(model);
+    this.#blank = blankZoneCell(model, lookups);
+    this.#searchOf = routingSearch(model);
+    this.#searched = null;
     this.expanded = pruneExpanded(model, this.expanded);
     const editing = this.editing;
     if (
@@ -367,17 +377,22 @@ export class RoutingGrid extends LitElement {
     this.editing = null;
   }
 
-  #periodLines(row: RoutingRow, zoneId: string | null, waiting?: RoutingPending): CellPeriodLines {
+  #periodLines(
+    row: RoutingRow,
+    zoneId: string | null,
+    waiting: RoutingPending | undefined,
+    inherited: SelectedCell,
+  ): CellPeriodLines {
     const model = this.model!;
     const locale = currentLocale();
     if (this.#lines?.model !== model || this.#lines.locale !== locale) {
       this.#lines = {
         model,
         locale,
-        of: cellPeriodLines(model, (target) => this.#targetText(target)),
+        of: cellPeriodLines(model, (target) => this.#targetText(target), this.#lookups!),
       };
     }
-    return this.#lines.of(row, zoneId, waiting);
+    return this.#lines.of(row, zoneId, waiting, inherited);
   }
 
   #station(id: string) {
@@ -523,7 +538,7 @@ export class RoutingGrid extends LitElement {
     const shown = waiting === undefined ? (own?.target ?? null) : waiting.target;
     const disabled =
       shown?.kind === "station" && this.#station(shown.stationId)?.active !== true ? shown : null;
-    const periodLines = this.#periodLines(entry.row, zone.id, waiting);
+    const periodLines = this.#periodLines(entry.row, zone.id, waiting, selected);
     const text = this.#targetText(shown ?? inherited);
     const label = this.#labelWithNote(
       format("routing.cell_label", {
@@ -539,7 +554,7 @@ export class RoutingGrid extends LitElement {
         ? "set"
         : zone.id === null
           ? "inherited"
-          : this.#blank!(entry.row, zone.id)
+          : this.#blank!(entry.row, zone.id, selected)
             ? "blank"
             : "differs";
     return this.#button(address, label, shown, style, text, periodLines.lines, [
@@ -743,16 +758,27 @@ export class RoutingGrid extends LitElement {
     )?.focus();
   }
 
-  #rowLabel(entry: GridRow) {
+  #search(): RoutingSearch | undefined {
+    const { query, searchOpen: open } = this;
+    const memo = this.#searched;
+    if (memo?.query === query && memo.open === open) return memo.result;
+    const result = this.#searchOf!(query, open ?? undefined);
+    this.#searched = { query, open, result };
+    return result;
+  }
+
+  #setOpen(search: RoutingSearch | undefined, next: ReadonlySet<string>): void {
+    if (search === undefined) this.expanded = next;
+    else this.searchOpen = next;
+  }
+
+  #rowLabel(entry: GridRow, found: SearchRow | undefined, search: RoutingSearch | undefined) {
     if (entry.row.kind === "all" || entry.row.kind === "no_category") {
       return html`<span class="name">${this.#rowName(entry)}</span>`;
     }
-    const name = html`<span class="name"
-      >${highlighted(entry.name, this.#found.get(rowKey(entry.row))?.ranges ?? [])}</span
-    >`;
+    const name = html`<span class="name">${highlighted(entry.name, found?.ranges ?? [])}</span>`;
     if (entry.row.kind === "product") return name;
     const id = entry.row.categoryId;
-    const search = this.#search;
     const open = search === undefined ? this.expanded : search.open;
     const expanded = open.has(id);
     return html`<button
@@ -761,24 +787,26 @@ export class RoutingGrid extends LitElement {
       data-category=${id}
       aria-expanded=${expanded ? "true" : "false"}
       @click=${() => {
-        const next = expanded ? collapseCategory(open, id) : expandCategory(open, id);
-        if (search === undefined) this.expanded = next;
-        else this.searchOpen = next;
+        this.#setOpen(search, expanded ? collapseCategory(open, id) : expandCategory(open, id));
       }}
     >
       <span class="arrow" aria-hidden="true">${expanded ? "▾" : "▸"}</span> ${name}
     </button>`;
   }
 
-  #row(entry: GridRow, zones: readonly Zone[]) {
+  #row(
+    { entry, found }: { entry: GridRow; found?: SearchRow },
+    zones: readonly Zone[],
+    search: RoutingSearch | undefined,
+  ) {
     const heading = entry.row.kind === "no_category";
     return html`<tr class=${heading ? "heading" : ""}>
       <th
         scope=${heading ? "rowgroup" : "row"}
         style=${styleMap({ "--routing-depth": String(entry.path.length) })}
       >
-        <span class=${this.#found.get(rowKey(entry.row))?.parent ? "label parent" : "label"}
-          >${this.#rowLabel(entry)}</span
+        <span class=${found?.parent ? "label parent" : "label"}
+          >${this.#rowLabel(entry, found, search)}</span
         >
       </th>
       ${repeat(
@@ -796,27 +824,30 @@ export class RoutingGrid extends LitElement {
     </tr>`;
   }
 
-  #rows(entries: readonly GridRow[], zones: readonly Zone[]) {
+  #rows(
+    rows: readonly { entry: GridRow; found?: SearchRow }[],
+    zones: readonly Zone[],
+    search: RoutingSearch | undefined,
+  ) {
     return repeat(
-      entries,
-      (entry) => rowKey(entry.row),
-      (entry) => this.#row(entry, zones),
+      rows,
+      ({ entry }) => rowKey(entry.row),
+      (row) => this.#row(row, zones, search),
     );
   }
 
   override render() {
     const model = this.model;
     if (model === null) return nothing;
-    const search = (this.#search = searchRows(model, this.query, this.searchOpen ?? undefined));
-    this.#found = new Map(search?.rows.map((found) => [rowKey(found.entry.row), found]));
-    const entries =
+    const search = this.#search();
+    const rows: readonly { entry: GridRow; found?: SearchRow }[] =
       search === undefined
-        ? visibleRoutingRows(model, this.expanded)
-        : search.rows.map((found) => found.entry);
+        ? visibleRoutingRows(model, this.expanded).map((entry) => ({ entry }))
+        : search.rows.map((found) => ({ entry: found.entry, found }));
     const zones: Zone[] = [{ id: null, name: t("routing.every_zone") }, ...model.zones];
-    const heading = entries.findIndex((entry) => entry.row.kind === "no_category");
-    const tree = heading < 0 ? entries : entries.slice(0, heading);
-    const uncategorised = heading < 0 ? [] : entries.slice(heading);
+    const heading = rows.findIndex(({ entry }) => entry.row.kind === "no_category");
+    const tree = heading < 0 ? rows : rows.slice(0, heading);
+    const uncategorised = heading < 0 ? [] : rows.slice(heading);
     return html`<div class="toolbar">
         <wt-input
           type="search"
@@ -835,18 +866,12 @@ export class RoutingGrid extends LitElement {
         ><wt-button
           variant="secondary"
           data-test="expand-all"
-          @click=${() => {
-            if (search === undefined) this.expanded = expandAll(model);
-            else this.searchOpen = expandAll(model);
-          }}
+          @click=${() => this.#setOpen(search, expandAll(model))}
           >${t("routing.expand_all")}</wt-button
         ><wt-button
           variant="secondary"
           data-test="collapse-all"
-          @click=${() => {
-            if (search === undefined) this.expanded = collapseAll();
-            else this.searchOpen = collapseAll();
-          }}
+          @click=${() => this.#setOpen(search, collapseAll())}
           >${t("routing.collapse_all")}</wt-button
         ><span class="count" role="status"
           >${search === undefined ? "" : matchCount(search.count)}</span
@@ -868,13 +893,13 @@ export class RoutingGrid extends LitElement {
             </tr>
           </thead>
           <tbody>
-            ${this.#rows(tree, zones)}
+            ${this.#rows(tree, zones, search)}
           </tbody>
           ${
             heading < 0
               ? nothing
               : html`<tbody>
-                  ${this.#rows(uncategorised, zones)}
+                  ${this.#rows(uncategorised, zones, search)}
                 </tbody>`
           }
         </table>
