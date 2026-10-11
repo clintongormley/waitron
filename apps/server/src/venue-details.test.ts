@@ -276,8 +276,13 @@ describe("venue history locks", () => {
             }),
           ),
         ).rejects.toMatchObject({
-          code: "venue.detail_locked",
-          params: { field: Object.keys(changes)[0], reason: "orders" },
+          code: Object.hasOwn(changes, "dayCutover")
+            ? "venue.business_day_invalid"
+            : "venue.detail_locked",
+          params: {
+            field: Object.keys(changes)[0],
+            reason: Object.hasOwn(changes, "dayCutover") ? "effective_date_required" : "orders",
+          },
         });
         expect((await read()).details).toEqual(initial.details);
       }
@@ -321,7 +326,11 @@ describe("venue history locks", () => {
       true,
     ]);
     for (const field of ["timeZone", "dayCutover"] as const) {
-      expect(initial.policy[field]).toEqual({ decision: "refuse", reasons: ["daily_close"] });
+      expect(initial.policy[field]).toEqual(
+        field === "dayCutover"
+          ? { decision: "allow_with_warning", reasons: ["clock_effects"] }
+          : { decision: "refuse", reasons: ["daily_close"] },
+      );
       await expect(
         withTransaction(suite.db, (tx) =>
           writeVenueDetails(tx, venue.cfg, {
@@ -330,8 +339,11 @@ describe("venue history locks", () => {
           }),
         ),
       ).rejects.toMatchObject({
-        code: "venue.detail_locked",
-        params: { field, reason: "daily_close" },
+        code: field === "dayCutover" ? "venue.business_day_invalid" : "venue.detail_locked",
+        params: {
+          field,
+          reason: field === "dayCutover" ? "effective_date_required" : "daily_close",
+        },
       });
     }
     expect((await read()).details).toEqual(initial.details);
@@ -373,7 +385,11 @@ describe("venue history locks", () => {
       ["dayCutover", "04:00"],
       ["province", "Barcelona"],
     ] as const) {
-      expect(initial.policy[field]).toEqual({ decision: "refuse", reasons: ["sales"] });
+      expect(initial.policy[field]).toEqual(
+        field === "dayCutover"
+          ? { decision: "allow_with_warning", reasons: ["clock_effects"] }
+          : { decision: "refuse", reasons: ["sales"] },
+      );
       await expect(
         withTransaction(suite.db, (tx) =>
           writeVenueDetails(tx, venue.cfg, {
@@ -381,7 +397,10 @@ describe("venue history locks", () => {
             changes: { [field]: value, name: "Atomic refusal" },
           }),
         ),
-      ).rejects.toMatchObject({ code: "venue.detail_locked", params: { field, reason: "sales" } });
+      ).rejects.toMatchObject({
+        code: field === "dayCutover" ? "venue.business_day_invalid" : "venue.detail_locked",
+        params: { field, reason: field === "dayCutover" ? "effective_date_required" : "sales" },
+      });
       expect((await read()).details).toEqual(initial.details);
     }
     const saved = await withTransaction(suite.db, (tx) =>
@@ -392,20 +411,20 @@ describe("venue history locks", () => {
     );
     expect(saved.model.details.name).toBe("Current display");
   });
-  it("permits a clock override before operational history and stores whole seconds", async () => {
+  it("permits a time-zone override before operational history and retains the initial start", async () => {
     const initial = await read();
     const saved = await withTransaction(suite.db, (tx) =>
       writeVenueDetails(tx, venue.cfg, {
         expected: initial.details,
-        changes: { timeZone: "UTC", dayCutover: "04:30" },
+        changes: { timeZone: "UTC" },
       }),
     );
     expect(saved.model.details.timeZone).toBe("UTC");
-    expect(saved.model.details.dayCutover).toBe("04:30");
+    expect(saved.model.details.dayCutover).toBe("05:00");
     const { rows } = await suite.db.execute(
       sql`select day_cutover from locations where id = ${venue.cfg.locationId}`,
     );
-    expect(rows).toEqual([{ day_cutover: "04:30:00" }]);
+    expect(rows).toEqual([{ day_cutover: "05:00:00" }]);
   });
 });
 
@@ -804,7 +823,7 @@ describe("venue details preserve committed history", () => {
     const edit = withTransaction(suite.db, (tx) =>
       writeVenueDetails(tx, venue.cfg, {
         expected: initial.details,
-        changes: { timeZone: "UTC", dayCutover: "04:30" },
+        changes: { timeZone: "UTC" },
       }),
     );
     const sale = sell();
@@ -812,11 +831,11 @@ describe("venue details preserve committed history", () => {
     expect(saved.changed).toBe(true);
     await sale;
     const current = await read();
-    expect(current.details).toEqual({ ...initial.details, timeZone: "UTC", dayCutover: "04:30" });
+    expect(current.details).toEqual({ ...initial.details, timeZone: "UTC" });
     expect(current.hasSales).toBe(true);
     expect(clocksReadAtIssuance.length).toBeGreaterThan(0);
     for (const clockRow of clocksReadAtIssuance)
-      expect(clockRow).toEqual([{ time_zone: "UTC", day_cutover: "04:30:00" }]);
+      expect(clockRow).toEqual([{ time_zone: "UTC", day_cutover: "05:00:00" }]);
     expect(suite.db.all(sql`select id from sales`)).toHaveLength(1);
   });
 });
@@ -881,8 +900,8 @@ describe("all retained sale rows lock venue clocks", () => {
             }),
           ),
         ).rejects.toMatchObject({
-          code: "venue.detail_locked",
-          params: { field, reason: "sales" },
+          code: field === "dayCutover" ? "venue.business_day_invalid" : "venue.detail_locked",
+          params: { field, reason: field === "dayCutover" ? "effective_date_required" : "sales" },
         });
         expect((await read()).details).toEqual(initial.details);
         expect(suite.db.all(sql`select * from sales order by invoice_number`)).toEqual(stored);
@@ -900,6 +919,9 @@ describe("all retained sale rows lock venue clocks", () => {
 
 describe("venue detail consumer reads", () => {
   it("changes current station days and booking annotations without rewriting their intentions", async () => {
+    await suite.db.execute(
+      sql`update locations set day_cutover = '00:00:00' where id = ${venue.cfg.locationId}`,
+    );
     const at = new Date("2026-10-02T23:30:00Z");
     const stationIds = await withTransaction(suite.db, async (tx) => {
       const rows = await tx
@@ -911,8 +933,8 @@ describe("venue detail consumer reads", () => {
         ])
         .returning({ id: kitchenStations.id });
       await tx.insert(stationDayStates).values([
-        { stationId: rows[1]!.id, businessDay: "2026-10-02", open: false },
-        { stationId: rows[2]!.id, businessDay: "2026-10-01", open: false },
+        { stationId: rows[1]!.id, businessDay: "2026-10-03", open: false },
+        { stationId: rows[2]!.id, businessDay: "2026-10-02", open: false },
       ]);
       const defaults = await tx.execute<{ id: string }>(
         sql`select id from kitchen_stations where location_id = ${venue.cfg.locationId} and is_default`,
@@ -978,7 +1000,7 @@ describe("venue detail consumer reads", () => {
     await withTransaction(suite.db, (tx) =>
       writeVenueDetails(tx, venue.cfg, {
         expected: initial.details,
-        changes: { timeZone: "UTC", dayCutover: "23:45" },
+        changes: { timeZone: "UTC" },
       }),
     );
     expect(await readCurrent()).toEqual({
@@ -1206,7 +1228,7 @@ describe("complete editable field validation", () => {
       postalCode: { decision: "allow_with_warning", reasons: ["current_details_only"] },
       province: { decision: "refuse", reasons: ["sales"] },
       timeZone: { decision: "refuse", reasons: ["sales"] },
-      dayCutover: { decision: "refuse", reasons: ["sales"] },
+      dayCutover: { decision: "allow_with_warning", reasons: ["clock_effects"] },
     });
     const saved = await withTransaction(suite.db, (tx) =>
       writeVenueDetails(tx, venue.cfg, {
@@ -1350,7 +1372,7 @@ describe("workforce facts after venue corrections", () => {
     await withTransaction(suite.db, (tx) =>
       writeVenueDetails(tx, venue.cfg, {
         expected: initial.details,
-        changes: { timeZone: "UTC", dayCutover: "23:45", name: "Current location label" },
+        changes: { timeZone: "UTC", name: "Current location label" },
       }),
     );
     expect(await readCurrent()).toEqual(before);
@@ -1495,22 +1517,26 @@ describe("reviewed legacy geography and clock repairs", () => {
       expect(saved.model.details.name).toBe("Allowed display correction");
     },
   );
-  it("keeps a malformed saved cutover visible and accepts its eligible correction", async () => {
+  it("keeps a malformed saved cutover visible and refuses an undated correction", async () => {
     await suite.db.execute(
       sql`update locations set day_cutover = '06:00garbage' where id = ${venue.cfg.locationId}`,
     );
     const model = await read();
     expect(model.details.dayCutover).toBe("06:00garbage");
-    const saved = await withTransaction(suite.db, (tx) =>
-      writeVenueDetails(tx, venue.cfg, {
-        expected: model.details,
-        changes: { dayCutover: "06:00" },
-      }),
-    );
-    expect(saved.changed).toBe(true);
+    await expect(
+      withTransaction(suite.db, (tx) =>
+        writeVenueDetails(tx, venue.cfg, {
+          expected: model.details,
+          changes: { dayCutover: "06:00" },
+        }),
+      ),
+    ).rejects.toMatchObject({
+      code: "venue.business_day_invalid",
+      params: { field: "dayCutover", reason: "effective_date_required" },
+    });
     expect(
       suite.db.all(sql`select day_cutover from locations where id = ${venue.cfg.locationId}`),
-    ).toEqual([{ day_cutover: "06:00:00" }]);
+    ).toEqual([{ day_cutover: "06:00garbage" }]);
   });
 });
 
@@ -1548,8 +1574,8 @@ it("refuses a changed cutover that empties an offset placement and rolls back ot
       }),
     ),
   ).rejects.toMatchObject({
-    code: "venue.detail_invalid",
-    params: { field: "dayCutover", reason: "end_offset" },
+    code: "venue.business_day_invalid",
+    params: { field: "dayCutover", reason: "effective_date_required" },
   });
   const app = new Hono();
   mountLocationSettingsApi(
@@ -1580,7 +1606,10 @@ it("refuses a changed cutover that empties an offset placement and rolls back ot
   });
   expect(response.status).toBe(400);
   expect(await response.json()).toEqual({
-    error: { code: "venue.detail_invalid", params: { field: "dayCutover", reason: "end_offset" } },
+    error: {
+      code: "venue.business_day_invalid",
+      params: { field: "dayCutover", reason: "effective_date_required" },
+    },
   });
   expect((await read()).details).toEqual(initial.details);
 });

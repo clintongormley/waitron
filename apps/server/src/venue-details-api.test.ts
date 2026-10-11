@@ -35,7 +35,10 @@ beforeEach(async () => {
     () => {},
   );
 });
-const initial = () => withTransaction(suite.db, (tx) => readVenueDetails(tx, venue.cfg));
+const initial = () =>
+  withTransaction(suite.db, (tx) =>
+    readVenueDetails(tx, venue.cfg, new Date("2026-10-06T02:00:00Z")),
+  );
 function request(method: string, cookie?: string, body?: unknown) {
   return app.request("/management-api/venue-details", {
     method,
@@ -161,9 +164,12 @@ describe("fresh authorization and history at the HTTP write", () => {
       expected: model.details,
       changes: { name: "Do not commit", dayCutover: "04:00" },
     });
-    expect(locked.status).toBe(409);
+    expect(locked.status).toBe(400);
     expect(await locked.json()).toEqual({
-      error: { code: "venue.detail_locked", params: { field: "dayCutover", reason: "orders" } },
+      error: {
+        code: "venue.business_day_invalid",
+        params: { field: "dayCutover", reason: "effective_date_required" },
+      },
     });
     expect((await initial()).details).toEqual(model.details);
     const noOp = await request("PATCH", venue.managerCookie, {
@@ -178,7 +184,7 @@ describe("fresh authorization and history at the HTTP write", () => {
         hasOrderHistory: true,
         policy: {
           ...model.policy,
-          dayCutover: { decision: "refuse", reasons: ["orders"] },
+          dayCutover: { decision: "allow_with_warning", reasons: ["clock_effects"] },
           timeZone: { decision: "refuse", reasons: ["orders"] },
         },
       },
@@ -264,9 +270,12 @@ it("rechecks a real sale after GET before accepting any clock patch", async () =
     expected: model.details,
     changes: { name: "Not committed", dayCutover: "04:30" },
   });
-  expect(refused.status).toBe(409);
+  expect(refused.status).toBe(400);
   expect(await refused.json()).toEqual({
-    error: { code: "venue.detail_locked", params: { field: "dayCutover", reason: "sales" } },
+    error: {
+      code: "venue.business_day_invalid",
+      params: { field: "dayCutover", reason: "effective_date_required" },
+    },
   });
   expect(suite.db.all(sql`select * from locations`)).toEqual(before);
   const repeat = await request("PATCH", venue.managerCookie, {
