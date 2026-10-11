@@ -444,8 +444,8 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
   intent is preparation or live (`apps/server/src/boot.ts`). Left open by A496.
 
 - **`#onGoto` in `setup-app.ts` keeps `fiscalTestStatus`** — found by #567 while pruning comments.
-  The done screen treats a non-network status refusal as ready, so an HTTP 503 can announce "The
-  server is ready" early. [Detail](backlog/setup.md#ongoto-in-setup-appts-keeps-fiscalteststatus)
+  Several small wizard leftovers remain: a stale fiscal-test banner, a cloud restore's stale
+  message, a mistyped adopt answer, test titles and gaps, and a non-`wt-*` event name. [Detail](backlog/setup.md#ongoto-in-setup-appts-keeps-fiscalteststatus)
 
 - **The bucket route answers a wrong key (`recovery.passphrase_invalid`) and a damaged copy
   (`backup.artifact_invalid`, `backup.archive_invalid`) with different codes;** the wizard shows one
