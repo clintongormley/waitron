@@ -123,6 +123,8 @@ const shown = (box: HTMLButtonElement) => {
   const value = box.querySelector(".station")!;
   return { text: value.textContent!.trim(), muted: value.classList.contains("inherited") };
 };
+/** The look the cell is drawn in: `set`, `inherited`, `differs` or `blank`. */
+const styleOf = (box: HTMLButtonElement) => box.dataset.style;
 const editorOf = (el: RoutingGrid) => root(el).querySelector<Editor>("routing-cell-editor");
 /** The open cell editor's `wt-close`; take it before the key or click that closes the editor. */
 function editorClosed(el: RoutingGrid) {
@@ -177,15 +179,63 @@ async function choose(el: RoutingGrid, box: HTMLButtonElement, label: string): P
   await el.updateComplete;
 }
 
+/** Names as a real venue writes them: upper-case categories, one of them three levels down. */
+function santet(): RoutingView {
+  return routing({
+    zones: [{ id: "front", name: "Front Bar", departmentId: null }],
+    categories: [
+      { id: "santet", name: "Santet Deli Co", parentId: null },
+      { id: "agave", name: "AGAVE", parentId: "santet" },
+      { id: "clandestina", name: "CLANDESTINA", parentId: "agave" },
+      { id: "cafes", name: "CAFÉS", parentId: "santet" },
+    ],
+    products: [
+      { id: "reposado", name: "Clandestina Reposado", categoryId: "clandestina" },
+      { id: "leche", name: "Café con leche", categoryId: "cafes" },
+    ],
+    cells: [
+      { row: { kind: "category", categoryId: "santet" }, zoneId: "front", target: station("bar") },
+      {
+        row: { kind: "category", categoryId: "clandestina" },
+        zoneId: null,
+        target: station("kitchen"),
+      },
+    ],
+  });
+}
+
+/** The row's header cell, found through its Every zone cell. */
+const rowHeader = (el: RoutingGrid, row: string) =>
+  cell(el, row, "every").closest("tr")!.querySelector("th")!;
+/** The text nodes under `within` that draw letters, outside the expand arrow. */
+function texts(within: Node): Text[] {
+  const walker = document.createTreeWalker(within, NodeFilter.SHOW_TEXT);
+  const found: Text[] = [];
+  for (let node = walker.nextNode(); node !== null; node = walker.nextNode()) {
+    if (node.textContent!.trim() !== "" && node.parentElement?.closest(".arrow") === null) {
+      found.push(node as Text);
+    }
+  }
+  return found;
+}
+/** The line boxes the characters `start`..`end` of `text` are drawn in. */
+function boxes(text: Text, start = 0, end = text.length): DOMRect[] {
+  const range = document.createRange();
+  range.setStart(text, start);
+  range.setEnd(text, end);
+  return [...range.getClientRects()];
+}
+const frame = () => new Promise((resolve) => requestAnimationFrame(resolve));
+
 describe("venue-routing-grid", () => {
-  it("Expand all and Collapse all change the rendered rows and counts, and focus stays on the trigger", async () => {
+  it("Expand all and Collapse all change the rendered rows, and focus stays on the trigger", async () => {
     const { el } = await mount();
     expect(rowLabels(el)).toEqual([
       "All categories",
-      "▸ Drinks 2 more products",
-      "Drinks › ▸ Cocktails 1 more product",
+      "▸ Drinks",
+      "▸ Cocktails",
       "▸ Food",
-      "Food › Burger",
+      "Burger",
       "No category",
       "Bread",
     ]);
@@ -198,10 +248,10 @@ describe("venue-routing-grid", () => {
     expect(rowLabels(el)).toEqual([
       "All categories",
       "▾ Drinks",
-      "▸ Cocktails 1 more product",
+      "▸ Cocktails",
       "Cola",
       "▸ Food",
-      "Food › Burger",
+      "Burger",
       "No category",
       "Bread",
     ]);
@@ -225,7 +275,7 @@ describe("venue-routing-grid", () => {
     const collapseAll = root(el).querySelector<HTMLElement>('[data-test="collapse-all"]')!;
     await userEvent.click(collapseAll);
     await el.updateComplete;
-    expect(rowLabels(el)[1]).toBe("▸ Drinks 2 more products");
+    expect(rowLabels(el)[1]).toBe("▸ Drinks");
     expect(root(el).activeElement).toBe(collapseAll);
   });
 
@@ -248,20 +298,20 @@ describe("venue-routing-grid", () => {
     ]);
   });
 
-  it("shows inherited results muted and explicit ones normal, including explicit-equal", async () => {
+  it("shows inherited results muted, blank where they repeat the row's Every zone, and explicit ones unmuted, including explicit-equal", async () => {
     const { el } = await mount(routing(), {});
     root(el).querySelector<HTMLElement>('[data-test="expand-all"]')!.click();
     await el.updateComplete;
     // Explicit.
     expect(shown(combo(el, "c:drinks", "every")!)).toEqual({ text: "Bar", muted: false });
-    // Inherited from Drinks × Every zone: a category's own Every zone beats All × Terrace.
-    expect(shown(combo(el, "p:cola", "terrace")!)).toEqual({ text: "Bar", muted: true });
+    // Inherited from Drinks × Every zone, as Cola's own Every zone is: blank.
+    expect(shown(combo(el, "p:cola", "terrace")!)).toEqual({ text: "", muted: true });
     // Inherited from Cocktails × Terrace.
     expect(shown(combo(el, "p:mojito", "terrace")!)).toEqual({ text: "Terrace bar", muted: true });
     // Explicit Kitchen, equal to the default it would otherwise inherit.
     expect(shown(combo(el, "p:burger", "every")!)).toEqual({ text: "Kitchen", muted: false });
-    // Same-row Every zone counts as inherited for a zone cell.
-    expect(shown(combo(el, "p:burger", "terrace")!)).toEqual({ text: "Kitchen", muted: true });
+    // Same-row Every zone counts as inherited for a zone cell, and is blank there.
+    expect(shown(combo(el, "p:burger", "terrace")!)).toEqual({ text: "", muted: true });
     // Inherited No preparation from All × Terrace; never blank.
     expect(shown(combo(el, "p:bread", "terrace")!)).toEqual({
       text: "No preparation",
@@ -277,6 +327,27 @@ describe("venue-routing-grid", () => {
     expect(trigger(combo(el, "c:drinks", "every")!).getAttribute("aria-label")).toBe(
       "Drinks, Every zone: Bar, set here",
     );
+    expect(
+      Object.fromEntries(
+        [
+          ["c:drinks", "every"],
+          ["p:cola", "terrace"],
+          ["p:mojito", "terrace"],
+          ["p:burger", "terrace"],
+          ["p:bread", "terrace"],
+          ["p:bread", "every"],
+          ["all", "terrace"],
+        ].map(([row, zone]) => [`${row}|${zone}`, styleOf(combo(el, row!, zone!)!)]),
+      ),
+    ).toEqual({
+      "c:drinks|every": "set",
+      "p:cola|terrace": "blank",
+      "p:mojito|terrace": "differs",
+      "p:burger|terrace": "blank",
+      "p:bread|terrace": "differs",
+      "p:bread|every": "inherited",
+      "all|terrace": "set",
+    });
   });
 
   it("the editor offers active stations, then No preparation, and no Clear for an inherited cell; an inactive saved station is described, not offered", async () => {
@@ -484,7 +555,7 @@ describe("venue-routing-grid", () => {
     });
     el.pending = null;
     await el.updateComplete;
-    expect(shown(bread)).toEqual({ text: "Kitchen", muted: true });
+    expect(shown(bread)).toEqual({ text: "", muted: true });
   });
 
   it("removing a zone destroys its open editor instead of handing it to the neighbouring zone", async () => {
@@ -745,8 +816,8 @@ describe("venue-routing-grid", () => {
   it("a No category cell inherits its own row's Every zone before All categories × its zone", async () => {
     const { el } = await mount(noCategoryAtBar());
     expect(shown(combo(el, "no_category", "every")!)).toEqual({ text: "Bar", muted: false });
-    expect(shown(combo(el, "no_category", "terrace")!)).toEqual({ text: "Bar", muted: true });
-    expect(shown(combo(el, "p:bread", "terrace")!)).toEqual({ text: "Bar", muted: true });
+    expect(shown(combo(el, "no_category", "terrace")!)).toEqual({ text: "", muted: true });
+    expect(shown(combo(el, "p:bread", "terrace")!)).toEqual({ text: "", muted: true });
     expect(shown(combo(el, "all", "terrace")!)).toEqual({ text: "No preparation", muted: false });
   });
 
@@ -895,6 +966,159 @@ describe("venue-routing-grid", () => {
     );
   });
 
+  describe("how a cell is drawn", () => {
+    /** The computed value a declared token gives `property` on a span beside the grid. */
+    const tokenValue = (el: RoutingGrid, property: "color" | "fontWeight", value: string) => {
+      const probe = document.createElement("span");
+      probe.style[property] = value;
+      el.parentElement!.append(probe);
+      const computed = getComputedStyle(probe)[property];
+      probe.remove();
+      return computed;
+    };
+
+    it("draws no path in the row labels, even under a closed parent", async () => {
+      const { el } = await mount();
+      expect(root(el).querySelector("tbody th .path")).toBeNull();
+      for (const label of rowLabels(el)) expect(label).not.toContain("›");
+    });
+
+    it("draws a station set here bold in the primary text colour, and a blank cell empty", async () => {
+      const { el } = await mount();
+      root(el).querySelector<HTMLElement>('[data-test="expand-all"]')!.click();
+      await el.updateComplete;
+      for (const [row, zone] of [
+        ["c:drinks", "every"],
+        ["all", "every"],
+        ["all", "terrace"],
+      ] as const) {
+        const value = getComputedStyle(combo(el, row, zone)!.querySelector(".station")!);
+        expect(value.fontWeight).toBe(tokenValue(el, "fontWeight", "var(--wt-font-weight-bold)"));
+        expect(value.color).toBe(tokenValue(el, "color", "var(--wt-color-primary-text)"));
+      }
+      const blank = combo(el, "p:cola", "terrace")!;
+      expect(styleOf(blank)).toBe("blank");
+      expect(blank.querySelector(".station")!.textContent).toBe("");
+      expect(blank.querySelectorAll(".line")).toHaveLength(0);
+    });
+
+    it("tints and outlines a hovered cell, and outlines a keyboard-focused one the same way", async () => {
+      const { el } = await mount();
+      const box = combo(el, "c:drinks", "terrace")!;
+      const atRest = getComputedStyle(box);
+      const restBackground = atRest.backgroundColor;
+      expect(atRest.outlineStyle).toBe("none");
+      await userEvent.hover(box);
+      expect(box.matches(":hover")).toBe(true);
+      const hovered = getComputedStyle(box);
+      expect(hovered.backgroundColor).not.toBe(restBackground);
+      expect(hovered.outlineStyle).toBe("solid");
+      expect(hovered.cursor).toBe("pointer");
+      const hoverOutline = [hovered.outlineStyle, hovered.outlineWidth, hovered.outlineColor];
+      await userEvent.unhover(box);
+      box.focus({ focusVisible: true } as FocusOptions);
+      await userEvent.keyboard("{Shift}");
+      expect(box.matches(":focus-visible")).toBe(true);
+      const focused = getComputedStyle(box);
+      expect([focused.outlineStyle, focused.outlineWidth, focused.outlineColor]).toEqual(
+        hoverOutline,
+      );
+    });
+
+    /** Food on the Inside warns of its disabled station and carries a refusal. */
+    const warned = () =>
+      mount(routing(), {
+        refusal: {
+          address: { row: { kind: "category", categoryId: "food" }, zoneId: "inside" },
+          message: "This station was disabled. Choose another.",
+        },
+      });
+
+    it("makes the whole cell the button, with a warning, a refusal or a repair note under the station", async () => {
+      const { el } = await warned();
+      const repair = await mount(routing({ defaultStationId: null }));
+      for (const [grid, row, zone] of [
+        [el, "c:drinks", "every"],
+        [el, "c:drinks", "terrace"],
+        [el, "p:bread", "terrace"],
+        [el, "c:food", "inside"],
+        [repair.el, "all", "every"],
+      ] as const) {
+        const td = cell(grid, row, zone).getBoundingClientRect();
+        const button = combo(grid, row, zone)!.getBoundingClientRect();
+        for (const side of ["left", "top", "width", "height"] as const)
+          expect(Math.abs(button[side] - td[side]), `${row}|${zone} ${side}`).toBeLessThan(1.5);
+      }
+    });
+
+    it.each([
+      ["the disabled-station warning", '[data-test="disabled-target"]'],
+      ["the refusal", '[data-test="cell-error"]'],
+    ])("a pointer click on %s under the station opens the cell's editor", async (_, selector) => {
+      const { el } = await warned();
+      const food = cell(el, "c:food", "inside");
+      const note = food.querySelector<HTMLElement>(selector)!;
+      const described = root(el).getElementById(
+        combo(el, "c:food", "inside")!.getAttribute("aria-describedby")!,
+      );
+      expect(described?.contains(note)).toBe(true);
+      expect(combo(el, "c:drinks", "every")!.hasAttribute("aria-describedby")).toBe(false);
+      await userEvent.click(note);
+      await vi.waitFor(() => expect(editorOf(el)?.open).toBe(true));
+    });
+
+    it("a pointer click at the bottom of a warned cell opens the cell's editor", async () => {
+      const { el } = await warned();
+      const food = cell(el, "c:food", "inside");
+      const { width, height } = food.getBoundingClientRect();
+      await userEvent.click(food, { position: { x: width - 4, y: height - 3 } });
+      await vi.waitFor(() => expect(editorOf(el)?.open).toBe(true));
+    });
+
+    it("draws a category's name medium and a product's normal", async () => {
+      await page.viewport(1280, 800);
+      const { el } = await mount(santet());
+      await userEvent.click(root(el).querySelector<HTMLElement>('[data-test="expand-all"]')!);
+      await el.updateComplete;
+      const weight = (row: string) =>
+        getComputedStyle(texts(rowHeader(el, row))[0]!.parentElement!).fontWeight;
+      expect(weight("c:agave")).toBe(tokenValue(el, "fontWeight", "var(--wt-font-weight-medium)"));
+      expect(weight("p:leche")).toBe(tokenValue(el, "fontWeight", "var(--wt-font-weight-normal)"));
+    });
+
+    it("lines a row's name up with the station beside it, in a row as tall as a tap target", async () => {
+      await page.viewport(1280, 800);
+      const { el } = await mount(santet());
+      await userEvent.click(root(el).querySelector<HTMLElement>('[data-test="expand-all"]')!);
+      await el.updateComplete;
+      const tap = parseFloat(getComputedStyle(el).getPropertyValue("--wt-tap-min"));
+      for (const row of ["c:agave", "p:leche", "all"]) {
+        const name = boxes(texts(rowHeader(el, row))[0]!);
+        expect(name, row).toHaveLength(1);
+        const height = rowHeader(el, row).closest("tr")!.getBoundingClientRect().height;
+        expect(height, row).toBeLessThanOrEqual(tap + 1.5);
+        const station = boxes(texts(cell(el, row, "every").querySelector(".station")!)[0]!);
+        expect(Math.abs(name[0]!.top - station[0]!.top), row).toBeLessThanOrEqual(2);
+      }
+      expect(
+        root(el).querySelector('button[data-category="agave"]')!.getBoundingClientRect().height,
+      ).toBeGreaterThanOrEqual(tap);
+    });
+
+    it("at phone width breaks a row's name between words, never inside a word that fits", async () => {
+      await page.viewport(390, 800);
+      const { el } = await mount(santet());
+      await userEvent.click(root(el).querySelector<HTMLElement>('[data-test="expand-all"]')!);
+      await el.updateComplete;
+      for (const row of ["c:santet", "c:agave", "c:cafes", "p:leche"]) {
+        const [text] = texts(rowHeader(el, row));
+        for (const word of text!.data.matchAll(/\S+/g)) {
+          expect(boxes(text!, word.index, word.index + word[0].length), word[0]).toHaveLength(1);
+        }
+      }
+    });
+  });
+
   describe("the cell's button and its editor", () => {
     const dining = { departmentId: "dining", departmentName: "Dining", colour: "blue" as const };
     const lunch: RoutingPeriod = { id: "lunch", ...dining, name: "Lunch", productIds: ["mojito"] };
@@ -951,12 +1175,12 @@ describe("venue-routing-grid", () => {
       expect(bread.getAttribute("aria-label")).toBe(
         "Bread, Terrace: No preparation, set here. Staff lunch: Bar",
       );
-      // Inherited: italic, with the lines of the cell that decides it.
+      // Inherited in the Every zone column: muted, not italic, with the deciding cell's lines.
       root(el).querySelector<HTMLElement>('[data-test="expand-all"]')!.click();
       await el.updateComplete;
       const cola = combo(el, "p:cola", "every")!;
       expect(shown(cola)).toEqual({ text: "Bar", muted: true });
-      expect(getComputedStyle(cola.querySelector(".station")!).fontStyle).toBe("italic");
+      expect(getComputedStyle(cola.querySelector(".station")!).fontStyle).toBe("normal");
       expect(getComputedStyle(own.querySelector(".station")!).fontStyle).toBe("normal");
       expect(lines(el, "p:cola", "every")).toEqual(["Lunch: Kitchen"]);
       expect(cola.getAttribute("aria-label")).toBe(
@@ -1202,16 +1426,35 @@ describe("venue-routing-grid", () => {
         return { italic: style.fontStyle === "italic", color: style.color };
       });
 
-    it("draws inherited lines muted and italic, as the inherited station above them", async () => {
+    it("draws inherited lines muted, as the inherited station above them, and italic where a zone cell differs", async () => {
       const { el } = await expanded(withCola());
-      const station = combo(el, "p:mojito", "every")!.querySelector(".station")!;
-      const muted = getComputedStyle(station).color;
+      const mojito = combo(el, "p:mojito", "every")!.querySelector(".station")!;
+      const muted = getComputedStyle(mojito).color;
       expect(lines(el, "p:mojito", "every")).toEqual(["Lunch: Kitchen"]);
-      expect(lineStyles(el, "p:mojito", "every")).toEqual([{ italic: true, color: muted }]);
+      expect(lineStyles(el, "p:mojito", "every")).toEqual([{ italic: false, color: muted }]);
       const own = lineStyles(el, "p:cola", "every");
       expect(own).toHaveLength(1);
       expect(own[0]!.italic).toBe(false);
       expect(own[0]!.color).not.toBe(muted);
+      // Drinks × Terrace differs from Drinks × Every zone, so Cola × Terrace draws it, italic.
+      el.model = {
+        ...timed(),
+        cells: [
+          ...timed().cells,
+          {
+            row: { kind: "category", categoryId: "drinks" },
+            zoneId: "terrace",
+            target: station("kitchen"),
+            periods: [{ periodId: "lunch", target: station("bar") }],
+          } as RoutingCell,
+        ],
+      };
+      await el.updateComplete;
+      const differs = combo(el, "p:cola", "terrace")!;
+      expect(styleOf(differs)).toBe("differs");
+      expect(lines(el, "p:cola", "terrace")).toEqual(["Lunch: Bar"]);
+      expect(lineStyles(el, "p:cola", "terrace")).toEqual([{ italic: true, color: muted }]);
+      expect(getComputedStyle(differs.querySelector(".station")!).fontStyle).toBe("italic");
     });
 
     it("draws a waiting choice's own lines with its station, not the saved lines", async () => {
@@ -1242,7 +1485,7 @@ describe("venue-routing-grid", () => {
       const cola = combo(el, "p:cola", "every")!;
       expect(shown(cola)).toEqual({ text: "Bar", muted: true });
       expect(lines(el, "p:cola", "every")).toEqual(["Lunch: Kitchen"]);
-      expect(lineStyles(el, "p:cola", "every")[0]!.italic).toBe(true);
+      expect(lineStyles(el, "p:cola", "every")[0]!.italic).toBe(false);
       expect(cola.getAttribute("aria-label")).toBe(
         "Drinks › Cola, Every zone: Bar, inherited. Lunch: Kitchen",
       );
@@ -1311,6 +1554,151 @@ describe("venue-routing-grid", () => {
       el.model = timed();
       await el.updateComplete;
       expect(lines(el, "c:drinks", "every")).toEqual(["Lunch: Kitchen"]);
+    });
+  });
+
+  describe("search", () => {
+    const searchField = (el: RoutingGrid) =>
+      root(el).querySelector<HTMLElementTagNameMap["wt-input"]>('wt-input[name="search"]')!;
+    const searchInput = (el: RoutingGrid) =>
+      searchField(el).shadowRoot!.querySelector<HTMLInputElement>("input")!;
+    async function search(el: RoutingGrid, query: string) {
+      await searchField(el).updateComplete;
+      await userEvent.fill(searchInput(el), query);
+      await el.updateComplete;
+    }
+    const status = (el: RoutingGrid) =>
+      root(el).querySelector<HTMLElement>('[role="status"]')!.textContent!.trim();
+    const parentOnly = (el: RoutingGrid) =>
+      bodyRows(el).map((row) => row.querySelector(".label")!.classList.contains("parent"));
+    const marks = (el: RoutingGrid, row: number) =>
+      [...bodyRows(el)[row]!.querySelectorAll("th mark")].map((mark) => mark.textContent);
+    const toggle = (el: RoutingGrid, id: string) =>
+      root(el).querySelector<HTMLButtonElement>(`button[data-category="${id}"]`)!;
+
+    it("is a wt-input named search, labelled, before Expand all", async () => {
+      const { el } = await mount();
+      const field = searchField(el);
+      expect(field.type).toBe("search");
+      expect(field.hideLabel).toBe(true);
+      expect(field.autocomplete).toBe("off");
+      expect(field.label).toBe("Search categories and products");
+      expect(field.placeholder).toBe("Search categories and products");
+      await field.updateComplete;
+      expect(searchInput(el).getAttribute("aria-label")).toBe("Search categories and products");
+      const toolbar = [...root(el).querySelector(".toolbar")!.children];
+      expect(toolbar.indexOf(field)).toBeLessThan(
+        toolbar.indexOf(root(el).querySelector('[data-test="expand-all"]')!),
+      );
+      expect(status(el)).toBe("");
+    });
+
+    it("keeps the search field's wt-change inside the grid", async () => {
+      const { el } = await mount();
+      const escaped: Event[] = [];
+      el.addEventListener("wt-change", (event) => escaped.push(event));
+      await search(el, "coc");
+      expect(status(el)).not.toBe("");
+      expect(escaped).toEqual([]);
+    });
+
+    it("shows a match with its parents muted, its text marked, and the count", async () => {
+      const { el } = await mount();
+      await search(el, "coc");
+      expect(rowLabels(el)).toEqual(["All categories", "▾ Drinks", "▸ Cocktails"]);
+      expect(parentOnly(el)).toEqual([true, true, false]);
+      expect(marks(el, 2)).toEqual(["Coc"]);
+      expect(marks(el, 1)).toEqual([]);
+      expect(status(el)).toBe("1 match");
+      await search(el, "co");
+      expect(status(el)).toBe("2 matches");
+      await search(el, "zzz");
+      expect(status(el)).toBe("No matches");
+    });
+
+    it("counts in Spanish", async () => {
+      setLocale("es");
+      const { el } = await mount();
+      await search(el, "coc");
+      expect(status(el)).toBe("1 coincidencia");
+      await search(el, "co");
+      expect(status(el)).toBe("2 coincidencias");
+      await search(el, "zzz");
+      expect(status(el)).toBe("Sin coincidencias");
+    });
+
+    it("opens a matched category to show its children", async () => {
+      const { el } = await mount();
+      await search(el, "coc");
+      await userEvent.click(toggle(el, "cocktails"));
+      await el.updateComplete;
+      expect(rowLabels(el)).toEqual(["All categories", "▾ Drinks", "▾ Cocktails", "Mojito"]);
+    });
+
+    it("a new query starts from its own default opening", async () => {
+      const { el } = await mount();
+      await search(el, "coc");
+      await userEvent.click(toggle(el, "cocktails"));
+      await el.updateComplete;
+      await search(el, "cock");
+      expect(rowLabels(el)).toEqual(["All categories", "▾ Drinks", "▸ Cocktails"]);
+    });
+
+    it("clearing the field restores the rows exactly as they were open before searching", async () => {
+      const { el } = await mount();
+      await userEvent.click(toggle(el, "food"));
+      await el.updateComplete;
+      const before = rowLabels(el);
+      expect(before).toEqual([
+        "All categories",
+        "▸ Drinks",
+        "▸ Cocktails",
+        "▾ Food",
+        "Burger",
+        "No category",
+        "Bread",
+      ]);
+      await search(el, "coc");
+      await userEvent.click(root(el).querySelector<HTMLElement>('[data-test="expand-all"]')!);
+      await el.updateComplete;
+      expect(rowLabels(el)).toEqual(["All categories", "▾ Drinks", "▾ Cocktails", "Mojito"]);
+      await userEvent.click(toggle(el, "drinks"));
+      await el.updateComplete;
+      await search(el, "");
+      expect(rowLabels(el)).toEqual(before);
+      expect(parentOnly(el).some(Boolean)).toBe(false);
+      expect(status(el)).toBe("");
+    });
+
+    it("draws a marked name as one run of text, with no gap at the mark and the mark kept whole", async () => {
+      await page.viewport(1280, 800);
+      const { el } = await mount(santet());
+      await search(el, "clan");
+      const th = rowHeader(el, "c:clandestina");
+      const mark = th.querySelector("mark")!;
+      expect(mark.textContent).toBe("CLAN");
+      const rest = texts(th).find((text) => text.data === "DESTINA")!;
+      expect(boxes(rest)[0]!.left - mark.getBoundingClientRect().right).toBeCloseTo(0, 0);
+
+      await page.viewport(390, 800);
+      await frame();
+      const probe = document.createElement("mark");
+      probe.textContent = "CLAN";
+      probe.style.font = getComputedStyle(mark).font;
+      probe.style.position = "absolute";
+      el.parentElement!.append(probe);
+      const word = probe.getBoundingClientRect().width;
+      probe.remove();
+      expect(mark.getClientRects()).toHaveLength(1);
+      expect(mark.getBoundingClientRect().width).toBeGreaterThanOrEqual(word - 0.5);
+    });
+
+    it("Collapse all during search closes every category of the search", async () => {
+      const { el } = await mount();
+      await search(el, "coc");
+      await userEvent.click(root(el).querySelector<HTMLElement>('[data-test="collapse-all"]')!);
+      await el.updateComplete;
+      expect(rowLabels(el)).toEqual(["All categories", "▸ Drinks"]);
     });
   });
 });

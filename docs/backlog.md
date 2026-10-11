@@ -1397,14 +1397,9 @@ _Formerly entries spread across the old sections, A261's venue-operations steps 
 
 _Formerly the kitchen entries in the opening part of the old Track A (before A1), and kitchen entries elsewhere; part of A9._ Detail: [backlog/kitchen.md](backlog/kitchen.md).
 
-- **A507. Prep stations made lighter: a Routes grid you can scan and search, and a shorter
-  route-change notice (owner, 2026-10-11)** — left open by A507 part 1 (#1564). The Routes grid
-  loses its cell boxes, its "N more products" counts and its parent paths; a routing set on a row is
-  bold blue, an inherited one grey, and a zone cell is blank unless what it inherits differs from
-  the row's own Every zone. Rows with their own routing show with every category above them, even
-  inside a closed category, and a search bar finds any category or product. The route-change notice
-  no longer asks for a product's own edit and summarises a category's. Mockups:
-  [docs/backlog/mockups/a507-prep-stations/](backlog/mockups/a507-prep-stations/).
+- **A507. Prep stations made lighter: a shorter route-change notice (owner, 2026-10-11)** — left
+  open by A507 part 1 (#1564) and A507 part 2 (#1568). The route-change notice no longer asks for a
+  product's own edit and summarises a category's.
   [Detail](backlog/kitchen.md#a507-prep-stations-made-lighter)
 
 - **A routing period line naming another location's period is flagged but never drawn** (left open
@@ -1527,12 +1522,14 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   (`packages/venue-service/src/dashboard/routing-client.ts`) are called only by their own tests.
   Decide whether to remove them or use them; slice 4 Part A leaves both.
 
-- **Spanish and nested routing-grid labels split mid-word at 390 px** — the grid breaks words with
-  `overflow-wrap: anywhere` and sets no `hyphens`
-  (`packages/venue-service/src/dashboard/routing-grid.ts`); hyphenating would need `hyphens: auto`
-  and a `lang` on the grid or an element above it, and the dashboard sets none
-  (`apps/dashboard/index.html`'s `<html>` has none). Left open by
-  A366 slice 4 Part A.
+- **A long word in a routing-grid row name still splits at 390 px** — since A507 part 2 a name
+  breaks between words where each word fits ("AGAVE", "Café con / leche" stay whole), but a word
+  wider than what is left of the capped first column beside the indent and the arrow still breaks
+  inside itself ("BOCAD/ILLOS", "CLAN/DESTI/NA" one level down). The column is held at 96 px by the
+  phone-width case "at phone width the row label column is capped and the zones take most of the width"
+  (`packages/venue-service/src/dashboard/routing-grid.test.ts`). Options: widen the cap, shrink the
+  arrow at phone width, or hyphenate (`hyphens: auto` needs a `lang` on the grid or above it; the
+  dashboard sets none — `apps/dashboard/index.html`'s `<html>` has none).
 
 - **The station editor's Printers read-out (no `printer.manage`) is reachable only at component
   level** — module screens are not told the person's permissions, so Prep stations always passes

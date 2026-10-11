@@ -1,4 +1,4 @@
-import { LitElement, css, html, nothing } from "lit";
+import { LitElement, css, html, nothing, type TemplateResult } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { repeat } from "lit/directives/repeat.js";
 import { styleMap } from "lit/directives/style-map.js";
@@ -6,6 +6,7 @@ import { currentLocale } from "@waitron/dashboard-kit";
 import { baseStyles } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
+import "@waitron/ui/src/components/wt-input.js";
 import {
   cellKey,
   followFallbacks,
@@ -13,7 +14,6 @@ import {
   targetKey,
   zoneKey,
   selectRoutingCell,
-  selectionRulesFromModel,
   type CellAddress,
   type GridCategory,
   type GridProduct,
@@ -30,16 +30,23 @@ import type { PeriodLine, RoutingModelCell } from "../routing-types.js";
 import "./routing-cell-editor.js";
 import type { RoutingCellEditorCell, RoutingCellSave } from "./routing-cell-editor.js";
 import {
+  blankZoneCell,
   cellPeriodLines,
   collapseAll,
   collapseCategory,
   expandAll,
   expandCategory,
   pruneExpanded,
+  routingLookups,
+  routingSearch,
   rowInModel,
   visibleRoutingRows,
   type CellPeriodLines,
+  type MatchRange,
   type PeriodLineText,
+  type RoutingLookups,
+  type RoutingSearch,
+  type SearchRow,
 } from "./routing-grid-model.js";
 import { t } from "./strings.js";
 
@@ -72,6 +79,12 @@ type Zone = { id: string | null; name: string; departmentId?: string | null };
 
 const sameAddress = (a: CellAddress, b: CellAddress) => cellKey(a) === cellKey(b);
 
+/**
+ * Set here; inherited in the Every zone column; inherited in a zone column and differing from the
+ * row's own Every zone; or the same as it, drawn empty.
+ */
+type CellStyle = "set" | "inherited" | "differs" | "blank";
+
 @customElement("venue-routing-grid")
 export class RoutingGrid extends LitElement {
   static override styles = [
@@ -89,13 +102,26 @@ export class RoutingGrid extends LitElement {
           --routing-first: calc(var(--wt-space-6) * 3);
           --routing-zone: calc(var(--wt-space-6) * 3.25);
           --routing-pad: var(--wt-space-1);
+          --routing-indent: var(--wt-space-2);
         }
       }
       .toolbar {
         display: flex;
         flex-wrap: wrap;
+        align-items: center;
         gap: var(--wt-space-2);
         margin-block-end: var(--wt-space-3);
+      }
+      .toolbar wt-input {
+        flex: 1 1 calc(var(--wt-space-6) * 8);
+        max-inline-size: calc(var(--wt-space-6) * 12);
+      }
+      .count {
+        color: var(--wt-color-text-muted);
+      }
+      mark {
+        background: var(--wt-color-highlight);
+        color: var(--wt-color-on-highlight);
       }
       .scroll {
         overflow-x: auto;
@@ -135,10 +161,13 @@ export class RoutingGrid extends LitElement {
         z-index: 1;
         border-inline-end: 1px solid var(--wt-color-border);
       }
+      /* The label or its toggle carries the block padding, so the padding is inside the toggle's tap area. */
       tbody th {
         font-weight: var(--wt-font-weight-normal);
+        padding-block: 0;
         padding-inline-start: calc(
-          var(--routing-pad, var(--wt-space-2)) + var(--wt-space-4) * var(--routing-depth, 0)
+          var(--routing-pad, var(--wt-space-2)) + var(--routing-indent, var(--wt-space-4)) *
+            var(--routing-depth, 0)
         );
       }
       tbody tr.heading th {
@@ -147,21 +176,26 @@ export class RoutingGrid extends LitElement {
       }
       .toggle {
         display: inline-flex;
-        align-items: center;
+        align-items: flex-start;
         gap: var(--wt-space-1);
+        min-inline-size: 0;
         min-block-size: var(--wt-tap-min);
-        padding: 0;
+        padding: var(--routing-pad, var(--wt-space-2)) 0;
         border: 0;
         background: none;
         color: inherit;
         font: inherit;
+        font-weight: var(--wt-font-weight-medium);
         text-align: start;
         cursor: pointer;
       }
+      /* The large arrow takes up only a text-sized height, so it centres on the name's first line. */
       .arrow {
         display: inline-flex;
+        flex: none;
         justify-content: center;
         inline-size: var(--wt-space-5);
+        margin-block: calc((var(--wt-font-size-md) - var(--wt-font-size-xl)) / 2);
         font-size: var(--wt-font-size-xl);
         line-height: 1;
       }
@@ -169,21 +203,28 @@ export class RoutingGrid extends LitElement {
         outline: var(--wt-focus-ring);
         outline-offset: var(--wt-focus-offset);
       }
-      .path,
-      .hidden,
       .note {
         color: var(--wt-color-text-muted);
         font-size: var(--wt-font-size-sm);
       }
+      /* The No category heading keeps its colour: muted text is under 4.5:1 on its sunken fill. */
+      tbody tr:not(.heading) .label.parent {
+        color: var(--wt-color-text-muted);
+      }
+      /* Top-aligned with a zone cell's padding, so a name's first line meets its station's. */
       .label {
         display: flex;
-        flex-wrap: wrap;
-        align-items: center;
-        column-gap: var(--wt-space-1);
-        min-block-size: var(--wt-field-height);
+        align-items: flex-start;
+        min-block-size: var(--wt-tap-min);
+        padding-block: var(--routing-pad, var(--wt-space-2));
       }
-      .hidden {
-        flex-basis: 100%;
+      .label:has(> .toggle) {
+        padding-block: 0;
+      }
+      /* One inline run, so a mark never splits the name; a word breaks only when it cannot fit. */
+      .name {
+        min-inline-size: 0;
+        overflow-wrap: break-word;
       }
       .note,
       .warning,
@@ -204,30 +245,54 @@ export class RoutingGrid extends LitElement {
         flex-direction: column;
         align-items: stretch;
         gap: var(--wt-space-1);
-        inline-size: 100%;
-        min-block-size: var(--wt-field-height);
-        padding: var(--wt-space-2);
-        border: 1px solid var(--wt-color-border);
-        border-radius: var(--wt-radius-md);
-        background: var(--wt-color-surface);
+        /* The cell keeps its padding and the button spreads over it, so the whole cell is the target. */
+        inline-size: calc(100% + var(--routing-pad, var(--wt-space-2)) * 2);
+        block-size: calc(100% + var(--routing-pad, var(--wt-space-2)) * 2);
+        min-block-size: var(--wt-tap-min);
+        margin: calc(var(--routing-pad, var(--wt-space-2)) * -1);
+        padding: var(--routing-pad, var(--wt-space-2));
+        border: 0;
+        background: transparent;
         color: var(--wt-color-text);
         font: inherit;
         text-align: start;
         cursor: pointer;
       }
-      .cell:hover {
-        background: var(--wt-color-surface-lifted);
+      /* A definite height, which the row then grows, lets the button's percentage height resolve. */
+      td:has(> .cell) {
+        block-size: 1px;
       }
+      /* Drawn inside the cell, so the outline never covers a neighbour. */
+      .cell:hover,
       .cell:focus-visible {
         outline: var(--wt-focus-ring);
-        outline-offset: var(--wt-focus-offset);
+        outline-offset: calc(var(--wt-focus-offset) * -1);
       }
-      .cell .warning {
+      /* Untinted under a refusal: the danger colour falls under 4.5:1 on the tint in the dark theme. */
+      .cell:hover:not(:has(.cell-error)) {
+        background: var(--wt-color-surface-lifted);
+      }
+      .notes {
+        display: flex;
+        flex-direction: column;
+        gap: var(--wt-space-1);
+      }
+      .cell .warning,
+      .cell .repair,
+      .cell .cell-error {
         margin: 0;
+      }
+      .cell[data-style="set"] .station,
+      .cell[data-style="set"] .line {
+        font-weight: var(--wt-font-weight-bold);
+        color: var(--wt-color-primary-text);
       }
       .station.inherited,
       .line.inherited {
         color: var(--wt-color-text-muted);
+      }
+      .station.differs,
+      .line.differs {
         font-style: italic;
       }
       .line {
@@ -243,22 +308,35 @@ export class RoutingGrid extends LitElement {
   ];
 
   @property({ attribute: false }) model: RoutingView | null = null;
-  /** A refused write: its message shows beside that cell and once at the bottom of the grid. */
+  /** A refused write: its message shows in that cell and once at the bottom of the grid. */
   @property({ attribute: false }) refusal: RoutingRefusal | null = null;
   /** Set by the host while it previews or saves a choice, and cleared when that settles. */
   @property({ attribute: false }) pending: RoutingPending | null = null;
   @property({ attribute: false }) defaultRefusal: RoutingDefaultRefusal | null = null;
 
+  /** Never written while a search is shown, so clearing the search restores the tree as it was. */
   @state() private expanded: ReadonlySet<string> = new Set();
+  @state() private query = "";
+  /** The categories open in the search view; `null` until the person opens or closes one. */
+  @state() private searchOpen: ReadonlySet<string> | null = null;
   /** The cell whose editor is open. */
   @state() private editing: CellAddress | null = null;
 
+  #lookups: RoutingLookups | null = null;
   #rules: RoutingSelectionRules | null = null;
   #fallbackRules: RoutingRules | null = null;
-  #cells = new Map<string, RoutingModelCell>();
+  #cells: ReadonlyMap<string, RoutingModelCell> = new Map();
   #products = new Map<string, GridProduct>();
   #categories = new Map<string, GridCategory>();
   #allRows: ReadonlyMap<string, GridRow> | null = null;
+  #blank: ReturnType<typeof blankZoneCell> | null = null;
+  #searchOf: ReturnType<typeof routingSearch> | null = null;
+  /** The last search, kept while the model, the query and the search's open set stay the same. */
+  #searched: {
+    query: string;
+    open: ReadonlySet<string> | null;
+    result: RoutingSearch | undefined;
+  } | null = null;
   /** Rebuilt with the model and the language, which the lines' words are in. */
   #lines: {
     model: RoutingView;
@@ -269,12 +347,16 @@ export class RoutingGrid extends LitElement {
   override willUpdate(changed: Map<PropertyKey, unknown>): void {
     if (!changed.has("model") || this.model === null) return;
     const model = this.model;
-    this.#rules = selectionRulesFromModel(model);
+    const lookups = (this.#lookups = routingLookups(model));
+    this.#rules = lookups.rules;
     this.#fallbackRules = null;
-    this.#cells = new Map(model.cells.map((c) => [cellKey(c), c]));
+    this.#cells = lookups.cells;
     this.#products = new Map(model.products.map((product) => [product.id, product]));
     this.#categories = new Map(model.categories.map((category) => [category.id, category]));
     this.#allRows = null;
+    this.#blank = blankZoneCell(model, lookups);
+    this.#searchOf = routingSearch(model);
+    this.#searched = null;
     this.expanded = pruneExpanded(model, this.expanded);
     const editing = this.editing;
     if (
@@ -295,17 +377,22 @@ export class RoutingGrid extends LitElement {
     this.editing = null;
   }
 
-  #periodLines(row: RoutingRow, zoneId: string | null, waiting?: RoutingPending): CellPeriodLines {
+  #periodLines(
+    row: RoutingRow,
+    zoneId: string | null,
+    waiting: RoutingPending | undefined,
+    inherited: SelectedCell,
+  ): CellPeriodLines {
     const model = this.model!;
     const locale = currentLocale();
     if (this.#lines?.model !== model || this.#lines.locale !== locale) {
       this.#lines = {
         model,
         locale,
-        of: cellPeriodLines(model, (target) => this.#targetText(target)),
+        of: cellPeriodLines(model, (target) => this.#targetText(target), this.#lookups!),
       };
     }
-    return this.#lines.of(row, zoneId, waiting);
+    return this.#lines.of(row, zoneId, waiting, inherited);
   }
 
   #station(id: string) {
@@ -391,36 +478,51 @@ export class RoutingGrid extends LitElement {
   #error(address: CellAddress) {
     const message = this.#refusalAt(address);
     return message === ""
-      ? nothing
+      ? null
       : html`<span class="cell-error" data-test="cell-error">${message}</span>`;
   }
 
+  /** `notes` are drawn inside the button, so the whole cell stays the target. */
   #button(
     address: CellAddress,
     label: string,
     target: RouteTarget | null,
-    station: { text: string; inherited: boolean },
-    lines: { shown: readonly PeriodLineText[]; inherited: boolean },
+    style: CellStyle,
+    station: string,
+    lines: readonly PeriodLineText[],
+    notes: readonly (TemplateResult | null)[] = [],
   ) {
+    const shownNotes = notes.filter((note) => note !== null);
+    const notesId = `notes-${encodeURIComponent(cellKey(address))}`;
+    const blank = style === "blank";
+    const look = {
+      set: "",
+      inherited: " inherited",
+      differs: " inherited differs",
+      blank: " inherited",
+    }[style];
     return html`<button
       type="button"
       class="cell"
       data-test="routing-cell"
       data-target=${targetKey(target)}
+      data-style=${style}
       aria-label=${label}
+      aria-describedby=${shownNotes.length === 0 ? nothing : notesId}
       @click=${() => {
         this.editing = address;
       }}
     >
-      <span class=${station.inherited ? "station inherited" : "station"}>${station.text}</span>
-      ${lines.shown.map(
+      <span class=${`station${look}`}>${blank ? "" : station}</span>
+      ${(blank ? [] : lines).map(
         (line) =>
-          html`<span class=${lines.inherited ? "line inherited" : "line"}>${line.text}</span>${
+          html`<span class=${`line${look}`}>${line.text}</span>${
               line.flagText === undefined
                 ? nothing
                 : html`<span class="warning" data-test="period-flag">${line.flagText}</span>`
             }`,
       )}
+      ${shownNotes.length === 0 ? nothing : html`<span class="notes" id=${notesId}>${shownNotes}</span>`}
     </button>`;
   }
 
@@ -436,7 +538,7 @@ export class RoutingGrid extends LitElement {
     const shown = waiting === undefined ? (own?.target ?? null) : waiting.target;
     const disabled =
       shown?.kind === "station" && this.#station(shown.stationId)?.active !== true ? shown : null;
-    const periodLines = this.#periodLines(entry.row, zone.id, waiting);
+    const periodLines = this.#periodLines(entry.row, zone.id, waiting, selected);
     const text = this.#targetText(shown ?? inherited);
     const label = this.#labelWithNote(
       format("routing.cell_label", {
@@ -447,22 +549,25 @@ export class RoutingGrid extends LitElement {
       }),
       ...periodLines.lines.flatMap((line) => [line.text, line.flagText ?? null]),
     );
-    return html`${this.#button(
-      address,
-      label,
-      shown,
-      { text, inherited: shown === null },
-      { shown: periodLines.lines, inherited: periodLines.inherited },
-    )}${this.#error(address)}${
+    const style: CellStyle =
+      shown !== null
+        ? "set"
+        : zone.id === null
+          ? "inherited"
+          : this.#blank!(entry.row, zone.id, selected)
+            ? "blank"
+            : "differs";
+    return this.#button(address, label, shown, style, text, periodLines.lines, [
+      this.#error(address),
       disabled === null
-        ? nothing
+        ? null
         : html`<span class="warning" data-test="disabled-target"
             >${format("routing.disabled_target", {
               station: this.#station(disabled.stationId)?.name ?? disabled.stationId,
             })}
             ${this.#fallbackSentence(disabled.stationId)}</span
-          >`
-    }`;
+          >`,
+    ]);
   }
 
   #defaultTarget(): RouteTarget | null {
@@ -481,7 +586,7 @@ export class RoutingGrid extends LitElement {
     const name = target === null ? null : this.#targetText(target);
     const repair =
       target !== null
-        ? nothing
+        ? null
         : html`<span class="repair" data-test="default-repair"
             >${t("routing.default_repair")}</span
           >`;
@@ -498,7 +603,7 @@ export class RoutingGrid extends LitElement {
         state: t("routing.default_state"),
       }),
     );
-    return html`${this.#button(address, label, target, { text, inherited: false }, { shown: [], inherited: false })}${this.#error(address)}${repair}`;
+    return this.#button(address, label, target, "set", text, [], [this.#error(address), repair]);
   }
 
   /** The row's name as the grid draws it, whether or not the row is shown. */
@@ -653,63 +758,56 @@ export class RoutingGrid extends LitElement {
     )?.focus();
   }
 
-  #hiddenText(entry: GridRow): string {
-    const parts: string[] = [];
-    if (entry.hiddenProducts > 0) {
-      parts.push(
-        entry.hiddenProducts === 1
-          ? t("routing.more_product")
-          : format("routing.more_products", { count: String(entry.hiddenProducts) }),
-      );
-    }
-    if (entry.hiddenCategories > 0) {
-      parts.push(
-        entry.hiddenCategories === 1
-          ? t("routing.more_category")
-          : format("routing.more_categories", { count: String(entry.hiddenCategories) }),
-      );
-    }
-    return parts.join(", ");
+  #search(): RoutingSearch | undefined {
+    const { query, searchOpen: open } = this;
+    const memo = this.#searched;
+    if (memo?.query === query && memo.open === open) return memo.result;
+    const result = this.#searchOf!(query, open ?? undefined);
+    this.#searched = { query, open, result };
+    return result;
   }
 
-  #rowLabel(entry: GridRow, open: ReadonlySet<string>) {
-    if (entry.row.kind === "all" || entry.row.kind === "no_category") return this.#rowName(entry);
-    const row = entry.row;
-    const parent =
-      row.kind === "category"
-        ? (this.#categories.get(row.categoryId)?.parentId ?? null)
-        : this.#categoryOf(row);
-    const path =
-      entry.path.length > 0 && (parent === null || !open.has(parent))
-        ? html`<span class="path">${entry.path.join(" › ")} › </span>`
-        : nothing;
-    if (entry.row.kind === "product") return html`${path}${entry.name}`;
+  #setOpen(search: RoutingSearch | undefined, next: ReadonlySet<string>): void {
+    if (search === undefined) this.expanded = next;
+    else this.searchOpen = next;
+  }
+
+  #rowLabel(entry: GridRow, found: SearchRow | undefined, search: RoutingSearch | undefined) {
+    if (entry.row.kind === "all" || entry.row.kind === "no_category") {
+      return html`<span class="name">${this.#rowName(entry)}</span>`;
+    }
+    const name = html`<span class="name">${highlighted(entry.name, found?.ranges ?? [])}</span>`;
+    if (entry.row.kind === "product") return name;
     const id = entry.row.categoryId;
-    const expanded = this.expanded.has(id);
-    const hidden = this.#hiddenText(entry);
-    return html`${path}<button
-        type="button"
-        class="toggle"
-        data-category=${id}
-        aria-expanded=${expanded ? "true" : "false"}
-        @click=${() => {
-          this.expanded = expanded
-            ? collapseCategory(this.expanded, id)
-            : expandCategory(this.expanded, id);
-        }}
-      >
-        <span class="arrow" aria-hidden="true">${expanded ? "▾" : "▸"}</span> ${entry.name}</button
-      >${hidden ? html` <span class="hidden">${hidden}</span>` : nothing}`;
+    const open = search === undefined ? this.expanded : search.open;
+    const expanded = open.has(id);
+    return html`<button
+      type="button"
+      class="toggle"
+      data-category=${id}
+      aria-expanded=${expanded ? "true" : "false"}
+      @click=${() => {
+        this.#setOpen(search, expanded ? collapseCategory(open, id) : expandCategory(open, id));
+      }}
+    >
+      <span class="arrow" aria-hidden="true">${expanded ? "▾" : "▸"}</span> ${name}
+    </button>`;
   }
 
-  #row(entry: GridRow, zones: readonly Zone[], open: ReadonlySet<string>) {
+  #row(
+    { entry, found }: { entry: GridRow; found?: SearchRow },
+    zones: readonly Zone[],
+    search: RoutingSearch | undefined,
+  ) {
     const heading = entry.row.kind === "no_category";
     return html`<tr class=${heading ? "heading" : ""}>
       <th
         scope=${heading ? "rowgroup" : "row"}
         style=${styleMap({ "--routing-depth": String(entry.path.length) })}
       >
-        <span class="label">${this.#rowLabel(entry, open)}</span>
+        <span class=${found?.parent ? "label parent" : "label"}
+          >${this.#rowLabel(entry, found, search)}</span
+        >
       </th>
       ${repeat(
         zones,
@@ -726,41 +824,57 @@ export class RoutingGrid extends LitElement {
     </tr>`;
   }
 
-  #rows(entries: readonly GridRow[], zones: readonly Zone[], open: ReadonlySet<string>) {
+  #rows(
+    rows: readonly { entry: GridRow; found?: SearchRow }[],
+    zones: readonly Zone[],
+    search: RoutingSearch | undefined,
+  ) {
     return repeat(
-      entries,
-      (entry) => rowKey(entry.row),
-      (entry) => this.#row(entry, zones, open),
+      rows,
+      ({ entry }) => rowKey(entry.row),
+      (row) => this.#row(row, zones, search),
     );
   }
 
   override render() {
     const model = this.model;
     if (model === null) return nothing;
-    const entries = visibleRoutingRows(model, this.expanded);
+    const search = this.#search();
+    const rows: readonly { entry: GridRow; found?: SearchRow }[] =
+      search === undefined
+        ? visibleRoutingRows(model, this.expanded).map((entry) => ({ entry }))
+        : search.rows.map((found) => ({ entry: found.entry, found }));
     const zones: Zone[] = [{ id: null, name: t("routing.every_zone") }, ...model.zones];
-    // A category's children follow it in place only when it is shown and expanded.
-    const open = new Set(
-      entries.flatMap((entry) =>
-        entry.row.kind === "category" && this.expanded.has(entry.row.categoryId)
-          ? [entry.row.categoryId]
-          : [],
-      ),
-    );
-    const heading = entries.findIndex((entry) => entry.row.kind === "no_category");
-    const tree = heading < 0 ? entries : entries.slice(0, heading);
-    const uncategorised = heading < 0 ? [] : entries.slice(heading);
+    const heading = rows.findIndex(({ entry }) => entry.row.kind === "no_category");
+    const tree = heading < 0 ? rows : rows.slice(0, heading);
+    const uncategorised = heading < 0 ? [] : rows.slice(heading);
     return html`<div class="toolbar">
-        <wt-button
+        <wt-input
+          type="search"
+          name="search"
+          hide-label
+          autocomplete="off"
+          label=${t("routing.search")}
+          placeholder=${t("routing.search")}
+          .value=${this.query}
+          @wt-change=${(event: CustomEvent<{ value: string }>) => {
+            event.stopPropagation();
+            this.query = event.detail.value;
+            this.searchOpen = null;
+          }}
+        ></wt-input
+        ><wt-button
           variant="secondary"
           data-test="expand-all"
-          @click=${() => (this.expanded = expandAll(model))}
+          @click=${() => this.#setOpen(search, expandAll(model))}
           >${t("routing.expand_all")}</wt-button
         ><wt-button
           variant="secondary"
           data-test="collapse-all"
-          @click=${() => (this.expanded = collapseAll())}
+          @click=${() => this.#setOpen(search, collapseAll())}
           >${t("routing.collapse_all")}</wt-button
+        ><span class="count" role="status"
+          >${search === undefined ? "" : matchCount(search.count)}</span
         >
       </div>
       <div class="scroll" data-test="grid-scroll">
@@ -779,13 +893,13 @@ export class RoutingGrid extends LitElement {
             </tr>
           </thead>
           <tbody>
-            ${this.#rows(tree, zones, open)}
+            ${this.#rows(tree, zones, search)}
           </tbody>
           ${
             heading < 0
               ? nothing
               : html`<tbody>
-                  ${this.#rows(uncategorised, zones, open)}
+                  ${this.#rows(uncategorised, zones, search)}
                 </tbody>`
           }
         </table>
@@ -795,6 +909,24 @@ export class RoutingGrid extends LitElement {
       ></wt-form-actions>
       ${this.#editorDialog()}`;
   }
+}
+
+function matchCount(count: number): string {
+  if (count === 0) return t("routing.matches_none");
+  if (count === 1) return t("routing.matches_one");
+  return format("routing.matches_many", { count: String(count) });
+}
+
+function highlighted(name: string, ranges: readonly MatchRange[]) {
+  if (ranges.length === 0) return name;
+  const parts = [];
+  let at = 0;
+  for (const { start, end } of ranges) {
+    parts.push(name.slice(at, start), html`<mark>${name.slice(start, end)}</mark>`);
+    at = end;
+  }
+  parts.push(name.slice(at));
+  return parts;
 }
 
 declare global {

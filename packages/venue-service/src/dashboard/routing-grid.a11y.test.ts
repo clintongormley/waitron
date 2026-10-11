@@ -104,15 +104,46 @@ const flaggedLine = routing({
   ],
 });
 
+/**
+ * Option A's tree: Mojito has its own routing under closed Drinks and Cocktails; Drinks' Terrace
+ * cell is blank, Cocktails' Inside cell differs, and Drinks' Every zone carries a line.
+ */
+const mockupTree = routing({
+  periods: flaggedLine.periods,
+  cells: [
+    {
+      row: { kind: "category", categoryId: "drinks" },
+      zoneId: null,
+      target: { kind: "station", stationId: "bar" },
+      periods: [{ periodId: "lunch", target: { kind: "station", stationId: "kitchen" } }],
+    },
+    {
+      row: { kind: "product", productId: "mojito" },
+      zoneId: null,
+      target: { kind: "station", stationId: "kitchen" },
+    },
+    { row: { kind: "all" }, zoneId: "terrace", target: { kind: "no_preparation" } },
+    {
+      row: { kind: "category", categoryId: "drinks" },
+      zoneId: "inside",
+      target: { kind: "station", stationId: "kitchen" },
+    },
+  ],
+});
+
 const states: Record<
   string,
   {
     model: RoutingView;
     expand?: boolean;
+    /** Typed into the search field before the scan, with the number of marks it must draw. */
+    search?: { query: string; marks: number };
     open?: string;
     refusal?: RoutingGrid["refusal"];
     /** Cells and whether each must carry a period line's not-on-menus mark before the scan. */
     flags?: Record<string, boolean>;
+    /** Cells and the look each must be drawn in before the scan. */
+    styles?: Record<string, string>;
   }
 > = {
   "flagged period line": {
@@ -121,6 +152,17 @@ const states: Record<
     flags: {
       'td[data-row="c:drinks"][data-zone="every"]': true,
       'td[data-row="p:mojito"][data-zone="every"]': false,
+    },
+  },
+  "mockup tree": {
+    model: mockupTree,
+    styles: {
+      'td[data-row="c:drinks"][data-zone="every"]': "set",
+      'td[data-row="p:mojito"][data-zone="every"]': "set",
+      'td[data-row="c:drinks"][data-zone="terrace"]': "blank",
+      'td[data-row="c:cocktails"][data-zone="inside"]': "differs",
+      'td[data-row="p:mojito"][data-zone="inside"]': "blank",
+      'td[data-row="c:cocktails"][data-zone="every"]': "inherited",
     },
   },
   collapsed: { model: routing() },
@@ -143,6 +185,12 @@ const states: Record<
     model: disabledTarget,
     open: 'td[data-row="c:drinks"][data-zone="inside"]',
   },
+  "search with matches": { model: mockupTree, search: { query: "mo", marks: 1 } },
+  "search matching an uncategorised product": {
+    model: routing(),
+    search: { query: "bread", marks: 1 },
+  },
+  "search, no matches": { model: routing(), search: { query: "zzz", marks: 0 } },
   refusal: {
     model: routing(),
     refusal: {
@@ -164,6 +212,13 @@ describe.each(["light", "dark"] as const)("routing grid accessibility (%s)", (th
       el.shadowRoot!.querySelector<HTMLElement>('[data-test="expand-all"]')!.click();
       await el.updateComplete;
     }
+    if (state.search) {
+      const field = el.shadowRoot!.querySelector<HTMLElement>('wt-input[name="search"]')!;
+      await userEvent.fill(field.shadowRoot!.querySelector("input")!, state.search.query);
+      await el.updateComplete;
+      const marks = el.shadowRoot!.querySelectorAll("tbody mark").length;
+      if (marks !== state.search.marks) throw new Error(`search drew ${marks} marks`);
+    }
     if (state.open) {
       el.shadowRoot!.querySelector<HTMLButtonElement>(
         `${state.open} button[data-test="routing-cell"]`,
@@ -179,7 +234,33 @@ describe.each(["light", "dark"] as const)("routing grid accessibility (%s)", (th
       if ((flag !== null) !== carries)
         throw new Error(`${selector}: not-on-menus mark ${carries ? "missing" : "unexpected"}`);
     }
+    for (const [selector, style] of Object.entries(state.styles ?? {})) {
+      const drawn = el.shadowRoot!.querySelector<HTMLElement>(
+        `${selector} button[data-test="routing-cell"]`,
+      )?.dataset.style;
+      if (drawn !== style) throw new Error(`${selector}: drawn ${drawn}, not ${style}`);
+    }
     await expectNoA11yViolations(host);
+  });
+});
+
+describe.each(["light", "dark"] as const)("a highlighted match (%s)", (theme) => {
+  test("keeps its text at 4.5:1 against the highlight", async () => {
+    await mountThemed("<div></div>", theme);
+    const el = document.createElement("venue-routing-grid");
+    Object.assign(el, { model: routing() });
+    host.append(el);
+    await el.updateComplete;
+    const field = el.shadowRoot!.querySelector<HTMLElement>('wt-input[name="search"]')!;
+    await userEvent.fill(field.shadowRoot!.querySelector("input")!, "coc");
+    await el.updateComplete;
+    const mark = el.shadowRoot!.querySelector("tbody mark")!;
+    const style = getComputedStyle(mark);
+    const probe = document.createElement("div");
+    probe.style.background = "var(--wt-color-highlight)";
+    host.append(probe);
+    expect(style.backgroundColor).toBe(getComputedStyle(probe).backgroundColor);
+    expect(contrastRatio(style.color, style.backgroundColor)).toBeGreaterThanOrEqual(4.5);
   });
 });
 
@@ -202,14 +283,39 @@ describe.each(["light", "dark"] as const)("a hovered routing cell (%s)", (theme)
   test.each([
     [
       "the not-on-menus mark",
+      flaggedLine,
       'td[data-row="c:drinks"][data-zone="every"]',
       '[data-test="period-flag"]',
     ],
-    ["an inherited line", 'td[data-row="p:mojito"][data-zone="every"]', ".line.inherited"],
-  ])("keeps %s at 4.5:1 against the hover", async (_, cellSelector, textSelector) => {
+    [
+      "an inherited line",
+      flaggedLine,
+      'td[data-row="p:mojito"][data-zone="every"]',
+      ".line.inherited",
+    ],
+    ["a set-here station", routing(), 'td[data-row="c:drinks"][data-zone="every"]', ".station"],
+    [
+      "a differing inherited station",
+      routing(),
+      'td[data-row="p:bread"][data-zone="terrace"]',
+      ".station.differs",
+    ],
+    [
+      "the disabled-station warning",
+      disabledTarget,
+      'td[data-row="c:drinks"][data-zone="inside"]',
+      '[data-test="disabled-target"]',
+    ],
+    [
+      "the repair note",
+      routing({ defaultStationId: null }),
+      'td[data-row="all"][data-zone="every"]',
+      '[data-test="default-repair"]',
+    ],
+  ])("keeps %s at 4.5:1 against the hover", async (_, model, cellSelector, textSelector) => {
     await mountThemed("<div></div>", theme);
     const el = document.createElement("venue-routing-grid");
-    Object.assign(el, { model: flaggedLine });
+    Object.assign(el, { model });
     host.append(el);
     await el.updateComplete;
     el.shadowRoot!.querySelector<HTMLElement>('[data-test="expand-all"]')!.click();
@@ -224,5 +330,30 @@ describe.each(["light", "dark"] as const)("a hovered routing cell (%s)", (theme)
     const hovered = getComputedStyle(cell).backgroundColor;
     expect(hovered).not.toBe(atRest);
     expect(contrastRatio(getComputedStyle(text).color, hovered)).toBeGreaterThanOrEqual(4.5);
+  });
+
+  test("outlines a cell carrying a refusal untinted, keeping the refusal at 4.5:1", async () => {
+    await mountThemed("<div></div>", theme);
+    const el = document.createElement("venue-routing-grid");
+    Object.assign(el, {
+      model: routing(),
+      refusal: {
+        address: { row: { kind: "category", categoryId: "drinks" }, zoneId: null },
+        message: "This station was disabled. Choose another.",
+      },
+    });
+    host.append(el);
+    await el.updateComplete;
+    const cell = el.shadowRoot!.querySelector<HTMLButtonElement>(
+      'td[data-row="c:drinks"][data-zone="every"] button[data-test="routing-cell"]',
+    )!;
+    const refusal = cell.querySelector('[data-test="cell-error"]')!;
+    await userEvent.hover(cell);
+    expect(cell.matches(":hover")).toBe(true);
+    const hovered = getComputedStyle(cell);
+    expect(hovered.outlineStyle).toBe("solid");
+    expect(hovered.backgroundColor).toBe("rgba(0, 0, 0, 0)");
+    const behind = getComputedStyle(cell.parentElement!).backgroundColor;
+    expect(contrastRatio(getComputedStyle(refusal).color, behind)).toBeGreaterThanOrEqual(4.5);
   });
 });

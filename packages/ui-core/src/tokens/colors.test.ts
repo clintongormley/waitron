@@ -250,6 +250,25 @@ describe.each(["light", "dark"] as const)("primary text (%s)", (theme) => {
   });
 });
 
+describe.each(["light", "dark"] as const)("search highlight (%s)", (theme) => {
+  test("its own text and the ordinary text both read at 4.5:1 or more on it", () => {
+    const el = mount(theme);
+    const highlight = token(el, "--wt-color-highlight");
+    for (const text of ["--wt-color-on-highlight", "--wt-color-text"]) {
+      expect(ratio(token(el, text), highlight), `${theme}: ${text}`).toBeGreaterThanOrEqual(4.5);
+    }
+  });
+
+  test("the OS preference gives it the same values as the explicit theme", async () => {
+    const names = ["--wt-color-highlight", "--wt-color-on-highlight"];
+    await commands.emulateColorScheme(theme);
+    const byPreference = mount();
+    const fromPreference = names.map((name) => token(byPreference, name));
+    byPreference.remove();
+    expect(fromPreference).toEqual(names.map((name) => token(mount(theme), name)));
+  });
+});
+
 const HOVER_FILLS = [
   ["--wt-color-primary-hover", "--wt-color-primary", "--wt-color-on-primary"],
   ["--wt-color-danger-hover", "--wt-color-danger", "--wt-color-on-danger"],

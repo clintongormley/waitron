@@ -155,6 +155,7 @@ describe("VENUE_SERVICE_DASHBOARD", () => {
             path === "/management-api/venue-service/routing"
               ? {
                   zones: [],
+                  periods: [],
                   categories: [],
                   products: [],
                   cells: [],

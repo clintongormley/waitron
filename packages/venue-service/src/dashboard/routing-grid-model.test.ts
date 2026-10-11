@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { currentLocale, setLocale } from "@waitron/dashboard-kit";
+import { foldForSearch, textSearch } from "@waitron/shared";
 import {
   selectRoutingCell,
   selectionRulesFromModel,
@@ -14,14 +15,18 @@ import {
   type RoutingSelectionRules,
 } from "../routing.js";
 import {
+  blankZoneCell,
   cellPeriodLines,
   collapseAll,
   collapseCategory,
   expandAll,
   expandCategory,
+  matchRanges,
   pruneExpanded,
   rowInModel,
+  searchRows,
   visibleRoutingRows,
+  type SearchRow,
 } from "./routing-grid-model.js";
 
 const kitchen: RouteTarget = { kind: "station", stationId: "kitchen" };
@@ -71,7 +76,7 @@ function model(
   };
 }
 
-/** One line per entry: indentation is depth, then the label, path and hidden counts. */
+/** One line per entry: indentation is depth, then the label and path. */
 function outline(entries: GridRow[]): string[] {
   return entries.map((entry) => {
     if (entry.row.kind === "no_category") return "[No category]";
@@ -82,15 +87,71 @@ function outline(entries: GridRow[]): string[] {
           ? `C:${entry.name}`
           : `P:${entry.name}`;
     const path = entry.path.length > 0 ? ` <${entry.path.join("/")}>` : "";
-    const counts =
-      entry.hiddenCategories + entry.hiddenProducts > 0
-        ? ` {${entry.hiddenCategories},${entry.hiddenProducts}}`
-        : "";
-    return `${"  ".repeat(entry.depth)}${label}${path}${counts}`;
+    return `${"  ".repeat(entry.depth)}${label}${path}`;
   });
 }
 
 const none: ReadonlySet<string> = new Set();
+
+describe("visibleRoutingRows own-routing rows", () => {
+  const deep = (): RoutingModel =>
+    model(
+      [
+        folder("l1"),
+        folder("l2", "l1"),
+        folder("l3", "l2"),
+        folder("l4", "l3"),
+        folder("l5", "l4"),
+        folder("side", "l2"),
+        folder("other"),
+      ],
+      [item("deep", "l5"), item("sibling", "l5"), item("near", "l3"), item("top", "l1")],
+      [productCell("deep")],
+    );
+
+  it("shows a deep product with its own cell under each of its five ancestors, once, closed, and no sibling of theirs", () => {
+    const labels = outline(visibleRoutingRows(deep(), none)).map((line) =>
+      line.replace(/ <.*>$/, ""),
+    );
+    expect(labels).toEqual([
+      "[All]",
+      "  C:l1",
+      "    C:l2",
+      "      C:l3",
+      "        C:l4",
+      "          C:l5",
+      "            P:deep",
+      "  C:other",
+    ]);
+  });
+
+  it("shows a category with its own cell under a closed parent, with the parent as a row", () => {
+    const venue = model(
+      [folder("drinks"), folder("cocktails", "drinks"), folder("wine", "drinks")],
+      [item("mojito", "cocktails"), item("cola", "drinks")],
+      [categoryCell("cocktails", bar, "terrace")],
+    );
+    expect(outline(visibleRoutingRows(venue, none))).toEqual([
+      "[All]",
+      "  C:drinks",
+      "    C:cocktails <drinks>",
+    ]);
+  });
+
+  it("opening an ancestor of an own-routing row shows all its children", () => {
+    expect(outline(visibleRoutingRows(deep(), new Set(["l2"])))).toEqual([
+      "[All]",
+      "  C:l1",
+      "    C:l2 <l1>",
+      "      C:l3 <l1/l2>",
+      "        C:l4 <l1/l2/l3>",
+      "          C:l5 <l1/l2/l3/l4>",
+      "            P:deep <l1/l2/l3/l4/l5>",
+      "      C:side <l1/l2>",
+      "  C:other",
+    ]);
+  });
+});
 
 describe("visibleRoutingRows", () => {
   it("pins independently overlapping summaries", () => {
@@ -101,8 +162,10 @@ describe("visibleRoutingRows", () => {
     );
     expect(outline(visibleRoutingRows(chain, none))).toEqual([
       "[All]",
-      "  C:root {2,3}",
-      "      C:b <root/a> {1,1}",
+      "  C:root",
+      "    C:a <root>",
+      "      C:b <root/a>",
+      "        C:c <root/a/b>",
       "          P:p-c <root/a/b/c>",
     ]);
   });
@@ -115,13 +178,13 @@ describe("visibleRoutingRows", () => {
     );
     expect(outline(visibleRoutingRows(venue, none))).toEqual([
       "[All]",
-      "  C:food {0,1}",
+      "  C:food",
       "    P:bread <food>",
       "    P:soup <food>",
     ]);
   });
 
-  it("a cell for a product the model does not list counts zero; each product counts once", () => {
+  it("a cell for a product the model does not list adds no row; each product shows once", () => {
     const venue = model(
       [folder("drinks"), folder("wine")],
       [item("cola", "drinks"), item("lemonade", "drinks"), item("red", "wine")],
@@ -133,7 +196,7 @@ describe("visibleRoutingRows", () => {
     );
     expect(outline(visibleRoutingRows(venue, none))).toEqual([
       "[All]",
-      "  C:drinks {0,2}",
+      "  C:drinks",
       "  C:wine",
       "    P:red <wine>",
     ]);
@@ -165,12 +228,12 @@ describe("visibleRoutingRows", () => {
     );
     expect(outline(visibleRoutingRows(venue, none))).toEqual([
       "[All]",
-      "  C:root {1,2}",
-      "    C:x <root> {1,2}",
+      "  C:root",
+      "    C:x <root>",
     ]);
   });
 
-  it("an explicitly expanded exceptional category under a collapsed ancestor shows its children, and the ancestor's counts no longer include them", () => {
+  it("an explicitly expanded exceptional category under a collapsed ancestor shows its children", () => {
     const venue = model(
       [folder("root"), folder("x", "root"), folder("y", "x")],
       [item("p-x", "x"), item("p-y", "y")],
@@ -178,31 +241,31 @@ describe("visibleRoutingRows", () => {
     );
     expect(outline(visibleRoutingRows(venue, new Set(["x"])))).toEqual([
       "[All]",
-      "  C:root {0,1}",
+      "  C:root",
       "    C:x <root>",
-      "      C:y <root/x> {0,1}",
+      "      C:y <root/x>",
       "      P:p-x <root/x>",
     ]);
     expect(outline(visibleRoutingRows(venue, new Set(["y"])))).toEqual([
       "[All]",
-      "  C:root {1,2}",
-      "    C:x <root> {1,2}",
+      "  C:root",
+      "    C:x <root>",
     ]);
   });
 
-  it("expand one, expand all, collapse all change the rows and counts exactly", () => {
+  it("expand one, expand all, collapse all change the rows exactly", () => {
     const venue = model([folder("root"), folder("a", "root")], [item("p", "root"), item("q", "a")]);
-    expect(outline(visibleRoutingRows(venue, none))).toEqual(["[All]", "  C:root {1,2}"]);
+    expect(outline(visibleRoutingRows(venue, none))).toEqual(["[All]", "  C:root"]);
     const one = expandCategory(none, "root");
     expect(outline(visibleRoutingRows(venue, one))).toEqual([
       "[All]",
       "  C:root",
-      "    C:a <root> {0,1}",
+      "    C:a <root>",
       "    P:p <root>",
     ]);
     expect(outline(visibleRoutingRows(venue, collapseCategory(one, "root")))).toEqual([
       "[All]",
-      "  C:root {1,2}",
+      "  C:root",
     ]);
     expect(outline(visibleRoutingRows(venue, expandAll(venue)))).toEqual([
       "[All]",
@@ -211,7 +274,7 @@ describe("visibleRoutingRows", () => {
       "      P:q <root/a>",
       "    P:p <root>",
     ]);
-    expect(outline(visibleRoutingRows(venue, collapseAll()))).toEqual(["[All]", "  C:root {1,2}"]);
+    expect(outline(visibleRoutingRows(venue, collapseAll()))).toEqual(["[All]", "  C:root"]);
   });
 
   it("refresh keeps expansion, prunes removed ids, and starts new categories collapsed", () => {
@@ -226,12 +289,12 @@ describe("visibleRoutingRows", () => {
     expect(outline(visibleRoutingRows(after, kept))).toEqual([
       "[All]",
       "  C:root",
-      "    C:fresh <root> {0,1}",
+      "    C:fresh <root>",
       "    P:p <root>",
     ]);
   });
 
-  it("the No category row lists every active uncategorised product at the bottom, carries the no_category address and counts nothing, and a saved No category cell keeps it with no products", () => {
+  it("the No category row lists every active uncategorised product at the bottom, carries the no_category address, and a saved No category cell keeps it with no products", () => {
     const venue = model(
       [folder("food")],
       [item("bread", "food"), item("menu-card", null), item("water", null)],
@@ -239,7 +302,7 @@ describe("visibleRoutingRows", () => {
     const entries = visibleRoutingRows(venue, none);
     expect(outline(entries)).toEqual([
       "[All]",
-      "  C:food {0,1}",
+      "  C:food",
       "[No category]",
       "  P:menu-card",
       "  P:water",
@@ -249,8 +312,6 @@ describe("visibleRoutingRows", () => {
       name: "",
       path: [],
       depth: 0,
-      hiddenProducts: 0,
-      hiddenCategories: 0,
     };
     expect(entries.at(-3)).toEqual(noCategory);
     expect(entries.filter((entry) => entry.row.kind === "all")).toHaveLength(1);
@@ -272,7 +333,7 @@ describe("visibleRoutingRows", () => {
     );
     expect(outline(visibleRoutingRows(storedOnly, none))).toEqual([
       "[All]",
-      "  C:food {0,1}",
+      "  C:food",
       "[No category]",
     ]);
     expect(visibleRoutingRows(storedOnly, none).at(-1)).toEqual(noCategory);
@@ -284,7 +345,7 @@ describe("visibleRoutingRows", () => {
     ]);
   });
 
-  it("a product cell five category levels down stays visible under a collapsed root, once, with its path", () => {
+  it("a product cell five category levels down stays visible under a collapsed root, once, with its five ancestors as rows", () => {
     const venue = model(
       [
         folder("l1"),
@@ -298,12 +359,16 @@ describe("visibleRoutingRows", () => {
     );
     expect(outline(visibleRoutingRows(venue, none))).toEqual([
       "[All]",
-      "  C:l1 {4,0}",
+      "  C:l1",
+      "    C:l2 <l1>",
+      "      C:l3 <l1/l2>",
+      "        C:l4 <l1/l2/l3>",
+      "          C:l5 <l1/l2/l3/l4>",
       "            P:deep <l1/l2/l3/l4/l5>",
     ]);
   });
 
-  it("a disabled product's cell is neither shown nor counted, and returns when the model lists the product again", () => {
+  it("a disabled product's cell is not shown, and returns when the model lists the product again", () => {
     const folders = [folder("food")];
     const enabled = model(folders, [item("bread", "food")], [productCell("bread")]);
     expect(outline(visibleRoutingRows(enabled, none))).toEqual([
@@ -332,7 +397,7 @@ describe("visibleRoutingRows", () => {
       "[All]",
       "  C:root",
       "  C:self",
-      "  C:a {1,1}",
+      "  C:a",
     ]);
     expect(outline(visibleRoutingRows(venue, expandAll(venue)))).toEqual([
       "[All]",
@@ -352,7 +417,8 @@ describe("visibleRoutingRows", () => {
     );
     expect(outline(visibleRoutingRows(venue, none))).toEqual([
       "[All]",
-      "  C:b {2,0}",
+      "  C:b",
+      "    C:c <b>",
       "      P:p <b/c>",
     ]);
     expect(outline(visibleRoutingRows(venue, expandAll(venue)))).toEqual([
@@ -366,7 +432,7 @@ describe("visibleRoutingRows", () => {
 
   it("treats a category whose parent the model does not list as a root", () => {
     const venue = model([folder("orphan", "missing")], [item("p", "orphan")]);
-    expect(outline(visibleRoutingRows(venue, none))).toEqual(["[All]", "  C:orphan {0,1}"]);
+    expect(outline(visibleRoutingRows(venue, none))).toEqual(["[All]", "  C:orphan"]);
   });
 
   it("lists a product whose category the model does not list under No category", () => {
@@ -1043,5 +1109,337 @@ describe("cellPeriodLines", () => {
         ]),
       ]),
     ).toEqual(["Lunch: Downstairs bar"]);
+  });
+});
+
+describe("blankZoneCell", () => {
+  const at = (zoneId: string | null, target: RouteTarget, row: RoutingRow): RoutingCell => ({
+    row,
+    zoneId,
+    target,
+  });
+  const drinks: RoutingRow = { kind: "category", categoryId: "drinks" };
+  const cocktails: RoutingRow = { kind: "category", categoryId: "cocktails" };
+  const food: RoutingRow = { kind: "category", categoryId: "food" };
+  const all: RoutingRow = { kind: "all" };
+  const product = (productId: string): RoutingRow => ({ kind: "product", productId });
+  const terraceBar: RouteTarget = { kind: "station", stationId: "tbar" };
+  const old: RouteTarget = { kind: "station", stationId: "old" };
+
+  // The routing-grid.test.ts fixture: Drinks to the Bar everywhere, Cocktails to the Terrace bar
+  // on the Terrace, Burger set to Kitchen, Food on the Inside to the disabled Old kitchen, and
+  // nothing on the Terrace prepared unless a row says otherwise.
+  const grid = (): RoutingModel => ({
+    ...model(
+      [folder("drinks"), folder("cocktails", "drinks"), folder("food")],
+      [
+        item("mojito", "cocktails"),
+        item("cola", "drinks"),
+        item("burger", "food"),
+        item("bread", null),
+      ],
+      [
+        at(null, bar, drinks),
+        at("terrace", terraceBar, cocktails),
+        at(null, kitchen, product("burger")),
+        at("inside", old, food),
+        at("terrace", noPreparation, all),
+      ],
+    ),
+    zones: [
+      { id: "terrace", name: "Terrace", departmentId: null },
+      { id: "inside", name: "Inside", departmentId: null },
+    ],
+  });
+
+  it("is blank where the zone and the row's Every zone are decided by the same cell", () => {
+    expect(blankZoneCell(grid())(product("cola"), "terrace")).toBe(true);
+  });
+
+  it("is not blank where a parent's zone cell differs from the row's Every zone", () => {
+    expect(blankZoneCell(grid())(product("mojito"), "terrace")).toBe(false);
+  });
+
+  it("is blank where the row's own Every zone decides the zone", () => {
+    expect(blankZoneCell(grid())(product("burger"), "terrace")).toBe(true);
+  });
+
+  it("is not blank where All categories' zone cell differs from the default station", () => {
+    expect(blankZoneCell(grid())(product("bread"), "terrace")).toBe(false);
+  });
+
+  it("is blank on an unset All categories zone cell, which inherits the default", () => {
+    expect(blankZoneCell(grid())(all, "inside")).toBe(true);
+  });
+
+  it("judges what the coordinate inherits, setting aside its own cell", () => {
+    // Food × Inside holds Old kitchen; without it, both sides fall to the default Kitchen.
+    expect(blankZoneCell(grid())(food, "inside")).toBe(true);
+  });
+
+  it("a row's own Every zone beats a parent's zone cell (the CLANDESTINA case)", () => {
+    const venue: RoutingModel = {
+      ...model(
+        [folder("agave"), folder("clandestina", "agave")],
+        [],
+        [
+          at("front", bar, { kind: "category", categoryId: "agave" }),
+          at(null, kitchen, { kind: "category", categoryId: "clandestina" }),
+        ],
+      ),
+      zones: [{ id: "front", name: "Front Bar", departmentId: null }],
+    };
+    const blank = blankZoneCell(venue);
+    expect(blank({ kind: "category", categoryId: "clandestina" }, "front")).toBe(true);
+    expect(blank({ kind: "category", categoryId: "agave" }, "front")).toBe(true);
+  });
+
+  describe("period lines", () => {
+    const period = (id: string, departmentId: string): RoutingPeriod => ({
+      id,
+      departmentId,
+      departmentName: departmentId,
+      name: id,
+      colour: "red",
+      productIds: [],
+    });
+    const downstairs: RouteTarget = { kind: "station", stationId: "downstairs" };
+    const lined = (
+      cell: RoutingCell,
+      lines: [string, RouteTarget][],
+    ): RoutingModel["cells"][number] => ({
+      ...cell,
+      periods: lines.map(([periodId, target]) => ({ periodId, target })),
+    });
+    // Drinks × Terrace and Drinks × Every zone both send to the Bar, so only their lines can
+    // make Cola × Terrace differ.
+    const venue = (
+      zoneLines: [string, RouteTarget][],
+      everyLines: [string, RouteTarget][],
+    ): RoutingModel => ({
+      ...model(
+        [folder("drinks")],
+        [item("cola", "drinks")],
+        [lined(at("terrace", bar, drinks), zoneLines), lined(at(null, bar, drinks), everyLines)],
+      ),
+      periods: [period("lunch", "dining"), period("aperitivo", "bar")],
+    });
+    const blank = (model: RoutingModel) => blankZoneCell(model)(product("cola"), "terrace");
+
+    it("an Every-zone line for another department's period leaves the zone blank", () => {
+      expect(blank(venue([], [["aperitivo", downstairs]]))).toBe(true);
+    });
+
+    it("a line the model does not list leaves the zone blank", () => {
+      expect(blank(venue([], [["gone", downstairs]]))).toBe(true);
+    });
+
+    it("the same lines in the zone's department leave the zone blank", () => {
+      expect(blank(venue([["lunch", downstairs]], [["lunch", downstairs]]))).toBe(true);
+    });
+
+    it("the same station with a different line in the zone's department is not blank", () => {
+      expect(blank(venue([["lunch", downstairs]], [["lunch", kitchen]]))).toBe(false);
+      expect(blank(venue([], [["lunch", kitchen]]))).toBe(false);
+      expect(blank(venue([["lunch", kitchen]], []))).toBe(false);
+    });
+
+    it("a zone the model does not list inherits the row's Every zone, so it is blank", () => {
+      expect(blankZoneCell(venue([], [["lunch", kitchen]]))(product("cola"), "nowhere")).toBe(true);
+    });
+
+    it("the default station has no lines, so a zone cell's line on the same station differs from it", () => {
+      const lunchOnAll: RoutingModel = {
+        ...model(
+          [folder("drinks")],
+          [item("cola", "drinks")],
+          [lined(at("terrace", kitchen, all), [["lunch", downstairs]])],
+        ),
+        periods: [period("lunch", "dining")],
+      };
+      expect(blankZoneCell(lunchOnAll)(product("cola"), "terrace")).toBe(false);
+    });
+  });
+});
+
+describe("matchRanges", () => {
+  const marked = (name: string, query: string) =>
+    matchRanges(name, query).map(({ start, end }) => name.slice(start, end));
+
+  it("marks nothing for a blank query or one with no words", () => {
+    expect(matchRanges("Café con leche", "  ")).toEqual([]);
+    expect(matchRanges("Café con leche", "!!")).toEqual([]);
+  });
+
+  it("marks the word being typed anywhere, accent- and case-blind, in the original text", () => {
+    expect(matchRanges("Café con leche", "cafe")).toEqual([{ start: 0, end: 4 }]);
+    expect(marked("Decafeinado", "CAFÉ")).toEqual(["cafe"]);
+    expect(marked("Clandestina Reposado", "clan")).toEqual(["Clan"]);
+  });
+
+  it("marks a finished last word only where it is whole", () => {
+    expect(marked("Café con leche", "café ")).toEqual(["Café"]);
+    expect(matchRanges("Decafeinado", "café ")).toEqual([]);
+    expect(marked("Rojo y rojos", "rojo ")).toEqual(["Rojo"]);
+  });
+
+  it("marks every word but the last only where it is whole, so a part of a word marks nothing", () => {
+    expect(matchRanges("Clandestina Reposado", "clan d")).toEqual([]);
+    expect(marked("Clandestina Reposado", "reposado clan")).toEqual(["Clan", "Reposado"]);
+  });
+
+  it("counts a digit as part of a word", () => {
+    expect(matchRanges("Mesa 12", "2 ")).toEqual([]);
+    expect(marked("Mesa 12", "2")).toEqual(["2"]);
+  });
+
+  it("marks every occurrence, merging ranges that overlap or touch", () => {
+    expect(marked("Rojo y rojo", "rojo ")).toEqual(["Rojo", "rojo"]);
+    expect(matchRanges("aaa", "aa")).toEqual([{ start: 0, end: 3 }]);
+    expect(matchRanges("abab", "ab")).toEqual([{ start: 0, end: 4 }]);
+  });
+
+  it("maps folded positions back through decomposed accents, final sigma and surrogate pairs", () => {
+    expect(marked("Café solo", "cafe")).toEqual(["Café"]);
+    expect(marked("ΟΔΟΣ", "οδος")).toEqual(["ΟΔΟΣ"]);
+    expect(marked("🍔 Burger", "burger")).toEqual(["Burger"]);
+    expect(marked("\u0301abc", "abc")).toEqual(["abc"]);
+  });
+
+  it("marks something exactly when textSearch matches the folded name", () => {
+    const names = [
+      "Clandestina Reposado",
+      "CLANDESTINA",
+      "Café con leche",
+      "Decafeinado",
+      "Café solo",
+      "Mesa 12",
+      "ΟΔΟΣ",
+      "🍔 Burger",
+      "Rojo y rojo",
+    ];
+    const queries = [
+      "clan",
+      "clan ",
+      "clan d",
+      "reposado clan",
+      "clandestina repo",
+      "café",
+      "café ",
+      "cafe solo",
+      "12",
+      "2 ",
+      "οδοσ",
+      "rojo rojo",
+      "!!",
+      "zzz",
+    ];
+    for (const name of names) {
+      for (const query of queries) {
+        const matches = textSearch(query)?.rank(foldForSearch(name)) !== undefined;
+        expect([name, query, matchRanges(name, query).length > 0]).toEqual([name, query, matches]);
+      }
+    }
+  });
+});
+
+describe("searchRows", () => {
+  const deli = (): RoutingModel =>
+    model(
+      [
+        folder("santet", null, "Santet Deli Co"),
+        folder("agave", "santet", "AGAVE"),
+        folder("clandestina", "agave", "CLANDESTINA"),
+        folder("mezcal", "agave", "MEZCAL"),
+        folder("food", null, "Food"),
+      ],
+      [
+        item("reposado", "agave", "Clandestina Reposado"),
+        item("blanco", "agave", "Tequila Blanco"),
+        item("shot", "clandestina", "Shot"),
+        item("burger", "food", "Burger"),
+        item("coffee", null, "Café con leche"),
+        item("water", null, "Water"),
+      ],
+    );
+  /** One line per row: indentation is depth, then the label, then match or parent. */
+  const lines = (rows: readonly SearchRow[]) =>
+    outline(rows.map((row) => row.entry)).map(
+      (line, i) => `${line}${rows[i]!.match ? " match" : ""}${rows[i]!.parent ? " parent" : ""}`,
+    );
+
+  it("is undefined for a blank query: no search", () => {
+    expect(searchRows(deli(), "")).toBeUndefined();
+    expect(searchRows(deli(), "   ")).toBeUndefined();
+  });
+
+  it("lists each match under every ancestor, in tree order; ancestors open, matches closed", () => {
+    const found = searchRows(deli(), "clan")!;
+    expect(lines(found.rows)).toEqual([
+      "[All] parent",
+      "  C:Santet Deli Co parent",
+      "    C:AGAVE <Santet Deli Co> parent",
+      "      C:CLANDESTINA <Santet Deli Co/AGAVE> match",
+      "      P:Clandestina Reposado <Santet Deli Co/AGAVE> match",
+    ]);
+    expect(found.count).toBe(2);
+    expect([...found.open].sort()).toEqual(["agave", "santet"]);
+    expect(found.rows.map((row) => row.ranges)).toEqual([
+      [],
+      [],
+      [],
+      [{ start: 0, end: 4 }],
+      [{ start: 0, end: 4 }],
+    ]);
+  });
+
+  it("an opened match lists all its children; an open ancestor only the way to a match", () => {
+    const opened = new Set([...searchRows(deli(), "clan")!.open, "clandestina"]);
+    expect(lines(searchRows(deli(), "clan", opened)!.rows)).toEqual([
+      "[All] parent",
+      "  C:Santet Deli Co parent",
+      "    C:AGAVE <Santet Deli Co> parent",
+      "      C:CLANDESTINA <Santet Deli Co/AGAVE> match",
+      "        P:Shot <Santet Deli Co/AGAVE/CLANDESTINA>",
+      "      P:Clandestina Reposado <Santet Deli Co/AGAVE> match",
+    ]);
+  });
+
+  it("a closed ancestor hides the matches under it, and the count still includes them", () => {
+    const found = searchRows(deli(), "clan", collapseAll())!;
+    expect(lines(found.rows)).toEqual(["[All] parent", "  C:Santet Deli Co parent"]);
+    expect(found.count).toBe(2);
+    expect(found.open.size).toBe(0);
+  });
+
+  it("every word must match", () => {
+    const found = searchRows(deli(), "clandestina repo")!;
+    expect(lines(found.rows).at(-1)).toBe(
+      "      P:Clandestina Reposado <Santet Deli Co/AGAVE> match",
+    );
+    expect(found.count).toBe(1);
+    expect(found.rows.filter((row) => row.match)).toHaveLength(1);
+  });
+
+  it("lists an uncategorised match under No category, with its accent-blind range", () => {
+    const found = searchRows(deli(), "cafe")!;
+    expect(lines(found.rows)).toEqual([
+      "[All] parent",
+      "[No category] parent",
+      "  P:Café con leche match",
+    ]);
+    expect(found.rows.at(-1)!.ranges).toEqual([{ start: 0, end: 4 }]);
+    expect(found.count).toBe(1);
+  });
+
+  it("with no match lists All categories alone", () => {
+    const found = searchRows(deli(), "zzz")!;
+    expect(lines(found.rows)).toEqual(["[All] parent"]);
+    expect(found.count).toBe(0);
+  });
+
+  it("adds no rows for a cell of a row's own", () => {
+    const routed = { ...deli(), cells: [categoryCell("food"), productCell("water")] };
+    expect(lines(searchRows(routed, "zzz")!.rows)).toEqual(["[All] parent"]);
   });
 });
