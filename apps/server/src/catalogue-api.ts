@@ -29,6 +29,7 @@ import {
   writeContentLanguages,
   validateContentTranslations,
   createCatalogue,
+  duplicateMenu,
   createCategory,
   readCategory,
   updateCategory,
@@ -983,6 +984,18 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
         }),
       );
       return c.json(created, 201);
+    }),
+  );
+
+  app.post("/management-api/catalogues/:id/duplicate", (c) =>
+    run(c, log, async () => {
+      const sessionId = requireManagementSession(c);
+      const menuId = requireUuidParam(c.req.param("id"), "MenuId");
+      const body = await readJsonBody<Record<string, unknown>>(c);
+      const name = requireString(body.name, "name");
+      if (name.trim() === "") throw new AppError("management.request_invalid", { field: "name" });
+      const copy = await gated(c, sessionId, (tx) => duplicateMenu(tx, menuId, name));
+      return c.json(copy, 201);
     }),
   );
 

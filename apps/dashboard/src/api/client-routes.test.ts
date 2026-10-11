@@ -811,6 +811,16 @@ describe("DashboardApi routes", () => {
     ]);
   });
 
+  it("duplicates a menu at its own duplicate route with the copy's name", async () => {
+    const copy = { id: "c9", name: "Lunch (copy)", active: true, version: 1 };
+    const fetchImpl = vi.fn().mockResolvedValueOnce(jsonResponse(copy));
+    const api = new DashboardApi("", fetchImpl);
+    await expect(api.duplicateCatalogue("c1", "Lunch (copy)")).resolves.toEqual(copy);
+    expect(callsOf(fetchImpl)).toEqual([
+      ["/management-api/catalogues/c1/duplicate", "POST", { name: "Lunch (copy)" }],
+    ]);
+  });
+
   it("sends every section-editor request to its route and returns the answers", async () => {
     const section = {
       id: "s1",
