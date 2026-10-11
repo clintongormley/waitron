@@ -2,8 +2,8 @@ const queues = new WeakMap<object, Map<string, Promise<void>>>();
 
 /**
  * Runs `attempt` once every earlier attempt on `throttle` under `key` has settled. An attempt checks
- * its secret before its transaction and the throttle counts the outcome inside it, so without turns
- * attempts sent at once would each derive a key before any outcome was counted. Never call this
+ * its secret before the throttle counts its outcome, so without turns attempts sent at once would
+ * each derive a key before any outcome was counted. Never call this
  * inside a transaction: waiting here while holding the write lock would stall the attempt ahead,
  * which is waiting for that lock.
  */

@@ -462,25 +462,6 @@ that window can get one stale `pending` or `approved` (both routes return only `
 no credential; the till and print-agent clients were not traced); and `verifySecretAsync` could be
 renamed `verifySecret` (optional).
 
-## A till sign-in whose PIN is not text answers 500, not `pin.invalid` — OPEN (found 2026-10-03 by W1)
-
-**A till sign-in whose PIN is not text answers 500, not `pin.invalid` — OPEN (found 2026-10-03 by W1).**
-`POST /api/session` (`mountTillApi`, `apps/server/src/till-api.ts`) with a PIN that is a number,
-`null`, missing or an object answers 500 `server.internal`; measured the same before and after W1.
-**Next action:** refuse a non-text PIN as `pin.invalid`, with a failing case first. (The payments
-attestation refuses one after its throttle check and counts it as a wrong PIN,
-`apps/server/src/payments-api.ts`.)
-
-## A burst of till PIN sign-ins derives a key for every attempt — OPEN (found 2026-10-03 by W1)
-
-**A burst of till PIN sign-ins derives a key for every attempt — OPEN (found 2026-10-03 by W1).**
-`POST /api/session` (`apps/server/src/till-api.ts`) checks its throttle before any failure is
-recorded, so attempts sent at once all pass it. Measured 2026-10-03: 8 wrong attempts at once gave 8
-derivations and eight 401s, on main and on W1's branch alike; manager password sign-in gave 1
-derivation (one 401, seven 429), because `passwordThrottle.begin` refuses a second attempt in
-flight. **Next action:** give the till sign-in the same turn-taking (`inTurn`,
-`apps/server/src/attempt-turns.ts`) or an in-flight refusal.
-
 ## Ongoing — the dashboard UI overhaul, screen by screen
 
 **Ongoing — the dashboard UI overhaul, screen by screen.** Every screen is being brought onto one
