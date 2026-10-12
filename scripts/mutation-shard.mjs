@@ -17,7 +17,7 @@ const REPO_ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
  * Per package, the files cut into that many line ranges, each range run in a shard of its own. A
  * file's bytes do not predict its cost: what costs is how many tests cover each mutant. A mutant
  * whose span crosses a range boundary is in neither range, so no shard mutates it and the merged
- * score leaves it out (instrumenter 10.0.0; 2 in db and 26 in ui at the splits of 2026-10-12).
+ * score leaves it out (instrumenter 10.0.0).
  *
  * db: `src/schema/sales.ts` alone ran 186min while every other N=10 shard finished <=90min
  * (run 32384997149).

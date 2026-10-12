@@ -166,7 +166,12 @@ describe("mutateFiles", () => {
       "src/deep/x-one.ts",
       "src/x-two.ts",
     ]);
-    expect(mutateFiles(dir, ["!src/b.ts", "src/**/*.ts"])).toContain("src/b.ts");
+    expect(mutateFiles(dir, ["!src/b.ts", "src/**/*.ts"])).toEqual([
+      "src/a.ts",
+      "src/b.ts",
+      "src/deep/x-one.ts",
+      "src/x-two.ts",
+    ]);
     expect(mutateFiles(dir, ["src/**/*.ts", "!src/**/x-*.ts", "src/deep/x-one.ts"])).toEqual([
       "src/a.ts",
       "src/b.ts",
@@ -421,7 +426,7 @@ describe("the CLI rejects bad input loudly", () => {
   });
 
   it("fails when a shard would select no files (more shards than slices)", () => {
-    // Derive the shard count from the LIVE slice count (at one shard past db's three ranges, the
+    // Derive the shard count from the LIVE slice count (at one shard past db's split-file ranges, the
     // last shard holds every other file) rather than hard-coding it — `@waitron/db` grows, and a
     // fixed number silently stops exceeding the slice count once it does. One more shard than there
     // are slices guarantees the HIGHEST-index shard is empty (greedy packs slices into the

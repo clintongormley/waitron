@@ -243,7 +243,7 @@ on a pull request, so thinning a `packages/db` test merges green.** `.github/wor
 fires nightly and on `workflow_dispatch` only, and `mutation-db-aggregate` lives in it, so a change
 that removes an assertion the score depended on reddens the next night. The ten db shards run side
 by side, 2.9 to 12.2 minutes each on run `38241392066`, but a pull request that started them would
-hold ten of the account's 20 job slots
+take ten of the roughly 20 jobs the account was seen running at once at most
 ([ci-and-gates.md](../developers/ci-and-gates.md#mutation-testing-runs-nightly-at-0500-utc)).
 Either accept the overnight lag and say so where a reader meets the gate, or find a cheaper
 per-pull-request signal.

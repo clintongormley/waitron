@@ -1010,6 +1010,7 @@ describe("the test shards", () => {
     );
   });
 
+  // Nightly and by hand (owner, 2026-10-12). Weaker than its name: it reads mutation.yml as TEXT.
   it("runs mutation checks for ui, ui-core and db every night and by hand", () => {
     const workflow = readFileSync(join(repoRoot, ".github/workflows/mutation.yml"), "utf8");
     expect(workflowTriggers(workflow).sort()).toEqual(["schedule", "workflow_dispatch"]);
@@ -1049,8 +1050,15 @@ describe("the test shards", () => {
 
     const db = section("mutation-db");
     expect(db).toMatch(/shard: \[1(, \d+)*\]/);
+    expect(db).toContain("fail-fast: false");
+    expect(lines(db)).toContain('FILES=$(node scripts/mutation-shard.mjs db "$SHARD" "$TOTAL")');
     expect(lines(db)).toContain('pnpm --filter @waitron/db exec stryker run --mutate "$FILES"');
-    expect(section("mutation-db-aggregate")).toContain("needs: mutation-db");
+    expect(db).toContain("name: mutation-report-db-shard-${{ matrix.shard }}");
+    expect(db).toContain("path: packages/db/reports/mutation/");
+    const dbAggregate = section("mutation-db-aggregate");
+    expect(dbAggregate).toContain("needs: mutation-db");
+    expect(dbAggregate).toContain("if: always()");
+    expect(dbAggregate).toContain("pattern: mutation-report-db-shard-*");
   });
 
   it("isolates Bookings from the light bins", () => {

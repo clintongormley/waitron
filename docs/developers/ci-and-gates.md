@@ -334,8 +334,9 @@ receipt is the `!src/english-only.ts` entry in `packages/db/stryker.config.json`
 `scripts/mutation-shard.mjs` reads each sharded package's `mutate` list from that config rather than
 keeping its own copy, and `scripts/mutation-shard.test.mjs` names `src/english-only.ts` as the one
 file db's selection leaves out. Nor do ui's and db's merged scores count every mutant: one whose
-span crosses a `HEAVY_FILES` range boundary is mutated by no shard — measured 2026-10-12 at the
-splits then in place by instrumenting each split file whole and by range, 2 in db and 26 in ui. And `scripts/mutation-break-thresholds.test.mjs`, which pins which
+span crosses a `HEAVY_FILES` range boundary is mutated by no shard — 2 in db and 26 in ui at the
+2026-10-12 splits, as counted by that day's Codex review by instrumenting each split file whole and
+by range. And `scripts/mutation-break-thresholds.test.mjs`, which pins which
 package holds which bar, is weaker than its name: it reads `mutation.yml` as TEXT for db's and ui's
 bars, so a step that reached the same command through a variable would be invisible to it.
 
@@ -357,9 +358,11 @@ instrumented copies the same way — `packages/fiscal/src/no-hardcoded-margin.te
 ### Mutation testing runs nightly at 05:00 UTC
 
 Nightly rather than Mondays only (owner, 2026-10-12). A run is 43 jobs (ui's 30 shards, db's 10,
-ui-core, and the two aggregates), and the account ran at most 20 jobs at once from 6 to 12 October
-(every job of every workflow run in that range that held a runner, read from
-`gh api repos/clintongormley/waitron/actions/runs/<id>/jobs`; one instant read 21). So while a run lasts, other workflows' jobs queue behind it. On dispatch run `38256003987`
+ui-core, and the two aggregates), and the account never ran more than 20 jobs at once from 6 to 12
+October except for one instant that read 21 (every job that held a runner, from
+`gh api 'repos/clintongormley/waitron/actions/runs?created=<day>&per_page=100' --paginate` and
+`gh api repos/clintongormley/waitron/actions/runs/<id>/jobs?per_page=100&filter=all --paginate`, a
+re-run attempt's repeated copies dropped). On dispatch run `38256003987`
 (2026-10-12, 13:29 to 14:09 UTC) 18 of its jobs ran at once, and the 58 jobs other workflows created
 during it waited a median of 330 s to start (90th percentile 737 s, longest 777 s, in pull-request
 run `38257189737`). With no mutation run going, the 69 jobs created from 14:10 to 14:50 waited a
@@ -401,12 +404,15 @@ over the others, so a broken measurement is not listed as a deliberate skip.
 A test that loads a module with `import()` inside a case makes Stryker count that case as covering
 the module's load-time code, so under `"ignoreStatic": true` the module's static mutants run against
 that one case instead of being left out (the hybrid rule in `@stryker-mutator/core` 10.0.0,
-`dist/src/mutants/mutant-test-planner.js`). Measured 2026-10-12 (A539): with
-`packages/db/src/schema/columns.test.ts` loading `../index.js` that way, `pnpm exec stryker run
+`dist/src/mutants/mutant-test-planner.js`). Measured 2026-10-12 (A539): on main `6838acb1c`,
+where `packages/db/src/schema/columns.test.ts` loaded `../index.js` that way, `pnpm exec stryker run
 --mutate src/classification.ts,src/trigger-refusals.ts,src/venue-holder-identity.ts --force` in
 `packages/db` left 229 and 15 mutants of the first two files `Survived`; with the import at the top
-of the file, the same command left them `Ignored`. db's merged score went from 86.00% (run
-`38206876422`) to 92.40% (run `38256003987`).
+of the file, the same command (run by that day's Codex review) left them `Ignored`. db's merged
+score read 85.47%, 85.23% and 86.00% on scheduled runs `36380351019`, `37267389722` and
+`38206876422`, and 92.40% on run `38256003987`. `describeSchemaConformance`'s `reload` option
+(`packages/db/src/testing/schema-conformance.ts`) loads a module inside a case on purpose, after
+`vi.resetModules()`, so the cases that read the schema's declarations cover them.
 
 Receipt for the `ui` floor (2026-09-20): before the tests that branch added, the package read
 78.62% — 1658 of 2109 valid mutants — and the run exited 1 against the new threshold, which is the
@@ -950,7 +956,7 @@ Test jobs and shard legs (10 minutes), `-merge` jobs (5), and `lint` and `root-g
 from the owner's four-minute bound (2026-10-09), not the doubling rule; the
 "bounds every test job" case in `scripts/ci-workflow.test.mjs` pins those numbers.
 
-ui-core's figure is run `37267389722` (5m18s; its other two weekly runs, `36380351019` and
+ui-core's figure is run `37267389722` (5m18s; its other two scheduled runs, `36380351019` and
 `38206876422`, took 2m06s and 4m56s).
 `mutation-ui`'s and `mutation-ui-aggregate`'s figures are dispatch run `38256003987`, with 30 ui
 shards: the slowest shard (9, `wt-data-table.ts:1029-1285`) took 23.7
@@ -958,8 +964,8 @@ minutes and the aggregate under 1, so its limit is 50 by the doubling rule. The 
 minutes on run `38241392066`, before A539 added data-table tests. On
 the previous run, `38233718266`, with 20 ui shards, `wt-combobox.ts` and `wt-dialog.ts` each reached
 the 30-minute limit alone. Until A539 split it, ui ran inside the `mutation` matrix at a 185-minute
-limit, which run `38206876422` reached and was cancelled at. `mutation-db`'s 8.8 is from runs `36380351019` and `37267389722`, the two weekly runs since the
-SQLite switch; on run `38241392066` its shards took 2.9 to 12.2 minutes (shard 10 longest, 732 s),
+limit, which run `38206876422` reached and was cancelled at. `mutation-db`'s 8.8 is from runs `36380351019` and `37267389722`, the two scheduled runs from the
+SQLite switch to 2026-10-05; on run `38241392066` its shards took 2.9 to 12.2 minutes (shard 10 longest, 732 s),
 so its limit is 25 by the doubling rule.
 
 codeql.yml's figure is from GitHub's default setup, before A488 replaced it: the 55 successful

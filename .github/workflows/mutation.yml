@@ -1,7 +1,8 @@
 name: Mutation testing
 
-# Mutation testing reruns, for each mutant, the tests that cover it — in real Chromium (ui, ui-core)
-# or against a database on disk (db) — so it does not belong gating merges the way ci.yml's coverage
+# Mutation testing reruns, for each mutant, the tests that cover it (every test, for a mutant in code
+# that runs as a module loads, unless the package sets ignoreStatic as db does) — in real Chromium
+# (ui, ui-core) or against a database on disk (db) — so it does not belong gating merges the way ci.yml's coverage
 # jobs do: it doesn't tell you "did I break something," it tells you "how good are my tests," which
 # is a slower-moving signal worth reviewing periodically rather than blocking merges on. Scheduled
 # nightly, plus on-demand via workflow_dispatch so it can be run against a specific branch (e.g. from
@@ -14,8 +15,7 @@ name: Mutation testing
 
 on:
   schedule:
-    # Why 05:00 UTC: docs/developers/ci-and-gates.md, "Mutation testing runs nightly at 05:00 UTC".
-    - cron: "0 5 * * *"
+    - cron: "0 5 * * *" # nightly, 05:00 UTC — why this hour: docs/developers/ci-and-gates.md, "Mutation testing runs nightly at 05:00 UTC"
   workflow_dispatch:
 
 permissions:
