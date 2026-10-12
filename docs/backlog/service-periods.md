@@ -151,6 +151,15 @@ Pre-live, so venues reset rather than carry today's hours across (CLAUDE.md §3)
 till sells and closes by the business day's season, and a configuration transfer carries and
 checks them; the old weekday rows are still written beside them. Special days are not written yet.
 
+**Left open by A506-1, for the later parts.**
+- A506-2: once the old weekday rows stop being written, the department delete preview's timetable
+  and slot counts, `endOffsetClash` and the clock-change guard must read the season weeks; today they
+  read the old rows.
+- A506-3: `season.not_found` (`packages/venue-service/src/errors.ts`) has no HTTP status yet.
+- A506-4: a configuration transfer carries no special days, and refuses a day row that names a
+  special-day date (`packages/venue-service/src/configuration-transfer.ts`).
+- No test yet gives a second department its own week on the same named day.
+
 **Why.** One standard week does not fit a venue whose hours change with the season, and copying a
 week into future dates would bury the special days among ordinary ones.
 
