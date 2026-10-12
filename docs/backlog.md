@@ -3337,8 +3337,8 @@ _Formerly A7, and the dashboard entries in the opening part of the old Track A (
   [Detail](backlog/dashboard.md#row-menus-in-plain-tables-are-unchecked-at-phone-width)
 
 - The reasons screen keeps its own copy of the role list and role names (C51 sorts its dropdowns by
-  displayed name, with a separate seniority order for validation) and of the placeholder-filling
-  helper in `apps/dashboard/src/widgets/menu-preview.ts`. **Next action:** move both into
+  displayed name, with a separate seniority order for validation) and of the dashboard's
+  placeholder-filling `fill` (`apps/dashboard/src/i18n/t.ts`). **Next action:** move both into
   `@waitron/dashboard-kit` if a third module screen needs them. Left open by service Task 1 (#706,
   adjustment reasons).
 
@@ -3676,12 +3676,17 @@ _Formerly A7, and the dashboard entries in the opening part of the old Track A (
 - **Many dashboard labels still put a name into a translated string with `.replace("{name}", …)`,
   so a name holding `$&` (or, where two placeholders are filled one after another, another
   placeholder's `{…}` text) can garble them** — left open by A520, which moved the colour chooser,
-  the order detail dialog, the product list's Made at and price-per text and four private helpers to
-  `fill` (`apps/dashboard/src/i18n/t.ts`). Sites remain in, among others, `menu-structure-table.ts`,
-  `menu-prices-table.ts`, `add-to-menus.ts`, `devices-screen.ts`, `printers-screen.ts`,
-  `modifiers-screen.ts` and `menus-screen.ts`; a string replacement whose value is a number is
-  safe. `apps/dashboard/src/widgets/price-source.ts` keeps a private one-pass fill because it is
-  handed its `t`.
+  the order detail dialog, the product list's Made at, price-per and colour labels, the product
+  details' price-per text, the product image link's label, and the private helpers in the sales,
+  orders, menu preview, order detail, catalogue browser and product media code to `fill`
+  (`apps/dashboard/src/i18n/t.ts`). Sites remain in, among others, `menu-structure-table.ts`
+  (including the same colour label), `menu-prices-table.ts`, `add-to-menus.ts`, `devices-screen.ts`,
+  `printers-screen.ts`, `modifiers-screen.ts` and `menus-screen.ts`. A lone replacement whose value
+  is a number is safe; one that follows a name in the same chain is not (`action.reordered` in
+  `menu-structure-table.ts` and `device-home-preview.ts`, and the delete-section question in
+  `menus-screen.ts`).
+  `apps/dashboard/src/widgets/price-source.ts` keeps a private one-pass fill because it is handed
+  its `t`.
 
 - **One earlier Spanish dark-theme 390 px demo probe reached its 12-second deadline before the
   bottom** — left open by A334 (#1416, held reorder drags scroll at the list edge): a later

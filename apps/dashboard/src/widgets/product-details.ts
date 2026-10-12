@@ -11,7 +11,7 @@ import type { ModifierListChoice, UnitChoice } from "./product-editor-model.js";
 import { modifierListName, modifierListNames } from "./product-editor-model.js";
 import { priceText } from "./form-fields.js";
 import { allergenName, vatClassName } from "../i18n/domain.js";
-import { currentLocale, t } from "../i18n/t.js";
+import { currentLocale, fill, t } from "../i18n/t.js";
 
 @customElement("dashboard-product-details")
 export class ProductDetails extends LitElement {
@@ -92,7 +92,7 @@ export class ProductDetails extends LitElement {
         : unit
           ? resolveContentText(unit.name, currentLocale(), currentLocale())
           : t("editor.missing_choice");
-    return `${priceText(price)} ${name === null ? t("product.price_each") : t("product.price_per").replace("{unit}", name)}`;
+    return `${priceText(price)} ${name === null ? t("product.price_each") : fill("product.price_per", { unit: name })}`;
   }
 
   #details(value: ProductEditorValue) {

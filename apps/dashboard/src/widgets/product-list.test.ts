@@ -417,6 +417,26 @@ describe("product-list", () => {
       "No replacement (Cocktail bar is disabled)",
     );
   });
+  it("names a switched-off station holding a placeholder or a replacement pattern as it is", async () => {
+    setLocale("en");
+    const { el } = await mountWidget<ProductList>("dashboard-product-list", {
+      products: [product({ id: "mojito" })],
+      madeAt: {
+        mojito: {
+          stationId: null,
+          stationName: "{from} $& $1",
+          noPreparation: false,
+          noReplacement: true,
+          unavailableStationId: "cocktail",
+          variesByZone: false,
+        },
+      },
+    });
+    const root = await tableRoot(el);
+    expect(cellUnder(root, "mojito", "Made at").querySelector("a")?.textContent?.trim()).toBe(
+      "No replacement ({from} $& $1 is disabled)",
+    );
+  });
   it("shows the made-at station, zone variation, and Routing link", async () => {
     setLocale("en");
     const { el } = await mountWidget<ProductList>("dashboard-product-list", {
@@ -4402,6 +4422,22 @@ describe("a category's Made at", () => {
       ["b", { maker: bar, source: { kind: "inherited", name: "$& Co" }, someElsewhere: false }],
     ]);
     expect(detailOf(root, "folder:b")).toBe("from $& Co");
+  });
+
+  it("keeps a switched-off station's name with a placeholder or a replacement pattern literal", async () => {
+    const { root } = await mountMadeAt([
+      [
+        "d",
+        {
+          maker: { kind: "no_replacement", stationName: "{from} $& $1" },
+          source: { kind: "own" },
+          someElsewhere: false,
+        },
+      ],
+    ]);
+    expect(madeAtCell(root, "folder:d").querySelector("a")!.textContent!.trim()).toBe(
+      "No replacement ({from} $& $1 is disabled)",
+    );
   });
 
   it("marks a route that falls to the default station", async () => {

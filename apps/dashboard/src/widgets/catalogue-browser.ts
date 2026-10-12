@@ -515,10 +515,6 @@ export class CatalogueBrowser extends LitElement {
     const [parentId] = parents;
     return parentId ? categoryPath(byId.get(parentId)!, this.categories) : t("categories.none");
   }
-  // One pass with a function replacement: a `$&` or a `{name}` inside a value stays literal.
-  #fill(key: Parameters<typeof t>[0], values: Record<string, string>): string {
-    return t(key).replace(/\{(\w+)\}/g, (whole, name: string) => values[name] ?? whole);
-  }
   /** Each category's path, numbered where others share it in the order the list draws them: depth
    * first, with siblings in `categories` order, which is how the table breaks a tie in its sort. */
   #namedPaths(ids: readonly string[]): string[] {
@@ -545,7 +541,7 @@ export class CatalogueBrowser extends LitElement {
       const path = pathOf.get(id) ?? "";
       const same = sharing.get(path) ?? [];
       if (same.length < 2) return path;
-      return this.#fill("folders.path_ordinal", {
+      return fill("folders.path_ordinal", {
         path,
         position: String(same.indexOf(id) + 1),
         total: String(same.length),
@@ -586,7 +582,7 @@ export class CatalogueBrowser extends LitElement {
       ...(totals.folders ? [folderCount] : []),
       ...(totals.active ? [productCount] : []),
     ];
-    const keepLabel = this.#fill(
+    const keepLabel = fill(
       totals.folders + totals.active === 1 ? "folders.contents_keep_one" : "folders.contents_keep",
       { items: conjunctionList(moving), parent },
     );
@@ -596,18 +592,17 @@ export class CatalogueBrowser extends LitElement {
     ];
     const actions = [
       ...(deleted.length
-        ? [this.#fill("folders.also_deletes", { items: conjunctionList(deleted) })]
+        ? [fill("folders.also_deletes", { items: conjunctionList(deleted) })]
         : []),
-      ...(totals.active ? [this.#fill("folders.also_archives", { products: productCount })] : []),
+      ...(totals.active ? [fill("folders.also_archives", { products: productCount })] : []),
     ];
     const deleteLabel = [
-      this.#fill("folders.contents_also", { actions: conjunctionList(actions) }),
+      fill("folders.contents_also", { actions: conjunctionList(actions) }),
       ...(totals.active
         ? [
-            this.#fill(
-              totals.active === 1 ? "folders.products_move_one" : "folders.products_move",
-              { parent },
-            ),
+            fill(totals.active === 1 ? "folders.products_move_one" : "folders.products_move", {
+              parent,
+            }),
           ]
         : []),
     ].join(" ");
