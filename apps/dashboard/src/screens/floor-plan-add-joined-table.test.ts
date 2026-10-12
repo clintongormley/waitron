@@ -195,6 +195,13 @@ it("after a change, Add with fields missing explains each field and keeps Add di
   expect(changes).toEqual([]);
 });
 
+it("a refused Add moves focus to the first field it marks", async () => {
+  const el = await openAdd();
+  await set(el, "table-name", "Long table");
+  await pressAdd(el);
+  await expect.poll(() => el.shadowRoot!.activeElement).toBe(field(el, "seats"));
+});
+
 it("refuses one table, 0 seats and 1000 seats", async () => {
   const el = await openAdd();
   const { changes } = listen(el);
