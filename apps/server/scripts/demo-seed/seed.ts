@@ -7,7 +7,7 @@ import { deviceProfiles, floorZones, withTransaction } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import { validateCapabilities } from "@waitron/layouts";
 import { readLocationClock } from "@waitron/reporting";
-import { replaceZoneClosedWeek } from "@waitron/venue-service";
+import { replaceZoneClosedWeek, saveSpecialDay, venueLocalMoment } from "@waitron/venue-service";
 import { locationId as brandLocationId } from "@waitron/shared";
 import type { CountryDemoIdentity } from "@waitron/country";
 import { createPrinter } from "@waitron/printing";
@@ -147,6 +147,23 @@ export async function seedDemoRestaurant(
         weekday,
         ranges: [{ startsAt: "23:00", endsAt: dayCutover }],
       })),
+      await readBusinessDayScheduleRevision(tx, { locationId: brandLocationId(locationId) }),
+    );
+    const at = new Date();
+    const year = venueLocalMoment(at, await readLocationClock(tx, locationId))!.civilDate.slice(
+      0,
+      4,
+    );
+    await saveSpecialDay(
+      tx,
+      { locationId: brandLocationId(locationId) },
+      null,
+      {
+        name: "Christmas Day",
+        repeatsYearly: true,
+        dates: [{ date: `${year}-12-25`, closedAllDay: true }],
+      },
+      at,
       await readBusinessDayScheduleRevision(tx, { locationId: brandLocationId(locationId) }),
     );
   });

@@ -50,6 +50,7 @@ export { withdrawPendingDepartmentTransfers } from "./department-transfer-lifecy
 export { readSpecialDaysModel } from "./named-days.js";
 
 export { replaceZoneClosedWeek } from "./zone-closed-times.js";
+export { saveSpecialDay } from "./special-days.js";
 
 export {
   stationServiceTimes,
