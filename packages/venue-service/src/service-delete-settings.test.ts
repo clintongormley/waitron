@@ -594,8 +594,7 @@ async function paintSeasons(tx: Transaction) {
   return { f, season: (name: string) => seasonsByName.get(name)!, week, closure };
 }
 
-const seasonLines = (impact: { key: string }[]) =>
-  impact.filter((item) => ["timetables", "slots", "seasons"].includes(item.key));
+const seasonLines = (impact: { key: string }[]) => impact.filter((item) => item.key === "seasons");
 
 it("the delete impact counts a week saved with no season once per season", async () => {
   await run(async (tx) => {

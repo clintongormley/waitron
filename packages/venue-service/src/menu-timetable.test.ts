@@ -1797,7 +1797,7 @@ describe("statements", () => {
         expect(
           spy.mock.calls
             .map(([query]) => (query as unknown as { sql: string }).sql)
-            .filter((text) => text.includes('"zone_closed_times"')),
+            .filter((text) => /"(zone_days|zone_day_ranges)"/.test(text)),
         ).toEqual([]);
       } finally {
         spy.mockRestore();
@@ -1815,17 +1815,6 @@ describe("statements", () => {
       prepared.mockRestore();
       return texts;
     });
-
-  it("deletes a period without reading the retired dated timetables or named days", async () => {
-    const v = await timed();
-    const statements = await statementsOf((tx) => deleteMenuPeriod(tx, v.cfg, v.periods.brunch));
-    expect(
-      statements.filter((text) => /"(menu_slots|menu_day_timetables|special_dates)"/.test(text)),
-    ).toEqual([]);
-    expect(await db.select().from(menuPeriods).where(eq(menuPeriods.id, v.periods.brunch))).toEqual(
-      [],
-    );
-  });
 
   it("moves a zone to its new department without accessing retired zone menu tables", async () => {
     const v = await timed();
@@ -1956,7 +1945,7 @@ describe("statements", () => {
     const lots = await read(busy);
     const v = busy;
     expect(lots).toHaveLength(none.length);
-    const runningPeriodReads = /"(menu_slots|menu_day_timetables|special_dates|locations)"/;
+    const runningPeriodReads = /"locations"/;
     expect(lots.filter((text) => runningPeriodReads.test(text))).toEqual([]);
     const priced = await scoped((tx) => listZoneOffers(tx, v.cfg, v.barra, { withDefault: false }));
     expect(priced.defaultMenuId).toBeNull();

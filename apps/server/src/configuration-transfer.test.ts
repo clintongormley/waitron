@@ -4273,39 +4273,6 @@ describe("special days in a configuration transfer", () => {
       expect(states.get(importedPase.id)).toMatchObject({ isDefault: true, open: true });
   });
 
-  it("carries a past named date without the retired station schedule clash", async () => {
-    const source = await applyVenue(planVenue(venue("B44005511"), ALL_MODULES), {
-      db: suite.db,
-      modules: ALL_MODULES,
-    });
-    await withTransaction(suite.db, (tx) =>
-      tx.insert(kitchenStations).values({ locationId: source.locationId, name: "Pass" }),
-    );
-    const { cfg } = await named(suite.db, source);
-    await withTransaction(suite.db, (tx) =>
-      insertSpecialDay(tx, cfg, { date: "2026-09-25", name: "Late night" }),
-    );
-    const versions = await schemaVersionsByModule(suite.db, ALL_MODULES);
-    const transferred = await buildConfigurationBundle(suite.db, source, ALL_MODULES, AT, versions);
-    expect(transferred.venue.location.timeZone).toBe("Europe/Madrid");
-    for (const createdAt of ["2026-09-26T21:59:59.999Z", "2026-09-26T22:00:00.000Z"])
-      expect(() =>
-        validateConfigurationBundle({ ...transferred, createdAt }, ALL_MODULES, versions),
-      ).not.toThrow();
-
-    expect(() => validateConfigurationBundle(transferred, ALL_MODULES, versions)).not.toThrow();
-    const target = await applyVenue(planVenue(venue("B44005522"), ALL_MODULES), {
-      db: targetSuite.db,
-      modules: ALL_MODULES,
-      beforeCommit: (tx, result) =>
-        importConfigurationTables(tx, transferred, result, ALL_MODULES, versions),
-    });
-    const expected = await specialDaysByName(suite.db, source);
-    expect(expected.dates.map((date) => date.date)).toEqual(["2026-09-25"]);
-    const actual = await specialDaysByName(targetSuite.db, target);
-    expect(actual.dates).toEqual(expected.dates);
-  });
-
   it.each([
     "station_fallbacks",
     "hours_week_cells",

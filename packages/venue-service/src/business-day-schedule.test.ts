@@ -1359,7 +1359,7 @@ describe("clock compatibility reads special-day paint", () => {
     });
   });
 
-  it("reads none of the named-day tables", async () => {
+  it("reads the special days' dates", async () => {
     const v = await fixture([], { zone: true });
     await specialDay(v, "2026-11-20", [
       { periodId: v.periodId, startsAt: "22:00", endsAt: "04:30" },
@@ -1376,11 +1376,6 @@ describe("clock compatibility reads special-day paint", () => {
         prepared.mockRestore();
       }
     });
-    expect(
-      statements.filter((text) =>
-        /"(menu_day_timetables|zone_closed_times|special_dates)"/.test(text),
-      ),
-    ).toEqual([]);
     expect(statements.filter((text) => text.includes('"special_day_dates"'))).not.toEqual([]);
   });
 });

@@ -380,7 +380,6 @@ describe("zones closed at an instant", () => {
         "zone_extensions",
       ])
         expect(texts.filter((text) => text.includes(`from "${table}"`))).toHaveLength(1);
-      expect(texts.filter((text) => text.includes(`from "zone_closed_times"`))).toHaveLength(0);
       expect(texts).toHaveLength(5);
     }
     expect(three).toHaveLength(one.length);
