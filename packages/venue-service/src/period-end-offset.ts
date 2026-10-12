@@ -1,6 +1,6 @@
 import { addDays, weekdayOf } from "./hours-rules.js";
 import type { LocalDate } from "./hours-types.js";
-import { seasonOn } from "./season-rules.js";
+import { seasonOnSorted } from "./season-rules.js";
 import { rangeSpan, type ServiceRange } from "./service-day.js";
 import { scheduleCutovers, serviceDayWallContext } from "./service-day-context.js";
 import type { BusinessDayClock } from "@waitron/shared";
@@ -142,16 +142,25 @@ export function findSeasonEndOffsetClash(
   );
   const special = new Map(occurrences.map((day) => [day.date, day]));
   const seasonal = (date: LocalDate): readonly ServiceRange[] => {
-    const season = seasonOn(ordered, date);
+    const season = seasonOnSorted(ordered, date);
     return season === null ? [] : weekOf(season, weekdayOf(date));
+  };
+  // The first entry in `dated` that holds a date: on that date, or repeating from on or before it.
+  const firstOnDate = new Map<LocalDate, number>();
+  const repeatsOn = new Map<string, number[]>();
+  dated.forEach((entry, index) => {
+    if (!firstOnDate.has(entry.date)) firstOnDate.set(entry.date, index);
+    if (entry.repeatOn != null)
+      repeatsOn.set(entry.repeatOn, [...(repeatsOn.get(entry.repeatOn) ?? []), index]);
+  });
+  const storedOn = (date: LocalDate): DatedSchedule | undefined => {
+    const repeat = repeatsOn.get(date.slice(5))?.find((index) => dated[index]!.date <= date);
+    const index = Math.min(firstOnDate.get(date) ?? Infinity, repeat ?? Infinity);
+    return index === Infinity ? undefined : dated[index];
   };
   const effective = (date: LocalDate): readonly ServiceRange[] => {
     if (special.get(date)?.closeWholeVenue === true) return [];
-    const stored = dated.find(
-      (entry) =>
-        entry.date === date ||
-        (entry.repeatOn != null && entry.repeatOn === date.slice(5) && entry.date <= date),
-    );
+    const stored = storedOn(date);
     return stored === undefined || stored.ownHours === false
       ? seasonal(date)
       : (stored.slots ?? seasonal(date));

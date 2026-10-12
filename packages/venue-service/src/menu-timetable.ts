@@ -291,6 +291,9 @@ async function endOffsetClash(
   const departmentIds = [...new Set(periods.map((period) => period.departmentId))];
   const allSeasons = await readSeasons(tx, cfg);
   const weeks = await readDepartmentSeasonWeeks(tx, cfg, departmentIds, clock.dayCutover);
+  const ownDay = new Map(
+    timetables.map((day) => [`${day.departmentId}|${day.specialDateId}`, slots.get(day.id)!]),
+  );
   for (const id of departmentIds) {
     const clash = findSeasonEndOffsetClash(
       allSeasons.map((season) => ({
@@ -298,12 +301,7 @@ async function endOffsetClash(
         startsOn: season.startsOn,
         week: weeks.get(id)?.get(season.id) ?? [],
       })),
-      dates.map((date) => {
-        const own = timetables.find(
-          (day) => day.departmentId === id && day.specialDateId === date.id,
-        );
-        return { ...date, slots: own === undefined ? null : slots.get(own.id)! };
-      }),
+      dates.map((date) => ({ ...date, slots: ownDay.get(`${id}|${date.id}`) ?? null })),
       offsets,
       clock,
     );

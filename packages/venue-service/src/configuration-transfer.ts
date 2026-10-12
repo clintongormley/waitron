@@ -385,31 +385,37 @@ function validateEndOffsets(tables: Tables, bundle?: { readonly dayCutover: stri
     endsAt: (row.ends_at as string).slice(0, 5),
   });
   const offsets = periodOffsets(tables);
+  const weeks = new Map<unknown, ServiceRange[][]>();
+  for (const row of seasonRows) {
+    const day = days.get(row.day_id)!;
+    const key = JSON.stringify([day.department_id, day.season_id]);
+    const week = weeks.get(key) ?? Array.from({ length: 7 }, (): ServiceRange[] => []);
+    week[day.weekday as number]!.push(range(row));
+    weeks.set(key, week);
+  }
+  const namedSlots = new Map<unknown, ServiceRange[]>();
+  for (const row of namedRows) {
+    const day = namedDays.get(row.timetable_id)!;
+    const key = JSON.stringify([day.department_id, day.special_date_id]);
+    namedSlots.set(key, [...(namedSlots.get(key) ?? []), range(row)]);
+  }
+  for (const day of namedDays.values()) {
+    const key = JSON.stringify([day.department_id, day.special_date_id]);
+    if (!namedSlots.has(key)) namedSlots.set(key, []);
+  }
   for (const departmentId of ids(tables.departments)) {
-    const seasons = (tables.seasons ?? []).map((season) => {
-      const week: ServiceRange[][] = Array.from({ length: 7 }, () => []);
-      for (const row of seasonRows) {
-        const day = days.get(row.day_id)!;
-        if (day.department_id === departmentId && day.season_id === season.id)
-          week[day.weekday as number]!.push(range(row));
-      }
-      return { seasonId: season.id as string, startsOn: season.starts_on as string, week };
-    });
-    const dated = (tables.special_dates ?? []).map((date) => {
-      const own = [...namedDays.values()].find(
-        (day) => day.department_id === departmentId && day.special_date_id === date.id,
-      );
-      return {
-        date: date.date as LocalDate,
-        closeWholeVenue: date.close_whole_venue === 1,
-        repeatOn: (date.repeat_on ?? null) as string | null,
-        ownHours: date.own_hours !== 0,
-        slots:
-          own === undefined
-            ? null
-            : namedRows.filter((row) => row.timetable_id === own.id).map(range),
-      };
-    });
+    const seasons = (tables.seasons ?? []).map((season) => ({
+      seasonId: season.id as string,
+      startsOn: season.starts_on as string,
+      week: weeks.get(JSON.stringify([departmentId, season.id])) ?? [],
+    }));
+    const dated = (tables.special_dates ?? []).map((date) => ({
+      date: date.date as LocalDate,
+      closeWholeVenue: date.close_whole_venue === 1,
+      repeatOn: (date.repeat_on ?? null) as string | null,
+      ownHours: date.own_hours !== 0,
+      slots: namedSlots.get(JSON.stringify([departmentId, date.id])) ?? null,
+    }));
     const clash = findSeasonEndOffsetClash(seasons, dated, offsets, bundle.dayCutover);
     if (clash !== null) refuse(clash.date === undefined ? "department_day_ranges" : "menu_slots");
   }
