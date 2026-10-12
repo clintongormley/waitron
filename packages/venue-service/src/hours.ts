@@ -25,7 +25,7 @@ import { specialDates } from "./schema/hours.js";
 import { specialDayDates, specialDays } from "./schema/seasons.js";
 import { sharedSpecialDate } from "./special-days.js";
 import { namedDaysOn } from "./named-days.js";
-import { occursOn, repeatKey } from "./named-day-rules.js";
+import { repeatKey } from "./named-day-rules.js";
 import { readOpeningHoursModel } from "./menu-timetable.js";
 import { menuDayTimetables, menuSlots } from "./schema/menus.js";
 import { zoneClosedTimes } from "./schema/zone-closed-times.js";
@@ -75,17 +75,10 @@ async function assertNamedDayAvailable(
     )
     .orderBy(asc(specialDates.date));
   for (const row of rows) {
-    const other = { date: row.date, repeats: row.repeatOn !== null };
-    const clash =
-      repeats && other.repeats && repeatKey(date) === repeatKey(row.date)
-        ? date > row.date
-          ? date
-          : row.date
-        : occursOn(other, date)
-          ? date
-          : occursOn({ date, repeats }, row.date)
-            ? row.date
-            : null;
+    const clash = sharedSpecialDate(
+      { date, repeats },
+      { date: row.date, repeats: row.repeatOn !== null },
+    );
     if (clash !== null) throw new AppError("special_date.date_taken", { date: clash });
   }
   const specialDayRows = await tx
