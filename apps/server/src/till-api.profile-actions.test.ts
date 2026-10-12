@@ -74,7 +74,7 @@ import {
  * | POST /api/sales/:id/reprint                               | print-receipt              | reprint               |
  * | POST /api/drawer/open                                     | open-cash-drawer           | drawer_open           |
  * | POST /api/tables/:id/seat                                 | take-orders                | take-orders           |
- * | POST /api/tables/:id/today/move, /rotate, /take-off, /put-back, /place, /seats, /back, /merge, /split; POST /api/zones/:id/today/reset | take-orders | take-orders |
+ * | POST /api/tables/:id/today/move, /rotate, /take-off, /put-back, /place, /seats, /back, /merge, /split, /split-off; POST /api/zones/:id/today/reset | take-orders | take-orders |
  * | POST /api/parties/:id/finish, /bill-request, /move, /join, /split-table | take-orders  | take-orders           |
  * | PUT /api/parties/:id/name                                 | take-orders                | take-orders           |
  * | POST /api/parties/:id/groups, /groups/move, /groups/split-line; PUT /groups/order | take-orders            | take-orders           |
@@ -380,6 +380,7 @@ const ROUTES: readonly Row[] = [
   ordering("POST", `/api/tables/${id}/today/back`),
   ordering("POST", `/api/tables/${id}/today/merge`),
   ordering("POST", `/api/tables/${id}/today/split`),
+  ordering("POST", `/api/tables/${id}/today/split-off`),
   ordering("POST", `/api/zones/${id}/today/reset`),
   ordering("POST", `/api/parties/${id}/finish`),
   ordering("POST", `/api/parties/${id}/bill-request`),
