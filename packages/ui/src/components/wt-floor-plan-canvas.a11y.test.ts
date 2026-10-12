@@ -1,7 +1,8 @@
-import { afterEach, describe, test } from "vitest";
+import { afterEach, describe, expect, test } from "vitest";
+import { userEvent } from "vitest/browser";
 import { cleanup, host } from "../test-helpers.js";
 import { expectNoA11yViolations, mountThemed } from "../a11y-helpers.js";
-import type { PlanCanvasTable, WtFloorPlanCanvas } from "./wt-floor-plan-canvas.js";
+import type { PlanCanvasTable, TableResize, WtFloorPlanCanvas } from "./wt-floor-plan-canvas.js";
 import "./wt-floor-plan-canvas.js";
 
 afterEach(cleanup);
@@ -30,13 +31,14 @@ const tables: PlanCanvasTable[] = [
 async function mountCanvas(
   theme: "light" | "dark",
   props: Partial<Pick<WtFloorPlanCanvas, "tables" | "selected">>,
-): Promise<void> {
+): Promise<WtFloorPlanCanvas> {
   const el = (await mountThemed(
     '<wt-floor-plan-canvas style="width: 480px; height: 240px"></wt-floor-plan-canvas>',
     theme,
   )) as WtFloorPlanCanvas;
   Object.assign(el, props);
   await el.updateComplete;
+  return el;
 }
 
 describe.each(["light", "dark"] as const)("wt-floor-plan-canvas a11y (%s theme)", (theme) => {
@@ -55,7 +57,7 @@ describe.each(["light", "dark"] as const)("wt-floor-plan-canvas a11y (%s theme)"
     await expectNoA11yViolations(host);
   });
 
-  test("a selected table with its rotation handle above it", async () => {
+  test("a selected table with its handles", async () => {
     const lowered = tables.map((t) => ({ ...t, placement: { ...t.placement, y: 8 } }));
     await mountCanvas(theme, { tables: lowered, selected: "b1" });
     await expectNoA11yViolations(host);
@@ -71,8 +73,28 @@ describe.each(["light", "dark"] as const)("wt-floor-plan-canvas a11y (%s theme)"
     await expectNoA11yViolations(host);
   });
 
-  test("a selected table at the top with its rotation handle below it", async () => {
-    await mountCanvas(theme, { tables, selected: "b1" });
+  test("a selected table at the top-left corner with its handles", async () => {
+    const cornered = tables.map((t) =>
+      t.key === "b1" ? { ...t, placement: { ...t.placement, x: 0, y: 0 } } : t,
+    );
+    await mountCanvas(theme, { tables: cornered, selected: "b1" });
+    await expectNoA11yViolations(host);
+  });
+
+  test("a refused selected table after a keyboard resize, with its size badge and the announcement", async () => {
+    const refused = [{ ...tables[0]!, refused: "Booked 12 Oct, 21:00" }, ...tables.slice(1)];
+    const el = await mountCanvas(theme, { tables: refused, selected: "t1" });
+    el.addEventListener("wt-table-resize", (e) => {
+      const { key, ...box } = (e as CustomEvent<TableResize>).detail;
+      el.tables = el.tables.map((t) =>
+        t.key === key ? { ...t, placement: { ...t.placement, ...box } } : t,
+      );
+    });
+    el.shadowRoot!.querySelector<HTMLButtonElement>('button[data-key="t1"]')!.focus();
+    await userEvent.keyboard("{Shift>}{ArrowRight}{/Shift}");
+    await el.updateComplete;
+    expect(el.shadowRoot!.querySelector('[part~="size-badge"]')).not.toBeNull();
+    expect(el.shadowRoot!.querySelector('[role="status"]')!.textContent!.trim()).toBe("9 by 4");
     await expectNoA11yViolations(host);
   });
 });

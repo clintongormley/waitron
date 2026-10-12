@@ -181,20 +181,13 @@ export function patchTable(draft: FloorPlanDraft, key: string, patch: TablePatch
   return mapTable(draft, key, (t) => ({ ...t, ...copied }));
 }
 
-export function moveTable(
+export function changePlacement(
   draft: FloorPlanDraft,
   key: string,
-  x: number,
-  y: number,
+  change: Partial<PlanPlacement>,
 ): FloorPlanDraft {
   return mapTable(draft, key, (t) =>
-    t.placement === null ? t : { ...t, placement: { ...t.placement, x, y } },
-  );
-}
-
-export function rotateTable(draft: FloorPlanDraft, key: string, rotation: number): FloorPlanDraft {
-  return mapTable(draft, key, (t) =>
-    t.placement === null ? t : { ...t, placement: { ...t.placement, rotation } },
+    t.placement === null ? t : { ...t, placement: { ...t.placement, ...change } },
   );
 }
 

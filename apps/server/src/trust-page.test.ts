@@ -125,7 +125,7 @@ it.each([
   ["--wt-color-primary", "background: light-dark(#1f6feb, #4c8dff)"],
   ["--wt-color-on-primary", "color: light-dark(#ffffff, #06101f)"],
   ["--wt-color-text-muted", "light-dark(#5c626e, #a1a7b3)"],
-  ["--wt-color-danger", "light-dark(#b3261e, #ff6b5e)"],
+  ["--wt-color-danger", "light-dark(#b3261e, #ff7f73)"],
 ])("keeps %s in step with the design tokens", (_token, declaration) => {
   expect(renderTrustPage(base)).toContain(declaration);
 });

@@ -10,6 +10,7 @@ import {
   firstFreeSpot,
   fitScale,
   gridExtent,
+  resizeFrom,
   rotatedRect,
   showsName,
   snapToSquare,
@@ -215,5 +216,89 @@ describe("floor plan geometry", () => {
     const names = automaticNames("T", existing, 2);
     expect(names).toEqual(["T 9007199254740993", "T 9007199254740994"]);
     expect(new Set([...existing, ...names]).size).toBe(3);
+  });
+
+  describe("resizeFrom", () => {
+    /** Where `side`'s midpoint is drawn, in squares, with the table turned round its centre. */
+    function midpoint(p: PlanPlacement, side: "top" | "right" | "bottom" | "left") {
+      const a = (p.rotation * Math.PI) / 180;
+      const [u, v] = {
+        top: [0, -p.height / 2],
+        right: [p.width / 2, 0],
+        bottom: [0, p.height / 2],
+        left: [-p.width / 2, 0],
+      }[side];
+      return {
+        x: p.x + p.width / 2 + u * Math.cos(a) - v * Math.sin(a),
+        y: p.y + p.height / 2 + u * Math.sin(a) + v * Math.cos(a),
+      };
+    }
+
+    it("moves the dragged side and keeps the opposite one", () => {
+      const p = table(10, 10, 8, 4);
+      expect(resizeFrom(p, "right", 2)).toEqual({ ...p, x: 10, width: 10 });
+      expect(resizeFrom(p, "left", 2)).toEqual({ ...p, x: 8, width: 10 });
+      expect(resizeFrom(p, "top", 1)).toEqual({ ...p, y: 9, height: 5 });
+      expect(resizeFrom(p, "bottom", -1)).toEqual({ ...p, y: 10, height: 3 });
+    });
+
+    it.each([90, 30, 225])("keeps the opposite side's midpoint on screen at %i°", (rotation) => {
+      const p = table(10, 10, 8, 4, rotation);
+      for (const [side, opposite, grows] of [
+        ["right", "left", "width"],
+        ["left", "right", "width"],
+        ["bottom", "top", "height"],
+        ["top", "bottom", "height"],
+      ] as const) {
+        const q = resizeFrom(p, side, 2);
+        expect(q[grows]).toBe(p[grows] + 2);
+        expect(q.rotation).toBe(rotation);
+        const before = midpoint(p, opposite);
+        const after = midpoint(q, opposite);
+        expect(Math.abs(after.x - before.x)).toBeLessThanOrEqual(0.5);
+        expect(Math.abs(after.y - before.y)).toBeLessThanOrEqual(0.5);
+      }
+    });
+
+    it("holds the size to 1–99 squares", () => {
+      expect(resizeFrom(table(10, 10, 8, 4), "right", -20).width).toBe(1);
+      expect(resizeFrom(table(10, 10, 8, 4), "bottom", 200).height).toBe(99);
+      expect(resizeFrom(table(10, 10, 98, 4), "left", 5)).toMatchObject({ x: 9, width: 99 });
+    });
+
+    it("grows a side at the grid's edge only as far as fits, keeping the opposite side", () => {
+      // Unturned at (1, 1): the right side is at 9 and the bottom at 5 before and after.
+      expect(resizeFrom(table(1, 1, 8, 4), "left", 5)).toEqual(table(0, 1, 9, 4));
+      expect(resizeFrom(table(1, 1, 8, 4), "top", 5)).toEqual(table(1, 0, 8, 5));
+      expect(resizeFrom(table(0, 0, 8, 4), "left", 2)).toEqual(table(0, 0, 8, 4));
+      expect(resizeFrom(table(0, 0, 8, 4), "top", 2)).toEqual(table(0, 0, 8, 4));
+      // Turned 90°, the left side is drawn at the top and the right side at the bottom, which is
+      // drawn at y 7 with its midpoint at x 14 both before (centre 14, 3) and after (centre 14, 2).
+      expect(resizeFrom(table(10, 1, 8, 4, 90), "left", 4)).toEqual(table(9, 0, 10, 4, 90));
+    });
+
+    it("shrinks a side at the grid's edge, moving the opposite side instead", () => {
+      // Turned 90° at y 0, the right side faces down and the left side up; shrinking the right
+      // side would put y at -1, so y stays 0 and the left side, drawn at the top, moves down.
+      expect(resizeFrom(table(10, 0, 8, 4, 90), "right", -1)).toEqual(table(11, 0, 7, 4, 90));
+      expect(resizeFrom(table(10, 0, 8, 4, 270), "left", -1)).toEqual(table(11, 0, 7, 4, 270));
+    });
+
+    it.each([0, 45, 90, 180, 270])("undoes a resize with the opposite one at %i°", (rotation) => {
+      const p = table(10, 10, 8, 4, rotation);
+      for (const side of ["top", "right", "bottom", "left"] as const) {
+        for (const squares of [1, 2, 3]) {
+          expect(resizeFrom(resizeFrom(p, side, squares), side, -squares)).toEqual(p);
+          expect(resizeFrom(resizeFrom(p, side, -squares), side, squares)).toEqual(p);
+        }
+      }
+    });
+
+    it("rounds a half-square shift at a right angle away from where the table was", () => {
+      // At 90° the right side faces down: one more square of width moves the centre half a square
+      // left (half the width) and half a square down (the side moving out).
+      expect(resizeFrom(table(10, 10, 8, 4, 90), "right", 1)).toEqual(table(9, 11, 9, 4, 90));
+      expect(resizeFrom(table(9, 11, 9, 4, 90), "right", -1)).toEqual(table(10, 10, 8, 4, 90));
+    });
   });
 });

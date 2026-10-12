@@ -1794,10 +1794,32 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   `apps/till/src/api/client.ts` has no method for the older list route. Check other callers before
   removing the route. Left open by A429 slice 5, decision 15.
 
-- **A466 — floor plan editor follow-ups (2026-10-10).** Small gaps the dashboard floor plan editor
-  left: a preview not heard on focus, an ungated link, a duplicated address template, canvas
-  details and surviving mutants. Left open by A429 slice 2.
-  [Detail](backlog/till.md#a466--floor-plan-editor-follow-ups)
+- **`wt-input` has no visible description.** The Add tables names preview is a polite live region
+  after Prefix, so it is not heard when the field takes focus; the fix is a visible description in
+  the shared `wt-input`. Left open by A466 (A429 slice 2) / A502 part 3.
+
+- **The zone panel's "Edit floor plan" link is not hidden without `venue.configure`.** Every role
+  with `venue_service.manage` has `venue.configure` today, and a module screen's context carries no
+  permissions. Revisit beside the permissions review. Left open by A466 (A429 slice 2) / A502 part 3.
+
+- **The department zone address template is written twice**, in
+  `packages/venue-service/src/dashboard/department-zones.ts` and `department-settings.ts`.
+  Left open by A466 (A429 slice 2) / A502 part 3.
+
+- **On computers whose scrollbars take space, a size reading just after a floor plan drop may
+  shift the plan by the extra room.** Seen only with a stand-in scrollbar; headless Chromium's
+  scrollbars take none, so it is not measurable there. Left open by A466 (A429 slice 2) / A502 part 3.
+
+- **An arrow-key turn that makes a corner table poke further out still shifts the other tables a
+  square** (for example 15° to 30° on the turn arrow). A Shift+arrow resize of a turned corner
+  table was not tested for the same shift. Left open by A466 (A429 slice 2) / A502 part 3.
+
+- **Resizing a floor plan table needs a pointer or a keyboard.** The side dots are hidden from
+  assistive technology and Shift+arrow needs a keyboard, so a screen-reader user on a touch screen
+  cannot resize a table (accepted by the A502 coordinator, not yet by the owner). Left open by A466 (A429 slice 2) / A502 part 3.
+
+- **Small floor plan canvas details:** `reveal` does not count the side dots, and on a turned
+  table the resize cursor points the screen's way, not the side's. Left open by A466 (A429 slice 2) / A502 part 3.
 
 - **A470 — the till's floor map follow-ups (2026-10-10).** Small gaps the till's map left: an
   unmeasured screen-reader activation and two wordings. Left open by A429 slice 3.
@@ -1807,11 +1829,6 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   the dashboard skips the taken-off check, the map's drag works out its target the slow way, and
   smaller gaps. Left open by A429 slice 4 (#1526).
   [Detail](backlog/till.md#a474--todays-floor-changes-on-the-till-follow-ups)
-
-- **A502. The floor plan editor as a big modal, with handles and a shorter form (owner,
-  2026-10-11).** A selected table's form shrinks to name, seats, shape and
-  Moveable, and the table is sized and turned by handles on the plan.
-  [Detail](backlog/till.md#a502-the-floor-plan-editor-as-a-big-modal-with-handles-and-a-shorter-form)
 
 - **A503. Joined tables replace saved joins (owner, 2026-10-11).** A table made of other tables
   is set up in the editor and starts the day as one table; the till can split it. Two tables

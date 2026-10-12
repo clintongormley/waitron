@@ -218,33 +218,6 @@ screen is designed.
   English when the tab shell is shown in a synthetic Spanish probe; check whether any
   real kitchen session shows that bar before widening the standard-tab translation.
 
-## A466 — floor plan editor follow-ups
-
-- **A466 — floor plan editor follow-ups (2026-10-10).** Left open by A429 slice 2.
-  - `wt-input` has no visible description, so the Add tables names preview is a polite live region
-    after Prefix rather than the field's description, and is not heard when the field takes focus.
-    The proper fix is a visible description in `wt-input` (a shared component).
-  - The zone panel's "Edit floor plan" link is not hidden without `venue.configure`. Today every
-    role with `venue_service.manage` also has `venue.configure`, and a module screen's context
-    carries no permissions. Revisit beside the permissions review.
-  - The department zone address template is written in two places:
-    `packages/venue-service/src/dashboard/department-zones.ts` and `department-settings.ts`.
-  - The booked reason ("Booked 12 Oct, 21:00") is worded in the dashboard's core strings, not the
-    bookings module's, because the module code-message route takes no parameters. The owner decided
-    on 2026-10-10 that it stays in the dashboard's own strings.
-  - Seat and size errors keep showing while the person types (owner decision 2026-10-10).
-  - The canvas: a narrow table at x=0 draws part of its rotate handle left of the grid; a table
-    dragged into the top rows shows its handle above the grid until it is released; the size
-    tokens are read once for the element's whole life.
-  - The canvas's extra squares for a turned table at the top-left corner: after a corner drop, an
-    Undo or a refused move back to the earlier layout keeps the extra room and a scrollbar until
-    another change; a keyboard nudge or turn of a corner table in a plan that fits shifts the whole
-    plan by a square; and on computers whose scrollbars take space, a size reading that arrives just
-    after a drop may shift the plan by the extra room (seen only with a 15 px stand-in for a
-    scrollbar, since headless Chromium's scrollbars take none).
-  - Surviving mutants in `wt-floor-plan-canvas`: the default "Rotate {name}" text,
-    `super.disconnectedCallback` and `preventScroll`.
-
 ## A470 — the till's floor map follow-ups
 
 - **A470 — the till's floor map follow-ups (2026-10-10).** Left open by A429 slice 3.
@@ -285,27 +258,6 @@ screen is designed.
     tables' labels overlap while they line up mid-drag.
   - The new floor test files repeat their setup; shared helpers were left out to avoid churn.
 
-## A502. The floor plan editor as a big modal, with handles and a shorter form
-
-**A502 (owner, 2026-10-11) — OPEN.** A selected table's form is a long column of fields. The owner's mockups, saved
-as images: [1, the editor with a table selected](mockups/a502-a503-floor-plan-editor/1-editor-table-selected.png),
-[2, the tables list](mockups/a502-a503-floor-plan-editor/2-tables-list-nothing-selected.png) (its
-joined-table rows are A503), [3, the handles](mockups/a502-a503-floor-plan-editor/3-handles.png),
-[4, the delete confirmation](mockups/a502-a503-floor-plan-editor/4-delete-confirmation.png). The
-canvas they came from is https://claude.ai/artifact/NkwkgPN6rjSu26P6qAjTyK.
-
-- **The selected table's form** is Name; Seats beside a rectangle/round shape toggle; and a
-  Moveable switch, on by default, replacing "Fixed in place". Width, Height and Rotation leave the
-  form. Joins leave it too once A503 lands; until then they stay.
-- **Handles on the selected table.** A dot in the middle of each side changes width or height. A
-  two-headed quarter-circle arrow on the top-right corner turns the table, and turns with it, so it
-  stays at the same corner. The arrow-key nudge and turn shortcuts
-  stay. With the Width and Height fields gone, the plan needs a keyboard way to resize as well.
-- A503 adds a third marker to the tables list, for a table that is part of a joined table, and its
-  "made of" picker must sort by number too.
-- A466's canvas items (the rotate handle drawn outside the grid) are on the same code; fold in the
-  ones this job does not make moot.
-
 ## A503. Joined tables replace saved joins
 
 **A503 (owner, 2026-10-11) — OPEN. Needs a short design before a plan.** It changes what is stored
@@ -320,7 +272,8 @@ section 6.1, `docs/superpowers/specs/2026-10-08-floor-plan-design.md`; `floor_pl
   ([mockup 5](mockups/a502-a503-floor-plan-editor/5-add-joined-table.png); the tables list in
   [mockup 2](mockups/a502-a503-floor-plan-editor/2-tables-list-nothing-selected.png)). The joined table is placed on the plan as
   one table; its parts are marked "in <joined table>" in the tables list and cannot be placed on
-  their own. The list's last column shows what a joined table is made of.
+  their own. The list's last column shows what a joined table is made of. The made-of picker lists
+  tables in number order, as the tables list does.
 - **On the till a joined table can be split.** Its parts go side by side inside the outline the
   joined table took up, each with its own seats.
 - **Two separate tables dragged together during service ask for the seat count.** Adding the two
@@ -1302,8 +1255,18 @@ From **Variants as products (#511–#556) — what is left open.** How the model
 
 ## Decisions and deliberate limits
 
+- **The floor plan editor's booked reason stays in the dashboard's own strings (owner,
+  2026-10-10).** "Booked 12 Oct, 21:00" is worded in the dashboard's core strings, not the bookings
+  module's, because the module code-message route takes no parameters.
+- **A floor plan seat error keeps showing while the person types (owner, 2026-10-10).**
+- **A taken-off table's place is kept only while the editor is open (A502, coordinator decision).** Pressed again, a
+  table taken off the plan goes back to the same place for as long as the editor stays open on
+  that zone; the place is not saved.
+- **Shift+arrow keys resize the selected table on the editor's plan (A502, coordinator decision).** Only the
+  selected table resizes, so only it carries the keys' description
+  ([design-system.md](../developers/design-system.md)).
 - **The floor plan editor's header runs Undo, Redo, Cancel, Save (A502, owner, 2026-10-11).**
-  Cancel sits beside Save, after Undo and Redo, as the owner's backlog entry and mockup 1 put it: an
+  Cancel sits beside Save, after Undo and Redo, as the owner's [mockup 1](mockups/a502-a503-floor-plan-editor/1-editor-table-selected.png) puts it: an
   exception to Cancel on the left ([design-system.md](../developers/design-system.md)).
 - **Individual tables keep the later floor contract (A435 step 6, 2026-10-11).** Delete is a master
   draft edit with Undo until Save; today's release remains deferred. There is no table active flag

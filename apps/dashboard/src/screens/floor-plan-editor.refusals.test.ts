@@ -10,11 +10,10 @@ import type { DashboardApi, FloorPlan } from "../api/client.js";
 import { currentLocale, setLocale } from "../i18n/t.js";
 import {
   addTables,
+  changePlacement,
   deleteTable,
   draftFromPlan,
-  moveTable,
   patchTable,
-  rotateTable,
   type FloorPlanDraft,
 } from "./floor-plan-draft.js";
 
@@ -139,7 +138,7 @@ it("a taken name no draft table carries shows the code's own sentence and select
 it("an invalid field selects the table that was sent at its index", async () => {
   const write = deferred<never>();
   const el = await open(stubApi({ saveFloorPlan: vi.fn().mockReturnValue(write.promise) }));
-  const moved = moveTable(opened(), "m1", 5, 4);
+  const moved = changePlacement(opened(), "m1", { x: 5, y: 4 });
   await change(el, moved);
   await press(el, "save");
   await change(el, deleteTable(moved, "m1"));
@@ -153,20 +152,29 @@ it("an invalid field selects the table that was sent at its index", async () => 
 });
 
 it("a placement field the panel shows is named by its own name", async () => {
-  const el = await open(refusing(invalid("tables.0.placement.width")));
-  await change(el, moveTable(opened(), "m1", 5, 4));
+  const el = await open(refusing(invalid("tables.0.placement.shape")));
+  await change(el, changePlacement(opened(), "m1", { x: 5, y: 4 }));
   await press(el, "save");
-  expect(el.fieldError?.field).toBe("width");
+  expect(el.fieldError?.field).toBe("shape");
+});
+
+it("a refusal naming a size the panel no longer shows selects the table and shows its own sentence", async () => {
+  const el = await open(refusing(invalid("tables.0.placement.width")));
+  await change(el, changePlacement(opened(), "m1", { x: 5, y: 4 }));
+  await press(el, "save");
+  expect(canvas(el).selected).toBe("m1");
+  expect(el.fieldError).toBeNull();
+  expect(message(el)).toBe("Check the floor plan's tables and try again");
 });
 
 it("a refusal naming a field of an unplaced table stays until that field changes", async () => {
-  const el = await open(refusing(invalid("tables.1.placement.width")));
-  const moved = moveTable(opened(), "m1", 5, 4);
+  const el = await open(refusing(invalid("tables.1.placement.shape")));
+  const moved = changePlacement(opened(), "m1", { x: 5, y: 4 });
   await change(el, moved);
   await press(el, "save");
   expect(el.fieldError?.key).toBe("m2");
   await change(el, patchTable(moved, "m2", { seats: 3 }));
-  expect(el.fieldError?.field).toBe("width");
+  expect(el.fieldError?.field).toBe("shape");
   await change(el, patchTable(moved, "m2", { placement }));
   expect(el.fieldError).toBeNull();
 });
@@ -177,7 +185,7 @@ it("a refusal naming an index the save did not send, or no label, selects nothin
     .mockRejectedValueOnce(invalid("tables.7.label"))
     .mockRejectedValueOnce({ code: "table.label_taken" });
   const el = await open(stubApi({ saveFloorPlan }));
-  await change(el, moveTable(opened(), "m1", 5, 4));
+  await change(el, changePlacement(opened(), "m1", { x: 5, y: 4 }));
   await press(el, "save");
   expect(canvas(el).selected).toBeNull();
   expect(message(el)).toBe("Check the floor plan's tables and try again");
@@ -202,7 +210,7 @@ it("an invalid field of a table deleted since sending selects nothing", async ()
 
 it("an invalid field the panel does not show selects the table and shows the refusal's own sentence", async () => {
   const el = await open(refusing(invalid("tables.0.placement.x")));
-  await change(el, moveTable(opened(), "m1", 5, 4));
+  await change(el, changePlacement(opened(), "m1", { x: 5, y: 4 }));
   await press(el, "save");
   expect(canvas(el).selected).toBe("m1");
   expect(el.fieldError).toBeNull();
@@ -211,7 +219,7 @@ it("an invalid field the panel does not show selects the table and shows the ref
 
 it("a refusal about a join selects nothing and shows its own sentence", async () => {
   const el = await open(refusing(invalid("joins.0.tableKeys")));
-  await change(el, moveTable(opened(), "m1", 5, 4));
+  await change(el, changePlacement(opened(), "m1", { x: 5, y: 4 }));
   canvas(el).dispatchEvent(
     new CustomEvent("wt-table-select", { detail: { key: "m1" }, bubbles: true, composed: true }),
   );
@@ -247,7 +255,10 @@ it("a booked table the draft deleted comes back as opened, marked with its booki
   const el = await openPlaced(
     vi.fn().mockRejectedValue(booked({ tableId: "l2", date: "2026-10-12", time: "21:00" })),
   );
-  await change(el, moveTable(deleteTable(draftFromPlan(placedM2()), "m2"), "m1", 5, 4));
+  await change(
+    el,
+    changePlacement(deleteTable(draftFromPlan(placedM2()), "m2"), "m1", { x: 5, y: 4 }),
+  );
   expect(drawn(el, "m2")).toBeUndefined();
   await press(el, "save");
   expect(drawn(el, "m2")).toEqual({
@@ -352,7 +363,10 @@ it("a booked table's mark goes at the next Save, which sends it back", async () 
     .mockRejectedValueOnce(booked({ tableId: "l2", date: "2026-10-12", time: "21:00" }))
     .mockReturnValue(new Promise(() => {}));
   const el = await openPlaced(saveFloorPlan);
-  await change(el, moveTable(deleteTable(draftFromPlan(placedM2()), "m2"), "m1", 5, 4));
+  await change(
+    el,
+    changePlacement(deleteTable(draftFromPlan(placedM2()), "m2"), "m1", { x: 5, y: 4 }),
+  );
   await press(el, "save");
   expect(drawn(el, "m2")?.refused).toBe("Booked 12 Oct, 21:00");
   await press(el, "save");
@@ -377,11 +391,11 @@ it("a booked table's mark goes when it is moved, rotated, edited or deleted agai
     return el["draft"]!;
   };
   let restored = await refusedOnce();
-  await change(el, moveTable(restored, "m1", 9, 9));
+  await change(el, changePlacement(restored, "m1", { x: 9, y: 9 }));
   expect(drawn(el, "m2")?.refused).toBe("Booked 12 Oct, 21:00");
   for (const edit of [
-    (d: FloorPlanDraft) => moveTable(d, "m2", 30, 4),
-    (d: FloorPlanDraft) => rotateTable(d, "m2", 90),
+    (d: FloorPlanDraft) => changePlacement(d, "m2", { x: 30, y: 4 }),
+    (d: FloorPlanDraft) => changePlacement(d, "m2", { rotation: 90 }),
     (d: FloorPlanDraft) => patchTable(d, "m2", { seats: 3 }),
     (d: FloorPlanDraft) => deleteTable(d, "m2"),
   ]) {
@@ -438,7 +452,7 @@ it("a booked table comes back as last saved when the re-read after that save fai
     .mockResolvedValueOnce(placedM2())
     .mockRejectedValue({ code: "server.internal" });
   const el = await open(stubApi({ getFloorPlan, saveFloorPlan }));
-  const moved = moveTable(draftFromPlan(placedM2()), "m2", 30, 10);
+  const moved = changePlacement(draftFromPlan(placedM2()), "m2", { x: 30, y: 10 });
   await change(el, moved);
   await press(el, "save");
   await change(el, deleteTable(moved, "m2"));
@@ -454,7 +468,10 @@ it("the tables list is handed the same marks until the mark changes", async () =
   );
   const panel = () =>
     el.shadowRoot!.querySelector<FloorPlanTablesPanel>("floor-plan-tables-panel")!;
-  await change(el, moveTable(deleteTable(draftFromPlan(placedM2()), "m2"), "m1", 5, 4));
+  await change(
+    el,
+    changePlacement(deleteTable(draftFromPlan(placedM2()), "m2"), "m1", { x: 5, y: 4 }),
+  );
   await press(el, "save");
   const first = panel().marks;
   expect(first).toEqual(new Map([["m2", "Booked 12 Oct, 21:00"]]));
@@ -478,7 +495,10 @@ it("Reload clears a booked table's mark", async () => {
     .mockResolvedValueOnce(placedM2())
     .mockResolvedValue({ ...placedM2(), revision: 4 });
   const el = await open(stubApi({ getFloorPlan, saveFloorPlan }));
-  await change(el, moveTable(deleteTable(draftFromPlan(placedM2()), "m2"), "m1", 5, 4));
+  await change(
+    el,
+    changePlacement(deleteTable(draftFromPlan(placedM2()), "m2"), "m1", { x: 5, y: 4 }),
+  );
   await press(el, "save");
   expect(drawn(el, "m2")?.refused).toBe("Booked 12 Oct, 21:00");
   saveFloorPlan.mockRejectedValueOnce({
@@ -539,7 +559,7 @@ it("a booked table the opened plan does not hold shows the code's own sentence",
 
 it("a failure with no field shows the server's sentence and leaves Save enabled", async () => {
   const el = await open(refusing({ code: "server.internal" }));
-  await change(el, moveTable(opened(), "m1", 5, 4));
+  await change(el, changePlacement(opened(), "m1", { x: 5, y: 4 }));
   await press(el, "save");
   expect(message(el)).toBe("Something went wrong, try again");
   expect(el.fieldError).toBeNull();
@@ -682,7 +702,7 @@ it("Save does not send while a Reload read is pending", async () => {
     .mockRejectedValue({ code: "floor_plan.out_of_date", params: { zoneId: "z1", revision: 4 } });
   const getFloorPlan = vi.fn().mockResolvedValueOnce(plan()).mockReturnValueOnce(newer.promise);
   const el = await open(stubApi({ saveFloorPlan, getFloorPlan }));
-  await change(el, moveTable(opened(), "m1", 5, 4));
+  await change(el, changePlacement(opened(), "m1", { x: 5, y: 4 }));
   await press(el, "save");
   await press(el, "load-newer");
   expect(button(el, "save").disabled).toBe(true);
@@ -690,7 +710,7 @@ it("Save does not send while a Reload read is pending", async () => {
   expect(saveFloorPlan).toHaveBeenCalledTimes(1);
   newer.resolve({ ...plan(), revision: 4 });
   await flush(el);
-  await change(el, moveTable(opened(), "m1", 6, 4));
+  await change(el, changePlacement(opened(), "m1", { x: 6, y: 4 }));
   await press(el, "save");
   expect(saveFloorPlan).toHaveBeenCalledTimes(2);
   expect(saveFloorPlan.mock.calls[1]![1].revision).toBe(4);
@@ -701,12 +721,12 @@ it("a save still pending on one zone does not stop Save on the next", async () =
   const bar: FloorPlan = { ...plan(), zoneId: "z2", tables: [plan().tables[0]!], joins: [] };
   const getFloorPlan = vi.fn((zoneId: string) => Promise.resolve(zoneId === "z2" ? bar : plan()));
   const el = await open(stubApi({ saveFloorPlan, getFloorPlan }));
-  await change(el, moveTable(opened(), "m1", 5, 4));
+  await change(el, changePlacement(opened(), "m1", { x: 5, y: 4 }));
   await press(el, "save");
   history.pushState(null, "", "/manage/floor-plan/zone/z2");
   window.dispatchEvent(new PopStateEvent("popstate"));
   await flush(el);
-  await change(el, moveTable(draftFromPlan(bar), "m1", 9, 4));
+  await change(el, changePlacement(draftFromPlan(bar), "m1", { x: 9, y: 4 }));
   await press(el, "save");
   expect(saveFloorPlan).toHaveBeenCalledTimes(2);
   expect(saveFloorPlan.mock.calls[1]![0]).toBe("z2");
@@ -836,13 +856,13 @@ it("a seat count typed past 999 disables Save and says so until it is fixed", as
   expect(vi.mocked(api.saveFloorPlan).mock.calls[0]![1].tables[0]!.seats).toBe(10);
 });
 
-it("a width with a fraction is refused and keeps Save disabled", async () => {
+it("a seat count with a fraction is refused and keeps Save disabled", async () => {
   await wide();
   const el = await open(stubApi());
   await select(el, "m1");
-  await typeIntoPanel(el, "width", "1.5");
-  expect(panelField(el, "width").error).toBe("Enter 1 to 99.");
-  expect(panelField(el, "width").value).toBe("1.5");
+  await typeIntoPanel(el, "seats", "1.5");
+  expect(panelField(el, "seats").error).toBe("Enter 0 to 999.");
+  expect(panelField(el, "seats").value).toBe("1.5");
   expect(button(el, "save").disabled).toBe(true);
 });
 
@@ -874,21 +894,21 @@ it("a typed refusal stays on its table while another is selected", async () => {
   expect(panelField(el, "seats").value).toBe("1000");
 });
 
-it("a second refused field keeps the first's refused text and reason, and Save waits for both", async () => {
+it("a second table's refused seats keep the first's refused text and reason, and Save waits for both", async () => {
   await wide();
   const api = stubApi();
   const el = await open(api);
   await select(el, "m1");
-  await typeIntoPanel(el, "seats", "1000");
-  await typeIntoPanel(el, "width", "1.5");
-  expect(panelField(el, "seats").value).toBe("1000");
+  await typeIntoPanel(el, "seats", "1.5");
+  await select(el, "m2");
+  await typeIntoPanel(el, "seats", "2.5");
+  expect(panelField(el, "seats").value).toBe("2.5");
   expect(panelField(el, "seats").error).toBe("Enter 0 to 999.");
-  expect(panelField(el, "width").value).toBe("1.5");
-  expect(panelField(el, "width").error).toBe("Enter 1 to 99.");
   expect(button(el, "save").disabled).toBe(true);
-  await typeIntoPanel(el, "width", "9");
-  expect(panelField(el, "width").error).toBe("");
-  expect(panelField(el, "seats").value).toBe("1000");
+  await typeIntoPanel(el, "seats", "3");
+  expect(panelField(el, "seats").error).toBe("");
+  await select(el, "m1");
+  expect(panelField(el, "seats").value).toBe("1.5");
   expect(panelField(el, "seats").error).toBe("Enter 0 to 999.");
   expect(message(el)).toBe("Correct the highlighted fields to continue.");
   expect(button(el, "save").disabled).toBe(true);
@@ -896,8 +916,8 @@ it("a second refused field keeps the first's refused text and reason, and Save w
   expect(message(el)).toBe("");
   expect(button(el, "save").disabled).toBe(false);
   await press(el, "save");
-  const sent = vi.mocked(api.saveFloorPlan).mock.calls[0]![1].tables[0]!;
-  expect([sent.seats, sent.placement!.width]).toEqual([12, 9]);
+  const sent = vi.mocked(api.saveFloorPlan).mock.calls[0]![1].tables;
+  expect(sent.slice(0, 2).map((t) => t.seats)).toEqual([12, 3]);
 });
 
 it("a refused field typed into a new table while it is saved stays marked under its master id", async () => {
@@ -948,7 +968,7 @@ it("a table saved new while other edits were made comes back when its delete is 
   const added = patchTable(withT5(), "new:1", { placement: t5 });
   await change(el, added);
   await press(el, "save");
-  await change(el, moveTable(added, "m1", 5, 4));
+  await change(el, changePlacement(added, "m1", { x: 5, y: 4 }));
   write.resolve({ revision: 4, ids: { m1: "m1", m2: "m2", m9: "m9", "new:1": "m5" } });
   await flush(el);
   reread.resolve(afterSave);

@@ -78,16 +78,76 @@ async function set(el: FloorPlanTablePanel, name: string, value: string): Promis
 const tableOf = (change: Change | undefined, key: string) =>
   change!.draft.tables.find((t) => t.key === key);
 
+const shapeGroup = (el: FloorPlanTablePanel) =>
+  el.shadowRoot!.querySelector<HTMLElement>("[role=group][data-field=shape]");
+const shapeButtons = (el: FloorPlanTablePanel) => [
+  ...shapeGroup(el)!.querySelectorAll<HTMLButtonElement>("button[aria-pressed]"),
+];
+const pressedShape = (el: FloorPlanTablePanel) =>
+  shapeButtons(el)
+    .filter((b) => b.getAttribute("aria-pressed") === "true")
+    .map((b) => b.getAttribute("aria-label"));
+const shapeCaption = (el: FloorPlanTablePanel) =>
+  el.shadowRoot!.getElementById(shapeGroup(el)!.getAttribute("aria-labelledby")!);
+
 it("shows the selected table's values", async () => {
   const el = await open();
   expect(field(el, "table-name")!.value).toBe("T1");
   expect(field(el, "seats")!.value).toBe("4");
-  expect(field(el, "fixed")!.checked).toBe(false);
-  expect(field(el, "shape")!.value).toBe("rect");
-  expect(field(el, "width")!.value).toBe("8");
-  expect(field(el, "height")!.value).toBe("8");
-  expect(field(el, "rotation")!.value).toBe("0");
+  expect(field(el, "moveable")!.checked).toBe(true);
+  expect(pressedShape(el)).toEqual(["Rectangle"]);
 });
+
+it("lays out Name, then Seats beside Shape, then Moveable, and nothing more", async () => {
+  const el = await open();
+  const named = [
+    ...el.shadowRoot!.querySelectorAll(".fields [name]:not(wt-icon), .fields [role=group]"),
+  ];
+  expect(named.map((n) => n.getAttribute("name") ?? n.getAttribute("data-field"))).toEqual([
+    "table-name",
+    "seats",
+    "shape",
+    "moveable",
+  ]);
+  const seatsRow = field(el, "seats")!.parentElement!;
+  expect(seatsRow.contains(shapeGroup(el))).toBe(true);
+  expect(seatsRow.contains(field(el, "table-name"))).toBe(false);
+  expect(seatsRow.contains(field(el, "moveable"))).toBe(false);
+  for (const name of ["width", "height", "rotation", "fixed", "shape"]) {
+    expect(field(el, name)).toBeNull();
+  }
+});
+
+it("names the shape pair by a visible caption, with no tooltip", async () => {
+  const el = await open();
+  const caption = shapeCaption(el)!;
+  expect(caption.textContent!.trim()).toBe("Shape");
+  expect(caption.checkVisibility()).toBe(true);
+  expect(shapeButtons(el).map((b) => b.getAttribute("aria-label"))).toEqual(["Rectangle", "Round"]);
+  expect(shapeGroup(el)!.querySelector(".icon-tooltip")).toBeNull();
+});
+
+it("puts Shape under Seats only on a panel too narrow for both", async () => {
+  const el = await open();
+  el.style.width = "180px";
+  await el.updateComplete;
+  const seats = field(el, "seats")!.getBoundingClientRect();
+  const shape = shapeGroup(el)!.getBoundingClientRect();
+  expect(shape.top).toBeGreaterThanOrEqual(seats.bottom);
+});
+
+for (const locale of ["en-GB", "es-ES"]) {
+  it(`puts Shape beside Seats in the editor's widest side column (${locale})`, async () => {
+    setLocale(locale);
+    const el = await open();
+    el.style.width = "288px";
+    await el.updateComplete;
+    const seats = field(el, "seats")!.getBoundingClientRect();
+    const block = shapeGroup(el)!.parentElement!.getBoundingClientRect();
+    expect(Math.abs(block.top - seats.top)).toBeLessThanOrEqual(0.5);
+    expect(block.left).toBeGreaterThanOrEqual(seats.right);
+  });
+}
 
 it("typing a name sends one merged change", async () => {
   const el = await open();
@@ -141,12 +201,8 @@ it("a seat count typed past 999 asks the page to refuse it, sending only the val
 
 it("a fraction or a trailing point is refused", async () => {
   const el = await open();
-  const { changes } = listen(el);
+  listen(el);
   const invalid = listenInvalid(el);
-  await typeInto(el, "width", "1.5");
-  expect(changes.map((c) => tableOf(c, "m1")!.placement!.width)).toEqual([1]);
-  expect(invalid.filter((i) => i.text !== null).map((i) => i.text)).toEqual(["", "1.", "1.5"]);
-  expect(invalid.at(-1)!.message!()).toBe("Enter 1 to 99.");
   await typeInto(el, "seats", "4.");
   expect(invalid.at(-1)).toMatchObject({ field: "seats", text: "4." });
 });
@@ -178,50 +234,29 @@ it("shows a draft value again over text typed into the field", async () => {
   const el = await open();
   listen(el);
   listenInvalid(el);
-  await typeInto(el, "height", "0");
-  expect(field(el, "height")!.value).toBe("0");
+  await typeInto(el, "seats", "4.");
+  expect(field(el, "seats")!.value).toBe("4.");
   el.draft = patchTable(el.draft, "m1", { label: "T1x" });
   await el.updateComplete;
-  expect(field(el, "height")!.value).toBe("8");
+  expect(field(el, "seats")!.value).toBe("4");
 });
 
-it("Fixed in place, shape, width, height and rotation each send their change", async () => {
+it("Moveable and shape each send their change", async () => {
   const el = await open();
   const { changes } = listen(el);
-  const fixed = field(el, "fixed")!;
-  fixed.shadowRoot!.querySelector("input")!.click();
+  shapeButtons(el)[0]!.click();
+  expect(changes).toHaveLength(0);
+  const moveable = field(el, "moveable")!;
+  moveable.shadowRoot!.querySelector("input")!.click();
   await el.updateComplete;
   expect(tableOf(changes.at(-1), "m1")!.fixed).toBe(true);
   expect(changes.at(-1)!.mergeKey).toBeUndefined();
-  await set(el, "shape", "round");
+  shapeButtons(el)[1]!.click();
+  await el.updateComplete;
   expect(tableOf(changes.at(-1), "m1")!.placement!.shape).toBe("round");
-  await set(el, "width", "10");
-  expect(tableOf(changes.at(-1), "m1")!.placement!.width).toBe(10);
-  expect(changes.at(-1)!.mergeKey).toBe("width:m1");
-  await set(el, "height", "6");
-  expect(tableOf(changes.at(-1), "m1")!.placement!.height).toBe(6);
-  expect(changes.at(-1)!.mergeKey).toBe("height:m1");
-  await set(el, "rotation", "45");
-  expect(tableOf(changes.at(-1), "m1")!.placement).toEqual({
-    x: 2,
-    y: 3,
-    width: 10,
-    height: 6,
-    shape: "round",
-    rotation: 45,
-  });
-  expect(changes).toHaveLength(5);
-});
-
-it("offers rotation in 15° steps from 0° to 345°", async () => {
-  const el = await open();
-  const options = (
-    field(el, "rotation") as unknown as { options: { value: string; label: string }[] }
-  ).options;
-  expect(options).toHaveLength(24);
-  expect(options[0]).toEqual({ value: "0", label: "0°" });
-  expect(options[1]).toEqual({ value: "15", label: "15°" });
-  expect(options.at(-1)).toEqual({ value: "345", label: "345°" });
+  expect(changes.at(-1)!.mergeKey).toBeUndefined();
+  expect(pressedShape(el)).toEqual(["Round"]);
+  expect(changes).toHaveLength(2);
 });
 
 it("names its fields in Spanish", async () => {
@@ -229,17 +264,18 @@ it("names its fields in Spanish", async () => {
   const el = await open();
   const label = (name: string) => (field(el, name) as unknown as { label: string }).label;
   expect(label("table-name")).toBe("Nombre");
-  expect(label("shape")).toBe("Forma");
-  expect(label("width")).toBe("Ancho");
-  expect(label("height")).toBe("Largo");
-  expect(label("rotation")).toBe("Giro");
-  const shapes = (field(el, "shape") as unknown as { options: { label: string }[] }).options;
-  expect(shapes.map((o) => o.label)).toEqual(["Rectángulo", "Redonda"]);
+  expect(label("seats")).toBe("Plazas");
+  expect(shapeCaption(el)!.textContent!.trim()).toBe("Forma");
+  expect(shapeButtons(el).map((b) => b.getAttribute("aria-label"))).toEqual([
+    "Rectángulo",
+    "Redonda",
+  ]);
+  expect(label("moveable")).toBe("Movible");
 });
 
 it("an unplaced table offers no shape or size, and no Place", async () => {
   const el = await open({ tableKey: "m2" });
-  for (const name of ["shape", "width", "height", "rotation"]) expect(field(el, name)).toBeNull();
+  expect(shapeGroup(el)).toBeNull();
 });
 
 it("offers no Place, Remove or Delete, placed or not", async () => {
@@ -264,25 +300,43 @@ it("shows each marked field's own refused text and reason, the first mark of a f
   const el = await open({
     fieldErrors: [
       { field: "seats", message: "Enter 0 to 999.", text: "1000" },
-      { field: "width", message: "Enter 1 to 99.", text: "1.5" },
-      { field: "seats", message: "Too many seats" },
+      { field: "seats", message: "Too many seats", text: "5." },
     ],
   });
   expect([field(el, "seats")!.value, field(el, "seats")!.error]).toEqual([
     "1000",
     "Enter 0 to 999.",
   ]);
-  expect([field(el, "width")!.value, field(el, "width")!.error]).toEqual(["1.5", "Enter 1 to 99."]);
-  expect([field(el, "height")!.value, field(el, "height")!.error]).toEqual(["8", ""]);
+  expect([field(el, "table-name")!.value, field(el, "table-name")!.error]).toEqual(["T1", ""]);
 });
 
-it("shows a refusal of Fixed in place under the switch", async () => {
+it("shows a refusal of Moveable under the switch", async () => {
   const el = await open({ fieldErrors: [{ field: "fixed", message: "Not allowed" }] });
   const note = el.shadowRoot!.querySelector("[data-error=fixed]")!;
   expect(note.textContent!.trim()).toBe("Not allowed");
-  expect((field(el, "fixed") as unknown as { description: string }).description).toBe(
+  expect((field(el, "moveable") as unknown as { description: string }).description).toBe(
     "Not allowed",
   );
+});
+
+it("shows a refusal of the shape under the shape pair", async () => {
+  const el = await open({ fieldErrors: [{ field: "shape", message: "Not allowed" }] });
+  const note = el.shadowRoot!.querySelector("[data-error=shape]")!;
+  expect(note.textContent!.trim()).toBe("Not allowed");
+  expect(shapeGroup(el)!.parentElement!.contains(note)).toBe(true);
+  expect(el.shadowRoot!.querySelector("[data-error=fixed]")).toBeNull();
+});
+
+it("describes each shape button by the shape refusal only while one shows", async () => {
+  const el = await open({ fieldErrors: [{ field: "shape", message: "Not allowed" }] });
+  for (const button of shapeButtons(el)) {
+    const id = button.getAttribute("aria-describedby")!;
+    expect(el.shadowRoot!.getElementById(id)!.textContent!.trim()).toBe("Not allowed");
+    await expect.element(button).toHaveAccessibleDescription("Not allowed");
+  }
+  el.fieldErrors = [];
+  await el.updateComplete;
+  expect(shapeButtons(el).map((b) => b.hasAttribute("aria-describedby"))).toEqual([false, false]);
 });
 
 it("shows nothing for a table the draft does not hold", async () => {

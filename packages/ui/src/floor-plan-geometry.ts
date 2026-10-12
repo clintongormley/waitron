@@ -60,6 +60,53 @@ export function rotatedRect(p: PlanPlacement): PlanRect {
   return { x: centreX - width / 2, y: centreY - height / 2, width, height };
 }
 
+export type PlanSide = "top" | "right" | "bottom" | "left";
+
+const SIZE_MIN = 1;
+const SIZE_MAX = 99;
+
+const OUTWARDS: Record<PlanSide, { x: number; y: number }> = {
+  top: { x: 0, y: -1 },
+  right: { x: 1, y: 0 },
+  bottom: { x: 0, y: 1 },
+  left: { x: -1, y: 0 },
+};
+
+/** The unit direction `side` faces on screen, with the table turned `rotation` degrees. */
+export function outward(side: PlanSide, rotation: number): { x: number; y: number } {
+  const { x, y } = OUTWARDS[side];
+  const radians = (rotation * Math.PI) / 180;
+  const [cos, sin] = [Math.cos(radians), Math.sin(radians)];
+  return { x: x * cos - y * sin, y: x * sin + y * cos };
+}
+
+/** Whole squares, a half going away from zero so that a shift and its reverse cancel. */
+function roundShift(squares: number): number {
+  // At 90° a shift of exactly -0.5 is computed as -0.49999999999999994.
+  const clean = Math.round(squares * 1e9) / 1e9;
+  return Math.sign(clean) * Math.round(Math.abs(clean));
+}
+
+/**
+ * `p` with its own `side` moved `squares` outwards (inwards when negative), keeping the opposite
+ * side's midpoint's x and y each within half a square of where it is drawn. The size stays 1–99;
+ * at the grid's edge a growth stops where x and y fit, and a shrink lets the opposite side move
+ * instead.
+ */
+export function resizeFrom(p: PlanPlacement, side: PlanSide, squares: number): PlanPlacement {
+  const across = side === "left" || side === "right" ? "width" : "height";
+  const wanted = Math.min(SIZE_MAX, Math.max(SIZE_MIN, p[across] + squares)) - p[across];
+  const out = outward(side, p.rotation);
+  for (let growth = wanted; growth !== 0; growth -= Math.sign(growth)) {
+    const grown = across === "width" ? { width: p.width + growth } : { height: p.height + growth };
+    const x = p.x + roundShift((out.x * growth) / 2 - (across === "width" ? growth / 2 : 0));
+    const y = p.y + roundShift((out.y * growth) / 2 - (across === "height" ? growth / 2 : 0));
+    if (growth < 0 || (x === clampToGrid(x) && y === clampToGrid(y)))
+      return { ...p, ...grown, x: clampToGrid(x), y: clampToGrid(y) };
+  }
+  return p;
+}
+
 export function bounds(placements: readonly PlanPlacement[]): PlanRect | null {
   if (placements.length === 0) return null;
   let left = Infinity;

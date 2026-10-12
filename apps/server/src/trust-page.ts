@@ -104,7 +104,7 @@ details[open] { padding-bottom: .3rem; }
 details details { padding-inline: .6rem; }
 summary { cursor: pointer; font-weight: 600; }
 /* Four token pairs are inlined below, light then dark, and kept in step by hand: #5c626e/#a1a7b3
-   is --wt-color-text-muted, #b3261e/#ff6b5e is --wt-color-danger, #1f6feb/#4c8dff is
+   is --wt-color-text-muted, #b3261e/#ff7f73 is --wt-color-danger, #1f6feb/#4c8dff is
    --wt-color-primary, and #ffffff/#06101f is --wt-color-on-primary, all declared in
    packages/ui-core/src/tokens/colors.css. apps/server does not depend on @waitron/ui, and this page must
    stay one self-contained string with no external assets, so it cannot read the custom properties.
@@ -112,7 +112,7 @@ summary { cursor: pointer; font-weight: 600; }
 .note { color: light-dark(#5c626e, #a1a7b3); font-size: .92rem; }
 /* The browser's own warning, in the browser's own colour. The words carry the meaning; the colour
    is emphasis, so a reader who cannot see it loses nothing. */
-.accent, .warning-words { color: light-dark(#b3261e, #ff6b5e); }
+.accent, .warning-words { color: light-dark(#b3261e, #ff7f73); }
 .warning-words { font-weight: 600; }
 .button { display: inline-block; padding: .7rem 1.1rem; border-radius: .4rem; font-weight: 600;
   text-decoration: none; background: light-dark(#1f6feb, #4c8dff); color: light-dark(#ffffff, #06101f); }

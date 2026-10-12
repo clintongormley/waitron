@@ -315,12 +315,12 @@ export class FloorPlanAddTables extends LitElement {
                     )
               }
               <wt-switch
-                name="fixed"
-                label=${t("floor_plan_editor.fixed_in_place")}
-                .checked=${form.fixed}
+                name="moveable"
+                label=${t("floor_plan_editor.moveable")}
+                .checked=${!form.fixed}
                 @wt-change=${(e: CustomEvent<{ checked: boolean }>) => {
                   e.stopPropagation();
-                  this.#edit({ fixed: e.detail.checked });
+                  this.#edit({ fixed: !e.detail.checked });
                 }}
               ></wt-switch>
             </div>`

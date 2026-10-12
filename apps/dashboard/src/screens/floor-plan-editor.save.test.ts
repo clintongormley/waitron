@@ -9,8 +9,8 @@ import { currentLocale, setLocale } from "../i18n/t.js";
 import { codeMessage } from "../i18n/codes.js";
 import {
   addTables,
+  changePlacement,
   draftFromPlan,
-  moveTable,
   patchTable,
   rekeyDraft,
   saveFromDraft,
@@ -150,7 +150,7 @@ it("Save sends the draft with a key per table and joins as keys", async () => {
   const el = await open(api);
   await move(el, "m1", 5);
   await press(el, "save");
-  const moved = moveTable(draftFromPlan(plan()), "m1", 5, 4);
+  const moved = changePlacement(draftFromPlan(plan()), "m1", { x: 5, y: 4 });
   expect(api.saveFloorPlan).toHaveBeenCalledWith("z1", saveFromDraft(3, moved));
   const body = vi.mocked(api.saveFloorPlan).mock.calls[0]![1];
   expect(body.tables[0]!.placement!.x).toBe(5);
@@ -602,7 +602,7 @@ it("a failed Reload replaces the older copy's message with its own, and Reload s
   expect(placed(el, "m1").x).toBe(5);
 });
 
-// At the narrowest phone width, with fonts wider than macOS's system one (A466).
+// At the narrowest phone width, with fonts wider than macOS's system one.
 describe.each([
   ["en-GB", "the system font", ""],
   ["es-ES", "the system font", ""],

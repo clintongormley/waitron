@@ -80,6 +80,19 @@ describe.each(["light", "dark"] as const)("floor-plan-tables-panel a11y (%s them
     ).toBeGreaterThanOrEqual(3);
   });
 
+  it("shows a mark under the selected row accessibly", async () => {
+    const { el, host } = await mountWidget<FloorPlanTablesPanel>(
+      "floor-plan-tables-panel",
+      { ...props, selected: "m4" },
+      theme,
+    );
+    await el.updateComplete;
+    expect(
+      el.shadowRoot!.querySelector("[data-table=m4][aria-current=true] [data-mark]"),
+    ).not.toBeNull();
+    await expectNoA11yViolations(host);
+  });
+
   it("shows the list inside a sheet accessibly", async () => {
     const { el: sheet, host } = await mountWidget<WtSheet>(
       "wt-sheet",
