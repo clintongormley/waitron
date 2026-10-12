@@ -32,9 +32,9 @@ import {
   nowIso,
 } from "./columns.js";
 import * as vocabulary from "./columns.js";
-
-const publicSurface = () => import("../index.js");
-const drawerOpensTable = async () => (await import("./drawer-opens.js")).drawerOpens;
+import { drawerOpens } from "./drawer-opens.js";
+import * as publicSurface from "../index.js";
+import { binary as doorBinary, day as doorDay, table as doorTable } from "../index.js";
 
 const probe = table("probe", {
   pk: id("pk").primaryKey().$defaultFn(newId),
@@ -405,8 +405,8 @@ describe("the generated migration and the converted table agree", () => {
   const body = createTableBody("drawer_opens");
   let live: Record<string, AnyColumn> = {};
 
-  beforeAll(async () => {
-    live = columnsOf(await drawerOpensTable());
+  beforeAll(() => {
+    live = columnsOf(drawerOpens);
   });
 
   it("finds drawer_opens in the generated migrations at all", () => {
@@ -422,8 +422,8 @@ describe("the generated migration and the converted table agree", () => {
     });
   }
 
-  it("declares the reason check exactly as enumCheck builds it", async () => {
-    const [constraint] = getTableConfig(await drawerOpensTable()).checks.filter(
+  it("declares the reason check exactly as enumCheck builds it", () => {
+    const [constraint] = getTableConfig(drawerOpens).checks.filter(
       (c) => c.name === "drawer_opens_reason_ck",
     );
     expect(constraint).toBeDefined(); // positive control, as above
@@ -570,18 +570,17 @@ describe("a real node:sqlite database reports the types the vocabulary declared"
 });
 
 describe("the vocabulary is reachable from outside packages/db", () => {
-  it("re-exports every name columns.ts provides, as the same value", async () => {
+  it("re-exports every name columns.ts provides, as the same value", () => {
     // Weaker than its name: `Object.keys` on a module namespace sees VALUES, so an exported TYPE is
     // never checked.
-    const door = (await publicSurface()) as unknown as Record<string, unknown>;
+    const door = publicSurface as unknown as Record<string, unknown>;
     const inside = vocabulary as Record<string, unknown>;
     const names = Object.keys(inside);
     expect(names.length).toBeGreaterThan(0); // positive control: an empty list checks nothing
     expect(names.filter((name) => door[name] !== inside[name])).toEqual([]);
   });
 
-  it("builds a column through that door", async () => {
-    const { binary: doorBinary, day: doorDay, table: doorTable } = await publicSurface();
+  it("builds a column through that door", () => {
     const c = columnsOf(doorTable("door_probe", { on: doorDay("on"), bytes: doorBinary("bytes") }));
     expect(c.on.getSQLType()).toBe("text");
     expect(c.bytes.getSQLType()).toBe("blob");
