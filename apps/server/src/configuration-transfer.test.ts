@@ -6132,7 +6132,7 @@ describe("seasons in a configuration transfer", () => {
     return rows.rows;
   }
 
-  it("leaves a bundle's old weekday rows behind and serves the week from its seasons", async () => {
+  it("leaves a bundle's old weekday rows behind, keeps its named-day rows, and serves the week from its seasons", async () => {
     const source = await applyVenue(planVenue(venue("B35792470"), ALL_MODULES), {
       db: suite.db,
       modules: ALL_MODULES,
@@ -6170,6 +6170,30 @@ describe("seasons in a configuration transfer", () => {
       });
       await tx.execute(sql`insert into zone_closed_times (id, zone_id, weekday, special_date_id, starts_at, ends_at)
         values (${randomUUID()}, ${zone.id}, 6, null, '20:00:00', '23:00:00')`);
+      const named = await saveSpecialDate(
+        tx,
+        scope,
+        null,
+        {
+          date: "2027-01-06",
+          name: "Own hours day",
+          kind: "holiday",
+          repeats: false,
+          ownHours: true,
+          closeWholeVenue: false,
+          cells: [],
+        },
+        WINTER_SATURDAY,
+        undefined,
+        0,
+      );
+      const timetable = randomUUID();
+      await tx.execute(sql`insert into menu_day_timetables (id, department_id, weekday, special_date_id)
+        values (${timetable}, ${department.id}, null, ${named.id})`);
+      await tx.execute(sql`insert into menu_slots (id, timetable_id, department_id, period_id, starts_at, ends_at)
+        values (${randomUUID()}, ${timetable}, ${department.id}, ${dinner}, '19:00:00', '23:00:00')`);
+      await tx.execute(sql`insert into zone_closed_times (id, zone_id, weekday, special_date_id, starts_at, ends_at)
+        values (${randomUUID()}, ${zone.id}, null, ${named.id}, '21:00:00', '23:00:00')`);
     });
     const versions = await schemaVersionsByModule(suite.db, ALL_MODULES);
     const bundle = await buildConfigurationBundle(
@@ -6192,6 +6216,20 @@ describe("seasons in a configuration transfer", () => {
       select (select count(*) from menu_day_timetables where weekday is not null) as timetables,
         (select count(*) from zone_closed_times where weekday is not null) as closures`);
     expect(weekdayRows.rows).toEqual([{ timetables: 0, closures: 0 }]);
+    const namedHours = await targetSuite.db.execute(sql`
+      select d.date, s.starts_at, s.ends_at from menu_day_timetables t
+      join special_dates d on d.id=t.special_date_id join menu_slots s on s.timetable_id=t.id
+      join departments dep on dep.id=t.department_id where dep.name='Weekday rows'`);
+    expect(namedHours.rows).toEqual([
+      { date: "2027-01-06", starts_at: "19:00:00", ends_at: "23:00:00" },
+    ]);
+    const namedClosures = await targetSuite.db.execute(sql`
+      select d.date, c.starts_at, c.ends_at from zone_closed_times c
+      join special_dates d on d.id=c.special_date_id join floor_zones z on z.id=c.zone_id
+      where z.name='Weekday terrace'`);
+    expect(namedClosures.rows).toEqual([
+      { date: "2027-01-06", starts_at: "21:00:00", ends_at: "23:00:00" },
+    ]);
     const targetScope = { locationId: brandLocationId(target.locationId) };
     const [department] = await targetSuite.db
       .select({ id: departments.id })

@@ -551,9 +551,9 @@ A fresh request during grace is accepted without checking when you selected its 
 the server receives no trusted selection timestamp.
 
 An offset is bounded to −1439…1439 minutes. Each placement must keep a nonempty sending window;
-a positive offset must stop strictly before the same department's next placement starts. The
-normal week and dated overrides are checked when you edit periods, timetables, dates or the venue
-clock, and during configuration import. Yesterday's grace can reach a closed business day only
+a positive offset must stop strictly before the same department's next placement starts. Each
+season's week, each season boundary and the dated overrides are checked when you edit periods,
+timetables, dates or the venue clock, and during configuration import. Yesterday's grace can reach a closed business day only
 until its own cutoff. Selection and sending remain separate from the department's actual open state.
 The [A432 plan](../superpowers/plans/2026-10-08-a432-period-end-offset.md) records the decisions.
 `apps/server/src/till-api.service-periods.test.ts` exercises the request boundary.
@@ -625,8 +625,8 @@ them" in `apps/server/src/configuration-transfer.test.ts` renames and moves one 
 export, finds the target holding the exported four, and asks `resolveDepartmentService` and
 `closedZoneIdsAt` about one Saturday in each of two seasons. The import keeps no old weekday row:
 the transfer's `afterImport` deletes the `menu_day_timetables` and `zone_closed_times` rows that
-name a weekday, and named-day rows stay (the case "leaves a bundle's old weekday rows behind and
-serves the week from its seasons" in the same file).
+name a weekday, and named-day rows stay (the case "leaves a bundle's old weekday rows behind,
+keeps its named-day rows, and serves the week from its seasons" in the same file).
 
 `validateSeasonWeeks` (`packages/venue-service/src/configuration-transfer.ts`) refuses, among
 others: a season start that is not a common year's date or is `02-29`; a range off the

@@ -117,6 +117,33 @@ describe("end offsets across seasons", () => {
     expect(findSeasonEndOffsetClash(seasons(), [], new Map([["dinner", 14]]), "06:00")).toBeNull();
   });
 
+  it("pairs only a season with the one after it among the four default seasons", () => {
+    const late = { periodId: "dinner", startsAt: "20:00", endsAt: "05:45" };
+    const four = (saturday: string, sunday: string): SeasonSchedule[] =>
+      [
+        ["spring", "03-01"],
+        ["summer", "06-01"],
+        ["autumn", "09-01"],
+        ["winter", "12-01"],
+      ].map(([seasonId, startsOn]) => {
+        const week = empty();
+        if (seasonId === saturday) week[6] = [late];
+        if (seasonId === sunday) week[0] = [breakfast];
+        return { seasonId: seasonId!, startsOn: startsOn!, week };
+      });
+    // Summer never meets Winter, and Winter is followed by Spring, not Autumn.
+    expect(findSeasonEndOffsetClash(four("summer", "winter"), [], offsets, "06:00")).toBeNull();
+    expect(findSeasonEndOffsetClash(four("winter", "autumn"), [], offsets, "06:00")).toBeNull();
+    expect(findSeasonEndOffsetClash(four("spring", "autumn"), [], offsets, "06:00")).toBeNull();
+    // Winter's last day, at the end of February, meets Spring's first.
+    expect(findSeasonEndOffsetClash(four("winter", "spring"), [], offsets, "06:00")).toEqual({
+      periodId: "dinner",
+      slotIndex: 0,
+      seasonId: "winter",
+      weekday: 6,
+    });
+  });
+
   it("reads a dated day's neighbour from the season holding it", () => {
     const [autumn, winter] = seasons();
     autumn!.week = empty();
