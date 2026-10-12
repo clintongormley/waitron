@@ -27,7 +27,6 @@ import { VENUE_SERVICE_MIGRATIONS } from "./migrations.js";
 import { departments, zoneServicePolicies } from "./schema/service.js";
 import { menuDayTimetables, menuPeriods, menuSlots } from "./schema/menus.js";
 import { specialDates } from "./schema/hours.js";
-import { zoneClosedTimes } from "./schema/zone-closed-times.js";
 import {
   departmentDayRanges,
   departmentDays,
