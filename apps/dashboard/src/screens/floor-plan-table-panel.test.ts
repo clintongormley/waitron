@@ -25,9 +25,33 @@ const plan: FloorPlan = {
   revision: 3,
   savedAt: "2026-10-01T10:00:00.000Z",
   tables: [
-    { id: "m1", liveTableId: "l1", label: "T1", seats: 4, fixed: false, placement: m1Placement },
-    { id: "m2", liveTableId: "l2", label: "T2", seats: 2, fixed: true, placement: null },
-    { id: "m9", liveTableId: "l9", label: "T9", seats: null, fixed: false, placement: null },
+    {
+      id: "m1",
+      liveTableId: "l1",
+      label: "T1",
+      seats: 4,
+      fixed: false,
+      placement: m1Placement,
+      partIds: [],
+    },
+    {
+      id: "m2",
+      liveTableId: "l2",
+      label: "T2",
+      seats: 2,
+      fixed: true,
+      placement: null,
+      partIds: [],
+    },
+    {
+      id: "m9",
+      liveTableId: "l9",
+      label: "T9",
+      seats: null,
+      fixed: false,
+      placement: null,
+      partIds: [],
+    },
   ],
 };
 

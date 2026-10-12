@@ -19,6 +19,7 @@ const draft: FloorPlanDraft = {
       seats: 4,
       fixed: false,
       placement: null,
+      parts: null,
     },
   ],
 };

@@ -31,7 +31,15 @@ const plan = (zoneId: string, id: string): FloorPlan => ({
   revision: 3,
   savedAt: "2026-10-01T10:00:00.000Z",
   tables: [
-    { id, liveTableId: `l-${id}`, label: id.toUpperCase(), seats: 4, fixed: false, placement },
+    {
+      id,
+      liveTableId: `l-${id}`,
+      label: id.toUpperCase(),
+      seats: 4,
+      fixed: false,
+      placement,
+      partIds: [],
+    },
   ],
 });
 

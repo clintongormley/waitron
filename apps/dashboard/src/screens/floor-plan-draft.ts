@@ -13,6 +13,8 @@ export interface DraftTable {
   seats: number | null;
   fixed: boolean;
   placement: PlanPlacement | null;
+  /** A joined table's part keys, possibly too few; null for a table that is not a joined table. */
+  parts: readonly string[] | null;
 }
 
 export interface FloorPlanDraft {
@@ -51,6 +53,7 @@ export function draftFromPlan(plan: FloorPlan): FloorPlanDraft {
       seats: t.seats,
       fixed: t.fixed,
       placement: t.placement === null ? null : { ...t.placement },
+      parts: t.partIds.length === 0 ? null : [...t.partIds],
     })),
   };
 }
@@ -65,6 +68,7 @@ export function saveFromDraft(revision: number, draft: FloorPlanDraft): FloorPla
       seats: t.seats,
       fixed: t.fixed,
       placement: t.placement,
+      partKeys: t.parts === null ? [] : [...t.parts],
     })),
   };
 }
@@ -78,10 +82,14 @@ export function rekeyDraft(
   draft: FloorPlanDraft,
   ids: Readonly<Record<string, string>>,
 ): FloorPlanDraft {
+  const rekey = rekeyWith(ids);
   return {
-    tables: draft.tables.map((t) =>
-      Object.hasOwn(ids, t.key) ? { ...t, key: ids[t.key]!, id: ids[t.key]! } : t,
-    ),
+    tables: draft.tables.map((t) => {
+      const parts = t.parts === null ? null : t.parts.map(rekey);
+      return Object.hasOwn(ids, t.key)
+        ? { ...t, key: ids[t.key]!, id: ids[t.key]!, parts }
+        : { ...t, parts };
+    }),
   };
 }
 
@@ -98,13 +106,20 @@ export function withLiveTables(draft: FloorPlanDraft, from: FloorPlanDraft): Flo
   return moved ? { ...draft, tables } : draft;
 }
 
+function sameParts(a: readonly string[] | null, b: readonly string[] | null): boolean {
+  if (a === null || b === null) return a === b;
+  const set = new Set(a);
+  return set.size === new Set(b).size && b.every((key) => set.has(key));
+}
+
 function sameTable(a: DraftTable, b: DraftTable): boolean {
   if (
     a.id !== b.id ||
     a.liveTableId !== b.liveTableId ||
     a.label !== b.label ||
     a.seats !== b.seats ||
-    a.fixed !== b.fixed
+    a.fixed !== b.fixed ||
+    !sameParts(a.parts, b.parts)
   ) {
     return false;
   }
@@ -194,16 +209,46 @@ export function placeTable(draft: FloorPlanDraft, key: string, at?: PlanPlacemen
   });
 }
 
-export function deleteTable(draft: FloorPlanDraft, key: string): FloorPlanDraft {
-  if (!draft.tables.some((t) => t.key === key)) return draft;
-  return { ...draft, tables: draft.tables.filter((t) => t.key !== key) };
+export function joinedTableOf(draft: FloorPlanDraft, key: string): DraftTable | undefined {
+  return draft.tables.find((t) => t.parts?.includes(key) === true);
 }
 
-/** Puts a table back, as given, after the others. */
-export function restoreTable(draft: FloorPlanDraft, table: DraftTable): FloorPlanDraft {
+/** Deleting a part takes it out of its joined table; a joined table's own delete frees its parts. */
+export function deleteTable(draft: FloorPlanDraft, key: string): FloorPlanDraft {
+  if (!draft.tables.some((t) => t.key === key)) return draft;
+  return {
+    ...draft,
+    tables: draft.tables.flatMap((t) => {
+      if (t.key === key) return [];
+      if (t.parts?.includes(key) !== true) return [t];
+      return [{ ...t, parts: t.parts.filter((part) => part !== key) }];
+    }),
+  };
+}
+
+/** Puts a table back, as given, after the others. A part re-joins the joined table that held it
+ *  in `opened` when that table is in the draft and no other joined table holds the part; a joined
+ *  table keeps only the parts in the draft that no other joined table holds. */
+export function restoreTable(
+  draft: FloorPlanDraft,
+  table: DraftTable,
+  opened: FloorPlanDraft,
+): FloorPlanDraft {
   if (draft.tables.some((t) => t.key === table.key)) return draft;
   const placement = table.placement === null ? null : { ...table.placement };
-  return { ...draft, tables: [...draft.tables, { ...table, placement }] };
+  const parts =
+    table.parts === null
+      ? null
+      : table.parts.filter(
+          (part) =>
+            draft.tables.some((t) => t.key === part) && joinedTableOf(draft, part) === undefined,
+        );
+  const heldBy = joinedTableOf(opened, table.key)?.key;
+  const rejoins = heldBy !== undefined && joinedTableOf(draft, table.key) === undefined;
+  const tables = draft.tables.map((t) =>
+    rejoins && t.key === heldBy && t.parts !== null ? { ...t, parts: [...t.parts, table.key] } : t,
+  );
+  return { ...draft, tables: [...tables, { ...table, placement, parts }] };
 }
 
 export function addTables(
@@ -223,6 +268,7 @@ export function addTables(
         seats: t.seats,
         fixed: t.fixed,
         placement: null,
+        parts: null,
       })),
     ],
   };

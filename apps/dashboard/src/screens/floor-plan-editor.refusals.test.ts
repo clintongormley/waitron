@@ -37,9 +37,25 @@ function plan(): FloorPlan {
     revision: 3,
     savedAt: "2026-10-01T10:00:00.000Z",
     tables: [
-      { id: "m1", liveTableId: "l1", label: "T1", seats: 4, fixed: false, placement },
-      { id: "m2", liveTableId: "l2", label: "T2", seats: 2, fixed: true, placement: null },
-      { id: "m9", liveTableId: "l9", label: "T9", seats: null, fixed: false, placement: null },
+      { id: "m1", liveTableId: "l1", label: "T1", seats: 4, fixed: false, placement, partIds: [] },
+      {
+        id: "m2",
+        liveTableId: "l2",
+        label: "T2",
+        seats: 2,
+        fixed: true,
+        placement: null,
+        partIds: [],
+      },
+      {
+        id: "m9",
+        liveTableId: "l9",
+        label: "T9",
+        seats: null,
+        fixed: false,
+        placement: null,
+        partIds: [],
+      },
     ],
   };
 }
@@ -522,6 +538,59 @@ it("a deleted unplaced table that is refused comes back in the tables list with 
   expect(message(el)).toBe("");
 });
 
+/** Long table (10 seats) made of Counter 3 (2), Counter 4 (6) and Counter 5 (4). */
+function joinedPlan(): FloorPlan {
+  const part = (id: string, label: string, seats: number) => ({
+    id,
+    liveTableId: `l${id}`,
+    label,
+    seats,
+    fixed: false,
+    placement: null,
+    partIds: [],
+  });
+  return {
+    ...plan(),
+    tables: [
+      part("c3", "Counter 3", 2),
+      part("c4", "Counter 4", 6),
+      part("c5", "Counter 5", 4),
+      {
+        id: "long",
+        liveTableId: "llong",
+        label: "Long table",
+        seats: 10,
+        fixed: false,
+        placement,
+        partIds: ["c3", "c4", "c5"],
+      },
+    ],
+  };
+}
+
+it("a booked part whose delete was refused comes back inside Long table", async () => {
+  const el = await open(
+    stubApi({
+      getFloorPlan: vi.fn().mockResolvedValue(joinedPlan()),
+      saveFloorPlan: vi
+        .fn()
+        .mockRejectedValue(booked({ tableId: "lc5", date: "2026-10-12", time: "21:00" })),
+    }),
+  );
+  await change(el, deleteTable(draftFromPlan(joinedPlan()), "c5"));
+  expect(el["draft"]!.tables.find((t) => t.key === "long")!.parts).toEqual(["c3", "c4"]);
+  await press(el, "save");
+  expect(el["draft"]!.tables.map((t) => t.key)).toContain("c5");
+  expect([...el["draft"]!.tables.find((t) => t.key === "long")!.parts!].sort()).toEqual([
+    "c3",
+    "c4",
+    "c5",
+  ]);
+  expect(panelRow(el, "c5")!.querySelector("[data-mark]")!.textContent!.trim()).toBe(
+    "Booked 12 Oct, 21:00",
+  );
+});
+
 it("a booked table the opened plan does not hold shows the code's own sentence", async () => {
   const el = await open(refusing({ code: "table.booked", params: { tableId: "l7" } }));
   await change(el, deleteTable(opened(), "m2"));
@@ -927,8 +996,24 @@ it("a table saved new while other edits were made comes back when its delete is 
     revision: 4,
     tables: [
       ...plan().tables.slice(0, 2),
-      { id: "m9", liveTableId: "l9", label: "T9", seats: null, fixed: false, placement: null },
-      { id: "m5", liveTableId: "l5", label: "T5", seats: 2, fixed: false, placement: t5 },
+      {
+        id: "m9",
+        liveTableId: "l9",
+        label: "T9",
+        seats: null,
+        fixed: false,
+        placement: null,
+        partIds: [],
+      },
+      {
+        id: "m5",
+        liveTableId: "l5",
+        label: "T5",
+        seats: 2,
+        fixed: false,
+        placement: t5,
+        partIds: [],
+      },
     ],
   };
   const saveFloorPlan = vi

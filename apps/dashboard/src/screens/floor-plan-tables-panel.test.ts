@@ -28,6 +28,7 @@ const table = (
   seats,
   fixed: false,
   placement: placed ? { x: 0, y: 0, width: 8, height: 8, shape: "rect", rotation: 0 } : null,
+  parts: null,
 });
 
 const draft: FloorPlanDraft = {

@@ -45,9 +45,26 @@ function plan(m1x = 2): FloorPlan {
         seats: 4,
         fixed: false,
         placement: { ...m1Placement, x: m1x },
+        partIds: [],
       },
-      { id: "m2", liveTableId: "l2", label: "T2", seats: 2, fixed: true, placement: null },
-      { id: "m9", liveTableId: "l9", label: "T9", seats: null, fixed: false, placement: null },
+      {
+        id: "m2",
+        liveTableId: "l2",
+        label: "T2",
+        seats: 2,
+        fixed: true,
+        placement: null,
+        partIds: [],
+      },
+      {
+        id: "m9",
+        liveTableId: "l9",
+        label: "T9",
+        seats: null,
+        fixed: false,
+        placement: null,
+        partIds: [],
+      },
     ],
   };
 }
@@ -120,8 +137,24 @@ const afterFirstSave: FloorPlan = {
   revision: 4,
   tables: [
     ...plan().tables.slice(0, 2),
-    { id: "m9", liveTableId: "l9", label: "T9", seats: null, fixed: false, placement: null },
-    { id: "m5", liveTableId: "l5", label: "T5", seats: 2, fixed: false, placement: t5Placement },
+    {
+      id: "m9",
+      liveTableId: "l9",
+      label: "T9",
+      seats: null,
+      fixed: false,
+      placement: null,
+      partIds: [],
+    },
+    {
+      id: "m5",
+      liveTableId: "l5",
+      label: "T5",
+      seats: 2,
+      fixed: false,
+      placement: t5Placement,
+      partIds: [],
+    },
   ],
 };
 
@@ -257,8 +290,24 @@ it("a first save's re-read gives a new table its live table", async () => {
     revision: 1,
     tables: [
       ...plan().tables.slice(0, 2),
-      { id: "m9", liveTableId: "l9", label: "T9", seats: null, fixed: false, placement: null },
-      { id: "m5", liveTableId: "l5", label: "T5", seats: 2, fixed: false, placement: t5Placement },
+      {
+        id: "m9",
+        liveTableId: "l9",
+        label: "T9",
+        seats: null,
+        fixed: false,
+        placement: null,
+        partIds: [],
+      },
+      {
+        id: "m5",
+        liveTableId: "l5",
+        label: "T5",
+        seats: 2,
+        fixed: false,
+        placement: t5Placement,
+        partIds: [],
+      },
     ],
   };
   const api = stubApi({
@@ -732,5 +781,6 @@ it("the save body never carries a remembered place", async () => {
     seats: 4,
     fixed: false,
     placement: null,
+    partKeys: [],
   });
 });

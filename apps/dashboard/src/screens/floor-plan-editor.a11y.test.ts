@@ -27,6 +27,7 @@ const plan: FloorPlan = {
       seats: 4,
       fixed: false,
       placement: { x: 2, y: 3, width: 8, height: 8, shape: "rect", rotation: 0 },
+      partIds: [],
     },
     {
       id: "m2",
@@ -35,6 +36,7 @@ const plan: FloorPlan = {
       seats: 2,
       fixed: true,
       placement: { x: 14, y: 3, width: 6, height: 6, shape: "round", rotation: 0 },
+      partIds: [],
     },
   ],
 };

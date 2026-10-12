@@ -1648,7 +1648,14 @@ describe("startServer, against a migrated venue directory", () => {
       });
       expect(zone.status).toBe(201);
       const zoneId = ((await zone.json()) as { id: string }).id;
-      const table = { key: "a", label: "Boot plan 1", seats: 4, fixed: false, placement: null };
+      const table = {
+        key: "a",
+        label: "Boot plan 1",
+        seats: 4,
+        fixed: false,
+        placement: null,
+        partKeys: [],
+      };
       expect(
         (
           await send("PUT", `/zones/${zoneId}/floor-plan`, {

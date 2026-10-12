@@ -639,6 +639,8 @@ export interface FloorPlan {
     seats: number | null;
     fixed: boolean;
     placement: PlanPlacement | null;
+    /** The ids of a joined table's parts; empty for any other table. */
+    partIds: string[];
   }[];
 }
 
@@ -652,6 +654,8 @@ export interface FloorPlanSave {
     seats: number | null;
     fixed: boolean;
     placement: PlanPlacement | null;
+    /** The keys of a joined table's parts; empty for any other table. */
+    partKeys: string[];
   }[];
 }
 

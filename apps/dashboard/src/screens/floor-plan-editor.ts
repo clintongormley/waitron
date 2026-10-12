@@ -730,7 +730,7 @@ export class FloorPlanEditor extends LitElement {
   /** Puts a table the save could not delete back as last saved, as one undo step, marked and
    *  selected. */
   #restoreRefused(table: DraftTable, params: Record<string, unknown>): void {
-    this.#change(restoreTable(this.draft!, table));
+    this.#change(restoreTable(this.draft!, table, this.#opened!));
     const restored = this.draft!.tables.find((t) => t.key === table.key)!;
     this.refused = { table: restored, reason: () => bookedReason(params) };
     this.#selectFlagged(restored.key);

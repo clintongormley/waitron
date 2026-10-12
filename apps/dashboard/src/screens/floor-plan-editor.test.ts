@@ -30,8 +30,16 @@ function terrace(revision = 3): FloorPlan {
     revision,
     savedAt: revision === 0 ? null : "2026-10-01T10:00:00.000Z",
     tables: [
-      { id: "m1", liveTableId: "l1", label: "T1", seats: 4, fixed: false, placement },
-      { id: "m2", liveTableId: "l2", label: "T2", seats: 2, fixed: false, placement: null },
+      { id: "m1", liveTableId: "l1", label: "T1", seats: 4, fixed: false, placement, partIds: [] },
+      {
+        id: "m2",
+        liveTableId: "l2",
+        label: "T2",
+        seats: 2,
+        fixed: false,
+        placement: null,
+        partIds: [],
+      },
     ],
   };
 }
@@ -40,7 +48,9 @@ const bar: FloorPlan = {
   zoneId: "z2",
   revision: 1,
   savedAt: "2026-10-01T10:00:00.000Z",
-  tables: [{ id: "b1", liveTableId: "l5", label: "B1", seats: 2, fixed: false, placement }],
+  tables: [
+    { id: "b1", liveTableId: "l5", label: "B1", seats: 2, fixed: false, placement, partIds: [] },
+  ],
 };
 
 function stubApi(overrides: Partial<DashboardApi> = {}): DashboardApi {
@@ -830,8 +840,24 @@ it("gives added tables keys no draft table holds, through saves, undo and redo",
   });
   const saved = terrace(4);
   saved.tables.push(
-    { id: "m5", liveTableId: "l5", label: "Terrace 1", seats: 4, fixed: false, placement: null },
-    { id: "m6", liveTableId: "l6", label: "Terrace 2", seats: 4, fixed: false, placement: null },
+    {
+      id: "m5",
+      liveTableId: "l5",
+      label: "Terrace 1",
+      seats: 4,
+      fixed: false,
+      placement: null,
+      partIds: [],
+    },
+    {
+      id: "m6",
+      liveTableId: "l6",
+      label: "Terrace 2",
+      seats: 4,
+      fixed: false,
+      placement: null,
+      partIds: [],
+    },
   );
   const getFloorPlan = vi.fn().mockResolvedValueOnce(terrace()).mockResolvedValue(saved);
   const el = await open(stubApi({ saveFloorPlan, getFloorPlan }));
