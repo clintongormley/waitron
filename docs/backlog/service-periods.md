@@ -188,6 +188,14 @@ each conflict in a season's week.
   revision or refuse a draft built before them.
 - With no season in the address, a Week tab left open across a season change keeps showing the old
   season (the picker names it) until the address changes.
+- The Business day start dialog works out its conflict count by repeating the server's rule for
+  counting a conflict once whatever its season (`rangeKey`,
+  `apps/dashboard/src/screens/business-day-start-editor.ts`), so a change to that rule on the server
+  would make the dialog miscount without any test noticing. The server could return how many conflicts
+  it left off its list instead, which adds a field to the shared preview type.
+- A venue with no seasons cannot save a week from the dashboard: the Day and Week tabs send an empty
+  `seasonId`, the route refuses it, and the person sees only the generic save error. Provisioning gives
+  every venue its four seasons, so this is believed unreachable — read in the code, not run.
 
 **Why.** One standard week does not fit a venue whose hours change with the season, and copying a
 week into future dates would bury the special days among ordinary ones.
