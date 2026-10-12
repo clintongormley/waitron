@@ -69,11 +69,13 @@ export interface SeasonSchedule {
 }
 
 /** A named day; `slots` null when it keeps its season's hours. A special-day date instead carries
- *  `paint`, laid over its season's day, and `closeWholeVenue` for its Closed-all-day tick. */
+ *  `paint`, laid over its season's day, and `closeWholeVenue` for its Closed-all-day tick; a
+ *  repeating one says where it falls in a year through `occursIn` rather than `repeatOn`. */
 export interface DatedSchedule {
   date: LocalDate;
   closeWholeVenue: boolean;
   repeatOn?: string | null;
+  occursIn?: (year: number) => LocalDate | null;
   ownHours?: boolean;
   slots: readonly ServiceRange[] | null;
   paint?: readonly PaintRange[];
@@ -125,7 +127,7 @@ export function findSeasonEndOffsetClash(
     for (const change of clock.cutoverChanges)
       years.add(Number(change.effectiveBusinessDay.slice(0, 4)));
   for (const day of dated) {
-    if (day.repeatOn == null) continue;
+    if (day.repeatOn == null && day.occursIn === undefined) continue;
     const firstYear = Number(day.date.slice(0, 4));
     for (let year = firstYear; year < Math.min(firstYear + 400, 10000); year++) years.add(year);
     if (typeof clock !== "string")
@@ -135,15 +137,20 @@ export function findSeasonEndOffsetClash(
       }
   }
   const occurrences = dated.flatMap((day) =>
-    day.repeatOn == null
-      ? [day]
-      : [...years].flatMap((year) => {
-          const date = `${String(year).padStart(4, "0")}-${day.repeatOn}`;
-          return date >= day.date &&
-            new Date(`${date}T00:00:00Z`).toISOString().slice(0, 10) === date
-            ? [{ ...day, date }]
-            : [];
-        }),
+    day.occursIn !== undefined
+      ? [...years].flatMap((year) => {
+          const date = day.occursIn!(year);
+          return date === null ? [] : [{ ...day, date }];
+        })
+      : day.repeatOn == null
+        ? [day]
+        : [...years].flatMap((year) => {
+            const date = `${String(year).padStart(4, "0")}-${day.repeatOn}`;
+            return date >= day.date &&
+              new Date(`${date}T00:00:00Z`).toISOString().slice(0, 10) === date
+              ? [{ ...day, date }]
+              : [];
+          }),
   );
   const special = new Map(occurrences.map((day) => [day.date, day]));
   const seasonOf = (date: LocalDate) => seasonOnSorted(ordered, date);
@@ -155,13 +162,28 @@ export function findSeasonEndOffsetClash(
   const firstOnDate = new Map<LocalDate, number>();
   const repeatsOn = new Map<string, number[]>();
   dated.forEach((entry, index) => {
-    if (!firstOnDate.has(entry.date)) firstOnDate.set(entry.date, index);
+    if (entry.occursIn === undefined && !firstOnDate.has(entry.date))
+      firstOnDate.set(entry.date, index);
     if (entry.repeatOn != null)
       repeatsOn.set(entry.repeatOn, [...(repeatsOn.get(entry.repeatOn) ?? []), index]);
   });
+  const occursInYear = new Map<number, Map<LocalDate, number>>();
+  const occursOn = (date: LocalDate): number => {
+    const year = Number(date.slice(0, 4));
+    let index = occursInYear.get(year);
+    if (index === undefined) {
+      index = new Map();
+      for (const [at, entry] of dated.entries()) {
+        const on = entry.occursIn?.(year) ?? null;
+        if (on !== null && !index.has(on)) index.set(on, at);
+      }
+      occursInYear.set(year, index);
+    }
+    return index.get(date) ?? Infinity;
+  };
   const storedIndex = (date: LocalDate): number => {
     const repeat = repeatsOn.get(date.slice(5))?.find((index) => dated[index]!.date <= date);
-    return Math.min(firstOnDate.get(date) ?? Infinity, repeat ?? Infinity);
+    return Math.min(firstOnDate.get(date) ?? Infinity, repeat ?? Infinity, occursOn(date));
   };
   const storedOn = (date: LocalDate): DatedSchedule | undefined => dated[storedIndex(date)];
   // A repeating date falls on up to 400 years of dates but only (season, weekday) varies its day.

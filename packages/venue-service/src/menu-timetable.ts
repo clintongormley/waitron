@@ -44,8 +44,8 @@ import {
   type VenueScope,
 } from "./operations.js";
 import { specialDates } from "./schema/hours.js";
-import { nextOccurrence, repeatKey } from "./named-day-rules.js";
-import { readSpecialDaySchedules } from "./special-days.js";
+import { nextOccurrence } from "./named-day-rules.js";
+import { readSpecialDaySchedules, specialDateIn } from "./special-days.js";
 import { menuDayTimetables, menuPeriods, menuPeriodStaffMenus, menuSlots } from "./schema/menus.js";
 import { departments } from "./schema/service.js";
 import { routingCellPeriods, routingCells } from "./schema/routing.js";
@@ -313,7 +313,9 @@ async function endOffsetClash(
         ...specialDays.map((day) => ({
           date: day.date,
           closeWholeVenue: day.closedAllDay,
-          repeatOn: day.repeats ? repeatKey(day.date) : null,
+          ...(day.repeats
+            ? { occursIn: (year: number) => specialDateIn({ date: day.date, repeats: true }, year) }
+            : {}),
           slots: null,
           paint: day.paint.get(id) ?? [],
           specialDayId: day.specialDayId,

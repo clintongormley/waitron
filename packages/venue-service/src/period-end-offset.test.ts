@@ -295,3 +295,25 @@ describe("end offsets around special days", () => {
     ).toBeNull();
   });
 });
+
+it("walks a repeating special date through where it says it falls each year", () => {
+  const week: ServiceRange[][] = Array.from({ length: 7 }, () => []);
+  week[6] = [{ periodId: "dinner", startsAt: "20:00", endsAt: "05:45" }];
+  const moved = {
+    date: "2026-12-24",
+    closeWholeVenue: false,
+    slots: null,
+    paint: [{ periodId: "breakfast", startsAt: "06:00", endsAt: "09:00" }],
+    specialDayId: "sd-1",
+    // Stored on 24 December (first a Sunday in 2028) but falling on 20 December (a Sunday in 2026).
+    occursIn: (year: number) => (year >= 2026 ? `${year}-12-20` : null),
+  };
+  expect(
+    findSeasonEndOffsetClash(
+      [{ seasonId: "year", startsOn: "01-01", week }],
+      [moved],
+      new Map([["dinner", 30]]),
+      "06:00",
+    ),
+  ).toEqual({ periodId: "dinner", slotIndex: 0, date: "2026-12-19", specialDayId: "sd-1" });
+});
