@@ -140,7 +140,7 @@ empty receipt. The venue's receipt language moves to Venue settings. Nothing is 
 venue defaults may be dropped rather than carried over (CLAUDE.md §3, last rule).
 
 **Remaining implementation:** receipt UI/API integration, sale descriptions, preview
-defaults, media/transfer/setup retirement, and the unified list with protected editors and zone dragging.
+defaults, setup retirement, and the unified list with protected editors and zone dragging.
 
 ## A506. Opening hours rebuilt around seasons and special days
 

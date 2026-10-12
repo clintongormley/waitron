@@ -139,32 +139,26 @@ it.each([
   ["en-GB", "dark"],
   ["es-ES", "light"],
   ["es-ES", "dark"],
-] as const)("keeps venue and department logo uses accessible in %s/%s", async (locale, theme) => {
+] as const)("keeps department logo uses accessible in %s/%s", async (locale, theme) => {
   setLocale(locale);
   const library = await mount(theme);
   vi.mocked(library.api.getImage).mockResolvedValue({
-    image: { ...image, usageCount: 3 },
+    image: { ...image, usageCount: 2 },
     uses: [
-      { kind: "receipt" },
       { kind: "department_receipt", id: "bar", name: "Bar", active: false },
       { kind: "department_receipt", id: "dining", name: "Dining", active: true },
     ],
   });
   const modal = await openDialog(library, "delete-bread");
-  await vi.waitFor(() => expect(modal.querySelectorAll("li")).toHaveLength(3));
+  await vi.waitFor(() => expect(modal.querySelectorAll("li")).toHaveLength(2));
   const uses = [...modal.querySelectorAll("li")];
   expect(uses.map((use) => use.textContent?.trim())).toEqual(
     locale === "en-GB"
-      ? ["Receipt logo", "Bar receipt logo (Deleted department)", "Dining receipt logo"]
-      : [
-          "Logotipo del recibo",
-          "Logotipo del recibo de Bar (Departamento eliminado)",
-          "Logotipo del recibo de Dining",
-        ],
+      ? ["Bar receipt logo (Deleted department)", "Dining receipt logo"]
+      : ["Logotipo del recibo de Bar (Departamento eliminado)", "Logotipo del recibo de Dining"],
   );
-  expect(uses[1]!.querySelector("a")).toBeNull();
+  expect(uses[0]!.querySelector("a")).toBeNull();
   expect([...modal.querySelectorAll("a")].map((link) => link.getAttribute("href"))).toEqual([
-    "/manage/venue-settings/view/receipts",
     "/manage/venue-operations/department/dining/view/receipt",
   ]);
   expect(modal.querySelector("[data-test=confirm-delete]")).toBeNull();

@@ -11,7 +11,7 @@ import {
   staffPresentationName,
   validateContentTranslations,
 } from "@waitron/catalogue";
-import { catalogues, products, tenantReceipts, type Transaction } from "@waitron/db";
+import { catalogues, products, type Transaction } from "@waitron/db";
 import { departmentReceipts, departments } from "@waitron/venue-service";
 import {
   AppError,
@@ -92,14 +92,12 @@ export type ImageUsage =
       number: number;
       activatesAt: string;
     }
-  | { kind: "receipt" }
   | { kind: "department_receipt"; id: string; name: string; active: boolean };
 function storedLogo(receipt: typeof departmentReceipts.receipt) {
   return sql<string | null>`case when json_valid(${receipt}) then
     case when json_type(${receipt}) = 'object' and json_type(${receipt}, '$.logo') = 'text'
     then json_extract(${receipt}, '$.logo') else null end else null end`;
 }
-const receiptLogo = sql<string | null>`json_extract(${tenantReceipts.receipt}, '$.logo')`;
 const departmentLogo = storedLogo(departmentReceipts.receipt);
 // The expression `section_members_folder_image_idx` indexes.
 const folderImage = sql<string | null>`${sectionMembers.folderOverrides} ->> '$.image'`;
@@ -238,10 +236,6 @@ async function listImageUsagesForFilename(
       ),
     )
     .orderBy(catalogues.name, menuVersions.menuId, menuVersions.number);
-  const receiptRows = await tx
-    .select({ id: tenantReceipts.id })
-    .from(tenantReceipts)
-    .where(eq(receiptLogo, filename));
   const departmentRows = await tx
     .select({ id: departments.id, name: departments.name, active: departments.active })
     .from(departmentReceipts)
@@ -281,7 +275,6 @@ async function listImageUsagesForFilename(
             },
           ]),
     ]),
-    ...receiptRows.map((): ImageUsage => ({ kind: "receipt" })),
     ...departmentRows.map((row): ImageUsage => ({ kind: "department_receipt", ...row })),
   ];
 }
@@ -569,12 +562,6 @@ async function countUsages(
         eq(menuScheduledPublications.state, "queued"),
       ),
     )) {
-    tally(row.image);
-  }
-  for (const row of await tx
-    .select({ image: receiptLogo })
-    .from(tenantReceipts)
-    .where(inArray(receiptLogo, wanted))) {
     tally(row.image);
   }
   for (const row of await tx

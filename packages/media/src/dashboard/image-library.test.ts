@@ -1234,16 +1234,16 @@ it.each([
 });
 
 it.each([
-  ["en-GB", "Receipt logo"],
-  ["es-ES", "Logotipo del recibo"],
+  ["en-GB", "Dining receipt logo"],
+  ["es-ES", "Logotipo del recibo de Dining"],
 ])(
-  "in %s, links the receipt using the image as its logo to the Receipts screen, and blocks the delete",
+  "in %s, links the department using the image as its logo to its receipt editor, and blocks the delete",
   async (locale, label) => {
     setLocale(locale);
     const client = api();
     client.getImage.mockResolvedValue({
       image: { ...image, usageCount: 1 },
-      uses: [{ kind: "receipt" }],
+      uses: [{ kind: "department_receipt", id: "dining", name: "Dining", active: true }],
     });
     await mount(client);
     click("[data-test=delete-one]");
@@ -1251,19 +1251,18 @@ it.each([
       expect(el.shadowRoot!.querySelector("wt-modal li")?.textContent).toBe(label),
     );
     expect(el.shadowRoot!.querySelector("wt-modal li a")!.getAttribute("href")).toBe(
-      "/manage/venue-settings/view/receipts",
+      "/manage/venue-operations/department/dining/view/receipt",
     );
     expect(el.shadowRoot!.querySelector('[data-test="confirm-delete"]')).toBeNull();
   },
 );
 
-// `countUsages` (packages/media/src/images.ts) counts the receipt's logo from this table.
-it("refreshes the library passively when tenant_receipts changes", async () => {
+it("refreshes the library passively when department_receipts changes", async () => {
   const liveData = new LiveData();
   const background = api();
   const client = Object.assign(api(), { background, liveData });
   await mount(client);
-  liveData.invalidate([{ type: "tenant_receipts" }]);
+  liveData.invalidate([{ type: "department_receipts" }]);
   await vi.waitFor(() => expect(background.listImages).toHaveBeenCalledOnce());
 });
 
@@ -1989,26 +1988,20 @@ it.each([
     setLocale(locale);
     const client = api();
     client.getImage.mockResolvedValue({
-      image: { ...image, usageCount: 3 },
+      image: { ...image, usageCount: 2 },
       uses: [
-        { kind: "receipt" },
         { kind: "department_receipt", id: "bar/a&b", name: "Bar", active: false },
         { kind: "department_receipt", id: "dining", name: "Dining", active: true },
       ] as ImageUsage[],
     });
     await mount(client);
     click("[data-test=delete-one]");
-    await vi.waitFor(() => expect(el.shadowRoot!.querySelectorAll("wt-modal li")).toHaveLength(3));
+    await vi.waitFor(() => expect(el.shadowRoot!.querySelectorAll("wt-modal li")).toHaveLength(2));
     const uses = [...el.shadowRoot!.querySelectorAll("wt-modal li")];
     const links = [...el.shadowRoot!.querySelectorAll("wt-modal li a")];
-    expect(uses.map((use) => use.textContent?.trim())).toEqual([
-      locale === "en-GB" ? "Receipt logo" : "Logotipo del recibo",
-      deleted,
-      active,
-    ]);
-    expect(uses[1]!.querySelector("a")).toBeNull();
+    expect(uses.map((use) => use.textContent?.trim())).toEqual([deleted, active]);
+    expect(uses[0]!.querySelector("a")).toBeNull();
     expect(links.map((link) => link.getAttribute("href"))).toEqual([
-      "/manage/venue-settings/view/receipts",
       "/manage/venue-operations/department/dining/view/receipt",
     ]);
     expect(el.shadowRoot!.querySelector('[data-test="confirm-delete"]')).toBeNull();

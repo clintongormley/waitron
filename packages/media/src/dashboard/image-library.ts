@@ -31,7 +31,6 @@ import { t } from "./strings.js";
 function usageHref(use: ImageUsage): string {
   if (use.kind === "department_receipt")
     return `/manage/venue-operations/department/${encodeURIComponent(use.id)}/view/receipt`;
-  if (use.kind === "receipt") return "/manage/venue-settings/view/receipts";
   if (use.kind === "section")
     return `/manage/menus/menu/${encodeURIComponent(use.ownerMenuId)}/view/structure`;
   if (use.kind === "menu_include")
@@ -43,8 +42,6 @@ function usageHref(use: ImageUsage): string {
 
 function usageName(use: ImageUsage): string {
   switch (use.kind) {
-    case "receipt":
-      return t("image.receipt_logo");
     case "department_receipt":
       return t("image.department_receipt_logo").replace("{department}", () => use.name);
     case "section":
