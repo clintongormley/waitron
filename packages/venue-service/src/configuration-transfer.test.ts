@@ -1847,14 +1847,19 @@ describe("season weeks in a configuration bundle", () => {
     expect(() => validate(tables, clock)).not.toThrow();
   });
 
-  it("checks the end offset within each season, not across two", () => {
+  it("checks the end offset across a season boundary, and accepts different weeks that meet no grace", () => {
     const tables = seasonTables();
     tables.menu_periods![1]!.end_offset_minutes = 240;
-    // Winter holds no Saturday; Autumn's Saturday Lunch follows no Late in Autumn.
+    // Winter, which runs to 31 August, holds no Saturday. Its Friday Late sends until 06:00, when
+    // Autumn's first day, on a Saturday, opens Lunch.
     tables.department_days = tables.department_days!.filter((row) => row.id !== "w-sat");
     tables.department_day_ranges = tables.department_day_ranges!.filter(
       (row) => row.day_id !== "w-sat",
     );
+    expect(() => validate(tables, clock)).toThrowError(refusal("department_day_ranges"));
+    // Autumn's Lunch from 06:15 is clear of that grace; the two seasons' weeks still differ.
+    for (const row of tables.department_day_ranges)
+      if (row.day_id === "a-sat") row.starts_at = "06:15:00";
     expect(() => validate(tables, clock)).not.toThrow();
   });
 
