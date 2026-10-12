@@ -100,7 +100,6 @@ interface EditorMessage {
   from: "read" | "action";
   /** The generic sentence standing for a field's own; it goes when that field's mark goes. */
   fix?: true;
-  /** Says a press changed nothing, so the draft's next change makes it untrue. */
   noRoom?: true;
 }
 
@@ -695,7 +694,8 @@ export class FloorPlanEditor extends LitElement {
   }
 
   #clearNoRoom(): void {
-    if (this.message?.noRoom) this.message = null;
+    if (!this.message?.noRoom) return;
+    this.message = this.typedMarks.length > 0 || this.mark !== null ? this.#fixMessage() : null;
   }
 
   #showReadFailure(error: unknown): void {

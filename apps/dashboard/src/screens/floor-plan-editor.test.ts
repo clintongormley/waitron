@@ -1046,6 +1046,9 @@ it("forgets where tables stood when another zone opens", async () => {
   expect(placed(el, "m1")).not.toEqual(odd);
 });
 
+const fullFloor = { x: 0, y: 0, width: 999, height: 999, shape: "rect" as const, rotation: 0 };
+const message = (el: FloorPlanEditor) => el.shadowRoot!.querySelector("wt-form-actions")!.error;
+
 it.each([
   ["en-GB", "No room on the plan."],
   ["es-ES", "No hay sitio en el plano."],
@@ -1053,38 +1056,34 @@ it.each([
   "pressing a never-placed table on a plan with no free spot says so and changes nothing (%s)",
   async (locale, text) => {
     setLocale(locale);
-    const floor = { x: 0, y: 0, width: 999, height: 999, shape: "rect" as const, rotation: 0 };
-    const el = await open(stubApi({ getFloorPlan: vi.fn().mockResolvedValue(withM1(floor)) }));
+    const el = await open(stubApi({ getFloorPlan: vi.fn().mockResolvedValue(withM1(fullFloor)) }));
     await toggleRow(el, "m2");
-    expect(el.shadowRoot!.querySelector("wt-form-actions")!.error).toBe(text);
+    expect(message(el)).toBe(text);
     expect(canvas(el).tables.map((t) => t.key)).toEqual(["m1"]);
     expectSaveQuiet(el);
     expect(button(el, "undo").disabled).toBe(true);
   },
 );
 
-const fullFloor = { x: 0, y: 0, width: 999, height: 999, shape: "rect" as const, rotation: 0 };
-const actionMessage = (el: FloorPlanEditor) =>
-  el.shadowRoot!.querySelector("wt-form-actions")!.error;
-
-it("the no-room message goes once a later press puts the spare table on the plan", async () => {
+it("the no-room message goes at the draft's next change", async () => {
   const el = await open(stubApi({ getFloorPlan: vi.fn().mockResolvedValue(withM1(fullFloor)) }));
   await toggleRow(el, "m2");
-  expect(actionMessage(el)).toBe("No room on the plan.");
+  expect(message(el)).toBe("No room on the plan.");
   await toggleRow(el, "m1");
+  expect(message(el)).toBe("");
   await toggleRow(el, "m2");
   expect(canvas(el).tables.map((t) => t.key)).toEqual(["m2"]);
-  expect(actionMessage(el)).toBe("");
+  expect(message(el)).toBe("");
 });
 
 it("the no-room message goes when Undo steps the draft back", async () => {
   const el = await open(stubApi({ getFloorPlan: vi.fn().mockResolvedValue(withM1(fullFloor)) }));
   await fromCanvas(el, "wt-table-rotate", { key: "m1", rotation: 90 });
   await toggleRow(el, "m2");
-  expect(actionMessage(el)).toBe("No room on the plan.");
+  expect(message(el)).toBe("No room on the plan.");
   await press(el, "undo");
   expect(placed(el, "m1")!.rotation).toBe(0);
-  expect(actionMessage(el)).toBe("");
+  expect(message(el)).toBe("");
 });
 
 it("a save's refusal stays when the draft changes after it", async () => {
@@ -1093,12 +1092,12 @@ it("a save's refusal stays when the draft changes after it", async () => {
   await fromCanvas(el, "wt-table-rotate", { key: "m1", rotation: 90 });
   await press(el, "save");
   await flush(el);
-  expect(actionMessage(el)).toBe("Something went wrong, try again");
+  expect(message(el)).toBe("Something went wrong, try again");
   await toggleRow(el, "m2");
   expect(canvas(el).tables.map((t) => t.key)).toEqual(["m1", "m2"]);
-  expect(actionMessage(el)).toBe("Something went wrong, try again");
+  expect(message(el)).toBe("Something went wrong, try again");
   await press(el, "undo");
-  expect(actionMessage(el)).toBe("Something went wrong, try again");
+  expect(message(el)).toBe("Something went wrong, try again");
 });
 
 const hintText = (el: FloorPlanEditor) =>

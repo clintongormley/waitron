@@ -994,3 +994,58 @@ it("a typed refusal's reason shows in its table's row while another table is sel
   expect(rowMark(el, "m1")).toBe("Enter 0 to 999.");
   expect(rowMark(el, "m2")).toBeNull();
 });
+
+/** The plan with m1 covering the whole floor, so no spare table has room. */
+function fullPlan(): FloorPlan {
+  const floor = { x: 0, y: 0, width: 999, height: 999, shape: "rect" as const, rotation: 0 };
+  return {
+    ...plan(),
+    tables: plan().tables.map((t) => (t.id === "m1" ? { ...t, placement: floor } : t)),
+  };
+}
+
+async function pressRow(el: FloorPlanEditor, key: string): Promise<void> {
+  panelRow(el, key)!.querySelector<HTMLElement>("button[data-action=toggle]")!.click();
+  await el.updateComplete;
+  await listPanel(el).updateComplete;
+}
+
+async function rotate(el: FloorPlanEditor, key: string, rotation: number): Promise<void> {
+  canvas(el).dispatchEvent(
+    new CustomEvent("wt-table-rotate", {
+      detail: { key, rotation },
+      bubbles: true,
+      composed: true,
+    }),
+  );
+  await el.updateComplete;
+}
+
+it("a typed refusal's sentence comes back when the draft changes after a no-room press", async () => {
+  await wide();
+  const el = await open(stubApi({ getFloorPlan: vi.fn().mockResolvedValue(fullPlan()) }));
+  await select(el, "m1");
+  await typeIntoPanel(el, "seats", "1000");
+  await pressRow(el, "m2");
+  expect(message(el)).toBe("No room on the plan.");
+  await rotate(el, "m1", 90);
+  expect(panelField(el, "seats").error).toBe("Enter 0 to 999.");
+  expect(message(el)).toBe("Correct the highlighted fields to continue.");
+});
+
+it("a save refusal's sentence comes back when the draft changes after a no-room press", async () => {
+  const el = await open(
+    stubApi({
+      getFloorPlan: vi.fn().mockResolvedValue(fullPlan()),
+      saveFloorPlan: vi.fn().mockRejectedValue(invalid("tables.0.seats")),
+    }),
+  );
+  await change(el, patchTable(draftFromPlan(fullPlan()), "m1", { seats: 5 }));
+  await press(el, "save");
+  expect(el.fieldError).toEqual(expect.objectContaining({ key: "m1", field: "seats" }));
+  await pressRow(el, "m2");
+  expect(message(el)).toBe("No room on the plan.");
+  await rotate(el, "m1", 90);
+  expect(el.fieldError).toEqual(expect.objectContaining({ key: "m1", field: "seats" }));
+  expect(message(el)).toBe("Correct the highlighted fields to continue.");
+});
