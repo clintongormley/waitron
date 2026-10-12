@@ -254,6 +254,7 @@ export class TillStationScreen extends LitElement {
   @state() private moveErrorCode?: string;
   #moveOpening = false;
   #collectGeneration = 0;
+  readonly #collecting = new Set<string>();
   #tableChangedNext: string | null = null;
   #lastGoodAt = new Date();
   #initialConsumed = false;
@@ -338,6 +339,7 @@ export class TillStationScreen extends LitElement {
   override disconnectedCallback(): void {
     super.disconnectedCallback();
     this.#collectGeneration++;
+    this.#collecting.clear();
     clearInterval(this.#refreshTimer);
     for (const read of this.#refreshReads) read.abort();
     this.#refreshReads.clear();
@@ -626,6 +628,8 @@ export class TillStationScreen extends LitElement {
     // a stray composed event.
     if (this.deviceMode) return;
     const { orderId } = (event as CustomEvent<{ orderId: string }>).detail;
+    if (this.#collecting.has(orderId)) return;
+    this.#collecting.add(orderId);
     const generation = this.#collectGeneration;
     const submissionId = crypto.randomUUID();
     const limit = limited(TABLE_REQUEST_LIMIT_MS);
@@ -647,6 +651,7 @@ export class TillStationScreen extends LitElement {
       });
     } finally {
       limit.done();
+      if (generation === this.#collectGeneration) this.#collecting.delete(orderId);
     }
   }
 

@@ -356,6 +356,53 @@ describe("till-station-screen", () => {
     }
   });
 
+  it("station Collect holds reload and ignores a second press until its send settles", async () => {
+    let finish!: () => void;
+    const markCollected = vi.fn<(id: string, submissionId?: string) => Promise<void>>(
+      () =>
+        new Promise<void>((resolve) => {
+          finish = resolve;
+        }),
+    );
+    const api = stubApi({ markCollected });
+    const { el, host } = await mountWidget<TillStationScreen>("till-station-screen", { api });
+    await flush(el);
+    const held: Promise<unknown>[] = [];
+    host.addEventListener("hold-reload", (event) => {
+      held.push((event as CustomEvent<{ until: Promise<unknown> }>).detail.until);
+    });
+    const press = () =>
+      queueWidget(el)!.dispatchEvent(
+        new CustomEvent("mark-collected", {
+          detail: { orderId: "wo-1" },
+          bubbles: true,
+          composed: true,
+        }),
+      );
+    press();
+    await flush(el);
+    expect(held).toHaveLength(1);
+    let released = false;
+    void held[0]!.then(() => {
+      released = true;
+    });
+    expect(released).toBe(false);
+    press();
+    await flush(el);
+    expect(markCollected).toHaveBeenCalledTimes(1);
+    expect(held).toHaveLength(1);
+    finish();
+    await flush(el);
+    expect(released).toBe(true);
+    press();
+    await flush(el);
+    expect(markCollected).toHaveBeenCalledTimes(2);
+    expect(markCollected.mock.calls[1]![1]).not.toBe(markCollected.mock.calls[0]![1]);
+    expect(held).toHaveLength(2);
+    finish();
+    await flush(el);
+  });
+
   it("station Collect does not resend across disconnect and reconnect", async () => {
     const markCollected = vi.fn().mockRejectedValue(new TypeError("Failed to fetch"));
     const api = stubApi({ markCollected });
