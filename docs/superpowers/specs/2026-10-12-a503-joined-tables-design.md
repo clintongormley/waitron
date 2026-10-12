@@ -104,6 +104,8 @@ refuses or one in an unknown state waits; a free one is put back at once (`planR
   lists (`apps/dashboard/src/api/live-queries.ts`, `packages/venue-service/src/dashboard/live-queries.ts`)
   and the schema guards (`scripts/schema-constraints.test.ts`). The plan lists the foreign keys into
   every dropped table before writing the migration (CLAUDE.md §3).
+  > Added 2026-10-12 by A503 part 2: `packages/venue-service/src/dashboard/live-queries.ts` was left
+  > unchanged; the plan found nothing it reads that the parts change.
 - Other places the dropped tables are named, all to change: `packages/db/src/index.ts:87-93`,
   `apps/server/src/floor-plan.ts` (read and save, :126-136, :323-387),
   `apps/server/src/floor-delete.ts:76-85`, `apps/server/src/floor-today-merges.ts`, their tests and
