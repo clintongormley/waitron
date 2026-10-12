@@ -419,6 +419,33 @@ describe("floor plan draft", () => {
     expect(placeTable(d, "m2")).toBe(d);
   });
 
+  it("puts a table back exactly at a remembered place, even over another table", () => {
+    const at = { x: 2, y: 3, width: 5, height: 7, shape: "round" as const, rotation: 30 };
+    expect(table(placeTable(open(), "m2", at), "m2").placement).toEqual(at);
+  });
+
+  it("control: leaves a table unplaced when ten rows of ten 99 × 99 tables fill the grid", () => {
+    const tables = Array.from({ length: 100 }, (_, i) => ({
+      key: `f${i}`,
+      id: null,
+      liveTableId: null,
+      label: `F${i}`,
+      seats: null,
+      fixed: false,
+      placement: {
+        x: (i % 10) * 100,
+        y: Math.floor(i / 10) * 100,
+        width: 99,
+        height: 99,
+        shape: "rect" as const,
+        rotation: 0,
+      },
+    }));
+    const d = { ...open(), tables: [...open().tables, ...tables] };
+    const full = patchTable(d, "m1", { placement: null });
+    expect(placeTable(full, "m2")).toBe(full);
+  });
+
   it("returns the same draft when placing a table that already has a place", () => {
     const d = open();
     expect(placeTable(d, "m1")).toBe(d);

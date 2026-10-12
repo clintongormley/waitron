@@ -312,6 +312,45 @@ it("acceptance sends a selected table in its chosen zone", async () => {
   );
 });
 
+it("offers the zone's tables in number order after no table", async () => {
+  const table = (id: string, label: string): TableState => ({
+    id,
+    label,
+    zoneId: "terrace",
+    state: "free",
+    hasOpenTab: false,
+    condition: "free",
+    pendingDeliveries: 0,
+    pendingToServe: 0,
+    readyToServe: 0,
+    enRoute: 0,
+    timingBand: "fresh",
+    status: null,
+    nextReservation: null,
+    today: null,
+    party: null,
+    signals: [],
+  });
+  const { el } = await mount(undefined, [
+    table("t1", "T1"),
+    table("t10", "T10"),
+    table("t2", "T2"),
+  ]);
+  click(el, "[data-accept]");
+  await vi.waitFor(() =>
+    expect(
+      el.shadowRoot!.querySelector<HTMLElement & { disabled: boolean }>("[data-save-transfer]")
+        ?.disabled,
+    ).toBe(false),
+  );
+  await change(el, "zoneId", "terrace");
+  expect(
+    el
+      .shadowRoot!.querySelector<HTMLElement & { options: { value: string }[] }>("[name=tableId]")!
+      .options.map((option) => option.value),
+  ).toEqual(["", "t1", "t2", "t10"]);
+});
+
 it("refuses a retained selected table removed from the current table list", async () => {
   const table: TableState = {
     id: "table-one",

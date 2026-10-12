@@ -1,17 +1,21 @@
 import { LitElement, css, html, nothing } from "lit";
 import { customElement, property } from "lit/decorators.js";
 import { baseStyles } from "@waitron/ui";
+import { createLabelComparator } from "@waitron/shared";
 import "@waitron/ui/src/components/wt-button.js";
-import { currentLocale, t } from "../i18n/t.js";
+import "@waitron/ui/src/components/wt-icon.js";
+import { fill, t } from "../i18n/t.js";
 import { LocaleChangeController } from "../state/locale-controller.js";
+import type { PlanPlacement } from "../api/client.js";
 import {
+  patchTable,
   placeTable,
   sendChange,
   tableName,
   type DraftTable,
   type FloorPlanDraft,
 } from "./floor-plan-draft.js";
-import type { FloorPlanSelect } from "./floor-plan-editor.js";
+import type { FloorPlanDeleteAsk, FloorPlanNoRoom, FloorPlanSelect } from "./floor-plan-editor.js";
 
 @customElement("floor-plan-tables-panel")
 export class FloorPlanTablesPanel extends LitElement {
@@ -19,37 +23,134 @@ export class FloorPlanTablesPanel extends LitElement {
     baseStyles,
     css`
       :host {
-        display: block;
+        display: flex;
+        flex-direction: column;
+        gap: var(--wt-space-2);
+        --columns: var(--wt-space-3) minmax(0, 1fr) var(--wt-space-6);
+      }
+      .title {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: baseline;
+        gap: var(--wt-space-2) var(--wt-space-4);
       }
       h2 {
-        margin: 0 0 var(--wt-space-2);
+        margin: 0;
         font-size: var(--wt-font-size-md);
         color: var(--wt-color-text);
+      }
+      .legend {
+        display: flex;
+        gap: var(--wt-space-3);
+        font-size: var(--wt-font-size-sm);
+        color: var(--wt-color-text-muted);
+      }
+      .legend span {
+        display: inline-flex;
+        align-items: center;
+        gap: var(--wt-space-1);
+      }
+      .marker {
+        box-sizing: border-box;
+        width: var(--wt-space-3);
+        height: var(--wt-space-3);
+        border-radius: var(--wt-radius-full);
+      }
+      .marker.placed {
+        background: var(--wt-color-primary);
+      }
+      .marker.spare {
+        background: transparent;
+        border: 2px solid var(--wt-color-text-muted);
+      }
+      .columns,
+      .toggle {
+        display: grid;
+        grid-template-columns: var(--columns);
+        align-items: center;
+        column-gap: var(--wt-space-3);
+      }
+      .columns {
+        padding-inline: var(--wt-space-2);
+      }
+      .heads {
+        font-size: var(--wt-font-size-sm);
+        color: var(--wt-color-text-muted);
+      }
+      .columns span:first-child {
+        grid-column: 2;
+      }
+      .heads wt-button {
+        visibility: hidden;
+        block-size: 0;
+        overflow: hidden;
       }
       ul {
         margin: 0;
         padding: 0;
         list-style: none;
       }
-      wt-button {
-        display: block;
+      .heads,
+      li {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        align-items: center;
+        column-gap: var(--wt-space-2);
+        border-radius: var(--wt-radius-md);
       }
-      .refused {
+      li[aria-current="true"] {
+        background: var(--wt-color-surface-lifted);
+      }
+      li[aria-current="true"] .name {
+        font-weight: var(--wt-font-weight-bold);
+      }
+      .toggle {
+        min-height: var(--wt-tap-min);
+        padding: var(--wt-space-1) var(--wt-space-2);
+        border: 0;
+        border-radius: var(--wt-radius-md);
+        background: transparent;
+        color: var(--wt-color-text);
+        font: inherit;
+        text-align: start;
+        cursor: pointer;
+      }
+      .toggle:focus-visible {
+        outline: var(--wt-focus-ring);
+        outline-offset: calc(-1 * var(--wt-focus-offset));
+      }
+      .name {
+        overflow-wrap: anywhere;
+      }
+      .mark {
+        grid-column: 1;
+        margin: 0;
+        padding: 0 var(--wt-space-2) var(--wt-space-2)
+          calc(var(--wt-space-2) + 2 * var(--wt-space-3));
         color: var(--wt-color-danger);
+        font-size: var(--wt-font-size-sm);
+      }
+      .visually-hidden {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        overflow: hidden;
+        clip-path: inset(50%);
+        white-space: nowrap;
       }
       .add {
-        margin-bottom: var(--wt-space-2);
-      }
-      wt-button[data-placed]::part(button) {
-        color: var(--wt-color-text-muted);
-        font-weight: var(--wt-font-weight-normal);
+        display: block;
+        margin-top: auto;
       }
     `,
   ];
 
   @property({ attribute: false }) draft!: FloorPlanDraft;
-  /** A table a save could not delete, with why. */
-  @property({ attribute: false }) refused: { key: string; reason: string } | null = null;
+  @property({ attribute: false }) selected: string | null = null;
+  /** A message to show under a table's name, by table key. */
+  @property({ attribute: false }) marks: ReadonlyMap<string, string> = new Map();
+  /** Where a spare table stood before it was taken off, by table key. */
+  @property({ attribute: false }) places: ReadonlyMap<string, PlanPlacement> = new Map();
   /** Inside a `wt-sheet` the toggle names the list, so the panel drops its own heading. */
   @property({ type: Boolean }) inSheet = false;
 
@@ -58,32 +159,85 @@ export class FloorPlanTablesPanel extends LitElement {
     new LocaleChangeController(this);
   }
 
-  #collatorLocale: string | null = null;
-  #collator!: Intl.Collator;
-
-  #sorter(): Intl.Collator {
-    const locale = currentLocale();
-    if (locale !== this.#collatorLocale) {
-      this.#collatorLocale = locale;
-      this.#collator = new Intl.Collator(locale, { numeric: true });
-    }
-    return this.#collator;
-  }
-
   #send<T>(type: string, detail: T): void {
     this.dispatchEvent(new CustomEvent<T>(type, { detail, bubbles: true, composed: true }));
   }
 
   #press(table: DraftTable): void {
-    if (table.placement === null) sendChange(this, placeTable(this.draft, table.key));
-    this.#send<FloorPlanSelect>("floor-plan-select", { key: table.key });
+    if (table.placement === null) {
+      const next = placeTable(this.draft, table.key, this.places.get(table.key));
+      if (next === this.draft) {
+        this.#send<FloorPlanNoRoom>("floor-plan-no-room", { key: table.key });
+        return;
+      }
+      sendChange(this, next);
+      this.#send<FloorPlanSelect>("floor-plan-select", { key: table.key });
+      return;
+    }
+    sendChange(this, patchTable(this.draft, table.key, { placement: null }));
+    if (this.selected === table.key)
+      this.#send<FloorPlanSelect>("floor-plan-select", { key: null });
+  }
+
+  #row(table: DraftTable, index: number) {
+    const name = tableName(table);
+    const placed = table.placement !== null;
+    const mark = this.marks.get(table.key);
+    const markId = `mark-${index}`;
+    return html`<li
+      data-table=${table.key}
+      aria-current=${this.selected === table.key ? "true" : nothing}
+    >
+      <button
+        type="button"
+        class="toggle"
+        data-action="toggle"
+        aria-pressed=${placed ? "true" : "false"}
+        aria-describedby=${mark === undefined ? nothing : markId}
+        @click=${() => this.#press(table)}
+      >
+        <span
+          class="marker ${placed ? "placed" : "spare"}"
+          data-marker=${placed ? "placed" : "spare"}
+        ></span>
+        <span class="name" data-name>${name}</span>
+        <span
+          ><span class="visually-hidden">${t("floor_plan_editor.seats")} </span
+          ><span data-seats>${table.seats ?? "—"}</span></span
+        >
+      </button>
+      <wt-button
+        variant="ghost"
+        data-action="delete"
+        aria-label=${fill("floor_plan_editor.delete_named", { name })}
+        @click=${() => this.#send<FloorPlanDeleteAsk>("floor-plan-delete-ask", { key: table.key })}
+        ><wt-icon name="bin"></wt-icon
+      ></wt-button>
+      ${mark === undefined ? nothing : html`<p class="mark" id=${markId} data-mark>${mark}</p>`}
+    </li>`;
   }
 
   override render() {
-    const collator = this.#sorter();
-    const tables = [...this.draft.tables].sort((a, b) => collator.compare(a.label, b.label));
+    const compare = createLabelComparator();
+    const tables = [...this.draft.tables].sort((a, b) => compare(tableName(a), tableName(b)));
     return html`
-      ${this.inSheet ? nothing : html`<h2>${t("floor_plan_editor.tables")}</h2>`}
+      <div class="title">
+        ${this.inSheet ? nothing : html`<h2>${t("floor_plan_editor.tables")}</h2>`}
+        <span class="legend" data-legend aria-hidden="true">
+          <span><span class="marker placed"></span>${t("floor_plan_editor.on_plan")}</span>
+          <span><span class="marker spare"></span>${t("floor_plan_editor.not_placed")}</span>
+        </span>
+      </div>
+      <div class="heads" aria-hidden="true">
+        <span class="columns"
+          ><span data-head>${t("floor_plan_editor.name")}</span
+          ><span data-head>${t("floor_plan_editor.seats")}</span></span
+        >
+        <wt-button variant="ghost"><wt-icon name="bin"></wt-icon></wt-button>
+      </div>
+      <ul>
+        ${tables.map((table, index) => this.#row(table, index))}
+      </ul>
       <wt-button
         class="add"
         variant="secondary"
@@ -91,25 +245,6 @@ export class FloorPlanTablesPanel extends LitElement {
         @click=${() => this.#send("floor-plan-add-tables", {})}
         >${t("floor_plan_editor.add_tables")}</wt-button
       >
-      <ul>
-        ${tables.map(
-          (table) =>
-            html`<li>
-              <wt-button
-                variant="ghost"
-                align="start"
-                data-table=${table.key}
-                ?data-placed=${table.placement !== null}
-                @click=${() => this.#press(table)}
-                >${tableName(table)}${
-                  this.refused?.key === table.key
-                    ? html`<span class="refused"> — ${this.refused.reason}</span>`
-                    : nothing
-                }</wt-button
-              >
-            </li>`,
-        )}
-      </ul>
     `;
   }
 }

@@ -3658,7 +3658,7 @@ describe("till-table-order-screen", () => {
         expect(el.shadowRoot!.querySelector("[data-target-picker] h2")!.textContent!.trim()).toBe(
           t("table.move_bill_heading").replace("{bill}", scope),
         );
-        expect(targetIds(el)).toEqual(["counter", "t7", "t6", "t9"]);
+        expect(targetIds(el)).toEqual(["counter", "t6", "t7", "t9"]);
         expect(target(el, "counter")!.textContent).toContain(t("table.to_counter"));
         expect(target(el, "t9")!.textContent).toContain(t("floor.free"));
         expect(target(el, "t7")!.textContent).toContain(
@@ -3806,7 +3806,7 @@ describe("till-table-order-screen", () => {
       expect(el.shadowRoot!.querySelector("[data-target-picker] h2")!.textContent!.trim()).toBe(
         t("table.move_guests_heading").replace("{party}", "Ana (Mesa 4)"),
       );
-      expect(targetIds(el)).toEqual(["t7", "t6", "t9"]);
+      expect(targetIds(el)).toEqual(["t6", "t7", "t9"]);
       expect(target(el, "t9")!.textContent).toContain("Mesa 9");
       expect(target(el, "t9")!.textContent).toContain(t("floor.free"));
       expect(target(el, "t7")!.textContent).toContain(
@@ -3953,19 +3953,47 @@ describe("till-table-order-screen", () => {
       await toMenu(el);
       click(el, '[data-action="join"]');
       await el.updateComplete;
-      expect(targetIds(el)).toEqual(["t7", "t6", "t9"]);
+      expect(targetIds(el)).toEqual(["t6", "t7", "t9"]);
 
       click(el, "[data-action-back]");
       await el.updateComplete;
       click(el, '[data-action="move"]');
       await el.updateComplete;
-      expect(targetIds(el)).toEqual(["t4", "t5", "t7", "t6", "t9"]);
+      expect(targetIds(el)).toEqual(["t4", "t5", "t6", "t7", "t9"]);
       expect(target(el, "t5")!.textContent).toContain(t("table.this_party"));
       const moved = heard(el, "move-guests");
       click(el, '[data-target="t5"]');
       await el.updateComplete;
       expect(billChoice(el)).toBeNull();
       expect(moved).toEqual([{ toTableId: "t5", bills: "merge" }]);
+    });
+
+    it("offers target tables in number order, a moving party's own tables first", async () => {
+      const ana: TableParty = { ...anaParty, tableIds: ["t10", "t2"] };
+      const held = (id: string, label: string) =>
+        tableState({ id, label, state: "open-tab", condition: "held", party: ana });
+      const { el } = await mount({
+        lines: [pendingLine],
+        orderId: "wo-4",
+        party: ana,
+        tables: [
+          tableState({ id: "t1", label: "T1" }),
+          held("t10", "T10"),
+          held("t2", "T2"),
+          tableState({ id: "t20", label: "T20" }),
+          tableState({ id: "t3", label: "T3" }),
+        ],
+      });
+      await toMenu(el);
+      click(el, '[data-action="move"]');
+      await el.updateComplete;
+      expect(targetIds(el)).toEqual(["t2", "t10", "t1", "t3", "t20"]);
+
+      click(el, "[data-action-back]");
+      await el.updateComplete;
+      click(el, '[data-action="join"]');
+      await el.updateComplete;
+      expect(targetIds(el)).toEqual(["t1", "t3", "t20"]);
     });
 
     it("Split a table picks one of the party's tables, then one of its open or presented bills other than the main one, or none", async () => {

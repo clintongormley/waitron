@@ -239,6 +239,25 @@ describe("bookings-screen", () => {
     expect(api.listBookings).toHaveBeenCalledTimes(2);
   });
 
+  it("offers the seat tables in number order and starts on the first of them", async () => {
+    const tables: DashboardTable[] = ["t-10", "t-2", "t-1"].map((id) => ({
+      id,
+      label: `Mesa ${id.slice(2)}`,
+      zoneId: "z1",
+      planTableId: null,
+      createdAt: "2026-01-01",
+    }));
+    const api = stubApi({ listTables: vi.fn().mockResolvedValue(tables) });
+    const { el } = await mountWidget<BookingsScreen>("dashboard-bookings-screen", { api });
+    await flush(el);
+    await click(el, "seat-bk-late");
+    const table = el.shadowRoot!.querySelector<
+      HTMLElement & { value: string; options: { value: string; label: string }[] }
+    >("wt-combobox[data-test=seat-table-bk-late]")!;
+    expect(table.options.map((o) => o.label)).toEqual(["Mesa 1", "Mesa 2", "Mesa 10"]);
+    expect(table.value).toBe("t-1");
+  });
+
   it.each([
     ["en", "Table", "Search", "No results"],
     ["es", "Mesa", "Buscar", "Sin resultados"],

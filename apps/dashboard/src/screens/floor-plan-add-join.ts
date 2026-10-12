@@ -10,6 +10,7 @@ import {
   type LeaveReason,
   type WtModal,
 } from "@waitron/ui";
+import { createLabelComparator } from "@waitron/shared";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-combobox.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
@@ -154,9 +155,11 @@ export class FloorPlanAddJoin extends LitElement {
   }
 
   #options(form: JoinForm): { value: string; label: string }[] {
+    const compare = createLabelComparator();
     return this.draft.tables
       .filter((table) => table.key !== form.tableKey)
-      .map((table) => ({ value: table.key, label: tableName(table) }));
+      .map((table) => ({ value: table.key, label: tableName(table) }))
+      .sort((a, b) => compare(a.label, b.label));
   }
 
   #heading(form: JoinForm): string {

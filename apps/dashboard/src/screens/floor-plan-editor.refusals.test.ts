@@ -241,7 +241,7 @@ const drawn = (el: FloorPlanEditor, key: string) => canvas(el).tables.find((t) =
 const panelRow = (el: FloorPlanEditor, key: string) =>
   el
     .shadowRoot!.querySelector("floor-plan-tables-panel")!
-    .shadowRoot!.querySelector<HTMLElement>(`wt-button[data-table="${key}"]`);
+    .shadowRoot!.querySelector<HTMLElement>(`[data-table="${key}"]`);
 
 it("a booked table the draft deleted comes back as opened, marked with its booking, and selected", async () => {
   const el = await openPlaced(
@@ -448,7 +448,7 @@ it("a booked table comes back as last saved when the re-read after that save fai
   expect(button(el, "save").disabled).toBe(true);
 });
 
-it("the tables list is handed the same refused value until the mark changes", async () => {
+it("the tables list is handed the same marks until the mark changes", async () => {
   const el = await openPlaced(
     vi.fn().mockRejectedValue(booked({ tableId: "l2", date: "2026-10-12", time: "21:00" })),
   );
@@ -456,17 +456,17 @@ it("the tables list is handed the same refused value until the mark changes", as
     el.shadowRoot!.querySelector<FloorPlanTablesPanel>("floor-plan-tables-panel")!;
   await change(el, moveTable(deleteTable(draftFromPlan(placedM2()), "m2"), "m1", 5, 4));
   await press(el, "save");
-  const first = panel().refused;
-  expect(first).toEqual({ key: "m2", reason: "Booked 12 Oct, 21:00" });
+  const first = panel().marks;
+  expect(first).toEqual(new Map([["m2", "Booked 12 Oct, 21:00"]]));
   canvas(el).dispatchEvent(
     new CustomEvent("wt-table-select", { detail: { key: "m1" }, bubbles: true, composed: true }),
   );
   await el.updateComplete;
   expect(canvas(el).selected).toBe("m1");
-  expect(panel().refused).toBe(first);
+  expect(panel().marks).toBe(first);
   setLocale("es-ES");
   await el.updateComplete;
-  expect(panel().refused).toEqual({ key: "m2", reason: "Reservada el 12 oct, 21:00" });
+  expect(panel().marks).toEqual(new Map([["m2", "Reservada el 12 oct, 21:00"]]));
 });
 
 it("Reload clears a booked table's mark", async () => {
@@ -521,8 +521,11 @@ it("a deleted unplaced table that is refused comes back in the tables list with 
   await change(el, deleteTable(opened(), "m2"));
   expect(panelRow(el, "m2")).toBeNull();
   await press(el, "save");
-  expect(panelRow(el, "m2")!.textContent!.trim()).toBe("T2 — Booked 12 Oct, 21:00");
-  expect(panelRow(el, "m1")!.textContent!.trim()).toBe("T1");
+  expect(panelRow(el, "m2")!.querySelector("[data-name]")!.textContent!.trim()).toBe("T2");
+  expect(panelRow(el, "m2")!.querySelector("[data-mark]")!.textContent!.trim()).toBe(
+    "Booked 12 Oct, 21:00",
+  );
+  expect(panelRow(el, "m1")!.querySelector("[data-mark]")).toBeNull();
   expect(drawn(el, "m2")).toBeUndefined();
   expect(message(el)).toBe("");
 });
@@ -953,11 +956,96 @@ it("a table saved new while other edits were made comes back when its delete is 
   expect(button(el, "save").disabled).toBe(false);
   await select(el, "m5");
   await tablePanel(el).updateComplete;
-  tablePanel(el).shadowRoot!.querySelector<HTMLElement>("wt-button[data-test=delete]")!.click();
+  panelRow(el, "m5")!.querySelector<HTMLElement>("wt-button[data-action=delete]")!.click();
   await el.updateComplete;
+  await press(el, "delete-confirm");
   expect(drawn(el, "m5")).toBeUndefined();
   await press(el, "save");
   expect(drawn(el, "m5")?.refused).toBe("Booked 12 Oct, 21:00");
   expect(canvas(el).selected).toBe("m5");
   expect(message(el)).toBe("");
+});
+
+const listPanel = (el: FloorPlanEditor) =>
+  el.shadowRoot!.querySelector<FloorPlanTablesPanel>("floor-plan-tables-panel")!;
+const rowMark = (el: FloorPlanEditor, key: string) =>
+  panelRow(el, key)!.querySelector("[data-mark]")?.textContent!.trim() ?? null;
+
+it("a name check's mark shows in its table's row while another table is selected", async () => {
+  const el = await open(stubApi());
+  await change(el, renamed(opened(), "m2", ""));
+  await press(el, "save");
+  const marks = listPanel(el).marks;
+  await select(el, "m1");
+  await listPanel(el).updateComplete;
+  expect(canvas(el).selected).toBe("m1");
+  expect(rowMark(el, "m2")).toBe("Enter a name.");
+  expect(rowMark(el, "m1")).toBeNull();
+  expect(listPanel(el).marks).toBe(marks);
+});
+
+it("a typed refusal's reason shows in its table's row while another table is selected", async () => {
+  await wide();
+  const el = await open(stubApi());
+  await select(el, "m1");
+  await typeIntoPanel(el, "seats", "1000");
+  await select(el, "m2");
+  await listPanel(el).updateComplete;
+  expect(rowMark(el, "m1")).toBe("Enter 0 to 999.");
+  expect(rowMark(el, "m2")).toBeNull();
+});
+
+/** The plan with m1 covering the whole floor, so no spare table has room. */
+function fullPlan(): FloorPlan {
+  const floor = { x: 0, y: 0, width: 999, height: 999, shape: "rect" as const, rotation: 0 };
+  return {
+    ...plan(),
+    tables: plan().tables.map((t) => (t.id === "m1" ? { ...t, placement: floor } : t)),
+  };
+}
+
+async function pressRow(el: FloorPlanEditor, key: string): Promise<void> {
+  panelRow(el, key)!.querySelector<HTMLElement>("button[data-action=toggle]")!.click();
+  await el.updateComplete;
+  await listPanel(el).updateComplete;
+}
+
+async function rotate(el: FloorPlanEditor, key: string, rotation: number): Promise<void> {
+  canvas(el).dispatchEvent(
+    new CustomEvent("wt-table-rotate", {
+      detail: { key, rotation },
+      bubbles: true,
+      composed: true,
+    }),
+  );
+  await el.updateComplete;
+}
+
+it("a typed refusal's sentence comes back when the draft changes after a no-room press", async () => {
+  await wide();
+  const el = await open(stubApi({ getFloorPlan: vi.fn().mockResolvedValue(fullPlan()) }));
+  await select(el, "m1");
+  await typeIntoPanel(el, "seats", "1000");
+  await pressRow(el, "m2");
+  expect(message(el)).toBe("No room on the plan.");
+  await rotate(el, "m1", 90);
+  expect(panelField(el, "seats").error).toBe("Enter 0 to 999.");
+  expect(message(el)).toBe("Correct the highlighted fields to continue.");
+});
+
+it("a save refusal's sentence comes back when the draft changes after a no-room press", async () => {
+  const el = await open(
+    stubApi({
+      getFloorPlan: vi.fn().mockResolvedValue(fullPlan()),
+      saveFloorPlan: vi.fn().mockRejectedValue(invalid("tables.0.seats")),
+    }),
+  );
+  await change(el, patchTable(draftFromPlan(fullPlan()), "m1", { seats: 5 }));
+  await press(el, "save");
+  expect(el.fieldError).toEqual(expect.objectContaining({ key: "m1", field: "seats" }));
+  await pressRow(el, "m2");
+  expect(message(el)).toBe("No room on the plan.");
+  await rotate(el, "m1", 90);
+  expect(el.fieldError).toEqual(expect.objectContaining({ key: "m1", field: "seats" }));
+  expect(message(el)).toBe("Correct the highlighted fields to continue.");
 });

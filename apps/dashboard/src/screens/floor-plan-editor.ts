@@ -29,12 +29,19 @@ import "./floor-plan-tables-panel.js";
 import { bookedReason } from "./floor-plan-booked.js";
 import { DashboardQueries } from "../api/query-controller.js";
 import { dashboardPath } from "../navigation.js";
-import { currentLocale, t } from "../i18n/t.js";
+import { currentLocale, fill, t } from "../i18n/t.js";
 import { LocaleChangeController } from "../state/locale-controller.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
-import type { DashboardApi, DashboardTable, FloorPlan, FloorPlanSave } from "../api/client.js";
+import type {
+  DashboardApi,
+  DashboardTable,
+  FloorPlan,
+  FloorPlanSave,
+  PlanPlacement,
+} from "../api/client.js";
 import {
   checkDraft,
+  deleteTable,
   draftFromPlan,
   moveTable,
   rekeyDraft,
@@ -43,6 +50,7 @@ import {
   rotateTable,
   sameDraft,
   saveFromDraft,
+  tableName,
   withLiveTables,
   type DraftTable,
   type FloorPlanChange,
@@ -55,6 +63,15 @@ export interface FloorPlanSelect {
 
 export interface FloorPlanAddJoinAsk {
   tableKey: string;
+}
+
+export interface FloorPlanDeleteAsk {
+  key: string;
+}
+
+/** A spare table that `placeTable` found no free spot for. */
+export interface FloorPlanNoRoom {
+  key: string;
 }
 
 /** A panel field whose typed text the draft cannot hold. */
@@ -83,6 +100,7 @@ interface EditorMessage {
   from: "read" | "action";
   /** The generic sentence standing for a field's own; it goes when that field's mark goes. */
   fix?: true;
+  noRoom?: true;
 }
 
 /** A table field a side panel shows, so a refusal naming it can sit beside it. */
@@ -220,6 +238,11 @@ export class FloorPlanEditor extends LitElement {
       header.narrow a.close {
         padding-inline: var(--wt-space-2);
       }
+      .hint {
+        margin: 0 0 var(--wt-space-3);
+        color: var(--wt-color-text-muted);
+        font-size: var(--wt-font-size-sm);
+      }
       .note {
         margin: var(--wt-space-1) 0 0;
         color: var(--wt-color-text-muted);
@@ -258,9 +281,15 @@ export class FloorPlanEditor extends LitElement {
         gap: var(--wt-space-4);
       }
       .side {
+        display: flex;
+        flex-direction: column;
         min-height: 0;
         overflow-y: auto;
         overscroll-behavior: contain;
+      }
+      /* Grows so that its Add tables, last, sits at the column's foot (mockup 1). */
+      .side floor-plan-tables-panel {
+        flex: 1 0 auto;
       }
       .layout.narrow {
         display: block;
@@ -325,11 +354,13 @@ export class FloorPlanEditor extends LitElement {
   @state() private narrow = false;
   @state() private sheetOpen = false;
   @state() private refused: RefusedTable | null = null;
+  /** The table whose bin was pressed, while the delete question is open. */
+  @state() private deleteAsk: string | null = null;
   /** How far the phone sheet reaches up over the canvas, in px. */
   @state() private sheetOverlap = 0;
 
   /** The field a save's refusal points at, else the first field whose typed text the editor's own
-   *  check refused. The panels are given every mark through `#panelErrors`. */
+   *  check refused. */
   get fieldError(): FloorPlanFieldError | null {
     const mark = this.mark ?? this.typedMarks[0] ?? null;
     return mark === null ? null : { key: mark.key, field: mark.field, message: mark.text() };
@@ -352,6 +383,8 @@ export class FloorPlanEditor extends LitElement {
   #opened: FloorPlanDraft | null = null;
   /** The last refresh kept from replacing a changed draft; Undo and Redo take its live tables. */
   #liveFrom: FloorPlanDraft | null = null;
+  /** Where each table stood before a change took it off the plan, so the list can put it back. */
+  #places = new Map<string, PlanPlacement>();
   #scope?: DraftScope<StagedPlan>;
   readonly #scopeId = {};
 
@@ -406,6 +439,12 @@ export class FloorPlanEditor extends LitElement {
     });
     this.addEventListener("floor-plan-select", (event) => {
       this.selected = (event as CustomEvent<FloorPlanSelect>).detail.key;
+    });
+    this.addEventListener("floor-plan-delete-ask", (event) => {
+      this.deleteAsk = (event as CustomEvent<FloorPlanDeleteAsk>).detail.key;
+    });
+    this.addEventListener("floor-plan-no-room", () => {
+      this.message = { ...actionMessage(() => t("floor_plan_editor.no_room")), noRoom: true };
     });
   }
 
@@ -522,6 +561,8 @@ export class FloorPlanEditor extends LitElement {
     this.#history = null;
     this.#liveFrom = null;
     this.selected = null;
+    this.deleteAsk = null;
+    this.#places = new Map();
     this.#clearFeedback();
     this.loadError = "zone.not_found";
   }
@@ -541,6 +582,8 @@ export class FloorPlanEditor extends LitElement {
     this.#history = null;
     this.#liveFrom = null;
     this.selected = null;
+    this.deleteAsk = null;
+    this.#places = new Map();
     this.loadError = null;
     this.#clearFeedback();
     if (zoneId !== null) void this.#load(zoneId, request);
@@ -571,8 +614,10 @@ export class FloorPlanEditor extends LitElement {
   #change(next: FloorPlanDraft, mergeKey?: string): void {
     if (this.#history === null || next === this.draft) return;
     this.#history.push(next, mergeKey);
+    this.#remember(this.draft, next);
     this.draft = next;
     this.#clearReadMessage();
+    this.#clearNoRoom();
     this.#followMark(next);
     this.#followRefused(next);
     this.#scope?.changed();
@@ -582,9 +627,11 @@ export class FloorPlanEditor extends LitElement {
   #step(step: FloorPlanDraft | undefined): void {
     if (step === undefined) return;
     const next = this.#liveFrom === null ? step : withLiveTables(step, this.#liveFrom);
+    this.#remember(this.draft, next);
     this.draft = next;
     this.#setTyped([]);
     this.#clearReadMessage();
+    this.#clearNoRoom();
     this.#followMark(next);
     this.#followRefused(next);
     if (this.selected !== null && !next.tables.some((table) => table.key === this.selected)) {
@@ -592,6 +639,15 @@ export class FloorPlanEditor extends LitElement {
     }
     this.#scope?.changed();
     this.requestUpdate();
+  }
+
+  #remember(from: FloorPlanDraft | null, to: FloorPlanDraft): void {
+    if (from === null) return;
+    const before = new Map(from.tables.map((t) => [t.key, t.placement]));
+    for (const table of to.tables) {
+      const was = before.get(table.key);
+      if (table.placement === null && was != null) this.#places.set(table.key, was);
+    }
   }
 
   /** Typed text stays marked until its field holds a value again, or the draft's value changes. */
@@ -635,6 +691,11 @@ export class FloorPlanEditor extends LitElement {
 
   #clearReadMessage(): void {
     if (this.message?.from === "read") this.message = null;
+  }
+
+  #clearNoRoom(): void {
+    if (!this.message?.noRoom) return;
+    this.message = this.typedMarks.length > 0 || this.mark !== null ? this.#fixMessage() : null;
   }
 
   #showReadFailure(error: unknown): void {
@@ -792,6 +853,7 @@ export class FloorPlanEditor extends LitElement {
     this.renderRoot.querySelector("floor-plan-add-join")?.rekey(ids);
     const rekey = rekeyWith(ids);
     this.#rekeyMarks(rekey);
+    this.#places = new Map([...this.#places].map(([key, place]) => [rekey(key), place]));
     this.revision = answer.revision;
     this.outOfDate = false;
     this.#opened = saved;
@@ -799,6 +861,7 @@ export class FloorPlanEditor extends LitElement {
     this.#history?.reset(current);
     this.draft = current;
     if (this.selected !== null) this.selected = rekey(this.selected);
+    if (this.deleteAsk !== null) this.deleteAsk = rekey(this.deleteAsk);
     this.#scope?.changed();
     void this.#reread(zoneId, ++this.#request, false);
   };
@@ -936,21 +999,75 @@ export class FloorPlanEditor extends LitElement {
     return this.#taken;
   }
 
-  #panelFor: RefusedTable | null = null;
-  #panelLocale: string | null = null;
-  #panelRefused: { key: string; reason: string } | null = null;
+  #marksRefused: RefusedTable | null = null;
+  #marksMark: FieldMark | null = null;
+  #marksTyped: readonly TypedMark[] = [];
+  #marksLocale: string | null = null;
+  #marks: ReadonlyMap<string, string> = new Map();
 
-  /** The same object while the mark and the language stay, so the panel does not redraw for it. */
-  #refusedForPanel(): { key: string; reason: string } | null {
-    const refused = this.refused;
+  /** Each table's standing mark, typed text first as in its panel; the same map while the marks
+   *  and the language stay, so the list does not redraw for it. */
+  #listMarks(): ReadonlyMap<string, string> {
+    const { refused, mark, typedMarks } = this;
     const locale = currentLocale();
-    if (refused !== this.#panelFor || locale !== this.#panelLocale) {
-      this.#panelFor = refused;
-      this.#panelLocale = locale;
-      this.#panelRefused =
-        refused === null ? null : { key: refused.table.key, reason: refused.reason() };
+    if (
+      refused !== this.#marksRefused ||
+      mark !== this.#marksMark ||
+      typedMarks !== this.#marksTyped ||
+      locale !== this.#marksLocale
+    ) {
+      this.#marksRefused = refused;
+      this.#marksMark = mark;
+      this.#marksTyped = typedMarks;
+      this.#marksLocale = locale;
+      const marks = new Map<string, string>();
+      const add = (key: string, text: () => string) => {
+        if (!marks.has(key)) marks.set(key, text());
+      };
+      for (const typed of typedMarks) add(typed.key, typed.text);
+      if (mark !== null) add(mark.key, mark.text);
+      if (refused !== null) add(refused.table.key, refused.reason);
+      this.#marks = marks;
     }
-    return this.#panelRefused;
+    return this.#marks;
+  }
+
+  readonly #confirmDelete = (): void => {
+    const key = this.deleteAsk;
+    this.deleteAsk = null;
+    if (key === null || this.draft === null) return;
+    this.#change(deleteTable(this.draft, key));
+    if (this.selected === key) this.selected = null;
+  };
+
+  #deleteQuestion(draft: FloorPlanDraft) {
+    const key = this.deleteAsk;
+    const name = tableName(draft.tables.find((table) => table.key === key));
+    return html`<wt-modal
+      data-dialog="delete-table"
+      size="compact"
+      heading=${key === null ? "" : fill("floor_plan_editor.delete_question", { name })}
+      .open=${key !== null}
+      @wt-close=${(event: Event) => {
+        event.stopPropagation();
+        if (event.target === event.currentTarget) this.deleteAsk = null;
+      }}
+    >
+      <p data-delete-text>${t("floor_plan_editor.delete_text")}</p>
+      <wt-form-actions slot="footer"
+        ><wt-button
+          slot="cancel"
+          variant="secondary"
+          data-action="delete-cancel"
+          @click=${() => {
+            this.deleteAsk = null;
+          }}
+          >${t("action.cancel")}</wt-button
+        ><wt-button variant="danger" data-action="delete-confirm" @click=${this.#confirmDelete}
+          >${t("action.delete")}</wt-button
+        ></wt-form-actions
+      >
+    </wt-modal>`;
   }
 
   #errorFor: FieldMark | null = null;
@@ -1013,7 +1130,9 @@ export class FloorPlanEditor extends LitElement {
     ></wt-floor-plan-canvas>`;
     const panel = html`<floor-plan-tables-panel
       .draft=${draft}
-      .refused=${this.#refusedForPanel()}
+      .selected=${this.selected}
+      .marks=${this.#listMarks()}
+      .places=${this.#places}
       .inSheet=${this.narrow}
     ></floor-plan-tables-panel>`;
     const tablePanel =
@@ -1023,7 +1142,7 @@ export class FloorPlanEditor extends LitElement {
             .tableKey=${this.selected}
             .fieldErrors=${this.#panelErrors(this.selected)}
           ></floor-plan-table-panel>`
-        : nothing;
+        : html`<p class="hint" data-hint>${t("floor_plan_editor.hint")}</p>`;
     const panels = html`${tablePanel}${panel}`;
     return html`<div class="layout ${this.narrow ? "narrow" : ""}">
         ${canvas}${this.narrow ? this.#sheet(draft, panels) : html`<div class="side">${panels}</div>`}
@@ -1039,7 +1158,8 @@ export class FloorPlanEditor extends LitElement {
         .draft=${draft}
         .nextJoinKey=${this.#nextJoinKey}
         .draftParent=${this.#scopeId}
-      ></floor-plan-add-join>`;
+      ></floor-plan-add-join>
+      ${this.#deleteQuestion(draft)}`;
   }
 
   #sheet(draft: FloorPlanDraft, panel: unknown) {

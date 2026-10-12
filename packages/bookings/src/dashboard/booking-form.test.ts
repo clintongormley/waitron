@@ -102,6 +102,20 @@ describe("booking-form", () => {
     expect(options.map((o) => o.value)).toEqual(["", "t-1", "t-2"]);
   });
 
+  it("lists the tables in number order after 'no table', whatever order they arrive in", async () => {
+    const tables: DashboardTable[] = ["t-10", "t-2", "t-1"].map((id) => ({
+      id,
+      label: `Mesa ${id.slice(2)}`,
+      zoneId: "z1",
+      planTableId: null,
+      createdAt: "2026-01-01",
+    }));
+    const { el } = await mountWidget<BookingForm>("dashboard-booking-form", baseProps({ tables }));
+    const { options } = el.shadowRoot!.querySelector<TableField>("[data-test=booking-table]")!;
+    expect(options.map((o) => o.value)).toEqual(["", "t-1", "t-2", "t-10"]);
+    expect(tables.map((table) => table.id)).toEqual(["t-10", "t-2", "t-1"]);
+  });
+
   it.each([
     ["en", "Table", "No table", "Search", "No results"],
     ["es", "Mesa", "Sin mesa", "Buscar", "Sin resultados"],

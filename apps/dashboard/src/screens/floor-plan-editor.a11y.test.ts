@@ -183,6 +183,15 @@ describe.each(["light", "dark"] as const)("floor-plan-editor a11y (%s theme)", (
     await expectNoA11yViolations(host);
   });
 
+  it("shows the hint with nothing selected accessibly", async () => {
+    const before = [window.innerWidth, window.innerHeight] as const;
+    await page.viewport(1280, 800);
+    onTestFinished(() => page.viewport(...before));
+    const { el, host } = await open(stubApi(vi.fn().mockResolvedValue(plan)), theme);
+    await expect.poll(() => el.shadowRoot!.querySelector(".side [data-hint]")).not.toBeNull();
+    await expectNoA11yViolations(host);
+  });
+
   it("shows the sheet collapsed and expanded at 390 px accessibly", async () => {
     const before = [window.innerWidth, window.innerHeight] as const;
     await page.viewport(390, 844);
@@ -264,13 +273,37 @@ describe.each(["light", "dark"] as const)("floor-plan-editor a11y (%s theme)", (
     await expectNoA11yViolations(host);
   });
 
+  const listRow = (el: FloorPlanEditor, key: string) =>
+    el
+      .shadowRoot!.querySelector("floor-plan-tables-panel")!
+      .shadowRoot!.querySelector<HTMLElement>(`li[data-table="${key}"]`)!;
+
   it("shows an unplaced table's panel accessibly", async () => {
     const { el, host } = await open(stubApi(vi.fn().mockResolvedValue(plan)), theme);
-    const panel = await selectTable(el, "m2");
-    panel.shadowRoot!.querySelector<HTMLElement>("[data-test=remove]")!.click();
+    listRow(el, "m2").querySelector<HTMLElement>("button[data-action=toggle]")!.click();
     await el.updateComplete;
+    el.dispatchEvent(
+      new CustomEvent("floor-plan-select", {
+        detail: { key: "m2" },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+    await el.updateComplete;
+    const panel = el.shadowRoot!.querySelector("floor-plan-table-panel")!;
     await panel.updateComplete;
-    expect(panel.shadowRoot!.querySelector("[data-test=place]")).not.toBeNull();
+    expect(panel.tableKey).toBe("m2");
+    expect(panel.shadowRoot!.querySelector("[name=shape]")).toBeNull();
+    await expectNoA11yViolations(host);
+  });
+
+  it("shows the delete question accessibly", async () => {
+    const { el, host } = await open(stubApi(vi.fn().mockResolvedValue(plan)), theme);
+    listRow(el, "m2").querySelector<HTMLElement>("wt-button[data-action=delete]")!.click();
+    await el.updateComplete;
+    const dialog = el.shadowRoot!.querySelector<WtModal>("wt-modal[data-dialog=delete-table]")!;
+    await dialog.updateComplete;
+    expect(dialog.open).toBe(true);
     await expectNoA11yViolations(host);
   });
 

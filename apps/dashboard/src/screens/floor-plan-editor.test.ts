@@ -5,7 +5,7 @@ import { chooseOption, chooseOptions } from "@waitron/ui/src/test-helpers.js";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import "./floor-plan-editor.js";
 import type { FloorPlanEditor } from "./floor-plan-editor.js";
-import type { DashboardApi, FloorPlan } from "../api/client.js";
+import type { DashboardApi, FloorPlan, PlanPlacement } from "../api/client.js";
 import { currentLocale, setLocale } from "../i18n/t.js";
 import { DASHBOARD_ICONS } from "../icons.js";
 import { addTables, draftFromPlan, patchTable, type FloorPlanDraft } from "./floor-plan-draft.js";
@@ -508,6 +508,18 @@ it("puts the panel beside the canvas at 1280 px and in a collapsed sheet at 390 
   expect(sheet(el)!.heading).toBe("Tables");
 });
 
+it("at 1280 px puts Add tables at the bottom of a side column taller than its list", async () => {
+  await viewport(1280, 800);
+  const el = await open();
+  await expect.poll(() => el.shadowRoot!.querySelector(".side")).not.toBeNull();
+  const column = el.shadowRoot!.querySelector<HTMLElement>(".side")!;
+  const add = column
+    .querySelector("floor-plan-tables-panel")!
+    .shadowRoot!.querySelector<HTMLElement>("wt-button[data-action=add-tables]")!;
+  expect(column.scrollHeight).toBe(column.clientHeight);
+  expect(add.getBoundingClientRect().bottom).toBeCloseTo(column.getBoundingClientRect().bottom, 0);
+});
+
 it("the sheet's heading names the selected table", async () => {
   await viewport(390, 844);
   const el = await open();
@@ -856,6 +868,270 @@ const tablePanel = (el: FloorPlanEditor) =>
     "floor-plan-table-panel",
   );
 
+const listRow = (el: FloorPlanEditor, key: string) =>
+  el
+    .shadowRoot!.querySelector("floor-plan-tables-panel")!
+    .shadowRoot!.querySelector<HTMLElement>(`li[data-table="${key}"]`)!;
+const deleteDialog = (el: FloorPlanEditor) =>
+  el.shadowRoot!.querySelector<WtModal>("wt-modal[data-dialog=delete-table]");
+
+async function askDelete(el: FloorPlanEditor, key: string): Promise<WtModal> {
+  listRow(el, key).querySelector<HTMLElement>("wt-button[data-action=delete]")!.click();
+  await el.updateComplete;
+  const dialog = deleteDialog(el)!;
+  await dialog.updateComplete;
+  return dialog;
+}
+
+const closeOf = (dialog: WtModal) =>
+  new Promise((resolve) => dialog.addEventListener("wt-close", resolve, { once: true }));
+
+const joinedTerrace = (): FloorPlan => ({
+  ...terrace(),
+  joins: [{ id: "j1", seats: 6, tableIds: ["m1", "m2"] }],
+});
+
+it.each([
+  ["en-GB", "Delete T2?", "It leaves the tables list and the plan.", "Cancel", "Delete"],
+  ["es-ES", "¿Eliminar T2?", "Sale de la lista de mesas y del plano.", "Cancelar", "Eliminar"],
+])(
+  "the bin asks before deleting, in a compact dialog (%s)",
+  async (locale, head, text, no, yes) => {
+    setLocale(locale);
+    const el = await open();
+    expect(deleteDialog(el)?.open ?? false).toBe(false);
+    const dialog = await askDelete(el, "m2");
+    expect(dialog.open).toBe(true);
+    expect(dialog.getAttribute("size")).toBe("compact");
+    expect(dialog.heading).toBe(head);
+    expect(dialog.querySelector("[data-delete-text]")!.textContent!.trim()).toBe(text);
+    expect(button(el, "delete-cancel").textContent!.trim()).toBe(no);
+    expect(button(el, "delete-confirm").textContent!.trim()).toBe(yes);
+    expect(button(el, "delete-confirm").variant).toBe("danger");
+    expect(button(el, "delete-confirm").disabled).toBe(false);
+    expect(canvas(el).tables.map((t) => t.key)).toEqual(["m1"]);
+    expectSaveQuiet(el);
+  },
+);
+
+it("Cancel on the delete question changes nothing and closes it", async () => {
+  const el = await open(stubApi({ getFloorPlan: vi.fn().mockResolvedValue(joinedTerrace()) }));
+  const dialog = await askDelete(el, "m2");
+  const closed = closeOf(dialog);
+  await press(el, "delete-cancel");
+  await closed;
+  await el.updateComplete;
+  expect(dialog.open).toBe(false);
+  expect(el.shadowRoot!.querySelector("floor-plan-tables-panel")!.draft.tables).toHaveLength(2);
+  expectSaveQuiet(el);
+  expect(button(el, "undo").disabled).toBe(true);
+});
+
+it("Escape on the delete question changes nothing, closes it and does not start leaving", async () => {
+  const el = await open();
+  let leaving = 0;
+  el.shadowRoot!.querySelector("a.close")!.addEventListener("click", (event) => {
+    event.preventDefault();
+    leaving++;
+  });
+  const dialog = await askDelete(el, "m2");
+  const closed = closeOf(dialog);
+  await userEvent.keyboard("{Escape}");
+  await closed;
+  await el.updateComplete;
+  expect(dialog.open).toBe(false);
+  expect(leaving).toBe(0);
+  expect(el.shadowRoot!.querySelector("floor-plan-tables-panel")!.draft.tables).toHaveLength(2);
+  expectSaveQuiet(el);
+});
+
+it("Delete on the question removes the table and its join as one step, clears its selection and closes", async () => {
+  const el = await open(stubApi({ getFloorPlan: vi.fn().mockResolvedValue(joinedTerrace()) }));
+  await fromCanvas(el, "wt-table-select", { key: "m1" });
+  const dialog = await askDelete(el, "m1");
+  const closed = closeOf(dialog);
+  await press(el, "delete-confirm");
+  await closed;
+  await el.updateComplete;
+  expect(dialog.open).toBe(false);
+  const panel = el.shadowRoot!.querySelector("floor-plan-tables-panel")!;
+  expect(panel.draft.tables.map((t) => t.key)).toEqual(["m2"]);
+  expect(panel.draft.joins).toEqual([]);
+  expect(canvas(el).selected).toBeNull();
+  expectSaveAwake(el);
+  await press(el, "undo");
+  expectSaveQuiet(el);
+  expect(button(el, "undo").disabled).toBe(true);
+});
+
+it("Delete on the question keeps the selection of another table", async () => {
+  const el = await open();
+  await fromCanvas(el, "wt-table-select", { key: "m1" });
+  const dialog = await askDelete(el, "m2");
+  const closed = closeOf(dialog);
+  await press(el, "delete-confirm");
+  await closed;
+  await el.updateComplete;
+  expect(canvas(el).selected).toBe("m1");
+  expect(el.shadowRoot!.querySelector("floor-plan-tables-panel")!.draft.tables).toHaveLength(1);
+});
+
+it("hands the tables list the selection, so the selected table's row is current", async () => {
+  const el = await open();
+  expect(listRow(el, "m1").getAttribute("aria-current")).toBeNull();
+  await fromCanvas(el, "wt-table-select", { key: "m1" });
+  await el.shadowRoot!.querySelector("floor-plan-tables-panel")!.updateComplete;
+  expect(listRow(el, "m1").getAttribute("aria-current")).toBe("true");
+  expect(listRow(el, "m2").getAttribute("aria-current")).toBeNull();
+});
+
+it("taking a saved placed table off through its row wakes Save; Undo puts it back and quiets Save", async () => {
+  const el = await open();
+  listRow(el, "m1").querySelector<HTMLElement>("button[data-action=toggle]")!.click();
+  await el.updateComplete;
+  expect(canvas(el).tables).toEqual([]);
+  expectSaveAwake(el);
+  await press(el, "undo");
+  expect(placed(el, "m1")).toEqual(placement);
+  expectSaveQuiet(el);
+});
+
+async function toggleRow(el: FloorPlanEditor, key: string): Promise<void> {
+  listRow(el, key).querySelector<HTMLElement>("button[data-action=toggle]")!.click();
+  await el.updateComplete;
+  await el.shadowRoot!.querySelector("floor-plan-tables-panel")!.updateComplete;
+}
+
+const odd = { x: 30, y: 12, width: 12, height: 6, shape: "round" as const, rotation: 90 };
+const withM1 = (at: PlanPlacement | null): FloorPlan => ({
+  ...terrace(),
+  tables: terrace().tables.map((t) => (t.id === "m1" ? { ...t, placement: at } : t)),
+});
+
+it("a table taken off through its row goes back to the same place when pressed again, which is no change", async () => {
+  const el = await open(stubApi({ getFloorPlan: vi.fn().mockResolvedValue(withM1(odd)) }));
+  await toggleRow(el, "m1");
+  expect(canvas(el).tables).toEqual([]);
+  await toggleRow(el, "m1");
+  expect(placed(el, "m1")).toEqual(odd);
+  expectSaveQuiet(el);
+});
+
+it("an Undo that takes a table off remembers where it stood", async () => {
+  const el = await open();
+  const draft = patchTable(draftFromPlan(terrace()), "m2", { placement: odd });
+  await fromCanvas(el, "floor-plan-change", { draft });
+  await press(el, "undo");
+  await el.shadowRoot!.querySelector("floor-plan-tables-panel")!.updateComplete;
+  await toggleRow(el, "m2");
+  expect(placed(el, "m2")).toEqual(odd);
+});
+
+it("forgets where tables stood when another zone opens", async () => {
+  const getFloorPlan = vi
+    .fn()
+    .mockResolvedValueOnce(withM1(odd))
+    .mockResolvedValueOnce(bar)
+    .mockResolvedValueOnce(withM1(null));
+  const el = await open(stubApi({ getFloorPlan }));
+  await toggleRow(el, "m1");
+  for (const zone of ["z2", "z1"]) {
+    history.pushState(null, "", `/manage/floor-plan/zone/${zone}`);
+    window.dispatchEvent(new PopStateEvent("popstate"));
+    await flush(el);
+  }
+  expect(heading(el)).toBe("Terrace");
+  await toggleRow(el, "m1");
+  expect(placed(el, "m1")).toEqual(expect.objectContaining({ width: 8, height: 8, rotation: 0 }));
+  expect(placed(el, "m1")).not.toEqual(odd);
+});
+
+const fullFloor = { x: 0, y: 0, width: 999, height: 999, shape: "rect" as const, rotation: 0 };
+const message = (el: FloorPlanEditor) => el.shadowRoot!.querySelector("wt-form-actions")!.error;
+
+it.each([
+  ["en-GB", "No room on the plan."],
+  ["es-ES", "No hay sitio en el plano."],
+])(
+  "pressing a never-placed table on a plan with no free spot says so and changes nothing (%s)",
+  async (locale, text) => {
+    setLocale(locale);
+    const el = await open(stubApi({ getFloorPlan: vi.fn().mockResolvedValue(withM1(fullFloor)) }));
+    await toggleRow(el, "m2");
+    expect(message(el)).toBe(text);
+    expect(canvas(el).tables.map((t) => t.key)).toEqual(["m1"]);
+    expectSaveQuiet(el);
+    expect(button(el, "undo").disabled).toBe(true);
+  },
+);
+
+it("the no-room message goes at the draft's next change", async () => {
+  const el = await open(stubApi({ getFloorPlan: vi.fn().mockResolvedValue(withM1(fullFloor)) }));
+  await toggleRow(el, "m2");
+  expect(message(el)).toBe("No room on the plan.");
+  await toggleRow(el, "m1");
+  expect(message(el)).toBe("");
+  await toggleRow(el, "m2");
+  expect(canvas(el).tables.map((t) => t.key)).toEqual(["m2"]);
+  expect(message(el)).toBe("");
+});
+
+it("the no-room message goes when Undo steps the draft back", async () => {
+  const el = await open(stubApi({ getFloorPlan: vi.fn().mockResolvedValue(withM1(fullFloor)) }));
+  await fromCanvas(el, "wt-table-rotate", { key: "m1", rotation: 90 });
+  await toggleRow(el, "m2");
+  expect(message(el)).toBe("No room on the plan.");
+  await press(el, "undo");
+  expect(placed(el, "m1")!.rotation).toBe(0);
+  expect(message(el)).toBe("");
+});
+
+it("a save's refusal stays when the draft changes after it", async () => {
+  const saveFloorPlan = vi.fn().mockRejectedValue({ code: "server.internal" });
+  const el = await open(stubApi({ saveFloorPlan }));
+  await fromCanvas(el, "wt-table-rotate", { key: "m1", rotation: 90 });
+  await press(el, "save");
+  await flush(el);
+  expect(message(el)).toBe("Something went wrong, try again");
+  await toggleRow(el, "m2");
+  expect(canvas(el).tables.map((t) => t.key)).toEqual(["m1", "m2"]);
+  expect(message(el)).toBe("Something went wrong, try again");
+  await press(el, "undo");
+  expect(message(el)).toBe("Something went wrong, try again");
+});
+
+const hintText = (el: FloorPlanEditor) =>
+  el.shadowRoot!.querySelector("[data-hint]")?.textContent!.trim() ?? null;
+
+it.each([
+  [
+    "en-GB",
+    "Select a table on the plan to change it. Click a table below to put it on the plan or take it off; it returns to the same spot.",
+  ],
+  [
+    "es-ES",
+    "Selecciona una mesa en el plano para cambiarla. Pulsa una mesa de abajo para ponerla en el plano o quitarla; vuelve al mismo sitio.",
+  ],
+])("with nothing selected, a hint sits above the tables list (%s)", async (locale, text) => {
+  setLocale(locale);
+  await viewport(1280, 800);
+  const el = await open();
+  await expect.poll(() => el.shadowRoot!.querySelector(".side")).not.toBeNull();
+  expect(hintText(el)).toBe(text);
+  const side = el.shadowRoot!.querySelector(".side")!;
+  expect([...side.children].map((c) => c.localName)).toEqual(["p", "floor-plan-tables-panel"]);
+  expect(side.firstElementChild!.hasAttribute("data-hint")).toBe(true);
+  await page.viewport(390, 844);
+  await expect.poll(() => sheet(el)).not.toBeNull();
+  expect([...sheet(el)!.children].map((c) => c.localName)).toEqual([
+    "p",
+    "floor-plan-tables-panel",
+  ]);
+  expect(hintText(el)).toBe(text);
+  await fromCanvas(el, "wt-table-select", { key: "m1" });
+  expect(hintText(el)).toBeNull();
+});
+
 it("Undo of a Delete brings back the table and its join", async () => {
   const joined: FloorPlan = {
     ...terrace(),
@@ -863,8 +1139,8 @@ it("Undo of a Delete brings back the table and its join", async () => {
   };
   const el = await open(stubApi({ getFloorPlan: vi.fn().mockResolvedValue(joined) }));
   await fromCanvas(el, "wt-table-select", { key: "m1" });
-  tablePanel(el)!.shadowRoot!.querySelector<HTMLElement>("[data-test=delete]")!.click();
-  await el.updateComplete;
+  await askDelete(el, "m1");
+  await press(el, "delete-confirm");
   expect(canvas(el).tables.map((t) => t.key)).toEqual([]);
   expect(canvas(el).selected).toBeNull();
   expect(tablePanel(el)).toBeNull();
@@ -881,6 +1157,7 @@ it("puts the selected table's panel above the tables list, beside the canvas and
   await expect.poll(() => el.shadowRoot!.querySelector(".side")).not.toBeNull();
   expect(tablePanel(el)).toBeNull();
   await fromCanvas(el, "wt-table-select", { key: "m1" });
+  expect(el.shadowRoot!.querySelector("[data-hint]")).toBeNull();
   const side = el.shadowRoot!.querySelector(".side")!;
   expect([...side.children].map((c) => c.localName)).toEqual([
     "floor-plan-table-panel",

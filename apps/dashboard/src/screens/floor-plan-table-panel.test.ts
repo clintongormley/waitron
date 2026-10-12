@@ -6,7 +6,7 @@ import "./floor-plan-table-panel.js";
 import type { FloorPlanTablePanel } from "./floor-plan-table-panel.js";
 import { currentLocale, setLocale } from "../i18n/t.js";
 import type { FloorPlan } from "../api/client.js";
-import { draftFromPlan, patchTable, placeTable, type FloorPlanDraft } from "./floor-plan-draft.js";
+import { draftFromPlan, patchTable, type FloorPlanDraft } from "./floor-plan-draft.js";
 
 let originalLocale = currentLocale();
 beforeEach(() => {
@@ -224,7 +224,7 @@ it("offers rotation in 15° steps from 0° to 345°", async () => {
   expect(options.at(-1)).toEqual({ value: "345", label: "345°" });
 });
 
-it("names its fields and actions in Spanish", async () => {
+it("names its fields in Spanish", async () => {
   setLocale("es-ES");
   const el = await open();
   const label = (name: string) => (field(el, name) as unknown as { label: string }).label;
@@ -235,75 +235,19 @@ it("names its fields and actions in Spanish", async () => {
   expect(label("rotation")).toBe("Giro");
   const shapes = (field(el, "shape") as unknown as { options: { label: string }[] }).options;
   expect(shapes.map((o) => o.label)).toEqual(["Rectángulo", "Redonda"]);
-  expect(action(el, "remove")!.textContent!.trim()).toBe("Quitar del plano");
-  el.tableKey = "m2";
-  await el.updateComplete;
-  expect(action(el, "place")!.textContent!.trim()).toBe("Colocar");
 });
 
-it("an unplaced table offers Place and no shape or size", async () => {
+it("an unplaced table offers no shape or size, and no Place", async () => {
   const el = await open({ tableKey: "m2" });
-  const { changes } = listen(el);
   for (const name of ["shape", "width", "height", "rotation"]) expect(field(el, name)).toBeNull();
-  expect(action(el, "remove")).toBeNull();
-  expect(action(el, "place")!.textContent!.trim()).toBe("Place");
-  action(el, "place")!.click();
-  expect(changes).toHaveLength(1);
-  expect(tableOf(changes[0], "m2")!.placement).toEqual(
-    placeTable(opened(), "m2").tables.find((t) => t.key === "m2")!.placement,
-  );
-  expect(tableOf(changes[0], "m2")!.placement).not.toBeNull();
 });
 
-it("Remove from plan makes the table a spare", async () => {
-  const el = await open();
-  const { changes } = listen(el);
-  expect(action(el, "place")).toBeNull();
-  expect(action(el, "remove")!.textContent!.trim()).toBe("Remove from plan");
-  action(el, "remove")!.click();
-  expect(tableOf(changes[0], "m1")!.placement).toBeNull();
-});
-
-it("Delete removes the table and clears the selection", async () => {
-  const el = await open();
-  const { changes, selects } = listen(el);
-  expect(action(el, "delete")!.textContent!.trim()).toBe("Delete");
-  action(el, "delete")!.click();
-  expect(changes).toHaveLength(1);
-  expect(tableOf(changes[0], "m1")).toBeUndefined();
-  expect(changes[0]!.draft.joins).toEqual([]);
-  expect(selects).toEqual([null]);
-});
-
-it("offers Delete for every table, including an unsaved table with a live link", async () => {
-  const draft = opened();
-  draft.tables.push({
-    key: "new:linked",
-    id: null,
-    liveTableId: "linked",
-    label: "New",
-    seats: 3,
-    fixed: false,
-    placement: null,
-  });
-  const el = await open({ draft, tableKey: "new:linked" });
-  const { changes, selects } = listen(el);
-  expect(action(el, "delete")).not.toBeNull();
-  action(el, "delete")!.click();
-  expect(changes).toHaveLength(1);
-  expect(tableOf(changes[0], "new:linked")).toBeUndefined();
-  expect(selects).toEqual([null]);
-});
-
-it("a linked master table offers Delete whether placed or spare", async () => {
-  const placed = placeTable(opened(), "m9");
-  const el = await open({ draft: placed, tableKey: "m9" });
-  expect(action(el, "remove")).not.toBeNull();
-  expect(action(el, "delete")).not.toBeNull();
-  el.draft = patchTable(placed, "m9", { placement: null });
-  await el.updateComplete;
-  expect(action(el, "place")).not.toBeNull();
-  expect(action(el, "delete")).not.toBeNull();
+it("offers no Place, Remove or Delete, placed or not", async () => {
+  for (const tableKey of ["m1", "m2"]) {
+    const el = await open({ tableKey });
+    for (const name of ["place", "remove", "delete"]) expect(action(el, name)).toBeNull();
+    cleanupWidgets();
+  }
 });
 
 it("shows a refusal under the field it names", async () => {

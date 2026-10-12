@@ -15,12 +15,17 @@ afterEach(() => {
   cleanupWidgets();
 });
 
-const table = (key: string, label: string, placed = false): DraftTable => ({
+const table = (
+  key: string,
+  label: string,
+  placed = false,
+  seats: number | null = null,
+): DraftTable => ({
   key,
   id: key,
   liveTableId: null,
   label,
-  seats: null,
+  seats,
   fixed: false,
   placement: placed ? { x: 0, y: 0, width: 8, height: 8, shape: "rect", rotation: 0 } : null,
 });
@@ -51,8 +56,10 @@ async function open(props: Partial<FloorPlanTablesPanel> = {}): Promise<FloorPla
 const rows = (el: FloorPlanTablesPanel) => [
   ...el.shadowRoot!.querySelectorAll<HTMLElement>("[data-table]"),
 ];
-const row = (el: FloorPlanTablesPanel, label: string) =>
-  rows(el).find((r) => r.textContent!.trim() === label)!;
+const nameOf = (r: HTMLElement) => r.querySelector("[data-name]")!.textContent!.trim();
+const row = (el: FloorPlanTablesPanel, label: string) => rows(el).find((r) => nameOf(r) === label)!;
+const toggle = (r: HTMLElement) =>
+  r.querySelector<HTMLButtonElement>("button[data-action=toggle]")!;
 
 function listen(el: FloorPlanTablesPanel) {
   const changes: FloorPlanDraft[] = [];
@@ -66,26 +73,104 @@ function listen(el: FloorPlanTablesPanel) {
   return { changes, selects };
 }
 
-it("lists the tables in numeric order, placed ones muted", async () => {
+it("lists the tables in numeric order, placed ones marked", async () => {
   const el = await open();
   expect(el.shadowRoot!.querySelector("h2")!.textContent!.trim()).toBe("Tables");
-  expect(rows(el).map((r) => r.textContent!.trim())).toEqual([
+  expect(rows(el).map(nameOf)).toEqual(["Terrace 1", "Terrace 2", "Terrace 10", "Terrace bar 3"]);
+  expect(
+    rows(el)
+      .filter((r) => r.querySelector("[data-marker=placed]") !== null)
+      .map(nameOf),
+  ).toEqual(["Terrace 1"]);
+});
+
+it("sorts a name with leading spaces by its trimmed name", async () => {
+  const el = await open({
+    draft: { tables: [...draft.tables, table("m5", "  Terrace 3")], joins: [] },
+  });
+  expect(rows(el).map(nameOf)).toEqual([
     "Terrace 1",
     "Terrace 2",
+    "Terrace 3",
     "Terrace 10",
     "Terrace bar 3",
   ]);
+});
+
+it("shows each row's marker, name, seats and a bin, under Name and Seats heads", async () => {
+  const el = await open({
+    draft: { tables: [table("m1", "Terrace 1", true, 4), table("m3", "Terrace 2")], joins: [] },
+  });
+  const [placed, spare] = rows(el);
+  expect(placed!.querySelector("[data-marker]")!.getAttribute("data-marker")).toBe("placed");
+  expect(spare!.querySelector("[data-marker]")!.getAttribute("data-marker")).toBe("spare");
+  expect(placed!.querySelector("[data-seats]")!.textContent!.trim()).toBe("4");
+  expect(spare!.querySelector("[data-seats]")!.textContent!.trim()).toBe("—");
   expect(
-    rows(el)
-      .filter((r) => r.hasAttribute("data-placed"))
-      .map((r) => r.textContent!.trim()),
-  ).toEqual(["Terrace 1"]);
+    spare!
+      .querySelector("button[data-action=delete], wt-button[data-action=delete]")!
+      .getAttribute("aria-label"),
+  ).toBe("Delete Terrace 2");
+  const heads = [...el.shadowRoot!.querySelectorAll("[data-head]")].map((h) =>
+    h.textContent!.trim(),
+  );
+  expect(heads).toEqual(["Name", "Seats"]);
+  expect(
+    el.shadowRoot!.querySelector("[data-legend]")!.textContent!.replace(/\s+/g, " ").trim(),
+  ).toBe("on plan not placed");
+});
+
+it("starts the Name and Seats heads where each row's name and seats start", async () => {
+  const el = await open({ draft: { tables: [table("m1", "Terrace 1", true, 4)], joins: [] } });
+  const [nameHead, seatsHead] = [...el.shadowRoot!.querySelectorAll("[data-head]")].map(
+    (head) => head.getBoundingClientRect().left,
+  );
+  const [first] = rows(el);
+  expect(first!.querySelector("[data-name]")!.getBoundingClientRect().left).toBeCloseTo(
+    nameHead!,
+    0,
+  );
+  expect(first!.querySelector("[data-seats]")!.getBoundingClientRect().left).toBeCloseTo(
+    seatsHead!,
+    0,
+  );
+});
+
+it("every row, placed or spare, has a bin", async () => {
+  const el = await open();
+  expect(rows(el).map((r) => r.querySelector("[data-action=delete]") !== null)).toEqual([
+    true,
+    true,
+    true,
+    true,
+  ]);
+});
+
+it("words its legend in Spanish", async () => {
+  setLocale("es-ES");
+  const el = await open();
+  expect(
+    el.shadowRoot!.querySelector("[data-legend]")!.textContent!.replace(/\s+/g, " ").trim(),
+  ).toBe("en el plano sin colocar");
+});
+
+it("draws a placed marker as a filled dot and a spare one as a hollow ring", async () => {
+  const { el, host } = await mount();
+  host.style.setProperty("--wt-color-primary", "rgb(21, 22, 23)");
+  host.style.setProperty("--wt-color-text-muted", "rgb(41, 42, 43)");
+  const placed = getComputedStyle(row(el, "Terrace 1").querySelector("[data-marker]")!);
+  const spare = getComputedStyle(row(el, "Terrace 2").querySelector("[data-marker]")!);
+  expect(placed.backgroundColor).toBe("rgb(21, 22, 23)");
+  expect(placed.borderRadius).toBe("9999px");
+  expect(spare.backgroundColor).toBe("rgba(0, 0, 0, 0)");
+  expect(spare.borderTopColor).toBe("rgb(41, 42, 43)");
+  expect(spare.borderTopWidth).toBe("2px");
 });
 
 it("pressing an unplaced table places it at the first free spot and selects it", async () => {
   const el = await open();
   const { changes, selects } = listen(el);
-  row(el, "Terrace 2").click();
+  toggle(row(el, "Terrace 2")).click();
   expect(changes).toHaveLength(1);
   expect(changes[0]!.tables.find((t) => t.key === "m3")!.placement).toEqual({
     x: 9,
@@ -98,28 +183,49 @@ it("pressing an unplaced table places it at the first free spot and selects it",
   expect(selects).toEqual(["m3"]);
 });
 
-it("pressing a placed table selects it and changes nothing", async () => {
-  const el = await open();
+it("pressing an unplaced table with a remembered place puts it back there and selects it", async () => {
+  const at = { x: 30, y: 4, width: 5, height: 7, shape: "round" as const, rotation: 45 };
+  const el = await open({ places: new Map([["m3", at]]) });
   const { changes, selects } = listen(el);
-  row(el, "Terrace 1").click();
-  expect(selects).toEqual(["m1"]);
-  expect(changes).toEqual([]);
+  toggle(row(el, "Terrace 2")).click();
+  expect(changes).toHaveLength(1);
+  expect(changes[0]!.tables.find((t) => t.key === "m3")!.placement).toEqual(at);
+  expect(selects).toEqual(["m3"]);
 });
 
-it("paints a placed table's row in the muted text colour", async () => {
-  const { el, host } = await mount();
-  host.style.setProperty("--wt-color-text-muted", "rgb(41, 42, 43)");
-  host.style.setProperty("--wt-color-text", "rgb(11, 12, 13)");
-  const inner = (label: string) => row(el, label).shadowRoot!.querySelector("button")!;
-  expect(getComputedStyle(inner("Terrace 1")).color).toBe("rgb(41, 42, 43)");
-  expect(getComputedStyle(inner("Terrace 2")).color).toBe("rgb(11, 12, 13)");
+it("pressing a placed table takes it off", async () => {
+  const el = await open();
+  const { changes, selects } = listen(el);
+  toggle(row(el, "Terrace 1")).click();
+  expect(changes).toHaveLength(1);
+  expect(changes[0]!.tables.find((t) => t.key === "m1")!.placement).toBeNull();
+  expect(selects).toEqual([]);
+});
+
+it("taking off the selected table clears the selection", async () => {
+  const el = await open({ selected: "m1" });
+  const { changes, selects } = listen(el);
+  toggle(row(el, "Terrace 1")).click();
+  expect(changes).toHaveLength(1);
+  expect(selects).toEqual([null]);
+});
+
+it("presses on the plan as a toggle", async () => {
+  const el = await open();
+  expect(toggle(row(el, "Terrace 1")).getAttribute("aria-pressed")).toBe("true");
+  expect(toggle(row(el, "Terrace 2")).getAttribute("aria-pressed")).toBe("false");
+});
+
+it("marks the selected table's row as current", async () => {
+  const el = await open({ selected: "m1" });
+  expect(rows(el).map((r) => r.getAttribute("aria-current"))).toEqual(["true", null, null, null]);
 });
 
 it("names a table with a blank name Unnamed", async () => {
   const el = await open({
     draft: { tables: [table("m1", "  "), table("m2", "Terrace 1")], joins: [] },
   });
-  expect(rows(el).map((r) => r.textContent!.trim())).toEqual(["Unnamed", "Terrace 1"]);
+  expect(rows(el).map(nameOf)).toEqual(["Terrace 1", "Unnamed"]);
 });
 
 it("leaves out its heading inside a sheet, whose toggle already names it", async () => {
@@ -127,13 +233,40 @@ it("leaves out its heading inside a sheet, whose toggle already names it", async
   expect(el.shadowRoot!.querySelector("h2")).toBeNull();
 });
 
-it("writes a refused table's reason after its name in the error colour", async () => {
-  const el = await open({ refused: { key: "m2", reason: "Booked 12 Oct, 21:00" } });
+it("writes a marked table's message under its name in the error colour, as its description", async () => {
+  const el = await open({ marks: new Map([["m2", "Booked 12 Oct, 21:00"]]) });
   el.style.setProperty("--wt-color-danger", "rgb(7, 8, 9)");
-  const refusedRow = rows(el).find((r) => r.dataset.table === "m2")!;
-  expect(refusedRow.textContent!.trim()).toBe("Terrace 10 — Booked 12 Oct, 21:00");
-  expect(getComputedStyle(refusedRow.querySelector(".refused")!).color).toBe("rgb(7, 8, 9)");
-  expect(row(el, "Terrace 2").querySelector(".refused")).toBeNull();
+  const markedRow = rows(el).find((r) => r.dataset.table === "m2")!;
+  const mark = markedRow.querySelector<HTMLElement>("[data-mark]")!;
+  expect(nameOf(markedRow)).toBe("Terrace 10");
+  expect(mark.textContent!.trim()).toBe("Booked 12 Oct, 21:00");
+  expect(getComputedStyle(mark).color).toBe("rgb(7, 8, 9)");
+  const described = toggle(markedRow).getAttribute("aria-describedby")!;
+  expect(el.shadowRoot!.getElementById(described)).toBe(mark);
+  expect(mark.getBoundingClientRect().top).toBeGreaterThanOrEqual(
+    markedRow.querySelector("[data-name]")!.getBoundingClientRect().bottom,
+  );
+  for (const other of rows(el).filter((r) => r !== markedRow)) {
+    expect(other.querySelector("[data-mark]")).toBeNull();
+    expect(toggle(other).hasAttribute("aria-describedby")).toBe(false);
+  }
+});
+
+it("the bin asks the page to delete the table and changes nothing itself", async () => {
+  const el = await open();
+  const { changes, selects } = listen(el);
+  const asks: unknown[] = [];
+  el.addEventListener("floor-plan-delete-ask", (e) => asks.push((e as CustomEvent).detail));
+  row(el, "Terrace 2").querySelector<HTMLElement>("[data-action=delete]")!.click();
+  expect(asks).toEqual([{ key: "m3" }]);
+  expect(changes).toEqual([]);
+  expect(selects).toEqual([]);
+});
+
+it("ends with Add tables", async () => {
+  const el = await open();
+  const elements = [...el.shadowRoot!.children].filter((c) => c.tagName !== "STYLE");
+  expect(elements.at(-1)!.matches("wt-button[data-action=add-tables]")).toBe(true);
 });
 
 it("Add tables asks the page to open its dialog", async () => {

@@ -9,7 +9,13 @@ import "@waitron/ui/src/components/wt-combobox.js";
 import "@waitron/ui/src/components/wt-input.js";
 import { t } from "./strings.js";
 import { codeMessage } from "@waitron/dashboard-kit";
+import { createLabelComparator } from "@waitron/shared";
 import type { Booking, BookingInput, BookingPatch, DashboardTable } from "./client.js";
+
+export function tablesInNumberOrder(tables: readonly DashboardTable[]): DashboardTable[] {
+  const compare = createLabelComparator();
+  return [...tables].sort((a, b) => compare(a.label, b.label));
+}
 
 export interface UpdateBookingDetail {
   id: string;
@@ -65,6 +71,8 @@ export class BookingForm extends LitElement {
   @property({ attribute: false }) booking: Booking | null = null;
 
   @property({ attribute: false }) tables: DashboardTable[] = [];
+  #sortedFrom: DashboardTable[] | null = null;
+  #sorted: DashboardTable[] = [];
 
   /** The day the screen is showing; a create starts on it. */
   @property() defaultDate = "";
@@ -152,6 +160,14 @@ export class BookingForm extends LitElement {
         return true;
       },
     };
+  }
+
+  #tablesInOrder(): DashboardTable[] {
+    if (this.#sortedFrom !== this.tables) {
+      this.#sortedFrom = this.tables;
+      this.#sorted = tablesInNumberOrder(this.tables);
+    }
+    return this.#sorted;
   }
 
   override willUpdate(changed: PropertyValues): void {
@@ -347,7 +363,7 @@ export class BookingForm extends LitElement {
             noResultsLabel=${t("booking.combobox_no_results")}
             .options=${[
               { value: "", label: t("booking.table_none") },
-              ...this.tables.map((table) => ({ value: table.id, label: table.label })),
+              ...this.#tablesInOrder().map((table) => ({ value: table.id, label: table.label })),
             ]}
             .value=${this.tableId}
             @wt-change=${(e: CustomEvent<{ value: string }>) => this.#onTableChange(e, opening)}

@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from "vitest";
 import { page } from "vitest/browser";
-import type { WtButton, WtFloorPlanCanvas } from "@waitron/ui";
+import type { WtButton, WtFloorPlanCanvas, WtModal } from "@waitron/ui";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import "./floor-plan-editor.js";
 import type { FloorPlanEditor } from "./floor-plan-editor.js";
@@ -199,6 +199,33 @@ it("a selected new table keeps its selection under its master id", async () => {
   expect(api.getFloorPlan).toHaveBeenCalledTimes(2);
   expect(canvas(el).selected).toBe("m5");
   expect(canvas(el).tables.map((t) => t.key)).toEqual(["m1", "m5"]);
+});
+
+it("a delete question opened on a new table while its save is sent deletes it under its master id", async () => {
+  const write = deferred<{ revision: number; ids: Record<string, string> }>();
+  const el = await open(
+    stubApi({
+      saveFloorPlan: vi.fn().mockReturnValue(write.promise),
+      getFloorPlan: vi.fn().mockResolvedValueOnce(plan()).mockResolvedValue(afterFirstSave),
+    }),
+  );
+  await fromCanvas(el, "floor-plan-change", { draft: withT5() });
+  await press(el, "save");
+  const list = el.shadowRoot!.querySelector("floor-plan-tables-panel")!;
+  await list.updateComplete;
+  list
+    .shadowRoot!.querySelector<HTMLElement>('li[data-table="new:1"] [data-action=delete]')!
+    .click();
+  await flush(el);
+  expect(el.shadowRoot!.querySelector<WtModal>("wt-modal[data-dialog=delete-table]")!.heading).toBe(
+    "Delete T5?",
+  );
+  write.resolve({ revision: 4, ids: { ...savedIds, "new:1": "m5" } });
+  await flush(el);
+  await flush(el);
+  expect(canvas(el).tables.some((t) => t.key === "m5")).toBe(true);
+  await press(el, "delete-confirm");
+  expect(canvas(el).tables.some((t) => t.key === "m5")).toBe(false);
 });
 
 it("a failed re-read after a save shows as a read's failure, and the next Save sends master ids", async () => {
@@ -649,4 +676,64 @@ it("Reload drops the selection of a table the newer plan no longer has", async (
   await press(el, "save");
   await press(el, "load-newer");
   expect(canvas(el).selected).toBeNull();
+});
+
+async function toggleRow(el: FloorPlanEditor, key: string): Promise<void> {
+  el.shadowRoot!.querySelector("floor-plan-tables-panel")!
+    .shadowRoot!.querySelector<HTMLElement>(`li[data-table="${key}"] button[data-action=toggle]`)!
+    .click();
+  await el.updateComplete;
+  await el.shadowRoot!.querySelector("floor-plan-tables-panel")!.updateComplete;
+}
+
+const spareM1 = (): FloorPlan => ({
+  ...plan(),
+  revision: 4,
+  tables: plan().tables.map((t) => (t.id === "m1" ? { ...t, placement: null } : t)),
+});
+
+it("a table taken off and saved goes back to its old place after the refresh", async () => {
+  const getFloorPlan = vi.fn().mockResolvedValueOnce(plan(30)).mockResolvedValue(spareM1());
+  const el = await open(stubApi({ getFloorPlan }));
+  await toggleRow(el, "m1");
+  await press(el, "save");
+  expect(getFloorPlan).toHaveBeenCalledTimes(2);
+  expectSave(el, "quiet");
+  await toggleRow(el, "m1");
+  expect(placed(el, "m1")).toEqual({ ...m1Placement, x: 30 });
+});
+
+it("a new table taken off before its save goes back to its place under its master id", async () => {
+  const after: FloorPlan = {
+    ...afterFirstSave,
+    tables: afterFirstSave.tables.map((t) => (t.id === "m5" ? { ...t, placement: null } : t)),
+  };
+  const api = stubApi({
+    saveFloorPlan: vi.fn().mockResolvedValue({ revision: 4, ids: { ...savedIds, "new:1": "m5" } }),
+    getFloorPlan: vi.fn().mockResolvedValueOnce(plan()).mockResolvedValueOnce(after),
+  });
+  const el = await open(api);
+  await fromCanvas(el, "floor-plan-change", { draft: withT5() });
+  await el.shadowRoot!.querySelector("floor-plan-tables-panel")!.updateComplete;
+  await toggleRow(el, "new:1");
+  await press(el, "save");
+  expect(api.getFloorPlan).toHaveBeenCalledTimes(2);
+  await toggleRow(el, "m5");
+  expect(placed(el, "m5")).toEqual(t5Placement);
+});
+
+it("the save body never carries a remembered place", async () => {
+  const api = stubApi();
+  const el = await open(api);
+  await toggleRow(el, "m1");
+  await press(el, "save");
+  const body = vi.mocked(api.saveFloorPlan).mock.calls[0]![1];
+  expect(body.tables[0]).toEqual({
+    id: "m1",
+    key: "m1",
+    label: "T1",
+    seats: 4,
+    fixed: false,
+    placement: null,
+  });
 });

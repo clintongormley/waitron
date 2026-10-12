@@ -229,9 +229,6 @@ screen is designed.
     carries no permissions. Revisit beside the permissions review.
   - The department zone address template is written in two places:
     `packages/venue-service/src/dashboard/department-zones.ts` and `department-settings.ts`.
-  - The tables list sorts on the raw name but shows the trimmed one, and does not mark the
-    selected row.
-  - A refusal mark on table A while table B is selected leaves nothing pointing back to A.
   - The booked reason ("Booked 12 Oct, 21:00") is worded in the dashboard's core strings, not the
     bookings module's, because the module code-message route takes no parameters. The owner decided
     on 2026-10-10 that it stays in the dashboard's own strings.
@@ -245,7 +242,6 @@ screen is designed.
     plan by a square; and on computers whose scrollbars take space, a size reading that arrives just
     after a drop may shift the plan by the extra room (seen only with a 15 px stand-in for a
     scrollbar, since headless Chromium's scrollbars take none).
-  - Place on a plan with no free spot does nothing and says nothing.
   - Surviving mutants in `wt-floor-plan-canvas`: the default "Rotate {name}" text,
     `super.disconnectedCallback` and `preventScroll`.
 
@@ -299,25 +295,16 @@ joined-table rows are A503), [3, the handles](mockups/a502-a503-floor-plan-edito
 canvas they came from is https://claude.ai/artifact/NkwkgPN6rjSu26P6qAjTyK.
 
 - **The selected table's form** is Name; Seats beside a rectangle/round shape toggle; and a
-  Moveable switch, on by default, replacing "Fixed in place". Width, Height, Rotation, Remove from
-  plan and Delete leave the form. Joins leave it too once A503 lands; until then they stay.
+  Moveable switch, on by default, replacing "Fixed in place". Width, Height and Rotation leave the
+  form. Joins leave it too once A503 lands; until then they stay.
 - **Handles on the selected table.** A dot in the middle of each side changes width or height. A
   two-headed quarter-circle arrow on the top-right corner turns the table, and turns with it, so it
   stays at the same corner. The arrow-key nudge and turn shortcuts
   stay. With the Width and Height fields gone, the plan needs a keyboard way to resize as well.
-- **The tables list.** Each row shows a marker (on the plan, or not placed; A503 adds a third for
-  a table that is part of a joined table), the name, the seats, and a bin that deletes the table
-  after a confirmation. The markers differ in shape as well as colour. Clicking a row puts the
-  table on the plan, or takes it off with no confirmation. A table taken off keeps its position,
-  size, turn and shape, and goes back to the same place when it is clicked again.
-- **Sort by number everywhere a table is picked.** The tables list already sorts by number
-  (`Intl.Collator` with `numeric: true`, `apps/dashboard/src/screens/floor-plan-tables-panel.ts`),
-  and so does the till (`inNumberOrder`). The Add join dialog's picker lists tables in the draft's
-  own order (`#options`, `apps/dashboard/src/screens/floor-plan-add-join.ts`), and the booking
-  form's table dropdown (`packages/bookings/src/dashboard/booking-form.ts`) lists them in the order
-  the server sends, which was not traced. A503's "made of" picker must sort by number too.
-- A466's list and canvas items (the unmarked selected row, the rotate handle drawn outside the
-  grid) are on the same code; fold in the ones this job does not make moot.
+- A503 adds a third marker to the tables list, for a table that is part of a joined table, and its
+  "made of" picker must sort by number too.
+- A466's canvas items (the rotate handle drawn outside the grid) are on the same code; fold in the
+  ones this job does not make moot.
 
 ## A503. Joined tables replace saved joins
 

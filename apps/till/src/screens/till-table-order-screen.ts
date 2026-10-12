@@ -1,7 +1,7 @@
 import { servicePeriod, servicePeriodStyles } from "../widgets/service-period.js";
 import type { MenuState, TillApi } from "../api/client.js";
 import { optionAnswers } from "../widgets/option-snapshot.js";
-import { ContentLanguageController, leaveCoordinatorFor } from "@waitron/ui";
+import { ContentLanguageController, inNumberOrder, leaveCoordinatorFor } from "@waitron/ui";
 import type { DraftScope, LeaveCoordinator, LeaveReason, WtDialog } from "@waitron/ui";
 import {
   LitElement,
@@ -4324,8 +4324,9 @@ export class TillTableOrderScreen extends LitElement {
   #tableTargets(): TableState[] {
     const own = new Set(this.party?.tableIds ?? []);
     const keepOwn = this.actionVerb === "move" && own.size > 1;
-    const owned = keepOwn ? this.tables.filter((table) => own.has(table.id)) : [];
-    return [...owned, ...this.tables.filter((table) => !own.has(table.id))];
+    const tables = [...this.tables].sort((a, b) => inNumberOrder(a.label, b.label));
+    const owned = keepOwn ? tables.filter((table) => own.has(table.id)) : [];
+    return [...owned, ...tables.filter((table) => !own.has(table.id))];
   }
 
   /** The party's other open bills holding no payment, a pending one included, which merge and

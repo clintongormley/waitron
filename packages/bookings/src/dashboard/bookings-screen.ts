@@ -11,7 +11,7 @@ import { t, bookingStatusName } from "./strings.js";
 import { codeMessage, codeOf } from "@waitron/dashboard-kit";
 import { today } from "./date-utils.js";
 import "./booking-form.js";
-import type { UpdateBookingDetail } from "./booking-form.js";
+import { tablesInNumberOrder, type UpdateBookingDetail } from "./booking-form.js";
 import type { Booking, BookingInput, BookingApi, DashboardTable } from "./client.js";
 
 @customElement("dashboard-bookings-screen")
@@ -149,7 +149,7 @@ export class BookingsScreen extends LitElement {
           },
         },
         (value) => {
-          this.tables = value;
+          this.tables = tablesInNumberOrder(value);
         },
       );
     } catch (error) {

@@ -1798,8 +1798,8 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   removing the route. Left open by A429 slice 5, decision 15.
 
 - **A466 — floor plan editor follow-ups (2026-10-10).** Small gaps the dashboard floor plan editor
-  left: a preview not heard on focus, an ungated link, a duplicated address template, list and
-  canvas details and surviving mutants. Left open by A429 slice 2.
+  left: a preview not heard on focus, an ungated link, a duplicated address template, canvas
+  details and surviving mutants. Left open by A429 slice 2.
   [Detail](backlog/till.md#a466--floor-plan-editor-follow-ups)
 
 - **A470 — the till's floor map follow-ups (2026-10-10).** Small gaps the till's map left: an
@@ -1812,9 +1812,8 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   [Detail](backlog/till.md#a474--todays-floor-changes-on-the-till-follow-ups)
 
 - **A502. The floor plan editor as a big modal, with handles and a shorter form (owner,
-  2026-10-11).** A selected table's
-  form shrinks to name, seats, shape and Moveable, the table is sized and turned by handles on the
-  plan, and the tables list marks which tables are placed. Table pickers sort by number.
+  2026-10-11).** A selected table's form shrinks to name, seats, shape and
+  Moveable, and the table is sized and turned by handles on the plan.
   [Detail](backlog/till.md#a502-the-floor-plan-editor-as-a-big-modal-with-handles-and-a-shorter-form)
 
 - **A503. Joined tables replace saved joins (owner, 2026-10-11).** A table made of other tables
@@ -3449,6 +3448,8 @@ _Formerly A7, and the dashboard entries in the opening part of the old Track A (
   fixed: in a screenshot of a `wt-modal` editor after a refusal that names no field, a blue line
   runs along the top of the footer, which looks like the modal's scrolling body showing a focus ring
   — not traced, and not checked against `main`; an observation from the implementer's session.
+  A502 part 2 saw the same line above the buttons of the floor plan editor's compact "Delete
+  {name}?" question, opened by a click.
 
 - **Request refusals that still land in the bottom message, or under a field in generic words — OPEN
   (left by C54, #853).** In the forms C54 surveyed (the dashboard, the setup wizard, and the
