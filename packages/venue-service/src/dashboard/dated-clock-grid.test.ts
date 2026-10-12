@@ -217,7 +217,7 @@ it("the Day view uses its selected business date for every department and zone c
         periods: [],
         seasonWeeks: [],
         dates: [],
-        zones: [{ id: "z", name: "Terrace", seasonWeeks: [], week: [], dates: [] }],
+        zones: [{ id: "z", name: "Terrace", seasonWeeks: [], dates: [] }],
       },
     ],
   };

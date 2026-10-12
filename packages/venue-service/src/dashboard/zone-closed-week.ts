@@ -1,6 +1,7 @@
 import { nothing } from "lit";
 import { currentLocale } from "@waitron/dashboard-kit";
 import type { OpeningHoursModel } from "../menu-timetable-types.js";
+import { seasonWeek } from "./season-choice.js";
 import { t } from "./strings.js";
 export function zoneClosedWeek(
   hours: OpeningHoursModel | undefined,
@@ -11,6 +12,16 @@ export function zoneClosedWeek(
     ?.find((d) => d.id === departmentId)
     ?.zones.find((z) => z.id === zoneId);
   if (!zone) return nothing;
+  const season = hours!.seasons.find((s) => s.id === hours!.currentSeasonId) ?? hours!.seasons[0];
+  const week = seasonWeek(zone.seasonWeeks, season?.id ?? "");
+  const say = (
+    unnamed: Parameters<typeof t>[0],
+    seasonal: Parameters<typeof t>[0],
+    values: Record<string, string> = {},
+  ) =>
+    t(season ? seasonal : unnamed).replace(/\{(\w+)\}/g, (field, key: string) =>
+      key === "season" ? season!.name : (values[key] ?? field),
+    );
   const groups = new Map<
     string,
     { ranges: readonly { startsAt: string; endsAt: string }[]; days: number[] }
@@ -19,7 +30,7 @@ export function zoneClosedWeek(
   const minute = (time: string) => Number(time.slice(0, 2)) * 60 + Number(time.slice(3));
   const rank = (time: string) => (minute(time) - minute(cutover) + 1440) % 1440;
   for (const weekday of [1, 2, 3, 4, 5, 6, 0]) {
-    const ranges = [...(zone.week.find((d) => d.weekday === weekday)?.ranges ?? [])].sort(
+    const ranges = [...(week.find((d) => d.weekday === weekday)?.ranges ?? [])].sort(
       (a, b) => rank(a.startsAt) - rank(b.startsAt),
     );
     if (!ranges.length) continue;
@@ -28,12 +39,12 @@ export function zoneClosedWeek(
     group.days.push(weekday);
     groups.set(key, group);
   }
-  if (!groups.size) return t("venue.zone_open_with_department");
+  if (!groups.size)
+    return say("venue.zone_open_with_department", "venue.zone_season_open_with_department");
   if (groups.size > 2)
-    return t("venue.zone_closed_days").replace(
-      "{count}",
-      String([...groups.values()].reduce((sum, g) => sum + g.days.length, 0)),
-    );
+    return say("venue.zone_closed_days", "venue.zone_season_closed_days", {
+      count: String([...groups.values()].reduce((sum, g) => sum + g.days.length, 0)),
+    });
   const list = new Intl.ListFormat(currentLocale(), { style: "long", type: "conjunction" });
   const day = (n: number) => t(`hours.day_in_sentence.${n}` as Parameters<typeof t>[0]);
   const days = (values: number[]) => {
@@ -52,13 +63,12 @@ export function zoneClosedWeek(
     }
     return list.format(labels);
   };
-  return t("venue.zone_closed_summary").replace(
-    "{groups}",
-    [...groups.values()]
+  return say("venue.zone_closed_summary", "venue.zone_season_closed_summary", {
+    groups: [...groups.values()]
       .map(
         (g) =>
           `${list.format(g.ranges.map((r) => (r.endsAt === cutover ? t("venue.zone_closed_from").replace("{time}", r.startsAt) : `${r.startsAt}–${r.endsAt}`)))} ${days(g.days)}`,
       )
       .join("; "),
-  );
+  });
 }

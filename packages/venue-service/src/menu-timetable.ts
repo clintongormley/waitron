@@ -1284,13 +1284,7 @@ export async function readOpeningHoursModel(
         ...department,
         zones: zones
           .filter((zone) => zone.departmentId === department.id)
-          .map(({ id, name, seasonWeeks, week, dates }) => ({
-            id,
-            name,
-            seasonWeeks,
-            week,
-            dates,
-          })),
+          .map(({ id, name, seasonWeeks, dates }) => ({ id, name, seasonWeeks, dates })),
         periods: periods
           .filter((period) => period.departmentId === department.id)
           .map(({ id, name, colour, menuId, endOffsetMinutes }) => ({

@@ -72,7 +72,6 @@ export function realWeekModel(): OpeningHoursModel {
             id: "z1",
             name: "Terrace",
             seasonWeeks: [{ seasonId: AUTUMN.id, week: structuredClone(terraceWeek) }],
-            week: structuredClone(terraceWeek),
             dates: [
               { specialDateId: "annual/day", ranges: [{ startsAt: "23:00", endsAt: "06:00" }] },
             ],

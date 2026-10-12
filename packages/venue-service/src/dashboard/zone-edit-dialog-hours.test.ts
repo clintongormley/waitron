@@ -29,6 +29,64 @@ async function mount(hours: OpeningHoursModel, request?: DashboardRequest) {
 const summary = () =>
   el.shadowRoot!.querySelector("[data-test=closed-week-summary]")?.textContent?.trim();
 
+function twoSeasons(currentSeasonId: string | null) {
+  const hours = model();
+  hours.seasons = [
+    { id: "autumn", name: "Autumn", startsOn: "09-01" },
+    { id: "winter", name: "Winter", startsOn: "12-01" },
+  ];
+  hours.currentSeasonId = currentSeasonId;
+  hours.departments[0]!.zones[0]!.seasonWeeks = [
+    {
+      seasonId: "autumn",
+      week: [{ weekday: 5, ranges: [{ startsAt: "12:00", endsAt: "14:00" }] }],
+    },
+    {
+      seasonId: "winter",
+      week: [1, 2, 3, 4].map((weekday) => ({
+        weekday,
+        ranges: [{ startsAt: "23:30", endsAt: "06:00" }],
+      })),
+    },
+  ];
+  return hours;
+}
+it("summarises the current season's closed times and names the season", async () => {
+  await mount(twoSeasons("winter"));
+  await expect.poll(summary).toBe("Winter: closed from 23:30 Monday to Thursday");
+});
+it("names the season in Spanish with the season's stored name", async () => {
+  setLocale("es-ES");
+  await mount(twoSeasons("winter"));
+  await expect.poll(summary).toBe("Winter: cerrada desde 23:30 lunes a jueves");
+});
+it("summarises the first season when there is no current season", async () => {
+  await mount(twoSeasons(null));
+  await expect.poll(summary).toBe("Autumn: closed 12:00–14:00 Friday");
+});
+it("names the season when a season leaves the zone open, and when it counts days", async () => {
+  const open = twoSeasons("winter");
+  open.departments[0]!.zones[0]!.seasonWeeks[1]!.week = [];
+  await mount(open);
+  await expect.poll(summary).toBe("Winter: open whenever the department is");
+  el.remove();
+  const counted = twoSeasons("winter");
+  counted.departments[0]!.zones[0]!.seasonWeeks[1]!.week = [1, 2, 3].map((weekday) => ({
+    weekday,
+    ranges: [{ startsAt: `2${weekday}:00`, endsAt: "06:00" }],
+  }));
+  setLocale("es-ES");
+  await mount(counted);
+  await expect.poll(summary).toBe("Winter: cerrada en algunas franjas de 3 días");
+});
+it("keeps the unnamed sentence when the venue has no seasons", async () => {
+  const hours = model();
+  hours.seasons = [];
+  hours.currentSeasonId = null;
+  hours.departments[0]!.zones[0]!.seasonWeeks = [];
+  await mount(hours);
+  await expect.poll(summary).toBe("Open whenever the department is");
+});
 it("groups the Terrace's closing times by identical normal-week ranges", async () => {
   await mount(model());
   await expect

@@ -32,13 +32,11 @@ export function departmentHoursModel(): OpeningHoursModel {
             name: "Terrace",
             dates: [],
             seasonWeeks: [{ seasonId: AUTUMN.id, week: terraceWeek() }],
-            week: terraceWeek(),
           },
           {
             id: "z2",
             name: "Bar",
             seasonWeeks: [{ seasonId: AUTUMN.id, week: [] }],
-            week: [],
             dates: [],
           },
         ],
