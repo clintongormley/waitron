@@ -9,6 +9,7 @@ import { readCalendarDays, saveSpecialDate } from "./hours.js";
 import { readNamedDaysModel } from "./named-days.js";
 import { replaceMenuWeek, saveMenuPeriod, saveSpecialDateMenus } from "./menu-timetable.js";
 import { VENUE_SERVICE_MIGRATIONS } from "./migrations.js";
+import { readSeasons } from "./seasons.js";
 import { specialDates } from "./schema/hours.js";
 import { menuDayTimetables, menuSlots } from "./schema/menus.js";
 import { departments } from "./schema/service.js";
@@ -117,6 +118,48 @@ describe("calendar follows department service periods", () => {
       model: ["standard", "closed"],
       closed: [false, true],
     });
+  });
+
+  it("reads each date's own season: Winter's Monday Lunch opens 2 December, Autumn's empty Monday closes 25 November", async () => {
+    const f = await fixture();
+    await withTransaction(suite.db, async (tx) => {
+      const seasons = await readSeasons(tx, f.cfg);
+      const seasonId = (name: string) => seasons.find((season) => season.name === name)!.id;
+      const lunch = await saveMenuPeriod(
+        tx,
+        f.cfg,
+        f.department,
+        { name: "Lunch", menuId: (await tx.select().from(catalogues))[0]!.id, staffMenuIds: [] },
+        0,
+      );
+      const monday = (slots: readonly { periodId: string; startsAt: string; endsAt: string }[]) =>
+        [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({ weekday, slots: weekday === 1 ? slots : [] }));
+      await replaceMenuWeek(
+        tx,
+        f.cfg,
+        f.department,
+        monday([{ periodId: lunch.id, startsAt: "12:00", endsAt: "15:00" }]),
+        at,
+        0,
+        { seasonId: seasonId("Winter") },
+      );
+      await replaceMenuWeek(tx, f.cfg, f.department, monday([]), at, 0, {
+        seasonId: seasonId("Autumn"),
+      });
+    });
+    const calendar = await withTransaction(suite.db, (tx) =>
+      readCalendarDays(tx, f.cfg, "2030-11-25", "2030-12-02"),
+    );
+    expect(calendar.map((day) => [day.date, day.tone])).toEqual([
+      ["2030-11-25", "closed"],
+      ["2030-11-26", "closed"],
+      ["2030-11-27", "closed"],
+      ["2030-11-28", "closed"],
+      ["2030-11-29", "closed"],
+      ["2030-11-30", "closed"],
+      ["2030-12-01", "closed"],
+      ["2030-12-02", "standard"],
+    ]);
   });
 
   it("keeps a named day without its own timetable closed like the standard week", async () => {

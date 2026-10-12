@@ -410,9 +410,8 @@ On an own-hours day, a department without a dated timetable row follows its seas
 that weekday; a dated row with no ranges closes that department. `resolveDepartmentDays` in
 `packages/venue-service/src/day-resolver.ts` selects the dated row only for own-hours days,
 then falls back to the business day's season week when there is no row. Whole-venue closure closes departments.
-Switching to own hours copies the old weekday rows' department ranges and zone closed times
-(until A506-2 moves it to the season week);
-switching back removes the dated schedules (`switchNamedDayHours` in `hours.ts`).
+Switching to own hours copies that weekday's department ranges and zone closed times from the
+season holding the date; switching back removes the dated schedules (`switchNamedDayHours` in `hours.ts`).
 The individual department's Follow the normal week DELETE route is retired (`routes.ts` and
 `dashboard/opening-hours-client.ts`); change the named day's hours choice instead.
 

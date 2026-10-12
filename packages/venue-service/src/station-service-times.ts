@@ -6,6 +6,7 @@ import type { VenueScope } from "./operations.js";
 import type { LocalDate } from "./hours-types.js";
 import { addDays, isLocalDate, weekdayOf } from "./hours-rules.js";
 import { occursOn } from "./named-day-rules.js";
+import { seasonOn } from "./season-rules.js";
 import { readOpeningHoursModel } from "./menu-timetable.js";
 import { periodProductIds } from "./routing-periods.js";
 import { loadRoutingRules } from "./routing-store.js";
@@ -147,13 +148,19 @@ export async function stationServiceTimes(
     const named =
       week === "normal" ? undefined : model.namedDays.find((day) => occursOn(day, date));
     const weekday = weekdayOf(date);
+    const seasonId = seasonOn(model.seasons, week === "normal" ? from : date)?.id;
     const results: StationServiceDay["departments"][number][] = [];
     if (!named?.closeWholeVenue)
       for (const department of departments) {
         const own = named?.ownHours
           ? department.dates.find((day) => day.specialDateId === named.id)
           : undefined;
-        const slots = own?.slots ?? department.week.find((day) => day.weekday === weekday)!.slots;
+        const slots =
+          own?.slots ??
+          department.seasonWeeks
+            .find((entry) => entry.seasonId === seasonId)
+            ?.week.find((day) => day.weekday === weekday)!.slots ??
+          [];
         const byPeriod = new Map<string, Span[]>();
         for (const slot of slots) {
           const shares = byPeriod.get(slot.periodId) ?? [];
@@ -161,7 +168,9 @@ export async function stationServiceTimes(
             if (!reaches.get(slot.periodId)?.has(zone.id)) continue;
             const closed = named?.ownHours
               ? (zone.dates.find((day) => day.specialDateId === named.id)?.ranges ?? [])
-              : zone.week.find((day) => day.weekday === weekday)!.ranges;
+              : (zone.seasonWeeks
+                  .find((entry) => entry.seasonId === seasonId)
+                  ?.week.find((day) => day.weekday === weekday)!.ranges ?? []);
             shares.push(...subtract(plannedSpan(slot, context), closed, context));
           }
           byPeriod.set(slot.periodId, shares);

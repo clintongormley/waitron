@@ -50,6 +50,8 @@ import { departments, zoneServicePolicies } from "./schema/service.js";
 import { menuDayTimetables, menuSlots } from "./schema/menus.js";
 import { zoneClosedTimes } from "./schema/zone-closed-times.js";
 import { replaceMenuWeek, saveMenuPeriod, saveSpecialDateMenus } from "./menu-timetable.js";
+import { readSeasons } from "./seasons.js";
+import { replaceZoneClosedWeek } from "./zone-closed-times.js";
 import { clockChangeAfter, minutesAfter } from "./testing/clock-change.js";
 
 type SpecialDateInput = NamedDayInput & { cells: DateHoursCell[] };
@@ -2713,10 +2715,22 @@ describe("named-day own-hours switching", () => {
         await tx
           .insert(zoneServicePolicies)
           .values({ locationId: cfg.locationId, zoneId: zone!.id, departmentId });
-        await tx.insert(zoneClosedTimes).values([
-          { zoneId: zone!.id, weekday: 5, startsAt: "13:00:00", endsAt: "14:00:00" },
-          { zoneId: zone!.id, weekday: 1, startsAt: "10:00:00", endsAt: "11:00:00" },
-        ]);
+        await replaceZoneClosedWeek(
+          tx,
+          cfg,
+          zone!.id,
+          [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({
+            weekday,
+            ranges:
+              weekday === 5
+                ? [{ startsAt: "13:00", endsAt: "14:00" }]
+                : weekday === 1
+                  ? [{ startsAt: "10:00", endsAt: "11:00" }]
+                  : [],
+          })),
+          0,
+          AT,
+        );
       }
       return { lunch };
     });
@@ -2767,6 +2781,50 @@ describe("named-day own-hours switching", () => {
       .from(zoneServicePolicies)
       .where(eq(zoneServicePolicies.zoneId, rows.closures[0]!.zoneId));
     expect(policy!.locationId).toBe(f.cfg.locationId);
+  });
+
+  it("copies the date's own season's weekday: Winter's Monday on 2 December, Autumn's empty Monday on 25 November", async () => {
+    const { f, lunch } = await setup();
+    await withTransaction(db, async (tx) => {
+      const seasons = await readSeasons(tx, f.cfg);
+      const seasonId = (name: string) => seasons.find((season) => season.name === name)!.id;
+      const monday = <T>(field: "slots" | "ranges", ranges: readonly T[]) =>
+        [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({
+          weekday,
+          [field]: weekday === 1 ? ranges : [],
+        }));
+      await replaceMenuWeek(
+        tx,
+        f.cfg,
+        f.departmentIds.restaurant,
+        monday("slots", [{ periodId: lunch.id, startsAt: "12:00", endsAt: "15:00" }]),
+        AT,
+        0,
+        { seasonId: seasonId("Winter") },
+      );
+      await replaceMenuWeek(tx, f.cfg, f.departmentIds.restaurant, monday("slots", []), AT, 0, {
+        seasonId: seasonId("Autumn"),
+      });
+      const [zone] = await tx
+        .select()
+        .from(zoneServicePolicies)
+        .where(eq(zoneServicePolicies.locationId, f.cfg.locationId));
+      await replaceZoneClosedWeek(tx, f.cfg, zone!.zoneId, monday("ranges", []), 0, AT, {
+        seasonId: seasonId("Autumn"),
+      });
+    });
+    const winter = await snapshot(
+      (await saveDate(f, null, specialInput({ date: "2030-12-02", ownHours: true }))).id,
+    );
+    expect(winter.slots.map((s) => [s.departmentId, s.periodId, s.startsAt, s.endsAt])).toEqual([
+      [f.departmentIds.restaurant, lunch.id, "12:00:00", "15:00:00"],
+    ]);
+    expect(winter.closures.map((c) => [c.startsAt, c.endsAt])).toEqual([["10:00:00", "11:00:00"]]);
+    expect(
+      await snapshot(
+        (await saveDate(f, null, specialInput({ date: "2030-11-25", ownHours: true }))).id,
+      ),
+    ).toEqual({ days: [], slots: [], closures: [] });
   });
 
   it("copies on an off-to-on update and leaves the standard week intact", async () => {
