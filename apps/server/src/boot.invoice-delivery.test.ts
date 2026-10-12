@@ -1,3 +1,4 @@
+import { departments, departmentReceipts } from "@waitron/venue-service";
 import { once } from "node:events";
 import { createServer as createNetServer, type AddressInfo, type Socket } from "node:net";
 import { randomUUID } from "node:crypto";
@@ -636,7 +637,19 @@ describe("invoice-choice email context at trading boot", () => {
         .insert(workingOrders)
         .values({ source: "dashboard", nodeId: ctx.node, locationId: ctx.location, orderNumber: 1 })
         .returning();
-      await suite.db.insert(tenantReceipts).values({ receipt: { email: "venue@example.test" } });
+      await suite.db.insert(tenantReceipts).values({ receipt: { email: "global@example.test" } });
+      const [department] = await suite.db
+        .insert(departments)
+        .values({
+          locationId: ctx.location,
+          name: "Email contact",
+          tradingName: "Email contact",
+          isDefault: true,
+        })
+        .returning();
+      await suite.db
+        .insert(departmentReceipts)
+        .values({ departmentId: department!.id, receipt: { email: "venue@example.test" } });
       if (configured)
         await withTransaction(suite.db, (tx) =>
           putCredential(tx, loadKeyRing(env), {

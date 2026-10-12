@@ -3519,6 +3519,7 @@ export async function setOrderInvoiceChoice(
       delivery: request.delivery,
       invoiceType: request.invoiceType,
       locationId: order.locationId,
+      source: { kind: "order", orderId },
       context: deliveryContext,
     });
     const revision = order.revision + 1;

@@ -1,5 +1,10 @@
 # A231d implementation plan: full invoices by email as a PDF, and on an office printer
 
+> **2026-10-12, A493:** consent validation uses the selected order or sale's department
+> contact, including the existing local default-department fallback, rather than the venue
+> receipt row. See [A493](../specs/2026-10-12-a493-departments-zones-design.md). The consent payload,
+> reservation and retry contracts remain; their separate rewrite is still open.
+
 > **2026-10-10, A366 slice 7 and the owner's 2026-10-09 answer:** the planned consent box,
 > statement and withdrawal actions below are superseded by the
 > [single core rewrite](../../backlog/printers.md#remove-the-consent-step-from-emailed-receipts).

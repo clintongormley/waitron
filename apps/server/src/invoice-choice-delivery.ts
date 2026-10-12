@@ -11,8 +11,11 @@ import {
 import { reserveInvoiceDelivery } from "./invoice-delivery.js";
 import { optionalDocument } from "./optional-document.js";
 import { isValidEmail } from "@waitron/identity";
-import { getReceipt } from "@waitron/layouts";
-import { AppError } from "@waitron/shared";
+import {
+  resolveInvoiceEmailContact,
+  type InvoiceEmailContactSource,
+} from "./invoice-email-contact.js";
+import { AppError, locationId } from "@waitron/shared";
 
 export type InvoiceChoiceDeliveryContext = {
   personId: string;
@@ -34,6 +37,7 @@ export async function checkedInvoiceChoiceDelivery(
     delivery: unknown;
     invoiceType: "F1" | "F2";
     locationId: string;
+    source: InvoiceEmailContactSource;
     context: InvoiceChoiceDeliveryContext | undefined;
   },
 ): Promise<StagedInvoiceDelivery | null> {
@@ -76,8 +80,12 @@ export async function checkedInvoiceChoiceDelivery(
     .select({ locales: locations.invoiceLocales })
     .from(locations)
     .where(eq(locations.id, input.locationId));
-  const contact = await getReceipt(tx);
-  if (typeof contact.email !== "string" || !isValidEmail(contact.email)) {
+  const contact = await resolveInvoiceEmailContact(
+    tx,
+    { locationId: locationId(input.locationId) },
+    input.source,
+  );
+  if (contact === null || !isValidEmail(contact.email)) {
     throw new AppError("invoice_delivery.email_unavailable", {});
   }
   if (

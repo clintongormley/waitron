@@ -139,6 +139,9 @@ logo, subtitle, footer, address switch and tax-agency description. A new departm
 empty receipt. The venue's receipt language moves to Venue settings. Nothing is live, so stored
 venue defaults may be dropped rather than carried over (CLAUDE.md §3, last rule).
 
+**Remaining implementation:** receipt UI/API integration, sale descriptions, printing/media/transfer
+default retirement, and the unified list with protected editors and zone dragging.
+
 ## A506. Opening hours rebuilt around seasons and special days
 
 **A506 (owner, 2026-10-11) — OPEN.** Agreed with the owner over mockups. Spec (2026-10-11, three defaults asked of the owner):

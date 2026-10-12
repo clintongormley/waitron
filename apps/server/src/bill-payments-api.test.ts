@@ -1,3 +1,4 @@
+import { departments, departmentReceipts } from "@waitron/venue-service";
 import { randomUUID } from "node:crypto";
 import { loadKeyRing, putCredential, deleteCredential } from "@waitron/credentials";
 import { resolveInvoiceEmailDelivery } from "./email-delivery.js";
@@ -24,7 +25,6 @@ import {
   saleLines,
   sales,
   tenders,
-  tenantReceipts,
   withTransaction,
   workingOrderLines,
   workingOrders,
@@ -1851,21 +1851,35 @@ describe("the invoice at full payment (design §8 test 8)", () => {
     });
 
     async function withContact(body: () => Promise<void>) {
-      const [original] = await inTx((tx) => tx.select().from(tenantReceipts));
+      const contactDepartmentId = await invoiceContactDepartment();
+      const [original] = await inTx((tx) =>
+        tx
+          .select()
+          .from(departmentReceipts)
+          .where(eq(departmentReceipts.departmentId, contactDepartmentId)),
+      );
       try {
         await inTx((tx) =>
           tx
-            .insert(tenantReceipts)
-            .values({ receipt: { email: "venue@example.test", phone: "910000000" } })
+            .insert(departmentReceipts)
+            .values({
+              departmentId: contactDepartmentId,
+              receipt: { email: "venue@example.test", phone: "910000000" },
+            })
             .onConflictDoUpdate({
-              target: tenantReceipts.id,
+              target: departmentReceipts.departmentId,
               set: { receipt: { email: "venue@example.test", phone: "910000000" } },
             }),
         );
         await body();
       } finally {
-        await inTx((tx) => tx.delete(tenantReceipts));
-        if (original !== undefined) await inTx((tx) => tx.insert(tenantReceipts).values(original));
+        await inTx((tx) =>
+          tx
+            .delete(departmentReceipts)
+            .where(eq(departmentReceipts.departmentId, contactDepartmentId)),
+        );
+        if (original !== undefined)
+          await inTx((tx) => tx.insert(departmentReceipts).values(original));
       }
     }
 
@@ -5025,3 +5039,13 @@ describe("a refund's supervisor PIN is checked before the write lock is taken", 
     expect(await refundRows(paymentId)).toEqual([]);
   });
 });
+
+async function invoiceContactDepartment() {
+  const rows = await inTx((tx) =>
+    tx
+      .select({ id: departments.id, isDefault: departments.isDefault })
+      .from(departments)
+      .where(eq(departments.locationId, venue.cfg.locationId)),
+  );
+  return rows.find((row) => row.isDefault)!.id;
+}
