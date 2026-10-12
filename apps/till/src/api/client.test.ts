@@ -860,6 +860,20 @@ describe("TillApi", () => {
     expect(r).toEqual(order);
   });
 
+  it("setWorkingOrderLabel sends only label and revision", async () => {
+    const fetchStub = vi.fn().mockResolvedValue(jsonResponse({ revision: 4 }));
+    const api = new TillApi("", fetchStub);
+    await expect(api.setWorkingOrderLabel("wo1", { label: "Ana", revision: 3 })).resolves.toEqual({
+      revision: 4,
+    });
+    expect(fetchStub).toHaveBeenCalledExactlyOnceWith("/api/working-orders/wo1/label", {
+      method: "PUT",
+      credentials: "include",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ label: "Ana", revision: 3 }),
+    });
+  });
+
   it("updateWorkingOrder PUTs the whole new basket to the addressed order and resolves the revision the server answers", async () => {
     const fetchStub = vi
       .fn()

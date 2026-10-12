@@ -2634,10 +2634,6 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   can mark lines "Not offered now" when their own zone still offers them. Traced, not run. **Next
   action:** send the order's zone with the retrieved order and read that zone's offer.
 
-- **A label typed when re-holding an unedited retrieved order is never saved**, because re-holding
-  saves only through `#syncIfDirty` (`apps/till/src/till-app.ts`), and a label change does not count
-  as a line edit. **Next action:** a way to save a label without re-sending the lines.
-
 - **`GET /api/products` has no caller in the till app, and `listAvailableProducts` is off the sale
   path.** `TillApi.listProducts` (`apps/till/src/api/client.ts`) is kept because the till's tests
   stub it; outside tests `listAvailableProducts` is called by that route and two dev scripts. **Next

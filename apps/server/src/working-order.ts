@@ -5477,6 +5477,24 @@ async function countEdit(
   return copy + 1;
 }
 
+export async function setWorkingOrderLabel(
+  db: Database,
+  orderId: string,
+  request: { label: string; revision: number },
+): Promise<number> {
+  return withTransaction(db, async (tx) => {
+    const { label } = await requireEditableOrder(tx, orderId, request.revision);
+    const changed = label !== request.label;
+    if (changed) {
+      await tx
+        .update(workingOrders)
+        .set({ label: request.label })
+        .where(eq(workingOrders.id, orderId));
+    }
+    return countEdit(tx, orderId, request.revision, changed);
+  });
+}
+
 /**
  * Save an edited copy of an OPEN order, from any node of the venue, by the rules
  * {@link applyLineEdits} states. A line of the basket naming a stored line by id, through the same
