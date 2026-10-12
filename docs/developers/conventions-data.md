@@ -617,8 +617,9 @@ changes that season alone (`replaceMenuWeek` in `packages/venue-service/src/menu
 (`PUT …/departments/:departmentId/menu-week`, `PUT …/zones/:zoneId/closed-week`,
 `packages/venue-service/src/routes.ts`) require `seasonId`: a missing or malformed one is refused
 `management.request_invalid`, an unknown or another venue's one `season.not_found` (404).
-In-process callers that name no season, such as provisioning's first Open period
-(`menu-timetable.ts`) and the demo seed, still write every season. The old tables,
+In-process callers that name no season, such as `placeOpenPeriod` (`menu-timetable.ts`), which gives a new
+department its first Open period at provisioning and whenever a department is created, and the demo
+seed, still write every season. The old tables,
 `menu_day_timetables` with `menu_slots` and `zone_closed_times`, get no weekday row from any
 writer (the case "a week written with no season named leaves no weekday row in the old tables" in
 `packages/venue-service/src/season-weeks.test.ts`). A venue database that ran #1577 (A506-1) and

@@ -1671,7 +1671,7 @@ Winter week", "Edit the Winter week" (→ Week tab with `season=`), "Make this a
 
 ### Task 7.3: Remove the dated copies; docs
 
-**Files:** `real-week.ts` (deleted; its `seasonWeekOn` helper moves to a small
+**Files:** `real-week.ts` (deleted; its `seasonIdOn` helper (the date's season, read with `seasonWeek` from `season-choice.ts`) moves to a small
 `season-week-view.ts`, which the Week tab and the read-only station and All departments views keep
 using for the current season's week), dated modes of `opening-hours-week.ts`,
 `opening-hours-zone-week.ts`, `opening-hours-all.ts` and `opening-hours-station.ts` (it imports

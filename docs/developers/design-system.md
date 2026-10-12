@@ -1922,9 +1922,9 @@ changeover belongs to the next morning. A skipped-time refusal
 names the clock gap at the date header and keeps Save available for retry. The Day tab starts on your venue's business date; Previous cannot go earlier. Each active
 department is followed by a narrow column for each of its active zones. Dragging in a zone stages
 closed times over the department's periods; opening a closed block edits its times or deletes it.
-Previous/next date actions ask before discarding a staged draft. A date without own hours shows
-“Changes every {weekday} in {season}” and saves that weekday in the week of the season holding
-the date. Its heading offers Give this
+Previous/next date actions ask before discarding a staged draft. When a season holds the date, a date
+without own hours shows “Changes every {weekday} in {season}” and saves that weekday in that
+season's week; when none does, it shows no note. Its heading offers Give this
 date its own hours after its calendar facts load, opening an existing named day's editor or
 prefilling a public holiday's name and kind. A named day with own hours saves that date's
 department ranges and zone closed times. A whole-venue closure says Closed and offers no editing
@@ -3520,7 +3520,7 @@ someone with `venue_service.manage`; a supervisor is not offered it.
 
 Department opening hours belong to `/manage/opening-hours`, with Week, Periods, Day and Calendar
 tabs; `/department/<id>` selects the department and `/view/periods` selects its periods, and on the Week
-tab `/season/<id>` selects the season (the current season when absent). The Week
+tab `/season/<id>` selects the season (in the standard week only; the fallback is in Forms above). The Week
 and Day editing contract is in Forms above. After provisioning, setup's completion screen shows
 the first saved Open schedule, when it is still Monday to Friday, 09:00–17:00, with a link to
 that department's Opening hours.
