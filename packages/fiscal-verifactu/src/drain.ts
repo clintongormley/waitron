@@ -56,6 +56,10 @@ const deferredBatch = new Error("Wait for a full sending batch");
  * due, and the hold is lifted once that send breaks the run (`releaseSettledBrakeHolds`). */
 export const SAME_CODE_REFUSAL_LIMIT = 3;
 
+/** The accepted-with-errors codes AEAT says need no correction: «Se excepciona este error de la
+ * necesidad de ser subsanado» (Validaciones_Errores_Veri-Factu v1.2.2, §4.3.1). */
+const EXEMPT_FROM_CORRECTION = new Set([2004, 2009]);
+
 /** The first retry's wait, and the per-attempt doubling unit `backoffMs` scales from. */
 export const BACKOFF_BASE_MS = 60_000;
 /** The retry ceiling: a batch that keeps failing retries hourly, as art. 16.4 requires. */
@@ -1152,7 +1156,8 @@ async function applyOutcome(
       result.recordsAccepted += 1;
       return;
     case "accepted_with_errors": {
-      // Still an accept: AEAT stored the record, and only a warning incident marks the difference.
+      // Still an accept: AEAT stored the record. A warning marks the difference, and a case asks
+      // a person to correct it unless AEAT exempts the error.
       await setEstado(tx, row.id, "aceptado_con_errores", now, { csv, confirmadoEn: now });
       const codigo = linea.CodigoErrorRegistro ?? null;
       const mensaje = linea.DescripcionErrorRegistro ?? null;
@@ -1164,6 +1169,9 @@ async function applyOutcome(
         now,
         result,
       );
+      if (codigo === null || !EXEMPT_FROM_CORRECTION.has(codigo)) {
+        await openCase(tx, row, "fiscal.aceptado_con_errores", linea, csv, now);
+      }
       result.recordsAccepted += 1;
       return;
     }

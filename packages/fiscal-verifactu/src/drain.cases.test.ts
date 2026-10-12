@@ -561,6 +561,53 @@ async function mensajeOf(registroId: string): Promise<string | null> {
   return rows[0]!.mensaje_error;
 }
 
+describe("drain — a record accepted with errors", () => {
+  /** Every line reads accepted with errors, with `codigo`. */
+  const acceptedWithError = (client: VerifactuClient, codigo: (ref: string) => number) =>
+    rewritingLines(client, (linea) => ({
+      ...linea,
+      EstadoRegistro: "AceptadoConErrores",
+      CodigoErrorRegistro: codigo(linea.RefExterna!),
+      DescripcionErrorRegistro: `Error ${codigo(linea.RefExterna!)}`,
+    }));
+
+  it("opens a case when AEAT says the error must be corrected, and still raises the warning", async () => {
+    const seeded = await seedPendingEnvios(suite.db, { count: 1 });
+    const [record] = seeded.registroIds;
+
+    const result = await drain(deps(acceptedWithError(fakeAeat().client(), () => 2005)), FIRST);
+
+    expect(await envioOf(record!)).toMatchObject({ estado: "aceptado_con_errores" });
+    expect(result.recordsAccepted).toBe(1);
+    const opened = await cases();
+    expect(opened.map((c) => [c.registroId, c.cause, c.status])).toEqual([
+      [record, "fiscal.aceptado_con_errores", "open"],
+    ]);
+    expect(opened[0]!.evidence).toEqual({
+      codigo: 2005,
+      mensaje: "Error 2005",
+      csv: expect.any(String),
+    });
+    expect(await incidentCodes()).toEqual(["fiscal.aceptado_con_errores"]);
+  });
+
+  it("opens no case for the two errors AEAT exempts from correction, 2004 and 2009", async () => {
+    const seeded = await seedPendingEnvios(suite.db, { count: 2 });
+    const [late, ipsi] = seeded.registroIds;
+    const codes: Record<string, number> = { [late!]: 2004, [ipsi!]: 2009 };
+
+    await drain(deps(acceptedWithError(fakeAeat().client(), (ref) => codes[ref]!)), FIRST);
+
+    expect(await envioOf(late!)).toMatchObject({ estado: "aceptado_con_errores" });
+    expect(await envioOf(ipsi!)).toMatchObject({ estado: "aceptado_con_errores" });
+    expect(await cases()).toEqual([]);
+    expect(await incidentCodes()).toEqual([
+      "fiscal.aceptado_con_errores",
+      "fiscal.aceptado_con_errores",
+    ]);
+  });
+});
+
 describe("drain — a conflict no longer holds its chain", () => {
   it("Route B: refuses the conflicting record with AEAT's code, opens one case, and sends the next record", async () => {
     const aeat = fakeAeat();

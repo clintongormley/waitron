@@ -8,7 +8,10 @@ import { registrosFacturacion } from "./registros.js";
  * a CHECK would make each new cause a table rebuild, which fails once events point at the cases.
  */
 export type FilingCaseCause =
-  "fiscal.registro_rechazado" | "fiscal.huella_divergente" | "fiscal.duplicado_anulado";
+  | "fiscal.registro_rechazado"
+  | "fiscal.huella_divergente"
+  | "fiscal.duplicado_anulado"
+  | "fiscal.aceptado_con_errores";
 
 /** What AEAT said about the record when the case opened. `csv` is the envío's. */
 export interface FilingCaseEvidence {
