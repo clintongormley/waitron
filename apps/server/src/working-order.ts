@@ -1,5 +1,5 @@
 import { readSaleOperationDescription } from "./sale-operation-description.js";
-import { joinedOutOfService, stillJoinedPart, tableInService } from "@waitron/db";
+import { joinedOutOfService, joinedTableApart, stillJoinedPart, tableInService } from "@waitron/db";
 import { readStationQueueMoves, type StationQueueMove } from "./station-queue-moves.js";
 import {
   checkedInvoiceChoiceDelivery,
@@ -57,6 +57,7 @@ import {
   decimal,
   decimalToCents,
   decimalToThousandths,
+  compareLabels,
   divideDecimal,
   locationId as brandLocationId,
   partyDisplayName,
@@ -7173,6 +7174,10 @@ export interface TableToday {
   joinSeats: number | null;
   /** The live name of the joined table this table is still a part of; `null` when it is in none. */
   inJoinedTable: string | null;
+  /** For a joined table of today's copy: its parts still joined and split off, by label; else `null`. */
+  joined: { parts: string[]; splitOff: string[]; apart: boolean } | null;
+  /** For a part split off today: its joined table's live id. */
+  splitOffFrom: string | null;
 }
 
 /** One row of the occupancy read-model. */
@@ -7441,6 +7446,57 @@ async function readTodayTables(
       and ${stillJoinedPart(sql`part_row.table_id`)}
   `);
   const joinedName = new Map(parts.rows.map((part) => [part.table_id, part.label]));
+  const copyParts = await tx.execute<{
+    joined_id: string;
+    part_id: string;
+    label: string;
+    still: number;
+  }>(sql`
+    select joined_row.table_id as joined_id, part_table.id as part_id, part_table.label,
+      ${stillJoinedPart(sql`part_table.id`)} as still
+    from floor_reset_table_parts joined_part
+    inner join floor_reset_tables part_row on part_row.id = joined_part.part_reset_table_id
+    inner join floor_reset_tables joined_row on joined_row.id = joined_part.joined_reset_table_id
+    inner join dining_tables joined_table on joined_table.id = joined_row.table_id
+    inner join dining_tables part_table on part_table.id = part_row.table_id
+    where joined_table.location_id = ${locationId}
+  `);
+  const apart = await tx.execute<{ id: string }>(sql`
+    select id from dining_tables
+    where location_id = ${locationId} and ${joinedTableApart(sql`dining_tables.id`)}
+  `);
+  const splits = await tx.execute<{ joined_id: string; part_id: string; label: string }>(sql`
+    select split.joined_table_id as joined_id, split.part_table_id as part_id, part_table.label
+    from floor_today_split_parts split
+    inner join dining_tables part_table on part_table.id = split.part_table_id
+    where part_table.location_id = ${locationId}
+  `);
+  const apartIds = new Set(apart.rows.map((row) => row.id));
+  const joinedOf = new Map<string, { parts: Labelled[]; splitOff: Labelled[] }>();
+  const entryOf = (joinedId: string) => {
+    let entry = joinedOf.get(joinedId);
+    if (entry === undefined) {
+      entry = { parts: [], splitOff: [] };
+      joinedOf.set(joinedId, entry);
+    }
+    return entry;
+  };
+  for (const part of copyParts.rows) {
+    const entry = entryOf(part.joined_id);
+    if (part.still) entry.parts.push({ id: part.part_id, label: part.label });
+  }
+  const splitOffFrom = new Map<string, string>();
+  for (const split of splits.rows) {
+    entryOf(split.joined_id).splitOff.push({ id: split.part_id, label: split.label });
+    splitOffFrom.set(split.part_id, split.joined_id);
+  }
+  const ids = (labelled: Labelled[]) =>
+    labelled.sort((a, b) => compareLabels(a.label, b.label)).map((part) => part.id);
+  const joinedState = (tableId: string): TableToday["joined"] => {
+    const entry = joinedOf.get(tableId);
+    if (entry === undefined) return null;
+    return { parts: ids(entry.parts), splitOff: ids(entry.splitOff), apart: apartIds.has(tableId) };
+  };
   return new Map(
     rows.map((row) => [
       row.tableId,
@@ -7452,9 +7508,16 @@ async function readTodayTables(
         joinId: row.joinId,
         joinSeats: row.joinSeats,
         inJoinedTable: joinedName.get(row.tableId) ?? null,
+        joined: joinedState(row.tableId),
+        splitOffFrom: splitOffFrom.get(row.tableId) ?? null,
       },
     ]),
   );
+}
+
+interface Labelled {
+  id: string;
+  label: string;
 }
 
 /**
