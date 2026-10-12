@@ -21,7 +21,6 @@ import { placeOpenPeriod } from "./menu-timetable.js";
 import { VENUE_SERVICE_PROVISIONING } from "./provisioning.js";
 import { departments, zoneServicePolicies } from "./schema/service.js";
 import { menuPeriods } from "./schema/menus.js";
-import { specialDates } from "./schema/hours.js";
 
 const suite = useVenueDb({
   migrations: [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS, service.VENUE_SERVICE_MIGRATIONS],
@@ -62,10 +61,6 @@ async function fixture() {
       },
       0,
     );
-    const [day] = await tx
-      .insert(specialDates)
-      .values({ ...cfg, name: "Event", date: "2026-10-12", ownHours: true })
-      .returning();
     await service.writeDepartmentReceipt(tx, cfg, gone.id, { email: "history@example.com" });
     await tx.update(departments).set({ active: false }).where(eq(departments.id, gone.id));
     await tx.update(floorZones).set({ active: false }).where(eq(floorZones.id, zone.id));
@@ -77,7 +72,6 @@ async function fixture() {
       liveZone: liveZone.id,
       menu: menu!.id,
       period: period.id,
-      day: day!.id,
     };
   });
 }

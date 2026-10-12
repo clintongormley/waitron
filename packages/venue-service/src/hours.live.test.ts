@@ -174,10 +174,7 @@ it("refreshes Calendar and holiday coverage after every special day, area, addre
       0,
     ),
   );
-  expect(both(named)).toEqual([
-    ["special_days", "special_day_dates"],
-    ["special_days", "special_day_dates"],
-  ]);
+  expect(both(named)).toEqual([["special_days", "special_day_dates"], []]);
   const area = await announced((tx) => saveHolidayArea(tx, cfg, { areaKey: "aran" }));
   expect(both(area)).toEqual([["holiday_geographies"], ["holiday_geographies"]]);
   const moved = await announced((tx) =>

@@ -30,9 +30,9 @@ import {
 import type { ModuleRouteContext } from "@waitron/module";
 import { locationId as brandLocationId } from "@waitron/shared";
 import { MANAGEMENT_COOKIE, type Logger } from "@waitron/server-kit";
-import { insertNamedDay } from "./testing/named-day-rows.js";
 import { readOpeningHoursModel, saveMenuPeriod } from "./menu-timetable.js";
 import type { MenuSlot, OpeningHoursModel } from "./menu-timetable-types.js";
+import { saveSpecialDay } from "./special-days.js";
 import { VENUE_SERVICE_MIGRATIONS } from "./migrations.js";
 import { configureZone, createDepartment } from "./operations.js";
 import { VENUE_SERVICE_PERMISSIONS } from "./permissions.js";
@@ -110,13 +110,19 @@ async function routed() {
       )
     ).id;
     const christmas = (
-      await insertNamedDay(tx, cfg, {
-        date: "2030-12-25",
-        name: "Navidad",
-        closeWholeVenue: false,
-        ownHours: true,
-        cells: [],
-      })
+      await saveSpecialDay(
+        tx,
+        cfg,
+        null,
+        {
+          name: "Navidad",
+          repeatsYearly: false,
+          dates: [{ date: "2030-12-25", closedAllDay: false }],
+          paint: [],
+        },
+        new Date(),
+        0,
+      )
     ).id;
     const person = async (role: "manager" | "supervisor" | "staff") => {
       const [row] = await tx

@@ -51,9 +51,6 @@ describe("SpecialDaysApi", () => {
       ]);
       expect(live.interests).toEqual(
         [
-          "special_dates",
-          "menu_day_timetables",
-          "menu_slots",
           "departments",
           "tenants",
           "locations",
@@ -172,7 +169,7 @@ it("the replacement named-day watch reads passively, reports failure and recover
   expect(recovered).toHaveBeenCalledTimes(1);
   stop();
   expect(live.interests).toEqual([]);
-  live.invalidate([{ type: "special_dates" }]);
+  live.invalidate([{ type: "special_days" }]);
   live.refresh();
   await new Promise((resolve) => setTimeout(resolve, 20));
   expect(request).toHaveBeenCalledTimes(3);
@@ -218,7 +215,7 @@ it("retired station rows do not start another Calendar read", async () => {
     for (let turn = 0; turn < 20; turn++) await Promise.resolve();
     expect(request).toHaveBeenCalledTimes(1);
     expect(apply).toHaveBeenCalledTimes(1);
-    live.invalidate([{ type: "special_dates" }]);
+    live.invalidate([{ type: "special_days" }]);
     await vi.waitFor(() => expect(apply).toHaveBeenCalledTimes(2));
     expect(request).toHaveBeenCalledTimes(2);
   } finally {

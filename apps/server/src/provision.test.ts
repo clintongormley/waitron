@@ -132,7 +132,7 @@ describe("provisionVenue", () => {
     const { rows } = await db.execute<Record<string, number>>(sql`
       select
         (select cast(count(*) as int) from holiday_geographies) as geographies,
-        (select cast(count(*) as int) from special_dates) as entries`);
+        (select cast(count(*) as int) from special_days) as entries`);
     expect(rows[0]).toEqual({ geographies: 0, entries: 0 });
     const read = await withTransaction(db, async (tx) => ({
       may: await readHolidays(tx, cfg, "2026-05-01", "2026-05-31"),
@@ -476,13 +476,13 @@ describe("clearProvisionFixture", () => {
 
     const { rows } = await db.execute<Record<string, number>>(sql`
       select
-        (select cast(count(*) as int) from special_dates) as entries,
+        (select cast(count(*) as int) from special_days) as entries,
         (select cast(count(*) as int) from holiday_geographies) as geographies,
         (select cast(count(*) as int) from locations) as locations`);
     expect(rows[0]).toEqual({ entries: 0, geographies: 0, locations: 0 });
   });
 
-  it("clears a venue holding named dates before their owners", async () => {
+  it("clears a venue holding special days before their owners", async () => {
     const db = ownerDb();
     const result = await provisionVenue(
       { ownerDb: db, moduleConfig: ES_CONFIG, database: "waitron", stateDir },
@@ -494,20 +494,25 @@ describe("clearProvisionFixture", () => {
         .values({ locationId: result.locationId, name: "Restaurant pass" })
         .returning({ id: kitchenStations.id });
       await tx.insert(kitchenStations).values({ locationId: result.locationId, name: "Bar" });
-      await tx.execute(sql`insert into special_dates (id, location_id, date, name)
-        values (${randomUUID()}, ${result.locationId}, '2026-12-24', 'Christmas Eve')`);
+      const day = randomUUID();
+      await tx.execute(sql`insert into special_days (id, location_id, name, repeats_yearly)
+        values (${day}, ${result.locationId}, 'Christmas Eve', 0)`);
+      await tx.execute(sql`insert into special_day_dates (id, special_day_id, location_id, date, closed_all_day)
+        values (${randomUUID()}, ${day}, ${result.locationId}, '2026-12-24', 0)`);
     });
 
     await clearProvisionFixture(db);
 
     const { rows } = await db.execute<Record<string, number>>(sql`
       select
-        (select cast(count(*) as int) from special_dates) as special_dates,
+        (select cast(count(*) as int) from special_days) as special_days,
+        (select cast(count(*) as int) from special_day_dates) as special_day_dates,
         (select cast(count(*) as int) from departments) as departments,
         (select cast(count(*) as int) from kitchen_stations) as stations,
         (select cast(count(*) as int) from locations) as locations`);
     expect(rows[0]).toEqual({
-      special_dates: 0,
+      special_days: 0,
+      special_day_dates: 0,
       departments: 0,
       stations: 0,
       locations: 0,

@@ -21,13 +21,6 @@ describe("VENUE_SERVICE_CLASSIFICATION", () => {
       "local_holidays",
     );
   });
-  it("copies zone closed times as state", () => {
-    expect(
-      VENUE_SERVICE_CLASSIFICATION.filter((entry) => entry.table === "zone_closed_times").map(
-        (entry) => [entry.table, entry.class],
-      ),
-    ).toEqual([["zone_closed_times", "state"]]);
-  });
   it("copies a period's staff-only menu choices as state", () => {
     expect(
       VENUE_SERVICE_CLASSIFICATION.filter((entry) => entry.table === "menu_period_staff_menus").map(
@@ -42,10 +35,7 @@ describe("VENUE_SERVICE_CLASSIFICATION", () => {
         entry.table,
         entry.class,
       ]),
-    ).toEqual([
-      ["station_day_states", "state"],
-      ["special_dates", "state"],
-    ]);
+    ).toEqual([["station_day_states", "state"]]);
   });
   it("classifies routing_cells as replicated state", () => {
     expect(

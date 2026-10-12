@@ -42,9 +42,6 @@ describe("SpecialDaysApi.watchSpecialDays", () => {
     await vi.waitFor(() => expect(apply).toHaveBeenCalledWith(model("2030-10-06")));
     expect(liveData.interests).toEqual(QUERY_DEPENDENCIES["named-days"].map((type) => ({ type })));
     expect(QUERY_DEPENDENCIES["named-days"]).toEqual([
-      "special_dates",
-      "menu_day_timetables",
-      "menu_slots",
       "departments",
       "tenants",
       "locations",
@@ -88,14 +85,14 @@ describe("SpecialDaysApi.watchSpecialDays", () => {
     );
     await vi.waitFor(() => expect(apply).toHaveBeenCalledTimes(1));
 
-    liveData.invalidate([{ type: "special_dates" }]);
+    liveData.invalidate([{ type: "special_days" }]);
     await vi.waitFor(() => expect(apply).toHaveBeenLastCalledWith(model("2030-10-07")));
 
     liveData.invalidate([{ type: "locations" }]);
     await vi.waitFor(() => expect(failed).toHaveBeenCalledWith(new Error("offline")));
     expect(recovered).not.toHaveBeenCalled();
 
-    liveData.invalidate([{ type: "menu_slots" }]);
+    liveData.invalidate([{ type: "special_day_dates" }]);
     await vi.waitFor(() => expect(apply).toHaveBeenLastCalledWith(model("2030-10-08")));
     expect(recovered).toHaveBeenCalledTimes(1);
     expect(apply).toHaveBeenCalledTimes(3);
@@ -104,7 +101,7 @@ describe("SpecialDaysApi.watchSpecialDays", () => {
     liveData.invalidate([{ type: "service_settings" }]);
     detach();
     expect(liveData.interests).toEqual([]);
-    liveData.invalidate([{ type: "special_dates" }]);
+    liveData.invalidate([{ type: "special_days" }]);
     liveData.refresh();
     await new Promise((resolve) => setTimeout(resolve, 20));
     expect(request).toHaveBeenCalledTimes(4);

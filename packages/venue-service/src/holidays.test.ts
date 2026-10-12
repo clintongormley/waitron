@@ -19,12 +19,10 @@ import {
   readHolidays as packageReadHolidays,
 } from "./holidays.js";
 import { saveSpecialDay } from "./special-days.js";
-import { insertNamedDay } from "./testing/named-day-rows.js";
 import * as packageIndex from "./index.js";
 import { VENUE_SERVICE_MIGRATIONS } from "./migrations.js";
 import type { VenueScope } from "./operations.js";
 import { holidayGeographies } from "./schema/holidays.js";
-import { specialDates } from "./schema/hours.js";
 import { specialDayDates, specialDays } from "./schema/seasons.js";
 
 const suite = useVenueDb({
@@ -197,7 +195,7 @@ async function specialDay(cfg: VenueScope, date: string, name: string, repeatsYe
   });
 }
 
-async function seedRetainedGeographyWithWorkingDay(
+async function seedRetainedGeographyWithSpecialDay(
   tx: Transaction,
   cfg: VenueScope,
   date: string,
@@ -213,15 +211,19 @@ async function seedRetainedGeographyWithWorkingDay(
       cityKey: "villa real",
     })
     .returning();
+  const [day] = await tx
+    .insert(specialDays)
+    .values({ locationId: cfg.locationId, name, repeatsYearly: false })
+    .returning({ id: specialDays.id });
   await tx
-    .insert(specialDates)
-    .values({ locationId: cfg.locationId, date, name, kind: "working_day" });
+    .insert(specialDayDates)
+    .values({ specialDayId: day!.id, locationId: cfg.locationId, date, closedAllDay: false });
 }
 
 async function stored() {
   return run(async (tx) => ({
     geographies: await tx.select().from(holidayGeographies).orderBy(asc(holidayGeographies.id)),
-    entries: await tx.select().from(specialDates).orderBy(asc(specialDates.id)),
+    entries: await tx.select().from(specialDays).orderBy(asc(specialDays.id)),
   }));
 }
 
@@ -308,9 +310,9 @@ describe("reading a venue's holidays", () => {
     expect(read.facts.map(({ date }) => date)).toEqual(["2027-01-01"]);
   });
 
-  it("keeps a working named day and retained geography out of holiday facts, coverage and sources", async () => {
+  it("keeps a special day and retained geography out of holiday facts, coverage and sources", async () => {
     const cfg = await venue();
-    await run((tx) => seedRetainedGeographyWithWorkingDay(tx, cfg, "2026-01-01", "Fiesta mayor"));
+    await run((tx) => seedRetainedGeographyWithSpecialDay(tx, cfg, "2026-01-01", "Fiesta mayor"));
     const read = await run((tx) => store.readHolidays(tx, cfg, "2026-01-01", "2026-01-01"));
     expect(read.facts).toEqual([
       {
@@ -521,7 +523,7 @@ describe("an address that does not resolve", () => {
 
   it("returns no local facts for a matching geography once its country has no holiday capability", async () => {
     const cfg = await venue({ country: "ZY" });
-    await run((tx) => seedRetainedGeographyWithWorkingDay(tx, cfg, "2026-03-19", "Retired"));
+    await run((tx) => seedRetainedGeographyWithSpecialDay(tx, cfg, "2026-03-19", "Retired"));
     const read = await run((tx) => store.readHolidays(tx, cfg, "2026-01-01", "2026-12-31"));
     expect(read).toEqual({
       facts: [],
@@ -566,7 +568,7 @@ describe("territorial areas", () => {
 
   it("stores the choice on a geography with no entries, keeps it across a move away and back, and clears it with null", async () => {
     const cfg = await venue({ province: "Isleshire" });
-    const specials = await run((tx) => tx.select().from(specialDates));
+    const specials = await run((tx) => tx.select().from(specialDays));
     const geography = (await run((tx) => store.saveHolidayArea(tx, cfg, { areaKey: "isle-a" })))!;
     expect(geography).toEqual({
       id: geography.id,
@@ -598,7 +600,7 @@ describe("territorial areas", () => {
     expect(await run((tx) => store.readHolidayAreaModel(tx, cfg))).toMatchObject({
       areaRequired: true,
     });
-    expect(await run((tx) => tx.select().from(specialDates))).toEqual(specials);
+    expect(await run((tx) => tx.select().from(specialDays))).toEqual(specials);
   });
 
   it("offers the area choice from the province alone while the city is missing, but cannot save it", async () => {
@@ -708,11 +710,23 @@ describe("transactions and other callers", () => {
   it("reads a data revision's facts, version and allowance, leaving every stored row as it was", async () => {
     const cfg = await venue();
     await run((tx) =>
-      insertNamedDay(tx, cfg, { date: "2026-01-01", name: "New Year", closeWholeVenue: true }),
+      saveSpecialDay(
+        tx,
+        cfg,
+        null,
+        {
+          name: "New Year",
+          repeatsYearly: false,
+          dates: [{ date: "2026-01-01", closedAllDay: true }],
+          paint: [],
+        },
+        new Date("2025-12-01T10:00:00Z"),
+        0,
+      ),
     );
     const rows = async () => ({
       stored: await stored(),
-      specialDates: await run((tx) => tx.select().from(specialDates).orderBy(asc(specialDates.id))),
+      specialDays: await run((tx) => tx.select().from(specialDays).orderBy(asc(specialDays.id))),
     });
     const before = await rows();
 
@@ -775,7 +789,7 @@ describe("transactions and other callers", () => {
     const model = await run((tx) => revised.readHolidayAreaModel(tx, cfg));
     expect(model.localHolidaysPerYear).toBe(1);
     expect(await rows()).toEqual(before);
-    expect(before.specialDates.map(({ name }) => name)).toEqual(["New Year"]);
+    expect(before.specialDays.map(({ name }) => name)).toEqual(["New Year"]);
   });
 
   it("is exported from the package index, bound to the installed country packs", () => {

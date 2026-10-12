@@ -140,11 +140,13 @@ describe("VENUE_SERVICE", () => {
       "special_date_hours_periods",
     ])
       expect(names).not.toContain(table);
-    expect(names).toContain("special_dates");
+    expect(names).toContain("special_days");
+    expect(names).toContain("special_day_dates");
     expect(names).toContain("menu_periods");
-    expect(names).toContain("menu_day_timetables");
-    expect(names).toContain("menu_slots");
-    expect(names).toContain("zone_closed_times");
+    expect(names).toContain("department_days");
+    expect(names).toContain("department_day_ranges");
+    expect(names).toContain("zone_days");
+    expect(names).toContain("zone_day_ranges");
     expect(names).not.toContain("station_hours");
     expect(names).not.toContain("department_hours");
     expect(names).not.toContain("station_fallbacks");

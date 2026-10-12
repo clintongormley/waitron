@@ -9,7 +9,6 @@ import { readCalendarDays } from "./hours.js";
 import { readOpeningHoursModel } from "./menu-timetable.js";
 import { VENUE_SERVICE_MIGRATIONS } from "./migrations.js";
 import { readSpecialDaysModel } from "./named-days.js";
-import { specialDates } from "./schema/hours.js";
 import { specialDayDates, specialDays } from "./schema/seasons.js";
 
 const suite = useVenueDb({
@@ -34,14 +33,6 @@ it.each(["calendar", "special days", "opening hours"] as const)(
           })
           .returning();
         const cfg = { locationId: locationId(venue!.id) };
-        await tx.insert(specialDates).values({
-          locationId: cfg.locationId,
-          date: "2026-10-10",
-          name: "Annual closure",
-          repeatOn: "10-10",
-          kind: "holiday",
-          closeWholeVenue: true,
-        });
         const [special] = await tx
           .insert(specialDays)
           .values({ locationId: cfg.locationId, name: "Annual closure", repeatsYearly: true })

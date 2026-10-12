@@ -55,11 +55,6 @@ it.each([
     "Removes {count} zone service settings.",
     "Quita {count} ajustes de servicio de zonas.",
   ],
-  [
-    "zone_closed_times",
-    "Removes {count} zone closed times.",
-    "Quita {count} horarios de cierre de zonas.",
-  ],
   ["zone_extensions", "Removes {count} zone extensions.", "Quita {count} extensiones de zonas."],
   [
     "department_periods",
@@ -71,8 +66,6 @@ it.each([
     "Removes {count} staff menu settings.",
     "Quita {count} ajustes de menús del personal.",
   ],
-  ["timetables", "Removes {count} menu timetables.", "Quita {count} horarios de menús."],
-  ["slots", "Removes {count} menu slots.", "Quita {count} franjas de menús."],
   ["seasons", "Removes hours in {count} seasons.", "Quita los horarios de {count} temporadas."],
   [
     "period_extensions",

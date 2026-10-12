@@ -18,7 +18,6 @@ import { locationId as brandLocationId } from "@waitron/shared";
 import { readHolidays, readHolidayAreaModel } from "./holidays.js";
 import { readSpecialDaysModel } from "./named-days.js";
 import { saveSpecialDay } from "./special-days.js";
-import { insertNamedDay, readNamedDay } from "./testing/named-day-rows.js";
 import { readSeasons } from "./seasons.js";
 import { VENUE_SERVICE_MIGRATIONS } from "./migrations.js";
 import { createServiceZone } from "./operations.js";
@@ -295,65 +294,6 @@ describe("VENUE_SERVICE_PROVISIONING", () => {
     await runSeed();
     expect(await settings()).toEqual([{ id: 1, edit_sent_lines: 0 }]);
   });
-  it("leaves a fresh venue without named dates and preserves an authored date on a re-run", async () => {
-    await seedTenant(db);
-    const [location] = await db
-      .insert(locations)
-      .values({
-        name: "Calendar Venue",
-        invoiceLocales: ["en-GB"],
-        operationDescription: "Hospitality",
-        timeZone: "Europe/Madrid",
-        dayCutover: "06:00:00",
-      })
-      .returning({ id: locations.id });
-    const locationId = brandLocationId(location!.id);
-    const cfg = { locationId };
-    const node = { locationId, nodeId: await seedNode(db, locationId) };
-    const runSeed = () => db.transaction((tx) => VENUE_SERVICE_PROVISIONING.seed!.run(tx, node));
-    const dates = async () =>
-      (
-        await db.execute(sql`
-          select id, kind, repeat_on, own_hours, date, name, close_whole_venue
-          from special_dates where location_id = ${locationId}`)
-      ).rows;
-    await runSeed();
-    expect(await dates()).toEqual([]);
-
-    const saved = await db.transaction((tx) =>
-      insertNamedDay(tx, cfg, {
-        date: "2026-12-25",
-        name: "Christmas",
-        closeWholeVenue: false,
-      }),
-    );
-    const before = await db.transaction((tx) => readNamedDay(tx, cfg, saved.id));
-    expect(before).toEqual({
-      id: saved.id,
-      kind: "working_day",
-      repeats: false,
-      ownHours: false,
-      date: "2026-12-25",
-      name: "Christmas",
-      closeWholeVenue: false,
-    });
-
-    await runSeed();
-
-    expect(await db.transaction((tx) => readNamedDay(tx, cfg, saved.id))).toEqual(before);
-    expect(await dates()).toEqual([
-      {
-        id: saved.id,
-        kind: "working_day",
-        repeat_on: null,
-        own_hours: 0,
-        date: "2026-12-25",
-        name: "Christmas",
-        close_whole_venue: 0,
-      },
-    ]);
-  });
-
   it("leaves a fresh Spanish venue's holiday storage empty while its address reads the shipped holidays, and a re-run keeps entries made later", async () => {
     await seedTenant(db);
     const [location] = await db

@@ -4,11 +4,9 @@ import { createHolidayCalendar, type CountryPack } from "@waitron/country";
 import {
   VENUE_SERVICE_CONFIGURATION_TRANSFER,
   validateHolidayConfiguration,
-  validateNamedDaysConfiguration,
   validateMenuTimetables,
   validateRoutingConfiguration,
 } from "./configuration-transfer.js";
-import { clockChangeAfter, minutesAfter } from "./testing/clock-change.js";
 
 type Row = Record<string, unknown>;
 type Tables = Record<string, Row[]>;
@@ -17,132 +15,11 @@ const RESTAURANT = "d-restaurant";
 const DELI = "d-deli";
 const KITCHEN = "k-kitchen"; // the default station
 const BAR = "k-bar";
-const CHRISTMAS = "sd-christmas";
-
-function namedTables(): Tables {
-  return {
-    special_dates: [
-      {
-        id: "day",
-        location_id: "venue",
-        date: "2026-12-25",
-        name: "Christmas",
-        kind: "holiday",
-        repeat_on: null,
-        own_hours: 0,
-        close_whole_venue: 0,
-      },
-    ],
-  };
-}
 
 function refusal(field: string) {
   return expect.objectContaining({ code: "setup.request_invalid", params: { field } });
 }
 
-describe("named days in configuration transfer", () => {
-  it.each([
-    ["kind", "other", "special_dates"],
-    ["kind", null, "special_dates"],
-    ["repeat_on", "12-24", "special_dates.repeat_on"],
-    ["repeat_on", true, "special_dates.repeat_on"],
-    ["own_hours", true, "special_dates.own_hours"],
-    ["own_hours", null, "special_dates.own_hours"],
-  ])("refuses named-day %s=%s", (key, value, field) => {
-    const tables = namedTables();
-    tables.special_dates![0]![key as string] = value;
-    expect(() => validateNamedDaysConfiguration(tables)).toThrowError(refusal(field as string));
-  });
-
-  it("refuses own hours combined with whole-venue closure", () => {
-    const tables = namedTables();
-    Object.assign(tables.special_dates![0]!, { own_hours: 1, close_whole_venue: 1 });
-    expect(() => validateNamedDaysConfiguration(tables)).toThrowError(refusal("special_dates"));
-  });
-
-  it.each([
-    "hours_week_cells",
-    "hours_week_periods",
-    "special_date_hours",
-    "special_date_hours_periods",
-  ])("validates named days independently of retired %s rows", (table) => {
-    const tables = namedTables();
-    tables.special_dates![0]!.repeat_on = "12-25";
-    tables[table] = [
-      { id: "retired", mode: "invalid", cell_id: "missing", special_date_id: "missing" },
-    ];
-    expect(() => validateNamedDaysConfiguration(tables)).not.toThrow();
-  });
-
-  it.each([
-    ["2026-12-25", "12-25", "2027-12-25", null],
-    ["2027-12-25", null, "2026-12-25", "12-25"],
-    ["2026-12-25", "12-25", "2028-12-25", "12-25"],
-  ])("refuses colliding occurrences %s/%s and %s/%s", (a, ar, b, br) => {
-    const tables = namedTables();
-    const row = tables.special_dates![0]!;
-    Object.assign(row, { date: a, repeat_on: ar });
-    tables.special_dates!.push({ ...row, id: "other", date: b, repeat_on: br });
-    expect(() => validateNamedDaysConfiguration(tables)).toThrowError(
-      refusal("special_dates.date"),
-    );
-  });
-
-  it("accepts a one-off before the repeat begins and independent venues", () => {
-    const tables = namedTables();
-    const row = tables.special_dates![0]!;
-    Object.assign(row, { date: "2027-12-25", repeat_on: "12-25", own_hours: 1 });
-    tables.special_dates!.push({ ...row, id: "past", date: "2026-12-25", repeat_on: null });
-    tables.special_dates!.push({ ...row, id: "elsewhere", location_id: "other" });
-    expect(() => validateNamedDaysConfiguration(tables)).not.toThrow();
-  });
-});
-
-describe("named-day fields in configuration transfer", () => {
-  it.each<[string, (tables: Tables) => void, string]>([
-    [
-      "a date that does not exist",
-      (t) => (t.special_dates![0]!.date = "2026-02-30"),
-      "special_dates.date",
-    ],
-    [
-      "two special dates on one date",
-      (t) => t.special_dates!.push({ ...t.special_dates![0]!, id: "sd-copy" }),
-      "special_dates.date",
-    ],
-    ["a blank name", (t) => (t.special_dates![0]!.name = "  "), "special_dates.name"],
-    [
-      "a kind outside the vocabulary",
-      (t) => (t.special_dates![0]!.kind = "party"),
-      "special_dates",
-    ],
-    [
-      "a whole-venue flag other than 0 or 1",
-      (t) => (t.special_dates![0]!.close_whole_venue = true),
-      "special_dates.close_whole_venue",
-    ],
-  ])("refuses %s", (_, edit, field) => {
-    const tables = namedTables();
-    edit(tables);
-    expect(() => validateNamedDaysConfiguration(tables)).toThrowError(refusal(field));
-  });
-
-  it("runs named-day validation through the transfer callback", () => {
-    const tables = namedTables();
-    tables.special_dates![0]!.date = "2026-02-30";
-    expect(() => VENUE_SERVICE_CONFIGURATION_TRANSFER.validate(tables)).toThrowError(
-      refusal("special_dates.date"),
-    );
-    tables.special_dates![0]!.date = "2026-12-25";
-    expect(() => VENUE_SERVICE_CONFIGURATION_TRANSFER.validate(tables)).not.toThrow();
-  });
-
-  it("accepts a bundle without named days", () => {
-    expect(() => validateNamedDaysConfiguration({})).not.toThrow();
-  });
-});
-
-/** An invented country, so no expectation below depends on any real country's allowance. */
 function holidayPack(localEntryLimit: number): CountryPack {
   return {
     countryCode: "ZZ",
@@ -321,9 +198,9 @@ describe("validateHolidayConfiguration", () => {
     expect(() => validateHolidayConfiguration(tables, packs(2))).not.toThrow();
   });
 
-  it("is run by the venue-service transfer's validate callback, beside the named-day check", () => {
+  it("is run by the venue-service transfer's validate callback", () => {
     const { validate } = VENUE_SERVICE_CONFIGURATION_TRANSFER;
-    const both = { ...namedTables(), ...holidayTables() };
+    const both = holidayTables();
     // The installed packs know no country ZZ.
     expect(() => validate(both)).toThrowError(refusal("holiday_geographies.country"));
     for (const row of both.holiday_geographies!) row.country = "ES";
@@ -335,7 +212,7 @@ describe("validateHolidayConfiguration", () => {
 
   it("declares holiday geographies and excludes the retired local entries", () => {
     const names = VENUE_SERVICE_CONFIGURATION_TRANSFER.tables.map((table) => table.name);
-    expect(names.slice(-2)).toEqual(["zone_closed_times", "holiday_geographies"]);
+    expect(names.slice(-2)).toEqual(["zone_day_ranges", "holiday_geographies"]);
     expect(names).not.toContain("local_holidays");
     expect(VENUE_SERVICE_CONFIGURATION_TRANSFER.tables.at(-1)).toEqual({
       name: "holiday_geographies",
@@ -350,7 +227,7 @@ describe("the menu timetable rows of a bundle", () => {
     (endOffsetMinutes) => {
       const tables = menuTables();
       tables.menu_periods![0]!.end_offset_minutes = endOffsetMinutes;
-      expect(() => validateMenuTimetables(tables, madrid("2026-10-07T10:00:00Z"))).toThrowError(
+      expect(() => validateMenuTimetables(tables)).toThrowError(
         refusal("menu_periods.end_offset_minutes"),
       );
     },
@@ -358,20 +235,12 @@ describe("the menu timetable rows of a bundle", () => {
   it.each([-15, 0, 14, undefined])("accepts scalar imported end offset %s", (offset) => {
     const tables = menuTables();
     if (offset !== undefined) tables.menu_periods![0]!.end_offset_minutes = offset;
-    expect(() => validateMenuTimetables(tables, madrid("2026-10-07T10:00:00Z"))).not.toThrow();
+    expect(() => validateMenuTimetables(tables)).not.toThrow();
   });
 
-  it("refuses imported grace reaching the next business day's period in a season week, not in old weekday rows", () => {
+  it("refuses imported grace reaching the next business day's period in a season week", () => {
     const tables = menuTables();
     tables.menu_periods![1]!.end_offset_minutes = 240;
-    tables.menu_day_timetables!.push({
-      id: "t-saturday",
-      department_id: RESTAURANT,
-      weekday: 6,
-      special_date_id: null,
-    });
-    tables.menu_slots!.push(slotRow("t-saturday", MANANAS, "06:00:00", "09:00:00"));
-    // Old weekday rows are left behind on import, so their grace is not checked.
     expect(() => validate(tables, madrid("2026-10-07T10:00:00Z"))).not.toThrow();
     tables.seasons = [{ id: "s-year", location_id: "location", name: "Year", starts_on: "01-01" }];
     tables.department_days = [5, 6].map((weekday) => ({
@@ -403,23 +272,6 @@ describe("the menu timetable rows of a bundle", () => {
   const MANANAS = "11111111-1111-4111-8111-111111111111";
   const MADRUGADA = "22222222-2222-4222-8222-222222222222";
   const DELI_PERIOD = "33333333-3333-4333-8333-333333333333";
-  const dateRow = (id: string, date: string, closeWholeVenue = 0) => ({
-    id,
-    location_id: "location",
-    date,
-    name: "Fiesta",
-    colour: "red",
-    close_whole_venue: closeWholeVenue,
-  });
-  const slotRow = (timetableId: string, periodId: string, startsAt: string, endsAt: string) => ({
-    id: randomUUID(),
-    timetable_id: timetableId,
-    department_id: RESTAURANT,
-    period_id: periodId,
-    starts_at: startsAt,
-    ends_at: endsAt,
-  });
-
   /**
    * The restaurant's Mañanas (Desayunos) runs 09:00–12:00 on Monday and Madrugada (Copas)
    * 22:00–02:00 on Friday; on Christmas, a Friday, Mañanas alone runs 10:00–13:00. Barra serves
@@ -431,7 +283,6 @@ describe("the menu timetable rows of a bundle", () => {
         { id: RESTAURANT, is_default: 1 },
         { id: DELI, is_default: 0 },
       ],
-      special_dates: [dateRow(CHRISTMAS, "2026-12-25")],
       floor_zones: [{ id: BARRA, active: 1 }],
       zone_service_policies: [{ zone_id: BARRA, department_id: RESTAURANT }],
       catalogues: [{ id: "m-desayunos" }, { id: "m-copas" }, { id: "m-cafe" }, { id: "m-deli" }],
@@ -458,16 +309,6 @@ describe("the menu timetable rows of a bundle", () => {
           menu_id: "m-deli",
         },
       ],
-      menu_day_timetables: [
-        { id: "t-monday", department_id: RESTAURANT, weekday: 1, special_date_id: null },
-        { id: "t-friday", department_id: RESTAURANT, weekday: 5, special_date_id: null },
-        { id: "t-christmas", department_id: RESTAURANT, weekday: null, special_date_id: CHRISTMAS },
-      ],
-      menu_slots: [
-        slotRow("t-monday", MANANAS, "09:00:00", "12:00:00"),
-        slotRow("t-friday", MADRUGADA, "22:00:00", "02:00:00"),
-        slotRow("t-christmas", MANANAS, "10:00:00", "13:00:00"),
-      ],
       menu_period_staff_menus: [
         { period_id: MANANAS, department_id: RESTAURANT, menu_id: "m-cafe", display_order: 0 },
       ],
@@ -480,22 +321,15 @@ describe("the menu timetable rows of a bundle", () => {
     dayCutover: "06:00",
   });
 
-  it("are transferred after special dates, with staff rows after their periods", () => {
+  it("are transferred after the zone sale policies, with staff rows after their periods", () => {
     const names = VENUE_SERVICE_CONFIGURATION_TRANSFER.tables.map((table) => table.name);
-    const at = names.indexOf("special_dates");
-    expect(names.slice(at + 1, at + 5)).toEqual([
-      "menu_periods",
-      "menu_period_staff_menus",
-      "menu_day_timetables",
-      "menu_slots",
-    ]);
+    const at = names.indexOf("menu_periods");
+    expect(names.slice(at, at + 2)).toEqual(["menu_periods", "menu_period_staff_menus"]);
     expect(at).toBeGreaterThan(names.indexOf("zone_sale_policies"));
   });
 
   it("accept rows a writer could have written, and a bundle with none", () => {
-    expect(() =>
-      validateMenuTimetables(menuTables(), madrid("2026-10-07T10:00:00Z")),
-    ).not.toThrow();
+    expect(() => validateMenuTimetables(menuTables())).not.toThrow();
     expect(() => validateMenuTimetables({})).not.toThrow();
     expect(() => validate(menuTables(), madrid("2026-10-07T10:00:00Z"))).not.toThrow();
   });
@@ -537,124 +371,6 @@ describe("the menu timetable rows of a bundle", () => {
       "menu_periods.menu_id",
     ],
     [
-      "a day of a department the bundle lacks",
-      (t: Tables) => {
-        t.menu_day_timetables![0]!.department_id = "d-gone";
-      },
-      "menu_day_timetables.department_id",
-    ],
-    [
-      "a day that is both a weekday and a special date",
-      (t: Tables) => {
-        t.menu_day_timetables![0]!.special_date_id = CHRISTMAS;
-      },
-      "menu_day_timetables.weekday",
-    ],
-    [
-      "a day that is neither",
-      (t: Tables) => {
-        t.menu_day_timetables![0]!.weekday = null;
-      },
-      "menu_day_timetables.weekday",
-    ],
-    [
-      "a weekday outside the week",
-      (t: Tables) => {
-        t.menu_day_timetables![0]!.weekday = 7;
-      },
-      "menu_day_timetables.weekday",
-    ],
-    [
-      "a special date the bundle lacks",
-      (t: Tables) => {
-        t.menu_day_timetables![2]!.special_date_id = "sd-gone";
-      },
-      "menu_day_timetables.special_date_id",
-    ],
-    [
-      "a weekday held twice",
-      (t: Tables) => {
-        t.menu_day_timetables![1]!.weekday = 1;
-      },
-      "menu_day_timetables.weekday",
-    ],
-    [
-      "a special date held twice by one department",
-      (t: Tables) => {
-        t.menu_day_timetables!.push({
-          id: "t-again",
-          department_id: RESTAURANT,
-          weekday: null,
-          special_date_id: CHRISTMAS,
-        });
-      },
-      "menu_day_timetables.special_date_id",
-    ],
-    [
-      "a slot of a day the bundle lacks",
-      (t: Tables) => {
-        t.menu_slots![0]!.timetable_id = "t-gone";
-      },
-      "menu_slots.timetable_id",
-    ],
-    [
-      "a slot filed under another department than its day's",
-      (t: Tables) => {
-        t.menu_slots![0]!.department_id = DELI;
-      },
-      "menu_slots.department_id",
-    ],
-    [
-      "a slot placing another department's period",
-      (t: Tables) => {
-        t.menu_slots![0]!.period_id = DELI_PERIOD;
-      },
-      "menu_slots.period_id",
-    ],
-    [
-      "a slot time that is not canonical",
-      (t: Tables) => {
-        t.menu_slots![0]!.starts_at = "09:00";
-      },
-      "menu_slots.starts_at",
-    ],
-    [
-      "a named-day slot ending where it starts",
-      (t: Tables) => {
-        t.menu_slots![2]!.ends_at = "10:00:00";
-      },
-      "menu_slots",
-    ],
-    [
-      "two slots overlapping within a named day",
-      (t: Tables) => {
-        t.menu_slots!.push(slotRow("t-christmas", MADRUGADA, "12:00:00", "14:00:00"));
-      },
-      "menu_slots",
-    ],
-    [
-      "a special-date range crossing the business-day boundary",
-      (t: Tables) => {
-        t.special_dates!.push(dateRow("sd-boxing", "2026-12-26"));
-        t.menu_day_timetables!.push({
-          id: "t-boxing",
-          department_id: RESTAURANT,
-          weekday: null,
-          special_date_id: "sd-boxing",
-        });
-        t.menu_slots!.push(slotRow("t-boxing", MANANAS, "01:00:00", "07:00:00"));
-        t.special_dates!.push(dateRow("sd-18", "2026-12-19"));
-        t.menu_day_timetables!.push({
-          id: "t-18",
-          department_id: RESTAURANT,
-          weekday: null,
-          special_date_id: "sd-18",
-        });
-        t.menu_slots!.push(slotRow("t-18", MANANAS, "01:00:00", "03:00:00"));
-      },
-      "menu_slots",
-    ],
-    [
       "a staff menu filed under another department than its period's",
       (t: Tables) => {
         t.menu_period_staff_menus![0]!.department_id = DELI;
@@ -678,92 +394,7 @@ describe("the menu timetable rows of a bundle", () => {
   ])("refuse %s", (_, edit, field) => {
     const tables = menuTables();
     edit(tables);
-    expect(() => validateMenuTimetables(tables, madrid("2026-10-07T10:00:00Z"))).toThrowError(
-      refusal(field),
-    );
-  });
-
-  it("accept old weekday ranges the import drops, crossing the changeover or overlapping, but refuse the crossing range on a named day", () => {
-    const tables = menuTables();
-    tables.menu_day_timetables!.push({
-      id: "t-saturday",
-      department_id: RESTAURANT,
-      weekday: 6,
-      special_date_id: null,
-    });
-    tables.menu_slots!.push(
-      slotRow("t-saturday", MANANAS, "01:00:00", "07:00:00"),
-      slotRow("t-monday", MADRUGADA, "11:00:00", "13:00:00"),
-    );
-    expect(() => validateMenuTimetables(tables, madrid("2026-10-07T10:00:00Z"))).not.toThrow();
-    expect(() => validate(tables, madrid("2026-10-07T10:00:00Z"))).not.toThrow();
-    tables.menu_day_timetables!.at(-1)!.weekday = null;
-    tables.menu_day_timetables!.at(-1)!.special_date_id = CHRISTMAS;
-    tables.menu_day_timetables = tables.menu_day_timetables!.filter(
-      (row) => row.id !== "t-christmas",
-    );
-    tables.menu_slots = tables.menu_slots!.filter((row) => row.timetable_id !== "t-christmas");
-    expect(() => validateMenuTimetables(tables, madrid("2026-10-07T10:00:00Z"))).toThrowError(
-      refusal("menu_slots"),
-    );
-  });
-
-  it("refuse a special-date slot at a skipped quarter-hour, including a past date", () => {
-    const forward = clockChangeAfter("Europe/Madrid", "2027-01-01T00:00:00Z", "forward");
-    const tables = menuTables();
-    tables.special_dates!.push(
-      dateRow(
-        "sd-march",
-        new Date(new Date(`${forward.date}T12:00:00Z`).getTime() - 86400000)
-          .toISOString()
-          .slice(0, 10),
-      ),
-    );
-    tables.menu_day_timetables!.push({
-      id: "t-march",
-      department_id: RESTAURANT,
-      weekday: null,
-      special_date_id: "sd-march",
-    });
-    tables.menu_slots!.push(
-      slotRow("t-march", MANANAS, `${minutesAfter(forward.after, -30)}:00`, "05:00:00"),
-    );
-    expect(() => validateMenuTimetables(tables, madrid("2026-10-07T10:00:00Z"))).toThrowError(
-      refusal("menu_slots.starts_at"),
-    );
-    tables.menu_slots!.at(-1)!.starts_at = "21:00:00";
-    tables.menu_slots!.at(-1)!.ends_at = `${minutesAfter(forward.after, -30)}:00`;
-    expect(() => validateMenuTimetables(tables, madrid("2026-10-07T10:00:00Z"))).toThrowError(
-      refusal("menu_slots.ends_at"),
-    );
-    expect(() => validateMenuTimetables(tables, madrid("2027-06-01T10:00:00Z"))).toThrowError(
-      refusal("menu_slots.ends_at"),
-    );
-    expect(() =>
-      validateMenuTimetables(tables, { ...madrid("2026-10-07T10:00:00Z"), timeZone: "Unreadable" }),
-    ).not.toThrow();
-  });
-
-  it("refuses a business-day boundary crossing even for a past special date or closure", () => {
-    const tables = menuTables();
-    tables.special_dates!.push(dateRow("sd-boxing", "2026-12-26", 1));
-    tables.menu_day_timetables!.push({
-      id: "t-boxing",
-      department_id: RESTAURANT,
-      weekday: null,
-      special_date_id: "sd-boxing",
-    });
-    tables.menu_slots!.push(slotRow("t-boxing", MANANAS, "01:00:00", "07:00:00"));
-    tables.menu_day_timetables = tables.menu_day_timetables!.filter(
-      (row) => row.id !== "t-christmas",
-    );
-    tables.menu_slots = tables.menu_slots!.filter((row) => row.timetable_id !== "t-christmas");
-    expect(() => validateMenuTimetables(tables, madrid("2026-10-07T10:00:00Z"))).toThrowError(
-      refusal("menu_slots"),
-    );
-    expect(() => validateMenuTimetables(tables, madrid("2027-01-10T10:00:00Z"))).toThrowError(
-      refusal("menu_slots"),
-    );
+    expect(() => validateMenuTimetables(tables)).toThrowError(refusal(field));
   });
 });
 
@@ -1324,25 +955,7 @@ describe("service-period configuration", () => {
       menu_period_staff_menus: [
         { period_id: periodId, department_id: RESTAURANT, menu_id: "staff", display_order: 0 },
       ],
-      menu_day_timetables: [
-        { id: "monday", department_id: RESTAURANT, weekday: 1, special_date_id: null },
-      ],
-      menu_slots: [
-        {
-          id: "night",
-          timetable_id: "monday",
-          department_id: RESTAURANT,
-          period_id: periodId,
-          starts_at: "21:00:00",
-          ends_at: "03:00:00",
-        },
-      ],
     };
-  }
-  function onNamedDay(t: Tables): void {
-    t.special_dates = [{ id: "june", date: "2027-06-01", name: "June", close_whole_venue: 0 }];
-    t.menu_day_timetables![0]!.weekday = null;
-    t.menu_day_timetables![0]!.special_date_id = "june";
   }
   it("accepts customer and staff menus without a retired department menu list", () => {
     expect(() => VENUE_SERVICE_CONFIGURATION_TRANSFER.validate(tables(), context)).not.toThrow();
@@ -1411,236 +1024,11 @@ describe("service-period configuration", () => {
       },
       "menu_period_staff_menus.display_order",
     ],
-    [
-      "a non-quarter-hour endpoint on a named day",
-      (t: Tables) => {
-        onNamedDay(t);
-        t.menu_slots![0]!.starts_at = "21:01:00";
-      },
-      "menu_slots",
-    ],
-    [
-      "a named-day range crossing the changeover",
-      (t: Tables) => {
-        onNamedDay(t);
-        t.menu_slots![0]!.ends_at = "07:00:00";
-      },
-      "menu_slots",
-    ],
   ])("refuses %s", (_, edit, field) => {
     const t = tables();
     edit(t);
     expect(() => VENUE_SERVICE_CONFIGURATION_TRANSFER.validate(t, context)).toThrowError(
       refusal(field),
-    );
-  });
-  it("accepts an old weekday range crossing the changeover, which the import drops, but not one off the quarter-hour", () => {
-    const t = tables();
-    t.menu_slots![0]!.ends_at = "07:00:00";
-    expect(() => VENUE_SERVICE_CONFIGURATION_TRANSFER.validate(t, context)).not.toThrow();
-    // The import inserts the row before dropping it, and `menu_slots_step_ck` refuses the insert.
-    for (const [column, time] of [
-      ["starts_at", "21:01:00"],
-      ["ends_at", "07:05:00"],
-    ] as const) {
-      const off = tables();
-      off.menu_slots![0]![column] = time;
-      expect(() => VENUE_SERVICE_CONFIGURATION_TRANSFER.validate(off, context)).toThrowError(
-        refusal("menu_slots"),
-      );
-    }
-  });
-  it("keeps early-morning ranges in their own business day, including whole-day ranges", () => {
-    const t = tables();
-    onNamedDay(t);
-    t.menu_slots![0]!.starts_at = "06:00:00";
-    t.menu_slots![0]!.ends_at = "06:00:00";
-    expect(() => VENUE_SERVICE_CONFIGURATION_TRANSFER.validate(t, context)).not.toThrow();
-    t.special_dates!.push({ id: "june-2", date: "2027-06-02", name: "June", close_whole_venue: 0 });
-    t.menu_day_timetables!.push({
-      id: "tuesday",
-      department_id: RESTAURANT,
-      weekday: null,
-      special_date_id: "june-2",
-    });
-    t.menu_slots!.push({
-      ...t.menu_slots![0]!,
-      id: "early",
-      timetable_id: "tuesday",
-      starts_at: "01:00:00",
-      ends_at: "03:00:00",
-    });
-    expect(() => VENUE_SERVICE_CONFIGURATION_TRANSFER.validate(t, context)).not.toThrow();
-  });
-  it.each([
-    ["2027-03-27", "02:30:00", "05:00:00", "06:00", "menu_slots.starts_at"],
-    ["2027-03-27", "21:00:00", "02:30:00", "06:00", "menu_slots.ends_at"],
-    ["2027-03-27", "21:00:00", "02:30:00", "02:30", "menu_slots.ends_at"],
-  ])(
-    "checks skipped endpoints on the next calendar morning (%s %s–%s)",
-    (date, startsAt, endsAt, dayCutover, field) => {
-      const t = tables();
-      t.special_dates = [{ id: "spring", date, name: "Spring", close_whole_venue: 0 }];
-      t.menu_day_timetables![0]!.weekday = null;
-      t.menu_day_timetables![0]!.special_date_id = "spring";
-      t.menu_slots![0]!.starts_at = startsAt;
-      t.menu_slots![0]!.ends_at = endsAt;
-      expect(() =>
-        VENUE_SERVICE_CONFIGURATION_TRANSFER.validate(t, { ...context, dayCutover }),
-      ).toThrowError(refusal(field));
-    },
-  );
-  it("checks a start exactly at changeover on the business date", () => {
-    const t = tables();
-    t.special_dates = [{ id: "spring", date: "2027-03-27", name: "Spring", close_whole_venue: 0 }];
-    t.menu_day_timetables![0]!.weekday = null;
-    t.menu_day_timetables![0]!.special_date_id = "spring";
-    t.menu_slots![0]!.starts_at = "02:30:00";
-    t.menu_slots![0]!.ends_at = "21:00:00";
-    expect(() =>
-      VENUE_SERVICE_CONFIGURATION_TRANSFER.validate(t, { ...context, dayCutover: "02:30" }),
-    ).not.toThrow();
-  });
-});
-
-describe("zone closed times in configuration transfer", () => {
-  const ownDay = { weekday: null, special_date_id: "own-day" };
-  const clock = {
-    createdAt: new Date("2026-10-08T12:00:00Z"),
-    timeZone: "Europe/Madrid",
-    dayCutover: "04:00",
-  };
-  function closureTables(): Tables {
-    return {
-      departments: [{ id: RESTAURANT }],
-      floor_zones: [{ id: "terrace", active: 1 }],
-      zone_service_policies: [{ zone_id: "terrace", department_id: RESTAURANT }],
-      special_dates: [
-        {
-          id: "own-day",
-          location_id: "venue",
-          date: "2026-12-25",
-          name: "Christmas",
-          kind: "holiday",
-          colour: "red",
-          repeat_on: null,
-          own_hours: 1,
-          close_whole_venue: 0,
-        },
-      ],
-      zone_closed_times: [
-        {
-          id: "closed",
-          zone_id: "terrace",
-          weekday: 5,
-          special_date_id: null,
-          starts_at: "23:00:00",
-          ends_at: "04:00:00",
-        },
-      ],
-    };
-  }
-  it("accepts adjacent ranges, a cutover end and separate weekday/date scopes", () => {
-    const tables = closureTables();
-    tables.zone_closed_times!.push(
-      {
-        id: "early",
-        zone_id: "terrace",
-        weekday: null,
-        special_date_id: "own-day",
-        starts_at: "22:00:00",
-        ends_at: "23:00:00",
-      },
-      {
-        id: "dated",
-        zone_id: "terrace",
-        weekday: null,
-        special_date_id: "own-day",
-        starts_at: "23:00:00",
-        ends_at: "04:00:00",
-      },
-      {
-        id: "other-weekday",
-        zone_id: "terrace",
-        weekday: 6,
-        special_date_id: null,
-        starts_at: "23:00:00",
-        ends_at: "04:00:00",
-      },
-    );
-    expect(() => VENUE_SERVICE_CONFIGURATION_TRANSFER.validate(tables, clock)).not.toThrow();
-  });
-  it.each([
-    ["foreign zone", { zone_id: "foreign" }, "zone_closed_times.zone_id"],
-    ["both day selectors", { special_date_id: "own-day" }, "zone_closed_times"],
-    ["neither day selector", { weekday: null }, "zone_closed_times"],
-    [
-      "foreign date",
-      { weekday: null, special_date_id: "foreign" },
-      "zone_closed_times.special_date_id",
-    ],
-    ["string weekday", { weekday: "5" }, "zone_closed_times.weekday"],
-    ["fractional weekday", { weekday: 1.5 }, "zone_closed_times.weekday"],
-    ["negative weekday", { weekday: -1 }, "zone_closed_times.weekday"],
-    ["late weekday", { weekday: 7 }, "zone_closed_times.weekday"],
-    ["noncanonical start", { starts_at: "23:00" }, "zone_closed_times.starts_at"],
-    ["nonzero seconds", { ends_at: "04:00:01" }, "zone_closed_times.ends_at"],
-    ["empty named-day range", { ...ownDay, ends_at: "23:00:00" }, "zone_closed_times"],
-    ["backwards named-day range", { ...ownDay, ends_at: "22:00:00" }, "zone_closed_times"],
-    ["off-step named-day start", { ...ownDay, starts_at: "23:05:00" }, "zone_closed_times"],
-    ["off-step named-day end", { ...ownDay, ends_at: "03:55:00" }, "zone_closed_times"],
-    [
-      "named-day range crossing the changeover",
-      { ...ownDay, ends_at: "05:00:00" },
-      "zone_closed_times",
-    ],
-  ])("refuses %s", (_name, changes, field) => {
-    const tables = closureTables();
-    Object.assign(tables.zone_closed_times![0]!, changes);
-    expect(() => VENUE_SERVICE_CONFIGURATION_TRANSFER.validate(tables, clock)).toThrowError(
-      refusal(field as string),
-    );
-  });
-  it("refuses a dated closure while the named day keeps the week", () => {
-    const tables = closureTables();
-    tables.special_dates![0]!.own_hours = 0;
-    Object.assign(tables.zone_closed_times![0]!, { weekday: null, special_date_id: "own-day" });
-    expect(() => VENUE_SERVICE_CONFIGURATION_TRANSFER.validate(tables, clock)).toThrowError(
-      refusal("zone_closed_times.special_date_id"),
-    );
-  });
-  it("accepts old weekday ranges the import drops: empty, crossing the changeover or overlapping", () => {
-    const tables = closureTables();
-    tables.zone_closed_times![0]!.ends_at = "05:00:00";
-    tables.zone_closed_times!.push(
-      { ...tables.zone_closed_times![0]!, id: "overlap", starts_at: "23:15:00" },
-      { ...tables.zone_closed_times![0]!, id: "empty", weekday: 1, ends_at: "23:00:00" },
-    );
-    expect(() => VENUE_SERVICE_CONFIGURATION_TRANSFER.validate(tables, clock)).not.toThrow();
-  });
-  it.each([
-    ["start", { starts_at: "23:05:00" }],
-    ["end", { ends_at: "03:55:00" }],
-  ])(
-    "refuses an old weekday range off the quarter-hour at its %s, which no insert takes",
-    (_, changes) => {
-      const tables = closureTables();
-      Object.assign(tables.zone_closed_times![0]!, changes);
-      expect(() => VENUE_SERVICE_CONFIGURATION_TRANSFER.validate(tables, clock)).toThrowError(
-        refusal("zone_closed_times"),
-      );
-    },
-  );
-  it("refuses overlapping ranges in the same zone and named day", () => {
-    const tables = closureTables();
-    Object.assign(tables.zone_closed_times![0]!, ownDay);
-    tables.zone_closed_times!.push({
-      ...tables.zone_closed_times![0]!,
-      id: "overlap",
-      starts_at: "23:15:00",
-    });
-    expect(() => VENUE_SERVICE_CONFIGURATION_TRANSFER.validate(tables, clock)).toThrowError(
-      refusal("zone_closed_times"),
     );
   });
 });
@@ -2225,28 +1613,6 @@ describe("special days in a configuration bundle", () => {
     expect(() => validate(tables, clock)).not.toThrow();
     tables.special_day_dates![2]!.date = "2025-08-15";
     expect(() => validate(tables, clock)).toThrowError(refusal("special_day_dates.date"));
-  });
-
-  it("refuses a named day and a special day on one date", () => {
-    const tables = specialTables();
-    tables.special_dates = [
-      {
-        id: "named",
-        location_id: "venue",
-        date: "2026-08-16",
-        name: "Saint's day",
-        kind: "holiday",
-        repeat_on: null,
-        own_hours: 0,
-        close_whole_venue: 0,
-      },
-    ];
-    expect(() => validate(tables, clock)).toThrowError(refusal("special_day_dates.date"));
-    // The import gives every location column the importing venue's location.
-    tables.special_dates[0]!.location_id = "elsewhere";
-    expect(() => validate(tables, clock)).toThrowError(refusal("special_day_dates.date"));
-    tables.special_dates[0]!.date = "2026-08-17";
-    expect(() => validate(tables, clock)).not.toThrow();
   });
 
   it.each([

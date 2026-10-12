@@ -631,5 +631,4 @@ describe("season tables only", () => {
     expect([...weeks.get(v.departmentId)!.keys()]).not.toContain(Winter);
     expect(weeks.get(v.departmentId)!.size).toBe(3);
   });
-
 });

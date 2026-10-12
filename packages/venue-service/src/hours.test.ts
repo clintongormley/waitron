@@ -23,13 +23,11 @@ import { readCalendarDays as packageReadCalendarDays } from "./index.js";
 import { type CalendarDay, type HolidayFact, type LocalDate } from "./hours-types.js";
 import { VENUE_SERVICE_MIGRATIONS } from "./migrations.js";
 import type { VenueScope } from "./operations.js";
-import { specialDates } from "./schema/hours.js";
 import { departments } from "./schema/service.js";
 import { specialDayDates, specialDays } from "./schema/seasons.js";
 import { replaceMenuWeek, saveMenuPeriod } from "./menu-timetable.js";
 import { occursOn } from "./repeat-rules.js";
 import { deleteSpecialDay, saveSpecialDay } from "./special-days.js";
-import { readNamedDay } from "./testing/named-day-rows.js";
 
 const suite = useVenueDb({
   migrations: [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS, VENUE_SERVICE_MIGRATIONS],
@@ -177,29 +175,35 @@ const dateSnapshot = (f: Fixture, subject: HoursSubject, date: LocalDate) =>
   withTransaction(db, async (tx) => {
     const day = (await readCalendarDays(tx, f.cfg, date, date))[0]!;
     const named = (
-      await tx.select().from(specialDates).where(eq(specialDates.locationId, f.cfg.locationId))
-    ).find((row) => occursOn({ date: row.date, repeats: row.repeatOn !== null }, date));
+      await tx
+        .select({
+          id: specialDays.id,
+          date: specialDayDates.date,
+          repeatsYearly: specialDays.repeatsYearly,
+          closedAllDay: specialDayDates.closedAllDay,
+        })
+        .from(specialDayDates)
+        .innerJoin(specialDays, eq(specialDays.id, specialDayDates.specialDayId))
+        .where(eq(specialDayDates.locationId, f.cfg.locationId))
+    ).find((row) => occursOn({ date: row.date, repeats: row.repeatsYearly }, date));
     const states = await stationStates(tx, f.cfg, new Date(`${date}T10:00:00Z`));
     return {
       subject,
       openingDate: day.date,
       specialDateId: named?.id ?? null,
-      closeWholeVenue: named?.closeWholeVenue ?? false,
+      closeWholeVenue: named?.closedAllDay ?? false,
       state: states.get(subject.id)!,
     };
   });
 
 const storedDates = (f: Fixture) =>
-  withTransaction(db, async (tx) => {
-    const rows = await tx
-      .select({ id: specialDates.id })
-      .from(specialDates)
-      .where(eq(specialDates.locationId, f.cfg.locationId))
-      .orderBy(asc(specialDates.date));
-    const dates = [];
-    for (const row of rows) dates.push(await readNamedDay(tx, f.cfg, row.id));
-    return dates;
-  });
+  withTransaction(db, (tx) =>
+    tx
+      .select()
+      .from(specialDays)
+      .where(eq(specialDays.locationId, f.cfg.locationId))
+      .orderBy(asc(specialDays.name)),
+  );
 
 const tone = (f: Fixture, date: LocalDate) =>
   withTransaction(db, async (tx) => (await readCalendarDays(tx, f.cfg, date, date))[0]!.tone);

@@ -1,8 +1,6 @@
 import type {
-  DateCell,
   HourPeriod,
   HoursSubject,
-  DateHoursCell,
   WeekCell,
   WeekDay,
 } from "./testing/legacy-station-types.js";
@@ -36,23 +34,16 @@ import { readSpecialDaysModel } from "./named-days.js";
 import { saveSpecialDay } from "./special-days.js";
 import { locationId } from "@waitron/shared";
 import { MANAGEMENT_COOKIE, type Logger } from "@waitron/server-kit";
-import { insertNamedDay } from "./testing/named-day-rows.js";
-import {
-  WEEK_DISPLAY_ORDER,
-  type SpecialDate,
-  type SpecialDateInput as NamedDayInput,
-} from "./hours-types.js";
+import { WEEK_DISPLAY_ORDER } from "./hours-types.js";
 import { VENUE_SERVICE_MIGRATIONS } from "./migrations.js";
 import type { VenueScope } from "./operations.js";
 import { VENUE_SERVICE_PERMISSIONS } from "./permissions.js";
 import { routingModel } from "./routing-store.js";
 import { VENUE_SERVICE_ROUTES } from "./routes.js";
-import { specialDates } from "./schema/hours.js";
+import { specialDayDates, specialDays } from "./schema/seasons.js";
 import { departments } from "./schema/service.js";
 import { replaceMenuWeek, saveMenuPeriod } from "./menu-timetable.js";
 import { setStationToday } from "./station-times.js";
-
-type SpecialDateInput = NamedDayInput & { cells: DateHoursCell[] };
 
 registerModulePermissions(VENUE_SERVICE_PERMISSIONS);
 
@@ -81,7 +72,6 @@ interface Fixture {
   kitchen: HoursSubject;
   otherDepartment: HoursSubject;
   departmentIds: { restaurant: string; deli: string };
-  otherDateId: string;
   manager: string;
   supervisor: string;
   staff: string;
@@ -120,11 +110,6 @@ async function fixture(): Promise<Fixture> {
         { locationId: location!.id, name: "Kitchen", isDefault: true, displayOrder: 0 },
       ])
       .returning();
-    const otherDate = await insertNamedDay(
-      tx,
-      { locationId: locationId(other!.id) },
-      { date: "2030-10-15", name: "Elsewhere", closeWholeVenue: false },
-    );
     const person = async (role: "manager" | "supervisor" | "staff") => {
       const [row] = await tx
         .insert(persons)
@@ -175,7 +160,6 @@ async function fixture(): Promise<Fixture> {
       bar: { kind: "station" as const, id: bar!.id },
       kitchen: { kind: "station" as const, id: kitchen!.id },
       otherDepartment: { kind: "station" as const, id: foreignStation!.id },
-      otherDateId: otherDate.id,
       manager: await person("manager"),
       supervisor: await person("supervisor"),
       staff: await person("staff"),
@@ -251,23 +235,13 @@ const week = (cells: Partial<Record<number, WeekCell>> = {}): WeekDay[] =>
 const unsetWeek = (): WeekDay[] =>
   [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({ weekday, cell: { mode: "not_set", periods: [] } }));
 
-const input = (overrides: Partial<SpecialDateInput> = {}): SpecialDateInput => ({
-  date: "2030-10-15",
-  name: "Staff party",
-  closeWholeVenue: false,
-  cells: [],
-  ...overrides,
-});
-
 const venueDates = (fx: Fixture) =>
   db
-    .select({ id: specialDates.id, date: specialDates.date, name: specialDates.name })
-    .from(specialDates)
-    .where(eq(specialDates.locationId, fx.cfg.locationId))
-    .orderBy(asc(specialDates.date));
-
-const createDate = (fx: Fixture, value: SpecialDateInput) =>
-  withTransaction(db, (tx) => insertNamedDay(tx, fx.cfg, value));
+    .select({ id: specialDays.id, date: specialDayDates.date, name: specialDays.name })
+    .from(specialDayDates)
+    .innerJoin(specialDays, eq(specialDays.id, specialDayDates.specialDayId))
+    .where(eq(specialDayDates.locationId, fx.cfg.locationId))
+    .orderBy(asc(specialDayDates.date));
 
 const createDay = (
   fx: Fixture,
@@ -507,16 +481,10 @@ describe("reading Hours", () => {
     expect(long.count).toBe(short.count);
   });
 
-  it("keeps named days in the timetable and limits the Calendar to its requested range", async () => {
+  it("limits the Calendar to its requested range", async () => {
     const fx = await fixture();
     /** Sunday 6 October 2030, 12:00 in Madrid. */
     const at = new Date("2030-10-06T10:00:00Z");
-    const closedBar = [{ subject: fx.bar, cell: { mode: "closed", periods: [] } as DateCell }];
-    const saved: Record<string, SpecialDate> = {};
-    for (const date of ["2030-10-04", "2030-10-05", "2030-10-14", "2032-12-25"])
-      saved[date] = await withTransaction(db, (tx) =>
-        insertNamedDay(tx, fx.cfg, input({ date, name: date, cells: closedBar })),
-      );
     const days: Record<string, string> = {};
     for (const date of ["2030-10-12", "2030-10-15", "2030-10-16"])
       days[date] = (await createDay(fx, date, { name: date, at })).id;
@@ -543,7 +511,7 @@ describe("reading Hours", () => {
 });
 
 describe("writing Hours", () => {
-  it("the retired station week writer answers 404 and keeps named days for every session", async () => {
+  it("the retired station week writer answers 404 and keeps special days for every session", async () => {
     const fx = await fixture();
     const bodies = [
       { subject: fx.deli, days: week({ 5: periods(period("18:00", "22:00")) }) },
@@ -683,10 +651,10 @@ describe("named-days Calendar route", () => {
 });
 
 describe("retired special-date routes", () => {
-  it("answers the unmatched-route 404 to every special-date writer for a manager and leaves a named day as it was", async () => {
+  it("answers the unmatched-route 404 to every special-date writer for a manager and leaves a special day as it was", async () => {
     const fx = await fixture();
-    const day = await createDate(fx, input({ date: "2030-10-15", name: "Staff party" }));
-    const row = () => db.select().from(specialDates).where(eq(specialDates.id, day.id));
+    const day = await createDay(fx, "2030-10-15", { name: "Staff party" });
+    const row = () => db.select().from(specialDays).where(eq(specialDays.id, day.id));
     const before = await row();
     expect(before).toHaveLength(1);
     const body = { date: "2030-10-15", name: "Renamed party", closeWholeVenue: false };
@@ -716,7 +684,7 @@ describe("retired station-hours range route", () => {
     "/hours?from=2030-02-30&to=2030-03-02",
   ])("answers 404 for %s without changing saved data for any session", async (path) => {
     const fx = await fixture();
-    await createDate(fx, input({ closeWholeVenue: true }));
+    await createDay(fx, "2030-10-15", { closedAllDay: true });
     const beforeDates = await venueDates(fx);
     for (const cookie of [fx.manager, fx.supervisor, fx.staff, fx.expired, undefined]) {
       expect((await send(fx, "GET", path, cookie)).status).toBe(404);
