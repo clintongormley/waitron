@@ -18,6 +18,7 @@ import {
 } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
+import "@waitron/ui/src/components/wt-icon.js";
 import "@waitron/ui/src/components/wt-floor-plan-canvas.js";
 import "@waitron/ui/src/components/wt-modal.js";
 import "@waitron/ui/src/components/wt-sheet.js";
@@ -192,6 +193,7 @@ export class FloorPlanEditor extends LitElement {
         flex-wrap: wrap;
         align-items: flex-end;
         gap: var(--wt-space-2) var(--wt-space-4);
+        margin-block-end: var(--wt-space-4);
       }
       h1 {
         margin: 0;
@@ -207,12 +209,12 @@ export class FloorPlanEditor extends LitElement {
         flex-basis: 100%;
       }
       /* Room on a phone for fonts wider than macOS's system font. */
-      header.narrow wt-button::part(button),
+      header.narrow wt-button:not([shape="round"])::part(button),
       header.narrow a.close {
-        padding-inline: var(--wt-space-3);
+        padding-inline: var(--wt-space-2);
       }
       .note {
-        margin: var(--wt-space-2) 0 var(--wt-space-4);
+        margin: var(--wt-space-1) 0 0;
         color: var(--wt-color-text-muted);
         font-size: var(--wt-font-size-sm);
       }
@@ -371,7 +373,7 @@ export class FloorPlanEditor extends LitElement {
   readonly #userScrolls = (): void => {
     this.#revealing = false;
   };
-  /** Escape takes Close's path, which the shell guards; the modal stays until the route changes. */
+  /** Escape takes Cancel's path, which the shell guards; the modal stays until the route changes. */
   readonly #leave = async (): Promise<boolean> => {
     this.renderRoot.querySelector<HTMLElement>("a.close")?.click();
     return false;
@@ -815,7 +817,12 @@ export class FloorPlanEditor extends LitElement {
     } catch (error) {
       if (this.isConnected && request === this.#request) {
         this.loadingNewer = false;
-        this.#showReadFailure(error);
+        if (replace) {
+          const code = codeOf(error);
+          this.message = actionMessage(() => codeMessage(code));
+        } else {
+          this.#showReadFailure(error);
+        }
       }
       return;
     }
@@ -1053,10 +1060,19 @@ export class FloorPlanEditor extends LitElement {
           <div class="notices"><slot name="notices"></slot></div>
           <div class="width-probe"></div>
           <header class=${this.narrow ? "narrow" : ""}>
-            <h1>${this.zoneName ?? t("floor_plan_editor.title")}</h1>
+            <div>
+              <h1>${this.zoneName ?? t("floor_plan_editor.title")}</h1>
+              ${
+                this.plan === null
+                  ? nothing
+                  : html`<p class="note" data-note>
+                      ${t(this.revision === 0 ? "floor_plan_editor.first_note" : "floor_plan_editor.note")}
+                    </p>`
+              }
+            </div>
             <wt-form-actions .error=${this.message === null ? "" : this.message.text()}>
               <a slot="cancel" class="close" data-action="close" href=${closeHref(this.back)}
-                >${t("action.close")}</a
+                >${t("action.cancel")}</a
               >
               ${
                 this.outOfDate && !this.saving
@@ -1072,19 +1088,23 @@ export class FloorPlanEditor extends LitElement {
               <wt-button
                 slot="secondary"
                 data-action="undo"
+                shape="round"
                 variant="secondary"
+                aria-label=${t("floor_plan_editor.undo")}
                 ?disabled=${!history?.canUndo}
                 @click=${() => this.#step(history?.undo())}
-                >${t("floor_plan_editor.undo")}</wt-button
-              >
+                ><wt-icon name="undo"></wt-icon
+              ></wt-button>
               <wt-button
                 slot="secondary"
                 data-action="redo"
+                shape="round"
                 variant="secondary"
+                aria-label=${t("floor_plan_editor.redo")}
                 ?disabled=${!history?.canRedo}
                 @click=${() => this.#step(history?.redo())}
-                >${t("floor_plan_editor.redo")}</wt-button
-              >
+                ><wt-icon name="redo"></wt-icon
+              ></wt-button>
               <wt-button
                 data-action="save"
                 variant=${save.variant}
@@ -1100,13 +1120,6 @@ export class FloorPlanEditor extends LitElement {
               >
             </wt-form-actions>
           </header>
-          ${
-            this.plan === null
-              ? nothing
-              : html`<p class="note" data-note>
-                  ${t(this.revision === 0 ? "floor_plan_editor.first_note" : "floor_plan_editor.note")}
-                </p>`
-          }
           ${
             this.loadError !== null
               ? html`<p class="load-error" role="alert" data-load-error>

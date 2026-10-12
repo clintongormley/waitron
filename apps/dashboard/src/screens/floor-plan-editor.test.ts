@@ -7,6 +7,7 @@ import "./floor-plan-editor.js";
 import type { FloorPlanEditor } from "./floor-plan-editor.js";
 import type { DashboardApi, FloorPlan } from "../api/client.js";
 import { currentLocale, setLocale } from "../i18n/t.js";
+import { DASHBOARD_ICONS } from "../icons.js";
 import { addTables, draftFromPlan, patchTable, type FloorPlanDraft } from "./floor-plan-draft.js";
 
 const originalUrl = location.href;
@@ -128,7 +129,7 @@ it("names the modal Floor plan for a zone the zone list lacks", async () => {
   expect(modal.getAttribute("aria-label")).toBe("Floor plan");
 });
 
-it("keeps a load failure and its Close inside the modal", async () => {
+it("keeps a load failure and its Cancel inside the modal", async () => {
   const el = await open(
     stubApi({
       getFloorPlan: vi.fn().mockRejectedValue({ code: "zone.not_found" }),
@@ -146,21 +147,67 @@ it("draws placed tables and leaves unplaced ones off the canvas", async () => {
   expect(canvas(el).tables[0]).toEqual({ key: "m1", label: "T1", fixed: false, placement });
 });
 
-it("says what a first save does, and when a saved plan's changes reach the till", async () => {
-  const first = await open(
-    stubApi({
-      getFloorPlan: vi.fn().mockResolvedValue(terrace(0)) as DashboardApi["getFloorPlan"],
-    }),
-  );
-  expect(first.shadowRoot!.querySelector("[data-note]")!.textContent!.trim()).toBe(
-    "Your first save goes live now; later changes tomorrow, or sooner with Reset to saved plan on the till.",
-  );
-  cleanupWidgets();
-  const saved = await open();
-  expect(saved.shadowRoot!.querySelector("[data-note]")!.textContent!.trim()).toBe(
-    "Your changes go live tomorrow, or sooner with Reset to saved plan on the till.",
-  );
-});
+it.each([
+  [
+    "en-GB",
+    "Your first save goes live now; later changes tomorrow, unless you “Reset to saved plan” on the till.",
+    "Changes will go live tomorrow, unless you “Reset to saved plan” on the till.",
+  ],
+  [
+    "es-ES",
+    "Tu primer guardado se aplica ya; los cambios posteriores, mañana, salvo que uses «Volver al plano guardado» en el TPV.",
+    "Los cambios se aplicarán mañana, salvo que uses «Volver al plano guardado» en el TPV.",
+  ],
+])(
+  "says under the zone's name what a first save does, and when a saved plan's changes reach the till (%s)",
+  async (locale, firstNote, laterNote) => {
+    setLocale(locale);
+    const note = (el: FloorPlanEditor) => {
+      const header = el.shadowRoot!.querySelector("header")!;
+      const p = header.querySelector("[data-note]")!;
+      expect(header.querySelector("h1")!.compareDocumentPosition(p)).toBe(
+        Node.DOCUMENT_POSITION_FOLLOWING,
+      );
+      expect(p.compareDocumentPosition(header.querySelector("wt-form-actions")!)).toBe(
+        Node.DOCUMENT_POSITION_FOLLOWING,
+      );
+      return p.textContent!.trim();
+    };
+    const first = await open(
+      stubApi({
+        getFloorPlan: vi.fn().mockResolvedValue(terrace(0)) as DashboardApi["getFloorPlan"],
+      }),
+    );
+    expect(note(first)).toBe(firstNote);
+    cleanupWidgets();
+    const saved = await open();
+    expect(note(saved)).toBe(laterNote);
+  },
+);
+
+it.each([
+  ["en-GB", "Undo", "Redo", "Cancel"],
+  ["es-ES", "Deshacer", "Rehacer", "Cancelar"],
+])(
+  "draws Undo and Redo as round icon buttons named by their labels, and Cancel as a link (%s)",
+  async (locale, undo, redo, cancel) => {
+    setLocale(locale);
+    const el = await open();
+    for (const [action, name] of [
+      ["undo", undo],
+      ["redo", redo],
+    ] as const) {
+      const b = button(el, action);
+      expect(b.shape).toBe("round");
+      expect(b.variant).toBe("secondary");
+      expect(b.getAttribute("aria-label")).toBe(name);
+      expect(b.textContent!.trim()).toBe("");
+      expect(b.querySelector(`wt-icon[name=${action}]`)).not.toBeNull();
+      expect(DASHBOARD_ICONS[action]).toMatch(/^M/);
+    }
+    expect(el.shadowRoot!.querySelector("a[data-action=close]")!.textContent!.trim()).toBe(cancel);
+  },
+);
 
 it("a move from the canvas changes the draft and wakes Save", async () => {
   const el = await open();
@@ -316,7 +363,7 @@ it("a load failure shows its sentence and no canvas", async () => {
   expect(el.shadowRoot!.querySelector("a[data-action=close]")).not.toBeNull();
 });
 
-it("Close links to the way back, or to /manage when it is not a dashboard path", async () => {
+it("Cancel links to the way back, or to /manage when it is not a dashboard path", async () => {
   const close = (el: FloorPlanEditor) =>
     el.shadowRoot!.querySelector("a[data-action=close]")!.getAttribute("href");
   const back = await open(stubApi(), "/manage/floor-plan/zone/z1?back=%2Fmanage%2Foverview");

@@ -135,7 +135,7 @@ it("an untouched editor closes without asking", async () => {
   expect(question(app).open).toBe(false);
 });
 
-it("Close asks after a move, and Keep stays with the move", async () => {
+it("Cancel asks after a move, and Keep stays with the move", async () => {
   const { app } = await mount();
   const el = editor(app);
   await move(el);
@@ -145,7 +145,7 @@ it("Close asks after a move, and Keep stays with the move", async () => {
   expect(placed(el, "m1").x).toBe(5);
 });
 
-it("Discard on Close leaves and writes nothing", async () => {
+it("Discard on Cancel leaves and writes nothing", async () => {
   const { app, api } = await mount();
   const el = editor(app);
   await move(el);
@@ -260,7 +260,7 @@ it("refused text standing in a field holds the plan, though the draft is unchang
   expect(unload()).toBe(false);
 });
 
-it("put back after a detached update, the editor still asks before Close discards a change", async () => {
+it("put back after a detached update, the editor still asks before Cancel discards a change", async () => {
   const { app } = await mount();
   const el = editor(app);
   await reattachAfterDetachedUpdate(el);
@@ -295,7 +295,7 @@ it("a departed save's answer cannot change a reconnected editor", async () => {
   await expect.poll(() => api.saveFloorPlan.mock.calls.length).toBe(2);
 });
 
-it("an edit made while a save is sent still asks on Close once the save is accepted", async () => {
+it("an edit made while a save is sent still asks on Cancel once the save is accepted", async () => {
   const { app, api } = await mount();
   let answer!: (value: { revision: number; ids: Record<string, string> }) => void;
   api.saveFloorPlan.mockReturnValueOnce(new Promise((resolve) => (answer = resolve)));

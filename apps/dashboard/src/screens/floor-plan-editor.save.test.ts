@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, expect, it, onTestFinished, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from "vitest";
 import { page } from "vitest/browser";
 import type { WtButton, WtFloorPlanCanvas } from "@waitron/ui";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
@@ -6,6 +6,7 @@ import "./floor-plan-editor.js";
 import type { FloorPlanEditor } from "./floor-plan-editor.js";
 import type { DashboardApi, FloorPlan } from "../api/client.js";
 import { currentLocale, setLocale } from "../i18n/t.js";
+import { codeMessage } from "../i18n/codes.js";
 import {
   addTables,
   draftFromPlan,
@@ -248,7 +249,7 @@ it("a first save's re-read gives a new table its live table", async () => {
   await fromCanvas(el, "floor-plan-change", { draft: draftFromPlan(after) });
   expectSave(el, "quiet");
   expect(el.shadowRoot!.querySelector("[data-note]")!.textContent!.trim()).toBe(
-    "Your changes go live tomorrow, or sooner with Reset to saved plan on the till.",
+    "Changes will go live tomorrow, unless you “Reset to saved plan” on the till.",
   );
 });
 
@@ -276,24 +277,21 @@ it("a label sent with spaces is saved trimmed, so trimming it by hand is no chan
 it("a read's failure does not replace an action's message", async () => {
   const saveFloorPlan = vi
     .fn()
-    .mockRejectedValueOnce({
-      code: "floor_plan.out_of_date",
-      params: { zoneId: "z1", revision: 4 },
-    })
+    .mockResolvedValueOnce({ revision: 4, ids: savedIds })
     .mockRejectedValueOnce({ code: "server.internal" });
-  const getFloorPlan = vi
-    .fn()
-    .mockResolvedValueOnce(plan())
-    .mockRejectedValueOnce({ code: "connection.failed" });
+  const reread = deferred<FloorPlan>();
+  const getFloorPlan = vi.fn().mockResolvedValueOnce(plan()).mockReturnValueOnce(reread.promise);
   const el = await open(stubApi({ saveFloorPlan, getFloorPlan }));
   await move(el, "m1", 5);
   await press(el, "save");
+  await move(el, "m1", 6);
   await press(el, "save");
   expect(message(el)).toBe("Something went wrong, try again");
-  await press(el, "load-newer");
+  reread.reject({ code: "connection.failed" });
+  await flush(el);
   expect(getFloorPlan).toHaveBeenCalledTimes(2);
   expect(message(el)).toBe("Something went wrong, try again");
-  expect(placed(el, "m1").x).toBe(5);
+  expect(placed(el, "m1").x).toBe(6);
 });
 
 it("a re-read answer does not replace a draft changed since the save", async () => {
@@ -387,7 +385,7 @@ it.each([
   ["es-ES", "the system font", ""],
   ["es-ES", "a wider font", 'Verdana, "DejaVu Sans"'],
 ])(
-  "keeps Close, Undo, Redo and Save on one row at 390 px with Reload shown (%s, %s)",
+  "keeps Cancel, Undo, Redo and Save on one row at 390 px with Reload shown (%s, %s)",
   async (locale, _name, font) => {
     setLocale(locale);
     const before = [window.innerWidth, window.innerHeight] as const;
@@ -538,6 +536,67 @@ it("a successful Reload clears every message", async () => {
   await press(el, "load-newer");
   expect(message(el)).toBe("");
   expect(button(el, "load-newer")).toBeNull();
+});
+
+it("a failed Reload replaces the older copy's message with its own, and Reload stays", async () => {
+  const saveFloorPlan = vi
+    .fn()
+    .mockRejectedValue({ code: "floor_plan.out_of_date", params: { zoneId: "z1", revision: 4 } });
+  const getFloorPlan = vi
+    .fn()
+    .mockResolvedValueOnce(plan())
+    .mockRejectedValueOnce({ code: "connection.failed" });
+  const el = await open(stubApi({ saveFloorPlan, getFloorPlan }));
+  await move(el, "m1", 5);
+  await press(el, "save");
+  const outOfDate = message(el);
+  await press(el, "load-newer");
+  await flush(el);
+  expect(message(el)).not.toBe(outOfDate);
+  expect(message(el)).toBe(codeMessage("connection.failed"));
+  expect(button(el, "load-newer")).not.toBeNull();
+  expect(placed(el, "m1").x).toBe(5);
+});
+
+// At the narrowest phone width, with fonts wider than macOS's system one (A466).
+describe.each([
+  ["en-GB", "the system font", ""],
+  ["es-ES", "the system font", ""],
+  ["en-GB", "a wider font", 'Verdana, "DejaVu Sans"'],
+  ["es-ES", "a wider font", 'Verdana, "DejaVu Sans"'],
+])("at 320 px (%s, %s)", (locale, _name, font) => {
+  async function narrow(api: DashboardApi): Promise<FloorPlanEditor> {
+    setLocale(locale);
+    const before = [window.innerWidth, window.innerHeight] as const;
+    await page.viewport(320, 700);
+    onTestFinished(() => page.viewport(...before));
+    const el = await open(api);
+    if (font !== "") el.style.setProperty("--wt-font-family", font);
+    await expect.poll(() => el.shadowRoot!.querySelector("wt-sheet")).not.toBeNull();
+    return el;
+  }
+  const top = (node: Element) => Math.round(node.getBoundingClientRect().top);
+  const expectOneRow = (el: FloorPlanEditor) => {
+    const row = top(button(el, "save")!);
+    expect(top(el.shadowRoot!.querySelector("[data-action=close]")!)).toBe(row);
+    expect(top(button(el, "undo")!)).toBe(row);
+    expect(top(button(el, "redo")!)).toBe(row);
+  };
+
+  it("keeps Cancel, Undo, Redo and Save on one row", async () => {
+    expectOneRow(await narrow(stubApi()));
+  });
+
+  it("keeps them on one row with Reload on its own row above", async () => {
+    const saveFloorPlan = vi
+      .fn()
+      .mockRejectedValue({ code: "floor_plan.out_of_date", params: { zoneId: "z1", revision: 4 } });
+    const el = await narrow(stubApi({ saveFloorPlan }));
+    await move(el, "m1", 5);
+    await press(el, "save");
+    expectOneRow(el);
+    expect(top(button(el, "load-newer")!)).toBeLessThan(top(button(el, "save")!));
+  });
 });
 
 it("Save pressed again after an older copy hides Reload while it is sent", async () => {

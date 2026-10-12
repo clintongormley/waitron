@@ -1017,9 +1017,9 @@ export const en = {
   "floor_plan_editor.already_joined": "Already joined.",
   "floor_plan_editor.booked": "Booked {date}, {time}",
   "floor_plan_editor.first_note":
-    "Your first save goes live now; later changes tomorrow, or sooner with Reset to saved plan on the till.",
+    "Your first save goes live now; later changes tomorrow, unless you “Reset to saved plan” on the till.",
   "floor_plan_editor.note":
-    "Your changes go live tomorrow, or sooner with Reset to saved plan on the till.",
+    "Changes will go live tomorrow, unless you “Reset to saved plan” on the till.",
   "kitchen.stations_title": "Stations",
   "kitchen.station_name": "Name",
   "kitchen.station_order": "Order",
@@ -3682,9 +3682,9 @@ export const es: Record<StringKey, string> = {
   "floor_plan_editor.already_joined": "Ya están unidas.",
   "floor_plan_editor.booked": "Reservada el {date}, {time}",
   "floor_plan_editor.first_note":
-    "Tu primer guardado se aplica ya; los cambios posteriores mañana, o antes con Volver al plano guardado en el TPV.",
+    "Tu primer guardado se aplica ya; los cambios posteriores, mañana, salvo que uses «Volver al plano guardado» en el TPV.",
   "floor_plan_editor.note":
-    "Tus cambios se aplican mañana, o antes con Volver al plano guardado en el TPV.",
+    "Los cambios se aplicarán mañana, salvo que uses «Volver al plano guardado» en el TPV.",
   "kitchen.stations_title": "Estaciones",
   "kitchen.station_name": "Nombre",
   "kitchen.station_order": "Orden",
