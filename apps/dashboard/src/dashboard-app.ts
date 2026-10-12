@@ -642,8 +642,8 @@ export class DashboardApp extends LitElement {
           padding-inline-start: 0;
           border-inline-start: 0;
         }
-        /* The closed drawer is moved out past .layout's left edge; where the page keeps its padding,
-           its last strip would show there. */
+        /* The closed drawer is moved out past .layout's left edge, which is not the window's: the
+           page's own padding would show its last strip. */
         .layout {
           overflow: clip;
         }

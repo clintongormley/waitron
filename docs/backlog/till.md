@@ -291,19 +291,13 @@ screen is designed.
 
 ## A502. The floor plan editor as a big modal, with handles and a shorter form
 
-**A502 (owner, 2026-10-11) — OPEN; part 1 done** (the big modal and its header, with the
-dashboard's alert toast and update bar shown at the modal's top). The editor wastes space today: the dashboard's header and menu
-stay on screen, and a selected table's form is a long column of fields. The owner's mockups, saved
+**A502 (owner, 2026-10-11) — OPEN.** A selected table's form is a long column of fields. The owner's mockups, saved
 as images: [1, the editor with a table selected](mockups/a502-a503-floor-plan-editor/1-editor-table-selected.png),
 [2, the tables list](mockups/a502-a503-floor-plan-editor/2-tables-list-nothing-selected.png) (its
 joined-table rows are A503), [3, the handles](mockups/a502-a503-floor-plan-editor/3-handles.png),
 [4, the delete confirmation](mockups/a502-a503-floor-plan-editor/4-delete-confirmation.png). The
 canvas they came from is https://claude.ai/artifact/NkwkgPN6rjSu26P6qAjTyK.
 
-- **A big modal.** The editor opens over the whole window, so the dashboard's header and menu are
-  hidden. The header holds the zone's name and the line 'Changes will go live tomorrow, unless you
-  "Reset to saved plan" on the till.', then Undo and Redo as round arrow icons, then Cancel (today's
-  Close) beside Save.
 - **The selected table's form** is Name; Seats beside a rectangle/round shape toggle; and a
   Moveable switch, on by default, replacing "Fixed in place". Width, Height, Rotation, Remove from
   plan and Delete leave the form. Joins leave it too once A503 lands; until then they stay.
@@ -1321,6 +1315,9 @@ From **Variants as products (#511–#556) — what is left open.** How the model
 
 ## Decisions and deliberate limits
 
+- **The floor plan editor's header runs Undo, Redo, Cancel, Save (A502, owner, 2026-10-11).**
+  Cancel sits beside Save, after Undo and Redo, as the owner's backlog entry and mockup 1 put it: an
+  exception to Cancel on the left ([design-system.md](../developers/design-system.md)).
 - **Individual tables keep the later floor contract (A435 step 6, 2026-10-11).** Delete is a master
   draft edit with Undo until Save; today's release remains deferred. There is no table active flag
   or immediate table write route. Labels remain unique across the location. Hierarchy Delete is

@@ -74,7 +74,7 @@ interface StagedPlan {
 
 const HOME = "/manage";
 
-/** Below this width of the page itself, the side panel becomes a bottom sheet. */
+/** Below this width, measured inside the editor's modal, the side panel becomes a bottom sheet. */
 const NARROW_PX = 600;
 
 /** The editor's one message, remembering whether a read or an action set it (CLAUDE.md §3). */
@@ -372,7 +372,8 @@ export class FloorPlanEditor extends LitElement {
   /** The sheet grows and shrinks with its panels after it is drawn, so its height is watched. */
   readonly #sheetResize = new ResizeObserver(() => void this.#reveal());
   #watchedSheet: WtSheet | null = null;
-  /** Set by a new selection or the sheet opening, cleared by the user's press or wheel, so a later change in the sheet's height never moves a canvas the user has panned. */
+  /** Set by a new selection or the sheet opening, cleared by the user's press or wheel, so a later
+   *  change in the sheet's height never moves a canvas the user has panned. */
   #revealing = false;
   /** Set when a check or refusal points at a table, which may already be selected, with the sheet
    *  already open: what it draws beside the table (a reason) still has to be lifted. */

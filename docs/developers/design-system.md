@@ -781,8 +781,8 @@ and a hovered row, or one holding focus, paints `--wt-color-bg`. Guard: the "att
 `apps/dashboard/src/widgets/product-editor.test.ts`.
 
 `wt-button shape="round"` renders a circular button of exactly `--wt-tap-min` diameter, meant for
-one icon with its own `aria-label` rather than a text label — the round "Add" button beside a table
-heading, for one. It replaces the button's own padding and border radius; it does not change what
+one icon with its own `aria-label` rather than a text label — the floor plan editor's Undo and
+Redo, for one. It replaces the button's own padding and border radius; it does not change what
 `variant` paints.
 
 `wt-button` has no `type` property — see "Forms" below. `wt-button loading` is how a button shows an
@@ -1473,14 +1473,17 @@ above). Give it a `size` chosen by its content:
   at the form width beside a classic scrollbar (17px allowed for it).
 - `size="wide"` (`--wt-modal-max-width`, 1024px): a table wider than a form, a side-by-side layout,
   an image grid, or a toolbar that needs one line.
+- `size="full"`: the viewport less the side margin (`--wt-modal-inline-margin`) on all four sides,
+  in width and in height; for an editor that takes the place of a page (the floor plan editor).
 
 A modal given no size, or a value not listed, is wide. Choose one anyway, so a reader can see the
 choice; do not widen a modal past what its content needs. Each size is bounded by the viewport less
 the modal's side margins, so on a phone every size is the same width (measured at 390px and 320px
-wide). Each size reads only its own
+wide). Each size but full reads only its own
 token: an ancestor's `--wt-modal-max-width` resizes an unsized or wide modal and leaves a compact or
-standard one alone, and to resize one sized modal you set its own size token on it. A size is not
-passed down: a wide or unsized modal opened inside a compact or standard one is still wide. Changing
+standard one alone, and to resize one compact or standard modal you set its own size token on it;
+full has no size token. A size is not
+passed down: a wide or unsized modal opened inside a compact, standard or full one is still wide. Changing
 `size` on an open modal resizes it, and the property is reflected to the `size` attribute.
 Guards: the size cases in `packages/ui/src/components/wt-modal.test.ts`, and the order of the sizes
 and the standard modal's room for a form in `packages/ui-core/src/tokens/structure.test.ts`. The
@@ -2121,7 +2124,8 @@ inside the field only while it contains an action.
 
 Put the final action row at the bottom of the form with `wt-form-actions`. Its default slot stays on
 the bottom right. Put the expected primary action there. Put Cancel or Back in the `cancel` slot so
-it stays on the bottom left. A secondary action that belongs beside the primary action goes in the
+it stays on the bottom left. The floor plan editor's header is the owner's exception: Undo, Redo,
+then Cancel beside Save (A502). A secondary action that belongs beside the primary action goes in the
 `secondary` slot. The row's message runs from the form's left edge only when the row is the form's
 full width. Where the row shares a line with something else, show the message with `formMessage`
 directly before that line, or let the row take the full width (in a `wt-modal`, no wider than the form width)
@@ -2196,7 +2200,9 @@ render must not replace it while you are answering the question. Route Cancel, c
 an existing backdrop action through `requestClose(reason)`. Native Escape uses the same gate. The
 dialog stays open while asking, and a later answer cannot close a different opening. `closeAfter("saved")` and
 `closeAfter("security")` bypass a pending question for a successful write or forced teardown.
-An owner's `open` binding still controls rendering; it is not a user-dismissal path.
+An owner's `open` binding still controls rendering; it is not a user-dismissal path. The floor
+plan editor's full-window modal is the exception: its `beforeClose` follows its Cancel link, whose
+route change the shell guards, and returns false, so the modal goes only when the route changes.
 
 Use one `LeaveController` from `@waitron/ui` in each application shell. Render its confirmation
 with `render(copy)` and resolve that same coordinator from a connected descendant with
@@ -2640,7 +2646,8 @@ its modal, because the modal makes the page underneath inert.
 
 When the server reports a different build from the one the page first saw, an update bar
 (`wt-banner`, "Waitron was updated." / "Waitron se ha actualizado." with Reload / Recargar) appears
-directly under the banner, signed in and signed out, and stays until Reload. It never shows beside
+directly under the banner (at the top of the floor plan editor's modal while that is open), signed
+in and signed out, and stays until Reload. It never shows beside
 the box-reset notice, which has its own Reload. In Demo and Preparation `wt-demo-bar` stays above
 the banner. Looked at on 2026-10-11 in English and Spanish, both themes, at 390 and 1280 px wide
 (screenshots), and measured at 320: the message and its button fit on one row at 390, and at 320 the Spanish bar puts Recargar under the
@@ -3605,8 +3612,8 @@ button that creates one, such as "Add menu", in the heading's row at its trailin
 the owner's request, W79, 2026-10-04); Menus' button moves under the heading, still at the trailing
 edge, when it does not fit. Put Edit, Delete or domain-specific actions in each row's menu. A
 screen may instead offer Add as a round icon-only `wt-button` (`shape="round"` with the `plus`
-icon and an `aria-label`) beside the heading — but **no screen does today**, and no dashboard
-control uses `shape="round"` at all, so read this as a permission rather than a pattern with a home.
+icon and an `aria-label`) beside the heading — but **no screen does today**, so read this as a
+permission rather than a pattern with a home.
 The menu uses a native popover: clicking outside or pressing Escape closes it. Clicking an action
 inside it closes it too; `closesMenu` in `packages/ui/src/components/wt-row-actions.ts` decides which
 clicks count, judging each action before its own click listeners run, so an action that disables

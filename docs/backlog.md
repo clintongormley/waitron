@@ -1795,7 +1795,7 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   [Detail](backlog/till.md#a474--todays-floor-changes-on-the-till-follow-ups)
 
 - **A502. The floor plan editor as a big modal, with handles and a shorter form (owner,
-  2026-10-11).** Part 1 (the full-window modal and its header) is done. Left: a selected table's
+  2026-10-11).** A selected table's
   form shrinks to name, seats, shape and Moveable, the table is sized and turned by handles on the
   plan, and the tables list marks which tables are placed. Table pickers sort by number.
   [Detail](backlog/till.md#a502-the-floor-plan-editor-as-a-big-modal-with-handles-and-a-shorter-form)
