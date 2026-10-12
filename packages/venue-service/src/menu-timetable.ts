@@ -44,7 +44,8 @@ import {
   type VenueScope,
 } from "./operations.js";
 import { specialDates } from "./schema/hours.js";
-import { nextOccurrence } from "./named-day-rules.js";
+import { nextOccurrence, repeatKey } from "./named-day-rules.js";
+import { readSpecialDaySchedules } from "./special-days.js";
 import { menuDayTimetables, menuPeriods, menuPeriodStaffMenus, menuSlots } from "./schema/menus.js";
 import { departments } from "./schema/service.js";
 import { routingCellPeriods, routingCells } from "./schema/routing.js";
@@ -294,6 +295,7 @@ async function endOffsetClash(
     .where(eq(specialDates.locationId, cfg.locationId));
   const offsets = new Map(periods.map((period) => [period.id, period.offset]));
   const departmentIds = [...new Set(periods.map((period) => period.departmentId))];
+  const specialDays = await readSpecialDaySchedules(tx, cfg, departmentIds);
   const allSeasons = await readSeasons(tx, cfg);
   const weeks = await readDepartmentSeasonWeeks(tx, cfg, departmentIds, clock.dayCutover);
   const ownDay = new Map(
@@ -306,7 +308,18 @@ async function endOffsetClash(
         startsOn: season.startsOn,
         week: weeks.get(id)?.get(season.id) ?? [],
       })),
-      dates.map((date) => ({ ...date, slots: ownDay.get(`${id}|${date.id}`) ?? null })),
+      [
+        // First, so a special day wins a date a named day also holds, as on the till.
+        ...specialDays.map((day) => ({
+          date: day.date,
+          closeWholeVenue: day.closedAllDay,
+          repeatOn: day.repeats ? repeatKey(day.date) : null,
+          slots: null,
+          paint: day.paint.get(id) ?? [],
+          specialDayId: day.specialDayId,
+        })),
+        ...dates.map((date) => ({ ...date, slots: ownDay.get(`${id}|${date.id}`) ?? null })),
+      ],
       offsets,
       clock,
     );
@@ -317,10 +330,16 @@ async function endOffsetClash(
         weekday: clash.weekday,
         date: clash.date,
         departmentId: id,
+        ...(clash.specialDayId === undefined ? {} : { specialDayId: clash.specialDayId }),
       };
     }
   }
   return null;
+}
+
+/** The first sending cutoff that runs into what follows it, over every department. */
+export function scheduleEndOffsetClash(tx: Transaction, cfg: VenueScope) {
+  return endOffsetClash(tx, cfg);
 }
 
 export async function assertPeriodEndOffsets(tx: Transaction, cfg: VenueScope): Promise<void> {
@@ -676,6 +695,7 @@ async function writeMenuPeriod(
       seasonId: clash.seasonId,
       weekday: clash.weekday,
       date: clash.date,
+      ...(clash.specialDayId === undefined ? {} : { specialDayId: clash.specialDayId }),
     });
   return { id: id! };
 }

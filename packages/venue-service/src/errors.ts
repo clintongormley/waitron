@@ -72,6 +72,7 @@ declare module "@waitron/shared" {
       seasonId?: string;
       weekday?: number;
       date?: string;
+      specialDayId?: string;
     };
     /** Deleting a named period that `uses` still place, past special dates included. */
     "menu_period.in_use": { periodId: string; uses: MenuPeriodUse[] };
@@ -84,6 +85,7 @@ declare module "@waitron/shared" {
       departmentId?: string;
       seasonId?: string;
       weekday?: number;
+      specialDayId?: string;
       reason?: "overlap" | "clock_skips" | "empty" | "order" | "step" | "end_offset";
     };
     "zone.name_taken": { name: string };

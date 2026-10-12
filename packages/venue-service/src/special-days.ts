@@ -26,6 +26,7 @@ import {
 } from "./schema/seasons.js";
 import { specialDates } from "./schema/hours.js";
 import { menuPeriods } from "./schema/menus.js";
+import { scheduleEndOffsetClash } from "./menu-timetable.js";
 import { joinTouching } from "./season-weeks.js";
 import { scheduleCutovers } from "./service-day-context.js";
 import { clockTimeSkippedInDay, parseRanges, type ClosedRange } from "./service-day.js";
@@ -156,6 +157,70 @@ export async function specialDaysOn(
       zonePaint: zonePaint.get(row.dateId) ?? new Map(),
     });
   return found;
+}
+
+export interface SpecialDaySchedule {
+  specialDayId: string;
+  name: string;
+  date: LocalDate;
+  repeats: boolean;
+  closedAllDay: boolean;
+  /** By department. */
+  paint: ReadonlyMap<string, PaintRange[]>;
+}
+
+/** Every special-day date of the venue with its department paint (of `departmentIds` only, when
+ *  given): one read of the dates and one of the paint. */
+export async function readSpecialDaySchedules(
+  tx: Transaction,
+  cfg: VenueScope,
+  departmentIds?: readonly string[],
+): Promise<SpecialDaySchedule[]> {
+  const dates = await tx
+    .select({
+      dateId: specialDayDates.id,
+      specialDayId: specialDays.id,
+      name: specialDays.name,
+      date: specialDayDates.date,
+      repeats: specialDays.repeatsYearly,
+      closedAllDay: specialDayDates.closedAllDay,
+    })
+    .from(specialDayDates)
+    .innerJoin(specialDays, eq(specialDays.id, specialDayDates.specialDayId))
+    .where(eq(specialDayDates.locationId, cfg.locationId))
+    .orderBy(asc(specialDayDates.date), asc(specialDayDates.id));
+  if (dates.length === 0) return [];
+  const paint = await tx
+    .select({
+      dateId: departmentDays.specialDayDateId,
+      departmentId: departmentDays.departmentId,
+      periodId: departmentDayRanges.periodId,
+      startsAt: departmentDayRanges.startsAt,
+      endsAt: departmentDayRanges.endsAt,
+    })
+    .from(departmentDays)
+    .innerJoin(departmentDayRanges, eq(departmentDayRanges.dayId, departmentDays.id))
+    .where(
+      and(
+        inArray(
+          departmentDays.specialDayDateId,
+          dates.map((row) => row.dateId),
+        ),
+        departmentIds === undefined
+          ? undefined
+          : inArray(departmentDays.departmentId, departmentIds),
+      ),
+    );
+  const byDate = new Map<string, Map<string, PaintRange[]>>();
+  for (const row of paint) {
+    const owners = byDate.get(row.dateId!) ?? new Map<string, PaintRange[]>();
+    byDate.set(row.dateId!, owners);
+    owners.set(row.departmentId, [
+      ...(owners.get(row.departmentId) ?? []),
+      { periodId: row.periodId, startsAt: wireTime(row.startsAt), endsAt: wireTime(row.endsAt) },
+    ]);
+  }
+  return dates.map(({ dateId, ...row }) => ({ ...row, paint: byDate.get(dateId) ?? new Map() }));
 }
 
 export interface SpecialDayInput {
@@ -408,8 +473,17 @@ async function requireSpecialDay(tx: Transaction, cfg: VenueScope, id: string) {
   return row;
 }
 
-/** Where the checks that read the whole schedule after a special-day write go (Task 4.4). */
-async function checkScheduleAfterWrite(): Promise<void> {}
+/** Every department, since a Closed-all-day tick touches them all. */
+async function checkScheduleAfterWrite(tx: Transaction, cfg: VenueScope): Promise<void> {
+  const clash = await scheduleEndOffsetClash(tx, cfg);
+  if (clash !== null)
+    invalid("paint", {
+      reason: "end_offset",
+      date: clash.date,
+      periodId: clash.periodId,
+      departmentId: clash.departmentId,
+    });
+}
 
 export async function readSpecialDay(
   tx: Transaction,
@@ -603,7 +677,7 @@ export async function saveSpecialDay(
       })),
     );
   }
-  await checkScheduleAfterWrite();
+  await checkScheduleAfterWrite(tx, cfg);
   return readSpecialDay(tx, cfg, specialDayId);
 }
 
@@ -618,5 +692,5 @@ export async function deleteSpecialDay(
   await assertBusinessDayScheduleWrite(tx, cfg, "time", at, expectedClockRevision);
   await requireSpecialDay(tx, cfg, id);
   await tx.delete(specialDays).where(eq(specialDays.id, id));
-  await checkScheduleAfterWrite();
+  await checkScheduleAfterWrite(tx, cfg);
 }
