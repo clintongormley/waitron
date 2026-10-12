@@ -306,8 +306,6 @@ it("shows a part greyed with its joined table's name, and a joined table's parts
   expect(getComputedStyle(part.querySelector("[data-seats]")!).color).toBe("rgb(41, 42, 43)");
   expect(toggle(part).getAttribute("aria-disabled")).toBe("true");
   expect(toggle(part).disabled).toBe(false);
-  const described = toggle(part).getAttribute("aria-describedby")!;
-  expect(el.shadowRoot!.getElementById(described)!.textContent!.trim()).toBe("in Long table");
   expect(madeOf(row(el, "Long table"))).toBe("Counter 3, 4, 5");
   expect(madeOf(row(el, "Counter 1"))).toBe("—");
   expect(row(el, "Long table").querySelector("[data-marker]")!.getAttribute("data-marker")).toBe(
@@ -322,6 +320,23 @@ it("shows a part greyed with its joined table's name, and a joined table's parts
   expect(
     el.shadowRoot!.querySelector("[data-legend]")!.textContent!.replace(/\s+/g, " ").trim(),
   ).toBe("on plan not placed in a joined table");
+});
+
+it("tells a part's joined table once, in its toggle's name, and describes a marked part by its mark alone", async () => {
+  const el = await open({ draft: joined, marks: new Map([["c4", "Booked 12 Oct, 21:00"]]) });
+  const marked = toggle(row(el, "Counter 4"));
+  await expect.element(marked).toHaveAccessibleName(/^Counter 4\b.*\bin Long table$/);
+  await expect.element(marked).toHaveAccessibleDescription("Booked 12 Oct, 21:00");
+  const part = toggle(row(el, "Counter 3"));
+  await expect.element(part).toHaveAccessibleName(/^Counter 3\b.*\bin Long table$/);
+  await expect.element(part).toHaveAccessibleDescription("");
+});
+
+it("writes — in Made of for a joined table with no parts", async () => {
+  const el = await open({
+    draft: { tables: [{ ...table("long", "Long table", true, 10), parts: [] }] },
+  });
+  expect(madeOf(row(el, "Long table"))).toBe("—");
 });
 
 it("draws a part's marker as a grey square", async () => {

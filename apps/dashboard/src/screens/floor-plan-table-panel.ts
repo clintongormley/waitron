@@ -16,13 +16,14 @@ import {
   MAX_SEATS,
   freeTables,
   patchTable,
+  seatCount,
   sendChange,
   setParts,
   tableName,
+  tablesChosen,
   type DraftTable,
   type FloorPlanDraft,
 } from "./floor-plan-draft.js";
-import { seatCount, tablesChosen } from "./floor-plan-add-joined-table.js";
 import type {
   FloorPlanInvalid,
   FloorPlanPanelError,

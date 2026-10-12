@@ -208,7 +208,7 @@ export class FloorPlanTablesPanel extends LitElement {
       const part = this.draft.tables.find((t) => t.key === key);
       return part === undefined ? [] : [tableName(part)];
     });
-    return madeOfText(names);
+    return names.length === 0 ? "—" : madeOfText(names);
   }
 
   #row(table: DraftTable, index: number) {
@@ -216,13 +216,8 @@ export class FloorPlanTablesPanel extends LitElement {
     const placed = table.placement !== null;
     const mark = this.marks.get(table.key);
     const markId = `mark-${index}`;
-    const madeOfId = `made-of-${index}`;
     const joined = joinedTableOf(this.draft, table.key);
     const marker = joined !== undefined ? "joined" : placed ? "placed" : "spare";
-    const described = [
-      ...(joined === undefined ? [] : [madeOfId]),
-      ...(mark === undefined ? [] : [markId]),
-    ].join(" ");
     return html`<li
       data-table=${table.key}
       aria-current=${this.selected === table.key ? "true" : nothing}
@@ -233,7 +228,7 @@ export class FloorPlanTablesPanel extends LitElement {
         data-action="toggle"
         aria-pressed=${placed ? "true" : "false"}
         aria-disabled=${joined === undefined ? nothing : "true"}
-        aria-describedby=${described === "" ? nothing : described}
+        aria-describedby=${mark === undefined ? nothing : markId}
         @click=${() => this.#press(table)}
       >
         <span class="marker ${marker}" data-marker=${marker}></span>
@@ -242,7 +237,7 @@ export class FloorPlanTablesPanel extends LitElement {
           ><span class="visually-hidden">${t("floor_plan_editor.seats")} </span
           ><span data-seats>${table.seats ?? "—"}</span></span
         >
-        <span class="made-of" id=${madeOfId} data-made-of>${this.#madeOf(table, joined)}</span>
+        <span class="made-of" data-made-of>${this.#madeOf(table, joined)}</span>
       </button>
       <wt-button
         variant="ghost"

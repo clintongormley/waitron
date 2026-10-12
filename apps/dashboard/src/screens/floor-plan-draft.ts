@@ -1,7 +1,7 @@
 import { createLabelComparator } from "@waitron/shared";
 import { NEW_TABLE_SIZE, clampToGrid, firstFreeSpot } from "@waitron/ui";
 import type { FloorPlan, FloorPlanSave, PlanPlacement } from "../api/client.js";
-import { t } from "../i18n/t.js";
+import { fill, t } from "../i18n/t.js";
 
 /** The most seats a table may hold. */
 export const MAX_SEATS = 999;
@@ -41,6 +41,14 @@ export function sendChange(host: EventTarget, draft: FloorPlanDraft, mergeKey?: 
 export function tableName(table: Pick<DraftTable, "label"> | undefined): string {
   return table?.label.trim() || t("floor_plan_editor.unnamed");
 }
+
+export const seatCount = (seats: number) =>
+  seats === 1
+    ? t("floor_plan_editor.seat_count_one")
+    : fill("floor_plan_editor.seat_count", { count: String(seats) });
+
+export const tablesChosen = (count: number) =>
+  fill("floor_plan_editor.tables_chosen", { count: String(count) });
 
 type TablePatch = Partial<Pick<DraftTable, "label" | "seats" | "fixed" | "placement">>;
 
@@ -317,17 +325,13 @@ export function freeTables(draft: FloorPlanDraft, joinedKey?: string): DraftTabl
 
 const NUMBERED = /^(.*\S)\s+(\d+)$/;
 
-/** "Counter 3, 4, 5" when every name is one prefix and a number, else the names joined. */
+/** The names in number order: "Counter 3, 4, 5" when every name is one prefix and a number, else
+ *  the names joined. */
 export function madeOfText(names: readonly string[]): string {
-  const numbered: { name: string; prefix: string; number: string }[] = [];
-  for (const name of names) {
-    const match = NUMBERED.exec(name);
-    if (match === null) return names.join(", ");
-    numbered.push({ name, prefix: match[1]!, number: match[2]! });
-  }
-  numbered.sort((a, b) => Number(a.number) - Number(b.number));
-  const prefix = numbered[0]?.prefix;
-  if (prefix === undefined) return "";
-  if (numbered.some((n) => n.prefix !== prefix)) return numbered.map((n) => n.name).join(", ");
-  return `${prefix} ${numbered.map((n) => n.number).join(", ")}`;
+  const sorted = [...names].sort(createLabelComparator());
+  const numbered = sorted.map((name) => NUMBERED.exec(name));
+  const prefix = numbered[0]?.[1];
+  if (prefix === undefined || numbered.some((match) => match?.[1] !== prefix))
+    return sorted.join(", ");
+  return `${prefix} ${numbered.map((match) => match![2]).join(", ")}`;
 }

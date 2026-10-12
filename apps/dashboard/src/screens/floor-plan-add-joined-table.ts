@@ -17,7 +17,7 @@ import "@waitron/ui/src/components/wt-form-actions.js";
 import "@waitron/ui/src/components/wt-input.js";
 import "@waitron/ui/src/components/wt-modal.js";
 import "@waitron/ui/src/components/wt-number-stepper.js";
-import { fill, t } from "../i18n/t.js";
+import { t } from "../i18n/t.js";
 import { codeMessage } from "../i18n/codes.js";
 import { LocaleChangeController } from "../state/locale-controller.js";
 import { wholeWithin } from "../widgets/form-fields.js";
@@ -25,8 +25,10 @@ import {
   MAX_SEATS,
   addJoinedTable,
   freeTables,
+  seatCount,
   sendChange,
   tableName,
+  tablesChosen,
   type FloorPlanDraft,
 } from "./floor-plan-draft.js";
 
@@ -52,14 +54,6 @@ function sameForm(a: JoinedForm, b: JoinedForm): boolean {
     a.parts.every((key) => b.parts.includes(key))
   );
 }
-
-export const seatCount = (seats: number) =>
-  seats === 1
-    ? t("floor_plan_editor.seat_count_one")
-    : fill("floor_plan_editor.seat_count", { count: String(seats) });
-
-export const tablesChosen = (count: number) =>
-  fill("floor_plan_editor.tables_chosen", { count: String(count) });
 
 /** The editor's Add joined table dialog, owned by the page beside Add tables for the same reason. */
 @customElement("floor-plan-add-joined-table")

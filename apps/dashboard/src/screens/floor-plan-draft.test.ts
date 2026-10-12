@@ -722,8 +722,10 @@ describe("floor plan draft", () => {
 
   it.each([
     [["Counter 3", "Counter 5", "Counter 4"], "Counter 3, 4, 5"],
-    [["Window 1", "Stool 2"], "Window 1, Stool 2"],
+    [["Window 1", "Stool 2"], "Stool 2, Window 1"],
+    [["Bar 10", "Window 1", "Bar 2"], "Bar 2, Bar 10, Window 1"],
     [["T1", "T2"], "T1, T2"],
+    [["T10", "T2"], "T2, T10"],
     [["Bar 2", "Bar 10"], "Bar 2, 10"],
     [[], ""],
   ])("writes %s as %s", (names, text) => {
