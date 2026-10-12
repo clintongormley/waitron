@@ -117,9 +117,7 @@ import {
   readHolidays,
   readHolidayAreaModel,
   readProfileServiceAccess,
-  readSpecialDate,
   saveHolidayArea,
-  saveSpecialDate,
   saveMenuPeriod,
   replaceMenuWeek,
   replaceZoneClosedWeek,
@@ -131,6 +129,7 @@ import {
   stationStates,
   zoneSalePolicies,
 } from "@waitron/venue-service";
+import { insertNamedDay, readNamedDay } from "@waitron/venue-service/testing/named-day-rows.js";
 import { decimal, locationId, nodeId, seriesId, deviceOrigin } from "@waitron/shared";
 import { moduleCoreServices } from "./parties.js";
 import { createTable } from "./testing/live-table.js";
@@ -4102,7 +4101,7 @@ describe("named days in a configuration transfer", () => {
       );
       const dates = [];
       for (const { id } of dateRows.rows) {
-        const date = await readSpecialDate(tx, venue.cfg, id);
+        const date = (await readNamedDay(tx, venue.cfg, id))!;
         dates.push({
           date: date.date,
           name: date.name,
@@ -4136,51 +4135,27 @@ describe("named days in a configuration transfer", () => {
     const deli = { kind: "station" as const, id: stations.get("Grill")! };
     const bar = { kind: "station" as const, id: stations.get("Bar")! };
     await withTransaction(suite.db, async (tx) => {
-      await saveSpecialDate(
-        tx,
-        cfg,
-        null,
-        {
-          date: "2026-12-24",
-          name: "Christmas Eve",
-          closeWholeVenue: false,
-          cells: [
-            { subject: restaurant, cell: { mode: "periods", periods: [p("12:00", "18:00")] } },
-            { subject: bar, cell: CLOSED },
-          ],
-        },
-        AT,
-        undefined,
-        0,
-      );
-      await saveSpecialDate(
-        tx,
-        cfg,
-        null,
-        {
-          date: "2026-12-25",
-          name: "Christmas",
-          closeWholeVenue: true,
-          cells: [{ subject: deli, cell: ALL_DAY }],
-        },
-        AT,
-        undefined,
-        0,
-      );
-      await saveSpecialDate(
-        tx,
-        cfg,
-        null,
-        {
-          date: "2027-01-01",
-          name: "New Year",
-          closeWholeVenue: false,
-          cells: [{ subject: bar, cell: ALL_DAY }],
-        },
-        AT,
-        undefined,
-        0,
-      );
+      await insertNamedDay(tx, cfg, {
+        date: "2026-12-24",
+        name: "Christmas Eve",
+        closeWholeVenue: false,
+        cells: [
+          { subject: restaurant, cell: { mode: "periods", periods: [p("12:00", "18:00")] } },
+          { subject: bar, cell: CLOSED },
+        ],
+      });
+      await insertNamedDay(tx, cfg, {
+        date: "2026-12-25",
+        name: "Christmas",
+        closeWholeVenue: true,
+        cells: [{ subject: deli, cell: ALL_DAY }],
+      });
+      await insertNamedDay(tx, cfg, {
+        date: "2027-01-01",
+        name: "New Year",
+        closeWholeVenue: false,
+        cells: [{ subject: bar, cell: ALL_DAY }],
+      });
       await setStationToday(tx, cfg, bar.id, "closed", AT);
     });
     const versions = await schemaVersionsByModule(suite.db, ALL_MODULES);
@@ -4213,23 +4188,15 @@ describe("named days in a configuration transfer", () => {
         name: "Terrace",
         departmentId: department.id,
       });
-      const day = await saveSpecialDate(
-        tx,
-        cfg,
-        null,
-        {
-          date: "2027-01-06",
-          name: "Own Terrace day",
-          kind: "holiday",
-          repeats: true,
-          ownHours: true,
-          closeWholeVenue: false,
-          cells: [],
-        },
-        AT,
-        undefined,
-        0,
-      );
+      const day = await insertNamedDay(tx, cfg, {
+        date: "2027-01-06",
+        name: "Own Terrace day",
+        kind: "holiday",
+        repeats: true,
+        ownHours: true,
+        closeWholeVenue: false,
+        cells: [],
+      });
       await tx.execute(sql`insert into zone_closed_times (id, zone_id, weekday, special_date_id, starts_at, ends_at)
         values (${randomUUID()}, ${zone.id}, 5, null, '23:00:00', '04:00:00'),
         (${randomUUID()}, ${zone.id}, null, ${day.id}, '22:00:00', '04:00:00')`);
@@ -4358,10 +4325,9 @@ describe("named days in a configuration transfer", () => {
       modules: ALL_MODULES,
     });
     await withTransaction(suite.db, (tx) =>
-      saveSpecialDate(
+      insertNamedDay(
         tx,
         { locationId: locationId(source.locationId) },
-        null,
         {
           date: "2026-12-25",
           name: "Own Christmas",
@@ -4371,9 +4337,6 @@ describe("named days in a configuration transfer", () => {
           closeWholeVenue: false,
           cells: [],
         },
-        AT,
-        undefined,
-        0,
       ),
     );
     const versions = await schemaVersionsByModule(suite.db, ALL_MODULES);
@@ -4394,7 +4357,7 @@ describe("named days in a configuration transfer", () => {
     const imported = await targetSuite.db.execute<{ id: string }>(sql`
       select id from special_dates where location_id = ${target.locationId}`);
     const day = await withTransaction(targetSuite.db, (tx) =>
-      readSpecialDate(tx, { locationId: locationId(target.locationId) }, imported.rows[0]!.id),
+      readNamedDay(tx, { locationId: locationId(target.locationId) }, imported.rows[0]!.id),
     );
     expect(day).toMatchObject({
       date: "2026-12-25",
@@ -4404,7 +4367,7 @@ describe("named days in a configuration transfer", () => {
       ownHours: true,
       closeWholeVenue: false,
     });
-    expect(day.id).not.toBe(transferred.tables.special_dates![0]!.id);
+    expect(day!.id).not.toBe(transferred.tables.special_dates![0]!.id);
   });
 
   it.each(["kind", "repeat_on", "own_hours", "clash"])(
@@ -4517,20 +4480,12 @@ describe("named days in a configuration transfer", () => {
     const { cfg, stations } = await named(suite.db, source);
     const pase = { kind: "station" as const, id: stations.get("Pase")! };
     await withTransaction(suite.db, async (tx) => {
-      await saveSpecialDate(
-        tx,
-        cfg,
-        null,
-        {
-          date: "2026-12-31",
-          name: "New Year's Eve",
-          closeWholeVenue: false,
-          cells: [{ subject: pase, cell: CLOSED }],
-        },
-        AT,
-        undefined,
-        0,
-      );
+      await insertNamedDay(tx, cfg, {
+        date: "2026-12-31",
+        name: "New Year's Eve",
+        closeWholeVenue: false,
+        cells: [{ subject: pase, cell: CLOSED }],
+      });
       await setDefaultStation(
         tx,
         {
@@ -4586,22 +4541,12 @@ describe("named days in a configuration transfer", () => {
     const { cfg, stations } = await named(suite.db, source);
     const restaurant = { kind: "station" as const, id: stations.get("Pass")! };
     await withTransaction(suite.db, async (tx) => {
-      await saveSpecialDate(
-        tx,
-        cfg,
-        null,
-        {
-          date: "2026-09-25",
-          name: "Late night",
-          closeWholeVenue: false,
-          cells: [
-            { subject: restaurant, cell: { mode: "periods", periods: [p("22:00", "03:00")] } },
-          ],
-        },
-        AT,
-        undefined,
-        0,
-      );
+      await insertNamedDay(tx, cfg, {
+        date: "2026-09-25",
+        name: "Late night",
+        closeWholeVenue: false,
+        cells: [{ subject: restaurant, cell: { mode: "periods", periods: [p("22:00", "03:00")] } }],
+      });
     });
     const versions = await schemaVersionsByModule(suite.db, ALL_MODULES);
     const transferred = await buildConfigurationBundle(suite.db, source, ALL_MODULES, AT, versions);
@@ -4750,21 +4695,13 @@ describe("public holidays in a configuration transfer", () => {
       await tx.execute(
         sql`insert into holiday_geographies (id, location_id, country, province_code, city, city_key) values (${randomUUID()}, ${cfg.locationId}, 'ES', '28', 'Madrid', 'madrid')`,
       );
-      await saveSpecialDate(
-        tx,
-        cfg,
-        null,
-        {
-          date: "2026-01-06",
-          name: "Reyes",
-          kind: "holiday",
-          closeWholeVenue: true,
-          cells: [],
-        },
-        AT,
-        undefined,
-        0,
-      );
+      await insertNamedDay(tx, cfg, {
+        date: "2026-01-06",
+        name: "Reyes",
+        kind: "holiday",
+        closeWholeVenue: true,
+        cells: [],
+      });
     });
     await moveTo(suite.db, source, "Lleida", "Vielha e Mijaran");
     await withTransaction(suite.db, async (tx) => {
@@ -6296,23 +6233,15 @@ describe("seasons in a configuration transfer", () => {
         values (${saturdayTimetable}, ${department.id}, 6, null)`);
         await tx.execute(sql`insert into menu_slots (id, timetable_id, department_id, period_id, starts_at, ends_at)
         values (${randomUUID()}, ${saturdayTimetable}, ${department.id}, ${dinner}, '20:00:00', ${slotEnd})`);
-        const named = await saveSpecialDate(
-          tx,
-          scope,
-          null,
-          {
-            date: "2027-01-06",
-            name: "Own hours day",
-            kind: "holiday",
-            repeats: false,
-            ownHours: true,
-            closeWholeVenue: false,
-            cells: [],
-          },
-          WINTER_SATURDAY,
-          undefined,
-          0,
-        );
+        const named = await insertNamedDay(tx, scope, {
+          date: "2027-01-06",
+          name: "Own hours day",
+          kind: "holiday",
+          repeats: false,
+          ownHours: true,
+          closeWholeVenue: false,
+          cells: [],
+        });
         const timetable = randomUUID();
         await tx.execute(sql`insert into menu_day_timetables (id, department_id, weekday, special_date_id)
         values (${timetable}, ${department.id}, null, ${named.id})`);

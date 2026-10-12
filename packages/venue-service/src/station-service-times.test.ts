@@ -24,7 +24,7 @@ import { VENUE_SERVICE_MIGRATIONS } from "./migrations.js";
 import { configureZone, createDepartment } from "./operations.js";
 import { replaceMenuWeek, saveMenuPeriod, saveSpecialDateMenus } from "./menu-timetable.js";
 import { setRoutingCell } from "./routing-store.js";
-import { saveSpecialDate } from "./hours.js";
+import { insertNamedDay } from "./testing/named-day-rows.js";
 import { replaceZoneClosedWeek, saveZoneClosedDate } from "./zone-closed-times.js";
 import { closeStationForToday } from "./station-times.js";
 import { stationServiceTimes } from "./station-service-times.js";
@@ -151,15 +151,12 @@ it("shows only Lunch when the period line sends Cocktails there only during Lunc
 it("applies named-day own ranges and dated zone closures", async () =>
   tx(async (db) => {
     const f = await fixture(db);
-    const named = await saveSpecialDate(
-      db,
-      f.cfg,
-      null,
-      { date: day, name: "Celebration", ownHours: true, closeWholeVenue: false },
-      at,
-      undefined,
-      0,
-    );
+    const named = await insertNamedDay(db, f.cfg, {
+      date: day,
+      name: "Celebration",
+      ownHours: true,
+      closeWholeVenue: false,
+    });
     await saveSpecialDateMenus(
       db,
       f.cfg,
@@ -285,15 +282,12 @@ it.each([
       await db.delete(sectionMembers).where(eq(sectionMembers.productId, f.product));
     }
     if (kind === "whole venue closed")
-      await saveSpecialDate(
-        db,
-        f.cfg,
-        null,
-        { date: day, name: "Closed", ownHours: false, closeWholeVenue: true },
-        at,
-        undefined,
-        0,
-      );
+      await insertNamedDay(db, f.cfg, {
+        date: day,
+        name: "Closed",
+        ownHours: false,
+        closeWholeVenue: true,
+      });
     if (kind === "whole zone closed")
       await replaceZoneClosedWeek(
         db,
@@ -378,15 +372,13 @@ it("reads products from staff menus and routes a variant by its parent's categor
 it("a repeating own-hours day uses its occurrence, with an unsaved department still following the week", async () =>
   tx(async (db) => {
     const f = await fixture(db);
-    await saveSpecialDate(
-      db,
-      f.cfg,
-      null,
-      { date: day, name: "Annual day", repeats: true, ownHours: true, closeWholeVenue: false },
-      at,
-      undefined,
-      0,
-    );
+    await insertNamedDay(db, f.cfg, {
+      date: day,
+      name: "Annual day",
+      repeats: true,
+      ownHours: true,
+      closeWholeVenue: false,
+    });
     expect(await stationServiceTimes(db, f.cfg, f.station, "2037-10-12", "2037-10-12")).toEqual({
       always: null,
       days: [
@@ -494,21 +486,13 @@ it("reads the last valid calendar date without stepping beyond its requested ran
 it("the normal week ignores a named-day closure while the dated week applies it", async () =>
   tx(async (db) => {
     const f = await fixture(db);
-    await saveSpecialDate(
-      db,
-      f.cfg,
-      null,
-      {
-        date: day,
-        name: "Closed Monday",
-        closeWholeVenue: true,
-        ownHours: false,
-        repeats: false,
-      },
-      at,
-      undefined,
-      0,
-    );
+    await insertNamedDay(db, f.cfg, {
+      date: day,
+      name: "Closed Monday",
+      closeWholeVenue: true,
+      ownHours: false,
+      repeats: false,
+    });
     expect(await stationServiceTimes(db, f.cfg, f.station, day, day)).toEqual({
       always: null,
       days: [{ date: day, departments: [] }],

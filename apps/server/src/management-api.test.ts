@@ -23,12 +23,7 @@ import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { hashPassword, hashPin, persons, registerModulePermissions } from "@waitron/identity";
 import { createCatalogue, createCategory, createProduct } from "@waitron/catalogue";
-import {
-  deleteSpecialDate,
-  readSpecialDate,
-  saveSpecialDate,
-  stationStates,
-} from "@waitron/venue-service";
+import { stationStates } from "@waitron/venue-service";
 import { applyVenue, planVenue } from "@waitron/provisioning";
 import type { VenueResult } from "@waitron/provisioning";
 import {
@@ -1466,51 +1461,62 @@ describe("/management-api/stations (KDS-1 config)", () => {
   it.each(["existing", "new"] as const)(
     "replaces the default using the %s-station action while preserving named dates",
     async (choice) => {
-      const cfg = { locationId: brandLocationId(venue.locationId) };
       const kitchen = await createStation(unique("Resume kitchen"), { isDefault: true });
       const barName = unique("Resume bar");
       const bar = await createStation(barName);
-      const at = new Date("2026-10-06T10:00:00Z");
       // Dates far enough ahead to stay current whenever the suite runs.
-      const barDate = (date: string) => ({
-        date,
-        name: unique("Resume date"),
-        colour: "red" as const,
-        closeWholeVenue: false,
-      });
-      const earlier = await withTransaction(suite.db, (tx) =>
-        saveSpecialDate(tx, cfg, null, barDate("2096-06-09"), at, undefined, 0),
-      );
-      const later = await withTransaction(suite.db, (tx) =>
-        saveSpecialDate(tx, cfg, null, barDate("2096-06-12"), at, undefined, 0),
-      );
+      const dayPath = (id = "") => `/venue-service/special-days${id === "" ? "" : `/${id}`}`;
+      const barDay = (date: string, name = unique("Resume date")) =>
+        JSON.stringify({
+          name,
+          repeatsYearly: false,
+          dates: [{ date, closedAllDay: false }],
+          paint: [],
+          expectedClockRevision: 0,
+        });
+      const create = async (date: string) => {
+        const response = await req(
+          dayPath(),
+          { method: "POST", body: barDay(date) },
+          managerCookie,
+        );
+        expect(response.status).toBe(201);
+        return (await response.json()) as { id: string; name: string };
+      };
+      const readDay = async (id: string) => {
+        const response = await req(dayPath(id), {}, managerCookie);
+        expect(response.status).toBe(200);
+        return response.json();
+      };
+      const earlier = await create("2096-06-09");
+      const later = await create("2096-06-12");
       expect(
         (await req(`/stations/${bar}/default`, { method: "POST" }, managerCookie)).status,
       ).toBe(204);
-      await withTransaction(suite.db, (tx) =>
-        saveSpecialDate(
-          tx,
-          cfg,
-          later.id,
-          { ...barDate("2096-06-10"), name: later.name },
-          at,
-          undefined,
-          0,
-        ),
-      );
+      expect(
+        (
+          await req(
+            dayPath(later.id),
+            { method: "PUT", body: barDay("2096-06-10", later.name) },
+            managerCookie,
+          )
+        ).status,
+      ).toBe(200);
 
       let removed = false;
       const removeDate = async () => {
         if (removed) return;
-        await withTransaction(suite.db, async (tx) => {
-          await deleteSpecialDate(tx, cfg, later.id, at, undefined, 0);
-          await deleteSpecialDate(tx, cfg, earlier.id, at, undefined, 0);
-        });
+        for (const id of [later.id, earlier.id])
+          await req(
+            dayPath(id),
+            { method: "DELETE", body: JSON.stringify({ expectedClockRevision: 0 }) },
+            managerCookie,
+          );
         removed = true;
       };
       onTestFinished(removeDate);
       const before = await listStations();
-      const keptDate = await withTransaction(suite.db, (tx) => readSpecialDate(tx, cfg, later.id));
+      const keptDate = await readDay(later.id);
       const newName = unique("Resume new default");
       let next = kitchen;
       if (choice === "existing") {
@@ -1537,9 +1543,7 @@ describe("/management-api/stations (KDS-1 config)", () => {
       expect(list.find((s) => s.id === kitchen)!.isDefault).toBe(choice === "existing");
       expect(list.some((s) => s.name === newName)).toBe(choice === "new");
       expect(list).toHaveLength(before.length + (choice === "new" ? 1 : 0));
-      expect(await withTransaction(suite.db, (tx) => readSpecialDate(tx, cfg, later.id))).toEqual(
-        keptDate,
-      );
+      expect(await readDay(later.id)).toEqual(keptDate);
       await removeDate();
       expect(
         (await req(`/stations/${kitchen}/default`, { method: "POST" }, managerCookie)).status,

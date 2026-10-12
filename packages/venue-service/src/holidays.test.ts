@@ -18,7 +18,8 @@ import {
   readHolidayFacts as packageReadHolidayFacts,
   readHolidays as packageReadHolidays,
 } from "./holidays.js";
-import { saveSpecialDate } from "./hours.js";
+import { saveSpecialDay } from "./special-days.js";
+import { insertNamedDay } from "./testing/named-day-rows.js";
 import * as packageIndex from "./index.js";
 import { VENUE_SERVICE_MIGRATIONS } from "./migrations.js";
 import type { VenueScope } from "./operations.js";
@@ -686,13 +687,17 @@ describe("transactions and other callers", () => {
       read.facts,
     );
     await run((tx) =>
-      saveSpecialDate(
+      saveSpecialDay(
         tx,
         cfg,
         null,
-        { date: "2026-05-01", name: "Labour", closeWholeVenue: true, cells: [] },
+        {
+          name: "Labour",
+          repeatsYearly: false,
+          dates: [{ date: "2026-05-01", closedAllDay: true }],
+          paint: [],
+        },
         new Date("2026-04-01T10:00:00Z"),
-        undefined,
         0,
       ),
     );
@@ -703,15 +708,7 @@ describe("transactions and other callers", () => {
   it("reads a data revision's facts, version and allowance, leaving every stored row as it was", async () => {
     const cfg = await venue();
     await run((tx) =>
-      saveSpecialDate(
-        tx,
-        cfg,
-        null,
-        { date: "2026-01-01", name: "New Year", closeWholeVenue: true, cells: [] },
-        new Date("2025-12-01T10:00:00Z"),
-        undefined,
-        0,
-      ),
+      insertNamedDay(tx, cfg, { date: "2026-01-01", name: "New Year", closeWholeVenue: true }),
     );
     const rows = async () => ({
       stored: await stored(),

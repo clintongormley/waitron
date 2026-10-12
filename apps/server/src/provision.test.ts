@@ -27,7 +27,6 @@ import {
   readHolidays,
   readHolidayAreaModel,
   saveHolidayArea,
-  saveSpecialDate,
   setRoutingCell,
 } from "@waitron/venue-service";
 import { locationId as brandLocationId } from "@waitron/shared";
@@ -489,27 +488,14 @@ describe("clearProvisionFixture", () => {
       { ownerDb: db, moduleConfig: ES_CONFIG, database: "waitron", stateDir },
       { environment: "preproduction", venue: venueRequest(nextNif()) },
     );
-    const cfg = { locationId: brandLocationId(result.locationId) };
-    const at = new Date("2026-10-06T10:00:00Z");
     await withTransaction(db, async (tx) => {
       await tx
         .insert(kitchenStations)
         .values({ locationId: result.locationId, name: "Restaurant pass" })
         .returning({ id: kitchenStations.id });
       await tx.insert(kitchenStations).values({ locationId: result.locationId, name: "Bar" });
-      await saveSpecialDate(
-        tx,
-        cfg,
-        null,
-        {
-          date: "2026-12-24",
-          name: "Christmas Eve",
-          closeWholeVenue: false,
-        },
-        at,
-        undefined,
-        0,
-      );
+      await tx.execute(sql`insert into special_dates (id, location_id, date, name)
+        values (${randomUUID()}, ${result.locationId}, '2026-12-24', 'Christmas Eve')`);
     });
 
     await clearProvisionFixture(db);

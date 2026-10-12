@@ -18,7 +18,7 @@ import { locationId as brandLocationId } from "@waitron/shared";
 import { readHolidays, readHolidayAreaModel } from "./holidays.js";
 import { readSpecialDaysModel } from "./named-days.js";
 import { saveSpecialDay } from "./special-days.js";
-import { readSpecialDate, saveSpecialDate } from "./hours.js";
+import { insertNamedDay, readNamedDay } from "./testing/named-day-rows.js";
 import { readSeasons } from "./seasons.js";
 import { VENUE_SERVICE_MIGRATIONS } from "./migrations.js";
 import { createServiceZone } from "./operations.js";
@@ -320,23 +320,14 @@ describe("VENUE_SERVICE_PROVISIONING", () => {
     await runSeed();
     expect(await dates()).toEqual([]);
 
-    const at = new Date("2026-10-06T10:00:00Z");
     const saved = await db.transaction((tx) =>
-      saveSpecialDate(
-        tx,
-        cfg,
-        null,
-        {
-          date: "2026-12-25",
-          name: "Christmas",
-          closeWholeVenue: false,
-        },
-        at,
-        undefined,
-        0,
-      ),
+      insertNamedDay(tx, cfg, {
+        date: "2026-12-25",
+        name: "Christmas",
+        closeWholeVenue: false,
+      }),
     );
-    const before = await db.transaction((tx) => readSpecialDate(tx, cfg, saved.id));
+    const before = await db.transaction((tx) => readNamedDay(tx, cfg, saved.id));
     expect(before).toEqual({
       id: saved.id,
       kind: "working_day",
@@ -349,7 +340,7 @@ describe("VENUE_SERVICE_PROVISIONING", () => {
 
     await runSeed();
 
-    expect(await db.transaction((tx) => readSpecialDate(tx, cfg, saved.id))).toEqual(before);
+    expect(await db.transaction((tx) => readNamedDay(tx, cfg, saved.id))).toEqual(before);
     expect(await dates()).toEqual([
       {
         id: saved.id,
