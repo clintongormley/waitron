@@ -1293,6 +1293,13 @@ _Formerly the catalogue and menus entries in the opening part of the old Track A
 
 ### Service periods, opening hours and departments
 
+- **A per-field department policy repair changes the trading-name default.** With no policy row,
+  readers show the trading name off; PATCH of `orderStart` inserts a row with it on. A real route
+  probe at base `c704ac0dc` returned `{before:false, after:true}`. Left open by A493's review;
+  align `setDepartmentSalePolicyField` repair defaults with the existing readers, with a failing
+  authenticated route case first. The combined department editor preserves the off fallback.
+
+
 _Formerly entries spread across the old sections, A261's venue-operations steps among them; part of A9._ Detail: [backlog/service-periods.md](backlog/service-periods.md).
 
 - **Which name a record sent across a legal-name change carries** (A494 follow-up, 2026-10-11). A

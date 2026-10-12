@@ -291,3 +291,13 @@ no venue sale, print, deletion or provisioning action was submitted for that cap
 Local acceptance is ready for finish-branch. The single installed Claude review, normal push
 hook, required current-head CI and authorised locked landing still remain; this is not a
 publication or CI-success claim.
+
+
+Finish review (2026-10-12): the first Claude dispatch took 295 seconds and was incomplete
+because two experiments were denied. A 275-second retry completed those experiments with no
+denials. Missing-policy reads now match the unchanged generic off fallback, while new creation
+rows remain on. A browser RED reproduced ArrowUp skipping the last initial target; both arrows
+now pass. Module338/server22/types/lint pass. The review's earlier per-field repair finding also
+fails at the unchanged base and is recorded separately in the backlog, outside this replacement
+editor's scope. The deleted-zone case now releases over the target's updated coordinates;
+its behavioral no-write assertion is unchanged. Current-head hook/CI and landing remain.

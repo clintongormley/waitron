@@ -283,7 +283,11 @@ it.each(["department", "zone"] as const)(
     el.model = next;
     await el.updateComplete;
     await table.updateComplete;
-    pointer(document, "pointerup", at);
+    const releaseAt =
+      kind === "zone"
+        ? point(table.shadowRoot!.querySelector('[data-row-key="department:d2"]')!)
+        : at;
+    pointer(document, "pointerup", releaseAt);
     expect(writes).toEqual([]);
     expect(table.shadowRoot!.querySelector('[data-test="lifted-zone-row"]')).toBeNull();
     expect(table.shadowRoot!.querySelector('[part~="drop-into"]')).toBeNull();
