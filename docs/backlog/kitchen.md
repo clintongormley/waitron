@@ -180,7 +180,6 @@ list does not exist.
   the Routes grid shows each match under every category above it, because those rows carry the
   stations being inherited.
 
-- **A product's own routing choice never asks (A507, owner 2026-10-11).** In the owner's words:
-  "what changes is the product clicked, its own variants and the extras that move with it as their
-  dish, which the person already chose." It saves at once; a category, All categories or No
+- **A product's own routing choice never asks (A507, owner 2026-10-11).** What changes is the product clicked, its own
+  variants and the extras that move with it as their dish, which the person already chose. It saves at once; a category, All categories or No
   category choice that moves products still opens the "Review route change" notice.

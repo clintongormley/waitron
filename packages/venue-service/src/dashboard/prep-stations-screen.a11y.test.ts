@@ -42,7 +42,7 @@ describe.each(["light", "dark"] as const)("prep stations accessibility (%s)", (t
     "invalid",
     "grid",
     "grid-preview",
-    "grid-preview, products shown",
+    "grid-preview-products-shown",
     "grid-refusal",
     "grid-disabled-target",
     "grid-dropped",
@@ -188,7 +188,7 @@ describe.each(["light", "dark"] as const)("prep stations accessibility (%s)", (t
           expect(el.shadowRoot!.querySelector('[data-test="routing-preview"]')).not.toBeNull(),
         );
       }
-      if (state === "grid-preview, products shown") {
+      if (state === "grid-preview-products-shown") {
         const disclosure = el.shadowRoot!.querySelector("wt-disclosure")!;
         disclosure.open = true;
         await disclosure.updateComplete;

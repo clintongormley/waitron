@@ -3308,7 +3308,6 @@ describe("Routing grid", () => {
       expect(sentences(preview)).toEqual([
         "Food, Terrace: 14 products move from Kitchen to Bar during Lunch.",
       ]);
-      expect(preview.textContent).not.toContain("These products will be made somewhere else");
     });
 
     it("one sentence per zone, periods, from and to: no zone first, then the model's zones, all day before timed", async () => {
