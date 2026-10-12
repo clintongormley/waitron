@@ -1,6 +1,11 @@
-import { eq, sql } from "drizzle-orm";
+import { eq, sql, type SQL } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
-import { savedPart, stillJoinedPart } from "./joined-parts.js";
+import {
+  joinedOutOfService,
+  joinedTableApart,
+  savedPart,
+  stillJoinedPart,
+} from "./joined-parts.js";
 import { CORE_MIGRATIONS } from "./migrations.js";
 import { diningTables } from "./schema/dining-tables.js";
 import {
@@ -11,6 +16,7 @@ import {
   floorResetTables,
   floorTodayJoinTables,
   floorTodayJoins,
+  floorTodaySplitParts,
 } from "./schema/floor-plans.js";
 import { floorZones } from "./schema/floor-zones.js";
 import { parties, partyTables } from "./schema/parties.js";
@@ -33,37 +39,44 @@ const PLAIN_ROW = "dddddddd-0000-4000-8000-000000000009";
 const WAITING_PART_ROW = "dddddddd-0000-4000-8000-000000000006";
 const OPERATOR = "99999999-0000-4000-8000-000000000001";
 
+type Db = ReturnType<typeof useVenueDb>["db"];
+
+/** Long table joined from Counter 3, 4 and 5 in today's copy, beside a Plain table. */
+async function seedJoinedToday(db: Db): Promise<void> {
+  await seedTenant(db);
+  await db.insert(locations).values({
+    id: LOCATION,
+    name: "Room",
+    invoiceLocales: ["es"],
+    operationDescription: "Hostelería",
+  });
+  await db.insert(floorZones).values({ id: ZONE, locationId: LOCATION, name: "Bar" });
+  await db.insert(diningTables).values([
+    { id: LONG, locationId: LOCATION, zoneId: ZONE, label: "Long table" },
+    { id: COUNTER_3, locationId: LOCATION, zoneId: ZONE, label: "Counter 3" },
+    { id: COUNTER_4, locationId: LOCATION, zoneId: ZONE, label: "Counter 4" },
+    { id: COUNTER_5, locationId: LOCATION, zoneId: ZONE, label: "Counter 5" },
+    { id: PLAIN, locationId: LOCATION, zoneId: ZONE, label: "Plain" },
+  ]);
+  await db.insert(floorResetTables).values([
+    { id: LONG_ROW, zoneId: ZONE, tableId: LONG, label: "Long table", seats: 10 },
+    { id: COUNTER_3_ROW, zoneId: ZONE, tableId: COUNTER_3, label: "Counter 3", seats: 2 },
+    { id: COUNTER_4_ROW, zoneId: ZONE, tableId: COUNTER_4, label: "Counter 4", seats: 6 },
+    { id: COUNTER_5_ROW, zoneId: ZONE, tableId: COUNTER_5, label: "Counter 5", seats: 4 },
+    { id: PLAIN_ROW, zoneId: ZONE, tableId: PLAIN, label: "Plain", seats: 4 },
+  ]);
+  await db.insert(floorResetTableParts).values([
+    { joinedResetTableId: LONG_ROW, partResetTableId: COUNTER_3_ROW },
+    { joinedResetTableId: LONG_ROW, partResetTableId: COUNTER_4_ROW },
+    { joinedResetTableId: LONG_ROW, partResetTableId: COUNTER_5_ROW },
+  ]);
+}
+
 describe("still joined part", () => {
   const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
 
   beforeEach(async () => {
-    await seedTenant(suite.db);
-    await suite.db.insert(locations).values({
-      id: LOCATION,
-      name: "Room",
-      invoiceLocales: ["es"],
-      operationDescription: "Hostelería",
-    });
-    await suite.db.insert(floorZones).values({ id: ZONE, locationId: LOCATION, name: "Bar" });
-    await suite.db.insert(diningTables).values([
-      { id: LONG, locationId: LOCATION, zoneId: ZONE, label: "Long table" },
-      { id: COUNTER_3, locationId: LOCATION, zoneId: ZONE, label: "Counter 3" },
-      { id: COUNTER_4, locationId: LOCATION, zoneId: ZONE, label: "Counter 4" },
-      { id: COUNTER_5, locationId: LOCATION, zoneId: ZONE, label: "Counter 5" },
-      { id: PLAIN, locationId: LOCATION, zoneId: ZONE, label: "Plain" },
-    ]);
-    await suite.db.insert(floorResetTables).values([
-      { id: LONG_ROW, zoneId: ZONE, tableId: LONG, label: "Long table", seats: 10 },
-      { id: COUNTER_3_ROW, zoneId: ZONE, tableId: COUNTER_3, label: "Counter 3", seats: 2 },
-      { id: COUNTER_4_ROW, zoneId: ZONE, tableId: COUNTER_4, label: "Counter 4", seats: 6 },
-      { id: COUNTER_5_ROW, zoneId: ZONE, tableId: COUNTER_5, label: "Counter 5", seats: 4 },
-      { id: PLAIN_ROW, zoneId: ZONE, tableId: PLAIN, label: "Plain", seats: 4 },
-    ]);
-    await suite.db.insert(floorResetTableParts).values([
-      { joinedResetTableId: LONG_ROW, partResetTableId: COUNTER_3_ROW },
-      { joinedResetTableId: LONG_ROW, partResetTableId: COUNTER_4_ROW },
-      { joinedResetTableId: LONG_ROW, partResetTableId: COUNTER_5_ROW },
-    ]);
+    await seedJoinedToday(suite.db);
   });
 
   async function read() {
@@ -166,6 +179,105 @@ describe("still joined part", () => {
 
     await suite.db.delete(floorTodayJoinTables).where(eq(floorTodayJoinTables.joinId, join!.id));
     expect((await read())[COUNTER_5]).toBe(1);
+  });
+
+  it("names no part split off today", async () => {
+    await suite.db
+      .insert(floorTodaySplitParts)
+      .values({ joinedTableId: LONG, partTableId: COUNTER_4 });
+    const joined = await read();
+    expect(joined[COUNTER_4]).toBe(0);
+    expect(joined[COUNTER_3]).toBe(1);
+    expect(joined[COUNTER_5]).toBe(1);
+  });
+});
+
+describe("joined table apart", () => {
+  const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
+
+  beforeEach(async () => {
+    await seedJoinedToday(suite.db);
+  });
+
+  async function read(predicate: (tableId: SQL) => SQL) {
+    const rows = await suite.db.all<{ id: string; named: number | null }>(
+      sql`select dt.id, ${predicate(sql`dt.id`)} as named from dining_tables dt order by dt.id`,
+    );
+    return Object.fromEntries(rows.map((row) => [row.id, row.named]));
+  }
+
+  async function splitOff(...partTableIds: string[]) {
+    await suite.db
+      .insert(floorTodaySplitParts)
+      .values(partTableIds.map((partTableId) => ({ joinedTableId: LONG, partTableId })));
+  }
+
+  async function seatParty(...tableIds: string[]) {
+    const [party] = await suite.db
+      .insert(parties)
+      .values({ openedBy: OPERATOR })
+      .returning({ id: parties.id });
+    await suite.db
+      .insert(partyTables)
+      .values(tableIds.map((tableId) => ({ partyId: party!.id, tableId })));
+  }
+
+  it("names no joined table while two or more of its parts are still joined", async () => {
+    expect((await read(joinedTableApart))[LONG]).toBe(0);
+    await splitOff(COUNTER_5);
+    expect((await read(joinedTableApart))[LONG]).toBe(0);
+  });
+
+  it("names the joined table once fewer than two parts are still joined", async () => {
+    await splitOff(COUNTER_4, COUNTER_5);
+    expect(await read(joinedTableApart)).toEqual({
+      [LONG]: 1,
+      [COUNTER_3]: 0,
+      [COUNTER_4]: 0,
+      [COUNTER_5]: 0,
+      [PLAIN]: 0,
+    });
+  });
+
+  it("counts a part a party holds as not joined", async () => {
+    await seatParty(COUNTER_3);
+    await seatParty(COUNTER_4);
+    expect((await read(joinedTableApart))[LONG]).toBe(1);
+  });
+
+  it("names no joined table a party holds, or one in today's merges", async () => {
+    await splitOff(COUNTER_4, COUNTER_5);
+    await seatParty(LONG);
+    expect((await read(joinedTableApart))[LONG]).toBe(0);
+
+    await suite.db.delete(partyTables);
+    const [join] = await suite.db
+      .insert(floorTodayJoins)
+      .values({ zoneId: ZONE, seats: 14 })
+      .returning({ id: floorTodayJoins.id });
+    await suite.db.insert(floorTodayJoinTables).values([
+      { joinId: join!.id, tableId: LONG, beforeX: 0, beforeY: 0, beforeRotation: 0 },
+      { joinId: join!.id, tableId: PLAIN, beforeX: 10, beforeY: 0, beforeRotation: 0 },
+    ]);
+    expect((await read(joinedTableApart))[LONG]).toBe(0);
+  });
+
+  it("puts still-joined parts and a joined table come apart out of service, and nothing else", async () => {
+    expect(await read(joinedOutOfService)).toEqual({
+      [LONG]: 0,
+      [COUNTER_3]: 1,
+      [COUNTER_4]: 1,
+      [COUNTER_5]: 1,
+      [PLAIN]: 0,
+    });
+    await splitOff(COUNTER_4, COUNTER_5);
+    expect(await read(joinedOutOfService)).toEqual({
+      [LONG]: 1,
+      [COUNTER_3]: 1,
+      [COUNTER_4]: 0,
+      [COUNTER_5]: 0,
+      [PLAIN]: 0,
+    });
   });
 });
 

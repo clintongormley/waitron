@@ -1,5 +1,5 @@
 import { readSaleOperationDescription } from "./sale-operation-description.js";
-import { stillJoinedPart, tableInService } from "@waitron/db";
+import { joinedOutOfService, stillJoinedPart, tableInService } from "@waitron/db";
 import { readStationQueueMoves, type StationQueueMove } from "./station-queue-moves.js";
 import {
   checkedInvoiceChoiceDelivery,
@@ -1160,7 +1160,7 @@ export async function createOpenOrder(
       .select({
         id: diningTables.id,
         zoneId: diningTables.zoneId,
-        joined: stillJoinedPart(diningTables.id).mapWith(Boolean),
+        joined: joinedOutOfService(diningTables.id).mapWith(Boolean),
       })
       .from(diningTables)
       .where(
@@ -1277,7 +1277,7 @@ export async function parkOrder(
 
 /**
  * Open the party's first bill at a table, clearing the table's manual status. Refused while the
- * table is still part of a joined table, while it needs clearing and while a party holds it (an
+ * table is out of service because of a joined table, while it needs clearing and while a party holds it (an
  * active `party_tables` row); the caller adds the party's membership afterwards. The check cannot interleave with a second `openTab`, because
  * `withTransaction` IS the venue file's write lock.
  */
@@ -1295,7 +1295,7 @@ export async function openTab(
   const [table] = await tx
     .select({
       inService: tableInService(diningTables.id).mapWith(Boolean),
-      joined: stillJoinedPart(diningTables.id).mapWith(Boolean),
+      joined: joinedOutOfService(diningTables.id).mapWith(Boolean),
       zoneId: diningTables.zoneId,
       needsClearingSince: diningTables.needsClearingSince,
     })

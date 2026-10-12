@@ -28,7 +28,12 @@ import {
 import { foodOnItsWay } from "./delivery-release.js";
 import { leaveMerges } from "./floor-today-merges.js";
 import { holdersOf } from "./parties.js";
-import { refuseStillJoined, refuseUnfree, refuseUnmovable, todayOf } from "./floor-today-table.js";
+import {
+  refuseInJoinedTable,
+  refuseUnfree,
+  refuseUnmovable,
+  todayOf,
+} from "./floor-today-table.js";
 import { refusedByAModule, removeLiveTables, tablesTied } from "./table-removal.js";
 import type { TillConfig } from "./till-config.js";
 import "./errors.js";
@@ -517,7 +522,7 @@ export async function placeSpareToday(
   at: { x: number; y: number },
 ): Promise<void> {
   const { row } = await todayOf(tx, cfg, tableId);
-  await refuseStillJoined(tx, [tableId]);
+  await refuseInJoinedTable(tx, [tableId]);
   if (row.takenOff) throw new AppError("table.taken_off", { tableId });
   if (row.x !== null) return;
   if (row.fixed) throw new AppError("table.fixed", { tableId });

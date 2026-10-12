@@ -25,7 +25,7 @@ import {
   setupPartyVenue,
   type PartyVenue,
 } from "./testing/party-venue.js";
-import { mergeOf, plannedZone, todayRow } from "./testing/floor-today-venue.js";
+import { mergeOf, plannedZone, splitOffRow, todayRow } from "./testing/floor-today-venue.js";
 import "./errors.js";
 
 let v: PartyVenue;
@@ -209,5 +209,117 @@ describe("a part still in a joined table", () => {
 
     const atCounter = await seat(v, table.c3!);
     expect(await partyAt(v, table.c3!)).toBe(atCounter.partyId);
+  });
+});
+
+describe("a joined table come apart", () => {
+  it("seats a party at Counter 4 once it is split off", async () => {
+    const { table } = await LONG_AND_BAR();
+    await splitOffRow(v, table.long!, table.c4!);
+    const { partyId } = await seat(v, table.c4!);
+    expect(await partyAt(v, table.c4!)).toBe(partyId);
+  });
+
+  it("refuses seating a party at Long table once two of its three parts are split off", async () => {
+    const { table } = await LONG_AND_BAR();
+    await splitOffRow(v, table.long!, table.c4!);
+    await splitOffRow(v, table.long!, table.c5!);
+    await expect(seat(v, table.long!)).rejects.toMatchObject(inJoinedTable(table.long!));
+    expect(await partyAt(v, table.long!)).toBeNull();
+  });
+
+  it("refuses joining Long table to a party at Bar once it has come apart", async () => {
+    const { table } = await LONG_AND_BAR();
+    await splitOffRow(v, table.long!, table.c4!);
+    await splitOffRow(v, table.long!, table.c5!);
+    const { partyId } = await seat(v, table.bar!);
+    await expect(join(v, partyId, table.long!)).rejects.toMatchObject(inJoinedTable(table.long!));
+    expect(await activeTablesOf(v, partyId)).toEqual([table.bar!]);
+  });
+
+  it("refuses merging Bar with Long table once it has come apart", async () => {
+    const { table } = await LONG_AND_BAR();
+    await splitOffRow(v, table.long!, table.c4!);
+    await splitOffRow(v, table.long!, table.c5!);
+    await expect(
+      inTx(v, (tx) =>
+        writeMerge(tx, v.cfg, {
+          movingId: table.bar!,
+          targetId: table.long!,
+          side: "right",
+          seats: 14,
+          free: true,
+        }),
+      ),
+    ).rejects.toMatchObject(inJoinedTable(table.long!));
+    expect(await mergeOf(v, table.bar!)).toBeNull();
+    expect(await mergeOf(v, table.long!)).toBeNull();
+  });
+
+  it("refuses an order delivered to Long table once it has come apart", async () => {
+    const { table } = await LONG_AND_BAR();
+    await splitOffRow(v, table.long!, table.c4!);
+    await splitOffRow(v, table.long!, table.c5!);
+    const id = randomUUID();
+    await expect(
+      inTx(v, (tx) =>
+        createOpenOrder(
+          tx,
+          v.cfg,
+          id,
+          [{ menuItemId: v.counterItem("Flan"), quantity: "1" }],
+          null,
+          {
+            deliveryTableId: table.long!,
+            zoneId: v.counter.zoneId,
+          },
+        ),
+      ),
+    ).rejects.toMatchObject(inJoinedTable(table.long!));
+    const written = await inTx(v, (tx) =>
+      tx.select().from(workingOrders).where(eq(workingOrders.id, id)),
+    );
+    expect(written).toEqual([]);
+  });
+
+  it("Long table is out of service while two of its parts still hold parties from before the reset", async () => {
+    const { zoneId, table, master, revision } = await plannedZone(
+      v,
+      [
+        { key: "c3", label: "Counter 3", seats: 2, place: { x: 0, y: 0 } },
+        { key: "c4", label: "Counter 4", seats: 6, place: { x: 20, y: 0 } },
+        { key: "c5", label: "Counter 5", seats: 4, place: { x: 40, y: 0 } },
+      ],
+      NOW,
+    );
+    await seat(v, table.c3!);
+    await seat(v, table.c4!);
+    const plan = await inTx(v, (tx) => readZonePlan(tx, v.cfg, zoneId));
+    const tables: ZonePlanSave["tables"] = plan.tables.map((entry) => ({
+      id: entry.id,
+      key: entry.id,
+      label: entry.label,
+      seats: entry.seats,
+      fixed: entry.fixed,
+      placement: null,
+      partKeys: [],
+    }));
+    tables.push({
+      key: "long",
+      label: `Long table ${randomUUID().slice(0, 6)}`,
+      seats: 10,
+      fixed: false,
+      placement: { x: 0, y: 20, width: 6, height: 2, shape: "rect", rotation: 0 },
+      partKeys: [master.c3!, master.c4!, master.c5!],
+    });
+    const { ids } = await inTx(v, (tx) =>
+      saveZonePlan(tx, v.cfg, REMOVALS, zoneId, { revision, tables }, NOW),
+    );
+    await inTx(v, (tx) => resetZone(tx, v.cfg, REMOVALS, zoneId, NOW));
+    const after = await inTx(v, (tx) => readZonePlan(tx, v.cfg, zoneId));
+    const long = after.tables.find((entry) => entry.id === ids.long)!.liveTableId!;
+
+    await expect(seat(v, long)).rejects.toMatchObject(inJoinedTable(long));
+    expect(await partyAt(v, long)).toBeNull();
   });
 });

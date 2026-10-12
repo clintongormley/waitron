@@ -4,6 +4,7 @@ import {
   floorPlanTableSizes,
   floorTodayJoinTables,
   floorTodayJoins,
+  floorTodaySplitParts,
   floorTodayTables,
   floorZones,
 } from "@waitron/db";
@@ -100,6 +101,15 @@ export async function giveKeptSize(
   size: { width: number; height: number },
 ): Promise<void> {
   await inTx(v, (tx) => tx.insert(floorPlanTableSizes).values({ planTableId: masterId, ...size }));
+}
+
+/** Records `partTableId` as split off joined table `joinedTableId` today, as the split route will. */
+export async function splitOffRow(
+  v: PartyVenue,
+  joinedTableId: string,
+  partTableId: string,
+): Promise<void> {
+  await inTx(v, (tx) => tx.insert(floorTodaySplitParts).values({ joinedTableId, partTableId }));
 }
 
 export async function todayRow(
