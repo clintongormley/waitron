@@ -1472,6 +1472,10 @@ describe("the invoice at full payment (design §8 test 8)", () => {
         tradingName: "Comedor Nuevo",
         orderStart: "table",
       });
+      await tx.insert(departmentReceipts).values({
+        departmentId: department.id,
+        receipt: { operationDescription: "Restaurante" },
+      });
       const zone = await createServiceZone(tx, venue.cfg, {
         name: `Zona ${randomUUID()}`,
         departmentId: department.id,

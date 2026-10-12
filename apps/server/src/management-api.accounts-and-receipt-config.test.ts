@@ -1,6 +1,7 @@
 import {
   departments,
   departmentReceipts,
+  departmentSalePolicies,
   readPrintedDepartmentReceipt,
 } from "@waitron/venue-service";
 import { locations } from "@waitron/db";
@@ -2135,8 +2136,17 @@ async function departmentFixture(active = true, elsewhere = false): Promise<stri
   }
   const [row] = await suite.db
     .insert(departments)
-    .values({ locationId, name: `Receipt ${randomUUID()}`, tradingName: "Receipt", active })
+    .values({
+      locationId,
+      name: `Receipt ${randomUUID()}`,
+      tradingName: "Receipt",
+      active,
+    })
     .returning();
+  await suite.db.insert(departmentSalePolicies).values({
+    departmentId: row!.id,
+    ...RECEIPT_POLICY,
+  });
   return row!.id;
 }
 async function putTrim(app: Hono, cookie: string, path: string, body: unknown): Promise<Response> {
