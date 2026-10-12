@@ -627,13 +627,13 @@ export, finds the target holding the exported four, and asks `resolveDepartmentS
 
 `validateSeasonWeeks` (`packages/venue-service/src/configuration-transfer.ts`) refuses, among
 others: a season start that is not a common year's date or is `02-29`; a range off the
-quarter-hour or overlapping another on the same day; a
-department range with no period (Closed) and a zone range of any kind but `closed`; and a period
-end offset reaching the next placement in the same season's week. It accepts a season with fewer
-than seven day rows, compares no placements across a season boundary, and checks no skipped clock
-hour, as a season week has no date. A season day naming a special-day date is refused, because
-the bundle carries no `special_days` or `special_day_dates`. The cases are under "season weeks in
-a configuration bundle" in `packages/venue-service/src/configuration-transfer.test.ts`.
+quarter-hour or overlapping another on the same day; a department range with no period (Closed)
+and a zone range of any kind but `closed`; and a period end offset reaching the next placement in
+the same season's week. It accepts a season with fewer than seven day rows, compares no
+placements across a season boundary, and checks no skipped clock hour, as a season week has no
+date. A season day naming a special-day date is refused, because the bundle carries no
+`special_days` or `special_day_dates`. The cases are under "season weeks in a configuration
+bundle" in `packages/venue-service/src/configuration-transfer.test.ts`.
 
 ### Earlier W98 menu timetable model
 

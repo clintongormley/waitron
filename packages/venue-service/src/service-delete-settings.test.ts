@@ -583,19 +583,19 @@ it("delete takes the department's season days and their ranges before its period
   });
 });
 
-it("the delete impact counts the season days and ranges a season-only week and a season closure wrote", async () => {
-  await run(async (tx) => {
-    const f = await fixture(tx);
-    const [menu] = await tx.insert(catalogues).values({ name: "Published menu" }).returning();
-    const [lunch] = await tx
-      .insert(menuPeriods)
-      .values({ departmentId: f.department, name: "Lunch", menuId: menu!.id })
-      .returning();
-    const winter = (await ensureDefaultSeasons(tx, f.cfg)).find(
-      (season) => season.name === "Winter",
-    )!.id;
-    const at = new Date("2030-01-01T12:00:00Z");
-    await replaceMenuWeek(
+async function paintSeasons(tx: Transaction) {
+  const f = await fixture(tx);
+  const [menu] = await tx.insert(catalogues).values({ name: "Published menu" }).returning();
+  const [lunch] = await tx
+    .insert(menuPeriods)
+    .values({ departmentId: f.department, name: "Lunch", menuId: menu!.id })
+    .returning();
+  const seasonsByName = new Map(
+    (await ensureDefaultSeasons(tx, f.cfg)).map((season) => [season.name, season.id]),
+  );
+  const at = new Date("2030-01-01T12:00:00Z");
+  const week = (seasonId?: string) =>
+    replaceMenuWeek(
       tx,
       f.cfg,
       f.department,
@@ -607,15 +607,14 @@ it("the delete impact counts the season days and ranges a season-only week and a
                 { periodId: lunch!.id, startsAt: "09:00", endsAt: "11:00" },
                 { periodId: lunch!.id, startsAt: "13:00", endsAt: "16:00" },
               ]
-            : weekday === 3
-              ? [{ periodId: lunch!.id, startsAt: "13:00", endsAt: "16:00" }]
-              : [],
+            : [],
       })),
       at,
       0,
-      { seasonId: winter },
+      seasonId === undefined ? {} : { seasonId },
     );
-    await replaceZoneClosedWeek(
+  const closure = (seasonId: string) =>
+    replaceZoneClosedWeek(
       tx,
       f.cfg,
       f.gone,
@@ -625,27 +624,62 @@ it("the delete impact counts the season days and ranges a season-only week and a
       })),
       0,
       at,
-      { seasonId: winter },
+      { seasonId },
     );
+  return { f, season: (name: string) => seasonsByName.get(name)!, week, closure };
+}
+
+const seasonLines = (impact: { key: string }[]) =>
+  impact.filter((item) => ["timetables", "slots", "seasons"].includes(item.key));
+
+it("the delete impact counts a week saved with no season once per season, beside its old timetables and slots", async () => {
+  await run(async (tx) => {
+    const { f, week } = await paintSeasons(tx);
+    await week();
+
+    expect(
+      seasonLines(
+        await readServiceDeleteSettings(tx, f.cfg, [f.gone, f.forbidden, f.allowed], f.department),
+      ),
+    ).toEqual([
+      { key: "timetables", count: 1, targets: [] },
+      { key: "slots", count: 2, targets: [] },
+      { key: "seasons", count: 4, targets: [] },
+    ]);
+  });
+});
+
+it("the delete impact counts one season for a week painted in Winter only, with a Winter closure in its zone", async () => {
+  await run(async (tx) => {
+    const { f, season, week, closure } = await paintSeasons(tx);
+    await week(season("Winter"));
+    await closure(season("Winter"));
     expect(await tx.select().from(menuDayTimetables)).toEqual([]);
     expect(await tx.select().from(zoneClosedTimes)).toEqual([]);
 
-    const impact = await readServiceDeleteSettings(
-      tx,
-      f.cfg,
-      [f.gone, f.forbidden, f.allowed],
-      f.department,
-    );
-
-    expect(impact.filter((item) => item.key.startsWith("season_"))).toEqual([
-      { key: "season_days", count: 3, targets: [] },
-      { key: "season_ranges", count: 4, targets: [] },
-    ]);
+    expect(
+      seasonLines(
+        await readServiceDeleteSettings(tx, f.cfg, [f.gone, f.forbidden, f.allowed], f.department),
+      ),
+    ).toEqual([{ key: "seasons", count: 1, targets: [] }]);
     await clearServiceDeleteSettings(tx, f.cfg, [f.gone, f.forbidden, f.allowed], f.department);
     expect(await tx.select().from(departmentDays)).toEqual([]);
     expect(await tx.select().from(departmentDayRanges)).toEqual([]);
     expect(await tx.select().from(zoneDays)).toEqual([]);
     expect(await tx.select().from(zoneDayRanges)).toEqual([]);
+  });
+});
+
+it("a zone delete counts the seasons holding its closures and none of its department's hours", async () => {
+  await run(async (tx) => {
+    const { f, season, week, closure } = await paintSeasons(tx);
+    await week();
+    await closure(season("Winter"));
+    await closure(season("Summer"));
+
+    expect(seasonLines(await readServiceDeleteSettings(tx, f.cfg, [f.gone], null))).toEqual([
+      { key: "seasons", count: 2, targets: [] },
+    ]);
   });
 });
 

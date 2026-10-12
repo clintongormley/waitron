@@ -193,34 +193,18 @@ async function settings(
     .select()
     .from(menuSlots)
     .where(eq(menuSlots.departmentId, departmentId ?? ""));
-  const departmentSeasonDays = await tx
-    .select({ id: departmentDays.id })
+  const departmentSeasons = await tx
+    .selectDistinct({ seasonId: departmentDays.seasonId })
     .from(departmentDays)
+    .innerJoin(departmentDayRanges, eq(departmentDayRanges.dayId, departmentDays.id))
     .where(
       and(eq(departmentDays.departmentId, departmentId ?? ""), isNotNull(departmentDays.seasonId)),
     );
-  const departmentSeasonRanges = await tx
-    .select({ dayId: departmentDayRanges.dayId })
-    .from(departmentDayRanges)
-    .where(
-      inArray(
-        departmentDayRanges.dayId,
-        departmentSeasonDays.map((row) => row.id),
-      ),
-    );
-  const zoneSeasonDays = await tx
-    .select({ id: zoneDays.id })
+  const zoneSeasons = await tx
+    .selectDistinct({ seasonId: zoneDays.seasonId })
     .from(zoneDays)
+    .innerJoin(zoneDayRanges, eq(zoneDayRanges.dayId, zoneDays.id))
     .where(and(inArray(zoneDays.zoneId, zoneIds), isNotNull(zoneDays.seasonId)));
-  const zoneSeasonRanges = await tx
-    .select({ dayId: zoneDayRanges.dayId })
-    .from(zoneDayRanges)
-    .where(
-      inArray(
-        zoneDayRanges.dayId,
-        zoneSeasonDays.map((row) => row.id),
-      ),
-    );
   const periodExtra = await tx
     .select()
     .from(periodExtensions)
@@ -322,16 +306,8 @@ async function settings(
     { key: "timetables", count: timetables.length, targets: [] },
     { key: "slots", count: slots.length, targets: [] },
     {
-      key: "season_days",
-      // A written week stores all seven weekdays; only a day holding a range was painted.
-      count:
-        new Set(departmentSeasonRanges.map((row) => row.dayId)).size +
-        new Set(zoneSeasonRanges.map((row) => row.dayId)).size,
-      targets: [],
-    },
-    {
-      key: "season_ranges",
-      count: departmentSeasonRanges.length + zoneSeasonRanges.length,
+      key: "seasons",
+      count: new Set([...departmentSeasons, ...zoneSeasons].map((row) => row.seasonId)).size,
       targets: [],
     },
     { key: "period_extensions", count: periodExtra.length, targets: [] },
