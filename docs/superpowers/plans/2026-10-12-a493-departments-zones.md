@@ -264,3 +264,30 @@ without provisioning or changing the inherited demo target. This does not replac
 onboarding shell flow. That limit and the complete source/prose/assertion audit remain before
 whole-feature completion. Till's final captures wait for Spanish action labels using the exact
 loaded Vite locale module; earlier wrong-locale captures supply no acceptance evidence.
+
+
+Final local acceptance (2026-10-12): the full managed onboarding shell has been inspected in
+EN/ES, both themes and 390/1280 widths, through connection, administrator, venue and review,
+without submitting provisioning. Earlier component-only limitations are superseded by that run.
+The final assertion audit restored native language/refusal/focus, description correction/focus,
+malformed locale, placeholder contrast and distinct accessibility checks at the new owners.
+The five affected dashboard suites pass 105 cases. Core/fiscal/guard files retain their
+previous assertions; the unchanged fiscal pair passes 20 cases.
+
+The list now shows missing department description setup only when the installed fiscal
+contribution supplies that field. The corrected real boot test failed on the absent issue
+before the boot route flag was connected; restored Spain/GB boot cases pass, as does the
+no-field sale case (three cases total). The four-file module selection passes 253 cases,
+including malformed/missing descriptions, repair, scope, passive invalidation and the setup
+link. Four package type checks, focused lint and 2467 root cases pass.
+
+The source/prose audit followed current receipt, description, language, transfer and page
+consumers and added dated pointers to historical artifacts. Current user guidance now names
+the replacement owners. Both A493 backlog entries are removed; unresolved floor-plan
+permissions, non-plan fixtures, contact-limit duplication and preview load investigation remain
+open under their current owners. Visual readiness captures use a synthetic in-browser issue;
+no venue sale, print, deletion or provisioning action was submitted for that capture.
+
+Local acceptance is ready for finish-branch. The single installed Claude review, normal push
+hook, required current-head CI and authorised locked landing still remain; this is not a
+publication or CI-success claim.

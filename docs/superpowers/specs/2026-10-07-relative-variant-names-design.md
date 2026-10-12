@@ -1,5 +1,8 @@
 # Relative variant names (A357)
 
+> **2026-10-12, A493:** Product issuance uses the department receipt description. The location description remains the generic omitted-input fallback. Earlier contracts below are historical.
+> See [A493](2026-10-12-a493-departments-zones-design.md).
+
 Owner decision: 2026-10-07, Lane D queue A357. Name a variant relative to its product:
 Seagrams Gin and London Gin may each have Single and Double.
 

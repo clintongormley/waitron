@@ -33,6 +33,13 @@ pretend an email request works without today's required data. Keep existing glob
 readers until this rewrite; do not fill consent fields with made-up evidence, bypass the checker,
 or add a compatibility schema. The new contact selector is not yet the current staging API.
 
+**2026-10-12, A493:** product consent validation now reads the selected order or sale's
+recorded department contact through `resolveInvoiceEmailContact`. The global receipt
+readers and editors are retired. The source inventory and slice-7 directions below describe
+the 2026-10-10 tree; the consent-removal task still owns the payload and schema changes.
+`apps/server/src/invoice-choice-delivery.test.ts` exercises the department/default selector,
+global-contact refusal and stale-contact refusal through the real checker.
+
 ### Current source inventory (read, not runtime verification)
 
 | Reader/writer or constraint | Current source | Future change to examine |
@@ -467,12 +474,15 @@ just a green typecheck.
 
 ## Left open by #1261's review, not acted on (2026-10-05)
 
-- **Left open by #1261's review, not acted on (2026-10-05):** (1) no database trigger protects
-  the logo image (the approved design adds no migration; the app-level `receipt` usage refuses a
-  library delete); (2) a configuration import does not validate the `tenant_receipts` JSON (the
-  print path reads it defensively instead); (3) the phone and email length limits (30 and 254)
-  are copied into the dashboard’s `receipts-screen.ts` and `department-receipt-editor.ts`;
-  those copies are separate from `packages/layouts/src/validate.ts`.
+- **Left open by #1261's review:** no database trigger protects the logo image; the app-level
+  department receipt usage refuses a library delete. The phone and email length limits (30 and
+  254) are copied into `apps/dashboard/src/screens/department-receipt-dialog.ts`, separately
+  from `packages/layouts/src/validate.ts`.
+
+**2026-10-12, A493:** the venue receipt is no longer a configuration-transfer entry. The
+real transfer cases in `apps/server/src/configuration-transfer.test.ts` assert its absence
+beside populated department receipts and imported logo rasters. The old follow-up asking
+for validation of exported `tenant_receipts` JSON is retired.
 
 The earlier malformed-JSON speculation is retired by the bounded-reader case in
 `packages/layouts/src/receipt-store.test.ts`: after inserting `{broken`, `getReceipt` returns
@@ -509,9 +519,6 @@ returns `null`. This checks those readers, not every sale path.
   fiscal record or drawer. Explicit copy failure remains a refusal. This retires the earlier
   proposal to contain automatic QR-formatting failures; no native-QR fallback was added.
 
-- **Receipt contact (A366 slice 7, owner 2026-10-09).** Department/default contact selection
-  is separate from venue logo/text inheritance. The current delivery checker still reads global
-  phone/email until [the core consent rewrite](#remove-the-consent-step-from-emailed-receipts).
 
 - **A calibration drawer opening records who asked and when, not that the drawer opened.** There is
   no drawer sensor; the audit row is the request.

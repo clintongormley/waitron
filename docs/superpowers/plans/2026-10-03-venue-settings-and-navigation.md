@@ -1,5 +1,8 @@
 # Venue settings and the new sidebar: implementation plan (A261 step 1)
 
+> **2026-10-12, A493:** The Receipts tab is retired. Venue details holds receipt language; the department receipt dialog owns decoration and the tax-agency description. Earlier contracts below are historical.
+> See [A493](../specs/2026-10-12-a493-departments-zones-design.md).
+
 > **2026-10-10, A366 slice 7 Part A:** Receipt previews now send authored department and
 > venue drafts through POST. The GET preview, its query parameters and the client
 > `previewReceipt` method below describe the earlier implementation. Follow

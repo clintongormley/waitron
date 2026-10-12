@@ -1,5 +1,12 @@
 # Departments, service styles and opening hours
 
+> **2026-10-12, A493 supersession:** departments and zones share one list with protected
+> editors. The department page and its tabs, including the zone panel and receipt tab, are
+> retired. Floor-plan editing returns to the list. Receipt decoration and the tax-agency
+> description belong to each department; Venue settings holds the receipt language.
+> The earlier page, global-default and live transfer contracts below are historical.
+> See [the current contract](2026-10-12-a493-departments-zones-design.md).
+
 > **2026-10-10, A366 slice 4 Part B:** authored station hours and configured fallback chains
 > below are historical. Stations use daily closure destinations and the active default;
 > Opening hours shows their worked-out times without a station-hours editor. See

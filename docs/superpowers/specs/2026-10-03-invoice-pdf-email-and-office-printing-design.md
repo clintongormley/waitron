@@ -1,5 +1,8 @@
 # Full invoices by email as a PDF, and on an office printer (A231d)
 
+> **2026-10-12, A493:** Live venue decoration defaults are retired. Each department owns its decoration and tax-agency description. Earlier contracts below are historical.
+> See [A493](2026-10-12-a493-departments-zones-design.md).
+
 > **2026-10-12, A493:** consent validation uses the selected order or sale's department
 > contact, including the existing local default-department fallback, rather than the venue
 > receipt row. See [A493](2026-10-12-a493-departments-zones-design.md). The consent payload,

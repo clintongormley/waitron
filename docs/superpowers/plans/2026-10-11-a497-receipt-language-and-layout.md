@@ -1,5 +1,8 @@
 # A497: Receipt Language Chosen at the Till, and the Printed Layout — Implementation Plan
 
+> **2026-10-12, A493:** Product issuance uses the department receipt description. The old receipt editors are retired; the department dialog owns decoration and Venue details owns receipt language. Earlier contracts below are historical.
+> See [A493](../specs/2026-10-12-a493-departments-zones-design.md).
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or
 > superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax
 > for tracking.
