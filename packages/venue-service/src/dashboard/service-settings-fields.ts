@@ -69,7 +69,7 @@ export class ServiceSettingsFields extends LitElement {
       search=${field === "receiptPrintMode" ? "always" : "never"}
       searchPlaceholder=${t("venue.combobox_search")}
       noResultsLabel=${t("venue.combobox_no_results")}
-      .options=${following ? [{ value: "", label: t("venue.clear") }, ...options] : options}
+      .options=${following ? [{ value: "", label: t("venue.same_as_department").replace("{value}", placeholder) }, ...options] : options}
       .value=${this.value[field] ?? ""}
       .placeholder=${placeholder}
       .hint=${hint}

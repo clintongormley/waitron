@@ -126,7 +126,7 @@ function table(el: List) {
   return list!;
 }
 function rows(el: List) {
-  return [...table(el).shadowRoot!.querySelectorAll("tbody tr")];
+  return [...table(el).shadowRoot!.querySelectorAll('tbody tr[data-row-key^="department:"]')];
 }
 function find(el: List, selector: string) {
   return (
@@ -143,15 +143,15 @@ async function action(el: List, key: string) {
 }
 
 describe("department list", () => {
-  it("shows the four department columns and only active rows and zones", async () => {
+  it("shows service columns and only active department and zone rows", async () => {
     const el = await setup();
     const list = table(el);
     expect(list.viewKey).toBe("waitron.venue.departments");
     expect(list.columns.map(({ key, label }) => [key, label])).toEqual([
-      ["name", "Department"],
-      ["trading", "Trading name"],
-      ["zones", "Zones"],
-      ["setup", "Setup"],
+      ["name", "Name"],
+      ["orderStart", "How orders start"],
+      ["paidWhen", "When counter service is used"],
+      ["receiptPrintMode", "Print a receipt"],
       ["actions", "Actions"],
     ]);
     expect(list.columns.at(-1)).toMatchObject({ key: "actions", pinned: "end" });
@@ -160,12 +160,12 @@ describe("department list", () => {
         [...row.querySelectorAll("td")].slice(0, 4).map((cell) => cell.textContent!.trim()),
       ),
     ).toEqual([
-      ["Restaurant and bar", "Casa Delgado", "Dining room, Bar", ""],
-      ["Deli", "Casa Delgado Deli", "No zones", ""],
+      ["Restaurant and bar", "Counter service", "Paid before preparation", "Always"],
+      ["Deli", "Counter service", "Paid before preparation", "Always"],
     ]);
     expect(list.shadowRoot!.querySelector('[part="disabled-note"]')).toBeNull();
   });
-  it("puts the department and its zone problems only in that department's Setup cell", async () => {
+  it("puts the department and its zone problems only in that department's name cell", async () => {
     const el = await setup({
       ...model,
       readiness: [
@@ -174,15 +174,17 @@ describe("department list", () => {
         { code: "zone.menu_empty", zoneId: "z2", zoneName: "Bar", menuId: "m1", menuName: "Lunch" },
       ],
     });
-    const cells = rows(el).map((row) => row.querySelectorAll("td")[3]!);
+    const cells = rows(el).map((row) => row.querySelectorAll("td")[0]!);
     expect(cells[0]!.textContent).toContain("Restaurant and bar has no opening periods.");
-    expect(cells[0]!.querySelector("a")!.getAttribute("href")).toBe(
+    expect(cells[0]!.querySelector('[part="setup-issue"] a')!.getAttribute("href")).toBe(
       "/manage/opening-hours/department/d1",
     );
-    expect(cells[0]!.querySelector("a")!.textContent).toBe("Set up Opening hours");
+    expect(cells[0]!.querySelector('[part="setup-issue"] a')!.textContent).toBe(
+      "Set up Opening hours",
+    );
     expect(cells[0]!.textContent).toContain("Dining room needs an active, published menu.");
     expect(cells[0]!.textContent).toContain("Bar: Lunch has no products for Bar.");
-    expect(cells[1]!.textContent!.trim()).toBe("");
+    expect(cells[1]!.querySelectorAll('[part="setup-issue"]')).toHaveLength(0);
   });
   it("keeps another department's zone issues out of a ready department", async () => {
     const el = await setup({
@@ -190,10 +192,12 @@ describe("department list", () => {
       departments: model.departments.map((department) => ({ ...department, active: true })),
       readiness: [{ code: "zone.menu_unpublished", zoneId: "z1", zoneName: "Dining room" }],
     });
-    expect(rows(el)[0]!.querySelectorAll("td")[3]!.textContent).toContain(
+    expect(rows(el)[0]!.querySelectorAll("td")[0]!.textContent).toContain(
       "Dining room needs an active, published menu.",
     );
-    expect(rows(el)[1]!.querySelectorAll("td")[3]!.textContent!.trim()).toBe("");
+    expect(
+      rows(el)[1]!.querySelectorAll("td")[0]!.querySelectorAll('[part="setup-issue"]'),
+    ).toHaveLength(0);
   });
   it("shows venue issues above and unassigned zones below, with their actions", async () => {
     const el = await setup({
@@ -262,7 +266,10 @@ describe("department list", () => {
     ["add-department", "add-department", null],
     ["open-department-d1", "open-department", { departmentId: "d1" }],
     ["open-department-name-d2", "open-department", { departmentId: "d2" }],
-    ["rename-department-d1", "rename-department", { departmentId: "d1" }],
+    ["add-zone-d1", "add-zone", { departmentId: "d1" }],
+    ["receipt-department-d1", "edit-receipt", { departmentId: "d1" }],
+    ["edit-zone-z1", "edit-zone", { zoneId: "z1" }],
+    ["delete-zone-z1", "delete-zone", { zoneId: "z1" }],
     ["delete-department-d1", "delete-department", { departmentId: "d1" }],
     ["delete-department-d2", "delete-department", { departmentId: "d2" }],
     ["add-zone-to-department-z4", "add-to-department", { zoneId: "z4" }],
@@ -293,7 +300,7 @@ describe("department list", () => {
     expect(list.rows.map((row) => (row as { id: string }).id)).not.toContain("d2");
     expect(list.shadowRoot!.querySelector('[data-test="enable-department-d2"]')).toBeNull();
   });
-  it("localizes columns, empty zones, venue issues and menu actions in Spanish", async () => {
+  it("localizes service columns, active zones, venue issues and menu actions in Spanish", async () => {
     setLocale("es");
     const el = await setup({
       ...model,
@@ -301,13 +308,14 @@ describe("department list", () => {
       departments: model.departments.map((row) => ({ ...row, active: true })),
     });
     expect(table(el).columns.map(({ label }) => label)).toEqual([
-      "Departamento",
-      "Nombre comercial",
-      "Zonas",
-      "Configuración",
+      "Nombre",
+      "Cómo empiezan los pedidos",
+      "Cuando se usa el servicio en mostrador",
+      "Imprimir el recibo",
       "Acciones",
     ]);
-    expect(rows(el)[1]!.textContent).toContain("Sin zonas");
+    expect(rows(el)[1]!.textContent).toContain("Servicio en mostrador");
+    expect(table(el).shadowRoot!.querySelectorAll('[data-row-key^="zone:"]')).toHaveLength(2);
     expect(find(el, '[data-test="delete-department-d2"]')!.textContent!.trim()).toBe("Eliminar");
     expect(find(el, '[data-test="no-enabled-department"]')!.textContent).toContain(
       "No hay ningún departamento disponible: añade uno para aceptar pedidos",
@@ -334,7 +342,7 @@ describe("department list", () => {
         });
         const list = table(el);
         list.scrollIntoView({ block: "center" });
-        expectRowMenusOnScreen(list, model.departments.length);
+        expectRowMenusOnScreen(list, model.departments.length + 2);
       } finally {
         await page.viewport(width, height);
       }
@@ -381,13 +389,13 @@ it("retains alphabetical department sorting without changing the supplied displa
   expect(el.model.departments.map((row) => row.name)).toEqual(["Restaurant and bar", "Deli"]);
 });
 
-it("retains the Spanish published-menu refusal in the owning department's Setup cell", async () => {
+it("retains the Spanish published-menu refusal in the owning department's name cell", async () => {
   setLocale("es");
   const el = await setup({
     ...model,
     readiness: [{ code: "zone.menu_unpublished", zoneId: "z1", zoneName: "Terraza" }],
   });
-  const cells = rows(el).map((row) => row.querySelectorAll("td")[3]!);
+  const cells = rows(el).map((row) => row.querySelectorAll("td")[0]!);
   expect(cells[0]!.textContent).toContain("Terraza necesita una carta activa y publicada.");
   expect(cells[1]!.textContent).not.toContain("Terraza");
 });

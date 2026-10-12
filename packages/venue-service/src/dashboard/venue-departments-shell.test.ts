@@ -54,6 +54,11 @@ async function mount(path = "/manage/venue-operations", view = model()) {
       profiles: [],
     }),
     listDeviceProfiles: vi.fn().mockResolvedValue([]),
+    watchZoneFloorPlan: vi.fn((_id, apply) => {
+      apply({ tables: [] });
+      return () => {};
+    }),
+    openingHours: { watchOpeningHours: vi.fn(() => () => {}) },
   };
   shell.api = { ...reads, background: reads } as unknown as VenueServiceApi;
   hosts.push(shell);
@@ -79,15 +84,15 @@ it("Open pushes the selected department page and keeps unrelated query values", 
     departmentId: "d2",
   });
   await shell.updateComplete;
-  await expect.poll(() => shell.shadowRoot!.querySelector("department-page")).not.toBeNull();
-  const page = shell.shadowRoot!.querySelector("department-page");
+  await expect.poll(() => shell.shadowRoot!.querySelector("department-edit-dialog")).not.toBeNull();
+  const page = shell.shadowRoot!.querySelector("department-edit-dialog");
   expect(page).not.toBeNull();
   expect(page!.departmentId).toBe("d2");
   await page!.updateComplete;
-  expect(page!.shadowRoot!.querySelector("h1")!.textContent).toBe("Department d2");
-  expect(page!.shadowRoot!.querySelector("nav a")!.getAttribute("href")).toBe(
-    "/manage/venue-operations",
+  expect(page!.shadowRoot!.querySelector("wt-modal")!.heading).toBe(
+    "Edit department: Department d2",
   );
+  expect(shell.shadowRoot!.querySelector("departments-list")).not.toBeNull();
   expect(location.pathname).toBe("/manage/venue-operations/department/d2");
   expect(location.search).toBe("?dev=1&source=saved");
   expect(push).toHaveBeenCalledTimes(1);
@@ -95,40 +100,32 @@ it("Open pushes the selected department page and keeps unrelated query values", 
 it("a direct department address selects Settings without replacing history", async () => {
   const replace = vi.spyOn(history, "replaceState");
   const shell = await mount("/manage/venue-operations/department/d1");
-  expect(shell.shadowRoot!.querySelector("department-page")!.view).toBe("settings");
+  expect(shell.shadowRoot!.querySelector("department-edit-dialog")!.departmentId).toBe("d1");
   expect(replace).toHaveBeenCalledTimes(1);
 });
-it("a tab pushes and a zone replaces the address, and Settings removes zone", async () => {
+it("a zone row opens its exact editor and a department row removes the zone path", async () => {
   const shell = await mount("/manage/venue-operations/department/d1");
   const push = vi.spyOn(history, "pushState");
-  const replace = vi.spyOn(history, "replaceState");
-  emit(shell.shadowRoot!.querySelector("department-page")!, "view-change", { view: "zones" });
-  await shell.updateComplete;
-  expect(location.pathname).toBe("/manage/venue-operations/department/d1/view/zones");
-  const zones = shell.shadowRoot!.querySelector("department-zones");
-  expect(zones).not.toBeNull();
-  expect(zones!.getAttribute("slot")).toBe("zones");
-  expect(zones!.departmentId).toBe("d1");
-  emit(zones!, "zone-change", { zoneId: "z2" });
-  await shell.updateComplete;
+  const list = shell.shadowRoot!.querySelector("departments-list")!;
+  emit(list, "edit-zone", { zoneId: "z2" });
+  await expect.poll(() => shell.shadowRoot!.querySelector("zone-edit-dialog")?.zoneId).toBe("z2");
   expect(location.pathname).toBe("/manage/venue-operations/department/d1/view/zones/zone/z2");
-  await expect.poll(() => zones!.zone).toBe("z2");
   expect(push).toHaveBeenCalledTimes(1);
-  expect(replace).toHaveBeenCalledTimes(1);
-  emit(shell.shadowRoot!.querySelector("department-page")!, "view-change", { view: "settings" });
-  await shell.updateComplete;
+  emit(list, "open-department", { departmentId: "d1" });
+  await expect
+    .poll(() => shell.shadowRoot!.querySelector("department-edit-dialog")?.departmentId)
+    .toBe("d1");
   expect(location.pathname).toBe("/manage/venue-operations/department/d1");
   expect(push).toHaveBeenCalledTimes(2);
 });
-it("Settings' differing-zone link selects the Zones tab with a replacement", async () => {
+it("Settings' differing-zone link opens the exact protected zone editor", async () => {
   const shell = await mount("/manage/venue-operations/department/d1");
-  const page = shell.shadowRoot!.querySelector("department-page")!;
-  await page.updateComplete;
-  const replace = vi.spyOn(history, "replaceState");
-  emit(page.shadowRoot!.querySelector("department-settings")!, "zone-change", { zoneId: "z2" });
-  await shell.updateComplete;
+  const editor = shell.shadowRoot!.querySelector("department-edit-dialog")!;
+  await editor.updateComplete;
+  const settings = editor.shadowRoot!.querySelector("department-settings")!;
+  emit(settings, "zone-change", { zoneId: "z2" });
+  await expect.poll(() => shell.shadowRoot!.querySelector("zone-edit-dialog")?.zoneId).toBe("z2");
   expect(location.pathname).toBe("/manage/venue-operations/department/d1/view/zones/zone/z2");
-  expect(replace).toHaveBeenCalledTimes(1);
 });
 it.each(["departments", "zones", "status", "missing", "menus", "kitchen"])(
   "old %s bookmarks replace to the list",
@@ -152,15 +149,13 @@ it.each(["en", "es"] as const)(
     expect(shell.shadowRoot!.querySelector("[role=status]")!.textContent!.trim()).toBe(
       locale === "en" ? "This department no longer exists." : "Este departamento ya no existe.",
     );
-    expect(shell.shadowRoot!.querySelector("nav a")!.getAttribute("href")).toBe(
-      "/manage/venue-operations",
-    );
+    expect(shell.shadowRoot!.querySelector("departments-list")).not.toBeNull();
     expect(location.pathname).toBe("/manage/venue-operations/department/gone");
   },
 );
 it("accepted history changes return to the list and do not write another entry", async () => {
   const shell = await mount("/manage/venue-operations/department/d1/view/zones/zone/z2");
-  expect(shell.shadowRoot!.querySelector("department-zones")!.zone).toBe("z2");
+  expect(shell.shadowRoot!.querySelector("zone-edit-dialog")!.zoneId).toBe("z2");
   history.replaceState(null, "", "/manage/venue-operations?dev=1&source=saved");
   const push = vi.spyOn(history, "pushState");
   const replace = vi.spyOn(history, "replaceState");
@@ -171,11 +166,10 @@ it("accepted history changes return to the list and do not write another entry",
   expect(push).not.toHaveBeenCalled();
   expect(replace).not.toHaveBeenCalled();
 });
-it("a zone outside this department falls back to its first zone without changing the URL", async () => {
+it("a zone outside this department keeps the list visible without opening an unrelated zone", async () => {
   const shell = await mount("/manage/venue-operations/department/d1/view/zones/zone/elsewhere");
-  const zones = shell.shadowRoot!.querySelector("department-zones")!;
-  await zones.updateComplete;
-  expect(zones.shadowRoot!.querySelector("h2")!.textContent).toBe("z1");
+  expect(shell.shadowRoot!.querySelector("zone-edit-dialog")).toBeNull();
+  expect(shell.shadowRoot!.querySelector("departments-list")).not.toBeNull();
   expect(location.pathname).toBe(
     "/manage/venue-operations/department/d1/view/zones/zone/elsewhere",
   );

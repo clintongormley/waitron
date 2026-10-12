@@ -133,8 +133,12 @@ it.each(["numbered", "none"] as const)(
   },
 );
 describe.each([
-  ["en", ["Table service", "Paid before preparation", "Print", "Always"], "Clear"],
-  ["es", ["Servicio de mesa", "Se paga antes de preparar", "Imprimir", "Siempre"], "Borrar"],
+  ["en", ["Table service", "Paid before preparation", "Print", "Always"], "Same as department"],
+  [
+    "es",
+    ["Servicio de mesa", "Se paga antes de preparar", "Imprimir", "Siempre"],
+    "Igual que el departamento",
+  ],
 ] as const)("zone inheritance in %s", (locale, placeholders, clearLabel) => {
   it("paints only the localized department value as each empty trigger's placeholder", async () => {
     setLocale(locale);
@@ -147,7 +151,9 @@ describe.each([
       expect(control.shadowRoot!.querySelector(".value.placeholder")!.textContent).toBe(
         placeholders[index],
       );
-      expect(control.options.find((option) => option.value === "")!.label).toBe(clearLabel);
+      expect(control.options.find((option) => option.value === "")!.label).toBe(
+        `${clearLabel} (${placeholders[index]})`,
+      );
     }
   });
   it("uses the other inherited choices as placeholders too", async () => {

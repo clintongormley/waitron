@@ -164,3 +164,22 @@ protected department dialog handles dirty Escape, pending Save, newer native edi
 and stale native close events, but is not yet connected to the unified list. Existing department
 form validation, transfers and leave assertions remain. Whole Task 4 and Task 3's wider managed
 look/audit remain unfinished; no publication at this checkpoint.
+
+
+Task 4 list/editor/drag checkpoint (2026-10-12): the combined list and protected zone editor
+are connected to the host, with the list retained under department, zone and receipt deep links.
+Null overrides use inherited styling; explicit equal overrides do not. Floor-plan menu reads
+remain passive and return to the list. Pointer moves lift a row, make room at the destination,
+and animate its landing unless reduced motion is selected. Keyboard moves restore grip focus
+after refresh. Independent pending moves each keep their request and queue another read when
+an earlier refresh is still running.
+
+Focused verification ran 537 module cases, 328 existing dashboard drag-consumer cases,
+2475 root cases, two extracted pointer-helper cases and the unchanged fiscal pair's 20 cases.
+Five installed removal controls each failed an assertion; restoring the candidate passed its
+focused suites. The initial close-control timeout was discarded and the pending-close test
+now checks that no confirmation opens before awaiting the refusal. Three scoped type checks
+passed. This does not complete Task 4: the two unchanged legacy shell action/leave suites
+still report 23 failures and 15 passes. Port every relevant behavior before retiring their
+old page/dialog helpers, then perform the full managed look and source/prose audit. No full
+review, push, PR or landing has run.

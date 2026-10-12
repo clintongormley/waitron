@@ -1,0 +1,250 @@
+import { afterEach, expect, it, vi } from "vitest";
+import { page, userEvent } from "vitest/browser";
+import { cleanup, mount } from "@waitron/ui/src/test-helpers.js";
+import { setLocale, type DashboardRequest } from "@waitron/dashboard-kit";
+import { VenueServiceApi } from "./client.js";
+import { zonesModel } from "../testing/department-zones-fixture.js";
+import "./departments-list.js";
+afterEach(() => {
+  cleanup();
+  setLocale("en");
+});
+async function setup(write?: () => Promise<void>) {
+  setLocale("en");
+  const el = (await mount(
+    "<departments-list></departments-list>",
+  )) as HTMLElementTagNameMap["departments-list"];
+  const writes: unknown[][] = [];
+  el.api = new VenueServiceApi((async (path, method = "GET", input) => {
+    if (method === "GET") return { tables: [] };
+    writes.push([path, method, input]);
+    await write?.();
+  }) as DashboardRequest);
+  el.model = structuredClone(zonesModel);
+  await el.updateComplete;
+  const table = el.shadowRoot!.querySelector("wt-data-table")!;
+  await table.updateComplete;
+  return {
+    el,
+    table,
+    writes,
+    grip: table.shadowRoot!.querySelector<HTMLElement>('[data-test="zone-grip-z1"]')!,
+  };
+}
+const point = (element: Element) => {
+  const box = element.getBoundingClientRect();
+  return { clientX: box.left + box.width / 2, clientY: box.top + box.height / 2 };
+};
+function pointer(
+  target: Element | Document,
+  type: string,
+  at: { clientX: number; clientY: number },
+) {
+  target.dispatchEvent(
+    new PointerEvent(type, {
+      ...at,
+      pointerId: 42,
+      button: 0,
+      buttons: type === "pointerup" ? 0 : 1,
+      bubbles: true,
+      composed: true,
+      cancelable: true,
+    }),
+  );
+}
+it("a grip drag lifts the complete visible row, marks every target cell and writes one move", async () => {
+  const { el, table, writes, grip } = await setup();
+  const target = table.shadowRoot!.querySelector('[data-row-key="department:d2"]')!;
+  pointer(grip, "pointerdown", point(grip));
+  pointer(document, "pointermove", point(target));
+  const ghost = table.shadowRoot!.querySelector('[data-test="lifted-zone-row"]');
+  expect(ghost, "the full visible zone row follows the pointer").not.toBeNull();
+  expect(ghost!.textContent).toContain("Terrace");
+  expect(ghost!.textContent).toContain("Counter service");
+  expect(ghost!.textContent).toContain("Paid before preparation");
+  expect(ghost!.getBoundingClientRect().width).toBeGreaterThan(
+    grip.getBoundingClientRect().width * 3,
+  );
+  expect([...target.querySelectorAll("td")].every((cell) => cell.part.contains("drop-into"))).toBe(
+    true,
+  );
+  pointer(document, "pointerup", point(target));
+  await expect
+    .poll(() => writes)
+    .toEqual([["/management-api/venue-service/zones/z1", "PUT", { departmentId: "d2" }]]);
+  expect(el.model!.zones[0]!.departmentId).toBe("d1");
+  expect(table.shadowRoot!.querySelector('[part~="dragging"]')).toBeNull();
+});
+it.each(["same", "zone", "outside", "cancel", "escape", "disconnect", "refresh"])(
+  "%s cancels without a move",
+  async (state) => {
+    const { el, table, writes, grip } = await setup();
+    let target = table.shadowRoot!.querySelector('[data-row-key="department:d2"]')!;
+    if (state === "same")
+      target = table.shadowRoot!.querySelector('[data-row-key="department:d1"]')!;
+    if (state === "zone") target = table.shadowRoot!.querySelector('[data-row-key="zone:z4"]')!;
+    pointer(grip, "pointerdown", point(grip));
+    const at = state === "outside" ? { clientX: -10, clientY: -10 } : point(target);
+    pointer(document, "pointermove", at);
+    if (state === "cancel") pointer(document, "pointercancel", at);
+    if (state === "escape")
+      document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+    if (state === "disconnect") el.remove();
+    if (state === "refresh") {
+      el.model = structuredClone(el.model);
+      await el.updateComplete;
+    }
+    pointer(document, "pointerup", at);
+    await el.updateComplete;
+    expect(writes).toEqual([]);
+    expect(table.shadowRoot!.querySelector('[part~="dragging"]')).toBeNull();
+    expect(table.shadowRoot!.querySelector('[data-test="lifted-zone-row"]')).toBeNull();
+  },
+);
+it("a press under five pixels sends no move", async () => {
+  const { writes, grip } = await setup();
+  const at = point(grip);
+  pointer(grip, "pointerdown", at);
+  pointer(document, "pointermove", { ...at, clientY: at.clientY + 4 });
+  expect(
+    grip.getRootNode() instanceof ShadowRoot &&
+      (grip.getRootNode() as ShadowRoot).querySelector('[data-test="lifted-zone-row"]'),
+  ).toBeNull();
+  pointer(document, "pointerup", at);
+  expect(writes).toEqual([]);
+});
+it("a real pointer drag releases over the pinned cell without opening an editor", async () => {
+  const { el, table, grip, writes } = await setup();
+  const opened = vi.fn();
+  el.addEventListener("open-department", opened);
+  el.addEventListener("edit-zone", opened);
+  const target = table.shadowRoot!.querySelector(
+    '[data-row-key="department:d2"] td[data-pinned="end"]',
+  )!;
+  await userEvent.dragAndDrop(page.elementLocator(grip), page.elementLocator(target));
+  await expect
+    .poll(() => writes)
+    .toEqual([["/management-api/venue-service/zones/z1", "PUT", { departmentId: "d2" }]]);
+  expect(opened).not.toHaveBeenCalled();
+});
+it("keyboard grip pickup, destination selection and drop move once and keep row focus", async () => {
+  const { table, grip, writes } = await setup();
+  grip.focus();
+  await userEvent.keyboard(" ");
+  await userEvent.keyboard("{ArrowDown}");
+  await userEvent.keyboard("{Enter}");
+  await expect
+    .poll(() => writes)
+    .toEqual([["/management-api/venue-service/zones/z1", "PUT", { departmentId: "d2" }]]);
+  expect(table.shadowRoot!.activeElement).toBe(grip);
+});
+it("a pending move disables only conflicting grips and a refusal preserves assignment", async () => {
+  let finish!: () => void;
+  const { el, table, grip, writes } = await setup(async () => {
+    await new Promise<void>((resolve) => {
+      finish = resolve;
+    });
+    throw { code: "zone.not_found" };
+  });
+  const target = table.shadowRoot!.querySelector('[data-row-key="department:d2"]')!;
+  pointer(grip, "pointerdown", point(grip));
+  pointer(document, "pointermove", point(target));
+  pointer(document, "pointerup", point(target));
+  await expect.poll(() => !!finish).toBe(true);
+  await el.updateComplete;
+  await table.updateComplete;
+  expect((grip as HTMLButtonElement).disabled).toBe(true);
+  expect(
+    (table.shadowRoot!.querySelector('[data-test="zone-grip-z2"]') as HTMLButtonElement).disabled,
+  ).toBe(false);
+  finish();
+  await expect
+    .poll(() => el.shadowRoot!.querySelector('[role="alert"]')?.textContent)
+    .toBe("The change could not be saved.");
+  expect(el.model!.zones[0]!.departmentId).toBe("d1");
+  expect(writes).toHaveLength(1);
+});
+it("a lifted target makes room and the released full row slides into its slot", async () => {
+  const { table, grip } = await setup();
+  const target = table.shadowRoot!.querySelector('[data-row-key="department:d2"]')!;
+  pointer(grip, "pointerdown", point(grip));
+  pointer(document, "pointermove", point(target));
+  const cells = [...target.querySelectorAll<HTMLElement>("td")];
+  await expect
+    .poll(() =>
+      cells.every(
+        (cell) =>
+          parseFloat(getComputedStyle(cell).paddingBlockEnd) >=
+          grip.closest("tr")!.getBoundingClientRect().height,
+      ),
+    )
+    .toBe(true);
+  pointer(document, "pointerup", point(target));
+  const ghost = table.shadowRoot!.querySelector('[data-test="lifted-zone-row"]')!;
+  expect(ghost, "the released row remains visible during its landing").not.toBeNull();
+  expect(ghost.getAnimations()).toHaveLength(1);
+  await expect
+    .poll(() => table.shadowRoot!.querySelector('[data-test="lifted-zone-row"]'))
+    .toBeNull();
+});
+it("Escape suppresses the abandoned drag's later release click", async () => {
+  const { el, table, grip, writes } = await setup();
+  const opened = vi.fn();
+  el.addEventListener("open-department", opened);
+  const target = table.shadowRoot!.querySelector('[data-row-key="department:d2"]')!;
+  pointer(grip, "pointerdown", point(grip));
+  pointer(document, "pointermove", point(target));
+  document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+  pointer(document, "pointerup", point(target));
+  target.querySelector<HTMLElement>(".row-activate")!.click();
+  expect(writes).toEqual([]);
+  expect(opened).not.toHaveBeenCalled();
+});
+it("reduced motion lands immediately without retaining a row animation", async () => {
+  const original = window.matchMedia.bind(window);
+  const media = vi
+    .spyOn(window, "matchMedia")
+    .mockImplementation((query) =>
+      query === "(prefers-reduced-motion: reduce)"
+        ? ({ ...original(query), matches: true } as MediaQueryList)
+        : original(query),
+    );
+  try {
+    const { table, grip, writes } = await setup();
+    const target = table.shadowRoot!.querySelector('[data-row-key="department:d2"]')!;
+    pointer(grip, "pointerdown", point(grip));
+    pointer(document, "pointermove", point(target));
+    pointer(document, "pointerup", point(target));
+    await expect.poll(() => writes.length).toBe(1);
+    expect(table.shadowRoot!.querySelector('[data-test="lifted-zone-row"]')).toBeNull();
+    expect(table.shadowRoot!.querySelectorAll('[part~="drop-into"]')).toHaveLength(0);
+  } finally {
+    media.mockRestore();
+  }
+});
+it("another zone can move while the first zone's request is pending", async () => {
+  const releases: (() => void)[] = [];
+  const { table, grip, writes } = await setup(async () => {
+    await new Promise<void>((resolve) => releases.push(resolve));
+  });
+  try {
+    const target = table.shadowRoot!.querySelector('[data-row-key="department:d2"]')!;
+    pointer(grip, "pointerdown", point(grip));
+    pointer(document, "pointermove", point(target));
+    pointer(document, "pointerup", point(target));
+    await expect.poll(() => writes.length).toBe(1);
+    await table.updateComplete;
+    const second = table.shadowRoot!.querySelector<HTMLElement>('[data-test="zone-grip-z2"]')!;
+    pointer(second, "pointerdown", point(second));
+    pointer(document, "pointermove", point(target));
+    pointer(document, "pointerup", point(target));
+    await expect
+      .poll(() => writes)
+      .toEqual([
+        ["/management-api/venue-service/zones/z1", "PUT", { departmentId: "d2" }],
+        ["/management-api/venue-service/zones/z2", "PUT", { departmentId: "d2" }],
+      ]);
+  } finally {
+    for (const release of releases) release();
+  }
+});

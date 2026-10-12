@@ -11,3 +11,4 @@ export * from "./table-strings.js";
 
 export { DraftRows } from "./merge-draft.js";
 export * from "./card-provider-panel.js";
+export * from "./pointer-drag.js";

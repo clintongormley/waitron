@@ -93,10 +93,12 @@ boards: the list, Edit department, Edit zone and Edit receipt.
 **Branch checkpoint, 2026-10-12.** Product issuance uses department descriptions, with
 readiness checked before new payment dispatch and the no-field fiscal slot handled at boot.
 Receipt dialogs, language settings and the public preview use department-owned content.
-Zone editors have an atomic name/policy API. Department settings now save name, trading name,
-service settings and transfers without writing receipt policy; the protected department dialog
-is implemented separately from the current page host. The unified list, zone dialog, dragging,
-full product look and whole-branch audit remain. The branch is unpublished.
+Zone editors save name and raw policy overrides together. The protected department and zone
+editors now open over the combined list. Department settings save name, trading name,
+service settings and transfers without writing receipt policy. Pointer and keyboard zone moves
+are implemented, including independent pending writes and queued refreshes. Legacy action/leave
+assertion ports, obsolete helper retirement, the full product look and the whole-branch audit
+remain. The branch is unpublished; the two legacy shell suites still have failing cases.
 
 **The list.** "Departments and zones" becomes one list. Each department is a row, and its zones are
 indented beneath it. The columns are name, service style (how orders start), counter service (when
