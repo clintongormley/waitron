@@ -339,10 +339,11 @@ export async function businessDayClockConflicts(
   // The cap and the count are of distinct ranges: one range painted in several seasons is one.
   const rangeKey = (conflict: BusinessDayClockConflict) =>
     JSON.stringify({ ...conflict, seasonId: undefined });
-  const ranges = [...new Set(conflicts.map(rangeKey))];
+  const keys = conflicts.map(rangeKey);
+  const ranges = [...new Set(keys)];
   const listed = new Set(ranges.slice(0, 20));
   return {
-    conflicts: conflicts.filter((conflict) => listed.has(rangeKey(conflict))),
+    conflicts: conflicts.filter((_, index) => listed.has(keys[index]!)),
     conflictCount: ranges.length,
   };
 }
