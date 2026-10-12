@@ -1,7 +1,13 @@
 import { randomUUID } from "node:crypto";
 import { sql, eq } from "drizzle-orm";
 import { describe, expect, it, vi } from "vitest";
-import { CORE_MIGRATIONS, floorZones, locations, withTransaction } from "@waitron/db";
+import {
+  CORE_MIGRATIONS,
+  floorZones,
+  locations,
+  withTransaction,
+  type Transaction,
+} from "@waitron/db";
 import { CATALOGUE_MIGRATIONS } from "@waitron/catalogue";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { locationId } from "@waitron/shared";
@@ -426,14 +432,14 @@ describe("zones closed at an instant", () => {
         [v.disabled, null],
       ]),
     );
-    const batch = (zoneIds: string[]) =>
+    const counted = <T>(read: (db: Transaction) => Promise<T>) =>
       tx(async (db) => {
         const session = (
           db as unknown as { session: { prepareQuery: (...args: never[]) => unknown } }
         ).session;
         const spy = vi.spyOn(session, "prepareQuery");
         try {
-          const answers = await VENUE_SERVICE.readZoneKeepOpenStates(db, v.cfg, zoneIds, instant);
+          const answers = await read(db);
           return {
             answers,
             texts: spy.mock.calls.map(([query]) => (query as unknown as { sql: string }).sql),
@@ -442,12 +448,25 @@ describe("zones closed at an instant", () => {
           spy.mockRestore();
         }
       });
+    const batch = (zoneIds: string[]) =>
+      counted((db) => VENUE_SERVICE.readZoneClosingStates(db, v.cfg, zoneIds, instant));
+    const keepOpen = (states: ReadonlyMap<string, { keepOpen: unknown }>) =>
+      new Map([...states].map(([id, state]) => [id, state.keepOpen]));
     const one = await batch([v.terrace]);
     const three = await batch(ids);
-    expect(one.answers).toEqual(new Map([[v.terrace, single.get(v.terrace)]]));
-    expect(three.answers).toEqual(single);
+    expect(keepOpen(one.answers)).toEqual(new Map([[v.terrace, single.get(v.terrace)]]));
+    expect(keepOpen(three.answers)).toEqual(single);
     expect(three.texts).toHaveLength(one.texts.length);
     expect((await batch([])).answers).toEqual(new Map());
+    const closedOnly = await counted((db) =>
+      VENUE_SERVICE.closedZoneIdsAt(db, v.cfg, instant, ids),
+    );
+    expect(new Map([...three.answers].map(([id, state]) => [id, state.closed]))).toEqual(
+      new Map(ids.map((id) => [id, closedOnly.answers.has(id)])),
+    );
+    expect([...closedOnly.answers]).toEqual([v.terrace]);
+    // Beyond the closed check, the summaries cost only the read of the closing zones' names.
+    expect(three.texts).toHaveLength(closedOnly.texts.length + 1);
   });
 });
 

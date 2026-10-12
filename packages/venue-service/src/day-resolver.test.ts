@@ -18,7 +18,12 @@ import {
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { locationId as brandLocationId, type BusinessDayClock } from "@waitron/shared";
-import { resolveDepartmentDays, resolveZoneClosedDays } from "./day-resolver.js";
+import {
+  readDayPlan,
+  readServiceDayPlan,
+  resolveDepartmentDays,
+  resolveZoneClosedDays,
+} from "./day-resolver.js";
 import {
   replaceMenuWeek,
   resolveDepartmentService,
@@ -27,7 +32,13 @@ import {
   updateMenuPeriod,
 } from "./menu-timetable.js";
 import { VENUE_SERVICE_MIGRATIONS } from "./migrations.js";
-import { configureZone, createDepartment, type VenueScope } from "./operations.js";
+import {
+  configureZone,
+  createDepartment,
+  menuState,
+  readZoneClosingStates,
+  type VenueScope,
+} from "./operations.js";
 import { specialDates } from "./schema/hours.js";
 import { seasons } from "./schema/seasons.js";
 import { ensureDefaultSeasons } from "./seasons.js";
@@ -375,6 +386,126 @@ describe("the till's service on a season boundary", () => {
       .set({ timeZone: "not/a-zone" })
       .where(eq(locations.id, v.cfg.locationId));
     expect([...(await scoped((tx) => closedZoneIdsAt(tx, v.cfg, at)))]).toEqual([]);
+  });
+
+  it("an unreadable clock answers every zone named with nothing to close", async () => {
+    const v = await venue();
+    await zoneSeason(v, v.sala, v.seasons.Autumn!, {
+      [SATURDAY]: [{ startsAt: "00:00", endsAt: "05:00" }],
+    });
+    await db
+      .update(locations)
+      .set({ timeZone: "not/a-zone" })
+      .where(eq(locations.id, v.cfg.locationId));
+    const states = await scoped((tx) =>
+      readZoneClosingStates(tx, v.cfg, [v.sala, v.terraza], new Date("2030-11-30T23:15:00Z")),
+    );
+    expect(states).toEqual(
+      new Map([
+        [v.sala, { closed: false, keepOpen: null }],
+        [v.terraza, { closed: false, keepOpen: null }],
+      ]),
+    );
+  });
+
+  it("an unreadable clock keeps the till's menus and zone open", async () => {
+    const v = await autumnAndWinter();
+    await db
+      .update(locations)
+      .set({ timeZone: "not/a-zone" })
+      .where(eq(locations.id, v.cfg.locationId));
+    const state = await scoped((tx) =>
+      menuState(tx, v.cfg, v.sala, new Date("2030-11-30T23:15:00Z")),
+    );
+    expect(state.service).toMatchObject({ open: true, zoneOpen: true, zoneKeepOpen: null });
+  });
+});
+
+describe("a day plan shared between resolvers", () => {
+  it("refuses a plan that does not cover a requested day", async () => {
+    const v = await autumnAndWinter();
+    const plan = await scoped((tx) => readDayPlan(tx, v.cfg, ["2030-11-30"]));
+    await expect(
+      scoped((tx) => resolveDepartmentDays(tx, v.cfg, v.departmentId, ["2030-12-01"], CLOCK, plan)),
+    ).rejects.toThrow("the day plan does not cover 2030-12-01");
+    await expect(
+      scoped((tx) => resolveZoneClosedDays(tx, v.cfg, [v.sala], ["2030-12-01"], CLOCK, plan)),
+    ).rejects.toThrow("the day plan does not cover 2030-12-01");
+  });
+
+  it("gives two departments and two zones each year-end day's own season", async () => {
+    const TUESDAY = 2;
+    const WEDNESDAY = 3;
+    const v = await venue();
+    await db.update(seasons).set({ startsOn: "01-01" }).where(eq(seasons.id, v.seasons.Winter!));
+    await menuSeason(v, v.seasons.Autumn!, {
+      [TUESDAY]: [{ periodId: v.dinner, startsAt: "20:00", endsAt: "02:00" }],
+    });
+    await menuSeason(v, v.seasons.Winter!, {
+      [WEDNESDAY]: [{ periodId: v.breakfast, startsAt: "09:00", endsAt: "12:00" }],
+    });
+    const second = await scoped(async (tx) => {
+      const id = (await createDepartment(tx, v.cfg, { name: "Second", orderStart: "table" })).id;
+      const period = (
+        await saveMenuPeriod(
+          tx,
+          v.cfg,
+          id,
+          { name: "Second dinner", menuId: v.menus.Dinner!, staffMenuIds: [] },
+          0,
+        )
+      ).id;
+      await replaceMenuWeek(
+        tx,
+        v.cfg,
+        id,
+        menuWeek({ [TUESDAY]: [{ periodId: period, startsAt: "21:00", endsAt: "03:00" }] }),
+        AT,
+        0,
+        { seasonId: v.seasons.Autumn! },
+      );
+      return { id, period };
+    });
+    await zoneSeason(v, v.sala, v.seasons.Autumn!, {
+      [TUESDAY]: [{ startsAt: "23:00", endsAt: "02:00" }],
+    });
+    await zoneSeason(v, v.terraza, v.seasons.Autumn!, {
+      [TUESDAY]: [{ startsAt: "22:00", endsAt: "01:00" }],
+    });
+    // 00:15 on 1 January in Madrid still falls in business day 31 December.
+    const prepared = await scoped((tx) =>
+      readServiceDayPlan(tx, v.cfg, new Date("2030-12-31T23:15:00Z")),
+    );
+    expect([...prepared.plan!.seasonIdOn]).toEqual([
+      ["2030-12-30", v.seasons.Autumn],
+      ["2030-12-31", v.seasons.Autumn],
+    ]);
+    const days = ["2030-12-31", "2031-01-01"];
+    const plan = await scoped((tx) => readDayPlan(tx, v.cfg, days));
+    const first = await scoped((tx) =>
+      resolveDepartmentDays(tx, v.cfg, v.departmentId, days, CLOCK, plan),
+    );
+    expect(first.get("2030-12-31")?.ranges).toEqual([
+      { periodId: v.dinner, startsAt: "20:00", endsAt: "02:00" },
+    ]);
+    expect(first.get("2031-01-01")?.ranges).toEqual([
+      { periodId: v.breakfast, startsAt: "09:00", endsAt: "12:00" },
+    ]);
+    const other = await scoped((tx) =>
+      resolveDepartmentDays(tx, v.cfg, second.id, days, CLOCK, plan),
+    );
+    expect(other.get("2030-12-31")?.ranges).toEqual([
+      { periodId: second.period, startsAt: "21:00", endsAt: "03:00" },
+    ]);
+    expect(other.get("2031-01-01")?.ranges).toEqual([]);
+    const closed = await scoped((tx) =>
+      resolveZoneClosedDays(tx, v.cfg, [v.sala, v.terraza], days, CLOCK, plan),
+    );
+    expect(closed.get(v.sala)?.get("2030-12-31")).toEqual([{ startsAt: "23:00", endsAt: "02:00" }]);
+    expect(closed.get(v.terraza)?.get("2030-12-31")).toEqual([
+      { startsAt: "22:00", endsAt: "01:00" },
+    ]);
+    expect(closed.get(v.sala)?.get("2031-01-01")).toEqual([]);
   });
 });
 

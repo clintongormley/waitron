@@ -5,6 +5,7 @@ import type { KeepOpenSubject } from "@waitron/module";
 import { readLocationClock } from "@waitron/reporting";
 import { AppError } from "@waitron/shared";
 import { departmentDay, keepOpenSubject, serviceRuns } from "./menu-timetable.js";
+import { readServiceDayPlan } from "./day-resolver.js";
 import { resolveZoneContext, storedTime, type VenueScope } from "./operations.js";
 import { floorZones } from "@waitron/db";
 import {
@@ -169,12 +170,13 @@ export async function keepPeriodOpen(
 
 async function zoneContext(tx: Transaction, cfg: VenueScope, zoneId: string, at: Date) {
   const { departmentId } = await resolveZoneContext(tx, cfg, zoneId);
-  const c = await zoneClosureDay(tx, cfg, zoneId, at);
+  const prepared = await readServiceDayPlan(tx, cfg, at);
+  const c = await zoneClosureDay(tx, cfg, zoneId, at, prepared);
   const closure =
     c.moment === null
       ? undefined
       : c.ranges.find((range) => rangeSpanInDay(range, c.dayContext).end > c.moment!.minute);
-  const day = await departmentDay(tx, cfg, departmentId, c.moment, c.clock);
+  const day = await departmentDay(tx, cfg, departmentId, c.moment, c.clock, prepared.plan);
   const openRanges =
     day.ranges.length === 0 ? [] : withExtension(day.ranges, day.extension, c.cutover);
   const extended =

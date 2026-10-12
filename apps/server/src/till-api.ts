@@ -2304,7 +2304,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
         const serviceZones = new Set(
           (await VENUE_SERVICE.listServiceZones(tx, deps.cfg)).map((zone) => zone.id),
         );
-        const closed = await VENUE_SERVICE.closedZoneIdsAt(tx, deps.cfg, at, ids);
+        const states = await VENUE_SERVICE.readZoneClosingStates(tx, deps.cfg, ids, at);
         const planned = new Set(
           (
             await tx
@@ -2313,18 +2313,15 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
               .where(inArray(floorPlans.zoneId, ids))
           ).map((row) => row.zoneId),
         );
-        const keepOpen = await VENUE_SERVICE.readZoneKeepOpenStates(
-          tx,
-          deps.cfg,
-          ids.filter((id) => serviceZones.has(id)),
-          at,
-        );
-        return visible.map((zone) => ({
-          ...zone,
-          closed: closed.has(zone.id),
-          closesAt: keepOpen.get(zone.id)?.closesAt ?? null,
-          hasPlan: planned.has(zone.id),
-        }));
+        return visible.map((zone) => {
+          const state = states.get(zone.id)!;
+          return {
+            ...zone,
+            closed: state.closed,
+            closesAt: serviceZones.has(zone.id) ? (state.keepOpen?.closesAt ?? null) : null,
+            hasPlan: planned.has(zone.id),
+          };
+        });
       });
       return c.json(zones);
     }),

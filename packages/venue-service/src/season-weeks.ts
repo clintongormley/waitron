@@ -2,6 +2,7 @@ import { and, eq, inArray } from "drizzle-orm";
 import type { Transaction } from "@waitron/db";
 import { readLocationClock } from "@waitron/reporting";
 import { AppError } from "@waitron/shared";
+import { sameScheduleRanges } from "./business-day-schedule.js";
 import { storedTime, wireTime, type VenueScope } from "./operations.js";
 import {
   departmentDayRanges,
@@ -54,26 +55,18 @@ function assertWeek(week: readonly unknown[]): void {
   if (week.length !== 7) throw new Error("a season week has seven days");
 }
 
-/** Season weeks already holding `week` exactly, so a rewrite would store the same rows. */
+/** Season weeks already holding `week`, so a rewrite changes no answer. */
 export function seasonsHolding<T extends { startsAt: string; endsAt: string; periodId?: string }>(
   stored: ReadonlyMap<string, readonly (readonly T[])[]> | undefined,
   seasonIds: readonly string[],
   week: readonly (readonly T[])[],
 ): Set<string> {
-  const same = (a: T, b: T) =>
-    a.periodId === b.periodId &&
-    wireTime(a.startsAt) === wireTime(b.startsAt) &&
-    wireTime(a.endsAt) === wireTime(b.endsAt);
   return new Set(
     seasonIds.filter((seasonId) => {
       const held = stored?.get(seasonId);
       return (
         held !== undefined &&
-        week.every(
-          (ranges, weekday) =>
-            held[weekday]?.length === ranges.length &&
-            ranges.every((range, index) => same(held[weekday]![index]!, range)),
-        )
+        week.every((ranges, weekday) => sameScheduleRanges(held[weekday] ?? [], ranges))
       );
     }),
   );

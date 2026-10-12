@@ -1347,14 +1347,14 @@ export async function copyWorkingLineContext(
   });
 }
 
-/** Each zone's floor closing summary, null for a zone with no closure still to come today. */
+type ZoneKeepOpenState = NonNullable<ZoneMenuState["service"]["zoneKeepOpen"]>;
+
+/** The floor closing summary of each zone with a closure still to come today. */
 async function keepOpenStatesIn(
   tx: Transaction,
   days: ZoneClosureDays,
-): Promise<Map<string, ZoneKeepOpenState | null>> {
-  const states = new Map<string, ZoneKeepOpenState | null>(
-    [...days.zones.keys()].map((zoneId) => [zoneId, null]),
-  );
+): Promise<Map<string, ZoneKeepOpenState>> {
+  const states = new Map<string, ZoneKeepOpenState>();
   const { moment, dayContext } = days;
   if (moment === null || dayContext === null) return states;
   const closing = [...days.zones].flatMap(([zoneId, zone]) => {
@@ -1393,22 +1393,22 @@ async function keepOpenStatesIn(
   return states;
 }
 
-export interface ZoneKeepOpenState {
-  zoneId: string;
-  zoneName: string;
-  closesAt: string;
-  running: boolean;
-  extendedUntil: string | null;
-}
-
-export async function readZoneKeepOpenStates(
+export async function readZoneClosingStates(
   tx: Transaction,
   cfg: VenueScope,
   zoneIds: readonly string[],
   at: Date,
-): Promise<Map<string, ZoneKeepOpenState | null>> {
+): Promise<Map<string, { closed: boolean; keepOpen: ZoneKeepOpenState | null }>> {
   if (zoneIds.length === 0) return new Map();
-  return keepOpenStatesIn(tx, await zoneClosureDays(tx, cfg, zoneIds, at));
+  const days = await zoneClosureDays(tx, cfg, zoneIds, at);
+  const closed = closedZoneIdsIn(days);
+  const keepOpen = await keepOpenStatesIn(tx, days);
+  return new Map(
+    zoneIds.map((zoneId) => [
+      zoneId,
+      { closed: closed.has(zoneId), keepOpen: keepOpen.get(zoneId) ?? null },
+    ]),
+  );
 }
 
 export async function readZoneKeepOpenState(
@@ -1417,7 +1417,7 @@ export async function readZoneKeepOpenState(
   zoneId: string,
   at: Date,
 ): Promise<ZoneKeepOpenState | null> {
-  return (await readZoneKeepOpenStates(tx, cfg, [zoneId], at)).get(zoneId) ?? null;
+  return (await readZoneClosingStates(tx, cfg, [zoneId], at)).get(zoneId)!.keepOpen;
 }
 
 /** The department's service and the zone's own closure state at `at`, sharing one clock and

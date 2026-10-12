@@ -62,7 +62,7 @@ import {
   resolveZoneContext,
   menuState,
   readZoneKeepOpenState,
-  readZoneKeepOpenStates,
+  readZoneClosingStates,
   orderInZones,
 } from "./operations.js";
 import {
@@ -154,7 +154,7 @@ export const VENUE_SERVICE: VenueServiceContribution = {
   resolveDefaultMenu,
   menuState,
   readZoneKeepOpenState,
-  readZoneKeepOpenStates,
+  readZoneClosingStates,
   resolveNewOrderZone,
   readProfileServiceAccess,
   readProfileZones,

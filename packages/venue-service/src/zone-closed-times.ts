@@ -206,7 +206,7 @@ export async function readZoneClosedTimes(tx: Transaction, cfg: VenueScope, cuto
     .where(eq(zoneServicePolicies.locationId, cfg.locationId));
   const ranges = (values: typeof rows): ClosedRange[] =>
     values
-      .map((row) => ({ startsAt: row.startsAt.slice(0, 5), endsAt: row.endsAt.slice(0, 5) }))
+      .map((row) => ({ startsAt: wireTime(row.startsAt), endsAt: wireTime(row.endsAt) }))
       .sort((a, b) => rangeSpan(a, cutover).start - rangeSpan(b, cutover).start);
   return zones.map((zone) => {
     const own = rows.filter((row) => row.zoneId === zone.id);
@@ -318,8 +318,14 @@ export async function zoneClosureDays(
 
 export type ZoneClosureDays = Awaited<ReturnType<typeof zoneClosureDays>>;
 
-export async function zoneClosureDay(tx: Transaction, cfg: VenueScope, zoneId: string, at: Date) {
-  const { zones, ...day } = await zoneClosureDays(tx, cfg, [zoneId], at);
+export async function zoneClosureDay(
+  tx: Transaction,
+  cfg: VenueScope,
+  zoneId: string,
+  at: Date,
+  prepared?: { clock: BusinessDayClock; plan?: DayPlan },
+) {
+  const { zones, ...day } = await zoneClosureDays(tx, cfg, [zoneId], at, prepared);
   return {
     ...day,
     ranges: zones.get(zoneId)?.ranges ?? [],
