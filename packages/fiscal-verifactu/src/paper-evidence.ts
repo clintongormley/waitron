@@ -43,6 +43,40 @@ export interface PaperConsumption {
   readonly consumedAt: string;
 }
 
+export interface PaperReservation {
+  readonly version: 1;
+  readonly custodianId: string;
+  readonly blockDigest: string;
+  readonly allocationId: string;
+  readonly eventId: string;
+  readonly operatorId: string;
+  readonly sourceId: string;
+  readonly targetNodeId: string;
+  readonly incidentEvidence: string;
+  readonly reservedAt: string;
+}
+
+export interface PaperReservationContext extends Omit<
+  PaperEvidenceContext,
+  "consumptionConfirmed"
+> {
+  readonly reservationConfirmed: boolean;
+  readonly currentEntryState:
+    "reserved" | "consumed-for-event" | "consumed-elsewhere" | "retired" | "abandoned";
+}
+
+export type PaperReservationVerification =
+  | {
+      readonly ok: true;
+      readonly allocation: PaperAllocation;
+      readonly reservation: PaperReservation;
+    }
+  | {
+      readonly ok: false;
+      readonly reason:
+        Exclude<PaperVerification, { ok: true }>["reason"] | "reservation_not_current";
+    };
+
 export interface PaperCustodianTrust {
   readonly custodianId: string;
   readonly publicKey: string;
@@ -318,6 +352,68 @@ function consumptionBytes(value: PaperConsumption): Buffer {
   );
 }
 
+function parseReservation(value: unknown): PaperReservation | null {
+  if (
+    !record(value) ||
+    !exactKeys(value, [
+      "version",
+      "custodianId",
+      "blockDigest",
+      "allocationId",
+      "eventId",
+      "operatorId",
+      "sourceId",
+      "targetNodeId",
+      "incidentEvidence",
+      "reservedAt",
+    ]) ||
+    value.version !== 1 ||
+    ![
+      "custodianId",
+      "allocationId",
+      "eventId",
+      "operatorId",
+      "sourceId",
+      "targetNodeId",
+      "incidentEvidence",
+    ].every((key) => text(value[key])) ||
+    typeof value.blockDigest !== "string" ||
+    !/^[a-f0-9]{64}$/.test(value.blockDigest) ||
+    !timestamp(value.reservedAt)
+  )
+    return null;
+  return {
+    version: 1,
+    custodianId: value.custodianId as string,
+    blockDigest: value.blockDigest,
+    allocationId: value.allocationId as string,
+    eventId: value.eventId as string,
+    operatorId: value.operatorId as string,
+    sourceId: value.sourceId as string,
+    targetNodeId: value.targetNodeId as string,
+    incidentEvidence: value.incidentEvidence as string,
+    reservedAt: value.reservedAt,
+  };
+}
+
+function reservationBytes(value: PaperReservation): Buffer {
+  return Buffer.from(
+    JSON.stringify([
+      "waitron.paper-reservation",
+      value.version,
+      value.custodianId,
+      value.blockDigest,
+      value.allocationId,
+      value.eventId,
+      value.operatorId,
+      value.sourceId,
+      value.targetNodeId,
+      value.incidentEvidence,
+      value.reservedAt,
+    ]),
+  );
+}
+
 function digest(bytes: Buffer): string {
   return createHash("sha256").update(bytes).digest("hex");
 }
@@ -455,6 +551,135 @@ function signature(value: unknown): value is string {
     /^[A-Za-z0-9_-]{86}$/.test(value) &&
     Buffer.from(value, "base64url").toString("base64url") === value
   );
+}
+
+export function signPaperReservationForBlock(
+  input: unknown,
+  allocationId: string,
+  event: unknown,
+  privateKey: string,
+): SignedPaperValue<PaperReservation> {
+  const block = record(input) ? parseBlock(input.payload) : null;
+  const key = signingKey(privateKey);
+  if (
+    block === null ||
+    !record(input) ||
+    !signature(input.signature) ||
+    !verify(
+      null,
+      blockBytes(block),
+      createPublicKey(key),
+      Buffer.from(input.signature, "base64url"),
+    ) ||
+    !block.allocations.some(
+      (allocation) => allocation.allocationId === allocationId && allocation.source === "paper",
+    )
+  )
+    throw new RangeError("Untrusted paper block or absent allocation");
+  if (
+    !record(event) ||
+    !exactKeys(event, [
+      "eventId",
+      "operatorId",
+      "sourceId",
+      "targetNodeId",
+      "incidentEvidence",
+      "reservedAt",
+    ])
+  )
+    throw new RangeError("Invalid paper reservation event");
+  const reservation = parseReservation({
+    version: 1,
+    custodianId: block.custodianId,
+    blockDigest: digest(blockBytes(block)),
+    allocationId,
+    ...event,
+  });
+  if (reservation === null || reservation.sourceId === reservation.targetNodeId)
+    throw new RangeError("Invalid paper reservation event");
+  return {
+    payload: reservation,
+    signature: sign(null, reservationBytes(reservation), key).toString("base64url"),
+  };
+}
+
+// Reservation evidence identifies the dormant recipient; consumption requires a separate event.
+export function verifyPaperReservation(
+  input: unknown,
+  trust: unknown,
+  context: PaperReservationContext,
+): PaperReservationVerification {
+  if (
+    !record(input) ||
+    !exactKeys(input, ["block", "reservation"]) ||
+    !record(input.block) ||
+    !exactKeys(input.block, ["payload", "signature"]) ||
+    !record(input.reservation) ||
+    !exactKeys(input.reservation, ["payload", "signature"])
+  )
+    return { ok: false, reason: "malformed" };
+  const block = parseBlock(input.block.payload);
+  const reservation = parseReservation(input.reservation.payload);
+  if (
+    block === null ||
+    reservation === null ||
+    !signature(input.block.signature) ||
+    !signature(input.reservation.signature)
+  )
+    return { ok: false, reason: "malformed" };
+  const key = trustedKey(trust);
+  if (
+    key === null ||
+    !record(trust) ||
+    trust.custodianId !== block.custodianId ||
+    trust.custodianId !== reservation.custodianId ||
+    !verify(null, blockBytes(block), key, Buffer.from(input.block.signature, "base64url")) ||
+    !verify(
+      null,
+      reservationBytes(reservation),
+      key,
+      Buffer.from(input.reservation.signature, "base64url"),
+    )
+  )
+    return { ok: false, reason: "untrusted" };
+  if (context.currentRegisterConfirmed !== true || context.reservationConfirmed !== true)
+    return { ok: false, reason: "outside_confirmation_missing" };
+  if (context.currentEntryState !== "reserved")
+    return { ok: false, reason: "reservation_not_current" };
+  const allocation = block.allocations.find((a) => a.allocationId === context.allocationId);
+  if (
+    allocation === undefined ||
+    allocation.source !== "paper" ||
+    reservation.blockDigest !== digest(blockBytes(block)) ||
+    reservation.allocationId !== allocation.allocationId ||
+    reservation.sourceId === reservation.targetNodeId ||
+    !["taxpayerNif", "softwareId", "environment"].every(
+      (key) =>
+        allocation[key as "taxpayerNif" | "softwareId" | "environment"] ===
+        context[key as "taxpayerNif" | "softwareId" | "environment"],
+    ) ||
+    !["recipientVenueId", "generationId", "blockId"].every(
+      (key) =>
+        block[key as "recipientVenueId" | "generationId" | "blockId"] ===
+        context[key as "recipientVenueId" | "generationId" | "blockId"],
+    ) ||
+    !["eventId", "operatorId", "sourceId", "targetNodeId", "incidentEvidence"].every(
+      (key) =>
+        reservation[
+          key as "eventId" | "operatorId" | "sourceId" | "targetNodeId" | "incidentEvidence"
+        ] ===
+        context[key as "eventId" | "operatorId" | "sourceId" | "targetNodeId" | "incidentEvidence"],
+    )
+  )
+    return { ok: false, reason: "scope_mismatch" };
+  if (!isAllocatedSeries(allocation.series, allocation.installationIdentity, context.requiredBases))
+    return { ok: false, reason: "series_mismatch" };
+  const result = structuredClone({ ok: true as const, allocation, reservation });
+  for (const series of result.allocation.series) Object.freeze(series);
+  Object.freeze(result.allocation.series);
+  Object.freeze(result.allocation);
+  Object.freeze(result.reservation);
+  return Object.freeze(result);
 }
 
 export function verifyPaperEvidence(

@@ -209,6 +209,15 @@ Statements below that a conflict holds its chain, that a cancellation of a rejec
 held or holds its chain, or that the brake reads the three records immediately before a record,
 describe the earlier behaviour.
 
+**2026-10-12, standby decision:** the owner selected dormant reservation at join and activation at
+takeover. The Task 4 branch signs a dedicated paper-reservation receipt for the named spare and
+checks its signatures, outside reserved state and stored venue scope without writing a SIF,
+chain, series, audit result or counter. The signing command requires current-register and outside
+reservation confirmations. That receipt cannot replace a takeover consumption receipt.
+Bundle, dormant-state persistence, adoption and promotion integration remain open. Takeover must
+still authenticate the administrator, isolate the old box, rule out parallel recovery and check
+outside consumption before atomic activation. All three invoice purposes stay separate.
+
 **2026-10-12, Task 5:** invoice issuance reads the live series inside its transaction.
 Startup, development seeds, mirror bundles and saved trading identity carry node and location
 without a cached invoice-series id. Restore still checks live standard and full series before
@@ -233,9 +242,10 @@ back the local rows; a synthetic retained-record comparison checks unchanged sto
 The operation has no package-root export or host caller. SIF typing remains numeric until the
 coupled representation and consumer replacement: the inactive writer currently binds the text
 identity through SQL, as the transaction-validation fixtures did. Counter retirement, all host
-entry points, emergency replay following restart and the two-restored-database control remain
-open. The root append-only `EXPECTED` list needs owner approval for one added ledger name; the
-guard is unchanged. Cloud input remains refused until its separate trusted adapter exists. The existing recovery kit carries the old box's pointer
+entry points and recovery-pack integration remain open. Emergency replay following restart and
+the two-restored-database control now pass on the branch. The owner approved the root append-only
+`EXPECTED` entry for the allocation ledger, and that guard passes without a logic change.
+Cloud input remains refused until its separate trusted adapter exists. The existing recovery kit carries the old box's pointer
 signer; it does not declare a paper custodian (`packages/stream/src/kit.ts`, `RecoveryKit`).
 A disposable SIF text-schema candidate has passed populated-record migration and integrity
 controls, recorded in [the migration notes](../developers/conventions-data.md). The complete

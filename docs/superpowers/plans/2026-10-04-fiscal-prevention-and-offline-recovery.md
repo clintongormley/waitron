@@ -299,6 +299,17 @@ primary stops, while the recovery approval requires isolation before activation.
 followed by activation at promotion. No host path or SIF declaration has changed. Task 4 remains
 incomplete; the owner's earlier signer/assertion/list-entry approvals remain valid.
 
+**2026-10-12 dormant-standby checkpoint:** the owner approved reservation at join and activation
+at takeover. `paper-reservation.test.ts` uses independently signed bytes to check a dedicated
+reservation receipt bound to the block, allocation, join event, operator, primary and named spare.
+`paper-custodian.reservation.test.ts` exercises the separate signing command and outside
+confirmation flags. `standby-allocation.test.ts` checks stored taxpayer, environment, software,
+source/target binding, complete-purpose bases and retained collisions, then compares SIF, chain,
+series, audit and counter rows around a successful read-only validation. No live standby identity
+or series is written by this validator. These APIs are still unconnected to bundle, adoption and
+promotion. Their authenticated host context, dormant persistence, takeover consumption and
+atomic role/identity activation remain open alongside the coupled text-schema/counter transition.
+
 ## Task 5: select active series inside issuance transactions
 
 **Modify:** `apps/server/src/till-config.ts`, `trading-config.ts`, `till-sale.ts`,

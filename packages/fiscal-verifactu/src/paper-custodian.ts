@@ -6,6 +6,7 @@ import {
   paperCustodianFingerprint,
   signPaperBlock,
   signPaperConsumptionForBlock,
+  signPaperReservationForBlock,
 } from "./paper-evidence.js";
 
 export interface PaperCustodianIo {
@@ -20,7 +21,11 @@ export async function runPaperCustodian(argv: string[], io: PaperCustodianIo): P
   };
   if (command === "keygen" || command === "public") {
     options.custodian = { type: "string" };
-  } else if (command === "sign-block" || command === "sign-consumption") {
+  } else if (
+    command === "sign-block" ||
+    command === "sign-consumption" ||
+    command === "sign-reservation"
+  ) {
     options.input = { type: "string" };
     options.output = { type: "string" };
     if (command === "sign-block") {
@@ -29,7 +34,9 @@ export async function runPaperCustodian(argv: string[], io: PaperCustodianIo): P
       options.block = { type: "string" };
       options.allocation = { type: "string" };
       options["current-register-confirmed"] = { type: "boolean" };
-      options["consumed-outside"] = { type: "boolean" };
+      options[command === "sign-reservation" ? "reserved-outside" : "consumed-outside"] = {
+        type: "boolean",
+      };
     }
   } else {
     io.stderr("Invalid paper custodian arguments");
@@ -86,7 +93,9 @@ export async function runPaperCustodian(argv: string[], io: PaperCustodianIo): P
     const signed =
       command === "sign-block"
         ? signPaperBlock(input, privateKey)
-        : signPaperConsumptionForBlock(
+        : (command === "sign-reservation"
+            ? signPaperReservationForBlock
+            : signPaperConsumptionForBlock)(
             JSON.parse(await readFile(values.block as string, "utf8")),
             values.allocation as string,
             input,

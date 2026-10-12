@@ -93,6 +93,45 @@ not check or write the master register. Its output contains the validated payloa
 It refuses an existing output file. Reprinting it does not create fresh names or clear consumption
 marks; the pack still identifies its generation and block and states that its snapshot may be stale.
 
+## Reserve an entry for a named standby
+
+A spare box needs its own reserved names while the primary is still selling. Record the named
+spare, primary, operator and join event in the current outside register. Keep the entry reserved;
+joining does not consume it or activate its fiscal identity. Prepare `join.json`:
+
+```json
+{
+  "eventId": "join-1",
+  "operatorId": "administrator",
+  "sourceId": "primary-node",
+  "targetNodeId": "standby-node",
+  "incidentEvidence": "master-register/join-1",
+  "reservedAt": "2026-10-12T09:00:00.000Z"
+}
+```
+
+Use the actual node IDs and a fresh unpredictable event ID. After recording the assignment, sign
+the reservation with the same outside custodian key that signed the block:
+
+```sh
+node packages/fiscal-verifactu/dist/paper-custodian.js sign-reservation \
+  --key /secure/master/custodian-2026.pem \
+  --block signed-block.json --allocation paper-42 \
+  --input join.json --output reservation.json \
+  --current-register-confirmed --reserved-outside
+```
+
+The command writes a signed reservation bound to the block, allocation and named spare. It
+refuses the primary as its own spare, a setup-only allocation and an existing output file. The
+verifier requires an independently enrolled key and current outside confirmation that this entry
+is still reserved for that assignment. Abandoned or consumed entries do not qualify.
+
+The reservation has a separate signature format from a consumption receipt. When the spare takes
+over, you still authenticate the administrator, isolate the old box, rule out parallel recovery
+and mark this allocation consumed for the new takeover event before local activation. An
+abandoned reservation stays retired in the outside register. The signing and validation tools
+are implemented on the Task 4 branch; bundle, adoption and promotion integration remain open.
+
 ## Sign a consumed entry
 
 Create an unpredictable recovery event ID before claiming an allocation. Record the event, backup

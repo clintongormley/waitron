@@ -1,5 +1,10 @@
 # W41s-4: when a standby's reserved identity becomes active
 
+**Owner decision, 2026-10-12 19:45:** A is approved: reserve at join, switch on at takeover.
+The proposal and source findings below record the decision's basis. Implementation must retain
+all standard, full and rectificative purposes. The signed dormant paper-reservation proof and
+stored-scope validator are now on this branch; host integration remains open.
+
 Task 4 must replace the standby's local counter allocation as well as setup and recovery.
 The existing standby flow prepares its future identity while the primary is still serving.
 The approved recovery contract requires the old selling machine to be offline before activation.

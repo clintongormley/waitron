@@ -55,3 +55,5 @@ export type {
 
 export { validateAllocationForActivation } from "./allocation.js";
 export type { ActivationRefusal, ActivationValidation } from "./allocation.js";
+export { validateStandbyAllocation } from "./standby-allocation.js";
+export type { StandbyAllocationValidation } from "./standby-allocation.js";
