@@ -23,21 +23,29 @@ loop runs the picker every pass and acts on what it prints; `lane-status.py` sho
 
 | What | Where | How it is changed |
 | --- | --- | --- |
-| The picker, its rules, `lane-status.py`, their tests and docs | `~/workspace/tools` (git, branch `account-pool`, worktree `~/workspace/tools/.worktrees/account-pool`) | Tasks 1–4 and 6, one branch, one pull request |
-| The runner library and its tests | `~/waitron-campaign-shared/runner-lib.sh`, `tests/runner.test.sh` (not in git) | Task 5, in a staging folder, installed by an atomic rename |
-| The watcher's skill and memory | `~/.claude/skills/watch-campaigns/SKILL.md`, `~/.claude/projects/-Users-clintongormley-workspace-repos-waitron/memory/` (not in git) | Task 7 |
-| The pool file, the switch-over | `~/waitron-campaign-shared/accounts/` | Task 8, run by the controller, not an implementer |
+| The picker, its rules, `lane-status.py`, their tests and docs | `~/workspace/tools` (git, branch `account-pool`, worktree `~/workspace/tools/.worktrees/account-pool`) | Tasks 1–4, 4b and 6, one branch, one pull request |
+| The runner library and its tests | `~/waitron-campaign-shared/runner-lib.sh`, `tests/runner.test.sh` (not in git) | Tasks 5 and 5b, each in a staging folder, installed by an atomic rename |
+| The watcher's skill and memory | `~/.claude/skills/watch-campaigns/SKILL.md`, `~/.claude/projects/-Users-clintongormley-workspace-repos-waitron/memory/` (not in git) | Task 7 writes the new versions to a staging folder; Task 8 step 4 installs them |
+| The pool file, each lane's `run.sh` defaults, the switch-over | `~/waitron-campaign-shared/accounts/`, `~/waitron-campaign*/run.sh` | Task 8, run by the controller, not an implementer |
 
 **Execution notes for the controller.**
 
-- Dispatch Tasks 1–7 as `subagent_type: "implementer"`, one at a time, in order. Each task names the
-  folder it works in. Task 8 is yours, run with the owner's knowledge.
-- Dispatch Task 7 only after the tools pull request has landed on `master`, and run Task 8 straight
-  after it. The watcher re-arms its Monitor from the skill's text every 30 minutes, so once Task 7 has
-  edited the skill the live loop calls `~/workspace/tools/assign-accounts.py`: before landing that
-  file does not exist and every four-minute pass would print an error, and before Task 8 there is no
-  pool, which the picker reports once as an `ACCOUNTS ERROR` line. Tell the watcher session that line
-  is expected until the switch-over.
+- Dispatch Tasks 1, 2, 3, 4, 4b, 5, 5b, 6 and 7 as `subagent_type: "implementer"`, one at a time, in
+  that order. Each task names the folder it works in. Task 8 is yours, run with the owner's knowledge.
+- **Task 7 changes nothing the live watcher reads.** It writes the edited skill and the new memory
+  files to `~/waitron-account-pool-staging/watcher/`, and Task 8 step 4 installs them by rename once
+  the pool exists. Two reasons. A live watcher reloads this skill whenever its safety-net cron invokes
+  it (about every three hours), so an early edit would put the picker in its loop before the tools
+  pull request has landed (every pass an error) or before the pool exists. And before the switch-over
+  `~/waitron-campaign-shared/accounts/` does not exist, so the picker has nowhere to save what it has
+  already said, and its `ACCOUNTS ERROR: no pool file` line would repeat every four minutes. So Task 7
+  can run before the tools pull request lands, and the loop line reaches the watcher only at Task 8
+  step 4, after the pool file (and with it `accounts/`) exists.
+- **The picker stays in the watcher's change-watch loop, not in a launchd job of its own** (owner,
+  2026-10-12, keeping the spec). A live watcher session keeps arming the loop text it already holds,
+  so Task 8 step 4 tells it to stop its Monitor and arm the new loop text from the installed skill,
+  and the skill itself (Task 7) says that a restarted session arms the loop from the skill's current
+  text.
 - Keep the ledger `docs/handoffs/2026-10-12-campaign-account-pool.md` in the waitron main checkout's
   `docs/handoffs/` (gitignored) current after every task.
 - After Task 6, run `/finish-branch ~/workspace/tools/.worktrees/account-pool` on the tools branch.
@@ -45,8 +53,10 @@ loop runs the picker every pass and acts on what it prints; `lane-status.py` sho
   rebase on `origin/master`, skip the CI and Copilot waits. None of the waitron risk triggers applies,
   so it takes the light review path; the Codex run-it seat still runs. Landing it needs the owner's
   approval (`/land-branch`), and Task 8 cannot start before it has landed.
-- The runner library (Task 5) is outside git, so its only review is the per-task review. Ask that
-  reviewer to run the staged suite itself, not to read it.
+- The runner library (Tasks 5 and 5b) is outside git, so its only review is the per-task review. Ask
+  that reviewer to run the staged suite itself, not to read it.
+- **Task 8 starts after 01:00 on 13 October** (Europe/Madrid). The gmail Claude account was at 100% of
+  its week on 12 October and resets then, and Task 8 step 0 needs every pool folder able to answer.
 
 ## Global Constraints
 
@@ -64,6 +74,16 @@ Copied from the spec; every task's requirements include these.
   why to the run log.
 - "Paused" is the runner's own marker under `~/waitron-campaign-shared/limits/`. Claude lanes run their
   account to 100%: a lane moves when a run is refused, not before.
+- "Sign-in broken" is a second runner marker, `~/waitron-campaign-shared/limits/<account_name>.signin`
+  (line 1: epoch when first noticed; line 2: the message), written when a firing fails with a sign-in
+  error and removed by the next firing on that folder that exits 0, or by the picker once the folder's
+  stored sign-in has changed (the owner signed it in again). The picker treats it as a pause with no
+  end. Tasks 4b and 5b.
+- One picker at a time: a run that writes takes a non-blocking `fcntl.flock` on
+  `~/waitron-campaign-shared/accounts/.lock` and exits silently, status 0, when another run holds it
+  (macOS has no `flock` program by default). A `--dry-run` takes no lock. Task 4b.
+- Every program the picker or `lane-status.py` starts has a time limit: `security` 10 s, `launchctl`
+  30 s (Python's `subprocess.run(..., timeout=...)`, which kills only the child it started). Task 4.
 - Allowance left per day = (100 − weekly percent used) ÷ days until the weekly reset. A paused lane moves
   to the account with the most, among the lane's engine's pool accounts that are not paused and below
   100% in both windows; a tie goes to the account fewer lanes use.
@@ -78,7 +98,11 @@ Copied from the spec; every task's requirements include these.
   - `ACCOUNTS: lane A claude → ~/.claude-dev (was ~/.claude-support, paused until Fri 16 Oct 22:00)`
   - `ACCOUNTS: lane C stays paused — no Claude account has allowance left (next reset Sun 18 Oct 18:00)`
   - `CODEX 85%: dev@waitron.io at 86%, weekly reset Sun 18 Oct 06:00 — offer the owner a spare reset`
-  The `CODEX 85%` line appears once per account per weekly window; the "stays paused" line once.
+  - `SIGN-IN BROKEN: ~/.claude-dev (dev@waitron.io) — no lane is given it until it is signed in again: CLAUDE_CONFIG_DIR=~/.claude-dev claude, then /login (noticed Wed 14 Oct 09:50: Not logged in · Please run /login)`
+    (for a Codex folder the command is `CODEX_HOME=~/.codex-dev codex login`)
+  - `ACCOUNTS: ~/.claude-dev is signed in again — it can be handed out`
+  The `CODEX 85%` line appears once per account per weekly window; the "stays paused" and
+  `SIGN-IN BROKEN` lines once each.
 - Shared scripts are edited atomically: write a temporary file beside the target, then `mv` it over.
   Live runners source `runner-lib.sh` at every firing.
 - Plain English in everything written for the owner, commit messages included. Exact file and function
@@ -126,10 +150,50 @@ A reviewer may overturn any of these; each is pinned by a named test so the chan
   check.
 - **A runner also logs a line when the assignment applies**, not only when it falls back. Task 8 needs it
   to see which folder a firing used.
-- **A Claude lane's Codex review seat stays where it is until its account is paused**, like a driver.
-  Re-choosing the best account on every four-minute pass would move seats back and forth as the two Codex
-  accounts' figures cross, printing a line each time. Test: Task 2
-  `test_a_codex_seat_stays_until_its_account_pauses`.
+- **A Claude lane's Codex review seat stays where it is while its account qualifies**: not paused, its
+  sign-in not broken, and below 100% in both windows. Re-choosing the best account on every four-minute
+  pass would move seats back and forth as the two Codex accounts' figures cross, printing a line each
+  time. The 100% condition is needed because a Codex account gets a pause marker only from a Codex lane
+  it drives: with lanes D and E stopped, nothing would ever pause a used-up seat. Tests: Task 2
+  `test_a_codex_seat_stays_until_its_account_pauses` and
+  `test_a_codex_seat_at_100_percent_moves_even_with_no_pause`.
+- **Lanes that move in the same pass all go to the single best account.** The spec's tie rule ("a tie
+  goes to the account fewer lanes use") is kept and pinned by `test_a_tie_goes_to_the_account_fewer_lanes_use`,
+  but allowance left per day is computed from live percentages and reset times, so two accounts never
+  tie exactly in practice and the tie rule does not spread lanes that move together. That is what the
+  spec's wording implies: each paused lane goes to "the account with the most allowance left per day".
+  Spreading applies only to lanes given their first account (rule 4).
+- **The picker stays in the watcher's change-watch loop** (owner, 2026-10-12: keep as specified), not
+  in a launchd job of its own. See the execution notes for what that means for a live watcher session.
+- **A broken sign-in is caught by the runner and handled by the picker.** A sign-in expires about
+  eight hours after its last use and its refresh token lasts until about 8–11 November; a revoked one
+  (memory `chatgpt-security-change-revokes-codex-lanes`) fails every firing. Without a marker that
+  failure is silent: the lane stays on the folder and fails every 30 minutes for two weeks. The runner
+  marks the folder (Task 5b), the picker moves the lane off it like a pause with no end, never hands
+  the folder out, says one `SIGN-IN BROKEN` line naming the re-login command, and clears the marker
+  itself once the folder's stored sign-in changes (Task 4b). The watcher turns that line into one
+  phone message (Task 7). The runner never writes the usage-limit marker for a sign-in failure.
+- **The shapes a sign-in failure prints** were measured, not guessed, where possible:
+  - Claude: `Not logged in · Please run /login`, exit 1. Measured 2026-10-12 18:16 by running
+    `claude -p "say hi"` with `CLAUDE_CONFIG_DIR` set to an empty folder. No Claude sign-in failure
+    survives in the Claude lanes' run logs (pruned to the last few days; searched for `401`, `login`,
+    `OAuth`, `Invalid API key`, `authentication`, `Unauthorized`, `expired`, `credential`). The other
+    Claude shapes matched (`Invalid API key`, `API Error: 401`, `OAuth token has expired`) are
+    inferred, not measured.
+  - Codex, revoked: lane D's `logs/run-20261012-124050.log` (the owner's ChatGPT security change)
+    has stderr lines `... ERROR codex_models_manager::manager: ... auth error code: token_revoked`
+    and `... ERROR codex_login::auth::manager: Failed to refresh token status=401 ... refresh_token_invalidated
+    ... Please log in again.`, and ends `{"type":"turn.failed","error":{"message":"workspace routing discovery unauthorized (401)"}}`, exit 1.
+  - Codex, never signed in: `codex exec` with `CODEX_HOME` set to an empty folder, measured 2026-10-12
+    18:17, ends `{"type":"turn.failed","error":{"message":"unexpected status 401 Unauthorized: Missing bearer or basic authentication in header, ..."}}`, exit 1.
+  A Codex run log is an event stream that also carries tool output, which in this repository often
+  mentions 401; tool output sits inside an `item.*` event's escaped string, so only a line that
+  STARTS `{"type":"turn.failed"` or with a timestamp and ` ERROR ` is read. Measured 2026-10-12 with
+  Task 5b's Codex pattern over lanes D's and E's run logs since 5 October: 247 of them contain `401`
+  somewhere; the pattern matched two, `run-20261012-124050.log` (the revoked firing, exit 1) and
+  `run-20261012-120546.log`, the firing that was running when the revocation happened, which logged
+  the `token_revoked` lines but exited 0. That is why the runner reads the log only when the firing
+  failed: a firing that exits 0 marks nothing and clears any marker.
 - **An account whose usage has never been read qualifies only after every account whose usage is
   known**, and only when its folder is signed in. A folder with no sign-in at all never qualifies.
 - **A lane with a `STOP` file keeps its line untouched** and is not counted when spreading lanes.
@@ -168,7 +232,7 @@ uncommitted change in the main checkout.)
 - Consumes: nothing.
 - Produces (later tasks import these by name):
   - `Account(folder, engine, email=None, logged_in=True, known=True, five_hour=None, five_hour_reset=None, weekly=None, weekly_reset=None, paused_until=None)` — frozen dataclass; percentages are `int`, times are timezone-aware `datetime`.
-  - `Lane(name, engine, stopped=False)`; `Move(lane, role, engine, old, new, reason, paused_until=None)` with `role` `"driver"`/`"reviewer"` and `reason` one of `"new"`, `"paused"`, `"pinned"`, `"not in the pool"`, `"watcher"`; `Stuck(lane, engine, next_reset)`.
+  - `Lane(name, engine, stopped=False)`; `Move(lane, role, engine, old, new, reason, paused_until=None)` with `role` `"driver"`/`"reviewer"` and `reason` one of `"new"`, `"paused"`, `"pinned"`, `"not in the pool"`, `"watcher"` (Task 2 adds `"full"`, Task 4b `"sign-in broken"`); `Stuck(lane, engine, next_reset)`.
   - `effective_usage(account, now) -> (five_hour_pct, weekly_pct, days_to_weekly_reset)`
   - `per_day(account, now) -> float`
   - `pause_end(account, accounts, now) -> datetime | None`
@@ -595,6 +659,8 @@ checks failed for the stated reason before being restored, and the commit exists
   - `format_move(move, now, home) -> str`, `format_stuck(stuck, now) -> str`
   - `codex_alerts(accounts, announced: dict[str, str], now) -> (lines: list[str], announced: dict[str, str])`
   - `launchd_label(lane) -> str`
+  - `full_until(account, now) -> datetime | None` (when an account at 100% in a window can be used again)
+  - `Move.reason` `"full"`: a Codex seat moved off an account at 100% that no pause marker names.
 
 - [ ] **Step 1: Write the failing tests** (append to `test_account_pool.py`, above the `if __name__` line)
 
@@ -623,6 +689,14 @@ class Reviewers(unittest.TestCase):
         accounts = [claude("dev"), codex("dev", weekly=0), codex("gmail", weekly=80)]
         result = decide(lanes("A"), accounts, {"A": (f("dev"), CX("gmail"))})
         self.assertEqual((result.assignments["A"][1], result.moves), (CX("gmail"), []))
+
+    def test_a_codex_seat_at_100_percent_moves_even_with_no_pause(self):
+        # With lanes D and E stopped no Codex lane drives either account, so no pause marker is written.
+        accounts = [claude("dev"), codex("dev", weekly=20), codex("gmail", weekly=100, reset=at(18, 9, 27))]
+        current = {"A": (f("dev"), CX("gmail")), "D": (CX("gmail"), W), "E": (CX("dev"), W)}
+        result = decide([ap.Lane("A", "claude"), ap.Lane("D", "codex", stopped=True),
+                         ap.Lane("E", "codex", stopped=True)], accounts, current)
+        self.assertEqual(result.moves, [ap.Move("A", "reviewer", "codex", CX("gmail"), CX("dev"), "full", at(18, 9, 27))])
 
     def test_a_paused_codex_seat_moves(self):
         accounts = [claude("dev"), codex("dev"), codex("gmail", paused_until=at(15, 9))]
@@ -660,6 +734,8 @@ class Lines(unittest.TestCase):
                          "ACCOUNTS: lane A codex reviewer → ~/.codex-dev (was ~/.codex-gmail, paused until Thu 15 Oct 09:00)")
         self.assertEqual(ap.format_move(ap.Move("D", "reviewer", "claude", f("lane-a"), W, "watcher"), NOW, H),
                          "ACCOUNTS: lane D claude reviewer → ~/.claude-waitron (was ~/.claude-lane-a, Codex lanes are reviewed from the watcher's account)")
+        self.assertEqual(ap.format_move(ap.Move("A", "reviewer", "codex", CX("gmail"), CX("dev"), "full", at(18, 9, 27)), NOW, H),
+                         "ACCOUNTS: lane A codex reviewer → ~/.codex-dev (was ~/.codex-gmail, at 100% until Sun 18 Oct 09:27)")
 
     def test_a_stuck_lane_reads_as_the_spec_says(self):
         self.assertEqual(ap.format_stuck(ap.Stuck("C", "claude", at(18, 18)), NOW),
@@ -698,6 +774,7 @@ class CodexAlert(unittest.TestCase):
 Run: `cd ~/workspace/tools/.worktrees/account-pool && python3 -m unittest test_account_pool -v`
 Expected: the new tests error with `AttributeError: module 'account_pool' has no attribute 'decide'`
 (and `format_move`, `format_stuck`, `when`, `launchd_label`, `codex_alerts`); Task 1's 21 tests still pass.
+(`full_until` is not called by a test directly; the 100% seat test reaches it through `decide`.)
 
 - [ ] **Step 3: Write the minimal implementation** (append to `account_pool.py`)
 
@@ -711,6 +788,13 @@ class Decision:
     assignments: dict
     moves: list
     stuck: list
+
+
+def full_until(a, now):
+    """When an account at 100% in a window can be used again (the latest such window's reset), or None."""
+    five, weekly, _ = effective_usage(a, now)
+    times = [t for t, pct in ((a.five_hour_reset, five), (a.weekly_reset, weekly)) if pct >= 100 and t is not None]
+    return max(times) if times else None
 
 
 def decide(lanes, accounts, current, pins, watcher_folder, watcher_email, now):
@@ -735,7 +819,9 @@ def decide(lanes, accounts, current, pins, watcher_folder, watcher_email, now):
         else:
             seat = by_folder.get(old)
             end = pause_end(seat, accounts, now) if seat else None
-            if seat is not None and seat.engine == "codex" and seat.logged_in and end is None:
+            # A seat stays while its account qualifies: not paused AND below 100% in both windows. A
+            # Codex account is paused only by a Codex lane it drives, so 100% has to be checked here.
+            if seat is not None and seat.engine == "codex" and qualifies(seat, accounts, now, watcher_folder, watcher_email):
                 new = old
             else:
                 pool = [a for a in codex if qualifies(a, accounts, now, watcher_folder, watcher_email)]
@@ -749,7 +835,12 @@ def decide(lanes, accounts, current, pins, watcher_folder, watcher_email, now):
                     drivers.pop(lane.name)
                     moves = [m for m in moves if m.lane != lane.name]
                     continue
-                reason = "paused" if end else "not in the pool"
+                if end:
+                    reason = "paused"
+                elif seat is not None and seat.engine == "codex" and seat.logged_in and full_until(seat, now):
+                    reason, end = "full", full_until(seat, now)
+                else:
+                    reason = "not in the pool"
         reviewers[lane.name] = new
         if new != old:
             moves.append(Move(lane.name, "reviewer", "claude" if lane.engine == "codex" else "codex", old, new,
@@ -775,6 +866,8 @@ def format_move(m, now, home):
         detail = "was %s, paused until %s" % (tilde(m.old, home), when(m.paused_until))
     elif m.reason == "watcher":
         detail = "was %s, Codex lanes are reviewed from the watcher's account" % tilde(m.old, home)
+    elif m.reason == "full":
+        detail = "was %s, at 100%% until %s" % (tilde(m.old, home), when(m.paused_until) if m.paused_until else "not known")
     else:
         detail = "was %s, %s" % (tilde(m.old, home), m.reason)
     return "ACCOUNTS: lane %s %s → %s (%s)" % (m.lane, role, tilde(m.new, home), detail)
@@ -813,13 +906,16 @@ def launchd_label(lane):
 - [ ] **Step 4: Run the tests to watch them pass**
 
 Run: `cd ~/workspace/tools/.worktrees/account-pool && python3 -m unittest test_account_pool -v`
-Expected: `OK`, 35 tests.
+Expected: `OK`, 36 tests.
 
 - [ ] **Step 5: Prove the seat rule by deletion**
 
-Replace the `if seat is not None and ... end is None: new = old` branch's condition with `False`, run the
-tests, and confirm `test_a_codex_seat_stays_until_its_account_pauses` fails because the seat moved to
-`~/.codex-dev`. Restore and rerun to green.
+Replace the `if seat is not None and ... qualifies(seat, ...): new = old` branch's condition with
+`False`, run the tests, and confirm `test_a_codex_seat_stays_until_its_account_pauses` fails because the
+seat moved to `~/.codex-dev`. Then put the condition back but with `qualifies(...)` replaced by
+`seat.logged_in and end is None` (the rule before the 100% check), and confirm
+`test_a_codex_seat_at_100_percent_moves_even_with_no_pause` fails because the seat stayed on
+`~/.codex-gmail`. Restore and rerun to green.
 
 - [ ] **Step 6: Commit**
 
@@ -830,12 +926,12 @@ git commit -s -m "account pool: reviewer seats, the lines the watcher reads, the
 
 A Codex lane is always reviewed from the watcher's folder. A Claude lane's Codex reviewer seat
 starts on the Codex account with the most allowance left per day and stays there until that
-account is paused, so seats do not swap back and forth every few minutes. The lines the picker
+account is paused or used up, so seats do not swap back and forth every few minutes. The lines the picker
 prints are written here in the exact shapes the spec gives, and the 85% offer is made once per
 Codex account per weekly window."
 ```
 
-**Done when:** 35 tests pass, the deletion check failed for the stated reason before being restored,
+**Done when:** 36 tests pass, both deletion checks failed for the stated reason before being restored,
 and the commit exists.
 
 ---
@@ -1254,7 +1350,7 @@ if __name__ == "__main__":
 - [ ] **Step 5: Run both to watch them pass**
 
 Run: `cd ~/workspace/tools/.worktrees/account-pool && chmod +x assign-accounts.py && python3 -m unittest test_account_pool -v && sh assign-accounts.test.sh`
-Expected: `OK` (38 tests), then `assign-accounts: all checks passed`.
+Expected: `OK` (39 tests), then `assign-accounts: all checks passed`.
 
 - [ ] **Step 6: Prove the rename check by deletion**
 
@@ -1286,7 +1382,8 @@ and the commit exists.
 **Work in:** `~/workspace/tools/.worktrees/account-pool`.
 
 **Files:**
-- Modify: `lane-status.py:72-89` (`stored_token` split into `stored_credential` and `stored_token`)
+- Modify: `lane-status.py:72-89` (`stored_token` split into `stored_credential` and `stored_token`; the
+  `security` call gets a time limit)
 - Modify: `assign-accounts.py`
 - Modify: `assign-accounts.test.sh` (append before the final `echo`)
 - Modify: `README.md` (a section for the picker, and its test in the Tests list)
@@ -1294,10 +1391,16 @@ and the commit exists.
 **Interfaces:**
 - Consumes: Task 3's `assign-accounts.py`; from `lane-status.py` also `ps_lines()` and `running_for(lane_dir, lines)`.
 - Produces:
-  - `lane-status.stored_credential(folder) -> dict | None` (the stored `claudeAiOauth` record); `stored_token` keeps its behaviour.
+  - `lane-status.stored_credential(folder) -> dict | None` (the stored `claudeAiOauth` record); raises
+    `RuntimeError("the Keychain did not answer within N s")` when `security` takes longer than
+    `LANE_STATUS_KEYCHAIN_SECONDS` (default 10). `stored_token` keeps its behaviour, and returns None on
+    that timeout, so `lane-status.py` still prints its report.
+  - Environment variables `LANE_STATUS_SECURITY` (default `security`) and `LANE_STATUS_KEYCHAIN_SECONDS`,
+    for the test.
   - `<shared>/accounts/usage.json`: `{"fetched_at": iso, "markers": {folder: until epoch}, "accounts": {folder: {"logged_in", "email", "five_hour", "five_hour_reset", "weekly", "weekly_reset", "read_at"}}, "errors": {folder: text}}`
   - `<shared>/accounts/log`: every printed line, prefixed with `YYYY-MM-DD HH:MM `.
-  - Environment variable `ASSIGN_ACCOUNTS_LAUNCHCTL` (default `launchctl`), for the test.
+  - Environment variables `ASSIGN_ACCOUNTS_LAUNCHCTL` (default `launchctl`) and
+    `ASSIGN_ACCOUNTS_LAUNCHCTL_SECONDS` (default 30), for the test.
 
 - [ ] **Step 1: Write the failing tests** (append to `assign-accounts.test.sh`, before the final `echo`)
 
@@ -1380,6 +1483,27 @@ fresh; rm -f "$tmp/launchctl.calls"; run >/dev/null
 mark "$HOME/.claude-dev" "2026-10-18 18:00"
 export FAKE_LAUNCHCTL_EXIT=3; run | grep -qx 'ACCOUNTS: could not start lane A now (launchctl exit 3) — it starts at its next 30-minute firing' || fail "a failed start is reported"
 unset FAKE_LAUNCHCTL_EXIT
+fresh; rm -f "$tmp/launchctl.calls"; run >/dev/null
+mark "$HOME/.claude-dev" "2026-10-18 18:00"
+printf '#!/bin/sh\nexec sleep 5\n' > "$tmp/slow-launchctl"; chmod +x "$tmp/slow-launchctl"
+out=$(ASSIGN_ACCOUNTS_LAUNCHCTL="$tmp/slow-launchctl" ASSIGN_ACCOUNTS_LAUNCHCTL_SECONDS=1 run)
+echo "$out" | grep -qx 'ACCOUNTS: could not start lane A now (launchctl did not answer within 1 s) — it starts at its next 30-minute firing' || fail "a launchctl that does not answer is given a time limit (got: $out)"
+
+# a Keychain that does not answer is given a time limit, and the last answer is kept
+fresh; run >/dev/null
+printf '#!/bin/sh\nexec sleep 5\n' > "$tmp/slow-security"; chmod +x "$tmp/slow-security"
+out=$(LANE_STATUS_KEYCHAIN_DIR= LANE_STATUS_SECURITY="$tmp/slow-security" LANE_STATUS_KEYCHAIN_SECONDS=1 run_at 2026-10-14T10:11:00+02:00)
+echo "$out" | grep -qx 'ACCOUNTS: usage for ~/.claude-support unreadable (the Keychain did not answer within 1 s) — using the answer read Wed 14 Oct 10:00' || fail "a Keychain that does not answer is given a time limit (got: $out)"
+[ "$(line_of A)" = "A $HOME/.claude-dev $HOME/.codex-dev" ] || fail "a Keychain that does not answer moves no lane (got: $(line_of A))"
+
+# a lane-status.py that cannot be loaded is one line, said once, never a traceback
+mkdir -p "$tmp/broken"; cp "$here/assign-accounts.py" "$here/account_pool.py" "$tmp/broken/"
+echo 'def (' > "$tmp/broken/lane-status.py"
+fresh
+out=$(python3 "$tmp/broken/assign-accounts.py" --shared "$SHARED" --now "$NOW" --lane "A=$tmp/camp-a" 2>&1) || fail "a broken lane-status.py still exits 0"
+echo "$out" | grep -q '^ACCOUNTS ERROR: SyntaxError: ' || fail "a broken lane-status.py is one ACCOUNTS ERROR line (got: $out)"
+[ "$(echo "$out" | wc -l | tr -d ' ')" = 1 ] || fail "and only one line, no traceback (got: $out)"
+[ -z "$(python3 "$tmp/broken/assign-accounts.py" --shared "$SHARED" --now "$NOW" --lane "A=$tmp/camp-a" 2>&1)" ] || fail "a broken lane-status.py is said once"
 
 # every printed line is also kept, with the time, in accounts/log
 grep -q '^2026-10-14 10:00 ACCOUNTS: lane A claude → ' "$ACC/log" || fail "printed lines are appended to accounts/log (got: $(cat "$ACC/log"))"
@@ -1404,7 +1528,8 @@ In `lane-status.py`, replace `stored_token` (lines 72–89) with:
 
 ```python
 def stored_credential(folder):
-    """The record Claude stored for this login folder (claudeAiOauth), or None when it never logged in."""
+    """The record Claude stored for this login folder (claudeAiOauth), or None when it never logged in.
+    Raises RuntimeError when the Keychain does not answer in time."""
     service = keychain_service(folder)
     fixture = os.environ.get("LANE_STATUS_KEYCHAIN_DIR")
     if fixture:
@@ -1413,7 +1538,12 @@ def stored_credential(folder):
             return None
         raw = open(path, encoding="utf-8").read()
     else:
-        r = subprocess.run(["security", "find-generic-password", "-s", service, "-w"], capture_output=True, text=True)
+        seconds = int(os.environ.get("LANE_STATUS_KEYCHAIN_SECONDS") or 10)
+        try:
+            r = subprocess.run([os.environ.get("LANE_STATUS_SECURITY") or "security", "find-generic-password", "-s", service, "-w"],
+                               capture_output=True, text=True, timeout=seconds)
+        except subprocess.TimeoutExpired:
+            raise RuntimeError("the Keychain did not answer within %d s" % seconds)
         if r.returncode != 0:
             return None
         raw = r.stdout.strip()
@@ -1425,8 +1555,12 @@ def stored_credential(folder):
 
 
 def stored_token(folder):
-    """The access token Claude stored for this login folder, or None when it never logged in."""
-    return (stored_credential(folder) or {}).get("accessToken")
+    """The access token Claude stored for this login folder, or None when it never logged in or the
+    Keychain did not answer in time."""
+    try:
+        return (stored_credential(folder) or {}).get("accessToken")
+    except RuntimeError:
+        return None
 ```
 
 Replace `assign-accounts.py` with this complete version. Against Task 3's it adds the usage cache
@@ -1544,7 +1678,12 @@ def read_usage(ls, pool, cache, now):
     for engine, folder in pool:
         entry = dict(old.get(folder, {}))
         if engine == "claude":
-            record = ls.stored_credential(folder) or {}
+            try:
+                record = ls.stored_credential(folder) or {}
+            except RuntimeError as e:  # the Keychain did not answer: keep the last answer
+                errors[folder] = str(e)
+                entries[folder] = entry
+                continue
             token = record.get("accessToken")
             if not token:
                 entries[folder] = {"logged_in": False}
@@ -1648,7 +1787,12 @@ def kick(ls, moves, lanes, said):
             continue
         cmd = [os.environ.get("ASSIGN_ACCOUNTS_LAUNCHCTL", "launchctl"), "kickstart",
                "gui/%d/%s" % (os.getuid(), ap.launchd_label(m.lane))]
-        r = subprocess.run(cmd, capture_output=True, text=True)
+        seconds = int(os.environ.get("ASSIGN_ACCOUNTS_LAUNCHCTL_SECONDS") or 30)
+        try:
+            r = subprocess.run(cmd, capture_output=True, text=True, timeout=seconds)
+        except subprocess.TimeoutExpired:
+            said.lines.append("ACCOUNTS: could not start lane %s now (launchctl did not answer within %d s) — it starts at its next 30-minute firing" % (m.lane, seconds))
+            continue
         if r.returncode:
             said.lines.append("ACCOUNTS: could not start lane %s now (launchctl exit %d) — it starts at its next 30-minute firing" % (m.lane, r.returncode))
 
@@ -1696,9 +1840,9 @@ def main(argv):
     p.add_argument("--now", help="ISO 8601 with offset, for a reproducible run")
     p.add_argument("--dry-run", action="store_true", help="print what would be written; write and start nothing")
     a = p.parse_args(argv)
-    ls = lane_status()
-    now = ls.parse_iso(a.now) if a.now else dt.datetime.now().astimezone()
     try:
+        ls = lane_status()  # inside the guard: a lane-status.py that cannot load is one line, not a traceback every pass
+        now = ls.parse_iso(a.now) if a.now else dt.datetime.now().astimezone()
         run(a, ls, now)
     except Exception as e:  # the watcher's loop runs this every pass: one line, said once, never a traceback
         acc = os.path.join(a.shared, "accounts")
@@ -1751,14 +1895,17 @@ python3 -m unittest test_account_pool -v   # the picker's rules
 - [ ] **Step 4: Run everything to watch it pass**
 
 Run: `cd ~/workspace/tools/.worktrees/account-pool && python3 -m unittest test_account_pool -v && sh assign-accounts.test.sh && sh lane-status.test.sh && sh codex-quota.test.sh`
-Expected: `OK` (38 tests), `assign-accounts: all checks passed`, `lane-status: all checks passed`, and
+Expected: `OK` (39 tests), `assign-accounts: all checks passed`, `lane-status: all checks passed`, and
 codex-quota's own pass line. Each command's status is checked by `&&`.
 
 - [ ] **Step 5: Prove two checks by deletion**
 
 Delete the `expires / 1000 <= now.timestamp()` skip and confirm the run stops at `FAIL: an expired
 sign-in is not asked ...`. Delete the `run.lock` condition in `kick` and confirm `FAIL: a lane holding
-its run lock is not started`. Restore both and rerun to green.
+its run lock is not started`. Delete `timeout=seconds` from the `launchctl` call and confirm `FAIL: a
+launchctl that does not answer is given a time limit`. Move `ls = lane_status()` back above the `try`
+and confirm `FAIL: a broken lane-status.py is one ACCOUNTS ERROR line`. Restore all four and rerun to
+green.
 
 - [ ] **Step 6: Commit**
 
@@ -1771,12 +1918,261 @@ The picker keeps every account's last usage answer in accounts/usage.json and re
 ten minutes, or at once when a new pause appears. A Claude sign-in whose stored token has expired
 is not asked: only Claude renews that token, and on 2026-10-12 the endpoint refused one such
 folder. A lane moved off a paused account is started with launchctl unless it is running or
-stopped. Every printed line also goes to accounts/log, and an unexpected failure is one line,
-said once."
+stopped. Every printed line also goes to accounts/log, and an unexpected failure, including a
+lane-status.py that cannot load, is one line, said once. The Keychain and launchctl calls have
+time limits."
 ```
 
-**Done when:** all four suites pass, both deletion checks failed for the stated reason before being
+**Done when:** all four suites pass, the four deletion checks failed for the stated reason before being
 restored, and the commit exists.
+
+---
+
+## Task 4b: The picker — one run at a time, and broken sign-ins
+
+**Work in:** `~/workspace/tools/.worktrees/account-pool`.
+
+**Files:**
+- Modify: `account_pool.py` (`Account.signin_broken`; `qualifies`, `next_reset`, `decide_drivers`,
+  `decide` honour it)
+- Modify: `test_account_pool.py` (append a `SignIn` class)
+- Modify: `assign-accounts.py` (the lock; reading, announcing and clearing sign-in markers)
+- Modify: `assign-accounts.test.sh` (append before the final `echo`)
+- Modify: `README.md` (two sentences in the picker's section)
+
+**Interfaces:**
+- Consumes: Task 4's `assign-accounts.py`; the marker Task 5b's runner writes,
+  `<shared>/limits/<account_name>.signin` (line 1 epoch first noticed, line 2 the message).
+- Produces:
+  - `Account(..., signin_broken=False)`: a folder whose sign-in is broken never qualifies, is not a reset
+    to wait for, and a driver or Codex seat on it moves with reason `"sign-in broken"`.
+  - In `assign-accounts.py`: `take_lock(acc)` (an open file holding the lock, `True` when there is no
+    `accounts` folder to lock, or `None` when another run holds it); `signin_path(ls, shared, folder)`
+    and `signin_marker(ls, shared, folder)` (`(epoch, message)` or None); `fingerprint(ls, engine, folder)` (a short hash of the folder's stored
+    sign-in: the Keychain record for Claude, `auth.json`'s bytes for Codex, `"none"` without one).
+  - `state.json` gains `"signin": {folder: fingerprint when the marker was first seen}`.
+  - Lines: `SIGN-IN BROKEN: …` and `ACCOUNTS: <folder> is signed in again — it can be handed out`, in the
+    shapes under Global Constraints.
+
+- [ ] **Step 1: Write the failing unit tests** (append to `test_account_pool.py`, above the `if __name__` line)
+
+```python
+class SignIn(unittest.TestCase):
+    def test_a_lane_whose_sign_in_broke_moves_and_the_folder_is_not_handed_out(self):
+        accounts = [claude("support", weekly=0, signin_broken=True), claude("dev", weekly=50)]
+        d, moves, _ = drivers(lanes("A", "B"), accounts, {"A": (f("support"), None)})
+        self.assertEqual(d, {"A": f("dev"), "B": f("dev")})
+        self.assertEqual(moves[0], ap.Move("A", "driver", "claude", f("support"), f("dev"), "sign-in broken"))
+
+    def test_a_broken_sign_in_is_not_a_reset_to_wait_for(self):
+        accounts = [claude("support", signin_broken=True, paused_until=at(15, 9)),
+                    claude("dev", paused_until=at(16, 22))]
+        self.assertEqual(ap.next_reset("claude", accounts, NOW, W, WE), at(16, 22))
+
+    def test_a_pin_on_a_folder_whose_sign_in_broke_is_ignored(self):
+        accounts = [claude("support", signin_broken=True), claude("dev")]
+        d, moves, _ = drivers(lanes("A"), accounts, {"A": (f("dev"), None)}, {"A": f("support")})
+        self.assertEqual((d["A"], moves), (f("dev"), []))
+
+    def test_a_codex_seat_whose_sign_in_broke_moves(self):
+        accounts = [claude("dev"), codex("dev"), codex("gmail", signin_broken=True)]
+        result = decide(lanes("A"), accounts, {"A": (f("dev"), CX("gmail"))})
+        self.assertEqual(result.moves, [ap.Move("A", "reviewer", "codex", CX("gmail"), CX("dev"), "sign-in broken")])
+
+    def test_a_sign_in_move_reads_plainly(self):
+        m = ap.Move("A", "driver", "claude", f("support"), f("dev"), "sign-in broken")
+        self.assertEqual(ap.format_move(m, NOW, H), "ACCOUNTS: lane A claude → ~/.claude-dev (was ~/.claude-support, sign-in broken)")
+```
+
+- [ ] **Step 2: Write the failing program tests** (append to `assign-accounts.test.sh`, before the final `echo`)
+
+Extend the file's `EXIT` trap so it also stops the lock holder below by its process id
+(`holder=""` near the top; the trap becomes `trap '[ -n "$holder" ] && kill "$holder" 2>/dev/null; rm -rf "$tmp"' EXIT`).
+
+```sh
+# one picker at a time: a run that finds the lock held exits at once, silently, and changes nothing
+fresh; run >/dev/null
+mark "$HOME/.claude-dev" "2026-10-18 18:00"
+python3 -c 'import fcntl, sys, time
+f = open(sys.argv[1], "a"); fcntl.flock(f, fcntl.LOCK_EX); print("held", flush=True); time.sleep(60)' "$ACC/.lock" > "$tmp/holder.out" &
+holder=$!
+n=0; until [ -s "$tmp/holder.out" ] || [ $n -ge 100 ]; do sleep 0.1; n=$((n + 1)); done
+[ -s "$tmp/holder.out" ] || fail "the test's lock holder started"
+before=$(cat "$ACC/assignments")
+out=$(run) || fail "a run that finds the lock held exits 0"
+[ -z "$out" ] || fail "a run that finds the lock held prints nothing (got: $out)"
+[ "$(cat "$ACC/assignments")" = "$before" ] || fail "a run that finds the lock held changes nothing"
+kill "$holder"; wait "$holder" 2>/dev/null; holder=""
+run | grep -q '^ACCOUNTS: lane A claude → ' || fail "once the lock is free the move happens"
+python3 -c 'import fcntl, sys
+f = open(sys.argv[1], "a"); fcntl.flock(f, fcntl.LOCK_EX | fcntl.LOCK_NB)' "$ACC/.lock" || fail "a finished run leaves the lock free"
+
+# a broken sign-in: the lane moves and starts, the watcher is told once how to sign it in again,
+# and a new sign-in clears it
+signin_mark() { # $1 folder $2 Madrid local time noticed $3 message: the marker runner-lib.sh writes
+  printf '%s\n%s\n' "$(epoch "$2")" "$3" > "$SHARED/limits/$(account_name "$1").signin"
+}
+fresh; rm -f "$tmp/launchctl.calls"; run >/dev/null   # A on dev, B on support
+signin_mark "$HOME/.claude-dev" "2026-10-14 09:50" "Not logged in · Please run /login"
+mv "$tmp/usage/tokV.json" "$tmp/usage/tokV.json.away"   # a signed-out folder's usage read fails too
+out=$(run_at 2026-10-14T10:11:00+02:00)                 # past the cache, so every account is read
+echo "$out" | grep -qx 'ACCOUNTS: lane A claude → ~/.claude-support (was ~/.claude-dev, sign-in broken)' || fail "a lane on a broken sign-in moves (got: $out)"
+echo "$out" | grep -qx 'SIGN-IN BROKEN: ~/.claude-dev (dev@waitron.io) — no lane is given it until it is signed in again: CLAUDE_CONFIG_DIR=~/.claude-dev claude, then /login (noticed Wed 14 Oct 09:50: Not logged in · Please run /login)' || fail "a broken sign-in is announced with its re-login command (got: $out)"
+echo "$out" | grep -q 'usage for ~/.claude-dev unreadable' && fail "a broken sign-in is announced once, not also as unreadable usage (got: $out)"
+[ "$(kicks)" = "kickstart gui/$(id -u)/com.waitron.campaign" ] || fail "a lane moved off a broken sign-in is started at once (got: $(kicks))"
+out=$(run_at 2026-10-14T10:22:00+02:00)
+[ -z "$out" ] || fail "a broken sign-in is announced once (got: $out)"
+[ -e "$SHARED/limits/$(account_name "$HOME/.claude-dev").signin" ] || fail "an unchanged sign-in keeps its marker"
+login "$HOME/.claude-dev" dev@waitron.io tokV2; cp "$tmp/usage/tokV.json.away" "$tmp/usage/tokV2.json"
+out=$(run_at 2026-10-14T10:33:00+02:00)
+echo "$out" | grep -qx 'ACCOUNTS: ~/.claude-dev is signed in again — it can be handed out' || fail "a new sign-in clears the marker (got: $out)"
+[ -e "$SHARED/limits/$(account_name "$HOME/.claude-dev").signin" ] && fail "the cleared marker is removed"
+mv "$tmp/usage/tokV.json.away" "$tmp/usage/tokV.json"; login "$HOME/.claude-dev" dev@waitron.io tokV
+
+# a broken Codex sign-in names the Codex re-login command
+fresh; run >/dev/null   # D on codex-dev
+signin_mark "$HOME/.codex-dev" "2026-10-14 09:50" '{"type":"turn.failed","error":{"message":"workspace routing discovery unauthorized (401)"}}'
+out=$(run)
+echo "$out" | grep -qx 'ACCOUNTS: lane D codex → ~/.codex-gmail (was ~/.codex-dev, sign-in broken)' || fail "a Codex lane on a broken sign-in moves (got: $out)"
+echo "$out" | grep -q '^SIGN-IN BROKEN: ~/.codex-dev (dev@waitron.io) — no lane is given it until it is signed in again: CODEX_HOME=~/.codex-dev codex login (noticed ' || fail "the Codex re-login command is named (got: $out)"
+```
+
+- [ ] **Step 3: Run both to watch them fail**
+
+Run: `cd ~/workspace/tools/.worktrees/account-pool && python3 -m unittest test_account_pool -v; sh assign-accounts.test.sh`
+Expected: the `SignIn` tests error with `TypeError: ... unexpected keyword argument 'signin_broken'`;
+the shell test stops at `FAIL: a run that finds the lock held prints nothing`.
+
+- [ ] **Step 4: Write the minimal implementation**
+
+In `account_pool.py`:
+- `Account` gains a last field `signin_broken: bool = False`.
+- `qualifies`: return False when `a.signin_broken`, before anything else.
+- `next_reset`: skip an account with `signin_broken` (it does not come back by itself).
+- `decide_drivers`: the pin branch also requires `not by_folder[pin].signin_broken`; after the
+  `not usable(old, ...)` branch add
+  `elif by_folder[old].signin_broken: moving.append((lane, old, "sign-in broken", None))`, before the
+  pause branch.
+- `decide`: when a Claude lane's seat moves, the reason is `"paused"` when `end`, else `"sign-in broken"`
+  when `seat is not None and seat.signin_broken`, else `"full"` as before, else `"not in the pool"`.
+  `format_move` needs no change: its last branch prints `was <old>, sign-in broken`.
+
+In `assign-accounts.py`:
+
+```python
+import fcntl
+import hashlib
+
+
+def take_lock(acc):
+    """This run's hold on <acc>/.lock, True when there is no accounts folder (nothing to write), or
+    None when another run holds it. Two runs at once (a manual run during the switch-over, two watcher
+    sessions during a handover) would each rewrite the assignment file and could start a lane twice."""
+    if not os.path.isdir(acc):
+        return True
+    f = open(os.path.join(acc, ".lock"), "a")
+    try:
+        fcntl.flock(f, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except BlockingIOError:
+        f.close()
+        return None
+    return f
+
+
+def signin_path(ls, shared, folder):
+    return os.path.join(shared, "limits", ls.account_name(folder) + ".signin")
+
+
+def signin_marker(ls, shared, folder):
+    """(epoch first noticed, message) from the runner's sign-in marker for this folder, or None."""
+    try:
+        epoch, message = read(signin_path(ls, shared, folder)).split("\n")[:2]
+        return int(epoch), message
+    except (AttributeError, ValueError):
+        return None
+
+
+def fingerprint(ls, engine, folder):
+    if engine == "claude":
+        record = ls.stored_credential(folder)
+        raw = json.dumps(record, sort_keys=True) if record else ""
+    else:
+        raw = read(os.path.join(folder, "auth.json")) or ""
+    return hashlib.sha256(raw.encode()).hexdigest()[:12] if raw else "none"
+```
+
+In `assign`, after the `if reread:` block (so `cache` holds every pool folder's last answer) and
+before the accounts are built:
+
+```python
+    recorded = dict(state.get("signin", {}))
+    broken = {}
+    for engine, folder in pool:
+        marker = signin_marker(ls, a.shared, folder)
+        if marker is None:
+            recorded.pop(folder, None)
+            continue
+        fp = fingerprint(ls, engine, folder)
+        if folder in recorded and recorded[folder] != fp:
+            # Signed in again since the marker was first seen: the marker is stale.
+            if not a.dry_run:
+                os.remove(signin_path(ls, a.shared, folder))
+            recorded.pop(folder)
+            said.lines.append("ACCOUNTS: %s is signed in again — it can be handed out" % ap.tilde(folder, HOME))
+            continue
+        recorded.setdefault(folder, fp)
+        broken[folder] = marker
+        email = cache["accounts"].get(folder, {}).get("email") or "account not known"
+        command = ("CLAUDE_CONFIG_DIR=%s claude, then /login" if engine == "claude" else "CODEX_HOME=%s codex login") % ap.tilde(folder, HOME)
+        noticed = ap.when(dt.datetime.fromtimestamp(marker[0], now.tzinfo))
+        said.once("signin:" + folder,
+                  "SIGN-IN BROKEN: %s (%s) — no lane is given it until it is signed in again: %s (noticed %s: %s)"
+                  % (ap.tilde(folder, HOME), email, command, noticed, marker[1]),
+                  str(marker[0]))
+```
+
+Build each account with `signin_broken=folder in broken`, skip the "usage … unreadable" line for a
+folder in `broken`, return `recorded` in the result, and in `run` save it as `new_state["signin"]`
+(not on a dry run). Kick a lane moved for
+`"sign-in broken"` as for `"paused"` (change `kick`'s reason test to `m.reason not in ("paused", "sign-in broken")`).
+
+In `main`, inside the `try` and after `a` is parsed: `lock = take_lock(os.path.join(a.shared, "accounts")) if not a.dry_run else True`;
+`if lock is None: return` (silently, status 0); keep `lock` referenced until `run` returns.
+
+In `README.md`'s picker section, add: "Only one run works at a time; a run that finds another holding
+`accounts/.lock` exits silently. A folder a runner marked as signed out (`limits/<folder>.signin`) is
+never handed out; the picker names the command that signs it in again, and clears the marker itself
+once the folder's stored sign-in changes."
+
+- [ ] **Step 5: Run everything to watch it pass**
+
+Run: `cd ~/workspace/tools/.worktrees/account-pool && python3 -m unittest test_account_pool -v && sh assign-accounts.test.sh && sh lane-status.test.sh && sh codex-quota.test.sh`
+Expected: `OK` (44 tests), then each suite's pass line.
+
+- [ ] **Step 6: Prove three checks by deletion**
+
+Replace the `fcntl.flock(...)` line with `pass` and confirm `FAIL: a run that finds the lock held prints
+nothing`. Delete the `signin_broken` test from `qualifies` and confirm
+`test_a_lane_whose_sign_in_broke_moves_and_the_folder_is_not_handed_out` fails because lane B was given
+`~/.claude-support`. Delete the fingerprint comparison (`recorded[folder] != fp`, so the branch never
+runs) and confirm `FAIL: a new sign-in clears the marker`. Restore all three and rerun to green.
+
+- [ ] **Step 7: Commit**
+
+```bash
+cd ~/workspace/tools/.worktrees/account-pool
+git add account_pool.py test_account_pool.py assign-accounts.py assign-accounts.test.sh README.md
+git commit -s -m "assign-accounts: one run at a time, and move lanes off a broken sign-in
+
+Two runs of the picker at once could each rewrite the assignment file and start a lane twice, so a
+run now takes a lock and a run that finds it held exits silently. A folder the runner marked as
+signed out is treated like a paused account that never resumes: its lanes move, it is not handed
+out, and the picker says once which command signs it in again. It clears the marker itself once
+the folder's stored sign-in changes."
+```
+
+**Done when:** all four suites pass, the three deletion checks failed for the stated reason before
+being restored, and the commit exists.
 
 ---
 
@@ -2072,7 +2468,9 @@ L=~/waitron-campaign-shared
 cmp -s "$L/runner-lib.sh" "$STAGE/base/runner-lib.sh" && cmp -s "$L/tests/runner.test.sh" "$STAGE/base/runner.test.sh" \
   || { echo "the live files changed since staging: stop, and fold that change in first"; exit 1; }
 bash -n "$STAGE/runner-lib.sh" && bash -n "$STAGE/tests/runner.test.sh" \
-  && cp "$STAGE/base/runner-lib.sh" "$L/archive/runner-lib.sh.before-account-pool" \
+  && mkdir -p "$L/backups/2026-10-12-account-pool" \
+  && cp "$STAGE/base/runner-lib.sh" "$L/backups/2026-10-12-account-pool/runner-lib.sh.before-account-pool" \
+  && cp "$STAGE/base/runner.test.sh" "$L/backups/2026-10-12-account-pool/runner.test.sh.before-account-pool" \
   && cp "$STAGE/runner-lib.sh" "$L/.runner-lib.sh.new" && mv -f "$L/.runner-lib.sh.new" "$L/runner-lib.sh" \
   && cp "$STAGE/tests/runner.test.sh" "$L/tests/.runner.test.sh.new" && mv -f "$L/tests/.runner.test.sh.new" "$L/tests/runner.test.sh" \
   && cmp "$STAGE/runner-lib.sh" "$L/runner-lib.sh" && echo installed
@@ -2080,13 +2478,205 @@ bash -n "$STAGE/runner-lib.sh" && bash -n "$STAGE/tests/runner.test.sh" \
 
 Expected: `installed`. Until Task 8 writes the assignment file, every firing logs
 `Accounts: no assignment file at ... — using run.sh's folders.` and otherwise behaves exactly as
-before. To roll back: `cp ~/waitron-campaign-shared/archive/runner-lib.sh.before-account-pool ~/waitron-campaign-shared/.runner-lib.sh.new && mv -f ~/waitron-campaign-shared/.runner-lib.sh.new ~/waitron-campaign-shared/runner-lib.sh`.
+before. To roll back: `cp ~/waitron-campaign-shared/backups/2026-10-12-account-pool/runner-lib.sh.before-account-pool ~/waitron-campaign-shared/.runner-lib.sh.new && mv -f ~/waitron-campaign-shared/.runner-lib.sh.new ~/waitron-campaign-shared/runner-lib.sh`.
 
 There is no commit: `~/waitron-campaign-shared` is not in git. Leave `$STAGE` in place for the reviewer.
 
 **Done when:** the full five-lane suite printed `0 failed` and `exit 0`, the deletion check failed for
 the stated reason before being restored, and both files are installed (the `cmp` printed nothing and
 `installed` was printed).
+
+---
+
+## Task 5b: The runners mark a broken sign-in
+
+**Work in:** a fresh staging folder, made from the files Task 5 installed:
+
+```bash
+STAGE=~/waitron-account-pool-staging/5b
+mkdir -p "$STAGE/tests" "$STAGE/base"
+cp ~/waitron-campaign-shared/runner-lib.sh "$STAGE/base/runner-lib.sh"
+cp ~/waitron-campaign-shared/tests/runner.test.sh "$STAGE/base/runner.test.sh"
+cp "$STAGE/base/runner-lib.sh" "$STAGE/runner-lib.sh"
+cp "$STAGE/base/runner.test.sh" "$STAGE/tests/runner.test.sh"
+```
+
+**Why:** a sign-in that stops working (expired with no refresh, or revoked by a security change on the
+account) fails every firing of every lane on that folder, silently, until someone reads a run log. See
+Decisions, "A broken sign-in is caught by the runner", for the measured message shapes.
+
+**Files:**
+- Modify: `$STAGE/runner-lib.sh` (a new `note_signin`, called first from `note_usage_limit`, which every
+  `run.sh` already calls after each firing, so no `run.sh` changes)
+- Modify: `$STAGE/tests/runner.test.sh` (new cases inside the per-lane loop)
+- Install over: `~/waitron-campaign-shared/runner-lib.sh`, `~/waitron-campaign-shared/tests/runner.test.sh`
+
+**Interfaces:**
+- Consumes: `LOG`, `ENGINE`, `DRIVER_ACCOUNT`, `SHARED`, `CAMP`, `account_name`, `runner_now`.
+- Produces: `note_signin <log> <exit status>`; variable `SIGNIN_MARKER`
+  (`$SHARED/limits/<account_name of the driver folder>.signin`, set by `set_accounts` beside
+  `LIMIT_MARKER`); the marker (line 1 epoch first noticed, line 2 the matching line, cut to 300
+  characters); the run-log line `=== sign-in broken for <folder>: <message> ===`; a `progress.log` line
+  `<date> — sign-in broken on <folder>: <message>` (the watcher relays progress lines).
+
+Rules, in order:
+1. Exit status 0: remove `SIGNIN_MARKER` if present (a clean firing proves the sign-in works) and stop.
+2. Find the first sign-in failure in `<log>`:
+   - Claude: a line matching `^(Not logged in|Invalid API key|API Error: 401|OAuth token has expired)`
+     or containing `Please run /login`. Only `Not logged in · Please run /login` is measured.
+   - Codex: a line starting `{"type":"turn.failed"` that contains `401` or `nauthorized`, or a line
+     starting with an ISO timestamp followed by ` ERROR ` that contains `token_revoked` or
+     `refresh_token_invalidated`. Tool output never starts a line, so it cannot match.
+3. None found: stop. Found: append the run-log line; if `SIGNIN_MARKER` already exists, stop (it keeps
+   the time first noticed, so the picker announces it once); otherwise write the marker and the
+   `progress.log` line. Never write the usage-limit marker and never call `notify`: the owner is away,
+   and the watcher's phone message is the channel.
+
+- [ ] **Step 1: Write the failing tests**
+
+Inside the per-lane loop, after the account-assignment cases Task 5 added and before `done`, add:
+
+```bash
+  # ── a broken sign-in is marked for the picker ──
+  signin() { mkdir -p "$SB/shared/limits"; echo "$SB/shared/limits/$(acct "$1").signin"; }
+
+  sandbox
+  echo "1|Not logged in · Please run /login" > "$SB/claude.script"
+  fire "$RUN"
+  eq "$lane: a Claude firing refused for its sign-in marks the folder" "$(sed -n 2p "$(signin "$SB/claude-acct")" 2>/dev/null)" "Not logged in · Please run /login"
+  if inlogs "=== sign-in broken for $SB/claude-acct: Not logged in · Please run /login ==="; then ok "$lane: the firing log says the sign-in is broken"
+  else bad "$lane: the firing log says the sign-in is broken"; fi
+  if [ -e "$(mark "$SB/claude-acct")" ]; then bad "$lane: a broken sign-in is not a usage-limit pause"
+  else ok "$lane: a broken sign-in is not a usage-limit pause"; fi
+  eq "$lane: a broken sign-in sends no Mac notification" "$(notices)" "0"
+  if grep -q "sign-in broken on $SB/claude-acct" "$SB/camp/progress.log" 2>/dev/null; then ok "$lane: a broken sign-in is written to the progress log"
+  else bad "$lane: a broken sign-in is written to the progress log"; fi
+  rm -rf "$SB"
+
+  sandbox
+  echo '1|API Error: 401 {"type":"error","error":{"type":"authentication_error","message":"OAuth token has expired."}}' > "$SB/claude.script"   # shape inferred, not measured
+  fire "$RUN"
+  if [ -s "$(signin "$SB/claude-acct")" ]; then ok "$lane: an API 401 marks the folder"
+  else bad "$lane: an API 401 marks the folder"; fi
+  rm -rf "$SB"
+
+  sandbox
+  echo "1|The refund route answers 401 Unauthorized when the session is gone; tests updated." > "$SB/claude.script"
+  fire "$RUN"
+  if [ -e "$(signin "$SB/claude-acct")" ]; then bad "$lane: a failed firing that mentions 401 in its prose is not a broken sign-in"
+  else ok "$lane: a failed firing that mentions 401 in its prose is not a broken sign-in"; fi
+  rm -rf "$SB"
+
+  sandbox
+  printf '%s\n%s\n' 1 "Not logged in · Please run /login" > "$(signin "$SB/claude-acct")"
+  fire "$RUN"
+  if [ -e "$(signin "$SB/claude-acct")" ]; then bad "$lane: a clean firing clears the folder's sign-in marker"
+  else ok "$lane: a clean firing clears the folder's sign-in marker"; fi
+  rm -rf "$SB"
+
+  sandbox
+  printf '%s\n%s\n' 1 "first" > "$(signin "$SB/claude-acct")"
+  echo "1|Not logged in · Please run /login" > "$SB/claude.script"
+  fire "$RUN"
+  eq "$lane: an existing marker keeps the time it was first noticed" "$(head -1 "$(signin "$SB/claude-acct")")" "1"
+  rm -rf "$SB"
+
+  sandbox
+  mkdir -p "$SB/claude-2" "$SB/codex-2"
+  assign "A $SB/claude-2 $SB/codex-2"
+  echo "1|Not logged in · Please run /login" > "$SB/claude.script"
+  LN=A fire "$RUN"
+  if [ -s "$(signin "$SB/claude-2")" ] && [ ! -e "$(signin "$SB/claude-acct")" ]; then ok "$lane: the assigned folder is marked, not run.sh's"
+  else bad "$lane: the assigned folder is marked, not run.sh's"; fi
+  rm -rf "$SB"
+
+  sandbox
+  printf '%s\n' '1|{"type":"turn.failed","error":{"message":"workspace routing discovery unauthorized (401)"}}' > "$SB/codex.script"
+  ENG=codex fire "$RUN"
+  if [ -s "$(signin "$SB/codex-acct")" ] && [ ! -e "$(signin "$SB/claude-acct")" ]; then ok "$lane: a Codex turn refused with 401 marks the Codex folder"
+  else bad "$lane: a Codex turn refused with 401 marks the Codex folder"; fi
+  rm -rf "$SB"
+
+  sandbox
+  printf '%s\n' '1|2026-10-12T10:40:51.621686Z ERROR codex_login::auth::manager: Failed to refresh token status=401 Unauthorized detail=TokenErrorDetail { error_code: Some("refresh_token_invalidated") }' > "$SB/codex.script"
+  ENG=codex fire "$RUN"
+  if [ -s "$(signin "$SB/codex-acct")" ]; then ok "$lane: a revoked Codex sign-in marks the Codex folder"
+  else bad "$lane: a revoked Codex sign-in marks the Codex folder"; fi
+  rm -rf "$SB"
+
+  sandbox
+  printf '%s\n' '1|{"type":"item.completed","item":{"type":"command_execution","aggregated_output":"{\"type\":\"turn.failed\",\"error\":{\"message\":\"401\"}}"}}' > "$SB/codex.script"
+  ENG=codex fire "$RUN"
+  if [ -e "$(signin "$SB/codex-acct")" ]; then bad "$lane: a 401 inside a Codex tool's output is not a broken sign-in"
+  else ok "$lane: a 401 inside a Codex tool's output is not a broken sign-in"; fi
+  rm -rf "$SB"
+```
+
+The `assign` helper is the one Task 5 defined in the same loop.
+
+- [ ] **Step 2: Run against one lane to watch them fail**
+
+Run: `RUNNER_TEST_LANES=/Users/clintongormley/waitron-campaign/run.sh bash ~/waitron-account-pool-staging/5b/tests/runner.test.sh 2>&1 | tail -30`
+Expected: every case that expects a marker to be written, and "a clean firing clears the folder's
+sign-in marker", print `FAIL`. The three "is not a broken sign-in" cases and "an existing marker keeps
+the time it was first noticed" already pass, because nothing writes a marker yet: they are the controls,
+and they must still pass after Step 3. Every earlier case still prints `ok`.
+
+- [ ] **Step 3: Write the minimal implementation** in `$STAGE/runner-lib.sh`
+
+In `set_accounts`, after the `LIMIT_ALERTED=` line, add
+`SIGNIN_MARKER="$SHARED/limits/$(account_name "$DRIVER_ACCOUNT").signin"  # line 1: epoch first noticed; line 2: the message`.
+Add before `note_usage_limit`:
+
+```bash
+# note_signin <log> <exit status>: a firing that failed because its driver's sign-in no longer works
+# marks the folder for the account picker, which moves the lane and tells the watcher. A clean firing
+# clears the mark. Never the usage-limit marker, and no Mac notification: the watcher tells the owner.
+note_signin() {
+  local line
+  if [ "${2:-1}" -eq 0 ]; then rm -f "$SIGNIN_MARKER"; return 0; fi
+  if [ "$ENGINE" = codex ]; then
+    line=$(grep -E '^\{"type":"turn\.failed".*(401|nauthorized)|^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9:.]+Z ERROR .*(token_revoked|refresh_token_invalidated)' "$1" | head -1)
+  else
+    line=$(grep -E '^(Not logged in|Invalid API key|API Error: 401|OAuth token has expired)|Please run /login' "$1" | head -1)
+  fi
+  [ -z "$line" ] && return 0
+  line=$(printf '%s' "$line" | cut -c1-300)
+  echo "=== sign-in broken for $DRIVER_ACCOUNT: $line ===" >> "$1"
+  [ -e "$SIGNIN_MARKER" ] && return 0
+  mkdir -p "$SHARED/limits"
+  printf '%s\n%s\n' "$(runner_now)" "$line" > "$SIGNIN_MARKER"
+  echo "$(date '+%Y-%m-%d %H:%M') — sign-in broken on $DRIVER_ACCOUNT: $line" >> "$CAMP/progress.log"
+}
+```
+
+and make `note_signin "$1" "${2:-1}"` the first command of `note_usage_limit` (after its `local` line).
+
+- [ ] **Step 4: Run against one lane to watch them pass**
+
+Same command as Step 2. Expected: last line `<n> passed, 0 failed`.
+
+- [ ] **Step 5: Prove a case by deletion**
+
+Remove `^\{"type":"turn\.failed"` from the Codex pattern (leaving `.*(401|nauthorized)` unanchored), rerun,
+and confirm `FAIL waitron-campaign: a 401 inside a Codex tool's output is not a broken sign-in`.
+Restore and rerun to green.
+
+- [ ] **Step 6: Run the whole suite against all five lanes**, as Task 5 step 6 but with the `5b` paths:
+
+```bash
+gtimeout 2400 bash ~/waitron-account-pool-staging/5b/tests/runner.test.sh > ~/waitron-account-pool-staging/5b/full.out 2>&1; echo "exit $?" >> ~/waitron-account-pool-staging/5b/full.out
+```
+
+Expected: `<n> passed, 0 failed` and `exit 0`.
+
+- [ ] **Step 7: Install atomically**, exactly as Task 5 step 7 with `STAGE=~/waitron-account-pool-staging/5b`
+  and the backup copies named `runner-lib.sh.before-signin-marker` and
+  `runner.test.sh.before-signin-marker`. Expected: `installed`. Rollback goes back to Task 5's
+  version, the `.before-signin-marker` copy.
+
+**Done when:** the full five-lane suite printed `0 failed` and `exit 0`, the deletion check failed for
+the stated reason before being restored, and both files are installed.
 
 ---
 
@@ -2385,23 +2975,36 @@ EOF
 
 ## Task 7: The watcher's skill and memory
 
-**Work in:** `~/.claude/skills/watch-campaigns/SKILL.md` and
+**Work in:** a staging folder, `~/waitron-account-pool-staging/watcher/`. Nothing the live watcher reads
+changes in this task (see the execution notes: a live watcher reloads the skill from its safety-net
+cron, and before the switch-over there is no `accounts/` folder for the picker's state). The live files
+are `~/.claude/skills/watch-campaigns/SKILL.md` and
 `~/.claude/projects/-Users-clintongormley-workspace-repos-waitron/memory/` (`~/.claude-waitron`'s copies
-are symbolic links to these). Neither is in git: copy `SKILL.md` to
-`~/waitron-account-pool-staging/SKILL.md.before` first.
+are symbolic links to these); the skill is not tracked in `~/.claude`'s git repository and the memory
+folder is not in git. Task 8 step 4 installs the staged files by rename.
 
-**Files:**
-- Modify: `SKILL.md` — the change-watch loop (lines 88–118), "Cost model" (lines 136–163), the lane D/E
-  paragraph (line 209: "driven by Codex from `~/.codex` … from `~/.claude`"), the launchd bullet (line 229),
-  the usage-limit pause bullet (lines 256–272), "Operator commands" (lines 277–292)
+```bash
+W=~/waitron-account-pool-staging/watcher; M=~/.claude/projects/-Users-clintongormley-workspace-repos-waitron/memory
+mkdir -p "$W/before" "$W/memory"
+cp ~/.claude/skills/watch-campaigns/SKILL.md "$W/before/SKILL.md"; cp "$W/before/SKILL.md" "$W/SKILL.md"
+for f in MEMORY.md chatgpt-security-change-revokes-codex-lanes.md owner-accounts-and-weekly-resets.md watcher-never-repoints-lane-logins.md; do
+  cp "$M/$f" "$W/before/$f"; done
+for f in MEMORY.md chatgpt-security-change-revokes-codex-lanes.md owner-accounts-and-weekly-resets.md; do cp "$M/$f" "$W/memory/$f"; done
+```
+
+**Files** (all under `$W`; line numbers are the live skill's on 2026-10-12):
+- Modify: `SKILL.md` — the re-arm paragraph (lines 82–90), the change-watch loop (lines 91–120), "Cost
+  model" (lines 136–163), the lane D/E paragraph ("driven by Codex from `~/.codex` … from `~/.claude`"),
+  the launchd bullet, the usage-limit pause bullet, "Operator commands"
 - Create: `memory/watcher-assigns-lane-accounts.md`
-- Delete: `memory/watcher-never-repoints-lane-logins.md`
-- Modify: `memory/MEMORY.md:103`, `memory/chatgpt-security-change-revokes-codex-lanes.md:15`,
-  `memory/owner-accounts-and-weekly-resets.md:28` (the `[[watcher-never-repoints-lane-logins]]` links)
+- Modify: `memory/MEMORY.md` (the `watcher-never-repoints-lane-logins` line),
+  `memory/chatgpt-security-change-revokes-codex-lanes.md`, `memory/owner-accounts-and-weekly-resets.md`
+  (their `[[watcher-never-repoints-lane-logins]]` links)
+- Write: `INSTALL.md`, the exact commands Task 8 step 4 runs (Step 7 below)
 
-There is nothing to unit-test here; the check is the dry run in Step 4.
+There is nothing to unit-test here; the check is the loop run in Step 4.
 
-- [ ] **Step 1: The change-watch loop.** In the fenced command, after the
+- [ ] **Step 1: The change-watch loop.** In the fenced command of the staged `$W/SKILL.md`, after the
   `/Users/clintongormley/waitron-campaign-shared/watch-stalls.sh "$ST" 2>/dev/null` line, add:
 
 ```
@@ -2410,16 +3013,29 @@ There is nothing to unit-test here; the check is the dry run in Step 4.
 
   and below the block, after the paragraph on `MAIN MOVED`, add: "Every pass also runs the account picker
   (`~/workspace/tools/assign-accounts.py`; see "Which login each lane uses"). It prints nothing when
-  nothing changed. This changes the command, so a session armed before 2026-10-12's change must re-arm
-  with this one."
+  nothing changed. This changes the command, so a session armed before 2026-10-13's switch-over must
+  re-arm with this one."
+
+  In the re-arm paragraph above the block, replace "re-arm it with the SAME command" with "re-arm it
+  with the command as this skill's text gives it NOW", and add after that sentence: "**Arm from the
+  skill's current text, never from the command you armed last.** When this session starts or restarts,
+  when the safety-net cron reloads this skill, or when the owner says the skill changed, compare the
+  loop you have armed with the block below; if they differ, TaskStop the armed Monitor and arm the
+  block below. A session that keeps re-arming the command it remembers keeps an old loop for as long
+  as it lives (the account picker joined the loop at the 2026-10-13 switch-over)."
 
 - [ ] **Step 2: Cost model.** Add these bullets to the list under "On a change line from the Monitor":
 
 ```markdown
 - An `ACCOUNTS: lane … → …` line (a lane moved, or given its first account) → relay it in one plain
-  line, no tools, no push: moving lanes is the watcher's job now (owner, 2026-10-12). The picker keeps
-  its own record in `~/waitron-campaign-shared/accounts/log`, and starts a lane it moved off a paused
-  account itself.
+  line, no push: moving lanes is the watcher's job now (owner, 2026-10-12). The picker keeps its own
+  record in `~/waitron-campaign-shared/accounts/log`, and starts a lane it moved off a paused account
+  itself. **For a driver moved off a paused account or a broken sign-in, check that lane's next run
+  log** (`ls -t <lane folder>/logs/run-*.log | head -1`, once a firing after the move has ended): it
+  must hold `Accounts: driver <the new folder>, …` and an engine run with no sign-in error
+  (`/usr/bin/grep -nE 'Not logged in|Please run /login|Invalid API key|API Error: 401|token_revoked|refresh_token_invalidated|sign-in broken' <log>`
+  prints nothing). Note the result in `watcher-handoff.md`. A failure there is handled as in the
+  `SIGN-IN BROKEN` bullet below, even before the picker says so.
 - An `ACCOUNTS: lane … stays paused — no Claude|Codex account has allowance left` line → work on that
   engine has stopped: send ONE PushNotification for the batch (several lanes arrive together), naming
   the lanes and the next reset the line gives, e.g. "All Claude accounts are out of allowance; lanes A
@@ -2439,6 +3055,14 @@ There is nothing to unit-test here; the check is the dry run in Step 4.
   keep their last assignment. Read the message. A malformed pins file is yours to fix. Anything else,
   push the owner once. Never create a missing pool file: the pool is written at the switch-over (plan
   Task 8) and changed only to add or retire an account.
+- A `SIGN-IN BROKEN: <folder> (<email>) — … : <command> (noticed …)` line → a login folder stopped
+  working (expired with no renewal, or revoked by a security change on the account); the picker has
+  already moved its lanes and will not hand it out. Send ONE PushNotification naming the folder, the
+  account and the command from the line, e.g. "The Claude login ~/.claude-dev (dev@waitron.io) has
+  signed out. Lanes were moved off it. To sign it in again, on the Mac run:
+  CLAUDE_CONFIG_DIR=~/.claude-dev claude, then /login." The picker says it once per marker; do not
+  repeat it. Several in one batch go in one message.
+- An `ACCOUNTS: <folder> is signed in again` line → relay it; the folder is back in the pool.
 ```
 
 - [ ] **Step 3: The login sections.**
@@ -2469,26 +3093,51 @@ There is nothing to unit-test here; the check is the dry run in Step 4.
   hold a lane on an account for a reason the rules cannot see, write `<lane> <folder>` in
   `accounts/pins`, and remove the pin when the reason ends. To add an account:
   `~/waitron-campaign-shared/new-account.sh claude|codex <folder>`, the owner signs it in, then one pool
-  line. The old per-lane folders (`~/.claude-lane-a`, `-b`, `-c`, `~/.codex-lane-d`, `-e`, `~/.codex`,
-  `~/.codex-waitron`) stay signed in until the owner is back and are used only when a lane falls back
-  to its `run.sh` defaults; note that `~/.claude-lane-b` was signed in as info@ on 2026-10-12.
+  line. Each `run.sh`'s own default folders, used only when its assignment line is missing or wrong,
+  were pointed at pool folders at the switch-over (never `~/.claude-waitron` or `~/.claude-info` for a
+  driver; a Codex lane's Claude seat stays `~/.claude-waitron`). The old per-lane folders
+  (`~/.claude-lane-a`, `-b`, `-c`, `~/.codex-lane-d`, `-e`, `~/.codex`, `~/.codex-waitron`) stay signed
+  in until the owner is back but nothing uses them; `~/.claude-lane-b` is signed in as info@, the
+  watcher's account, so never point a lane back at it.
+- **A broken sign-in.** When a firing fails because its login no longer works, the runner writes
+  `limits/<folder>.signin`; the picker moves the lanes off that folder, never hands it out, prints one
+  `SIGN-IN BROKEN` line with the command that signs it in again, and removes the marker itself once
+  the folder's stored sign-in changes. To clear a marker you know is wrong, delete the file.
 ```
 
   - Operator commands: add `- **What the picker would do, without doing it:** python3
     ~/workspace/tools/assign-accounts.py --dry-run`, and to the lane-status bullet add "and, after the
     lanes, one block per pool account with its usage, any pause and which lanes it drives or reviews".
 
-- [ ] **Step 4: Check the skill's loop still runs.** Copy the fenced loop from the edited skill to
-  `~/waitron-account-pool-staging/loop.sh`, then in the copy: set `ME` to the claim's current contents
+- [ ] **Step 4: Check the staged loop runs, and says a missing pool once.** Before the tools pull
+  request lands, `~/workspace/tools/assign-accounts.py` does not exist, so the check runs the worktree's
+  picker against a scratch shared folder, never the real one. Copy the fenced loop from `$W/SKILL.md` to
+  `$W/loop.sh`, then in the copy: set `ME` to the claim's current contents
   (`cat ~/waitron-campaign-shared/watcher.claim`) so the copy is not told it was superseded; replace the
   `watch-stalls.sh` line with `:` (that script records what it has reported in the real
-  `stall-state/`, and a test pass must not use up the real watcher's reports); and replace `sleep 240` with `exit 0`. Run `gtimeout 120 zsh ~/waitron-account-pool-staging/loop.sh`
-  (the Monitor runs it under zsh). Expected: exactly one line,
-  `[HH:MM] ACCOUNTS ERROR: no pool file at /Users/clintongormley/waitron-campaign-shared/accounts/pool — no lane is assigned or moved`,
-  no shell error, and `ls ~/waitron-campaign-shared/accounts` still failing (with no `accounts` folder
-  the picker writes nothing, so the real loop will say it again).
+  `stall-state/`, and a test pass must not use up the real watcher's reports); in the picker line
+  replace `/Users/clintongormley/workspace/tools/assign-accounts.py` with
+  `/Users/clintongormley/workspace/tools/.worktrees/account-pool/assign-accounts.py --shared "$SCRATCH"`;
+  and replace `sleep 240` with `pass=$((${pass:-0} + 1)); [ "$pass" -ge 2 ] && exit 0` (two passes).
+  Then, under zsh as the Monitor runs it:
 
-- [ ] **Step 5: The memory.** Create `watcher-assigns-lane-accounts.md`:
+```bash
+W=~/waitron-account-pool-staging/watcher
+SCRATCH=$(mktemp -d "${TMPDIR:-/tmp}/loop-check.XXXXXX"); mkdir -p "$SCRATCH/accounts" "$SCRATCH/limits"
+SCRATCH="$SCRATCH" gtimeout 120 zsh "$W/loop.sh"; echo "exit $?"
+rm -rf "$SCRATCH/accounts"   # the control: no accounts folder, as before the switch-over
+SCRATCH="$SCRATCH" gtimeout 120 zsh "$W/loop.sh"; echo "exit $?"
+rm -rf "$SCRATCH"; ls ~/waitron-campaign-shared/accounts
+```
+
+  (`$W/loop.sh` must read `SCRATCH` from its environment.) Expected: the first run prints exactly ONE
+  line, `[HH:MM] ACCOUNTS ERROR: no pool file at <scratch>/accounts/pool — no lane is assigned or moved`,
+  over its two passes, then `exit 0`; the control prints that line TWICE (with no `accounts` folder the
+  picker cannot save what it said, which is why the loop line reaches the watcher only after Task 8
+  writes the pool); no shell error; and the last `ls` fails with `No such file or directory` (nothing
+  touched the real shared folder).
+
+- [ ] **Step 5: The memory, staged.** Create `$W/memory/watcher-assigns-lane-accounts.md`:
 
 ```markdown
 ---
@@ -2516,17 +3165,20 @@ write `<lane> <folder>` in `~/waitron-campaign-shared/accounts/pins` and remove 
 Claude lanes run an account to 100% before moving; Codex lanes are reviewed from `~/.claude-waitron`.
 At 85% of a Codex account's week, push the owner once offering a spare reset, which the owner applies
 from the phone ("i can", 2026-10-12); the spare resets are listed in [[owner-accounts-and-weekly-resets]].
+A `SIGN-IN BROKEN` line from the picker is one push to the owner with the re-login command it names.
+After a lane is moved off a paused account, check its next run log names the new folder and signed in.
 Spec: `docs/superpowers/specs/2026-10-12-campaign-account-pool-design.md` in the waitron repository.
 Related: [[campaign-runners-auth-and-2026-09-20-quota-episode]], [[lane-status-command]].
 ```
 
-  Delete `watcher-never-repoints-lane-logins.md`. In `MEMORY.md` replace line 103 with:
+  Do not delete the live `watcher-never-repoints-lane-logins.md`; the install script (Step 7) does it.
+  In `$W/memory/MEMORY.md` replace the `watcher-never-repoints-lane-logins` line with:
 
 ```markdown
 - [watcher assigns lane accounts](watcher-assigns-lane-accounts.md) — reversed 2026-10-12: the picker moves lanes between pool accounts; steer it with a pin, never by hand
 ```
 
-  and in the two other memories replace `[[watcher-never-repoints-lane-logins]]` with
+  and in the two other staged memories replace `[[watcher-never-repoints-lane-logins]]` with
   `[[watcher-assigns-lane-accounts]]`.
 
 - [ ] **Step 6: Check no stale reference is left.**
@@ -2534,33 +3186,115 @@ Related: [[campaign-runners-auth-and-2026-09-20-quota-episode]], [[lane-status-c
 Run:
 
 ```bash
-/usr/bin/grep -rn 'watcher-never-repoints\|never re-points\|from `~/.codex` (one shared' ~/.claude/skills/watch-campaigns/ ~/.claude/projects/-Users-clintongormley-workspace-repos-waitron/memory/; echo "exit $?"
+W=~/waitron-account-pool-staging/watcher; M=~/.claude/projects/-Users-clintongormley-workspace-repos-waitron/memory
+/usr/bin/grep -rn 'watcher-never-repoints\|never re-points\|from `~/.codex` (one shared' "$W/SKILL.md" "$W/memory/"; echo "staged: exit $?"
+/usr/bin/grep -rl 'watcher-never-repoints' "$M" | /usr/bin/grep -v -e '/MEMORY.md$' -e '/chatgpt-security-change-revokes-codex-lanes.md$' \
+  -e '/owner-accounts-and-weekly-resets.md$' -e '/watcher-never-repoints-lane-logins.md$'; echo "other live memories: exit $?"
 ```
 
-Expected: no matches and `exit 1`.
+Expected: no matches and `staged: exit 1`; no file names and `other live memories: exit 1` (no live
+memory outside the three staged ones links to the memory being retired).
 
-**Done when:** the one-pass loop printed the expected line and no shell error, the stale-reference
-search found nothing, and `diff ~/waitron-account-pool-staging/SKILL.md.before ~/.claude/skills/watch-campaigns/SKILL.md`
-shows only the changes above.
+- [ ] **Step 7: Write the install script.** `$W/install.sh`, run under bash by Task 8 step 4, never by
+  this task. It must, in this order, stopping at the first failure:
+  1. refuse (print which file and exit 1) if any live file differs from its copy in `$W/before/`: the
+     skill, and the four memory files. `MEMORY.md` changes often; if it moved, the controller re-applies
+     the one-line change to a fresh copy rather than overwriting someone's edit;
+  2. copy each live file it will replace or delete to `~/waitron-campaign-shared/backups/2026-10-12-account-pool/`;
+  3. install `$W/SKILL.md` and each file in `$W/memory/` by writing a temporary file in the target
+     folder and renaming it over the target;
+  4. remove the live `watcher-never-repoints-lane-logins.md`;
+  5. print `installed`, and the one-line rollback (copy the backups back the same way, and remove
+     `watcher-assigns-lane-accounts.md`).
+  Check it with `bash -n "$W/install.sh"`, and by running it against a scratch copy: make it take the
+  skill folder and the memory folder from `INSTALL_SKILL_DIR` and `INSTALL_MEMORY_DIR` (defaults: the
+  live ones) and the backup folder from `INSTALL_BACKUP_DIR`, copy the live folders to a scratch
+  folder, run it there, and `diff -r` the result against what you expect. Never run it against the live
+  folders.
+
+**Done when:** the loop check printed one line and its control two, with no shell error; the
+stale-reference search found nothing; `diff "$W/before/SKILL.md" "$W/SKILL.md"` shows only the changes
+above; the install script passed its scratch run; and every live file is unchanged
+(`cmp ~/.claude/skills/watch-campaigns/SKILL.md "$W/before/SKILL.md"` and the same for the four memory
+files print nothing).
 
 ---
 
 ## Task 8: The switch-over — run by the controller, with the owner's knowledge
 
 Not for an implementer. Each step says what failure looks like; stop at the first one and tell the
-owner. Do it before the owner leaves on 17 October.
+owner. Do it before the owner leaves on 17 October, and **not before 01:00 on 13 October**
+(Europe/Madrid): the gmail Claude account was at 100% of its week on 12 October and resets then.
 
-- [ ] **Step 0: Preconditions.**
+- [ ] **Step 0a: Renew every sign-in, from launchd.** A stored Claude sign-in expires about eight hours
+  after it was last used (the five pool folders' tokens, signed in on 12 October, expire between 00:40
+  and 00:52 on 13 October); its refresh token lasts until about 8–11 November. One short run per folder
+  renews it, and running it as a launchd job, not from a terminal, also answers the question the
+  2026-09-20 episode left open: does a folder authenticate when launchd starts the program? Folders: the
+  four Claude pool folders, `~/.claude-waitron` (the Codex lanes' Claude review seat, which also runs
+  under launchd) and `~/.claude-info` (the spare folder of the watcher's account), then the two Codex
+  pool folders.
+
+```bash
+bash <<'EOF'
+set -u
+D=~/waitron-account-pool-staging/signin-check; mkdir -p "$D"; U=$(id -u)
+ENVLINE='export HOME=/Users/clintongormley PATH=/opt/homebrew/bin:/usr/local/bin:/Users/clintongormley/.local/bin:/usr/bin:/bin:/usr/sbin:/sbin; cd /tmp'
+labels=()
+start() { # $1 name $2 engine $3 folder
+  local label="com.waitron.signin-check.$1"
+  if [ "$2" = claude ]; then
+    printf '%s\nexport CLAUDE_CONFIG_DIR=%s\nclaude -p "Reply with the single word ok."\necho "exit $?"\n' "$ENVLINE" "$3" > "$D/$1.sh"
+  else
+    printf '%s\nexport CODEX_HOME=%s\ncodex exec --skip-git-repo-check "Reply with the single word ok."\necho "exit $?"\n' "$ENVLINE" "$3" > "$D/$1.sh"
+  fi
+  rm -f "$D/$1.log"
+  cat > "$D/$1.plist" <<PL
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+<key>Label</key><string>$label</string>
+<key>ProgramArguments</key><array><string>/bin/bash</string><string>$D/$1.sh</string></array>
+<key>StandardOutPath</key><string>$D/$1.log</string><key>StandardErrorPath</key><string>$D/$1.log</string>
+<key>RunAtLoad</key><true/>
+</dict></plist>
+PL
+  launchctl bootstrap "gui/$U" "$D/$1.plist" && labels+=("$label")
+}
+for n in support dev clint gmail waitron info; do start "claude-$n" claude "/Users/clintongormley/.claude-$n"; done
+for n in dev gmail; do start "codex-$n" codex "/Users/clintongormley/.codex-$n"; done
+end=$((SECONDS + 300))
+until [ $SECONDS -ge $end ] || [ "$(cat "$D"/*.log 2>/dev/null | /usr/bin/grep -c '^exit ')" -ge 8 ]; do sleep 5; done
+for l in "${labels[@]}"; do launchctl bootout "gui/$U/$l" 2>/dev/null; done
+for f in "$D"/*.log; do echo "== $f"; tail -3 "$f"; done
+EOF
+```
+
+  (`printf`'s `$?` is inside single quotes, so it is written into each job's script as is.) Expected:
+  eight logs, each ending with the engine's answer (`ok`) and `exit 0`. Failure looks like:
+  `Not logged in · Please run /login`, a `401`, `token_revoked` or `exit 1` in a log. Then the owner
+  signs that folder in again (`CLAUDE_CONFIG_DIR=<folder> claude`, then `/login`; or
+  `CODEX_HOME=<folder> codex login`) and you rerun the check for that folder alone. A folder that fails
+  here when started by launchd but works from a terminal is the launchd and Keychain problem the
+  2026-09-20 memory suspected: tell the owner before going further. A usage-limit message is not a
+  sign-in failure; it means that account has not reset yet. A job that never wrote `exit` within five
+  minutes was stopped by `bootout`; report it. Record each folder's result in the ledger and in memory
+  `campaign-runners-auth-and-2026-09-20-quota-episode`, which can then close its open question.
+
+- [ ] **Step 0b: Preconditions.**
   - The tools pull request has landed and the main checkout has it:
     `git -C ~/workspace/tools pull --ff-only && ls ~/workspace/tools/assign-accounts.py ~/workspace/tools/account_pool.py`.
-  - The runner library is live: `cmp ~/waitron-account-pool-staging/runner-lib.sh ~/waitron-campaign-shared/runner-lib.sh`
-    prints nothing, and the newest run log of each lane that has fired since Task 5 holds the line
+  - The runner library is live: `cmp ~/waitron-account-pool-staging/5b/runner-lib.sh ~/waitron-campaign-shared/runner-lib.sh`
+    prints nothing (Task 5b's version), and the newest run log of each lane that has fired since Task 5 holds the line
     `Accounts: no assignment file at /Users/clintongormley/waitron-campaign-shared/accounts/assignments — using run.sh's folders.`
     and otherwise reads like the logs before it:
     `for d in ~/waitron-campaign ~/waitron-campaign-{b,c,d,e}; do f=$(ls -t $d/logs/run-*.log | head -1); echo "$f"; /usr/bin/grep -h '^Accounts:' "$f"; done`.
     Failure looks like: no `Accounts:` line in a log written after Task 5, or a firing that stopped at
     a shell error.
-  - Task 7 is done, and the owner knows the switch is happening now.
+  - Task 7 is done: `~/waitron-account-pool-staging/watcher/` holds the staged skill, memory and
+    `install.sh`, and the live skill still matches `watcher/before/SKILL.md`.
+  - It is after 01:00 on 13 October, step 0a passed for every folder, and the owner knows the switch
+    is happening now.
 
 - [ ] **Step 1: Write the pool file**, exactly the spec's table less the watcher's folder, through a
   rename:
@@ -2606,13 +3340,62 @@ ls -A ~/waitron-campaign-shared/accounts
   week on 2026-10-12) and the owner would rather it did not, write a pin for it in
   `~/waitron-campaign-shared/accounts/pins` and repeat the dry run.
 
-- [ ] **Step 4: Switch.** Note the time (`date '+%Y-%m-%d %H:%M'`; call it T), then
-  `python3 ~/workspace/tools/assign-accounts.py`. Expected: ten `ACCOUNTS: … (new)` lines (a driver and a
-  reviewer per lane), `cat ~/waitron-campaign-shared/accounts/assignments` matching the dry run's table,
-  and a second run printing nothing. Then, in the watcher session, TaskStop its change-watch Monitor and
-  arm the new command from the skill (Task 7), so the picker runs every pass from now on.
+- [ ] **Step 4: Switch.**
+  1. **Point every `run.sh`'s own defaults at pool folders first**, so that a lane falling back (no
+     assignment file, no line, a missing folder, or the rollback below) lands on a pool folder, never
+     on the watcher's account: today lane B's default `~/.claude-lane-b` is signed in as info@.
+     Use the dry run's table (step 3): a Claude lane's `CLAUDE_ACCOUNT` default becomes its driver and
+     its `CODEX_ACCOUNT` default its reviewer; a Codex lane's `CODEX_ACCOUNT` default becomes its driver
+     and its `CLAUDE_ACCOUNT` default stays `/Users/clintongormley/.claude-waitron`. Each file is
+     backed up, rewritten into a temporary file beside it, checked with `bash -n`, and renamed over the
+     original (a firing in progress keeps reading the file it opened). Save this as
+     `~/waitron-account-pool-staging/lane-defaults.sh` and run it once per lane under bash, e.g.
+     `bash ~/waitron-account-pool-staging/lane-defaults.sh ~/waitron-campaign /Users/clintongormley/.claude-dev /Users/clintongormley/.codex-dev`:
+
+```bash
+#!/bin/bash
+# lane-defaults.sh <lane folder> <Claude folder> <Codex folder>: rewrite run.sh's two default login folders.
+set -eu
+B=~/waitron-campaign-shared/backups/2026-10-12-account-pool; mkdir -p "$B"
+cp -p "$1/run.sh" "$B/run.sh.$(basename "$1")"
+python3 - "$1" "$2" "$3" <<'PY'
+import os, re, shutil, sys
+d, claude, codex = sys.argv[1:]
+f, n = os.path.join(d, "run.sh"), os.path.join(d, ".run.sh.new")
+text = open(f, encoding="utf-8").read()
+text, a = re.subn(r'^(CLAUDE_ACCOUNT="\$\{RUNNER_CLAUDE_ACCOUNT:-)[^}]*\}', lambda m: m.group(1) + claude + "}", text, flags=re.M)
+text, b = re.subn(r'^(CODEX_ACCOUNT="\$\{RUNNER_CODEX_ACCOUNT:-)[^}]*\}', lambda m: m.group(1) + codex + "}", text, flags=re.M)
+assert a == 1 and b == 1, (a, b)
+open(n, "w", encoding="utf-8").write(text)
+shutil.copymode(f, n)
+PY
+bash -n "$1/.run.sh.new"
+mv -f "$1/.run.sh.new" "$1/run.sh"
+echo "$1/run.sh: Claude $2, Codex $3"
+```
+
+     Check: `for d in ~/waitron-campaign ~/waitron-campaign-{b,c,d,e}; do echo "== $d"; /usr/bin/grep -E '^(ENGINE|CLAUDE_ACCOUNT|CODEX_ACCOUNT)=' $d/run.sh; done`.
+     Failure looks like: a Claude lane whose `CLAUDE_ACCOUNT` default is `~/.claude-waitron`,
+     `~/.claude-info` or an old `~/.claude-lane-*` folder; any lane whose Codex default is not a pool
+     Codex folder; or `bash -n` complaining (then the original is untouched).
+  2. Note the time (`date '+%Y-%m-%d %H:%M'`; call it T), then `python3 ~/workspace/tools/assign-accounts.py`.
+     Expected: ten `ACCOUNTS: … (new)` lines (a driver and a reviewer per lane),
+     `cat ~/waitron-campaign-shared/accounts/assignments` matching the dry run's table, and a second run
+     printing nothing.
+  3. Install the watcher's staged skill and memory: `bash ~/waitron-account-pool-staging/watcher/install.sh`.
+     Expected: `installed`. If it refuses because a live file changed since Task 7 staged it, fold that
+     change into the staged copy and run it again; never overwrite someone else's edit.
+  4. In the watcher session: tell it the skill changed, so it reloads the skill, TaskStops its
+     change-watch Monitor, and arms the loop from the skill's new text (the skill now says a session
+     arms from its current text). Check the new loop is the one running: `~/waitron-campaign-shared/accounts/usage.json`'s
+     modification time moves at least every ten minutes or so (the picker re-reads usage that often).
+
   Rollback, if anything below fails: `mv ~/waitron-campaign-shared/accounts/assignments ~/waitron-campaign-shared/accounts/assignments.off`;
-  every lane falls back to its `run.sh` folders at its next firing, and says so in its log.
+  every lane falls back to its `run.sh` folders at its next firing, and says so in its log. Since
+  part 1 those are pool folders, so the rollback moves no lane onto info@. **Never restore the
+  `run.sh` backups as a rollback**: lane B's old default is `~/.claude-lane-b`, signed in as info@,
+  the watcher's account. To take the picker out of the watcher's loop as well, restore the skill and
+  memory with the rollback line `install.sh` printed.
 
 - [ ] **Step 5: The first SCHEDULED firing of each lane authenticates.** This is the question left open
   by the 2026-09-20 episode (memory `campaign-runners-auth-and-2026-09-20-quota-episode`): only a
@@ -2680,9 +3463,13 @@ EOF
   folder.
 
   This proves the picker moves a paused lane and that the runner library reads the move. It does not
-  prove a real firing ran on the new account. The first real move off a refused account does that: when
-  an `ACCOUNTS: lane … (was …, paused until …)` line arrives, check that lane's next run log as in Step 5,
-  and record the result in the ledger.
+  prove a real firing ran on the new account, and this step is not finished until one has: when the
+  first real `ACCOUNTS: lane … (was …, paused until …)` line arrives, check that lane's next run log as
+  in Step 5 (it names the new folder in its `Accounts: driver …` line, ran the engine, and holds no
+  sign-in error), and record the result in the ledger. Until then the ledger lists this check as open.
+  The watcher's skill (Task 7) carries the same check as a standing rule for every later move.
 
-- [ ] **Step 7: Close.** Set the ledger to `Status: done`, tell the owner in plain words what each lane
-  now runs on, what Step 5 found for each lane, and that the old per-lane folders are still signed in.
+- [ ] **Step 7: Close.** Set the ledger to `Status: done` once the step 6 real-move check is recorded
+  (until then, `Status: in progress` with that check as the next step). Tell the owner in plain words
+  what each lane now runs on, what steps 0a and 5 found for each folder and lane, that every `run.sh`
+  default is now a pool folder, and that the old per-lane folders are still signed in but unused.
