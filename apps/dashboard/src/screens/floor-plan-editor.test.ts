@@ -114,6 +114,7 @@ it("heads a zone the zone list lacks as Floor plan", async () => {
 });
 
 it("draws the editor in an open full-window modal named after the zone", async () => {
+  await viewport(1280, 800);
   const el = await open();
   const modal = el.shadowRoot!.querySelector<WtModal>("wt-modal[size=full]")!;
   expect(modal).not.toBeNull();
