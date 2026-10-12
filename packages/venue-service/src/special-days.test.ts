@@ -11,6 +11,7 @@ import {
 import {
   CORE_MIGRATIONS,
   floorZones,
+  locationDayCutoverChanges,
   locations,
   withTransaction,
   type Database,
@@ -808,6 +809,144 @@ describe("saveSpecialDay", () => {
       // After it, the next occurrence is 2027-03-28, whose night (28 → 29 March) skips nothing.
       const saved = await save(v, null, skipping("2025-03-28", true, v), new Date("2026-04-01"));
       expect(saved.paint).toHaveLength(1);
+    });
+
+    it("turning a day repeating rechecks the department paint the request leaves out", async () => {
+      const v = await venue();
+      const saved = await save(v, null, skipping("2025-03-28", false, v), new Date("2025-01-10"));
+      const repeating = { name: saved.name, repeatsYearly: true, dates: saved.dates };
+      expect(await refusal(save(v, saved.id, repeating, new Date("2026-01-10")))).toEqual({
+        code: "special_day.invalid",
+        params: {
+          field: "paint",
+          departmentId: v.restaurant,
+          reason: "clock_skips",
+          date: "2026-03-28",
+        },
+      });
+      expect(await read(v, saved.id)).toEqual(saved);
+      const replaced = [{ periodId: v.dinner, startsAt: "04:00", endsAt: "05:00" }];
+      const accepted = await save(
+        v,
+        saved.id,
+        {
+          ...repeating,
+          paint: [{ departmentId: v.restaurant, date: "2025-03-28", ranges: replaced }],
+        },
+        new Date("2026-01-10"),
+      );
+      expect(accepted.paint).toEqual([
+        { departmentId: v.restaurant, date: "2025-03-28", ranges: replaced },
+      ]);
+    });
+
+    it("turning a day repeating rechecks the zone paint the request leaves out", async () => {
+      const v = await venue();
+      const saved = await save(
+        v,
+        null,
+        {
+          name: "Cambio de hora",
+          repeatsYearly: false,
+          dates: dates(["2025-03-28"]),
+          zonePaint: [
+            {
+              zoneId: v.sala,
+              date: "2025-03-28",
+              ranges: [{ kind: "open", startsAt: "02:15", endsAt: "04:00" }],
+            },
+          ],
+        },
+        new Date("2025-01-10"),
+      );
+      expect(
+        await refusal(
+          save(
+            v,
+            saved.id,
+            { name: saved.name, repeatsYearly: true, dates: saved.dates },
+            new Date("2026-01-10"),
+          ),
+        ),
+      ).toEqual({
+        code: "special_day.invalid",
+        params: { field: "zonePaint", zoneId: v.sala, reason: "clock_skips", date: "2026-03-28" },
+      });
+      expect(await read(v, saved.id)).toEqual(saved);
+    });
+  });
+
+  describe("a retained changeover change (03:00 from 2031)", () => {
+    const AFTER = new Date("2031-02-01T10:00:00Z");
+    const withChange = async () => {
+      const v = await venue();
+      await db.insert(locationDayCutoverChanges).values({
+        locationId: v.cfg.locationId,
+        effectiveBusinessDay: "2031-01-01",
+        dayCutover: "03:00:00",
+      });
+      return v;
+    };
+    const late = [{ startsAt: "22:00", endsAt: "04:30" }];
+
+    it("turning a day repeating rechecks the department paint's order under every changeover", async () => {
+      const v = await withChange();
+      const saved = await save(
+        v,
+        null,
+        {
+          name: "Nochebuena",
+          repeatsYearly: false,
+          dates: dates(["2030-12-24"]),
+          paint: [
+            {
+              departmentId: v.restaurant,
+              date: "2030-12-24",
+              ranges: late.map((range) => ({ periodId: v.dinner, ...range })),
+            },
+          ],
+        },
+        AFTER,
+      );
+      expect(
+        await refusal(
+          save(v, saved.id, { name: saved.name, repeatsYearly: true, dates: saved.dates }, AFTER),
+        ),
+      ).toEqual({
+        code: "special_day.invalid",
+        params: { field: "paint", departmentId: v.restaurant, date: "2030-12-24", reason: "order" },
+      });
+      expect(await read(v, saved.id)).toEqual(saved);
+    });
+
+    it("turning a day repeating rechecks the zone paint's order under every changeover", async () => {
+      const v = await withChange();
+      const saved = await save(
+        v,
+        null,
+        {
+          name: "Nochebuena",
+          repeatsYearly: false,
+          dates: dates(["2030-12-24"]),
+          zonePaint: [
+            {
+              zoneId: v.sala,
+              date: "2030-12-24",
+              ranges: late.map((range) => ({ kind: "open", ...range })),
+            },
+          ],
+        },
+        AFTER,
+      );
+      expect(
+        await refusal(
+          save(v, saved.id, { name: saved.name, repeatsYearly: true, dates: saved.dates }, AFTER),
+        ),
+      ).toEqual({
+        code: "special_day.invalid",
+        params: { field: "zonePaint", zoneId: v.sala, date: "2030-12-24", reason: "order" },
+      });
+      expect(await read(v, saved.id)).toEqual(saved);
     });
   });
 });

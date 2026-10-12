@@ -255,7 +255,55 @@ interface ParsedEntry<T> {
   ownerId: string;
   date: LocalDate;
   ranges: Placed<T>[];
-  field: string;
+  /** Refuses the entry, or the part of it at `path` (such as `ranges.0.startsAt`). */
+  refuse: (path: string, extra: Refusal) => never;
+}
+
+type CutoversOf = (date: LocalDate) => string[];
+
+const cutoversFor =
+  (clock: BusinessDayClock, repeats: boolean): CutoversOf =>
+  (date) =>
+    scheduleCutovers(clock, repeats ? undefined : date);
+
+function readPaintRange(
+  entry: Record<string, unknown>,
+  at: string,
+  range: ClosedRange,
+): PaintRange {
+  const { periodId } = entry;
+  if (periodId === null) return { periodId: null, ...range };
+  if (typeof periodId !== "string" || !isUuid(periodId)) invalid(`${at}.periodId`);
+  return { periodId: periodId.toLowerCase(), ...range };
+}
+
+function readZoneRange(entry: Record<string, unknown>, at: string, range: ClosedRange): ZonePaint {
+  const kind = entry.kind as ZonePaint["kind"];
+  if (!ZONE_PAINT_KINDS.includes(kind)) invalid(`${at}.kind`);
+  return { kind, ...range };
+}
+
+/** Parses one owner's ranges on one date under every changeover `cutoversOf` gives that date. */
+function parseOwnRanges<T extends ClosedRange>(
+  ranges: unknown,
+  field: string,
+  cutoversOf: CutoversOf,
+  date: LocalDate,
+  refuse: (at: string, extra: Refusal) => never,
+  read: (entry: Record<string, unknown>, at: string, range: ClosedRange) => T,
+): Placed<T>[] {
+  return cutoversOf(date).map((cutover) =>
+    parseRanges(
+      ranges,
+      field,
+      cutover,
+      (at, reason) => refuse(at, reason === undefined ? {} : { reason }),
+      (item, at, range): Placed<T> => ({
+        ...read(item, at, range),
+        position: Number(at.slice(at.lastIndexOf(".") + 1)),
+      }),
+    ),
+  )[0]!;
 }
 
 /** Each entry of a `paint` or `zonePaint` list, refusing a date the input lacks and a second entry
@@ -265,7 +313,7 @@ function parseEntries<T extends ClosedRange>(
   value: unknown,
   list: "paint" | "zonePaint",
   ownerKey: "departmentId" | "zoneId",
-  cutoversOf: (date: LocalDate) => string[],
+  cutoversOf: CutoversOf,
   dates: ReadonlySet<LocalDate>,
   read: (entry: Record<string, unknown>, at: string, range: ClosedRange) => T,
 ): ParsedEntry<T>[] {
@@ -282,20 +330,41 @@ function parseEntries<T extends ClosedRange>(
     const key = `${ownerId.toLowerCase()}|${date}`;
     if (seen.has(key)) invalid(field, { reason: "overlap" });
     seen.add(key);
-    const ranges = cutoversOf(date).map((cutover) =>
-      parseRanges(
-        entry.ranges,
-        `${field}.ranges`,
-        cutover,
-        (at, reason) => invalid(at, reason === undefined ? {} : { reason }),
-        (item, at, range): Placed<T> => ({
-          ...read(item, at, range),
-          position: Number(at.slice(at.lastIndexOf(".") + 1)),
-        }),
-      ),
-    )[0]!;
-    return { ownerId: ownerId.toLowerCase(), date, ranges, field };
+    const ranges = parseOwnRanges(entry.ranges, `${field}.ranges`, cutoversOf, date, invalid, read);
+    return {
+      ownerId: ownerId.toLowerCase(),
+      date,
+      ranges,
+      refuse: (path, extra) => invalid(`${field}.${path}`, extra),
+    };
   });
+}
+
+/** The paint of `stored` that the save keeps without the request naming it — on a kept date, for an
+ *  owner and date the request does not paint — parsed as the save's own paint is. The request never
+ *  sent it, so a refusal names the list and the owner and date instead of a request path. */
+function retainedEntries<T extends ClosedRange>(
+  stored: readonly { ownerId: string; date: LocalDate; ranges: readonly unknown[] }[],
+  list: "paint" | "zonePaint",
+  ownerKey: "departmentId" | "zoneId",
+  supplied: readonly ParsedEntry<unknown>[],
+  dates: ReadonlySet<LocalDate>,
+  cutoversOf: CutoversOf,
+  read: (entry: Record<string, unknown>, at: string, range: ClosedRange) => T,
+): ParsedEntry<T>[] {
+  const named = new Set(supplied.map((entry) => `${entry.ownerId}|${entry.date}`));
+  return stored
+    .filter((entry) => dates.has(entry.date) && !named.has(`${entry.ownerId}|${entry.date}`))
+    .map(({ ownerId, date, ranges }) => {
+      const refuse = (_path: string, extra: Refusal): never =>
+        invalid(list, { [ownerKey]: ownerId, date, ...extra });
+      return {
+        ownerId,
+        date,
+        ranges: parseOwnRanges(ranges, list, cutoversOf, date, refuse, read),
+        refuse,
+      };
+    });
 }
 
 function parseInput(value: unknown, clock: BusinessDayClock) {
@@ -321,33 +390,24 @@ function parseInput(value: unknown, clock: BusinessDayClock) {
         invalid(`dates.${index}.date`, { reason: "overlap" });
   });
   const held = new Set(dates.map((entry) => entry.date));
-  const cutoversOf = (date: LocalDate) => scheduleCutovers(clock, repeatsYearly ? undefined : date);
-  const paint = parseEntries<PaintRange>(
+  const cutoversOf = cutoversFor(clock, repeatsYearly);
+  const paint = parseEntries(
     input.paint,
     "paint",
     "departmentId",
     cutoversOf,
     held,
-    (entry, at, range) => {
-      const { periodId } = entry;
-      if (periodId === null) return { periodId: null, ...range };
-      if (typeof periodId !== "string" || !isUuid(periodId)) invalid(`${at}.periodId`);
-      return { periodId: periodId.toLowerCase(), ...range };
-    },
+    readPaintRange,
   );
-  const zonePaint = parseEntries<ZonePaint>(
+  const zonePaint = parseEntries(
     input.zonePaint,
     "zonePaint",
     "zoneId",
     cutoversOf,
     held,
-    (entry, at, range) => {
-      const kind = entry.kind as ZonePaint["kind"];
-      if (!ZONE_PAINT_KINDS.includes(kind)) invalid(`${at}.kind`);
-      return { kind, ...range };
-    },
+    readZoneRange,
   );
-  return { name: name.trim(), repeatsYearly, dates, paint, zonePaint };
+  return { name: name.trim(), repeatsYearly, dates, held, cutoversOf, paint, zonePaint };
 }
 
 /** Refuses a painted period that is not the painted department's own. */
@@ -370,9 +430,7 @@ async function assertOwnPeriods(
   for (const entry of paint)
     entry.ranges.forEach((range) => {
       if (range.periodId !== null && owner.get(range.periodId) !== entry.ownerId)
-        invalid(`${entry.field}.ranges.${range.position}.periodId`, {
-          departmentId: entry.ownerId,
-        });
+        entry.refuse(`ranges.${range.position}.periodId`, { departmentId: entry.ownerId });
     });
 }
 
@@ -392,10 +450,7 @@ function assertNoSkippedTimes(
     for (const range of entry.ranges)
       for (const end of ["startsAt", "endsAt"] as const)
         if (clockTimeSkippedInDay(clock, date, range[end], end === "endsAt"))
-          invalid(`${entry.field}.ranges.${range.position}.${end}`, {
-            reason: "clock_skips",
-            date,
-          });
+          entry.refuse(`ranges.${range.position}.${end}`, { reason: "clock_skips", date });
   }
 }
 
@@ -582,7 +637,7 @@ export async function saveSpecialDay(
   expectedClockRevision: number,
 ): Promise<SpecialDayDetail> {
   await assertBusinessDayScheduleWrite(tx, cfg, "time", at, expectedClockRevision);
-  if (id !== null) await requireSpecialDay(tx, cfg, id);
+  const stored = id === null ? null : await readSpecialDay(tx, cfg, id);
   const clock = await readLocationClock(tx, cfg.locationId);
   const parsed = parseInput(input, clock);
   for (const departmentId of new Set(parsed.paint.map((entry) => entry.ownerId)))
@@ -590,8 +645,34 @@ export async function saveSpecialDay(
   for (const zoneId of new Set(parsed.zonePaint.map((entry) => entry.ownerId)))
     await resolveZoneContext(tx, cfg, zoneId);
   await assertOwnPeriods(tx, parsed.paint);
+  const retainedPaint = retainedEntries(
+    (stored?.paint ?? []).map(({ departmentId, ...entry }) => ({
+      ownerId: departmentId,
+      ...entry,
+    })),
+    "paint",
+    "departmentId",
+    parsed.paint,
+    parsed.held,
+    parsed.cutoversOf,
+    readPaintRange,
+  );
+  const retainedZonePaint = retainedEntries(
+    (stored?.zonePaint ?? []).map(({ zoneId, ...entry }) => ({ ownerId: zoneId, ...entry })),
+    "zonePaint",
+    "zoneId",
+    parsed.zonePaint,
+    parsed.held,
+    parsed.cutoversOf,
+    readZoneRange,
+  );
   const today = venueLocalMoment(at, clock)?.civilDate ?? null;
-  assertNoSkippedTimes(clock, today, parsed.repeatsYearly, [...parsed.paint, ...parsed.zonePaint]);
+  assertNoSkippedTimes(clock, today, parsed.repeatsYearly, [
+    ...parsed.paint,
+    ...parsed.zonePaint,
+    ...retainedPaint,
+    ...retainedZonePaint,
+  ]);
   await assertDatesFree(
     tx,
     cfg,
