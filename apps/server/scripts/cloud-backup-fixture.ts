@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { createConnection } from "node:net";
-import { mkdir, readFile, realpath, rm, stat, writeFile } from "node:fs/promises";
+import { mkdir, readFile, realpath, stat, writeFile } from "node:fs/promises";
 import { join, resolve, sep } from "node:path";
 import { tmpdir } from "node:os";
 import { DatabaseSync } from "node:sqlite";
@@ -74,6 +74,12 @@ if (request.command === "capture") {
           async put(_key, bytes) {
             artifact = bytes;
           },
+          async putFile(_key, path) {
+            artifact = await readFile(path);
+          },
+          async getFile() {
+            throw new Error("Capture does not read from its destination");
+          },
           async get() {
             throw new Error("Capture does not read from its destination");
           },
@@ -100,21 +106,25 @@ if (request.command === "capture") {
     });
     assert(artifact, "Waitron did not capture an archive");
     const checked = await validateArtifact({ ...validation, artifact });
-    const trading = checked.secretEntries.find((entry) => entry.name === "secrets/trading.env");
-    assert(trading);
-    const identity = parseEnvFile(Buffer.from(trading.bytes).toString());
-    const venue = await store.venue.select({ name: locations.name }).from(locations);
-    assert.equal(venue.length, 1);
-    await writeFile(join(root, "captured.backup.enc"), artifact, { mode: 0o600 });
-    console.log(
-      JSON.stringify({
-        networkDenied,
-        manifest: checked.manifest,
-        sourceNodeId: identity.WAITRON_TILL_NODE_ID,
-        venueName: venue[0]!.name,
-        entries: checked.secretEntries.map((entry) => entry.name),
-      }),
-    );
+    try {
+      const trading = checked.secretEntries.find((entry) => entry.name === "secrets/trading.env");
+      assert(trading);
+      const identity = parseEnvFile(Buffer.from(trading.bytes).toString());
+      const venue = await store.venue.select({ name: locations.name }).from(locations);
+      assert.equal(venue.length, 1);
+      await writeFile(join(root, "captured.backup.enc"), artifact, { mode: 0o600 });
+      console.log(
+        JSON.stringify({
+          networkDenied,
+          manifest: checked.manifest,
+          sourceNodeId: identity.WAITRON_TILL_NODE_ID,
+          venueName: venue[0]!.name,
+          entries: checked.secretEntries.map((entry) => entry.name),
+        }),
+      );
+    } finally {
+      await checked.discard();
+    }
   } finally {
     await store.close();
   }
@@ -122,70 +132,70 @@ if (request.command === "capture") {
   assert.equal(await exists("venue/venue.db"), false, "Restore target must be fresh");
   const artifact = await readFile(join(root, "input.backup.enc"));
   const checked = await validateArtifact({ ...validation, artifact });
-  assert.deepEqual(checked.manifest.modules, request.modules);
-  const trading = checked.secretEntries.find((entry) => entry.name === "secrets/trading.env");
-  assert(trading);
-  assert.equal(
-    parseEnvFile(Buffer.from(trading.bytes).toString()).WAITRON_TILL_NODE_ID,
-    request.sourceNodeId,
-  );
-  assert(
-    !checked.secretEntries.some(
-      (entry) => entry.name.includes("cloud-connection") || entry.name.includes("cloud-staff"),
-    ),
-  );
-  const sideFile = join(root, "integrity.db");
-  await writeFile(sideFile, checked.dumpEntry.bytes, { mode: 0o600 });
   try {
-    const db = new DatabaseSync(sideFile, { readOnly: true });
+    assert.deepEqual(checked.manifest.modules, request.modules);
+    const trading = checked.secretEntries.find((entry) => entry.name === "secrets/trading.env");
+    assert(trading);
+    assert.equal(
+      parseEnvFile(Buffer.from(trading.bytes).toString()).WAITRON_TILL_NODE_ID,
+      request.sourceNodeId,
+    );
+    assert(
+      !checked.secretEntries.some(
+        (entry) => entry.name.includes("cloud-connection") || entry.name.includes("cloud-staff"),
+      ),
+    );
+    {
+      const db = new DatabaseSync(checked.databasePath, { readOnly: true });
+      try {
+        assert.deepEqual(
+          db
+            .prepare("PRAGMA integrity_check")
+            .all()
+            .map((row) => row.integrity_check),
+          ["ok"],
+        );
+      } finally {
+        db.close();
+      }
+    }
+    // A replacement receives fresh destination credentials; it must not reuse captured backup.env.
+    const managed = {
+      ...checked,
+      secretEntries: checked.secretEntries.filter((entry) => entry.name !== "secrets/backup.env"),
+    };
+    const hooks: string[] = [];
+    await mkdir(join(root, "venue"), { mode: 0o700 });
+    await writeValidated(managed, {
+      ...validation,
+      venueDir: join(root, "venue"),
+      log: (_level, code, params) => {
+        if (code === "restore.hook.done") hooks.push(String(params?.module));
+      },
+    });
+    const store = await openVenueDatabase(join(root, "venue"));
     try {
+      const venue = await store.venue.select({ name: locations.name }).from(locations);
       assert.deepEqual(
-        db
-          .prepare("PRAGMA integrity_check")
-          .all()
-          .map((row) => row.integrity_check),
-        ["ok"],
+        venue.map((row) => row.name),
+        [request.expectedVenue],
       );
     } finally {
-      db.close();
+      await store.close();
     }
-  } finally {
-    await rm(sideFile);
-  }
-  // A replacement receives fresh destination credentials; it must not reuse captured backup.env.
-  const managed = {
-    ...checked,
-    secretEntries: checked.secretEntries.filter((entry) => entry.name !== "secrets/backup.env"),
-  };
-  const hooks: string[] = [];
-  await mkdir(join(root, "venue"), { mode: 0o700 });
-  await writeValidated(managed, {
-    ...validation,
-    venueDir: join(root, "venue"),
-    log: (_level, code, params) => {
-      if (code === "restore.hook.done") hooks.push(String(params?.module));
-    },
-  });
-  const store = await openVenueDatabase(join(root, "venue"));
-  try {
-    const venue = await store.venue.select({ name: locations.name }).from(locations);
-    assert.deepEqual(
-      venue.map((row) => row.name),
-      [request.expectedVenue],
+    assert.equal(await exists("backup.env", stateDir), false);
+    console.log(
+      JSON.stringify({
+        networkDenied,
+        integrityOk: true,
+        hooks,
+        cloudCredentialPresent: await exists("cloud-connection.json", stateDir),
+        staffKeyPresent: await exists("cloud-staff.key", stateDir),
+      }),
     );
   } finally {
-    await store.close();
+    await checked.discard();
   }
-  assert.equal(await exists("backup.env", stateDir), false);
-  console.log(
-    JSON.stringify({
-      networkDenied,
-      integrityOk: true,
-      hooks,
-      cloudCredentialPresent: await exists("cloud-connection.json", stateDir),
-      staffKeyPresent: await exists("cloud-staff.key", stateDir),
-    }),
-  );
 } else {
   throw new Error("Unknown backup fixture command");
 }

@@ -3929,9 +3929,8 @@ _Formerly B2, B3, B4, B5 and B7._ Detail: [backlog/box.md](backlog/box.md).
   origin and an authenticated entry.
 
 - **Reconsider the backup container against off-the-shelf tools** (a brainstorm): `WBA1` plus
-  `artifact-cipher.ts` holds the whole database copy in memory and is restorable only by Waitron
-  code, where piping the engine's own copy through a standard encrypter into a tar is the obvious
-  alternative.
+  `WBK1` is restorable only by Waitron code. Scheduled local archives stream through protected
+  files; reconsider using a standard encryption and archive format.
 
 - **B3. The bootable USB installer** — Runs `waitron.sh install` unattended. Open questions it owns: whether the stick carries the images so
   install needs no internet; unattended updates for a box we did not sell; AP-mode WiFi onboarding. Box
@@ -4138,20 +4137,15 @@ _Formerly B2, B3, B4, B5 and B7._ Detail: [backlog/box.md](backlog/box.md).
   (#630, the first start after a restore).
   [Detail](backlog/box.md#when-the-key-rename-and-the-put-back-both-fail-the-new-certificate-is-left-beside-the-old-key)
 
-- **A copy over 2 GiB cannot be restored**: `restoreFromStream` reads the downloaded file whole, and
-  Node refuses a file that size (`ERR_FS_FILE_TOO_LARGE`). The root is that placement
-  (`restoreDatabase`) takes bytes, not a file. Left open by SQLite slice 2 Task 9b (#642,
-  `waitron-restore restore --from-bucket`).
-  [Detail](backlog/box.md#a-copy-over-2-gib-cannot-be-restored)
-
 - **`pragma integrity_check` is one blocking statement,** and the venue watchdog kills a process
   after 120 seconds without a timer turn. The review measured 6.0 s on a 1.36 GB database on NVMe;
   box storage has not been measured. Left open by SQLite slice 2 Task 9b (#642, `waitron-restore
   restore --from-bucket`).
 
-- **A staged request whose marker is invalid, or whose payload cannot be read, throws before the
-  request is cleared,** so every start fails the same way. I believe this predates the branch. Left
-  open by SQLite slice 2 Task 9b (#642, `waitron-restore restore --from-bucket`).
+- **An invalid staged marker, unreadable recovery key or unreadable stream entries keeps the
+  request,** so the next start fails again. A516's file archive path clears a missing archive once
+  the key was read. Left open by SQLite slice 2 Task 9b (#642,
+  `waitron-restore restore --from-bucket`).
 
 - **A copy with no `tenants` row reads an empty tax id,** which neither the command line nor the
   setup wizard ever accepts as confirmed, so it cannot be restored; no dedicated error code names

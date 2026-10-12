@@ -8,10 +8,10 @@ import type { Logger } from "./logger.js";
 import { ALL_MODULES } from "./modules.js";
 import {
   RESTORE_STAGING_DIR,
-  restoreFromArtifact,
-  validateEntries,
+  restoreFromArtifactFile,
+  validateDatabaseEntries,
   type EntryValidationDeps,
-  type RestoreDeps,
+  type RestoreFileDeps,
 } from "./restore.js";
 import {
   confirmsVenue,
@@ -40,7 +40,6 @@ export interface ArchiveRestoreRequest {
 /** A rebuild from the bucket: the downloaded database and the unlocked secrets row's entries. */
 export interface StreamRestoreRequest {
   kind: "stream";
-  /** Moved, not copied, into the state folder, so it must be on the same filesystem. */
   databasePath: string;
   entries: ArchiveEntry[];
   environment: DeploymentEnvironment;
@@ -109,10 +108,12 @@ export async function stageStreamRestore(
         environment: deps.environment,
       },
       async (request) => {
-        await validateEntries(
-          [...request.entries, { name: "db.dump", bytes: await readFile(request.databasePath) }],
+        const validated = await validateDatabaseEntries(
+          request.entries,
+          request.databasePath,
           deps,
         );
+        await validated.discard();
       },
     );
   } finally {
@@ -129,7 +130,7 @@ export interface StagedRestoreDeps {
   onManagedCloudRestored?: (binding: { requestId: string; pointId: string }) => Promise<void>;
 }
 
-type Restore = (deps: RestoreDeps) => Promise<void>;
+type Restore = (deps: RestoreFileDeps) => Promise<void>;
 type RestoreStream = (args: WriteStreamArgs) => Promise<void>;
 
 async function clearStagedRestore(stateDir: string): Promise<void> {
@@ -147,7 +148,7 @@ async function clearStagedRestore(stateDir: string): Promise<void> {
  * database. Returns false when no request exists. */
 export async function runStagedRestore(
   deps: StagedRestoreDeps,
-  restore: Restore = restoreFromArtifact,
+  restore: Restore = restoreFromArtifactFile,
   restoreStream: RestoreStream = writeStreamRestore,
 ): Promise<boolean> {
   let raw: string;
@@ -193,20 +194,19 @@ export async function runStagedRestore(
   };
   let run: () => Promise<void>;
   if (marker.kind === "stream") {
-    const [databaseBytes, packed] = await Promise.all([
-      readFile(join(deps.stateDir, STREAM_DB)),
-      readFile(join(deps.stateDir, STREAM_ENTRIES)),
-    ]);
-    run = () => restoreStream({ ...common, databaseBytes, entries: unpackArchive(packed) });
+    const packed = await readFile(join(deps.stateDir, STREAM_ENTRIES));
+    run = () =>
+      restoreStream({
+        ...common,
+        databasePath: join(deps.stateDir, STREAM_DB),
+        entries: unpackArchive(packed),
+      });
   } else {
-    const [artifact, recoveryKey] = await Promise.all([
-      readFile(join(deps.stateDir, ARTIFACT)),
-      readFile(join(deps.stateDir, KEY), "utf8"),
-    ]);
+    const recoveryKey = await readFile(join(deps.stateDir, KEY), "utf8");
     run = () =>
       restore({
         ...common,
-        artifact,
+        artifactPath: join(deps.stateDir, ARTIFACT),
         recoveryKey,
         ...(marker.managedCloud
           ? { managedCloud: marker.managedCloud as { requestId: string; pointId: string } }

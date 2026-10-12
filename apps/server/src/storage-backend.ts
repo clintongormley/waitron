@@ -8,6 +8,8 @@ export interface StoredObject {
 export interface StorageBackend {
   readonly id: string;
   put(key: string, bytes: Uint8Array): Promise<void>;
+  putFile(key: string, path: string): Promise<void>;
+  getFile(key: string, outPath: string): Promise<void>;
   get(key: string): Promise<Buffer>;
   /** Objects whose key starts with `prefix`, newest-first by mtime. Missing store → []. */
   list(prefix: string): Promise<StoredObject[]>;

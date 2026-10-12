@@ -3,7 +3,7 @@ import type { Hono } from "hono";
 import { createServer } from "node:net";
 import { createServer as createHttpServer } from "node:http";
 import type { AddressInfo } from "node:net";
-import { cp, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { cp, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { eq, sql } from "drizzle-orm";
@@ -573,6 +573,70 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
     }
   }, 60_000);
 
+  it("deletes setup validation's plaintext copy after staging a confirmed archive", async () => {
+    const venue = await freshVenue();
+    const source = await freshVenue();
+    const dumpDir = await mkdtemp(join(tmpdir(), "waitron-boot-validation-copy-"));
+    try {
+      const dump = join(dumpDir, "venue.db");
+      await source.store.venue.archiveTo(dump);
+      const artifact = encryptArtifact(
+        packArchive([
+          {
+            name: "manifest.json",
+            bytes: Buffer.from(
+              JSON.stringify({
+                manifestVersion: 1,
+                createdAt: "2026-10-12T00:00:00.000Z",
+                environment: "preproduction",
+                modules: {},
+              }),
+            ),
+          },
+          { name: "db.dump", bytes: await readFile(dump) },
+          {
+            name: "secrets/trading.env",
+            bytes: Buffer.from(
+              [
+                "WAITRON_TILL_NODE_ID=c0000000-0000-4000-8000-000000000008",
+                "WAITRON_TILL_SERIES_ID=c0000000-0000-4000-8000-000000000004",
+                "WAITRON_TILL_LOCATION_ID=c0000000-0000-4000-8000-000000000002",
+                "",
+              ].join("\n"),
+            ),
+          },
+        ]),
+        "validation-key",
+      );
+      await withSetupBoot(venue.directory, {}, async ({ post, stateDir, kills }) => {
+        const response = await post("/setup-api/restore", {
+          headers: {
+            "content-type": "application/octet-stream",
+            "x-waitron-recovery-key": "validation-key",
+            "x-waitron-restore-environment": "preproduction",
+            "x-waitron-old-box-gone": "1",
+          },
+          body: new Uint8Array(artifact),
+        });
+        expect(response.status).toBe(202);
+        expect(await response.json()).toEqual({ restoreStaged: true, restarting: true });
+        expect(await readdir(join(stateDir, "restore-staging"))).toEqual([]);
+        expect(await readFile(join(stateDir, "restore-request.artifact"))).toEqual(artifact);
+        expect(await readFile(join(stateDir, "restore-request.key"), "utf8")).toBe(
+          "validation-key",
+        );
+        await poll(() => (kills.length > 0 ? kills.length : undefined));
+        expect(kills).toEqual([{ pid: process.pid, signal: "SIGTERM" }]);
+      });
+    } finally {
+      await venue.store.close();
+      await source.store.close();
+      await rm(venue.directory, { recursive: true, force: true });
+      await rm(source.directory, { recursive: true, force: true });
+      await rm(dumpDir, { recursive: true, force: true });
+    }
+  }, 60_000);
+
   /** A bucket address that accepts connections and never answers. */
   async function withSilentBucket(use: (endpoint: string) => Promise<void>): Promise<void> {
     const sockets = new Set<import("node:net").Socket>();
@@ -903,6 +967,7 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
           await expect(readFile(join(stateDir, "restore-request.json"))).rejects.toMatchObject({
             code: "ENOENT",
           });
+          expect(await readdir(join(stateDir, "restore-staging"))).toEqual([]);
           expect(kills).toEqual([]);
         });
       });

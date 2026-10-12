@@ -1,3 +1,4 @@
+import { readArchiveStateFile, type ArchiveReadBudget } from "./archive-read-budget.js";
 import { chmod, mkdir, readFile, realpath } from "node:fs/promises";
 import { dirname, isAbsolute, join, resolve, sep } from "node:path";
 import { AppError } from "@waitron/shared";
@@ -21,11 +22,18 @@ export const RECOVERY_FILES = [
 ] as const;
 
 /** A missing file is `recovery.state_incomplete`: a bundle without the vault key is worthless. */
-export async function collectStateSecrets(stateDir: string): Promise<BundleFiles> {
+export async function collectStateSecrets(
+  stateDir: string,
+  budget?: ArchiveReadBudget,
+): Promise<BundleFiles> {
   const files: BundleFiles = {};
   for (const rel of RECOVERY_FILES) {
     try {
-      files[rel] = await readFile(join(stateDir, rel), "utf8");
+      files[rel] = budget
+        ? (await readArchiveStateFile(join(stateDir, rel), budget, `secrets/${rel}`)).toString(
+            "utf8",
+          )
+        : await readFile(join(stateDir, rel), "utf8");
     } catch (err) {
       if ((err as NodeJS.ErrnoException).code === "ENOENT") {
         throw new AppError("recovery.state_incomplete", { missing: rel });

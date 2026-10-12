@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, open, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { AppError } from "@waitron/shared";
@@ -121,9 +121,7 @@ describe("staged restore requests", () => {
     expect(onManagedCloudRestored).not.toHaveBeenCalled();
     expect(restore).toHaveBeenCalledWith(
       expect.objectContaining({
-        // A Buffer, not a bare Uint8Array: `runStagedRestore` hands `restore` exactly what
-        // `readFile` returned, and deep equality here distinguishes the subclass.
-        artifact: Buffer.from([4, 5]),
+        artifactPath: join(stateDir, "restore-request.artifact"),
         recoveryKey: "recovery",
         environment: "preproduction",
         venueDir: "/var/lib/waitron/venue",
@@ -360,7 +358,7 @@ describe("staged restore requests from the bucket", () => {
     expect(archive).not.toHaveBeenCalled();
     expect(stream).toHaveBeenCalledWith(
       expect.objectContaining({
-        databaseBytes: Buffer.from("restored"),
+        databasePath: join(stateDir, "restore-request.db"),
         entries: [{ name: "manifest.json", bytes: Buffer.from("{}") }],
         environment: "production",
         venueDir: "/var/lib/waitron/venue",
@@ -371,6 +369,56 @@ describe("staged restore requests from the bucket", () => {
     );
     for (const name of [...STREAM_FILES, "setup-operation.json"]) {
       await expect(readFile(join(stateDir, name))).rejects.toMatchObject({ code: "ENOENT" });
+    }
+  });
+
+  it("forwards a staged file beyond 2 GiB without materializing it", async () => {
+    const stateDir = await fresh();
+    const databasePath = join(stateDir, "download.db");
+    const size = 2 ** 31 + 4096;
+    const source = await open(databasePath, "wx", 0o600);
+    try {
+      await source.truncate(size);
+      await source.write(Buffer.from("FIRST"), 0, 5, 0);
+      await source.write(Buffer.from("LAST"), 0, 4, size - 4);
+    } finally {
+      await source.close();
+    }
+    await stageRestoreRequest(stateDir, {
+      kind: "stream",
+      databasePath,
+      entries,
+      environment: "preproduction",
+    });
+    let observed = false;
+    expect(
+      await runStagedRestore(
+        { stateDir, venueDir: "/v", migrationsRoot: null, log: () => {} },
+        async () => {
+          throw new Error("archive path selected");
+        },
+        async (args) => {
+          expect(args.databasePath).toBe(join(stateDir, "restore-request.db"));
+          expect((await stat(args.databasePath)).size).toBe(2147487744);
+          expect(args).not.toHaveProperty("databaseBytes");
+          const file = await open(args.databasePath, "r");
+          try {
+            const first = Buffer.alloc(5);
+            const last = Buffer.alloc(4);
+            await file.read(first, 0, 5, 0);
+            await file.read(last, 0, 4, size - 4);
+            expect(first.toString()).toBe("FIRST");
+            expect(last.toString()).toBe("LAST");
+          } finally {
+            await file.close();
+          }
+          observed = true;
+        },
+      ),
+    ).toBe(true);
+    expect(observed).toBe(true);
+    for (const name of STREAM_FILES) {
+      await expect(stat(join(stateDir, name))).rejects.toMatchObject({ code: "ENOENT" });
     }
   });
 

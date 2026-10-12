@@ -1,3 +1,4 @@
+import { readdirSync } from "node:fs";
 import { copyFile, mkdtemp, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
@@ -18,6 +19,7 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { generateNodeKeyPair } from "@waitron/membership";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import {
+  encodeRecoveryKit,
   generationPrefix,
   pointerKey,
   signPointer,
@@ -47,10 +49,30 @@ import {
   restoreFromStream,
   type PrepareStreamDeps,
 } from "./restore-stream.js";
-import { stageStreamRestore } from "./restore-request.js";
+import { runRestore } from "./restore-command.js";
+import { runStagedRestore, stageStreamRestore } from "./restore-request.js";
 import { sealNodeState, writeSealedStateRow } from "./sealed-state.js";
 import { STREAM_PURPOSE, streamSettingsPayload } from "./stream-host.js";
 import { omitStoredStreamField } from "./testing/old-stream-credential.js";
+
+const bulkReadGuard = vi.hoisted(() => ({ stateDir: "" }));
+vi.mock("node:fs/promises", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("node:fs/promises")>();
+  return {
+    ...actual,
+    readFile: (...args: Parameters<typeof actual.readFile>) => {
+      const path = String(args[0]);
+      if (
+        bulkReadGuard.stateDir !== "" &&
+        path.startsWith(`${bulkReadGuard.stateDir}/`) &&
+        (path.endsWith("/venue.db") || path.endsWith("/restore-request.db"))
+      ) {
+        throw new Error("database-wide read forbidden");
+      }
+      return actual.readFile(...args);
+    },
+  };
+});
 
 const suite = useVenueDb({
   migrations: migrationOptionsFor(manifestSets(), null),
@@ -97,6 +119,7 @@ async function fresh(prefix: string): Promise<string> {
   return dir;
 }
 afterEach(async () => {
+  bulkReadGuard.stateDir = "";
   await Promise.all(dirs.splice(0).map((dir) => rm(dir, { recursive: true, force: true })));
 });
 
@@ -675,7 +698,8 @@ describe("refuseIfArchiveSourceLive", () => {
     }
     return {
       manifest: MANIFEST,
-      dumpEntry: { name: "db.dump", bytes: await readFile(file) },
+      databasePath: file,
+      discard: () => rm(dirname(file), { recursive: true, force: true }),
       secretEntries: secrets
         ? [{ name: "secrets/secrets.env", bytes: Buffer.from(SECRETS_ENV) }]
         : [],
@@ -737,6 +761,22 @@ describe("refuseIfArchiveSourceLive", () => {
     expect(opened).toEqual([KIT.bucket]);
     await expectStateUntouched(a.stateDir);
     await refuseIfArchiveSourceLive({ ...a, oldBoxGone: true });
+    await expectStateUntouched(a.stateDir);
+  });
+
+  it("checks source liveness without materializing another database copy", async () => {
+    const validated = await archive(true);
+    const store = await bucket();
+    const a = await args(validated, () => store);
+    let seen: string[] = [];
+    await refuseIfArchiveSourceLive({
+      ...a,
+      openStore: () => {
+        seen = readdirSync(a.stateDir).filter((name) => name.startsWith("archive-source-check-"));
+        return store;
+      },
+    });
+    expect(seen).toEqual([]);
     await expectStateUntouched(a.stateDir);
   });
 
@@ -891,6 +931,88 @@ describe("checkIntegrity", () => {
 });
 
 describe("restoreFromStream (the command line's whole path)", () => {
+  it("restores real SQLite rows and secrets with database-wide reads forbidden", async () => {
+    const venueDir = await fresh("waitron-stream-venue-");
+    const deps = await prepareDeps(await bucket());
+    bulkReadGuard.stateDir = deps.stateDir;
+    await restoreFromStream({
+      ...deps,
+      venueDir,
+      stagingDir: join(deps.stateDir, "restore-staging"),
+      environment: "preproduction",
+      modules: [],
+      confirmVenue: (venue) => venue.taxId === VENUE.taxId,
+    });
+    const placed = await openVenueDatabase(venueDir);
+    try {
+      expect(await placed.venue.select({ taxId: tenants.taxId }).from(tenants)).toEqual([
+        { taxId: "89890001K" },
+      ]);
+    } finally {
+      await placed.close();
+    }
+    expect(await readFile(join(deps.stateDir, "secrets.env"), "utf8")).toBe(
+      "WAITRON_CREDENTIALS_KEY=deadbeef\n",
+    );
+    expect(await readFile(join(deps.stateDir, "trading.env"), "utf8")).toContain(T.nodeId);
+    expect(JSON.parse(await readFile(join(deps.stateDir, REBUILD_MARKER), "utf8"))).toEqual({
+      version: 1,
+      source: "stream",
+    });
+    expect(
+      (await readdir(deps.stateDir)).filter(
+        (name) => name.startsWith("stream-restore") || name.startsWith("archive-validate"),
+      ),
+    ).toEqual([]);
+  });
+
+  it("the bucket CLI restores through real placement without database-wide reads", async () => {
+    const deps = await prepareDeps(await bucket());
+    const kitPath = join(deps.stateDir, "kit.txt");
+    await writeFile(kitPath, encodeRecoveryKit(KIT));
+    bulkReadGuard.stateDir = deps.stateDir;
+    const out: string[] = [];
+    expect(
+      await runRestore({
+        argv: [
+          "restore",
+          "--from-bucket",
+          kitPath,
+          "--confirm-venue",
+          VENUE.taxId,
+          "--confirm-old-box-gone",
+        ],
+        env: { WAITRON_ENV: "preproduction", WAITRON_STATE_DIR: deps.stateDir },
+        out: (line) => out.push(line),
+        openStore: deps.openStore,
+        restoreStream: (args) =>
+          restoreFromStream({
+            ...args,
+            migrationsRoot: null,
+            restoreGeneration: copyFixture,
+          }),
+      }),
+    ).toBe(0);
+    expect(out).toContain(`restored from the bucket named in ${kitPath}`);
+    const placed = await openVenueDatabase(join(deps.stateDir, "venue"));
+    try {
+      expect(await placed.venue.select({ taxId: tenants.taxId }).from(tenants)).toEqual([
+        { taxId: "89890001K" },
+      ]);
+    } finally {
+      await placed.close();
+    }
+    expect(JSON.parse(await readFile(join(deps.stateDir, REBUILD_MARKER), "utf8"))).toEqual({
+      version: 1,
+      source: "stream",
+    });
+    expect(
+      (await readdir(deps.stateDir)).filter(
+        (name) => name.startsWith("stream-restore") || name.startsWith("archive-validate"),
+      ),
+    ).toEqual([]);
+  });
+
   it("a failed integrity check leaves the box's own database and identity exactly as they were", async () => {
     const venueDir = await fresh("waitron-stream-venue-");
     await writeFile(join(venueDir, "venue.db"), "the box's own database");
@@ -991,6 +1113,106 @@ describe("stageStreamRestore (the setup wizard's path)", () => {
     (await readdir(stateDir)).filter(
       (name) => name.startsWith("stream-restore") || name.startsWith("restore-request"),
     );
+
+  it("stages real SQLite without reading its database into memory", async () => {
+    const deps = await stageDeps();
+    bulkReadGuard.stateDir = deps.stateDir;
+    await stageStreamRestore(deps);
+    const staged = new DatabaseSync(join(deps.stateDir, "restore-request.db"));
+    try {
+      expect(staged.prepare("select tax_id from tenants").all()).toEqual([{ tax_id: "89890001K" }]);
+    } finally {
+      staged.close();
+    }
+    expect((await leftovers(deps.stateDir)).sort()).toEqual(STAGED);
+    expect(JSON.parse(await readFile(join(deps.stateDir, "restore-request.json"), "utf8"))).toEqual(
+      {
+        version: 1,
+        environment: "preproduction",
+        kind: "stream",
+      },
+    );
+  });
+
+  it("runs the staged real SQLite through default placement with database-wide reads forbidden", async () => {
+    const deps = await stageDeps();
+    await stageStreamRestore(deps);
+    bulkReadGuard.stateDir = deps.stateDir;
+    const venueDir = await fresh("waitron-staged-venue-");
+    expect(
+      await runStagedRestore({
+        stateDir: deps.stateDir,
+        venueDir,
+        migrationsRoot: null,
+        log: () => {},
+      }),
+    ).toBe(true);
+    const placed = await openVenueDatabase(venueDir);
+    try {
+      expect(await placed.venue.select({ taxId: tenants.taxId }).from(tenants)).toEqual([
+        { taxId: "89890001K" },
+      ]);
+    } finally {
+      await placed.close();
+    }
+    expect(await readFile(join(deps.stateDir, "secrets.env"), "utf8")).toBe(
+      "WAITRON_CREDENTIALS_KEY=deadbeef\n",
+    );
+    expect(await readFile(join(deps.stateDir, "trading.env"), "utf8")).toContain(T.nodeId);
+    expect(JSON.parse(await readFile(join(deps.stateDir, REBUILD_MARKER), "utf8"))).toEqual({
+      version: 1,
+      source: "stream",
+    });
+    expect(await leftovers(deps.stateDir)).toEqual([]);
+  });
+
+  it("a real busy lock retains the staged database and retry then restores it", async () => {
+    const deps = await stageDeps();
+    await stageStreamRestore(deps);
+    const source = join(deps.stateDir, "restore-request.db");
+    const original = await stat(source);
+    const venueDir = await fresh("waitron-busy-staged-venue-");
+    await writeFile(join(venueDir, "venue.db"), "previous database");
+    await writeFile(join(deps.stateDir, "trading.env"), "previous identity");
+    bulkReadGuard.stateDir = deps.stateDir;
+    const lock = new DatabaseSync(join(venueDir, "venue.lock"));
+    try {
+      lock.exec("begin immediate");
+      await expect(
+        runStagedRestore({
+          stateDir: deps.stateDir,
+          venueDir,
+          migrationsRoot: null,
+          log: () => {},
+        }),
+      ).rejects.toMatchObject({ code: "provisioning.database_in_use" });
+      expect((await stat(source)).ino).toBe(original.ino);
+      expect((await stat(source)).size).toBe(original.size);
+      expect((await leftovers(deps.stateDir)).sort()).toEqual(STAGED);
+      expect(await readFile(join(venueDir, "venue.db"), "utf8")).toBe("previous database");
+      expect(await readFile(join(deps.stateDir, "trading.env"), "utf8")).toBe("previous identity");
+    } finally {
+      lock.close();
+    }
+    expect(
+      await runStagedRestore({
+        stateDir: deps.stateDir,
+        venueDir,
+        migrationsRoot: null,
+        log: () => {},
+      }),
+    ).toBe(true);
+    const placed = await openVenueDatabase(venueDir);
+    try {
+      expect(await placed.venue.select({ taxId: tenants.taxId }).from(tenants)).toEqual([
+        { taxId: "89890001K" },
+      ]);
+    } finally {
+      await placed.close();
+    }
+    expect(await leftovers(deps.stateDir)).toEqual([]);
+    expect(await readFile(join(deps.stateDir, "trading.env"), "utf8")).toContain(T.nodeId);
+  });
 
   it("stages the copy the owner confirmed by its tax id, and removes the download's folder", async () => {
     const deps = await stageDeps();

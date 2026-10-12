@@ -493,10 +493,14 @@ describe("fiscal restore, end to end", () => {
     const dirs = await arrangeDirs();
     const rd = await restoreDepsFor(dirs);
     const validated = await validateArtifact(rd);
-    await expect(writeValidated(validated, { ...rd, modules: sabotaged })).rejects.toMatchObject({
-      code: "restore.hook_failed",
-      params: { module: "fiscal-verifactu", code: "series.code_collision" },
-    });
+    try {
+      await expect(writeValidated(validated, { ...rd, modules: sabotaged })).rejects.toMatchObject({
+        code: "restore.hook_failed",
+        params: { module: "fiscal-verifactu", code: "series.code_collision" },
+      });
+    } finally {
+      await validated.discard();
+    }
     const store = await openVenueDatabase(dirs.venueDir);
     try {
       const sifs = await store.venue

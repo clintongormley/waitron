@@ -1,12 +1,18 @@
-import { mkdir, readFile, readdir, rm, stat } from "node:fs/promises";
-import { join } from "node:path";
+import {
+  chmod,
+  copyFile,
+  mkdir,
+  mkdtemp,
+  readFile,
+  readdir,
+  rename,
+  rm,
+  stat,
+} from "node:fs/promises";
+import { dirname, join } from "node:path";
 import { writeFileAtomic } from "./fs-atomic.js";
 import type { BackupDestination, StorageBackend, StoredObject } from "./storage-backend.js";
 
-/**
- * v1 storage backend: a local directory. `put` writes through `writeFileAtomic` (`fs-atomic.ts`), so
- * a write that dies mid-way never leaves a half-written key visible under its real name.
- */
 export class LocalFsBackend implements StorageBackend {
   constructor(
     readonly id: string,
@@ -16,6 +22,14 @@ export class LocalFsBackend implements StorageBackend {
   async put(key: string, bytes: Uint8Array): Promise<void> {
     await mkdir(this.dir, { recursive: true });
     await writeFileAtomic(join(this.dir, key), bytes, 0o600);
+  }
+
+  async putFile(key: string, path: string): Promise<void> {
+    await copyAtomic(path, join(this.dir, key));
+  }
+
+  async getFile(key: string, outPath: string): Promise<void> {
+    await copyAtomic(join(this.dir, key), outPath);
   }
 
   async get(key: string): Promise<Buffer> {
@@ -65,5 +79,19 @@ export function buildBackend(dest: BackupDestination): StorageBackend {
       throw new Error(`unknown backup destination kind: ${String(_never)}`);
     }
     /* v8 ignore stop */
+  }
+}
+
+async function copyAtomic(source: string, target: string): Promise<void> {
+  await mkdir(dirname(target), { recursive: true });
+  // copyFile preserves the source mode; the private directory contains it until chmod completes.
+  const scratch = await mkdtemp(join(dirname(target), ".backup-copy-"));
+  try {
+    const copied = join(scratch, "payload");
+    await copyFile(source, copied);
+    await chmod(copied, 0o600);
+    await rename(copied, target);
+  } finally {
+    await rm(scratch, { recursive: true, force: true });
   }
 }

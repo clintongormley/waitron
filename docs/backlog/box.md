@@ -324,19 +324,6 @@ Open:
   first start. Publishing the pair through one atomic switch (for example a directory swapped by a
   single rename) would remove this case.
 
-## A copy over 2 GiB cannot be restored
-
-**Task 9b** (#642, `waitron-restore restore --from-bucket`, `apps/server/src/restore-stream.ts`).
-Open:
-
-- A copy over 2 GiB cannot be restored: `restoreFromStream` reads the downloaded file whole, and
-  Node refuses a file that size (`ERR_FS_FILE_TOO_LARGE`). Archive creation has the same limit
-  (`apps/server/src/backup-sweep.ts`). The root is that placement (`restoreDatabase`) takes bytes,
-  not a file. Letting it take a source path and rename it into place on the same filesystem would
-  remove the read into memory on the bucket path, and also the archive form's extra full copy:
-  `refuseIfArchiveSourceLive` writes the whole database to a scratch folder only to read the bucket
-  settings from it.
-
 ## Litestream at trace logging deadlocked sales for five seconds
 
 **A130, A133 and A135 — a sale can wait behind Litestream's own checkpoint (DONE: A130 #868, A133 #889,

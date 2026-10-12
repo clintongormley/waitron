@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, readdir, rm, stat, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -13,6 +13,13 @@ vi.mock("node:fs/promises", async (importOriginal) => {
   const actual = await importOriginal<typeof import("node:fs/promises")>();
   return {
     ...actual,
+    copyFile: async (...args: Parameters<typeof actual.copyFile>) => {
+      if (String(args[0]).endsWith("partial-copy-input")) {
+        await actual.writeFile(args[1], "partial");
+        throw Object.assign(new Error("disk full"), { code: "ENOSPC" });
+      }
+      return actual.copyFile(...args);
+    },
     stat: vi.fn((path: Parameters<typeof actual.stat>[0], ...rest: unknown[]) => {
       if (typeof path === "string" && path.endsWith(VANISHING_KEY)) {
         const err = new Error("ENOENT: no such file or directory, stat") as NodeJS.ErrnoException;
@@ -110,4 +117,68 @@ describe("LocalFsBackend", () => {
     await be.put("waitron-real.dump.enc", Buffer.from("here"));
     expect((await be.list("waitron-")).map((o) => o.key)).toEqual(["waitron-real.dump.enc"]);
   });
+});
+
+describe("LocalFsBackend file transfers", () => {
+  const dirs: string[] = [];
+  afterEach(async () => {
+    await Promise.all(dirs.splice(0).map((dir) => rm(dir, { recursive: true, force: true })));
+  });
+  async function fresh() {
+    const dir = await mkdtemp(join(tmpdir(), "backend-file-"));
+    dirs.push(dir);
+    return dir;
+  }
+  it("publishes a protected copy, retains the shared input and gets an independent file", async () => {
+    const dir = await fresh();
+    const input = join(dir, "input");
+    const output = join(dir, "output");
+    const stored = join(dir, "store");
+    await writeFile(input, Buffer.from([0, 255, 42]), { mode: 0o644 });
+    const backend = new LocalFsBackend("file", stored);
+    await backend.putFile("waitron-copy.backup.enc", input);
+    expect(await readFile(input)).toEqual(Buffer.from([0, 255, 42]));
+    expect((await stat(join(stored, "waitron-copy.backup.enc"))).mode & 0o777).toBe(0o600);
+    expect(await readdir(stored)).toEqual(["waitron-copy.backup.enc"]);
+    await backend.getFile("waitron-copy.backup.enc", output);
+    expect(await readFile(output)).toEqual(Buffer.from([0, 255, 42]));
+    expect((await stat(output)).mode & 0o777).toBe(0o600);
+    await writeFile(output, "changed");
+    expect(await backend.get("waitron-copy.backup.enc")).toEqual(Buffer.from([0, 255, 42]));
+  });
+  it("leaves a previous key intact and removes temporary output when copying fails", async () => {
+    const dir = await fresh();
+    const backend = new LocalFsBackend("file", dir);
+    await backend.put("waitron-copy.backup.enc", Buffer.from("old"));
+    await expect(
+      backend.putFile("waitron-copy.backup.enc", join(dir, "missing")),
+    ).rejects.toMatchObject({ code: "ENOENT" });
+    expect(await backend.get("waitron-copy.backup.enc")).toEqual(Buffer.from("old"));
+    expect(await readdir(dir)).toEqual(["waitron-copy.backup.enc"]);
+    const output = join(dir, "out");
+    await writeFile(output, "keep");
+    await expect(backend.getFile("missing", output)).rejects.toMatchObject({ code: "ENOENT" });
+    expect(await readFile(output, "utf8")).toBe("keep");
+    expect(await readdir(dir)).toEqual(expect.arrayContaining(["out", "waitron-copy.backup.enc"]));
+    expect((await readdir(dir)).some((name) => name.endsWith(".tmp"))).toBe(false);
+  });
+});
+
+it("cleans a partially copied backend file without replacing an existing object", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "backend-partial-"));
+  try {
+    const input = join(dir, "partial-copy-input");
+    const store = join(dir, "store");
+    await writeFile(input, "new");
+    const backend = new LocalFsBackend("file", store);
+    await backend.put("waitron-old.backup.enc", Buffer.from("old"));
+    await expect(backend.putFile("waitron-old.backup.enc", input)).rejects.toMatchObject({
+      code: "ENOSPC",
+    });
+    expect(await backend.get("waitron-old.backup.enc")).toEqual(Buffer.from("old"));
+    expect(await readFile(input, "utf8")).toBe("new");
+    expect(await readdir(store)).toEqual(["waitron-old.backup.enc"]);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
 });

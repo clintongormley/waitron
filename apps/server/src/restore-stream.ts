@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
-import { join } from "node:path";
+import { mkdir, mkdtemp, rm } from "node:fs/promises";
+import { dirname, join } from "node:path";
 import { eq, sql } from "drizzle-orm";
 import { loadKeyRing } from "@waitron/credentials";
 import { locations, openVenueDatabase, tenants, type VenueDatabase } from "@waitron/db";
@@ -24,7 +24,7 @@ import type { ArchiveEntry } from "./backup-archive.js";
 import { parseEnvFile } from "./env-file.js";
 import type { Logger } from "./logger.js";
 import {
-  validateEntries,
+  validateDatabaseEntries,
   writeValidated,
   type PlacementDeps,
   type ValidatedArtifact,
@@ -48,12 +48,8 @@ export function confirmsVenue(venue: RestoredVenue, confirmedTaxId: string | nul
   return venue.taxId !== "" && confirmedTaxId === venue.taxId;
 }
 
-/**
- * Scratch folders are made fresh per run, inside the state folder so a later move stays on one
- * filesystem; a fixed name would let two runs remove each other's copy.
- */
+/** A fresh folder keeps concurrent preparations from removing each other's copy. */
 const SCRATCH = "stream-restore-";
-const ARCHIVE_SCRATCH = "archive-source-check-";
 const UNREADABLE = "the file could not be opened or read as a database";
 
 export interface PrepareStreamDeps {
@@ -150,7 +146,7 @@ export async function refuseIfSourceLive(args: {
 /**
  * An archive whose database holds bucket settings may be a copy of a box still streaming, and
  * selling: its bucket's live generation gets the same check as a bucket rebuild. The settings are
- * read from a scratch copy of the archive's database, with the archive's own vault key.
+ * read from validation's database file, with the archive's own vault key.
  */
 export async function refuseIfArchiveSourceLive(args: {
   validated: ValidatedArtifact;
@@ -164,47 +160,41 @@ export async function refuseIfArchiveSourceLive(args: {
     (entry) => entry.name === "secrets/secrets.env",
   );
   if (secrets === undefined) return;
-  const scratch = await scratchFolder(args.stateDir, ARCHIVE_SCRATCH);
+  const copy = await openVenueDatabase(dirname(args.validated.databasePath));
+  let settings;
   try {
-    await writeFile(join(scratch, VENUE_FILE), args.validated.dumpEntry.bytes, { mode: 0o600 });
-    const copy = await openVenueDatabase(scratch);
-    let settings;
-    try {
-      const ring = loadKeyRing(parseEnvFile(Buffer.from(secrets.bytes).toString("utf8")));
-      settings = await readStreamSettings(copy.venue, ring);
-    } catch (error) {
-      if (isAppError(error) && hasCode(error, "server.credential_unusable")) {
-        throw new AppError("restore.stream_source_unchecked", { reason: "bucket" });
-      }
-      throw error;
-    } finally {
-      await copy.close();
-    }
-    if (settings === null) return;
-    const { bucket, venueId } = settings;
-    try {
-      const store = (args.openStore ?? createS3ObjectStore)(bucket);
-      const read = await readPointer(store, venueId);
-      if (read === null) return;
-      await refuseIfSourceLive({
-        store,
-        venueId,
-        generation: read.pointer.body.generation,
-        now: args.now,
-        oldBoxGone: false,
-      });
-    } catch (error) {
-      if (
-        isAppError(error) &&
-        (hasCode(error, "restore.stream_source_live") ||
-          hasCode(error, "restore.stream_source_unchecked"))
-      ) {
-        throw error;
-      }
+    const ring = loadKeyRing(parseEnvFile(Buffer.from(secrets.bytes).toString("utf8")));
+    settings = await readStreamSettings(copy.venue, ring);
+  } catch (error) {
+    if (isAppError(error) && hasCode(error, "server.credential_unusable")) {
       throw new AppError("restore.stream_source_unchecked", { reason: "bucket" });
     }
+    throw error;
   } finally {
-    await rm(scratch, { recursive: true, force: true });
+    await copy.close();
+  }
+  if (settings === null) return;
+  const { bucket, venueId } = settings;
+  try {
+    const store = (args.openStore ?? createS3ObjectStore)(bucket);
+    const read = await readPointer(store, venueId);
+    if (read === null) return;
+    await refuseIfSourceLive({
+      store,
+      venueId,
+      generation: read.pointer.body.generation,
+      now: args.now,
+      oldBoxGone: false,
+    });
+  } catch (error) {
+    if (
+      isAppError(error) &&
+      (hasCode(error, "restore.stream_source_live") ||
+        hasCode(error, "restore.stream_source_unchecked"))
+    ) {
+      throw error;
+    }
+    throw new AppError("restore.stream_source_unchecked", { reason: "bucket" });
   }
 }
 
@@ -342,19 +332,20 @@ export async function prepareStreamRestore(deps: PrepareStreamDeps): Promise<Pre
 }
 
 export interface WriteStreamArgs extends PlacementDeps {
-  databaseBytes: Uint8Array;
+  databasePath: string;
   entries: ArchiveEntry[];
 }
 
 /** The archive restore's own validation and write, over the restored database and the unlocked
  * row's entries, with the first-start marker naming the stream. */
 export async function writeStreamRestore(args: WriteStreamArgs): Promise<void> {
-  const { databaseBytes, entries, ...deps } = args;
-  const validated = await validateEntries(
-    [...entries, { name: "db.dump", bytes: databaseBytes }],
-    deps,
-  );
-  await writeValidated(validated, { ...deps, rebuildSource: "stream" });
+  const { databasePath, entries, ...deps } = args;
+  const validated = await validateDatabaseEntries(entries, databasePath, deps);
+  try {
+    await writeValidated(validated, { ...deps, rebuildSource: "stream" });
+  } finally {
+    await validated.discard();
+  }
 }
 
 /**
@@ -374,7 +365,7 @@ export async function restoreFromStream(
     }
     await writeStreamRestore({
       ...deps,
-      databaseBytes: await readFile(prepared.databasePath),
+      databasePath: prepared.databasePath,
       entries: prepared.entries,
     });
   } finally {

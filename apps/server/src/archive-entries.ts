@@ -1,3 +1,4 @@
+import type { ArchiveReadBudget } from "./archive-read-budget.js";
 import type { WaitronModule } from "@waitron/module";
 import type { ArchiveEntry } from "./backup-archive.js";
 import type { BackupManifest } from "./backup-manifest.js";
@@ -14,15 +15,18 @@ export interface StateParts {
 
 /** Throws `recovery.state_incomplete` when a `RECOVERY_FILES` path is missing; a missing optional
  * file is skipped. */
-export async function collectStateParts(deps: {
-  readonly stateDir: string;
-  readonly modules: readonly WaitronModule[];
-  readonly resolvers: Record<string, string>;
-}): Promise<StateParts> {
+export async function collectStateParts(
+  deps: {
+    readonly stateDir: string;
+    readonly modules: readonly WaitronModule[];
+    readonly resolvers: Record<string, string>;
+  },
+  budget?: ArchiveReadBudget,
+): Promise<StateParts> {
   const [secrets, nonDbState, optionalState] = await Promise.all([
-    collectStateSecrets(deps.stateDir),
-    collectModuleNonDbState(deps.modules, deps.resolvers),
-    collectOptionalStateFiles(deps.stateDir, OPTIONAL_BACKUP_STATE),
+    collectStateSecrets(deps.stateDir, budget),
+    collectModuleNonDbState(deps.modules, deps.resolvers, budget),
+    collectOptionalStateFiles(deps.stateDir, OPTIONAL_BACKUP_STATE, budget),
   ]);
   return { nonDbState, secrets, optionalState };
 }

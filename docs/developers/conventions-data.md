@@ -1887,7 +1887,7 @@ lock, not that every writer of the file takes it.
 | `apps/server/src/backup-supervisor.ts` (`reload`) | inside the server | shares the server's hold |
 | `apps/server/src/node-entry.ts` (`clearReplacedDatabases`, `assertNotAhead`) and the staged restore and staged reset it runs | the container entrypoint, the same process as the server | the staged restore, then the staged reset, each locks on its own and releases before `runEntry` takes `lockVenueDatabase` and holds it from clearing set-aside folders (`clearReplacedDatabases`) through the ahead check until `startServer` settles or an earlier step throws. The ahead check's opens and the server's opens during its start share that hold |
 | `apps/server/src/restore.ts` (`writeValidated`) | `waitron-restore` (server stopped) and the staged restore | takes the lock before its first change and holds it to the end; its migrate and hook open share it. Refused while another process holds the folder |
-| `apps/server/src/restore-stream.ts` (`refuseIfArchiveSourceLive`, and `readRestoredCopy` inside `prepareStreamRestore`) | `waitron-restore`, before `writeValidated`; and the setup-mode server before it stages a restore (`boot.ts`): `refuseIfArchiveSourceLive` for `/setup-api/restore` and `/setup-api/cloud-recovery/restore`, `prepareStreamRestore` for `/setup-api/restore-bucket` | each locks (default) its own scratch folder under the state folder, made fresh per run (`archive-source-check-XXXXXX` for the archive's copy, `stream-restore-XXXXXX` for the download, which is opened once), never the venue folder; no contention |
+| `apps/server/src/restore-stream.ts` (`refuseIfArchiveSourceLive`, and `readRestoredCopy` inside `prepareStreamRestore`) | `waitron-restore`, before `writeValidated`; and the setup-mode server before it stages a restore (`boot.ts`): `refuseIfArchiveSourceLive` for `/setup-api/restore` and `/setup-api/cloud-recovery/restore`, `prepareStreamRestore` for `/setup-api/restore-bucket` | each opens validation's private archive database or the prepared download (`stream-restore-XXXXXX`), never the destination venue folder; archive validation owns and disposes its private directory |
 | `apps/server/src/reset-request.ts` (`runStagedReset`) | the container entrypoint, when the setup wizard has staged a reset, before the server starts | takes `lockVenueDatabase` before its first check and holds it through the wipe; its `openVenueDatabase` for the check shares that hold, and it releases before `runEntry` locks again |
 | `apps/server/src/rejoin-command.ts` | `waitron-rejoin` (server stopped) | takes the lock before its first read and holds it through the wipe and re-migrate. Refused while another process holds the folder |
 | `packages/migrations/src/apply.ts` | boot, restore, rejoin, dev scripts | locks (default), inside its own `migrations.lock` |
@@ -2491,3 +2491,45 @@ mover. Both cases failed before their fixes; deleting either order in a disposab
 its respective case again. Commands: `pnpm --filter @waitron/server exec vitest run
 src/till-api.station-move.test.ts -t attribution` and the same command with
 `src/station-move.test.ts -t 'latest mover when splitting'`.
+
+
+## Local backup and restore pass database files
+
+A database-sized buffer makes Node's file-read limit a restore limit. Pass the closed staging file
+instead: bucket CLI, setup staging and boot use `databasePath`; archive CLI and boot use
+`restoreFromArtifactFile`. Validation returns one owned database file with `discard`, which callers
+await after placement or refusal. The source-liveness check opens that same file. Borrowed bucket
+validation leaves disposal to its prepared download or staged request.
+
+Scheduled local capture streams WBA1 framing into WBK1 encryption once and passes the completed
+ciphertext file to each destination's `putFile`. Local storage copies inside a private directory,
+sets mode 0600, then renames the completed file to its key; `getFile` uses the same copy boundary.
+File decryption completes GCM authentication before parsing the archive, because the unverified
+plaintext must never reach placement. Metadata reads share limits of 4096 entries, 4096 UTF-8 name
+bytes and 16 MiB total; database chunks are 64 KiB and `db.dump` has no metadata size cap.
+
+The real SQLite roundtrip in `apps/server/src/restore-artifact-file.test.ts` captures through the
+scheduled sweep, stores and retrieves through the local file backend, then runs default placement,
+migrations and hooks and checks rows and secrets. Its CLI and boot cases forbid whole-artifact
+reads; a held SQLite lock retains the staged archive for a successful retry. The companion sweep
+and collection suites check identical destination ciphertext, failure isolation, modes, cleanup
+and growing metadata files. Run `pnpm --filter @waitron/server exec vitest run
+src/restore-artifact-file.test.ts src/backup-sweep-file.test.ts src/archive-read-budget.test.ts
+src/local-fs-backend.test.ts`.
+
+Sparse 2147487744-byte placement and codec tests check size, offsets and edge bytes. They do not
+measure integrity checks or cryptographic throughput over a valid SQLite database that large.
+Managed Cloud's 512 MiB and setup upload's 256 MiB limits remain separate from this local file path.
+
+
+The closed placement source must have one filesystem name (`nlink == 1`), so a surviving hard link
+cannot become another path to the placed database. The multiply-linked and missing-source cases
+in `restore-file-placement.test.ts` require `restore.unsafe_entry_path` before old-set cleanup.
+Setup disposal is asserted after successful staging and a source-liveness refusal through
+`boot.setup-routes.test.ts`; deleting `boot.ts`'s discard failed both cases.
+
+Source liveness opens the private validation copy through SQLite. That can change its journal
+metadata and create local scratch files, so the placed database is not promised byte-identical to
+the archived database. Validation owns and disposes that directory; the encrypted input remains
+caller-owned. The review's rollback-journal probe observed changed file bytes after open/close,
+while its WAL-mode control observed unchanged bytes.

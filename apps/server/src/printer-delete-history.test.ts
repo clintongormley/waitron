@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { sql } from "drizzle-orm";
@@ -165,7 +165,7 @@ describe("a deleted printer's history in a full archive", () => {
     try {
       await suite.db.archiveTo(join(scratch, "venue.dump"));
       await restoreDatabase({
-        dumpBytes: await readFile(join(scratch, "venue.dump")),
+        databasePath: join(scratch, "venue.dump"),
         venueDir,
         log: () => {},
       });
