@@ -263,6 +263,7 @@ export async function seedFloor(
         seats: table.capacity,
         fixed: table.fixed,
         placement: table.placement,
+        partKeys: [],
       })),
     });
   }

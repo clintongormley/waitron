@@ -65,16 +65,17 @@ describe("the till's table-state answer carries today's plan", () => {
     const zoneId = await zone();
     const [la, lb, ls, lo] = [fresh("A"), fresh("B"), fresh("S"), fresh("O")];
     const entries: Entry[] = [
-      { key: "a", label: la, seats: 4, fixed: true, placement: place(3, 5) },
+      { key: "a", label: la, seats: 4, fixed: true, placement: place(3, 5), partKeys: [] },
       {
         key: "b",
         label: lb,
         seats: 2,
         fixed: false,
         placement: place(20, 5, { width: 10, rotation: 45 }),
+        partKeys: [],
       },
-      { key: "s", label: ls, seats: null, fixed: false, placement: null },
-      { key: "o", label: lo, seats: 6, fixed: false, placement: place(40, 0) },
+      { key: "s", label: ls, seats: null, fixed: false, placement: null, partKeys: [] },
+      { key: "o", label: lo, seats: 6, fixed: false, placement: place(40, 0), partKeys: [] },
     ];
     await inTx(v, (tx) =>
       saveZonePlan(tx, v.cfg, REMOVALS, zoneId, { revision: 0, tables: entries }, NOW),

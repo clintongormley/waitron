@@ -208,6 +208,7 @@ describe("today's routes", () => {
             seats: 4,
             fixed: false,
             placement: { x: 50, y: 0, width: 8, height: 8, shape: "rect", rotation: 0 },
+            partKeys: [],
           },
         ],
       }),

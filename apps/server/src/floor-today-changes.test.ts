@@ -260,6 +260,7 @@ describe("today's changes", () => {
         seats: 2,
         fixed: false,
         placement: place(50, 50),
+        partKeys: [],
       },
     ]);
     expect(await masterRow(master.a!)).toMatchObject({ x: 50, seats: 2 });

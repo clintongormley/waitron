@@ -121,7 +121,7 @@ function fresh(label: string): string {
 type Entry = ZonePlanSave["tables"][number];
 
 function entry(key: string, label: string, extra: Partial<Entry> = {}): Entry {
-  return { key, label, seats: 4, fixed: false, placement: place(0, 0), ...extra };
+  return { key, label, seats: 4, fixed: false, placement: place(0, 0), partKeys: [], ...extra };
 }
 
 function place(x: number, y: number) {

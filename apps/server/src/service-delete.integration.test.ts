@@ -594,6 +594,7 @@ describe("mounted authenticated service deletion races", () => {
                           seats: 2,
                           fixed: false,
                           placement: null,
+                          partKeys: [],
                         },
                       ],
                     },
@@ -893,6 +894,7 @@ it.each(["zone", "department"] as const)(
       seats: 4,
       fixed: false,
       placement: null,
+      partKeys: [],
     };
     const save = (revision: number) =>
       run((tx) =>
@@ -1059,7 +1061,7 @@ it.each(["zone", "department"] as const)(
           replacementZone.id,
           {
             revision: 0,
-            tables: [{ key: "new", label, seats: 4, fixed: false, placement: null }],
+            tables: [{ key: "new", label, seats: 4, fixed: false, placement: null, partKeys: [] }],
           },
           NOW,
         ),

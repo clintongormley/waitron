@@ -5894,6 +5894,7 @@ it("round-trips a deleted service hierarchy while remapping only its live namesa
             fixed: false,
             seats: 2,
             placement: { x: 0, y: 0, width: 8, height: 8, rotation: 0, shape: "rect" },
+            partKeys: [],
           },
         ],
       },

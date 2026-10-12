@@ -7,6 +7,7 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
   diningTables,
   floorPlans,
+  floorPlanTableParts,
   floorPlanTables,
   floorResetTables,
   floorTodayTables,
@@ -42,6 +43,34 @@ useVenueDb({
 const NOW = new Date("2026-10-10T12:00:00Z");
 const NONE: readonly TableRemoval[] = [];
 const PLACE = { x: 0, y: 0, width: 8, height: 8, shape: "rect" as const, rotation: 0 };
+
+type SaveEntry = ZonePlanSave["tables"][number];
+
+/** Counter 3 (2 seats), 4 (6) and 5 (4), off the plan, and Long table (10) placed and made of them. */
+function longTableEntries(extra: SaveEntry[] = []): SaveEntry[] {
+  const part = (key: string, label: string, seats: number): SaveEntry => ({
+    key,
+    label: fresh(label),
+    seats,
+    fixed: false,
+    placement: null,
+    partKeys: [],
+  });
+  return [
+    part("c3", "Counter 3", 2),
+    part("c4", "Counter 4", 6),
+    part("c5", "Counter 5", 4),
+    {
+      key: "long",
+      label: fresh("Long table"),
+      seats: 10,
+      fixed: false,
+      placement: PLACE,
+      partKeys: ["c3", "c4", "c5"],
+    },
+    ...extra,
+  ];
+}
 
 /** A fresh table-service zone, so one case's tables never meet another's. */
 async function zone(): Promise<string> {
@@ -145,6 +174,17 @@ describe("readZonePlan", () => {
     expect(await readCost(7)).toBe(two);
   });
 
+  it("reads a joined table's parts, and none for a plain table", async () => {
+    const z = await zone();
+    const { ids } = await inTx(v, (tx) =>
+      saveZonePlan(tx, v.cfg, NONE, z, { revision: 0, tables: longTableEntries() }, NOW),
+    );
+    const plan = await inTx(v, (tx) => readZonePlan(tx, v.cfg, z));
+    const byId = new Map(plan.tables.map((t) => [t.id, t]));
+    expect(byId.get(ids.long!)!.partIds).toEqual([ids.c3, ids.c4, ids.c5]);
+    for (const key of ["c3", "c4", "c5"]) expect(byId.get(ids[key]!)!.partIds).toEqual([]);
+  });
+
   it("refuses a zone that does not exist", async () => {
     const zoneId = randomUUID();
     const error = await refusal(inTx(v, (tx) => readZonePlan(tx, v.cfg, zoneId)));
@@ -162,7 +202,9 @@ describe("checkZonePlanSave", () => {
     const [master] = await masterOf(z, [{ label, live }]);
     const input: ZonePlanSave = {
       revision: 1,
-      tables: [{ id: master!, key: "a", label, seats: 4, fixed: false, placement: PLACE }],
+      tables: [
+        { id: master!, key: "a", label, seats: 4, fixed: false, placement: PLACE, partKeys: [] },
+      ],
     };
     return { z, live, master: master!, input };
   }
@@ -196,7 +238,14 @@ describe("checkZonePlanSave", () => {
       ...input,
       tables: [
         ...input.tables,
-        { key: "n", label: `  ${taken} `, seats: null, fixed: false, placement: null },
+        {
+          key: "n",
+          label: `  ${taken} `,
+          seats: null,
+          fixed: false,
+          placement: null,
+          partKeys: [],
+        },
       ],
     };
     const error = await refusal(check(z, save));
@@ -213,7 +262,7 @@ describe("checkZonePlanSave", () => {
       ...input,
       tables: [
         ...input.tables,
-        { key: "n", label: taken, seats: null, fixed: false, placement: null },
+        { key: "n", label: taken, seats: null, fixed: false, placement: null, partKeys: [] },
       ],
     };
     const error = await refusal(check(z, save));
@@ -230,7 +279,14 @@ describe("checkZonePlanSave", () => {
       ...input,
       tables: [
         ...input.tables,
-        { key: "n", label: taken.toUpperCase(), seats: null, fixed: false, placement: null },
+        {
+          key: "n",
+          label: taken.toUpperCase(),
+          seats: null,
+          fixed: false,
+          placement: null,
+          partKeys: [],
+        },
       ],
     };
     await expect(check(z, save)).resolves.toBeUndefined();
@@ -278,7 +334,14 @@ describe("checkZonePlanSave", () => {
   it.each(["id"] as const)("refuses one %s named twice", async (name) => {
     const { z, master, input } = await planned();
     const ref = master;
-    const entry = { key: "b", label: fresh("B"), seats: null, fixed: false, placement: null };
+    const entry = {
+      key: "b",
+      label: fresh("B"),
+      seats: null,
+      fixed: false,
+      placement: null,
+      partKeys: [],
+    };
     const save: ZonePlanSave = {
       ...input,
       tables: [
@@ -299,7 +362,15 @@ describe("checkZonePlanSave", () => {
       ...input,
       tables: [
         ...input.tables,
-        { id: foreign!, key: "f", label: fresh("F"), seats: null, fixed: false, placement: null },
+        {
+          id: foreign!,
+          key: "f",
+          label: fresh("F"),
+          seats: null,
+          fixed: false,
+          placement: null,
+          partKeys: [],
+        },
       ],
     };
     const error = await refusal(check(z, save));
@@ -359,7 +430,9 @@ describe("checkZonePlanSave", () => {
     });
     const save: ZonePlanSave = {
       revision: 2,
-      tables: [{ id: added, key: "a", label, seats: 4, fixed: false, placement: null }],
+      tables: [
+        { id: added, key: "a", label, seats: 4, fixed: false, placement: null, partKeys: [] },
+      ],
     };
     await expect(check(z, save)).resolves.toBeUndefined();
   });
@@ -372,7 +445,7 @@ describe("checkZonePlanSave", () => {
     const x = fresh("X");
     const [ma] = await masterOf(a, [{ label: p, live: await liveTable(a, fresh("a")) }]);
     const [mb] = await masterOf(b, [{ label: q, live: await liveTable(b, fresh("b")) }]);
-    const entry = { fixed: false, seats: null, placement: null, key: "k" };
+    const entry = { fixed: false, seats: null, placement: null, key: "k", partKeys: [] };
     // First save: zone A's P is renamed X; its live table keeps P until the next reset.
     await expect(
       check(a, { revision: 1, tables: [{ ...entry, id: ma!, label: x }] }),
@@ -398,7 +471,7 @@ describe("saveZonePlan", () => {
   }
 
   function entry(key: string, label: string, extra: Partial<Entry> = {}): Entry {
-    return { key, label, seats: 4, fixed: false, placement: PLACE, ...extra };
+    return { key, label, seats: 4, fixed: false, placement: PLACE, partKeys: [], ...extra };
   }
 
   async function todayOf(tableId: string) {
@@ -468,6 +541,102 @@ describe("saveZonePlan", () => {
     return { z, t1, bar, live, result };
   }
 
+  async function partsOf(zoneId: string): Promise<Record<string, string[]>> {
+    const plan = await inTx(v, (tx) => readZonePlan(tx, v.cfg, zoneId));
+    return Object.fromEntries(plan.tables.map((t) => [t.id, t.partIds]));
+  }
+
+  /** Each entry sent back with its saved id, as the editor sends a plan it read. */
+  function asSaved(entries: Entry[], ids: Record<string, string>): Entry[] {
+    return entries.map((e) => (ids[e.key] === undefined ? e : { ...e, id: ids[e.key]! }));
+  }
+
+  describe("a joined table's parts", () => {
+    it("saves Long table made of three tables added in the same save", async () => {
+      const z = await zone();
+      const { ids } = await save(z, { revision: 0, tables: longTableEntries() });
+      expect((await partsOf(z))[ids.long!]).toEqual([ids.c3, ids.c4, ids.c5]);
+    });
+
+    it("takes a deleted part out of its joined table", async () => {
+      const z = await zone();
+      const entries = longTableEntries();
+      const { ids } = await save(z, { revision: 0, tables: entries });
+      const next = asSaved(entries, ids)
+        .filter((e) => e.key !== "c5")
+        .map((e) => (e.key === "long" ? { ...e, partKeys: ["c3", "c4"] } : e));
+      await save(z, { revision: 1, tables: next });
+      const parts = await partsOf(z);
+      expect(parts[ids.long!]).toEqual([ids.c3, ids.c4]);
+      expect(parts[ids.c5!]).toBeUndefined();
+    });
+
+    it("frees the parts of a deleted joined table", async () => {
+      const z = await zone();
+      const entries = longTableEntries();
+      const { ids } = await save(z, { revision: 0, tables: entries });
+      await save(z, {
+        revision: 1,
+        tables: asSaved(entries, ids).filter((e) => e.key !== "long"),
+      });
+      const partIds = [ids.c3!, ids.c4!, ids.c5!];
+      expect(await partsOf(z)).toEqual(Object.fromEntries(partIds.map((id) => [id, []])));
+      const rows = await inTx(v, (tx) =>
+        tx
+          .select()
+          .from(floorPlanTableParts)
+          .where(inArray(floorPlanTableParts.partTableId, partIds)),
+      );
+      expect(rows).toEqual([]);
+    });
+
+    it("moves a part between joined tables in one save", async () => {
+      const z = await zone();
+      const entries = longTableEntries();
+      const { ids } = await save(z, { revision: 0, tables: entries });
+      const next = [
+        ...asSaved(entries, ids).map((e) =>
+          e.key === "long" ? { ...e, partKeys: ["c3", "c4"] } : e,
+        ),
+        entry("c6", fresh("Counter 6"), { placement: null }),
+        entry("bar", fresh("Bar"), { placement: { ...PLACE, x: 20 }, partKeys: ["c5", "c6"] }),
+      ];
+      const second = await save(z, { revision: 1, tables: next });
+      const parts = await partsOf(z);
+      expect(parts[ids.long!]).toEqual([ids.c3, ids.c4]);
+      expect(parts[second.ids.bar!]).toEqual([ids.c5, second.ids.c6]);
+      for (const key of ["c3", "c4", "c5", "c6"]) expect(parts[second.ids[key]!]).toEqual([]);
+    });
+
+    it("saves the parts in the same statements, however many there are", async () => {
+      async function statementsFor(parts: number): Promise<number> {
+        const z = await zone();
+        await save(z, { revision: 0, tables: [] });
+        const keys = Array.from({ length: parts }, (_, i) => `p${i}`);
+        const input: ZonePlanSave = {
+          revision: 1,
+          tables: [
+            ...keys.map((key) => entry(key, fresh(key), { placement: null })),
+            entry("long", fresh("Long table"), { seats: 10, partKeys: keys }),
+          ],
+        };
+        const counted = await inTx(v, async (tx) => {
+          const prepare = vi.spyOn(DatabaseSync.prototype, "prepare");
+          try {
+            const saved = await saveZonePlan(tx, v.cfg, NONE, z, input, NOW);
+            return { saved, statements: prepare.mock.calls.length };
+          } finally {
+            prepare.mockRestore();
+          }
+        });
+        expect((await partsOf(z))[counted.saved.ids.long!]).toHaveLength(parts);
+        return counted.statements;
+      }
+
+      expect(await statementsFor(4)).toBe(await statementsFor(2));
+    });
+  });
+
   it("inserts the new tables in the same statements, however many there are", async () => {
     async function statementsFor(tables: number): Promise<number> {
       const z = await zone();
@@ -515,6 +684,7 @@ describe("saveZonePlan", () => {
         seats: t.seats,
         fixed: t.fixed,
         placement: t.placement,
+        partKeys: [],
       })),
     });
 
@@ -792,7 +962,17 @@ describe("floor plans without adoption", () => {
     const label = fresh("New");
     const input = {
       revision: 0,
-      tables: [{ key: "a", liveTableId: live, label, seats: 4, fixed: false, placement: PLACE }],
+      tables: [
+        {
+          key: "a",
+          liveTableId: live,
+          label,
+          seats: 4,
+          fixed: false,
+          placement: PLACE,
+          partKeys: [],
+        },
+      ],
     };
     const saved = await inTx(v, (tx) => saveZonePlan(tx, v.cfg, NONE, z, input, NOW));
     const plan = await inTx(v, (tx) => readZonePlan(tx, v.cfg, z));
@@ -804,6 +984,7 @@ describe("floor plans without adoption", () => {
         seats: 4,
         fixed: false,
         placement: PLACE,
+        partIds: [],
       },
     ]);
     expect(plan.tables[0]!.liveTableId).not.toBe(live);
@@ -817,7 +998,7 @@ describe("floor plans without adoption", () => {
     await liveTable(z, own);
     const input = (label: string): ZonePlanSave => ({
       revision: 0,
-      tables: [{ key: "a", label, seats: 4, fixed: false, placement: PLACE }],
+      tables: [{ key: "a", label, seats: 4, fixed: false, placement: PLACE, partKeys: [] }],
     });
     await expect(check(z, input(own))).resolves.toBeUndefined();
     const other = await zone();

@@ -1,7 +1,8 @@
-import { and, asc, eq, inArray, ne } from "drizzle-orm";
+import { and, asc, eq, getTableColumns, inArray, ne } from "drizzle-orm";
 import {
   diningTables,
   floorPlans,
+  floorPlanTableParts,
   floorPlanTables,
   floorResetTables,
   floorTodayZones,
@@ -24,6 +25,8 @@ export interface PlanTable {
   seats: number | null;
   fixed: boolean;
   placement: Placement | null;
+  /** A joined table's parts, in label order; empty for any other table. */
+  partIds: string[];
 }
 
 export interface ZonePlan {
@@ -44,6 +47,8 @@ export interface ZonePlanSave {
     seats: number | null;
     fixed: boolean;
     placement: Placement | null;
+    /** The save keys of a joined table's parts. */
+    partKeys: string[];
   }[];
 }
 
@@ -71,8 +76,9 @@ async function planOf(tx: Transaction, zoneId: string) {
 
 async function mastersOf(tx: Transaction, planId: string) {
   return tx
-    .select()
+    .select({ ...getTableColumns(floorPlanTables), partOf: floorPlanTableParts.joinedTableId })
     .from(floorPlanTables)
+    .leftJoin(floorPlanTableParts, eq(floorPlanTableParts.partTableId, floorPlanTables.id))
     .where(eq(floorPlanTables.planId, planId))
     .orderBy(asc(floorPlanTables.label));
 }
@@ -109,6 +115,7 @@ export async function readZonePlan(
         seats: master.seats,
         fixed: master.fixed,
         placement: placementOf(master),
+        partIds: masters.filter((m) => m.partOf === master.id).map((m) => m.id),
       });
     }
   }
@@ -273,6 +280,18 @@ export async function saveZonePlan(
   }
   const planId = plan!.id;
 
+  await tx
+    .delete(floorPlanTableParts)
+    .where(
+      inArray(
+        floorPlanTableParts.joinedTableId,
+        tx
+          .select({ id: floorPlanTables.id })
+          .from(floorPlanTables)
+          .where(eq(floorPlanTables.planId, planId)),
+      ),
+    );
+
   const kept = new Set(tables.flatMap((t) => (t.id === undefined ? [] : [t.id])));
   const deleted = masters.filter((m) => !kept.has(m.id)).map((m) => m.id);
   if (deleted.length > 0) {
@@ -317,6 +336,13 @@ export async function saveZonePlan(
     if ((Object.keys(next) as (keyof typeof next)[]).every((k) => current[k] === next[k])) continue;
     await tx.update(floorPlanTables).set(next).where(eq(floorPlanTables.id, table.id));
   }
+  const parts = tables.flatMap((table) =>
+    table.partKeys.map((key) => ({
+      joinedTableId: ids.get(table.key)!,
+      partTableId: ids.get(key)!,
+    })),
+  );
+  if (parts.length > 0) await tx.insert(floorPlanTableParts).values(parts);
 
   const revision = plan!.revision + 1;
   await tx.update(floorPlans).set({ revision, savedAt }).where(eq(floorPlans.id, planId));
