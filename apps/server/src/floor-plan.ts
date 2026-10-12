@@ -26,7 +26,7 @@ export interface PlanTable {
   seats: number | null;
   fixed: boolean;
   placement: Placement | null;
-  /** The size the table last had on the plan, while it is off the plan; null otherwise. */
+  /** The size the table last had on the plan, kept by the save while it is off the plan. */
   keptSize: { width: number; height: number } | null;
   /** A joined table's parts, in label order; empty for any other table. */
   partIds: string[];
