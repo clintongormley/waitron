@@ -61,8 +61,10 @@ describe("seedDemoRestaurant", () => {
       );
       const readClosures = () =>
         suite.db.execute<{ zone: string; weekday: number; starts_at: string; ends_at: string }>(sql`
-          select z.name as zone, c.weekday, c.starts_at, c.ends_at
-          from zone_closed_times c join floor_zones z on z.id = c.zone_id
+          select z.name as zone, c.weekday, r.starts_at, r.ends_at
+          from zone_day_ranges r join zone_days c on c.id = r.day_id
+          join seasons se on se.id = c.season_id and se.starts_on = '12-01'
+          join floor_zones z on z.id = c.zone_id
           where z.location_id = ${venue.locationId}
           order by z.name, c.weekday`);
       const realSeedSales = salesSeed.seedSales;
@@ -115,8 +117,9 @@ describe("seedDemoRestaurant", () => {
       ends_at: string;
     }>(sql`
       select d.name as department, p.name as period, t.weekday, s.starts_at, s.ends_at
-      from menu_slots s join menu_periods p on p.id = s.period_id
-      join menu_day_timetables t on t.id = s.timetable_id
+      from department_day_ranges s join menu_periods p on p.id = s.period_id
+      join department_days t on t.id = s.day_id
+      join seasons se on se.id = t.season_id and se.starts_on = '12-01'
       join departments d on d.id = p.department_id
       where d.location_id = ${venue.locationId}
       order by d.name, t.weekday, s.starts_at`);
@@ -349,9 +352,10 @@ describe("seedDemoRestaurant", () => {
           starts_at: string;
           ends_at: string;
         }>(sql`
-            select t.weekday, s.starts_at, s.ends_at from menu_day_timetables t
-            join menu_slots s on s.timetable_id = t.id
-            where t.department_id = ${subject.id} and t.weekday is not null
+            select t.weekday, s.starts_at, s.ends_at from department_days t
+            join department_day_ranges s on s.day_id = t.id
+            join seasons se on se.id = t.season_id and se.starts_on = '12-01'
+            where t.department_id = ${subject.id}
             order by t.weekday, s.starts_at`);
         weeks[subject.name] = [0, 1, 2, 3, 4, 5, 6].map((weekday) => {
           const slots = ranges.filter((range) => range.weekday === weekday);
@@ -460,8 +464,9 @@ describe("seedDemoRestaurant", () => {
       }));
       const { rows: hoursRows } = await tx.execute<{ department_name: string; days: number }>(sql`
         select d.name as department_name, cast(count(distinct h.weekday) as integer) as days
-        from menu_day_timetables h
-        join menu_slots s on s.timetable_id = h.id
+        from department_days h
+        join department_day_ranges s on s.day_id = h.id
+        join seasons se on se.id = h.season_id and se.starts_on = '12-01'
         join departments d on d.id = h.department_id
         group by d.name
         order by d.name`);

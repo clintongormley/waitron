@@ -278,7 +278,7 @@ describe("new department service periods", () => {
     );
     expect(periods.rows).toEqual([{ name: "Open", menu_id: menu.id }]);
     const slots = await db.execute(
-      sql`select d.weekday, s.starts_at, s.ends_at from menu_day_timetables d join menu_slots s on s.timetable_id = d.id where d.department_id = ${department.id} order by d.weekday`,
+      sql`select d.weekday, s.starts_at, s.ends_at from department_days d join department_day_ranges s on s.day_id = d.id join seasons se on se.id = d.season_id and se.starts_on = '12-01' where d.department_id = ${department.id} order by d.weekday`,
     );
     expect(slots.rows).toEqual(
       [1, 2, 3, 4, 5].map((weekday) => ({ weekday, starts_at: "09:00:00", ends_at: "17:00:00" })),
