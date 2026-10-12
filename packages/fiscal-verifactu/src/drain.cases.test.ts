@@ -754,7 +754,7 @@ describe("drain — a re-sent record whose stored copy AEAT accepted with errors
   });
 });
 
-describe("drain — a conflict no longer holds its chain", () => {
+describe("drain — a conflict holds nothing behind it", () => {
   it("Route B: refuses the conflicting record with AEAT's code, opens one case, and sends the next record", async () => {
     const aeat = fakeAeat();
     const seeded = await seedPendingEnvios(suite.db, { count: 1 });

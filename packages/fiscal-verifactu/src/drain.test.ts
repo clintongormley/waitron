@@ -561,8 +561,8 @@ describe("drain — nextDueAt is folded as a minimum, never assigned", () => {
 
 /**
  * Per-record resolution: a lone rejection raises a structured incident and holds nothing behind it,
- * AceptadoConErrores is still an accept with a warning, and a record landing on a chain held behind
- * a held cancellation is stopped without reaching AEAT.
+ * AceptadoConErrores is still an accept, with a warning and, unless AEAT exempts the code, a filing
+ * case; and a record landing on a chain the same-code brake holds is stopped without reaching AEAT.
  */
 describe("drain — per-record resolution: rejection, halting, incidents", () => {
   it("keeps filing a chain after a genuine rejection: the record is rechazado, its successor keeps its own accept, an error incident is raised", async () => {
@@ -1626,8 +1626,8 @@ describe("drain — the deployment-environment guard", () => {
   /**
    * A refused row's successors on the SAME chain must not submit either: they would reach AEAT
    * pointing at a huella AEAT never received. `haltOpenChainClaims` holds a claimed row only behind
-   * an earlier `detenido` row of its chain, or when it is a cancellation whose original is
-   * `rechazado`; a `pendiente` refusal is neither.
+   * an earlier `detenido` row of its chain, or after a same-code run of refusals; a `pendiente`
+   * refusal is neither.
    */
   it("halts a chain behind a refused predecessor: no successor submits, and none of them are touched", async () => {
     const aeat = createFakeAeat({ serverNow: new Date("2026-07-21T00:00:00Z") });

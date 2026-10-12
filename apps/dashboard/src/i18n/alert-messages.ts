@@ -184,8 +184,8 @@ export const ALERT_MESSAGES: Readonly<
     es: "{count} registro(s) fiscal(es) han detenido su envío y requieren atención.",
   },
   "fiscal.filing_cases_open": {
-    en: "{count} fiscal record(s) were rejected by the tax agency or conflict with the record it holds, and need someone to decide what to do. Contact support.",
-    es: "{count} registro(s) fiscal(es) han sido rechazados por la Agencia Tributaria o no coinciden con el registro que tiene, y alguien tiene que decidir qué hacer. Contacta con soporte.",
+    en: "{count} fiscal record(s) need someone to decide what to do. Contact support.",
+    es: "{count} registro(s) fiscal(es) necesitan que alguien decida qué hacer. Contacta con soporte.",
   },
   "fiscal.refusals_repeated": {
     en: "AEAT rejected {count} fiscal records in a row with code {codigo}. Waitron retries the first eligible stopped record hourly. An accept or a different refusal can restart sending. Contact support.",

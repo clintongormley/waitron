@@ -51,8 +51,11 @@ export async function openFilingCase(
   return opened!;
 }
 
-/** The accepted-with-errors codes AEAT says need no correction: «Se excepciona este error de la
- * necesidad de ser subsanado» (Validaciones_Errores_Veri-Factu v1.2.2, §4.3.1). */
+/** The accepted-with-errors codes taken to need no correction. AEAT's validation document
+ * (Validaciones_Errores_Veri-Factu v1.2.2, §4.3.1) says «Se excepciona este error de la necesidad
+ * de ser subsanado» of two cases: no `ClaveRegimen` when the tax is IPSI, and a
+ * `FechaHoraHusoGenRegistro` later than AEAT's clock. 2009 and 2004 are read as those cases' codes;
+ * a late send also gets 2004, which that wording does not name (docs/compliance/verifactu-findings.md). */
 const EXEMPT_FROM_CORRECTION = new Set([2004, 2009]);
 
 /**

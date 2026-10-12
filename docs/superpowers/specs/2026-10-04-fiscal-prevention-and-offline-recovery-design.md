@@ -148,7 +148,8 @@ record of the conflict's own envío is not held when the reply is applied; one w
 unknown is held at its next claim like any later record of that chain, and is not sent again
 _(narrowed 2026-10-07: only when it comes after the conflict on the chain; 2026-10-12: a
 conflict no longer holds such a record)_. A
-cancellation whose original is rejected or held is held and never sent. A failed duplicate lookup
+cancellation whose original is rejected or held is held and never sent _(2026-10-12: one whose
+original is rejected is set aside instead, holding nothing; see the note above)_. A failed duplicate lookup
 makes only that record's outcome unknown. Filing cases (`src/filing-cases.ts`) are append-only,
 and resolving one releases nothing until Tasks 8–9. A new ongoing alert,
 `fiscal.filing_cases_open`, counts unresolved cases. Not yet probed: a successor sent after a 3000

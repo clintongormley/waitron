@@ -752,6 +752,11 @@ From **The product editor and catalogue (#345, #379, #387) — what is left open
 
 ## Decisions and deliberate limits
 
+- **Records that need a person's decision (owner, 2026-10-12, PR #1596).** A 3000 conflict is
+  refused and holds nothing; a cancellation of a refused original is set aside (`retenido`) with a
+  filing case of its own and holds nothing; a record accepted with errors opens a filing case
+  unless AEAT exempts its code (2004, 2009). Three conflicts in a row still trip the same-code
+  brake until Tasks 4 and 7 switch to a fresh number series instead.
 - **Decided (owner, 2026-10-02): a whole-invoice credit copies the invoice's own VAT split,
   negated** (`recordCorrection`'s `wholeInvoice`, `packages/core/src/record-correction.ts`).
   Worked out from the lines, as a partial correction still is, a 0.55 dish at 21% invoiced

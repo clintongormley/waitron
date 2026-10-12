@@ -309,8 +309,9 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   record in that reply before the repeated-code brake takes effect (`MAX_REGISTROS_POR_ENVIO`).
   The successor probes are finished: W41s-1c's [receipt](superpowers/specs/2026-10-04-fiscal-prevention-and-offline-recovery-design.md#successor-receipt-2026-10-12-w41s-1c-both-probes-re-run-with-fresh-chains)
   records warning-free `Correcto` successors after a 3000 refusal and after an unsent
-  cancellation, and a 3000 answer to an exact re-send. The hold after a 3000 conflict was dropped
-  on 2026-10-12 (owner); the other holds are unchanged.
+  cancellation, and a 3000 answer to an exact re-send. The holds after a 3000 conflict and behind a
+  cancellation of a refused invoice were dropped on 2026-10-12 (owner); the brake and the wait
+  behind an unknown answer are unchanged.
   [Detail](backlog/fiscal.md#w41s-fiscal-prevention-and-offline-recovery--design-and-revised-plan-approved-2026-10-04)
 
 - **Follow-up (W41s Task 8, held-record resolution): release a brake hold (send the held records
@@ -336,7 +337,7 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   to the W41s-1b probe first. The W41s-1b probes have since run without an overtaking case; their
   results are in [W41s-1c's receipt](superpowers/specs/2026-10-04-fiscal-prevention-and-offline-recovery-design.md#successor-receipt-2026-10-12-w41s-1c-both-probes-re-run-with-fresh-chains).
   The decision is put to the asesor as [Q47](compliance/asesor-questions.md#q47-keeping-a-chains-later-records-unsent-added-2026-10-12)
-  (S19 in the short list), covering this hold and the three-refusal brake. The hold after a 3000 conflict was dropped on 2026-10-12 (owner). [Detail](backlog/fiscal.md#w41s-fiscal-prevention-and-offline-recovery--design-and-revised-plan-approved-2026-10-04)
+  (S19 in the short list), covering this hold and the three-refusal brake. The holds after a 3000 conflict and behind a cancellation of a refused invoice were dropped on 2026-10-12 (owner). [Detail](backlog/fiscal.md#w41s-fiscal-prevention-and-offline-recovery--design-and-revised-plan-approved-2026-10-04)
 
 - **For Task 9 (the filing screen):** `listFilingCases` reads every case and event with no filter or
   paging, and `heldRecords` reads every `rechazado`/`detenido` row; neither has a production caller
