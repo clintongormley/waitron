@@ -757,7 +757,7 @@ it("reports offset placement refusals on the submitted field and retains the com
         reason: "placement",
         periodId: r.mananas,
         departmentId: r.restaurant,
-        seasonId: before.seasons[0]!.id,
+        seasonId: r.season,
         weekday: 0,
       },
     },
@@ -808,7 +808,10 @@ describe("zone closed-time routes", () => {
       {
         id: r.barra,
         name: "Barra",
-        seasonWeeks: saved.seasons.map((season) => ({ seasonId: season.id, week: days })),
+        seasonWeeks: saved.seasons.map((season) => ({
+          seasonId: season.id,
+          week: season.id === r.season ? days : days.map((day) => ({ ...day, ranges: [] })),
+        })),
         week: days,
         dates: [{ specialDateId: r.christmas, ranges: [{ startsAt: "06:00", endsAt: "06:00" }] }],
       },
