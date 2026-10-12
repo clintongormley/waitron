@@ -1477,3 +1477,171 @@ describe("clock compatibility reads special-day paint", () => {
     await expect(check(v, "07:00")).resolves.toBeUndefined();
   });
 });
+
+/** Four seasons, three departments and `count` yearly named days and yearly special days, with
+ *  fixed ids so the listed conflicts come out in one order. */
+async function busyCalendar(count: number, run = 0) {
+  const fixed = (kind: number, n: number) =>
+    `00000000-0000-4${String(run).padStart(3, "0")}-8${String(kind).padStart(3, "0")}-${String(n).padStart(12, "0")}`;
+  return withTransaction(suite.db, async (tx) => {
+    const loc = locationId(randomUUID());
+    await tx.insert(locations).values({
+      id: loc,
+      name: "Busy venue",
+      invoiceLocales: ["en"],
+      operationDescription: "Restaurant",
+      timeZone: before.timeZone,
+      dayCutover: "05:00:00",
+    });
+    const seasonIds = ["03-01", "06-01", "09-01", "12-01"].map((startsOn, i) => ({
+      id: fixed(1, i),
+      startsOn,
+      name: `Season ${i}`,
+    }));
+    for (const season of seasonIds) await tx.insert(seasons).values({ ...season, locationId: loc });
+    const menuId = randomUUID();
+    await tx.insert(catalogues).values({ id: menuId, name: "Menu" });
+    const departmentsMade: { id: string; lunch: string; dinner: string }[] = [];
+    for (let d = 0; d < 3; d++) {
+      const id = fixed(2, d);
+      await tx.insert(departments).values({
+        id,
+        locationId: loc,
+        name: `Department ${d}`,
+        tradingName: `Department ${d}`,
+      });
+      const lunch = fixed(3, d * 2),
+        dinner = fixed(3, d * 2 + 1);
+      await tx.insert(menuPeriods).values([
+        { id: lunch, departmentId: id, menuId, name: `Lunch ${d}`, endOffsetMinutes: 30 },
+        { id: dinner, departmentId: id, menuId, name: `Dinner ${d}`, endOffsetMinutes: 120 },
+      ]);
+      departmentsMade.push({ id, lunch, dinner });
+      for (const season of seasonIds)
+        for (let weekday = 0; weekday < 7; weekday++) {
+          const dayId = randomUUID();
+          await tx
+            .insert(departmentDays)
+            .values({ id: dayId, departmentId: id, seasonId: season.id, weekday });
+          await tx.insert(departmentDayRanges).values([
+            { dayId, departmentId: id, periodId: lunch, startsAt: "12:00:00", endsAt: "15:00:00" },
+            {
+              dayId,
+              departmentId: id,
+              periodId: dinner,
+              startsAt: weekday === 6 ? "21:00:00" : "20:00:00",
+              endsAt: weekday === 6 ? "03:45:00" : "23:30:00",
+            },
+          ]);
+        }
+    }
+    const date = (month: number, day: number) =>
+      `2026-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+    for (let i = 0; i < count; i++) {
+      const namedId = fixed(4, i);
+      await tx.insert(specialDates).values({
+        id: namedId,
+        locationId: loc,
+        date: date((i % 12) + 1, 2 + (i % 14)),
+        name: `Named ${i}`,
+        repeatOn: date((i % 12) + 1, 2 + (i % 14)).slice(5),
+        ownHours: true,
+        closeWholeVenue: i % 5 === 4,
+      });
+      const timetableId = randomUUID();
+      await tx
+        .insert(menuDayTimetables)
+        .values({ id: timetableId, departmentId: departmentsMade[0]!.id, specialDateId: namedId });
+      await tx.insert(menuSlots).values({
+        timetableId,
+        departmentId: departmentsMade[0]!.id,
+        periodId: departmentsMade[0]!.lunch,
+        startsAt: "05:15:00",
+        endsAt: "09:00:00",
+      });
+      const specialDayId = fixed(5, i),
+        dateId = fixed(6, i);
+      await tx
+        .insert(specialDays)
+        .values({ id: specialDayId, locationId: loc, name: `Special ${i}`, repeatsYearly: true });
+      await tx.insert(specialDayDates).values({
+        id: dateId,
+        specialDayId,
+        locationId: loc,
+        date: date((i % 12) + 1, 1 + (i % 14)),
+        closedAllDay: i % 7 === 6,
+      });
+      for (const [d, department] of departmentsMade.entries()) {
+        const dayId = fixed(7, i * 3 + d);
+        await tx
+          .insert(departmentDays)
+          .values({ id: dayId, departmentId: department.id, specialDayDateId: dateId });
+        await tx.insert(departmentDayRanges).values([
+          {
+            dayId,
+            departmentId: department.id,
+            periodId: department.dinner,
+            startsAt: "20:00:00",
+            endsAt: "03:30:00",
+          },
+          ...(i % 3 === 0
+            ? [
+                {
+                  dayId,
+                  departmentId: department.id,
+                  periodId: null,
+                  startsAt: "12:00:00",
+                  endsAt: "15:00:00",
+                },
+              ]
+            : []),
+        ]);
+      }
+    }
+    return { locationId: loc };
+  });
+}
+
+it("lists the same conflicts for many yearly named days and special days", async () => {
+  const cfg = await busyCalendar(50);
+  const result = await withTransaction(suite.db, (tx) =>
+    businessDayClockConflicts(tx, cfg, before, candidate("04:00"), E),
+  );
+  const lines = result.conflicts.map((c) =>
+    [
+      c.departmentName,
+      c.specialDayName ?? c.specialDateName ?? c.seasonName,
+      c.date ?? c.weekday,
+      c.periodName ?? "Closed",
+      `${c.startsAt}-${c.endsAt}`,
+      c.rangeIndex,
+      c.reason,
+    ].join(" | "),
+  );
+  expect(result.conflictCount).toBe(41);
+  expect(lines).toEqual([
+    "Department 0 | Season 0 | 6 | Dinner 0 | 21:00-03:45 | 1 | sending_cutoff",
+    "Department 0 | Season 1 | 6 | Dinner 0 | 21:00-03:45 | 1 | sending_cutoff",
+    "Department 0 | Season 2 | 6 | Dinner 0 | 21:00-03:45 | 1 | sending_cutoff",
+    "Department 0 | Season 3 | 6 | Dinner 0 | 21:00-03:45 | 1 | sending_cutoff",
+    "Department 0 | Special 0 | 2026-01-01 | Dinner 0 | 20:00-03:30 | 1 | sending_cutoff",
+    "Department 0 | Special 1 | 2026-02-02 | Dinner 0 | 20:00-03:30 | 0 | sending_cutoff",
+    "Department 0 | Special 2 | 2026-03-03 | Dinner 0 | 20:00-03:30 | 0 | sending_cutoff",
+    "Department 0 | Special 3 | 2026-04-04 | Dinner 0 | 20:00-03:30 | 1 | sending_cutoff",
+    "Department 0 | Special 5 | 2026-06-06 | Dinner 0 | 20:00-03:30 | 0 | sending_cutoff",
+    "Department 0 | Special 6 | 2026-07-07 | Dinner 0 | 20:00-03:30 | 1 | sending_cutoff",
+    "Department 0 | Special 7 | 2026-08-08 | Dinner 0 | 20:00-03:30 | 0 | sending_cutoff",
+    "Department 0 | Special 8 | 2026-09-09 | Dinner 0 | 20:00-03:30 | 0 | sending_cutoff",
+    "Department 0 | Special 10 | 2026-11-11 | Dinner 0 | 20:00-03:30 | 0 | sending_cutoff",
+    "Department 0 | Special 11 | 2026-12-12 | Dinner 0 | 20:00-03:30 | 0 | sending_cutoff",
+    "Department 0 | Special 12 | 2026-01-13 | Dinner 0 | 20:00-03:30 | 1 | sending_cutoff",
+    "Department 0 | Special 13 | 2026-02-14 | Dinner 0 | 20:00-03:30 | 0 | sending_cutoff",
+    "Department 0 | Special 15 | 2026-04-02 | Dinner 0 | 20:00-03:30 | 1 | sending_cutoff",
+    "Department 0 | Special 16 | 2026-05-03 | Dinner 0 | 20:00-03:30 | 0 | sending_cutoff",
+    "Department 0 | Special 17 | 2026-06-04 | Dinner 0 | 20:00-03:30 | 0 | sending_cutoff",
+    "Department 0 | Special 18 | 2026-07-05 | Dinner 0 | 20:00-03:30 | 1 | sending_cutoff",
+    "Department 0 | Special 20 | 2026-09-07 | Dinner 0 | 20:00-03:30 | 0 | sending_cutoff",
+    "Department 0 | Special 21 | 2026-10-08 | Dinner 0 | 20:00-03:30 | 1 | sending_cutoff",
+    "Department 0 | Special 22 | 2026-11-09 | Dinner 0 | 20:00-03:30 | 0 | sending_cutoff",
+  ]);
+});
