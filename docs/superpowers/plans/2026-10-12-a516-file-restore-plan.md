@@ -107,7 +107,7 @@ Tasks 3–4 remain; the branch stays unpublished.
 
 ## Task 3: compatible file archive codecs with bounded memory
 
-**Files:** create `apps/server/src/{backup-archive-file.ts,artifact-cipher-file.ts}` and sibling `.test.ts` suites; export shared framing constants/limits from existing codec files as needed.
+**Files:** create `apps/server/src/{backup-archive-file.ts,artifact-cipher-file.ts}` and sibling `.test.ts` suites; share bounded I/O through `artifact-file-io.ts` and its tests; export shared framing constants/limits from existing codec files as needed.
 **Interfaces:** `ArchiveInputEntry={kind:"bytes",entry:ArchiveEntry}|{kind:"file",name:string,path:string}`;
 `packArchiveStream(entries:readonly ArchiveInputEntry[]):AsyncIterable<Uint8Array>`;
 `unpackArchiveFile(path:string,scratchDir:string):Promise<ArchiveInputEntry[]>`;
@@ -115,24 +115,42 @@ Tasks 3–4 remain; the branch stays unpublished.
 `decryptArtifactFile(artifactPath:string,outPath:string,key:string):Promise<void>`.
 File writers own only their newly created output, remove partial output on failure and never delete input.
 
-- [ ] Write failing small cross-codec tests: streaming WBA equals `packArchive` bytes; each cipher
+- [x] Write failing small cross-codec tests: streaming WBA equals `packArchive` bytes; each cipher
   opens the other's output, checking version/AAD/KDF/tag layout and binary/non-ASCII/empty entries.
   Add header/tag/ciphertext tamper, wrong key, truncated fields/data, excessive u64/count/name/
   non-DB aggregate, reader/writer failure and cleanup. Assert exact current domain refusals.
-- [ ] Run `test -- src/backup-archive-file.test.ts src/artifact-cipher-file.test.ts`; first require
+- [x] Run `test -- src/backup-archive-file.test.ts src/artifact-cipher-file.test.ts`; first require
   expected missing-interface failures, then behavioral failures as each interface is introduced.
-- [ ] Implement bounded entry framing/file reads, checked BigInt lengths against file size, limits
+- [x] Implement bounded entry framing/file reads, checked BigInt lengths against file size, limits
   before allocation and the existing trailing-byte behavior. Extract DB once into private
   `scratchDir/venue.db`; retain duplicate entry names for the existing validation guard, without
   overwriting the first DB. Close every handle; unexpected file entries cannot reach placement.
-- [ ] Implement async KDF and GCM file writing with tag reservation/patch after finalization;
+- [x] Implement async KDF and GCM file writing with tag reservation/patch after finalization;
   decrypt to a private spool and return only after authentication. Map auth errors exactly as the
   byte cipher does; preserve ordinary I/O errors. Never concatenate bulk chunks.
-- [ ] Test large lengths using a real sparse WBA/file segment and bounded reads at offsets past
+- [x] Test large lengths using a real sparse WBA/file segment and bounded reads at offsets past
   2 GiB. Use smaller files with several chunks for actual crypto and full hash comparisons;
   record maximum chunks read/written rather than making a noisy RSS threshold the assertion.
-- [ ] Run both new suites plus `src/backup-archive.test.ts src/artifact-cipher.test.ts` and `typecheck`.
+- [x] Run both new suites plus `src/backup-archive.test.ts src/artifact-cipher.test.ts` and `typecheck`.
   Sign off Task 3; no users are switched until Task 4 is complete.
+
+### Task 3 qualification, 2026-10-12
+
+Missing-interface failures were followed by 27 failing behavioral cases against empty implementations.
+The five selected old/new codec and file-I/O suites pass 54 tests. Existing byte codecs open the new
+WBK1 output, the new reader opens byte-codec output, and streaming WBA1 equals the existing encoder.
+Tests cover authenticated header/tag/ciphertext changes, wrong keys, framing truncation, u64 bounds,
+metadata limits, duplicate database names, partial I/O, cleanup and protected output modes.
+A sparse duplicate segment of 2147487744 bytes is skipped without replacing the first database;
+bounded framing reads then reach metadata beyond that offset. This is not a full extraction,
+cryptographic pass or integrity check over a valid 2 GiB SQLite database.
+
+In an independent installed clone, removing or weakening metadata/name/length bounds,
+authentication, plaintext/database cleanup and chunk bounds failed 1/1/1/5/7/2/2 cases respectively;
+restoring the candidate passed 54, with the six source/test files equal to the feature checkout.
+Server types, changed-file lint/format and the unedited fiscal pair (20 tests) pass. No existing
+assertion changed in Task 3. Task 4 must integrate the codecs, storage and callers before publication;
+this checkpoint does not change the running archive pipeline.
 
 ## Task 4: scheduled local archive creation through artifact restore
 
