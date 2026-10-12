@@ -59,7 +59,7 @@ import type { TillConfig } from "./till-config.js";
 import type { Logger } from "./logger.js";
 import { billPaymentIsLive, completeBillPayment, failBillPayment } from "./bill-payments.js";
 import { CHARGED, settleFromProviderRow } from "./bill-payments-loop.js";
-import { withPinCheckAhead } from "./pin-check-ahead.js";
+import { inPinTurn, withPinCheckAhead } from "./pin-check-ahead.js";
 import {
   attestCardRefund,
   billRefundIsLive,
@@ -246,16 +246,10 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
 
   const pinThrottle = deps.pinThrottle ?? createPinThrottle();
 
-  /**
-   * The session manager's PIN, for `checkPin` before {@link pinGated} opens its transaction.
-   * Undefined when `gated` would refuse first or the PIN is not text: the transaction then refuses as
-   * it would have without a check.
-   */
   const managerPinToCheck = async (
     sessionId: string,
     pin: unknown,
-  ): Promise<{ personId: string; pin: string } | undefined> => {
-    if (typeof pin !== "string") return undefined;
+  ): Promise<{ personId: string; pin: unknown } | undefined> => {
     try {
       const { authorizedBy } = await authorizeManager(deps.db, {
         managementSessionId: sessionId,
@@ -288,22 +282,30 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
     pinThrottle.clear(DASHBOARD_PIN_SLOT, personId);
   };
 
-  /** {@link gated} after {@link verifyManagerPin}, its key derived before the transaction opens. */
   const pinGated = async <T>(
     sessionId: string,
     pin: unknown,
     fn: (tx: Transaction, personId: string) => Promise<T>,
-  ): Promise<T> =>
-    withPinCheckAhead(
+  ): Promise<T> => {
+    const credential = await managerPinToCheck(sessionId, pin);
+    const attempts = { throttle: pinThrottle, slot: DASHBOARD_PIN_SLOT };
+    const transaction = (checked: SecretCheck | undefined) =>
+      gated(sessionId, async (tx, personId) => {
+        await verifyManagerPin(tx, personId, pin, checked);
+        return fn(tx, personId);
+      });
+    if (credential === undefined) return transaction(undefined);
+    if (typeof credential.pin !== "string") {
+      // Count malformed attempts after the earlier PIN checks have settled, without deriving a key.
+      return inPinTurn(attempts, credential.personId, () => transaction(undefined));
+    }
+    return withPinCheckAhead(
       deps.db,
-      await managerPinToCheck(sessionId, pin),
-      { throttle: pinThrottle, slot: DASHBOARD_PIN_SLOT },
-      (checked) =>
-        gated(sessionId, async (tx, personId) => {
-          await verifyManagerPin(tx, personId, pin, checked);
-          return fn(tx, personId);
-        }),
+      { personId: credential.personId, pin: credential.pin },
+      attempts,
+      transaction,
     );
+  };
 
   /**
    * Asks the provider what became of an abandoned attempt. `payment.not_found` from it means a
