@@ -1419,6 +1419,7 @@ async function bootServer(
   const till: TillConfig = {
     ...config.till,
     simplifiedInvoiceLimit: tillBackend.simplifiedInvoiceLimit,
+    operationDescriptionRequired: enabledFiscal.venueFields !== undefined,
     practiceMode: config.onboardingIntent === "demo" || config.onboardingIntent === "prepare",
   };
   // The venue's default DISPLAY locale. The override is the RAW `till.localeOverride`, not the

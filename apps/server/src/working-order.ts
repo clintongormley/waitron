@@ -1,3 +1,4 @@
+import { readSaleOperationDescription } from "./sale-operation-description.js";
 import { tableInService } from "@waitron/db";
 import { readStationQueueMoves, type StationQueueMove } from "./station-queue-moves.js";
 import {
@@ -5807,10 +5808,15 @@ export async function issueUnpaidInvoice(
     log,
     workingOrderId: id,
   });
+  const operationDescription = await readSaleOperationDescription(tx, cfg, {
+    kind: "order",
+    orderId: id,
+  });
   const { saleId, fiscal } = await recordSale(tx, backend, {
     origin: cfg.origin,
     nodeId: cfg.nodeId,
     ...selected.sale,
+    operationDescription,
     workingOrderId: brandWorkingOrderId(id),
     ...language,
     total: priced.total,

@@ -1,3 +1,4 @@
+import { readSaleOperationDescription } from "./sale-operation-description.js";
 import { eq } from "drizzle-orm";
 import { readLiveSeriesIdTx, saleLines, sales } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
@@ -56,7 +57,12 @@ export async function creditWholeInvoice(
       .where(eq(saleLines.saleId, invoice.id))
       .orderBy(saleLines.lineNo),
   );
+  const operationDescription = await readSaleOperationDescription(tx, cfg, {
+    kind: "sale",
+    saleId: invoice.id,
+  });
   await recordCorrection(tx, deps.backend, {
+    operationDescription,
     origin: cfg.origin,
     nodeId: cfg.nodeId,
     seriesId,

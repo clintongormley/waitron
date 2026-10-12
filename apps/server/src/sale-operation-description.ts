@@ -5,9 +5,10 @@ import "./errors.js";
 
 export async function readSaleOperationDescription(
   tx: Transaction,
-  cfg: { locationId: LocationId },
+  cfg: { locationId: LocationId; operationDescriptionRequired?: boolean },
   source: { kind: "order"; orderId: string } | { kind: "sale"; saleId: string },
 ): Promise<string> {
+  if (cfg.operationDescriptionRequired === false) return "";
   let departmentId: string | null;
   if (source.kind === "sale") {
     departmentId = await VENUE_SERVICE.receiptDepartmentForSale(tx, cfg, source.saleId);

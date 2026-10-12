@@ -1,3 +1,4 @@
+import { readSaleOperationDescription } from "./sale-operation-description.js";
 import { selectOrderInvoice } from "./invoice-selection.js";
 import { withReceiptListPrices } from "./receipt-lines.js";
 import { and, eq, inArray, sql } from "drizzle-orm";
@@ -687,10 +688,15 @@ async function issueWhenFullyPaid(
     log: deps.log,
     workingOrderId,
   });
+  const operationDescription = await readSaleOperationDescription(tx, cfg, {
+    kind: "order",
+    orderId: workingOrderId,
+  });
   const { saleId, fiscal } = await recordSale(tx, deps.backend, {
     origin: cfg.origin,
     nodeId: cfg.nodeId,
     ...selected.sale,
+    operationDescription,
     workingOrderId: brandWorkingOrderId(workingOrderId),
     ...language,
     total: priced.total,
@@ -1043,6 +1049,7 @@ async function beginBillPayment(
   const { request, items } = await allocationRequestFor(tx, workingOrderId, req, held);
   const total = await storedOrderTotal(tx, workingOrderId);
   await selectOrderInvoice(tx, backend, cfg, workingOrderId, total);
+  await readSaleOperationDescription(tx, cfg, { kind: "order", orderId: workingOrderId });
   const allocation = confirmAllocation(
     fundsOf(workingOrderId, total, held),
     request,

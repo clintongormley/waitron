@@ -1127,6 +1127,7 @@ async function payIntegrated(
         : await priceStoredOrderForIssuance(tx, req.id);
     // Before the reader is asked: P3 could never file this sale.
     await selectOrderInvoice(tx, deps.backend, cfg, req.id, order.gross.total);
+    await readSaleOperationDescription(tx, cfg, { kind: "order", orderId: req.id });
     const wasPlaced = locked?.status === "placed";
     if (compareDecimal(order.gross.total, ZERO) === 0) {
       // Nothing to charge, so the reader is not asked and no tip is taken; called only to refuse a
@@ -1402,16 +1403,26 @@ async function finalizeCapture(
   /* v8 ignore stop */
   try {
     return await withTransaction(deps.db, async (tx) => {
+      const [locked] = await tx
+        .select({ status: workingOrders.status })
+        .from(workingOrders)
+        .where(eq(workingOrders.id, req.id));
+      if (locked?.status === "settled") return readSettledTicket(deps.backend, tx, cfg, req.id);
       const { priced, clock } = issueMoment(deps.clock, grossInP1);
       const selected = await selectOrderInvoice(tx, deps.backend, cfg, req.id, priced.total);
       const language = await saleLanguageFor(tx, cfg.locationId, selected.receiptLocale, {
         log: deps.log,
         workingOrderId: req.id,
       });
+      const operationDescription = await readSaleOperationDescription(tx, cfg, {
+        kind: "order",
+        orderId: req.id,
+      });
       const { saleId, fiscal } = await recordSale(tx, deps.backend, {
         origin: cfg.origin,
         nodeId: cfg.nodeId,
         ...selected.sale,
+        operationDescription,
         // The sale-idempotency key (`sales_working_order_id_key`) the backstop below relies on.
         workingOrderId: brandWorkingOrderId(req.id),
         ...language,
@@ -1564,10 +1575,15 @@ async function finalizeRecovery(
       log: deps.log,
       workingOrderId: req.id,
     });
+    const operationDescription = await readSaleOperationDescription(tx, cfg, {
+      kind: "order",
+      orderId: req.id,
+    });
     const { saleId, fiscal } = await recordSale(tx, deps.backend, {
       origin,
       nodeId: cfg.nodeId,
       ...selected.sale,
+      operationDescription,
       workingOrderId: brandWorkingOrderId(req.id),
       ...language,
       total: priced.total,

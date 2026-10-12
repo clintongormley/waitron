@@ -194,6 +194,14 @@ async function provision(db: typeof suite.db): Promise<Venue> {
     tipsEnabled: false,
     simplifiedInvoiceLimit: null,
   });
+  const rows = await db
+    .select()
+    .from(departments)
+    .where(eq(departments.locationId, cfg.locationId));
+  for (const department of rows)
+    await db
+      .insert(departmentReceipts)
+      .values({ departmentId: department.id, receipt: { operationDescription: "Restaurante" } });
   const operator = {
     personId: OPERATOR,
     sessionId: await openTillSession(db, { deviceId: cfg.origin.deviceId, personId: OPERATOR }),
@@ -1993,11 +2001,21 @@ describe("the invoice at full payment", () => {
           .insert(departmentReceipts)
           .values({
             departmentId: contactDepartmentId,
-            receipt: { email: "venue@example.test", phone: "910000000" },
+            receipt: {
+              operationDescription: "Restaurante",
+              email: "venue@example.test",
+              phone: "910000000",
+            },
           })
           .onConflictDoUpdate({
             target: departmentReceipts.departmentId,
-            set: { receipt: { email: "venue@example.test", phone: "910000000" } },
+            set: {
+              receipt: {
+                operationDescription: "Restaurante",
+                email: "venue@example.test",
+                phone: "910000000",
+              },
+            },
           }),
       );
       const request = {
@@ -2048,7 +2066,7 @@ describe("the invoice at full payment", () => {
       await inTx((tx) =>
         tx
           .update(departmentReceipts)
-          .set({ receipt: { email: "new@example.test" } })
+          .set({ receipt: { operationDescription: "Restaurante", email: "new@example.test" } })
           .where(eq(departmentReceipts.departmentId, contactDepartmentId)),
       );
       await expect(
@@ -2150,11 +2168,21 @@ describe("the invoice at full payment", () => {
           .insert(departmentReceipts)
           .values({
             departmentId: contactDepartmentId,
-            receipt: { email: "venue@example.test", phone: "910000000" },
+            receipt: {
+              operationDescription: "Restaurante",
+              email: "venue@example.test",
+              phone: "910000000",
+            },
           })
           .onConflictDoUpdate({
             target: departmentReceipts.departmentId,
-            set: { receipt: { email: "venue@example.test", phone: "910000000" } },
+            set: {
+              receipt: {
+                operationDescription: "Restaurante",
+                email: "venue@example.test",
+                phone: "910000000",
+              },
+            },
           }),
       );
       const request = {
@@ -2302,10 +2330,21 @@ describe("the invoice at full payment", () => {
         await inTx((tx) =>
           tx
             .insert(departmentReceipts)
-            .values({ departmentId: contactDepartmentId, receipt: email === null ? {} : { email } })
+            .values({
+              departmentId: contactDepartmentId,
+              receipt: {
+                operationDescription: "Restaurante",
+                ...(email === null ? {} : { email }),
+              },
+            })
             .onConflictDoUpdate({
               target: departmentReceipts.departmentId,
-              set: { receipt: email === null ? {} : { email } },
+              set: {
+                receipt: {
+                  operationDescription: "Restaurante",
+                  ...(email === null ? {} : { email }),
+                },
+              },
             }),
         );
         const request = {
@@ -2395,10 +2434,15 @@ describe("the invoice at full payment", () => {
         await inTx(async (tx) => {
           await tx
             .insert(departmentReceipts)
-            .values({ departmentId: contactDepartmentId, receipt: { email: "venue@example.test" } })
+            .values({
+              departmentId: contactDepartmentId,
+              receipt: { operationDescription: "Restaurante", email: "venue@example.test" },
+            })
             .onConflictDoUpdate({
               target: departmentReceipts.departmentId,
-              set: { receipt: { email: "venue@example.test" } },
+              set: {
+                receipt: { operationDescription: "Restaurante", email: "venue@example.test" },
+              },
             });
           await tx.insert(pagePrinters).values({
             id: pagePrinterId,
@@ -2981,6 +3025,7 @@ describe("bill answer receipt presentation", () => {
           .values({
             departmentId,
             receipt: {
+              operationDescription: "Restaurante",
               headerSubtitle: { "es-ES": "Bill subtitle" },
               printAddress: false,
             },
@@ -2989,6 +3034,7 @@ describe("bill answer receipt presentation", () => {
             target: departmentReceipts.departmentId,
             set: {
               receipt: {
+                operationDescription: "Restaurante",
                 headerSubtitle: { "es-ES": "Bill subtitle" },
                 printAddress: false,
               },

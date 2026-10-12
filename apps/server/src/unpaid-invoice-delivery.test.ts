@@ -41,10 +41,16 @@ beforeEach(async () => {
       .select()
       .from(departments)
       .where(eq(departments.locationId, venue.cfg.locationId));
-    await tx.insert(departmentReceipts).values({
-      departmentId: rows.find((row) => row.isDefault)!.id,
-      receipt: { email: "venue@example.test" },
-    });
+    await tx
+      .insert(departmentReceipts)
+      .values({
+        departmentId: rows.find((row) => row.isDefault)!.id,
+        receipt: { operationDescription: "Restaurante", email: "venue@example.test" },
+      })
+      .onConflictDoUpdate({
+        target: departmentReceipts.departmentId,
+        set: { receipt: { operationDescription: "Restaurante", email: "venue@example.test" } },
+      });
   });
 });
 

@@ -90,6 +90,11 @@ Disable with permanent Delete in the same screens
 mockup is the private canvas https://claude.ai/artifact/Tya5FcmK39ESBkQ2hTaA7s, which has four
 boards: the list, Edit department, Edit zone and Edit receipt.
 
+**Branch checkpoint, 2026-10-12.** Product issuance now uses department descriptions, with
+readiness checked before new payment dispatch and the no-field fiscal slot handled at boot.
+Dashboard receipt integration, field visibility, obsolete-editor retirement and the full product
+look remain, followed by the one-list editors and drag moves. The branch is unpublished.
+
 **The list.** "Departments and zones" becomes one list. Each department is a row, and its zones are
 indented beneath it. The columns are name, service style (how orders start), counter service (when
 counter service is used) and print receipt. The row menu is the last column, keyed `actions` and
