@@ -225,7 +225,11 @@ export function validateMenuTimetables(
     });
   }
 
-  const slotsByDay = new Map<unknown, MenuSlot[]>([...days.keys()].map((id) => [id, []]));
+  // A weekday day's slots are checked as rows only: the import drops them, so their ranges are not.
+  const slotsByNamedDay = new Map<unknown, MenuSlot[]>(
+    [...days].filter(([, day]) => day.date !== null).map(([id]) => [id, []]),
+  );
+  let namedSlots = 0;
   for (const row of tables.menu_slots ?? []) {
     const day = days.get(row.timetable_id);
     if (day === undefined) refuse("menu_slots.timetable_id");
@@ -234,18 +238,21 @@ export function validateMenuTimetables(
     for (const column of ["starts_at", "ends_at"])
       if (typeof row[column] !== "string" || !STORED_TIME.test(row[column]))
         refuse(`menu_slots.${column}`);
-    slotsByDay.get(row.timetable_id)!.push({
+    const slots = slotsByNamedDay.get(row.timetable_id);
+    if (slots === undefined) continue;
+    slots.push({
       periodId: row.period_id as string,
       startsAt: (row.starts_at as string).slice(0, 5),
       endsAt: (row.ends_at as string).slice(0, 5),
     });
+    namedSlots += 1;
   }
-  if ((tables.menu_slots ?? []).length === 0) return;
+  if (namedSlots === 0) return;
   if (bundle === undefined || !CUTOVER.test(bundle.dayCutover)) refuse("menu_slots");
-  for (const [id, slots] of slotsByDay) {
+  for (const [id, slots] of slotsByNamedDay) {
     const parsed = parsedAs("menu_slots", () => parseServiceDay(slots, "slots", bundle.dayCutover));
-    const date = days.get(id)!.date;
-    if (date === null || !isReadableClock(bundle)) continue;
+    const date = days.get(id)!.date!;
+    if (!isReadableClock(bundle)) continue;
     for (const slot of parsed)
       for (const end of ["startsAt", "endsAt"] as const) {
         // The exclusive end at changeover belongs to the next calendar morning.
@@ -571,8 +578,6 @@ function validateServiceHierarchy(tables: Tables): void {
 
 function validateZoneClosedTimes(tables: Tables, bundle?: { readonly dayCutover: string }): void {
   const rows = tables.zone_closed_times ?? [];
-  if (rows.length === 0) return;
-  if (bundle === undefined || !CUTOVER.test(bundle.dayCutover)) refuse("zone_closed_times");
   const zones = ids(tables.floor_zones);
   const configured = new Set((tables.zone_service_policies ?? []).map((row) => row.zone_id));
   const days = new Map((tables.special_dates ?? []).map((row) => [row.id, row]));
@@ -593,7 +598,9 @@ function validateZoneClosedTimes(tables: Tables, bundle?: { readonly dayCutover:
       if (typeof row[column] !== "string" || !STORED_TIME.test(row[column]))
         refuse(`zone_closed_times.${column}`);
     }
-    const key = JSON.stringify([row.zone_id, weekday, day]);
+    // A weekday row is checked as a row only: the import drops it, so its range is not.
+    if (weekday !== null) continue;
+    const key = JSON.stringify([row.zone_id, day]);
     const ranges = groups.get(key) ?? [];
     ranges.push({
       startsAt: (row.starts_at as string).slice(0, 5),
@@ -601,6 +608,8 @@ function validateZoneClosedTimes(tables: Tables, bundle?: { readonly dayCutover:
     });
     groups.set(key, ranges);
   }
+  if (groups.size === 0) return;
+  if (bundle === undefined || !CUTOVER.test(bundle.dayCutover)) refuse("zone_closed_times");
   for (const ranges of groups.values())
     parsedAs("zone_closed_times", () => parseClosedRanges(ranges, "ranges", bundle.dayCutover));
 }

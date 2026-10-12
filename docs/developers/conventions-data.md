@@ -630,8 +630,10 @@ them" in `apps/server/src/configuration-transfer.test.ts` renames and moves one 
 export, finds the target holding the exported four, and asks `resolveDepartmentService` and
 `closedZoneIdsAt` about one Saturday in each of two seasons. The import keeps no old weekday row:
 the transfer's `afterImport` deletes the `menu_day_timetables` and `zone_closed_times` rows that
-name a weekday, and named-day rows stay (the case "leaves a bundle's old weekday rows behind,
-keeps its named-day rows, and serves the week from its seasons" in the same file).
+name a weekday, and named-day rows stay. Such a row's own fields and the ids it names are still
+checked, its ranges are not, so a stale range crossing the bundle's changeover is no refusal (the
+cases "leaves a bundle's old weekday rows behind (%s), keeps its named-day rows, and serves the
+week from its seasons" in the same file).
 
 `validateSeasonWeeks` (`packages/venue-service/src/configuration-transfer.ts`) refuses, among
 others: a season start that is not a common year's date or is `02-29`; a range off the

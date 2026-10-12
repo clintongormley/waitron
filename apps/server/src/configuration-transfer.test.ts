@@ -4316,9 +4316,11 @@ describe("named days in a configuration transfer", () => {
         edited.tables.special_dates!.find((day) => day.id === dayId)!.own_hours = 0;
         field += ".special_date_id";
       }
+      // A weekday row's range is not checked, since the import drops it.
+      const named = edited.tables.zone_closed_times.find((r) => r.special_date_id === dayId)!;
       if (problem === "overlap")
-        edited.tables.zone_closed_times.push({ ...row, id: randomUUID(), starts_at: "23:15:00" });
-      if (problem === "off-step") row.starts_at = "23:05:00";
+        edited.tables.zone_closed_times.push({ ...named, id: randomUUID(), starts_at: "23:15:00" });
+      if (problem === "off-step") named.starts_at = "22:05:00";
       const error = { code: "setup.request_invalid", params: { field } };
       expect(() => validateConfigurationBundle(edited, ALL_MODULES, versions)).toThrowError(
         expect.objectContaining(error),
@@ -6135,131 +6137,143 @@ describe("seasons in a configuration transfer", () => {
     return rows.rows;
   }
 
-  it("leaves a bundle's old weekday rows behind, keeps its named-day rows, and serves the week from its seasons", async () => {
-    const source = await applyVenue(planVenue(venue("B35792470"), ALL_MODULES), {
-      db: suite.db,
-      modules: ALL_MODULES,
-    });
-    const scope = { locationId: brandLocationId(source.locationId) };
-    await withTransaction(suite.db, async (tx) => {
-      const department = await createDepartment(tx, scope, {
-        name: "Weekday rows",
-        orderStart: "table",
+  // At the 06:00 changeover a weekday range ending 07:00 crosses it; the import drops the row
+  // unchecked, so it refuses nothing.
+  it.each([
+    ["within the changeover", "02:00:00", "23:00:00"],
+    ["a menu range crossing the changeover", "07:00:00", "23:00:00"],
+    ["a zone closure crossing the changeover", "02:00:00", "07:00:00"],
+  ])(
+    "leaves a bundle's old weekday rows behind (%s), keeps its named-day rows, and serves the week from its seasons",
+    async (_, slotEnd, closureEnd) => {
+      const source = await applyVenue(planVenue(venue("B35792470"), ALL_MODULES), {
+        db: suite.db,
+        modules: ALL_MODULES,
       });
-      const { id: dinner } = await saveMenuPeriod(
-        tx,
-        scope,
-        department.id,
-        {
-          name: "Dinner",
-          menuId: (await createCatalogue(tx, { name: "Weekday rows menu" })).id,
-          staffMenuIds: [],
-        },
-        0,
-      );
-      await replaceMenuWeek(
-        tx,
-        scope,
-        department.id,
-        saturday([{ periodId: dinner, startsAt: "20:00", endsAt: "02:00" }]).map(
-          (slots, weekday) => ({ weekday, slots }),
-        ),
-        WINTER_SATURDAY,
-        0,
-      );
-      const zone = await createServiceZone(tx, scope, {
-        name: "Weekday terrace",
-        departmentId: department.id,
-      });
-      await tx.execute(sql`insert into zone_closed_times (id, zone_id, weekday, special_date_id, starts_at, ends_at)
-        values (${randomUUID()}, ${zone.id}, 6, null, '20:00:00', '23:00:00')`);
-      const saturdayTimetable = randomUUID();
-      await tx.execute(sql`insert into menu_day_timetables (id, department_id, weekday, special_date_id)
+      const scope = { locationId: brandLocationId(source.locationId) };
+      await withTransaction(suite.db, async (tx) => {
+        const department = await createDepartment(tx, scope, {
+          name: "Weekday rows",
+          orderStart: "table",
+        });
+        const { id: dinner } = await saveMenuPeriod(
+          tx,
+          scope,
+          department.id,
+          {
+            name: "Dinner",
+            menuId: (await createCatalogue(tx, { name: "Weekday rows menu" })).id,
+            staffMenuIds: [],
+          },
+          0,
+        );
+        await replaceMenuWeek(
+          tx,
+          scope,
+          department.id,
+          saturday([{ periodId: dinner, startsAt: "20:00", endsAt: "02:00" }]).map(
+            (slots, weekday) => ({ weekday, slots }),
+          ),
+          WINTER_SATURDAY,
+          0,
+        );
+        const zone = await createServiceZone(tx, scope, {
+          name: "Weekday terrace",
+          departmentId: department.id,
+        });
+        await tx.execute(sql`insert into zone_closed_times (id, zone_id, weekday, special_date_id, starts_at, ends_at)
+        values (${randomUUID()}, ${zone.id}, 6, null, '20:00:00', ${closureEnd})`);
+        const saturdayTimetable = randomUUID();
+        await tx.execute(sql`insert into menu_day_timetables (id, department_id, weekday, special_date_id)
         values (${saturdayTimetable}, ${department.id}, 6, null)`);
-      await tx.execute(sql`insert into menu_slots (id, timetable_id, department_id, period_id, starts_at, ends_at)
-        values (${randomUUID()}, ${saturdayTimetable}, ${department.id}, ${dinner}, '20:00:00', '02:00:00')`);
-      const named = await saveSpecialDate(
-        tx,
-        scope,
-        null,
-        {
-          date: "2027-01-06",
-          name: "Own hours day",
-          kind: "holiday",
-          repeats: false,
-          ownHours: true,
-          closeWholeVenue: false,
-          cells: [],
-        },
-        WINTER_SATURDAY,
-        undefined,
-        0,
-      );
-      const timetable = randomUUID();
-      await tx.execute(sql`insert into menu_day_timetables (id, department_id, weekday, special_date_id)
+        await tx.execute(sql`insert into menu_slots (id, timetable_id, department_id, period_id, starts_at, ends_at)
+        values (${randomUUID()}, ${saturdayTimetable}, ${department.id}, ${dinner}, '20:00:00', ${slotEnd})`);
+        const named = await saveSpecialDate(
+          tx,
+          scope,
+          null,
+          {
+            date: "2027-01-06",
+            name: "Own hours day",
+            kind: "holiday",
+            repeats: false,
+            ownHours: true,
+            closeWholeVenue: false,
+            cells: [],
+          },
+          WINTER_SATURDAY,
+          undefined,
+          0,
+        );
+        const timetable = randomUUID();
+        await tx.execute(sql`insert into menu_day_timetables (id, department_id, weekday, special_date_id)
         values (${timetable}, ${department.id}, null, ${named.id})`);
-      await tx.execute(sql`insert into menu_slots (id, timetable_id, department_id, period_id, starts_at, ends_at)
+        await tx.execute(sql`insert into menu_slots (id, timetable_id, department_id, period_id, starts_at, ends_at)
         values (${randomUUID()}, ${timetable}, ${department.id}, ${dinner}, '19:00:00', '23:00:00')`);
-      await tx.execute(sql`insert into zone_closed_times (id, zone_id, weekday, special_date_id, starts_at, ends_at)
+        await tx.execute(sql`insert into zone_closed_times (id, zone_id, weekday, special_date_id, starts_at, ends_at)
         values (${randomUUID()}, ${zone.id}, null, ${named.id}, '21:00:00', '23:00:00')`);
-    });
-    const versions = await schemaVersionsByModule(suite.db, ALL_MODULES);
-    const bundle = await buildConfigurationBundle(
-      suite.db,
-      source,
-      ALL_MODULES,
-      new Date("2026-10-07T10:00:00Z"),
-      versions,
-    );
-    expect(bundle.tables.menu_day_timetables!.some((row) => row.weekday === 6)).toBe(true);
-    expect(bundle.tables.zone_closed_times!.some((row) => row.weekday === 6)).toBe(true);
-    const target = await applyVenue(planVenue(venue("B35792471"), ALL_MODULES), {
-      db: targetSuite.db,
-      modules: ALL_MODULES,
-      beforeCommit: (tx, result) =>
-        importConfigurationTables(tx, bundle, result, ALL_MODULES, versions),
-    });
+      });
+      const versions = await schemaVersionsByModule(suite.db, ALL_MODULES);
+      const bundle = await buildConfigurationBundle(
+        suite.db,
+        source,
+        ALL_MODULES,
+        new Date("2026-10-07T10:00:00Z"),
+        versions,
+      );
+      expect(bundle.tables.menu_day_timetables!.some((row) => row.weekday === 6)).toBe(true);
+      expect(bundle.tables.zone_closed_times!.some((row) => row.weekday === 6)).toBe(true);
+      const target = await applyVenue(planVenue(venue("B35792471"), ALL_MODULES), {
+        db: targetSuite.db,
+        modules: ALL_MODULES,
+        beforeCommit: (tx, result) =>
+          importConfigurationTables(tx, bundle, result, ALL_MODULES, versions),
+      });
 
-    const weekdayRows = await targetSuite.db.execute<{ timetables: number; closures: number }>(sql`
+      const weekdayRows = await targetSuite.db.execute<{
+        timetables: number;
+        closures: number;
+      }>(sql`
       select (select count(*) from menu_day_timetables where weekday is not null) as timetables,
         (select count(*) from zone_closed_times where weekday is not null) as closures`);
-    expect(weekdayRows.rows).toEqual([{ timetables: 0, closures: 0 }]);
-    const namedHours = await targetSuite.db.execute(sql`
+      expect(weekdayRows.rows).toEqual([{ timetables: 0, closures: 0 }]);
+      const namedHours = await targetSuite.db.execute(sql`
       select d.date, s.starts_at, s.ends_at from menu_day_timetables t
       join special_dates d on d.id=t.special_date_id join menu_slots s on s.timetable_id=t.id
       join departments dep on dep.id=t.department_id where dep.name='Weekday rows'`);
-    expect(namedHours.rows).toEqual([
-      { date: "2027-01-06", starts_at: "19:00:00", ends_at: "23:00:00" },
-    ]);
-    const namedClosures = await targetSuite.db.execute(sql`
+      expect(namedHours.rows).toEqual([
+        { date: "2027-01-06", starts_at: "19:00:00", ends_at: "23:00:00" },
+      ]);
+      const namedClosures = await targetSuite.db.execute(sql`
       select d.date, c.starts_at, c.ends_at from zone_closed_times c
       join special_dates d on d.id=c.special_date_id join floor_zones z on z.id=c.zone_id
       where z.name='Weekday terrace'`);
-    expect(namedClosures.rows).toEqual([
-      { date: "2027-01-06", starts_at: "21:00:00", ends_at: "23:00:00" },
-    ]);
-    const targetScope = { locationId: brandLocationId(target.locationId) };
-    const [department] = await targetSuite.db
-      .select({ id: departments.id })
-      .from(departments)
-      .where(eq(departments.name, "Weekday rows"));
-    const zone = await targetSuite.db.execute<{ id: string }>(
-      sql`select id from floor_zones where name='Weekday terrace'`,
-    );
-    const answers = await withTransaction(targetSuite.db, async (tx) => ({
-      service: await VENUE_SERVICE.resolveDepartmentService(
-        tx,
-        targetScope,
-        department!.id,
-        WINTER_SATURDAY,
-      ),
-      closed: await VENUE_SERVICE.closedZoneIdsAt(tx, targetScope, WINTER_SATURDAY, [
-        zone.rows[0]!.id,
-      ]),
-    }));
-    expect(answers.service).toMatchObject({ open: true, periodName: "Dinner" });
-    expect([...answers.closed]).toEqual([]);
-  });
+      expect(namedClosures.rows).toEqual([
+        { date: "2027-01-06", starts_at: "21:00:00", ends_at: "23:00:00" },
+      ]);
+      const targetScope = { locationId: brandLocationId(target.locationId) };
+      const [department] = await targetSuite.db
+        .select({ id: departments.id })
+        .from(departments)
+        .where(eq(departments.name, "Weekday rows"));
+      const zone = await targetSuite.db.execute<{ id: string }>(
+        sql`select id from floor_zones where name='Weekday terrace'`,
+      );
+      const answers = await withTransaction(targetSuite.db, async (tx) => ({
+        service: await VENUE_SERVICE.resolveDepartmentService(
+          tx,
+          targetScope,
+          department!.id,
+          WINTER_SATURDAY,
+        ),
+        closed: await VENUE_SERVICE.closedZoneIdsAt(tx, targetScope, WINTER_SATURDAY, [
+          zone.rows[0]!.id,
+        ]),
+      }));
+      expect(answers.service).toMatchObject({ open: true, periodName: "Dinner" });
+      expect([...answers.closed]).toEqual([]);
+    },
+  );
 
   it("refuses a bundle whose grace reaches the next season's first day, and writes nothing", async () => {
     const source = await applyVenue(planVenue(venue("B35792472"), ALL_MODULES), {

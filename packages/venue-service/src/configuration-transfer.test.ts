@@ -619,29 +619,16 @@ describe("the menu timetable rows of a bundle", () => {
       "menu_slots.starts_at",
     ],
     [
-      "a slot ending where it starts",
+      "a named-day slot ending where it starts",
       (t: Tables) => {
-        t.menu_slots![0]!.ends_at = "09:00:00";
+        t.menu_slots![2]!.ends_at = "10:00:00";
       },
       "menu_slots",
     ],
     [
-      "two slots overlapping within a day",
+      "two slots overlapping within a named day",
       (t: Tables) => {
-        t.menu_slots!.push(slotRow("t-monday", MADRUGADA, "11:00:00", "13:00:00"));
-      },
-      "menu_slots",
-    ],
-    [
-      "a week range crossing the business-day boundary",
-      (t: Tables) => {
-        t.menu_day_timetables!.push({
-          id: "t-saturday",
-          department_id: RESTAURANT,
-          weekday: 6,
-          special_date_id: null,
-        });
-        t.menu_slots!.push(slotRow("t-saturday", MANANAS, "01:00:00", "07:00:00"));
+        t.menu_slots!.push(slotRow("t-christmas", MADRUGADA, "12:00:00", "14:00:00"));
       },
       "menu_slots",
     ],
@@ -693,6 +680,31 @@ describe("the menu timetable rows of a bundle", () => {
     edit(tables);
     expect(() => validateMenuTimetables(tables, madrid("2026-10-07T10:00:00Z"))).toThrowError(
       refusal(field),
+    );
+  });
+
+  it("accept old weekday ranges the import drops, crossing the changeover or overlapping, but refuse the same on a named day", () => {
+    const tables = menuTables();
+    tables.menu_day_timetables!.push({
+      id: "t-saturday",
+      department_id: RESTAURANT,
+      weekday: 6,
+      special_date_id: null,
+    });
+    tables.menu_slots!.push(
+      slotRow("t-saturday", MANANAS, "01:00:00", "07:00:00"),
+      slotRow("t-monday", MADRUGADA, "11:00:00", "13:00:00"),
+    );
+    expect(() => validateMenuTimetables(tables, madrid("2026-10-07T10:00:00Z"))).not.toThrow();
+    expect(() => validate(tables, madrid("2026-10-07T10:00:00Z"))).not.toThrow();
+    tables.menu_day_timetables!.at(-1)!.weekday = null;
+    tables.menu_day_timetables!.at(-1)!.special_date_id = CHRISTMAS;
+    tables.menu_day_timetables = tables.menu_day_timetables!.filter(
+      (row) => row.id !== "t-christmas",
+    );
+    tables.menu_slots = tables.menu_slots!.filter((row) => row.timetable_id !== "t-christmas");
+    expect(() => validateMenuTimetables(tables, madrid("2026-10-07T10:00:00Z"))).toThrowError(
+      refusal("menu_slots"),
     );
   });
 
@@ -1327,6 +1339,11 @@ describe("service-period configuration", () => {
       ],
     };
   }
+  function onNamedDay(t: Tables): void {
+    t.special_dates = [{ id: "june", date: "2027-06-01", name: "June", close_whole_venue: 0 }];
+    t.menu_day_timetables![0]!.weekday = null;
+    t.menu_day_timetables![0]!.special_date_id = "june";
+  }
   it("accepts customer and staff menus without a retired department menu list", () => {
     expect(() => VENUE_SERVICE_CONFIGURATION_TRANSFER.validate(tables(), context)).not.toThrow();
   });
@@ -1395,15 +1412,17 @@ describe("service-period configuration", () => {
       "menu_period_staff_menus.display_order",
     ],
     [
-      "a non-quarter-hour endpoint",
+      "a non-quarter-hour endpoint on a named day",
       (t: Tables) => {
+        onNamedDay(t);
         t.menu_slots![0]!.starts_at = "21:01:00";
       },
       "menu_slots",
     ],
     [
-      "a range crossing the changeover",
+      "a named-day range crossing the changeover",
       (t: Tables) => {
+        onNamedDay(t);
         t.menu_slots![0]!.ends_at = "07:00:00";
       },
       "menu_slots",
@@ -1414,6 +1433,12 @@ describe("service-period configuration", () => {
     expect(() => VENUE_SERVICE_CONFIGURATION_TRANSFER.validate(t, context)).toThrowError(
       refusal(field),
     );
+  });
+  it("accepts an old weekday range off the quarter-hour or crossing the changeover, which the import drops", () => {
+    const t = tables();
+    t.menu_slots![0]!.starts_at = "21:01:00";
+    t.menu_slots![0]!.ends_at = "07:00:00";
+    expect(() => VENUE_SERVICE_CONFIGURATION_TRANSFER.validate(t, context)).not.toThrow();
   });
   it("keeps early-morning ranges in their own business day, including whole-day ranges", () => {
     const t = tables();
@@ -1467,6 +1492,7 @@ describe("service-period configuration", () => {
 });
 
 describe("zone closed times in configuration transfer", () => {
+  const ownDay = { weekday: null, special_date_id: "own-day" };
   const clock = {
     createdAt: new Date("2026-10-08T12:00:00Z"),
     timeZone: "Europe/Madrid",
@@ -1547,10 +1573,15 @@ describe("zone closed times in configuration transfer", () => {
     ["late weekday", { weekday: 7 }, "zone_closed_times.weekday"],
     ["noncanonical start", { starts_at: "23:00" }, "zone_closed_times.starts_at"],
     ["nonzero seconds", { ends_at: "04:00:01" }, "zone_closed_times.ends_at"],
-    ["empty range", { ends_at: "23:00:00" }, "zone_closed_times"],
-    ["backwards range", { ends_at: "22:00:00" }, "zone_closed_times"],
-    ["off-step start", { starts_at: "23:05:00" }, "zone_closed_times"],
-    ["off-step end", { ends_at: "03:55:00" }, "zone_closed_times"],
+    ["empty named-day range", { ...ownDay, ends_at: "23:00:00" }, "zone_closed_times"],
+    ["backwards named-day range", { ...ownDay, ends_at: "22:00:00" }, "zone_closed_times"],
+    ["off-step named-day start", { ...ownDay, starts_at: "23:05:00" }, "zone_closed_times"],
+    ["off-step named-day end", { ...ownDay, ends_at: "03:55:00" }, "zone_closed_times"],
+    [
+      "named-day range crossing the changeover",
+      { ...ownDay, ends_at: "05:00:00" },
+      "zone_closed_times",
+    ],
   ])("refuses %s", (_name, changes, field) => {
     const tables = closureTables();
     Object.assign(tables.zone_closed_times![0]!, changes);
@@ -1566,8 +1597,19 @@ describe("zone closed times in configuration transfer", () => {
       refusal("zone_closed_times.special_date_id"),
     );
   });
-  it("refuses overlapping ranges in the same zone and weekday", () => {
+  it("accepts old weekday ranges the import drops: empty, off-step, crossing the changeover or overlapping", () => {
     const tables = closureTables();
+    tables.zone_closed_times![0]!.ends_at = "05:00:00";
+    tables.zone_closed_times!.push(
+      { ...tables.zone_closed_times![0]!, id: "overlap", starts_at: "23:15:00" },
+      { ...tables.zone_closed_times![0]!, id: "empty", weekday: 1, ends_at: "23:00:00" },
+      { ...tables.zone_closed_times![0]!, id: "off-step", weekday: 2, starts_at: "23:05:00" },
+    );
+    expect(() => VENUE_SERVICE_CONFIGURATION_TRANSFER.validate(tables, clock)).not.toThrow();
+  });
+  it("refuses overlapping ranges in the same zone and named day", () => {
+    const tables = closureTables();
+    Object.assign(tables.zone_closed_times![0]!, ownDay);
     tables.zone_closed_times!.push({
       ...tables.zone_closed_times![0]!,
       id: "overlap",
