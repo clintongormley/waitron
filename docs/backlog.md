@@ -3167,6 +3167,13 @@ _Formerly A7, and the dashboard entries in the opening part of the old Track A (
   full-height dialog those are not the same place. Options: push the message to the bottom of the
   body, or into the footer.
 
+- **A short notice in a full-height dialog leaves most of it empty** (found by A507's look, owner
+  decision needed). The Prep stations route-change notice (`size="wide"`, `#previewDialog` in
+  `packages/venue-service/src/dashboard/prep-stations-screen.ts`) now holds three or four sentences
+  with its product list closed, but `wt-modal` gives every dialog except a compact one the full
+  screen height (`packages/ui/src/components/wt-modal.ts:17`), so at 1280 wide most of it is blank.
+  Decide whether a wide dialog should shrink to fit its content.
+
 - **A disabled primary button reads as clickable in dark** (found by A507's look). `wt-button` only
   fades a disabled button (`packages/ui-core/src/components/wt-button.ts:44-45`, opacity
   `--wt-opacity-disabled`), and on a dark surface a faded primary stays a solid mid-blue, so a Save
