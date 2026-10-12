@@ -379,9 +379,20 @@ it.each([
   expect(q<HTMLElementTagNameMap["wt-button"]>("[data-test=add-to]")!.disabled).toBe(false);
 });
 
-it("labels the range's second field Last date with its hint as the placeholder", async () => {
+it("labels the range's second field Last date (optional), with no hint a date field cannot draw", async () => {
   await mount((dialog) => (dialog.date = "2026-12-14"));
   await click("[data-test=add-dates]");
-  expect(field("addTo").label).toBe("Last date");
-  expect(field("addTo").hint).toBe("Empty for one date");
+  expect(field("addTo").label).toBe("Last date (optional)");
+  expect(field("addTo").hint).toBe("");
+});
+
+it("shows no holiday-name note on a saved date with no stored name, even when it is now a visible holiday", async () => {
+  await mount((dialog) => {
+    dialog.specialDay = {
+      ...structuredClone(stored),
+      dates: [{ date: "2026-12-25", closedAllDay: false }],
+    };
+    dialog.holidays = [navidad];
+  });
+  expect(q("[data-test=holiday-note]")).toBeNull();
 });
