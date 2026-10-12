@@ -735,14 +735,17 @@ describe("a presented bill whose card is in flight", () => {
         paying = pay(placedId);
         await expect.poll(() => venue.card.collectCalls.length).toBe(calls + 1);
         const before = snapshot();
+        const revision = revisionOf(party.partyId);
         const answer = await depart(party.partyId, {
-          expectedPartyRevision: revisionOf(party.partyId),
+          expectedPartyRevision: revision,
           reason: REASON,
         });
         observed = {
           answer,
           before,
           after: snapshot(),
+          revision,
+          revisionAfter: revisionOf(party.partyId),
           sales: await salesOf(placedId),
           departures: await departuresOf(placedId),
           status: await statusOf(venue, placedId),
@@ -757,6 +760,7 @@ describe("a presented bill whose card is in flight", () => {
         json: { code: "order.payment_in_flight", params: { workingOrderId: placedId } },
       });
       expect(observed.after).toEqual(observed.before);
+      expect(observed.revisionAfter).toBe(observed.revision);
       expect(observed.sales).toEqual(salesBefore);
       expect(observed.departures).toEqual([]);
       expect(observed.status).toBe("placed");
@@ -777,9 +781,10 @@ describe("a presented bill whose card is in flight", () => {
       venue.card.crashNextCollect("captured");
       expect((await pay(placedId)).status).toBe(500);
       const before = snapshot();
+      const revision = revisionOf(party.partyId);
 
       const answer = await depart(party.partyId, {
-        expectedPartyRevision: revisionOf(party.partyId),
+        expectedPartyRevision: revision,
         reason: REASON,
       });
 
@@ -788,6 +793,7 @@ describe("a presented bill whose card is in flight", () => {
         json: { code: "order.payment_in_flight", params: { workingOrderId: placedId } },
       });
       expect(snapshot()).toEqual(before);
+      expect(revisionOf(party.partyId)).toBe(revision);
       expect(await salesOf(placedId)).toEqual(salesBefore);
       expect(await departuresOf(placedId)).toEqual([]);
       expect(await statusOf(venue, placedId)).toBe("placed");
@@ -814,6 +820,30 @@ describe("a presented bill whose card is in flight", () => {
       expect(cardPaymentsOf(placedId)).toEqual([{ state: "failed", saleId: null }]);
       expect((await partyState(party.partyId)).state).toBe("closed");
     });
+  });
+  it("refuses a departure while a card captured for the party's second presented bill is not yet on a sale, writing nothing", async () => {
+    const party = await seatedWith(venue, "Caña");
+    const firstId = await placedCounterBillMovedTo(venue, ticketThenPayZone, party, true);
+    const secondId = await placedCounterBillMovedTo(venue, prepayZone, party);
+    venue.card.crashNextCollect("captured");
+    expect((await pay(secondId)).status).toBe(500);
+    const before = snapshot();
+    const revision = revisionOf(party.partyId);
+
+    const answer = await depart(party.partyId, { expectedPartyRevision: revision, reason: REASON });
+
+    expect(answer).toMatchObject({
+      status: 409,
+      json: { code: "order.payment_in_flight", params: { workingOrderId: secondId } },
+    });
+    expect(snapshot()).toEqual(before);
+    expect(revisionOf(party.partyId)).toBe(revision);
+    for (const billId of [party.tabId, firstId, secondId]) {
+      expect(await departuresOf(billId)).toEqual([]);
+    }
+    expect(await statusOf(venue, firstId)).toBe("placed");
+    expect(await statusOf(venue, secondId)).toBe("placed");
+    await expectNothingWritten(party.partyId, party.tabId);
   });
 });
 

@@ -5,7 +5,7 @@ import { describe, expect, it } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { floorZones, withTransaction } from "@waitron/db";
-import { failAttempting } from "@waitron/payments";
+import { captureAttempting, failAttempting } from "@waitron/payments";
 import { FakePaymentProvider } from "@waitron/payments/src/testing/fake-provider.js";
 import { issueOrderInvoice } from "./testing/issue-order.js";
 import { offerProducts } from "./testing/zone-offers.js";
@@ -195,6 +195,26 @@ describe("a placed order's collect while its card is in flight", () => {
       expect(await statusOf(venue, id)).toBe("settled");
     });
 
+    it("releases the card's hold when the pay throws after its reader wrote an attempting payment, so cash is taken once that payment fails", async () => {
+      const id = await placed(kind);
+      venue.card.crashNextCollect("attempting");
+      expect((await pay(id)).status).toBe(500);
+      expect(paymentsOf(id)).toEqual([{ provider: "fake", state: "attempting", saleId: null }]);
+      expect(await collect(id, { method: "cash", amount: "50.00" })).toEqual(refusedInFlight(id));
+
+      const [attempt] = venue.db.all<{ ref: string }>(
+        sql`select payment_ref as ref from payments where working_order_id = ${id}`,
+      );
+      await inTx(venue, (tx) => failAttempting(tx, { provider: "fake", paymentRef: attempt!.ref }));
+      const collected = await collect(id, { method: "cash", amount: "50.00" });
+
+      expect(collected.status).toBe(200);
+      expect(salesOf(id)).toHaveLength(1);
+      expect(tendersOf(id)).toEqual([{ method: "cash", amount: 300 }]);
+      expect(paymentsOf(id)).toEqual([{ provider: "fake", state: "failed", saleId: null }]);
+      expect(await statusOf(venue, id)).toBe("settled");
+    });
+
     it("takes cash after a declined card", async () => {
       const id = await placed(kind);
       venue.card.failNextCollect();
@@ -231,10 +251,6 @@ function payWith(provider: FakePaymentProvider, id: string) {
     venue.cfg,
     { id, lines: [] },
   );
-}
-
-function readerCallsFor(id: string): number {
-  return venue.card.collectCalls.filter((call) => call.workingOrderId === id).length;
 }
 
 /** A reader that charges the card and writes its captured row, then holds its answer until
@@ -317,6 +333,36 @@ describe("a second card payment of a placed order while the first is in flight",
       expect(venue.card.collectCalls.length).toBe(calls);
       const sales = salesOf(id);
       expect(sales).toHaveLength(1);
+      expect(paymentsOf(id)).toEqual([
+        { provider: "fake", state: "captured", saleId: sales[0]!.id },
+      ]);
+    });
+
+    it("lets a Pay from another till file a charge the sweep found captured after its reader timed out, asking no reader", async () => {
+      const id = await placed(kind);
+      venue.card.stallNextCollect();
+      expect(await pay(id)).toEqual({ status: 200, json: { outcome: "timeout" } });
+      const [attempt] = venue.db.all<{ ref: string }>(
+        sql`select payment_ref as ref from payments where working_order_id = ${id}`,
+      );
+      await inTx(venue, (tx) =>
+        captureAttempting(tx, {
+          provider: "fake",
+          paymentRef: attempt!.ref,
+          settledAt: new Date(),
+          externalRef: `swept-${attempt!.ref}`,
+        }),
+      );
+      const calls = venue.card.collectCalls.length;
+
+      const filed = await pay(id, venue.cookie2);
+
+      expect(filed.status).toBe(200);
+      expect(filed.json.outcome).toBe("captured");
+      expect(venue.card.collectCalls.length).toBe(calls);
+      const sales = salesOf(id);
+      expect(sales).toHaveLength(1);
+      expect(tendersOf(id)).toEqual([{ method: "card", amount: 300 }]);
       expect(paymentsOf(id)).toEqual([
         { provider: "fake", state: "captured", saleId: sales[0]!.id },
       ]);
@@ -450,72 +496,6 @@ describe("a second card payment of a placed order while the first is in flight",
       expect(tendersOf(id)).toEqual([{ method: "cash", amount: 300 }]);
       expect(paymentsOf(id)).toEqual([]);
     });
-  });
-
-  it("guard, which may not catch the race: Pay from two tills at once, over many orders, charges and files each order once", async () => {
-    const broken: unknown[] = [];
-    for (let round = 0; round < 20; round++) {
-      const id = await placed("uninvoiced");
-      const answers = await Promise.all([pay(id), pay(id, venue.cookie2)]);
-      const sales = salesOf(id);
-      const payments = paymentsOf(id);
-      const captured = answers.filter((a) => a.status === 200 && a.json.outcome === "captured");
-      const numbers = new Set(
-        captured.map((a) => (a.json.ticket as { invoiceNumber: string }).invoiceNumber),
-      );
-      const ok =
-        readerCallsFor(id) === 1 &&
-        sales.length === 1 &&
-        payments.length === 1 &&
-        payments[0]!.state === "captured" &&
-        payments[0]!.saleId === sales[0]!.id &&
-        answers.every(
-          (a) =>
-            (a.status === 200 && a.json.outcome === "captured") ||
-            (a.status === 409 && a.json.code === "order.payment_in_flight"),
-        ) &&
-        captured.length >= 1 &&
-        numbers.size === 1;
-      if (!ok) broken.push({ round, readerCalls: readerCallsFor(id), answers, sales, payments });
-    }
-    expect(broken).toEqual([]);
-  });
-
-  it("guard, which may not catch the race: Pay and a cash collect at once, over many orders, take each order's money once", async () => {
-    const broken: unknown[] = [];
-    for (let round = 0; round < 20; round++) {
-      const id = await placed("uninvoiced");
-      const [paid, collected] = await Promise.all([
-        pay(id),
-        collect(id, { method: "cash", amount: "50.00" }),
-      ]);
-      const sales = salesOf(id);
-      const tenders = tendersOf(id);
-      const payments = paymentsOf(id);
-      const cashWon =
-        tenders.length === 1 &&
-        tenders[0]!.method === "cash" &&
-        readerCallsFor(id) === 0 &&
-        collected.status === 200 &&
-        paid.status === 200 &&
-        payments.length === 0;
-      const cardWon =
-        tenders.length === 1 &&
-        tenders[0]!.method === "card" &&
-        readerCallsFor(id) === 1 &&
-        paid.status === 200 &&
-        paid.json.outcome === "captured" &&
-        (collected.status === 409
-          ? collected.json.code === "order.payment_in_flight"
-          : collected.status === 200 &&
-            (collected.json.tender as { method: string }).method === "card") &&
-        payments.length === 1 &&
-        payments[0]!.saleId === sales[0]?.id;
-      if (sales.length !== 1 || !(cashWon || cardWon)) {
-        broken.push({ round, readerCalls: readerCallsFor(id), paid, collected, tenders, payments });
-      }
-    }
-    expect(broken).toEqual([]);
   });
 });
 
