@@ -503,8 +503,8 @@ function refuseSkippedPaint(
       refuse(table);
 }
 
-/** Each department's end offsets over the bundle's seasons, special days and named days, under
- *  the bundle's one changeover; run after the shape checks, which refuse ranges without a
+/** Each department's end offsets over the bundle's seasons and special days, under the bundle's
+ *  one changeover; run after the shape checks, which refuse ranges without a
  *  changeover. A weekday row of `menu_day_timetables` is not imported, so it is not checked. */
 function validateEndOffsets(tables: Tables, bundle?: { readonly dayCutover: string }): void {
   const seasonRows = tables.department_day_ranges ?? [];
@@ -565,24 +565,11 @@ function validateEndOffsets(tables: Tables, bundle?: { readonly dayCutover: stri
         date: rule.date,
         closeWholeVenue: date.closed_all_day === 1,
         ...(rule.repeats ? { occursIn: (year: number) => specialDateIn(rule, year) } : {}),
-        slots: null,
         paint: paint.get(JSON.stringify([departmentId, date.id])) ?? [],
         specialDayId: date.special_day_id as string,
       };
     });
-    const named = (tables.special_dates ?? []).map((date) => ({
-      date: date.date as LocalDate,
-      closeWholeVenue: date.close_whole_venue === 1,
-      repeatOn: (date.repeat_on ?? null) as string | null,
-      ownHours: date.own_hours !== 0,
-      slots: namedSlots.get(JSON.stringify([departmentId, date.id])) ?? null,
-    }));
-    const clash = findSeasonEndOffsetClash(
-      seasons,
-      [...specialDays, ...named],
-      offsets,
-      bundle.dayCutover,
-    );
+    const clash = findSeasonEndOffsetClash(seasons, specialDays, offsets, bundle.dayCutover);
     if (clash !== null)
       refuse(
         clash.date === undefined || clash.specialDayId !== undefined

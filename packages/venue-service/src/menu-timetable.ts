@@ -264,43 +264,11 @@ async function endOffsetClash(
     );
   if (!validateZeroOffsets && periods.every((period) => period.offset === 0)) return null;
   const clock = acquiredClock ?? (await readLocationClock(tx, cfg.locationId));
-  const timetables = await tx
-    .select({
-      id: menuDayTimetables.id,
-      departmentId: menuDayTimetables.departmentId,
-      specialDateId: menuDayTimetables.specialDateId,
-    })
-    .from(menuDayTimetables)
-    .innerJoin(departments, eq(departments.id, menuDayTimetables.departmentId))
-    .where(
-      and(
-        eq(departments.locationId, cfg.locationId),
-        isNotNull(menuDayTimetables.specialDateId),
-        departmentId === undefined ? undefined : eq(departments.id, departmentId),
-      ),
-    );
-  const slots = await slotsByTimetable(
-    tx,
-    timetables.map((day) => day.id),
-  );
-  const dates = await tx
-    .select({
-      id: specialDates.id,
-      date: specialDates.date,
-      closeWholeVenue: specialDates.closeWholeVenue,
-      repeatOn: specialDates.repeatOn,
-      ownHours: specialDates.ownHours,
-    })
-    .from(specialDates)
-    .where(eq(specialDates.locationId, cfg.locationId));
   const offsets = new Map(periods.map((period) => [period.id, period.offset]));
   const departmentIds = [...new Set(periods.map((period) => period.departmentId))];
   const specialDays = await readSpecialDaySchedules(tx, cfg, departmentIds);
   const allSeasons = await readSeasons(tx, cfg);
   const weeks = await readDepartmentSeasonWeeks(tx, cfg, departmentIds, clock.dayCutover);
-  const ownDay = new Map(
-    timetables.map((day) => [`${day.departmentId}|${day.specialDateId}`, slots.get(day.id)!]),
-  );
   for (const id of departmentIds) {
     const clash = findSeasonEndOffsetClash(
       allSeasons.map((season) => ({
@@ -308,20 +276,15 @@ async function endOffsetClash(
         startsOn: season.startsOn,
         week: weeks.get(id)?.get(season.id) ?? [],
       })),
-      [
-        // First, so a special day wins a date a named day also holds, as on the till.
-        ...specialDays.map((day) => ({
-          date: day.date,
-          closeWholeVenue: day.closedAllDay,
-          ...(day.repeats
-            ? { occursIn: (year: number) => specialDateIn({ date: day.date, repeats: true }, year) }
-            : {}),
-          slots: null,
-          paint: day.paint.get(id) ?? [],
-          specialDayId: day.specialDayId,
-        })),
-        ...dates.map((date) => ({ ...date, slots: ownDay.get(`${id}|${date.id}`) ?? null })),
-      ],
+      specialDays.map((day) => ({
+        date: day.date,
+        closeWholeVenue: day.closedAllDay,
+        ...(day.repeats
+          ? { occursIn: (year: number) => specialDateIn({ date: day.date, repeats: true }, year) }
+          : {}),
+        paint: day.paint.get(id) ?? [],
+        specialDayId: day.specialDayId,
+      })),
       offsets,
       clock,
     );

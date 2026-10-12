@@ -16,6 +16,12 @@ import { VENUE_SERVICE_MIGRATIONS } from "./migrations.js";
 import * as namedDayReads from "./named-days.js";
 import { namedDaysBetween, namedDaysOn } from "./named-days.js";
 import { specialDates } from "./schema/hours.js";
+import {
+  departmentDayRanges,
+  departmentDays,
+  specialDayDates,
+  specialDays,
+} from "./schema/seasons.js";
 import { menuDayTimetables, menuSlots } from "./schema/menus.js";
 import { departments, departmentSalePolicies } from "./schema/service.js";
 
@@ -218,10 +224,29 @@ describe("departments and calendar follow named days", () => {
       (await run((tx) => readCalendarDays(tx, f.cfg, "2027-12-25", "2027-12-25")))[0]!.tone,
     ).toBe("closed");
   });
-  it("uses the business day's own range through a skipped clock minute in a later year", async () => {
+  it("uses a repeating special day's range through a skipped clock minute in a later year", async () => {
     const f = await fixture();
-    const row = await day(f, "2026-03-27", { repeatOn: "03-27", ownHours: true });
-    await dated(f, row.id, "02:30:00", "04:00:00");
+    await run(async (tx) => {
+      const [special] = await tx
+        .insert(specialDays)
+        .values({ locationId: f.cfg.locationId, name: "Navidad", repeatsYearly: true })
+        .returning({ id: specialDays.id });
+      const [date] = await tx
+        .insert(specialDayDates)
+        .values({ specialDayId: special!.id, locationId: f.cfg.locationId, date: "2026-03-27" })
+        .returning({ id: specialDayDates.id });
+      const [paint] = await tx
+        .insert(departmentDays)
+        .values({ departmentId: f.department, specialDayDateId: date!.id })
+        .returning({ id: departmentDays.id });
+      await tx.insert(departmentDayRanges).values({
+        dayId: paint!.id,
+        departmentId: f.department,
+        periodId: f.period,
+        startsAt: "02:30:00",
+        endsAt: "04:00:00",
+      });
+    });
     expect((await service(f, "2027-03-28T01:00:00Z")).periodId).toBe(f.period);
     expect((await service(f, "2027-03-28T02:00:00Z")).open).toBe(false);
   });

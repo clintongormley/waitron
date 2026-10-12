@@ -615,6 +615,48 @@ describe("resolveZoneClosedDays", () => {
   });
 });
 
+describe("named days on the sale path", () => {
+  it("leaves a date with a named day on its season's week", async () => {
+    const v = await autumnAndWinter();
+    await zoneSeason(v, v.sala, v.seasons.Autumn!, {
+      [SATURDAY]: [{ startsAt: "15:00", endsAt: "19:00" }],
+    });
+    await zoneSeason(v, v.sala, v.seasons.Winter!, {
+      [SUNDAY]: [{ startsAt: "08:00", endsAt: "10:00" }],
+    });
+    const own = await namedDay(v, "2030-11-30", { ownHours: true });
+    await scoped((tx) =>
+      saveSpecialDateMenus(
+        tx,
+        v.cfg,
+        own,
+        v.departmentId,
+        [{ periodId: v.lateBar, startsAt: "22:00", endsAt: "03:00" }],
+        AT,
+        0,
+      ),
+    );
+    await scoped((tx) =>
+      saveZoneClosedDate(tx, v.cfg, own, v.sala, [{ startsAt: "18:00", endsAt: "20:00" }], 0, AT),
+    );
+    await namedDay(v, "2030-12-01", { closeWholeVenue: true });
+    const days = await departmentDays(v, ["2030-11-30", "2030-12-01"]);
+    expect(days.get("2030-11-30")?.ranges).toEqual([
+      { periodId: v.dinner, startsAt: "20:00", endsAt: "02:00" },
+    ]);
+    expect(days.get("2030-12-01")?.ranges).toEqual([
+      { periodId: v.breakfast, startsAt: "09:00", endsAt: "12:00" },
+    ]);
+    const zones = await zoneDays(v, [v.sala], ["2030-11-30", "2030-12-01"]);
+    expect(zones.get(v.sala)).toEqual(
+      new Map([
+        ["2030-11-30", [{ startsAt: "15:00", endsAt: "19:00" }]],
+        ["2030-12-01", [{ startsAt: "08:00", endsAt: "10:00" }]],
+      ]),
+    );
+  });
+});
+
 type PaintSlot = { periodId: string | null; startsAt: string; endsAt: string };
 type ZoneSlot = { kind: "closed" | "open"; startsAt: string; endsAt: string };
 

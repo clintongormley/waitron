@@ -1156,8 +1156,13 @@ describe("a special date's menu timetable", () => {
   it("replaces the department's week that date, an empty one closing the department all day", async () => {
     const v = await timed();
     const { menus, periods } = v;
-    const christmas = await makeDate(v, CHRISTMAS);
-    await dateMenus(v, christmas.id, [slot(periods.brunch, "11:00", "15:00")]);
+    const christmas = await saveDay(v, CHRISTMAS, {
+      paint: [
+        { periodId: null, startsAt: "06:00", endsAt: "11:00" },
+        slot(periods.brunch, "11:00", "15:00"),
+        { periodId: null, startsAt: "15:00", endsAt: "06:00" },
+      ],
+    });
     const at = (time: string) => madrid(CHRISTMAS, time);
     expect(await choice(v, v.sala, at("10:00"))).toEqual({
       defaultMenuId: null,
@@ -1178,23 +1183,23 @@ describe("a special date's menu timetable", () => {
       periodId: periods.mediodiaDeli,
     });
 
-    await scoped(async (tx) => {
-      await saveSpecialDateMenus(
-        tx,
-        v.cfg,
-        christmas.id,
-        v.restaurant,
-        [slot(periods.mananas, "09:00", "11:00")],
-        AT,
-        0,
-      );
+    await saveDay(v, CHRISTMAS, {
+      id: christmas.id,
+      paint: [
+        { periodId: null, startsAt: "06:00", endsAt: "09:00" },
+        slot(periods.mananas, "09:00", "11:00"),
+        { periodId: null, startsAt: "11:00", endsAt: "06:00" },
+      ],
     });
     expect(await choice(v, v.barra, at("10:00"))).toEqual({
       defaultMenuId: menus.Desayunos,
       periodId: periods.mananas,
     });
 
-    await dateMenus(v, christmas.id, []);
+    await saveDay(v, CHRISTMAS, {
+      id: christmas.id,
+      paint: [{ periodId: null, startsAt: "06:00", endsAt: "06:00" }],
+    });
     for (const time of ["10:00", "12:00"])
       expect(await choice(v, v.sala, at(time))).toEqual({
         defaultMenuId: null,
