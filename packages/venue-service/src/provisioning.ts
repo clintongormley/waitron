@@ -11,11 +11,12 @@ import {
 } from "./schema/service.js";
 import { serviceSettings } from "./schema/settings.js";
 import { placeOpenPeriod } from "./menu-timetable.js";
+import { ensureDefaultSeasons } from "./seasons.js";
 
 export const VENUE_SERVICE_PROVISIONING: ModuleProvisioning = {
   seed: {
     summary:
-      "Create the default department, counter zone and service settings, and give each profile that takes orders that department",
+      "Create the default department, counter zone, service settings and four seasons, and give each profile that takes orders that department",
     async run(tx, node) {
       const location = await tx
         .select({ name: locations.name, catalogueId: locations.catalogueId })
@@ -144,6 +145,7 @@ export const VENUE_SERVICE_PROVISIONING: ModuleProvisioning = {
         .insert(zoneSalePolicies)
         .values({ zoneId })
         .onConflictDoNothing({ target: zoneSalePolicies.zoneId });
+      await ensureDefaultSeasons(tx, node);
       const menuId = location[0]!.catalogueId;
       if (menuId !== null) {
         const counterDepartmentId = policy[0]!.departmentId;
