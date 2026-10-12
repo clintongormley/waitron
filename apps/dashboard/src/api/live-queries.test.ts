@@ -402,6 +402,19 @@ it("reads the folders' Made at again when a season week changes", () => {
     expect(query.dependencies).toContainEqual({ type });
 });
 
+it("reads the folders' Made at again when a period, its department or the products its menus reach change", () => {
+  const query = dashboardQuery(new DashboardApi("", vi.fn()), "getFolderRouting", []);
+  for (const type of [
+    "menu_periods",
+    "menu_period_staff_menus",
+    "departments",
+    "sections",
+    "section_members",
+    "catalogues",
+  ])
+    expect(query.dependencies).toContainEqual({ type });
+});
+
 it("subscribes no read to the retired watcher tables, and has no watcher list", () => {
   const named = Object.values(QUERY_DEPENDENCIES).flat();
   for (const table of ["watchers", "watcher_stations", "watcher_zones", "watcher_printers"]) {
