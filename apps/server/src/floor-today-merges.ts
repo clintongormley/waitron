@@ -1,8 +1,5 @@
 import { and, asc, eq, inArray, isNotNull } from "drizzle-orm";
 import {
-  floorResetJoins,
-  floorResetJoinTables,
-  floorResetTables,
   parties,
   partyTables,
   floorTodayJoins,
@@ -152,49 +149,6 @@ export async function partyRevision(tx: Transaction, partyId: string): Promise<n
   return party!.revision;
 }
 
-/**
- * The seats of the join the zone's last reset copied with exactly these tables, or null. Reads by id
- * alone: the caller checks the venue first.
- */
-export async function savedJoinSeats(
-  tx: Transaction,
-  tableIds: readonly string[],
-): Promise<number | null> {
-  const rows = await tx
-    .select({ id: floorResetTables.id })
-    .from(floorResetTables)
-    .where(inArray(floorResetTables.tableId, [...tableIds]));
-  if (rows.length !== tableIds.length) return null;
-  const wanted = new Set(rows.map((row) => row.id));
-  const candidates = await tx
-    .select({ joinId: floorResetJoinTables.joinId })
-    .from(floorResetJoinTables)
-    .where(inArray(floorResetJoinTables.resetTableId, [...wanted]));
-  const joinIds = [...new Set(candidates.map((c) => c.joinId))];
-  if (joinIds.length === 0) return null;
-  const members = await tx
-    .select({
-      joinId: floorResetJoinTables.joinId,
-      resetTableId: floorResetJoinTables.resetTableId,
-    })
-    .from(floorResetJoinTables)
-    .where(inArray(floorResetJoinTables.joinId, joinIds));
-  const byJoin = new Map<string, string[]>();
-  for (const { joinId, resetTableId } of members) {
-    byJoin.set(joinId, [...(byJoin.get(joinId) ?? []), resetTableId]);
-  }
-  const match = joinIds.find((joinId) => {
-    const ids = byJoin.get(joinId)!;
-    return ids.length === wanted.size && ids.every((id) => wanted.has(id));
-  });
-  if (match === undefined) return null;
-  const [join] = await tx
-    .select({ seats: floorResetJoins.seats })
-    .from(floorResetJoins)
-    .where(eq(floorResetJoins.id, match));
-  return join!.seats;
-}
-
 /** `moving` joins `target`'s merge (or a new one), touching it on `side`; with `free`, neither table may be held or need clearing. */
 export async function writeMerge(
   tx: Transaction,
@@ -217,12 +171,8 @@ export async function writeMerge(
     });
   }
 
-  const members = [
-    ...(target.merge?.members.map((m) => m.tableId) ?? [target.tableId]),
-    moving.tableId,
-  ];
-  const seats = args.seats ?? (await savedJoinSeats(tx, members));
-  if (seats === null) throw new AppError("merge.seats_required", {});
+  if (args.seats === null) throw new AppError("merge.seats_required", {});
+  const { seats } = args;
 
   let joinId = target.merge?.joinId;
   if (joinId === undefined) {

@@ -2,12 +2,8 @@ import { requireZone } from "./floor-plan.js";
 import { and, eq, exists, getTableColumns, inArray, isNull, lt, or } from "drizzle-orm";
 import {
   diningTables,
-  floorPlanJoins,
-  floorPlanJoinTables,
   floorPlans,
   floorPlanTables,
-  floorResetJoins,
-  floorResetJoinTables,
   floorResetTables,
   floorTodayJoins,
   floorTodayJoinTables,
@@ -128,68 +124,20 @@ async function resetZoneFor(
     })),
     live,
   );
-  const copied = tx
-    .select({ id: floorResetJoins.id })
-    .from(floorResetJoins)
-    .where(eq(floorResetJoins.zoneId, zoneId));
-  await tx.delete(floorResetJoinTables).where(inArray(floorResetJoinTables.joinId, copied));
-  await tx.delete(floorResetJoins).where(eq(floorResetJoins.zoneId, zoneId));
   await tx.delete(floorResetTables).where(eq(floorResetTables.zoneId, zoneId));
   if (targets.length > 0) {
-    const written = await tx
-      .insert(floorResetTables)
-      .values(
-        targets.map((target) => ({
-          zoneId,
-          tableId: target.tableId,
-          planTableId: target.planTableId,
-          ...targetRow(target),
-          remove: target.remove,
-          pending: true,
-        })),
-      )
-      .returning({ id: floorResetTables.id, planTableId: floorResetTables.planTableId });
-    await copyJoins(tx, zoneId, written);
+    await tx.insert(floorResetTables).values(
+      targets.map((target) => ({
+        zoneId,
+        tableId: target.tableId,
+        planTableId: target.planTableId,
+        ...targetRow(target),
+        remove: target.remove,
+        pending: true,
+      })),
+    );
   }
   await catchUpZone(tx, cfg, removals, zoneId, now);
-}
-
-/** A join with a member that no reset row, or two, follow is not copied: a merge of those tables asks for its seats. */
-async function copyJoins(
-  tx: Transaction,
-  zoneId: string,
-  written: { id: string; planTableId: string | null }[],
-): Promise<void> {
-  const rowsOf = new Map<string, string[]>();
-  for (const { id, planTableId } of written) {
-    if (planTableId !== null) rowsOf.set(planTableId, [...(rowsOf.get(planTableId) ?? []), id]);
-  }
-  const members = await tx
-    .select({
-      joinId: floorPlanJoins.id,
-      seats: floorPlanJoins.seats,
-      planTableId: floorPlanJoinTables.planTableId,
-    })
-    .from(floorPlanJoinTables)
-    .innerJoin(floorPlanJoins, eq(floorPlanJoins.id, floorPlanJoinTables.joinId))
-    .innerJoin(floorPlans, eq(floorPlans.id, floorPlanJoins.planId))
-    .where(eq(floorPlans.zoneId, zoneId));
-  const joins = new Map<string, { seats: number; rows: (string[] | undefined)[] }>();
-  for (const { joinId, seats, planTableId } of members) {
-    const join = joins.get(joinId) ?? { seats, rows: [] };
-    join.rows.push(rowsOf.get(planTableId));
-    joins.set(joinId, join);
-  }
-  for (const { seats, rows } of joins.values()) {
-    if (!rows.every((r) => r?.length === 1)) continue;
-    const [join] = await tx
-      .insert(floorResetJoins)
-      .values({ zoneId, seats })
-      .returning({ id: floorResetJoins.id });
-    await tx
-      .insert(floorResetJoinTables)
-      .values(rows.map((r) => ({ joinId: join!.id, resetTableId: r![0]! })));
-  }
 }
 
 function zoneTables(tx: Transaction, cfg: TillConfig, zoneId: string) {
