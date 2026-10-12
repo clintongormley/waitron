@@ -56,6 +56,8 @@ describe("NamedDaysApi.watchNamedDays", () => {
       "department_day_ranges",
       "zone_days",
       "zone_day_ranges",
+      "special_days",
+      "special_day_dates",
     ]);
     expect(request.mock.calls).toEqual([[NAMED_PATH, "GET", undefined, { passive: true }]]);
     detach();
