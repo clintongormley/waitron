@@ -300,6 +300,30 @@ describe("booking-form", () => {
     expect(field.error).toBe("");
   });
 
+  it.each([
+    ["en", "Correct the highlighted fields to continue."],
+    ["es", "Corrige los campos marcados para continuar."],
+  ] as const)(
+    "says at the bottom to correct the marked fields while Table shows a refusal (%s)",
+    async (locale, sentence) => {
+      const before = currentLocale();
+      setLocale(locale);
+      try {
+        const { el } = await mountWidget<BookingForm>(
+          "dashboard-booking-form",
+          baseProps({ tableRefusal: "table.in_joined_table" }),
+        );
+        const bottom = el.shadowRoot!.querySelector("[data-test=error]")!;
+        expect(bottom.textContent!.trim()).toBe(sentence);
+        expect(bottom.textContent).not.toContain(codeMessage("table.in_joined_table"));
+        await setSelect(el, "booking-table", "t-2");
+        expect(el.shadowRoot!.querySelector("[data-test=error]")).toBeNull();
+      } finally {
+        setLocale(before);
+      }
+    },
+  );
+
   it("submits on Enter in a field, through the confirm button", async () => {
     const { el } = await mountWidget<BookingForm>("dashboard-booking-form", baseProps());
     const events: BookingInput[] = [];

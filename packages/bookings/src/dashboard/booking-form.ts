@@ -290,6 +290,10 @@ export class BookingForm extends LitElement {
   override render() {
     const opening = this.#opening;
     const save = saveActionState(this.#scope);
+    const bottom = [
+      ...(this.validationError === null ? [] : [codeMessage(this.validationError)]),
+      ...(this.tableRefusal === null ? [] : [t("booking.fix_fields")]),
+    ];
     return html`${keyed(
       opening,
       html`
@@ -374,10 +378,8 @@ export class BookingForm extends LitElement {
           ></wt-combobox>
 
           ${
-            this.validationError
-              ? html`<p class="error" role="alert" data-test="error">
-                  ${codeMessage(this.validationError)}
-                </p>`
+            bottom.length > 0
+              ? html`<p class="error" role="alert" data-test="error">${bottom.join(" ")}</p>`
               : nothing
           }
           <wt-button
