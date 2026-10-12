@@ -817,7 +817,6 @@ describe("zone closed-time routes", () => {
           seasonId: season.id,
           week: season.id === r.season ? days : days.map((day) => ({ ...day, ranges: [] })),
         })),
-        week: days,
         dates: [{ specialDateId: r.christmas, ranges: [{ startsAt: "06:00", endsAt: "06:00" }] }],
       },
     ]);
@@ -838,7 +837,12 @@ describe("zone closed-time routes", () => {
       400,
       { code: "zone_closed_time.invalid", params: { field: "days.6.ranges", reason: "step" } },
     );
-    expect(restaurantOf(await r.model(), r).zones[0]!.week).toEqual(days);
+    const model = await r.model();
+    expect(
+      restaurantOf(model, r).zones[0]!.seasonWeeks.find(
+        (entry) => entry.seasonId === (model.currentSeasonId ?? model.seasons[0]!.id),
+      )!.week,
+    ).toEqual(days);
   });
 });
 

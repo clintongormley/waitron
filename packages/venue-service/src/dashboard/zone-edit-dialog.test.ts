@@ -220,7 +220,9 @@ it("retains this zone's floor preview and hours links, with passive reads and li
     .poll(() =>
       el.shadowRoot!.querySelector("[data-test=closed-week-summary]")?.textContent?.trim(),
     )
-    .toBe("Closed from 23:30 Monday to Thursday and Sunday; from 01:00 Friday and Saturday");
+    .toBe(
+      "Autumn: closed from 23:30 Monday to Thursday and Sunday; from 01:00 Friday and Saturday",
+    );
   expect(reads.length).toBe(2);
   expect(reads.every((read) => (read[3] as { passive: boolean }).passive)).toBe(true);
 });
