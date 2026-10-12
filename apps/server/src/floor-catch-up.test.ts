@@ -300,7 +300,7 @@ describe("the till's floor routes catch today's plan up", () => {
     expect(released).toMatchObject({ deliveryTableId: null, deliveryTableLabel: label });
   });
 
-  it("a table made a part while a party sits at it stays in service until the party finishes", async () => {
+  it("a table made a part while a party sits at it stays usable until the party finishes", async () => {
     const zoneId = await zone();
     const [long, c3, c4, c5] = [
       fresh("Long"),
@@ -335,7 +335,7 @@ describe("the till's floor routes catch today's plan up", () => {
     expect((await readJoined()).get(t3)).toBe(long);
   });
 
-  it("a part a party holds when its joined table goes live stays in service until the party finishes", async () => {
+  it("a part a party holds when its joined table goes live stays usable until the party finishes", async () => {
     const z = await longWaitsForItsName();
     const p2 = await seatAt(z.t3);
     const joined = await send("POST", `/api/parties/${p2}/join`, {
@@ -368,7 +368,7 @@ describe("the till's floor routes catch today's plan up", () => {
     expect((await readJoined()).get(z.t4)).toBe(z.long);
   });
 
-  it("a part merged on today's map when its joined table goes live stays in service until the merge ends", async () => {
+  it("a part merged on today's map when its joined table goes live stays usable until the merge ends", async () => {
     const z = await longWaitsForItsName();
     const placed = await send("POST", `/api/tables/${z.t3}/today/place`, { x: 20, y: 40 });
     expect(placed.status).toBe(204);

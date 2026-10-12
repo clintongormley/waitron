@@ -3904,8 +3904,8 @@ Add tables and Add joined table side by side at its foot, wrapping when they do 
 naming a group of two pressed-state icon buttons (Rectangle and Round, with no tooltip, since an
 icon tooltip's Escape would also start leaving the editor), shown for a placed table only and
 stacked under Seats when the pair does not fit beside it; for a joined table, Seats is required and
-takes 1 to 999, and a required Made of picker follows, offering the tables not on the plan and in
-no other joined table; then a Moveable switch, on for a table that is not fixed. Add tables uses the same Moveable switch, on by default. Size, turn and place
+takes 1 to 999, and a required Made of picker follows, offering the tables not on the plan, not
+joined tables themselves and in no other joined table; then a Moveable switch, on for a table that is not fixed. Add tables uses the same Moveable switch, on by default. Size, turn and place
 are set on the plan; a refusal naming one of them selects the table and shows its own sentence. The list names its tables in number order under Name, Seats and
 Made of heads; seats blank reads "—". A joined table's Made of names its parts in number order,
 written once with their shared beginning ("Counter 3, 4, 5") when every name is that beginning and
