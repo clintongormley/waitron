@@ -21,8 +21,8 @@ import type { OpeningHoursApi } from "./opening-hours-client.js";
 import type { GridBlockChange, GridBlockOpen, GridRangeSelection } from "./service-grid.js";
 import type { RangeDialog } from "./range-dialog.js";
 import type { PeriodEditor } from "./period-editor.js";
-import type { NamedDaysModel } from "../holiday-types.js";
-import type { NamedCalendarAction } from "./hours-calendar.js";
+import type { SpecialDaysModel } from "../holiday-types.js";
+import type { SpecialDayAction } from "./hours-calendar.js";
 import { seasonIdOn } from "./real-week.js";
 import { seasonWeek } from "./season-choice.js";
 import { format, formatDate } from "./hours-view.js";
@@ -141,7 +141,7 @@ export class OpeningHoursDay extends LitElement {
   @state() private offsetClash = false;
   @state() private zoneOpening?: { zone: Zone; index: number; input: ClosedRange };
   @state() private errorZone = "";
-  @state() private calendar?: NamedDaysModel;
+  @state() private calendar?: SpecialDaysModel;
   @state() private calendarError = false;
   private calendarDate = "";
   private detachCalendar?: () => void;
@@ -300,7 +300,7 @@ export class OpeningHoursDay extends LitElement {
     this.calendarDate = date;
     this.calendar = undefined;
     this.calendarError = false;
-    this.detachCalendar = this.api.namedDays.watchNamedDays(
+    this.detachCalendar = this.api.specialDays.watchSpecialDays(
       date,
       date,
       (model) => {
@@ -746,11 +746,13 @@ export class OpeningHoursDay extends LitElement {
                     return;
                   const button = event.currentTarget as HTMLElement;
                   this.dispatchEvent(
-                    new CustomEvent<NamedCalendarAction>("named-calendar-action", {
+                    new CustomEvent<SpecialDayAction>("special-day-action", {
                       detail: {
-                        kind: "own",
+                        kind: "open",
                         date: this.date,
-                        day: special,
+                        specialDay:
+                          this.calendar.days?.find((day) => day.date === this.date)?.specialDay ??
+                          null,
                         holidays:
                           this.calendar.days?.find((day) => day.date === this.date)?.holidays ?? [],
                         returnTo: () => (button.isConnected ? button : null),

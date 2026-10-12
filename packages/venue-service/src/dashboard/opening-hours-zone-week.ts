@@ -409,7 +409,6 @@ export class OpeningHoursZoneWeek extends LitElement {
                                   this,
                                   this.weekStart,
                                   weekday,
-                                  this.namedDay(weekday),
                                   event.currentTarget as HTMLElement,
                                 );
                             }}

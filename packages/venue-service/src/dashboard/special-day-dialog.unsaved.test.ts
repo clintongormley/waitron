@@ -2,54 +2,54 @@ import { afterEach, beforeEach, expect, it } from "vitest";
 import { LitElement, html } from "lit";
 import { applyTokens, LeaveController } from "@waitron/ui";
 import { setLocale } from "@waitron/dashboard-kit";
-import type { NamedDayEditor } from "./named-day-editor.js";
-import "./named-day-editor.js";
+import type { SpecialDayDialog } from "./special-day-dialog.js";
+import "./special-day-dialog.js";
 
-class NamedDayLeaveApp extends LitElement {
+class SpecialDayLeaveApp extends LitElement {
   readonly leave = new LeaveController(this);
   override render() {
-    return html`<named-day-editor
+    return html`<special-day-dialog
         .open=${true}
-        .day=${{ id: "d1", date: "2027-03-01", name: "Lunch", kind: "working_day", repeats: false, ownHours: false, closeWholeVenue: false }}
-      ></named-day-editor
+        .specialDay=${{ id: "d1", name: "Lunch", repeatsYearly: false, dates: [{ date: "2027-03-01", closedAllDay: false }], paint: [], zonePaint: [] }}
+      ></special-day-dialog
       >${this.leave.render({ heading: "Unsaved changes", message: "Discard unsaved changes?", keepLabel: "Keep editing", discardLabel: "Discard changes" })}`;
   }
 }
-customElements.define("named-day-leave-test-app", NamedDayLeaveApp);
-let app: NamedDayLeaveApp;
+customElements.define("special-day-leave-test-app", SpecialDayLeaveApp);
+let app: SpecialDayLeaveApp;
 beforeEach(() => setLocale("en"));
 afterEach(() => {
   app?.remove();
   setLocale("en");
 });
 async function mount() {
-  app = document.createElement("named-day-leave-test-app") as NamedDayLeaveApp;
+  app = document.createElement("special-day-leave-test-app") as SpecialDayLeaveApp;
   applyTokens(app);
   document.body.append(app);
   await app.updateComplete;
-  const el = app.shadowRoot!.querySelector<NamedDayEditor>("named-day-editor")!;
+  const el = app.shadowRoot!.querySelector<SpecialDayDialog>("special-day-dialog")!;
   await el.updateComplete;
   return el;
 }
-function name(el: NamedDayEditor) {
+function name(el: SpecialDayDialog) {
   const field = el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>("[name=name]");
   expect(field).not.toBeNull();
   return field!;
 }
-async function change(el: NamedDayEditor, value: string) {
+async function change(el: SpecialDayDialog, value: string) {
   name(el).dispatchEvent(
     new CustomEvent("wt-change", { detail: { value }, bubbles: true, composed: true }),
   );
   await el.updateComplete;
 }
-function modal(el: NamedDayEditor) {
+function modal(el: SpecialDayDialog) {
   const modal = el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-modal"]>("wt-modal");
   expect(modal).not.toBeNull();
   return modal!;
 }
-function save(el: NamedDayEditor) {
+function save(el: SpecialDayDialog) {
   return el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>(
-    "[data-test=save-named-day]",
+    "[data-test=save-special-day]",
   )!;
 }
 function unload() {
@@ -72,7 +72,7 @@ async function choose(decision: "keep" | "discard") {
   q.shadowRoot!.querySelector<HTMLElement>(`[data-choice=${decision}]`)!.click();
   await expect.poll(() => q.open).toBe(false);
 }
-async function reconnect(el: NamedDayEditor) {
+async function reconnect(el: SpecialDayDialog) {
   const parent = el.parentNode!;
   el.remove();
   await el.updateComplete;
@@ -81,7 +81,7 @@ async function reconnect(el: NamedDayEditor) {
   await el.updateComplete;
 }
 
-it("asks before closing a changed named day and Keep preserves the editor", async () => {
+it("asks before closing a changed special day and Keep preserves the editor", async () => {
   const el = await mount();
   expect(unload()).toBe(false);
   await change(el, "Dinner");
@@ -138,12 +138,9 @@ it("a saved submission becomes the baseline without losing edits made while it w
   await change(el, "Evening");
   expect(
     el.commitSubmitted({
-      date: "2027-03-01",
       name: "Dinner",
-      kind: "working_day",
-      repeats: false,
-      ownHours: false,
-      closeWholeVenue: false,
+      repeatsYearly: false,
+      dates: [{ date: "2027-03-01", closedAllDay: false }],
     }),
   ).toBe(false);
   expect(name(el).value).toBe("Evening");
@@ -161,12 +158,9 @@ it("a submission that began before removal cannot commit after reconnect", async
   await reconnect(el);
   expect(
     el.commitSubmitted({
-      date: "2027-03-01",
       name: "Dinner",
-      kind: "working_day",
-      repeats: false,
-      ownHours: false,
-      closeWholeVenue: false,
+      repeatsYearly: false,
+      dates: [{ date: "2027-03-01", closedAllDay: false }],
     }),
   ).toBe(false);
   expect(unload()).toBe(true);

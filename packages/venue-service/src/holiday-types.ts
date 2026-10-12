@@ -10,14 +10,14 @@ export interface HolidayCoverage {
   regionCode: string | null;
   nationalRegional:
     "complete" | "missing_year" | "unknown_region" | "area_required" | "unsupported_country";
-  local: "address_unresolved" | "unsupported_country" | "none_entered" | "owner_entered";
+  local: "address_unresolved" | "unsupported_country" | "none_entered";
   dataVersion: string | null;
   sourceIds: readonly string[];
 }
 
 export interface HolidaySource {
   id: string;
-  kind: "official" | "owner";
+  kind: "official";
   title: string;
   url: string | null;
   sha256: string | null;
@@ -57,14 +57,6 @@ export interface NamedDay {
   ownHours: boolean;
   closeWholeVenue: boolean;
 }
-export interface NamedCalendarDay {
-  date: LocalDate;
-  namedDay: NamedDay | null;
-  holidays: readonly HolidayFact[];
-  tone: "public_holiday" | "own_holiday" | "working_day" | "closed" | "standard";
-  ownHours: boolean;
-  closed: boolean;
-}
 export interface SpecialDaysModel extends BusinessDayScheduleStatus {
   timeZone: string;
   dayCutover: string;
@@ -81,7 +73,4 @@ export interface SpecialDaysModel extends BusinessDayScheduleStatus {
     chosen: string | null;
   };
   localHolidaysPerYear: number;
-}
-export interface NamedDaysModel extends Omit<SpecialDaysModel, "days"> {
-  days: readonly NamedCalendarDay[];
 }

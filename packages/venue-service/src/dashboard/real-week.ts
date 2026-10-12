@@ -5,7 +5,7 @@ import type { OpeningHoursModel } from "../menu-timetable-types.js";
 import { seasonOn } from "../season-rules.js";
 import { formatDate } from "./hours-view.js";
 import { t } from "./strings.js";
-import type { NamedCalendarAction } from "./hours-calendar.js";
+import type { SpecialDayAction } from "./hours-calendar.js";
 export const dateInWeek = (monday: string, weekday: number) => addDays(monday, (weekday + 6) % 7);
 export const namedOn = (days: readonly NamedDay[], monday: string, weekday: number) =>
   monday ? days.find((day) => occursOn(day, dateInWeek(monday, weekday))) : undefined;
@@ -28,15 +28,13 @@ export function giveOwnHours(
   host: HTMLElement,
   monday: string,
   weekday: number,
-  day: NamedDay | undefined,
   button: HTMLElement,
 ) {
   host.dispatchEvent(
-    new CustomEvent<NamedCalendarAction>("named-calendar-action", {
+    new CustomEvent<SpecialDayAction>("special-day-action", {
       detail: {
-        kind: "own",
+        kind: "open",
         date: dateInWeek(monday, weekday),
-        day,
         holidays: [],
         returnTo: () => (button.isConnected ? button : null),
       },

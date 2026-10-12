@@ -1,5 +1,5 @@
 import type { OpeningHoursModel } from "../menu-timetable-types.js";
-import type { NamedDaysModel } from "../holiday-types.js";
+import type { SpecialDaysModel } from "../holiday-types.js";
 const annual = {
   id: "annual/day",
   date: "2025-10-13",
@@ -81,7 +81,7 @@ export function realWeekModel(): OpeningHoursModel {
     ],
   };
 }
-export const namedWeekModel = (): NamedDaysModel => ({
+export const namedWeekModel = (): SpecialDaysModel => ({
   businessDayClock: { timeZone: "Europe/Madrid", dayCutover: "06:00", cutoverChanges: [] },
   clockRevision: 0,
   currentBusinessDay: "2026-10-12",
