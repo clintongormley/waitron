@@ -1,5 +1,11 @@
 # W41s-1b: successor probe handoff
 
+> **Re-run, 2026-10-12 (W41s-1c):** the clock fix merged as verifactu #141
+> (`ead94a9faf95738be2a0d7577933a4b795b34e3a`) and both modes ran again on that commit.
+> [Their receipt](../superpowers/specs/2026-10-04-fiscal-prevention-and-offline-recovery-design.md#successor-receipt-2026-10-12-w41s-1c-both-probes-re-run-with-fresh-chains)
+> records warning-free results for every case, including the batch and exact-replay cases.
+> Everything below is historical.
+
 > **Result update, 2026-10-12:** the owner merged #140 as
 > `416ae5a8cd30d8a20ba7f308c8123ec2b8ae760b`; both live modes ran on that commit.
 > [The dated receipt](../superpowers/specs/2026-10-04-fiscal-prevention-and-offline-recovery-design.md#successor-receipt-2026-10-12-w41s-1b-partial-conflict-run)

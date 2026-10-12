@@ -494,6 +494,15 @@ as `AceptadoConErrores`/2004. The stale-generation control stopped the conflict 
 batch and exact-replay cases. Those cases and warning-free successor observations remain open;
 the library clock fix needs owner review before another live run. Existing holds are unchanged.
 
+**Update, 2026-10-12 (W41s-1c re-run):** the clock fix merged as verifactu
+[#141](https://github.com/waitron-io/verifactu/pull/141) and both probes ran again on its main
+commit; [the dated receipt](../superpowers/specs/2026-10-04-fiscal-prevention-and-offline-recovery-design.md#successor-receipt-2026-10-12-w41s-1c-both-probes-re-run-with-fresh-chains)
+sits beside the partial one. Every line was free of 2004. The successor after a 3000 refusal,
+the batch successor sent with its refused predecessor, the next successor after it, and the
+successor linked to an unsent cancellation all returned `Correcto`. An exact re-send of the
+accepted batch successor returned `Incorrecto`/3000 with `EstadoRegistroDuplicado` `Correcta`.
+No consulta, production run or legal answer is behind this; existing holds are unchanged.
+
 **Update, 2026-10-12 (W41s-3d):** PR
 [#1309](https://github.com/clintongormley/waitron/pull/1309) adds an hourly retry of the first
 eligible brake-held record. An accept or a different-code refusal can release the remaining

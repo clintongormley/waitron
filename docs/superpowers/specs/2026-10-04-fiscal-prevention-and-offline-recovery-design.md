@@ -295,6 +295,37 @@ Generate each independent synthetic chain after its preceding wait, then keep th
 unchanged through the batch replay. Retain this failed run alongside any later result. Existing
 Waitron holds and the dependent tasks' technical and adviser gates remain unchanged.
 
+#### Successor receipt, 2026-10-12 (W41s-1c; both probes re-run with fresh chains)
+
+The partial receipt above stays as it was. The owner-reviewed
+[Verifactu PR #141](https://github.com/waitron-io/verifactu/pull/141) merged as
+`ead94a9faf95738be2a0d7577933a4b795b34e3a`. It builds each synthetic chain just before that
+chain's first submission instead of building every chain at the start. Both manual modes then
+ran on that exact main commit against AEAT preproduction with synthetic invoices, one after the
+other. Both workflows succeeded with `incomplete=false`, and no line carried code 2004.
+
+| Case and source run | AEAT wording and individual outcomes | What remains unmeasured |
+| --- | --- | --- |
+| [Conflict, later submission](https://github.com/waitron-io/verifactu/actions/runs/38260029961) | Control original and successor `Correcto`; test original `Correcto`. Changed contents under that original's invoice key returned `Incorrecto`/3000, “Registro de facturación duplicado.”, with `EstadoRegistroDuplicado` `Correcta`. The successor linked to the refused changed fingerprint, sent in the next submission, returned `Correcto` with no warning. | No consulta checked which fingerprint AEAT stored for the original or the successor's predecessor. |
+| [Conflict batch and replay, same run](https://github.com/waitron-io/verifactu/actions/runs/38260029961) | Independent original `Correcto`. One submission held the changed contents and their successor: envelope `ParcialmenteCorrecto`, changed contents `Incorrecto`/3000, successor `Correcto`. Sending that successor again, as if the first reply had been lost, returned `Incorrecto`/3000 with `EstadoRegistroDuplicado` `Correcta`. The next successor, linked to the accepted successor, returned `Correcto`. | The replay was a simulated lost reply, not a real one. The log shows the same fingerprint for both sends; that the bytes matched rests on the library's own test, not on this log. |
+| [Unsent held cancellation](https://github.com/waitron-io/verifactu/actions/runs/38261082840) | Control original, cancellation and successor `Correcto`; test original `Incorrecto`/1161 (triggered artificially). The test cancellation stayed unsent. Its successor named that cancellation's fingerprint and returned `Correcto` with no warning. | AEAT never received the held cancellation. Its possible later submission, production behaviour and a legal remedy are unmeasured. |
+
+Read together with the partial receipt: in these preproduction runs AEAT accepted, without a
+warning, a successor whose predecessor fingerprint it had refused (3000) or never received.
+The earlier 2004 answers came from the stale generation timestamp, not from the chaining.
+That is what these runs show; it is not evidence about production, and it does not change
+any Waitron hold or adviser gate by itself.
+
+[Saved evidence](2026-10-12-aeat-successor-rerun-evidence.json) keeps each chain's logged plan,
+sent fingerprint and predecessor, per-record response, workflow status, exact head and dispatch
+command, in the same shape as the partial receipt's file. These are logged request and parsed
+reply projections, not raw SOAP bytes or consulta results. Source archives were retrieved with
+`gh api repos/waitron-io/verifactu/actions/runs/<run-id>/logs`; the saved archive hashes
+identify them. Run against the partial receipt's cancellation run, the same extraction
+reproduced that file's archive hash and every entry. Configured names and taxpayer identifiers
+are omitted or redacted. The preproduction environment's deployment policy still names only
+`main` (60719401), read with `gh api` after both runs.
+
 ## 8. Primary-source boundaries
 
 The [adviser document's provenance table](../../compliance/asesor-questions.md#sources-checked-for-the-2026-10-04-revision)

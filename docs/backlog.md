@@ -300,13 +300,12 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   and retires the boot series setting. Task 4 still owes allocation activation; the owner selected
   first symbol `0–7` with 128 random bits. The later recovery and resolution tasks remain open. [Detail](backlog/fiscal.md#w41s-fiscal-prevention-and-offline-recovery--design-and-revised-plan-approved-2026-10-04)
 
-- **Still open after W41s-3 (#1289): conflict batch replay and warning-free successor probes.**
-  W41s-1b's dated [receipt](superpowers/specs/2026-10-04-fiscal-prevention-and-offline-recovery-design.md#successor-receipt-2026-10-12-w41s-1b-partial-conflict-run)
-  records a later successor after 3000 and a successor linked to an unsent cancellation, both
-  `AceptadoConErrores`/2004. The conflict run stopped on its stale-timestamp control before the
-  batch/replay cases. Next: owner review of the library clock fix, then fresh-clock preproduction
-  probes; retain both first-run results. Existing holds remain. A refusal applying to every later
-  record can still open up to 1,000 cases before the repeated-code brake takes effect.
+- **Still open after W41s-3 (#1289): one reply can open up to 1,000 filing cases.** A refusal
+  that applies to every later record (one about the taxpayer's identity, say) opens one case per
+  record in that reply before the repeated-code brake takes effect (`MAX_REGISTROS_POR_ENVIO`).
+  The successor probes are finished: W41s-1c's [receipt](superpowers/specs/2026-10-04-fiscal-prevention-and-offline-recovery-design.md#successor-receipt-2026-10-12-w41s-1c-both-probes-re-run-with-fresh-chains)
+  records warning-free `Correcto` successors after a 3000 refusal and after an unsent
+  cancellation, and a 3000 answer to an exact re-send. Existing holds are unchanged.
   [Detail](backlog/fiscal.md#w41s-fiscal-prevention-and-offline-recovery--design-and-revised-plan-approved-2026-10-04)
 
 - **Follow-up (W41s Task 8, held-record resolution): release a brake hold (send the held records
@@ -329,7 +328,8 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   asesor; owner 2026-10-06). The owner kept the hold for now (it landed with W41s-3c, #1304) and
   asked to revisit it when the asesor answers Q37 and its siblings
   ([questions](compliance/asesor-questions.md)): drop the hold, keep it, or add the overtaking case
-  to the W41s-1b probe first. [Detail](backlog/fiscal.md#w41s-fiscal-prevention-and-offline-recovery--design-and-revised-plan-approved-2026-10-04)
+  to the W41s-1b probe first. The W41s-1b probes have since run without an overtaking case; their
+  results are in [W41s-1c's receipt](superpowers/specs/2026-10-04-fiscal-prevention-and-offline-recovery-design.md#successor-receipt-2026-10-12-w41s-1c-both-probes-re-run-with-fresh-chains). [Detail](backlog/fiscal.md#w41s-fiscal-prevention-and-offline-recovery--design-and-revised-plan-approved-2026-10-04)
 
 - **For Task 9 (the filing screen):** `listFilingCases` reads every case and event with no filter or
   paging, and `heldRecords` reads every `rechazado`/`detenido` row; neither has a production caller
