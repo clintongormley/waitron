@@ -9,6 +9,7 @@ import {
   floorResetTables,
   floorTodayJoins,
   floorTodayJoinTables,
+  floorTodaySplitParts,
   floorTodayTables,
   floorTodayZones,
   floorZones,
@@ -539,6 +540,15 @@ export async function placeSpareToday(
     .where(eq(floorTodayTables.id, row.id));
 }
 
+/** An order with food on its way to the table. */
+export async function refuseDeliveryPending(tx: Transaction, tableId: string): Promise<void> {
+  const [delivery] = await tx
+    .select({ id: workingOrders.id })
+    .from(workingOrders)
+    .where(and(eq(workingOrders.deliveryTableId, tableId), foodOnItsWay()));
+  if (delivery !== undefined) throw new AppError("table.delivery_pending", { tableId });
+}
+
 /** Takes a free table off today's plan, keeping its place; one already taken off is left as it is. */
 export async function takeOffToday(
   tx: Transaction,
@@ -549,11 +559,7 @@ export async function takeOffToday(
   if (today.row.takenOff) return;
   if (today.merge !== null) throw new AppError("table.merged", { tableId });
   await refuseUnfree(tx, [tableId]);
-  const [delivery] = await tx
-    .select({ id: workingOrders.id })
-    .from(workingOrders)
-    .where(and(eq(workingOrders.deliveryTableId, tableId), foodOnItsWay()));
-  if (delivery !== undefined) throw new AppError("table.delivery_pending", { tableId });
+  await refuseDeliveryPending(tx, tableId);
   await tx
     .update(floorTodayTables)
     .set({ takenOff: true })
@@ -598,6 +604,12 @@ export async function backToSaved(
   tableId: string,
 ): Promise<void> {
   const { row } = await todayOf(tx, cfg, tableId);
+  const [splitOff] = await tx
+    .select({ id: floorTodaySplitParts.id })
+    .from(floorTodaySplitParts)
+    .where(eq(floorTodaySplitParts.joinedTableId, tableId))
+    .limit(1);
+  if (splitOff !== undefined) throw new AppError("joined_table.parts_split_off", { tableId });
   const [saved] = await tx
     .select()
     .from(floorResetTables)

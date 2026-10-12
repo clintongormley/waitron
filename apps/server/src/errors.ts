@@ -670,6 +670,8 @@ declare module "@waitron/shared" {
     "joined_table.split_all": { tableId: string; field: "partIds" };
     /** A split that leaves two or more parts joined must say the joined table's seats. */
     "joined_table.seats_required": Record<string, never>;
+    /** Back to its saved place is refused for a joined table while any of its parts is split off. */
+    "joined_table.parts_split_off": { tableId: string };
     /** A floor-plan zone name already exists in this venue. `name` is the operator's own text. */
     "zone.name_taken": { name: string };
     /** A kitchen-station name already exists in this venue. `name` is the operator's own text. */

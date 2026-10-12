@@ -11,7 +11,8 @@ import {
 } from "@waitron/db";
 import { AppError, NEW_TABLE_SIZE, compareLabels } from "@waitron/shared";
 import { refuseHeld, refuseInJoinedTable, todayOf } from "./floor-today-table.js";
-import { placementColumns, placementOf } from "./floor-today-store.js";
+import { leaveMergesRestoring } from "./floor-today-merges.js";
+import { placementColumns, placementOf, refuseDeliveryPending } from "./floor-today-store.js";
 import { partPlaces, remainingPlace, type LaidPart } from "./joined-split-layout.js";
 import type { TillConfig } from "./till-config.js";
 import "./errors.js";
@@ -67,7 +68,7 @@ export async function splitJoinedTable(
 ): Promise<void> {
   const { tableId, partIds, seats } = args;
   const today = await todayOf(tx, cfg, tableId);
-  const row = placementOf(today.row);
+  let row = placementOf(today.row);
   if (row === null) throw new AppError("table.not_on_today_plan", { tableId });
   if (today.row.takenOff) throw new AppError("table.taken_off", { tableId });
 
@@ -89,8 +90,15 @@ export async function splitJoinedTable(
   if (left.length >= 2 && seats === null) throw new AppError("joined_table.seats_required", {});
   const toOne = left.length === 1;
   if (toOne) {
-    if (today.merge !== null) throw new AppError("table.merged", { tableId });
-    await refuseHeld(tx, [tableId]);
+    await refuseDeliveryPending(tx, tableId);
+    if (today.merge === null) {
+      await refuseHeld(tx, [tableId]);
+    } else {
+      const members = today.merge.members.map((member) => member.tableId);
+      await refuseHeld(tx, members);
+      await leaveMergesRestoring(tx, members);
+      row = placementOf((await todayOf(tx, cfg, tableId)).row)!;
+    }
   }
 
   const splitting = toOne ? joined : named;

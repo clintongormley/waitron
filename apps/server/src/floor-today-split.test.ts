@@ -1,14 +1,33 @@
-import { asc, eq, sql } from "drizzle-orm";
+import { and, asc, eq, sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { floorTodaySplitParts, floorTodayTables, joinedTableApart } from "@waitron/db";
+import {
+  floorTodaySplitParts,
+  floorTodayTables,
+  joinedTableApart,
+  workingOrders,
+} from "@waitron/db";
 import type { AppError } from "@waitron/shared";
 import { writeMerge } from "./floor-today-merges.js";
-import { moveToday, takeOffToday } from "./floor-today-store.js";
+import { foodOnItsWay } from "./delivery-release.js";
+import { backToSaved, moveToday, takeOffToday } from "./floor-today-store.js";
 import { splitJoinedTable } from "./floor-today-split.js";
-import { inTx, seat, setupPartyVenue, type PartyVenue } from "./testing/party-venue.js";
-import { giveKeptSize, plannedZone, splitOffRow, todayRow } from "./testing/floor-today-venue.js";
+import {
+  counterOrder,
+  inTx,
+  pay,
+  seat,
+  setupPartyVenue,
+  type PartyVenue,
+} from "./testing/party-venue.js";
+import {
+  giveKeptSize,
+  mergeOf,
+  plannedZone,
+  splitOffRow,
+  todayRow,
+} from "./testing/floor-today-venue.js";
 import "./errors.js";
 
 let v: PartyVenue;
@@ -286,21 +305,6 @@ describe("splitting parts off a joined table", () => {
       (z) => ({ code: "table.in_joined_table", params: { tableId: t(z, "long") } }),
     ],
     [
-      "down to one part while in a merge",
-      (z) =>
-        inTx(v, (tx) =>
-          writeMerge(tx, v.cfg, {
-            movingId: t(z, "bar"),
-            targetId: t(z, "long"),
-            side: "right",
-            seats: 14,
-            free: true,
-          }),
-        ),
-      (z) => ({ tableId: t(z, "long"), partIds: [t(z, "c4"), t(z, "c5")], seats: null }),
-      (z) => ({ code: "table.merged", params: { tableId: t(z, "long") } }),
-    ],
-    [
       "down to one part while a party holds it",
       async (z) => {
         await seat(v, t(z, "long"));
@@ -339,5 +343,117 @@ describe("splitting parts off a joined table", () => {
     expect(error?.code).toBe("joined_table.part_invalid");
     expect(error?.params).toEqual({ tableId: table.c5!, field: "partIds" });
     expect(await everything()).toEqual(before);
+  });
+});
+
+async function refusalOf(work: Promise<unknown>): Promise<AppError | null> {
+  return (await work.then(
+    () => null,
+    (thrown: unknown) => thrown,
+  )) as AppError | null;
+}
+
+const mergeLongOntoBar = (table: Record<string, string>) =>
+  inTx(v, (tx) =>
+    writeMerge(tx, v.cfg, {
+      movingId: table.long!,
+      targetId: table.bar!,
+      side: "right",
+      seats: 14,
+      free: true,
+    }),
+  );
+
+describe("splitting a joined table down to one part", () => {
+  it("a split down to one ends Long table's merge first, putting both tables back where they stood", async () => {
+    const { table } = await LONG_PLUS_BAR();
+    const barBefore = await todayRow(v, table.bar!);
+    await mergeLongOntoBar(table);
+    expect(await todayRow(v, table.long!)).not.toMatchObject({ x: 10, y: 20 });
+
+    await split(table.long!, [table.c4!, table.c5!], null);
+
+    expect(await mergeOf(v, table.long!)).toBeNull();
+    expect(await mergeOf(v, table.bar!)).toBeNull();
+    expect(await todayRow(v, table.long!)).toMatchObject({ x: 10, y: 20, rotation: 0 });
+    expect(await todayRow(v, table.bar!)).toEqual(barBefore);
+    expect(await todayRow(v, table.c3!)).toMatchObject({ x: 10, y: 20, width: 2, height: 2 });
+    expect(await splitRowsOf(table.long!)).toEqual([table.c3!, table.c4!, table.c5!].sort());
+    expect(await apart(table.long!)).toBe(1);
+  });
+
+  it("refuses a split down to one while a party holds Long table's merge", async () => {
+    const { table } = await LONG_PLUS_BAR();
+    await mergeLongOntoBar(table);
+    await seat(v, table.long!);
+    const before = { ...(await everything()), merge: await mergeOf(v, table.long!) };
+
+    const error = await refusalOf(split(table.long!, [table.c4!, table.c5!], null));
+
+    expect(error?.code).toBe("tab.already_open");
+    expect(error?.params).toEqual({ tableId: [table.long!, table.bar!].sort()[0] });
+    expect({ ...(await everything()), merge: await mergeOf(v, table.long!) }).toEqual(before);
+  });
+
+  it("splits parts off a merged Long table while two stay, leaving the merge as it is", async () => {
+    const { table } = await LONG_PLUS_BAR();
+    await mergeLongOntoBar(table);
+    const mergeBefore = await mergeOf(v, table.long!);
+    const longBefore = await todayRow(v, table.long!);
+
+    await split(table.long!, [table.c5!], 6);
+
+    expect(await mergeOf(v, table.long!)).toEqual(mergeBefore);
+    expect(await todayRow(v, table.long!)).toMatchObject({
+      x: longBefore!.x,
+      y: longBefore!.y,
+      width: 4,
+      height: 2,
+      seats: 6,
+    });
+  });
+
+  it("refuses a split down to one while food is on its way to Long table", async () => {
+    const { table } = await LONG_PLUS_BAR();
+    const order = await counterOrder(v, "Paella");
+    await inTx(v, (tx) =>
+      tx
+        .update(workingOrders)
+        .set({ deliveryTableId: table.long! })
+        .where(eq(workingOrders.id, order)),
+    );
+    await pay(v, order, "20.00");
+    const onItsWay = await inTx(v, (tx) =>
+      tx
+        .select({ id: workingOrders.id })
+        .from(workingOrders)
+        .where(and(eq(workingOrders.id, order), foodOnItsWay())),
+    );
+    expect(onItsWay).toHaveLength(1);
+    const before = await everything();
+
+    const error = await refusalOf(split(table.long!, [table.c4!, table.c5!], null));
+
+    expect(error?.code).toBe("table.delivery_pending");
+    expect(error?.params).toEqual({ tableId: table.long! });
+    expect(await everything()).toEqual(before);
+  });
+});
+
+describe("Back to its saved place on a joined table", () => {
+  it("refuses Back to its saved place on Long table while a part is split off", async () => {
+    const { table } = await LONG_PLUS_BAR();
+    await split(table.long!, [table.c5!], 6);
+    const longBefore = await todayRow(v, table.long!);
+
+    const error = await refusalOf(inTx(v, (tx) => backToSaved(tx, v.cfg, table.long!)));
+
+    expect(error?.code).toBe("joined_table.parts_split_off");
+    expect(error?.params).toEqual({ tableId: table.long! });
+    expect(await todayRow(v, table.long!)).toEqual(longBefore);
+
+    await inTx(v, (tx) => moveToday(tx, v.cfg, table.bar!, { x: 60, y: 60 }));
+    await inTx(v, (tx) => backToSaved(tx, v.cfg, table.bar!));
+    expect(await todayRow(v, table.bar!)).toMatchObject({ x: 40, y: 0 });
   });
 });

@@ -502,6 +502,7 @@ export const STATUS: Record<string, ContentfulStatusCode> = {
   "joined_table.part_invalid": 400,
   "joined_table.split_all": 409,
   "joined_table.seats_required": 400,
+  "joined_table.parts_split_off": 409,
   "zone.not_found": 404,
   "tab.already_open": 409,
   "tab.not_open": 409,

@@ -380,6 +380,18 @@ describe("the split-off route", () => {
     expect(await todayRow(v, table.long!)).toMatchObject({ width: 4, seats: 6 });
   });
 
+  it("answers 409 joined_table.parts_split_off to Back on Long table while a part is split off", async () => {
+    const { table } = await LONG();
+    await expect204(today(table.long!, "split-off", { partIds: [table.c5!], seats: 6 }));
+    const longBefore = await todayRow(v, table.long!);
+
+    expect(await refusal(today(table.long!, "back"))).toEqual({
+      status: 409,
+      body: { error: { code: "joined_table.parts_split_off", params: { tableId: table.long! } } },
+    });
+    expect(await todayRow(v, table.long!)).toEqual(longBefore);
+  });
+
   it.each<
     [
       number,
