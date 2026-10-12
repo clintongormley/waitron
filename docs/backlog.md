@@ -299,6 +299,9 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   needs old-chain evidence and its adviser answer. Task 5 reads the live series during issuance
   and retires the boot series setting. Task 4 still owes allocation activation; the owner selected
   first symbol `0–7` with 128 random bits. The later recovery and resolution tasks remain open.
+  [The Cloud registry handoff](superpowers/plans/2026-10-12-cloud-fiscal-allocation-registry.md)
+  separates its service and phone journey from the later Waitron adapter. Those builds and the
+  production custody, entitlement, signing and independent-history choices remain open.
   **Owner, 2026-10-12:** three duplicate conflicts in a row should switch to a fresh number series
   automatically and keep selling, never stop sales; this needs Task 4's activation and Task 7's
   automatic recovery, and until then the same-code brake holds the chain. Any invoice that needs
