@@ -58,6 +58,28 @@ describe("wall-minute end offsets", () => {
       ),
     ).toBeNull();
   });
+  it("reads an explicitly empty named next day as closed, not as its season's day", () => {
+    const late = { periodId: "late", startsAt: "21:00", endsAt: "06:00" };
+    const week: ServiceRange[][] = Array.from({ length: 7 }, () => []);
+    week[2] = [{ periodId: "early", startsAt: "07:00", endsAt: "09:00" }];
+    const seasons = [{ seasonId: "year", startsOn: "01-01", week }];
+    const offsets = new Map([["late", 120]]);
+    const monday = { date: "2026-10-12", closeWholeVenue: false, slots: [late] };
+    expect(findSeasonEndOffsetClash(seasons, [], offsets, "06:00")).toBeNull();
+    expect(findSeasonEndOffsetClash(seasons, [monday], offsets, "06:00")).toEqual({
+      periodId: "late",
+      slotIndex: 0,
+      date: "2026-10-12",
+    });
+    expect(
+      findSeasonEndOffsetClash(
+        seasons,
+        [monday, { date: "2026-10-13", closeWholeVenue: false, slots: [] }],
+        offsets,
+        "06:00",
+      ),
+    ).toBeNull();
+  });
 });
 
 it("checks annual neighbors beyond their saved and following years", () => {
