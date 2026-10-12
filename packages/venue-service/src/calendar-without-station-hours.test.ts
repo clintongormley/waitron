@@ -34,17 +34,14 @@ it.each(["calendar", "special days", "opening hours"] as const)(
           })
           .returning();
         const cfg = { locationId: locationId(venue!.id) };
-        const [day] = await tx
-          .insert(specialDates)
-          .values({
-            locationId: cfg.locationId,
-            date: "2026-10-10",
-            name: "Annual closure",
-            repeatOn: "10-10",
-            kind: "holiday",
-            closeWholeVenue: true,
-          })
-          .returning();
+        await tx.insert(specialDates).values({
+          locationId: cfg.locationId,
+          date: "2026-10-10",
+          name: "Annual closure",
+          repeatOn: "10-10",
+          kind: "holiday",
+          closeWholeVenue: true,
+        });
         const [special] = await tx
           .insert(specialDays)
           .values({ locationId: cfg.locationId, name: "Annual closure", repeatsYearly: true })
@@ -59,15 +56,6 @@ it.each(["calendar", "special days", "opening hours"] as const)(
         await tx.run(sql`drop table if exists hours_week_cells`);
         await tx.run(sql`drop table if exists special_date_hours_periods`);
         await tx.run(sql`drop table if exists special_date_hours`);
-        const expected = {
-          id: day!.id,
-          date: "2026-10-10",
-          name: "Annual closure",
-          kind: "holiday",
-          repeats: true,
-          ownHours: false,
-          closeWholeVenue: true,
-        };
         const calendarDay = {
           date: "2027-10-10",
           specialDay: { id: special!.id, name: "Annual closure" },
@@ -83,7 +71,7 @@ it.each(["calendar", "special days", "opening hours"] as const)(
           const model = await readSpecialDaysModel(tx, cfg, "2027-10-10", "2027-10-10", at);
           expect(model.days).toEqual([calendarDay]);
         } else {
-          expect((await readOpeningHoursModel(tx, cfg, at)).namedDays).toEqual([expected]);
+          expect(await readOpeningHoursModel(tx, cfg, at)).not.toHaveProperty("namedDays");
         }
         throw rollback;
       }),

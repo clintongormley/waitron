@@ -34,7 +34,6 @@ import type { SpecialDaysModel } from "./holiday-types.js";
 import { readCalendarDays } from "./hours.js";
 import { readSpecialDaysModel } from "./named-days.js";
 import { saveSpecialDay } from "./special-days.js";
-import { readOpeningHoursModel } from "./menu-timetable.js";
 import { locationId } from "@waitron/shared";
 import { MANAGEMENT_COOKIE, type Logger } from "@waitron/server-kit";
 import { insertNamedDay } from "./testing/named-day-rows.js";
@@ -526,9 +525,6 @@ describe("reading Hours", () => {
 
     const model = await read();
     expect(model.civilDate).toBe("2030-10-06");
-    expect(
-      (await withTransaction(db, (tx) => readOpeningHoursModel(tx, fx.cfg, at))).namedDays,
-    ).toEqual([saved["2030-10-05"], saved["2030-10-14"], saved["2032-12-25"]]);
     expect(model.days.map((day) => day.specialDay?.id ?? null)).toEqual([
       null,
       null,
@@ -543,9 +539,6 @@ describe("reading Hours", () => {
     const unreadable = await read();
     expect([unreadable.civilDate, unreadable.clockReadable]).toEqual([null, false]);
     expect(unreadable.days).toEqual(model.days);
-    expect(
-      (await withTransaction(db, (tx) => readOpeningHoursModel(tx, fx.cfg, at))).namedDays,
-    ).toEqual([saved["2030-10-04"], saved["2030-10-05"], saved["2030-10-14"], saved["2032-12-25"]]);
   });
 });
 

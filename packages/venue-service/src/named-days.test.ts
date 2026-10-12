@@ -5,12 +5,7 @@ import { CATALOGUE_MIGRATIONS } from "@waitron/catalogue";
 import { CORE_MIGRATIONS, catalogues, locations, tenants, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { locationId } from "@waitron/shared";
-import {
-  readOpeningHoursModel,
-  replaceMenuWeek,
-  resolveDepartmentService,
-  saveMenuPeriod,
-} from "./menu-timetable.js";
+import { replaceMenuWeek, resolveDepartmentService, saveMenuPeriod } from "./menu-timetable.js";
 import { VENUE_SERVICE_MIGRATIONS } from "./migrations.js";
 import { readSpecialDaysModel } from "./named-days.js";
 import { specialDates } from "./schema/hours.js";
@@ -20,7 +15,6 @@ import {
   specialDayDates,
   specialDays,
 } from "./schema/seasons.js";
-import { menuDayTimetables } from "./schema/menus.js";
 import { departments, departmentSalePolicies } from "./schema/service.js";
 
 const suite = useVenueDb({
@@ -151,11 +145,6 @@ async function day(
     return row!;
   });
 }
-async function dated(f: Fixture, id: string) {
-  await run((tx) =>
-    tx.insert(menuDayTimetables).values({ departmentId: f.department, specialDateId: id }),
-  );
-}
 const service = (f: Fixture, at: string, department = f.department) =>
   run((tx) => resolveDepartmentService(tx, f.cfg, department, new Date(at)));
 const read = (
@@ -227,16 +216,6 @@ describe("departments and calendar follow named days", () => {
     });
     expect((await service(f, "2027-03-28T01:00:00Z")).periodId).toBe(f.period);
     expect((await service(f, "2027-03-28T02:00:00Z")).open).toBe(false);
-  });
-  it("lists old repeats, future one-offs and past days still holding dated rows", async () => {
-    const f = await fixture();
-    const repeat = await day(f, "2020-12-25", { repeatOn: "12-25" });
-    await day(f, "2026-09-09");
-    const retained = await day(f, "2026-09-10", { ownHours: true });
-    await dated(f, retained.id);
-    const future = await day(f, "2026-12-26");
-    const model = await run((tx) => readOpeningHoursModel(tx, f.cfg, now));
-    expect(model.namedDays.map(({ id }) => id)).toEqual([repeat.id, retained.id, future.id]);
   });
 });
 

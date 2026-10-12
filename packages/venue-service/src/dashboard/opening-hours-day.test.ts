@@ -30,17 +30,6 @@ export function dayFixture(): OpeningHoursModel {
     menus: [{ id: "m1", name: "Lunch menu", active: true, includes: [] }],
     seasons: [{ id: "autumn", name: "Autumn", startsOn: "09-01" }],
     currentSeasonId: "autumn",
-    namedDays: [
-      {
-        id: "s/1",
-        date: "2026-10-13",
-        name: "Party",
-        kind: "working_day" as const,
-        repeats: false,
-        ownHours: true,
-        closeWholeVenue: false,
-      },
-    ],
     departments: [
       {
         id: "d1",
@@ -67,9 +56,6 @@ export function dayFixture(): OpeningHoursModel {
               { weekday: 2, slots: [{ periodId: "p1", startsAt: "11:00", endsAt: "15:00" }] },
             ],
           },
-        ],
-        dates: [
-          { specialDateId: "s/1", slots: [{ periodId: "p1", startsAt: "12:00", endsAt: "16:00" }] },
         ],
       },
       {
@@ -98,7 +84,6 @@ export function dayFixture(): OpeningHoursModel {
             ],
           },
         ],
-        dates: [],
       },
       {
         id: "disabled",
@@ -107,7 +92,6 @@ export function dayFixture(): OpeningHoursModel {
         zones: [],
         periods: [],
         seasonWeeks: [],
-        dates: [],
       },
     ],
   };
@@ -734,20 +718,9 @@ it("keeps a created period's signed offset in its wire body and department range
   ).toBe("late");
 });
 
-it("ignores retained dated rows when the named day follows the normal week", async () => {
-  vi.setSystemTime(new Date("2026-10-13T10:00:00Z"));
-  const model = dayFixture();
-  model.namedDays = [{ ...model.namedDays[0]!, ownHours: false }];
-  const day = await mount(undefined, model);
-  expect(grid(day).columns[0]!.slots).toEqual([
-    { periodId: "p1", startsAt: "11:00", endsAt: "15:00" },
-  ]);
-});
-
 it("uses the later occurrence's date for a repeating named day's clock warning", async () => {
   vi.setSystemTime(new Date("2027-10-30T10:00:00Z"));
   const model = dayFixture();
-  model.namedDays = [{ ...model.namedDays[0]!, date: "2026-10-30", repeats: true, ownHours: true }];
   const day = await mount(undefined, model);
   const range = await open(day);
   emit(range.shadowRoot!.querySelector("[name=startsAt]")!, "wt-change", { value: "02:00" });

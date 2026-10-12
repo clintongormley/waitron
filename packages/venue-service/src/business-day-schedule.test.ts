@@ -1,8 +1,8 @@
 import { readZoneKeepOpenState } from "./operations.js";
-import { replaceZoneClosedWeek, saveZoneClosedDate } from "./zone-closed-times.js";
+import { replaceZoneClosedWeek } from "./zone-closed-times.js";
+import { saveSpecialDay } from "./special-days.js";
 import {
   replaceMenuWeek,
-  saveSpecialDateMenus,
   updateMenuPeriod,
   readOpeningHoursModel,
   resolveDepartmentService,
@@ -57,6 +57,50 @@ const candidate = (time: string): BusinessDayClock => ({
   cutoverChanges: [{ effectiveBusinessDay: E, dayCutover: time }],
 });
 const at = new Date("2026-11-02T12:00:00Z");
+/** Saves a new special day on `date` painting the fixture's department (period) or zone (closed). */
+const paintDate = (
+  v: {
+    cfg: { locationId: ReturnType<typeof locationId> };
+    departmentId: string;
+    periodId: string;
+    zoneId?: string;
+  },
+  target: "menu" | "zone",
+  date: string,
+  ranges: { startsAt: string; endsAt: string }[],
+  when: Date,
+  revision: number,
+  repeatsYearly = false,
+) =>
+  withTransaction(suite.db, (tx) =>
+    saveSpecialDay(
+      tx,
+      v.cfg,
+      null,
+      {
+        name: "Special day",
+        repeatsYearly,
+        dates: [{ date, closedAllDay: false }],
+        ...(target === "menu"
+          ? {
+              paint: [
+                {
+                  departmentId: v.departmentId,
+                  date,
+                  ranges: ranges.map((r) => ({ periodId: v.periodId, ...r })),
+                },
+              ],
+            }
+          : {
+              zonePaint: [
+                { zoneId: v.zoneId!, date, ranges: ranges.map((r) => ({ kind: "closed", ...r })) },
+              ],
+            }),
+      },
+      when,
+      revision,
+    ),
+  ).then(() => undefined);
 async function fixture(
   ranges: { startsAt: string; endsAt: string }[],
   options: {
@@ -414,17 +458,7 @@ describe("pending guards every time writer", () => {
     const v = await fixture([range("09:00", "17:00")], { date: "2026-12-25" });
     await pending(v);
     await expect(
-      withTransaction(suite.db, (tx) =>
-        saveSpecialDateMenus(
-          tx,
-          v.cfg,
-          v.specialDateId!,
-          v.departmentId,
-          [{ periodId: v.periodId, ...range("09:00", "18:00") }],
-          at,
-          1,
-        ),
-      ),
+      paintDate(v, "menu", "2026-12-25", [range("09:00", "18:00")], at, 1),
     ).rejects.toMatchObject({ code: "hours.clock_change_pending" });
     const week = Array.from({ length: 7 }, (_, weekday) => ({
       weekday,
@@ -478,17 +512,7 @@ describe("pending guards every time writer", () => {
       ),
     ).rejects.toMatchObject({ code: "hours.clock_change_pending" });
     await expect(
-      withTransaction(suite.db, (tx) =>
-        saveZoneClosedDate(
-          tx,
-          v.cfg,
-          v.specialDateId!,
-          v.zoneId!,
-          [range("12:00", "13:00")],
-          1,
-          at,
-        ),
-      ),
+      paintDate(v, "zone", "2026-12-25", [range("12:00", "13:00")], at, 1),
     ).rejects.toMatchObject({ code: "hours.clock_change_pending" });
   });
 });
@@ -560,69 +584,32 @@ describe("schedule authoring retains date-specific starts", () => {
     const v = await fixture([], { date: "2026-12-25" });
     await activated(v);
     await expect(
-      withTransaction(suite.db, (tx) =>
-        saveSpecialDateMenus(
-          tx,
-          v.cfg,
-          v.specialDateId!,
-          v.departmentId,
-          [{ periodId: v.periodId, ...range("07:00", "07:00") }],
-          after,
-          1,
-        ),
-      ),
+      paintDate(v, "menu", "2026-12-25", [range("07:00", "07:00")], after, 1),
     ).resolves.toBeUndefined();
   });
   it("accepts a one-off zone day under its own 07:00 start", async () => {
     const v = await fixture([], { zone: true, date: "2026-12-25" });
     await activated(v);
     await expect(
-      withTransaction(suite.db, (tx) =>
-        saveZoneClosedDate(
-          tx,
-          v.cfg,
-          v.specialDateId!,
-          v.zoneId!,
-          [range("07:00", "07:00")],
-          1,
-          after,
-        ),
-      ),
+      paintDate(v, "zone", "2026-12-25", [range("07:00", "07:00")], after, 1),
     ).resolves.toBeUndefined();
   });
   it("checks annual menu ranges against every retained start", async () => {
     const v = await fixture([], { date: "2026-12-25", annual: true });
     await activated(v);
     await expect(
-      withTransaction(suite.db, (tx) =>
-        saveSpecialDateMenus(
-          tx,
-          v.cfg,
-          v.specialDateId!,
-          v.departmentId,
-          [{ periodId: v.periodId, ...range("07:00", "07:00") }],
-          after,
-          1,
-        ),
-      ),
-    ).rejects.toMatchObject({ code: "menu_timetable.invalid" });
+      paintDate(v, "menu", "2026-12-25", [range("07:00", "07:00")], after, 1, true),
+    ).rejects.toMatchObject({ code: "special_day.invalid", params: { field: "paint.0.ranges" } });
   });
   it("checks annual zone ranges against every retained start", async () => {
     const v = await fixture([], { zone: true, date: "2026-12-25", annual: true });
     await activated(v);
     await expect(
-      withTransaction(suite.db, (tx) =>
-        saveZoneClosedDate(
-          tx,
-          v.cfg,
-          v.specialDateId!,
-          v.zoneId!,
-          [range("07:00", "07:00")],
-          1,
-          after,
-        ),
-      ),
-    ).rejects.toMatchObject({ code: "zone_closed_time.invalid" });
+      paintDate(v, "zone", "2026-12-25", [range("07:00", "07:00")], after, 1, true),
+    ).rejects.toMatchObject({
+      code: "special_day.invalid",
+      params: { field: "zonePaint.0.ranges" },
+    });
   });
 });
 
@@ -642,17 +629,7 @@ describe("dated calendar authoring after activation", () => {
     const v = await fixture([], { date: "2026-12-25", offset: -1 });
     await activated(v);
     await expect(
-      withTransaction(suite.db, (tx) =>
-        saveSpecialDateMenus(
-          tx,
-          v.cfg,
-          v.specialDateId!,
-          v.departmentId,
-          [{ periodId: v.periodId, ...range("07:00", "07:00") }],
-          after,
-          1,
-        ),
-      ),
+      paintDate(v, "menu", "2026-12-25", [range("07:00", "07:00")], after, 1),
     ).resolves.toBeUndefined();
   });
   it("accepts a skipped final boundary at the reporting boundary instant", async () => {
@@ -664,16 +641,13 @@ describe("dated calendar authoring after activation", () => {
         .where(eq(locations.id, v.cfg.locationId)),
     );
     await expect(
-      withTransaction(suite.db, (tx) =>
-        saveSpecialDateMenus(
-          tx,
-          v.cfg,
-          v.specialDateId!,
-          v.departmentId,
-          [{ periodId: v.periodId, ...range("09:00", "02:30") }],
-          new Date("2026-03-20T12:00:00Z"),
-          0,
-        ),
+      paintDate(
+        v,
+        "menu",
+        "2026-03-28",
+        [range("09:00", "02:30")],
+        new Date("2026-03-20T12:00:00Z"),
+        0,
       ),
     ).resolves.toBeUndefined();
   });
