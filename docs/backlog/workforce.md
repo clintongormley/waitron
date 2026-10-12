@@ -24,7 +24,9 @@ Left, as the legal minimum:
 
 Then: shift templates and availability (the tables exist and the configuration export copies them,
 but no feature uses them); wages (A9); the payroll export, which waits on the gestoría's import
-format. **Before building, ask the labour
-advisor** whether the digital-registro decree is in force and which fields it requires
-([asesor-laboral-questions.md](../compliance/asesor-laboral-questions.md)). The time record cannot be
-edited once written, so its chain and correction paths take the owner's sign-off at land.
+format. **Designed 2026-10-12** in
+[the A10 spec](../superpowers/specs/2026-10-12-a10-clocking-in-and-out-design.md), six parts that land
+on their own. The labour-advisor gate is answered: the digital-record decree was not published in the
+BOE up to 12 Oct 2026 (the spec's legal-basis table has the sources), so A10 builds to the October 2025
+draft and is checked against the final text if it is published. The time record cannot be edited once
+written, so its chain and correction paths take the owner's sign-off at land.

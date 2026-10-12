@@ -3921,9 +3921,10 @@ _Formerly A10; part of A9._ Detail: [backlog/workforce.md](backlog/workforce.md)
 
 - **A10. Clocking in and out — the working-time record** — **Staff cannot clock in or out today.**
   The _registro de jornada_ is a legal duty from the first day the deli employs anyone
-  ([design](superpowers/specs/2026-07-22-workforce-and-time-record-design.md)). **Before building,
-  ask the labour advisor** whether the digital-registro decree is in force and which fields it
-  requires ([asesor-laboral-questions.md](compliance/asesor-laboral-questions.md)).
+  ([design](superpowers/specs/2026-07-22-workforce-and-time-record-design.md)). **Designed
+  2026-10-12, in six parts** ([spec](superpowers/specs/2026-10-12-a10-clocking-in-and-out-design.md)):
+  the digital-record decree is not in force (BOE checked to 12 Oct 2026), so it is built to the
+  October 2025 draft. Part 1 (the record's library) lands first, with the owner's sign-off.
   [Detail](backlog/workforce.md#a10-clocking-in-and-out--the-working-time-record)
 
 ### Purchasing, recipes, stock and reports
