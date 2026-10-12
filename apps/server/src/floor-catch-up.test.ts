@@ -395,6 +395,35 @@ describe("the till's floor routes catch today's plan up", () => {
     expect((await todayRow(z.t3))?.x).not.toBeNull();
   });
 
+  it("a part whose merge is split after its joined table goes live is free, still joined and still placed", async () => {
+    const z = await longWaitsForItsName();
+    expect((await send("POST", `/api/tables/${z.t3}/today/place`, { x: 20, y: 40 })).status).toBe(
+      204,
+    );
+    const merged = await send("POST", `/api/tables/${z.t3}/today/merge`, {
+      targetId: z.bar,
+      side: "right",
+      seats: 6,
+    });
+    expect(merged.status).toBe(204);
+    await finish(z.held);
+    await readJoined();
+    expect((await send("POST", `/api/tables/${z.bar}/today/split`, {})).status).toBe(204);
+
+    const answer = await send("GET", "/api/tables/state");
+    expect(answer.status).toBe(200);
+    const tables = (await answer.json()) as {
+      id: string;
+      state: string;
+      condition: string;
+      today: { inJoinedTable: string | null; placement: unknown };
+    }[];
+    const part = tables.find((t) => t.id === z.t3)!;
+    expect(part).toMatchObject({ state: "free", condition: "free" });
+    expect(part.today.inJoinedTable).toBe(z.long);
+    expect(part.today.placement).not.toBeNull();
+  });
+
   it("does nothing when no reset happened while the table was taken", async () => {
     const { zoneId, tableId } = await plannedTable(fresh("Kept"));
     const generation = await generationOf(zoneId);
