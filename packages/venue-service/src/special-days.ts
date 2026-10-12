@@ -523,15 +523,11 @@ function parseInput(value: unknown, clock: BusinessDayClock) {
     if (typeof entry.closedAllDay !== "boolean") invalid(`dates.${index}.closedAllDay`);
     return { date: entry.date, closedAllDay: entry.closedAllDay };
   });
+  // A repeating day's dates meeting in a later year is refused by the save, once it knows which
+  // dates follow a holiday's name.
   dates.forEach((entry, index) => {
-    for (const earlier of dates.slice(0, index))
-      if (
-        sharedSpecialDate(
-          { date: earlier.date, repeats: repeatsYearly },
-          { date: entry.date, repeats: repeatsYearly },
-        ) !== null
-      )
-        invalid(`dates.${index}.date`, { reason: "overlap" });
+    if (dates.slice(0, index).some((earlier) => earlier.date === entry.date))
+      invalid(`dates.${index}.date`, { reason: "overlap" });
   });
   const held = new Set(dates.map((entry) => entry.date));
   const cutoversOf = cutoversFor(clock, repeatsYearly);

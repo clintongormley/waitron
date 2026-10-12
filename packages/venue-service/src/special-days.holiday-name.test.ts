@@ -190,6 +190,63 @@ describe("a special-day date records the public holiday it was saved on", () => 
   });
 });
 
+describe("one special day's own dates under name-following", () => {
+  it("refuses two dates of one repeating day that meet where the holiday falls in a later year", async () => {
+    const v = await venue();
+    expect(
+      await refusal(
+        save(v, {
+          name: "Viernes Santo",
+          repeatsYearly: true,
+          dates: dates(["2026-04-03", "2027-03-26"]),
+        }),
+      ),
+    ).toEqual({
+      code: "special_day.invalid",
+      params: { field: "dates.1.date", reason: "overlap" },
+    });
+  });
+
+  it("accepts a holiday date and the old month and day a year later, which never meet", async () => {
+    const v = await venue();
+    const day = await save(v, {
+      name: "Viernes Santo",
+      repeatsYearly: true,
+      dates: dates(["2026-04-03", "2027-04-03"]),
+    });
+    expect(day.dates.map((entry) => entry.date)).toEqual(["2026-04-03", "2027-04-03"]);
+  });
+
+  it("keeps a kept date's stored holiday name when the day is saved again", async () => {
+    const v = await venue();
+    const day = await yearly(v, "Viernes Santo", "2026-04-03");
+    await db
+      .update(specialDayDates)
+      .set({ holidayName: "Stored name" })
+      .where(eq(specialDayDates.specialDayId, day.id));
+    await scoped((tx) =>
+      saveSpecialDay(
+        tx,
+        v.cfg,
+        day.id,
+        {
+          name: "Good Friday",
+          repeatsYearly: true,
+          dates: [{ date: "2026-04-03", closedAllDay: true }],
+        },
+        AT,
+        0,
+      ),
+    );
+    expect(
+      await db
+        .select({ holidayName: specialDayDates.holidayName })
+        .from(specialDayDates)
+        .where(eq(specialDayDates.specialDayId, day.id)),
+    ).toEqual([{ holidayName: "Stored name" }]);
+  });
+});
+
 describe("a repeating holiday date follows the holiday's name", () => {
   it("applies on the date the later year's list gives the name, not on the old month and day", async () => {
     const v = await venue();
