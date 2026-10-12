@@ -804,6 +804,7 @@ export async function splitHeldLineIntoUnits(
         throw new AppError("group.not_held", { groupId: line.groupId! });
       if (line.billStatus !== "open")
         throw new AppError("working_order.not_open", { workingOrderId: line.workingOrderId });
+      await refusePaymentInFlight(tx, [line.workingOrderId]);
       await splitUnitsWithinOrder(tx, cfg, line.workingOrderId, line.lineNo);
       await bumpRevision(tx, [line.workingOrderId]);
       await recordGroupEvent(tx, {

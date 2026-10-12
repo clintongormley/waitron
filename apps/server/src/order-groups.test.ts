@@ -4662,4 +4662,26 @@ describe("splitting a held line into units", () => {
       gate.mockRestore();
     }
   });
+  it("refuses a payment in progress before copying units", async () => {
+    const v = await setupVenue();
+    const s = await specExample(v);
+    const [source] = await linesIn(s.partyId, s.mains);
+    await db
+      .update(workingOrders)
+      .set({ paymentAttemptAt: new Date().toISOString() })
+      .where(eq(workingOrders.id, s.tabId));
+    const command = await args(s.partyId);
+    const copy = vi.spyOn(VENUE_SERVICE, "copyLineContext");
+    try {
+      await expectRefusedWithNothingWritten(
+        v,
+        s.partyId,
+        () => inTx((tx) => splitHeldLineIntoUnits(tx, v.cfg, s.partyId, source!.id, command)),
+        { code: "order.payment_in_flight" },
+      );
+      expect(copy).not.toHaveBeenCalled();
+    } finally {
+      copy.mockRestore();
+    }
+  });
 });
