@@ -4812,35 +4812,52 @@ describe("till-app when the server reports another build", () => {
     expect(updateBar(el)).not.toBeNull();
   });
 
-  it.each(["park-order", "place-order"])(
-    "waits for an unanswered %s before a pressed Reload reloads",
-    async (action) => {
-      const reload = vi.fn();
-      let answer!: (value: unknown) => void;
-      const parkOrder = vi.fn(() => new Promise((resolve) => (answer = resolve)));
-      const { el } = await mountApp(
-        { parkOrder, placeOrder: vi.fn(() => new Promise(() => {})) },
-        { reload },
-      );
-      const c = await toCounter(el);
-      c.store.addProduct(c.products[0]!, "1");
-      emit(c, action, {});
-      await flush(el);
-      expect(parkOrder).toHaveBeenCalledOnce();
-      updated();
-      await flush(el);
-      await userEvent.click(
-        updateBar(el)!.shadowRoot!.querySelector("wt-button")!.shadowRoot!.querySelector("button")!,
-      );
-      await flush(el);
-      expect(reload).not.toHaveBeenCalled();
-      if (action === "park-order") {
-        answer({});
-        await flush(el);
-        expect(reload).toHaveBeenCalledOnce();
-      }
-    },
-  );
+  it("waits for an unanswered park before a pressed Reload reloads, then reloads once it is answered", async () => {
+    const reload = vi.fn();
+    let answer!: () => void;
+    const parkOrder = vi.fn(() => new Promise<void>((resolve) => (answer = resolve)));
+    const { el } = await mountApp({ parkOrder }, { reload });
+    const c = await toCounter(el);
+    c.store.addProduct(c.products[0]!, "1");
+    emit(c, "park-order", {});
+    await flush(el);
+    expect(parkOrder).toHaveBeenCalledOnce();
+    updated();
+    await flush(el);
+    await userEvent.click(
+      updateBar(el)!.shadowRoot!.querySelector("wt-button")!.shadowRoot!.querySelector("button")!,
+    );
+    await flush(el);
+    expect(reload).not.toHaveBeenCalled();
+    answer();
+    await flush(el);
+    expect(reload).toHaveBeenCalledOnce();
+  });
+
+  it("waits for an unanswered place before a pressed Reload reloads, then reloads once it is answered", async () => {
+    const reload = vi.fn();
+    let answer!: () => void;
+    const placeOrder = vi.fn(() => new Promise<void>((resolve) => (answer = resolve)));
+    const { el } = await mountApp(
+      { parkOrder: vi.fn().mockResolvedValue(undefined), placeOrder },
+      { reload },
+    );
+    const c = await toCounter(el);
+    c.store.addProduct(c.products[0]!, "1");
+    emit(c, "place-order", {});
+    await flush(el);
+    expect(placeOrder).toHaveBeenCalledOnce();
+    updated();
+    await flush(el);
+    await userEvent.click(
+      updateBar(el)!.shadowRoot!.querySelector("wt-button")!.shadowRoot!.querySelector("button")!,
+    );
+    await flush(el);
+    expect(reload).not.toHaveBeenCalled();
+    answer();
+    await flush(el);
+    expect(reload).toHaveBeenCalledOnce();
+  });
 
   it("does not reload a till taken off the page while a pressed Reload waited for a request", async () => {
     const reload = vi.fn();
