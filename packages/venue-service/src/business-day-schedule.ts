@@ -139,7 +139,7 @@ export async function businessDayClockConflicts(
     .where(and(eq(zoneServicePolicies.locationId, cfg.locationId), isNotNull(zoneDays.seasonId)))
     .orderBy(asc(zoneDayRanges.id));
   const seasonList = await tx
-    .select({ id: seasons.id, startsOn: seasons.startsOn })
+    .select({ id: seasons.id, name: seasons.name, startsOn: seasons.startsOn })
     .from(seasons)
     .where(eq(seasons.locationId, cfg.locationId))
     .orderBy(asc(seasons.startsOn));
@@ -327,7 +327,12 @@ export async function businessDayClockConflicts(
           endsAt,
           ...(p.zoneId === undefined ? {} : { zoneId: p.zoneId }),
           ...(p.weekday === null ? {} : { weekday: p.weekday }),
-          ...(p.seasonId === null ? {} : { seasonId: p.seasonId }),
+          ...(p.seasonId === null
+            ? {}
+            : {
+                seasonId: p.seasonId,
+                seasonName: seasonList.find((season) => season.id === p.seasonId)!.name,
+              }),
           ...(p.specialDateId === null ? {} : { specialDateId: p.specialDateId }),
           ...(p.date === null ? {} : { date: p.date }),
           ...(p.periodId === undefined ? {} : { periodId: p.periodId }),
@@ -336,10 +341,10 @@ export async function businessDayClockConflicts(
         });
     }
   }
-  // The cap and the count are of distinct conflicts once `seasonId` is set aside; the same range at
+  // The cap and the count are of distinct conflicts once the season is set aside; the same range at
   // another position in another season counts again.
   const rangeKey = (conflict: BusinessDayClockConflict) =>
-    JSON.stringify({ ...conflict, seasonId: undefined });
+    JSON.stringify({ ...conflict, seasonId: undefined, seasonName: undefined });
   const keys = conflicts.map(rangeKey);
   const ranges = [...new Set(keys)];
   const listed = new Set(ranges.slice(0, 20));

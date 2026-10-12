@@ -1080,6 +1080,40 @@ it("reports a clashing season range once per season it is painted in, naming the
   }
 });
 
+it("names the season of each season range conflict", async () => {
+  const v = await fixture([]);
+  const result = await withTransaction(suite.db, async (tx) => {
+    const [autumn] = await tx
+      .insert(seasons)
+      .values({ locationId: v.cfg.locationId, name: "Autumn", startsOn: "09-01" })
+      .returning();
+    for (const seasonId of [v.seasonId, autumn!.id])
+      await replaceMenuWeek(
+        tx,
+        v.cfg,
+        v.departmentId,
+        Array.from({ length: 7 }, (_, weekday) => ({
+          weekday,
+          slots: weekday === 1 ? [{ periodId: v.periodId, ...range("22:00", "04:30") }] : [],
+        })),
+        at,
+        0,
+        { seasonId },
+      );
+    return {
+      conflicts: await businessDayClockConflicts(tx, v.cfg, before, candidate("03:00"), E),
+      autumn: autumn!.id,
+    };
+  });
+  expect(result.conflicts.conflicts).toHaveLength(2);
+  expect(result.conflicts.conflicts).toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({ weekday: 1, seasonId: v.seasonId, seasonName: "Winter" }),
+      expect.objectContaining({ weekday: 1, seasonId: result.autumn, seasonName: "Autumn" }),
+    ]),
+  );
+});
+
 it("checks a season's last day against the next season's first", async () => {
   const v = await fixture([range("22:00", "04:30")], { offset: 180 });
   await withTransaction(suite.db, async (tx) => {

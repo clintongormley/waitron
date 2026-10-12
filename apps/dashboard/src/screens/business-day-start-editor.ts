@@ -338,7 +338,7 @@ export class BusinessDayStartEditor extends LitElement {
         } as const
       )[conflict.reason],
     );
-    return [
+    const line = [
       conflict.departmentName ?? conflict.departmentId,
       conflict.zoneName ?? conflict.zoneId,
       conflict.specialDateName ?? conflict.specialDateId,
@@ -349,6 +349,18 @@ export class BusinessDayStartEditor extends LitElement {
     ]
       .filter(Boolean)
       .join(" · ");
+    return conflict.seasonName === undefined ? line : `${conflict.seasonName}: ${line}`;
+  }
+  #conflictLines(preview: BusinessDayStartPreview): { lines: string[]; count: number } {
+    const lines = [...new Set(preview.conflicts.map((conflict) => this.#conflict(conflict)))];
+    // The server counts conflicts with the season set aside and lists only the first few; what it
+    // counted beyond the list is added to the lines shown.
+    const listed = new Set(
+      preview.conflicts.map((conflict) =>
+        JSON.stringify({ ...conflict, seasonId: undefined, seasonName: undefined }),
+      ),
+    ).size;
+    return { lines, count: lines.length + Math.max(0, preview.conflictCount - listed) };
   }
   override render() {
     const model = this.model;
@@ -363,6 +375,7 @@ export class BusinessDayStartEditor extends LitElement {
     const action = saveActionState(this.#scope);
     const ready = this.#ready();
     const preview = this.preview;
+    const conflicts = preview && this.#conflictLines(preview);
     return html`<h3>${t("business_day.title")}</h3>
       <dl>
         <dt>${t("business_day.current")}</dt>
@@ -469,13 +482,13 @@ export class BusinessDayStartEditor extends LitElement {
                         ${
                           preview.conflictCount
                             ? html`<p data-test="conflicts">
-                                  ${t("business_day.conflicts")} ${preview.conflictCount}.
+                                  ${t("business_day.conflicts")} ${conflicts!.count}.
                                   <a href="/manage/opening-hours"
                                     >${t("business_day.open_hours")}</a
                                   >
                                 </p>
                                 <ul data-test="conflict-rows">
-                                  ${[...new Set(preview.conflicts.map((conflict) => this.#conflict(conflict)))].map((line) => html`<li>${line}</li>`)}
+                                  ${conflicts!.lines.map((line) => html`<li>${line}</li>`)}
                                 </ul>`
                             : nothing
                         }
