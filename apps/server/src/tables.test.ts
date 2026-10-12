@@ -38,6 +38,8 @@ import {
 } from "@waitron/shared";
 import type { OriginConfig } from "./till-config.js";
 import { listTables, listZones, updateZone } from "./tables.js";
+import { saveZonePlan, type ZonePlanSave } from "./floor-plan.js";
+import { ALL_MODULES, enabledTableRemovals } from "./modules.js";
 import { advanceTicketItem, fireLines, listTablesWithState } from "./working-order.js";
 import { openPartyTab, serveLine } from "./testing/serve-line.js";
 import "./errors.js";
@@ -112,6 +114,49 @@ describe("table CRUD", () => {
         zoneId,
         planTableId: null,
       }),
+    ]);
+  });
+});
+
+describe("a joined table's parts", () => {
+  it("lists Long table but none of its parts, unless asked for every table", async () => {
+    const cfg = await setupVenue();
+    const { id: zoneId } = await asApp(cfg, (tx) => createZone(tx, cfg, { name: "Counter" }));
+    const entry = (
+      key: string,
+      label: string,
+      seats: number,
+      partKeys: string[] = [],
+    ): ZonePlanSave["tables"][number] => ({
+      key,
+      label,
+      seats,
+      fixed: false,
+      placement:
+        partKeys.length === 0
+          ? null
+          : { x: 0, y: 0, width: 8, height: 8, shape: "rect", rotation: 0 },
+      partKeys,
+    });
+    await asApp(cfg, (tx) =>
+      saveZonePlan(tx, cfg, enabledTableRemovals(ALL_MODULES), zoneId, {
+        revision: 0,
+        tables: [
+          entry("c3", "Counter 3", 2),
+          entry("c4", "Counter 4", 6),
+          entry("c5", "Counter 5", 4),
+          entry("long", "Long table", 10, ["c3", "c4", "c5"]),
+        ],
+      }),
+    );
+    const labels = async (options?: { includeDisabled: boolean }) =>
+      (await asApp(cfg, (tx) => listTables(tx, cfg, options))).map((table) => table.label);
+    expect(await labels()).toEqual(["Long table"]);
+    expect(await labels({ includeDisabled: true })).toEqual([
+      "Counter 3",
+      "Counter 4",
+      "Counter 5",
+      "Long table",
     ]);
   });
 });

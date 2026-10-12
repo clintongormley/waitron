@@ -2,8 +2,8 @@
 // configured location; table assignments also check that location. Route handlers
 // own authorization. A by-id read or write needs only the id.
 import "./errors.js";
-import { and, asc, eq, inArray, type InferSelectModel } from "drizzle-orm";
-import { tableInService, diningTables, type Transaction } from "@waitron/db";
+import { and, asc, eq, inArray, sql, type InferSelectModel } from "drizzle-orm";
+import { savedPart, tableInService, diningTables, type Transaction } from "@waitron/db";
 import { AppError } from "@waitron/shared";
 import type { LocationId } from "@waitron/shared";
 import type { CoreServices } from "@waitron/module";
@@ -52,7 +52,7 @@ async function requireActiveTable(
   tableId: string,
 ): Promise<void> {
   const [table] = await tx
-    .select({ id: diningTables.id })
+    .select({ part: sql<number>`${savedPart(diningTables.id)}` })
     .from(diningTables)
     .where(
       and(
@@ -63,6 +63,9 @@ async function requireActiveTable(
     );
   if (table === undefined) {
     throw new AppError("table.not_found", { tableId });
+  }
+  if (table.part === 1) {
+    throw new AppError("table.in_joined_table", { tableId });
   }
 }
 

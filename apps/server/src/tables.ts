@@ -1,10 +1,11 @@
 // Side-effect only: keeps this host's error registry (errors.ts) reachable from a file that throws
 // its codes.
 import "./errors.js";
-import { and, eq, sql } from "drizzle-orm";
+import { and, eq, not, sql } from "drizzle-orm";
 import { AppError } from "@waitron/shared";
 import { authorizeManager } from "@waitron/identity";
 import {
+  savedPart,
   tableInService,
   diningTables,
   floorZones,
@@ -45,7 +46,9 @@ export async function listTables(
       and(
         eq(diningTables.locationId, cfg.locationId),
         eq(floorZones.active, true),
-        options.includeDisabled ? undefined : tableInService(diningTables.id),
+        options.includeDisabled
+          ? undefined
+          : and(tableInService(diningTables.id), not(savedPart(diningTables.id))),
       ),
     )
     .orderBy(diningTables.label);

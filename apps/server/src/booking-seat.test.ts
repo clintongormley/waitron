@@ -23,6 +23,7 @@ import type { TillConfig } from "./till-config.js";
 import { createTable } from "./testing/live-table.js";
 import { finishTable, moduleCoreServices, seatTable } from "./parties.js";
 import { ALL_MODULES, enabledTableRemovals } from "./modules.js";
+import { readZonePlan, saveZonePlan, type ZonePlanSave } from "./floor-plan.js";
 import "./errors.js";
 
 // The `seatBooking ↔ seatTable` edge with the REAL `apps/server` `seatTable` — the one seam the
@@ -258,6 +259,70 @@ describe("bookings seat route → real seatTable", () => {
         sql`select needs_clearing_since from dining_tables where id = ${tableId}`,
       );
       expect(table.rows[0]!.needs_clearing_since).not.toBeNull();
+    });
+  });
+
+  it("refuses seating a booking at a part still in a joined table with 409 table.in_joined_table", async () => {
+    const v = await setupVenue();
+    const app = mountApp(v.ctx);
+    const table = await withTransaction(db, async (tx: Transaction) => {
+      const { id: zoneId } = await createZone(tx, v.tillCfg, { name: "Counter" });
+      const entry = (
+        key: string,
+        label: string,
+        seats: number,
+        partKeys: string[] = [],
+      ): ZonePlanSave["tables"][number] => ({
+        key,
+        label,
+        seats,
+        fixed: false,
+        placement:
+          partKeys.length === 0
+            ? null
+            : { x: 0, y: 0, width: 8, height: 8, shape: "rect", rotation: 0 },
+        partKeys,
+      });
+      const { ids } = await saveZonePlan(tx, v.tillCfg, enabledTableRemovals(ALL_MODULES), zoneId, {
+        revision: 0,
+        tables: [
+          entry("c3", "Counter 3", 2),
+          entry("c4", "Counter 4", 6),
+          entry("c5", "Counter 5", 4),
+          entry("long", "Long table", 10, ["c3", "c4", "c5"]),
+        ],
+      });
+      const plan = await readZonePlan(tx, v.tillCfg, zoneId);
+      const live = (key: string) => plan.tables.find((t) => t.id === ids[key])!.liveTableId!;
+      return { long: live("long"), c3: live("c3") };
+    });
+    const created = await post(app, "/management-api/bookings", v.managerCookie, {
+      bookingDate: "2026-08-20",
+      bookingTime: "21:00",
+      partySize: 8,
+      contactName: "López",
+      tableId: table.long,
+    });
+    expect(created.status).toBe(201);
+    const bookingId = ((await created.json()) as { id: string }).id;
+
+    const res = await post(app, `/management-api/bookings/${bookingId}/seat`, v.managerCookie, {
+      tableId: table.c3,
+    });
+
+    expect(res.status).toBe(409);
+    expect(await res.json()).toMatchObject({
+      error: { code: "table.in_joined_table", params: { tableId: table.c3 } },
+    });
+    await withTransaction(db, async (tx) => {
+      const booking = await tx.execute<{ status: string; tab_id: string | null }>(
+        sql`select status, tab_id from bookings where id = ${bookingId}`,
+      );
+      expect(booking.rows[0]).toEqual({ status: "booked", tab_id: null });
+      const open = await tx.execute<{ n: number }>(
+        sql`select count(*) as n from parties where state = 'open'`,
+      );
+      expect(open.rows[0]!.n).toBe(0);
     });
   });
 });

@@ -15,3 +15,12 @@ export function stillJoinedPart(tableId: SQLWrapper): SQL {
       and joined_row.table_id is not null
   )`;
 }
+
+/** A table follows a part of a joined table on its zone's saved plan. */
+export function savedPart(tableId: SQLWrapper): SQL {
+  return sql`${tableId} in (
+    select part_table.id
+    from dining_tables part_table
+    inner join floor_plan_table_parts saved_part on saved_part.part_table_id = part_table.plan_table_id
+  )`;
+}

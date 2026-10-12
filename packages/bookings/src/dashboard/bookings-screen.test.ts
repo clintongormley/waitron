@@ -731,7 +731,7 @@ it.each([
   },
 );
 
-it.each(["floor_today_tables", "floor_zones"])(
+it.each(["floor_today_tables", "floor_zones", "floor_plan_table_parts"])(
   "refreshes table choices after %s changes",
   async (type) => {
     const liveData = new LiveData();

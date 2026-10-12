@@ -1,9 +1,15 @@
 import { eq, sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
-import { stillJoinedPart } from "./joined-parts.js";
+import { savedPart, stillJoinedPart } from "./joined-parts.js";
 import { CORE_MIGRATIONS } from "./migrations.js";
 import { diningTables } from "./schema/dining-tables.js";
-import { floorResetTableParts, floorResetTables } from "./schema/floor-plans.js";
+import {
+  floorPlanTableParts,
+  floorPlanTables,
+  floorPlans,
+  floorResetTableParts,
+  floorResetTables,
+} from "./schema/floor-plans.js";
 import { floorZones } from "./schema/floor-zones.js";
 import { locations } from "./schema/tenants.js";
 import { seedTenant } from "./testing/seed.js";
@@ -120,6 +126,86 @@ describe("still joined part", () => {
       [COUNTER_4]: 0,
       [COUNTER_5]: 0,
       [PLAIN]: 0,
+    });
+  });
+});
+
+const PLAN = "eeeeeeee-0000-4000-8000-000000000001";
+const LONG_MASTER = "ffffffff-0000-4000-8000-000000000001";
+const COUNTER_3_MASTER = "ffffffff-0000-4000-8000-000000000003";
+const COUNTER_4_MASTER = "ffffffff-0000-4000-8000-000000000004";
+const COUNTER_5_MASTER = "ffffffff-0000-4000-8000-000000000005";
+const NO_MASTER = "cccccccc-0000-4000-8000-000000000008";
+
+describe("saved part", () => {
+  const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
+
+  beforeEach(async () => {
+    await seedTenant(suite.db);
+    await suite.db.insert(locations).values({
+      id: LOCATION,
+      name: "Room",
+      invoiceLocales: ["es"],
+      operationDescription: "Hostelería",
+    });
+    await suite.db.insert(floorZones).values({ id: ZONE, locationId: LOCATION, name: "Bar" });
+    await suite.db
+      .insert(floorPlans)
+      .values({ id: PLAN, zoneId: ZONE, savedAt: "2026-10-10T12:00:00.000Z" });
+    await suite.db.insert(floorPlanTables).values([
+      { id: LONG_MASTER, planId: PLAN, label: "Long table", seats: 10 },
+      { id: COUNTER_3_MASTER, planId: PLAN, label: "Counter 3", seats: 2 },
+      { id: COUNTER_4_MASTER, planId: PLAN, label: "Counter 4", seats: 6 },
+      { id: COUNTER_5_MASTER, planId: PLAN, label: "Counter 5", seats: 4 },
+    ]);
+    await suite.db.insert(floorPlanTableParts).values([
+      { joinedTableId: LONG_MASTER, partTableId: COUNTER_3_MASTER },
+      { joinedTableId: LONG_MASTER, partTableId: COUNTER_4_MASTER },
+      { joinedTableId: LONG_MASTER, partTableId: COUNTER_5_MASTER },
+    ]);
+    await suite.db.insert(diningTables).values([
+      {
+        id: LONG,
+        locationId: LOCATION,
+        zoneId: ZONE,
+        label: "Long table",
+        planTableId: LONG_MASTER,
+      },
+      {
+        id: COUNTER_3,
+        locationId: LOCATION,
+        zoneId: ZONE,
+        label: "Counter 3",
+        planTableId: COUNTER_3_MASTER,
+      },
+      {
+        id: COUNTER_4,
+        locationId: LOCATION,
+        zoneId: ZONE,
+        label: "Counter 4",
+        planTableId: COUNTER_4_MASTER,
+      },
+      {
+        id: COUNTER_5,
+        locationId: LOCATION,
+        zoneId: ZONE,
+        label: "Counter 5",
+        planTableId: COUNTER_5_MASTER,
+      },
+      { id: NO_MASTER, locationId: LOCATION, zoneId: ZONE, label: "Loose" },
+    ]);
+  });
+
+  it("names the live tables following a saved joined table's parts, and nothing else", async () => {
+    const rows = await suite.db.all<{ id: string; part: number }>(
+      sql`select dt.id, ${savedPart(sql`dt.id`)} as part from dining_tables dt`,
+    );
+    expect(Object.fromEntries(rows.map((row) => [row.id, row.part]))).toEqual({
+      [LONG]: 0,
+      [COUNTER_3]: 1,
+      [COUNTER_4]: 1,
+      [COUNTER_5]: 1,
+      [NO_MASTER]: 0,
     });
   });
 });
