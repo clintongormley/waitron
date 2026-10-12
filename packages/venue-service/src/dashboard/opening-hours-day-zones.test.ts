@@ -774,7 +774,6 @@ it.each([
     { field: "zonePaint.0.ranges.0.endsAt", reason: "clock_skips", date: PARTY_DATE },
     "menu.time_skipped",
   ],
-  ["an end offset", { field: "zonePaint.0", reason: "end_offset" }, "menu.offset_timetable"],
   [
     "overlapping ranges",
     { field: "zonePaint.0.ranges", reason: "overlap" },

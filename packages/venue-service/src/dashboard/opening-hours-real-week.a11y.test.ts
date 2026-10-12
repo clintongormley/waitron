@@ -31,8 +31,20 @@ const stocktake: SpecialDayDetail = {
   name: "Stocktake",
   repeatsYearly: false,
   dates: [{ date: "2026-10-15", closedAllDay: true }],
-  paint: [],
-  zonePaint: [],
+  paint: [
+    {
+      departmentId: "d1",
+      date: "2026-10-15",
+      ranges: [{ periodId: "p1", startsAt: "12:00", endsAt: "13:00" }],
+    },
+  ],
+  zonePaint: [
+    {
+      zoneId: "z1",
+      date: "2026-10-15",
+      ranges: [{ kind: "closed", startsAt: "22:00", endsAt: "23:00" }],
+    },
+  ],
 };
 /** The week of 12 Oct 2026 with Anniversary painted on Tuesday 13 and Stocktake closing Thursday 15. */
 function specialWeek(): SpecialDaysModel {

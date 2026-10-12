@@ -620,7 +620,6 @@ export class OpeningHoursDay extends LitElement {
     this.skippedTime = false;
     this.offsetClash = false;
     try {
-      // The latest read of the same day, so a rename or added date made meanwhile is not undone.
       const stored = this.detail?.id === special.detail.id ? this.detail : special.detail;
       await this.api.saveDatePaint(stored, { paint, zonePaint }, this.draftRevision);
       if (generation !== this.generation || !this.isConnected) return;
@@ -663,11 +662,9 @@ export class OpeningHoursDay extends LitElement {
       this.error = t(
         this.skippedTime
           ? "menu.time_skipped"
-          : this.offsetClash
-            ? "menu.offset_timetable"
-            : field === "zonePaint" || /^zonePaint\.\d+\.ranges(?:\.|$)/.test(field)
-              ? "opening.closed_invalid"
-              : "opening.check_day",
+          : field === "zonePaint" || /^zonePaint\.\d+\.ranges(?:\.|$)/.test(field)
+            ? "opening.closed_invalid"
+            : "opening.check_day",
       );
     }
   }
