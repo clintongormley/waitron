@@ -2272,8 +2272,12 @@ describe("special days in a configuration bundle", () => {
     oneOffs.special_days![0]!.repeats_yearly = 0;
     oneOffs.special_day_dates![1]!.date = "2025-08-15";
     expect(() => validate(oneOffs, clock)).toThrowError(refusal("special_day_dates.date"));
+    // The import gives every location column the importing venue's location.
     oneOffs.special_day_dates![1]!.location_id = "elsewhere";
-    expect(() => validate(oneOffs, clock)).not.toThrow();
+    expect(() => validate(oneOffs, clock)).toThrowError(refusal("special_day_dates.date"));
+    twice.special_day_dates![2]!.date = "2027-08-15";
+    twice.special_day_dates![2]!.location_id = "elsewhere";
+    expect(() => validate(twice, clock)).toThrowError(refusal("special_day_dates.date"));
   });
 
   it("refuses a named day and a special day on one date", () => {
@@ -2361,6 +2365,13 @@ describe("special days in a configuration bundle", () => {
     ];
     zone.special_day_dates![0]!.id = "fiesta-15";
     expect(() => validate(zone, clock)).toThrowError(refusal("zone_day_ranges"));
+  });
+
+  // 02:30 on 29 March 2026 does not happen in Madrid, but `clockTimeSkippedInDay`, the writer's
+  // check, reads an end at the changeover as the day's own end.
+  it("accepts paint ending at the changeover on the night the clocks skip it", () => {
+    const tables = painted("2026-03-28", 0, "22:00:00", "02:30:00");
+    expect(() => validate(tables, { ...clock, dayCutover: "02:30" })).not.toThrow();
   });
 
   it("refuses paint whose period's end offset reaches the next day's paint", () => {

@@ -20,7 +20,7 @@ import { ZONE_PAINT_KINDS } from "./schema/seasons.js";
 import { sharedSpecialDate, specialDateIn } from "./special-days.js";
 import {
   calendarDateOfTime,
-  clockTimeSkipped,
+  clockTimeSkippedInDay,
   parseClosedRanges,
   parseServiceDay,
   type ClosedRange,
@@ -308,23 +308,27 @@ function validateSpecialDays(tables: Tables): Map<unknown, ImportedSpecialDate> 
     repeats.set(row.id, flag === 1);
   }
   const dates = new Map<unknown, ImportedSpecialDate>();
-  const placed: { locationId: unknown; date: LocalDate; repeats: boolean }[] = [];
-  for (const row of tables.special_dates ?? [])
-    placed.push({
-      locationId: row.location_id,
-      date: row.date as LocalDate,
-      repeats: (row.repeat_on ?? null) !== null,
-    });
+  const named = (tables.special_dates ?? []).map((row) => ({
+    locationId: row.location_id,
+    date: row.date as LocalDate,
+    repeats: (row.repeat_on ?? null) !== null,
+  }));
+  // Every special-day date lands at the importing venue, whatever location the bundle names.
+  const placed: { date: LocalDate; repeats: boolean }[] = [];
   for (const row of tables.special_day_dates ?? []) {
     if (!repeats.has(row.special_day_id)) refuse("special_day_dates.special_day_id");
     if (!isLocalDate(row.date)) refuse("special_day_dates.date");
     const closed = row.closed_all_day === undefined ? 0 : row.closed_all_day;
     if (closed !== 0 && closed !== 1) refuse("special_day_dates.closed_all_day");
     const rule = { date: row.date, repeats: repeats.get(row.special_day_id)! };
-    for (const other of placed)
-      if (other.locationId === row.location_id && sharedSpecialDate(rule, other) !== null)
-        refuse("special_day_dates.date");
-    placed.push({ locationId: row.location_id, ...rule });
+    if (
+      placed.some((other) => sharedSpecialDate(rule, other) !== null) ||
+      named.some(
+        (other) => other.locationId === row.location_id && sharedSpecialDate(rule, other) !== null,
+      )
+    )
+      refuse("special_day_dates.date");
+    placed.push(rule);
     dates.set(row.id, rule);
   }
   return dates;
@@ -499,14 +503,14 @@ function refuseSkippedPaint(
     !isReadableClock({ timeZone, dayCutover: bundle.dayCutover })
   )
     return;
+  const clock = { timeZone, dayCutover: bundle.dayCutover, cutoverChanges: [] };
   const from = civilDateOf(createdAt, timeZone) as LocalDate;
   for (const [dayId, ranges] of paint) {
     const stored = dates.get(days.get(dayId)!.dateId)!;
     const date = stored.repeats ? (nextOccurrence(stored, from) ?? stored.date) : stored.date;
     for (const range of ranges)
       for (const end of ["startsAt", "endsAt"] as const)
-        if (clockTimeSkipped(date, range[end], bundle.dayCutover, timeZone, end === "endsAt"))
-          refuse(table);
+        if (clockTimeSkippedInDay(clock, date, range[end], end === "endsAt")) refuse(table);
   }
 }
 
