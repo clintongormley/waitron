@@ -1871,8 +1871,7 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   API's wiring. Left open by A429 slice 1 (#1493).
 
 - **Small floor-plan refusals still missing.** `dining_tables.plan_table_id` has no unique index;
-  a saved join's seats have no upper bound; the delivery-release
-  trigger accepts an empty label. Left open by A429 slice 1 (#1493).
+  the delivery-release trigger accepts an empty label. Left open by A429 slice 1 (#1493).
   [Detail](backlog/till.md#small-floor-plan-refusals-still-missing)
 
 - **A phone's Chrome drew a white page for the box (2026-10-08; watch, not a job yet).** Quitting

@@ -1599,8 +1599,8 @@ master does not rearrange tables during service. The first save builds today's p
 floor read or change that sees a new business day, or catches up its pending reset rows
 (`apps/server/src/floor-today-store.ts:425`). Reset to saved plan takes a fresh copy explicitly.
 
-A reset copies the master's tables into `floor_reset_tables` and its joins into `floor_reset_joins`
-and `floor_reset_join_tables` (`apps/server/src/floor-today-store.ts:92`). Occupied tables wait.
+A reset copies the master's tables into `floor_reset_tables`
+(`apps/server/src/floor-today-store.ts:129`). Occupied tables wait.
 After their tab closes, the next floor read or change can apply the pending rows; closing the tab
 itself does not run that catch-up. New live tables are created from those reset rows, including
 rows that had to wait for a name (`apps/server/src/floor-today-store.ts:323`). This separation keeps
