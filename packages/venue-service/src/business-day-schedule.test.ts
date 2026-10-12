@@ -34,6 +34,8 @@ import {
   departmentDayRanges,
   departmentDays,
   seasons,
+  specialDayDates,
+  specialDays,
   zoneDayRanges,
   zoneDays,
 } from "./schema/seasons.js";
@@ -1308,6 +1310,170 @@ describe("clock compatibility reads each day's neighbours from its own season", 
         ranges: [range("07:15", "09:00")],
       }),
     );
+    await expect(check(v, "07:00")).resolves.toBeUndefined();
+  });
+});
+
+describe("clock compatibility reads special-day paint", () => {
+  /** Raw rows, bypassing the special-day writer's checks. */
+  async function specialDay(
+    v: Awaited<ReturnType<typeof fixture>>,
+    date: string,
+    ranges: { periodId: string | null; startsAt: string; endsAt: string }[],
+  ) {
+    return withTransaction(suite.db, async (tx) => {
+      const specialDayId = randomUUID(),
+        dateId = randomUUID(),
+        dayId = randomUUID();
+      await tx
+        .insert(specialDays)
+        .values({ id: specialDayId, locationId: v.cfg.locationId, name: "Fiesta" });
+      await tx
+        .insert(specialDayDates)
+        .values({ id: dateId, specialDayId, locationId: v.cfg.locationId, date });
+      await tx
+        .insert(departmentDays)
+        .values({ id: dayId, departmentId: v.departmentId, specialDayDateId: dateId });
+      if (ranges.length > 0)
+        await tx.insert(departmentDayRanges).values(
+          ranges.map((r) => ({
+            dayId,
+            departmentId: v.departmentId,
+            periodId: r.periodId,
+            startsAt: `${r.startsAt}:00`,
+            endsAt: `${r.endsAt}:00`,
+          })),
+        );
+      return specialDayId;
+    });
+  }
+  const conflicts = (v: Awaited<ReturnType<typeof fixture>>, time: string) =>
+    withTransaction(suite.db, (tx) =>
+      businessDayClockConflicts(tx, v.cfg, before, candidate(time), E),
+    );
+
+  it("reports a painted range the new changeover cuts through, naming the special day", async () => {
+    const v = await fixture([]);
+    const specialDayId = await specialDay(v, "2026-11-20", [
+      { periodId: v.periodId, startsAt: "22:00", endsAt: "04:30" },
+    ]);
+    expect(await conflicts(v, "03:00")).toEqual({
+      conflictCount: 1,
+      conflicts: [
+        {
+          departmentId: v.departmentId,
+          departmentName: "Service",
+          periodName: "Service",
+          specialDayId,
+          specialDayName: "Fiesta",
+          date: "2026-11-20",
+          periodId: v.periodId,
+          startsAt: "22:00",
+          endsAt: "04:30",
+          rangeIndex: 0,
+          reason: "range",
+        },
+      ],
+    });
+    expect(await conflicts(v, "07:00")).toEqual({ conflictCount: 0, conflicts: [] });
+  });
+
+  it("reports a Closed painted range the new changeover cuts through, with no period", async () => {
+    const v = await fixture([]);
+    const specialDayId = await specialDay(v, "2026-11-20", [
+      { periodId: null, startsAt: "22:00", endsAt: "04:30" },
+    ]);
+    expect((await conflicts(v, "03:00")).conflicts).toEqual([
+      {
+        departmentId: v.departmentId,
+        departmentName: "Service",
+        specialDayId,
+        specialDayName: "Fiesta",
+        date: "2026-11-20",
+        startsAt: "22:00",
+        endsAt: "04:30",
+        rangeIndex: 0,
+        reason: "range",
+      },
+    ]);
+  });
+
+  it("reports a zone's painted range the new changeover cuts through", async () => {
+    const v = await fixture([], { zone: true });
+    const specialDayId = await specialDay(v, "2026-11-20", []);
+    await withTransaction(suite.db, async (tx) => {
+      const [date] = await tx
+        .select({ id: specialDayDates.id })
+        .from(specialDayDates)
+        .where(eq(specialDayDates.specialDayId, specialDayId));
+      const dayId = randomUUID();
+      await tx
+        .insert(zoneDays)
+        .values({ id: dayId, zoneId: v.zoneId!, specialDayDateId: date!.id });
+      await tx
+        .insert(zoneDayRanges)
+        .values({ dayId, kind: "closed", startsAt: "22:00:00", endsAt: "04:30:00" });
+    });
+    expect((await conflicts(v, "03:00")).conflicts).toEqual([
+      {
+        departmentId: v.departmentId,
+        departmentName: "Service",
+        zoneId: v.zoneId,
+        zoneName: "Zone",
+        specialDayId,
+        specialDayName: "Fiesta",
+        date: "2026-11-20",
+        startsAt: "22:00",
+        endsAt: "04:30",
+        rangeIndex: 0,
+        reason: "range",
+      },
+    ]);
+  });
+
+  it("ignores a one-off special day before the change", async () => {
+    const v = await fixture([]);
+    await specialDay(v, "2026-10-20", [
+      { periodId: v.periodId, startsAt: "22:00", endsAt: "04:30" },
+    ]);
+    expect(await conflicts(v, "03:00")).toEqual({ conflictCount: 0, conflicts: [] });
+  });
+
+  it("follows a season day with the special day's painted next day", async () => {
+    // Wednesday's range sends until 07:30; 2026-11-05 is a Thursday, empty in the season.
+    const v = await fixture([range("22:00", "04:30")], { offset: 180 });
+    await expect(check(v, "07:00")).resolves.toBeUndefined();
+    await specialDay(v, "2026-11-05", [
+      { periodId: v.periodId, startsAt: "07:15", endsAt: "09:00" },
+    ]);
+    await expect(check(v, "07:00")).rejects.toMatchObject({
+      code: "venue.business_day_hours_conflict",
+      params: { conflicts: [expect.objectContaining({ reason: "sending_cutoff", weekday: 3 })] },
+    });
+  });
+
+  it("follows a special day with the next day's paint laid over its season", async () => {
+    // 2026-11-19 is a Thursday whose painted range sends until 07:30; Friday's season opens at 07:15.
+    const v = await fixture([], { offset: 180 });
+    await withTransaction(suite.db, (tx) =>
+      seasonDay(tx, {
+        departmentId: v.departmentId,
+        seasonId: v.seasonId,
+        weekday: 5,
+        periodId: v.periodId,
+        ranges: [range("07:15", "09:00")],
+      }),
+    );
+    const late = await specialDay(v, "2026-11-19", [
+      { periodId: v.periodId, startsAt: "22:00", endsAt: "04:30" },
+    ]);
+    await expect(check(v, "07:00")).rejects.toMatchObject({
+      code: "venue.business_day_hours_conflict",
+      params: {
+        conflicts: [expect.objectContaining({ reason: "sending_cutoff", specialDayId: late })],
+      },
+    });
+    await specialDay(v, "2026-11-20", [{ periodId: null, startsAt: "07:15", endsAt: "09:00" }]);
     await expect(check(v, "07:00")).resolves.toBeUndefined();
   });
 });

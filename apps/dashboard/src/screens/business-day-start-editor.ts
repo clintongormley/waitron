@@ -349,6 +349,8 @@ export class BusinessDayStartEditor extends LitElement {
     ]
       .filter(Boolean)
       .join(" · ");
+    if (conflict.specialDayName !== undefined)
+      return fill("business_day.conflict_on_special_day", { name: conflict.specialDayName, line });
     return conflict.seasonName === undefined
       ? line
       : fill("business_day.conflict_in_season", { season: conflict.seasonName, line });

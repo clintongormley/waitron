@@ -556,6 +556,8 @@ export interface BusinessDayClockConflict {
   seasonId?: string;
   seasonName?: string;
   specialDateId?: string;
+  specialDayId?: string;
+  specialDayName?: string;
   date?: string;
   periodId?: string;
   rangeIndex: number;

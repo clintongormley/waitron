@@ -433,6 +433,19 @@ it.each([
   expect(lines).toEqual([`Winter: Restaurant · ${rest}`]);
 });
 
+it.each([
+  ["en-GB", "2026-11-20 · Dinner · 22:00–04:30 · Range crosses the new start"],
+  ["es-ES", "2026-11-20 · Dinner · 22:00–04:30 · El tramo cruza el nuevo inicio"],
+])("puts the special day's name before its conflict's line (%s)", async (locale, rest) => {
+  setLocale(locale);
+  const conflict = { ...seasonConflict(undefined), weekday: undefined };
+  const { lines } = await conflictLines(
+    [{ ...conflict, specialDayId: "sd", specialDayName: "Fiesta", date: "2026-11-20" }],
+    1,
+  );
+  expect(lines).toEqual([`Fiesta: Restaurant · ${rest}`]);
+});
+
 it("leaves a conflict without a season as it was", async () => {
   setLocale("en-GB");
   const { lines } = await conflictLines([seasonConflict(undefined)], 1);
