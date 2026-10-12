@@ -197,7 +197,9 @@ export async function businessDayClockConflicts(
       placement.date < addDays(effectiveBusinessDay, -1)
     )
       continue;
-    const key = `${placement.departmentId}/${placement.zoneId ?? ""}/${placement.specialDateId ?? `${placement.seasonId}:${placement.weekday}`}`;
+    // A season's position in the venue's order leads its key, so the sorted groups list seasons by `startsOn`.
+    const season = `${String(seasonList.findIndex((s) => s.id === placement.seasonId)).padStart(4, "0")}:${placement.seasonId}`;
+    const key = `${placement.departmentId}/${placement.zoneId ?? ""}/${placement.specialDateId ?? `${season}:${placement.weekday}`}`;
     groups.set(key, [...(groups.get(key) ?? []), placement]);
   }
   const conflicts: BusinessDayClockConflict[] = [];
@@ -316,6 +318,7 @@ export async function businessDayClockConflicts(
         inStrip(((newCutoff % 1440) + 1440) % 1440)
       )
         reason = "transition_strip";
+      const seasonName = seasonList.find((season) => season.id === p.seasonId)?.name;
       if (reason !== null)
         conflicts.push({
           departmentId: p.departmentId,
@@ -327,12 +330,8 @@ export async function businessDayClockConflicts(
           endsAt,
           ...(p.zoneId === undefined ? {} : { zoneId: p.zoneId }),
           ...(p.weekday === null ? {} : { weekday: p.weekday }),
-          ...(p.seasonId === null
-            ? {}
-            : {
-                seasonId: p.seasonId,
-                seasonName: seasonList.find((season) => season.id === p.seasonId)!.name,
-              }),
+          ...(p.seasonId === null ? {} : { seasonId: p.seasonId }),
+          ...(seasonName === undefined ? {} : { seasonName }),
           ...(p.specialDateId === null ? {} : { specialDateId: p.specialDateId }),
           ...(p.date === null ? {} : { date: p.date }),
           ...(p.periodId === undefined ? {} : { periodId: p.periodId }),

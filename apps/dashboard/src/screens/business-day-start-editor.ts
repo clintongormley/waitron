@@ -19,7 +19,7 @@ import type {
   BusinessDayStartInput,
   BusinessDayStartPreview,
 } from "../api/client.js";
-import { t, currentLocale } from "../i18n/t.js";
+import { t, fill, currentLocale } from "../i18n/t.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
 
 type Draft = { effectiveBusinessDay: string; dayCutover: string };
@@ -349,7 +349,9 @@ export class BusinessDayStartEditor extends LitElement {
     ]
       .filter(Boolean)
       .join(" · ");
-    return conflict.seasonName === undefined ? line : `${conflict.seasonName}: ${line}`;
+    return conflict.seasonName === undefined
+      ? line
+      : fill("business_day.conflict_in_season", { season: conflict.seasonName, line });
   }
   #conflictLines(preview: BusinessDayStartPreview): { lines: string[]; count: number } {
     const lines = [...new Set(preview.conflicts.map((conflict) => this.#conflict(conflict)))];
