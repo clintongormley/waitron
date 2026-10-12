@@ -52,6 +52,7 @@ import { departmentDayRanges, zoneDayRanges, zoneDays } from "./schema/seasons.j
 import { zoneClosedTimes } from "./schema/zone-closed-times.js";
 import { replaceMenuWeek, saveMenuPeriod, saveSpecialDateMenus } from "./menu-timetable.js";
 import { readSeasons } from "./seasons.js";
+import { saveSpecialDay } from "./special-days.js";
 import { replaceZoneClosedWeek } from "./zone-closed-times.js";
 import { clockChangeAfter, minutesAfter } from "./testing/clock-change.js";
 
@@ -307,6 +308,36 @@ describe("special dates", () => {
     expect((await withTransaction(db, (tx) => readSpecialDate(tx, f.cfg, second.id))).date).toBe(
       "2026-10-10",
     );
+  });
+
+  it("refuses a date a special day holds", async () => {
+    const f = await fixture();
+    await withTransaction(db, (tx) =>
+      saveSpecialDay(
+        tx,
+        f.cfg,
+        null,
+        {
+          name: "Harvest",
+          repeatsYearly: true,
+          dates: [{ date: "2026-10-09", closedAllDay: true }],
+        },
+        AT,
+        0,
+      ),
+    );
+    await expect(saveDate(f, null, specialInput())).rejects.toMatchObject({
+      code: "special_date.date_taken",
+      params: { date: "2026-10-09" },
+    });
+    await expect(saveDate(f, null, specialInput({ date: "2027-10-09" }))).rejects.toMatchObject({
+      code: "special_date.date_taken",
+      params: { date: "2027-10-09" },
+    });
+    await expect(
+      saveDate(f, null, specialInput({ date: "2025-10-09", repeats: true })),
+    ).rejects.toMatchObject({ code: "special_date.date_taken", params: { date: "2026-10-09" } });
+    expect((await saveDate(f, null, specialInput({ date: "2025-10-09" }))).date).toBe("2025-10-09");
   });
 
   const refusals: [string, (f: Fixture) => unknown, string][] = [

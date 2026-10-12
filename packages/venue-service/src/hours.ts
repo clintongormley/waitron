@@ -1,5 +1,5 @@
 import { assertBusinessDayScheduleWrite } from "./business-day-schedule.js";
-import { and, asc, eq, ne } from "drizzle-orm";
+import { and, asc, eq, ne, sql } from "drizzle-orm";
 import { newId, type Transaction } from "@waitron/db";
 import { AppError } from "@waitron/shared";
 import {
@@ -22,6 +22,8 @@ import { seasonOn } from "./season-rules.js";
 import { readDepartmentSeasonWeeks, readZoneSeasonWeeks } from "./season-weeks.js";
 import { readSeasons } from "./seasons.js";
 import { specialDates } from "./schema/hours.js";
+import { specialDayDates, specialDays } from "./schema/seasons.js";
+import { sharedSpecialDate } from "./special-days.js";
 import { namedDaysOn } from "./named-days.js";
 import { occursOn, repeatKey } from "./named-day-rules.js";
 import { readOpeningHoursModel } from "./menu-timetable.js";
@@ -84,6 +86,21 @@ async function assertNamedDayAvailable(
           : occursOn({ date, repeats }, row.date)
             ? row.date
             : null;
+    if (clash !== null) throw new AppError("special_date.date_taken", { date: clash });
+  }
+  const specialDayRows = await tx
+    .select({ date: specialDayDates.date, repeats: specialDays.repeatsYearly })
+    .from(specialDayDates)
+    .innerJoin(specialDays, eq(specialDays.id, specialDayDates.specialDayId))
+    .where(
+      and(
+        eq(specialDayDates.locationId, cfg.locationId),
+        eq(sql`substr(${specialDayDates.date}, 6)`, repeatKey(date)),
+      ),
+    )
+    .orderBy(asc(specialDayDates.date));
+  for (const row of specialDayRows) {
+    const clash = sharedSpecialDate({ date, repeats }, row);
     if (clash !== null) throw new AppError("special_date.date_taken", { date: clash });
   }
 }
