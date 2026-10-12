@@ -169,9 +169,10 @@ reaches 4.5:1 on both themes' `--wt-color-bg`. A tenant theme cannot set it: `TH
 yet.
 
 `--wt-color-primary-hover` and `--wt-color-danger-hover` are the fills a primary and a danger
-`wt-button` take under the pointer: `#1a5fd0` and `#9a1f18` light, `#78a9ff` and `#ff8a7f` dark,
+`wt-button` take under the pointer: `#1a5fd0` and `#9a1f18` light, `#78a9ff` and `#ffa197` dark,
 each further from its button's text colour than the resting fill, so the label reads at 4.5:1 or
-more on it (the "hover fills" cases in `colors.test.ts`). Like `--wt-color-primary-text` they hold
+more on it, and at least 1.2:1 from the resting fill, so the hover shows (the "hover fills" cases
+in `colors.test.ts`). Like `--wt-color-primary-text` they hold
 their own values, so a deployment rule that overrides `--wt-color-primary` or `--wt-color-danger`
 must set the matching hover token too, in both
 themes; and `THEMEABLE_TOKENS` does not list them either, so a tenant theme cannot set them.
