@@ -45,7 +45,13 @@ import {
 } from "./operations.js";
 import { specialDates } from "./schema/hours.js";
 import { nextOccurrence } from "./named-day-rules.js";
-import { readSpecialDaySchedules, specialDateIn } from "./special-days.js";
+import {
+  holidayDatesFor,
+  holidayHorizon,
+  NO_HOLIDAY_DATES,
+  readSpecialDaySchedules,
+  specialDateIn,
+} from "./special-days.js";
 import { menuDayTimetables, menuPeriods, menuPeriodStaffMenus, menuSlots } from "./schema/menus.js";
 import { departments } from "./schema/service.js";
 import { routingCellPeriods, routingCells } from "./schema/routing.js";
@@ -267,6 +273,10 @@ async function endOffsetClash(
   const offsets = new Map(periods.map((period) => [period.id, period.offset]));
   const departmentIds = [...new Set(periods.map((period) => period.departmentId))];
   const specialDays = await readSpecialDaySchedules(tx, cfg, departmentIds);
+  const holidays =
+    specialDays.length === 0
+      ? NO_HOLIDAY_DATES
+      : await holidayDatesFor(tx, cfg, specialDays, ...holidayHorizon(specialDays));
   const allSeasons = await readSeasons(tx, cfg);
   const weeks = await readDepartmentSeasonWeeks(tx, cfg, departmentIds, clock.dayCutover);
   for (const id of departmentIds) {
@@ -279,9 +289,7 @@ async function endOffsetClash(
       specialDays.map((day) => ({
         date: day.date,
         closeWholeVenue: day.closedAllDay,
-        ...(day.repeats
-          ? { occursIn: (year: number) => specialDateIn({ date: day.date, repeats: true }, year) }
-          : {}),
+        ...(day.repeats ? { occursIn: (year: number) => specialDateIn(day, year, holidays) } : {}),
         paint: day.paint.get(id) ?? [],
         specialDayId: day.specialDayId,
       })),

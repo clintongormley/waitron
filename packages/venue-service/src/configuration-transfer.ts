@@ -17,7 +17,12 @@ import {
 import type { PaintRange } from "./day-paint.js";
 import { civilDateOf } from "@waitron/reporting";
 import { ZONE_PAINT_KINDS } from "./schema/seasons.js";
-import { firstSkippedEnd, sharedSpecialDate, specialDateIn } from "./special-days.js";
+import {
+  firstSkippedEnd,
+  NO_HOLIDAY_DATES,
+  sharedSpecialDate,
+  specialDateIn,
+} from "./special-days.js";
 import {
   calendarDateOfTime,
   parseClosedRanges,
@@ -294,10 +299,12 @@ function isSeasonStart(value: unknown): value is string {
 interface ImportedSpecialDate {
   date: LocalDate;
   repeats: boolean;
+  holidayName: string | null;
 }
 
 /** The bundle's special-day dates by id, refusing what `saveSpecialDay` could not have stored and
- *  two dates, or a date and a named day, that would stand on one day. */
+ *  two dates, or a date and a named day, that would stand on one day. The bundle carries no holiday
+ *  lists, so a date following a holiday's name is compared in its first year only. */
 function validateSpecialDays(tables: Tables): Map<unknown, ImportedSpecialDate> {
   const repeats = new Map<unknown, boolean>();
   for (const row of tables.special_days ?? []) {
@@ -318,8 +325,11 @@ function validateSpecialDays(tables: Tables): Map<unknown, ImportedSpecialDate> 
     if (!isLocalDate(row.date)) refuse("special_day_dates.date");
     const closed = row.closed_all_day === undefined ? 0 : row.closed_all_day;
     if (closed !== 0 && closed !== 1) refuse("special_day_dates.closed_all_day");
-    const rule = { date: row.date, repeats: repeats.get(row.special_day_id)! };
-    if (placed.some((other) => sharedSpecialDate(rule, other) !== null))
+    const holidayName = row.holiday_name ?? null;
+    if (holidayName !== null && (typeof holidayName !== "string" || holidayName.trim() === ""))
+      refuse("special_day_dates.holiday_name");
+    const rule = { date: row.date, repeats: repeats.get(row.special_day_id)!, holidayName };
+    if (placed.some((other) => sharedSpecialDate(rule, other, NO_HOLIDAY_DATES) !== null))
       refuse("special_day_dates.date");
     placed.push(rule);
     dates.set(row.id, rule);
@@ -499,7 +509,15 @@ function refuseSkippedPaint(
   const clock = { timeZone, dayCutover: bundle.dayCutover, cutoverChanges: [] };
   const from = civilDateOf(createdAt, timeZone) as LocalDate;
   for (const [dayId, ranges] of paint)
-    if (firstSkippedEnd(clock, dates.get(days.get(dayId)!.dateId)!, from, ranges) !== null)
+    if (
+      firstSkippedEnd(
+        clock,
+        dates.get(days.get(dayId)!.dateId)!,
+        from,
+        ranges,
+        NO_HOLIDAY_DATES,
+      ) !== null
+    )
       refuse(table);
 }
 
@@ -560,11 +578,14 @@ function validateEndOffsets(tables: Tables, bundle?: { readonly dayCutover: stri
       const rule = {
         date: date.date as LocalDate,
         repeats: repeats.get(date.special_day_id) === 1,
+        holidayName: (date.holiday_name ?? null) as string | null,
       };
       return {
         date: rule.date,
         closeWholeVenue: date.closed_all_day === 1,
-        ...(rule.repeats ? { occursIn: (year: number) => specialDateIn(rule, year) } : {}),
+        ...(rule.repeats
+          ? { occursIn: (year: number) => specialDateIn(rule, year, NO_HOLIDAY_DATES) }
+          : {}),
         paint: paint.get(JSON.stringify([departmentId, date.id])) ?? [],
         specialDayId: date.special_day_id as string,
       };

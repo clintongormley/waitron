@@ -199,6 +199,27 @@ describe("department list", () => {
       rows(el)[1]!.querySelectorAll("td")[0]!.querySelectorAll('[part="setup-issue"]'),
     ).toHaveLength(0);
   });
+  it("warns, above the table, of each year a repeating holiday date will not apply", async () => {
+    const el = await setup({
+      ...model,
+      readiness: [
+        {
+          code: "special_day.holiday_missing",
+          specialDayId: "sd1",
+          holidayName: "Viernes Santo",
+          year: 2027,
+        },
+      ],
+    });
+    const warning = find(el, '[data-test="holiday-missing"]')!;
+    expect(warning.textContent!.trim()).toBe(
+      "Viernes Santo (Every year) has no public holiday of that name in 2027.",
+    );
+    expect(
+      warning.compareDocumentPosition(table(el)) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+  });
+
   it("shows venue issues above and unassigned zones below, with their actions", async () => {
     const el = await setup({
       ...model,

@@ -28,7 +28,12 @@ import { seasonOnSorted } from "./season-rules.js";
 import { addDays, weekdayOf } from "./hours-rules.js";
 import { layerPaint, type PaintRange } from "./day-paint.js";
 import { repeatKey } from "./named-day-rules.js";
-import { specialDateIn } from "./special-days.js";
+import {
+  holidayDatesFor,
+  holidayHorizon,
+  NO_HOLIDAY_DATES,
+  specialDateIn,
+} from "./special-days.js";
 import { parseClosedRanges, rangeSpan, type ClosedRange } from "./service-day.js";
 import "./errors.js";
 
@@ -153,6 +158,7 @@ export async function businessDayClockConflicts(
       name: specialDays.name,
       date: specialDayDates.date,
       repeats: specialDays.repeatsYearly,
+      holidayName: specialDayDates.holidayName,
       closedAllDay: specialDayDates.closedAllDay,
     })
     .from(specialDayDates)
@@ -206,6 +212,17 @@ export async function businessDayClockConflicts(
           ),
         ),
     );
+  const effectiveYear = Number(effectiveBusinessDay.slice(0, 4));
+  const holidays =
+    specialDayList.length === 0
+      ? NO_HOLIDAY_DATES
+      : await holidayDatesFor(
+          tx,
+          cfg,
+          specialDayList,
+          holidayHorizon(specialDayList)[0],
+          Math.min(Math.max(holidayHorizon(specialDayList)[0], effectiveYear) + 400, 9999),
+        );
   const specialDayOf = new Map(specialDayList.map((day) => [day.dateId, day]));
   const specialPlacements: Placement[] = specialPaint.flatMap((row) => {
     const day = specialDayOf.get(row.dateId!);
@@ -317,7 +334,7 @@ export async function businessDayClockConflicts(
       day.dateId,
       day.repeats
         ? walkedYears(day.date).flatMap((year) => {
-            const date = specialDateIn({ date: day.date, repeats: true }, year);
+            const date = specialDateIn(day, year, holidays);
             return date !== null && date >= fromDay ? [date] : [];
           })
         : [day.date],
@@ -377,9 +394,7 @@ export async function businessDayClockConflicts(
       return index.get(date);
     };
   };
-  const specialOn = yearIndex(specialDayList, (day, year) => [
-    specialDateIn({ date: day.date, repeats: day.repeats }, year),
-  ]);
+  const specialOn = yearIndex(specialDayList, (day, year) => [specialDateIn(day, year, holidays)]);
   const namedOn = yearIndex(calendar, (day, year) => {
     const repeat = `${String(year).padStart(4, "0")}-${day.repeatOn}`;
     return [

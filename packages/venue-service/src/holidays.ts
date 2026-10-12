@@ -19,6 +19,7 @@ import {
 } from "./holiday-types.js";
 import { rangeDates } from "./hours-rules.js";
 import type { HolidayFact, LocalDate, SpecialDate } from "./hours-types.js";
+import type { HolidayDates } from "./special-days.js";
 import {
   duplicateSpecialDate,
   renameSpecialDate,
@@ -219,6 +220,34 @@ export function createHolidayStore(findPack: PackLookup = getCountryPack) {
     return { facts: unique, coverage, sources };
   }
 
+  /** The official holidays of `fromYear` through `toYear`, by year and then name, each name at
+   *  its first date in that year. A year with no list is absent. */
+  async function readHolidayDates(
+    tx: Transaction,
+    cfg: VenueScope,
+    fromYear: number,
+    toYear: number,
+  ): Promise<HolidayDates> {
+    const byYear = new Map<number, Map<string, LocalDate>>();
+    if (fromYear > toYear) return byYear;
+    const address = await readAddress(tx, cfg);
+    const { calendar, provinceCode } = address;
+    if (calendar === undefined || provinceCode === null) return byYear;
+    const current = (await geographiesOf(tx, cfg)).find((row) => matches(row, address));
+    const { facts } = calendar.read({
+      provinceCode,
+      areaKey: current?.areaKey ?? null,
+      from: `${String(fromYear).padStart(4, "0")}-01-01`,
+      to: yearEnd(toYear),
+    });
+    for (const fact of facts) {
+      const names = byYear.get(yearOf(fact.date)) ?? new Map<string, LocalDate>();
+      byYear.set(yearOf(fact.date), names);
+      if (!names.has(fact.name)) names.set(fact.name, fact.date);
+    }
+    return byYear;
+  }
+
   const readHolidayFacts: HolidayReader = async (tx, cfg, from, to) =>
     (await readHolidays(tx, cfg, from, to)).facts;
 
@@ -316,6 +345,7 @@ export function createHolidayStore(findPack: PackLookup = getCountryPack) {
 
   return {
     readHolidays,
+    readHolidayDates,
     readHolidayFacts,
     duplicateHolidayNamedSpecialDates,
     readHolidayAreaModel,
@@ -327,6 +357,7 @@ const INSTALLED = createHolidayStore();
 
 export const {
   readHolidays,
+  readHolidayDates,
   readHolidayAreaModel,
   saveHolidayArea,
   duplicateHolidayNamedSpecialDates,

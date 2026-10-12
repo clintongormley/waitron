@@ -2191,6 +2191,42 @@ describe("special days in a configuration bundle", () => {
     expect(() => validate(twice, clock)).toThrowError(refusal("special_day_dates.date"));
   });
 
+  it("refuses a holiday name that is not a name, and takes one or none", () => {
+    for (const holidayName of ["", "  ", 3])
+      expect(() =>
+        validate(
+          {
+            ...specialTables(),
+            special_day_dates: specialTables().special_day_dates!.map((row, i) =>
+              i === 0 ? { ...row, holiday_name: holidayName } : row,
+            ),
+          },
+          clock,
+        ),
+      ).toThrowError(refusal("special_day_dates.holiday_name"));
+    for (const holidayName of ["Asunción de la Virgen", null]) {
+      const tables = specialTables();
+      tables.special_day_dates![0]!.holiday_name = holidayName;
+      expect(() => validate(tables, clock)).not.toThrow();
+    }
+  });
+
+  it("compares a repeating holiday date in its first year only, as the bundle carries no holiday lists", () => {
+    const tables = specialTables();
+    tables.special_day_dates![0]!.holiday_name = "Asunción de la Virgen";
+    tables.special_days!.push({ id: "other", location_id: "venue", name: "Other" });
+    tables.special_day_dates!.push({
+      id: "other-15",
+      special_day_id: "other",
+      location_id: "venue",
+      date: "2027-08-15",
+      closed_all_day: 0,
+    });
+    expect(() => validate(tables, clock)).not.toThrow();
+    tables.special_day_dates![2]!.date = "2025-08-15";
+    expect(() => validate(tables, clock)).toThrowError(refusal("special_day_dates.date"));
+  });
+
   it("refuses a named day and a special day on one date", () => {
     const tables = specialTables();
     tables.special_dates = [
