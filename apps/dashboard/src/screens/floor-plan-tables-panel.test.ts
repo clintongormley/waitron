@@ -120,6 +120,22 @@ it("shows each row's marker, name, seats and a bin, under Name and Seats heads",
   ).toBe("on plan not placed");
 });
 
+it("starts the Name and Seats heads where each row's name and seats start", async () => {
+  const el = await open({ draft: { tables: [table("m1", "Terrace 1", true, 4)], joins: [] } });
+  const [nameHead, seatsHead] = [...el.shadowRoot!.querySelectorAll("[data-head]")].map(
+    (head) => head.getBoundingClientRect().left,
+  );
+  const [first] = rows(el);
+  expect(first!.querySelector("[data-name]")!.getBoundingClientRect().left).toBeCloseTo(
+    nameHead!,
+    0,
+  );
+  expect(first!.querySelector("[data-seats]")!.getBoundingClientRect().left).toBeCloseTo(
+    seatsHead!,
+    0,
+  );
+});
+
 it("every row, placed or spare, has a bin", async () => {
   const el = await open();
   expect(rows(el).map((r) => r.querySelector("[data-action=delete]") !== null)).toEqual([

@@ -72,26 +72,34 @@ export class FloorPlanTablesPanel extends LitElement {
         background: transparent;
         border: 2px solid var(--wt-color-text-muted);
       }
-      .heads,
+      .columns,
       .toggle {
         display: grid;
         grid-template-columns: var(--columns);
         align-items: center;
         column-gap: var(--wt-space-3);
       }
+      .columns {
+        padding-inline: var(--wt-space-2);
+      }
       .heads {
-        padding-inline: var(--wt-space-2) calc(var(--wt-tap-min) + var(--wt-space-2));
         font-size: var(--wt-font-size-sm);
         color: var(--wt-color-text-muted);
       }
-      .heads span:first-child {
+      .columns span:first-child {
         grid-column: 2;
+      }
+      .heads wt-button {
+        visibility: hidden;
+        block-size: 0;
+        overflow: hidden;
       }
       ul {
         margin: 0;
         padding: 0;
         list-style: none;
       }
+      .heads,
       li {
         display: grid;
         grid-template-columns: minmax(0, 1fr) auto;
@@ -230,8 +238,11 @@ export class FloorPlanTablesPanel extends LitElement {
         </span>
       </div>
       <div class="heads" aria-hidden="true">
-        <span data-head>${t("floor_plan_editor.name")}</span>
-        <span data-head>${t("floor_plan_editor.seats")}</span>
+        <span class="columns"
+          ><span data-head>${t("floor_plan_editor.name")}</span
+          ><span data-head>${t("floor_plan_editor.seats")}</span></span
+        >
+        <wt-button variant="ghost"><wt-icon name="bin"></wt-icon></wt-button>
       </div>
       <ul>
         ${tables.map((table, index) => this.#row(table, index))}
