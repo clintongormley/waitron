@@ -641,8 +641,7 @@ async function claimBatch(
  * immediately before it make a run of the limit.
  *
  * A cancellation whose original, on the same chain, is `detenido` is held by the first rule: that
- * original is an earlier row of the chain. For a record of a conflict's own envío, see
- * `haltSuccessors`.
+ * original is an earlier row of the chain.
  *
  * Short of such a run, a `rechazado` row holds nothing behind it (design §7.1,
  * docs/superpowers/specs/2026-10-04-fiscal-prevention-and-offline-recovery-design.md). A cancellation of a
@@ -1115,7 +1114,7 @@ async function persistResponse(
   const sentIds = batch.map((row) => row.id);
 
   for (const line of lines) {
-    await applyOutcome(tx, line, csv, now, result, sentIds);
+    await applyOutcome(tx, line, csv, now, result);
   }
   for (const { row, answer } of unmatched) {
     await awaitReadableAnswer(tx, row, csv, now, result, answer);
@@ -1137,15 +1136,13 @@ async function persistResponse(
   await releaseSettledBrakeHolds(tx, now);
 }
 
-/** Routes one resolved line to its estado transition + side effects. `sentIds` is the envío's
- * batch (see `haltSuccessors`). */
+/** Routes one resolved line to its estado transition + side effects. */
 async function applyOutcome(
   tx: Transaction,
   { row, linea, efectivo, lookup, duplicateAcceptedWithErrors }: ResolvedLine,
   csv: string | null,
   now: Date,
   result: CommittedCounts,
-  sentIds: string[],
 ): Promise<void> {
   switch (efectivo) {
     case "accepted":
@@ -1210,7 +1207,6 @@ async function applyOutcome(
         csv,
         now,
         result,
-        sentIds,
       );
   }
 }
@@ -1308,39 +1304,8 @@ async function setEstado(
     where registro_id = ${registroId}
   `);
   // The ack is written in the same transaction as the estado it reflects, so the two never
-  // disagree. The bulk halt paths write their own.
+  // disagree. `haltOpenChainClaims` writes its own.
   await writeAck(tx, registroId, now);
-}
-
-/**
- * Holds a conflict's still-`pendiente`/`enviando` successors on its chain (same `sif_id`, higher
- * `secuencia`) as `detenido`, flagging `incidencia`, except the records of this envío: those were
- * sent, and each keeps its own line's outcome here. One whose outcome stays unknown is held at its
- * next claim instead (`haltOpenChainClaims`). Writes a `halted` ack for each, because this bulk
- * UPDATE bypasses `setEstado`.
- *
- * A subquery rather than `UPDATE ... FROM`, which this engine refused with an alias on the target
- * table.
- */
-async function haltSuccessors(
-  tx: Transaction,
-  row: DueRow,
-  sentIds: string[],
-  now: Date,
-): Promise<string[]> {
-  const halted = await tx.execute<{ registro_id: string }>(sql`
-    update envios set estado = 'detenido', incidencia = true
-    where estado in ('pendiente', 'enviando')
-      and registro_id not in ${sentIds}
-      and registro_id in (
-        select id from registros_facturacion
-        where sif_id = ${row.sif_id} and secuencia > ${row.secuencia}
-      )
-    returning registro_id
-  `);
-  const haltedIds = halted.rows.map((r) => r.registro_id);
-  for (const id of haltedIds) await writeAck(tx, id, now);
-  return haltedIds;
 }
 
 /**
@@ -1426,10 +1391,10 @@ async function routeB(client: VerifactuClient, row: DueRow): Promise<boolean | n
  * The error-3000 duplicate cases:
  *
  *   - Route A (`duplicate_annulled` on an alta): AEAT's own copy of this identity is `Anulada`. This
- *     record can never become a confirmed accept under this identity, so it halts with
+ *     record can never become a confirmed accept under this identity, so it is refused with
  *     `fiscal.duplicado_anulado` rather than retrying forever.
  *   - Route B (all other duplicates): a consulta reads the record AEAT holds under this identity.
- *     A matching fingerprint and installation confirm our record. A mismatch halts; missing
+ *     A matching fingerprint and installation confirm our record. A mismatch is refused; missing
  *     evidence leaves the row pending, or a probe `detenido` for its next probe. An anulación
  *     belongs here because `Anulada` on a resent anulación is most likely AEAT holding that very
  *     anulación: the verifactu library's live preproduction check asserts that the final consulta
@@ -1440,8 +1405,9 @@ async function routeB(client: VerifactuClient, row: DueRow): Promise<boolean | n
  * `resolveLines` makes Route B's consulta before this transaction opens; a failed one leaves this
  * record unknown, as missing evidence does.
  *
- * A conflict opens a case and holds this chain's records not yet sent (`haltSuccessors`): no live
- * AEAT test has sent a successor after one (design §5, "Implemented, 2026-10-06"). Design:
+ * A conflict is `rechazado` with AEAT's code and opens a case. AEAT preproduction accepted, without
+ * a warning, a successor of a record refused with 3000 for changed contents (design §7.1,
+ * "Successor receipt, 2026-10-12 (W41s-1c …)"):
  * docs/superpowers/specs/2026-10-04-fiscal-prevention-and-offline-recovery-design.md.
  */
 async function handleDuplicate(
@@ -1454,7 +1420,6 @@ async function handleDuplicate(
   csv: string | null,
   now: Date,
   result: CommittedCounts,
-  sentIds: string[],
 ): Promise<void> {
   const annulled = efectivo === "duplicate_annulled";
   if (lookup !== null) {
@@ -1499,11 +1464,19 @@ async function handleDuplicate(
     }
   }
   const cause = annulled ? "fiscal.duplicado_anulado" : "fiscal.huella_divergente";
-  await setEstado(tx, row.id, "detenido", now, { csv, incidencia: true });
-  await raiseIncident(tx, row, "error", new AppError(cause, { registroId: row.id }), now, result);
+  await setEstado(tx, row.id, "rechazado", now, {
+    csv,
+    codigoError: linea.CodigoErrorRegistro ?? null,
+    mensajeError: linea.DescripcionErrorRegistro ?? null,
+    incidencia: true,
+  });
+  // As for a refusal: a probe that conflicts with its run's code lengthens the run that
+  // `fiscal.refusals_repeated` already reports.
+  if (row.probe === undefined || String(linea.CodigoErrorRegistro) !== row.probe.runCode) {
+    await raiseIncident(tx, row, "error", new AppError(cause, { registroId: row.id }), now, result);
+  }
   await openCase(tx, row, cause, linea, csv, now);
-  const haltedIds = await haltSuccessors(tx, row, sentIds, now);
-  result.recordsHalted += 1 + haltedIds.length;
+  result.recordsHalted += 1;
 }
 
 /** A structured code, never prose: the AppError's own code, or the literal "unknown". The same

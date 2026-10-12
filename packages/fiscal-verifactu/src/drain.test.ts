@@ -18,6 +18,7 @@ import {
 } from "./drain.js";
 import { ackStateOf } from "./acks.js";
 import {
+  appendCancellation,
   appendPendingAlta,
   seedIndependentChain,
   seedPendingEnvios,
@@ -58,23 +59,6 @@ const parseParams = <Row extends { params: string }>(result: {
     params: JSON.parse(params) as Record<string, unknown>,
   })),
 });
-
-/** AEAT already holds another fingerprint under this record's identity: a Route B conflict. */
-async function collideAtAeat(
-  aeat: ReturnType<typeof createFakeAeat>,
-  seeded: SeededDrain,
-  registroId: string,
-): Promise<void> {
-  const raw = await suite.db.execute<Record<string, unknown>>(sql`
-    select * from registros_facturacion where id = ${registroId}
-  `);
-  const ours = fromRegistroRow(decodeRegistroRow<RegistroRow>(raw.rows[0]!)) as RegistroAlta;
-  await aeat
-    .client()
-    .submit({ ObligadoEmision: { NombreRazon: seeded.legalName, NIF: seeded.nif } }, [
-      { RegistroAlta: { ...ours, Huella: "D".repeat(64) } },
-    ]);
-}
 
 describe("drain — happy path", () => {
   let seeded: SeededDrain;
@@ -578,8 +562,8 @@ describe("drain — nextDueAt is folded as a minimum, never assigned", () => {
 
 /**
  * Per-record resolution: a lone rejection raises a structured incident and holds nothing behind it,
- * AceptadoConErrores is still an accept with a warning, and a record landing on a chain held for a
- * conflict is stopped without reaching AEAT.
+ * AceptadoConErrores is still an accept with a warning, and a record landing on a chain held behind
+ * a held cancellation is stopped without reaching AEAT.
  */
 describe("drain — per-record resolution: rejection, halting, incidents", () => {
   it("keeps filing a chain after a genuine rejection: the record is rechazado, its successor keeps its own accept, an error incident is raised", async () => {
@@ -656,19 +640,20 @@ describe("drain — per-record resolution: rejection, halting, incidents", () =>
       serverNow: new Date("2026-07-21T00:00:00Z"),
       tiempoEsperaInicial: 5,
     });
-    const seeded = await seedPendingEnvios(suite.db, { count: 3 });
-    await collideAtAeat(aeat, seeded, seeded.registroIds[1]!);
-    // A cap of 2 sends secuencia 1 and 2 only, so secuencia 3 is still unsent when 2 conflicts.
-    const deps = { ...drainDeps(staticResolver(aeat.client())), maxRegistrosPorEnvio: 2 };
-    // First pass: secuencia 2 detenido for its conflict, secuencia 3 held detenido — the chain is
-    // left with an OPEN halt.
-    const first = await drain(deps, new Date("2026-07-21T00:01:00Z"));
-    expect(first.recordsHalted).toBe(2);
+    const seeded = await seedPendingEnvios(suite.db, { count: 2 });
+    aeat.reject(seeded.facturaKeys[1]!, 1100, "Campo obligatorio ausente");
+    const deps = drainDeps(staticResolver(aeat.client()));
+    await drain(deps, new Date("2026-07-21T00:01:00Z"));
+    // A cancellation of the refused secuencia 2 is held when claimed, leaving the chain with an
+    // OPEN halt.
+    await appendCancellation(suite.db, seeded, seeded.registroIds[1]!, 3);
+    const first = await drain(deps, new Date("2026-07-21T00:01:30Z"));
+    expect(first.recordsHalted).toBe(1);
 
     // A NEW record lands on the same chain while the halt is still open.
     await appendPendingAlta(suite.db, seeded, 4);
 
-    const second = await drain(deps, new Date("2026-07-21T00:01:30Z"));
+    const second = await drain(deps, new Date("2026-07-21T00:02:00Z"));
 
     const row4 = decodeFlags(
       await withTransaction(suite.db, (tx) =>
@@ -697,12 +682,13 @@ describe("drain — per-record resolution: rejection, halting, incidents", () =>
       serverNow: new Date("2026-07-21T00:00:00Z"),
       tiempoEsperaInicial: 5,
     });
-    const seeded = await seedPendingEnvios(suite.db, { count: 3 });
-    await collideAtAeat(aeat, seeded, seeded.registroIds[1]!);
-    // A cap of 2 sends secuencia 1 and 2 only, so secuencia 3 is still unsent when 2 conflicts.
-    const deps = { ...drainDeps(staticResolver(aeat.client())), maxRegistrosPorEnvio: 2 };
-    const first = await drain(deps, new Date("2026-07-21T00:01:00Z"));
-    expect(first.recordsHalted).toBe(2); // chain A: secuencia 2 conflict + secuencia 3 held
+    const seeded = await seedPendingEnvios(suite.db, { count: 2 });
+    aeat.reject(seeded.facturaKeys[1]!, 1100, "Campo obligatorio ausente");
+    const deps = drainDeps(staticResolver(aeat.client()));
+    await drain(deps, new Date("2026-07-21T00:01:00Z"));
+    await appendCancellation(suite.db, seeded, seeded.registroIds[1]!, 3);
+    const first = await drain(deps, new Date("2026-07-21T00:01:15Z"));
+    expect(first.recordsHalted).toBe(1); // chain A: the cancellation of the refused secuencia 2
 
     // Chain A (halted) and chain B (healthy) both fall due together, claimed in one batch.
     const chainA4 = await appendPendingAlta(suite.db, seeded, 4);
@@ -783,7 +769,7 @@ describe("drain — error 3000: Route A + Route B resolution", () => {
    * Two records on one chain, resubmitted together: secuencia 1 comes back `Anulada`, secuencia 2
    * `Correcta`. Secuencia 2 was in the same envío, so it keeps its own line's outcome.
    */
-  it("Route A: duplicate_annulled halts detenido, a same-batch successor keeps its own accept, raising a fiscal.duplicado_anulado incident", async () => {
+  it("Route A: duplicate_annulled is refused with code 3000, a same-batch successor keeps its own accept, raising a fiscal.duplicado_anulado incident", async () => {
     const seeded = await seedPendingEnvios(suite.db, { count: 2 });
     const deps = drainDeps(staticResolver(aeat.client()));
     await drain(deps, new Date("2026-07-21T00:01:00Z")); // stores both — AEAT now genuinely holds both "Correcta"
@@ -805,7 +791,7 @@ describe("drain — error 3000: Route A + Route B resolution", () => {
       `),
       ),
     );
-    expect(rows.rows.map((r) => r.estado)).toEqual(["detenido", "aceptado"]);
+    expect(rows.rows.map((r) => r.estado)).toEqual(["rechazado", "aceptado"]);
     expect(rows.rows.map((r) => r.incidencia)).toEqual([true, false]);
     expect(result.recordsHalted).toBe(1); // duplicate_annulled only
     expect(result.recordsAccepted).toBe(1); // secuencia 2's own "Correcta" line
@@ -859,7 +845,7 @@ describe("drain — error 3000: Route A + Route B resolution", () => {
    * lands in the fake's store FIRST. Secuencia 2 is fresh and accepted on its own merits, and keeps
    * that outcome: it was in the same envío.
    */
-  it("Route B: duplicate_unknown with a differing huella halts the record while a same-batch successor keeps its own accept, raising a fiscal.huella_divergente incident", async () => {
+  it("Route B: duplicate_unknown with a differing huella is refused with code 3000 while a same-batch successor keeps its own accept, raising a fiscal.huella_divergente incident", async () => {
     const seeded = await seedPendingEnvios(suite.db, { count: 2 });
     const [nif, numSerieFactura, fechaExpedicion] = seeded.facturaKeys[0]!.split("|");
 
@@ -921,7 +907,7 @@ describe("drain — error 3000: Route A + Route B resolution", () => {
       `),
       ),
     );
-    expect(rows.rows.map((r) => r.estado)).toEqual(["detenido", "aceptado"]);
+    expect(rows.rows.map((r) => r.estado)).toEqual(["rechazado", "aceptado"]);
     expect(rows.rows.map((r) => r.incidencia)).toEqual([true, false]);
     expect(result.recordsHalted).toBe(1); // huella_divergente only
     expect(result.recordsAccepted).toBe(1); // secuencia 2's own "Correcto" line
@@ -1277,7 +1263,7 @@ describe("drain — error 3000 Anulada on a resent anulación", () => {
     expect(confirmed[0]?.confirmado_en).toBe(secondPass.toISOString());
   });
 
-  it("still halts an anulación when what AEAT holds as Anulada carries another huella", async () => {
+  it("still refuses an anulación when what AEAT holds as Anulada carries another huella", async () => {
     const sale = await sell();
     await drain(drainDeps(staticResolver(aeat.client())), firstPass);
     // AEAT's copy of the sale's identity is Anulada, but under the ALTA's huella, not ours.
@@ -1290,7 +1276,7 @@ describe("drain — error 3000 Anulada on a resent anulación", () => {
 
     expect(await chainRows()).toEqual([
       { tipo_registro: "alta", estado: "aceptado", incidencia: false },
-      { tipo_registro: "anulacion", estado: "detenido", incidencia: true },
+      { tipo_registro: "anulacion", estado: "rechazado", incidencia: true },
       { tipo_registro: "alta", estado: "aceptado", incidencia: false },
     ]);
     expect(result.recordsAccepted).toBe(1);
@@ -1319,10 +1305,16 @@ describe("drain — error 3000 Anulada on a resent anulación", () => {
     const result = await drain(drainDeps(staticResolver(aeat.client())), firstPass);
 
     expect(result.recordsAccepted).toBe(0);
+    expect((await chainRows()).map((row) => row.estado)).toEqual(["rechazado", "pendiente"]);
+
+    // The original's refusal holds the cancellation at its next claim; it is never sent.
+    const next = await drain(drainDeps(staticResolver(aeat.client())), secondPass);
+
+    expect(next.recordsSubmitted).toBe(0);
     expect(aeat.stored()).toEqual([
       expect.objectContaining({ estado: "Correcto", huella: "D".repeat(64) }),
     ]);
-    expect((await chainRows()).map((row) => row.estado)).toEqual(["detenido", "detenido"]);
+    expect((await chainRows()).map((row) => row.estado)).toEqual(["rechazado", "detenido"]);
   });
 
   it("does not send a successor past a cancellation held for its original", async () => {
@@ -1493,20 +1485,20 @@ describe("drain — a reply line with no recognisable status", () => {
 
 /**
  * A halted record stays counted AND flagged, and the flag rides its `acks` row. The bulk
- * chain-halt paths bypass `setEstado`'s `writeAck`, so they must write their own `halted` acks.
+ * chain-halt path bypasses `setEstado`'s `writeAck`, so it must write its own `halted` acks.
  */
-describe("drain — halted records get a halted ack (the bulk chain-halt paths)", () => {
-  it("writes a rejected ack for a rejection and a halted ack for a successor still pending behind a conflict", async () => {
+describe("drain — halted records get a halted ack (the bulk chain-halt path)", () => {
+  it("writes a rejected ack for a rejection and a halted ack for a record held behind a held cancellation", async () => {
     const aeat = createFakeAeat({ serverNow: new Date("2026-07-21T00:00:00Z") });
-    const seeded = await seedPendingEnvios(suite.db, { count: 3 }); // secuencia 1,2,3 on one SIF
+    const seeded = await seedPendingEnvios(suite.db, { count: 1 });
     aeat.reject(seeded.facturaKeys[0]!, 1100, "Campo obligatorio ausente"); // reject the first record
-    await collideAtAeat(aeat, seeded, seeded.registroIds[1]!); // the second conflicts
-    // A cap of 2 sends secuencia 1 and 2 only, so secuencia 3 is still pending when 2 conflicts.
-    const deps = { ...drainDeps(staticResolver(aeat.client())), maxRegistrosPorEnvio: 2 };
+    const deps = drainDeps(staticResolver(aeat.client()));
     await drain(deps, new Date("2026-07-21T00:01:00Z"));
+    await appendCancellation(suite.db, seeded, seeded.registroIds[0]!, 2);
+    await appendPendingAlta(suite.db, seeded, 3);
+    await drain(deps, new Date("2026-07-21T00:03:00Z"));
 
-    // secuencia 1 rejected, 2 held for its conflict, 3 halted — the successor `haltSuccessors`
-    // swept to detenido.
+    // secuencia 1 rejected, 2 its cancellation held, 3 held behind it by `haltOpenChainClaims`.
     const envios = await withTransaction(suite.db, (tx) =>
       tx.execute<{ registro_id: string; secuencia: number; estado: string }>(sql`
         select e.registro_id, r.secuencia, e.estado from envios e

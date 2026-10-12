@@ -154,6 +154,30 @@ async function brakeHold(
 }
 
 describe("drain — a chain stopped by the same-code brake sends its first held record once an hour (real client over the fake AEAT's SOAP)", () => {
+  it("holds the chain after three conflicts in a row, and a probe that conflicts again opens its case without a new incident", async () => {
+    const aeat = fakeAeat();
+    const seeded = await seedPendingEnvios(suite.db, { count: 3 });
+    for (const id of seeded.registroIds) await collideAtAeat(suite.db, aeat, seeded, id);
+    await drain(deps(aeat.client()), T0);
+    expect(await estados(seeded.registroIds)).toEqual(["rechazado", "rechazado", "rechazado"]);
+    const probe = await appendPendingAlta(suite.db, seeded, 4);
+    await drain(deps(aeat.client()), T);
+    expect(await envioOf(probe.registroId)).toMatchObject({ estado: "detenido" });
+    await collideAtAeat(suite.db, aeat, seeded, probe.registroId);
+    const wire = recording(aeat.client());
+
+    await drain(deps(wire.client), at(HOUR));
+
+    expect(wire.sent).toEqual([[probe.registroId]]);
+    expect(await envioOf(probe.registroId)).toMatchObject({ estado: "rechazado" });
+    expect((await cases()).filter((c) => c.registroId === probe.registroId)).toHaveLength(1);
+    expect(await incidentCodes()).toEqual([
+      "fiscal.huella_divergente",
+      "fiscal.huella_divergente",
+      "fiscal.huella_divergente",
+    ]);
+  });
+
   it("sends nothing for the chain before the hour, then exactly its first held record at the hour", async () => {
     const aeat = fakeAeat();
     const { held } = await brakeHold(aeat, 2);
@@ -598,12 +622,15 @@ describe("drain — a chain stopped by the same-code brake sends its first held 
   describe("controls: never probed, never released", () => {
     it("a chain whose earliest held record has a case of its own after the run is never probed", async () => {
       const aeat = fakeAeat();
-      const seeded = await seedPendingEnvios(suite.db, { count: 4 });
-      for (const key of seeded.facturaKeys.slice(0, 3)) aeat.reject(key, RUN_CODE, "Rechazo");
-      const conflicting = seeded.registroIds[3]!;
-      await collideAtAeat(suite.db, aeat, seeded, conflicting);
-      await drain(deps(aeat.client()), T0);
-      expect(await envioOf(conflicting)).toMatchObject({ estado: "detenido" });
+      const { held } = await brakeHold(aeat, 1);
+      await withTransaction(suite.db, (tx) =>
+        openFilingCase(tx, {
+          registroId: held[0]!,
+          cause: "fiscal.huella_divergente",
+          evidence: { codigo: 3000, mensaje: null, csv: null },
+          now: at(MINUTE),
+        }),
+      );
       const wire = recording(aeat.client());
 
       await drain(deps(wire.client), at(2 * HOUR));
@@ -611,7 +638,7 @@ describe("drain — a chain stopped by the same-code brake sends its first held 
       expect(wire.sent).toEqual([]);
     });
 
-    it("a record held behind a conflict whose own envío also carried a same-code run is never probed", async () => {
+    it("a record after a conflict and a same-code run in one envío is held by the run and probed", async () => {
       const aeat = fakeAeat();
       const seeded = await seedPendingEnvios(suite.db, { count: 4 });
       const [conflicting] = seeded.registroIds;
@@ -619,7 +646,7 @@ describe("drain — a chain stopped by the same-code brake sends its first held 
       for (const key of seeded.facturaKeys.slice(1)) aeat.reject(key, RUN_CODE, "Rechazo");
       await drain(deps(aeat.client()), T0);
       expect(await estados(seeded.registroIds)).toEqual([
-        "detenido",
+        "rechazado",
         "rechazado",
         "rechazado",
         "rechazado",
@@ -631,10 +658,10 @@ describe("drain — a chain stopped by the same-code brake sends its first held 
 
       await drain(deps(wire.client), at(2 * HOUR));
 
-      expect(wire.sent).toEqual([]);
+      expect(wire.sent).toEqual([[behind.registroId]]);
     });
 
-    it("a probe that meets a conflict is never probed again", async () => {
+    it("a probe that meets a conflict is refused with its own case, and releases the records held behind it", async () => {
       const aeat = fakeAeat();
       const { seeded, held } = await brakeHold(aeat, 2);
       const [first, second] = held;
@@ -643,17 +670,17 @@ describe("drain — a chain stopped by the same-code brake sends its first held 
 
       await drain(deps(wire.client), at(HOUR));
       expect(wire.sent).toEqual([[first]]);
-      expect(await envioOf(first!)).toMatchObject({ estado: "detenido" });
+      expect(await envioOf(first!)).toMatchObject({ estado: "rechazado" });
       expect((await cases()).find((c) => c.registroId === first)?.cause).toBe(
         "fiscal.huella_divergente",
       );
 
-      await drain(deps(wire.client), at(3 * HOUR));
-      expect(wire.sent).toEqual([[first]]);
-      expect(await envioOf(second!)).toMatchObject({ estado: "detenido" });
+      await drain(deps(wire.client), at(HOUR + MINUTE));
+      expect(wire.sent).toEqual([[first], [second]]);
+      expect(await envioOf(second!)).toMatchObject({ estado: "aceptado" });
     });
 
-    it("a released record that then meets a conflict stays held", async () => {
+    it("a released record that then meets a conflict is refused and not sent again", async () => {
       const aeat = fakeAeat();
       const { seeded, held, heldKeys } = await brakeHold(aeat, 2);
       const [first, second] = held;
@@ -665,7 +692,7 @@ describe("drain — a chain stopped by the same-code brake sends its first held 
       await drain(deps(wire.client), at(HOUR + MINUTE));
 
       expect(wire.sent).toEqual([[first], [second]]);
-      expect(await envioOf(second!)).toMatchObject({ estado: "detenido" });
+      expect(await envioOf(second!)).toMatchObject({ estado: "rechazado" });
 
       await drain(deps(wire.client), at(3 * HOUR));
       expect(wire.sent).toHaveLength(2);

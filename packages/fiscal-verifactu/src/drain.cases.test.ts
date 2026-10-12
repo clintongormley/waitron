@@ -547,8 +547,78 @@ describe("drain — a run of refusals with one code stops its chain", () => {
   });
 });
 
-describe("drain — a conflict holds the records not yet sent behind it", () => {
-  it("Route B: keeps a same-reply successor's own outcome, holds the unsent successor and a later one, with one case", async () => {
+async function codigoOf(registroId: string): Promise<string | null> {
+  const { rows } = await suite.db.execute<{ codigo_error: string | null }>(
+    sql`select codigo_error from envios where registro_id = ${registroId}`,
+  );
+  return rows[0]!.codigo_error;
+}
+
+async function mensajeOf(registroId: string): Promise<string | null> {
+  const { rows } = await suite.db.execute<{ mensaje_error: string | null }>(
+    sql`select mensaje_error from envios where registro_id = ${registroId}`,
+  );
+  return rows[0]!.mensaje_error;
+}
+
+describe("drain — a conflict no longer holds its chain", () => {
+  it("Route B: refuses the conflicting record with AEAT's code, opens one case, and sends the next record", async () => {
+    const aeat = fakeAeat();
+    const seeded = await seedPendingEnvios(suite.db, { count: 1 });
+    const [conflicting] = seeded.registroIds;
+    await collideAtAeat(suite.db, aeat, seeded, conflicting!);
+
+    const first = await drain(deps(aeat.client()), FIRST);
+
+    expect(await envioOf(conflicting!)).toMatchObject({ estado: "rechazado", incidencia: true });
+    expect(await codigoOf(conflicting!)).toBe("3000");
+    expect(await mensajeOf(conflicting!)).toBe("Registro duplicado");
+    expect(await ackOf(conflicting!)).toBe("rejected");
+    expect(first.recordsHalted).toBe(1);
+
+    const later = await appendPendingAlta(suite.db, seeded, 2);
+    const wire = recording(aeat.client());
+    const second = await drain(deps(wire.client), SECOND);
+
+    expect(wire.sent).toEqual([[later.registroId]]);
+    expect(await envioOf(later.registroId)).toMatchObject({ estado: "aceptado" });
+    expect(second.recordsHalted).toBe(0);
+    expect((await cases()).map((c) => [c.registroId, c.cause])).toEqual([
+      [conflicting, "fiscal.huella_divergente"],
+    ]);
+    expect(await incidentCodes()).toEqual(["fiscal.huella_divergente"]);
+  });
+
+  it("Route A: refuses a record AEAT holds as cancelled, opens one case, and sends the next record", async () => {
+    const aeat = fakeAeat();
+    const seeded = await seedPendingEnvios(suite.db, { count: 1 });
+    const [original] = seeded.registroIds;
+    await drain(deps(aeat.client()), FIRST);
+    aeat.annul(seeded.facturaKeys[0]!);
+    await suite.db.execute(sql`
+      update envios set estado = 'pendiente', proximo_intento_en = ${FIRST.toISOString()}
+      where registro_id = ${original}
+    `);
+
+    await drain(deps(aeat.client()), SECOND);
+
+    expect(await envioOf(original!)).toMatchObject({ estado: "rechazado", incidencia: true });
+    expect(await codigoOf(original!)).toBe("3000");
+
+    const later = await appendPendingAlta(suite.db, seeded, 2);
+    const wire = recording(aeat.client());
+    await drain(deps(wire.client), new Date(SECOND.getTime() + 60_000));
+
+    expect(wire.sent).toEqual([[later.registroId]]);
+    expect(await envioOf(later.registroId)).toMatchObject({ estado: "aceptado" });
+    expect((await cases()).map((c) => [c.registroId, c.cause])).toEqual([
+      [original, "fiscal.duplicado_anulado"],
+    ]);
+  });
+});
+
+describe("drain — the records around a conflict", () => {
+  it("Route B: keeps a same-reply successor's own outcome, then sends the unsent successor and a later one, with one case", async () => {
     const aeat = fakeAeat();
     const seeded = await seedPendingEnvios(suite.db, { count: 3 });
     const [conflicting, sameReply, unsent] = seeded.registroIds;
@@ -561,27 +631,24 @@ describe("drain — a conflict holds the records not yet sent behind it", () => 
     expect(wire.sent).toEqual([[conflicting, sameReply]]);
     const csv = (await envioOf(sameReply!)).csv;
     expect(csv).toEqual(expect.any(String));
-    expect(await envioOf(conflicting!)).toMatchObject({ estado: "detenido", incidencia: true });
+    expect(await envioOf(conflicting!)).toMatchObject({ estado: "rechazado", incidencia: true });
     expect(await envioOf(sameReply!)).toMatchObject({ estado: "aceptado", csv });
-    expect(await envioOf(unsent!)).toMatchObject({
-      estado: "detenido",
-      csv: null,
-      incidencia: true,
-    });
-    expect(await ackOf(unsent!)).toBe("halted");
+    expect(await envioOf(unsent!)).toMatchObject({ estado: "pendiente", csv: null });
+    expect(await ackOf(unsent!)).toBeUndefined();
     expect(first.recordsAccepted).toBe(1);
-    expect(first.recordsHalted).toBe(2);
+    expect(first.recordsHalted).toBe(1);
 
     const later = await appendPendingAlta(suite.db, seeded, 4);
     const second = await drain(deps(wire.client, { maxRegistrosPorEnvio: 2 }), SECOND);
 
-    expect(wire.sent).toHaveLength(1);
-    expect(await envioOf(later.registroId)).toMatchObject({ estado: "detenido", incidencia: true });
-    expect(await ackOf(later.registroId)).toBe("halted");
-    expect(second.recordsAccepted).toBe(0);
-    expect(second.recordsHalted).toBe(1);
-    expect(aeat.stored().some((s) => s.refExterna === unsent)).toBe(false);
-    expect(aeat.stored().some((s) => s.refExterna === later.registroId)).toBe(false);
+    expect(wire.sent).toEqual([
+      [conflicting, sameReply],
+      [unsent, later.registroId],
+    ]);
+    expect(await envioOf(unsent!)).toMatchObject({ estado: "aceptado" });
+    expect(await envioOf(later.registroId)).toMatchObject({ estado: "aceptado" });
+    expect(second.recordsAccepted).toBe(2);
+    expect(second.recordsHalted).toBe(0);
 
     const opened = await cases();
     expect(opened.map((c) => [c.registroId, c.cause, c.status])).toEqual([
@@ -597,12 +664,10 @@ describe("drain — a conflict holds the records not yet sent behind it", () => 
     const alerts = await withTransaction(suite.db, (tx) =>
       fiscalSubmissionSource.read({ tx, now: SECOND }),
     );
-    expect(alerts.find((a) => a.code === "fiscal.submission_stopped")?.params).toEqual({
-      count: 3,
-    });
+    expect(alerts.find((a) => a.code === "fiscal.submission_stopped")).toBeUndefined();
   });
 
-  it("Route A: an annulled duplicate of a sale opens a fiscal.duplicado_anulado case and holds a later record, while a same-reply successor keeps its own line", async () => {
+  it("Route A: an annulled duplicate of a sale opens a fiscal.duplicado_anulado case, a same-reply successor keeps its own line, and a later record is sent", async () => {
     const aeat = fakeAeat();
     const seeded = await seedPendingEnvios(suite.db, { count: 1 });
     const [original] = seeded.registroIds;
@@ -616,7 +681,7 @@ describe("drain — a conflict holds the records not yet sent behind it", () => 
 
     const result = await drain(deps(aeat.client()), SECOND);
 
-    expect(await envioOf(original!)).toMatchObject({ estado: "detenido", incidencia: true });
+    expect(await envioOf(original!)).toMatchObject({ estado: "rechazado", incidencia: true });
     expect(await envioOf(sameReply.registroId)).toMatchObject({
       estado: "aceptado",
       csv: expect.any(String),
@@ -630,8 +695,8 @@ describe("drain — a conflict holds the records not yet sent behind it", () => 
     const later = await appendPendingAlta(suite.db, seeded, 3);
     const wire = recording(aeat.client());
     await drain(deps(wire.client), new Date(SECOND.getTime() + 60_000));
-    expect(wire.sent).toEqual([]);
-    expect(await envioOf(later.registroId)).toMatchObject({ estado: "detenido" });
+    expect(wire.sent).toEqual([[later.registroId]]);
+    expect(await envioOf(later.registroId)).toMatchObject({ estado: "aceptado" });
     expect(await cases()).toHaveLength(1);
   });
 
@@ -645,12 +710,12 @@ describe("drain — a conflict holds the records not yet sent behind it", () => 
 
     await drain(deps(secondLineMisnamed), FIRST);
 
-    expect((await envioOf(conflicting!)).estado).toBe("detenido");
+    expect((await envioOf(conflicting!)).estado).toBe("rechazado");
     expect(await envioOf(unanswered!)).toMatchObject({ estado: "pendiente", incidencia: true });
     expect(await ackOf(unanswered!)).toBeUndefined();
   });
 
-  it("holds an unanswered record of the conflict's envío at its next claim, once its retry is due, and never sends it again", async () => {
+  it("sends an unanswered record of the conflict's envío again once its retry is due", async () => {
     const aeat = fakeAeat();
     const seeded = await seedPendingEnvios(suite.db, { count: 2 });
     const [conflicting, unanswered] = seeded.registroIds;
@@ -663,18 +728,16 @@ describe("drain — a conflict holds the records not yet sent behind it", () => 
     // Past the unanswered record's retry (`backoffMs(1)`), so this pass claims it.
     const result = await drain(deps(wire.client), new Date(FIRST.getTime() + backoffMs(1)));
 
-    expect(wire.sent).toEqual([]);
-    expect(await envioOf(unanswered!)).toMatchObject({ estado: "detenido", incidencia: true });
-    expect(await ackOf(unanswered!)).toBe("halted");
-    expect(result.recordsSubmitted).toBe(0);
-    expect(result.recordsHalted).toBe(1);
+    expect(wire.sent).toEqual([[unanswered]]);
+    expect(await envioOf(unanswered!)).toMatchObject({ estado: "aceptado" });
+    expect(result.recordsSubmitted).toBe(1);
+    expect(result.recordsHalted).toBe(0);
     const [opened] = await cases();
     expect(opened).toMatchObject({ registroId: conflicting, cause: "fiscal.huella_divergente" });
-    expect(await withTransaction(suite.db, (tx) => heldRecords(tx))).toEqual([
-      { registroId: unanswered, caseId: opened!.id },
-    ]);
+    expect(await withTransaction(suite.db, (tx) => heldRecords(tx))).toEqual([]);
   });
-  it("holds a record of the conflict's envío whose status was unreadable at its retry, and never sends it again", async () => {
+
+  it("sends a record of the conflict's envío whose status was unreadable again once its retry is due", async () => {
     const aeat = fakeAeat();
     const seeded = await seedPendingEnvios(suite.db, { count: 2 });
     const [conflicting, unreadable] = seeded.registroIds;
@@ -689,14 +752,10 @@ describe("drain — a conflict holds the records not yet sent behind it", () => 
 
     const result = await drain(deps(wire.client), new Date(FIRST.getTime() + backoffMs(1)));
 
-    expect(wire.sent).toEqual([]);
-    expect(await envioOf(unreadable!)).toMatchObject({ estado: "detenido", incidencia: true });
-    expect(await ackOf(unreadable!)).toBe("halted");
-    expect(result.recordsHalted).toBe(1);
-    const [opened] = await cases();
-    expect(await withTransaction(suite.db, (tx) => heldRecords(tx))).toEqual([
-      { registroId: unreadable, caseId: opened!.id },
-    ]);
+    expect(wire.sent).toEqual([[unreadable]]);
+    expect(await envioOf(unreadable!)).toMatchObject({ estado: "aceptado" });
+    expect(result.recordsHalted).toBe(0);
+    expect(await withTransaction(suite.db, (tx) => heldRecords(tx))).toEqual([]);
   });
 });
 
@@ -724,7 +783,7 @@ describe("drain — a cancellation whose original was not accepted", () => {
     expect(await incidentCodes()).toEqual(["fiscal.registro_rechazado"]);
   });
 
-  it("holds a cancellation of an original held for a conflict by the chain rule, as any later record of that chain, without sending it", async () => {
+  it("holds a cancellation of an original refused for a conflict, without sending it", async () => {
     const aeat = fakeAeat();
     const seeded = await seedPendingEnvios(suite.db, { count: 1 });
     const [original] = seeded.registroIds;
@@ -992,14 +1051,14 @@ describe("drain — a claim that rolls back reports nothing it wrote", () => {
 });
 
 describe("drain — resolving a case releases nothing", () => {
-  it("keeps a later record held and the original's envío unchanged after its conflict case is resolved", async () => {
+  it("keeps a cancellation held and the original's envío unchanged after its refusal case is resolved", async () => {
     const aeat = fakeAeat();
     const seeded = await seedPendingEnvios(suite.db, { count: 1 });
-    const [conflicting] = seeded.registroIds;
-    await collideAtAeat(suite.db, aeat, seeded, conflicting!);
+    const [original] = seeded.registroIds;
+    aeat.reject(seeded.facturaKeys[0]!, 1100, "Campo obligatorio ausente");
     await drain(deps(aeat.client()), FIRST);
     const [opened] = await cases();
-    expect(opened?.registroId).toBe(conflicting);
+    expect(opened?.registroId).toBe(original);
     await withTransaction(suite.db, (tx) =>
       recordCaseEvent(tx, {
         caseId: opened!.id,
@@ -1011,18 +1070,16 @@ describe("drain — resolving a case releases nothing", () => {
       }),
     );
     const before = await suite.db.execute(
-      sql`select * from envios where registro_id = ${conflicting}`,
+      sql`select * from envios where registro_id = ${original}`,
     );
-    const successor = await appendPendingAlta(suite.db, seeded, 2);
+    const cancellation = await appendCancellation(suite.db, seeded, original!, 2);
     const wire = recording(aeat.client());
 
     await drain(deps(wire.client), new Date(SECOND.getTime() + 60_000));
 
     expect(wire.sent).toEqual([]);
-    expect((await envioOf(successor.registroId)).estado).toBe("detenido");
-    const after = await suite.db.execute(
-      sql`select * from envios where registro_id = ${conflicting}`,
-    );
+    expect((await envioOf(cancellation)).estado).toBe("detenido");
+    const after = await suite.db.execute(sql`select * from envios where registro_id = ${original}`);
     expect(after.rows).toEqual(before.rows);
     expect((await cases()).map((c) => c.status)).toEqual(["resolved"]);
   });

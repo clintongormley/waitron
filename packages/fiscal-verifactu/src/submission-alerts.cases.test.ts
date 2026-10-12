@@ -243,25 +243,26 @@ describe("fiscalSubmissionSource — a chain held after refusals with one code",
     expect(await refusalAlerts()).toEqual([]);
   });
 
-  it("raises nothing when the chain's earliest held record is a conflict's, which has its own case", async () => {
+  it("raises nothing when the chain's earliest held record has a case of its own", async () => {
     const aeat = fakeAeat();
     const seeded = await seedPendingEnvios(suite.db, { count: 1 });
-    for (const secuencia of [2, 3, 4]) {
-      const appended = await appendPendingAlta(suite.db, seeded, secuencia);
-      aeat.reject(appended.facturaKey, 1100, "Rechazo 1100");
-    }
-    const conflicting = await appendPendingAlta(suite.db, seeded, 5);
-    await collideAtAeat(suite.db, aeat, seeded, conflicting.registroId);
-    await runDrain(aeat, at(1));
-    const later = await appendPendingAlta(suite.db, seeded, 6);
+    await fileOnChain(aeat, seeded, 2, [1100, 1100, 1100], at(1));
+    const later = await appendPendingAlta(suite.db, seeded, 5);
     await runDrain(aeat, at(2));
-    expect(await estadoOf(conflicting.registroId)).toBe("detenido");
     expect(await estadoOf(later.registroId)).toBe("detenido");
+    await withTransaction(suite.db, (tx) =>
+      openFilingCase(tx, {
+        registroId: later.registroId,
+        cause: "fiscal.huella_divergente",
+        evidence: { codigo: 3000, mensaje: null, csv: null },
+        now: at(2),
+      }),
+    );
 
     expect(await refusalAlerts()).toEqual([]);
   });
 
-  it("raises nothing for a record held behind a conflict, even after refusals in the conflict's own envío", async () => {
+  it("raises the alert for a record held by a run that follows a conflict in the same envío", async () => {
     const aeat = fakeAeat();
     const seeded = await seedPendingEnvios(suite.db, { count: 1 });
     const conflicting = await appendPendingAlta(suite.db, seeded, 2);
@@ -271,9 +272,11 @@ describe("fiscalSubmissionSource — a chain held after refusals with one code",
     await runDrain(aeat, at(2));
     expect(
       await Promise.all([conflicting.registroId, ...refused, later.registroId].map(estadoOf)),
-    ).toEqual(["detenido", "rechazado", "rechazado", "rechazado", "detenido"]);
+    ).toEqual(["rechazado", "rechazado", "rechazado", "rechazado", "detenido"]);
 
-    expect(await refusalAlerts()).toEqual([]);
+    expect((await refusalAlerts()).map((alert) => alert.params)).toEqual([
+      { codigo: "1100", count: 3 },
+    ]);
   });
 
   it("raises one alert per held chain", async () => {

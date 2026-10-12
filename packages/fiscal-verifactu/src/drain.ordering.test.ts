@@ -47,11 +47,11 @@ describe("drain chain ordering", () => {
     const stored = await suite.db.execute<{ estado: string }>(sql`
       select estado from envios where registro_id = ${seeded.registroIds[0]}
     `);
-    expect(stored.rows[0]?.estado).toBe("detenido");
+    expect(stored.rows[0]?.estado).toBe("rechazado");
     expect(aeat.stored()[0]?.huella).toBe("D".repeat(64));
   });
 
-  it("halts a mismatching fingerprint even when the lookup omits software identity", async () => {
+  it("refuses a mismatching fingerprint even when the lookup omits software identity", async () => {
     const seeded = await seedPendingEnvios(suite.db, { count: 1 });
     const raw = await suite.db.execute<Record<string, unknown>>(sql`
       select * from registros_facturacion where id = ${seeded.registroIds[0]}
@@ -93,7 +93,7 @@ describe("drain chain ordering", () => {
     const state = await suite.db.execute<{ estado: string }>(sql`
       select estado from envios where registro_id = ${seeded.registroIds[0]}
     `);
-    expect(state.rows[0]?.estado).toBe("detenido");
+    expect(state.rows[0]?.estado).toBe("rechazado");
   });
 
   it("keeps the warning state when a duplicate confirms an accepted-with-errors record", async () => {
@@ -161,7 +161,7 @@ describe("drain chain ordering", () => {
     const stored = await suite.db.execute<{ estado: string }>(sql`
       select estado from envios where registro_id = ${seeded.registroIds[0]}
     `);
-    expect(stored.rows[0]?.estado).toBe("detenido");
+    expect(stored.rows[0]?.estado).toBe("rechazado");
   });
 
   it("keeps a duplicate unresolved when lookup returns no matching invoice", async () => {
@@ -546,7 +546,7 @@ describe("drain chain ordering", () => {
     expect(aeat.stored().find((row) => row.key === first.facturaKeys[0])?.estado).toBe("Correcto");
   });
 
-  it("holds a successor created after its predecessor was halted for a conflicting fingerprint", async () => {
+  it("sends a successor created after its predecessor was refused for a conflicting fingerprint", async () => {
     const seeded = await seedPendingEnvios(suite.db, { count: 1 });
     const raw = await suite.db.execute<Record<string, unknown>>(sql`
       select * from registros_facturacion where id = ${seeded.registroIds[0]}
@@ -570,12 +570,15 @@ describe("drain chain ordering", () => {
 
     const retry = await drain(deps, new Date("2026-07-21T00:02:00Z"));
 
-    expect(retry.recordsSubmitted).toBe(0);
-    expect(retry.recordsHalted).toBe(1);
-    expect(aeat.stored().map((row) => row.key)).toEqual([seeded.facturaKeys[0]]);
+    expect(retry.recordsSubmitted).toBe(1);
+    expect(retry.recordsHalted).toBe(0);
+    expect(aeat.stored().map((row) => row.key)).toEqual([
+      seeded.facturaKeys[0],
+      successor.facturaKey,
+    ]);
     const state = await suite.db.execute<{ estado: string }>(sql`
       select estado from envios where registro_id = ${successor.registroId}
     `);
-    expect(state.rows[0]?.estado).toBe("detenido");
+    expect(state.rows[0]?.estado).toBe("aceptado");
   });
 });

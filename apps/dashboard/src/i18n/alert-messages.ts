@@ -136,12 +136,12 @@ export const ALERT_MESSAGES: Readonly<
     es: "La AEAT ha respondido a un envío con un número de líneas distinto del de registros de facturación que Waitron envió, así que Waitron no ha aplicado ninguna y volverá a enviar cada uno salvo que esté en espera un registro anterior de su cadena. Contacta con soporte.",
   },
   "fiscal.duplicado_anulado": {
-    en: "The tax agency (AEAT) already holds this invoice record as cancelled. Sending on this chain is on hold. Contact support.",
-    es: "La AEAT ya tiene este registro de facturación como anulado. El envío de esta cadena está en espera. Contacta con soporte.",
+    en: "The tax agency (AEAT) already holds this invoice record as cancelled. Contact support.",
+    es: "La AEAT ya tiene este registro de facturación como anulado. Contacta con soporte.",
   },
   "fiscal.huella_divergente": {
-    en: "An invoice record's fingerprint does not match the copy the tax agency (AEAT) holds. Sending on this chain is on hold. Contact support.",
-    es: "La huella de un registro de facturación no coincide con la copia de la AEAT. El envío de esta cadena está en espera. Contacta con soporte.",
+    en: "An invoice record's fingerprint does not match the copy the tax agency (AEAT) holds. Contact support.",
+    es: "La huella de un registro de facturación no coincide con la copia de la AEAT. Contacta con soporte.",
   },
   "fiscal.environment_mismatch": {
     en: "An invoice record was made for the tax agency's {recordEnvironment} service, but this box sends to {hostEnvironment}. It has not been sent. Contact support.",
