@@ -2078,6 +2078,12 @@ and nothing guards it across screens:
   `apps/dashboard/src/screens/floor-plan-add-joined-table.unsaved.test.ts`;
 - A494: Venue details' Change legal name dialog. Its leave cases are in
   `apps/dashboard/src/screens/legal-name-dialog.unsaved.test.ts`;
+- A231q: the mail server settings form (`apps/dashboard/src/widgets/email-settings-form.ts`); the
+  order detail's invoice email form (`apps/dashboard/src/widgets/invoice-email-dialog.ts`); an office
+  printer's Add (`apps/dashboard/src/widgets/page-printer-add.ts`); the office printers panel's
+  invoice printer choice and Rename (`apps/dashboard/src/widgets/page-printers-panel.ts`); and the
+  till's invoice email form (`apps/till/src/widgets/invoice-email-dialog.ts`). Each has a sibling
+  `*.unsaved.test.ts`;
 - batch 4c: the venue-service local holiday Add and Edit (its Remove and Forget stay `danger`
   confirmations, and the holiday area saves on choice); and the
   till's profile dialog, whose Switch waits until another profile is chosen. The profile dialog is

@@ -411,7 +411,7 @@ email through its mail server when one is set, and adds no way to set one there.
 (2026-10-12: A231q lets the till and the dashboard email a full invoice. In a prepare venue it
 still goes through a mail server only when one is set, otherwise to the box's captured inbox
 (`resolveInvoiceEmailDelivery`, `apps/server/src/email-delivery.ts`); the setup wizard and the
-dashboard's Email page still cannot set one there (`apps/server/src/email-settings-api.ts`), so
+dashboard's Account email page still cannot set one there (`apps/server/src/email-settings-api.ts`), so
 this item stays open.)
 
 ## Decisions and deliberate limits

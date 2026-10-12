@@ -290,7 +290,7 @@ is `POST /setup-api/email-test`. A production Live provision also requires an `e
 publishing the trading configuration. Missing settings answer `setup.email_required`, naming
 `email`; malformed settings name the offending field. Demo and Prepare refuse supplied settings,
 and development Live provisioning may omit them. You can enter these settings in the live wizard
-or, with `system.manage`, on the dashboard's Email page. The dashboard shows the server and sender
+or, with `system.manage`, on the dashboard's Account email page (`/manage/email`). The dashboard shows the server and sender
 without returning the saved password; you enter fresh credentials to change an authenticated
 gateway, or explicitly switch authentication off.
 
@@ -311,7 +311,7 @@ For a new production Live venue, the setup wizard asks for the mail server setti
 test message to your administrator address. Continue becomes available when the server accepts a
 test of the current settings. Final setup seals them in the credential vault.
 
-The wizard and the Email page seal these settings in the encrypted credential vault for you. From a
+The wizard and the Account email page seal these settings in the encrypted credential vault for you. From a
 terminal you can also put a production or on-prem venue's SMTP relay there yourself. Write the
 payload to a permission-restricted file rather than putting its password in a shell argument:
 

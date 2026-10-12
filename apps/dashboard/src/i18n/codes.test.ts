@@ -610,10 +610,10 @@ it("ends the already-waiting delivery refusal with a full stop, like the deliver
 // `requestEmailDelivery` and `retryEmailDelivery` throw).
 it("says what to check when invoice email is unavailable, in English and Spanish", () => {
   expect(codeMessage("invoice_delivery.email_unavailable", "en")).toBe(
-    "Invoice email is unavailable. Check the mail server and the Email field in Receipts",
+    "Invoice email is unavailable. Check the mail server and the Email field under Edit receipt in Departments and zones",
   );
   expect(codeMessage("invoice_delivery.email_unavailable", "es")).toBe(
-    "No se puede enviar la factura por correo. Revisa el servidor de correo y el campo Correo electrónico en Recibos",
+    "No se puede enviar la factura por correo. Revisa el servidor de correo y el campo Correo electrónico de Editar recibo en Departamentos y zonas",
   );
 });
 

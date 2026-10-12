@@ -767,8 +767,8 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     es: "La impresora de facturas no está disponible. Elige otra en Impresoras",
   },
   "invoice_delivery.email_unavailable": {
-    en: "Invoice email is unavailable. Check the mail server and the Email field in Receipts",
-    es: "No se puede enviar la factura por correo. Revisa el servidor de correo y el campo Correo electrónico en Recibos",
+    en: "Invoice email is unavailable. Check the mail server and the Email field under Edit receipt in Departments and zones",
+    es: "No se puede enviar la factura por correo. Revisa el servidor de correo y el campo Correo electrónico de Editar recibo en Departamentos y zonas",
   },
   "invoice_delivery.full_invoice_required": {
     en: "Only a full invoice can be sent this way",

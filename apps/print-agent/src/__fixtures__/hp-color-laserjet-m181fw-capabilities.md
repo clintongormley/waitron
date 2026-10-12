@@ -38,5 +38,4 @@ The parser and raster choice use these protocol sources:
 | [RFC 8010, section 3.9](https://www.rfc-editor.org/rfc/rfc8010.html#section-3.9)            | “OCTET-STRING consisting of nine octets” | Read the resolution's two signed dimensions and its units byte; select square 300 or 600 dpi, which the current invoice encoder accepts. |
 | [PWG chair's document-type explanation](https://www.pwg.org/pipermail/ipp/2014/018340.html) | “8-bit grayscale raster data”            | Require `sgray_8` for the PWG encoder's grey output.                                                                                     |
 
-Discovery sends this query (`createOfficePrinterClassifier`, `ipp-probe.ts`). No production
-office-printer job transport is connected yet.
+Discovery sends this query (`createOfficePrinterClassifier`, `ipp-probe.ts`).

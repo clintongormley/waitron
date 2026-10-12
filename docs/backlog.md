@@ -166,12 +166,12 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   advance-payment invoice** (LIVA 75.Dos, RD 1619/2012 art. 2.1). The server (#721) holds such money
   with no invoice until the bill is paid. Asked as [S3](compliance/asesor-questions.md#the-shortened-list-2026-10-09); no change until answered.
 
-- **A448. The email consent request for full invoices must say how the invoice will arrive and how
-  consent is withdrawn** (TRLGDCU art. 63.3). A231p's owner decision 2 records only that staff ask.
-  [Detail](backlog/fiscal.md#decisions-and-deliberate-limits)
+- **A448. Whether a customer's email address alone satisfies TRLGDCU art. 63.3 for an emailed full
+  invoice.** [Detail](backlog/fiscal.md#decisions-and-deliberate-limits)
   _2026-10-12: the product no longer asks for consent at all — A231q's tasks C1a and C1b removed it
   ([plan](superpowers/plans/2026-10-12-a231q-invoice-delivery-part-2.md)) on the owner's 2026-10-09
-  answer. Whether an address alone satisfies art. 63.3 stays open here._
+  answer. Until 2026-10-12 this entry asked that the consent request say how the invoice will arrive
+  and how consent is withdrawn._
 
 - **A resent cancellation AEAT already holds now counts as accepted when AEAT's stored fingerprint
   matches the cancellation's** (`drain.ts`'s `handleDuplicate`; a mismatch is refused with
