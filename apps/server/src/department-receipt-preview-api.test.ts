@@ -104,6 +104,17 @@ async function snapshot() {
 }
 
 describe("replacement department receipt preview", () => {
+  it.each([{}, { operationDescription: "" }])(
+    "previews an empty department without requiring nonprinted setup (%j)",
+    async (receipt) => {
+      const before = await snapshot();
+      const answer = await drawn({ ...draft(), receipt });
+      expect(lines(answer).join("\n")).toContain("Deli Test SL");
+      expect(lines(answer).join("\n")).not.toContain("Global subtitle");
+      expect(answer.marks.address).toBeNull();
+      expect(await snapshot()).toEqual(before);
+    },
+  );
   it("draws authored draft text and policy without printing descriptions or venue defaults", async () => {
     const before = await snapshot();
     const answer = await drawn({

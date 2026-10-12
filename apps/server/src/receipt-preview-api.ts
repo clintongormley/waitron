@@ -420,7 +420,7 @@ export function mountDepartmentReceiptDraftPreviewApi(
           sessionId,
           { receipt: body.receipt, policy: body.policy },
           deps.validateOperationDescription,
-          { touch: body.passive !== true },
+          { touch: body.passive !== true, allowEmptyDescription: true },
         );
         const languages = await departmentReceiptLanguages(tx, deps.cfg);
         const locale =

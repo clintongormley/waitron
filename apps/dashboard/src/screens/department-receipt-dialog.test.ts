@@ -63,6 +63,21 @@ it("explains an empty required description and disables Save until repaired", as
   await editReceipt(el, "operationDescription", "Counter service");
   expect(receiptSave(el).disabled).toBe(false);
 });
+
+it("uses the server's installed contribution metadata to hide the description and save decoration", async () => {
+  const { el, api } = await mountReceiptDialog(
+    receiptApi({
+      ...receiptModel,
+      receipt: {},
+      operationDescriptionRequired: false,
+    }),
+  );
+  expect(el.shadowRoot!.querySelector("[name=operationDescription]")).toBeNull();
+  await editReceipt(el, "email", "bar@example.com");
+  await clickReceiptSave(el);
+  await expect.poll(() => api.putDepartmentReceipt.mock.calls.length).toBe(1);
+  expect(api.putDepartmentReceipt.mock.lastCall?.[1].receipt).toEqual({ email: "bar@example.com" });
+});
 it("allows installations without a description field to save their empty receipt", async () => {
   const { el, api } = await mountReceiptDialog(receiptApi({ ...receiptModel, receipt: {} }));
   el.requiresDescription = false;
@@ -138,10 +153,11 @@ it("stale preview success and failure cannot replace the latest draft's paper", 
   await expect.poll(() => api.previewReceiptDraft.mock.calls.length).toBe(1);
   api.previewReceiptDraft.mockResolvedValue(preview("LATEST"));
   await editReceipt(el, "email", "new@example.com");
-  await expect.poll(() => el.shadowRoot!.querySelector(".paper")?.textContent).toContain("LATEST");
   first.resolve(preview("STALE"));
   await first.promise;
   await el.updateComplete;
+  expect(el.shadowRoot!.querySelector(".paper")?.textContent ?? "").not.toContain("STALE");
+  await expect.poll(() => el.shadowRoot!.querySelector(".paper")?.textContent).toContain("LATEST");
   expect(el.shadowRoot!.querySelector(".paper")!.textContent).toContain("LATEST");
   expect(api.previewReceiptDraft.mock.lastCall?.[1]).toEqual({ passive: true });
 });
@@ -253,10 +269,10 @@ it("a stale preview refusal cannot show an error after the current paper arrives
   await expect.poll(() => api.previewReceiptDraft.mock.calls.length).toBe(1);
   api.previewReceiptDraft.mockResolvedValue(preview("CURRENT"));
   await editReceipt(el, "email", "new@example.com");
-  await expect.poll(() => el.shadowRoot!.querySelector(".paper")?.textContent).toContain("CURRENT");
   old.reject({ code: "server.internal" });
   await old.promise.catch(() => {});
   await el.updateComplete;
+  await expect.poll(() => el.shadowRoot!.querySelector(".paper")?.textContent).toContain("CURRENT");
   expect(el.shadowRoot!.querySelector(".preview [role=alert]")).toBeNull();
 });
 it.each(["success", "refusal"])(
@@ -371,4 +387,40 @@ it("an ignored replacement subject does not overwrite a dirty receipt or consume
   await el.updateComplete;
   await expect.poll(() => api.getDepartmentReceipt.mock.lastCall?.[0]).toBe("terrace");
   await expect.poll(() => dialog.open).toBe(true);
+});
+
+it("compares and sends trimmed offered text while preserving hidden authored values exactly", async () => {
+  const api = receiptApi({
+    ...receiptModel,
+    receipt: { ...receiptModel.receipt, headerSubtitle: { "es-ES": "Bar", "eu-ES": "  Hidden  " } },
+  });
+  const { el, app } = await mountReceiptDialog(api);
+  await editReceipt(el, "headerSubtitle-es-ES", "  Bar  ");
+  expect(receiptSave(el).disabled).toBe(true);
+  expect(app.leave.coordinator.isDirty()).toBe(false);
+  await editReceipt(el, "headerSubtitle-es-ES", "  New Bar  ");
+  await editReceipt(el, "footerMessage-ca-ES", "   ");
+  await clickReceiptSave(el);
+  expect(api.putDepartmentReceipt.mock.lastCall?.[1].receipt).toEqual({
+    operationDescription: "Dining service",
+    headerSubtitle: { "es-ES": "New Bar", "eu-ES": "  Hidden  " },
+  });
+});
+it("a live receipt response delivered after Cancel begins cannot reopen the closing dialog", async () => {
+  const api = receiptApi();
+  const held = deferred<typeof receiptModel>();
+  const { el, dialog } = await mountReceiptDialog(api);
+  api.getDepartmentReceipt.mockImplementationOnce(() => held.promise);
+  api.liveData.invalidate([{ type: "department_receipts" }]);
+  await expect.poll(() => api.getDepartmentReceipt.mock.calls.length).toBe(2);
+  const closed = dialogClosed(dialog);
+  expect(await dialog.requestClose("cancel")).toBe(true);
+  expect(dialog.open).toBe(false);
+  held.resolve(structuredClone(receiptModel));
+  await held.promise;
+  await el.updateComplete;
+  await expect.poll(() => el.shadowRoot!.querySelector("[name=email]")).toBeNull();
+  await closed;
+  expect(dialog.open).toBe(false);
+  expect(el.shadowRoot!.querySelector("[name=email]")).toBeNull();
 });

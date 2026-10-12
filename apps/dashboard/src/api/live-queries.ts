@@ -485,7 +485,13 @@ export const QUERY_DEPENDENCIES = {
   listPurchaseInvoices: ["purchase_invoices", "purchase_invoice_vat"],
   getReceipt: ["tenant_receipts", "locations"],
   getVenueReceiptSettings: ["tenant_receipts"],
-  getDepartmentReceipt: ["department_receipts", "tenant_receipts", "departments", "locations"],
+  getDepartmentReceipt: [
+    "department_receipts",
+    "department_sale_policies",
+    "departments",
+    "locations",
+    "content_languages",
+  ],
   getLocationSettings: ["locations"],
   getVenueDetails: [
     "locations",

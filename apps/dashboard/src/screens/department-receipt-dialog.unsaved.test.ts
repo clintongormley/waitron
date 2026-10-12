@@ -91,15 +91,27 @@ it("pending Save blocks Escape, Cancel and a duplicate request", async () => {
   await closed;
   expect(app.leave.coordinator.isDirty()).toBe(false);
 });
-it("removing the dialog closes the modal and disposes its draft", async () => {
-  const { app, el, dialog } = await mountReceiptDialog();
+it("reconnecting the same receipt preserves its native draft and original Save baseline", async () => {
+  const { app, el, dialog, api } = await mountReceiptDialog();
   await editReceipt(el, "email", "draft@example.com");
   expect(app.leave.coordinator.isDirty()).toBe(true);
   await reattachAfterDetachedUpdate(el);
-  expect(dialog.open).toBe(false);
+  await expect.poll(() => dialog.shadowRoot!.querySelector("dialog")!.matches(":modal")).toBe(true);
+  await expect.poll(() => api.getDepartmentReceipt.mock.calls.length).toBe(2);
+  expect(receiptField(el, "email").shadowRoot!.querySelector("input")!.value).toBe(
+    "draft@example.com",
+  );
+  expect(receiptSave(el).disabled).toBe(false);
+  expect(app.leave.coordinator.isDirty()).toBe(true);
+  await editReceipt(el, "email", "");
+  expect(receiptSave(el).disabled).toBe(true);
+  expect(app.leave.coordinator.isDirty()).toBe(false);
+});
+it("a removed receipt closes the native modal and releases its mounted draft", async () => {
+  const { app, el, dialog } = await mountReceiptDialog();
+  await editReceipt(el, "email", "draft@example.com");
+  el.remove();
+  await el.updateComplete;
   expect(dialog.shadowRoot!.querySelector("dialog")!.matches(":modal")).toBe(false);
   expect(app.leave.coordinator.isDirty()).toBe(false);
-  el.show({ id: "cafe", name: "Cafe" });
-  await expect.poll(() => el.shadowRoot!.querySelector("[name=email]")).toBeTruthy();
-  expect(receiptSave(el).disabled).toBe(true);
 });

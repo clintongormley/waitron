@@ -4,6 +4,7 @@ import type { ReceiptPreview, PrintPaperWidth } from "./client.js";
 
 export interface DepartmentReceiptModel extends DepartmentReceiptWrite {
   receiptLanguage: string;
+  operationDescriptionRequired: boolean;
   languages: string[];
   warningLanguages: string[];
   venueAddress: string[];

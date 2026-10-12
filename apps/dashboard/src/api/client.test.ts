@@ -3226,10 +3226,12 @@ describe("inline translation transport", () => {
 });
 
 describe("department receipt client contracts", () => {
-  it("reads authored department fields separately from global defaults", async () => {
+  it("reads authored department fields with independent policy and no global defaults", async () => {
     const payload = {
       receipt: { headerSubtitle: { "es-ES": "Sala" } },
-      venueDefaults: { footerMessage: "Venue", printAddress: false },
+      policy: { receiptPrintMode: "auto", printTradingName: true },
+      operationDescriptionRequired: true,
+      receiptLanguage: "es-ES",
       languages: ["es-ES"],
       warningLanguages: [],
       venueAddress: ["Street"],
@@ -3245,14 +3247,20 @@ describe("department receipt client contracts", () => {
   it("sends translations only to the selected department", async () => {
     const fetchImpl = vi.fn().mockResolvedValue(emptyResponse());
     const api = new DashboardApi("", fetchImpl);
-    await api.putDepartmentReceipt("dept", { footerMessage: { "ca-ES": "Gràcies" } });
+    await api.putDepartmentReceipt("dept", {
+      receipt: { footerMessage: { "ca-ES": "Gràcies" } },
+      policy: { receiptPrintMode: "auto", printTradingName: true },
+    });
     expect(fetchImpl.mock.calls[0]).toEqual([
       "/management-api/venue-service/departments/dept/receipt",
       {
         method: "PUT",
         credentials: "include",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ receipt: { footerMessage: { "ca-ES": "Gràcies" } } }),
+        body: JSON.stringify({
+          receipt: { footerMessage: { "ca-ES": "Gràcies" } },
+          policy: { receiptPrintMode: "auto", printTradingName: true },
+        }),
       },
     ]);
   });

@@ -54,7 +54,7 @@ import "./screens/catalogue-screen.js";
 import "./screens/modifiers-screen.js";
 import "./screens/menus-screen.js";
 import "./screens/units-screen.js";
-import "./screens/receipts-screen.js";
+import "./screens/department-receipt-dialog.js";
 import "./screens/venue-details-panel.js";
 import "./screens/receipt-language-panel.js";
 import "./screens/catalogue-defaults-screen.js";
@@ -275,12 +275,6 @@ const CORE_SETTINGS_PANELS: readonly CoreSettingsPanel[] = [
     requiresPermission: "venue.configure",
     render: (api) =>
       html`<dashboard-receipt-language-panel .api=${api}></dashboard-receipt-language-panel>`,
-  },
-  {
-    key: "receipts",
-    tab: "receipts",
-    requiresManager: true,
-    render: (api) => html`<dashboard-receipts-screen .api=${api}></dashboard-receipts-screen>`,
   },
   {
     key: "statuses",
@@ -1241,11 +1235,11 @@ export class DashboardApp extends LitElement {
         liveData: this.api.liveData,
         renderPanel: (panel: string, subject: { id: string; name: string }) =>
           panel === "department-receipt" && this.#sessionPermissions.includes("layout.configure")
-            ? html`<dashboard-receipts-screen
+            ? html`<dashboard-department-receipt-dialog
                 .api=${this.api}
-                .departmentId=${subject.id}
-                .departmentName=${subject.name}
-              ></dashboard-receipts-screen>`
+                .subject=${subject}
+                .canManagePolicy=${this.#sessionPermissions.includes("venue_service.manage")}
+              ></dashboard-department-receipt-dialog>`
             : null,
       };
       for (const contributed of screens) {

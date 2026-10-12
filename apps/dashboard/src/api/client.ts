@@ -1,6 +1,6 @@
 import type {
   BusinessDayClock,
-  DepartmentReceiptConfig,
+  DepartmentReceiptWrite,
   VenueReceiptSettings,
 } from "@waitron/shared";
 import type { PlanPlacement } from "@waitron/ui";
@@ -36,14 +36,8 @@ import type {
 } from "@waitron/catalogue/src/product-types.js";
 import type { ExtraOfferUsage } from "@waitron/catalogue/src/extra-usage.js";
 export type { Product, ProductEditorValue, ProductEditorVariant, ProductEditorInput };
-export interface DepartmentReceiptSettings {
-  receiptLanguage: string;
-  receipt: DepartmentReceiptConfig;
-  venueDefaults: VenueReceiptSettings;
-  languages: string[];
-  warningLanguages: string[];
-  venueAddress: string[];
-}
+export type { DepartmentReceiptModel as DepartmentReceiptSettings } from "./department-receipts.js";
+import type { DepartmentReceiptModel as DepartmentReceiptSettings } from "./department-receipts.js";
 
 export interface VenueDetailValues {
   name: string;
@@ -2786,10 +2780,8 @@ export class DashboardApi {
     return this.#request(`/management-api/venue-service/departments/${id}/receipt`, "GET");
   }
 
-  putDepartmentReceipt(id: string, receipt: DepartmentReceiptConfig): Promise<void> {
-    return this.#request(`/management-api/venue-service/departments/${id}/receipt`, "PUT", {
-      receipt,
-    });
+  putDepartmentReceipt(id: string, input: DepartmentReceiptWrite): Promise<void> {
+    return this.#request(`/management-api/venue-service/departments/${id}/receipt`, "PUT", input);
   }
 
   getVenueReceiptSettings(): Promise<{ settings: VenueReceiptSettings }> {
@@ -2809,10 +2801,8 @@ export class DashboardApi {
   }
 
   previewReceiptDraft(
-    draft: {
-      departmentId: string | null;
-      receipt: DepartmentReceiptConfig;
-      settings: VenueReceiptSettings;
+    draft: DepartmentReceiptWrite & {
+      departmentId: string;
       language?: string;
       paperWidth?: PrintPaperWidth;
     },

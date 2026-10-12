@@ -1,7 +1,6 @@
 import { afterEach, expect, it, vi } from "vitest";
 import { userEvent, page } from "vitest/browser";
-import { createRequest, LiveData } from "@waitron/dashboard-kit";
-import { createDepartmentReceiptClient } from "../api/department-receipts.js";
+import { DashboardApi } from "../api/client.js";
 import {
   cleanupWidgets,
   mountWidget,
@@ -35,11 +34,8 @@ async function mount(locale = "en-GB", theme: "light" | "dark" = "light") {
       return new Response(JSON.stringify(model));
     },
   );
-  const liveData = new LiveData();
-  const api = createDepartmentReceiptClient(
-    createRequest({ fetchImpl, onSuccess: activity }),
-    liveData,
-  );
+  const api = new DashboardApi("", fetchImpl, undefined, activity);
+  const liveData = api.liveData;
   const { el, host } = await mountWidget<DepartmentReceiptDialog>(
     "dashboard-department-receipt-dialog",
     { api, subject: { id: "bar", name: "Bar" } },
@@ -83,7 +79,7 @@ it("a live policy and receipt read preserves the host-selected dialog's authored
     receipt: { operationDescription: "New elsewhere" },
     policy: { receiptPrintMode: "on_request", printTradingName: false },
   });
-  liveData.invalidate([{ type: "departments" }]);
+  liveData.invalidate([{ type: "department_sale_policies" }]);
   await expect
     .poll(() => fetchImpl.mock.calls.filter(([path]) => path.endsWith("/bar/receipt")).length)
     .toBe(2);

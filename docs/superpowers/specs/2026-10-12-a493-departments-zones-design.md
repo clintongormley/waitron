@@ -136,3 +136,17 @@ Reading receipts below establish source placement only; no command in this plann
 - Final cleanup deletes A493 in both backlog files (`docs/backlog.md:1295`, `docs/backlog/service-periods.md:85`). Audit whole touched-path prose and dated earlier specs/plans for stale page/tab/global-default claims; historical artifacts get a dated supersession pointer, not rewritten history. Keep A497's wider scope and A435-6's retained-history decisions.
 
 No confirmed implementation blocker was found by source inspection. Description-readiness refusals, permission combinations, native drag behavior and current-head checks remain **unverified until the parent executes the plan**. A failure requiring an H2 edit is a contradiction to report, not permission to weaken the requirement.
+
+## Task 3 interface qualification (2026-10-12)
+
+The department GET model also carries `operationDescriptionRequired`, derived from the installed
+management description validator. The dialog reads that flag so a fiscal contribution without the
+field does not acquire a required empty control. This extends the proposed response table without
+naming a fiscal module in the browser. Preview permits an absent or blank nonprinted description;
+the save path keeps its existing required-description check. Both combinations have real route
+cases in `department-receipt-settings-api.test.ts` and `department-receipt-preview-api.test.ts`.
+Retained modal reconnect keeps its draft and original baseline, matching the old department
+editors. Removing the native dialog from the document and retaining its `open` property can leave
+it outside the browser's modal layer; the receipt host binds its native opening to its connection.
+Offered receipt text is trimmed for comparison and submission, while hidden map entries keep their
+exact stored values. These qualifications do not authorise deleting unrelated legacy assertions.

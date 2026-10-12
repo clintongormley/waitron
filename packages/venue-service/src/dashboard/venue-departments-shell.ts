@@ -233,6 +233,15 @@ export class VenueDepartmentsShell extends LitElement {
     event.stopPropagation();
     void this.#navigate({ view: "zones", zone: event.detail.zoneId }, true);
   }
+  async #receiptClosed(event: CustomEvent<{ departmentId: string }>) {
+    event.stopPropagation();
+    if (this.departmentId !== event.detail.departmentId || this.view !== "receipt") return;
+    await this.#navigate({ view: null, zone: null }, true);
+  }
+  async #receiptSaved(event: CustomEvent<{ departmentId: string }>) {
+    await this.#receiptClosed(event);
+    await this.#written(event);
+  }
   #content(): unknown {
     if (!this.model) return nothing;
     if (!this.departmentId)
@@ -278,6 +287,8 @@ export class VenueDepartmentsShell extends LitElement {
         @add-to-department=${this.#openDialog}
         @delete-zone=${this.#openDialog}
         @saved=${this.#saved}
+        @department-receipt-closed=${this.#receiptClosed}
+        @department-receipt-saved=${this.#receiptSaved}
         ?inert=${this.busy}
       >
         ${this.actionError || this.loadError ? html`<p role="alert">${this.actionError || this.loadError}</p>` : nothing}${this.#content()}

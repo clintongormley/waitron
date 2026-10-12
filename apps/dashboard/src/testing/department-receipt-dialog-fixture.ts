@@ -21,6 +21,7 @@ export const receiptModel: DepartmentReceiptDialogModel = {
   },
   policy: { receiptPrintMode: "auto", printTradingName: true },
   receiptLanguage: "es-ES",
+  operationDescriptionRequired: true,
   languages: ["es-ES", "ca-ES"],
   warningLanguages: ["ca-ES"],
   venueAddress: ["Calle Mayor 1"],
@@ -63,7 +64,7 @@ export function receiptApi(model = receiptModel) {
     previewReceiptDraft: vi.fn<DepartmentReceiptDialogApi["previewReceiptDraft"]>(async () =>
       preview(),
     ),
-    imageLibraryRequest: vi.fn(async () => ({ images: [], total: 0 })),
+    imageLibraryRequest: async <T>() => ({ images: [], total: 0 }) as T,
   };
 }
 class ReceiptDialogHost extends LitElement {

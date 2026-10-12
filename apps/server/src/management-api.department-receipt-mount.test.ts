@@ -69,6 +69,7 @@ it("management mounts the department receipt and policy without global defaults"
     receipt: { operationDescription: "Meals" },
     policy,
     receiptLanguage: "es-ES",
+    operationDescriptionRequired: true,
     languages: ["es-ES"],
     warningLanguages: [],
     venueAddress: ["Calle Mayor 1", "28013 Madrid"],

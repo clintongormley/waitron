@@ -777,9 +777,10 @@ it("scopes department receipt subscriptions by department and refreshes passivel
   const query = dashboardQuery(api, "getDepartmentReceipt", ["bar"]);
   expect(query.dependencies).toEqual([
     { type: "department_receipts" },
-    { type: "tenant_receipts" },
+    { type: "department_sale_policies" },
     { type: "departments" },
     { type: "locations" },
+    { type: "content_languages" },
   ]);
   const other = dashboardQuery(api, "getDepartmentReceipt", ["cafe"]);
   expect(other.key).not.toBe(query.key);
@@ -792,25 +793,45 @@ it("scopes department receipt subscriptions by department and refreshes passivel
   expect(active).toHaveBeenCalledOnce();
 });
 
-it("venue-default refresh reads only its settings route and becomes passive", async () => {
+it("department receipt, policy, content and address refresh through the department route passively", async () => {
   const fetchImpl = vi.fn<(path: string, init: RequestInit) => Promise<Response>>(
-    async () => new Response(JSON.stringify({ settings: { headerSubtitle: "Restaurant" } })),
+    async () =>
+      new Response(
+        JSON.stringify({
+          receipt: {},
+          policy: { receiptPrintMode: "auto", printTradingName: true },
+          operationDescriptionRequired: false,
+          receiptLanguage: "es-ES",
+          languages: ["es-ES"],
+          warningLanguages: [],
+          venueAddress: [],
+        }),
+      ),
   );
   const active = vi.fn();
   const api = new DashboardApi("", fetchImpl, undefined, active);
   const observed = api.liveData.observe(
-    dashboardQuery(api, "getVenueReceiptSettings", []),
+    dashboardQuery(api, "getDepartmentReceipt", ["dept"]),
     () => {},
   );
   try {
     await vi.waitFor(() => expect(observed.snapshot.status).toBe("ready"));
-    api.liveData.invalidate([{ type: "tenant_receipts" }]);
-    await vi.waitFor(() => expect(fetchImpl).toHaveBeenCalledTimes(2));
-    expect(fetchImpl.mock.calls.map(([path]) => path)).toEqual([
-      "/management-api/receipt-settings",
-      "/management-api/receipt-settings",
-    ]);
-    expect(new Headers(fetchImpl.mock.calls[1]![1].headers).get("x-waitron-live")).toBe("1");
+    for (const [index, type] of [
+      "department_sale_policies",
+      "content_languages",
+      "locations",
+      "department_receipts",
+      "departments",
+    ].entries()) {
+      api.liveData.invalidate([{ type }]);
+      await vi.waitFor(() => expect(fetchImpl).toHaveBeenCalledTimes(index + 2));
+      expect(fetchImpl.mock.calls[index + 1]![0]).toBe(
+        "/management-api/venue-service/departments/dept/receipt",
+      );
+      expect(new Headers(fetchImpl.mock.calls[index + 1]![1].headers).get("x-waitron-live")).toBe(
+        "1",
+      );
+    }
     expect(active).toHaveBeenCalledOnce();
   } finally {
     observed.unsubscribe();

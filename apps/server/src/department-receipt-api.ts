@@ -220,6 +220,7 @@ export function mountDepartmentReceiptSettingsApi(
           receipt,
           policy,
           receiptLanguage,
+          operationDescriptionRequired: deps.validateOperationDescription !== undefined,
           languages,
           warningLanguages: untranslatedLanguages(
             [receipt.headerSubtitle, receipt.footerMessage],

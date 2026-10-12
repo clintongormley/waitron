@@ -24,7 +24,7 @@ export async function checkedDepartmentReceiptWrite(
   managementSessionId: string,
   input: unknown,
   validateOperationDescription?: (description: string) => void,
-  options: { touch?: boolean } = {},
+  options: { touch?: boolean; allowEmptyDescription?: boolean } = {},
 ) {
   await authorizeManager(tx, {
     managementSessionId,
@@ -39,6 +39,7 @@ export async function checkedDepartmentReceiptWrite(
     current,
     languages,
     validateOperationDescription,
+    options.allowEmptyDescription,
   );
   const policy = await VENUE_SERVICE.readDepartmentReceiptPolicy(tx, cfg, departmentId);
   if (
@@ -59,6 +60,7 @@ export function validateDepartmentReceiptWrite(
   current: DepartmentReceiptConfig,
   languages: DepartmentReceiptLanguages,
   validateOperationDescription?: (description: string) => void,
+  allowEmptyDescription = false,
 ): DepartmentReceiptWrite {
   if (
     !object(input) ||
@@ -84,7 +86,11 @@ export function validateDepartmentReceiptWrite(
       }
     }
   }
-  if (validateOperationDescription !== undefined) {
+  // Print previews may omit nonprinted setup without relaxing the save check.
+  if (
+    validateOperationDescription !== undefined &&
+    !(allowEmptyDescription && receipt.operationDescription === undefined)
+  ) {
     const description = (input.receipt as Record<string, unknown>).operationDescription;
     if (typeof description !== "string") {
       throw new AppError("management.request_invalid", { field: "operationDescription" });

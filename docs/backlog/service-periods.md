@@ -144,11 +144,13 @@ logo, subtitle, footer, address switch and tax-agency description. A new departm
 empty receipt. The venue's receipt language moves to Venue settings. Nothing is live, so stored
 venue defaults may be dropped rather than carried over (CLAUDE.md §3, last rule).
 
-**Remaining implementation:** receipt client/dialog integration and obsolete editor/route-helper retirement;
-integrated-card readiness, capture/recovery, unpaid/funded/corrective descriptions and the no-description
-fiscal combination; the unified list with protected editors and zone dragging; final managed visual checks.
-The unpublished branch mounts department receipt/settings and draft preview, retires the global and
-location-description routes, and wires the immediate-sale path. It is not ready to publish.
+**Remaining implementation:** finish the legacy receipt assertion ports and retire obsolete editors,
+route helpers, client methods and live queries; build the unified department/zone list and protected
+editors with zone dragging; complete managed visual checks and the whole-branch audit.
+The unpublished branch connects the department receipt dialog to the public client and dashboard
+host. It selects descriptions on the product issuance paths and checks readiness before provider
+dispatch. The legacy receipt suites are retained while their remaining behavior checks move; their
+old API types still prevent the dashboard type check from passing. It is not ready to publish.
 
 ## A506. Opening hours rebuilt around seasons and special days
 

@@ -145,6 +145,13 @@ async function libraryImage() {
 }
 
 describe("replacement department receipt HTTP contract", () => {
+  it.each([true, false])("reports the installed description field (%s)", async (withFiscal) => {
+    const f = await fixture("manager", "manager", withFiscal);
+    const response = await f.app.request(f.path, { headers: f.headers });
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({ operationDescriptionRequired: withFiscal });
+  });
+
   it("returns policy and offered languages without dropping hidden stored text or adding venue defaults", async () => {
     const f = await fixture();
     const response = await f.app.request(f.path, { headers: f.headers });
@@ -153,6 +160,7 @@ describe("replacement department receipt HTTP contract", () => {
       receipt: savedReceipt,
       policy,
       receiptLanguage: "gl-ES",
+      operationDescriptionRequired: true,
       languages: ["gl-ES", "es-ES", "ca-ES"],
       warningLanguages: ["gl-ES", "ca-ES"],
       venueAddress: ["Calle Uno 1", "28013 Madrid"],
