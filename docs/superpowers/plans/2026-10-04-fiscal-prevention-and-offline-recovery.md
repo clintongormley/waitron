@@ -632,7 +632,21 @@ person ID. New tests use independently signed bytes, account-free dormant takeov
 purposes, retained audit replay and membership-write rollback. These are internal synthetic
 qualification paths, not connected promotion or cold-restore entry points.
 
-Remaining Task 4 work: staged/CLI input and authentication carriers; text SIF/counter retirement
+**2026-10-12 restore-placement/CLI checkpoint:** the initial CLI can forward host-selected node and
+administrator IDs plus opaque module input into the venue runner. Archive and bucket CLI paths and
+both staged restore paths can receive a trusted host callback that authenticates against the placed
+database. It supplies the transaction used for all restore hooks and series checks. In-process
+authority stays alive through that callback and is never reconstructed from a marker or backup.
+The supplied module entries are snapshotted before the hooks run.
+
+Database tests exercise real encrypted-file validation and stream placement with distinct backup
+and node keys. Wrong-key refusal publishes no identity; refusal by a later hook rolls back writes
+from authentication and the earlier hook. CLI and staged forwarding tests use actual placement
+behind injected outer restore callbacks, so they do not qualify a complete production command or
+boot journey. The production entry points still lack allocation input collection and authenticated
+fiscal-seat wiring. The existing fiscal assertions and shipped migrations are unchanged.
+
+Remaining Task 4 work: production input collection and authenticated seat wiring; text SIF/counter retirement
 and every setup, seed, restore, bundle, adoption and promotion consumer together; current-main
 rebase, complete migration regeneration and populated upgrade; sync the Cloud handoff's proposed
 operator binding to the owner-selected union; two full reviews, normal hook and current-head CI.

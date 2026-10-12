@@ -21,7 +21,7 @@ import { resolveEnvironment } from "./environment.js";
 import { venueFiscalSelection } from "./venue-fiscal.js";
 import type { ProvisioningIo } from "./io.js";
 import { runKeyring } from "./keyring-command.js";
-import { applyVenue } from "./venue-apply.js";
+import { applyVenue, type VenueApplyDeps } from "./venue-apply.js";
 import { describeVenueAction, planVenue, type VenueRequest } from "./venue-plan.js";
 import { assertNoForeignTenant, readTenantIdentities } from "./tenant-guard.js";
 import "./errors.js";
@@ -39,6 +39,7 @@ export interface CliDeps {
   applyVenue: typeof applyVenue;
   /** The composition list (`@waitron/composition`'s `ALL_MODULES`). */
   modules: readonly WaitronModule[];
+  initialVenue?: Pick<VenueApplyDeps, "moduleInputs" | "initialNodeId" | "initialAdministratorId">;
   /** Absent, no `modules.json` is written. */
   writeModuleConfig?: (config: ModuleConfig) => Promise<void>;
   readEnvironment: typeof readDeploymentEnvironment;
@@ -327,7 +328,11 @@ async function venue(argv: string[], deps: CliDeps): Promise<number> {
       await deps.stampEnvironment(target, requested);
 
       try {
-        const result = await deps.applyVenue(actions, { db: target, modules });
+        const result = await deps.applyVenue(actions, {
+          ...deps.initialVenue,
+          db: target,
+          modules,
+        });
         if (deps.writeModuleConfig !== undefined) await deps.writeModuleConfig(fiscalConfig);
         deps.io.stdout("");
         deps.io.stdout(`node:     ${result.nodeId}`);

@@ -249,11 +249,20 @@ A synthetic setup integration writes a signed initial allocation with standard, 
 rectificative series; substituting the operator or removing current outside confirmation refuses
 the transaction. This does not connect the production fiscal seats or change SIF/counter typing.
 
-The recovery-key path currently verifies the node key without authenticating a named operator.
-The [decision inventory](../superpowers/plans/2026-10-12-w41s4-break-glass-operator-decision.md)
-asks whether to select an active administrator under that key, recording the recovery method,
-or require physical account reset and fresh sign-in. That decision, CLI/staged recovery inputs,
-bundle/adoption/promotion wiring, complete schema regeneration and full qualification remain open.
+The owner selected key-only authority at 22:55 on 2026-10-12, superseding the A/B choices in the
+[decision inventory](../superpowers/plans/2026-10-12-w41s4-break-glass-operator-decision.md).
+The signed consumption and permanent approval name the recovery-key event, never a person.
+
+**2026-10-12, restore placement and CLI carrier:** the initial CLI accepts host-selected node/account
+IDs and module input through its dependency object. It keeps the selected database and module list.
+Archive, bucket and staged runners can pass a host authentication callback to the placed database;
+its transaction contains the module hooks and series checks. New tests exercise actual encrypted
+file validation and stream placement with separate backup and node keys. Wrong-key refusal leaves
+no published identity; a later hook refusal backs out authentication and earlier hook writes.
+Host-issued input is snapshotted before hooks run. Neither the staged marker nor the backup carries
+in-process authority. These injectable paths do not yet collect production allocation input or
+connect the fiscal seats. Current outside confirmation, text SIF/counter retirement, all host
+replacements, final schema regeneration and full branch qualification remain open.
 
 **2026-10-12, Task 5:** invoice issuance reads the live series inside its transaction.
 Startup, development seeds, mirror bundles and saved trading identity carry node and location

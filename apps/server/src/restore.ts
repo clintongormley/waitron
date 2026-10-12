@@ -30,6 +30,7 @@ import {
   retireNodeSeriesTx,
   withTransaction,
   type Database,
+  type Transaction,
   type VenueLock,
 } from "@waitron/db";
 import { applyMigrations, expectedSchemaVersion, migrationOptionsFor } from "@waitron/migrations";
@@ -96,11 +97,23 @@ export interface RestoreDeps extends ValidationDeps {
   /** Runs after validation and before the restore changes the venue folder, the box's identity or
    * its secrets; not run with `skipSecrets`. Refusing stops the restore. */
   readonly checkSourceLive?: (validated: ValidatedArtifact) => Promise<void>;
+  readonly withModuleOperations?: RestoreOperationRunner;
   readonly log: Logger;
 }
 
 /** What writing an already validated artifact reads. */
 export type PlacementDeps = Omit<RestoreDeps, "artifact" | "recoveryKey">;
+
+export interface RestoreHookResult {
+  readonly seriesId: string;
+  readonly reports: readonly string[];
+}
+
+// Authentication is reconstructed by the trusted host, never deserialised from a backup or marker.
+export type RestoreOperationRunner = (
+  context: { readonly db: Database; readonly node: ProvisionedNode },
+  run: (tx: Transaction, operations: ModuleOperations) => Promise<RestoreHookResult>,
+) => Promise<RestoreHookResult>;
 
 /** What {@link validateArtifact} reads, and nothing else. */
 export interface ValidationDeps {
@@ -259,6 +272,7 @@ async function placeValidated(validated: ValidatedArtifact, deps: PlacementDeps)
       modules: deps.modules,
       node: identity.node,
       log,
+      withModuleOperations: deps.withModuleOperations,
     });
   } finally {
     await opened.close();
@@ -614,10 +628,12 @@ export async function runRestoreHooks(args: {
   node: ProvisionedNode;
   log: Logger;
   moduleOperations?: ModuleOperations;
+  withModuleOperations?: RestoreOperationRunner;
 }): Promise<{ seriesId: string; reports: readonly string[] }> {
   const { node } = args;
-  const operations = snapshotModuleOperations(args.moduleOperations);
-  return withTransaction(args.db, async (tx) => {
+  const suppliedOperations = snapshotModuleOperations(args.moduleOperations);
+  const run = async (tx: Transaction, moduleOperations = suppliedOperations) => {
+    const operations = snapshotModuleOperations(moduleOperations);
     const [known] = await tx
       .select({ id: nodes.id })
       .from(nodes)
@@ -666,7 +682,10 @@ export async function runRestoreHooks(args: {
     } catch (err) {
       throw wrapHookError(owner, err);
     }
-  });
+  };
+  return args.withModuleOperations === undefined
+    ? withTransaction(args.db, (tx) => run(tx))
+    : args.withModuleOperations({ db: args.db, node }, run);
 }
 
 /**

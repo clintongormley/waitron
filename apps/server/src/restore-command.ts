@@ -19,7 +19,12 @@ import { deploymentEnvironment, resolveConfigDir, type DeploymentEnvironment } f
 import { isUnset } from "./env-value.js";
 import { createLogger } from "./logger.js";
 import { ALL_MODULES } from "./modules.js";
-import { RESTORE_STAGING_DIR, restoreFromArtifactFile, type RestoreFileDeps } from "./restore.js";
+import {
+  RESTORE_STAGING_DIR,
+  restoreFromArtifactFile,
+  type RestoreFileDeps,
+  type RestoreOperationRunner,
+} from "./restore.js";
 import { confirmsVenue, refuseIfArchiveSourceLive, restoreFromStream } from "./restore-stream.js";
 import "./errors.js";
 
@@ -39,6 +44,7 @@ interface CommandDeps {
   openArchiveFiles?: (bucket: BucketConfig) => S3FileStore;
   /** How long the `--from-archive` download may take. Default {@link DEFAULT_DESTINATION_TIMEOUT_MS}. */
   archiveTimeoutMs?: number;
+  withModuleOperations?: RestoreOperationRunner;
 }
 
 const CONFIRM_OLD_BOX_GONE = "--confirm-old-box-gone";
@@ -221,7 +227,14 @@ function parseArgs(argv: readonly string[]): ParsedArgs | null {
 
 type RestoreTarget = Pick<
   RestoreFileDeps,
-  "stateDir" | "venueDir" | "stagingDir" | "migrationsRoot" | "modules" | "environment" | "log"
+  | "stateDir"
+  | "venueDir"
+  | "stagingDir"
+  | "migrationsRoot"
+  | "modules"
+  | "environment"
+  | "log"
+  | "withModuleOperations"
 >;
 
 /**
@@ -248,6 +261,9 @@ function resolveRestoreTarget(deps: CommandDeps): RestoreTarget | number {
     migrationsRoot: isUnset(migrationsDir) ? DEFAULT_MIGRATIONS_ROOT : migrationsDir,
     modules: ALL_MODULES,
     environment,
+    ...(deps.withModuleOperations === undefined
+      ? {}
+      : { withModuleOperations: deps.withModuleOperations }),
     log: createLogger(
       (line) => deps.out(line.trimEnd()),
       () => new Date(),

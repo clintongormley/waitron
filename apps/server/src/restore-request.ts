@@ -12,6 +12,7 @@ import {
   validateDatabaseEntries,
   type EntryValidationDeps,
   type RestoreFileDeps,
+  type RestoreOperationRunner,
 } from "./restore.js";
 import {
   confirmsVenue,
@@ -127,6 +128,7 @@ export interface StagedRestoreDeps {
   venueDir: string;
   migrationsRoot: string | null;
   log: Logger;
+  withModuleOperations?: RestoreOperationRunner;
   onManagedCloudRestored?: (binding: { requestId: string; pointId: string }) => Promise<void>;
 }
 
@@ -191,6 +193,9 @@ export async function runStagedRestore(
     modules: ALL_MODULES,
     environment,
     log: deps.log,
+    ...(deps.withModuleOperations === undefined
+      ? {}
+      : { withModuleOperations: deps.withModuleOperations }),
   };
   let run: () => Promise<void>;
   if (marker.kind === "stream") {
