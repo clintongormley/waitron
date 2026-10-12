@@ -985,6 +985,9 @@ export const en = {
   "floor_plan_editor.on_plan": "on plan",
   "floor_plan_editor.not_placed": "not placed",
   "floor_plan_editor.delete_named": "Delete {name}",
+  "floor_plan_editor.hint":
+    "Select a table on the plan to change it. Click a table below to put it on the plan or take it off; it returns to the same spot.",
+  "floor_plan_editor.no_room": "No room on the plan.",
   "floor_plan_editor.delete_question": "Delete {name}?",
   "floor_plan_editor.delete_text": "It leaves the tables list and the plan.",
   "floor_plan_editor.unnamed": "Unnamed",
@@ -3653,6 +3656,9 @@ export const es: Record<StringKey, string> = {
   "floor_plan_editor.on_plan": "en el plano",
   "floor_plan_editor.not_placed": "sin colocar",
   "floor_plan_editor.delete_named": "Eliminar {name}",
+  "floor_plan_editor.hint":
+    "Selecciona una mesa en el plano para cambiarla. Pulsa una mesa de abajo para ponerla en el plano o quitarla; vuelve al mismo sitio.",
+  "floor_plan_editor.no_room": "No hay sitio en el plano.",
   "floor_plan_editor.delete_question": "¿Eliminar {name}?",
   "floor_plan_editor.delete_text": "Sale de la lista de mesas y del plano.",
   "floor_plan_editor.unnamed": "Sin nombre",

@@ -183,6 +183,15 @@ describe.each(["light", "dark"] as const)("floor-plan-editor a11y (%s theme)", (
     await expectNoA11yViolations(host);
   });
 
+  it("shows the hint with nothing selected accessibly", async () => {
+    const before = [window.innerWidth, window.innerHeight] as const;
+    await page.viewport(1280, 800);
+    onTestFinished(() => page.viewport(...before));
+    const { el, host } = await open(stubApi(vi.fn().mockResolvedValue(plan)), theme);
+    await expect.poll(() => el.shadowRoot!.querySelector(".side [data-hint]")).not.toBeNull();
+    await expectNoA11yViolations(host);
+  });
+
   it("shows the sheet collapsed and expanded at 390 px accessibly", async () => {
     const before = [window.innerWidth, window.innerHeight] as const;
     await page.viewport(390, 844);

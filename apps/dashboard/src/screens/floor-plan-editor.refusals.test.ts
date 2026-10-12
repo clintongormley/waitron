@@ -965,3 +965,32 @@ it("a table saved new while other edits were made comes back when its delete is 
   expect(canvas(el).selected).toBe("m5");
   expect(message(el)).toBe("");
 });
+
+const listPanel = (el: FloorPlanEditor) =>
+  el.shadowRoot!.querySelector<FloorPlanTablesPanel>("floor-plan-tables-panel")!;
+const rowMark = (el: FloorPlanEditor, key: string) =>
+  panelRow(el, key)!.querySelector("[data-mark]")?.textContent!.trim() ?? null;
+
+it("a name check's mark shows in its table's row while another table is selected", async () => {
+  const el = await open(stubApi());
+  await change(el, renamed(opened(), "m2", ""));
+  await press(el, "save");
+  const marks = listPanel(el).marks;
+  await select(el, "m1");
+  await listPanel(el).updateComplete;
+  expect(canvas(el).selected).toBe("m1");
+  expect(rowMark(el, "m2")).toBe("Enter a name.");
+  expect(rowMark(el, "m1")).toBeNull();
+  expect(listPanel(el).marks).toBe(marks);
+});
+
+it("a typed refusal's reason shows in its table's row while another table is selected", async () => {
+  await wide();
+  const el = await open(stubApi());
+  await select(el, "m1");
+  await typeIntoPanel(el, "seats", "1000");
+  await select(el, "m2");
+  await listPanel(el).updateComplete;
+  expect(rowMark(el, "m1")).toBe("Enter 0 to 999.");
+  expect(rowMark(el, "m2")).toBeNull();
+});

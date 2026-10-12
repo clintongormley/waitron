@@ -21,6 +21,11 @@ export interface FloorPlanDeleteAsk {
   key: string;
 }
 
+/** A spare table that `placeTable` found no free spot for. */
+export interface FloorPlanNoRoom {
+  key: string;
+}
+
 @customElement("floor-plan-tables-panel")
 export class FloorPlanTablesPanel extends LitElement {
   static override styles = [
@@ -162,7 +167,10 @@ export class FloorPlanTablesPanel extends LitElement {
   #press(table: DraftTable): void {
     if (table.placement === null) {
       const next = placeTable(this.draft, table.key, this.places.get(table.key));
-      if (next === this.draft) return;
+      if (next === this.draft) {
+        this.#send<FloorPlanNoRoom>("floor-plan-no-room", { key: table.key });
+        return;
+      }
       sendChange(this, next);
       this.#send<FloorPlanSelect>("floor-plan-select", { key: table.key });
       return;

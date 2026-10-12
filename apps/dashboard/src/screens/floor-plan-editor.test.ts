@@ -5,7 +5,7 @@ import { chooseOption, chooseOptions } from "@waitron/ui/src/test-helpers.js";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import "./floor-plan-editor.js";
 import type { FloorPlanEditor } from "./floor-plan-editor.js";
-import type { DashboardApi, FloorPlan } from "../api/client.js";
+import type { DashboardApi, FloorPlan, PlanPlacement } from "../api/client.js";
 import { currentLocale, setLocale } from "../i18n/t.js";
 import { DASHBOARD_ICONS } from "../icons.js";
 import { addTables, draftFromPlan, patchTable, type FloorPlanDraft } from "./floor-plan-draft.js";
@@ -984,6 +984,105 @@ it("taking a saved placed table off through its row wakes Save; Undo puts it bac
   expectSaveQuiet(el);
 });
 
+async function toggleRow(el: FloorPlanEditor, key: string): Promise<void> {
+  listRow(el, key).querySelector<HTMLElement>("button[data-action=toggle]")!.click();
+  await el.updateComplete;
+  await el.shadowRoot!.querySelector("floor-plan-tables-panel")!.updateComplete;
+}
+
+const odd = { x: 30, y: 12, width: 12, height: 6, shape: "round" as const, rotation: 90 };
+const withM1 = (at: PlanPlacement | null): FloorPlan => ({
+  ...terrace(),
+  tables: terrace().tables.map((t) => (t.id === "m1" ? { ...t, placement: at } : t)),
+});
+
+it("a table taken off through its row goes back to the same place when pressed again, which is no change", async () => {
+  const el = await open(stubApi({ getFloorPlan: vi.fn().mockResolvedValue(withM1(odd)) }));
+  await toggleRow(el, "m1");
+  expect(canvas(el).tables).toEqual([]);
+  await toggleRow(el, "m1");
+  expect(placed(el, "m1")).toEqual(odd);
+  expectSaveQuiet(el);
+});
+
+it("an Undo that takes a table off remembers where it stood", async () => {
+  const el = await open();
+  const draft = patchTable(draftFromPlan(terrace()), "m2", { placement: odd });
+  await fromCanvas(el, "floor-plan-change", { draft });
+  await press(el, "undo");
+  await el.shadowRoot!.querySelector("floor-plan-tables-panel")!.updateComplete;
+  await toggleRow(el, "m2");
+  expect(placed(el, "m2")).toEqual(odd);
+});
+
+it("forgets where tables stood when another zone opens", async () => {
+  const getFloorPlan = vi
+    .fn()
+    .mockResolvedValueOnce(withM1(odd))
+    .mockResolvedValueOnce(bar)
+    .mockResolvedValueOnce(withM1(null));
+  const el = await open(stubApi({ getFloorPlan }));
+  await toggleRow(el, "m1");
+  for (const zone of ["z2", "z1"]) {
+    history.pushState(null, "", `/manage/floor-plan/zone/${zone}`);
+    window.dispatchEvent(new PopStateEvent("popstate"));
+    await flush(el);
+  }
+  expect(heading(el)).toBe("Terrace");
+  await toggleRow(el, "m1");
+  expect(placed(el, "m1")).toEqual(expect.objectContaining({ width: 8, height: 8, rotation: 0 }));
+  expect(placed(el, "m1")).not.toEqual(odd);
+});
+
+it.each([
+  ["en-GB", "No room on the plan."],
+  ["es-ES", "No hay sitio en el plano."],
+])(
+  "pressing a never-placed table on a plan with no free spot says so and changes nothing (%s)",
+  async (locale, text) => {
+    setLocale(locale);
+    const floor = { x: 0, y: 0, width: 999, height: 999, shape: "rect" as const, rotation: 0 };
+    const el = await open(stubApi({ getFloorPlan: vi.fn().mockResolvedValue(withM1(floor)) }));
+    await toggleRow(el, "m2");
+    expect(el.shadowRoot!.querySelector("wt-form-actions")!.error).toBe(text);
+    expect(canvas(el).tables.map((t) => t.key)).toEqual(["m1"]);
+    expectSaveQuiet(el);
+    expect(button(el, "undo").disabled).toBe(true);
+  },
+);
+
+const hintText = (el: FloorPlanEditor) =>
+  el.shadowRoot!.querySelector("[data-hint]")?.textContent!.trim() ?? null;
+
+it.each([
+  [
+    "en-GB",
+    "Select a table on the plan to change it. Click a table below to put it on the plan or take it off; it returns to the same spot.",
+  ],
+  [
+    "es-ES",
+    "Selecciona una mesa en el plano para cambiarla. Pulsa una mesa de abajo para ponerla en el plano o quitarla; vuelve al mismo sitio.",
+  ],
+])("with nothing selected, a hint sits above the tables list (%s)", async (locale, text) => {
+  setLocale(locale);
+  await viewport(1280, 800);
+  const el = await open();
+  await expect.poll(() => el.shadowRoot!.querySelector(".side")).not.toBeNull();
+  expect(hintText(el)).toBe(text);
+  const side = el.shadowRoot!.querySelector(".side")!;
+  expect([...side.children].map((c) => c.localName)).toEqual(["p", "floor-plan-tables-panel"]);
+  expect(side.firstElementChild!.hasAttribute("data-hint")).toBe(true);
+  await page.viewport(390, 844);
+  await expect.poll(() => sheet(el)).not.toBeNull();
+  expect([...sheet(el)!.children].map((c) => c.localName)).toEqual([
+    "p",
+    "floor-plan-tables-panel",
+  ]);
+  expect(hintText(el)).toBe(text);
+  await fromCanvas(el, "wt-table-select", { key: "m1" });
+  expect(hintText(el)).toBeNull();
+});
+
 it("Undo of a Delete brings back the table and its join", async () => {
   const joined: FloorPlan = {
     ...terrace(),
@@ -1009,6 +1108,7 @@ it("puts the selected table's panel above the tables list, beside the canvas and
   await expect.poll(() => el.shadowRoot!.querySelector(".side")).not.toBeNull();
   expect(tablePanel(el)).toBeNull();
   await fromCanvas(el, "wt-table-select", { key: "m1" });
+  expect(el.shadowRoot!.querySelector("[data-hint]")).toBeNull();
   const side = el.shadowRoot!.querySelector(".side")!;
   expect([...side.children].map((c) => c.localName)).toEqual([
     "floor-plan-table-panel",

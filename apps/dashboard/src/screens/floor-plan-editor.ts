@@ -33,7 +33,13 @@ import { dashboardPath } from "../navigation.js";
 import { currentLocale, fill, t } from "../i18n/t.js";
 import { LocaleChangeController } from "../state/locale-controller.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
-import type { DashboardApi, DashboardTable, FloorPlan, FloorPlanSave } from "../api/client.js";
+import type {
+  DashboardApi,
+  DashboardTable,
+  FloorPlan,
+  FloorPlanSave,
+  PlanPlacement,
+} from "../api/client.js";
 import {
   checkDraft,
   deleteTable,
@@ -223,6 +229,11 @@ export class FloorPlanEditor extends LitElement {
       header.narrow a.close {
         padding-inline: var(--wt-space-2);
       }
+      .hint {
+        margin: 0 0 var(--wt-space-3);
+        color: var(--wt-color-text-muted);
+        font-size: var(--wt-font-size-sm);
+      }
       .note {
         margin: var(--wt-space-1) 0 0;
         color: var(--wt-color-text-muted);
@@ -357,6 +368,8 @@ export class FloorPlanEditor extends LitElement {
   #opened: FloorPlanDraft | null = null;
   /** The last refresh kept from replacing a changed draft; Undo and Redo take its live tables. */
   #liveFrom: FloorPlanDraft | null = null;
+  /** Where each table stood before a change took it off the plan, so the list can put it back. */
+  #places = new Map<string, PlanPlacement>();
   #scope?: DraftScope<StagedPlan>;
   readonly #scopeId = {};
 
@@ -414,6 +427,9 @@ export class FloorPlanEditor extends LitElement {
     });
     this.addEventListener("floor-plan-delete-ask", (event) => {
       this.deleteAsk = (event as CustomEvent<FloorPlanDeleteAsk>).detail.key;
+    });
+    this.addEventListener("floor-plan-no-room", () => {
+      this.message = actionMessage(() => t("floor_plan_editor.no_room"));
     });
   }
 
@@ -531,6 +547,7 @@ export class FloorPlanEditor extends LitElement {
     this.#liveFrom = null;
     this.selected = null;
     this.deleteAsk = null;
+    this.#places = new Map();
     this.#clearFeedback();
     this.loadError = "zone.not_found";
   }
@@ -551,6 +568,7 @@ export class FloorPlanEditor extends LitElement {
     this.#liveFrom = null;
     this.selected = null;
     this.deleteAsk = null;
+    this.#places = new Map();
     this.loadError = null;
     this.#clearFeedback();
     if (zoneId !== null) void this.#load(zoneId, request);
@@ -581,6 +599,7 @@ export class FloorPlanEditor extends LitElement {
   #change(next: FloorPlanDraft, mergeKey?: string): void {
     if (this.#history === null || next === this.draft) return;
     this.#history.push(next, mergeKey);
+    this.#remember(this.draft, next);
     this.draft = next;
     this.#clearReadMessage();
     this.#followMark(next);
@@ -592,6 +611,7 @@ export class FloorPlanEditor extends LitElement {
   #step(step: FloorPlanDraft | undefined): void {
     if (step === undefined) return;
     const next = this.#liveFrom === null ? step : withLiveTables(step, this.#liveFrom);
+    this.#remember(this.draft, next);
     this.draft = next;
     this.#setTyped([]);
     this.#clearReadMessage();
@@ -602,6 +622,15 @@ export class FloorPlanEditor extends LitElement {
     }
     this.#scope?.changed();
     this.requestUpdate();
+  }
+
+  #remember(from: FloorPlanDraft | null, to: FloorPlanDraft): void {
+    if (from === null) return;
+    const before = new Map(from.tables.map((t) => [t.key, t.placement]));
+    for (const table of to.tables) {
+      const was = before.get(table.key);
+      if (table.placement === null && was != null) this.#places.set(table.key, was);
+    }
   }
 
   /** Typed text stays marked until its field holds a value again, or the draft's value changes. */
@@ -802,6 +831,7 @@ export class FloorPlanEditor extends LitElement {
     this.renderRoot.querySelector("floor-plan-add-join")?.rekey(ids);
     const rekey = rekeyWith(ids);
     this.#rekeyMarks(rekey);
+    this.#places = new Map([...this.#places].map(([key, place]) => [rekey(key), place]));
     this.revision = answer.revision;
     this.outOfDate = false;
     this.#opened = saved;
@@ -946,18 +976,35 @@ export class FloorPlanEditor extends LitElement {
     return this.#taken;
   }
 
-  #marksFor: RefusedTable | null = null;
+  #marksRefused: RefusedTable | null = null;
+  #marksMark: FieldMark | null = null;
+  #marksTyped: readonly TypedMark[] = [];
   #marksLocale: string | null = null;
   #marks: ReadonlyMap<string, string> = new Map();
 
-  /** The same map while the mark and the language stay, so the list does not redraw for it. */
+  /** Each table's standing mark, typed text first as in its panel; the same map while the marks
+   *  and the language stay, so the list does not redraw for it. */
   #listMarks(): ReadonlyMap<string, string> {
-    const refused = this.refused;
+    const { refused, mark, typedMarks } = this;
     const locale = currentLocale();
-    if (refused !== this.#marksFor || locale !== this.#marksLocale) {
-      this.#marksFor = refused;
+    if (
+      refused !== this.#marksRefused ||
+      mark !== this.#marksMark ||
+      typedMarks !== this.#marksTyped ||
+      locale !== this.#marksLocale
+    ) {
+      this.#marksRefused = refused;
+      this.#marksMark = mark;
+      this.#marksTyped = typedMarks;
       this.#marksLocale = locale;
-      this.#marks = refused === null ? new Map() : new Map([[refused.table.key, refused.reason()]]);
+      const marks = new Map<string, string>();
+      const add = (key: string, text: () => string) => {
+        if (!marks.has(key)) marks.set(key, text());
+      };
+      for (const typed of typedMarks) add(typed.key, typed.text);
+      if (mark !== null) add(mark.key, mark.text);
+      if (refused !== null) add(refused.table.key, refused.reason);
+      this.#marks = marks;
     }
     return this.#marks;
   }
@@ -1062,6 +1109,7 @@ export class FloorPlanEditor extends LitElement {
       .draft=${draft}
       .selected=${this.selected}
       .marks=${this.#listMarks()}
+      .places=${this.#places}
       .inSheet=${this.narrow}
     ></floor-plan-tables-panel>`;
     const tablePanel =
@@ -1071,7 +1119,7 @@ export class FloorPlanEditor extends LitElement {
             .tableKey=${this.selected}
             .fieldErrors=${this.#panelErrors(this.selected)}
           ></floor-plan-table-panel>`
-        : nothing;
+        : html`<p class="hint" data-hint>${t("floor_plan_editor.hint")}</p>`;
     const panels = html`${tablePanel}${panel}`;
     return html`<div class="layout ${this.narrow ? "narrow" : ""}">
         ${canvas}${this.narrow ? this.#sheet(draft, panels) : html`<div class="side">${panels}</div>`}
