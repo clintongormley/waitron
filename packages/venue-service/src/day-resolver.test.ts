@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { eq } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
 import {
   CATALOGUE_MIGRATIONS,
@@ -274,6 +275,33 @@ describe("resolveDepartmentDays", () => {
     ]);
   });
 
+  it("closes a named day whose own timetable has no slots", async () => {
+    const v = await autumnAndWinter();
+    const own = await namedDay(v, "2030-11-30", { ownHours: true });
+    await scoped((tx) => saveSpecialDateMenus(tx, v.cfg, own, v.departmentId, [], AT, 0));
+    const days = await departmentDays(v, ["2030-11-30"]);
+    expect(days.get("2030-11-30")?.ranges).toEqual([]);
+  });
+
+  it("closes a named day with its own hours that also closes the whole venue", async () => {
+    const v = await autumnAndWinter();
+    const own = await namedDay(v, "2030-11-30", { ownHours: true });
+    await scoped((tx) =>
+      saveSpecialDateMenus(
+        tx,
+        v.cfg,
+        own,
+        v.departmentId,
+        [{ periodId: v.lateBar, startsAt: "22:00", endsAt: "03:00" }],
+        AT,
+        0,
+      ),
+    );
+    await db.update(specialDates).set({ closeWholeVenue: true }).where(eq(specialDates.id, own));
+    const days = await departmentDays(v, ["2030-11-30"]);
+    expect(days.get("2030-11-30")?.ranges).toEqual([]);
+  });
+
   it("answers an empty map for no days", async () => {
     const v = await autumnAndWinter();
     expect((await departmentDays(v, [])).size).toBe(0);
@@ -354,6 +382,22 @@ describe("resolveZoneClosedDays", () => {
     ]);
     expect(days.get(v.sala)?.get("2030-11-30")).toEqual([]);
     expect(days.get(v.sala)?.get("2030-12-01")).toEqual([]);
+  });
+
+  it("closes nothing on a named day with its own closures that also closes the whole venue", async () => {
+    const v = await zones();
+    const own = await namedDay(v, "2030-11-30", { ownHours: true });
+    await scoped((tx) =>
+      saveZoneClosedDate(tx, v.cfg, own, v.sala, [{ startsAt: "18:00", endsAt: "20:00" }], 0, AT),
+    );
+    await db.update(specialDates).set({ closeWholeVenue: true }).where(eq(specialDates.id, own));
+    const days = await zoneDays(v, [v.sala], ["2030-11-30"]);
+    expect(days.get(v.sala)?.get("2030-11-30")).toEqual([]);
+  });
+
+  it("answers an empty map for no days", async () => {
+    const v = await zones();
+    expect((await zoneDays(v, undefined, [])).size).toBe(0);
   });
 
   it("answers an empty map for an empty zone list", async () => {

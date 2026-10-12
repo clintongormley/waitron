@@ -1,4 +1,4 @@
-import { and, eq, inArray } from "drizzle-orm";
+import { and, asc, eq, inArray } from "drizzle-orm";
 import type { Transaction } from "@waitron/db";
 import { cutoverForBusinessDay, type BusinessDayClock } from "@waitron/shared";
 import { weekdayOf } from "./hours-rules.js";
@@ -68,21 +68,24 @@ export async function resolveDepartmentDays(
         startsAt: menuSlots.startsAt,
         endsAt: menuSlots.endsAt,
       })
-      .from(menuSlots)
-      .innerJoin(menuDayTimetables, eq(menuDayTimetables.id, menuSlots.timetableId))
+      .from(menuDayTimetables)
+      .leftJoin(menuSlots, eq(menuSlots.timetableId, menuDayTimetables.id))
       .where(
         and(
           eq(menuDayTimetables.departmentId, departmentId),
           inArray(menuDayTimetables.specialDateId, plan.ownHoursIds),
         ),
-      )) {
+      )
+      .orderBy(asc(menuSlots.startsAt), asc(menuSlots.id))) {
+      // A timetable row with no slots is a closed day, not a missing timetable.
       const ranges = own.get(row.specialDateId!) ?? [];
       own.set(row.specialDateId!, ranges);
-      ranges.push({
-        periodId: row.periodId,
-        startsAt: wire(row.startsAt),
-        endsAt: wire(row.endsAt),
-      });
+      if (row.startsAt !== null)
+        ranges.push({
+          periodId: row.periodId!,
+          startsAt: wire(row.startsAt),
+          endsAt: wire(row.endsAt!),
+        });
     }
   for (const day of businessDays) {
     const named = plan.named.get(day);
@@ -107,7 +110,7 @@ export async function resolveZoneClosedDays(
   clock: BusinessDayClock,
 ): Promise<Map<string, Map<LocalDate, ClosedRange[]>>> {
   const resolved = new Map<string, Map<LocalDate, ClosedRange[]>>();
-  if (zoneIds?.length === 0) return resolved;
+  if (zoneIds?.length === 0 || businessDays.length === 0) return resolved;
   const zones =
     zoneIds ??
     (
@@ -135,7 +138,8 @@ export async function resolveZoneClosedDays(
           inArray(zoneClosedTimes.specialDateId, plan.ownHoursIds),
           zoneIds === undefined ? undefined : inArray(zoneClosedTimes.zoneId, [...zoneIds]),
         ),
-      )) {
+      )
+      .orderBy(asc(zoneClosedTimes.startsAt), asc(zoneClosedTimes.id))) {
       const key = `${row.zoneId}/${row.specialDateId}`;
       const ranges = own.get(key) ?? [];
       own.set(key, ranges);
