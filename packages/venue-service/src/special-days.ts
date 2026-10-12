@@ -25,6 +25,7 @@ import {
   zoneDays,
 } from "./schema/seasons.js";
 import { menuPeriods } from "./schema/menus.js";
+import { joinTouching } from "./season-weeks.js";
 import { scheduleCutovers } from "./service-day-context.js";
 import { clockTimeSkippedInDay, parseRanges, type ClosedRange } from "./service-day.js";
 import "./errors.js";
@@ -535,7 +536,7 @@ export async function saveSpecialDay(
       .insert(departmentDays)
       .values({ id: dayId, departmentId: entry.ownerId, specialDayDateId });
     await tx.insert(departmentDayRanges).values(
-      entry.ranges.map((range) => ({
+      joinTouching(entry.ranges, (a, b) => a.periodId === b.periodId).map((range) => ({
         dayId,
         departmentId: entry.ownerId,
         periodId: range.periodId,
@@ -555,7 +556,7 @@ export async function saveSpecialDay(
     const dayId = newId();
     await tx.insert(zoneDays).values({ id: dayId, zoneId: entry.ownerId, specialDayDateId });
     await tx.insert(zoneDayRanges).values(
-      entry.ranges.map((range) => ({
+      joinTouching(entry.ranges, (a, b) => a.kind === b.kind).map((range) => ({
         dayId,
         kind: range.kind,
         startsAt: storedTime(range.startsAt),

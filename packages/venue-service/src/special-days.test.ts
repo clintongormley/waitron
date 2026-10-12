@@ -489,6 +489,111 @@ describe("saveSpecialDay", () => {
     expect(after.paint).toEqual(before.paint);
   });
 
+  it("stores touching paint of one period, or of Closed, as one range, and of two periods as two", async () => {
+    const v = await venue();
+    const saved = await save(v, null, {
+      name: "Touching",
+      repeatsYearly: false,
+      dates: dates(["2030-12-24", "2030-12-25"]),
+      paint: [
+        {
+          departmentId: v.restaurant,
+          date: "2030-12-24",
+          ranges: [
+            { periodId: v.lunch, startsAt: "12:00", endsAt: "14:00" },
+            { periodId: v.lunch, startsAt: "14:00", endsAt: "16:00" },
+            { periodId: v.dinner, startsAt: "16:00", endsAt: "18:00" },
+          ],
+        },
+        {
+          departmentId: v.restaurant,
+          date: "2030-12-25",
+          ranges: [
+            { periodId: null, startsAt: "12:00", endsAt: "14:00" },
+            { periodId: null, startsAt: "14:00", endsAt: "16:00" },
+          ],
+        },
+      ],
+    });
+    expect(saved.paint).toEqual([
+      {
+        departmentId: v.restaurant,
+        date: "2030-12-24",
+        ranges: [
+          { periodId: v.lunch, startsAt: "12:00", endsAt: "16:00" },
+          { periodId: v.dinner, startsAt: "16:00", endsAt: "18:00" },
+        ],
+      },
+      {
+        departmentId: v.restaurant,
+        date: "2030-12-25",
+        ranges: [{ periodId: null, startsAt: "12:00", endsAt: "16:00" }],
+      },
+    ]);
+  });
+
+  it("stores touching zone paint of one kind as one range, and of two kinds as two", async () => {
+    const v = await venue();
+    const saved = await save(v, null, {
+      name: "Touching zone",
+      repeatsYearly: false,
+      dates: dates(["2030-12-24"]),
+      zonePaint: [
+        {
+          zoneId: v.sala,
+          date: "2030-12-24",
+          ranges: [
+            { kind: "closed", startsAt: "12:00", endsAt: "14:00" },
+            { kind: "closed", startsAt: "14:00", endsAt: "16:00" },
+            { kind: "open", startsAt: "16:00", endsAt: "18:00" },
+          ],
+        },
+      ],
+    });
+    expect(saved.zonePaint).toEqual([
+      {
+        zoneId: v.sala,
+        date: "2030-12-24",
+        ranges: [
+          { kind: "closed", startsAt: "12:00", endsAt: "16:00" },
+          { kind: "open", startsAt: "16:00", endsAt: "18:00" },
+        ],
+      },
+    ]);
+  });
+
+  it("saves without the clock-skip check when the venue's clock cannot be read", async () => {
+    const v = await venue();
+    await db
+      .update(locations)
+      .set({ timeZone: "Mars/Base" })
+      .where(eq(locations.id, v.cfg.locationId));
+    const saved = await save(
+      v,
+      null,
+      {
+        name: "Cambio de hora",
+        repeatsYearly: false,
+        dates: dates(["2026-03-28"]),
+        paint: [
+          {
+            departmentId: v.restaurant,
+            date: "2026-03-28",
+            ranges: [{ periodId: v.dinner, startsAt: "02:15", endsAt: "04:00" }],
+          },
+        ],
+      },
+      new Date("2026-01-10"),
+    );
+    expect(saved.paint).toEqual([
+      {
+        departmentId: v.restaurant,
+        date: "2026-03-28",
+        ranges: [{ periodId: v.dinner, startsAt: "02:15", endsAt: "04:00" }],
+      },
+    ]);
+  });
+
   it("a Closed range on a season week is still refused by the week's own parser", async () => {
     const v = await venue();
     const week = [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({
