@@ -1049,7 +1049,6 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
       designated: {
         locationId: "22222222-2222-4222-8222-222222222222",
         nodeId: "44444444-4444-4444-8444-444444444444",
-        seriesId: "55555555-5555-4555-8555-555555555555",
       },
       tenant: { country: "ES", taxId: "80000001K" },
       primaryNode: { name: "Caja 1", filingModule: "fiscal-verifactu", taxModule: null },

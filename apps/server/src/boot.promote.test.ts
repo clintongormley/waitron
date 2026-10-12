@@ -400,7 +400,7 @@ async function seedMirrorIdentity(
 }
 
 describe("promote: mirror → primary, in-process, restart-into-primary", () => {
-  it("exposes promoteMirrorToPrimary (not the local method), promotes, and rewrites trading.env to the cloud's own series", async () => {
+  it("exposes promoteMirrorToPrimary, promotes, and persists identity without a series cache", async () => {
     const seed = await seedMirrorIdentity(mirrorDb);
     const port = await freePort();
     // Its own state dir, so the rewritten `trading.env` can be read back.

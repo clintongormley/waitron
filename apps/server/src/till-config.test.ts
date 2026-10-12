@@ -191,7 +191,7 @@ describe("tryLoadTillConfig", () => {
     });
   });
 
-  it("names the FIRST missing variable (in WAITRON_TILL_{NODE,LOCATION}_ID order) when several are absent", () => {
+  it("names the missing node when the location is present", () => {
     // NODE is absent while LOCATION is present.
     const error = captureThrow(() =>
       tryLoadTillConfig({
