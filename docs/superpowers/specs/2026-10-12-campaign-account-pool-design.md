@@ -96,6 +96,9 @@ Rules, in order:
    assigned and paused, and the runner keeps skipping until the pause ends.
 4. **On first run, and whenever a lane has no line yet**, lanes of one engine are spread across
    different accounts where there are enough, using the same measure.
+   _Changed 2026-10-12 (workspace-tools PR #18): a new lane takes the account whose allowance per
+   day, divided among the lanes it would then drive, is largest, so it shares a healthy account
+   rather than take a nearly used one; an account whose usage was never read is the last resort._
 5. **The Codex review seat of a Claude lane** is the Codex account with the most allowance left per
    day. If both are paused, the seat keeps its last account and `finish-branch`'s existing fallback
    applies ("If Codex is unavailable, dispatch it as an Opus subagent and say so in the report").
