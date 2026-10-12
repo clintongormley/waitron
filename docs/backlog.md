@@ -292,9 +292,8 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   asesor answers and the owner decides.** [Detail](backlog/fiscal.md#a275-invoice-a-bill-paid-later-by-transfer-full-or-simplified-invoice--waits-on-asesor-q42-2026-10-06)
 
 - **W41s. Fiscal prevention and offline recovery** — DESIGN AND REVISED PLAN APPROVED (2026-10-04).
-  **Update, 2026-10-08: paused and not queued.** The owner paused the remaining W41s tasks on
-  2026-10-06 ("pause the other w41 tasks for now, continue with the non-w41 tasks") and on
-  2026-10-08 took them off the campaign queues; take them from here when they are un-paused. Q5(f)
+  **Update, 2026-10-12: queued again in Lane E.** The owner authorised landing after green
+  checks and resolved findings; an important unresolved decision still goes to the owner. Q5(f)
   and Q33–Q40 in the adviser document are revised, and Q41 covers issued invoices missing from the
   backup. Task 3 can use the published receipts; D2 retains its remaining plan gates, and D5 still
   needs old-chain evidence and its adviser answer. [Detail](backlog/fiscal.md#w41s-fiscal-prevention-and-offline-recovery--design-and-revised-plan-approved-2026-10-04)
@@ -308,11 +307,9 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
 
 - **Follow-up (W41s Task 8, held-record resolution): release a brake hold (send the held records
   again).** — left open by W41s-3b (#1303), which says "Nothing releases the hold yet." Task 8 as
-  planned resolves records that have a case of their own; a record the brake holds has none. While
-  held, those records are not retried hourly. W41s-3d (a chain held by repeated same-code refusals
-  sends its first held record once an hour) is built and reviewed on draft PR
-  [#1309](https://github.com/clintongormley/waitron/pull/1309), branch
-  `feat/w41s-brake-hourly-probe`, kept as it was; it needs a rebase before landing.
+  planned resolves records that have a case of their own; a record the brake holds has none.
+  The hourly retry in [#1309](https://github.com/clintongormley/waitron/pull/1309) releases eligible
+  brake holds after an accept or a different-code refusal. A manual release remains Task 8.
   [Detail](backlog/fiscal.md#w41s-fiscal-prevention-and-offline-recovery--design-and-revised-plan-approved-2026-10-04)
 
 - **Still open after W41s-3c (#1304)** — in AEAT's preproduction environment two runs of shuffled

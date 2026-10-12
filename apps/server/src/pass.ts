@@ -98,8 +98,9 @@ export async function runPass(deps: PassDeps, now: Date): Promise<PassReport> {
       });
       // DECISION: `recordsHalted`/`incidentsRaised` do NOT feed `parked` or any other field that
       // flips `/health`; `parked` is always `0` for this duty. A record AEAT rejects, or one that
-      // conflicts with AEAT's copy, already gets an incident and a filing case (`raiseIncident`,
-      // `openCase`, packages/fiscal-verifactu/src/drain.ts); a record held behind it gets neither and
+      // conflicts with AEAT's copy, already gets a filing case, and an incident unless it is a held
+      // chain's hourly retry refused with its run's code (`raiseIncident`, `openCase`,
+      // packages/fiscal-verifactu/src/drain.ts); a record held behind it gets neither and
       // counts in the `fiscal.submission_stopped` alert. The dashboard's alerts show both to anyone
       // holding `fiscal.view`; and a record AEAT rejects can be one invoice's data problem, not a
       // sign that this process is stuck.

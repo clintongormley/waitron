@@ -59,3 +59,7 @@ is GitHub issues; for now a bundle only needs to be copy-pastable.
   first; its 340 px table viewport had 906 px of scrollable content, and a 566 px horizontal pan
   reached the remaining text. Give the alert text more room at phone width while keeping its
   handling action reachable.
+  W41s-3d qualification (2026-10-11) also shows the repeated-refusals message's line ends
+  cut beside pinned Actions in mounted 390 px fixtures, in English and Spanish and both themes.
+  Desktop 1280 px fixtures show the complete message. These are controlled alert-data fixtures,
+  not an authenticated server session; the table's phone readability remains open.

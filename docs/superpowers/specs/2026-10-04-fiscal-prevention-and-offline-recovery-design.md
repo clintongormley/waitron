@@ -157,7 +157,13 @@ sent and its answer is unreadable or missing, the records added after it are sen
 and a later record is held only once the refusals immediately before it make a run of three. The
 chain stays stopped until a release action exists (a follow-up of Task 8), and its held
 records are not retried hourly meanwhile; the ongoing alert `fiscal.refusals_repeated` names the
-code and the run's length.
+code and the run's length. **The no-release/no-hourly-retry statements above describe the
+landed W41s-3b version. Update, 2026-10-12 (W41s-3d):** the hourly retry sends
+a brake-held chain's first held record once an hour (`claimProbes`); an accept or a refusal with
+another code can release eligible brake holds, and a refusal with the run's code keeps them held.
+The alert's “Since” retains the time the run reached three same-code refusals (owner, 2026-10-12).
+Details:
+[W41s details](../../backlog/fiscal.md#w41s-fiscal-prevention-and-offline-recovery--design-and-revised-plan-approved-2026-10-04).
 
 ## 6. Approved scope, remaining technical decisions and adviser questions
 

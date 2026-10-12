@@ -170,7 +170,7 @@ describe("fiscalSubmissionSource — a chain held after refusals with one code",
     return { seeded, lastRefusal: lastRefusal! };
   }
 
-  it("raises one error for the held chain, naming the code and the whole run, since the run's last refusal", async () => {
+  it("raises one error for the held chain, naming the code and the whole run, since the run reached the stop threshold", async () => {
     const aeat = fakeAeat();
     const { seeded, lastRefusal } = await runOfFour(aeat);
     const held = await appendPendingAlta(suite.db, seeded, 7);

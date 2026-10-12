@@ -2345,6 +2345,14 @@ would cut short of a full envío. Which name a record filed across a rename must
 question for the asesor (Q37(d), S18 in the shortened list of `docs/compliance/asesor-questions.md`). Guard:
 `packages/fiscal-verifactu/src/drain.names.test.ts`.
 
+The due count also includes hourly retries and pending rows a brake hold or a name boundary may
+leave out. Before the sending wait expires, the assembled batch must fill the cap; a partial batch
+rolls its claim transaction back so ordinary and probe attempt stamps remain unchanged. The
+`drain.probe.gate.test.ts` cases reproduced early single-record sends from an excluded successor
+and a differently named probe at an injected cap of two. The same-name ordinary/probe full-batch
+control still sends before the wait. Run them with
+`pnpm --filter @waitron/fiscal-verifactu exec vitest run src/drain.probe.gate.test.ts`.
+
 ## The box's BOOT path and the bucket rebuild carry an ahead-of-image check; no other migrating path does, and `waitron.sh install <ref>` is a one-way door
 
 `assertNotAhead` (`@waitron/provisioning`) compares the database's journal hashes against the

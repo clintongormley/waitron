@@ -114,7 +114,7 @@ async function refusalsRepeated(tx: Transaction): Promise<OngoingAlert[]> {
     ),
     runs as materialized (
       select held.node_id, held.sif_id, held.secuencia, last_envio.codigo_error as codigo,
-        last_case.opened_at, (
+        (
           select preceding.secuencia from registros_facturacion preceding
           left join envios preceding_envio on preceding_envio.registro_id = preceding.id
           where preceding.node_id = held.node_id and preceding.sif_id = held.sif_id
@@ -129,7 +129,15 @@ async function refusalsRepeated(tx: Transaction): Promise<OngoingAlert[]> {
       join filing_cases last_case on last_case.registro_id = held.last_id
       where last_envio.estado = 'rechazado' and last_envio.codigo_error is not null
     )
-    select sif_id, codigo, opened_at, (
+    select sif_id, codigo, (
+      select stop_case.opened_at from registros_facturacion stop_record
+      join filing_cases stop_case on stop_case.registro_id = stop_record.id
+      where stop_record.node_id = runs.node_id and stop_record.sif_id = runs.sif_id
+        and stop_record.secuencia < runs.secuencia
+        and stop_record.secuencia > coalesce(runs.break_secuencia, 0)
+      order by stop_record.secuencia
+      limit 1 offset ${SAME_CODE_REFUSAL_LIMIT - 1}
+    ) as opened_at, (
       select count(*) from registros_facturacion preceding
       where preceding.node_id = runs.node_id and preceding.sif_id = runs.sif_id
         and preceding.secuencia < runs.secuencia
