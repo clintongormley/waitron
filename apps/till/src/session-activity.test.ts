@@ -396,12 +396,41 @@ describe("bounded reader-payment idle protection", () => {
     void activity.stop();
   });
 
-  it("does not renew the ten-minute protection on interactions or repeated configuration", () => {
+  it("does not renew the ten-minute protection on repeated configuration", () => {
     const { activity, config, onIdle } = running();
     activity.configure({ ...config, readerPaymentPending: true });
     vi.advanceTimersByTime(599_999);
-    activity.noteInteraction();
     activity.configure({ ...config, readerPaymentPending: true });
+    expect(onIdle).not.toHaveBeenCalled();
+    vi.advanceTimersByTime(1);
+    expect(onIdle).toHaveBeenCalledOnce();
+    void activity.stop();
+  });
+
+  it("keeps normal idle protection from a real interaction after the payment-only grace expires", () => {
+    const { activity, config, onIdle } = running();
+    activity.configure({ ...config, readerPaymentPending: true });
+    vi.advanceTimersByTime(240_000);
+    activity.noteInteraction();
+    vi.advanceTimersByTime(240_000);
+    activity.noteInteraction();
+    vi.advanceTimersByTime(60_000);
+    activity.noteInteraction();
+    vi.advanceTimersByTime(90_000);
+    expect(onIdle).not.toHaveBeenCalled();
+    vi.advanceTimersByTime(209_999);
+    expect(onIdle).not.toHaveBeenCalled();
+    vi.advanceTimersByTime(1);
+    expect(onIdle).toHaveBeenCalledOnce();
+    void activity.stop();
+  });
+
+  it("starts the normal idle period when idle sign-out is enabled during an old payment", () => {
+    const { activity, config, onIdle } = running(null);
+    activity.configure({ ...config, readerPaymentPending: true });
+    vi.advanceTimersByTime(1_200_000);
+    activity.configure({ ...config, timeoutSeconds: 300, readerPaymentPending: true });
+    vi.advanceTimersByTime(299_999);
     expect(onIdle).not.toHaveBeenCalled();
     vi.advanceTimersByTime(1);
     expect(onIdle).toHaveBeenCalledOnce();

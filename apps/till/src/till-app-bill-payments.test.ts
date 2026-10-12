@@ -2781,6 +2781,31 @@ describe("till-app: a bill payment on the card reader", () => {
     }
   });
 
+  it("A532 leaves hand-keyed card waits subject to the ordinary idle sign-out", async () => {
+    const { el } = await mountApp({
+      getTill: vi.fn().mockResolvedValue({ ...till, inactivityTimeoutSeconds: 30 }),
+      previewBillPayment: vi.fn().mockResolvedValue(cardPreview),
+      takeBillPayment: vi.fn(() => new Promise(() => {})),
+    });
+    await openTable(el);
+    await openDialog(el, "contribution");
+    await type(el, "amount", "40");
+    await press(el, 'input[name="method"][value="card"]');
+    await press(el, "[data-pay-continue]");
+    await press(el, "[data-pay-confirm]");
+    expect(api.takeBillPayment).toHaveBeenCalledOnce();
+    expect(sent()[0]).toMatchObject({ entry: "manual", method: "card" });
+    vi.useFakeTimers({ toFake: ["Date", "setTimeout", "clearTimeout"] });
+    try {
+      emit(el, "pointerdown");
+      await vi.advanceTimersByTimeAsync(30_000);
+      expect((el as unknown as { operatorName: string }).operatorName).toBe("");
+      expect(dialog(el)).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("A532 keeps its own reader payment signed in beyond the idle time, then restarts the full idle period", async () => {
     let answer!: (value: BillPaymentResult) => void;
     const take = vi.fn(

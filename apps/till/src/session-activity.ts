@@ -23,9 +23,10 @@ export interface SessionActivityDeps {
 interface SessionActivityConfig {
   loggedIn: boolean;
   kind: DeviceKind;
-  /** Seconds of no interaction before {@link SessionActivityConfig.onIdle}; `null` disables idle logout. */
+  /** Ordinary idle period; `null` disables idle logout, including during reader waits. */
   timeoutSeconds: number | null;
   onIdle: () => void;
+  /** An own reader request defers idle logout for at most ten minutes without interaction. */
   readerPaymentPending?: boolean;
 }
 
@@ -35,8 +36,6 @@ function detectWakeLock(): WakeLockLike | undefined {
 }
 
 /**
- * Holds a screen wake lock (always on a KDS station, which never logs in; otherwise only while an
- * operator is logged in) and fires `onIdle` after `timeoutSeconds` without interaction (never on a KDS).
  * The browser drops the wake lock when the tab hides, so the caller wires {@link reacquire} to
  * `visibilitychange`.
  */
@@ -61,6 +60,7 @@ export class SessionActivity {
   #wakeGeneration = 0;
   /** When the idle logout is due; a timer that fires before it re-arms for the remainder. */
   #deadline = 0;
+  #idleDeadline = 0;
   #readerPaymentStarted: number | undefined;
 
   constructor(deps: SessionActivityDeps = {}) {
@@ -72,6 +72,8 @@ export class SessionActivity {
 
   /** Update who/what the device is; re-applies the wake lock and idle timer immediately when active. */
   configure(config: SessionActivityConfig): void {
+    const sameReaderWait = this.#config.readerPaymentPending && config.readerPaymentPending;
+    const timeoutChanged = this.#config.timeoutSeconds !== config.timeoutSeconds;
     if (config.readerPaymentPending) {
       this.#readerPaymentStarted ??= this.#now();
     } else {
@@ -80,7 +82,7 @@ export class SessionActivity {
     this.#config = config;
     if (this.#active) {
       void this.#applyWakeLock();
-      this.#armIdleTimer();
+      this.#armIdleTimer(!sameReaderWait || timeoutChanged);
     }
   }
 
@@ -163,16 +165,17 @@ export class SessionActivity {
     }
   }
 
-  #armIdleTimer(): void {
+  #armIdleTimer(resetIdle = true): void {
     this.#clearIdleTimer();
     if (!this.#shouldRunIdleTimer()) return;
     const ms = this.#config.timeoutSeconds! * 1000;
     const now = this.#now();
-    // A stuck request cannot renew its protection through taps or configuration refreshes.
-    this.#deadline =
-      this.#readerPaymentStarted === undefined
-        ? now + ms
-        : this.#readerPaymentStarted + Math.max(ms, 600_000);
+    if (resetIdle) this.#idleDeadline = now + ms;
+    // The reader's grace is fixed; staff interaction retains the ordinary idle protection.
+    this.#deadline = Math.max(
+      this.#idleDeadline,
+      this.#readerPaymentStarted === undefined ? 0 : this.#readerPaymentStarted + 600_000,
+    );
     this.#timer = this.#setTimer(this.#onTimer, Math.max(0, this.#deadline - now));
   }
 

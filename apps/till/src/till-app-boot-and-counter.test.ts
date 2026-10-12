@@ -5275,7 +5275,7 @@ describe("own card payment and idle sign-out (A532)", () => {
 
   it("locks after ten minutes of a stuck own reader request and ignores its late capture", async () => {
     let answer!: (value: unknown) => void;
-    const { el, c } = await waiting(
+    const { el } = await waiting(
       vi.fn(
         () =>
           new Promise((resolve) => {
@@ -5284,7 +5284,6 @@ describe("own card payment and idle sign-out (A532)", () => {
       ),
     );
     await vi.advanceTimersByTimeAsync(599_999);
-    emit(c, "pointerdown");
     expect(privateState<string>(el, "operatorName")).toBe("Ana");
     await vi.advanceTimersByTimeAsync(1);
     expect(privateState<string>(el, "operatorName")).toBe("");
