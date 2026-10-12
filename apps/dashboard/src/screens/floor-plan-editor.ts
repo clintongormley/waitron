@@ -11,6 +11,7 @@ import {
   type FloorPlanCanvasCopy,
   type PlanCanvasTable,
   type TableMove,
+  type TableResize,
   type TableRotate,
   type TableSelect,
   type WtFloorPlanCanvas,
@@ -46,6 +47,7 @@ import {
   moveTable,
   rekeyDraft,
   rekeyWith,
+  resizeTable,
   restoreTable,
   rotateTable,
   sameDraft,
@@ -942,6 +944,12 @@ export class FloorPlanEditor extends LitElement {
     this.#change(rotateTable(this.draft, event.detail.key, event.detail.rotation));
   };
 
+  readonly #onResize = (event: CustomEvent<TableResize>): void => {
+    if (this.draft === null) return;
+    const { key, ...box } = event.detail;
+    this.#change(resizeTable(this.draft, key, box));
+  };
+
   readonly #onSelect = (event: CustomEvent<TableSelect>): void => {
     this.selected = event.detail.key;
   };
@@ -1113,6 +1121,8 @@ export class FloorPlanEditor extends LitElement {
         label: t("floor_plan_editor.title"),
         fixed: t("floor_plan_editor.fixed"),
         rotate: t("floor_plan_editor.rotate"),
+        keys: t("floor_plan_editor.keys"),
+        size: t("floor_plan_editor.size"),
       };
     }
     return this.#copy;
@@ -1126,6 +1136,7 @@ export class FloorPlanEditor extends LitElement {
       .bottomInset=${this.narrow ? this.sheetOverlap : 0}
       @wt-table-move=${this.#onMove}
       @wt-table-rotate=${this.#onRotate}
+      @wt-table-resize=${this.#onResize}
       @wt-table-select=${this.#onSelect}
     ></wt-floor-plan-canvas>`;
     const panel = html`<floor-plan-tables-panel

@@ -12,6 +12,7 @@ import {
   rekeyDraft,
   removeJoin,
   restoreTable,
+  resizeTable,
   rotateTable,
   sameDraft,
   saveFromDraft,
@@ -268,6 +269,31 @@ describe("floor plan draft", () => {
       rotation: 45,
     });
     expect(table(d, "m1").placement).toEqual(m1Placement);
+  });
+
+  it("resizes a placed table, keeping its shape and turn, and leaves a spare as it was", () => {
+    const d = rotateTable(
+      patchTable(open(), "m1", { placement: { ...m1Placement, shape: "round" } }),
+      "m1",
+      30,
+    );
+    const before = structuredClone(d);
+    const resized = resizeTable(d, "m1", { x: 1, y: 4, width: 9, height: 3 });
+    expect(table(resized, "m1").placement).toEqual({
+      x: 1,
+      y: 4,
+      width: 9,
+      height: 3,
+      shape: "round",
+      rotation: 30,
+    });
+    expect({ ...table(resized, "m1"), placement: null }).toEqual({
+      ...table(d, "m1"),
+      placement: null,
+    });
+    expect(table(resized, "m9")).toBe(table(d, "m9"));
+    expect(d).toEqual(before);
+    expect(resizeTable(d, "m2", { x: 1, y: 4, width: 9, height: 3 })).toEqual(d);
   });
 
   it("places a table at the first free spot as an 8 × 8 rectangle", () => {

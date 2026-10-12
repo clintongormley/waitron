@@ -250,6 +250,23 @@ it("a turn from the canvas turns the table", async () => {
   expectSaveAwake(el);
 });
 
+it("a resize from the canvas changes the draft, wakes Save and is one Undo step each", async () => {
+  const el = await open();
+  expectSaveQuiet(el);
+  await fromCanvas(el, "wt-table-resize", { key: "m1", x: 1, y: 3, width: 9, height: 8 });
+  expect(placed(el, "m1")).toMatchObject({ x: 1, y: 3, width: 9, height: 8, rotation: 0 });
+  expectSaveAwake(el);
+  await fromCanvas(el, "wt-table-resize", { key: "m1", x: 1, y: 3, width: 9, height: 10 });
+  expect(placed(el, "m1")).toMatchObject({ x: 1, y: 3, width: 9, height: 10 });
+  await press(el, "undo");
+  expect(placed(el, "m1")).toMatchObject({ x: 1, y: 3, width: 9, height: 8 });
+  expectSaveAwake(el);
+  await press(el, "undo");
+  expect(placed(el, "m1")).toMatchObject({ x: 2, y: 3, width: 8, height: 8 });
+  expectSaveQuiet(el);
+  expect(button(el, "undo").disabled).toBe(true);
+});
+
 it("selecting a table is not a change", async () => {
   const el = await open();
   await fromCanvas(el, "wt-table-select", { key: "m1" });
@@ -414,6 +431,10 @@ it("names the canvas's fixed tables and turn handle in the dashboard's language"
   const root = canvas(el).shadowRoot!;
   expect(root.querySelector(".table[data-key=m1]")!.getAttribute("aria-label")).toBe("T1, Fija");
   expect(root.querySelector(".rotate-handle")!.getAttribute("aria-label")).toBe("Girar T1");
+  expect(root.querySelector("#keys")!.textContent).toBe(
+    "Las flechas la mueven. Mayús y las flechas cambian su tamaño.",
+  );
+  expect(canvas(el).copy.size).toBe("{width} por {height}");
 });
 
 it("a live language switch renames the canvas's fixed tables and turn handle", async () => {
@@ -427,12 +448,17 @@ it("a live language switch renames the canvas's fixed tables and turn handle", a
   const root = canvas(el).shadowRoot!;
   const marker = () => root.querySelector(".table[data-key=m1]")!.getAttribute("aria-label");
   const handle = () => root.querySelector(".rotate-handle")!.getAttribute("aria-label");
+  const keys = () => root.querySelector("#keys")!.textContent;
   expect([marker(), handle()]).toEqual(["T1, Fixed", "Rotate T1"]);
+  expect(keys()).toBe("Arrow keys move it. Shift and arrow keys resize it.");
+  expect(canvas(el).copy.size).toBe("{width} by {height}");
   setLocale("es-ES");
   await el.updateComplete;
   await canvas(el).updateComplete;
   expect(marker()).toBe("T1, Fija");
   expect(handle()).toBe("Girar T1");
+  expect(keys()).toBe("Las flechas la mueven. Mayús y las flechas cambian su tamaño.");
+  expect(canvas(el).copy.size).toBe("{width} por {height}");
 });
 
 it("a change of selection hands the canvas the same tables and copy", async () => {

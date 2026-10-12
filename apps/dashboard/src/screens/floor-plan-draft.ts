@@ -192,6 +192,17 @@ export function moveTable(
   );
 }
 
+export function resizeTable(
+  draft: FloorPlanDraft,
+  key: string,
+  box: { x: number; y: number; width: number; height: number },
+): FloorPlanDraft {
+  const { x, y, width, height } = box;
+  return mapTable(draft, key, (t) =>
+    t.placement === null ? t : { ...t, placement: { ...t.placement, x, y, width, height } },
+  );
+}
+
 export function rotateTable(draft: FloorPlanDraft, key: string, rotation: number): FloorPlanDraft {
   return mapTable(draft, key, (t) =>
     t.placement === null ? t : { ...t, placement: { ...t.placement, rotation } },
