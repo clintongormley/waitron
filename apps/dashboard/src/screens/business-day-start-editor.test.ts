@@ -293,7 +293,7 @@ it("shows a range clashing in four seasons as one line", async () => {
   const { el } = await rig({
     previewBusinessDayStart: async () => ({
       ...preview(),
-      conflictCount: 5,
+      conflictCount: 2,
       conflicts: [
         ...["spring", "summer", "autumn", "winter"].map((seasonId) => ({
           departmentId: "d",
@@ -331,7 +331,9 @@ it("shows a range clashing in four seasons as one line", async () => {
   expect(lines).toHaveLength(2);
   expect(lines[0]).toContain("Wed");
   expect(lines[1]).toContain("Thu");
-  expect(q(el, "[data-test=conflicts]")?.textContent).toContain("5");
+  expect(q(el, "[data-test=conflicts]")?.textContent?.replace(/\s+/g, " ").trim()).toBe(
+    "Conflicting schedules: 2. Review opening hours",
+  );
 });
 
 it.each([
