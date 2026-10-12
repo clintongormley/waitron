@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from "vitest";
 import { page } from "vitest/browser";
-import type { WtButton, WtFloorPlanCanvas } from "@waitron/ui";
+import type { WtButton, WtFloorPlanCanvas, WtModal } from "@waitron/ui";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import "./floor-plan-editor.js";
 import type { FloorPlanEditor } from "./floor-plan-editor.js";
@@ -199,6 +199,33 @@ it("a selected new table keeps its selection under its master id", async () => {
   expect(api.getFloorPlan).toHaveBeenCalledTimes(2);
   expect(canvas(el).selected).toBe("m5");
   expect(canvas(el).tables.map((t) => t.key)).toEqual(["m1", "m5"]);
+});
+
+it("a delete question opened on a new table while its save is sent deletes it under its master id", async () => {
+  const write = deferred<{ revision: number; ids: Record<string, string> }>();
+  const el = await open(
+    stubApi({
+      saveFloorPlan: vi.fn().mockReturnValue(write.promise),
+      getFloorPlan: vi.fn().mockResolvedValueOnce(plan()).mockResolvedValue(afterFirstSave),
+    }),
+  );
+  await fromCanvas(el, "floor-plan-change", { draft: withT5() });
+  await press(el, "save");
+  const list = el.shadowRoot!.querySelector("floor-plan-tables-panel")!;
+  await list.updateComplete;
+  list
+    .shadowRoot!.querySelector<HTMLElement>('li[data-table="new:1"] [data-action=delete]')!
+    .click();
+  await flush(el);
+  expect(el.shadowRoot!.querySelector<WtModal>("wt-modal[data-dialog=delete-table]")!.heading).toBe(
+    "Delete T5?",
+  );
+  write.resolve({ revision: 4, ids: { ...savedIds, "new:1": "m5" } });
+  await flush(el);
+  await flush(el);
+  expect(canvas(el).tables.some((t) => t.key === "m5")).toBe(true);
+  await press(el, "delete-confirm");
+  expect(canvas(el).tables.some((t) => t.key === "m5")).toBe(false);
 });
 
 it("a failed re-read after a save shows as a read's failure, and the next Save sends master ids", async () => {

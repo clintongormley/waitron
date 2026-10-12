@@ -15,16 +15,7 @@ import {
   type DraftTable,
   type FloorPlanDraft,
 } from "./floor-plan-draft.js";
-import type { FloorPlanSelect } from "./floor-plan-editor.js";
-
-export interface FloorPlanDeleteAsk {
-  key: string;
-}
-
-/** A spare table that `placeTable` found no free spot for. */
-export interface FloorPlanNoRoom {
-  key: string;
-}
+import type { FloorPlanDeleteAsk, FloorPlanNoRoom, FloorPlanSelect } from "./floor-plan-editor.js";
 
 @customElement("floor-plan-tables-panel")
 export class FloorPlanTablesPanel extends LitElement {
@@ -139,7 +130,7 @@ export class FloorPlanTablesPanel extends LitElement {
         color: var(--wt-color-danger);
         font-size: var(--wt-font-size-sm);
       }
-      .hidden {
+      .visually-hidden {
         position: absolute;
         width: 1px;
         height: 1px;
@@ -211,7 +202,7 @@ export class FloorPlanTablesPanel extends LitElement {
         ></span>
         <span class="name" data-name>${name}</span>
         <span
-          ><span class="hidden">${t("floor_plan_editor.seats")} </span
+          ><span class="visually-hidden">${t("floor_plan_editor.seats")} </span
           ><span data-seats>${table.seats ?? "—"}</span></span
         >
       </button>

@@ -26,7 +26,6 @@ import "./floor-plan-add-join.js";
 import "./floor-plan-add-tables.js";
 import "./floor-plan-table-panel.js";
 import "./floor-plan-tables-panel.js";
-import type { FloorPlanDeleteAsk } from "./floor-plan-tables-panel.js";
 import { bookedReason } from "./floor-plan-booked.js";
 import { DashboardQueries } from "../api/query-controller.js";
 import { dashboardPath } from "../navigation.js";
@@ -66,6 +65,15 @@ export interface FloorPlanAddJoinAsk {
   tableKey: string;
 }
 
+export interface FloorPlanDeleteAsk {
+  key: string;
+}
+
+/** A spare table that `placeTable` found no free spot for. */
+export interface FloorPlanNoRoom {
+  key: string;
+}
+
 /** A panel field whose typed text the draft cannot hold. */
 export type FloorPlanTypedField = "seats" | "width" | "height";
 
@@ -92,6 +100,8 @@ interface EditorMessage {
   from: "read" | "action";
   /** The generic sentence standing for a field's own; it goes when that field's mark goes. */
   fix?: true;
+  /** Says a press changed nothing, so the draft's next change makes it untrue. */
+  noRoom?: true;
 }
 
 /** A table field a side panel shows, so a refusal naming it can sit beside it. */
@@ -435,7 +445,7 @@ export class FloorPlanEditor extends LitElement {
       this.deleteAsk = (event as CustomEvent<FloorPlanDeleteAsk>).detail.key;
     });
     this.addEventListener("floor-plan-no-room", () => {
-      this.message = actionMessage(() => t("floor_plan_editor.no_room"));
+      this.message = { ...actionMessage(() => t("floor_plan_editor.no_room")), noRoom: true };
     });
   }
 
@@ -608,6 +618,7 @@ export class FloorPlanEditor extends LitElement {
     this.#remember(this.draft, next);
     this.draft = next;
     this.#clearReadMessage();
+    this.#clearNoRoom();
     this.#followMark(next);
     this.#followRefused(next);
     this.#scope?.changed();
@@ -621,6 +632,7 @@ export class FloorPlanEditor extends LitElement {
     this.draft = next;
     this.#setTyped([]);
     this.#clearReadMessage();
+    this.#clearNoRoom();
     this.#followMark(next);
     this.#followRefused(next);
     if (this.selected !== null && !next.tables.some((table) => table.key === this.selected)) {
@@ -680,6 +692,10 @@ export class FloorPlanEditor extends LitElement {
 
   #clearReadMessage(): void {
     if (this.message?.from === "read") this.message = null;
+  }
+
+  #clearNoRoom(): void {
+    if (this.message?.noRoom) this.message = null;
   }
 
   #showReadFailure(error: unknown): void {
@@ -845,6 +861,7 @@ export class FloorPlanEditor extends LitElement {
     this.#history?.reset(current);
     this.draft = current;
     if (this.selected !== null) this.selected = rekey(this.selected);
+    if (this.deleteAsk !== null) this.deleteAsk = rekey(this.deleteAsk);
     this.#scope?.changed();
     void this.#reread(zoneId, ++this.#request, false);
   };

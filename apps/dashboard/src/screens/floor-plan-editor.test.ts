@@ -1063,6 +1063,44 @@ it.each([
   },
 );
 
+const fullFloor = { x: 0, y: 0, width: 999, height: 999, shape: "rect" as const, rotation: 0 };
+const actionMessage = (el: FloorPlanEditor) =>
+  el.shadowRoot!.querySelector("wt-form-actions")!.error;
+
+it("the no-room message goes once a later press puts the spare table on the plan", async () => {
+  const el = await open(stubApi({ getFloorPlan: vi.fn().mockResolvedValue(withM1(fullFloor)) }));
+  await toggleRow(el, "m2");
+  expect(actionMessage(el)).toBe("No room on the plan.");
+  await toggleRow(el, "m1");
+  await toggleRow(el, "m2");
+  expect(canvas(el).tables.map((t) => t.key)).toEqual(["m2"]);
+  expect(actionMessage(el)).toBe("");
+});
+
+it("the no-room message goes when Undo steps the draft back", async () => {
+  const el = await open(stubApi({ getFloorPlan: vi.fn().mockResolvedValue(withM1(fullFloor)) }));
+  await fromCanvas(el, "wt-table-rotate", { key: "m1", rotation: 90 });
+  await toggleRow(el, "m2");
+  expect(actionMessage(el)).toBe("No room on the plan.");
+  await press(el, "undo");
+  expect(placed(el, "m1")!.rotation).toBe(0);
+  expect(actionMessage(el)).toBe("");
+});
+
+it("a save's refusal stays when the draft changes after it", async () => {
+  const saveFloorPlan = vi.fn().mockRejectedValue({ code: "server.internal" });
+  const el = await open(stubApi({ saveFloorPlan }));
+  await fromCanvas(el, "wt-table-rotate", { key: "m1", rotation: 90 });
+  await press(el, "save");
+  await flush(el);
+  expect(actionMessage(el)).toBe("Something went wrong, try again");
+  await toggleRow(el, "m2");
+  expect(canvas(el).tables.map((t) => t.key)).toEqual(["m1", "m2"]);
+  expect(actionMessage(el)).toBe("Something went wrong, try again");
+  await press(el, "undo");
+  expect(actionMessage(el)).toBe("Something went wrong, try again");
+});
+
 const hintText = (el: FloorPlanEditor) =>
   el.shadowRoot!.querySelector("[data-hint]")?.textContent!.trim() ?? null;
 
