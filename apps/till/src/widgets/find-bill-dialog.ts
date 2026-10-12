@@ -176,6 +176,7 @@ export class TillFindBillDialog extends LitElement {
       this.#scope = undefined;
       this.#baseline = undefined;
       this.selected = null;
+      this.#emit("find-bill-selection");
     };
     if (this.#scope) void this.#leave!.request({ scopes: [this], reason: "cancel", proceed });
     else proceed();
@@ -222,6 +223,7 @@ export class TillFindBillDialog extends LitElement {
     this.cash = row.stillOwed;
     this.cashError = false;
     this.method = "cash";
+    this.#emit("find-bill-selection");
   }
 
   #collect(): void {

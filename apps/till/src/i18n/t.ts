@@ -40,7 +40,6 @@ export function named(name: string, withName: string, unnamed: string): string {
   return name === "" ? unnamed : withName.replace("{name}", () => name);
 }
 
-/** The refusal of an order past the simplified-invoice limit, naming the limit. */
 export function overLimitText(limit: string): string {
   return t("sale.over_simplified_limit").replace("{amount}", () => formatMoney(limit, locale));
 }

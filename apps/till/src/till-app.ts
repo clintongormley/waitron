@@ -9441,6 +9441,9 @@ export class TillApp extends LitElement {
         }}
         @find-invoice-open=${(event: Event) => void this.#onFindInvoiceOpen(event)}
         @find-bill-pay=${(event: Event) => void this.#onFindBillPay(event)}
+        @find-bill-selection=${() => {
+          this.findBillError = undefined;
+        }}
         @find-bill-close=${() => {
           this.#invoiceRecoveryVisit++;
           this.findBillBusy = false;

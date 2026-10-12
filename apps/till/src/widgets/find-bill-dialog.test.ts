@@ -298,6 +298,23 @@ describe("Find a bill", () => {
     expect(el.shadowRoot!.querySelector("[data-bill]")).not.toBeNull();
   });
 
+  it("tells the app each time a bill is chosen or left, so the app can drop its error", async () => {
+    const el = await mount();
+    const changes = vi.fn();
+    el.addEventListener("find-bill-selection", changes);
+    await type(el, "bill-search", "12");
+    await click(el, "[data-search]");
+    await vi.waitFor(() => expect(el.shadowRoot!.querySelector("[data-bill]")).not.toBeNull());
+    expect(changes).not.toHaveBeenCalled();
+    await click(el, "[data-bill]");
+    expect(changes).toHaveBeenCalledTimes(1);
+    await click(el, "[slot=cancel]");
+    expect(el.shadowRoot!.querySelector("[data-collect]")).toBeNull();
+    expect(changes).toHaveBeenCalledTimes(2);
+    await click(el, "[data-bill]");
+    expect(changes).toHaveBeenCalledTimes(3);
+  });
+
   it.each([
     [
       "en",
