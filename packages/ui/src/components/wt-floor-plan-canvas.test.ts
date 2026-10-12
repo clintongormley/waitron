@@ -2205,13 +2205,15 @@ it("a press focuses a table partly out of view without scrolling the canvas", as
   await settled(el);
   const viewport = viewportOf(el);
   // The table's top 48 px are above the viewport and its bottom 48 px show.
-  viewport.scrollTop = 40 * 12 + 48;
+  const scrolled = offset(el, "t1").top + 48;
+  viewport.scrollTop = scrolled;
   viewport.scrollLeft = 0;
   const box = button(el, "t1").getBoundingClientRect();
+  expect(box.top).toBeCloseTo(viewport.getBoundingClientRect().top - 48, 0);
   pointer(button(el, "t1"), "pointerdown", 1, box.left + 5, box.bottom - 5);
   pointer(window, "pointercancel", 1, 0, 0);
   expect(el.shadowRoot!.activeElement).toBe(button(el, "t1"));
-  expect(viewport.scrollTop).toBe(40 * 12 + 48);
+  expect(viewport.scrollTop).toBe(scrolled);
   expect(viewport.scrollLeft).toBe(0);
 });
 
