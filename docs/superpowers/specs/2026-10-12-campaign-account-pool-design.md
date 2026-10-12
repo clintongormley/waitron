@@ -1,6 +1,7 @@
 # Campaign account pool — which login each lane uses
 
-Date: 2026-10-12. Status: design agreed with the owner in chat; awaiting review of this written spec.
+Date: 2026-10-12. Status: approved by the owner, 2026-10-12. Plan:
+`docs/superpowers/plans/2026-10-12-campaign-account-pool.md`.
 
 ## Why
 
@@ -166,8 +167,9 @@ pool in one command.
   Claude review seat all run on one folder, and three Codex folders signed in as dev@ all answer
   their usage checks. That is everyday use, not proof that two programs renewing their sign-in at
   the same moment can never clash.
-- **Can the owner apply a spare Codex reset from the phone?** Not yet known. If not, the 85% message
-  says so, and the decision becomes "use it when I'm back".
+- **The owner can apply a spare Codex reset from the phone** (owner, 2026-10-12: "i can"). So the 85%
+  message asks the owner to apply the reset from the phone, there and then; it is never put off until
+  the owner is back.
 - **A lane moved mid-item** restarts from what is on disk: the branch, its commits, the plan's
   ledger and the queue. It loses the refused run's conversation and any uncommitted half-step
   (lane B recovered from exactly this on 2026-10-12, when a watchdog stop cut A13 short).
