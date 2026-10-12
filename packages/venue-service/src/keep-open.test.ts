@@ -818,6 +818,26 @@ it("reads the clock, the seasons and the named days once for a zone's keep-open 
   });
 });
 
+it("reads the clock, the seasons and the named days once for a period's and a zone's keep-open choices", async () => {
+  const f = await zoneFixture();
+  await run(async (tx) => {
+    const session = (tx as unknown as { session: { prepareQuery: (...args: never[]) => unknown } })
+      .session;
+    const spy = vi.spyOn(session, "prepareQuery");
+    try {
+      const answer = await readKeepOpen(tx, f.cfg, f.zoneId, at("23:00"));
+      expect(answer.period).toMatchObject({ id: f.lunch, endsAt: "03:00", running: true });
+      expect(answer.zone).toMatchObject({ endsAt: "23:30", running: true });
+      const sql = spy.mock.calls.map(([q]) => (q as unknown as { sql: string }).sql);
+      expect(sql.filter((q) => q.includes('from "seasons"'))).toHaveLength(1);
+      expect(sql.filter((q) => q.includes('from "special_dates"'))).toHaveLength(1);
+      expect(sql.filter((q) => q.includes('from "locations"'))).toHaveLength(1);
+    } finally {
+      spy.mockRestore();
+    }
+  });
+});
+
 it("reads a floor closing summary without building period choices", async () => {
   const f = await zoneFixture();
   await run(async (tx) => {

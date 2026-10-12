@@ -2,7 +2,6 @@ import { serviceDayContext } from "./service-day-context.js";
 import { and, eq, ne } from "drizzle-orm";
 import type { Transaction } from "@waitron/db";
 import type { KeepOpenSubject } from "@waitron/module";
-import { readLocationClock } from "@waitron/reporting";
 import { AppError } from "@waitron/shared";
 import { departmentDay, keepOpenSubject, serviceRuns } from "./menu-timetable.js";
 import { readServiceDayPlan } from "./day-resolver.js";
@@ -28,11 +27,14 @@ import "./errors.js";
 
 export type { KeepOpenSubject } from "@waitron/module";
 
+type ServiceDayPlan = Awaited<ReturnType<typeof readServiceDayPlan>>;
+
 async function context(tx: Transaction, cfg: VenueScope, zoneId: string, at: Date) {
   const { departmentId } = await resolveZoneContext(tx, cfg, zoneId);
-  const clock = await readLocationClock(tx, cfg.locationId);
+  const prepared = await readServiceDayPlan(tx, cfg, at);
+  const { clock } = prepared;
   const moment = serviceMomentAt(at, clock);
-  const day = await departmentDay(tx, cfg, departmentId, moment, clock);
+  const day = await departmentDay(tx, cfg, departmentId, moment, clock, prepared.plan);
   const dayContext = moment === null ? null : serviceDayContext(clock, moment.businessDay);
   const cutover = dayContext?.dayCutover ?? clock.dayCutover;
   const limit = Math.min(dayContext?.endMinute ?? 1440, 1440);
@@ -41,7 +43,7 @@ async function context(tx: Transaction, cfg: VenueScope, zoneId: string, at: Dat
     day.ranges.length === 0
       ? null
       : keepOpenSubject(ranges, day, moment, cutover, dayContext ?? undefined);
-  return { departmentId, clock, moment, day, subject, dayContext, cutover, limit };
+  return { departmentId, prepared, clock, moment, day, subject, dayContext, cutover, limit };
 }
 
 function endMinute(time: string, cutover: string): number {
@@ -66,7 +68,7 @@ export async function readKeepOpen(
   at: Date,
 ): Promise<{ period: KeepOpenSubject | null; zone: KeepOpenSubject | null }> {
   const c = await context(tx, cfg, zoneId, at);
-  const zone = await readZoneKeepOpen(tx, cfg, zoneId, at);
+  const zone = await readZoneKeepOpen(tx, cfg, zoneId, at, c.prepared);
   if (c.subject === null || c.moment === null) return { period: null, zone };
   const start = Math.max(c.moment.minute, endMinute(scheduledEnd(c), c.cutover));
   const cutoverMinute = Number(c.cutover.slice(0, 2)) * 60 + Number(c.cutover.slice(3, 5));
@@ -168,9 +170,15 @@ export async function keepPeriodOpen(
     });
 }
 
-async function zoneContext(tx: Transaction, cfg: VenueScope, zoneId: string, at: Date) {
+async function zoneContext(
+  tx: Transaction,
+  cfg: VenueScope,
+  zoneId: string,
+  at: Date,
+  given?: ServiceDayPlan,
+) {
   const { departmentId } = await resolveZoneContext(tx, cfg, zoneId);
-  const prepared = await readServiceDayPlan(tx, cfg, at);
+  const prepared = given ?? (await readServiceDayPlan(tx, cfg, at));
   const c = await zoneClosureDay(tx, cfg, zoneId, at, prepared);
   const closure =
     c.moment === null
@@ -214,8 +222,9 @@ export async function readZoneKeepOpen(
   cfg: VenueScope,
   zoneId: string,
   at: Date,
+  prepared?: ServiceDayPlan,
 ): Promise<KeepOpenSubject | null> {
-  const c = await zoneContext(tx, cfg, zoneId, at);
+  const c = await zoneContext(tx, cfg, zoneId, at, prepared);
   if (c.moment === null || c.closure === undefined) return null;
   const [zone] = await tx
     .select({ name: floorZones.name })
