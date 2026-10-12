@@ -4142,9 +4142,10 @@ _Formerly B2, B3, B4, B5 and B7._ Detail: [backlog/box.md](backlog/box.md).
   box storage has not been measured. Left open by SQLite slice 2 Task 9b (#642, `waitron-restore
   restore --from-bucket`).
 
-- **A staged request whose marker is invalid, or whose payload cannot be read, throws before the
-  request is cleared,** so every start fails the same way. I believe this predates the branch. Left
-  open by SQLite slice 2 Task 9b (#642, `waitron-restore restore --from-bucket`).
+- **An invalid staged marker, unreadable recovery key or unreadable stream entries keeps the
+  request,** so the next start fails again. A516's file archive path clears a missing archive once
+  the key was read. Left open by SQLite slice 2 Task 9b (#642,
+  `waitron-restore restore --from-bucket`).
 
 - **A copy with no `tenants` row reads an empty tax id,** which neither the command line nor the
   setup wizard ever accepts as confirmed, so it cannot be restored; no dedicated error code names

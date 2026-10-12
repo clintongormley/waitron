@@ -163,32 +163,50 @@ Add `validateArtifactFile(deps:Omit<ValidationDeps,"artifact">&{artifactPath:str
 and `restoreFromArtifactFile(deps:Omit<RestoreDeps,"artifact">&{artifactPath:string}):Promise<void>`.
 Byte and file entrypoints share Task 1's lifecycle; inputs are never combined. `collectStateParts(deps,budget?:ArchiveReadBudget):Promise<StateParts>` propagates a shared budget to collectors; `readArchiveStateFile(path:string,budget:ArchiveReadBudget):Promise<Buffer>` enforces remaining bytes while reading. The budget holds the spec's count/name/aggregate limits.
 
-- [ ] Add failing sweep/local-backend tests: no bulk `readFile`, identical ciphertext from one
+- [x] Add failing sweep/local-backend tests: no bulk `readFile`, identical ciphertext from one
   encryption to two file backends, original entry order/content, existing scheduling/pruning/outcomes,
   0600 plaintext/artifact/backend temp, partial-copy/crypto failure publishes no completed key,
   destination isolation and cleanup after abort/failure. Add bounded metadata collection cases,
   including growth during reads; a real SQLite sweep → `putFile` → `getFile` → file restore roundtrip
   checks restored rows and secrets through default implementations.
-- [ ] Run `test -- src/backup-sweep.test.ts src/local-fs-backend.test.ts` and relevant collection
+- [x] Run `test -- src/backup-sweep.test.ts src/local-fs-backend.test.ts` and relevant collection
   suites; confirm the failures distinguish the whole-file pipeline from the proposed file pipeline.
-- [ ] Add a bounded collection option used by scheduled capture: check aggregate bytes/names/count
+- [x] Add a bounded collection option used by scheduled capture: check aggregate bytes/names/count
   before reading, cap reads even if files grow, retain byte entries. Sweep packs the archived DB
   path and metadata into Task 3's encryption once; fan out via `putFile`, clean after all settle.
   Local file storage copies to destination-local 0600 temp then renames; `getFile` publishes only
   a completed private copy. Never consume shared ciphertext or mask stored success on prune.
-- [ ] Add failing CLI/default staged archive tests that reject bulk reads, open authenticated real
+- [x] Add failing CLI/default staged archive tests that reject bulk reads, open authenticated real
   SQLite archives, reuse the extracted DB for liveness and preserve source artifact/retry behavior.
   Switch CLI/default staged artifact execution and its injected restore type to file APIs; byte
   setup/Cloud inputs retain existing limits. Adapt staged interface assertions to paths.
-- [ ] Validate file artifacts in one owned scratch directory: decrypt/authenticate spool, unpack,
+- [x] Validate file artifacts in one owned scratch directory: decrypt/authenticate spool, unpack,
   shared checks, remove spool, return owned DB; cleanup every refusal and placement outcome.
   Preserve CLI “wrong recovery key or corrupt artifact” wording and its unreadable-file handling.
-- [ ] Run focused sweep/backend/collection/restore/stream/request/command/codec/fiscal suites and
+- [x] Run focused sweep/backend/collection/restore/stream/request/command/codec/fiscal suites and
   `typecheck`. Use actual passed Tests counts. Audit consumers with `rg` for `dumpEntry`,
   `dumpBytes`, `databaseBytes`, codecs, backend methods and every validation disposal owner.
-- [ ] Add the streaming receipt to `docs/developers/conventions-data.md`,
+- [x] Add the streaming receipt to `docs/developers/conventions-data.md`,
   correcting its archive-source scratch row. Delete only the completed A516 entries from
   `docs/backlog.md` and `docs/backlog/box.md`; leave adjacent recovery residuals in place.
   Audit README/runbook claims across the whole branch and name the retained Cloud/upload limits.
-- [ ] Sign off the complete Task 4 commit. Report ready for `finish-branch`; the normal push hook
+- [x] Sign off the complete Task 4 commit. Report ready for `finish-branch`; the normal push hook
   and current-head CI supply coverage; no extra whole-workspace run or partially integrated PR.
+
+
+### Task 4 qualification, 2026-10-12
+
+The backend's empty interface failed two cases; bounded metadata collection failed four;
+the old sweep pipeline failed three; empty file validation and the CLI/staged byte reads failed
+seven. Correcting the test fixture added the required full invoice series and held a real SQLite
+lock, since the venue opener shares holds within one process. The selected 22 server suites pass
+422 tests, root guards pass 2459, server types and changed-file lint/format pass, and the fiscal
+golden/immutability pair passes 20 unedited tests.
+
+In an independent installed clone, deleting metadata/count/name/growth bounds, collector budget
+propagation, file-only sweep input, shared source retention, temporary-copy cleanup, file-validation
+cleanup and CLI/staged file forwarding failed 4/1/1/1/1/1/2/3/5/1/1 cases respectively. Restoring
+the snapshot passed 159 tests across seven suites, and all 40 changed paths matched the feature
+checkout. The real SQLite roundtrip checks restored rows and secrets; it does not measure a valid
+2 GiB database's full integrity or encryption throughput. Cloud and upload limits remain intact.
+The remaining branch gates are the Claude review, normal push hook and required current-head CI.
