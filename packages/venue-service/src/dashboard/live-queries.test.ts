@@ -45,6 +45,8 @@ it("refreshes the routing grid and the operations screen on a routing cell chang
     "department_day_ranges",
     "zone_days",
     "zone_day_ranges",
+    "special_days",
+    "special_day_dates",
   ]);
   expect(QUERY_DEPENDENCIES.operations).toEqual([
     "department_receipts",
@@ -76,6 +78,8 @@ it("refreshes the routing grid and the operations screen on a routing cell chang
     "department_day_ranges",
     "zone_days",
     "zone_day_ranges",
+    "special_days",
+    "special_day_dates",
   ]);
 });
 
@@ -104,6 +108,8 @@ it("refreshes Opening hours from its periods, ranges, dates, menu names and the 
     "department_day_ranges",
     "zone_days",
     "zone_day_ranges",
+    "special_days",
+    "special_day_dates",
   ]);
 });
 
@@ -187,6 +193,15 @@ it.each(["opening-hours", "operations", "routing", "named-days"] as const)(
         "zone_days",
         "zone_day_ranges",
       ]),
+    );
+  },
+);
+
+it.each(["opening-hours", "operations", "routing", "named-days", "holidays"] as const)(
+  "refreshes %s when a special day or one of its dates changes",
+  (interest) => {
+    expect(QUERY_DEPENDENCIES[interest]).toEqual(
+      expect.arrayContaining(["special_days", "special_day_dates"]),
     );
   },
 );

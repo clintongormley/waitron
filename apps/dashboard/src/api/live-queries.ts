@@ -371,6 +371,8 @@ export const QUERY_DEPENDENCIES = {
     "department_day_ranges",
     "zone_days",
     "zone_day_ranges",
+    "special_days",
+    "special_day_dates",
   ],
   // The extras and options lists: the list table, then its children (`listOptionLists` and
   // `getOptionList` in packages/catalogue/src/options.ts, `listExtraLists` and `getExtraList` in

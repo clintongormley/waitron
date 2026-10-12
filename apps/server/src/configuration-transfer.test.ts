@@ -6590,3 +6590,201 @@ describe("seasons in a configuration transfer", () => {
     expect([...answers.closedInWinter]).toEqual([zone.rows[0]!.id]);
   });
 });
+
+describe("special days in a configuration transfer", () => {
+  // 21:30 in Madrid (UTC+2) on Thursday 15 and Friday 16 August 2030.
+  const FIESTA_EVENING = new Date("2030-08-15T19:30:00Z");
+  const CLOSED_EVENING = new Date("2030-08-16T19:30:00Z");
+
+  async function fiestaRows(db: typeof suite.db, locationId: string) {
+    const paint = await db.execute(sql`
+      select s.name, s.repeats_yearly, d.date, d.closed_all_day, dep.name as department,
+        p.name as period, r.starts_at, r.ends_at
+      from special_days s join special_day_dates d on d.special_day_id=s.id
+      left join department_days dd on dd.special_day_date_id=d.id
+      left join departments dep on dep.id=dd.department_id
+      left join department_day_ranges r on r.day_id=dd.id
+      left join menu_periods p on p.id=r.period_id
+      where s.location_id=${locationId} and d.location_id=${locationId}
+      order by d.date, r.starts_at`);
+    const zones = await db.execute(sql`
+      select d.date, z.name as zone, r.kind, r.starts_at, r.ends_at
+      from special_day_dates d join zone_days zd on zd.special_day_date_id=d.id
+      join floor_zones z on z.id=zd.zone_id join zone_day_ranges r on r.day_id=zd.id
+      where d.location_id=${locationId} order by d.date, r.starts_at`);
+    return { paint: paint.rows, zones: zones.rows };
+  }
+
+  /** Fiesta repeats from 15 August 2029: Bar 20:00–23:00 and Closed 12:00–16:00, the terrace
+   *  closed 21:00–22:00; its 16 August is Closed all day. */
+  async function fiestaVenue(cif: string) {
+    const source = await applyVenue(planVenue(venue(cif), ALL_MODULES), {
+      db: suite.db,
+      modules: ALL_MODULES,
+    });
+    const scope = { locationId: brandLocationId(source.locationId) };
+    await withTransaction(suite.db, async (tx) => {
+      const department = await createDepartment(tx, scope, {
+        name: "Fiesta restaurant",
+        orderStart: "table",
+      });
+      const { id: bar } = await saveMenuPeriod(
+        tx,
+        scope,
+        department.id,
+        {
+          name: "Bar",
+          menuId: (await createCatalogue(tx, { name: "Fiesta bar menu" })).id,
+          staffMenuIds: [],
+        },
+        0,
+      );
+      const terrace = await createServiceZone(tx, scope, {
+        name: "Fiesta terrace",
+        departmentId: department.id,
+      });
+      const [fiesta, fifteenth, sixteenth, restaurantDay, terraceDay] = [1, 2, 3, 4, 5].map(() =>
+        randomUUID(),
+      );
+      await tx.execute(sql`insert into special_days (id, location_id, name, repeats_yearly)
+        values (${fiesta}, ${scope.locationId}, 'Fiesta', 1)`);
+      await tx.execute(sql`insert into special_day_dates (id, special_day_id, location_id, date, closed_all_day)
+        values (${fifteenth}, ${fiesta}, ${scope.locationId}, '2029-08-15', 0),
+          (${sixteenth}, ${fiesta}, ${scope.locationId}, '2029-08-16', 1)`);
+      await tx.execute(sql`insert into department_days (id, department_id, season_id, weekday, special_day_date_id)
+        values (${restaurantDay}, ${department.id}, null, null, ${fifteenth})`);
+      await tx.execute(sql`insert into department_day_ranges (id, day_id, department_id, period_id, starts_at, ends_at)
+        values (${randomUUID()}, ${restaurantDay}, ${department.id}, ${bar}, '20:00:00', '23:00:00'),
+          (${randomUUID()}, ${restaurantDay}, ${department.id}, null, '12:00:00', '16:00:00')`);
+      await tx.execute(sql`insert into zone_days (id, zone_id, season_id, weekday, special_day_date_id)
+        values (${terraceDay}, ${terrace.id}, null, null, ${fifteenth})`);
+      await tx.execute(sql`insert into zone_day_ranges (id, day_id, kind, starts_at, ends_at)
+        values (${randomUUID()}, ${terraceDay}, 'closed', '21:00:00', '22:00:00')`);
+    });
+    const versions = await schemaVersionsByModule(suite.db, ALL_MODULES);
+    const bundle = await buildConfigurationBundle(
+      suite.db,
+      source,
+      ALL_MODULES,
+      new Date("2026-10-07T10:00:00Z"),
+      versions,
+    );
+    return { source, versions, bundle };
+  }
+
+  it("arrives by value under the importing venue, and the imported venue serves and closes by it", async () => {
+    const { source, versions, bundle } = await fiestaVenue("B35792474");
+    const decoded = decodeConfigurationBundle(
+      encodeConfigurationBundle(bundle, "a strong passphrase"),
+      "a strong passphrase",
+    );
+    const target = await applyVenue(planVenue(venue("B35792475"), ALL_MODULES), {
+      db: targetSuite.db,
+      modules: ALL_MODULES,
+      beforeCommit: (tx, result) =>
+        importConfigurationTables(tx, decoded, result, ALL_MODULES, versions),
+    });
+
+    const exported = await fiestaRows(suite.db, source.locationId);
+    expect(exported).toEqual({
+      paint: [
+        {
+          name: "Fiesta",
+          repeats_yearly: 1,
+          date: "2029-08-15",
+          closed_all_day: 0,
+          department: "Fiesta restaurant",
+          period: null,
+          starts_at: "12:00:00",
+          ends_at: "16:00:00",
+        },
+        {
+          name: "Fiesta",
+          repeats_yearly: 1,
+          date: "2029-08-15",
+          closed_all_day: 0,
+          department: "Fiesta restaurant",
+          period: "Bar",
+          starts_at: "20:00:00",
+          ends_at: "23:00:00",
+        },
+        {
+          name: "Fiesta",
+          repeats_yearly: 1,
+          date: "2029-08-16",
+          closed_all_day: 1,
+          department: null,
+          period: null,
+          starts_at: null,
+          ends_at: null,
+        },
+      ],
+      zones: [
+        {
+          date: "2029-08-15",
+          zone: "Fiesta terrace",
+          kind: "closed",
+          starts_at: "21:00:00",
+          ends_at: "22:00:00",
+        },
+      ],
+    });
+    expect(await fiestaRows(targetSuite.db, target.locationId)).toEqual(exported);
+
+    const targetScope = { locationId: brandLocationId(target.locationId) };
+    const [department] = await targetSuite.db
+      .select({ id: departments.id })
+      .from(departments)
+      .where(
+        and(
+          eq(departments.name, "Fiesta restaurant"),
+          eq(departments.locationId, targetScope.locationId),
+        ),
+      );
+    const zone = await targetSuite.db.execute<{ id: string }>(
+      sql`select z.id from floor_zones z join zone_service_policies p on p.zone_id=z.id
+        where z.name='Fiesta terrace' and p.location_id=${target.locationId}`,
+    );
+    const answers = await withTransaction(targetSuite.db, async (tx) => ({
+      fiesta: await VENUE_SERVICE.resolveDepartmentService(
+        tx,
+        targetScope,
+        department!.id,
+        FIESTA_EVENING,
+      ),
+      closedAllDay: await VENUE_SERVICE.resolveDepartmentService(
+        tx,
+        targetScope,
+        department!.id,
+        CLOSED_EVENING,
+      ),
+      terrace: await VENUE_SERVICE.closedZoneIdsAt(tx, targetScope, FIESTA_EVENING, [
+        zone.rows[0]!.id,
+      ]),
+    }));
+    expect(answers.fiesta).toMatchObject({ open: true, periodName: "Bar" });
+    expect(answers.closedAllDay).toMatchObject({ open: false });
+    expect([...answers.terrace]).toEqual([zone.rows[0]!.id]);
+  });
+
+  it("refuses a bundle with two special-day dates on one date, and writes nothing", async () => {
+    const { versions, bundle } = await fiestaVenue("B35792476");
+    const [first] = bundle.tables.special_day_dates!;
+    bundle.tables.special_day_dates!.push({ ...first!, id: randomUUID(), closed_all_day: 1 });
+    const error = { code: "setup.request_invalid", params: { field: "special_day_dates.date" } };
+    expect(() => validateConfigurationBundle(bundle, ALL_MODULES, versions)).toThrowError(
+      expect.objectContaining(error),
+    );
+    await expect(
+      applyVenue(planVenue(venue("B35792477"), ALL_MODULES), {
+        db: targetSuite.db,
+        modules: ALL_MODULES,
+        beforeCommit: (tx, result) =>
+          importConfigurationTables(tx, bundle, result, ALL_MODULES, versions),
+      }),
+    ).rejects.toMatchObject(error);
+    expect(
+      (await targetSuite.db.execute<{ n: number }>(sql`select count(*) as n from tenants`)).rows,
+    ).toEqual([{ n: 0 }]);
+  });
+});
