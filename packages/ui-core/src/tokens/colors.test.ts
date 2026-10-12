@@ -136,7 +136,7 @@ test("the lifted surface stands apart from every other surface and keeps text re
         1.1,
       );
     }
-    for (const text of ["--wt-color-text", "--wt-color-text-muted"]) {
+    for (const text of ["--wt-color-text", "--wt-color-text-muted", "--wt-color-danger"]) {
       expect(ratio(lifted, token(el, text)), `${theme}: ${text} on lifted`).toBeGreaterThanOrEqual(
         4.5,
       );

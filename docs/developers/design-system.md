@@ -148,8 +148,9 @@ pointed at or focused — for example a table row while a pointer drags it
 hovered or while anything in it has focus, and a `wt-choice-row` under the pointer. A dragged row
 can sit inside a `wt-modal`, which is painted `--wt-color-surface-raised`, so the lifted surface
 differs from `--wt-color-bg`, `--wt-color-surface` and `--wt-color-surface-raised` in both themes,
-and keeps `--wt-color-text` and `--wt-color-text-muted` at 4.5:1 or more; the "lifted surface" test
-in `packages/ui-core/src/tokens/colors.test.ts` holds both. The dragged row follows the pointer,
+and keeps `--wt-color-text`, `--wt-color-text-muted` and `--wt-color-danger` at 4.5:1 or more, so an
+error under a selected row reads; the "lifted surface" test in
+`packages/ui-core/src/tokens/colors.test.ts` holds all three. The dragged row follows the pointer,
 held inside its list, and is drawn above the rows it covers. Each row it passes slides out of its
 way, and the row itself slides into its slot when released, both over `--wt-duration-move`. Under
 reduced motion (`prefers-reduced-motion: reduce`) passed and released rows land at once, while the

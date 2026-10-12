@@ -307,7 +307,13 @@ describe.each(["light", "dark"] as const)("floor-plan-editor a11y (%s theme)", (
     await expectNoA11yViolations(host);
   });
 
+  // At the default phone width the list ends up in a collapsed sheet, but only once the width
+  // observer fires, so axe judged the selected row's mark in some runs and not others. axe also
+  // skips a mark below the viewport, hence the height and the on-screen wait.
   it("shows a refusal under a field accessibly", async () => {
+    const before = [window.innerWidth, window.innerHeight] as const;
+    await page.viewport(1280, 1000);
+    onTestFinished(() => page.viewport(...before));
     const { el, host } = await open(
       stubApi(
         vi.fn().mockResolvedValue(plan),
@@ -327,6 +333,13 @@ describe.each(["light", "dark"] as const)("floor-plan-editor a11y (%s theme)", (
           panel.shadowRoot!.querySelector<HTMLElement & { error: string }>("[name=seats]")!.error,
       )
       .not.toBe("");
+    const mark = () =>
+      el
+        .shadowRoot!.querySelector(".side floor-plan-tables-panel")
+        ?.shadowRoot!.querySelector("[data-table=m1][aria-current=true] [data-mark]")
+        ?.getBoundingClientRect();
+    await expect.poll(() => (mark()?.bottom ?? Infinity) <= window.innerHeight).toBe(true);
+    expect(mark()!.height).toBeGreaterThan(0);
     await expectNoA11yViolations(host);
   });
 
