@@ -51,7 +51,6 @@ async function withServer(venue: Venue, use: (base: string) => Promise<void>): P
       WAITRON_STATE_DIR: scratch,
       WAITRON_VENUE_DIR: dirname(database),
       WAITRON_TILL_NODE_ID: venue.cfg.nodeId,
-      WAITRON_TILL_SERIES_ID: venue.cfg.seriesId,
       WAITRON_TILL_LOCATION_ID: venue.cfg.locationId,
       WAITRON_MIGRATIONS_DIR: migrationsRoot,
       WAITRON_ENV: "preproduction",

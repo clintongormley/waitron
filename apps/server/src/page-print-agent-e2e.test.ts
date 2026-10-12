@@ -42,6 +42,7 @@ import { mountJoinApi } from "./join-api.js";
 import { mountNodeApi } from "./node-api.js";
 import { createPairingMode } from "./pairing-mode.js";
 import type { TillConfig } from "./till-config.js";
+import { createZone } from "./testing/service-zone.js";
 import { mountTillApi } from "./till-api.js";
 import { createOpenOrder } from "./working-order.js";
 import { enrolDeviceForTest } from "./testing/enrol.js";
@@ -228,7 +229,7 @@ let more: FakeIppPrinter[] = [];
 afterEach(async () => {
   await ipp?.close();
   ipp = undefined;
-  await Promise.all(more.map((printer) => printer.close()));
+  await Promise.all(more.map((printer) => printer?.close()));
   more = [];
 });
 
@@ -254,14 +255,13 @@ async function venue() {
   ).makeBackend({ db: suite.db, clock, environment: "preproduction" });
   const cfg: TillConfig = {
     nodeId: brandNode(nodeId),
-    seriesId: brandSeries(series!.id),
     locationId: brandLocation(locationId),
     locale: "es-ES",
     invoiceLocales: ["es-ES"],
     tipsEnabled: false,
     simplifiedInvoiceLimit: null,
   };
-  const { managerCookie, staffId } = await withTransaction(suite.db, async (tx) => {
+  const { managerCookie, staffId, zoneId } = await withTransaction(suite.db, async (tx) => {
     const [manager] = await tx
       .insert(persons)
       .values({ displayName: "The Manager", pinHash: hashPin("1234"), role: "manager" })
@@ -271,7 +271,12 @@ async function venue() {
       .values({ displayName: "Staff one", pinHash: hashPin("5555"), role: "staff" })
       .returning({ id: persons.id });
     const session = await startManagementSession(tx, { personId: manager!.id });
-    return { managerCookie: `${MANAGEMENT_COOKIE}=${session.token}`, staffId: staff!.id };
+    const zone = await createZone(tx, cfg, { name: "Bar" });
+    return {
+      managerCookie: `${MANAGEMENT_COOKIE}=${session.token}`,
+      staffId: staff!.id,
+      zoneId: zone.id,
+    };
   });
   // The server's clock runs ahead of the wall clock by `ahead`, so a lease can lapse without waiting.
   const serverClock = { ahead: 0 };
@@ -318,6 +323,7 @@ async function venue() {
     locationId,
     nodeId,
     seriesId: series!.id,
+    zoneId,
     managerCookie,
     tillCookie: await tillSession(cfg, app, staffId),
     serverClock,
@@ -490,6 +496,7 @@ async function fullInvoice(v: Venue, orderId: string = randomUUID()): Promise<st
       orderId,
       [],
       null,
+      { zoneId: v.zoneId },
     );
     return recordSale(tx, v.backend, {
       origin: jobOrigin("operator_script"),

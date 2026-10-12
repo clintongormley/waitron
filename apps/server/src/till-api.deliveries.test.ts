@@ -146,7 +146,6 @@ async function venue(): Promise<Venue> {
   );
   const cfg: TillConfig = {
     nodeId: brandNodeId(result.nodeId),
-    seriesId: brandSeriesId(result.seriesIds[0]!),
     locationId: brandLocationId(result.locationId),
     locale: LOCALE,
     invoiceLocales: [LOCALE],

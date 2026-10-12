@@ -75,7 +75,7 @@ useVenueDb({
         })
         .returning({ id: pagePrinters.id });
       officeId = office!.id;
-      const receipt = { email: "facturas@example.test" };
+      const receipt = { operationDescription: "Restaurante", email: "facturas@example.test" };
       for (const { id } of await tx
         .select({ id: departments.id })
         .from(departments)

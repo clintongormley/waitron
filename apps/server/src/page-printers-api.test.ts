@@ -15,11 +15,7 @@ import { VENUE_SERVICE_MIGRATIONS } from "@waitron/venue-service";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 import { IDENTITY_MIGRATIONS, hashPin, persons, startManagementSession } from "@waitron/identity";
-import {
-  locationId as brandLocationId,
-  nodeId as brandNodeId,
-  seriesId as brandSeriesId,
-} from "@waitron/shared";
+import { locationId as brandLocationId, nodeId as brandNodeId } from "@waitron/shared";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import { createStation } from "./kitchen.js";
 import { acceptPrintAgentJoinRequest } from "./join-requests.js";
@@ -72,7 +68,6 @@ beforeEach(async () => {
     .returning({ id: locations.id });
   cfg = {
     nodeId: brandNodeId(randomUUID()),
-    seriesId: brandSeriesId(randomUUID()),
     locationId: brandLocationId(loc!.id),
     locale: "es-ES",
     invoiceLocales: ["es-ES"],

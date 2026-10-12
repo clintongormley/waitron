@@ -1,4 +1,3 @@
-import { departments, departmentReceipts } from "@waitron/venue-service";
 import { once } from "node:events";
 import { createServer as createNetServer, type AddressInfo, type Socket } from "node:net";
 import { randomUUID } from "node:crypto";

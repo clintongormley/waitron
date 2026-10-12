@@ -23,6 +23,7 @@ import {
   pagePrinters,
   locations,
   tenders,
+  tenantReceipts,
   tenants,
   triggerRaised,
   withTransaction,
@@ -345,6 +346,7 @@ async function withDepartmentContact(
   receipt: Record<string, unknown>,
   body: () => Promise<void>,
 ): Promise<void> {
+  const written = { operationDescription: "Restaurante", ...receipt };
   const original = await inTx((tx) => tx.select().from(departmentReceipts));
   try {
     await inTx(async (tx) => {
@@ -355,8 +357,11 @@ async function withDepartmentContact(
       for (const { id } of rows) {
         await tx
           .insert(departmentReceipts)
-          .values({ departmentId: id, receipt })
-          .onConflictDoUpdate({ target: departmentReceipts.departmentId, set: { receipt } });
+          .values({ departmentId: id, receipt: written })
+          .onConflictDoUpdate({
+            target: departmentReceipts.departmentId,
+            set: { receipt: written },
+          });
       }
     });
     await body();

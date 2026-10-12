@@ -1,4 +1,3 @@
-import { departments, departmentReceipts } from "@waitron/venue-service";
 import { randomUUID } from "node:crypto";
 import { loadKeyRing, putCredential, deleteCredential } from "@waitron/credentials";
 import { resolveInvoiceEmailDelivery } from "./email-delivery.js";

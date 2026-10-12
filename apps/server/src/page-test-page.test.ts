@@ -88,7 +88,6 @@ async function venue(opts: { render?: Render } = {}) {
   ).makeBackend({ db: suite.db, clock, environment: "preproduction" });
   const cfg: TillConfig = {
     nodeId: brandNode(nodeId),
-    seriesId: seriesId(series!.id),
     locationId: brandLocation(locationId),
     locale: "es-ES",
     invoiceLocales: ["es-ES"],

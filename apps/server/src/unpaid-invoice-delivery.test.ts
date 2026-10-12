@@ -1,4 +1,3 @@
-import { departments, departmentReceipts } from "@waitron/venue-service";
 import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -36,7 +35,7 @@ beforeEach(async () => {
   venue = await provisionBillVenue(suite.db);
   await withTransaction(suite.db, async (tx) => {
     await tx.update(tenants).set({ taxpayerDomicile: "Calle Fiscal 8, Madrid" });
-    const receipt = { email: "dining@example.test" };
+    const receipt = { operationDescription: "Restaurante", email: "dining@example.test" };
     const rows = await tx
       .select({ id: departments.id })
       .from(departments)
