@@ -406,10 +406,10 @@ occurs only in leap years (`named-day-rules.ts`). One venue cannot hold two name
 on the same date: the writer checks repeat-versus-one-off collisions, beside the stored date and
 repeat-key indexes in `schema/hours.ts`.
 
-On an own-hours day, a department without a dated timetable row still follows its normal weekday;
-a dated row with no ranges closes that department. `resolveDepartmentService` in
-`packages/venue-service/src/menu-timetable.ts` selects the dated row only for own-hours days,
-then falls back to the weekday when there is no row. Whole-venue closure closes departments.
+On an own-hours day, a department without a dated timetable row follows its season's week for
+that weekday; a dated row with no ranges closes that department. `resolveDepartmentDays` in
+`packages/venue-service/src/day-resolver.ts` selects the dated row only for own-hours days,
+then falls back to the business day's season week when there is no row. Whole-venue closure closes departments.
 Switching to own hours copies the normal week's department ranges and zone closed times;
 switching back removes the dated schedules (`switchNamedDayHours` in `hours.ts`).
 The individual department's Follow the normal week DELETE route is retired (`routes.ts` and
@@ -537,7 +537,7 @@ venue's business day, from one changeover to the next. With a 06:00 changeover, 
 21:00–03:00 range ends on Saturday morning; 06:00–06:00 covers the whole business day.
 
 With a readable venue clock, a named day with own hours and no department timetable row follows
-the normal weekday. A saved dated row with no ranges
+its season's week for that weekday. A saved dated row with no ranges
 closes that department for the date's business day. Closing the whole venue closes every
 department. `menu-timetable.test.ts` and `service-day.test.ts` exercise these cases.
 
@@ -574,8 +574,8 @@ opening schedule. `zone_closed_times` in `packages/venue-service/src/schema/zone
 links each range to a zone and either a weekday or a named day. The writers `replaceZoneClosedWeek`
 and `saveZoneClosedDate` in `zone-closed-times.ts` validate the ranges against the business-day
 changeover, on quarter-hour boundaries. A date must have own hours before you can save its closed
-times. `closedZoneIdsAt` uses that named day's dated ranges, including repeats, or the normal
-weekday otherwise. No dated closed ranges means no zone-specific closure on an own-hours day;
+times. `closedZoneIdsAt` uses that named day's dated ranges, including repeats, or the business day's
+season week (`zone_days`, through `resolveZoneClosedDays` in `day-resolver.ts`) otherwise. No dated closed ranges means no zone-specific closure on an own-hours day;
 it does not inherit the zone's normal-week closure. The start is closed and the end is open.
 When the venue clock is unreadable, this zone check reports no closed zone; department checks
 remain separate.
