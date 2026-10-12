@@ -1297,12 +1297,14 @@ _Formerly the catalogue and menus entries in the opening part of the old Track A
 
 ### Service periods, opening hours and departments
 
-_Formerly entries spread across the old sections, A261's venue-operations steps among them; part of A9._ Detail: [backlog/service-periods.md](backlog/service-periods.md).
+- **A per-field department policy repair changes the trading-name default.** With no policy row,
+  readers show the trading name off; PATCH of `orderStart` inserts a row with it on. A real route
+  probe at base `c704ac0dc` returned `{before:false, after:true}`. Left open by A493's review;
+  align `setDepartmentSalePolicyField` repair defaults with the existing readers, with a failing
+  authenticated route case first. The combined department editor preserves the off fallback.
 
-- **A493. Departments and zones as one list, edited in dialogs (owner, 2026-10-11).** Zones
-  indented under their departments, a row menu on each, a dialog to edit, and the venue receipt
-  page folded into each department's receipt.
-  [Detail](backlog/service-periods.md#a493-departments-and-zones-as-one-list-edited-in-dialogs)
+
+_Formerly entries spread across the old sections, A261's venue-operations steps among them; part of A9._ Detail: [backlog/service-periods.md](backlog/service-periods.md).
 
 - **Which name a record sent across a legal-name change carries** (A494 follow-up, 2026-10-11). A
   record keeps the name it was written with, so one written before the change but sent after it
@@ -1319,14 +1321,12 @@ _Formerly entries spread across the old sections, A261's venue-operations steps 
   [docs/backlog/mockups/a506-opening-hours-seasons/](backlog/mockups/a506-opening-hours-seasons/).
   [Detail](backlog/service-periods.md#a506-opening-hours-rebuilt-around-seasons-and-special-days)
 
-- **Test stubs answer the Zones tab's floor plan read with something that is not a plan.** Several
-  tests that mount the Departments screen, `apps/dashboard/src/dashboard-app.test.ts` among them,
-  answer every request with one body, so the zone panel's floor plan read
-  (`watchZoneFloorPlan`, `packages/venue-service/src/dashboard/client.ts`) gets a non-plan. The panel
-  now builds the preview's table list only when a plan arrives, which tolerates them; building it
-  on every redraw raised 33 unhandled errors, 17 of them in that file. Give those stubs a real answer for that read. The
-  Zones tab's recovery test also passes when its recovery step does nothing, because a good read
-  clears the alert anyway (the hours read works the same way). Left open by A366 slice 6 Part C (#1510).
+- **Some Departments screen test stubs answer a floor-plan read with a non-plan.** Check the
+  relocated zone editor tests and `apps/dashboard/src/dashboard-app.test.ts` for stubs answering
+  every request with one body. The zone editor's floor-plan read
+  (`watchZoneFloorPlan`, `packages/venue-service/src/dashboard/client.ts`) needs a plan-shaped answer. Also
+  re-check that a recovery case fails when its recovery step is deleted. These unresolved
+  fixture and assertion findings came from A366 slice 6 Part C (#1510); A493 relocated their owner.
 
 - **Departments and menus** (#297) remaining: remove the legacy price and fixed-station compatibility
   fields; per-menu modifier authoring; workforce assignments; immutable department attribution and
@@ -1805,13 +1805,9 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   after Prefix, so it is not heard when the field takes focus; the fix is a visible description in
   the shared `wt-input`. Left open by A466 (A429 slice 2) / A502 part 3.
 
-- **The zone panel's "Edit floor plan" link is not hidden without `venue.configure`.** Every role
+- **The zone editor's "Edit floor plan" link is not hidden without `venue.configure`.** Every role
   with `venue_service.manage` has `venue.configure` today, and a module screen's context carries no
   permissions. Revisit beside the permissions review. Left open by A466 (A429 slice 2) / A502 part 3.
-
-- **The department zone address template is written twice**, in
-  `packages/venue-service/src/dashboard/department-zones.ts` and `department-settings.ts`.
-  Left open by A466 (A429 slice 2) / A502 part 3.
 
 - **On computers whose scrollbars take space, a size reading just after a floor plan drop may
   shift the plan by the extra room.** Seen only with a stand-in scrollbar; headless Chromium's
@@ -2863,10 +2859,9 @@ _Formerly A3, A8 and B6; part of A9._ Detail: [backlog/printers.md](backlog/prin
   receipt up to 7 times, and the screen asks for a preview after each pause in typing. Not measured.
   [Detail](backlog/printers.md#the-receipts-preview-redraws-the-whole-receipt-once-per-highlighted-part)
 
-- **Left open by #1261's review, not acted on (2026-10-05)** (W111, the receipt's top block): (1) no
-  database trigger protects the logo image (the approved design adds no migration; the app-level
-  `receipt` usage refuses a library delete); (2) a configuration import does not validate the
-  `tenant_receipts` JSON (the print path reads it defensively instead); …
+- **Left open by #1261's review (W111):** database enforcement of logo retention remains open.
+  Receipt contact length limits are still copied into the dashboard form. A493 removes the live
+  venue-receipt transfer entry; the import follow-up about that entry is retired.
   [Detail](backlog/printers.md#left-open-by-1261s-review-not-acted-on-2026-10-05)
 
 **Left open, for the owner, by C113 (#1014, one receipt language per location):**
@@ -4799,12 +4794,11 @@ _Formerly B9, and the old Track C's development-stack and house-rules items; par
   passes alone. Neither types a search. **Next action:** reproduce each under load and fix at the
   root (standing rule: a flaky test is fixed, never re-run to green).
 
-- **A receipts-screen test failed once during A463's work and was not reproduced**: "previews the
-  independent department draft when getReceiptLanguage refuses"
-  (`apps/dashboard/src/screens/receipts-screen.defaults.test.ts`, from #1501), once in a full
-  `pnpm --filter @waitron/dashboard test:coverage` run on 2026-10-10, then three passes alone and a
-  second full run green. A463 (#1508) does not touch that screen. **Next action:** reproduce it
-  under load and fix at the root (standing rule: a flaky test is fixed, never re-run to green).
+- **The relocated independent department preview needs a load investigation.** The retired
+  `receipts-screen.defaults.test.ts` case failed once during A463 and was not reproduced.
+  A493 moves this behavior into the receipt dialog's language-independent preview cases.
+  Reproduce that flow under load before assigning a cause; its retirement does not establish
+  that the original failure is fixed.
 
 - **A printers-screen test failed once during A435 step 2's review fixes and was not reproduced**:
   "a press after one edit sends the edit and the field as it was read"

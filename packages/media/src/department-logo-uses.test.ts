@@ -21,7 +21,7 @@ const suite = useVenueDb({
 });
 const photo = await samplePreparedImage({ width: 19 });
 
-it("counts only stored venue and department logos and protects each until cleared", async () => {
+it("counts only department logos and protects each until cleared despite retired venue values", async () => {
   await seedTenant(suite.db);
   await withTransaction(suite.db, async (tx) => {
     const [place] = await tx
@@ -56,12 +56,12 @@ it("counts only stored venue and department logos and protects each until cleare
       { kind: "department_receipt", id: rows[1]!.id, name: "Bar", active: false },
       { kind: "department_receipt", id: rows[0]!.id, name: "Dining", active: true },
     ];
-    const uses = [{ kind: "receipt" }, ...departmentUses];
+    const uses = departmentUses;
     expect(await listImageUsages(tx, image.id)).toEqual(uses);
-    expect((await readImage(tx, image.id)).usageCount).toBe(3);
+    expect((await readImage(tx, image.id)).usageCount).toBe(2);
     for (const sort of ["date", "name"] as const) {
       expect((await listImages(tx, { sort })).images).toEqual([
-        expect.objectContaining({ id: image.id, usageCount: 3 }),
+        expect.objectContaining({ id: image.id, usageCount: 2 }),
       ]);
     }
     expect(await deleteImage(tx, image.id)).toEqual({ deleted: false, uses });
@@ -69,10 +69,10 @@ it("counts only stored venue and department logos and protects each until cleare
       .update(departmentReceipts)
       .set({ receipt: {} })
       .where(eq(departmentReceipts.departmentId, rows[0]!.id));
-    expect((await listImages(tx, {})).images[0]!.usageCount).toBe(2);
+    expect((await listImages(tx, {})).images[0]!.usageCount).toBe(1);
     expect(await deleteImage(tx, image.id)).toEqual({
       deleted: false,
-      uses: [{ kind: "receipt" }, departmentUses[0]],
+      uses: [departmentUses[0]],
     });
     await tx.update(tenantReceipts).set({ receipt: {} });
     expect(await deleteImage(tx, image.id)).toEqual({ deleted: false, uses: [departmentUses[0]] });

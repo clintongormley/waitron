@@ -2,11 +2,23 @@ import type { LocationId } from "./ids.js";
 export type ReceiptText = Readonly<Record<string, string>>;
 
 export interface DepartmentReceiptConfig {
+  printAddress?: boolean;
+  operationDescription?: string;
   logo?: string;
   phone?: string;
   email?: string;
   headerSubtitle?: ReceiptText;
   footerMessage?: ReceiptText;
+}
+
+export interface DepartmentReceiptPolicy {
+  receiptPrintMode: "auto" | "on_request";
+  printTradingName: boolean;
+}
+
+export interface DepartmentReceiptWrite {
+  receipt: DepartmentReceiptConfig;
+  policy: DepartmentReceiptPolicy;
 }
 
 export interface PrintedReceiptTrim {
@@ -32,7 +44,7 @@ export interface VenueReceiptConfig extends VenueReceiptSettings {
 export interface ReceiptPresentation {
   receiptTrim: PrintedReceiptTrim;
   venueAddress: readonly string[];
-  venueReceiptSettings: VenueReceiptSettings;
+  receiptSettings: { printAddress: boolean };
 }
 
 function writtenText(text: ReceiptText | undefined, language: string): string | undefined {

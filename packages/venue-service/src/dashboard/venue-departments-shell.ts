@@ -6,8 +6,8 @@ import { baseStyles, UrlStateController } from "@waitron/ui";
 import type { VenueServiceApi, VenueServiceView } from "./client.js";
 import { t } from "./strings.js";
 import "./departments-list.js";
-import "./department-page.js";
-import "./department-zones.js";
+import "./department-edit-dialog.js";
+import "./zone-edit-dialog.js";
 import "./department-dialogs.js";
 import type { DepartmentDialog } from "./department-dialogs.js";
 
@@ -44,14 +44,43 @@ export class VenueDepartmentsShell extends LitElement {
   @state() private loadError = "";
   @state() private actionError = "";
   #generation = {};
+  #refreshAgain = false;
+  #refreshActive?: Promise<boolean>;
   #opener?: HTMLElement;
+  #editorOrigin?: { kind: "department" | "zone"; id: string };
   override disconnectedCallback() {
     this.#generation = {};
+    this.#refreshAgain = false;
+    this.#refreshActive = undefined;
     this.busy = false;
     super.disconnectedCallback();
   }
   protected override willUpdate(changed: PropertyValues<this>) {
-    if (changed.has("model")) this.loadError = "";
+    if (changed.has("model")) {
+      this.loadError = "";
+      const editor = this.shadowRoot?.querySelector("department-edit-dialog, zone-edit-dialog");
+      if (editor && this.departmentId) {
+        const department = this.model?.departments.find(
+          (row) => row.id === this.departmentId && row.active,
+        );
+        const zone = this.model?.zones.find(
+          (row) =>
+            row.id === this.zone &&
+            row.departmentId === this.departmentId &&
+            row.active !== false &&
+            this.model.floorZones.find((floor) => floor.id === row.id)?.active !== false,
+        );
+        if (!department || (editor.tagName === "ZONE-EDIT-DIALOG" && !zone))
+          void this.#editorClosed(
+            new CustomEvent("gone", {
+              detail:
+                editor.tagName === "ZONE-EDIT-DIALOG"
+                  ? { zoneId: this.zone }
+                  : { departmentId: this.departmentId },
+            }),
+          );
+      }
+    }
   }
   protected override updated() {
     this.setAttribute("aria-busy", String(this.busy));
@@ -66,10 +95,12 @@ export class VenueDepartmentsShell extends LitElement {
     let dialog: DepartmentDialog;
     if (kind === "add-department") dialog = { kind };
     else if (kind === "add-zone") {
-      const department = this.model.departments.find((row) => row.id === this.departmentId);
+      const department = this.model.departments.find(
+        (row) => row.id === (event.detail.departmentId ?? this.departmentId),
+      );
       if (!department?.active) return;
       dialog = { kind, departmentId: department.id };
-    } else if (kind === "rename-department" || kind === "delete-department") {
+    } else if (kind === "delete-department") {
       const row = this.model.departments.find((row) => row.id === event.detail.departmentId);
       if (!row || row.active === false) return;
       dialog = { kind, row };
@@ -79,13 +110,18 @@ export class VenueDepartmentsShell extends LitElement {
       dialog = { kind, row };
     }
     const list = this.shadowRoot?.querySelector("departments-list");
-    const zones = this.shadowRoot?.querySelector("department-zones");
+    const table = list?.shadowRoot?.querySelector("wt-data-table");
     if (kind === "add-department")
       this.#opener =
         list?.shadowRoot?.querySelector<HTMLElement>("[data-test=add-department]") ?? undefined;
     else if (kind === "add-zone")
       this.#opener =
-        zones?.shadowRoot?.querySelector<HTMLElement>("[data-test=add-zone]") ?? undefined;
+        table?.shadowRoot
+          ?.querySelector<HTMLElement>(
+            `[data-test="add-zone-${CSS.escape(event.detail.departmentId ?? this.departmentId)}"]`,
+          )
+          ?.closest("wt-row-actions")
+          ?.shadowRoot?.querySelector<HTMLButtonElement>("button") ?? undefined;
     else if (kind === "add-to-department")
       this.#opener =
         list?.shadowRoot?.querySelector<HTMLElement>(
@@ -98,7 +134,9 @@ export class VenueDepartmentsShell extends LitElement {
         ? table?.shadowRoot?.querySelector<HTMLElement>(
             `[data-test="${key}-${CSS.escape(event.detail.departmentId!)}"]`,
           )
-        : zones?.shadowRoot?.querySelector<HTMLElement>(`[data-test="${kind}"]`);
+        : table?.shadowRoot?.querySelector<HTMLElement>(
+            `[data-test="${kind}-${CSS.escape(event.detail.zoneId!)}"]`,
+          );
       this.#opener =
         action?.closest("wt-row-actions")?.shadowRoot?.querySelector<HTMLButtonElement>("button") ??
         undefined;
@@ -117,9 +155,7 @@ export class VenueDepartmentsShell extends LitElement {
     const path = location.pathname;
     const generation = this.#generation;
     const list = this.shadowRoot?.querySelector("departments-list");
-    const zones = this.shadowRoot?.querySelector("department-zones");
     await list?.updateComplete;
-    await zones?.updateComplete;
     if (!this.#current(generation) || this.busy || this.dialog || location.pathname !== path)
       return;
     const root = opener?.getRootNode();
@@ -129,11 +165,31 @@ export class VenueDepartmentsShell extends LitElement {
       opener?.isConnected && sameRow
         ? opener
         : (list?.shadowRoot?.querySelector<HTMLElement>("[data-test=add-department]") ??
-          zones?.shadowRoot?.querySelector<HTMLElement>("[data-test=add-zone]") ??
           this.shadowRoot?.querySelector<HTMLElement>("nav a"));
     target?.focus();
   }
-  async #refresh(generation: object) {
+  async #refresh(generation: object): Promise<boolean> {
+    if (this.#refreshActive) {
+      this.#refreshAgain = true;
+      return this.#refreshActive;
+    }
+    const run = async () => {
+      let success: boolean;
+      do {
+        this.#refreshAgain = false;
+        success = await this.#readRefresh(generation);
+      } while (this.#refreshAgain && this.#current(generation));
+      return success;
+    };
+    const pending = run();
+    this.#refreshActive = pending;
+    try {
+      return await pending;
+    } finally {
+      if (this.#refreshActive === pending) this.#refreshActive = undefined;
+    }
+  }
+  async #readRefresh(generation: object) {
     const snapshot = this.model;
     try {
       const model = await (this.api.background ?? this.api).load();
@@ -161,9 +217,31 @@ export class VenueDepartmentsShell extends LitElement {
     await this.#refresh(generation);
     if (this.#current(generation)) this.busy = false;
   }
+  async #moved(event: CustomEvent<{ zoneId: string; focus?: boolean }>) {
+    const path = location.pathname,
+      generation = this.#generation;
+    await this.#written(event);
+    if (!event.detail.focus) return;
+    await this.updateComplete;
+    const list = this.shadowRoot!.querySelector("departments-list");
+    await list?.updateComplete;
+    const table = list?.shadowRoot?.querySelector("wt-data-table");
+    await table?.updateComplete;
+    if (!this.#current(generation) || this.busy || this.dialog || location.pathname !== path)
+      return;
+    const target =
+      table?.shadowRoot?.querySelector<HTMLElement>(
+        `[data-test="zone-grip-${CSS.escape(event.detail.zoneId)}"]`,
+      ) ?? list?.shadowRoot?.querySelector<HTMLElement>("[data-test=add-department]");
+    target?.focus();
+  }
   async #written(event: Event) {
     event.stopPropagation();
-    if (this.busy) return;
+    if (this.busy) {
+      this.#refreshAgain = true;
+      await this.#refreshActive;
+      return;
+    }
     const generation = this.#generation;
     this.busy = true;
     await this.#refresh(generation);
@@ -211,6 +289,14 @@ export class VenueDepartmentsShell extends LitElement {
     const view = this.#url.read("view");
     this.view = view === "zones" || view === "receipt" ? view : "settings";
     this.zone = this.#url.read("zone") ?? "";
+    if (
+      this.departmentId &&
+      this.#editorOrigin &&
+      (this.#editorOrigin.kind === "zone"
+        ? this.zone !== this.#editorOrigin.id
+        : this.view !== "settings" || this.departmentId !== this.#editorOrigin.id)
+    )
+      this.#editorOrigin = undefined;
     if (!this.departmentId && (this.#url.read("view") || this.#url.read("zone")))
       void this.#url.write({ view: null, zone: null }, true);
   }
@@ -218,66 +304,156 @@ export class VenueDepartmentsShell extends LitElement {
     await this.#url.write(changes, replace);
     if (this.isConnected) this.#restore();
   }
-  #open(event: CustomEvent<{ departmentId: string }>) {
+  async #open(event: CustomEvent<{ departmentId: string }>) {
     event.stopPropagation();
-    void this.#navigate({ department: event.detail.departmentId, view: null, zone: null });
+    const generation = this.#generation;
+    await this.#navigate({ department: event.detail.departmentId, view: null, zone: null });
+    if (
+      this.#current(generation) &&
+      this.departmentId === event.detail.departmentId &&
+      this.view === "settings"
+    )
+      this.#editorOrigin = { kind: "department", id: event.detail.departmentId };
   }
-  #view(event: CustomEvent<{ view: "settings" | "zones" | "receipt" }>) {
+  async #openZone(event: CustomEvent<{ zoneId: string }>) {
     event.stopPropagation();
-    void this.#navigate({
-      view: event.detail.view === "settings" ? null : event.detail.view,
-      zone: null,
-    });
+    const zone = this.model.zones.find(
+      (row) => row.id === event.detail.zoneId && row.active !== false,
+    );
+    if (zone) {
+      const generation = this.#generation;
+      await this.#navigate({ department: zone.departmentId, view: "zones", zone: zone.id });
+      if (this.#current(generation) && this.zone === zone.id && this.view === "zones")
+        this.#editorOrigin = { kind: "zone", id: zone.id };
+    }
   }
-  #zone(event: CustomEvent<{ zoneId: string }>) {
+  #openReceipt(event: CustomEvent<{ departmentId: string }>) {
     event.stopPropagation();
-    void this.#navigate({ view: "zones", zone: event.detail.zoneId }, true);
+    void this.#navigate({ department: event.detail.departmentId, view: "receipt", zone: null });
+  }
+  async #editorClosed(event: CustomEvent<{ departmentId?: string; zoneId?: string }>) {
+    event.stopPropagation();
+    if (
+      (event.detail.zoneId && event.detail.zoneId !== this.zone) ||
+      (event.detail.departmentId && event.detail.departmentId !== this.departmentId)
+    )
+      return;
+    await this.#navigate({ department: null, view: null, zone: null }, true);
+    await this.updateComplete;
+    await this.#returnEditorFocus();
+  }
+  async #returnEditorFocus() {
+    const origin = this.#editorOrigin;
+    const generation = this.#generation;
+    const path = location.pathname;
+    const list = this.shadowRoot?.querySelector("departments-list");
+    await list?.updateComplete;
+    const table = list?.shadowRoot?.querySelector("wt-data-table");
+    await table?.updateComplete;
+    if (!this.#current(generation) || this.busy || location.pathname !== path || this.departmentId)
+      return;
+    const action = origin
+      ? table?.shadowRoot?.querySelector<HTMLElement>(
+          `[data-test="${origin.kind === "department" ? "open-department" : "edit-zone"}-${CSS.escape(origin.id)}"]`,
+        )
+      : null;
+    const menu = action?.closest("wt-row-actions");
+    await menu?.updateComplete;
+    if (!this.#current(generation) || this.busy || location.pathname !== path || this.departmentId)
+      return;
+    (
+      menu?.shadowRoot?.querySelector<HTMLButtonElement>("button") ??
+      list?.shadowRoot?.querySelector<HTMLElement>("[data-test=add-department]")
+    )?.focus();
+  }
+  async #editorSaved(event: CustomEvent<{ departmentId?: string; zoneId?: string }>) {
+    await this.#editorClosed(event);
+    await this.#written(event);
+    await this.updateComplete;
+    await this.#returnEditorFocus();
+  }
+  async #receiptClosed(event: CustomEvent<{ departmentId: string }>) {
+    event.stopPropagation();
+    if (this.departmentId !== event.detail.departmentId || this.view !== "receipt") return;
+    await this.#navigate({ department: null, view: null, zone: null }, true);
+  }
+  async #receiptSaved(event: CustomEvent<{ departmentId: string }>) {
+    await this.#receiptClosed(event);
+    await this.#written(event);
   }
   #content(): unknown {
     if (!this.model) return nothing;
-    if (!this.departmentId)
-      return html`<departments-list
-        .model=${this.model}
-        @open-department=${this.#open}
-      ></departments-list>`;
-    const row = this.model.departments.find((d) => d.id === this.departmentId && d.active);
-    if (!row)
-      return html`<nav aria-label=${t("venue.departments")}>
-          <a href="/manage/venue-operations">${t("venue.departments")}</a> ›
-        </nav>
-        <p role="status">${t("venue.department_not_found")}</p>`;
-    return keyed(
-      row.id,
-      html`<department-page
+    const department = this.model.departments.find(
+      (row) => row.id === this.departmentId && row.active,
+    );
+    const zone = this.model.zones.find(
+      (row) =>
+        row.id === this.zone &&
+        row.departmentId === this.departmentId &&
+        row.active !== false &&
+        this.model.floorZones.find((floor) => floor.id === row.id)?.active !== false,
+    );
+    const receipt = department
+      ? (this.renderPanel?.("department-receipt", { id: department.id, name: department.name }) ??
+        nothing)
+      : nothing;
+    return html`<departments-list
         .api=${this.api}
         .model=${this.model}
-        .departmentId=${row.id}
-        .renderPanel=${this.renderPanel}
-        .view=${this.view}
-        @view-change=${this.#view}
-        @zone-change=${this.#zone}
-      >
-        <department-zones
-          slot="zones"
-          .api=${this.api}
-          .model=${this.model}
-          .departmentId=${row.id}
-          .zone=${this.zone}
-        ></department-zones>
-      </department-page>`,
-    );
+        .receiptAvailable=${(row: { id: string; name: string }) => this.renderPanel?.("department-receipt", row) != null}
+        @open-department=${this.#open}
+        @edit-zone=${this.#openZone}
+        @edit-receipt=${this.#openReceipt}
+      ></departments-list>
+      ${this.departmentId && !department ? html`<p role="status">${t("venue.department_not_found")}</p>` : nothing}
+      ${
+        department
+          ? this.view === "receipt" && receipt !== nothing
+            ? keyed(department.id, receipt)
+            : this.view === "zones"
+              ? zone
+                ? keyed(
+                    zone.id,
+                    html`<zone-edit-dialog
+                      .api=${this.api}
+                      .model=${this.model}
+                      .zoneId=${zone.id}
+                      .refreshing=${this.busy}
+                      @closed=${this.#editorClosed}
+                      @gone=${this.#editorClosed}
+                      @saved=${this.#editorSaved}
+                      @written=${this.#written}
+                    ></zone-edit-dialog>`,
+                  )
+                : nothing
+              : keyed(
+                  department.id,
+                  html`<department-edit-dialog
+                    .api=${this.api}
+                    .model=${this.model}
+                    .departmentId=${department.id}
+                    .refreshing=${this.busy}
+                    @closed=${this.#editorClosed}
+                    @gone=${this.#editorClosed}
+                    @saved=${this.#editorSaved}
+                    @written=${this.#written}
+                  ></department-edit-dialog>`,
+                )
+          : nothing
+      }`;
   }
   override render() {
     return html`<div
         @add-department=${this.#openDialog}
-        @rename-department=${this.#openDialog}
         @delete-department=${this.#openDialog}
         @add-zone=${this.#openDialog}
-        @rename-zone=${this.#openDialog}
-        @move-zone=${this.#openDialog}
         @add-to-department=${this.#openDialog}
         @delete-zone=${this.#openDialog}
         @saved=${this.#saved}
+        @zone-moved=${this.#moved}
+        @zone-change=${this.#openZone}
+        @department-receipt-closed=${this.#receiptClosed}
+        @department-receipt-saved=${this.#receiptSaved}
         ?inert=${this.busy}
       >
         ${this.actionError || this.loadError ? html`<p role="alert">${this.actionError || this.loadError}</p>` : nothing}${this.#content()}

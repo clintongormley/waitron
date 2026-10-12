@@ -39,17 +39,27 @@ export interface ZoneSalePolicy {
   receiptPrintMode: ReceiptPrintMode | null;
   effective: Omit<DepartmentSalePolicy, "departmentId">;
 }
-export interface DepartmentSettingsInput extends Omit<DepartmentSalePolicy, "departmentId"> {
+export interface DepartmentSettingsInput extends Pick<
+  DepartmentSalePolicy,
+  "orderStart" | "paidWhen" | "collectionNumber"
+> {
   name: string;
   tradingName: string;
   transfers?: { receivingProfileId: string | null; destinationDepartmentIds: string[] };
 }
+export type DepartmentEditInput = DepartmentSettingsInput;
 export type ZoneServiceSettingsInput = Omit<ZoneSalePolicy, "zoneId" | "effective">;
+export type ZoneEditInput = ZoneServiceSettingsInput & { name: string };
 
 export type VenueReadinessIssue =
   | { code: "venue.default_station_missing" }
   | { code: "venue.department_missing" }
   | { code: "zone.department_missing"; zoneId: string; zoneName: string }
+  | {
+      code: "department.operation_description_required";
+      departmentId: string;
+      departmentName: string;
+    }
   | { code: "department.no_periods"; departmentId: string; departmentName: string }
   | { code: "zone.menu_unpublished"; zoneId: string; zoneName: string }
   | {
@@ -66,7 +76,6 @@ export interface NamedRow {
 export interface FloorZone extends NamedRow {
   active?: boolean;
 }
-/** The part of a zone's master plan the zone panel reads (`ZonePlan`, apps/server/src/floor-plan.ts). */
 export interface ZoneFloorPlan {
   /** `id` is null only for a live table offered for adoption, which is never placed. */
   tables: { id: string | null; fixed: boolean; placement: PlanPlacement | null }[];
@@ -270,6 +279,10 @@ export class VenueServiceApi {
       "PUT",
       input,
     );
+  }
+
+  saveZoneSettings(zoneId: string, input: ZoneEditInput): Promise<void> {
+    return this.request(`/management-api/venue-service/zones/${zoneId}/settings`, "PUT", input);
   }
 
   saveZoneServiceSettings(zoneId: string, input: ZoneServiceSettingsInput): Promise<void> {

@@ -296,20 +296,27 @@ describe("DashboardApi routes", () => {
     ]);
   });
 
-  it("reads and saves the location's operation description", async () => {
-    const settings = { name: "Bar Pepe", operationDescription: "Restaurant service" };
+  it("reads and saves the department's operation description with its receipt policy", async () => {
+    const settings = {
+      receipt: { operationDescription: "Restaurant service" },
+      policy: { receiptPrintMode: "auto" as const, printTradingName: true },
+      receiptLanguage: "es-ES",
+      operationDescriptionRequired: true,
+      languages: ["es-ES"],
+      warningLanguages: [],
+      venueAddress: [],
+    };
+    const input = { receipt: { operationDescription: "Takeaway" }, policy: settings.policy };
     const fetchImpl = vi
       .fn()
       .mockResolvedValueOnce(jsonResponse(settings))
       .mockResolvedValueOnce(emptyResponse());
     const api = new DashboardApi("", fetchImpl);
-
-    await expect(api.getLocationSettings()).resolves.toEqual(settings);
-    await expect(api.putLocationSettings("Takeaway")).resolves.toBeUndefined();
-
+    await expect(api.getDepartmentReceipt("bar")).resolves.toEqual(settings);
+    await expect(api.putDepartmentReceipt("bar", input)).resolves.toBeUndefined();
     expect(callsOf(fetchImpl)).toEqual([
-      ["/management-api/location-settings", "GET", undefined],
-      ["/management-api/location-settings", "PUT", { operationDescription: "Takeaway" }],
+      ["/management-api/venue-service/departments/bar/receipt", "GET", undefined],
+      ["/management-api/venue-service/departments/bar/receipt", "PUT", input],
     ]);
   });
 
@@ -331,9 +338,9 @@ describe("DashboardApi routes", () => {
     const api = new DashboardApi("", fetchImpl);
 
     const draft = {
-      departmentId: null,
-      receipt: {},
-      settings: { headerSubtitle: "Calle Mayor 1" },
+      departmentId: "dept",
+      receipt: { headerSubtitle: { "es-ES": "Calle Mayor 1" } },
+      policy: { receiptPrintMode: "auto" as const, printTradingName: true },
     };
     await expect(api.previewReceiptDraft(draft)).resolves.toEqual(answer);
     expect(callsOf(fetchImpl)).toEqual([["/management-api/receipt-preview", "POST", draft]]);
@@ -345,9 +352,9 @@ describe("DashboardApi routes", () => {
     );
     const api = new DashboardApi("", fetchImpl);
     const draft = {
-      departmentId: null,
-      receipt: {},
-      settings: { footerMessage: "Gracias" },
+      departmentId: "dept",
+      receipt: { footerMessage: { "es-ES": "Gracias" } },
+      policy: { receiptPrintMode: "auto" as const, printTradingName: true },
       paperWidth: "58mm" as const,
     };
     await api.previewReceiptDraft(draft);
@@ -359,11 +366,16 @@ describe("DashboardApi routes", () => {
       jsonResponse({ preview: {}, marks: { headerSubtitle: null, footerMessage: null } }),
     );
     const api = new DashboardApi("", fetchImpl);
-    const first = { departmentId: null, receipt: {}, settings: {}, language: "gl-ES" };
-    const second = {
-      departmentId: null,
+    const first = {
+      departmentId: "dept",
       receipt: {},
-      settings: {},
+      policy: { receiptPrintMode: "auto" as const, printTradingName: true },
+      language: "gl-ES",
+    };
+    const second = {
+      departmentId: "dept",
+      receipt: {},
+      policy: { receiptPrintMode: "auto" as const, printTradingName: true },
       paperWidth: "58mm" as const,
       language: "eu-ES",
     };
@@ -381,7 +393,7 @@ describe("DashboardApi routes", () => {
     const draft = {
       departmentId: "aa000000-0000-4000-8000-000000000001",
       receipt: {},
-      settings: {},
+      policy: { receiptPrintMode: "auto" as const, printTradingName: true },
     };
     await api.previewReceiptDraft(draft);
     expect(callsOf(fetchImpl)).toEqual([["/management-api/receipt-preview", "POST", draft]]);
@@ -413,7 +425,11 @@ describe("DashboardApi routes", () => {
       jsonResponse({ preview: {}, marks: { headerSubtitle: null, footerMessage: null } }),
     );
     const api = new DashboardApi("", fetchImpl);
-    const draft = { departmentId: null, receipt: {}, settings: { footerMessage: "Gracias" } };
+    const draft = {
+      departmentId: "dept",
+      receipt: { footerMessage: { "es-ES": "Gracias" } },
+      policy: { receiptPrintMode: "auto" as const, printTradingName: true },
+    };
     await api.previewReceiptDraft(draft);
     await api.background.previewReceiptDraft(draft);
     await api.background.previewReceiptDraft(draft, { passive: true });
@@ -1265,9 +1281,9 @@ describe("department draft preview request", () => {
     const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(answer));
     const api = new DashboardApi("", fetchImpl);
     const draft = {
-      departmentId: null,
-      receipt: {},
-      settings: { headerSubtitle: "Unsaved" },
+      departmentId: "dept",
+      receipt: { headerSubtitle: { "ca-ES": "Unsaved" } },
+      policy: { receiptPrintMode: "auto" as const, printTradingName: true },
       language: "ca-ES",
       paperWidth: "58mm" as const,
     };
@@ -1280,7 +1296,11 @@ it("makes only explicitly passive draft previews passive, including on the backg
   const answer = { preview: { text: "Draft" }, marks: {} };
   const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(answer));
   const api = new DashboardApi("", fetchImpl);
-  const draft = { departmentId: null, receipt: {}, settings: {} };
+  const draft = {
+    departmentId: "dept",
+    receipt: {},
+    policy: { receiptPrintMode: "auto" as const, printTradingName: true },
+  };
   await expect(api.previewReceiptDraft(draft, { passive: true })).resolves.toEqual(answer);
   await expect(api.background.previewReceiptDraft(draft)).resolves.toEqual(answer);
   await expect(api.previewReceiptDraft(draft, { passive: false })).resolves.toEqual(answer);

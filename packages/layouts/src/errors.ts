@@ -13,11 +13,19 @@ declare module "@waitron/shared" {
         | "too_long"
         | "unknown_field"
         | "invalid_phone"
+        | "invalid_description"
         | "invalid_email"
         | "not_boolean"
         | "invalid_logo"
         | "image_not_found";
-      field?: "headerSubtitle" | "footerMessage" | "phone" | "email" | "printAddress" | "logo";
+      field?:
+        | "headerSubtitle"
+        | "footerMessage"
+        | "phone"
+        | "email"
+        | "printAddress"
+        | "logo"
+        | "operationDescription";
       language?: string;
       maxLength?: number;
     };

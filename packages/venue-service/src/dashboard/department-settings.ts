@@ -8,6 +8,7 @@ import {
   submitOnEnter,
   type DraftScope,
   type LeaveCoordinator,
+  type LeaveReason,
 } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-input.js";
 import "@waitron/ui/src/components/wt-switch.js";
@@ -42,8 +43,6 @@ const equal = (a: DepartmentSettingsInput, b: DepartmentSettingsInput) =>
   a.orderStart === b.orderStart &&
   a.paidWhen === b.paidWhen &&
   a.collectionNumber === b.collectionNumber &&
-  a.receiptPrintMode === b.receiptPrintMode &&
-  a.printTradingName === b.printTradingName &&
   a.transfers?.receivingProfileId === b.transfers?.receivingProfileId &&
   (a.transfers?.destinationDepartmentIds.length ?? 0) ===
     (b.transfers?.destinationDepartmentIds.length ?? 0) &&
@@ -117,7 +116,7 @@ export class DepartmentSettings extends LitElement {
   @property({ attribute: false }) api?: VenueServiceApi;
   @property({ attribute: false }) model?: VenueServiceView;
   @property() departmentId = "";
-  @property({ type: Boolean }) showReceipt = true;
+  @property({ type: Boolean }) refreshing = false;
   @state() private draft?: DepartmentSettingsInput;
   @state() private busy = false;
   @state() private attempted = false;
@@ -176,8 +175,6 @@ export class DepartmentSettings extends LitElement {
       orderStart: policy?.orderStart ?? "counter",
       paidWhen: policy?.paidWhen ?? "prepay",
       collectionNumber: policy?.collectionNumber ?? "none",
-      receiptPrintMode: policy?.receiptPrintMode ?? "auto",
-      printTradingName: policy?.printTradingName ?? false,
     };
     if (this.opened !== row.id) {
       this.scope?.dispose();
@@ -347,7 +344,7 @@ export class DepartmentSettings extends LitElement {
       ...(this.draft?.tradingName.trim() ? {} : { tradingName: t("venue.field_required") }),
     };
   }
-  private fieldRefusal(error: unknown) {
+  private fieldRefusal(error: unknown, submitted: DepartmentSettingsInput) {
     const { code, params } = (error ?? {}) as { code?: string; params?: Record<string, unknown> };
     let field: Field | undefined;
     let message = t("venue.field_refused");
@@ -357,8 +354,6 @@ export class DepartmentSettings extends LitElement {
       "orderStart",
       "paidWhen",
       "collectionNumber",
-      "receiptPrintMode",
-      "printTradingName",
       ...(this.draft?.transfers
         ? (["receivingProfileId", "destinationDepartmentIds"] as const)
         : []),
@@ -366,6 +361,7 @@ export class DepartmentSettings extends LitElement {
     if (code === "management.request_invalid" && fields.includes(params?.field as Field))
       field = params!.field as Field;
     if (code === "department.name_taken") {
+      if (this.draft?.name.trim() !== submitted.name.trim()) return;
       field = "name";
       message = t("venue.department_name_taken");
     }
@@ -394,6 +390,7 @@ export class DepartmentSettings extends LitElement {
     if (
       !this.isConnected ||
       this.busy ||
+      this.refreshing ||
       !this.department?.active ||
       saveActionState(this.scope).unchanged
     )
@@ -423,13 +420,13 @@ export class DepartmentSettings extends LitElement {
         this.emit("saved", { departmentId: id });
       }
     } catch (error) {
-      if (this.current(id, generation)) this.fieldRefusal(error);
+      if (this.current(id, generation)) this.fieldRefusal(error, submitted);
     } finally {
       if (this.current(id, generation)) this.busy = false;
     }
   }
   private async cancel() {
-    if (this.busy || !this.scope) return;
+    if (this.busy || this.refreshing || !this.scope) return;
     const id = this.departmentId,
       generation = this.generation;
     const proceed = () => {
@@ -445,6 +442,17 @@ export class DepartmentSettings extends LitElement {
       await this.leave.request({ scopes: [this.scope.id], reason: "cancel", proceed });
     else proceed();
   }
+  get hasUnsavedChanges() {
+    return this.scope?.isDirty() ?? false;
+  }
+  async requestLeave(reason: LeaveReason): Promise<boolean> {
+    if (!this.isConnected || this.busy || this.refreshing) return false;
+    if (!this.scope || !this.leave || !this.scope.isDirty()) return true;
+    const id = this.departmentId,
+      generation = this.generation;
+    const outcome = await this.leave.request({ scopes: [this.scope.id], reason, proceed() {} });
+    return !!this.current(id, generation) && outcome === "proceeded";
+  }
   private get differing() {
     const draft = this.draft!;
     const fields = ["orderStart", "paidWhen", "collectionNumber", "receiptPrintMode"] as const;
@@ -454,7 +462,16 @@ export class DepartmentSettings extends LitElement {
         const overrides = this.model!.salePolicies.zones.find((p) => p.zoneId === zone.id);
         if (!overrides) return [];
         const labels = fields
-          .filter((field) => overrides[field] !== null && overrides[field] !== draft[field])
+          .filter(
+            (field) =>
+              overrides[field] !== null &&
+              overrides[field] !==
+                (field === "receiptPrintMode"
+                  ? (this.model!.salePolicies.departments.find(
+                      (p) => p.departmentId === this.departmentId,
+                    )?.receiptPrintMode ?? "auto")
+                  : draft[field]),
+          )
           .map((field) => {
             switch (field) {
               case "orderStart":
@@ -492,7 +509,7 @@ export class DepartmentSettings extends LitElement {
       disabled = !row.active,
       state = saveActionState(this.scope);
     const serviceErrors: Partial<Record<keyof ServiceSettingsValue, string>> = {};
-    for (const field of ["orderStart", "paidWhen", "collectionNumber", "receiptPrintMode"] as const)
+    for (const field of ["orderStart", "paidWhen", "collectionNumber"] as const)
       if (errors[field]) serviceErrors[field] = errors[field];
     return html`<div
       class="form"
@@ -516,20 +533,29 @@ export class DepartmentSettings extends LitElement {
         }}
       ></wt-input>
 
+      <wt-input
+        name="tradingName"
+        label=${t("venue.trading_name")}
+        required
+        .value=${draft.tradingName}
+        error=${errors.tradingName ?? ""}
+        ?disabled=${disabled}
+        @wt-change=${(e: CustomEvent<{ value: string }>) => {
+          e.stopPropagation();
+          this.changed("tradingName", e.detail.value);
+        }}
+      ></wt-input>
+
       <section aria-label=${t("venue.service_settings")}>
         <h2>${t("venue.service_settings")}</h2>
         <dashboard-service-settings-fields
-          .value=${draft}
+          .value=${{ ...draft, receiptPrintMode: this.model!.salePolicies.departments.find((p) => p.departmentId === row.id)?.receiptPrintMode ?? "auto" }}
+          .showReceiptMode=${false}
           .errors=${serviceErrors}
           ?disabled=${disabled}
           @service-settings-change=${(e: CustomEvent<{ value: ServiceSettingsValue }>) => {
             e.stopPropagation();
-            for (const field of [
-              "orderStart",
-              "paidWhen",
-              "collectionNumber",
-              "receiptPrintMode",
-            ] as const)
+            for (const field of ["orderStart", "paidWhen", "collectionNumber"] as const)
               if (this.draft![field] !== e.detail.value[field])
                 this.changed(field, e.detail.value[field]);
           }}
@@ -553,43 +579,6 @@ export class DepartmentSettings extends LitElement {
                       >`,
                 )}
               </p>`
-            : nothing
-        }
-      </section>
-      <section aria-label=${t("venue.on_receipt")}>
-        <h2>${t("venue.on_receipt")}</h2>
-        <wt-input
-          name="tradingName"
-          label=${t("venue.trading_name")}
-          required
-          .value=${draft.tradingName}
-          error=${errors.tradingName ?? ""}
-          ?disabled=${disabled}
-          @wt-change=${(e: CustomEvent<{ value: string }>) => {
-            e.stopPropagation();
-            this.changed("tradingName", e.detail.value);
-          }}
-        ></wt-input>
-        <div>
-          <wt-switch
-            name="printTradingName"
-            label=${t("venue.print_trading_name")}
-            .checked=${draft.printTradingName}
-            ?disabled=${disabled}
-            @wt-change=${(e: CustomEvent<{ checked: boolean }>) => {
-              e.stopPropagation();
-              this.changed("printTradingName", e.detail.checked);
-            }}
-          ></wt-switch
-          >${errors.printTradingName ? html`<p class="error" data-field-error="printTradingName">${errors.printTradingName}</p>` : nothing}
-        </div>
-        ${
-          this.showReceipt
-            ? html`<a
-                data-test="edit-receipt"
-                href=${`/manage/venue-operations/department/${encodeURIComponent(row.id)}/view/receipt`}
-                >${t("venue.edit_receipt")}</a
-              >`
             : nothing
         }
       </section>
@@ -646,7 +635,7 @@ export class DepartmentSettings extends LitElement {
             </section>`
           : nothing
       }
-      ${row.active ? html`<wt-form-actions .error=${[this.failure, Object.keys(errors).length ? t("venue.fix_fields") : ""].filter(Boolean).join(" ")}><wt-button slot="cancel" variant="secondary" data-test="cancel-editor" ?disabled=${this.busy} @click=${() => void this.cancel()}>${t("venue.cancel")}</wt-button><wt-button data-test="save-editor" variant=${state.variant} ?disabled=${this.busy || state.unchanged || (this.attempted && Object.keys(this.errors).length > 0)} @click=${() => void this.save()}>${t("venue.save")}</wt-button></wt-form-actions>` : nothing}
+      ${row.active ? html`<wt-form-actions .error=${[this.failure, Object.keys(errors).length ? t("venue.fix_fields") : ""].filter(Boolean).join(" ")}><wt-button slot="cancel" variant="secondary" data-test="cancel-editor" ?disabled=${this.busy || this.refreshing} @click=${() => void this.cancel()}>${t("venue.cancel")}</wt-button><wt-button data-test="save-editor" variant=${this.refreshing ? "secondary" : state.variant} ?disabled=${this.busy || this.refreshing || state.unchanged || (this.attempted && Object.keys(this.errors).length > 0)} @click=${() => void this.save()}>${t("venue.save")}</wt-button></wt-form-actions>` : nothing}
     </div>`;
   }
 }

@@ -180,6 +180,8 @@ export {
 } from "./receipt-text.js";
 export type {
   DepartmentReceiptConfig,
+  DepartmentReceiptPolicy,
+  DepartmentReceiptWrite,
   PrintedReceiptTrim,
   ReceiptPresentation,
   ReceiptText,

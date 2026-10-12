@@ -708,46 +708,69 @@ export async function setZoneSalePolicyOverride<K extends keyof ZonePolicyField>
     });
 }
 
-export interface DepartmentSettingsInput extends DepartmentPolicyField {
+export interface DepartmentEditInput extends Pick<
+  DepartmentPolicyField,
+  "orderStart" | "paidWhen" | "collectionNumber"
+> {
   name: string;
   tradingName: string;
   transfers?: { receivingProfileId: string | null; destinationDepartmentIds: string[] };
 }
 
-export async function saveDepartmentSettings(
+export async function saveDepartmentEditSettings(
   tx: Transaction,
   cfg: VenueScope,
   departmentId: string,
-  input: DepartmentSettingsInput,
+  input: DepartmentEditInput,
 ): Promise<void> {
-  await setDepartmentSalePolicyField(
-    tx,
-    cfg,
-    departmentId,
-    "printTradingName",
-    input.printTradingName,
-  );
-  await updateDepartment(tx, cfg, departmentId, input);
-  await setDepartmentSalePolicyField(tx, cfg, departmentId, "paidWhen", input.paidWhen);
-  await setDepartmentSalePolicyField(
-    tx,
-    cfg,
-    departmentId,
-    "collectionNumber",
-    input.collectionNumber,
-  );
-  await setDepartmentSalePolicyField(
-    tx,
-    cfg,
-    departmentId,
-    "receiptPrintMode",
-    input.receiptPrintMode,
-  );
+  await updateDepartment(tx, cfg, departmentId, {
+    name: input.name,
+    tradingName: input.tradingName,
+  });
+  const settings = {
+    orderStart: input.orderStart,
+    paidWhen: input.paidWhen,
+    collectionNumber: input.collectionNumber,
+  };
+  await tx
+    .insert(departmentSalePolicies)
+    .values({
+      departmentId,
+      ...settings,
+      receiptPrintMode: "auto",
+      printTradingName: false,
+    })
+    .onConflictDoUpdate({ target: departmentSalePolicies.departmentId, set: settings });
   if (input.transfers !== undefined)
     await setDepartmentTransferSettings(tx, cfg, departmentId, input.transfers);
 }
 
 export type ZoneServiceSettingsInput = ZonePolicyField;
+
+export type ZoneEditInput = ZoneServiceSettingsInput & { name: string };
+
+export async function saveZoneSettings(
+  tx: Transaction,
+  cfg: VenueScope,
+  zoneId: string,
+  input: ZoneEditInput,
+): Promise<void> {
+  if (!(await listServiceZones(tx, cfg)).some((zone) => zone.id === zoneId))
+    throw new AppError("service_zone.not_found", { zoneId });
+  try {
+    await tx.update(floorZones).set({ name: input.name }).where(eq(floorZones.id, zoneId));
+  } catch (error) {
+    if (
+      refusalOn(error, UNIQUE_VIOLATION, {
+        table: "floor_zones",
+        columns: ["location_id", "name"],
+      })
+    )
+      throw new AppError("zone.name_taken", { name: input.name });
+    throw error;
+  }
+  await saveZoneServiceSettings(tx, cfg, zoneId, input);
+}
 
 export async function saveZoneServiceSettings(
   tx: Transaction,

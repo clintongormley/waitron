@@ -69,7 +69,7 @@ Add the language again to resume using those translations. The default language'
 **Delete**: choose another default first. A required language's row has none either.
 
 Your receipt-language settings remain independent. A receipt prints in one language. Each
-location's default is chosen on the **Receipts** tab of **Venue settings**, which fixes it to
+location's default is chosen in **Venue details** under **Venue settings**, which fixes it to
 Catalan in Catalonia, and staff can choose another language for a sale, or for a copy, at the till.
 The till offers the location's receipt language and, in Spain, whichever of Spanish, Catalan,
 Galician and Basque are among your content languages, so adding English content does not add an
@@ -79,7 +79,7 @@ Product names, units and option answers print in your default content language, 
 content languages where a name is blank in it, whatever language the receipt is in. They are stored
 in that language when a dish is added to an order, so changing the content default does not rewrite
 issued receipts. If the receipt language is not one of your content languages, this page and the
-Receipts tab of Venue settings show a note saying so.
+receipt language card in Venue settings show a note saying so.
 
 Kitchen displays,
 orders you retrieve and sales reports keep their recorded names, even if you later remove that

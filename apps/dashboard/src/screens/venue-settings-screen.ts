@@ -10,7 +10,6 @@ import type { StringKey } from "../i18n/strings.js";
 /** The page's tabs in the order they show; a module's panel names one of these keys. */
 export const VENUE_SETTINGS_TABS = [
   "venue-details",
-  "receipts",
   "tables",
   "adjustment-reasons",
   "kitchen",
@@ -19,7 +18,6 @@ export type VenueSettingsTab = (typeof VENUE_SETTINGS_TABS)[number];
 
 const TAB_LABELS: Record<VenueSettingsTab, StringKey> = {
   "venue-details": "venue_settings.tab.venue_details",
-  receipts: "venue_settings.tab.receipts",
   tables: "venue_settings.tab.tables",
   "adjustment-reasons": "venue_settings.tab.adjustment_reasons",
   kitchen: "venue_settings.tab.kitchen",
@@ -43,6 +41,11 @@ export class VenueSettingsScreen extends LitElement {
     css`
       :host {
         display: block;
+        min-width: 0;
+      }
+      .panels {
+        display: grid;
+        gap: var(--wt-space-5);
         min-width: 0;
       }
       h1 {
@@ -110,7 +113,7 @@ export class VenueSettingsScreen extends LitElement {
                 tabs,
                 (tab) => tab,
                 (tab) =>
-                  html`<div slot=${tab} data-test=${`venue-settings-${tab}`}>
+                  html`<div class="panels" slot=${tab} data-test=${`venue-settings-${tab}`}>
                     ${repeat(
                       this.panels.filter((panel) => panel.tab === tab),
                       (panel) => panel.key,

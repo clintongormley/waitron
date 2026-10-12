@@ -73,7 +73,7 @@ interface Fixture {
   categoryId: string;
 }
 
-async function fixture(): Promise<Fixture> {
+async function fixture(operationDescriptionRequired?: boolean): Promise<Fixture> {
   await seedTenant(db);
   const [location] = await db
     .insert(locations)
@@ -140,7 +140,7 @@ async function fixture(): Promise<Fixture> {
     app,
     {
       db,
-      cfg: { locationId: scopedLocationId },
+      cfg: Object.assign({ locationId: scopedLocationId }, { operationDescriptionRequired }),
       core: {
         seatTable: () => Promise.reject(new Error("route fixture: seating needs the server seat")),
         floorDeletion: {
@@ -216,11 +216,9 @@ async function send(
 const departmentSettings = {
   name: "New dining",
   tradingName: "Dining receipt",
-  printTradingName: true,
   orderStart: "counter",
   paidWhen: "ticket_then_pay",
   collectionNumber: "numbered",
-  receiptPrintMode: "on_request",
 } as const;
 const zoneSettings = {
   orderStart: "counter",
@@ -236,6 +234,10 @@ async function settingsFixture() {
       name: "Dining",
       orderStart: "table",
     });
+    await tx
+      .update(departmentSalePolicies)
+      .set({ printTradingName: true, receiptPrintMode: "on_request" })
+      .where(eq(departmentSalePolicies.departmentId, department.id));
     await configureZone(tx, fx, {
       zoneId: fx.zoneId,
       departmentId: department.id,
@@ -322,8 +324,6 @@ describe("whole service settings saves", () => {
         await send(fx.app, "PUT", fx.departmentPath, fx.managerCookie, {
           ...departmentSettings,
           orderStart: "table",
-          receiptPrintMode: "auto",
-          printTradingName: false,
         })
       ).status,
     ).toBe(204);
@@ -341,7 +341,7 @@ describe("whole service settings saves", () => {
       read.model.salePolicies.departments.find(
         (row: { departmentId: string }) => row.departmentId === fx.departmentId,
       ).receiptPrintMode,
-    ).toBe("auto");
+    ).toBe("on_request");
     expect(
       (await send(fx.app, "PUT", fx.departmentPath, fx.managerCookie, departmentSettings)).status,
     ).toBe(204);
@@ -3555,4 +3555,319 @@ describe("permanent department delete contracts", () => {
       }).toEqual(before);
     }
   });
+});
+
+describe("atomic zone editor save", () => {
+  const edited = { name: "Garden", ...zoneSettings };
+  const path = (id: string) => `/management-api/venue-service/zones/${id}/settings`;
+
+  it("saves the name and every override together, preserving raw inheritance", async () => {
+    const fx = await settingsFixture();
+    for (const input of [
+      edited,
+      {
+        name: "Garden",
+        orderStart: null,
+        paidWhen: null,
+        collectionNumber: null,
+        receiptPrintMode: null,
+      },
+    ]) {
+      expect((await send(fx.app, "PUT", path(fx.zoneId), fx.managerCookie, input)).status).toBe(
+        204,
+      );
+      expect(
+        (
+          await db
+            .select({ name: floorZones.name })
+            .from(floorZones)
+            .where(eq(floorZones.id, fx.zoneId))
+        )[0],
+      ).toEqual({ name: "Garden" });
+      expect(
+        (await db.select().from(zoneSalePolicies).where(eq(zoneSalePolicies.zoneId, fx.zoneId)))[0],
+      ).toEqual({
+        zoneId: fx.zoneId,
+        orderStart: input.orderStart,
+        paidWhen: input.paidWhen,
+        collectionNumber: input.collectionNumber,
+        receiptPrintMode: input.receiptPrintMode,
+      });
+    }
+  });
+
+  it("a duplicate name refuses without changing name or policy", async () => {
+    const fx = await settingsFixture();
+    await db.insert(floorZones).values({ locationId: fx.locationId, name: "Garden" });
+    const before = await rawSettingsSnapshot();
+    const response = await send(fx.app, "PUT", path(fx.zoneId), fx.managerCookie, edited);
+    expect(response.status).toBe(409);
+    expect(await response.json()).toEqual({
+      error: { code: "zone.name_taken", params: { name: "Garden" } },
+    });
+    expect(await rawSettingsSnapshot()).toEqual(before);
+  });
+
+  it.each([
+    ["name", null],
+    ["name", " "],
+    ["orderStart", "table_tab"],
+    ["paidWhen", ["prepay"]],
+    ["collectionNumber", false],
+    ["receiptPrintMode", "never"],
+    ["unexpected", true],
+  ])("invalid %s refuses without changing name or policy (%j)", async (field, value) => {
+    const fx = await settingsFixture();
+    const before = await rawSettingsSnapshot();
+    const response = await send(fx.app, "PUT", path(fx.zoneId), fx.managerCookie, {
+      ...edited,
+      [field]: value,
+    });
+    expect(response.status).toBe(400);
+    expect(await response.json()).toMatchObject({
+      error: { code: "management.request_invalid", params: { field } },
+    });
+    expect(await rawSettingsSnapshot()).toEqual(before);
+  });
+
+  it.each(["deleted", "other location", "unassigned", "unknown"])(
+    "refuses a %s zone without writes",
+    async (kind) => {
+      const fx = await settingsFixture();
+      let id = fx.zoneId;
+      if (kind === "deleted")
+        await db.update(floorZones).set({ active: false }).where(eq(floorZones.id, id));
+      if (kind === "other location") {
+        const other = await settingsFixture();
+        id = other.zoneId;
+      }
+      if (kind === "unassigned") {
+        const [zone] = await db
+          .insert(floorZones)
+          .values({ locationId: fx.locationId, name: "Unassigned" })
+          .returning({ id: floorZones.id });
+        id = zone!.id;
+      }
+      if (kind === "unknown") id = randomUUID();
+      const before = await rawSettingsSnapshot();
+      const response = await send(fx.app, "PUT", path(id), fx.managerCookie, edited);
+      expect(response.status).toBe(404);
+      expect(await response.json()).toMatchObject({ error: { code: "service_zone.not_found" } });
+      expect(await rawSettingsSnapshot()).toEqual(before);
+    },
+  );
+
+  it("requires service authority and a separate rename permission", async () => {
+    const fx = await settingsFixture();
+    const before = await rawSettingsSnapshot();
+    for (const [cookie, status, code] of [
+      [undefined, 401, "management_session.required"],
+      [fx.staffCookie, 403, "authorization.not_permitted"],
+    ] as const) {
+      const response = await send(fx.app, "PUT", path(fx.zoneId), cookie, edited);
+      expect(response.status).toBe(status);
+      expect(await response.json()).toMatchObject({ error: { code } });
+    }
+    expect(await rawSettingsSnapshot()).toEqual(before);
+    // Grant only the module permission to exercise the independent rename boundary.
+    registerModulePermissions([{ permission: "venue_service.manage", grantedFrom: "supervisor" }]);
+    try {
+      const response = await send(fx.app, "PUT", path(fx.zoneId), fx.supervisorCookie, edited);
+      expect(response.status).toBe(403);
+      expect(await response.json()).toMatchObject({
+        error: { code: "authorization.not_permitted", params: { permission: "venue.configure" } },
+      });
+      expect(await rawSettingsSnapshot()).toEqual(before);
+      expect(
+        (
+          await send(fx.app, "PUT", path(fx.zoneId), fx.supervisorCookie, {
+            ...edited,
+            name: "Terrace",
+          })
+        ).status,
+      ).toBe(204);
+      expect(
+        (await db.select().from(zoneSalePolicies).where(eq(zoneSalePolicies.zoneId, fx.zoneId)))[0],
+      ).toEqual({ zoneId: fx.zoneId, ...zoneSettings });
+      expect(
+        (
+          await db
+            .select({ name: floorZones.name })
+            .from(floorZones)
+            .where(eq(floorZones.id, fx.zoneId))
+        )[0],
+      ).toEqual({ name: "Terrace" });
+    } finally {
+      registerModulePermissions(VENUE_SERVICE_PERMISSIONS);
+    }
+  });
+  it("a refused policy write rolls back the earlier name write", async () => {
+    const fx = await settingsFixture();
+    const before = await rawSettingsSnapshot();
+    await db.execute(sql`
+      create trigger refuse_editor_policy before insert on zone_sale_policies
+      when new.zone_id in (select id from floor_zones where name = 'Garden')
+      begin select raise(abort, 'policy refused'); end
+    `);
+    try {
+      const response = await send(fx.app, "PUT", path(fx.zoneId), fx.managerCookie, edited);
+      expect(response.status).toBe(500);
+      expect(await response.json()).toEqual({ error: { code: "server.internal" } });
+      expect(await rawSettingsSnapshot()).toEqual(before);
+    } finally {
+      await db.execute(sql`drop trigger refuse_editor_policy`);
+    }
+  });
+});
+
+describe("department editor owns service settings separately from receipt policy", () => {
+  it("accepts only department fields and keeps the current receipt policy", async () => {
+    const fx = await settingsFixture();
+    await db
+      .update(departmentSalePolicies)
+      .set({ receiptPrintMode: "on_request", printTradingName: false })
+      .where(eq(departmentSalePolicies.departmentId, fx.departmentId));
+    const response = await send(fx.app, "PUT", fx.departmentPath, fx.managerCookie, {
+      name: "Service edit",
+      tradingName: "Shop",
+      orderStart: "counter",
+      paidWhen: "ticket_then_pay",
+      collectionNumber: "numbered",
+    });
+    expect(response.status).toBe(204);
+    const after = await settingsSnapshot(fx);
+    expect(
+      after.model.salePolicies.departments.find(
+        (row: { departmentId: string }) => row.departmentId === fx.departmentId,
+      ),
+    ).toEqual({
+      departmentId: fx.departmentId,
+      orderStart: "counter",
+      paidWhen: "ticket_then_pay",
+      collectionNumber: "numbered",
+      receiptPrintMode: "on_request",
+      printTradingName: false,
+    });
+    expect(
+      after.model.departments.find((row: { id: string }) => row.id === fx.departmentId),
+    ).toMatchObject({ name: "Service edit", tradingName: "Shop" });
+  });
+  it.each(["receiptPrintMode", "printTradingName"])(
+    "refuses receipt field %s without writes",
+    async (field) => {
+      const fx = await settingsFixture();
+      const before = await settingsSnapshot(fx);
+      const response = await send(fx.app, "PUT", fx.departmentPath, fx.managerCookie, {
+        name: "Service edit",
+        tradingName: "Shop",
+        orderStart: "counter",
+        paidWhen: "ticket_then_pay",
+        collectionNumber: "numbered",
+        [field]: field === "receiptPrintMode" ? "auto" : true,
+      });
+      expect(response.status).toBe(400);
+      expect(await response.json()).toMatchObject({
+        error: { code: "management.request_invalid", params: { field } },
+      });
+      expect(await settingsSnapshot(fx)).toEqual(before);
+    },
+  );
+});
+
+it("repairing an absent department policy preserves the previously read receipt defaults", async () => {
+  const fx = await settingsFixture();
+  await db
+    .delete(departmentSalePolicies)
+    .where(eq(departmentSalePolicies.departmentId, fx.departmentId));
+  const before = await settingsSnapshot(fx);
+  expect(
+    before.model.salePolicies.zones.find((row: { zoneId: string }) => row.zoneId === fx.zoneId)
+      .effective,
+  ).toMatchObject({ receiptPrintMode: "auto", printTradingName: false });
+  const response = await send(fx.app, "PUT", fx.departmentPath, fx.managerCookie, {
+    name: "Repaired",
+    tradingName: "Repair",
+    orderStart: "counter",
+    paidWhen: "ticket_then_pay",
+    collectionNumber: "numbered",
+  });
+  expect(response.status).toBe(204);
+  const after = await settingsSnapshot(fx);
+  expect(
+    after.model.salePolicies.departments.find(
+      (row: { departmentId: string }) => row.departmentId === fx.departmentId,
+    ),
+  ).toEqual({
+    departmentId: fx.departmentId,
+    orderStart: "counter",
+    paidWhen: "ticket_then_pay",
+    collectionNumber: "numbered",
+    receiptPrintMode: "auto",
+    printTradingName: false,
+  });
+});
+
+describe("department description setup in the live model", () => {
+  it.each([
+    undefined,
+    "{}",
+    JSON.stringify({ operationDescription: "  \t " }),
+    '{"operationDescription":23}',
+    "{broken",
+    JSON.stringify({ operationDescription: "x".repeat(501) }),
+    JSON.stringify({ operationDescription: "bad\u0001text" }),
+  ])(
+    "reports missing or unreadable department description %j only when the installed field requires it",
+    async (receipt) => {
+      const fx = await fixture(true);
+      const department = await withTransaction(db, (tx) =>
+        createDepartment(tx, fx, { name: "Dining" }),
+      );
+      if (receipt !== undefined)
+        await db.execute(
+          sql`insert into department_receipts (department_id, receipt, updated_at) values (${department.id}, ${receipt}, ${"2026-10-12T12:00:00Z"})`,
+        );
+      const read = async () =>
+        (
+          await (
+            await send(fx.app, "GET", "/management-api/venue-service", fx.managerCookie)
+          ).json()
+        ).readiness;
+      expect(await read()).toContainEqual({
+        code: "department.operation_description_required",
+        departmentId: department.id,
+        departmentName: "Dining",
+      });
+      await db.execute(
+        sql`insert into department_receipts (department_id, receipt, updated_at) values (${department.id}, ${JSON.stringify({ operationDescription: "Deli meals" })}, ${"2026-10-12T12:00:00Z"}) on conflict (department_id) do update set receipt=excluded.receipt`,
+      );
+      expect(await read()).not.toContainEqual(
+        expect.objectContaining({ code: "department.operation_description_required" }),
+      );
+      const other = await fixture(true);
+      expect(
+        (
+          await (
+            await send(other.app, "GET", "/management-api/venue-service", other.managerCookie)
+          ).json()
+        ).readiness,
+      ).not.toContainEqual(expect.objectContaining({ departmentId: department.id }));
+    },
+  );
+  it.each([false, undefined])(
+    "a no-field or standalone route (%j) does not require a department description",
+    async (required) => {
+      const fx = await fixture(required);
+      await withTransaction(db, (tx) => createDepartment(tx, fx, { name: "No description" }));
+      expect(
+        (
+          await (
+            await send(fx.app, "GET", "/management-api/venue-service", fx.managerCookie)
+          ).json()
+        ).readiness,
+      ).not.toContainEqual(
+        expect.objectContaining({ code: "department.operation_description_required" }),
+      );
+    },
+  );
 });

@@ -1,5 +1,6 @@
 import { createZone } from "./testing/service-zone.js";
 import { randomUUID } from "node:crypto";
+import { sql } from "drizzle-orm";
 import { describe, expect, it, vi } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -131,6 +132,7 @@ describe("orderWatchZones", () => {
     const noZone = randomUUID();
     await inTx(v, async (tx) => {
       await createOpenOrder(tx, v.cfg, noZone, [], null);
+      await tx.run(sql`delete from order_service_contexts where working_order_id = ${noZone}`);
     });
     const { partyId, tabId } = await seat(v, await v.table("Watch party"));
     const batch = vi.spyOn(VENUE_SERVICE, "findOrderZones");

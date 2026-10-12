@@ -1,5 +1,12 @@
 # Menus, reusable sections and home layouts — Implementation Plan
 
+> **2026-10-12, A493 supersession:** departments and zones share one list with protected
+> editors. The department page and its tabs, including the zone panel and receipt tab, are
+> retired. Floor-plan editing returns to the list. Receipt decoration and the tax-agency
+> description belong to each department; Venue settings holds the receipt language.
+> The earlier page, global-default and live transfer contracts below are historical.
+> See [the current contract](../specs/2026-10-12-a493-departments-zones-design.md).
+
 > 2026-10-07, A358: `PATCH /management-api/products/:id` is retired after A327 removed its
 > application caller. Product edits use `PUT /management-api/products/:id/editor`. The route
 > references below record the plan's earlier contract; see [Products](../../developers/products.md).

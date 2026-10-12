@@ -4,6 +4,7 @@ import { LitElement, html } from "lit";
 import { applyTokens, LeaveController, UrlStateController, navigationGuardFor } from "@waitron/ui";
 import { setLocale, type DashboardRequest } from "@waitron/dashboard-kit";
 import { VenueServiceApi, type VenueServiceView } from "./client.js";
+import { departmentHoursModel } from "../testing/department-hours-fixture.js";
 import "./venue-departments-shell.js";
 
 const initialUrl = location.href;
@@ -34,6 +35,7 @@ const model: VenueServiceView = {
   clearingWorkflow: false,
 };
 class App extends LitElement {
+  model = model;
   readonly leave = new LeaveController(this);
   readonly url = new UrlStateController(this, () => {}, {
     basePath: "/manage",
@@ -49,11 +51,35 @@ class App extends LitElement {
     vi.fn(async (path: string) =>
       path.endsWith("/profiles")
         ? []
-        : { departmentId: "d1", receivingProfileId: null, destinationDepartmentIds: [] },
+        : path.endsWith("/floor-plan")
+          ? { tables: [] }
+          : path.endsWith("/opening-hours")
+            ? departmentHoursModel()
+            : { departmentId: "d1", receivingProfileId: null, destinationDepartmentIds: [] },
     ) as DashboardRequest,
   );
   override render() {
-    return html`<venue-departments-shell .model=${model} .api=${this.api}></venue-departments-shell
+    return html`<venue-departments-shell
+        .model=${this.model}
+        .api=${this.api}
+        @click=${(event: MouseEvent) => {
+          const anchor = event
+            .composedPath()
+            .find((node): node is HTMLAnchorElement => node instanceof HTMLAnchorElement);
+          if (
+            !anchor ||
+            event.defaultPrevented ||
+            event.button ||
+            event.ctrlKey ||
+            event.metaKey ||
+            event.shiftKey ||
+            event.altKey
+          )
+            return;
+          event.preventDefault();
+          void navigationGuardFor(window)!.write(anchor.getAttribute("href")!);
+        }}
+      ></venue-departments-shell
       >${this.leave.render({ heading: "Unsaved changes", message: "Discard unsaved changes?", keepLabel: "Keep editing", discardLabel: "Discard changes" })}`;
   }
 }
@@ -74,7 +100,7 @@ async function mount(path = "/manage/venue-operations/department/d1") {
   await app.updateComplete;
   const shell = app.shadowRoot!.querySelector("venue-departments-shell")!;
   await shell.updateComplete;
-  const page = shell.shadowRoot!.querySelector("department-page");
+  const page = shell.shadowRoot!.querySelector("department-edit-dialog");
   await page?.updateComplete;
   const settings = page?.shadowRoot!.querySelector("department-settings");
   await settings?.updateComplete;
@@ -96,33 +122,52 @@ async function choose(value: "keep" | "discard") {
   question.shadowRoot!.querySelector<HTMLElement>(`[data-choice=${value}]`)!.click();
   await expect.poll(() => question.open).toBe(false);
 }
-it("the real tab click keeps an edited Settings page until Discard accepts the Zones URL", async () => {
-  const { shell, page, settings } = await mount();
+it("the real differing-zone link keeps the edited department until Discard accepts the zone URL", async () => {
+  const { shell, page: editor, settings } = await mount();
+  const next = structuredClone(model);
+  next.salePolicies.zones = [
+    {
+      zoneId: "z1",
+      orderStart: "table",
+      paidWhen: null,
+      collectionNumber: null,
+      receiptPrintMode: null,
+      effective: {
+        orderStart: "table",
+        paidWhen: "prepay",
+        collectionNumber: "none",
+        receiptPrintMode: "auto",
+        printTradingName: false,
+      },
+    },
+  ];
+  app.model = next;
+  shell.model = next;
+  await shell.updateComplete;
+  await editor.updateComplete;
+  await settings.updateComplete;
   await edit(settings);
-  const tabs = page.shadowRoot!.querySelector("wt-tabs")!;
-  await tabs.updateComplete;
-  const button = tabs.shadowRoot!.querySelector<HTMLElement>("[data-key=zones]")!;
-  button.click();
+  const link = settings.shadowRoot!.querySelector<HTMLAnchorElement>(
+    "[data-test=zones-that-differ] a",
+  )!;
+  await userEvent.click(page.elementLocator(link));
   await choose("keep");
   expect(location.pathname).toBe("/manage/venue-operations/department/d1");
   expect(
     (settings.shadowRoot!.querySelector("[name=name]")! as HTMLElementTagNameMap["wt-input"]).value,
   ).toBe("Draft");
-  expect(tabs.value).toBe("settings");
-  button.click();
+  expect(shell.shadowRoot!.querySelector("department-edit-dialog")).toBe(editor);
+  await userEvent.click(page.elementLocator(link));
   await choose("discard");
-  await expect
-    .poll(() => location.pathname)
-    .toBe("/manage/venue-operations/department/d1/view/zones");
-  await shell.updateComplete;
-  expect(shell.shadowRoot!.querySelector("department-page")!.view).toBe("zones");
+  await expect.poll(() => shell.shadowRoot!.querySelector("zone-edit-dialog")?.zoneId).toBe("z1");
+  expect(location.pathname).toBe("/manage/venue-operations/department/d1/view/zones/zone/z1");
   expect(app.leave.coordinator.isDirty()).toBe(false);
 });
 it("browser Back restores the edited page while Keep is chosen, then Discard returns to the list", async () => {
   const { shell, settings } = await mount("/manage/venue-operations");
   await navigationGuardFor(window)!.write("/manage/venue-operations/department/d1");
   await shell.updateComplete;
-  const page = shell.shadowRoot!.querySelector("department-page")!;
+  const page = shell.shadowRoot!.querySelector("department-edit-dialog")!;
   await page.updateComplete;
   const current = page.shadowRoot!.querySelector("department-settings")!;
   await current.updateComplete;
@@ -131,13 +176,13 @@ it("browser Back restores the edited page while Keep is chosen, then Discard ret
   history.back();
   await choose("keep");
   expect(location.pathname).toBe("/manage/venue-operations/department/d1");
-  expect(shell.shadowRoot!.querySelector("department-page")).toBe(page);
+  expect(shell.shadowRoot!.querySelector("department-edit-dialog")).toBe(page);
   expect(app.leave.coordinator.isDirty()).toBe(true);
   expect(history.length).toBe(length);
   history.back();
   await choose("discard");
-  await expect.poll(() => shell.shadowRoot!.querySelector("departments-list")).not.toBeNull();
-  expect(location.pathname).toBe("/manage/venue-operations");
+  await expect.poll(() => location.pathname).toBe("/manage/venue-operations");
+  expect(shell.shadowRoot!.querySelector("departments-list")).not.toBeNull();
   expect(app.leave.coordinator.isDirty()).toBe(false);
   expect(history.length).toBe(length);
   expect(settings).toBeUndefined();
@@ -148,119 +193,90 @@ it("an accepted external department route recreates the form and its baseline", 
   const pending = navigationGuardFor(window)!.write("/manage/venue-operations/department/gone");
   await choose("keep");
   await pending;
-  expect(shell.shadowRoot!.querySelector("department-page")).not.toBeNull();
+  expect(shell.shadowRoot!.querySelector("department-edit-dialog")).not.toBeNull();
   const accepted = navigationGuardFor(window)!.write("/manage/venue-operations/department/gone");
   await choose("discard");
   await accepted;
   await shell.updateComplete;
-  expect(shell.shadowRoot!.querySelector("department-page")).toBeNull();
+  expect(shell.shadowRoot!.querySelector("department-edit-dialog")).toBeNull();
   expect(shell.shadowRoot!.querySelector("[role=status]")!.textContent).toContain(
     "This department no longer exists.",
   );
   expect(app.leave.coordinator.isDirty()).toBe(false);
 });
 
-it.each(["move-zone", "delete-zone"])(
-  "the real %s menu waits for the zone draft decision before opening its dialog",
-  async (action) => {
-    const { shell } = await mount("/manage/venue-operations/department/d1/view/zones/zone/z1");
-    const snapshot = structuredClone(model);
-    snapshot.departments.push({
-      id: "d2",
-      name: "Deli",
-      tradingName: "Shop",
-
-      active: true,
-    });
-    shell.model = snapshot;
-    vi.spyOn(shell.api, "watchZoneDeleteImpact").mockImplementation((_id, apply) => {
-      apply({ target: { id: "z1", name: "Patio" }, refusals: [], ends: [], removes: [] });
-      return () => {};
-    });
-    await shell.updateComplete;
-    const zones = shell.shadowRoot!.querySelector("department-zones")!;
-    await zones.updateComplete;
-    const fields = zones.shadowRoot!.querySelector("dashboard-service-settings-fields")!;
-    const draft = {
-      orderStart: "counter" as const,
-      paidWhen: null,
-      collectionNumber: null,
-      receiptPrintMode: "on_request" as const,
-    };
-    fields.dispatchEvent(
-      new CustomEvent("service-settings-change", {
-        detail: { value: draft },
-        bubbles: true,
-        composed: true,
-      }),
-    );
-    await zones.updateComplete;
-    const button = zones.shadowRoot!.querySelector<HTMLElement>(`[data-test=${action}]`)!;
-    const dialogs = shell.shadowRoot!.querySelector("department-dialogs")!;
-    button.click();
-    await choose("keep");
-    expect(dialogs.dialog).toBeUndefined();
-    expect(fields.value).toEqual(draft);
-    expect(app.leave.coordinator.isDirty()).toBe(true);
-    button.click();
-    await choose("discard");
-    await expect.poll(() => dialogs.dialog?.kind).toBe(action);
-    expect(dialogs.dialog && "row" in dialogs.dialog && dialogs.dialog.row.id).toBe("z1");
-    expect(fields.value).toEqual({
-      orderStart: null,
-      paidWhen: null,
-      collectionNumber: null,
-      receiptPrintMode: null,
-    });
-    expect(app.leave.coordinator.isDirty()).toBe(false);
-  },
-);
-
-it.each([
-  ["rename-department", { departmentId: "d1" }, "Retained name"],
-  ["rename-zone", { zoneId: "z1" }, "Garden"],
-] as const)(
-  "%s retains its edited name when a live read removes the department",
-  async (action, detail, name) => {
+it("the real zone opening-hours link waits for the draft decision before navigation", async () => {
+  const { shell } = await mount("/manage/venue-operations/department/d1/view/zones/zone/z1");
+  const zone = shell.shadowRoot!.querySelector("zone-edit-dialog")!;
+  await zone.updateComplete;
+  const fields = zone.shadowRoot!.querySelector("dashboard-service-settings-fields")!;
+  const draft = {
+    orderStart: "counter" as const,
+    paidWhen: null,
+    collectionNumber: null,
+    receiptPrintMode: "on_request" as const,
+  };
+  fields.dispatchEvent(
+    new CustomEvent("service-settings-change", {
+      detail: { value: draft },
+      bubbles: true,
+      composed: true,
+    }),
+  );
+  await zone.updateComplete;
+  const link = zone.shadowRoot!.querySelector<HTMLAnchorElement>("[data-test=zone-opening-hours]")!;
+  await userEvent.click(page.elementLocator(link));
+  await choose("keep");
+  expect(location.pathname).toBe("/manage/venue-operations/department/d1/view/zones/zone/z1");
+  expect(fields.value).toMatchObject(draft);
+  expect(app.leave.coordinator.isDirty()).toBe(true);
+  await userEvent.click(page.elementLocator(link));
+  await choose("discard");
+  await expect
+    .poll(() => location.pathname)
+    .toBe("/manage/opening-hours/view/week/department/d1/zone/z1");
+  expect(fields.value).toMatchObject({
+    orderStart: null,
+    paidWhen: null,
+    collectionNumber: null,
+    receiptPrintMode: null,
+  });
+  expect(app.leave.coordinator.isDirty()).toBe(false);
+});
+it.each(["department", "zone"] as const)(
+  "a dirty %s editor closes without writing when its live identity disappears",
+  async (kind) => {
     const { shell } = await mount(
-      action === "rename-zone"
+      kind === "zone"
         ? "/manage/venue-operations/department/d1/view/zones/zone/z1"
-        : "/manage/venue-operations",
+        : "/manage/venue-operations/department/d1",
     );
-    const request = vi.spyOn(shell.api, "updateDepartment");
-    const zoneWrite = vi.spyOn(shell.api, "updateZone");
-    shell
-      .shadowRoot!.querySelector(
-        action === "rename-zone" ? "department-zones" : "departments-list",
-      )!
-      .dispatchEvent(new CustomEvent(action, { detail, bubbles: true, composed: true }));
-    await shell.updateComplete;
-    const dialogs = shell.shadowRoot!.querySelector("department-dialogs")!;
-    await dialogs.updateComplete;
-    const field =
-      dialogs.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>("[name=name]")!;
-    field.dispatchEvent(
-      new CustomEvent("wt-change", { detail: { value: name }, bubbles: true, composed: true }),
+    const request = vi.spyOn(shell.api, "saveDepartmentSettings");
+    const zoneWrite = vi.spyOn(shell.api, "saveZoneSettings");
+    const editor = shell.shadowRoot!.querySelector(`${kind}-edit-dialog`)!;
+    await editor.updateComplete;
+    const form =
+      kind === "department"
+        ? (editor as HTMLElementTagNameMap["department-edit-dialog"]).shadowRoot!.querySelector(
+            "department-settings",
+          )!
+        : editor;
+    await form.updateComplete;
+    const field = form.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>("[name=name]")!;
+    await field.updateComplete;
+    await userEvent.fill(
+      page.elementLocator(field.shadowRoot!.querySelector("input")!),
+      "Retained name",
     );
-    await dialogs.updateComplete;
-    const next = structuredClone(model);
-    next.departments = [];
-    shell.model = next;
-    await shell.updateComplete;
-    await dialogs.updateComplete;
-    expect(field.value).toBe(name);
     const unload = new Event("beforeunload", { cancelable: true });
     window.dispatchEvent(unload);
     expect(unload.defaultPrevented).toBe(true);
-    const cancel = dialogs.shadowRoot!.querySelector<HTMLElement>("[data-test=cancel-editor]")!;
-    cancel.click();
-    await choose("keep");
-    expect(field.value).toBe(name);
-    expect(app.leave.coordinator.isDirty()).toBe(true);
-    cancel.click();
-    await choose("discard");
-    await expect.poll(() => dialogs.dialog).toBeUndefined();
-    expect(dialogs.shadowRoot!.querySelector("[name=name]")).toBeNull();
+    const next = structuredClone(model);
+    next.departments = [];
+    shell.model = next;
+    await expect.poll(() => shell.shadowRoot!.querySelector(`${kind}-edit-dialog`)).toBeNull();
+    expect(field.isConnected).toBe(false);
+    expect(app.leave.coordinator.isDirty()).toBe(false);
     expect(request).not.toHaveBeenCalled();
     expect(zoneWrite).not.toHaveBeenCalled();
     const clean = new Event("beforeunload", { cancelable: true });
@@ -268,8 +284,7 @@ it.each([
     expect(clean.defaultPrevented).toBe(false);
   },
 );
-
-it("dirty native Escape keeps the rename, then Discard returns focus to its row menu", async () => {
+it("dirty native Escape keeps the department edit, then Discard returns focus to its row menu", async () => {
   const { shell } = await mount("/manage/venue-operations");
   const request = vi.fn<(path: string, method?: string) => Promise<unknown>>(async () => ({
     id: "unexpected-write",
@@ -280,11 +295,13 @@ it("dirty native Escape keeps the rename, then Discard returns focus to its row 
   await list.updateComplete;
   const table = list.shadowRoot!.querySelector("wt-data-table")!;
   await table.updateComplete;
-  table.shadowRoot!.querySelector<HTMLElement>("[data-test=rename-department-d1]")!.click();
-  const dialogs = shell.shadowRoot!.querySelector("department-dialogs")!;
-  await expect.poll(() => dialogs.dialog?.kind).toBe("rename-department");
-  const field =
-    dialogs.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>("[name=name]")!;
+  table.shadowRoot!.querySelector<HTMLElement>("[data-test=open-department-d1]")!.click();
+  await expect.poll(() => shell.shadowRoot!.querySelector("department-edit-dialog")).not.toBeNull();
+  const editor = shell.shadowRoot!.querySelector("department-edit-dialog")!;
+  await editor.updateComplete;
+  const form = editor.shadowRoot!.querySelector("department-settings")!;
+  await form.updateComplete;
+  const field = form.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>("[name=name]")!;
   await field.updateComplete;
   const input = field.shadowRoot!.querySelector("input")!;
   await userEvent.fill(page.elementLocator(input), "Retained rename");
@@ -295,13 +312,62 @@ it("dirty native Escape keeps the rename, then Discard returns focus to its row 
   await userEvent.click(page.elementLocator(input));
   await userEvent.keyboard("{Escape}");
   await choose("discard");
-  await expect.poll(() => dialogs.dialog).toBeUndefined();
+  await expect.poll(() => shell.shadowRoot!.querySelector("department-edit-dialog")).toBeNull();
   expect(app.leave.coordinator.isDirty()).toBe(false);
   const menu = table
-    .shadowRoot!.querySelector("[data-test=rename-department-d1]")!
+    .shadowRoot!.querySelector("[data-test=open-department-d1]")!
     .closest("wt-row-actions")!;
   await expect
     .poll(() => menu.shadowRoot!.activeElement)
     .toBe(menu.shadowRoot!.querySelector("button"));
   expect(request.mock.calls.filter(([, method]) => method && method !== "GET")).toEqual([]);
+});
+
+it("keeping a requested zone switch retains the department editor's originating menu", async () => {
+  const { shell } = await mount("/manage/venue-operations");
+  const next = structuredClone(model);
+  next.salePolicies.zones = [
+    {
+      zoneId: "z1",
+      orderStart: "table",
+      paidWhen: null,
+      collectionNumber: null,
+      receiptPrintMode: null,
+      effective: {
+        orderStart: "table",
+        paidWhen: "prepay",
+        collectionNumber: "none",
+        receiptPrintMode: "auto",
+        printTradingName: false,
+      },
+    },
+  ];
+  app.model = next;
+  shell.model = next;
+  await shell.updateComplete;
+  const list = shell.shadowRoot!.querySelector("departments-list")!;
+  await list.updateComplete;
+  const table = list.shadowRoot!.querySelector("wt-data-table")!;
+  await table.updateComplete;
+  const action = table.shadowRoot!.querySelector<HTMLElement>("[data-test=open-department-d1]")!;
+  const menu = action.closest("wt-row-actions")!;
+  await menu.updateComplete;
+  const trigger = menu.shadowRoot!.querySelector("button")!;
+  action.click();
+  await expect.poll(() => shell.shadowRoot!.querySelector("department-edit-dialog")).not.toBeNull();
+  const editor = shell.shadowRoot!.querySelector("department-edit-dialog")!;
+  await editor.updateComplete;
+  const form = editor.shadowRoot!.querySelector("department-settings")!;
+  await form.updateComplete;
+  await edit(form);
+  const link = form.shadowRoot!.querySelector<HTMLAnchorElement>(
+    "[data-test=zones-that-differ] a",
+  )!;
+  await userEvent.click(page.elementLocator(link));
+  await choose("keep");
+  expect(location.pathname).toBe("/manage/venue-operations/department/d1");
+  form.shadowRoot!.querySelector<HTMLElement>("[data-test=cancel-editor]")!.click();
+  await choose("discard");
+  await expect.poll(() => shell.shadowRoot!.querySelector("department-edit-dialog")).toBeNull();
+  await expect.poll(() => menu.shadowRoot!.activeElement).toBe(trigger);
 });

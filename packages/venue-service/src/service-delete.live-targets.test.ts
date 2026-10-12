@@ -113,14 +113,12 @@ const actions: [string, string, (tx: Transaction, f: Fixture) => Promise<unknown
     "department settings",
     "department.not_found",
     (tx, f) =>
-      service.saveDepartmentSettings(tx, f.cfg, f.gone, {
+      service.saveDepartmentEditSettings(tx, f.cfg, f.gone, {
         name: "Reborn",
         tradingName: "Reborn",
         orderStart: "counter",
         paidWhen: "prepay",
-        printTradingName: true,
         collectionNumber: "none",
-        receiptPrintMode: "auto",
       }),
   ],
   [

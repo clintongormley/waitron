@@ -1,0 +1,348 @@
+# A493 Departments and Zones Implementation Plan
+
+> **For agentic workers:** Use `superpowers:executing-plans` to implement this plan inline, task by task. The owner chose a Codex driver; do not dispatch routine implementer/reviewer pairs. Read `superpowers:test-driven-development` before writing implementation or tests. Checkbox steps are execution tracking, not claims that this planning delegate ran them.
+
+**Goal:** Replace department pages and venue receipt defaults with one department/zone list and protected dialog editors, including department-owned fiscal descriptions.
+
+**Architecture:** Venue-service owns department configuration and nullable zone policy; the server composes its receipt/fiscal inputs through the module seat. Core accepts an explicit description without depending on venue-service; fiscal backends retain their existing contract. Replace all live global receipt consumers together, keeping recorded transaction facts and the landed deletion flow.
+
+**Tech Stack:** TypeScript, Lit, Hono, Drizzle over the existing SQLite store, Vitest with real Chromium for browser projects, shared `wt-*` primitives.
+
+**Spec:** [2026-10-12-a493-departments-zones-design.md](../specs/2026-10-12-a493-departments-zones-design.md). Read its owner text, exact boundary table, consumer trace and assertion inventory before execution.
+
+## Global constraints
+
+- Work in this existing feature worktree. The owner has authorised unattended implementation, finish and landing; no design confirmation gate. This item is not plan-only.
+- No core-to-venue-service dependency. Core changes are limited to explicit description input/selection, including corrections/substitutions using the same resolver.
+- H2 prohibits edits to fiscal-verifactu builders/hash/records/invoice allocation, `registerSif` and `restoreFiscal`; golden huella and inmutabilidad files/fixtures remain byte-for-byte unchanged.
+- No migration/backwards-compatibility code pre-live. Guards are never edited, except new upgrade `CANDIDATES` entries if a later justified schema change requires them; this JSON-based design expects none.
+- Preserve all existing core receipt/sale assertions; zero core assertion substitutions. Product assertion substitutions are limited to the spec's explicit inventory. Do not lower coverage (`98/98/98/95`), mutation floors or add exclusions.
+- Reuse A435-6 (`ea98838b4b688b9b19c6381374664831a9959aea`): permanent-delete impact/refusal dialogs, retained history/media, no Enable/Disable replacement.
+- No CodeQL actions. Full finish review means one Claude run-it review in a single independent installed candidate checkout, not per-task delegate pairs.
+- No intermediate partial PRs or publishing: task boundaries are local coherent checkpoints on this one branch.
+- At each visually changed task end and final acceptance, LOOK at the affected flow in EN/ES × light/dark × 390/1280. The private mockup remains UNVERIFIED unless separately accessible to the parent; it is not acceptance evidence.
+
+## Review focus
+
+1. Empty/cleared receipt, missing department and broken optional read must not recover any venue logo/text/contact/address/description (Tasks 1–3).
+2. Receipt locale absent from enabled content languages, hidden saved translations, and historical copy language must remain visible/readable as appropriate (Task 3).
+3. A real grip drag ending over a pinned cell, after scrolling, or after a model refresh must send at most one correct move and no edit click (Task 4).
+4. Live changes/deletion or late results while an editor is dirty/pending must preserve its draft or close the removed identity, never overwrite another editor (Tasks 3–4).
+5. Captured-card recovery, funded bills and corrective issuance must file the selected department description, while replay retains filed facts and has no repeat side effects (Task 3).
+
+## Execution discipline and provisional boundaries
+
+The five tasks below are provisional reviewable units. If a signature change would break a current caller, move that caller and its behavioral tests into the same task; do not leave a broken checkpoint. Tasks 1–2 add private tested seams while the old host remains mounted; public issuance is wired in Task 3 alongside its required description editor so the intermediate checkpoint remains usable. Task 3 switches receipt UI/API/runtime consumers together and removes the old live defaults. Task 4 switches list/forms/policy ownership together. Temporary coexistence inside this unpublished branch is not a shipped compatibility feature.
+
+For each test group: write behavioral cases, run the named command and observe the intended assertion failure before implementation; implement minimally; rerun with a nonzero `Tests` count and inspect every exit status. Compile errors or no selected tests do not count as the required red result. Preserve assertions when relocating suites. Use `useVenueDb`, existing fixtures and real browser events; check `memory_pressure | rg free` before browser concurrency. Never run two tests in this worktree/package simultaneously. Do not run the whole workspace solely to finish.
+
+**Task-end LOOK for visible changes (Tasks 3–4; Tasks 1–2 change no screen):** start/use this worktree's managed stack with `wa-wt demo waitron-feat-a493-departments-zones-dialogs` (and its managed onboarding mode for setup where needed). Inspect the full current Departments and zones → editor → receipt → floor-plan return → Venue settings flow, including all affected current controls even before their replacement lands. Cover all eight locale/theme/width combinations, measure the test iframe's `window.innerWidth` with `page.viewport(390, …)` / `page.viewport(1280, …)`, register real app icons, save screenshots under allowed `__screenshots__/look/` paths and LOOK at them. Record current empty/filled state, field/bottom errors, pending/refused delete, inherited/explicit text, menus and preview. Task 4 adds drag/keyboard states. A screenshot command without inspection is not a LOOK. Do not stop other lanes' processes or reset a shared venue without establishing ownership.
+
+Each implementation task ends with its focused green checks and, where visible behavior changed, LOOK receipts and a logical `git commit -s` after checking the staged path set. Parent records red/green commands and screenshot paths. Keep these artifacts with implementation commits; do not publish until Task 5.
+
+### Task 1: Department-owned receipt persistence and module contracts
+
+**Files:** modify `packages/shared/src/receipt-text.ts`, its exports; `packages/layouts/src/validate.ts`, `errors.ts`; `packages/venue-service/src/department-receipts.ts`, `operations.ts`, `service.ts`, exports; `packages/module/src/module.ts`; configuration validation in `packages/venue-service/src/configuration-transfer.ts`. Tests: `packages/layouts/src/validate.test.ts`, `department-receipt-validation.test.ts`; `packages/venue-service/src/department-receipts.test.ts`, `department-receipts.upgrade.test.ts`, `configuration-transfer.test.ts`, `sale-receipt-headers.test.ts`. Do not change schema or shipped migrations: existing JSON storage is at `packages/venue-service/src/schema/department-receipts.ts:10`.
+
+**Interfaces:** produce the spec's extended `DepartmentReceiptConfig`, `DepartmentReceiptPolicy`, `DepartmentReceiptWrite`, `readDepartmentReceiptPolicy` and `saveDepartmentReceiptSettings` module seats. The new save consumes a caller-owned `Transaction`, scoped active department, authored receipt, policy and optional prepared rasters; no nested transaction. Existing `readDepartmentReceipt`, retained/printed reads and old generic core/layout assertions stay usable.
+
+- [x] Write cases named `empty department has no authored receipt values`, `round trips department address and operation description`, `clearing does not inherit`, `receipt and policy save roll back together`, `retained deleted receipt preserves authored values`, and `transferred receipt validates new fields`. Assert exact `{}` for new receipt; absent address → false at presentation; absent description stays absent in storage; Task 2 refuses missing/blank product issuance; another department's values never appear; policy and JSON rollback when either write refuses. Assert error codes for null/array/nonboolean/unknown fields, malformed text maps/images, bad department reference and over-limit/control description at the appropriate boundary. Keep 58/80 mm raster and bounded-read assertions.
+- [x] Run `pnpm --filter @waitron/venue-service exec vitest run src/department-receipts.test.ts src/configuration-transfer.test.ts src/sale-receipt-headers.test.ts --reporter=dot` and `pnpm --filter @waitron/layouts exec vitest run src/validate.test.ts src/department-receipt-validation.test.ts --reporter=dot` separately. New shape/empty-policy assertions must fail for the expected missing behavior.
+- [x] Extend shape validation, bounded SQL projection/parser and the module seats. Store address/description only in department JSON and receipt policy only in existing policy columns. Read optional print content conservatively; description selection is not an optional diagnostic that falls back to global data. Preserve hidden language-map entries on editing; Task 3 supplies the allowed retained-key set and regime validator. Add host configuration validation at the point that has the installed fiscal contribution; never import it into layouts or core.
+- [x] Rerun the red commands plus `pnpm --filter @waitron/venue-service exec vitest run src/department-receipts.upgrade.test.ts --reporter=dot`. An existing retained receipt read must still return its own decoration. Run `pnpm exec vitest run scripts/module-seams.test.ts scripts/workspace-cycles.test.ts scripts/live-subscriptions.test.ts --reporter=dot` without editing guards.
+- [x] Complete focused checks and signed-off checkpoint; no visible behavior changed. No old public response/body is removed until the corresponding callers change in Task 3.
+
+Task 1 completed 2026-10-12 at foundation `1bc75b31f13e89b883b0c394c096830727e4bbf1`. Focused tests: venue-service 260, layouts 99, server API/preview 141, real configuration-transfer 2 (107 skipped), root guards 2405, unedited fiscal golden/immutability 20. Changed-package types and focused lint passed. Five installed disposable deletion controls failed as intended (JSON type, address field, policy writes, policy scope, transfer validator); restored node 260 and layouts 99 passed. No visible controls changed. Existing checks gained the address field/capabilities and replaced obsolete address-is-unknown refusals with accepted booleans plus malformed-value refusals; prior unrelated values/assertions remain. The first commit's “real transfer1” receipt was a count error; the retained output prints 2. Tasks 2–5 remain; no intermediate publication.
+
+### Task 2: Select the department fiscal description before filing
+
+**Files:** modify `packages/core/src/sale-location.ts`, `record-sale.ts`, `record-correction.ts`, `record-substitution.ts`; add `apps/server/src/sale-operation-description.ts`; public issuance wiring stays in Task 3, when the receipt description field is usable. Tests: existing three core record suites plus new `apps/server/src/sale-operation-description.test.ts`; the integration and existing issuance suites run with Task 3 wiring.
+
+**Interfaces:** consume Task 1 receipt reads and the spec's source union; produce `readSaleOperationDescription(...): Promise<string>`. Add optional `operationDescription` to all three core input types and a fourth optional string to the one core resolver. `undefined` uses existing standalone location behavior; an explicit `""` wins. `SaleForFiscalRecord.descriptionOfOperation` stays unchanged (`packages/fiscal/src/backend.ts:55`).
+
+- [x] Add core cases `uses explicit operation description`, `empty supplied description never falls back`, and equivalent correction/substitution cases. Assert backend-observed strings `"Deli meals"`, `"Terrace drinks"`, `""`; keep the existing location assertions `"Terrace service"` and `"Counter service"` at `packages/core/src/record-sale.test.ts:225` and `:238` unchanged.
+- [x] Run `pnpm --filter @waitron/core exec vitest run src/record-sale.test.ts src/record-correction.test.ts src/record-substitution.test.ts --reporter=dot`; observe explicit-string assertions fail, not a fixture/type startup failure. Implement only input and shared selection plumbing, then rerun.
+- [x] Add and run `sale-operation-description.test.ts` RED then GREEN against the private helper: distinct department/location values, order and retained-sale context, missing/blank description domain refusal, populated opposite controls and cross-location refusal. The helper is not called by public payment/issuance routes until Task 3's editor and setup supply its required field. Register its domain code without changing a fiscal builder.
+- [x] Run **unedited** `pnpm --filter @waitron/fiscal-verifactu exec vitest run src/write-path.e2e.test.ts src/inmutabilidad.test.ts --reporter=dot`. Confirm the golden files/fixtures and prohibited paths have no diff. Complete focused checks and signed-off checkpoint; Task 2 has no visible changes.
+
+
+### Task 3: Receipt dialog, Venue language and complete live-default retirement
+
+**Files:** reuse/refactor `apps/dashboard/src/screens/department-receipt-editor.ts`; create `department-receipt-dialog.ts` and `receipt-language-panel.ts`; replace the department host at `apps/dashboard/src/dashboard-app.ts`; update `screens/venue-settings-screen.ts`, `api/client.ts`, `api/live-queries.ts`, EN/ES strings. Remove `screens/venue-receipt-defaults-editor.ts` and `screens/receipts-screen.ts` once all host consumers move. Server: `till-sale.ts`, `working-order.ts`, `bill-payments.ts`, `cancel-credit.ts`, `department-receipt-api.ts`, `management-api.ts`, `boot.ts`, `location-settings-api.ts`, `receipt-preview-api.ts`, `receipt-print.ts`, `receipt-presentation.ts`, `invoice-document.ts`, `invoice-choice-delivery.ts`, `working-order.ts`; add `department-receipt-languages.ts`. Create server suites `department-receipt-api.test.ts`, `department-receipt-languages.test.ts`, `receipt-presentation.test.ts`, `invoice-choice-delivery.test.ts`; keep existing behavioral coverage in `management-api.accounts-and-receipt-config.test.ts` and `invoice-selection.test.ts`. Create the six dashboard dialog/language suites named below. Update shared receipt presentation and till client/layout/ticket display. Media: `packages/media/src/images.ts`, dashboard usage links/queries; configuration: core transfer entry and server validation; setup field/review/body construction. Follow the spec's complete consumer table rather than limiting edits to these starting paths.
+
+**Interfaces:** switch GET/PUT/preview to the spec's exact department shapes; `DashboardApi.putDepartmentReceipt(id: string, input: DepartmentReceiptWrite): Promise<void>`; no `venueDefaults`/`settings` or venue-only preview. Expose the shared `receiptSettings` address field to till. Keep `getReceiptLanguage`/`putReceiptLanguage` signatures and refusals. For consent checking, extend `checkedInvoiceChoiceDelivery`'s input with the actual `source: InvoiceEmailContactSource`; resolve that source's contact, never a global row. Add optional description validator to `ManagementApiDeps` and mount deps, supplied from `enabledFiscal.venueFields` in boot (existing boot wiring: `apps/server/src/boot.ts:1572`).
+
+- [ ] Wire product description readiness only together with the new editor/setup. Check readiness before the first provider request or any cash/fiscal/drawer side effect, not merely beside final `recordSale` after card capture. Inventory integrated initial dispatch, capture and recovery entrypoints; preserve the selected department/header contract and the retained-department correction path. Account for installations without a fiscal description contribution rather than assuming every module combination shares a tax-agency field. Add real dispatch/refusal cases for the installed contribution combinations.
+- [ ] Add server cases using two different department descriptions and a deliberately different location description: ordinary cash/hand-keyed card, integrated capture, recovery, unpaid invoice, funded bill and whole-invoice correction. Assert the real filed description, original sale header/locale/line/tender facts, and exact counts after replay. Move a zone between starting an order and issuance; pin the same department choice as the existing header resolver. Edit description after issuance; replay must keep the old record and a fresh correction must use the retained department's current authored value. Deleted/no-context/empty department must not select the venue/default department description. Missing/blank descriptions refuse `department.operation_description_required` before invoice allocation, fiscal writes, external payment dispatch or drawer work; populated departments still issue. Extend existing fixture data where newly required, preserving every existing monetary/fiscal/permission assertion and inventorying fixture growth.
+- [ ] Run `pnpm --filter @waitron/server exec vitest run src/sale-operation-description.test.ts src/sale-operation-description.integration.test.ts --reporter=dot` and see the new filing assertions fail. Implement the helper and pass its explicit result at every product call in the spec's issuance inventory, before core records the sale. Corrections use original retained header context; all three core operations still call the same resolver. Do not rewrite invoice allocation or recorded headers.
+- [ ] Run those commands green, then targeted existing suites: `pnpm --filter @waitron/server exec vitest run src/sale-till-source.receipt.test.ts src/till-api.fiscal-sale-paths.test.ts src/bill-payments-api.test.ts src/working-order.pay-and-dispatch.test.ts --reporter=dot`. Observe missing/blank department refusal with exact error code and zero fiscal/number/payment/drawer side effects, plus real populated-description issuance through the unchanged fiscal backend. Do not file a blank product description or insert a hidden venue fallback.
+- [ ] Write route/model cases proving new exact bodies/responses, policy-change permission refusal, no decoration-save overwrite of policy, invalid/empty/control/501-character submitted descriptions (new/unconfigured stored receipt may still be `{}`), Sharp recheck races, full-JSON transfer with no tenant-receipt entry, and new/seeded department `{}` even with a nonempty generic bootstrap location. Legacy live endpoints must return route absence; update only the inventoried old success assertions. Run `pnpm --filter @waitron/server exec vitest run src/management-api.accounts-and-receipt-config.test.ts src/receipt-preview-api.test.ts src/receipt-preview-drafts.test.ts src/configuration-transfer.test.ts src/setup-api.test.ts --reporter=dot` and record intended failures.
+- [ ] Add language tests: content `es,ca,en` with receipt `gl-ES` → `gl-ES,es-ES,ca-ES`; no English heading; current receipt locale first even if not in content; disabled stored Basque translation survives GET/save and historical print; changing a hidden value or adding an unknown key is refused. Read maps with the helper's `storageLanguages`, not the visible list. Treat Valencian as its distinct existing `contentLanguageCode` value, not an invented label locale; only exact installed labelled locales qualify, plus current receipt locale. GET/save/preview use one helper, while printed reads continue requesting recorded/current keys independently. Run `pnpm --filter @waitron/server exec vitest run src/department-receipt-languages.test.ts --reporter=dot` red.
+- [ ] Add browser cases in `department-receipt-dialog.test.ts`, `.unsaved.test.ts`, `.a11y.test.ts`, `receipt-language-panel.test.ts`, `.unsaved.test.ts`, `.a11y.test.ts`: quiet disabled Save until a changed valid draft; exact fields including policy/address/description; bare language headings and one localized copy explanation; no global placeholder; draft beside preview, mobile stack; Keep/Discard/Escape/Cancel, repeated opening, pending request and field refusal; stale preview/load result; successful save closes before refresh failure; deleted identity closes. Keep `layout.configure` access and policy switches' extra `venue_service.manage` gate. Use `userEvent.click` and wait for `wt-close` before testing close effects. Run `pnpm --filter @waitron/dashboard exec vitest run src/screens/department-receipt-dialog{,.unsaved,.a11y}.test.ts src/screens/receipt-language-panel{,.unsaved,.a11y}.test.ts --reporter=dot` red before UI implementation.
+- [ ] Implement the new receipt dialog and language card, matching the spec's wire shapes and permission rules, stable `draftScopeFor` identity, submitted-value commit, independent language scope and token-only styling. The receipt panel owns no department page heading or tab. Until Task 4 replaces the shell, change its receipt tab host to open this dialog so it remains usable; no removed import/caller is left broken.
+- [ ] Switch every printed/on-screen/A4/preview/contact/media/transfer consumer in the trace. Keep generic pure `resolveReceiptTrim`/layout-store tests and the physical old table; product composition supplies `{}` for venue trim and never reads the global store. Address requires department `printAddress === true`; no-context print fallback is mandatory document plus no optional decoration. Keep A4 optional address omission, recorded issuer/header, tender/replay, diagnostic/raster guards. Remove old live routes/client methods/editor/tab and global query/media references. Keep the generic setup/provisioning location description contract, automatically fill its existing regime bootstrap value in setup, and remove its editable field/review sales-description claim; never copy it into department receipts. Revalidate email consent against the same order/sale contact and preserve all consent assertions unrelated to source.
+- [ ] Run all red commands green plus `pnpm --filter @waitron/server exec vitest run src/receipt-print.test.ts src/receipt-presentation.test.ts src/invoice-document.test.ts src/invoice-email-contact.test.ts src/invoice-choice-delivery.test.ts src/invoice-selection.test.ts src/management-api.accounts-and-receipt-config.test.ts src/service-delete.history.test.ts --reporter=dot`; `pnpm --filter @waitron/shared exec vitest run src/receipt-text.test.ts --reporter=dot`; `pnpm --filter @waitron/layouts exec vitest run src/receipt-store.test.ts --reporter=dot`; `pnpm --filter @waitron/media exec vitest run src/department-logo-uses.test.ts src/dashboard/image-library.test.ts --reporter=dot`; `pnpm --filter @waitron/setup exec vitest run src/screens/venue-screen.test.ts src/screens/review-screen.test.ts src/setup-app.test.ts --reporter=dot`; `pnpm --filter @waitron/till exec vitest run src/screens/till-ticket-view.test.ts src/screens/till-ticket-view.presentation.test.ts --reporter=dot`. Run separately; do not accept a command selecting no file.
+- [ ] Audit `rg -n 'tenantReceipts|getPrintedReceipt|getVenueReceiptSettings|venueDefaults|venueReceiptSettings|getLocationSettings|putLocationSettings|receipt-settings' apps packages --glob '*.ts' --glob '!**/*test*' --glob '!**/testing/**'`. Every remainder gets classified: allowed generic low-level storage/pure unit contract or generic bootstrap; no live product default path. Re-run root guards unchanged. Complete task-end full LOOK including receipt preview, till receipt, Venue settings and onboarding; signed-off checkpoint.
+
+Task 3 private dialog checkpoint (2026-10-12T02:29:13+02:00): `department-receipt-dialog.ts` and its three browser suites implement the intended receipt/policy body, required description, passive preview, independent preview choices, hidden-text retention and scoped close protection. The dialog remains **unmounted**, with a structural port for the intended API: no live receipt route, client, host or issuance contract has switched. Final dialog suites passed 33 cases (the eight accessibility cases each scan four states at both widths across EN/ES and both themes); the language card's existing 23 cases also passed before the address-only comparison fix. Eleven independently installed guard-removal controls each failed at an assertion; the restored final functional/unsaved suites passed 25. The absent-address/off comparison fix changes draft equality only, preserving submitted JSON. Standalone LOOK inspected 64 captured top/bottom views; its paper uses the fixture response, so this is not evidence of a real HTTP-rendered receipt. Dashboard types and changed-path lint passed; focused root guards passed 98; fiscal golden/immutability passed 20 unedited. Task 3's public switch, readiness/issuance/default retirement and full product LOOK remain open; Tasks 4–5 remain open. No intermediate publication.
+
+Task 3 HTTP checkpoint (2026-10-12): replacement department GET/PUT and draft-preview mount functions are implemented but **not mounted by management or boot**. Their new suites pass 25 and 12 cases; final focused server checks pass 288, focused root checks 2439, and unedited fiscal golden/immutability 20. Types, lint, formatting and diff checks pass. Eight installed weakening controls fail at the intended assertions, including real global-text fallback; restored candidate suites pass 37 and 12. An earlier fallback mutation failed at status 500 because of an unimported name and is explicitly invalid. Preview's initial red was inspected late; its implementation was deleted and a fresh cycle observed 10 assertion failures before reimplementation. Existing test assertions remain unchanged. The protected UI components remain unmounted; live client/host/boot switch, issuance readiness, default retirement, and full product LOOK are still pending. This is a Task 3 context checkpoint, not feature completion or publication readiness.
+
+Task 3 hosted language checkpoint (2026-10-12): the independent receipt-language card is mounted on Venue details with the server's `venue.configure` gate. Its draft stays independent of a venue-details edit and protects real sidebar navigation. Multiple settings panels now have token-based spacing. Corrected host RED observed four missing-card failures with two permission-denial controls passing; spacing RED observed eight adjoining-boundary failures. Final focused dashboard checks pass 92, additional shell checks pass 32 (390 not selected), focused root checks pass 37, and fiscal golden/immutability pass 20 unedited; dashboard types, changed-path lint and formatting pass. Four installed candidate controls fail at assertions, restored 14 pass, and the candidate is removed. All sixteen hosted saved/draft card screenshots were inspected across EN/ES, both themes and widths 390/1280; API responses were fixtures, so full managed-stack LOOK remains pending. One existing panel-count assertion now includes the new language card, with all window/scroll assertions retained. Receipt dialog/client/server mounts, old receipt-page retirement, issuance readiness and all live default consumers still await their joint switch. Task 3 is not complete and the branch is not ready to publish.
+
+Task 3 checkpoint, 2026-10-12: the exact department receipt HTTP client now lives in `apps/dashboard/src/api/department-receipts.ts`, and the unmounted dialog accepts a selected subject, reports its closure and uses passive live reads. Its model remains the receipt-plus-policy contract above. The public DashboardApi, boot mounts and receipt page still need their joint switch. The isolated client maps the new contract to the shared request primitive. Finish the joint public switch and preserve or relocate every relevant legacy behavioral assertion before deleting the old screens. The selected-subject screenshot checks use fixture HTTP responses; full managed-stack Task 3 LOOK and issuance/default retirement remain pending. Task 3 is not complete.
+
+Task 3 contact selection is integrated (2026-10-12). `checkedInvoiceChoiceDelivery` takes an explicit order/sale source; the product order-choice caller supplies its own order id. Five new real-database cases cover selected contacts, the local default, global/stale refusal and revision rollback. The six selected contact/bill/HTTP/unpaid/boot suites ran 310 tests; existing consent assertions are unchanged, with department contact fixtures replacing the obsolete venue contact fixtures. Receipt UI/API, issuance descriptions, printing/media/transfer defaults and the task-end LOOK remain unfinished.
+
+Task 3 printing checkpoint (2026-10-12): thermal jobs and A4 document projection now read optional decoration from the sale's retained department, with no venue-row read or fallback. Thermal address needs the department's explicit `printAddress: true`; A4 still omits the optional current address. A4 RED observed eight failures and GREEN passed nineteen cases; thermal RED observed seventeen failures and GREEN passed 108. Two HTTP fixtures moved address/text to the sale's retained department, preserving their existing matcher assertions, and all 98 route cases passed. The on-screen presentation still has its old wire contract and defaults; its replacement, live receipt editor/API, issuance readiness, preview/media/transfer/setup retirement and full Task 3 managed LOOK remain open. This is an unpublished context checkpoint, not Task 3 completion.
+
+Task 3 on-screen projection checkpoint (2026-10-12): the shared/server/till wire now carries `receiptSettings: { printAddress: boolean }`. Optional wording and permission come from the retained department; absent, empty or unreadable department decoration has no venue fallback. Five server suites ran 373 cases; four ticket/client/axe browser suites ran 401; seven till caller suites ran 1721. Fiscal golden/immutability ran 20 unedited. Three installed controls fail when venue inheritance, address-by-default or lost retained context is introduced, then the restored receipt suite passes ten. Full managed Task 3 LOOK and the public receipt/issuance/setup/default-retirement work remain unfinished. This does not complete Task 3.
+
+Task 3 media/transfer checkpoint (2026-10-12): image uses/counts/subscriptions and configuration export no longer read or carry the physical retired venue receipt row. Active and retained deleted department logo checks stay, with department images and both raster sizes round-tripped through real import. Media's selected node/browser/axe suites pass 192; the full server transfer suite passes 109. Five relevant root guards pass 2428 unchanged. Three installed restorations of global usage/count/export each fail two cases, then restored media node57 and transfer109 pass. UI/API/preview mounting, issuance descriptions/readiness, setup retirement and the full managed Task 3 LOOK remain unfinished.
+
+Task 3 setup retirement checkpoint (2026-10-12): onboarding no longer shows or reviews an editable sales description. Its generic location input comes from the selected installed fiscal slot's bootstrap. The defaults response includes an explicit empty value for a slot without description fields, so loading failure and that valid empty value remain distinct. Browser RED4 and the no-field browser/server RED1 each preceded implementation. Final selected setup/browser/axe suites pass 533 cases; server setup/country/opening-hours suites pass 287. Existing validation, retry, navigation and unsaved-change checks remain, with the retired-field checks replaced by hidden-field/action-message and emitted-bootstrap checks. Core's standalone location contract and department creation are unchanged. Public receipt mounts, issuance descriptions/readiness and full managed Task 3 LOOK still remain, followed by Tasks 4–5. No intermediate publication.
+
+### Task 4: One list, department/zone editors and cross-department grip moves
+
+**Files:** modify `packages/venue-service/src/dashboard/departments-list.ts`, `venue-departments-shell.ts`, `department-settings.ts`, `department-zones.ts`, `department-dialogs.ts`, `client.ts`, `strings.ts`, `live-queries.ts`; create focused `department-edit-dialog.ts`, `zone-edit-dialog.ts`, `departments-zones-drag.ts`; remove the obsolete `department-page.ts` and page-only hosts after relocating their behavioral coverage. Module operations/routes: narrow department settings, add atomic zone editor save. Shared drag extraction, if reused: `packages/dashboard-kit/src/tree-drag.ts`, `pointer-drag.ts`, exports; existing app widgets re-export them and preserve their tests. Dashboard navigation/media deep-link host also changes with this task.
+
+**Interfaces:** consume `VenueServiceView`'s department/zone/raw/effective policy arrays (`packages/venue-service/src/dashboard/client.ts:80`). Produce union list rows, unique `department:<id>` / `zone:<id>` keys, `rowParent`, always-open departments and row activation. Implement spec `DepartmentEditInput`, `ZoneEditInput`, `saveZoneSettings`. Reuse `configureZone(id, { departmentId })` for drag and the existing delete APIs. Keep receipt render-panel subject `{id,name}` unchanged, now mounted in a dialog. Retrieve floor-plan state with the existing passive `watchZoneFloorPlan` when a row menu/dialog opens; Add/Edit depends on placed tables, not simply a plan row.
+
+- [ ] Add list/shell/browser cases `department and zone rows open their editors`, `inheritance is styled by raw null not equality`, `menus stay pinned`, `sidebar always returns to the list`, `receipt deep link opens the current dialog`, `deleted deep link leaves list visible`, `floor plan returns to the list`, `unassigned/readiness controls remain reachable`. Assert exact menus/columns; no department page/tab selector; explicit equal overrides remain normal text; null inherited values are grey italic parts. Run `pnpm --filter @waitron/venue-service exec vitest run src/dashboard/departments-list.test.ts src/dashboard/venue-departments-shell.test.ts src/dashboard/venue-departments-shell.actions.test.ts --reporter=dot` red.
+- [ ] Add atomic route tests for zone name plus four nullable overrides: duplicate name rolls back policy; invalid policy rolls back name; another/deleted zone refuses; manager without rename permission may save unchanged-name policy but not rename; department settings save does not alter receipt policies. Create editor `.test.ts`, `.unsaved.test.ts`, `.a11y.test.ts` suites beside both new dialog files for exact field order, visible required names, request-field errors/bottom summary, no-op early return, retained transfers/hours/floor preview, pending close protection, successful-save/failed-refresh and late identity changes. Run `pnpm --filter @waitron/venue-service exec vitest run src/routes.test.ts src/dashboard/department-edit-dialog{,.unsaved,.a11y}.test.ts src/dashboard/zone-edit-dialog{,.unsaved,.a11y}.test.ts --reporter=dot` red before changing their implementation.
+- [ ] Implement list and protected editors with current shared primitives. Department form owns name/trading name, how orders start, paid when, collection switch and existing transfers; receipt switches belong to Task 3's owner. Zone form owns name and all four nullable overrides, each with `Same as department (…)`; map UI empty-choice sentinel to wire `null`, never to an effective value. Save zone name plus policies in one transaction using scoped uniqueness/refusal logic (existing rename logic is at `apps/server/src/tables.ts:79`); preserve its permission semantics without importing app code into a package. Keep delete-impact code and tests; remove Rename/Move menu/page plumbing only when replacement editors are wired.
+- [ ] Add pointer and keyboard drag tests: grip only; 5 px threshold; full visible lifted ghost; another live department drop sends one exact PUT; same parent/zone/outside/deleted target/Escape/pointercancel/disconnect sends none; native release click does not open an editor; scroll to off-screen target; pending move disables only conflicting actions; refusal leaves original assignment and reports action error; live replacement cancels stale target. Assert null overrides inherit destination, explicit equal/different overrides survive, incompatible routing periods clear, and stored order/line/header rows stay unchanged. Run `pnpm --filter @waitron/venue-service exec vitest run src/dashboard/departments-zones-drag.test.ts src/operations.test.ts src/routes.test.ts --reporter=dot` red, then implement and run green. Test real pointer events and row menu clicks, not only scripted `.click()`.
+- [ ] Use table row controls/parts and shared edge scrolling; extract app-owned reusable drag helpers into dashboard-kit rather than importing an app into a module. Lift the full visible row (or a full-row visual copy with its source space retained), bound its movement to the list, animate displacement/release with `--wt-duration-move`, and land immediately under reduced motion. A label-only tree ghost does not satisfy the owner's dragged-row rule. Tint every target cell including pinned end; stop owned scroll/capture/listeners on every exit and suppress release click. Keep keyboard focus on the moved row, or a connected list fallback after deletion. Close removed live editors; background snapshots do not reset dirty drafts or erase action failures.
+- [ ] Run focused list/editor/drag/delete/deep-link suites and applicable existing `department-dialogs`, `service-delete-dialog`, `service-delete-editors`, floor-plan-return and dashboard navigation tests, preserving their unrelated assertions. If helpers move, rerun existing app pointer/tree-drag consumer tests. Complete the full task-end LOOK with real drag/keyboard, pending/refusal states and all eight combinations; signed-off checkpoint.
+
+### Task 5: Whole-feature audit, full finish and locked landing
+
+**Files:** update `docs/developers/design-system.md`, relevant conventions/live-update docs, historical spec/plan supersession notes; delete A493 from `docs/backlog.md` and `docs/backlog/service-periods.md`. Include this spec and plan deliberately in the feature commits. Do not edit lane-local records into the repository.
+
+- [ ] Audit `git diff <captured-base> --name-only`, then read whole prose claims in touched source/docs and grep all docs/README/CLAUDE prose for department pages/tabs, Move to department, global receipt defaults, address switch, sales description and receipt language. Update current docs and add dated `2026-10-12 A493` pointers to superseded historical artifacts, including the 2026-10-07 service-times spec and A366 slice 6/7 plans. Do not rewrite owner quotes or historical receipts. Remove both complete A493 backlog entries only now; keep A497 residuals and decisions, and record any real remaining limitation separately.
+- [ ] Check all acceptance rows against tests/screenshots and audit the final assertion diff. Existing core/golden/inmutabilidad assertions must be unchanged; product substitutions must each map to the spec inventory. Run final focused failures/relevant guards; do not repeat unchanged whole-package checks just for finishing. Any guard demanding an unauthorised edit is a blocker to report, not a test to weaken. Run the unedited fiscal golden/inmutabilidad suites on the candidate tree again if code changed since their last receipt.
+- [ ] Perform final FULL LOOK: list, department edit, zone edit, receipt edit/printed preview, dragged row/target, all menus, delete loading/refusal/success, dirty Keep/Discard, floor-plan return, Venue language, till receipt and onboarding; EN/ES × light/dark × **390/1280 actual iframe widths**. Record screenshots, inspected states and remaining unverified items. Announce readiness to run `finish-branch`, then continue because it is already authorised.
+- [ ] Run the installed Codex `finish-branch` skill in this worktree: initial fetch/rebase; repair only genuine conflicts; one **FULL** Claude run-it whole-branch review via `~/workspace/tools/claude-seat.sh review-run <candidate-checkout> <brief-file> <report-file>` in a **single independent temporary clone with dependencies installed**, complete candidate tree including any staged/unstaged/untracked work. Preserve review report/timing/usage; require completed findings, not wrapper exit alone. Brief names H2, exact empty/fallback sentinels, all consumer/permission/transfer paths and the immutable/replay tests. In that disposable checkout, falsify critical claims by removing the supplied-description check, replacing raw-null inheritance with value equality, and enabling a replay side effect; the respective unchanged assertions must fail for their claimed reasons. Restore candidate production code between controls; never edit guards or golden tests. Driver reproduces/triages findings and fixes through TDD. No routine second review merely for a rebase.
+- [ ] Push signed-off commits through the normal pre-push hook, never `--no-verify`; create/update the one final PR. Read current-head SHA, CI selected packages and coverage/merge jobs, mutation/bundle/root results and resolved review conversations before declaring ready. No CodeQL dispatch, cancellation, rerun, or waiting on CodeQL as an extra gate. Required current-head CI must pass; no package-wide local duplicate solely to finish.
+- [ ] Land under H11 from the main checkout using `land-branch`: atomically `mkdir ~/waitron-campaign-shared/main.lock`; retry every 30 seconds for at most ten minutes; only an empty lock older than 30 minutes may be removed with `rmdir` and reacquired. Never land unless **your** mkdir succeeded; no files inside lock; release only your acquired lock. Hold it across the entire merge, main pull/install and registered worktree/local/remote cleanup. The owner's unattended approval is already given. Never merge red; `--admin` only for the documented mergeable BEHIND/nonoverlapping case. Check the merge's exact SHA has its own main CI run (H12), record its ID/result, and verify both branches are gone. If main's run remains pending, parent checkpoints it without a green claim. The planning delegate performs none of these actions.
+
+Planning self-review: all owner paragraphs map to Tasks 3–4; description placement and H2 map to Task 2; empty/default/setup/transfer/contact/media consumers map to Tasks 1–3; recorded facts and deletion are retained in Tasks 2–4; full LOOK, current-head CI and H11 are explicit. Builder check rejected blank fiscal issuance. Parent ruling preserves the existing nonblank requirement at department setup, with missing-configuration refusal before irreversible side effects. No authority-acceptance claim rests on a local validator pass.
+
+
+Task 3 server integration checkpoint (2026-10-12): management and real boot now mount the department receipt/policy API and draft preview with the installed description validator. The global receipt/settings and location-description endpoints are absent. The immediate-sale path supplies the department description before core issuance; its cash filing assertions distinguish a different generic location value, and missing/blank department descriptions refuse without changing sale, fiscal, invoice-number or print-job facts. Initial management RED5, boot validator/retirement/preview RED1 each, and immediate filing/refusal RED4 preceded implementation. The final twelve focused server suites passed 568 cases, five description/draft suites earlier passed 130, and unedited fiscal golden/immutability passed 20. The installed controls removed explicit description, replaced readiness with a fallback, and removed the boot validator; they failed 1, 3 and 1 assertions respectively, then restored 44 plus the boot case passed. No-field unreadable submissions now refuse under the bounded department reader's contract; RED2 and the installed control fail 2, a readable 500-character positive control passes, and the restored API suite passes 28. Three sale fixture additions preserve all 731 existing matcher calls (AST comparison). This is a context checkpoint inside Task 3: dashboard client/dialog, obsolete helpers/editors, integrated capture/recovery and pre-provider readiness, funded/unpaid/corrective descriptions, the no-description issuance combination and managed LOOK remain unfinished. No public PR or intermediate release is authorised by this checkpoint.
+
+Task 3 issuance checkpoint (2026-10-12): all five product sale callers and the whole-invoice correction caller now supply the department description. Integrated P1 and new bill payments check description readiness before dispatch; capture/recovery check again inside issuance. A settled concurrent winner is replayed before current receipt setup is consulted. Boot derives the no-field flag from the installed fiscal contribution, and that path supplies an explicit empty string. RED12 preceded the missing issuance/readiness wiring; no-field RED2 and real boot RED1 preceded their selection; concurrent-winner RED1 preceded early replay. The eleven focused server suites passed 504 cases; three later positive selection cases bring the new integration/boot run to 21. Existing fixture growth leaves all 683 matcher calls in the three touched existing suites unchanged (TypeScript AST comparison). Ten independently installed controls fail 1/1/1/1/2/3/1/1/2/1 checks; restored description/integration/boot suites pass 34 before the three added positives. Fiscal golden/immutability pass 20 unedited and five relevant root suites pass 2463. This completes the issuance/readiness subsection only: dashboard client/dialog switch, fiscal field visibility, obsolete UI/API/helper retirement and managed Task 3 LOOK remain, then Tasks 4–5. No PR or intermediate release.
+
+Task 3 rebase receipt (2026-10-12): Lane B's landed A526 now refuses a second placed-order payment while a charge is running. The concurrent-winner fixture therefore uses a second Pay that recovers the already captured charge, replacing the now-forbidden cash collect; its matcher assertions are unchanged by AST comparison. Initial rebased run failed only that fixture with `order.payment_in_flight` (53 passed). After the fixture change, thirteen focused server suites passed 600 cases, fiscal golden/immutability passed 20 unedited, and five root suites passed 2475. Server types and the changed test's lint/format/diff checks pass. The initial-charge, bill-charge and winner-replay deletion controls were repeated in an installed disposable candidate against this base; they fail 3/1/1 checks, restored suites pass 37, and eight candidate paths match. The candidate is removed. The twenty new integration cases distinguish department/location selection, zone moves, retained correction context, missing/blank setup, replay, recovery and the no-field contribution; managed UI acceptance and Tasks 3–5 are still unfinished.
+
+Task 3 dashboard integration checkpoint (2026-10-12): the public client now sends receipt plus
+policy and receives the installed description-field flag. The dashboard hosts the protected dialog
+and no longer mounts the global Receipts tab. Saving closes the dialog and refreshes its department
+host; receipt, policy, content-language and address changes use passive refreshes. Preview keeps one
+request in flight, preserves a result across an unchanged snapshot, and omits invalid draft contacts
+while still drawing other fields. Blank nonprinted description setup does not block a draft preview;
+saving retains its required-field checks. The retained reconnect and trim assertions exposed missing
+behavior and were restored before removing any legacy suites. Further ports cover map clearing,
+contact bounds, logo clearing, hostile locale errors, last-field focus, address refusals, retry,
+Enter and retained action failures. The independent read-only retirement inventory found additional
+logo, preview, language, load and unsaved-choice cases still to port. No legacy receipt suite has
+been deleted. The old editor types still fail dashboard type checking against the replacement API,
+so Task 3 remains unfinished and this local checkpoint cannot publish. Task 4, managed LOOK,
+whole-feature review, current-head CI and landing remain pending.
+
+Task 3 preview retirement checkpoint (2026-10-12): the public preview mount now accepts only active-department receipt/policy drafts. Legacy venue-only preview is removed; byte bounds, passive activity, printer width choice, saved rasters, QR and marks remain checked at this public boundary. The resumed five-file server run passes 216 cases; server types and focused lint pass, and formatting was corrected in the ported drafts suite. The fiscal golden/immutability pair passes 20 cases unedited. Seven installed controls each fail one assertion; restored candidate passes. All eight saved EN/ES, light/dark, 390/1280 receipt and Venue-language screenshot sheets were visually inspected. This completes preview retirement, not all of Task 3: full touched-prose audit and wider managed-flow LOOK remain alongside Tasks 4–5. No intermediate publication.
+
+Task 4 atomic zone-save prerequisite (2026-10-12): `ZoneEditInput` and `saveZoneSettings` now carry the name and four nullable policy overrides in one PUT. The route scopes an active assigned zone and separately requires `venue.configure` if its name changes; unchanged-name policy editing retains its module permission. Existing policy-only callers remain. New route status assertions failed before the route existed, and the new client case failed before its method existed. The final route/client run passes 198 cases; types/lint and five relevant root suites pass (2469 root cases). Three installed controls each fail an assertion for rename permission, persisted overrides and rollback after a forced policy refusal; restored suites pass 198. Existing test source prefixes are unchanged. No visible component changed. This is a Task 4 prerequisite inside the unpublished branch; list/dialog/department-write/drag work and wider Task 3 LOOK/audit remain.
+
+
+Task 4 department-editor checkpoint (2026-10-12): the current department PUT accepts only
+name, trading name, order start, paid when, collection ticket and optional transfers. Its transaction
+preserves existing receipt policy, and repairing a missing policy uses the receipt defaults the
+read model previously showed. The form moves trading name after name and omits receipt controls;
+its receipt-specific assertions now run at the receipt owner or the zone receipt picker. The new
+protected department dialog handles dirty Escape, pending Save, newer native edits, live deletion
+and stale native close events, but is not yet connected to the unified list. Existing department
+form validation, transfers and leave assertions remain. Whole Task 4 and Task 3's wider managed
+look/audit remain unfinished; no publication at this checkpoint.
+
+
+Task 4 list/editor/drag checkpoint (2026-10-12): the combined list and protected zone editor
+are connected to the host, with the list retained under department, zone and receipt deep links.
+Null overrides use inherited styling; explicit equal overrides do not. Floor-plan menu reads
+remain passive and return to the list. Pointer moves lift a row, make room at the destination,
+and animate its landing unless reduced motion is selected. Keyboard moves restore grip focus
+after refresh. Independent pending moves each keep their request and queue another read when
+an earlier refresh is still running.
+
+Focused verification ran 537 module cases, 328 existing dashboard drag-consumer cases,
+2475 root cases, two extracted pointer-helper cases and the unchanged fiscal pair's 20 cases.
+Five installed removal controls each failed an assertion; restoring the candidate passed its
+focused suites. The initial close-control timeout was discarded and the pending-close test
+now checks that no confirmation opens before awaiting the refusal. Three scoped type checks
+passed. This does not complete Task 4: the two unchanged legacy shell action/leave suites
+still report 23 failures and 15 passes. Port every relevant behavior before retiring their
+old page/dialog helpers, then perform the full managed look and source/prose audit. No full
+review, push, PR or landing has run.
+
+
+Task 4 host qualification checkpoint (2026-10-12): the former shell action/leave checks now
+exercise the protected editors and list. The real dashboard host checks Cancel, Escape,
+Back/Forward, exact receipt subjects, permissions and sidebar return; its full file passed 430
+cases. The ports exposed missing focus return, a second Save during refresh, dirty Cancel asking
+the coordinator twice, a cancelled navigation replacing the opener, hidden receipt permissions
+and the sidebar retaining a deep link. Each was reproduced before its fix. Save remains quiet
+while a retained draft waits for refresh, and pending moves block Edit/Delete for only that zone.
+
+The zone owner's policy, hours, floor-preview and lifecycle assertions now also run at the new
+dialog. Accessibility ports retain transfer/refusal, preview/hours and long-name geometry checks.
+The long-name check exposed an unbounded name link; the bounded link passes at phone and desktop
+widths. An installed copy failed the focus, refresh, Cancel, receipt-offer, sidebar and name-width
+removal controls, then passed the restored host/leave/warning and real-app selections. Removing a
+name wrapper passed, so that wrapper was removed rather than claimed necessary.
+
+Managed captures cover the list, editors and field errors, dirty question, zone menu, floor-plan
+Cancel return, receipt and Venue language in EN/ES, both themes and 390/1280 widths. Spanish
+captures wait for the locale repaint; early captures without that wait are discarded. This is
+still not whole Task 4 or whole-feature acceptance: old helper/suite retirement, the complete
+consumer/prose audit and the remaining drag/delete/printed/till/onboarding acceptance states are
+pending. No whole-branch review, PR or intermediate publication is authorised by this checkpoint.
+
+
+Task 4 helper-retirement checkpoint (2026-10-12): the old department page and zone panel,
+Rename/Move branches and internal combined department writer are retired. Creation, unassigned
+assignment and permanent Delete stay in `department-dialogs`. Existing policy, hours, floor-plan,
+readiness, geometry, live-loader and deletion checks now exercise the list and protected editors.
+The internal settings ports retain all 353 matcher calls across the three touched suites; receipt
+policy goes through its separate operation, and the missing-policy case still calls the narrow
+editor while the row is absent. Transfers still test rollback around the whole transaction.
+
+The name ports reproduced a late clash marking newer input. Retained controls reproduced an old
+zone changing its replacement, and reconnect cases reproduced native dialogs outside the modal
+layer. The old floor-link spacing check also failed. Their fixes precede the final 31-file browser
+run (489 cases), three-file database run (168), six root files (2472) and the unedited fiscal pair
+(20). Two package type checks and focused lint/format pass. Six installed removal controls fail at
+the intended assertions; restored editor suites pass 54 cases. The candidate is removed.
+
+All eight managed EN/ES, light/dark, 390/1280 host sheets were inspected. They cover current list,
+editors, invalid fields and bottom messages, discard, zone menus and floor-preview/return, receipt
+and Venue language. They do not complete the drag/delete/printed/till/onboarding acceptance. The
+first login raced the managed server's recorded restart and returned 502; no visual receipt rests
+on that attempt. A first native Cancel run did not open its question; the port now asserts that
+its real click arrived and the dirty scope existed, and the final run passes. No cause or repair
+claim is made for that first click. Source/prose audit, remaining acceptance and Task 5 remain; no
+whole-branch review, PR or intermediate publication has run.
+
+
+Rebase and visual-acceptance checkpoint (2026-10-12): the candidate now contains main's season,
+invoice and floor-plan modal work. Append-at-end configuration suites keep both sides; till-sale
+fixtures keep main's separately returned series id. A full focused till-sale run exposed missing
+authored descriptions in three fixture builders. They now seed department descriptions, and the
+optional-presentation fixtures replace that receipt while retaining their existing assertions.
+The receipt host's remaining page assertion now checks close-to-list and the refreshed printing
+policy there. Two new fixtures stop carrying main's retired configuration series field.
+
+The combined six-file module run passed 566 cases, three server files 167, three dashboard files
+520, two boot/receipt-boundary files 31, six root files 2482 and the unedited fiscal pair 20.
+The final scoped till-sale rerun passed 46, and till presentation/axe passed 53. Server/dashboard
+types and focused lint/format pass. These are focused checks, not CI or whole-feature completion.
+
+Managed EN/ES, light/dark, 390/1280 captures were inspected for the list/editor flow, floor-plan
+modal return, full loaded printed preview, pointer/keyboard and scrolled lifts, cancellation and
+deleted targets. Delete read/write responses were substituted on the in-browser API instance;
+no venue row was deleted. Pointer cancellation uses a dispatched PointerEvent, and the scroll
+capture does not measure automatic edge-scroll timing. Till receipt components use explicit
+populated/cleared fixtures over the managed app; they do not submit sales or print jobs.
+Onboarding visual acceptance and whole source/prose/assertion audit still remain. The source
+comment inventory includes all touched production files but is not yet fully reviewed. Current
+design-system and data-convention prose no longer describe the retired page/tab or receipt defaults.
+No full Claude review, PR, push, finish or land has run; this is an unpublished checkpoint.
+
+Setup component acceptance adds eight blank/invalid EN/ES, light/dark, 390/1280 captures with
+explicit prepare-mode/regime defaults; all were inspected and its two focused files passed 132
+cases. It runs the actual setup screen over the existing managed Vite in a fresh blank document,
+without provisioning or changing the inherited demo target. This does not replace the full managed
+onboarding shell flow. That limit and the complete source/prose/assertion audit remain before
+whole-feature completion. Till's final captures wait for Spanish action labels using the exact
+loaded Vite locale module; earlier wrong-locale captures supply no acceptance evidence.
+
+
+Final local acceptance (2026-10-12): the full managed onboarding shell has been inspected in
+EN/ES, both themes and 390/1280 widths, through connection, administrator, venue and review,
+without submitting provisioning. Earlier component-only limitations are superseded by that run.
+The final assertion audit restored native language/refusal/focus, description correction/focus,
+malformed locale, placeholder contrast and distinct accessibility checks at the new owners.
+The five affected dashboard suites pass 105 cases. Core/fiscal/guard files retain their
+previous assertions; the unchanged fiscal pair passes 20 cases.
+
+The list now shows missing department description setup only when the installed fiscal
+contribution supplies that field. The corrected real boot test failed on the absent issue
+before the boot route flag was connected; restored Spain/GB boot cases pass, as does the
+no-field sale case (three cases total). The four-file module selection passes 253 cases,
+including malformed/missing descriptions, repair, scope, passive invalidation and the setup
+link. Four package type checks, focused lint and 2467 root cases pass.
+
+The source/prose audit followed current receipt, description, language, transfer and page
+consumers and added dated pointers to historical artifacts. Current user guidance now names
+the replacement owners. Both A493 backlog entries are removed; unresolved floor-plan
+permissions, non-plan fixtures, contact-limit duplication and preview load investigation remain
+open under their current owners. Visual readiness captures use a synthetic in-browser issue;
+no venue sale, print, deletion or provisioning action was submitted for that capture.
+
+Local acceptance is ready for finish-branch. The single installed Claude review, normal push
+hook, required current-head CI and authorised locked landing still remain; this is not a
+publication or CI-success claim.
+
+
+Finish review (2026-10-12): the first Claude dispatch took 295 seconds and was incomplete
+because two experiments were denied. A 275-second retry completed those experiments with no
+denials. Missing-policy reads now match the unchanged generic off fallback, while new creation
+rows remain on. A browser RED reproduced ArrowUp skipping the last initial target; both arrows
+now pass. Module338/server22/types/lint pass. The review's earlier per-field repair finding also
+fails at the unchanged base and is recorded separately in the backlog, outside this replacement
+editor's scope. The deleted-zone case now releases over the target's updated coordinates;
+its behavioral no-write assertion is unchanged. Current-head hook/CI and landing remain.
+
+
+Current-head CI qualification (2026-10-12): first PR head e99dbe49 failed on unready test
+departments and a live-dependency shape pin. Shared test offer fixtures now author their
+existing location-description representative into otherwise absent department receipts;
+product runtime still has no location fallback. Signed-in callback fixtures author all of
+their created departments. Separate editor/transfer/deletion/receipt fixtures retain their
+existing assertions and gain required data. Native stream-pause runs with pinned binaries
+and passed in the 57-case selection. Receipt-print passed 108 with all 402 original matcher
+calls retained; six response suites passed 511; transfer/deletion passed 104 with 335 matchers
+retained; till receipt passed 98. The dependency pin adds only department_receipts.
+
+The unchanged contextless paid-order case in till-api.unroutable-dish.test.ts remains red:
+it deletes the whole service context but expects payment success. The current contract
+requires a department context. This is a real behavior contradiction, not another missing
+fixture; it is recorded in the backlog and lane questions for an owner ruling. No assertion,
+guard or fiscal invariant is weakened to obtain green CI. The branch must not land while
+that required case fails. Earlier local-readiness notes do not constitute current-head CI
+approval or whole-feature completion.
+
+
+Owner ruling continuation (2026-10-12): make `createOpenOrder` resolve an omitted zone
+through the existing device-profile/counter rule and record context for empty orders too.
+Pass a source order when creating a split so its frozen context travels at creation;
+refuse a missing source context. Port test-only create-then-copy fixtures without changing
+their behavioral assertions. Replace the explicitly owner-approved contextless-payment
+success case with a domain refusal and exact snapshots of money, filing, number, drawer,
+order, line, kitchen and incident rows. Delete the now-resolved backlog decision entry.
+
+The initial new creation tests reported five failures and two passes before the fix
+(`owner-zone-red.log` in the lane receipts). The focused nine-file selection reported
+602 passing cases after the implementation and initial fixture ports. Venue-service's
+current-head CI coverage merge reported 94.93% branches against 95%; additional real
+pointer/keyboard cases cover a second pointer, no destination, wrapping and ignored keys.
+A full package coverage investigation and final current-head CI remain required.
+The completed whole-branch Claude approval is retained; the new order-creation continuation
+gets a bounded review of its added code, rather than repeating the earlier entire feature.
+
+
+Continuation review completed in 278 seconds. Its closed-zone split and scoped device-lookup
+coverage gaps now have behavioral cases and installed removal controls. The driver also
+observed two no-description-regime payments succeeding after context deletion; these now
+refuse `order.service_context_missing` before cash/card dispatch. The final six-file selection
+passes 119 cases, including the retained positive no-description-regime cases. Required
+normal push checks and current-head CI still remain.

@@ -40,10 +40,7 @@ const model: VenueServiceView = {
 };
 const dialogs: DepartmentDialog[] = [
   { kind: "add-department" },
-  { kind: "rename-department", row: model.departments[0]! },
   { kind: "add-zone", departmentId: "d1" },
-  { kind: "rename-zone", row: model.floorZones[0]! },
-  { kind: "move-zone", row: model.floorZones[0]! },
   { kind: "add-to-department", row: { id: "z2", name: "Garden" } },
 ];
 afterEach(() => {
@@ -82,12 +79,12 @@ describe.each(["light", "dark"] as const)("department dialogs (%s)", (theme) => 
           : { code: "management.request_invalid", params: { field: "name" } };
       }),
     );
-    el.dialog = { kind: "rename-department", row: model.departments[0]! };
+    el.dialog = { kind: "add-department" };
     await el.updateComplete;
     const box = el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>("[name=name]")!;
     box.dispatchEvent(
       new CustomEvent("wt-change", {
-        detail: { value: state === "invalid" ? " " : "Brunch" },
+        detail: { value: "Brunch" },
         bubbles: true,
         composed: true,
       }),
@@ -97,6 +94,10 @@ describe.each(["light", "dark"] as const)("department dialogs (%s)", (theme) => 
     await new Promise((r) => setTimeout(r, 0));
     await el.updateComplete;
     if (state === "invalid") {
+      box.dispatchEvent(
+        new CustomEvent("wt-change", { detail: { value: " " }, bubbles: true, composed: true }),
+      );
+      await el.updateComplete;
       expect(box.error).toBe("This field is required.");
       expect(el.shadowRoot!.querySelector("wt-form-actions")!.error).toBe(
         "Correct the highlighted fields to continue.",

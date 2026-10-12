@@ -110,11 +110,14 @@ function emit(el: HTMLElement, name: string, detail: object = {}) {
   el.dispatchEvent(new CustomEvent(name, { detail, bubbles: true, composed: true }));
 }
 async function renameDepartment(shell: HTMLElementTagNameMap["venue-departments-shell"]) {
-  emit(shell.shadowRoot!.querySelector("departments-list")!, "rename-department", {
+  emit(shell.shadowRoot!.querySelector("departments-list")!, "open-department", {
     departmentId: "d1",
   });
   await shell.updateComplete;
-  const dialog = shell.shadowRoot!.querySelector("department-dialogs")!;
+  await expect.poll(() => shell.shadowRoot!.querySelector("department-edit-dialog")).toBeTruthy();
+  const editor = shell.shadowRoot!.querySelector("department-edit-dialog")!;
+  await editor.updateComplete;
+  const dialog = editor.shadowRoot!.querySelector("department-settings")!;
   await dialog.updateComplete;
   emit(dialog.shadowRoot!.querySelector("[name=name]")!, "wt-change", { value: "Changed name" });
   await dialog.updateComplete;
@@ -148,7 +151,7 @@ it("the initial read opens the department list actively and later live reads are
 });
 it("a live read updates the heading without resetting the dirty Settings draft", async () => {
   const { shell, value, liveData, request } = await mount("/manage/venue-operations/department/d1");
-  const page = shell.shadowRoot!.querySelector("department-page")!;
+  const page = shell.shadowRoot!.querySelector("department-edit-dialog")!;
   await page.updateComplete;
   const settings = page.shadowRoot!.querySelector("department-settings")!;
   await settings.updateComplete;
@@ -156,7 +159,9 @@ it("a live read updates the heading without resetting the dirty Settings draft",
   await settings.updateComplete;
   value(model("New heading"));
   await invalidate(liveData, request);
-  await expect.poll(() => page.shadowRoot!.querySelector("h1")!.textContent).toBe("New heading");
+  await expect
+    .poll(() => page.shadowRoot!.querySelector("wt-modal")!.heading)
+    .toBe("Edit department: New heading");
   expect(
     settings.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>("[name=name]")!.value,
   ).toBe("My draft");
@@ -290,7 +295,7 @@ it("live recovery clears a refresh failure without clearing a later action refus
 });
 it("a reconnected load wrapper reads passively and retains its Settings draft", async () => {
   const { shell, loader, app, request } = await mount("/manage/venue-operations/department/d1");
-  const page = shell.shadowRoot!.querySelector("department-page")!;
+  const page = shell.shadowRoot!.querySelector("department-edit-dialog")!;
   await page.updateComplete;
   const settings = page.shadowRoot!.querySelector("department-settings")!;
   await settings.updateComplete;
@@ -470,4 +475,38 @@ it("a live failure behind an unsaved dialog leaves its Save message empty", asyn
       .disabled,
   ).toBe(false);
   expect(request.mock.calls.filter((call) => call[1] === "POST")).toHaveLength(0);
+});
+
+it("receipt changes refresh department description setup passively", async () => {
+  const { shell, request, value, liveData } = await mount();
+  const next = model();
+  next.readiness.push(
+    Object.assign(
+      {},
+      {
+        code: "department.operation_description_required" as const,
+        departmentId: "d1",
+        departmentName: "Restaurant",
+      },
+    ),
+  );
+  value(next);
+  const count = reads(request);
+  liveData.invalidate([{ type: "department_receipts", id: "d1" }]);
+  await expect.poll(() => reads(request)).toBeGreaterThan(count);
+  await expect
+    .poll(() => shell.model.readiness)
+    .toEqual([
+      {
+        code: "department.operation_description_required" as const,
+        departmentId: "d1",
+        departmentName: "Restaurant",
+      },
+    ]);
+  expect(request).toHaveBeenCalledWith("/management-api/venue-service", "GET", undefined, {
+    passive: true,
+  });
+  value(model());
+  liveData.invalidate([{ type: "department_receipts", id: "d1" }]);
+  await expect.poll(() => shell.model.readiness).toEqual([]);
 });

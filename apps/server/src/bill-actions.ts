@@ -143,9 +143,9 @@ export async function splitBill(
   const newBillId = randomUUID();
   await createOpenOrder(tx, cfg, newBillId, [], await orderTableLabel(tx, cfg, billId), {
     partyId: path.partyId,
+    existingService: true,
+    copyServiceContextFrom: billId,
   });
-  // The new bill takes the source's service mode, so `carveOffLines` needs no mode check.
-  await VENUE_SERVICE.copyOrderContext(tx, cfg, billId, newBillId);
   await carveOffLines(tx, cfg, billId, newBillId, transfers, {
     refuseHeld: true,
   });

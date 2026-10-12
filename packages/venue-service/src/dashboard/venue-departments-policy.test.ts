@@ -45,7 +45,13 @@ async function mount() {
     writes.push({ path, method, body: structuredClone(body) });
     if (path === "/management-api/venue-service/departments/d1/settings") {
       Object.assign(stored.salePolicies.departments[0]!, body);
-    } else if (path === "/management-api/venue-service/zones/z1/service-settings") {
+    } else if (
+      path === "/management-api/venue-service/departments/d1/sale-policy/receiptPrintMode"
+    ) {
+      stored.salePolicies.departments[0]!.receiptPrintMode = (
+        body as { value: "auto" | "on_request" }
+      ).value;
+    } else if (path === "/management-api/venue-service/zones/z1/settings") {
       Object.assign(stored.salePolicies.zones[0]!, body);
     } else throw new Error(`Unexpected write: ${method} ${path}`);
   }) as DashboardRequest);
@@ -61,7 +67,7 @@ async function mount() {
   const shell = loader.shadowRoot!.querySelector("venue-departments-shell")!;
   await expect.poll(() => shell.model?.departments[0]?.id).toBe("d1");
   await shell.updateComplete;
-  const page = shell.shadowRoot!.querySelector("department-page")!;
+  const page = shell.shadowRoot!.querySelector("department-edit-dialog")!;
   await page.updateComplete;
   const settings = page.shadowRoot!.querySelector("department-settings")!;
   await settings.updateComplete;
@@ -109,57 +115,78 @@ it.each([
   async (field, changed, changedLabel, override, overrideLabel) => {
     const { shell, settings, writes } = await mount();
     const service = settings.shadowRoot!.querySelector("dashboard-service-settings-fields")!;
-    await pick(service, field, changed);
-    await expect.poll(() => service.value[field]).toBe(changed);
-    await settings.updateComplete;
-    settings.shadowRoot!.querySelector<HTMLElement>("[data-test=save-editor]")!.click();
+    if (field === "receiptPrintMode") {
+      await shell.api.setDepartmentSalePolicyField("d1", field, changed);
+      shell.model = await shell.api.background.load();
+      await shell.updateComplete;
+      await shell
+        .shadowRoot!.querySelector("department-edit-dialog")!
+        .shadowRoot!.querySelector("wt-modal")!
+        .requestClose("cancel");
+      await expect.poll(() => shell.shadowRoot!.querySelector("department-edit-dialog")).toBeNull();
+    } else {
+      await pick(service, field, changed);
+      await expect.poll(() => service.value[field]).toBe(changed);
+      await settings.updateComplete;
+      settings.shadowRoot!.querySelector<HTMLElement>("[data-test=save-editor]")!.click();
+    }
     await expect.poll(() => shell.model.salePolicies.departments[0]![field]).toBe(changed);
     await expect.poll(() => shell.getAttribute("aria-busy")).toBe("false");
     expect(writes).toEqual([
       {
-        path: "/management-api/venue-service/departments/d1/settings",
-        method: "PUT",
-        body: {
-          name: "Restaurant",
-          tradingName: "Casa",
-          orderStart: "table",
-          paidWhen: "prepay",
-          collectionNumber: "none",
-          receiptPrintMode: "auto",
-          printTradingName: false,
-          [field]: changed,
-        },
+        path:
+          field === "receiptPrintMode"
+            ? "/management-api/venue-service/departments/d1/sale-policy/receiptPrintMode"
+            : "/management-api/venue-service/departments/d1/settings",
+        method: field === "receiptPrintMode" ? "PATCH" : "PUT",
+        body:
+          field === "receiptPrintMode"
+            ? { value: "on_request" }
+            : {
+                name: "Restaurant",
+                tradingName: "Casa",
+                orderStart: "table",
+                paidWhen: "prepay",
+                collectionNumber: "none",
+                [field]: changed,
+              },
       },
     ]);
-    const page = shell.shadowRoot!.querySelector("department-page")!;
-    await page.updateComplete;
-    const tabs = page.shadowRoot!.querySelector("wt-tabs")!;
-    await tabs.updateComplete;
-    tabs.shadowRoot!.querySelector<HTMLElement>("[data-key=zones]")!.click();
-    await shell.updateComplete;
-    const zones = shell.shadowRoot!.querySelector("department-zones")!;
-    await expect.poll(() => zones?.getAttribute("slot")).toBe("zones");
-    await zones.updateComplete;
-    const fields = zones.shadowRoot!.querySelector("dashboard-service-settings-fields")!;
+    const openZone = async () => {
+      shell
+        .shadowRoot!.querySelector("departments-list")!
+        .dispatchEvent(
+          new CustomEvent("edit-zone", { detail: { zoneId: "z1" }, bubbles: true, composed: true }),
+        );
+      await shell.updateComplete;
+      await expect.poll(() => shell.shadowRoot!.querySelector("zone-edit-dialog")).toBeTruthy();
+      const zone = shell.shadowRoot!.querySelector("zone-edit-dialog")!;
+      await zone.updateComplete;
+      return zone;
+    };
+    let zones = await openZone();
+    let fields = zones.shadowRoot!.querySelector("dashboard-service-settings-fields")!;
     await fields.updateComplete;
-    const combo = fields.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-combobox"]>(
+    let combo = fields.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-combobox"]>(
       `[name=${field}]`,
     )!;
-    expect(combo.placeholder).toBe(changedLabel);
+    expect(combo.options[0]!.label).toBe(`Same as department (${changedLabel})`);
     expect(combo.value).toBe("");
     expect(
-      zones.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>("[data-test=save-zone]")!
-        .disabled,
+      zones.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>(
+        "[data-test=save-editor]",
+      )!.disabled,
     ).toBe(true);
     await pick(fields, field, override);
     await zones.updateComplete;
-    zones.shadowRoot!.querySelector<HTMLElement>("[data-test=save-zone]")!.click();
+    zones.shadowRoot!.querySelector<HTMLElement>("[data-test=save-editor]")!.click();
     await expect.poll(() => shell.model.salePolicies.zones[0]![field]).toBe(override);
     await expect.poll(() => shell.getAttribute("aria-busy")).toBe("false");
     expect(writes[1]).toEqual({
-      path: "/management-api/venue-service/zones/z1/service-settings",
+      path: "/management-api/venue-service/zones/z1/settings",
       method: "PUT",
       body: {
+        name: "Terrace",
         orderStart: null,
         paidWhen: null,
         collectionNumber: null,
@@ -167,25 +194,39 @@ it.each([
         [field]: override,
       },
     });
-    await zones.updateComplete;
+    zones = await openZone();
+    fields = zones.shadowRoot!.querySelector("dashboard-service-settings-fields")!;
     await fields.updateComplete;
+    combo = fields.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-combobox"]>(
+      `[name=${field}]`,
+    )!;
     expect(combo.value).toBe(override);
     await combo.updateComplete;
     expect(combo.shadowRoot!.querySelector("button")!.textContent).toContain(overrideLabel);
     await pick(fields, field, "");
     await zones.updateComplete;
-    zones.shadowRoot!.querySelector<HTMLElement>("[data-test=save-zone]")!.click();
+    zones.shadowRoot!.querySelector<HTMLElement>("[data-test=save-editor]")!.click();
     await expect.poll(() => shell.model.salePolicies.zones[0]![field]).toBeNull();
     await expect.poll(() => shell.getAttribute("aria-busy")).toBe("false");
-    await zones.updateComplete;
+    zones = await openZone();
+    fields = zones.shadowRoot!.querySelector("dashboard-service-settings-fields")!;
     await fields.updateComplete;
+    combo = fields.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-combobox"]>(
+      `[name=${field}]`,
+    )!;
     expect(writes[2]).toEqual({
-      path: "/management-api/venue-service/zones/z1/service-settings",
+      path: "/management-api/venue-service/zones/z1/settings",
       method: "PUT",
-      body: { orderStart: null, paidWhen: null, collectionNumber: null, receiptPrintMode: null },
+      body: {
+        name: "Terrace",
+        orderStart: null,
+        paidWhen: null,
+        collectionNumber: null,
+        receiptPrintMode: null,
+      },
     });
     expect(combo.value).toBe("");
-    expect(combo.placeholder).toBe(changedLabel);
+    expect(combo.options[0]!.label).toBe(`Same as department (${changedLabel})`);
     expect(app.leave.coordinator.isDirty()).toBe(false);
     expect(writes).toHaveLength(3);
   },

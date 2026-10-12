@@ -25,6 +25,7 @@ import type { RecordSaleLine } from "./record-sale.js";
 export interface RecordSubstitutionInput {
   /** Where the sale came from, written to `sales.source` and `sales.device_id`. */
   origin: SaleOrigin;
+  operationDescription?: string;
   /**
    * The node that issues this F3 and whose chain it extends. Checked against the series but not
    * against the substituted tickets' nodes: an F3 references them only by identity
@@ -243,7 +244,12 @@ export async function recordSubstitution(
     }
   }
 
-  const descriptionOfOperation = await operationDescriptionFor(tx, input.origin, input.nodeId);
+  const descriptionOfOperation = await operationDescriptionFor(
+    tx,
+    input.origin,
+    input.nodeId,
+    input.operationDescription,
+  );
 
   const fiscal = await backend.recordSubstitution(
     tx,

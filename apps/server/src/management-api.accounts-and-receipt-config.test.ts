@@ -1,4 +1,9 @@
-import { departments, departmentReceipts } from "@waitron/venue-service";
+import {
+  departments,
+  departmentReceipts,
+  departmentSalePolicies,
+  readPrintedDepartmentReceipt,
+} from "@waitron/venue-service";
 import { locations } from "@waitron/db";
 /**
  * The dashboard's sign-in and staff-administration routes end to end — login, logout, the roster
@@ -15,10 +20,11 @@ import { Hono } from "hono";
 import { eq, sql } from "drizzle-orm";
 import { describe, expect, it, vi, type Mock } from "vitest";
 import { tenantReceipts, withTransaction } from "@waitron/db";
+import { getPrintedReceipt } from "@waitron/layouts";
+import { contentLanguages } from "@waitron/catalogue";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { encryptTotpSecret, hashPassword, hashPin, persons } from "@waitron/identity";
-import { DEFAULT_RECEIPT, getPrintedReceipt } from "@waitron/layouts";
 import { mediaImages, uploadImage } from "@waitron/media";
 import { samplePreparedImage } from "@waitron/media/testing/sample-image.js";
 import { applyVenue, planVenue } from "@waitron/provisioning";
@@ -1213,19 +1219,30 @@ async function getReceiptOverHttp(
   app: Hono,
   cookie: string,
 ): Promise<{ receipt: unknown; venueAddress: string[] }> {
-  const res = await app.request("/management-api/receipt", { headers: { cookie } });
+  const res = await app.request(await receiptPath(), { headers: { cookie } });
   expect(res.status).toBe(200);
   return (await res.json()) as { receipt: unknown; venueAddress: string[] };
 }
 
+const RECEIPT_POLICY = { receiptPrintMode: "auto", printTradingName: true } as const;
+async function receiptDepartment() {
+  const [department] = await suite.db
+    .select()
+    .from(departments)
+    .where(eq(departments.locationId, venueCfg!.locationId));
+  return department!.id;
+}
+async function receiptPath() {
+  return `/management-api/venue-service/departments/${await receiptDepartment()}/receipt`;
+}
 const VENUE_ADDRESS = ["Calle Mayor 1", "28013 Madrid"];
 
-function putReceiptOverHttp(app: Hono, cookie: string, receipt: unknown): Promise<Response> {
+async function putReceiptOverHttp(app: Hono, cookie: string, receipt: unknown): Promise<Response> {
   return Promise.resolve(
-    app.request("/management-api/receipt", {
+    app.request(await receiptPath(), {
       method: "PUT",
       headers: { "content-type": "application/json", cookie },
-      body: JSON.stringify({ receipt }),
+      body: JSON.stringify({ receipt, policy: RECEIPT_POLICY }),
     }),
   );
 }
@@ -1239,10 +1256,14 @@ async function libraryImage(width: number): Promise<string> {
   return stored.filename;
 }
 
-/** The receipt row as stored, server-only keys included. */
 async function storedReceipt(): Promise<Record<string, unknown> | undefined> {
-  const [row] = await suite.db.select().from(tenantReceipts);
-  return row?.receipt as Record<string, unknown> | undefined;
+  const [row] = await suite.db
+    .select()
+    .from(departmentReceipts)
+    .where(eq(departmentReceipts.departmentId, await receiptDepartment()));
+  return row === undefined
+    ? undefined
+    : { ...row.receipt, ...(row.logoRasters == null ? {} : { logoRasters: row.logoRasters }) };
 }
 
 /** Replaces a library image's bytes with some that will not decode. */
@@ -1272,11 +1293,14 @@ describe("Management API — receipt routes (Task 7)", () => {
     const json = { "content-type": "application/json" };
 
     const cases = [
-      app.request("/management-api/receipt"),
-      app.request("/management-api/receipt", {
+      app.request(await receiptPath()),
+      app.request(await receiptPath(), {
         method: "PUT",
         headers: json,
-        body: JSON.stringify({ receipt: { footerMessage: "Gracias" } }),
+        body: JSON.stringify({
+          receipt: { footerMessage: { "es-ES": "Gracias" } },
+          policy: RECEIPT_POLICY,
+        }),
       }),
     ];
     for (const res of await Promise.all(cases)) {
@@ -1294,13 +1318,15 @@ describe("Management API — receipt routes (Task 7)", () => {
     const cookie = await login(app, STAFF_EMAIL);
     const json = { "content-type": "application/json" };
 
-    // GET authorizes at the route; PUT authorizes in putReceipt. Both refuse this session.
     const cases = [
-      app.request("/management-api/receipt", { headers: { cookie } }),
-      app.request("/management-api/receipt", {
+      app.request(await receiptPath(), { headers: { cookie } }),
+      app.request(await receiptPath(), {
         method: "PUT",
         headers: { ...json, cookie },
-        body: JSON.stringify({ receipt: { footerMessage: "Gracias" } }),
+        body: JSON.stringify({
+          receipt: { footerMessage: { "es-ES": "Gracias" } },
+          policy: RECEIPT_POLICY,
+        }),
       }),
     ];
     for (const res of await Promise.all(cases)) {
@@ -1311,26 +1337,33 @@ describe("Management API — receipt routes (Task 7)", () => {
     }
   });
 
-  it("GET /management-api/receipt returns DEFAULT_RECEIPT for a tenant that has never authored one", async () => {
+  it("GET returns an empty department receipt before it has been authored", async () => {
     await setupTenant();
     const app = mountApp();
     const cookie = await login(app, MANAGER_EMAIL);
 
-    // A fresh venue has no `tenant_receipts` row, so the built-in default comes back.
     const body = await getReceiptOverHttp(app, cookie);
-    expect(body).toEqual({ receipt: DEFAULT_RECEIPT, venueAddress: VENUE_ADDRESS });
+    expect(body).toEqual({
+      receipt: {},
+      venueAddress: VENUE_ADDRESS,
+      policy: RECEIPT_POLICY,
+      receiptLanguage: LOCALE,
+      languages: [LOCALE],
+      warningLanguages: [],
+      operationDescriptionRequired: false,
+    });
   });
 
-  it("manager PUT /management-api/receipt → 204, then GET /management-api/receipt reads it back (round-trip)", async () => {
+  it("a department receipt round trips through manager PUT and GET", async () => {
     await setupTenant();
     const app = mountApp();
     const cookie = await login(app, MANAGER_EMAIL);
-    const receipt = { footerMessage: "Gracias por su visita" };
+    const receipt = { footerMessage: { "es-ES": "Gracias por su visita" } };
 
-    const put = await app.request("/management-api/receipt", {
+    const put = await app.request(await receiptPath(), {
       method: "PUT",
       headers: { "content-type": "application/json", cookie },
-      body: JSON.stringify({ receipt }),
+      body: JSON.stringify({ receipt, policy: RECEIPT_POLICY }),
     });
     expect(put.status).toBe(204);
     expect(await put.text()).toBe("");
@@ -1338,6 +1371,11 @@ describe("Management API — receipt routes (Task 7)", () => {
     expect(await getReceiptOverHttp(app, cookie)).toEqual({
       receipt,
       venueAddress: VENUE_ADDRESS,
+      policy: RECEIPT_POLICY,
+      receiptLanguage: LOCALE,
+      languages: [LOCALE],
+      warningLanguages: [],
+      operationDescriptionRequired: false,
     });
   });
 
@@ -1349,6 +1387,11 @@ describe("Management API — receipt routes (Task 7)", () => {
     expect(await getReceiptOverHttp(app, cookie)).toEqual({
       receipt: { printAddress: false },
       venueAddress: VENUE_ADDRESS,
+      policy: RECEIPT_POLICY,
+      receiptLanguage: LOCALE,
+      languages: [LOCALE],
+      warningLanguages: [],
+      operationDescriptionRequired: false,
     });
   });
 
@@ -1364,10 +1407,29 @@ describe("Management API — receipt routes (Task 7)", () => {
     expect(await getReceiptOverHttp(app, cookie)).toEqual({
       receipt: { logo, phone: "+34 910 000 000" },
       venueAddress: VENUE_ADDRESS,
+      policy: RECEIPT_POLICY,
+      receiptLanguage: LOCALE,
+      languages: [LOCALE],
+      warningLanguages: [],
+      operationDescriptionRequired: false,
     });
     const printable = await withTransaction(suite.db, async (tx) => [
-      (await getPrintedReceipt(tx, "58mm")).logo,
-      (await getPrintedReceipt(tx, "80mm")).logo,
+      (
+        await readPrintedDepartmentReceipt(
+          tx,
+          { ...venueCfg!, receiptLanguages: [LOCALE] },
+          await receiptDepartment(),
+          "58mm",
+        )
+      ).logo,
+      (
+        await readPrintedDepartmentReceipt(
+          tx,
+          { ...venueCfg!, receiptLanguages: [LOCALE] },
+          await receiptDepartment(),
+          "80mm",
+        )
+      ).logo,
     ]);
     // 40 × 12 fitted inside 360 × 160 and 504 × 160.
     expect(printable.map((r) => [r?.widthDots, r?.heightDots])).toEqual([
@@ -1413,10 +1475,15 @@ describe("Management API — receipt routes (Task 7)", () => {
     // A decode would now fail, so a 204 shows none ran.
     await spoilImageBytes(logo);
 
-    expect((await putReceiptOverHttp(app, cookie, { logo, footerMessage: "Gracias" })).status).toBe(
-      204,
-    );
-    expect(await storedReceipt()).toEqual({ logo, footerMessage: "Gracias", logoRasters: before });
+    expect(
+      (await putReceiptOverHttp(app, cookie, { logo, footerMessage: { "es-ES": "Gracias" } }))
+        .status,
+    ).toBe(204);
+    expect(await storedReceipt()).toEqual({
+      logo,
+      footerMessage: { "es-ES": "Gracias" },
+      logoRasters: before,
+    });
   });
 
   it("PUT keeping the saved logo draws it again when a saved picture cannot be printed", async () => {
@@ -1426,12 +1493,16 @@ describe("Management API — receipt routes (Task 7)", () => {
     const logo = await libraryImage(43);
     expect((await putReceiptOverHttp(app, cookie, { logo })).status).toBe(204);
     const drawn = (await storedReceipt())!.logoRasters as Record<string, unknown>;
-    await suite.db.update(tenantReceipts).set({
-      receipt: {
-        logo,
-        logoRasters: { ...drawn, "80mm": { widthDots: 8, heightDots: 1, data: "" } },
-      },
-    });
+    await suite.db
+      .update(departmentReceipts)
+      .set({
+        receipt: { logo },
+        logoRasters: {
+          ...drawn,
+          "80mm": { widthDots: 8, heightDots: 1, data: "" },
+        } as typeof departmentReceipts.$inferInsert.logoRasters,
+      })
+      .where(eq(departmentReceipts.departmentId, await receiptDepartment()));
 
     expect((await putReceiptOverHttp(app, cookie, { logo })).status).toBe(204);
     expect(await storedReceipt()).toEqual({ logo, logoRasters: drawn });
@@ -1448,14 +1519,21 @@ describe("Management API — receipt routes (Task 7)", () => {
     await spoilImageBytes(logo);
 
     const res = await queuedInOrder(
-      () => putReceiptOverHttp(app, cookie, { logo, footerMessage: "Gracias" }),
+      () => putReceiptOverHttp(app, cookie, { logo, footerMessage: { "es-ES": "Gracias" } }),
       () =>
         withTransaction(suite.db, async (tx) => {
-          await tx.update(tenantReceipts).set({ receipt: { footerMessage: "Otra" } });
+          await tx
+            .update(departmentReceipts)
+            .set({ receipt: { footerMessage: { "es-ES": "Otra" } }, logoRasters: null })
+            .where(eq(departmentReceipts.departmentId, await receiptDepartment()));
         }),
     );
     expect(res.status).toBe(204);
-    expect(await storedReceipt()).toEqual({ logo, footerMessage: "Gracias", logoRasters: drawn });
+    expect(await storedReceipt()).toEqual({
+      logo,
+      footerMessage: { "es-ES": "Gracias" },
+      logoRasters: drawn,
+    });
   });
 
   it("PUT is refused image_not_found when the image is deleted while its pictures are drawn", async () => {
@@ -1478,15 +1556,15 @@ describe("Management API — receipt routes (Task 7)", () => {
     expect(await storedReceipt()).toBeUndefined();
   });
 
-  it("PUT /management-api/receipt with an unknown field → 400 receipt.invalid", async () => {
+  it("a department receipt with an unknown field is refused receipt.invalid", async () => {
     await setupTenant();
     const app = mountApp();
     const cookie = await login(app, MANAGER_EMAIL);
 
-    const res = await app.request("/management-api/receipt", {
+    const res = await app.request(await receiptPath(), {
       method: "PUT",
       headers: { "content-type": "application/json", cookie },
-      body: JSON.stringify({ receipt: { bogus: "x" } }),
+      body: JSON.stringify({ receipt: { bogus: "x" }, policy: RECEIPT_POLICY }),
     });
     expect(res.status).toBe(400);
     expect((await res.json()) as { error: { code: string } }).toMatchObject({
@@ -1501,7 +1579,7 @@ describe("Management API — receipt routes (Task 7)", () => {
     const json = { "content-type": "application/json" };
 
     // An object without the `receipt` key, and a JSON `null` read as `{}`.
-    const receiptEmpty = await app.request("/management-api/receipt", {
+    const receiptEmpty = await app.request(await receiptPath(), {
       method: "PUT",
       headers: { ...json, cookie },
       body: JSON.stringify({}),
@@ -1513,7 +1591,7 @@ describe("Management API — receipt routes (Task 7)", () => {
       error: { code: "management.request_invalid", params: { field: "receipt" } },
     });
 
-    const receiptNull = await app.request("/management-api/receipt", {
+    const receiptNull = await app.request(await receiptPath(), {
       method: "PUT",
       headers: { ...json, cookie },
       body: "null",
@@ -2047,6 +2125,7 @@ describe("Management API — a credential change checks the current password bef
 const departmentReceiptPath = (id: string) =>
   `/management-api/venue-service/departments/${id}/receipt`;
 async function departmentFixture(active = true, elsewhere = false): Promise<string> {
+  await suite.db.update(contentLanguages).set({ languages: ["es", "ca", "gl", "eu"] });
   let locationId = venueCfg!.locationId as string;
   if (elsewhere) {
     const [row] = await suite.db
@@ -2057,19 +2136,36 @@ async function departmentFixture(active = true, elsewhere = false): Promise<stri
   }
   const [row] = await suite.db
     .insert(departments)
-    .values({ locationId, name: `Receipt ${randomUUID()}`, tradingName: "Receipt", active })
+    .values({
+      locationId,
+      name: `Receipt ${randomUUID()}`,
+      tradingName: "Receipt",
+      active,
+    })
     .returning();
+  await suite.db.insert(departmentSalePolicies).values({
+    departmentId: row!.id,
+    ...RECEIPT_POLICY,
+  });
   return row!.id;
 }
 async function putTrim(app: Hono, cookie: string, path: string, body: unknown): Promise<Response> {
   return app.request(path, {
     method: "PUT",
     headers: { cookie, "content-type": "application/json" },
-    body: JSON.stringify(body),
+    body: JSON.stringify(
+      typeof body === "object" &&
+        body !== null &&
+        !Array.isArray(body) &&
+        "receipt" in body &&
+        !("policy" in body)
+        ? { ...body, policy: RECEIPT_POLICY }
+        : body,
+    ),
   });
 }
 
-describe("independent department and global defaults routes", () => {
+describe("independent department receipt routes", () => {
   it("the department read reports the saved receipt language rather than the first offered choice", async () => {
     await setupTenant();
     const app = mountApp();
@@ -2083,7 +2179,7 @@ describe("independent department and global defaults routes", () => {
     expect(response.status).toBe(200);
     const body = await response.json();
     expect(body.receiptLanguage).toBe("ca-ES");
-    expect(body.languages[0]).toBe("es-ES");
+    expect(body.languages[0]).toBe("ca-ES");
   });
   it("reads missing department receipt without copying global defaults or contact", async () => {
     await setupTenant();
@@ -2091,8 +2187,8 @@ describe("independent department and global defaults routes", () => {
     const cookie = await login(app, MANAGER_EMAIL);
     const id = await departmentFixture();
     await putReceiptOverHttp(app, cookie, {
-      headerSubtitle: "Venue",
-      footerMessage: "Thanks",
+      headerSubtitle: { "es-ES": "Venue" },
+      footerMessage: { "es-ES": "Thanks" },
       phone: "+34 910 000 000",
       printAddress: false,
     });
@@ -2101,15 +2197,16 @@ describe("independent department and global defaults routes", () => {
     expect(await response.json()).toEqual({
       receipt: {},
       receiptLanguage: "es-ES",
-      venueDefaults: { headerSubtitle: "Venue", footerMessage: "Thanks", printAddress: false },
+      policy: RECEIPT_POLICY,
       languages: ["es-ES", "ca-ES", "gl-ES", "eu-ES"],
       warningLanguages: [],
+      operationDescriptionRequired: false,
       venueAddress: VENUE_ADDRESS,
     });
   });
 
   it.each([false, true])(
-    "department and defaults saves preserve one another (department first %s)",
+    "department saves preserve one another (department first %s)",
     async (first) => {
       await setupTenant();
       const app = mountApp();
@@ -2124,9 +2221,14 @@ describe("independent department and global defaults routes", () => {
         email: "department@venue.test",
       };
       const department = () => putTrim(app, cookie, departmentReceiptPath(id), { receipt });
-      const global = () =>
-        putTrim(app, cookie, "/management-api/receipt-settings", {
-          settings: { footerMessage: "Global", printAddress: false },
+      const global = async () =>
+        putTrim(app, cookie, await receiptPath(), {
+          receipt: {
+            footerMessage: { "es-ES": "Global" },
+            printAddress: false,
+            email: "legacy@venue.test",
+            phone: "+34 910 000 000",
+          },
         });
       expect((await (first ? department() : global())).status).toBe(204);
       expect((await (first ? global() : department())).status).toBe(204);
@@ -2134,15 +2236,16 @@ describe("independent department and global defaults routes", () => {
       expect(await response.json()).toEqual({
         receipt,
         receiptLanguage: "es-ES",
-        venueDefaults: { footerMessage: "Global", printAddress: false },
+        policy: RECEIPT_POLICY,
         languages: ["es-ES", "ca-ES", "gl-ES", "eu-ES"],
         warningLanguages: ["gl-ES", "eu-ES"],
+        operationDescriptionRequired: false,
         venueAddress: VENUE_ADDRESS,
       });
       expect((await getReceiptOverHttp(app, cookie)).receipt).toEqual({
         email: "legacy@venue.test",
         phone: "+34 910 000 000",
-        footerMessage: "Global",
+        footerMessage: { "es-ES": "Global" },
         printAddress: false,
       });
     },
@@ -2157,7 +2260,7 @@ describe("independent department and global defaults routes", () => {
       { headerSubtitle: { unknown: "Text" } },
       { reason: "invalid_language", field: "headerSubtitle" },
     ],
-    [{ printAddress: false }, { reason: "unknown_field" }],
+    [{ printAddress: "false" }, { reason: "not_boolean", field: "printAddress" }],
     [null, { reason: "not_object" }],
   ])("refuses a department invalid value without writes (%j)", async (receipt, params) => {
     await setupTenant();
@@ -2167,8 +2270,36 @@ describe("independent department and global defaults routes", () => {
     const res = await putTrim(app, cookie, departmentReceiptPath(id), { receipt });
     expect(res.status).toBe(400);
     expect(await res.json()).toEqual({ error: { code: "receipt.invalid", params } });
-    expect(await suite.db.select().from(departmentReceipts)).toEqual([]);
+    expect(
+      await suite.db
+        .select()
+        .from(departmentReceipts)
+        .where(eq(departmentReceipts.departmentId, id)),
+    ).toEqual([]);
   });
+
+  it.each([false, true])(
+    "round trips department address %s and its authored description",
+    async (printAddress) => {
+      await setupTenant();
+      const app = mountApp();
+      const cookie = await login(app, MANAGER_EMAIL);
+      const id = await departmentFixture();
+      const receipt = { printAddress, operationDescription: "Dining service" };
+      expect((await putTrim(app, cookie, departmentReceiptPath(id), { receipt })).status).toBe(204);
+      const response = await app.request(departmentReceiptPath(id), { headers: { cookie } });
+      expect(response.status).toBe(200);
+      expect((await response.json()).receipt).toEqual(receipt);
+      expect(
+        (
+          await suite.db
+            .select()
+            .from(departmentReceipts)
+            .where(eq(departmentReceipts.departmentId, id))
+        )[0]?.receipt,
+      ).toEqual(receipt);
+    },
+  );
 
   it.each(["missing", "other-location"])("refuses %s department on GET and PUT", async (kind) => {
     await setupTenant();
@@ -2186,23 +2317,17 @@ describe("independent department and global defaults routes", () => {
     }
   });
 
-  it.each(["department", "defaults"])(
+  it.each(["department", "primary department"])(
     "requires layout permission for %s GET and PUT",
     async (kind) => {
       await setupTenant();
       const app = mountApp();
       const cookie = await login(app, STAFF_EMAIL);
       const id = await departmentFixture();
-      const path =
-        kind === "department" ? departmentReceiptPath(id) : "/management-api/receipt-settings";
+      const path = kind === "department" ? departmentReceiptPath(id) : await receiptPath();
       for (const res of [
         await app.request(path, { headers: { cookie } }),
-        await putTrim(
-          app,
-          cookie,
-          path,
-          kind === "department" ? { receipt: {} } : { settings: {} },
-        ),
+        await putTrim(app, cookie, path, kind === "department" ? { receipt: {} } : { receipt: {} }),
       ]) {
         expect(res.status).toBe(403);
         expect((await res.json()) as unknown).toMatchObject({
@@ -2217,44 +2342,42 @@ describe("independent department and global defaults routes", () => {
     { settings: null },
     { settings: { printAddress: null } },
     { settings: { phone: "+34 910 000 000" } },
-  ])("refuses invalid defaults envelopes (%j)", async (body) => {
-    await setupTenant();
-    const app = mountApp();
-    const cookie = await login(app, MANAGER_EMAIL);
-    const res = await putTrim(app, cookie, "/management-api/receipt-settings", body);
-    expect(res.status).toBe(400);
-    expect((await res.json()) as unknown).toMatchObject({
-      error: { code: "settings" in body ? "receipt.invalid" : "management.request_invalid" },
-    });
-  });
-
-  it("returns defaults alone, and absent printAddress clears only that switch", async () => {
+  ])(
+    "the retired defaults endpoint refuses every old envelope without writing (%j)",
+    async (body) => {
+      await setupTenant();
+      const app = mountApp();
+      const cookie = await login(app, MANAGER_EMAIL);
+      const before = await suite.db.select().from(tenantReceipts);
+      expect((await putTrim(app, cookie, "/management-api/receipt-settings", body)).status).toBe(
+        404,
+      );
+      expect(await suite.db.select().from(tenantReceipts)).toEqual(before);
+    },
+  );
+  it("omitting the department address switch clears it without inventing defaults", async () => {
     await setupTenant();
     const app = mountApp();
     const cookie = await login(app, MANAGER_EMAIL);
     expect(
       (
-        await putTrim(app, cookie, "/management-api/receipt-settings", {
-          settings: { printAddress: false, headerSubtitle: "" },
+        await putReceiptOverHttp(app, cookie, {
+          printAddress: false,
+          headerSubtitle: { "es-ES": "Retained subtitle" },
         })
       ).status,
     ).toBe(204);
-    const response = await app.request("/management-api/receipt-settings", { headers: { cookie } });
-    expect(response.status).toBe(200);
-    expect(await response.json()).toEqual({
-      settings: { printAddress: false, headerSubtitle: "" },
+    expect((await getReceiptOverHttp(app, cookie)).receipt).toEqual({
+      printAddress: false,
+      headerSubtitle: { "es-ES": "Retained subtitle" },
     });
-    expect(
-      (await putTrim(app, cookie, "/management-api/receipt-settings", { settings: {} })).status,
-    ).toBe(204);
-    expect(
-      await (await app.request("/management-api/receipt-settings", { headers: { cookie } })).json(),
-    ).toEqual({ settings: {} });
+    expect((await putReceiptOverHttp(app, cookie, {})).status).toBe(204);
+    expect((await getReceiptOverHttp(app, cookie)).receipt).toEqual({});
   });
 });
 
 describe("department logo ownership and route failure boundaries", () => {
-  it("reuses only the department's pair and clearing either owner keeps the other", async () => {
+  it("reuses only the department's pair and clearing either department keeps the other", async () => {
     await setupTenant();
     const app = mountApp();
     const cookie = await login(app, MANAGER_EMAIL);
@@ -2264,7 +2387,10 @@ describe("department logo ownership and route failure boundaries", () => {
     expect(
       (await putTrim(app, cookie, departmentReceiptPath(id), { receipt: { logo } })).status,
     ).toBe(204);
-    const [before] = await suite.db.select().from(departmentReceipts);
+    const [before] = await suite.db
+      .select()
+      .from(departmentReceipts)
+      .where(eq(departmentReceipts.departmentId, id));
     await spoilImageBytes(logo);
     expect(
       (
@@ -2273,13 +2399,18 @@ describe("department logo ownership and route failure boundaries", () => {
         })
       ).status,
     ).toBe(204);
-    expect((await suite.db.select().from(departmentReceipts))[0]!.logoRasters).toEqual(
-      before!.logoRasters,
-    );
     expect(
       (
-        await putTrim(app, cookie, "/management-api/receipt-settings", {
-          settings: { logo, headerSubtitle: "Venue" },
+        await suite.db
+          .select()
+          .from(departmentReceipts)
+          .where(eq(departmentReceipts.departmentId, id))
+      )[0]!.logoRasters,
+    ).toEqual(before!.logoRasters);
+    expect(
+      (
+        await putTrim(app, cookie, await receiptPath(), {
+          receipt: { logo, headerSubtitle: { "es-ES": "Venue" } },
         })
       ).status,
     ).toBe(204);
@@ -2287,21 +2418,32 @@ describe("department logo ownership and route failure boundaries", () => {
     expect((await putTrim(app, cookie, departmentReceiptPath(id), { receipt: {} })).status).toBe(
       204,
     );
-    expect((await suite.db.select().from(departmentReceipts))[0]!.logoRasters).toBeNull();
+    expect(
+      (
+        await suite.db
+          .select()
+          .from(departmentReceipts)
+          .where(eq(departmentReceipts.departmentId, id))
+      )[0]!.logoRasters,
+    ).toBeNull();
     expect((await storedReceipt())!.logoRasters).toBeDefined();
     await suite.db
       .update(departmentReceipts)
-      .set({ receipt: { logo }, logoRasters: before!.logoRasters });
-    expect(
-      (await putTrim(app, cookie, "/management-api/receipt-settings", { settings: {} })).status,
-    ).toBe(204);
+      .set({ receipt: { logo }, logoRasters: before!.logoRasters })
+      .where(eq(departmentReceipts.departmentId, id));
+    expect((await putTrim(app, cookie, await receiptPath(), { receipt: {} })).status).toBe(204);
     expect((await storedReceipt())!.logoRasters).toBeUndefined();
-    expect((await suite.db.select().from(departmentReceipts))[0]!.logoRasters).toEqual(
-      before!.logoRasters,
-    );
+    expect(
+      (
+        await suite.db
+          .select()
+          .from(departmentReceipts)
+          .where(eq(departmentReceipts.departmentId, id))
+      )[0]!.logoRasters,
+    ).toEqual(before!.logoRasters);
   });
 
-  it("does not borrow a global pair for an explicit department with the same filename", async () => {
+  it("does not borrow another department pair with the same filename", async () => {
     await setupTenant();
     const app = mountApp();
     const cookie = await login(app, MANAGER_EMAIL);
@@ -2312,10 +2454,15 @@ describe("department logo ownership and route failure boundaries", () => {
     const res = await putTrim(app, cookie, departmentReceiptPath(id), { receipt: { logo } });
     expect(res.status).toBe(422);
     expect((await res.json()) as unknown).toMatchObject({ error: { code: "image.invalid_file" } });
-    expect(await suite.db.select().from(departmentReceipts)).toEqual([]);
+    expect(
+      await suite.db
+        .select()
+        .from(departmentReceipts)
+        .where(eq(departmentReceipts.departmentId, id)),
+    ).toEqual([]);
   });
 
-  it.each(["department", "defaults"])(
+  it.each(["department", "primary department"])(
     "refuses an unknown logo for %s without saving",
     async (kind) => {
       await setupTenant();
@@ -2326,19 +2473,24 @@ describe("department logo ownership and route failure boundaries", () => {
       const res = await putTrim(
         app,
         cookie,
-        kind === "department" ? departmentReceiptPath(id) : "/management-api/receipt-settings",
-        kind === "department" ? { receipt: { logo } } : { settings: { logo } },
+        kind === "department" ? departmentReceiptPath(id) : await receiptPath(),
+        kind === "department" ? { receipt: { logo } } : { receipt: { logo } },
       );
       expect(res.status).toBe(400);
       expect(await res.json()).toEqual({
         error: { code: "receipt.invalid", params: { field: "logo", reason: "image_not_found" } },
       });
-      expect(await suite.db.select().from(departmentReceipts)).toEqual([]);
+      expect(
+        await suite.db
+          .select()
+          .from(departmentReceipts)
+          .where(eq(departmentReceipts.departmentId, id)),
+      ).toEqual([]);
       expect(await storedReceipt()).toBeUndefined();
     },
   );
 
-  it("redraws a corrupt explicit pair instead of using the global pair", async () => {
+  it("redraws a corrupt explicit pair", async () => {
     await setupTenant();
     const app = mountApp();
     const cookie = await login(app, MANAGER_EMAIL);
@@ -2347,44 +2499,60 @@ describe("department logo ownership and route failure boundaries", () => {
     expect(
       (await putTrim(app, cookie, departmentReceiptPath(id), { receipt: { logo } })).status,
     ).toBe(204);
-    const [before] = await suite.db.select().from(departmentReceipts);
+    const [before] = await suite.db
+      .select()
+      .from(departmentReceipts)
+      .where(eq(departmentReceipts.departmentId, id));
     await suite.db.update(departmentReceipts).set({
       logoRasters: { ...before!.logoRasters!, "80mm": { widthDots: 8, heightDots: 1, data: "" } },
     });
     expect(
       (await putTrim(app, cookie, departmentReceiptPath(id), { receipt: { logo } })).status,
     ).toBe(204);
-    expect((await suite.db.select().from(departmentReceipts))[0]!.logoRasters).toEqual(
-      before!.logoRasters,
-    );
+    expect(
+      (
+        await suite.db
+          .select()
+          .from(departmentReceipts)
+          .where(eq(departmentReceipts.departmentId, id))
+      )[0]!.logoRasters,
+    ).toEqual(before!.logoRasters);
   });
 
-  it.each(["department", "defaults"])("rechecks image presence before %s writes", async (kind) => {
-    await setupTenant();
-    const app = mountApp();
-    const cookie = await login(app, MANAGER_EMAIL);
-    const id = await departmentFixture();
-    const logo = await libraryImage(54);
-    const res = await queuedInOrder(
-      () =>
-        putTrim(
-          app,
-          cookie,
-          kind === "department" ? departmentReceiptPath(id) : "/management-api/receipt-settings",
-          kind === "department" ? { receipt: { logo } } : { settings: { logo } },
-        ),
-      () =>
-        withTransaction(suite.db, async (tx) => {
-          await tx.delete(mediaImages).where(eq(mediaImages.filename, logo));
-        }),
-    );
-    expect(res.status).toBe(400);
-    expect(await res.json()).toEqual({
-      error: { code: "receipt.invalid", params: { field: "logo", reason: "image_not_found" } },
-    });
-    expect(await suite.db.select().from(departmentReceipts)).toEqual([]);
-    expect(await storedReceipt()).toBeUndefined();
-  });
+  it.each(["department", "primary department"])(
+    "rechecks image presence before %s writes",
+    async (kind) => {
+      await setupTenant();
+      const app = mountApp();
+      const cookie = await login(app, MANAGER_EMAIL);
+      const id = await departmentFixture();
+      const logo = await libraryImage(54);
+      const res = await queuedInOrder(
+        async () =>
+          putTrim(
+            app,
+            cookie,
+            kind === "department" ? departmentReceiptPath(id) : await receiptPath(),
+            kind === "department" ? { receipt: { logo } } : { receipt: { logo } },
+          ),
+        () =>
+          withTransaction(suite.db, async (tx) => {
+            await tx.delete(mediaImages).where(eq(mediaImages.filename, logo));
+          }),
+      );
+      expect(res.status).toBe(400);
+      expect(await res.json()).toEqual({
+        error: { code: "receipt.invalid", params: { field: "logo", reason: "image_not_found" } },
+      });
+      expect(
+        await suite.db
+          .select()
+          .from(departmentReceipts)
+          .where(eq(departmentReceipts.departmentId, id)),
+      ).toEqual([]);
+      expect(await storedReceipt()).toBeUndefined();
+    },
+  );
 
   it("refuses malformed and absent department bodies", async () => {
     await setupTenant();
@@ -2400,15 +2568,14 @@ describe("department logo ownership and route failure boundaries", () => {
     }
   });
 
-  it.each(["department", "defaults"])("requires a session for %s", async (kind) => {
+  it.each(["department", "primary department"])("requires a session for %s", async (kind) => {
     await setupTenant();
     const app = mountApp();
     const id = await departmentFixture();
-    const path =
-      kind === "department" ? departmentReceiptPath(id) : "/management-api/receipt-settings";
+    const path = kind === "department" ? departmentReceiptPath(id) : await receiptPath();
     for (const res of [
       await app.request(path),
-      await putTrim(app, "", path, kind === "department" ? { receipt: {} } : { settings: {} }),
+      await putTrim(app, "", path, kind === "department" ? { receipt: {} } : { receipt: {} }),
     ]) {
       expect(res.status).toBe(401);
       expect((await res.json()) as unknown).toMatchObject({

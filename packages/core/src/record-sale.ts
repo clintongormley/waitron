@@ -63,6 +63,7 @@ export interface RecordSaleInput {
   /** Where the sale came from, written to `sales.source` and `sales.device_id`; its incidents name
    * it too. */
   origin: SaleOrigin;
+  operationDescription?: string;
   /** The node that chains the sale. The named series must belong to it. */
   nodeId: NodeId;
   seriesId: SeriesId;
@@ -355,7 +356,12 @@ export async function recordSale(
     await settleSale(tx, { saleId, tenders: input.settlement.tenders });
   }
 
-  const descriptionOfOperation = await operationDescriptionFor(tx, input.origin, input.nodeId);
+  const descriptionOfOperation = await operationDescriptionFor(
+    tx,
+    input.origin,
+    input.nodeId,
+    input.operationDescription,
+  );
 
   // The module builds the fiscal record behind this one call; this package never touches a
   // module's tables.

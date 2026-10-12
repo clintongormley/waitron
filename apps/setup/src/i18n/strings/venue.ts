@@ -5,7 +5,7 @@ export const venueEn = {
   "venue.intro": "Enter the business that issues your invoices and the address of this location.",
   "venue.intro_demo":
     "Name your demo location and enter its address. Waitron supplies a made-up business identity and invoice settings; you can review them before setup.",
-  "venue.defaults_not_loaded": "Demo invoice settings have not loaded yet.",
+  "venue.defaults_not_loaded": "Invoice settings have not loaded yet.",
   "venue.retry_defaults": "Try loading settings again",
   "venue.section.business": "Business",
   "venue.section.location": "Location",
@@ -199,7 +199,7 @@ export const venueEs: Record<keyof typeof venueEn, string> = {
     "Introduce los datos del negocio que emite tus facturas y la dirección de este local.",
   "venue.intro_demo":
     "Pon nombre a tu local de demostración e introduce su dirección. Waitron aporta una identidad de negocio inventada y los ajustes de factura; puedes revisarlos antes de la configuración.",
-  "venue.defaults_not_loaded": "Los ajustes de factura de demostración aún no se han cargado.",
+  "venue.defaults_not_loaded": "Los ajustes de factura aún no se han cargado.",
   "venue.retry_defaults": "Volver a cargar los ajustes",
   "venue.section.business": "Negocio",
   "venue.section.location": "Local",

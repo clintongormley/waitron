@@ -1,6 +1,13 @@
 > 2026-10-11, A476: the first-save note mentions Reset; merge seats use `merge.seats_required`,
 > and a table missing from today's plan uses `table.not_on_today_plan`. Code examples below use these names.
 
+> **2026-10-12, A493 supersession:** departments and zones share one list with protected
+> editors. The department page and its tabs, including the zone panel and receipt tab, are
+> retired. Floor-plan editing returns to the list. Receipt decoration and the tax-agency
+> description belong to each department; Venue settings holds the receipt language.
+> The earlier page, global-default and live transfer contracts below are historical.
+> See [the current contract](../specs/2026-10-12-a493-departments-zones-design.md).
+
 > **2026-10-11 supersession.** A435 step 6 supersedes reversible zone switching and the activeTableCount hierarchy impact. Individual-table master/today, reset, catch-up and release behavior remains governed by the later floor design. See the
 > [step 6 reconciliation](2026-10-11-a435-6-tables-zones-departments-delete.md). Earlier behavior and receipts below remain historical.
 

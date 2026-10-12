@@ -1762,8 +1762,11 @@ async function onSecondBill(
 ): Promise<string> {
   const billId = randomUUID();
   await inTx(async (tx) => {
-    await createOpenOrder(tx, v.cfg, billId, [], null, { partyId: s.partyId });
-    await VENUE_SERVICE.copyOrderContext(tx, v.cfg, s.tabId, billId);
+    await createOpenOrder(tx, v.cfg, billId, [], null, {
+      partyId: s.partyId,
+      existingService: true,
+      copyServiceContextFrom: s.tabId,
+    });
     await transferItems(tx, v.cfg, s.tabId, billId, transfers, {
       expectedPartyRevision: revision,
       operatorId,
@@ -1835,8 +1838,11 @@ describe("a line leaving its party", () => {
       const s = await specExample(v);
       const secondTab = randomUUID();
       await inTx(async (tx) => {
-        await createOpenOrder(tx, v.cfg, secondTab, [], null, { partyId: s.partyId });
-        await VENUE_SERVICE.copyOrderContext(tx, v.cfg, s.tabId, secondTab);
+        await createOpenOrder(tx, v.cfg, secondTab, [], null, {
+          partyId: s.partyId,
+          existingService: true,
+          copyServiceContextFrom: s.tabId,
+        });
       });
       const [steak] = await linesIn(s.partyId, s.mains);
       const revision = await revisionOf(s.partyId);

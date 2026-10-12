@@ -1,3 +1,4 @@
+import { readSaleOperationDescription } from "./sale-operation-description.js";
 import { tableInService } from "@waitron/db";
 import { readStationQueueMoves, type StationQueueMove } from "./station-queue-moves.js";
 import {
@@ -79,6 +80,7 @@ import {
   appendOrderAmendment,
   billPaymentRefunds,
   billPayments,
+  devices,
   diningTables,
   floorTodayJoins,
   floorTodayJoinTables,
@@ -1113,6 +1115,7 @@ export async function createOpenOrder(
     zoneId?: string;
     partyId?: string | null;
     existingService?: boolean;
+    copyServiceContextFrom?: string;
     receiptLocale?: string;
     creditedTo?: string;
     invalidMakeAt?: "ignore";
@@ -1143,6 +1146,15 @@ export async function createOpenOrder(
   }
   const deliveryTableId = placement.deliveryTableId ?? null;
   let effectiveZoneId = placement.zoneId;
+  if (placement.copyServiceContextFrom !== undefined) {
+    const context = await VENUE_SERVICE.findOrderContext(tx, cfg, placement.copyServiceContextFrom);
+    if (context === null) {
+      throw new AppError("order.service_context_missing", {
+        workingOrderId: placement.copyServiceContextFrom,
+      });
+    }
+    effectiveZoneId = context.zoneId;
+  }
   if (deliveryTableId !== null) {
     const [table] = await tx
       .select({ id: diningTables.id, zoneId: diningTables.zoneId })
@@ -1155,7 +1167,18 @@ export async function createOpenOrder(
     }
     effectiveZoneId = table.zoneId;
   }
-  if (effectiveZoneId !== undefined && placement.existingService !== true) {
+  if (effectiveZoneId === undefined) {
+    let profileId: string | undefined;
+    if (cfg.origin.source === "device") {
+      const [device] = await tx
+        .select({ profileId: devices.deviceProfileId })
+        .from(devices)
+        .where(and(eq(devices.id, cfg.origin.deviceId), eq(devices.locationId, cfg.locationId)));
+      profileId = device?.profileId;
+    }
+    effectiveZoneId = (await VENUE_SERVICE.resolveNewOrderZone(tx, cfg, { profileId })).zoneId;
+  }
+  if (placement.existingService !== true) {
     await VENUE_SERVICE.assertZoneTakesNewOrders(tx, cfg, effectiveZoneId, new Date());
   }
   const pricedLines = await priceOrderLines(
@@ -1199,10 +1222,12 @@ export async function createOpenOrder(
   if (lineRows.length > 0) {
     await tx.insert(workingOrderLines).values(lineRows);
   }
-  if (effectiveZoneId !== undefined) {
+  if (placement.copyServiceContextFrom !== undefined) {
+    await VENUE_SERVICE.copyOrderContext(tx, cfg, placement.copyServiceContextFrom, id);
+  } else {
     await VENUE_SERVICE.recordOrderContext(tx, cfg, id, effectiveZoneId);
-    await VENUE_SERVICE.recordLineContexts(tx, cfg, id, lineContexts, offers);
   }
+  await VENUE_SERVICE.recordLineContexts(tx, cfg, id, lineContexts, offers);
 
   if (choice !== undefined) await selectOrderInvoice(tx, choice, cfg, id, gross.total);
   return { orderNumber, gross, identities, lineRows };
@@ -3519,6 +3544,7 @@ export async function setOrderInvoiceChoice(
       delivery: request.delivery,
       invoiceType: request.invoiceType,
       locationId: order.locationId,
+      source: { kind: "order", orderId },
       context: deliveryContext,
     });
     const revision = order.revision + 1;
@@ -5806,10 +5832,15 @@ export async function issueUnpaidInvoice(
     log,
     workingOrderId: id,
   });
+  const operationDescription = await readSaleOperationDescription(tx, cfg, {
+    kind: "order",
+    orderId: id,
+  });
   const { saleId, fiscal } = await recordSale(tx, backend, {
     origin: cfg.origin,
     nodeId: cfg.nodeId,
     ...selected.sale,
+    operationDescription,
     workingOrderId: brandWorkingOrderId(id),
     ...language,
     total: priced.total,

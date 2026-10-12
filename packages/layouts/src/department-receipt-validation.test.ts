@@ -90,7 +90,7 @@ describe("department receipt validation", () => {
       );
     },
   );
-  it.each(["printAddress", "tradingName", "logoRasters", "__proto__", "constructor"])(
+  it.each(["tradingName", "logoRasters", "__proto__", "constructor"])(
     "refuses department field %s without echoing it",
     (field) => {
       expectRefusal({ [field]: false }, { reason: "unknown_field" });
@@ -168,5 +168,32 @@ describe("venue default subset validation", () => {
     const error = refusal(() => validation.validateVenueReceiptSettings(input));
     expect(error.code).toBe("receipt.invalid");
     expect(error.params).toEqual(params);
+  });
+});
+
+describe("department address and description fields", () => {
+  it.each([true, false])("accepts printAddress %s and an authored description", (printAddress) => {
+    const input = { printAddress, operationDescription: "Dining service" };
+    expect(validation.validateDepartmentReceipt(input, languages)).toEqual(input);
+  });
+  it.each([null, [], "true", 1].map((value) => [value]))(
+    "refuses non-boolean address choice %j",
+    (printAddress) => {
+      expectRefusal({ printAddress }, { reason: "not_boolean", field: "printAddress" });
+    },
+  );
+  it.each([null, [], true, 1].map((value) => [value]))(
+    "refuses non-string description %j",
+    (operationDescription) => {
+      expectRefusal(
+        { operationDescription },
+        { reason: "not_string", field: "operationDescription" },
+      );
+    },
+  );
+  it("accepts a 500-character description and keeps an empty receipt empty", () => {
+    const input = { operationDescription: "x".repeat(500) };
+    expect(validation.validateDepartmentReceipt(input, languages)).toEqual(input);
+    expect(validation.validateDepartmentReceipt({}, languages)).toEqual({});
   });
 });

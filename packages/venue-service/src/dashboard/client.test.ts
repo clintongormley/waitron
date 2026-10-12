@@ -356,11 +356,9 @@ describe("combined settings requests", () => {
     await api.saveDepartmentSettings("d1", {
       name: "Dining",
       tradingName: "Receipt",
-      printTradingName: true,
       orderStart: "table",
       paidWhen: "ticket_then_pay",
       collectionNumber: "numbered",
-      receiptPrintMode: "on_request",
       transfers: { receivingProfileId: "p1", destinationDepartmentIds: ["d2"] },
     });
     expect(
@@ -376,11 +374,9 @@ describe("combined settings requests", () => {
         {
           name: "Dining",
           tradingName: "Receipt",
-          printTradingName: true,
           orderStart: "table",
           paidWhen: "ticket_then_pay",
           collectionNumber: "numbered",
-          receiptPrintMode: "on_request",
           transfers: { receivingProfileId: "p1", destinationDepartmentIds: ["d2"] },
         },
       ],
@@ -629,4 +625,35 @@ it("does not offer reversible hierarchy removal or retired impact requests", () 
     "zoneRemovalImpact",
   ])
     expect(api).not.toHaveProperty(name);
+});
+
+it("saves a zone editor with its name and raw nullable overrides in one request", async () => {
+  const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(undefined, 204));
+  const api = new VenueServiceApi(createRequest({ fetchImpl: fetchImpl as typeof fetch }));
+  await api.saveZoneSettings("z1", {
+    name: "Garden",
+    orderStart: null,
+    paidWhen: "prepay",
+    collectionNumber: null,
+    receiptPrintMode: "on_request",
+  });
+  expect(
+    fetchImpl.mock.calls.map(([path, init]) => [
+      path,
+      init.method,
+      JSON.parse(init.body as string),
+    ]),
+  ).toEqual([
+    [
+      "/management-api/venue-service/zones/z1/settings",
+      "PUT",
+      {
+        name: "Garden",
+        orderStart: null,
+        paidWhen: "prepay",
+        collectionNumber: null,
+        receiptPrintMode: "on_request",
+      },
+    ],
+  ]);
 });

@@ -548,12 +548,14 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
     c.json(
       Object.fromEntries(
         ALL_MODULES.flatMap(({ fiscal }) =>
-          fiscal?.venueFields?.defaults === undefined
+          fiscal === undefined
             ? []
             : [
                 [
                   fiscal.id,
-                  { operationDescription: fiscal.venueFields.defaults.operationDescription },
+                  {
+                    operationDescription: fiscal.venueFields?.defaults?.operationDescription ?? "",
+                  },
                 ],
               ],
         ),

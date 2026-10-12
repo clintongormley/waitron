@@ -160,7 +160,7 @@ const tabLine: TabLine = {
 const saleResult: TillSaleResult = {
   receiptTrim: {},
   venueAddress: [],
-  venueReceiptSettings: {},
+  receiptSettings: { printAddress: false },
   orderLabel: null,
   orderNumber: 1,
   invoiceNumber: "F-0001",

@@ -1,5 +1,12 @@
 # Service periods, slice 2 — zone closed times and named days (A366)
 
+> **2026-10-12, A493 supersession:** departments and zones share one list with protected
+> editors. The department page and its tabs, including the zone panel and receipt tab, are
+> retired. Floor-plan editing returns to the list. Receipt decoration and the tax-agency
+> description belong to each department; Venue settings holds the receipt language.
+> The earlier page, global-default and live transfer contracts below are historical.
+> See [the current contract](../specs/2026-10-12-a493-departments-zones-design.md).
+
 > **2026-10-09, A440:** a presented bill moved on its own into another party or to a free table in
 > a zone closed to new orders now takes that zone, because `takeIntoParty` turns off `adoptZone`'s
 > closed-zone check for a presented bill. Decision 13's and Task 12's accounts of `takeIntoParty`

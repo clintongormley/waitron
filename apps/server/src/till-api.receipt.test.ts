@@ -53,7 +53,13 @@ import {
   reportInvoiceDelivery,
   reserveInvoiceDelivery,
 } from "./invoice-delivery.js";
-import { departmentSalePolicies, departments, routingCells } from "@waitron/venue-service";
+import {
+  departmentSalePolicies,
+  departmentReceipts,
+  saleReceiptHeaders,
+  departments,
+  routingCells,
+} from "@waitron/venue-service";
 import type { PrintConfig } from "@waitron/printing";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -240,6 +246,17 @@ async function setupVenue(): Promise<{
       .values({ displayName: "Responsable", pinHash: hashPin("5555"), role: "supervisor" })
       .returning({ id: persons.id });
     const { products: available } = await listAvailableProducts(tx, cfg.locationId);
+    for (const department of await tx
+      .select({ id: departments.id })
+      .from(departments)
+      .where(eq(departments.locationId, cfg.locationId)))
+      await tx
+        .insert(departmentReceipts)
+        .values({
+          departmentId: department.id,
+          receipt: { operationDescription: "Venta en establecimiento" },
+        })
+        .onConflictDoNothing({ target: departmentReceipts.departmentId });
     return {
       each: { ...available.find((p) => p.pricingUnit === "each")!, menuItemId: menuItem.id },
       operatorId: staff!.id,
@@ -1272,6 +1289,18 @@ describe("POST /api/sales/:id/reprint (manual receipt reprint over HTTP)", () =>
     mountTillApi(app, apiDeps(cfg), noopLog);
     const cookie = await login(app, cfg, operatorId);
     const orderId = await ringSale(app, cfg, cookie, each.menuItemId);
+    const [header] = await suite.db
+      .select({ departmentId: saleReceiptHeaders.departmentId })
+      .from(saleReceiptHeaders)
+      .innerJoin(sales, eq(sales.id, saleReceiptHeaders.saleId))
+      .where(eq(sales.workingOrderId, orderId));
+    await suite.db
+      .insert(departmentReceipts)
+      .values({ departmentId: header!.departmentId!, receipt: { printAddress: true } })
+      .onConflictDoUpdate({
+        target: departmentReceipts.departmentId,
+        set: { receipt: { printAddress: true } },
+      });
     const reprint = () =>
       app.request(`/api/sales/${orderId}/reprint`, { method: "POST", headers: { cookie } });
     expect((await reprint()).status).toBe(200);
@@ -2473,17 +2502,35 @@ it("duplicates use the filed issuer identity while optional trim follows the cur
   await suite.db.execute(
     sql`update tenants set legal_name = 'Changed venue identity' where id = 1`,
   );
-  // The CURRENT receipt text, which the reprint below must NOT read — it reprints the sale's own
-  // snapshot.
+  const [header] = await suite.db
+    .select({ departmentId: saleReceiptHeaders.departmentId })
+    .from(saleReceiptHeaders)
+    .innerJoin(sales, eq(sales.id, saleReceiptHeaders.saleId))
+    .where(eq(sales.workingOrderId, id));
   await suite.db
-    .insert(tenantReceipts)
+    .insert(departmentReceipts)
     .values({
-      id: 1,
-      receipt: { headerSubtitle: "Current welcome", footerMessage: "Current farewell" },
+      departmentId: header!.departmentId!,
+      receipt: {
+        headerSubtitle: { "es-ES": "Current welcome" },
+        footerMessage: { "es-ES": "Current farewell" },
+      },
     })
     .onConflictDoUpdate({
+      target: departmentReceipts.departmentId,
+      set: {
+        receipt: {
+          headerSubtitle: { "es-ES": "Current welcome" },
+          footerMessage: { "es-ES": "Current farewell" },
+        },
+      },
+    });
+  await suite.db
+    .insert(tenantReceipts)
+    .values({ receipt: { headerSubtitle: "Global welcome", footerMessage: "Global farewell" } })
+    .onConflictDoUpdate({
       target: tenantReceipts.id,
-      set: { receipt: { headerSubtitle: "Current welcome", footerMessage: "Current farewell" } },
+      set: { receipt: { headerSubtitle: "Global welcome", footerMessage: "Global farewell" } },
     });
   const res = await app.request(`/api/sales/${id}/reprint`, {
     method: "POST",

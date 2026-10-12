@@ -11,11 +11,11 @@ import {
 import type { Transaction } from "@waitron/db";
 import { PRINTER_DELETED, canResendPrintJob, enqueuePrintJob, esc } from "@waitron/printing";
 import type { EscSetting, PrintConfig } from "@waitron/printing";
-import { getPrintedReceipt, profileAllows, readPrinterRoles } from "@waitron/layouts";
+import { profileAllows, readPrinterRoles } from "@waitron/layouts";
 import type { ProfilePrinterRole } from "@waitron/layouts";
 import { receiptLabelsFor } from "@waitron/country-packs";
 import { readReceiptLanguage } from "@waitron/catalogue";
-import { receiptLogoSource, resolveReceiptTrim } from "@waitron/shared";
+import { resolveReceiptTrim } from "@waitron/shared";
 import type { Origin } from "@waitron/shared";
 import { AppError } from "@waitron/shared";
 import "./errors.js";
@@ -162,8 +162,6 @@ async function buildReceiptBytes(
     receiptId?: 1;
     departmentId?: string;
   }) => console.warn("receipt.optional_read_failed", event);
-  const venue = await getPrintedReceipt(tx, printer.paperWidth, diagnostic);
-  const venueAddress = await readReceiptAddress(tx, cfg.locationId, venue.receipt);
   const header = await VENUE_SERVICE.readSaleReceiptHeader(tx, saleId);
   const departmentId = header?.departmentId ?? null;
   const current = await readReceiptLanguage(tx, cfg.locationId);
@@ -181,14 +179,11 @@ async function buildReceiptBytes(
           printer.paperWidth,
         );
   const authored = department?.receipt ?? null;
-  const receipt = resolveReceiptTrim(
-    authored,
-    venue.receipt,
-    language ?? ticket.locale,
-    current.locale,
-  );
-  const logo =
-    receiptLogoSource(authored, venue.receipt) === "department" ? department!.logo : venue.logo;
+  const receipt = resolveReceiptTrim(authored, {}, language ?? ticket.locale, current.locale);
+  const logo = department?.logo ?? null;
+  const venueAddress = await readReceiptAddress(tx, cfg.locationId, {
+    printAddress: authored?.printAddress === true,
+  });
   const receiptHeader = departmentId === null ? undefined : (header ?? undefined);
   return formatReceipt({
     result: ticket,

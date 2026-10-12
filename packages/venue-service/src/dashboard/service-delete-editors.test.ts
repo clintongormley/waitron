@@ -8,8 +8,8 @@ import type { OpeningHoursModel } from "../menu-timetable-types.js";
 import { OpeningHoursApi } from "./opening-hours-client.js";
 import { VenueServiceApi } from "./client.js";
 import "./department-settings.js";
-import "./department-page.js";
-import "./department-zones.js";
+import "./venue-departments-shell.js";
+import "./zone-edit-dialog.js";
 import "./opening-hours-screen.js";
 import { realWeekModel, namedWeekModel } from "../testing/real-week-model.js";
 
@@ -245,10 +245,10 @@ it("day deletion removes only the deleted department and preserves the surviving
 });
 it("zone service deletion invalidates pending discard on the same retained component", async () => {
   await mount();
-  const el = document.createElement("department-zones");
+  const el = document.createElement("zone-edit-dialog");
   el.model = structuredClone(zonesModel);
-  el.departmentId = "d1";
-  el.zone = "z1";
+  el.zoneId = "z1";
+  el.api = new VenueServiceApi((async () => ({ tables: [] })) as DashboardRequest);
   app.append(el);
   await el.updateComplete;
   const fields = el.shadowRoot!.querySelector("dashboard-service-settings-fields")!;
@@ -621,14 +621,13 @@ it("a reconnected day owner can save its retained draft after an old pending wri
 it("department deletion removes its contributed receipt panel while another department draft survives", async () => {
   await mount();
   const survivor = await settings("d2");
-  const page = document.createElement("department-page");
+  history.replaceState(null, "", "/manage/venue-operations/department/d1/view/receipt");
+  const page = document.createElement("venue-departments-shell");
   page.api = new VenueServiceApi((async (path) =>
     path.endsWith("/profiles")
       ? []
       : { receivingProfileId: null, destinationDepartmentIds: [] }) as DashboardRequest);
   page.model = structuredClone(zonesModel);
-  page.departmentId = "d1";
-  page.view = "receipt";
   page.renderPanel = (panel, subject) =>
     html`<section data-test="contributed-receipt" data-department=${subject.id}>${panel}</section>`;
   app.append(page);

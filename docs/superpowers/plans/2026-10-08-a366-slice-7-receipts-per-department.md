@@ -1,5 +1,17 @@
 # Receipts per department, slice 7 — implementation plan (A366)
 
+> **2026-10-12, A493 supersession:** departments and zones share one list with protected
+> editors. The department page and its tabs, including the zone panel and receipt tab, are
+> retired. Floor-plan editing returns to the list. Receipt decoration and the tax-agency
+> description belong to each department; Venue settings holds the receipt language.
+> The earlier page, global-default and live transfer contracts below are historical.
+> See [the current contract](../specs/2026-10-12-a493-departments-zones-design.md).
+
+> **2026-10-12, A493:** consent validation uses the selected order or sale's department
+> contact, including the existing local default-department fallback, rather than the venue
+> receipt row. See [A493](../specs/2026-10-12-a493-departments-zones-design.md). The consent payload,
+> reservation and retry contracts remain; their separate rewrite is still open.
+
 > **2026-10-11 supersession.** A435 step 6 refuses deleted department management reads, writes and editor links, and replaces a deleted default. Internal recorded-sale/reprint readers retain department receipt configuration and media; the editable disabled-department contract below is historical. See the
 > [step 6 reconciliation](2026-10-11-a435-6-tables-zones-departments-delete.md). Earlier behavior and receipts below remain historical.
 

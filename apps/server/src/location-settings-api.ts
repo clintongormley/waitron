@@ -245,50 +245,6 @@ export function mountLocationSettingsApi(
       return c.json(result);
     }),
   );
-  app.get("/management-api/location-settings", (c) =>
-    run(c, log, async () => {
-      const result = await gated(requireManagementSession(c), async (tx) => {
-        const [location] = await tx
-          .select({ name: locations.name, operationDescription: locations.operationDescription })
-          .from(locations)
-          .where(scope);
-        if (location === undefined)
-          throw new AppError("management.request_invalid", { field: "locationId" });
-        return location;
-      });
-      return c.json(result);
-    }),
-  );
-  app.put("/management-api/location-settings", (c) =>
-    run(c, log, async () => {
-      const sessionId = requireManagementSession(c);
-      const body = await readJsonBody<unknown>(c);
-      await gated(sessionId, async (tx) => {
-        const description =
-          typeof body === "object" && body !== null && "operationDescription" in body
-            ? body.operationDescription
-            : undefined;
-        if (typeof description !== "string" || description.trim() === "") {
-          throw new AppError("management.request_invalid", { field: "operationDescription" });
-        }
-        try {
-          deps.fiscal.venueFields?.validateOperationDescription(description);
-        } catch (error) {
-          if (!isAppError(error) || error.code !== "setup.request_invalid") throw error;
-          throw new AppError("management.request_invalid", { field: "operationDescription" });
-        }
-        // Future records read this setting; previously recorded invoices keep their own description.
-        const updated = await tx
-          .update(locations)
-          .set({ operationDescription: description })
-          .where(scope)
-          .returning({ id: locations.id });
-        if (updated.length === 0)
-          throw new AppError("management.request_invalid", { field: "locationId" });
-      });
-      return c.body(null, 204);
-    }),
-  );
   app.get("/management-api/receipt-language", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);

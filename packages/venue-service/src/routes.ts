@@ -1,3 +1,4 @@
+import { listDepartmentReceiptReadiness } from "./department-receipts.js";
 import { and, eq } from "drizzle-orm";
 import { departments } from "./schema/service.js";
 import { readDepartmentDeleteImpact, deleteDepartment } from "./service-delete.js";
@@ -17,9 +18,10 @@ import {
 } from "@waitron/server-kit";
 import type { Logger } from "@waitron/server-kit";
 import {
-  saveDepartmentSettings,
+  saveDepartmentEditSettings,
   saveZoneServiceSettings,
-  type DepartmentSettingsInput,
+  saveZoneSettings,
+  type DepartmentEditInput,
   type ZoneServiceSettingsInput,
   configureZone,
   createServiceZone,
@@ -159,6 +161,31 @@ function requireSalePolicyField(field: string, value: unknown, zone: boolean) {
 function onlyKeys(body: object, allowed: readonly string[]): void {
   const extra = Object.keys(body).find((key) => !allowed.includes(key));
   if (extra !== undefined) throw new AppError("management.request_invalid", { field: extra });
+}
+
+function zoneSettingsBody(body: Record<string, unknown>): ZoneServiceSettingsInput {
+  return {
+    orderStart: requireSalePolicyField(
+      "orderStart",
+      body.orderStart,
+      true,
+    ) as ZoneServiceSettingsInput["orderStart"],
+    paidWhen: requireSalePolicyField(
+      "paidWhen",
+      body.paidWhen,
+      true,
+    ) as ZoneServiceSettingsInput["paidWhen"],
+    collectionNumber: requireSalePolicyField(
+      "collectionNumber",
+      body.collectionNumber,
+      true,
+    ) as ZoneServiceSettingsInput["collectionNumber"],
+    receiptPrintMode: requireSalePolicyField(
+      "receiptPrintMode",
+      body.receiptPrintMode,
+      true,
+    ) as ZoneServiceSettingsInput["receiptPrintMode"],
+  };
 }
 
 function requireTransferSettings(value: unknown) {
@@ -524,7 +551,12 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
           ),
           zones: await listServiceZones(tx, ctx.cfg),
           salePolicies: await listSalePolicies(tx, ctx.cfg),
-          readiness: await listVenueReadiness(tx, ctx.cfg),
+          readiness: [
+            ...(await listVenueReadiness(tx, ctx.cfg)),
+            ...(ctx.cfg.operationDescriptionRequired === true
+              ? await listDepartmentReceiptReadiness(tx, ctx.cfg)
+              : []),
+          ],
           settings: { editSentLines: await readEditSentLines(tx) },
           kitchenTicketGrouping: await readKitchenTicketGrouping(tx),
           printHeldWork: await readPrintHeldWork(tx),
@@ -624,46 +656,58 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
         onlyKeys(body, [
           "name",
           "tradingName",
-          "printTradingName",
           "orderStart",
           "paidWhen",
           "collectionNumber",
-          "receiptPrintMode",
           "transfers",
         ]);
-        const input: DepartmentSettingsInput = {
+        const input: DepartmentEditInput = {
           name: requireName(body.name, "name"),
           tradingName: requireName(body.tradingName, "tradingName"),
-          printTradingName: requireSalePolicyField(
-            "printTradingName",
-            body.printTradingName,
-            false,
-          ) as boolean,
           orderStart: requireSalePolicyField(
             "orderStart",
             body.orderStart,
             false,
-          ) as DepartmentSettingsInput["orderStart"],
+          ) as DepartmentEditInput["orderStart"],
           paidWhen: requireSalePolicyField(
             "paidWhen",
             body.paidWhen,
             false,
-          ) as DepartmentSettingsInput["paidWhen"],
+          ) as DepartmentEditInput["paidWhen"],
           collectionNumber: requireSalePolicyField(
             "collectionNumber",
             body.collectionNumber,
             false,
-          ) as DepartmentSettingsInput["collectionNumber"],
-          receiptPrintMode: requireSalePolicyField(
-            "receiptPrintMode",
-            body.receiptPrintMode,
-            false,
-          ) as DepartmentSettingsInput["receiptPrintMode"],
+          ) as DepartmentEditInput["collectionNumber"],
           ...(body.transfers === undefined
             ? {}
             : { transfers: requireTransferSettings(body.transfers) }),
         };
-        await gated(sessionId, (tx) => saveDepartmentSettings(tx, ctx.cfg, departmentId, input));
+        await gated(sessionId, (tx) =>
+          saveDepartmentEditSettings(tx, ctx.cfg, departmentId, input),
+        );
+        return c.body(null, 204);
+      }),
+    );
+
+    app.put("/management-api/venue-service/zones/:zoneId/settings", (c) =>
+      run(c, log, async () => {
+        const sessionId = requireManagementSession(c);
+        const zoneId = requireUuidParam(c.req.param("zoneId"), "ServiceZoneId");
+        const body = await readJsonBody<Record<string, unknown>>(c);
+        onlyKeys(body, ["name", "orderStart", "paidWhen", "collectionNumber", "receiptPrintMode"]);
+        const name = requireName(body.name, "name");
+        const policy = zoneSettingsBody(body);
+        await gated(sessionId, async (tx) => {
+          const zone = (await listServiceZones(tx, ctx.cfg)).find((zone) => zone.id === zoneId);
+          if (zone === undefined) throw new AppError("service_zone.not_found", { zoneId });
+          if (zone.name !== name)
+            await authorizeManager(tx, {
+              managementSessionId: sessionId,
+              permission: "venue.configure",
+            });
+          await saveZoneSettings(tx, ctx.cfg, zoneId, { name, ...policy });
+        });
         return c.body(null, 204);
       }),
     );
@@ -674,28 +718,7 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
         const zoneId = requireUuidParam(c.req.param("zoneId"), "ServiceZoneId");
         const body = await readJsonBody<Record<string, unknown>>(c);
         onlyKeys(body, ["orderStart", "paidWhen", "collectionNumber", "receiptPrintMode"]);
-        const input: ZoneServiceSettingsInput = {
-          orderStart: requireSalePolicyField(
-            "orderStart",
-            body.orderStart,
-            true,
-          ) as ZoneServiceSettingsInput["orderStart"],
-          paidWhen: requireSalePolicyField(
-            "paidWhen",
-            body.paidWhen,
-            true,
-          ) as ZoneServiceSettingsInput["paidWhen"],
-          collectionNumber: requireSalePolicyField(
-            "collectionNumber",
-            body.collectionNumber,
-            true,
-          ) as ZoneServiceSettingsInput["collectionNumber"],
-          receiptPrintMode: requireSalePolicyField(
-            "receiptPrintMode",
-            body.receiptPrintMode,
-            true,
-          ) as ZoneServiceSettingsInput["receiptPrintMode"],
-        };
+        const input = zoneSettingsBody(body);
         await gated(sessionId, (tx) => saveZoneServiceSettings(tx, ctx.cfg, zoneId, input));
         return c.body(null, 204);
       }),

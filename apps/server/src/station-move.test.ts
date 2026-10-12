@@ -2485,8 +2485,11 @@ describe("moveDishesToStation", () => {
     );
     const checkId = randomUUID();
     await inTx(venue, async (tx) => {
-      await createOpenOrder(tx, venue.cfg, checkId, [], null, { partyId });
-      await VENUE_SERVICE.copyOrderContext(tx, venue.cfg, tabId, checkId);
+      await createOpenOrder(tx, venue.cfg, checkId, [], null, {
+        partyId,
+        existingService: true,
+        copyServiceContextFrom: tabId,
+      });
       await carveOffLines(tx, venue.cfg, tabId, checkId, [{ lineNo: 1, quantity: "1" }], {
         refuseHeld: false,
       });
@@ -2530,8 +2533,11 @@ describe("moveDishesToStation", () => {
       );
     const checkId = randomUUID();
     await inTx(venue, async (tx) => {
-      await createOpenOrder(tx, venue.cfg, checkId, [], null, { partyId });
-      await VENUE_SERVICE.copyOrderContext(tx, venue.cfg, tabId, checkId);
+      await createOpenOrder(tx, venue.cfg, checkId, [], null, {
+        partyId,
+        existingService: true,
+        copyServiceContextFrom: tabId,
+      });
       await tx.run(sql`pragma reverse_unordered_selects = on`);
       try {
         await carveOffLines(tx, venue.cfg, tabId, checkId, [{ lineNo: 1, quantity: "1" }], {

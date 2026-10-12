@@ -174,6 +174,7 @@ export const QUERY_DEPENDENCIES = {
     "zone_day_ranges",
   ],
   operations: [
+    "department_receipts",
     "locations",
     "location_business_day_settings",
     "location_day_cutover_changes",

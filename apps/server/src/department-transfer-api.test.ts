@@ -22,6 +22,7 @@ import { hashPin, persons, setProfileAdmission, sessions } from "@waitron/identi
 import { CAPABILITY_FLAGS } from "@waitron/layouts";
 import {
   createDepartment,
+  departmentReceipts,
   createServiceZone,
   recordOrderServiceContext,
   retargetOrderServiceContext,
@@ -102,6 +103,12 @@ async function ready() {
       name: randomUUID(),
       orderStart: "table",
     });
+    await tx.insert(departmentReceipts).values(
+      [a, b].map((department) => ({
+        departmentId: department.id,
+        receipt: { operationDescription: "Restaurante" },
+      })),
+    );
     const az = await createServiceZone(tx, v.cfg, { name: randomUUID(), departmentId: a.id });
     const hidden = await createServiceZone(tx, v.cfg, { name: randomUUID(), departmentId: a.id });
     const bz = await createServiceZone(tx, v.cfg, { name: randomUUID(), departmentId: b.id });

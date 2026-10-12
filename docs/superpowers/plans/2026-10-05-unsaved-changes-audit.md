@@ -1,5 +1,8 @@
 # W69 editable-form inventory
 
+> **2026-10-12, A493:** The old receipt-page scopes are retired. Protected department receipt dialogs and the independent Venue language card own their drafts. Earlier contracts below are historical.
+> See [A493](../specs/2026-10-12-a493-departments-zones-design.md).
+
 > **2026-10-11 supersession.** The later floor design retires the old floor checkpoint’s immediate zone Enable/Disable and placement actions. A435 step 6 uses shared-impact hierarchy Delete and invalidates deleted editor targets; individual-table draft rules remain. See the
 > [step 6 reconciliation](2026-10-11-a435-6-tables-zones-departments-delete.md). Earlier behavior and receipts below remain historical.
 

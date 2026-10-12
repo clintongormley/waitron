@@ -7,7 +7,7 @@ import type { OriginalReceiptPrint, TillSaleResult } from "../api/client.js";
 const result: TillSaleResult = {
   receiptTrim: {},
   venueAddress: [],
-  venueReceiptSettings: {},
+  receiptSettings: { printAddress: false },
   orderLabel: "Mesa 6",
   orderNumber: 41,
   invoiceNumber: "A/1",

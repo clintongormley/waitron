@@ -56,7 +56,6 @@ import { splitBill, mergeBills, transferItems } from "./bill-actions.js";
 import { moveBill } from "./move-bill.js";
 import { moveGuests } from "./table-actions.js";
 import { partyRevisionOfOrder } from "./parties.js";
-import { VENUE_SERVICE } from "./modules.js";
 import { cancelLine } from "./testing/cancel-line.js";
 
 // What this suite proves: the check being table-less, and the line partition — plain row state. The
@@ -176,7 +175,9 @@ describe("receipt order grouping", () => {
     for (const label of ["Blue umbrella", null]) {
       await asApp(cfg, async (tx) => {
         const id = randomUUID();
-        const { orderNumber } = await createOpenOrder(tx, cfg, id, [], label);
+        const { orderNumber } = await createOpenOrder(tx, cfg, id, [], label, {
+          zoneId: offersByCfg.get(cfg)!.zoneId,
+        });
         expect(await readReceiptOrder(tx, cfg, id)).toEqual({ orderLabel: label, orderNumber });
       });
     }
@@ -526,8 +527,11 @@ async function twoTabs(
   const { tabId: from, partyId } = await asApp(cfg, (tx) => openTabWith(tx, cfg, { tableId }));
   const to = randomUUID();
   await asApp(cfg, async (tx) => {
-    await createOpenOrder(tx, cfg, to, [], null, { partyId });
-    await VENUE_SERVICE.copyOrderContext(tx, cfg, from, to);
+    await createOpenOrder(tx, cfg, to, [], null, {
+      partyId,
+      existingService: true,
+      copyServiceContextFrom: from,
+    });
   });
   await asApp(cfg, (tx) =>
     addTabRound(tx, cfg, from, [

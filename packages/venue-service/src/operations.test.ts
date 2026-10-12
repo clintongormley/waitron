@@ -3164,15 +3164,27 @@ describe("combined settings operations", () => {
       await tx.execute(
         sql`delete from department_sale_policies where department_id = ${department.id}`,
       );
-      await settingsOperations.saveDepartmentSettings(tx, cfg, department.id, {
+      await settingsOperations.saveDepartmentEditSettings(tx, cfg, department.id, {
         name: "Restaurant",
         tradingName: "Receipt",
-        printTradingName: false,
         orderStart: "table",
         paidWhen: "ticket_then_pay",
         collectionNumber: "numbered",
-        receiptPrintMode: "on_request",
       });
+      await settingsOperations.setDepartmentSalePolicyField(
+        tx,
+        cfg,
+        department.id,
+        "printTradingName",
+        false,
+      );
+      await settingsOperations.setDepartmentSalePolicyField(
+        tx,
+        cfg,
+        department.id,
+        "receiptPrintMode",
+        "on_request",
+      );
       expect(await resolveSalePolicy(tx, cfg, zone.id)).toEqual({
         zoneId: zone.id,
         departmentId: department.id,
@@ -3278,14 +3290,26 @@ describe("combined settings operations", () => {
       return { department, zone };
     });
     await scoped(async (tx) => {
-      await settingsOperations.saveDepartmentSettings(tx, cfg, department.id, {
+      await settingsOperations.setDepartmentSalePolicyField(
+        tx,
+        cfg,
+        department.id,
+        "printTradingName",
+        true,
+      );
+      await settingsOperations.setDepartmentSalePolicyField(
+        tx,
+        cfg,
+        department.id,
+        "receiptPrintMode",
+        "on_request",
+      );
+      await settingsOperations.saveDepartmentEditSettings(tx, cfg, department.id, {
         name: "Restaurant",
         tradingName: "Receipt",
-        printTradingName: true,
         orderStart: "counter",
         paidWhen: "ticket_then_pay",
         collectionNumber: "numbered",
-        receiptPrintMode: "on_request",
       });
       await settingsOperations.saveZoneServiceSettings(tx, cfg, zone.id, {
         orderStart: "table",

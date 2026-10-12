@@ -17,10 +17,8 @@ import {
   locationId,
   saleId as brandSaleId,
   thousandthsToDecimal,
-  receiptLogoSource,
   resolveReceiptTrim,
 } from "@waitron/shared";
-import { getPrintedReceipt } from "@waitron/layouts";
 import { readReceiptLanguage } from "@waitron/catalogue";
 import type { TillConfig } from "./till-config.js";
 import type { ReceiptDocumentInput } from "./receipt-document.js";
@@ -96,7 +94,6 @@ export async function readInvoiceDocument(
     receiptId?: 1;
     departmentId?: string;
   }) => console.warn("receipt.optional_read_failed", event);
-  const venue = await getPrintedReceipt(tx, "80mm", diagnostic);
   const header = await VENUE_SERVICE.readSaleReceiptHeader(tx, saleId);
   const current = await readReceiptLanguage(tx, saleCfg.locationId);
   const department =
@@ -113,9 +110,8 @@ export async function readInvoiceDocument(
           "80mm",
         );
   const authored = department?.receipt ?? null;
-  const receipt = resolveReceiptTrim(authored, venue.receipt, sale.locale, current.locale);
-  const logo =
-    receiptLogoSource(authored, venue.receipt) === "department" ? department!.logo : venue.logo;
+  const receipt = resolveReceiptTrim(authored, {}, sale.locale, current.locale);
+  const logo = department?.logo ?? null;
   const payments = await readBillTenderLines(tx, brandSaleId(saleId));
   const issueDay = new Date(new Date(sale.issuedAt).getTime() + sale.issuedOffsetMinutes * 60_000)
     .toISOString()

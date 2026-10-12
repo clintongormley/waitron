@@ -24,7 +24,6 @@ import {
   locations,
   tenders,
   tenants,
-  tenantReceipts,
   triggerRaised,
   withTransaction,
   workingOrderLines,
@@ -47,7 +46,7 @@ import {
   enqueueOriginalReceipt,
   readOriginalReceiptPrint,
 } from "./receipt-print.js";
-import { zoneSalePolicies } from "@waitron/venue-service";
+import { zoneSalePolicies, departments, departmentReceipts } from "@waitron/venue-service";
 import { applyVenue, planVenue } from "@waitron/provisioning";
 import {
   decimal,
@@ -195,6 +194,14 @@ async function provision(db: typeof suite.db): Promise<Venue> {
     tipsEnabled: false,
     simplifiedInvoiceLimit: null,
   });
+  const rows = await db
+    .select()
+    .from(departments)
+    .where(eq(departments.locationId, cfg.locationId));
+  for (const department of rows)
+    await db
+      .insert(departmentReceipts)
+      .values({ departmentId: department.id, receipt: { operationDescription: "Restaurante" } });
   const operator = {
     personId: OPERATOR,
     sessionId: await openTillSession(db, { deviceId: cfg.origin.deviceId, personId: OPERATOR }),
@@ -1981,15 +1988,34 @@ describe("the invoice at full payment", () => {
 
   it("stages email delivery with server-stamped consent under the bill revision", async () => {
     const billId = await tabWith("Caña");
-    const [originalContact] = await inTx((tx) => tx.select().from(tenantReceipts));
+    const contactDepartmentId = await invoiceContactDepartment();
+    const [originalContact] = await inTx((tx) =>
+      tx
+        .select()
+        .from(departmentReceipts)
+        .where(eq(departmentReceipts.departmentId, contactDepartmentId)),
+    );
     try {
       await inTx((tx) =>
         tx
-          .insert(tenantReceipts)
-          .values({ receipt: { email: "venue@example.test", phone: "910000000" } })
+          .insert(departmentReceipts)
+          .values({
+            departmentId: contactDepartmentId,
+            receipt: {
+              operationDescription: "Restaurante",
+              email: "venue@example.test",
+              phone: "910000000",
+            },
+          })
           .onConflictDoUpdate({
-            target: tenantReceipts.id,
-            set: { receipt: { email: "venue@example.test", phone: "910000000" } },
+            target: departmentReceipts.departmentId,
+            set: {
+              receipt: {
+                operationDescription: "Restaurante",
+                email: "venue@example.test",
+                phone: "910000000",
+              },
+            },
           }),
       );
       const request = {
@@ -2037,7 +2063,12 @@ describe("the invoice at full payment", () => {
           recordedAt: "2026-10-07T17:00:00.000Z",
         },
       });
-      await inTx((tx) => tx.update(tenantReceipts).set({ receipt: { email: "new@example.test" } }));
+      await inTx((tx) =>
+        tx
+          .update(departmentReceipts)
+          .set({ receipt: { operationDescription: "Restaurante", email: "new@example.test" } })
+          .where(eq(departmentReceipts.departmentId, contactDepartmentId)),
+      );
       await expect(
         setOrderInvoiceChoice(suite.db, backend, venue.cfg, billId, {
           ...request,
@@ -2061,8 +2092,19 @@ describe("the invoice at full payment", () => {
       );
       expect(cleared).toMatchObject({ revision: 2, invoiceType: "F2", invoiceDelivery: null });
     } finally {
-      if (originalContact === undefined) await inTx((tx) => tx.delete(tenantReceipts));
-      else await inTx((tx) => tx.update(tenantReceipts).set({ receipt: originalContact.receipt }));
+      if (originalContact === undefined)
+        await inTx((tx) =>
+          tx
+            .delete(departmentReceipts)
+            .where(eq(departmentReceipts.departmentId, contactDepartmentId)),
+        );
+      else
+        await inTx((tx) =>
+          tx
+            .update(departmentReceipts)
+            .set({ receipt: originalContact.receipt })
+            .where(eq(departmentReceipts.departmentId, contactDepartmentId)),
+        );
     }
   });
 
@@ -2113,15 +2155,34 @@ describe("the invoice at full payment", () => {
 
   it("refuses staged email when no mail transport is available", async () => {
     const billId = await tabWith("Caña");
-    const [originalContact] = await inTx((tx) => tx.select().from(tenantReceipts));
+    const contactDepartmentId = await invoiceContactDepartment();
+    const [originalContact] = await inTx((tx) =>
+      tx
+        .select()
+        .from(departmentReceipts)
+        .where(eq(departmentReceipts.departmentId, contactDepartmentId)),
+    );
     try {
       await inTx((tx) =>
         tx
-          .insert(tenantReceipts)
-          .values({ receipt: { email: "venue@example.test", phone: "910000000" } })
+          .insert(departmentReceipts)
+          .values({
+            departmentId: contactDepartmentId,
+            receipt: {
+              operationDescription: "Restaurante",
+              email: "venue@example.test",
+              phone: "910000000",
+            },
+          })
           .onConflictDoUpdate({
-            target: tenantReceipts.id,
-            set: { receipt: { email: "venue@example.test", phone: "910000000" } },
+            target: departmentReceipts.departmentId,
+            set: {
+              receipt: {
+                operationDescription: "Restaurante",
+                email: "venue@example.test",
+                phone: "910000000",
+              },
+            },
           }),
       );
       const request = {
@@ -2152,8 +2213,19 @@ describe("the invoice at full payment", () => {
         }),
       ).rejects.toMatchObject({ code: "invoice_delivery.email_unavailable", params: {} });
     } finally {
-      if (originalContact === undefined) await inTx((tx) => tx.delete(tenantReceipts));
-      else await inTx((tx) => tx.update(tenantReceipts).set({ receipt: originalContact.receipt }));
+      if (originalContact === undefined)
+        await inTx((tx) =>
+          tx
+            .delete(departmentReceipts)
+            .where(eq(departmentReceipts.departmentId, contactDepartmentId)),
+        );
+      else
+        await inTx((tx) =>
+          tx
+            .update(departmentReceipts)
+            .set({ receipt: originalContact.receipt })
+            .where(eq(departmentReceipts.departmentId, contactDepartmentId)),
+        );
     }
   });
 
@@ -2247,15 +2319,32 @@ describe("the invoice at full payment", () => {
     "refuses unavailable or changed consent contact/language %j %s",
     async (email, language, contactEmail, code) => {
       const billId = await tabWith("Caña");
-      const [original] = await inTx((tx) => tx.select().from(tenantReceipts));
+      const contactDepartmentId = await invoiceContactDepartment();
+      const [original] = await inTx((tx) =>
+        tx
+          .select()
+          .from(departmentReceipts)
+          .where(eq(departmentReceipts.departmentId, contactDepartmentId)),
+      );
       try {
         await inTx((tx) =>
           tx
-            .insert(tenantReceipts)
-            .values({ receipt: email === null ? {} : { email } })
+            .insert(departmentReceipts)
+            .values({
+              departmentId: contactDepartmentId,
+              receipt: {
+                operationDescription: "Restaurante",
+                ...(email === null ? {} : { email }),
+              },
+            })
             .onConflictDoUpdate({
-              target: tenantReceipts.id,
-              set: { receipt: email === null ? {} : { email } },
+              target: departmentReceipts.departmentId,
+              set: {
+                receipt: {
+                  operationDescription: "Restaurante",
+                  ...(email === null ? {} : { email }),
+                },
+              },
             }),
         );
         const request = {
@@ -2292,8 +2381,19 @@ describe("the invoice at full payment", () => {
         );
         expect(saved).toMatchObject({ revision: 0, invoiceType: "F2", invoiceDelivery: null });
       } finally {
-        if (original === undefined) await inTx((tx) => tx.delete(tenantReceipts));
-        else await inTx((tx) => tx.update(tenantReceipts).set({ receipt: original.receipt }));
+        if (original === undefined)
+          await inTx((tx) =>
+            tx
+              .delete(departmentReceipts)
+              .where(eq(departmentReceipts.departmentId, contactDepartmentId)),
+          );
+        else
+          await inTx((tx) =>
+            tx
+              .update(departmentReceipts)
+              .set({ receipt: original.receipt })
+              .where(eq(departmentReceipts.departmentId, contactDepartmentId)),
+          );
       }
     },
   );
@@ -2322,16 +2422,27 @@ describe("the invoice at full payment", () => {
     async (kind) => {
       const medium = kind === "email" ? "email" : "a4";
       const billId = await tabWith("Caña");
-      const [originalContact] = await inTx((tx) => tx.select().from(tenantReceipts));
+      const contactDepartmentId = await invoiceContactDepartment();
+      const [originalContact] = await inTx((tx) =>
+        tx
+          .select()
+          .from(departmentReceipts)
+          .where(eq(departmentReceipts.departmentId, contactDepartmentId)),
+      );
       const pagePrinterId = randomUUID();
       try {
         await inTx(async (tx) => {
           await tx
-            .insert(tenantReceipts)
-            .values({ receipt: { email: "venue@example.test" } })
+            .insert(departmentReceipts)
+            .values({
+              departmentId: contactDepartmentId,
+              receipt: { operationDescription: "Restaurante", email: "venue@example.test" },
+            })
             .onConflictDoUpdate({
-              target: tenantReceipts.id,
-              set: { receipt: { email: "venue@example.test" } },
+              target: departmentReceipts.departmentId,
+              set: {
+                receipt: { operationDescription: "Restaurante", email: "venue@example.test" },
+              },
             });
           await tx.insert(pagePrinters).values({
             id: pagePrinterId,
@@ -2466,9 +2577,19 @@ describe("the invoice at full payment", () => {
           await inTx((tx) => tx.select().from(printJobs).where(eq(printJobs.saleId, sale!.id))),
         ).toEqual([]);
       } finally {
-        if (originalContact === undefined) await inTx((tx) => tx.delete(tenantReceipts));
+        if (originalContact === undefined)
+          await inTx((tx) =>
+            tx
+              .delete(departmentReceipts)
+              .where(eq(departmentReceipts.departmentId, contactDepartmentId)),
+          );
         else
-          await inTx((tx) => tx.update(tenantReceipts).set({ receipt: originalContact.receipt }));
+          await inTx((tx) =>
+            tx
+              .update(departmentReceipts)
+              .set({ receipt: originalContact.receipt })
+              .where(eq(departmentReceipts.departmentId, contactDepartmentId)),
+          );
       }
     },
   );
@@ -2891,26 +3012,30 @@ describe("the bill's payments, taken within one millisecond", () => {
 });
 
 describe("bill answer receipt presentation", () => {
-  it("resolves live defaults on direct bill issuance and resultOf replay", async () => {
+  it("resolves live department settings on direct bill issuance and resultOf replay", async () => {
     const billId = await tabWith("Caña");
-    const [original] = await inTx((tx) => tx.select().from(tenantReceipts));
+    const departmentId = await invoiceContactDepartment();
+    const [original] = await inTx((tx) =>
+      tx.select().from(departmentReceipts).where(eq(departmentReceipts.departmentId, departmentId)),
+    );
     try {
       await inTx((tx) =>
         tx
-          .insert(tenantReceipts)
+          .insert(departmentReceipts)
           .values({
+            departmentId,
             receipt: {
-              headerSubtitle: "Bill subtitle",
-              email: "venue@example.test",
+              operationDescription: "Restaurante",
+              headerSubtitle: { "es-ES": "Bill subtitle" },
               printAddress: false,
             },
           })
           .onConflictDoUpdate({
-            target: tenantReceipts.id,
+            target: departmentReceipts.departmentId,
             set: {
               receipt: {
-                headerSubtitle: "Bill subtitle",
-                email: "venue@example.test",
+                operationDescription: "Restaurante",
+                headerSubtitle: { "es-ES": "Bill subtitle" },
                 printAddress: false,
               },
             },
@@ -2919,21 +3044,42 @@ describe("bill answer receipt presentation", () => {
       const request = cash("3.00");
       const first = await take(billId, request);
       expect(first.invoice?.receiptTrim).toEqual({ headerSubtitle: "Bill subtitle" });
-      expect(first.invoice?.venueReceiptSettings).toEqual({
-        headerSubtitle: "Bill subtitle",
-        printAddress: false,
-      });
-      await inTx((tx) => tx.update(tenantReceipts).set({ receipt: {} }));
+      expect(first.invoice?.receiptSettings).toEqual({ printAddress: false });
+      await inTx((tx) =>
+        tx
+          .update(departmentReceipts)
+          .set({ receipt: {} })
+          .where(eq(departmentReceipts.departmentId, departmentId)),
+      );
       const replay = await take(billId, request);
       expect(replay.invoice?.receiptTrim).toEqual({});
-      expect(replay.invoice?.venueReceiptSettings).toEqual({});
+      expect(replay.invoice?.receiptSettings).toEqual({ printAddress: false });
       expect(replay.invoice?.invoiceNumber).toBe(first.invoice?.invoiceNumber);
       expect(replay.invoice?.tender).toEqual(first.invoice?.tender);
       expect(replay.payment).toEqual(first.payment);
       expect(replay.balance).toEqual(first.balance);
     } finally {
-      if (original === undefined) await inTx((tx) => tx.delete(tenantReceipts));
-      else await inTx((tx) => tx.update(tenantReceipts).set({ receipt: original.receipt }));
+      if (original === undefined)
+        await inTx((tx) =>
+          tx.delete(departmentReceipts).where(eq(departmentReceipts.departmentId, departmentId)),
+        );
+      else
+        await inTx((tx) =>
+          tx
+            .update(departmentReceipts)
+            .set({ receipt: original.receipt })
+            .where(eq(departmentReceipts.departmentId, departmentId)),
+        );
     }
   });
 });
+
+async function invoiceContactDepartment() {
+  const rows = await inTx((tx) =>
+    tx
+      .select({ id: departments.id, isDefault: departments.isDefault })
+      .from(departments)
+      .where(eq(departments.locationId, venue.cfg.locationId)),
+  );
+  return rows.find((row) => row.isDefault)!.id;
+}

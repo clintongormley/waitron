@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { userEvent } from "vitest/browser";
+import { page, userEvent } from "vitest/browser";
 import { applyTokens } from "@waitron/ui";
 import { setLocale } from "@waitron/dashboard-kit";
 import { cleanup, mountInShadowRoot } from "@waitron/ui/src/test-helpers.js";
@@ -133,8 +133,12 @@ it.each(["numbered", "none"] as const)(
   },
 );
 describe.each([
-  ["en", ["Table service", "Paid before preparation", "Print", "Always"], "Clear"],
-  ["es", ["Servicio de mesa", "Se paga antes de preparar", "Imprimir", "Siempre"], "Borrar"],
+  ["en", ["Table service", "Paid before preparation", "Print", "Always"], "Same as department"],
+  [
+    "es",
+    ["Servicio de mesa", "Se paga antes de preparar", "Imprimir", "Siempre"],
+    "Igual que el departamento",
+  ],
 ] as const)("zone inheritance in %s", (locale, placeholders, clearLabel) => {
   it("paints only the localized department value as each empty trigger's placeholder", async () => {
     setLocale(locale);
@@ -147,7 +151,9 @@ describe.each([
       expect(control.shadowRoot!.querySelector(".value.placeholder")!.textContent).toBe(
         placeholders[index],
       );
-      expect(control.options.find((option) => option.value === "")!.label).toBe(clearLabel);
+      expect(control.options.find((option) => option.value === "")!.label).toBe(
+        `${clearLabel} (${placeholders[index]})`,
+      );
     }
   });
   it("uses the other inherited choices as placeholders too", async () => {
@@ -296,5 +302,25 @@ it.each([false, true])(
           el.errors[field],
         );
     }
+  },
+);
+
+it.each([
+  ["en", "Search", "No results"],
+  ["es", "Buscar", "Sin resultados"],
+] as const)(
+  "the zone receipt picker's native search and empty result are localized in %s",
+  async (locale, search, empty) => {
+    setLocale(locale);
+    const el = await mount(inherited, department);
+    const control = box(el, "receiptPrintMode");
+    await userEvent.click(control.shadowRoot!.querySelector<HTMLButtonElement>("button")!);
+    await control.updateComplete;
+    const native = control.shadowRoot!.querySelector<HTMLInputElement>("input")!;
+    expect(native, "receipt search input is available").not.toBeNull();
+    expect(native.placeholder).toBe(search);
+    await userEvent.fill(page.elementLocator(native), "no receipt option has this name");
+    await control.updateComplete;
+    expect(control.shadowRoot!.textContent).toContain(empty);
   },
 );

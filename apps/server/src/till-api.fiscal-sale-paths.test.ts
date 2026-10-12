@@ -53,7 +53,7 @@ import {
   cardReaderHolders,
   cardReaders,
 } from "@waitron/payments";
-import { routingCells } from "@waitron/venue-service";
+import { routingCells, departments, departmentReceipts } from "@waitron/venue-service";
 import { createPrinter } from "@waitron/printing";
 import { CARD_PROVIDERS } from "@waitron/composition";
 import { StripeTerminalProvider } from "@waitron/payments-stripe";
@@ -181,6 +181,14 @@ async function setupVenue(): Promise<{
   );
 
   const cfg = tillConfigFromVenue(venue);
+  const [department] = await suite.db
+    .select()
+    .from(departments)
+    .where(eq(departments.locationId, cfg.locationId));
+  await suite.db.insert(departmentReceipts).values({
+    departmentId: department!.id,
+    receipt: { operationDescription: "Venta en establecimiento" },
+  });
   const { catalogueId, available, operatorId } = await withTransaction(suite.db, async (tx) => {
     const cat = await createCatalogue(tx, { name: "Delicatessen" });
     const comida = await createCategory(tx, { name: "Comida" });

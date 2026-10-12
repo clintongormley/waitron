@@ -39,9 +39,9 @@ What constrains the next change to the wizard:
   `-<installation number>` and `stripOwnSuffixes` would then re-number a trailing `-<digits>`, so
   default to **FS** (factura simplificada — every till sale is `TipoFactura` F2) and **FR**
   (rectificativa). Nothing in the dashboard can change or add a series today.
-- **`operation_description` is a Veri\*Factu field, not a country fact.** It defaults from the fiscal
-  contribution and is editable after setup on the dashboard's Venue settings **Receipts** tab (its location
-  section), applying to records filed from then on and leaving already-filed records alone.
+- **`operation_description` comes from the installed fiscal contribution.** Setup supplies its
+  bootstrap value internally. Product sales use the description you save in each department's
+  **Edit receipt** dialog; the generic location field is not their fallback.
 
 ## Open owner call — setup always stores a language on the account
 

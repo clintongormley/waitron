@@ -1,3 +1,4 @@
+import { departments, departmentReceipts, departmentSalePolicies } from "@waitron/venue-service";
 import { uploadImage } from "@waitron/media";
 import { samplePreparedImage } from "@waitron/media/testing/sample-image.js";
 import {
@@ -277,6 +278,17 @@ async function assertPassiveManagementReads(port: number): Promise<void> {
     .values({ displayName: "Passive read probe", pinHash: hashPin("1234"), role: "manager" })
     .returning({ id: persons.id });
   const personId = person!.id;
+  const [department] = await sharedDb
+    .insert(departments)
+    .values({
+      locationId: KEY_ENV.WAITRON_TILL_LOCATION_ID,
+      name: "Receipt mount probe",
+      tradingName: "Probe",
+    })
+    .returning();
+  const departmentId = department!.id;
+  const policy = { receiptPrintMode: "auto", printTradingName: true } as const;
+  await sharedDb.insert(departmentSalePolicies).values({ departmentId, ...policy });
   try {
     const session = await withTransaction(sharedDb, (tx) =>
       startManagementSession(tx, { personId }),
@@ -329,9 +341,37 @@ async function assertPassiveManagementReads(port: number): Promise<void> {
     expect(mutation.status).toBe(200);
     await mutation.text();
     expect(await seen()).not.toBe(beforeMutation);
-    const beforePreview = await age();
     const previewUrl = `http://127.0.0.1:${port}/management-api/receipt-preview`;
-    const previewBody = { departmentId: null, receipt: {}, settings: {} };
+    const receiptPath = `http://127.0.0.1:${port}/management-api/venue-service/departments/${departmentId}/receipt`;
+    const headers = { cookie, "content-type": "application/json" };
+    const invalidDescription = await fetch(receiptPath, {
+      method: "PUT",
+      headers,
+      body: JSON.stringify({ receipt: { operationDescription: "" }, policy }),
+    });
+    expect(invalidDescription.status).toBe(400);
+    expect(await invalidDescription.json()).toEqual({
+      error: { code: "management.request_invalid", params: { field: "operationDescription" } },
+    });
+    const previewBody = { departmentId, receipt: { operationDescription: "Probe meals" }, policy };
+    const saved = await fetch(receiptPath, {
+      method: "PUT",
+      headers,
+      body: JSON.stringify({ receipt: previewBody.receipt, policy }),
+    });
+    expect(saved.status).toBe(204);
+    const read = await fetch(receiptPath, { headers });
+    expect(read.status).toBe(200);
+    const model = await read.json();
+    expect(model.receipt).toEqual(previewBody.receipt);
+    expect(model.policy).toEqual(policy);
+    expect(model).not.toHaveProperty("venueDefaults");
+    for (const oldRoute of ["receipt", "receipt-settings", "location-settings"]) {
+      expect(
+        (await fetch(`http://127.0.0.1:${port}/management-api/${oldRoute}`, { headers })).status,
+      ).toBe(404);
+    }
+    const beforePreview = await age();
     const passivePreview = await fetch(previewUrl, {
       method: "POST",
       headers: { cookie, "content-type": "application/json" },
@@ -350,6 +390,13 @@ async function assertPassiveManagementReads(port: number): Promise<void> {
     expect(drawn.preview.text).toContain("VERI*FACTU");
     expect(await seen()).not.toBe(beforePreview);
   } finally {
+    await sharedDb
+      .delete(departmentReceipts)
+      .where(eq(departmentReceipts.departmentId, departmentId));
+    await sharedDb
+      .delete(departmentSalePolicies)
+      .where(eq(departmentSalePolicies.departmentId, departmentId));
+    await sharedDb.delete(departments).where(eq(departments.id, departmentId));
     await sharedDb.execute(sql`delete from management_sessions where person_id = ${personId}`);
     await sharedDb.execute(sql`delete from persons where id = ${personId}`);
   }

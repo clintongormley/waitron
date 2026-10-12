@@ -1,5 +1,8 @@
 # A231 implementation plan: full invoices at the till
 
+> **2026-10-12, A493:** Live venue receipt defaults are retired. Decoration and the tax-agency description belong to each department. Earlier contracts below are historical.
+> See [A493](../specs/2026-10-12-a493-departments-zones-design.md).
+
 > **2026-10-10, A366 slice 7:** the W111 top-block and current-address checkpoints below
 > describe their dated implementation. Follow the
 > [slice 7 plan](2026-10-08-a366-slice-7-receipts-per-department.md) for current department

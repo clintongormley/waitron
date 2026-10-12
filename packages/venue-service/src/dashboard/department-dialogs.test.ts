@@ -50,10 +50,7 @@ export const view: VenueServiceView = {
 };
 export const dialogs: DepartmentDialog[] = [
   { kind: "add-department" },
-  { kind: "rename-department", row: view.departments[0]! },
   { kind: "add-zone", departmentId: "d1" },
-  { kind: "rename-zone", row: view.floorZones[0]! },
-  { kind: "move-zone", row: view.floorZones[0]! },
   { kind: "add-to-department", row: { id: "z2", name: "Garden" } },
 ];
 async function mount(
@@ -102,24 +99,20 @@ async function bottom(el: DepartmentDialogs) {
   );
 }
 
-it.each(dialogs.slice(0, 6))(
-  "$kind starts quiet and saves only a changed draft",
-  async (dialog) => {
-    const { el, request } = await mount(dialog);
-    expect(save(el).variant).toBe("secondary");
-    expect(save(el).disabled).toBe(true);
-    save(el).click();
-    await el.updateComplete;
-    expect(request).not.toHaveBeenCalled();
-    if (dialog.kind === "move-zone" || dialog.kind === "add-to-department")
-      await chooseOption(field(el, "departmentId"), "d2");
-    else await change(el, "name", "New name");
-    expect(save(el).variant).toBe("primary");
-    expect(save(el).disabled).toBe(false);
-    save(el).click();
-    await expect.poll(() => el.dialog).toBeUndefined();
-  },
-);
+it.each(dialogs)("$kind starts quiet and saves only a changed draft", async (dialog) => {
+  const { el, request } = await mount(dialog);
+  expect(save(el).variant).toBe("secondary");
+  expect(save(el).disabled).toBe(true);
+  save(el).click();
+  await el.updateComplete;
+  expect(request).not.toHaveBeenCalled();
+  if (dialog.kind === "add-to-department") await chooseOption(field(el, "departmentId"), "d2");
+  else await change(el, "name", "New name");
+  expect(save(el).variant).toBe("primary");
+  expect(save(el).disabled).toBe(false);
+  save(el).click();
+  await expect.poll(() => el.dialog).toBeUndefined();
+});
 it.each(dialogs)("$kind orders Cancel before its action", async (dialog) => {
   const { el } = await mount(dialog);
   const footer = el.shadowRoot!.querySelector("wt-form-actions")!;
@@ -141,7 +134,7 @@ it("creates a department with name only and emits the saved id", async () => {
 });
 
 it("a move cannot save a destination removed by a live read", async () => {
-  const { el, request } = await mount({ kind: "move-zone", row: view.floorZones[0]! });
+  const { el, request } = await mount({ kind: "add-to-department", row: view.floorZones[0]! });
   const destination =
     el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-combobox"]>("[name=departmentId]")!;
   await chooseOption(destination, "d2");
@@ -156,10 +149,12 @@ it("a move cannot save a destination removed by a live read", async () => {
   expect(request).not.toHaveBeenCalled();
   expect(destination.error).toBe("This field is required.");
   expect(save(el).disabled).toBe(true);
-  expect(el.dialog?.kind).toBe("move-zone");
+  expect(el.dialog?.kind).toBe("add-to-department");
 });
 it("move lists only other active departments and preserves the override", async () => {
-  const { el, request } = await mount(dialogs[4]!);
+  const { el, request } = await mount(
+    ({ kind: "add-to-department", row: view.floorZones[0]! } as const)!,
+  );
   const box = field(el, "departmentId") as unknown as HTMLElementTagNameMap["wt-combobox"];
   expect(box.options).toEqual([{ value: "d2", label: "Deli" }]);
   await chooseOption(box, "d2");
@@ -169,29 +164,6 @@ it("move lists only other active departments and preserves the override", async 
     departmentId: "d2",
   });
 });
-it.each(["department", "zone"] as const)(
-  "renames an active %s without changing its state",
-  async (kind) => {
-    const row =
-      kind === "department"
-        ? { ...view.departments[0]!, active: true }
-        : { ...view.floorZones[0]!, active: true };
-    const { el, request } = await mount({
-      kind: kind === "department" ? "rename-department" : "rename-zone",
-      row,
-    } as DepartmentDialog);
-    await change(el, "name", "Renamed");
-    save(el).click();
-    await expect.poll(() => el.dialog).toBeUndefined();
-    expect(request).toHaveBeenCalledWith(
-      kind === "department"
-        ? "/management-api/venue-service/departments/d1"
-        : "/management-api/zones/z1",
-      "PATCH",
-      { name: "Renamed" },
-    );
-  },
-);
 it.each(dialogs)("$kind stays open on a real Escape during its request", async (dialog) => {
   let finish!: () => void;
   const { el } = await mount(
@@ -204,8 +176,7 @@ it.each(dialogs)("$kind stays open on a real Escape during its request", async (
           }),
     ),
   );
-  if (dialog.kind === "move-zone" || dialog.kind === "add-to-department")
-    await chooseOption(field(el, "departmentId"), "d2");
+  if (dialog.kind === "add-to-department") await chooseOption(field(el, "departmentId"), "d2");
   else if (!dialog.kind.startsWith("disable")) await change(el, "name", "Changed");
   save(el).click();
   await el.updateComplete;
@@ -227,20 +198,6 @@ it("saves on Enter in the shared name field", async () => {
   expect(request).toHaveBeenCalledWith("/management-api/venue-service/departments", "POST", {
     name: "Brunch",
   });
-});
-it("marks a blank changed name beside the field and above Save", async () => {
-  const { el, request } = await mount(dialogs[1]!);
-  await change(el, "name", " ");
-  save(el).click();
-  await el.updateComplete;
-  expect(field(el, "name").error).toBe("This field is required.");
-  expect(await bottom(el)).toBe("Correct the highlighted fields to continue.");
-  expect(save(el).disabled).toBe(true);
-  expect(request).not.toHaveBeenCalled();
-  await change(el, "name", "Fixed");
-  expect(field(el, "name").error).toBe("");
-  expect(await bottom(el)).toBe("");
-  expect(save(el).disabled).toBe(false);
 });
 
 it("keeps a refusal usable and puts only a shown field refusal beside it", async () => {
@@ -265,35 +222,9 @@ it("keeps a refusal usable and puts only a shown field refusal beside it", async
   expect(save(el).disabled).toBe(false);
 });
 
-it("holds the shared name field to the form width at 1280px", async () => {
-  const width = window.innerWidth,
-    height = window.innerHeight;
-  await page.viewport(1280, 800);
-  try {
-    const { el } = await mount(dialogs[1]!);
-    await change(el, "name", " ");
-    save(el).click();
-    await el.updateComplete;
-    const probe = document.createElement("div");
-    probe.style.width = "var(--wt-form-max-width)";
-    el.shadowRoot!.append(probe);
-    const form = probe.getBoundingClientRect().width;
-    const modal = el.shadowRoot!.querySelector("wt-modal")!;
-    expect(modal.shadowRoot!.querySelector(".body")!.clientWidth).toBeGreaterThan(form);
-    for (const part of [
-      field(el, "name"),
-      ...field(el, "name").shadowRoot!.querySelectorAll("[data-error]"),
-    ])
-      expect(part.getBoundingClientRect().width, part.outerHTML).toBeCloseTo(form, 0);
-  } finally {
-    await page.viewport(width, height);
-  }
-});
-
 it.each(dialogs)("$kind puts Cancel before the action in native keyboard order", async (dialog) => {
   const { el } = await mount(dialog);
-  if (dialog.kind === "move-zone" || dialog.kind === "add-to-department")
-    await chooseOption(field(el, "departmentId"), "d2");
+  if (dialog.kind === "add-to-department") await chooseOption(field(el, "departmentId"), "d2");
   else if (!dialog.kind.startsWith("disable")) await change(el, "name", "Changed");
   const cancel = el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>(
     "[data-test=cancel-editor]",
@@ -309,7 +240,7 @@ it.each(["department", "zone"] as const)(
   "explains an active %s name refusal without offering Enable",
   async (kind) => {
     const { el } = await mount(
-      kind === "department" ? dialogs[0]! : dialogs[2]!,
+      kind === "department" ? dialogs[0]! : dialogs[1]!,
       vi.fn(async () => {
         throw { code: `${kind}.name_taken`, params: { name: "Taken" } };
       }),
@@ -331,7 +262,7 @@ it.each(["management.request_invalid", "department.not_found"])(
   "puts a refused move destination beside its field: %s",
   async (code) => {
     const { el } = await mount(
-      dialogs[4]!,
+      ({ kind: "add-to-department", row: view.floorZones[0]! } as const)!,
       vi.fn(async () => {
         throw { code, params: { field: "departmentId" } };
       }),
@@ -346,7 +277,9 @@ it.each(["management.request_invalid", "department.not_found"])(
   },
 );
 it("refuses an invalid move destination and frees Save once it is corrected", async () => {
-  const { el, request } = await mount(dialogs[4]!);
+  const { el, request } = await mount(
+    ({ kind: "add-to-department", row: view.floorZones[0]! } as const)!,
+  );
   await change(el, "departmentId", "d3");
   save(el).click();
   await el.updateComplete;
@@ -381,7 +314,7 @@ it("ignores a departed refusal after the dialog is replaced", async () => {
   await change(el, "name", "Old name");
   save(el).click();
   await el.updateComplete;
-  el.dialog = dialogs[2];
+  el.dialog = dialogs[1];
   await el.updateComplete;
   reject({ code: "management.request_invalid", params: { field: "name" } });
   await new Promise((r) => setTimeout(r, 0));
@@ -411,7 +344,7 @@ it.each([
 it("a retained close guard refuses a busy or disconnected dialog", async () => {
   let finish!: () => void;
   const { el } = await mount(
-    dialogs[1]!,
+    dialogs[0]!,
     vi.fn(
       () =>
         new Promise<void>((r) => {
@@ -429,19 +362,23 @@ it("a retained close guard refuses a busy or disconnected dialog", async () => {
   finish();
 });
 
-it.each(["rename", "move"])(
+it.each(["add", "assignment"])(
   "retained %s controls cannot change or close their replacement",
   async (kind) => {
-    const { el, request } = await mount(kind === "rename" ? dialogs[1]! : dialogs[4]!);
+    const { el, request } = await mount(
+      kind === "add"
+        ? dialogs[0]!
+        : ({ kind: "add-to-department", row: view.floorZones[0]! } as const)!,
+    );
     const oldModal = el.shadowRoot!.querySelector("wt-modal")!,
-      oldField = field(el, kind === "rename" ? "name" : "departmentId"),
+      oldField = field(el, kind === "add" ? "name" : "departmentId"),
       oldCancel = el.shadowRoot!.querySelector<HTMLElement>("[data-test=cancel-editor]")!;
-    el.dialog = dialogs[2];
+    el.dialog = dialogs[1];
     await el.updateComplete;
     await change(el, "name", "Retained replacement");
     oldField.dispatchEvent(
       new CustomEvent("wt-change", {
-        detail: { value: kind === "rename" ? "Old draft" : "d2" },
+        detail: { value: kind === "add" ? "Old draft" : "d2" },
         bubbles: true,
         composed: true,
       }),
@@ -453,7 +390,7 @@ it.each(["rename", "move"])(
     );
     await el.updateComplete;
     expect(field(el, "name").value).toBe("Retained replacement");
-    expect(el.dialog).toEqual(dialogs[2]);
+    expect(el.dialog).toEqual(dialogs[1]);
     expect(request).not.toHaveBeenCalled();
   },
 );
@@ -461,34 +398,13 @@ it.each(["rename", "move"])(
 it.each([
   {
     index: 1,
-    path: "/management-api/venue-service/departments/d1",
-    method: "PATCH",
-    body: { name: "Changed" },
-    detail: { departmentId: "d1" },
-  },
-  {
-    index: 2,
     path: "/management-api/venue-service/zones",
     method: "POST",
     body: { name: "Changed", departmentId: "d1" },
     detail: { zoneId: "new" },
   },
   {
-    index: 3,
-    path: "/management-api/zones/z1",
-    method: "PATCH",
-    body: { name: "Changed" },
-    detail: { zoneId: "z1" },
-  },
-  {
-    index: 4,
-    path: "/management-api/venue-service/zones/z1",
-    method: "PUT",
-    body: { departmentId: "d2" },
-    detail: { zoneId: "z1" },
-  },
-  {
-    index: 5,
+    index: 2,
     path: "/management-api/venue-service/zones/z2",
     method: "PUT",
     body: { departmentId: "d2" },
@@ -501,8 +417,7 @@ it.each([
       { el, request } = await mount(dialog);
     const saved = vi.fn();
     el.addEventListener("saved", saved);
-    if (dialog.kind === "move-zone" || dialog.kind === "add-to-department")
-      await chooseOption(field(el, "departmentId"), "d2");
+    if (dialog.kind === "add-to-department") await chooseOption(field(el, "departmentId"), "d2");
     else if (!dialog.kind.startsWith("disable")) await change(el, "name", "Changed");
     save(el).click();
     await expect.poll(() => saved.mock.calls.length).toBe(1);
@@ -534,7 +449,7 @@ it("clean native Escape closes, emits closed and performs no write", async () =>
   expect(request).not.toHaveBeenCalled();
 });
 
-it.each(dialogs.slice(0, 4))(
+it.each(dialogs.slice(0, 2))(
   "$kind leaves newer native text free of an earlier name refusal",
   async (dialog) => {
     let refuse!: (error: unknown) => void;
@@ -567,7 +482,7 @@ it.each(dialogs.slice(0, 4))(
   },
 );
 
-it.each(dialogs.slice(0, 4))(
+it.each(dialogs.slice(0, 2))(
   "$kind paints the native Save state for clean, changed, reverted and refused names",
   async (dialog) => {
     const request = vi.fn().mockRejectedValue({ code: "connection.failed" });
@@ -616,7 +531,7 @@ it.each(dialogs.slice(0, 4))(
 );
 
 it.each([
-  { kind: "move-zone" as const, row: view.floorZones[0]! },
+  { kind: "add-to-department" as const, row: view.floorZones[0]! },
   { kind: "add-to-department" as const, row: { id: "z2", name: "Garden" } },
 ])("$kind places a code-only missing department refusal beside its destination", async (dialog) => {
   const { el, request } = await mount(
@@ -643,7 +558,7 @@ it.each([
 });
 
 it.each(
-  dialogs.slice(0, 4).flatMap((dialog) => ["en", "es"].map((locale) => ({ dialog, locale }))),
+  dialogs.slice(0, 2).flatMap((dialog) => ["en", "es"].map((locale) => ({ dialog, locale }))),
 )(
   "$dialog.kind validates native input only after Save and rechecks every correction in $locale",
   async ({ dialog, locale }) => {
@@ -732,7 +647,7 @@ it.each(
 
 it.each(
   dialogs
-    .slice(0, 4)
+    .slice(0, 2)
     .flatMap((dialog) => ["validation", "refusal"].map((outcome) => ({ dialog, outcome }))),
 )("$dialog.kind reopens clean after a recorded $outcome", async ({ dialog, outcome }) => {
   const { el, request } = await mount(
@@ -775,14 +690,14 @@ it.each(
 
 it("the Move department picker's search and empty result are Spanish", async () => {
   setLocale("es");
-  const { el } = await mount(dialogs[4]!);
+  const { el } = await mount(({ kind: "add-to-department", row: view.floorZones[0]! } as const)!);
   const box = field(el, "departmentId") as unknown as HTMLElementTagNameMap["wt-combobox"];
   expect([box.searchPlaceholder, box.noResultsLabel]).toEqual(["Buscar", "Sin resultados"]);
 });
 
 it("a refused Add zone keeps its exact submitted department and name", async () => {
   const { el, request } = await mount(
-    dialogs[2]!,
+    dialogs[1]!,
     vi.fn(async () => {
       throw { code: "zone.name_taken" };
     }),
@@ -794,22 +709,6 @@ it("a refused Add zone keeps its exact submitted department and name", async () 
     ["/management-api/venue-service/zones", "POST", { name: "Patio", departmentId: "d1" }],
   ]);
   expect(field(el, "name").value).toBe("Patio");
-  expect(el.shadowRoot!.querySelector("wt-modal")).not.toBeNull();
-  expect(save(el).disabled).toBe(false);
-});
-it("a missing zone keeps its Spanish Rename draft and exact attempted name", async () => {
-  setLocale("es");
-  const { el, request } = await mount(
-    dialogs[3]!,
-    vi.fn(async () => {
-      throw { code: "zone.not_found" };
-    }),
-  );
-  await change(el, "name", "Jardín");
-  save(el).click();
-  await expect.poll(() => bottom(el)).toBe("No se pudo guardar el cambio.");
-  expect(request.mock.calls).toEqual([["/management-api/zones/z1", "PATCH", { name: "Jardín" }]]);
-  expect(field(el, "name").value).toBe("Jardín");
   expect(el.shadowRoot!.querySelector("wt-modal")).not.toBeNull();
   expect(save(el).disabled).toBe(false);
 });

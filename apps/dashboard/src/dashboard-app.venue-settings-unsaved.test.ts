@@ -1,11 +1,19 @@
 import { afterEach, expect, it, vi } from "vitest";
 import { commands, page, userEvent } from "vitest/browser";
-import type { WtFormActions, WtInput, WtTabs } from "@waitron/ui";
+import { registerIcons, type WtFormActions, type WtInput, type WtTabs } from "@waitron/ui";
+import { DASHBOARD_ICONS } from "./icons.js";
 import { LiveData } from "@waitron/dashboard-kit";
 import type { DashboardApi } from "./api/client.js";
 import { venueDetailsFixture } from "./testing/venue-details-fixture.js";
 import { DashboardApp } from "./dashboard-app.js";
 import { setLocale } from "./i18n/t.js";
+import {
+  mountReceiptDialog,
+  receiptApi,
+  receiptField,
+  editReceipt,
+  preview,
+} from "./testing/department-receipt-dialog-fixture.js";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "./widgets/test-helpers.js";
 
 afterEach(() => {
@@ -17,6 +25,7 @@ async function mount(
   locale = "en-GB",
   theme: "light" | "dark" = "light",
   apiOverrides: Partial<DashboardApi> = {},
+  permissions = ["venue.view", "venue.configure"],
 ) {
   history.replaceState(null, "", path);
   let logouts = 0;
@@ -47,8 +56,6 @@ async function mount(
         }),
         getBumpMode: async () => ({ mode: "line" }),
         getFireControl: async () => ({ mode: "waiter" }),
-        getReceipt: async () => ({ receipt: {}, venueAddress: [] }),
-        getVenueReceiptSettings: async () => ({ settings: {} }),
         getDepartmentReceipt: async () => ({
           receipt: {},
           venueDefaults: {},
@@ -56,7 +63,6 @@ async function mount(
           warningLanguages: [],
           venueAddress: [],
         }),
-        getLocationSettings: async () => ({ name: "Venue", operationDescription: "Sale" }),
         getReceiptLanguage: async () => ({ language: "es-ES", choices: ["es-ES"], fixed: null }),
         getVenueDepartments: async () => [],
         getMe: async () => ({
@@ -67,7 +73,7 @@ async function mount(
           venueLocale: locale,
           sessionDefault: locale,
           venueName: "Venue",
-          permissions: ["venue.view", "venue.configure"],
+          permissions,
           modules: [],
         }),
         getLocales: async () => ({
@@ -107,6 +113,12 @@ async function mount(
     },
     theme,
   );
+  if (!permissions.includes("venue.configure")) {
+    await expect
+      .poll(() => app.shadowRoot!.querySelector("dashboard-venue-settings-screen"))
+      .toBeTruthy();
+    return { app, host, logouts: () => logouts, locales };
+  }
   await expect
     .poll(() =>
       app
@@ -275,7 +287,7 @@ it("ignores repeated tab targets while deciding and changes only to the accepted
   await edit(app);
   await select(app, "kitchen");
   await expect.poll(() => app.shadowRoot!.querySelector("wt-unsaved-changes")!.open).toBe(true);
-  tabs(app).shadowRoot!.querySelector<HTMLButtonElement>("[data-key=receipts]")!.click();
+  tabs(app).shadowRoot!.querySelector<HTMLButtonElement>("[data-key=venue-details]")!.click();
   await tabs(app).updateComplete;
   expect(selected(app)).toBe("tables");
   await choose(app, "discard");
@@ -472,131 +484,117 @@ for (const locale of ["en-GB", "es-ES"]) {
 for (const locale of ["en-GB", "es-ES"]) {
   for (const theme of ["light", "dark"] as const) {
     for (const width of [390, 1280]) {
-      it(`venue receipt preview retains edited appearance in ${locale}/${theme}/${width}`, async () => {
+      it(`department receipt preview retains edited appearance in ${locale}/${theme}/${width}`, async () => {
+        const viewport = { width: innerWidth, height: innerHeight };
         await page.viewport(width, 900);
-        const previews: { heading: string | undefined; department: string | undefined }[] = [];
-        const { app } = await mount("/manage/venue-settings/view/receipts", locale, theme, {
-          getVenueDepartments: async () => [
-            { id: "bar", name: "Bar", active: true, isDefault: true },
-            { id: "deli", name: "Deli", active: true, isDefault: false },
-          ],
-          previewReceiptDraft: async (draft) => {
-            previews.push({
-              heading: draft.settings.headerSubtitle,
-              department: draft.departmentId ?? undefined,
+        setLocale(locale);
+        registerIcons(DASHBOARD_ICONS);
+        try {
+          const api = receiptApi();
+          api.previewReceiptDraft.mockImplementation(async (draft) =>
+            preview(draft.receipt.headerSubtitle?.["es-ES"] ?? "Bar"),
+          );
+          const { app, host, el } = await mountReceiptDialog(api, theme);
+          const input = receiptField(el, "headerSubtitle-es-ES");
+          await editReceipt(el, "headerSubtitle-es-ES", "Edited heading");
+          expect(input.value).toBe("Edited heading");
+          const event = new Event("beforeunload", { cancelable: true });
+          window.dispatchEvent(event);
+          expect(event.defaultPrevented).toBe(true);
+          await expect
+            .poll(() => api.previewReceiptDraft.mock.lastCall?.[0])
+            .toMatchObject({
+              departmentId: "bar",
+              receipt: { headerSubtitle: { "es-ES": "Edited heading" } },
             });
-            return {
-              preview: {
-                widthDots: 512,
-                columns: 42,
-                text: "Venue",
-                blocks: [{ kind: "text", text: "Venue" }],
-                qrData: [],
-                omittedGraphics: false,
-                truncated: false,
-                unsupported: false,
+          await expect
+            .poll(() => el.shadowRoot!.querySelector(".paper")?.textContent)
+            .toContain("Edited heading");
+          let left = false;
+          for (const decision of ["keep", "discard"] as const) {
+            const pending = app.leave.coordinator.request({
+              scopes: "all",
+              reason: "navigation",
+              proceed() {
+                left = true;
               },
-              marks: {
-                headerSubtitle: null,
-                footerMessage: null,
-                phone: null,
-                email: null,
-                address: null,
-                logo: null,
-              },
-              paperWidth: "80mm",
-              paperWidths: ["80mm"],
-            };
-          },
-        });
-        const receipt = settings(app).shadowRoot!.querySelector("dashboard-receipts-screen")!;
-        expect(receipt.shadowRoot!.querySelector("[name=departmentId]")).toBeNull();
-        expect(receipt.shadowRoot!.querySelector("dashboard-department-receipt-editor")).toBeNull();
-        const input = receipt
-          .shadowRoot!.querySelector("dashboard-venue-receipt-defaults-editor")!
-          .shadowRoot!.querySelector<WtInput>("[name=headerSubtitle]")!;
-        await input.updateComplete;
-        await userEvent.fill(input.shadowRoot!.querySelector("input")!, "Edited heading");
-        expect(input.value).toBe("Edited heading");
-        const event = new Event("beforeunload", { cancelable: true });
-        window.dispatchEvent(event);
-        expect(event.defaultPrevented).toBe(true);
-        await expect
-          .poll(() => previews.at(-1))
-          .toEqual({ heading: "Edited heading", department: undefined });
-        await select(app, "kitchen");
-        const warning = app.shadowRoot!.querySelector("wt-unsaved-changes")!;
-        await expect.poll(() => warning.open).toBe(true);
-        await warning.updateComplete;
-        await commands.parkPointer();
-        await expectNoA11yViolations(warning);
-        await page.screenshot({
-          path: `../node_modules/.cache/w69-receipt-look/${locale}-${theme}-${width}-warning.png`,
-        });
-        await choose(app, "keep");
-        expect(selected(app)).toBe("receipts");
-        expect(input.value).toBe("Edited heading");
-        await input.updateComplete;
-        await userEvent.click(input.shadowRoot!.querySelector("input")!);
-        await page.screenshot({
-          path: `../node_modules/.cache/w69-receipt-look/${locale}-${theme}-${width}-kept.png`,
-        });
-        await select(app, "kitchen");
-        await choose(app, "discard");
-        await expect.poll(() => selected(app)).toBe("kitchen");
-        expect(input.value).toBe("");
+            });
+            const warning = app.shadowRoot!.querySelector("wt-unsaved-changes")!;
+            await expect.poll(() => warning.open).toBe(true);
+            await warning.updateComplete;
+            await commands.parkPointer();
+            await expectNoA11yViolations(warning);
+            await userEvent.click(
+              page.elementLocator(warning.shadowRoot!.querySelector(`[data-choice=${decision}]`)!),
+            );
+            expect(await pending).toBe(decision === "keep" ? "kept" : "proceeded");
+            await el.updateComplete;
+            expect(input.value).toBe(decision === "keep" ? "Edited heading" : "Bar");
+            expect(left).toBe(decision === "discard");
+          }
+          expect(innerWidth).toBe(width);
+          await expectNoA11yViolations(host);
+          expect(api.putDepartmentReceipt).not.toHaveBeenCalled();
+        } finally {
+          await page.viewport(viewport.width, viewport.height);
+        }
       });
     }
   }
 }
 
-it("the real Receipts department-management link protects the appearance before leaving", async () => {
-  const { app } = await mount("/manage/venue-settings/view/receipts");
-  const receipt = settings(app).shadowRoot!.querySelector("dashboard-receipts-screen")!;
-  const input = receipt
-    .shadowRoot!.querySelector("dashboard-venue-receipt-defaults-editor")!
-    .shadowRoot!.querySelector<WtInput>("[name=headerSubtitle]")!;
-  await input.updateComplete;
-  await userEvent.fill(input.shadowRoot!.querySelector("input")!, "Edited heading");
-  const link = receipt
-    .shadowRoot!.querySelector("dashboard-venue-receipt-defaults-editor")!
-    .shadowRoot!.querySelector<HTMLAnchorElement>('a[href="/manage/venue-operations"]')!;
-  await userEvent.click(link);
-  await choose(app, "keep");
-  expect(location.pathname).toBe("/manage/venue-settings/view/receipts");
-  expect(input.value).toBe("Edited heading");
-  await userEvent.click(link);
-  await choose(app, "discard");
-  await expect.poll(() => location.pathname).toBe("/manage/overview");
-  expect(input.value).toBe("");
-  expect(receipt.isConnected).toBe(false);
+it("the receipt dialog's Cancel protects the appearance before closing", async () => {
+  const { app, el, dialog } = await mountReceiptDialog();
+  await editReceipt(el, "headerSubtitle-es-ES", "Edited heading");
+  const input = receiptField(el, "headerSubtitle-es-ES");
+  for (const decision of ["keep", "discard"] as const) {
+    await userEvent.click(
+      page.elementLocator(el.shadowRoot!.querySelector("[data-test=cancel-receipt]")!),
+    );
+    const warning = app.shadowRoot!.querySelector("wt-unsaved-changes")!;
+    await expect.poll(() => warning.open).toBe(true);
+    await warning.updateComplete;
+    await userEvent.click(
+      page.elementLocator(warning.shadowRoot!.querySelector(`[data-choice=${decision}]`)!),
+    );
+    await expect.poll(() => dialog.open).toBe(decision === "keep");
+    if (decision === "keep") expect(input.value).toBe("Edited heading");
+  }
+  expect(input.isConnected).toBe(false);
+  expect(app.leave.coordinator.isDirty()).toBe(false);
 });
 
-it("an obsolete department query cannot bypass a venue draft leave decision", async () => {
-  const { app } = await mount(
-    "/manage/venue-settings/view/receipts?departmentId=bar",
-    "en-GB",
-    "light",
-    { getVenueReceiptSettings: async () => ({ settings: { headerSubtitle: "Venue" } }) },
+it("an obsolete receipt department query cannot bypass a venue draft leave decision", async () => {
+  const { app } = await mount("/manage/venue-settings/view/venue-details?departmentId=bar");
+  const details = settings(app).shadowRoot!.querySelector("dashboard-venue-details-panel")!;
+  await expect.poll(() => details.shadowRoot?.querySelector("[data-test=edit]")).toBeTruthy();
+  await userEvent.click(
+    page.elementLocator(details.shadowRoot!.querySelector("[data-test=edit]")!),
   );
-  const receipt = settings(app).shadowRoot!.querySelector("dashboard-receipts-screen")!;
-  expect(receipt.shadowRoot!.querySelector("dashboard-department-receipt-editor")).toBeNull();
-  const defaults = receipt.shadowRoot!.querySelector("dashboard-venue-receipt-defaults-editor")!;
-  await expect.poll(() => defaults.shadowRoot?.querySelector("[name=headerSubtitle]")).toBeTruthy();
-  const subtitle = defaults.shadowRoot!.querySelector<WtInput>("[name=headerSubtitle]")!;
-  await subtitle.updateComplete;
+  await expect.poll(() => details.shadowRoot?.querySelector("[name=addressLine1]")).toBeTruthy();
+  const address = details.shadowRoot!.querySelector<WtInput>("[name=addressLine1]")!;
+  await address.updateComplete;
+  const saved = address.value;
   await userEvent.fill(
-    page.elementLocator(subtitle.shadowRoot!.querySelector("input")!),
-    "Draft venue",
+    page.elementLocator(address.shadowRoot!.querySelector("input")!),
+    "Draft street",
   );
   await select(app, "tables");
   await choose(app, "keep");
-  expect(selected(app)).toBe("receipts");
-  expect(subtitle.value).toBe("Draft venue");
+  expect(selected(app)).toBe("venue-details");
+  expect(address.value).toBe("Draft street");
   await select(app, "tables");
   await choose(app, "discard");
   await expect.poll(() => selected(app)).toBe("tables");
-  expect(subtitle.value).toBe("Venue");
+  expect(address.isConnected).toBe(false);
+  await select(app, "venue-details");
+  await expect.poll(() => selected(app)).toBe("venue-details");
+  await userEvent.click(
+    page.elementLocator(details.shadowRoot!.querySelector("[data-test=edit]")!),
+  );
+  await expect
+    .poll(() => details.shadowRoot!.querySelector<WtInput>("[name=addressLine1]")?.value)
+    .toBe(saved);
 });
 
 it("a legal-name change on Venue details re-reads the banner's name", async () => {
@@ -845,3 +843,158 @@ it("a failed banner read keeps the name the banner shows", async () => {
   expect(banner()).toBe("Initial SL");
   expect(app.shadowRoot!.querySelector("dashboard-venue-settings-screen")).not.toBeNull();
 });
+
+function languagePanel(app: DashboardApp) {
+  return settings(app).shadowRoot!.querySelector("dashboard-receipt-language-panel");
+}
+async function readyLanguage(app: DashboardApp) {
+  await expect
+    .poll(() => languagePanel(app)?.shadowRoot?.querySelector("[name=receiptLanguage]"))
+    .toBeTruthy();
+  return languagePanel(app)!;
+}
+function languageField(panel: HTMLElementTagNameMap["dashboard-receipt-language-panel"]) {
+  return panel.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-combobox"]>(
+    "[name=receiptLanguage]",
+  )!;
+}
+async function pickLanguage(
+  panel: HTMLElementTagNameMap["dashboard-receipt-language-panel"],
+  value: string,
+) {
+  languageField(panel).dispatchEvent(
+    new CustomEvent("wt-change", { detail: { value }, bubbles: true, composed: true }),
+  );
+  await panel.updateComplete;
+}
+const languageModel = { language: "es-ES", choices: ["es-ES", "ca-ES"], fixed: null };
+
+it("Venue details hosts receipt language with its own quiet Save", async () => {
+  const put = vi.fn<DashboardApi["putReceiptLanguage"]>(async () => {});
+  const { app } = await mount("/manage/venue-settings/view/venue-details", "en-GB", "light", {
+    getReceiptLanguage: async () => languageModel,
+    putReceiptLanguage: put,
+  });
+  const panel = await readyLanguage(app);
+  expect(panel.checkVisibility()).toBe(true);
+  const save = panel.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>(
+    "[data-test=language-save]",
+  )!;
+  expect(save.disabled).toBe(true);
+  expect(save.variant).toBe("secondary");
+  await pickLanguage(panel, "ca-ES");
+  expect(save.disabled).toBe(false);
+  await save.updateComplete;
+  await userEvent.click(page.elementLocator(save.shadowRoot!.querySelector("button")!));
+  await expect.poll(() => put.mock.calls).toEqual([["ca-ES"]]);
+  await expect.poll(() => save.disabled).toBe(true);
+  expect(languageField(panel).value).toBe("ca-ES");
+});
+
+it.each([["venue.view"], ["layout.configure"], ["venue.configure"]])(
+  "the hosted receipt-language gate matches the server for %j",
+  async (permission) => {
+    const { app } = await mount("/manage/venue-settings/view/venue-details", "en-GB", "light", {}, [
+      permission,
+    ]);
+    expect(languagePanel(app) !== null).toBe(permission === "venue.configure");
+  },
+);
+
+it("saving hosted receipt language preserves a separate venue-details draft", async () => {
+  const put = vi.fn<DashboardApi["putReceiptLanguage"]>(async () => {});
+  const detailsWrite = vi.fn<DashboardApi["patchVenueDetails"]>();
+  const { app } = await mount("/manage/venue-settings/view/venue-details", "en-GB", "light", {
+    getReceiptLanguage: async () => languageModel,
+    putReceiptLanguage: put,
+    patchVenueDetails: detailsWrite,
+  });
+  const panel = await readyLanguage(app);
+  const details = settings(app).shadowRoot!.querySelector("dashboard-venue-details-panel")!;
+  await expect.poll(() => details.shadowRoot?.querySelector("[data-test=edit]")).toBeTruthy();
+  details.shadowRoot!.querySelector<HTMLElement>("[data-test=edit]")!.click();
+  await expect.poll(() => details.shadowRoot!.querySelector("[name=venueName]")).toBeTruthy();
+  const name = details.shadowRoot!.querySelector<WtInput>("[name=venueName]")!;
+  await name.updateComplete;
+  await userEvent.fill(
+    page.elementLocator(name.shadowRoot!.querySelector("input")!),
+    "Draft venue",
+  );
+  await pickLanguage(panel, "ca-ES");
+  panel.shadowRoot!.querySelector<HTMLElement>("[data-test=language-save]")!.click();
+  await expect.poll(() => put.mock.calls).toEqual([["ca-ES"]]);
+  await expect
+    .poll(
+      () =>
+        panel.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>(
+          "[data-test=language-save]",
+        )!.disabled,
+    )
+    .toBe(true);
+  expect(name.value).toBe("Draft venue");
+  expect(detailsWrite).not.toHaveBeenCalled();
+  app.shadowRoot!.querySelector<HTMLElement>("[data-test=nav-overview]")!.click();
+  await choose(app, "keep");
+  expect(location.pathname).toBe("/manage/venue-settings/view/venue-details");
+  expect(name.value).toBe("Draft venue");
+  app.shadowRoot!.querySelector<HTMLElement>("[data-test=nav-overview]")!.click();
+  await choose(app, "discard");
+  await expect.poll(() => location.pathname).toBe("/manage/overview");
+});
+
+it("hosted receipt language protects sidebar navigation through Keep and Discard", async () => {
+  const { app } = await mount("/manage/venue-settings/view/venue-details", "en-GB", "light", {
+    getReceiptLanguage: async () => languageModel,
+  });
+  const panel = await readyLanguage(app);
+  await pickLanguage(panel, "ca-ES");
+  app.shadowRoot!.querySelector<HTMLElement>("[data-test=nav-overview]")!.click();
+  await choose(app, "keep");
+  expect(panel.checkVisibility()).toBe(true);
+  expect(languageField(panel).value).toBe("ca-ES");
+  expect(location.pathname).toBe("/manage/venue-settings/view/venue-details");
+  app.shadowRoot!.querySelector<HTMLElement>("[data-test=nav-overview]")!.click();
+  await choose(app, "discard");
+  await expect.poll(() => location.pathname).toBe("/manage/overview");
+  expect(panel.isConnected).toBe(false);
+  const unload = new Event("beforeunload", { cancelable: true });
+  window.dispatchEvent(unload);
+  expect(unload.defaultPrevented).toBe(false);
+});
+
+for (const locale of ["en-GB", "es-ES"]) {
+  for (const theme of ["light", "dark"] as const) {
+    for (const width of [390, 1280]) {
+      it(`hosted receipt language layout ${locale}/${theme}/${width}`, async () => {
+        registerIcons(DASHBOARD_ICONS);
+        await page.viewport(width, 900);
+        expect(window.innerWidth).toBe(width);
+        const { app } = await mount("/manage/venue-settings/view/venue-details", locale, theme, {
+          getReceiptLanguage: async () => languageModel,
+        });
+        const panel = await readyLanguage(app);
+        const screen = settings(app);
+        const details = screen.shadowRoot!.querySelector("dashboard-venue-details-panel")!;
+        expect(panel.getBoundingClientRect().top).toBeGreaterThan(
+          details.getBoundingClientRect().bottom,
+        );
+        panel.scrollIntoView({ block: "center" });
+        await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+        await commands.parkPointer();
+        await expectNoA11yViolations(screen);
+        expect(screen.scrollWidth).toBeLessThanOrEqual(screen.clientWidth);
+        expect(panel.scrollWidth).toBeLessThanOrEqual(panel.clientWidth);
+        await page.screenshot({
+          element: panel,
+          path: `__screenshots__/look/a493-host-language-${locale}-${theme}-${width}-saved.png`,
+        });
+        await pickLanguage(panel, "ca-ES");
+        await expectNoA11yViolations(screen);
+        await page.screenshot({
+          element: panel,
+          path: `__screenshots__/look/a493-host-language-${locale}-${theme}-${width}-draft.png`,
+        });
+      });
+    }
+  }
+}

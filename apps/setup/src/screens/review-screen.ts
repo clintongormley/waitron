@@ -183,7 +183,6 @@ export class SetupReviewScreen extends LitElement {
             ${this.#row("review.series", venue?.seriesCode, "summary-seriesCode")}
             ${this.#row("review.full_series", venue?.fullSeriesCode, "summary-fullSeriesCode")}
             ${this.#row("review.rectificative_series", venue?.rectificativeSeriesCode, "summary-rectificativeSeriesCode")}
-            ${this.#row("review.operation_description", location?.operationDescription, "summary-operationDescription")}
             ${
               mode === "demo"
                 ? nothing

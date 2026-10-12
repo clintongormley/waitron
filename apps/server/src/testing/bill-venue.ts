@@ -1,3 +1,4 @@
+import { departments, departmentReceipts } from "@waitron/venue-service";
 import { issueOrderInvoice } from "./issue-order.js";
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
@@ -150,6 +151,14 @@ export async function provisionBillVenue(db: Database): Promise<BillVenue> {
     tipsEnabled: false,
     simplifiedInvoiceLimit: null,
   });
+  const rows = await db
+    .select()
+    .from(departments)
+    .where(eq(departments.locationId, cfg.locationId));
+  for (const department of rows)
+    await db
+      .insert(departmentReceipts)
+      .values({ departmentId: department.id, receipt: { operationDescription: "Restaurante" } });
   const seeded = await withTransaction(db, async (tx) => {
     const cat = await createCatalogue(tx, { name: "Carta" });
     const platos = await createCategory(tx, { name: "Platos" });

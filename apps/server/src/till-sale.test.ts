@@ -126,6 +126,17 @@ function nextNif(): string {
   return nifWithControlLetter(50_000_000 + nifCounter);
 }
 
+async function readyDepartment(venue: VenueResult): Promise<void> {
+  const [department] = await suite.db
+    .select({ id: departments.id })
+    .from(departments)
+    .where(eq(departments.locationId, venue.locationId));
+  await suite.db.insert(departmentReceipts).values({
+    departmentId: department!.id,
+    receipt: { operationDescription: "Venta en establecimiento" },
+  });
+}
+
 function tillConfigFromVenue(venue: VenueResult): TillConfig {
   return {
     nodeId: brandNodeId(venue.nodeId),
@@ -185,6 +196,7 @@ async function setupVenue(options: { variants?: boolean } = {}): Promise<{
     { db: suite.db, modules: ALL_MODULES },
   );
 
+  await readyDepartment(venue);
   const cfg = await deviceRequestCfg(suite.db, tillConfigFromVenue(venue));
   const catalogue = await withTransaction(suite.db, async (tx) => {
     const cat = await createCatalogue(tx, { name: "Delicatessen" });
@@ -769,6 +781,7 @@ describe("priceOrderLines re-keys bare catalogue content to the venue invoice_lo
       ),
       { db: suite.db, modules: ALL_MODULES },
     );
+    await readyDepartment(venue);
     const cfg = await deviceRequestCfg(suite.db, tillConfigFromVenue(venue));
     const productId = await withTransaction(suite.db, async (tx) => {
       const cat = await createCatalogue(tx, { name: "Delicatessen" });
@@ -1010,6 +1023,7 @@ describe("ordering extras and options — parent + child lines", () => {
       ),
       { db: suite.db, modules: ALL_MODULES },
     );
+    await readyDepartment(venue);
     const cfg = await deviceRequestCfg(suite.db, tillConfigFromVenue(venue));
     const seeded = await withTransaction(suite.db, async (tx) => {
       const { defaultLanguage } = await readContentLanguages(tx, cfg.locale);
@@ -2457,13 +2471,18 @@ describe("per-answer receipt presentation", () => {
         .insert(tenantReceipts)
         .values({ id: 1, receipt: global })
         .onConflictDoUpdate({ target: tenantReceipts.id, set: { receipt: global } });
-      await suite.db.insert(departmentReceipts).values({
-        departmentId: department!.id,
-        receipt: {
-          headerSubtitle: { "es-ES": "Department subtitle" },
-          email: "department@example.test",
-        },
-      });
+      await suite.db
+        .update(departmentReceipts)
+        .set({
+          receipt: {
+            operationDescription: "Venta en establecimiento",
+            headerSubtitle: { "es-ES": "Department subtitle" },
+            footerMessage: { "es-ES": "Department footer" },
+            printAddress: true,
+            email: "department@example.test",
+          },
+        })
+        .where(eq(departmentReceipts.departmentId, department!.id));
       const req: TillSaleRequest = {
         zoneId,
         workingOrderId: randomUUID(),
@@ -2475,27 +2494,19 @@ describe("per-answer receipt presentation", () => {
       expect(first).toMatchObject({
         receiptTrim: {
           headerSubtitle: "Department subtitle",
-          footerMessage: "Venue footer",
+          footerMessage: "Department footer",
           email: "department@example.test",
         },
         venueAddress: ["Calle Mayor 1", "28013 Madrid"],
-        venueReceiptSettings: {
-          headerSubtitle: "Venue subtitle",
-          footerMessage: "Venue footer",
-          printAddress: true,
-        },
+        receiptSettings: { printAddress: true },
       });
       expect(first).toHaveProperty("receiptTrim");
       expect(first.receiptTrim).toEqual({
         headerSubtitle: "Department subtitle",
-        footerMessage: "Venue footer",
+        footerMessage: "Department footer",
         email: "department@example.test",
       });
-      expect(first.venueReceiptSettings).toEqual({
-        headerSubtitle: "Venue subtitle",
-        footerMessage: "Venue footer",
-        printAddress: true,
-      });
+      expect(first.receiptSettings).toEqual({ printAddress: true });
       const before = await suite.db.execute<{ n: number }>(
         sql`select count(*) as n from registros_facturacion`,
       );
@@ -2513,25 +2524,22 @@ describe("per-answer receipt presentation", () => {
       const replay = await recordTillSale(deps, cfg, req);
       expect(replay).toMatchObject({
         receiptTrim: {
-          headerSubtitle: "New venue subtitle",
           footerMessage: "New department footer",
         },
         venueAddress: ["Current street", "28013 Madrid"],
-        venueReceiptSettings: { headerSubtitle: "New venue subtitle", printAddress: false },
+        receiptSettings: { printAddress: false },
       });
       expect(replay.receiptTrim).toEqual({
-        headerSubtitle: "New venue subtitle",
         footerMessage: "New department footer",
       });
-      expect(replay.venueReceiptSettings).toEqual({
-        headerSubtitle: "New venue subtitle",
+      expect(replay.receiptSettings).toEqual({
         printAddress: false,
       });
       expect({
         ...replay,
         receiptTrim: first.receiptTrim,
         venueAddress: first.venueAddress,
-        venueReceiptSettings: first.venueReceiptSettings,
+        receiptSettings: first.receiptSettings,
       }).toEqual(first);
       expect(
         (
@@ -2545,7 +2553,7 @@ describe("per-answer receipt presentation", () => {
 });
 
 describe("receipt presentation sources", () => {
-  it("treats absent and explicitly null saved departments as venue-only, and clears previous defaults", async () => {
+  it("omits optional values for absent and null saved departments despite retired defaults", async () => {
     const { cfg, seriesId } = await setupVenue();
     const global = {
       headerSubtitle: "Venue subtitle",
@@ -2563,18 +2571,9 @@ describe("receipt presentation sources", () => {
     );
     expect(absent).toEqual({
       receiptHeader: undefined,
-      receiptTrim: {
-        headerSubtitle: "Venue subtitle",
-        footerMessage: "Venue footer",
-        phone: "+34910000000",
-        email: "venue@example.test",
-      },
+      receiptTrim: {},
       venueAddress: ["Calle Mayor 1", "28013 Madrid"],
-      venueReceiptSettings: {
-        headerSubtitle: "Venue subtitle",
-        footerMessage: "Venue footer",
-        printAddress: false,
-      },
+      receiptSettings: { printAddress: false },
     });
     const sale = await withTransaction(suite.db, (tx) =>
       recordSale(tx, backend, {
@@ -2620,7 +2619,7 @@ describe("receipt presentation sources", () => {
       receiptHeader: undefined,
       receiptTrim: {},
       venueAddress: ["Calle Mayor 1", "28013 Madrid"],
-      venueReceiptSettings: {},
+      receiptSettings: { printAddress: false },
     });
   });
 
@@ -2639,10 +2638,16 @@ describe("receipt presentation sources", () => {
           target: tenantReceipts.id,
           set: { receipt: { headerSubtitle: "Venue subtitle", phone: "+34910000000" } },
         });
-      await suite.db.insert(departmentReceipts).values({
-        departmentId: department!.id,
-        receipt: { footerMessage: { "es-ES": "Own footer" }, email: "own@example.test" },
-      });
+      await suite.db
+        .update(departmentReceipts)
+        .set({
+          receipt: {
+            operationDescription: "Venta en establecimiento",
+            footerMessage: { "es-ES": "Own footer" },
+            email: "own@example.test",
+          },
+        })
+        .where(eq(departmentReceipts.departmentId, department!.id));
       const req: TillSaleRequest = {
         zoneId,
         workingOrderId: randomUUID(),
@@ -2665,25 +2670,11 @@ describe("receipt presentation sources", () => {
           readReceiptPresentation(tx, cfg, saved!.saleId, "es-ES"),
         );
         expect(presentation.receiptTrim).toEqual(
-          source === "venue"
-            ? { footerMessage: "Own footer", email: "own@example.test" }
-            : source === "department"
-              ? { headerSubtitle: "Venue subtitle" }
-              : {},
+          source === "venue" ? { footerMessage: "Own footer", email: "own@example.test" } : {},
         );
         expect(presentation.venueAddress).toEqual(["Calle Mayor 1", "28013 Madrid"]);
-        expect(presentation.venueReceiptSettings).toEqual(
-          hiddenVenue ? {} : { headerSubtitle: "Venue subtitle" },
-        );
+        expect(presentation.receiptSettings).toEqual({ printAddress: false });
         expect(warning.mock.calls).toEqual([
-          ...(hiddenVenue
-            ? [
-                [
-                  "receipt.optional_read_failed",
-                  { operation: "getPrintedReceipt", receiptId: 1, code: "receipt.read_failed" },
-                ],
-              ]
-            : []),
           ...(hiddenDepartment
             ? [
                 [
@@ -2713,9 +2704,19 @@ describe("receipt presentation sources", () => {
 describe("receipt presentation address failure", () => {
   it("keeps the sale and surviving trim when the optional current-address read fails", async () => {
     const { cfg, zoneId, waterOfferId } = await setupVenue();
+    const [department] = await suite.db
+      .select()
+      .from(departments)
+      .where(eq(departments.locationId, cfg.locationId));
     await suite.db
-      .insert(tenantReceipts)
-      .values({ receipt: { headerSubtitle: "Surviving subtitle" } });
+      .update(departmentReceipts)
+      .set({
+        receipt: {
+          operationDescription: "Venta en establecimiento",
+          headerSubtitle: { "es-ES": "Surviving subtitle" },
+        },
+      })
+      .where(eq(departmentReceipts.departmentId, department!.id));
     const address = vi
       .spyOn(venueAddressReads, "readLocationAddress")
       .mockRejectedValue(new Error("current address read refused"));

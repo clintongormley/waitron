@@ -54,8 +54,9 @@ import "./screens/catalogue-screen.js";
 import "./screens/modifiers-screen.js";
 import "./screens/menus-screen.js";
 import "./screens/units-screen.js";
-import "./screens/receipts-screen.js";
+import "./screens/department-receipt-dialog.js";
 import "./screens/venue-details-panel.js";
+import "./screens/receipt-language-panel.js";
 import "./screens/catalogue-defaults-screen.js";
 import "./screens/content-languages-screen.js";
 import "./screens/service-status-screen.js";
@@ -269,10 +270,11 @@ const CORE_SETTINGS_PANELS: readonly CoreSettingsPanel[] = [
       ></dashboard-venue-details-panel>`,
   },
   {
-    key: "receipts",
-    tab: "receipts",
-    requiresManager: true,
-    render: (api) => html`<dashboard-receipts-screen .api=${api}></dashboard-receipts-screen>`,
+    key: "receipt-language",
+    tab: "venue-details",
+    requiresPermission: "venue.configure",
+    render: (api) =>
+      html`<dashboard-receipt-language-panel .api=${api}></dashboard-receipt-language-panel>`,
   },
   {
     key: "statuses",
@@ -1233,11 +1235,11 @@ export class DashboardApp extends LitElement {
         liveData: this.api.liveData,
         renderPanel: (panel: string, subject: { id: string; name: string }) =>
           panel === "department-receipt" && this.#sessionPermissions.includes("layout.configure")
-            ? html`<dashboard-receipts-screen
+            ? html`<dashboard-department-receipt-dialog
                 .api=${this.api}
-                .departmentId=${subject.id}
-                .departmentName=${subject.name}
-              ></dashboard-receipts-screen>`
+                .subject=${subject}
+                .canManagePolicy=${this.#sessionPermissions.includes("venue_service.manage")}
+              ></dashboard-department-receipt-dialog>`
             : null,
       };
       for (const contributed of screens) {
@@ -1628,7 +1630,11 @@ export class DashboardApp extends LitElement {
 
   #selectScreen(screen: ScreenId): void {
     const destination = this.#permittedScreen(screen);
-    void Promise.resolve(this.#writeScreenUrl(destination)).then((outcome) => {
+    const navigation =
+      destination === "venue-operations"
+        ? this.#url.write({ dashboard: destination, department: null, view: null, zone: null })
+        : this.#writeScreenUrl(destination);
+    void Promise.resolve(navigation).then((outcome) => {
       if (outcome === "proceeded" && this.isConnected && this.screen === destination) {
         this.#openGroupOf(destination);
         this.drawerOpen = false;

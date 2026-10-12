@@ -26,6 +26,8 @@ export interface TillConfig {
   localeOverride?: string;
   /** Whether the till offers a tip prompt at card collect. */
   tipsEnabled: boolean;
+  /** Whether the installed fiscal contribution exposes an operation description field. */
+  operationDescriptionRequired?: boolean;
   /**
    * True for Demo and Prepare installations. Receipt renderers use it only to add an unmistakable
    * practice warning; fiscal values and hashes never depend on it.

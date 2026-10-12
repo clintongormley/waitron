@@ -1419,6 +1419,7 @@ async function bootServer(
   const till: TillConfig = {
     ...config.till,
     simplifiedInvoiceLimit: tillBackend.simplifiedInvoiceLimit,
+    operationDescriptionRequired: enabledFiscal.venueFields !== undefined,
     practiceMode: config.onboardingIntent === "demo" || config.onboardingIntent === "prepare",
   };
   // The venue's default DISPLAY locale. The override is the RAW `till.localeOverride`, not the
@@ -1577,13 +1578,23 @@ async function bootServer(
     { db, cfg: till, fiscal: enabledFiscal, readBackupDeadlines: () => ({ ...backupDeadlines }) },
     log,
   );
-  mountReceiptPreviewApi(app, { db, cfg: till, receiptQrText: tillBackend.receiptQrText }, log);
+  mountReceiptPreviewApi(
+    app,
+    {
+      db,
+      cfg: till,
+      receiptQrText: tillBackend.receiptQrText,
+      validateOperationDescription: enabledFiscal.venueFields?.validateOperationDescription,
+    },
+    log,
+  );
   const managementApi = mountManagementApi(
     app,
     {
       db,
       cfg: { nodeId: till.nodeId },
       venueCfg: till,
+      validateOperationDescription: enabledFiscal.venueFields?.validateOperationDescription,
       secureCookies,
       rpId: config.managementRpId,
       origin: config.managementOrigin,
@@ -1664,6 +1675,7 @@ async function bootServer(
     cfg: {
       locationId: till.locationId,
       contentDefaultLanguage: venueLocale,
+      operationDescriptionRequired: enabledFiscal.venueFields !== undefined,
     },
     maxUploadBytes: MAX_UPLOAD_BYTES,
     core: moduleCoreServices(till, tableRemovals),

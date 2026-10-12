@@ -1,5 +1,17 @@
 # Service times, departments, zones and prep stations
 
+> **2026-10-12, A493 supersession:** departments and zones share one list with protected
+> editors. The department page and its tabs, including the zone panel and receipt tab, are
+> retired. Floor-plan editing returns to the list. Receipt decoration and the tax-agency
+> description belong to each department; Venue settings holds the receipt language.
+> The earlier page, global-default and live transfer contracts below are historical.
+> See [the current contract](2026-10-12-a493-departments-zones-design.md).
+
+> **2026-10-12, A493:** consent validation uses the selected order or sale's department
+> contact, including the existing local default-department fallback, rather than the venue
+> receipt row. See [A493](2026-10-12-a493-departments-zones-design.md). The consent payload,
+> reservation and retry contracts remain; their separate rewrite is still open.
+
 > **2026-10-11, A495:** the [dated business-day design](2026-10-11-a495-business-day-history-design.md) replaces the
 > scalar start edit and its history lock. The time-zone lock remains. Reports and actual-date
 > service views resolve each date through the retained timeline; pending changes pause hours

@@ -219,9 +219,6 @@ it("opens quiet with Cancel before Save and sends all settings in one request", 
       composed: true,
     }),
   );
-  field(el, "printTradingName").dispatchEvent(
-    new CustomEvent("wt-change", { detail: { checked: true }, bubbles: true, composed: true }),
-  );
   el.shadowRoot!.querySelector<HTMLInputElement>("[name=transferDestination-d2]")!.click();
   await chooseOption(
     el.shadowRoot!.querySelector(
@@ -244,8 +241,6 @@ it("opens quiet with Cancel before Save and sends all settings in one request", 
         orderStart: "counter",
         paidWhen: "ticket_then_pay",
         collectionNumber: "numbered",
-        receiptPrintMode: "on_request",
-        printTradingName: true,
         transfers: { receivingProfileId: "p2", destinationDepartmentIds: ["d2"] },
       },
     },
@@ -268,13 +263,9 @@ it("lists exactly differing stored overrides as zone links", async () => {
   links[1]!.click();
   expect(heard).toEqual([{ zoneId: "z2" }]);
 });
-it("links to the receipt editor for this department", async () => {
+it("does not link department settings to a receipt page", async () => {
   const { el } = await mount();
-  expect(
-    el
-      .shadowRoot!.querySelector<HTMLAnchorElement>("[data-test=edit-receipt]")!
-      .getAttribute("href"),
-  ).toBe("/manage/venue-operations/department/d1/view/receipt");
+  expect(el.shadowRoot!.querySelector("[data-test=edit-receipt]")).toBeNull();
 });
 it("hides transfers with one active department and excludes them from Save", async () => {
   const view = structuredClone(model);
@@ -347,11 +338,9 @@ it("a name refusal retains its draft without offering Enable", async () => {
 it.each([
   "name",
   "tradingName",
-  "printTradingName",
   "orderStart",
   "paidWhen",
   "collectionNumber",
-  "receiptPrintMode",
   "receivingProfileId",
   "destinationDepartmentIds",
 ])("places request-invalid %s beside its field without blocking retry", async (name) => {
@@ -365,13 +354,11 @@ it.each([
   const error =
     name === "destinationDepartmentIds"
       ? el.shadowRoot!.querySelector("[data-field-error=destinationDepartmentIds]")?.textContent
-      : name === "printTradingName"
-        ? el.shadowRoot!.querySelector("[data-field-error=printTradingName]")?.textContent
-        : ["orderStart", "paidWhen", "collectionNumber", "receiptPrintMode"].includes(name)
-          ? el.shadowRoot!.querySelector("dashboard-service-settings-fields")!.errors[
-              name as "orderStart"
-            ]
-          : field(el, name).getAttribute("error");
+      : ["orderStart", "paidWhen", "collectionNumber"].includes(name)
+        ? el.shadowRoot!.querySelector("dashboard-service-settings-fields")!.errors[
+            name as "orderStart"
+          ]
+        : field(el, name).getAttribute("error");
   expect(error).toContain("This value was not accepted. Change it and save again.");
   expect(save(el).disabled).toBe(false);
 });
@@ -498,15 +485,15 @@ it("undoing a service or destination change returns Save to quiet without depend
   });
   const { el } = await mount(view);
   const service = el.shadowRoot!.querySelector("dashboard-service-settings-fields")!;
-  const update = async (receiptPrintMode: "auto" | "on_request") => {
+  const update = async (paidWhen: "prepay" | "ticket_then_pay") => {
     service.dispatchEvent(
       new CustomEvent("service-settings-change", {
         detail: {
           value: {
             orderStart: "table",
-            paidWhen: "prepay",
+            paidWhen,
             collectionNumber: "none",
-            receiptPrintMode,
+            receiptPrintMode: "auto",
           },
         },
         bubbles: true,
@@ -515,9 +502,9 @@ it("undoing a service or destination change returns Save to quiet without depend
     );
     await el.updateComplete;
   };
-  await update("on_request");
+  await update("ticket_then_pay");
   expect(save(el).disabled).toBe(false);
-  await update("auto");
+  await update("prepay");
   expect(save(el).disabled).toBe(true);
   const toggle = async (id: string) => {
     el.shadowRoot!.querySelector<HTMLInputElement>(`[name=transferDestination-${id}]`)!.click();
@@ -534,6 +521,7 @@ it("undoing a service or destination change returns Save to quiet without depend
 });
 it("a service-setting change updates the differing-zone readout while null overrides follow", async () => {
   const view = structuredClone(model);
+  view.salePolicies.zones[1]!.paidWhen = null;
   view.salePolicies.zones[1]!.receiptPrintMode = null;
   const { el } = await mount(view);
   const service = el.shadowRoot!.querySelector("dashboard-service-settings-fields")!;
@@ -542,7 +530,7 @@ it("a service-setting change updates the differing-zone readout while null overr
       detail: {
         value: {
           orderStart: "table",
-          paidWhen: "prepay",
+          paidWhen: "ticket_then_pay",
           collectionNumber: "none",
           receiptPrintMode: "on_request",
         },
@@ -556,7 +544,7 @@ it("a service-setting change updates the differing-zone readout while null overr
     [...el.shadowRoot!.querySelectorAll<HTMLAnchorElement>("[data-zone]")].map((a) =>
       a.textContent!.trim(),
     ),
-  ).toEqual(["Terrace (Counter service)", "Same (Always)"]);
+  ).toEqual(["Terrace (Counter service)", "Same (Paid before preparation)"]);
 });
 it("a request failure naming no field stays at the bottom and allows retry", async () => {
   const { el } = await mount(structuredClone(model), { code: "connection.failed" });
@@ -754,7 +742,7 @@ it("differing-zone summaries name paid timing and collection choices independent
   );
   await el.updateComplete;
   expect(el.shadowRoot!.querySelector("[data-zone=z3]")!.textContent).toBe(
-    "Same (Table service, Paid before preparation, Don't print, Always)",
+    "Same (Table service, Paid before preparation, Don't print)",
   );
 });
 it("a pristine refresh without transfers applies the latest trading name", async () => {
@@ -894,8 +882,8 @@ it("owned zone links emit through the dashboard capture boundary while plain lin
   zone.click();
   expect(zones).toEqual([{ zoneId: "z1" }]);
   expect(shell).toEqual([]);
-  el.shadowRoot!.querySelector<HTMLAnchorElement>("[data-test=edit-receipt]")!.click();
-  expect(shell).toEqual(["/manage/venue-operations/department/d1/view/receipt"]);
+  expect(el.shadowRoot!.querySelector("[data-test=edit-receipt]")).toBeNull();
+  expect(shell).toEqual([]);
   const observed: boolean[] = [];
   const cancelBrowserDefault = (event: MouseEvent) => {
     observed.push(event.defaultPrevented);
@@ -914,14 +902,13 @@ it("owned zone links emit through the dashboard capture boundary while plain lin
   }
   expect(observed).toEqual([false, false, false, false]);
   expect(zones).toEqual([{ zoneId: "z1" }]);
-  expect(shell).toHaveLength(1);
+  expect(shell).toHaveLength(0);
 });
 
 it.each([
   ["orderStart", "counter", "paidWhen", "ticket_then_pay"],
-  ["paidWhen", "ticket_then_pay", "receiptPrintMode", "on_request"],
+  ["paidWhen", "ticket_then_pay", "orderStart", "counter"],
   ["collectionNumber", "numbered", "paidWhen", "ticket_then_pay"],
-  ["receiptPrintMode", "on_request", "paidWhen", "ticket_then_pay"],
 ] as const)(
   "a refused %s survives a different service edit until its own value changes",
   async (refused, corrected, other, value) => {
@@ -1066,75 +1053,6 @@ it("a native trading-name refusal survives a name edit and clears on its own inp
   expect(writes[0]!.body).toMatchObject({ name: "Restaurant", tradingName: "Casa revised" });
 });
 
-it.each(["success", "refusal"] as const)(
-  "a native receipt trading-name choice remains checked after %s",
-  async (outcome) => {
-    const { el, writes } = await mount(
-      undefined,
-      outcome === "refusal" ? new Error("offline") : undefined,
-    );
-    const control = el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-switch"]>(
-      "wt-switch[name=printTradingName]",
-    )!;
-    await control.updateComplete;
-    const native = control.shadowRoot!.querySelector<HTMLInputElement>("input")!;
-    expect(native.checked).toBe(false);
-    await userEvent.click(page.elementLocator(native));
-    await el.updateComplete;
-    save(el).click();
-    await expect.poll(() => writes.length).toBe(1);
-    expect(writes).toEqual([
-      {
-        path: "/management-api/venue-service/departments/d1/settings",
-        method: "PUT",
-        body: {
-          name: "Restaurant",
-          tradingName: "Casa",
-          orderStart: "table",
-          paidWhen: "prepay",
-          collectionNumber: "none",
-          receiptPrintMode: "auto",
-          printTradingName: true,
-          transfers: { receivingProfileId: "p1", destinationDepartmentIds: [] },
-        },
-      },
-    ]);
-    await expect
-      .poll(() => bottom(el))
-      .toBe(outcome === "refusal" ? "The change could not be saved." : "");
-    await control.updateComplete;
-    expect(native.checked).toBe(true);
-    expect(el.model!.salePolicies.departments[0]!.printTradingName).toBe(false);
-    expect(save(el).disabled).toBe(outcome === "success");
-    expect(el.shadowRoot!.querySelector("[role=alert]")).toBeNull();
-  },
-);
-
-it.each([
-  ["en", "Search", "No results"],
-  ["es", "Buscar", "Sin resultados"],
-])(
-  "the receipt picker's native search and empty result are localized in %s",
-  async (locale, search, empty) => {
-    setLocale(locale!);
-    const { el } = await mount();
-    const fields = el.shadowRoot!.querySelector("dashboard-service-settings-fields")!;
-    await fields.updateComplete;
-    const box = fields.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-combobox"]>(
-      'wt-combobox[name="receiptPrintMode"]',
-    )!;
-    await box.updateComplete;
-    box.shadowRoot!.querySelector<HTMLButtonElement>("button")!.click();
-    await box.updateComplete;
-    const native = box.shadowRoot!.querySelector<HTMLInputElement>("input")!;
-    expect(native, "receipt search input is available").not.toBeNull();
-    expect(native.placeholder).toBe(search);
-    await userEvent.fill(page.elementLocator(native), "no receipt option has this name");
-    await box.updateComplete;
-    expect(box.shadowRoot!.textContent).toContain(empty);
-  },
-);
-
 it("a blank native trading name is refused without writing and Cancel restores it", async () => {
   const { el, writes } = await mount();
   const box = field(el, "tradingName");
@@ -1157,7 +1075,6 @@ it("a blank native trading name is refused without writing and Cancel restores i
 it.each([
   ["paidWhen", "prepay", "ticket_then_pay"],
   ["collectionNumber", "none", "numbered"],
-  ["receiptPrintMode", "auto", "on_request"],
 ] as const)(
   "a refused department %s reverts to its baseline without another write",
   async (name, baseline, changed) => {
@@ -1223,4 +1140,19 @@ it("choosing the saved paid option sends no write or reload and contains raw cha
   } finally {
     document.removeEventListener("wt-change", listen);
   }
+});
+
+it("department fields put trading name immediately after name and leave receipt switches to their editor", async () => {
+  const { el } = await mount();
+  const names = [...el.shadowRoot!.querySelectorAll("wt-input")].map((field) =>
+    field.getAttribute("name"),
+  );
+  expect(names.slice(0, 2)).toEqual(["name", "tradingName"]);
+  const trading = field(el, "tradingName");
+  const service = el.shadowRoot!.querySelector("dashboard-service-settings-fields")!;
+  expect(trading.compareDocumentPosition(service) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  await service.updateComplete;
+  expect(service.shadowRoot!.querySelector('[name="receiptPrintMode"]')).toBeNull();
+  expect(el.shadowRoot!.querySelector('[name="printTradingName"]')).toBeNull();
+  expect(el.shadowRoot!.querySelector('[data-test="edit-receipt"]')).toBeNull();
 });

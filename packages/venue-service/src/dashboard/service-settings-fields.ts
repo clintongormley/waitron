@@ -38,6 +38,7 @@ export class ServiceSettingsFields extends LitElement {
   @property({ attribute: false }) follows?: ServiceSettingsValue;
   @property({ attribute: false }) errors: Partial<Record<Field, string>> = {};
   @property({ type: Boolean }) disabled = false;
+  @property({ type: Boolean }) showReceiptMode = true;
 
   #change<K extends Field>(event: Event, field: K, value: ServiceSettingsValue[K]) {
     event.stopPropagation();
@@ -68,7 +69,7 @@ export class ServiceSettingsFields extends LitElement {
       search=${field === "receiptPrintMode" ? "always" : "never"}
       searchPlaceholder=${t("venue.combobox_search")}
       noResultsLabel=${t("venue.combobox_no_results")}
-      .options=${following ? [{ value: "", label: t("venue.clear") }, ...options] : options}
+      .options=${following ? [{ value: "", label: t("venue.same_as_department").replace("{value}", placeholder) }, ...options] : options}
       .value=${this.value[field] ?? ""}
       .placeholder=${placeholder}
       .hint=${hint}
@@ -126,10 +127,14 @@ export class ServiceSettingsFields extends LitElement {
               { value: "none", label: t("venue.dont_print") },
             ])
       }
-      ${this.#choice("receiptPrintMode", t("venue.print_receipt"), [
-        { value: "auto", label: t("venue.always") },
-        { value: "on_request", label: t("venue.on_request") },
-      ])}
+      ${
+        this.showReceiptMode
+          ? this.#choice("receiptPrintMode", t("venue.print_receipt"), [
+              { value: "auto", label: t("venue.always") },
+              { value: "on_request", label: t("venue.on_request") },
+            ])
+          : nothing
+      }
     `;
   }
 }

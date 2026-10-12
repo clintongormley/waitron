@@ -2,7 +2,7 @@ import { floorDeletionFor } from "./floor-delete.js";
 import { readZoneDeleteImpact, deleteZone } from "@waitron/venue-service";
 import { readStationDeleteImpact, deleteStation } from "./station-delete.js";
 import { readCourseDeleteImpact, deleteCourse } from "./course-delete.js";
-import { mountDepartmentReceiptApi } from "./department-receipt-api.js";
+import { mountDepartmentReceiptSettingsApi } from "./department-receipt-api.js";
 // Side-effect only: registers host codes this file throws (`zone.not_found`, …).
 import "./errors.js";
 // The registry of `printer.not_found`, which `requireListedPrinters` throws.
@@ -77,23 +77,18 @@ import {
   deleteCanvas,
   deleteDeviceProfile,
   emptyPrinterLists,
-  getReceipt,
   getCanvas,
   getDeviceProfileWithPrinters,
-  getStoredLogoRasters,
   getTenantTheme,
   listCanvases,
   listDeviceProfiles,
-  putReceipt,
   putTenantTheme,
   readProfilePrinterLists,
   updateCanvas,
   updateDeviceProfile,
-  validateReceiptConfig,
   type DeviceProfileRow,
   type ProfilePrinterLists,
 } from "@waitron/layouts";
-import { imageExists, readImageBytes } from "@waitron/media";
 import {
   createStatus,
   deactivateStatus,
@@ -140,8 +135,6 @@ import {
   setManagementCookie,
 } from "@waitron/server-kit";
 import { isUuid } from "./till-session.js";
-import { drawLogoRasters } from "./receipt-logo.js";
-import { readLocationAddress } from "./venue-address.js";
 import { VENUE_SERVICE } from "./modules.js";
 import type { Logger } from "./logger.js";
 import type { AccountEmailSender } from "./account-email.js";
@@ -165,6 +158,7 @@ export interface ManagementApiDeps {
    * it; a request that does reach one without it fails closed (`requireVenueCfg`).
    */
   venueCfg?: TillConfig;
+  validateOperationDescription?: (description: string) => void;
   secureCookies: boolean;
   /** The WebAuthn Relying Party ID passkeys are bound to (`config.ts`'s `managementRpId`). */
   rpId: string;
@@ -375,10 +369,6 @@ function requireCanvasId(id: string): string {
 function requireDeviceProfileId(id: string): string {
   if (!isUuid(id)) throw new AppError("device_profile.not_found", {});
   return id;
-}
-
-function logoNotFound(): AppError<"receipt.invalid"> {
-  return new AppError("receipt.invalid", { reason: "image_not_found", field: "logo" });
 }
 
 function requireVenueCfg(deps: ManagementApiDeps): TillConfig {
@@ -741,7 +731,15 @@ export function mountManagementApi(
   deps: ManagementApiDeps,
   log: Logger,
 ): MountedManagementApi {
-  mountDepartmentReceiptApi(app, { db: deps.db, venueCfg: () => requireVenueCfg(deps) }, log);
+  mountDepartmentReceiptSettingsApi(
+    app,
+    {
+      db: deps.db,
+      venueCfg: () => requireVenueCfg(deps),
+      validateOperationDescription: deps.validateOperationDescription,
+    },
+    log,
+  );
   const recoveries = new Set<Promise<void>>();
   const credentialKeyRing = deps.credentialKeyRing;
   const passwordThrottle = deps.passwordThrottle ?? createPasswordThrottle();
@@ -1256,65 +1254,6 @@ export function mountManagementApi(
         });
       });
       return c.json({ invitationSent: await deliverAccountAction(deps, log, issued) });
-    }),
-  );
-
-  app.get("/management-api/receipt", (c) =>
-    run(c, log, async () => {
-      const sessionId = requireManagementSession(c);
-      const { locationId } = requireVenueCfg(deps);
-      const body = await withTransaction(deps.db, async (tx) => {
-        await authorizeManager(tx, {
-          managementSessionId: sessionId,
-          permission: "layout.configure",
-        });
-        const receipt = await getReceipt(tx);
-        return { receipt, venueAddress: await readLocationAddress(tx, locationId) };
-      });
-      return c.json(body);
-    }),
-  );
-
-  app.put("/management-api/receipt", (c) =>
-    run(c, log, async () => {
-      const sessionId = requireManagementSession(c);
-      const body = await readJsonBody<{ receipt?: unknown }>(c);
-      if (
-        typeof body !== "object" ||
-        body === null ||
-        Array.isArray(body) ||
-        !("receipt" in body)
-      ) {
-        throw new AppError("management.request_invalid", { field: "receipt" });
-      }
-      const { receipt } = body;
-      let logo: string | undefined;
-      // The kept pictures are handed to `putReceipt` from this read, so a save that changes the
-      // logo in between cannot leave this one without them.
-      const kept = await withTransaction(deps.db, async (tx) => {
-        await authorizeManager(tx, {
-          managementSessionId: sessionId,
-          permission: "layout.configure",
-        });
-        logo = validateReceiptConfig(receipt).logo;
-        if (logo === undefined) return undefined;
-        const stored = await getStoredLogoRasters(tx, logo);
-        if (stored !== null) return stored;
-        const image = await readImageBytes(tx, logo);
-        if (image === null) throw logoNotFound();
-        return image.bytes;
-      });
-      // Outside any transaction: sharp decodes the image.
-      const logoRasters = kept instanceof Uint8Array ? await drawLogoRasters(kept) : kept;
-      await withTransaction(deps.db, async (tx) => {
-        if (logo !== undefined && !(await imageExists(tx, logo))) throw logoNotFound();
-        await putReceipt(tx, {
-          managementSessionId: sessionId,
-          receipt,
-          ...(logoRasters === undefined ? {} : { logoRasters }),
-        });
-      });
-      return c.body(null, 204);
     }),
   );
 

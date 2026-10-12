@@ -97,8 +97,6 @@ function stubApi(role = "manager", permissions = ["test.use"]): DashboardApi {
     getSalesOverview: pending(),
     listAlerts: vi.fn().mockResolvedValue({ visible: false, alerts: [] }),
     getVenueDetails: vi.fn().mockResolvedValue(venueDetailsFixture()),
-    getReceipt: pending(),
-    getLocationSettings: pending(),
     getReceiptLanguage: pending(),
     listStatuses: vi.fn().mockResolvedValue([]),
     listCourses: vi.fn().mockResolvedValue([]),
@@ -148,10 +146,10 @@ it("puts a module's panels on their tab by their stated order, the core panel co
 
 it("leaves out a panel the session lacks the permission for, and a disabled module's panel", async () => {
   const el = await mount("/manage/venue-settings/view/adjustment-reasons");
-  expect(tabKeys(el)).toEqual(["receipts", "tables", "kitchen"]);
+  expect(tabKeys(el)).toEqual(["tables", "kitchen"]);
   expect(page(el).shadowRoot!.querySelector("[data-test=panel-reasons]")).toBeNull();
   expect(page(el).shadowRoot!.querySelector("[data-test=panel-gadgets]")).toBeNull();
-  expect(location.pathname).toBe("/manage/venue-settings/view/receipts");
+  expect(location.pathname).toBe("/manage/venue-settings/view/tables");
 });
 
 it("refuses to start when a module names an unknown settings tab", async () => {
@@ -219,14 +217,14 @@ it.each([
     expect(page(el).shadowRoot!.querySelectorAll("h1")).toHaveLength(1);
   },
 );
-it("preserves an explicitly selected Receipts link for a manager with venue access", async () => {
+it("replaces a removed Receipts deep link with Venue details for a manager with venue access", async () => {
   const el = await mount("/manage/venue-settings/view/receipts", "manager", [
     "venue.view",
     "venue.configure",
   ]);
   expect(tabKeys(el)[0]).toBe("venue-details");
-  expect(location.pathname).toBe("/manage/venue-settings/view/receipts");
-  expect(page(el).shadowRoot!.querySelector("wt-tabs")!.value).toBe("receipts");
+  expect(location.pathname).toBe("/manage/venue-settings/view/venue-details");
+  expect(page(el).shadowRoot!.querySelector("wt-tabs")!.value).toBe("venue-details");
 });
 
 it.each([

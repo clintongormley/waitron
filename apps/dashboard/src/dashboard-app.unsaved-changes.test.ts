@@ -812,7 +812,10 @@ it.each(["same-app", "device"] as const)(
 );
 
 it.each([
-  { use: { kind: "receipt" }, path: "/manage/venue-settings/view/receipts" },
+  {
+    use: { kind: "department_receipt", id: "bar", name: "Restaurant", active: true },
+    path: "/manage/venue-operations/department/bar/view/receipt",
+  },
   {
     use: { kind: "section", id: "section-one", internalName: "Lunch", ownerMenuId: "menu-one" },
     path: "/manage/menus/menu/menu-one/view/structure",
@@ -857,6 +860,7 @@ it.each([
             "venue.configure",
             "product.manage",
             "venue_service.manage",
+            "layout.configure",
             "device.manage",
           ],
           modules: ["media", "venue-service"],
@@ -901,15 +905,43 @@ it.each([
         getProductEditor: async () => {
           throw { code: "product.not_found" };
         },
-        getReceipt: async () => ({ receipt: {}, venueAddress: [] }),
-        getLocationSettings: async () => ({ name: "Venue", operationDescription: "Sale" }),
         getReceiptLanguage: async () => ({ language: "en-GB", choices: ["en-GB"], fixed: null }),
-        getVenueDepartments: async () => [],
+        getVenueDepartments: async () => [
+          { id: "bar", name: "Restaurant", active: true, isDefault: true },
+        ],
+        getDepartmentReceipt: async () => ({
+          receipt: { operationDescription: "Meals" },
+          policy: { receiptPrintMode: "auto", printTradingName: true },
+          receiptLanguage: "en-GB",
+          operationDescriptionRequired: true,
+          languages: ["en-GB"],
+          warningLanguages: [],
+          venueAddress: [],
+        }),
       },
       async (url) => {
         if (url === "/management-api/images/image-one") return { image, uses: [use] } as never;
         if (url.startsWith("/management-api/images?"))
           return { images: [image], total: 1 } as never;
+        if (url === "/management-api/venue-service/departments-and-zones")
+          return {
+            departments: [
+              {
+                id: "bar",
+                name: "Restaurant",
+                active: true,
+                tradingName: null,
+                orderStart: "counter",
+                paidWhen: "prepay",
+                receiptPrintMode: "auto",
+                printTradingName: true,
+                collectionNumber: "none",
+              },
+            ],
+            zones: [],
+            floorZones: [],
+            profiles: [],
+          } as never;
         if (url === "/management-api/venue-service/routing")
           return {
             zones: [],

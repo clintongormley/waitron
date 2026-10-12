@@ -179,7 +179,7 @@ describe("TillApi", () => {
     const ticket = {
       receiptTrim: { headerSubtitle: "Terraza", email: "terraza@example.com" },
       venueAddress: ["Current Street"],
-      venueReceiptSettings: { printAddress: false },
+      receiptSettings: { printAddress: false },
       orderLabel: null,
       orderNumber: 1,
       invoiceNumber: "A/1",
@@ -4644,7 +4644,7 @@ describe("TillApi: a bill's payments", () => {
       invoice: {
         receiptTrim: {},
         venueAddress: [],
-        venueReceiptSettings: {},
+        receiptSettings: { printAddress: false },
         orderLabel: "Mesa 4",
         orderNumber: 7,
         invoiceNumber: "A/9",

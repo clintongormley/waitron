@@ -14,7 +14,7 @@ describe.each(["light", "dark"] as const)("venue settings a11y (%s theme)", (the
         panels: [
           {
             key: "r",
-            tab: "receipts",
+            tab: "venue-details",
             render: () =>
               html`<h2>Receipt text</h2>
                 <p>Body</p>`,

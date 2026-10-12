@@ -57,11 +57,11 @@ describe("the Venue settings page", () => {
   it("owns the one h1 and shows only the tabs that have a panel, in core's order", async () => {
     setLocale("en-GB");
     navigate("/manage/venue-settings/view/kitchen");
-    const el = await mount([panel("k", "kitchen"), panel("r", "receipts")]);
+    const el = await mount([panel("k", "kitchen"), panel("r", "venue-details")]);
     const h1s = el.shadowRoot!.querySelectorAll("h1");
     expect(h1s).toHaveLength(1);
     expect(h1s[0]!.textContent!.trim()).toBe("Venue settings");
-    expect(tabKeys(el)).toEqual(["receipts", "kitchen"]);
+    expect(tabKeys(el)).toEqual(["venue-details", "kitchen"]);
     expect(tabs(el)!.label).toBe("Venue settings");
   });
 
@@ -69,7 +69,7 @@ describe("the Venue settings page", () => {
     navigate("/manage/venue-settings/view/kitchen");
     const push = vi.spyOn(history, "pushState");
     const replace = vi.spyOn(history, "replaceState");
-    const el = await mount([panel("r", "receipts"), panel("k", "kitchen")]);
+    const el = await mount([panel("r", "venue-details"), panel("k", "kitchen")]);
     expect(selected(el)).toBe("kitchen");
     expect(push).not.toHaveBeenCalled();
     expect(replace).not.toHaveBeenCalled();
@@ -96,8 +96,8 @@ describe("the Venue settings page", () => {
   });
 
   it("pushes one history entry per new tab and follows Back", async () => {
-    navigate("/manage/venue-settings/view/receipts");
-    const el = await mount([panel("r", "receipts"), panel("k", "kitchen")]);
+    navigate("/manage/venue-settings/view/venue-details");
+    const el = await mount([panel("r", "venue-details"), panel("k", "kitchen")]);
     const push = vi.spyOn(history, "pushState");
     await select(el, "kitchen");
     expect(location.pathname).toBe("/manage/venue-settings/view/kitchen");
@@ -110,13 +110,13 @@ describe("the Venue settings page", () => {
     await back;
     await el.updateComplete;
     await tabs(el)!.updateComplete;
-    expect(selected(el)).toBe("receipts");
+    expect(selected(el)).toBe("venue-details");
   });
 
   it("shows a tab's panels in the order given, and keeps every tab's panels mounted", async () => {
-    navigate("/manage/venue-settings/view/receipts");
+    navigate("/manage/venue-settings/view/venue-details");
     const el = await mount([
-      panel("r", "receipts"),
+      panel("r", "venue-details"),
       panel("first", "kitchen"),
       panel("second", "kitchen"),
     ]);
@@ -129,15 +129,15 @@ describe("the Venue settings page", () => {
   });
 
   it("tells the panels of the tab it left, and only after a switch goes through", async () => {
-    navigate("/manage/venue-settings/view/receipts");
+    navigate("/manage/venue-settings/view/venue-details");
     const heard: string[] = [];
     const record = (event: Event) => {
       expect(event.bubbles).toBe(false);
       heard.push(`${(event.target as HTMLElement).dataset.test}`);
     };
     const el = await mount([
-      panel("r", "receipts"),
-      panel("r2", "receipts"),
+      panel("r", "venue-details"),
+      panel("r2", "venue-details"),
       panel("k", "kitchen"),
     ]);
     const listen = () => {
@@ -146,7 +146,7 @@ describe("the Venue settings page", () => {
     };
     listen();
     expect(heard).toEqual([]);
-    await select(el, "receipts");
+    await select(el, "venue-details");
     expect(heard).toEqual([]);
     el.panels = [...el.panels];
     await el.updateComplete;
@@ -161,7 +161,7 @@ describe("the Venue settings page", () => {
     history.back();
     await back;
     await el.updateComplete;
-    expect(selected(el)).toBe("receipts");
+    expect(selected(el)).toBe("venue-details");
     expect(heard).toEqual(["panel-k"]);
   });
 
@@ -173,8 +173,8 @@ describe("the Venue settings page", () => {
   });
 
   it("ignores a tab change sent from a strip inside a panel", async () => {
-    navigate("/manage/venue-settings/view/receipts");
-    const el = await mount([panel("r", "receipts"), panel("k", "kitchen")]);
+    navigate("/manage/venue-settings/view/venue-details");
+    const el = await mount([panel("r", "venue-details"), panel("k", "kitchen")]);
     const inner = el.shadowRoot!.querySelector("[data-test=panel-r]")!;
     inner.dispatchEvent(
       new CustomEvent("wt-tab-change", {
@@ -184,14 +184,14 @@ describe("the Venue settings page", () => {
       }),
     );
     await el.updateComplete;
-    expect(location.pathname).toBe("/manage/venue-settings/view/receipts");
+    expect(location.pathname).toBe("/manage/venue-settings/view/venue-details");
   });
 
   it("names its tabs in Spanish", async () => {
     setLocale("es-ES");
     navigate("/manage/venue-settings");
     const el = await mount([
-      panel("r", "receipts"),
+      panel("r", "venue-details"),
       panel("s", "tables"),
       panel("a", "adjustment-reasons"),
       panel("k", "kitchen"),
@@ -199,7 +199,7 @@ describe("the Venue settings page", () => {
     expect(el.shadowRoot!.querySelector("h1")!.textContent!.trim()).toBe("Ajustes del local");
     expect(
       [...tabs(el)!.shadowRoot!.querySelectorAll('[role="tab"]')].map((t) => t.textContent!.trim()),
-    ).toEqual(["Recibos", "Mesas", "Motivos de ajuste", "Cocina"]);
+    ).toEqual(["Datos del local", "Mesas", "Motivos de ajuste", "Cocina"]);
   });
 });
 
@@ -207,19 +207,19 @@ it.each([
   ["en-GB", "Venue details"],
   ["es-ES", "Datos del local"],
 ])(
-  "opens Venue details first in %s while preserving explicit Receipts links",
+  "opens Venue details first in %s while preserving explicit Kitchen links",
   async (locale, label) => {
     setLocale(locale);
     navigate("/manage/venue-settings");
-    const el = await mount([panel("r", "receipts"), panel("v", "venue-details")]);
-    expect(tabKeys(el)).toEqual(["venue-details", "receipts"]);
+    const el = await mount([panel("r", "kitchen"), panel("v", "venue-details")]);
+    expect(tabKeys(el)).toEqual(["venue-details", "kitchen"]);
     expect(selected(el)).toBe("venue-details");
     expect(location.pathname).toBe("/manage/venue-settings/view/venue-details");
     expect(
       tabs(el)!.shadowRoot!.querySelector('[data-key="venue-details"]')?.textContent?.trim(),
     ).toBe(label);
-    await select(el, "receipts");
-    expect(location.pathname).toBe("/manage/venue-settings/view/receipts");
-    expect(selected(el)).toBe("receipts");
+    await select(el, "kitchen");
+    expect(location.pathname).toBe("/manage/venue-settings/view/kitchen");
+    expect(selected(el)).toBe("kitchen");
   },
 );

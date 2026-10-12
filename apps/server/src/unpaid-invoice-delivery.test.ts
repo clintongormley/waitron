@@ -1,3 +1,4 @@
+import { departments, departmentReceipts } from "@waitron/venue-service";
 import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -35,7 +36,21 @@ beforeEach(async () => {
   venue = await provisionBillVenue(suite.db);
   await withTransaction(suite.db, async (tx) => {
     await tx.update(tenants).set({ taxpayerDomicile: "Calle Fiscal 8, Madrid" });
-    await tx.insert(tenantReceipts).values({ receipt: { email: "venue@example.test" } });
+    await tx.insert(tenantReceipts).values({ receipt: { email: "global@example.test" } });
+    const rows = await tx
+      .select()
+      .from(departments)
+      .where(eq(departments.locationId, venue.cfg.locationId));
+    await tx
+      .insert(departmentReceipts)
+      .values({
+        departmentId: rows.find((row) => row.isDefault)!.id,
+        receipt: { operationDescription: "Restaurante", email: "venue@example.test" },
+      })
+      .onConflictDoUpdate({
+        target: departmentReceipts.departmentId,
+        set: { receipt: { operationDescription: "Restaurante", email: "venue@example.test" } },
+      });
   });
 });
 
