@@ -1288,7 +1288,6 @@ describe("setup-app", () => {
     ["legalName", "legalName"],
     ["seriesCode", "seriesCode"],
     ["rectificativeSeriesCode", "rectificativeSeriesCode"],
-    ["location.operationDescription", "operationDescription"],
   ])("sends a %s refusal back to the venue form with the field marked", async (field, key) => {
     const provision = vi
       .fn()
@@ -4721,3 +4720,29 @@ it.each([
     }
   },
 );
+
+it("routes an internal description refusal to the venue action message", async () => {
+  const provision = vi.fn().mockRejectedValue({
+    code: "setup.request_invalid",
+    params: { field: "location.operationDescription" },
+  });
+  const el = await mountSetupApp(stubApi({ provision }));
+  provisionRequest(el);
+  await flush(el);
+  const venue = await screenHost(el, "venue");
+  expect((venue as unknown as { invalidField?: string }).invalidField).toBe(
+    "location.operationDescription",
+  );
+  expect(venue.shadowRoot!.querySelector("[data-test=operationDescription]")).toBeNull();
+  const actions = venue.shadowRoot!.querySelector<
+    HTMLElement & { updateComplete: Promise<unknown> }
+  >("wt-form-actions")!;
+  await actions.updateComplete;
+  expect(actions.shadowRoot!.querySelector("[data-error]")!.textContent).toContain(
+    "500 characters",
+  );
+  expect(
+    (venue.shadowRoot!.querySelector("[data-test=next]") as HTMLElement & { disabled: boolean })
+      .disabled,
+  ).toBe(false);
+});

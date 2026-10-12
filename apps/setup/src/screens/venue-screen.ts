@@ -85,7 +85,6 @@ type FieldKey = TextField | "invoiceLocales";
 interface VenueForm {
   values: Record<TextField, string>;
   invoiceLocales: string[];
-  descriptionEdited: boolean;
   invoiceLocalesFollowAreaDefault: boolean;
 }
 
@@ -108,7 +107,6 @@ const REQUIRED_TEXT_FIELDS: readonly TextField[] = [
   "legalName",
   "taxpayerDomicile",
   "name",
-  "operationDescription",
   "addressLine1",
   "postalCode",
   "city",
@@ -242,7 +240,6 @@ export class SetupVenueScreen extends LitElement {
 
   @property({ attribute: false }) draft: DeepPartial<ProvisionBody> = {};
   @property({ attribute: false }) defaults: VenueDefaults = {};
-  #descriptionEdited = false;
 
   constructor() {
     super();
@@ -258,6 +255,13 @@ export class SetupVenueScreen extends LitElement {
       this.#jurisdiction()?.modules?.filing ??
       this.#pack()?.fiscalJurisdictions.find(({ supported }) => supported)?.modules?.filing;
     return filing === undefined ? "" : (this.defaults[filing]?.operationDescription ?? "");
+  }
+
+  #defaultsMissing(): boolean {
+    const jurisdiction =
+      this.#jurisdiction() ?? this.#pack()?.fiscalJurisdictions.find(({ supported }) => supported);
+    const filing = jurisdiction?.modules?.filing;
+    return filing !== undefined && this.defaults[filing] === undefined;
   }
 
   /** A server-side venue error that names no field, routed back by the shell and shown above
@@ -316,7 +320,6 @@ export class SetupVenueScreen extends LitElement {
     return {
       values: this.values,
       invoiceLocales: this.invoiceLocales,
-      descriptionEdited: this.#descriptionEdited,
       invoiceLocalesFollowAreaDefault: this.#invoiceLocalesFollowAreaDefault,
     };
   }
@@ -333,6 +336,7 @@ export class SetupVenueScreen extends LitElement {
     const rules = pack && receiptLanguageRules(pack, area?.code);
     const values: Record<TextField | "invoiceLocales", string | null> = {
       ...form.values,
+      operationDescription: "",
       taxId: tax?.valid ? tax.normalized : form.values.taxId,
       postalCode: postal?.valid ? postal.normalized : form.values.postalCode,
       province: area?.name ?? form.values.province,
@@ -363,7 +367,6 @@ export class SetupVenueScreen extends LitElement {
       restore: (form) => {
         this.values = form.values;
         this.invoiceLocales = form.invoiceLocales;
-        this.#descriptionEdited = form.descriptionEdited;
         this.#invoiceLocalesFollowAreaDefault = form.invoiceLocalesFollowAreaDefault;
         this.attempted = false;
       },
@@ -380,22 +383,7 @@ export class SetupVenueScreen extends LitElement {
         this.values = { ...this.values, name: demoLocation };
       }
     }
-    if (
-      !this.#descriptionEdited &&
-      this.draft.venue?.location?.operationDescription === undefined
-    ) {
-      this.values = { ...this.values, operationDescription: this.#descriptionDefault() };
-      if (changed.has("defaults") && this.#baseline?.values.country === this.values.country) {
-        this.#baseline = {
-          ...this.#baseline,
-          values: {
-            ...this.#baseline.values,
-            operationDescription: this.values.operationDescription,
-          },
-        };
-        this.#scope?.commit(this.#baseline);
-      }
-    }
+    this.values = { ...this.values, operationDescription: this.#descriptionDefault() };
     this.#baseline ??= this.#snapshot(this.#current());
     // Only when the shell hands down a NEW value: re-deriving on every update would put back a mark
     // the operator has already cleared by editing the field.
@@ -462,7 +450,6 @@ export class SetupVenueScreen extends LitElement {
     // Editing the field the server refused retires that mark: the new value has not been refused.
     if (this.serverInvalid?.key === key) this.serverInvalid = undefined;
     const value = event.detail.value;
-    if (key === "operationDescription") this.#descriptionEdited = true;
     if (key === "postalCode") {
       const pack = this.#pack();
       const validation = pack?.postalCode?.validate(value);
@@ -541,7 +528,7 @@ export class SetupVenueScreen extends LitElement {
   }
 
   #shows(key: FieldKey): boolean {
-    return !(this.#demo && DEMO_HIDDEN.has(key));
+    return key !== "operationDescription" && !(this.#demo && DEMO_HIDDEN.has(key));
   }
 
   #invalidFields(): Set<FieldKey> {
@@ -609,10 +596,6 @@ export class SetupVenueScreen extends LitElement {
   }
 
   #next(): void {
-    if (this.#demo && this.values.operationDescription === "") {
-      this.shadowRoot?.querySelector<HTMLElement>("[data-test=defaults-error]")?.focus();
-      return;
-    }
     // From the pack chosen NOW, so a country changed after the form was seeded cannot send another
     // country's demo identity.
     const identity = this.#demo ? this.#pack()?.demo : undefined;
@@ -624,6 +607,10 @@ export class SetupVenueScreen extends LitElement {
     this.serverInvalid = undefined;
     if (this.#invalidFields().size > 0) {
       void this.updateComplete.then(() => focusFirstInvalid(this.shadowRoot!));
+      return;
+    }
+    if (this.#defaultsMissing()) {
+      this.shadowRoot?.querySelector<HTMLElement>("[data-test=defaults-error]")?.focus();
       return;
     }
     const pack = this.#pack();
@@ -751,7 +738,7 @@ export class SetupVenueScreen extends LitElement {
       <p class="intro">${this.#demo ? t("venue.intro_demo") : t("venue.intro")}</p>
 
       ${
-        this.#demo && this.values.operationDescription === ""
+        this.#defaultsMissing()
           ? html`<p role="alert" tabindex="-1" data-test="defaults-error">
                 ${t("venue.defaults_not_loaded")}
               </p>
@@ -789,52 +776,51 @@ export class SetupVenueScreen extends LitElement {
         this.#demo
           ? nothing
           : html`<fieldset
-                class="locales"
-                tabindex="-1"
-                ?invalid=${errors.has("invoiceLocales")}
-                aria-invalid=${errors.has("invoiceLocales") ? "true" : "false"}
-                aria-describedby=${
-                  [
-                    ...(fixedReason === "" ? [] : ["invoice-locales-fixed"]),
-                    ...(errors.has("invoiceLocales") ? ["invoice-locales-error"] : []),
-                  ].join(" ") || nothing
-                }
-              >
-                <legend>
-                  ${t("venue.label.invoice_locales")} *
-                  <wt-help-tooltip aria-label=${t("venue.invoice_locales_help_label")}
-                    >${t("venue.invoice_locales_help")}</wt-help-tooltip
-                  >
-                </legend>
-                ${
-                  fixedReason === ""
-                    ? nothing
-                    : html`<p
-                        class="reason"
-                        id="invoice-locales-fixed"
-                        data-test="invoice-locales-fixed"
-                      >
-                        ${fixedReason}
-                      </p>`
-                }
-                ${(receipt?.choices ?? []).map(
-                  (locale) =>
-                    html`<label class="locale-option">
-                      <input
-                        type="radio"
-                        name="invoiceLocales"
-                        value=${locale}
-                        data-test=${`locale-${locale}`}
-                        .checked=${receiptLanguages.includes(locale)}
-                        ?disabled=${fixed !== undefined}
-                        @change=${(e: Event) => this.#onLocaleToggle(locale, e)}
-                      />
-                      ${RECEIPT_LANGUAGES[locale] === undefined ? locale : t(RECEIPT_LANGUAGES[locale].selectionLabel)}
-                    </label>`,
-                )}
-                ${errors.has("invoiceLocales") ? html`<p class="error" id="invoice-locales-error">${errors.get("invoiceLocales")}</p>` : nothing}
-              </fieldset>
-              ${this.#field(t("venue.label.operation_description"), "operationDescription")}`
+              class="locales"
+              tabindex="-1"
+              ?invalid=${errors.has("invoiceLocales")}
+              aria-invalid=${errors.has("invoiceLocales") ? "true" : "false"}
+              aria-describedby=${
+                [
+                  ...(fixedReason === "" ? [] : ["invoice-locales-fixed"]),
+                  ...(errors.has("invoiceLocales") ? ["invoice-locales-error"] : []),
+                ].join(" ") || nothing
+              }
+            >
+              <legend>
+                ${t("venue.label.invoice_locales")} *
+                <wt-help-tooltip aria-label=${t("venue.invoice_locales_help_label")}
+                  >${t("venue.invoice_locales_help")}</wt-help-tooltip
+                >
+              </legend>
+              ${
+                fixedReason === ""
+                  ? nothing
+                  : html`<p
+                      class="reason"
+                      id="invoice-locales-fixed"
+                      data-test="invoice-locales-fixed"
+                    >
+                      ${fixedReason}
+                    </p>`
+              }
+              ${(receipt?.choices ?? []).map(
+                (locale) =>
+                  html`<label class="locale-option">
+                    <input
+                      type="radio"
+                      name="invoiceLocales"
+                      value=${locale}
+                      data-test=${`locale-${locale}`}
+                      .checked=${receiptLanguages.includes(locale)}
+                      ?disabled=${fixed !== undefined}
+                      @change=${(e: Event) => this.#onLocaleToggle(locale, e)}
+                    />
+                    ${RECEIPT_LANGUAGES[locale] === undefined ? locale : t(RECEIPT_LANGUAGES[locale].selectionLabel)}
+                  </label>`,
+              )}
+              ${errors.has("invoiceLocales") ? html`<p class="error" id="invoice-locales-error">${errors.get("invoiceLocales")}</p>` : nothing}
+            </fieldset> `
       }
       ${this.#field(t("venue.label.address_line1"), "addressLine1")}
       ${this.#field(t("venue.label.address_line2"), "addressLine2")}

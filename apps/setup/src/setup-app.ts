@@ -612,7 +612,7 @@ export class SetupApp extends LitElement {
       const defaults = await this.api.getVenueDefaults();
       if (this.isConnected) this.venueDefaults = defaults;
     } catch {
-      // Prepare and Live can still collect an explicit description when defaults cannot be read.
+      return;
     }
   }
 

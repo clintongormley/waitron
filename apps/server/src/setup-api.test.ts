@@ -2848,6 +2848,7 @@ it("serves fiscal-owned venue defaults without exposing provider secrets", async
   expect(response.status).toBe(200);
   expect(await response.json()).toEqual({
     verifactu: { operationDescription: "Venta en establecimiento" },
+    none: { operationDescription: "" },
   });
 });
 
@@ -4018,4 +4019,12 @@ describe("POST /setup-api/reset-incomplete-adopt", () => {
       rmSync(dir, { recursive: true, force: true });
     }
   });
+});
+
+it("reports an installed fiscal slot with no description contribution as an empty bootstrap", async () => {
+  const app = new Hono();
+  mountSetup(app, { environment: "preproduction" }, noopLog);
+  const response = await app.request("/setup-api/venue-defaults");
+  expect(response.status).toBe(200);
+  expect((await response.json()).none).toEqual({ operationDescription: "" });
 });

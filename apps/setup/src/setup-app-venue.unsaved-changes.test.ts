@@ -53,7 +53,9 @@ async function mount(
   const api = {
     getDiscovery: vi.fn().mockResolvedValue({ caDownloadAvailable: false }),
     getStatus: vi.fn().mockResolvedValue({ environment: "preproduction", needs: ["venue"] }),
-    getVenueDefaults: vi.fn().mockResolvedValue({}),
+    getVenueDefaults: vi
+      .fn()
+      .mockResolvedValue({ verifactu: { operationDescription: "Delicatessen" } }),
     provision: vi.fn(),
   } as unknown as SetupApi;
   const { el, host } = await mountWidget<SetupApp>("setup-app", { api });
@@ -145,7 +147,7 @@ describe("setup venue unsaved changes", () => {
     Object.assign(el, { venueDefaults: { verifactu: { operationDescription: "Loaded default" } } });
     await el.updateComplete;
     await venue.updateComplete;
-    expect(field(venue, "operationDescription").value).toBe("Loaded default");
+    expect(field(venue, "operationDescription")).toBeNull();
     expect(leaveCoordinatorFor(venue)!.isDirty([venue])).toBe(false);
     expect(unload()).toBe(false);
     back(venue);
@@ -166,14 +168,13 @@ describe("setup venue unsaved changes", () => {
     await choose(el, "discard");
     await expect.poll(() => (el as unknown as State).screen).toBe("admin");
     expect(field(venue, "city").value).toBe("Madrid");
-    expect(field(venue, "operationDescription").value).toBe("Loaded default");
+    expect(field(venue, "operationDescription")).toBeNull();
   });
   it.each([
     ["taxId", "A58818501"],
     ["legalName", "New legal name"],
     ["taxpayerDomicile", "New fiscal address"],
     ["name", "New venue"],
-    ["operationDescription", "New activity"],
     ["addressLine1", "New street"],
     ["addressLine2", "Upstairs"],
     ["postalCode", "08001"],

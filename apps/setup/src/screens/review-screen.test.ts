@@ -254,10 +254,6 @@ describe("setup-review-screen", () => {
       ["summary-seriesCode", "Every invoice number starts with this: FS-000001, FS-000002…"],
       ["summary-rectificativeSeriesCode", "Credit notes use this separate numbering series."],
       [
-        "summary-operationDescription",
-        "This description appears on invoices for sales at this location.",
-      ],
-      [
         "summary-cert",
         "The certificate lets Waitron submit live invoice records to the tax agency.",
       ],
@@ -390,7 +386,7 @@ it("shows the fixed demo identity's note and full location details for review", 
   expect(text(el, "[data-test=demo-defaults]")).toBe(
     "The legal name and tax ID below are Waitron's fixed demo values. They are made up. Waitron also supplied the other business and invoice defaults below. Demo does not submit invoices to the tax agency.",
   );
-  expect(text(el, "[data-test=summary-operationDescription]")).toBe("Venta en establecimiento");
+  expect(q(el, "[data-test=summary-operationDescription]")).toBeNull();
   expect(q(el, "[data-test=summary-tillName]")).toBeNull();
   expect(el.shadowRoot!.textContent).not.toMatch(/\btill\b/i);
   expect(text(el, "[data-test=summary-address]")).toContain("Calle Mayor 1");
@@ -452,4 +448,12 @@ describe("setup-review-screen in Spanish", () => {
     expect(text(el, "h1")).toBe("Revisar y configurar");
     expect(text(el, "[data-test=summary-cert]")).toBe("adjunto");
   });
+});
+
+it("does not present the internal bootstrap as the venue sales description", async () => {
+  const draft = everyRowDraft("live");
+  draft.venue!.location!.operationDescription = "Internal bootstrap";
+  const { el } = await mountWidget<SetupReviewScreen>("setup-review-screen", { draft });
+  expect(q(el, "[data-test=summary-operationDescription]")).toBeNull();
+  expect(el.shadowRoot!.textContent).not.toContain("Internal bootstrap");
 });
