@@ -211,6 +211,10 @@ export function refusalOf(error: unknown, changes = true): PayRefusal {
   };
 }
 
+export function isPaymentInFlight(error: unknown): boolean {
+  return (error as { code?: unknown } | undefined)?.code === "order.payment_in_flight";
+}
+
 export function isTakePaymentRefusal(error: unknown): boolean {
   const refused = error as { code?: unknown; permission?: unknown } | undefined;
   return (

@@ -693,6 +693,160 @@ describe("bills already presented", () => {
   });
 });
 
+describe("a presented bill whose card is in flight", () => {
+  function pay(billId: string) {
+    return send(venue.app, venue.cookie, "POST", "/api/pay", { id: billId, lines: [] });
+  }
+
+  /** Everything a departure could write, across the venue. */
+  function snapshot() {
+    return venue.db.all(sql`
+      select
+        (select count(*) from sales) as sales,
+        (select count(*) from registros_facturacion) as registros,
+        (select count(*) from sale_settlements) as settlements,
+        (select count(*) from unpaid_departures) as departures,
+        (select count(*) from print_jobs) as printJobs
+    `)[0];
+  }
+
+  function cardPaymentsOf(billId: string) {
+    return venue.db.all<{ state: string; saleId: string | null }>(sql`
+      select state, sale_id as saleId from payments
+      where working_order_id = ${billId} order by created_at`);
+  }
+
+  describe.each([
+    { label: "with an invoice", issued: true },
+    { label: "with no invoice", issued: false },
+  ])("$label", ({ issued }) => {
+    const presented = (party: { partyId: string; tableId: string }) =>
+      placedCounterBillMovedTo(venue, issued ? ticketThenPayZone : prepayZone, party, issued);
+
+    it("refuses a departure while the bill's card is at the reader, writing nothing, and the card then pays the bill", async () => {
+      const party = await seatedWith(venue, "Caña");
+      const placedId = await presented(party);
+      const salesBefore = await salesOf(placedId);
+      const calls = venue.card.collectCalls.length;
+      const release = venue.card.holdNextCollect();
+      let paying: ReturnType<typeof pay> | undefined;
+      let observed;
+      try {
+        paying = pay(placedId);
+        await expect.poll(() => venue.card.collectCalls.length).toBe(calls + 1);
+        const before = snapshot();
+        const revision = revisionOf(party.partyId);
+        const answer = await depart(party.partyId, {
+          expectedPartyRevision: revision,
+          reason: REASON,
+        });
+        observed = {
+          answer,
+          before,
+          after: snapshot(),
+          revision,
+          revisionAfter: revisionOf(party.partyId),
+          sales: await salesOf(placedId),
+          departures: await departuresOf(placedId),
+          status: await statusOf(venue, placedId),
+        };
+      } finally {
+        release();
+      }
+      const paid = await paying;
+
+      expect(observed.answer).toMatchObject({
+        status: 409,
+        json: { code: "order.payment_in_flight", params: { workingOrderId: placedId } },
+      });
+      expect(observed.after).toEqual(observed.before);
+      expect(observed.revisionAfter).toBe(observed.revision);
+      expect(observed.sales).toEqual(salesBefore);
+      expect(observed.departures).toEqual([]);
+      expect(observed.status).toBe("placed");
+      await expectNothingWritten(party.partyId, party.tabId);
+      expect(paid.status).toBe(200);
+      expect(paid.json.outcome).toBe("captured");
+      const sales = await salesOf(placedId);
+      expect(sales).toHaveLength(1);
+      expect(sales[0]!.settledAt).not.toBeNull();
+      expect(cardPaymentsOf(placedId)).toEqual([{ state: "captured", saleId: sales[0]!.id }]);
+      expect(await statusOf(venue, placedId)).toBe("settled");
+    });
+
+    it("refuses a departure while a card captured for the bill is not yet on a sale, writing nothing", async () => {
+      const party = await seatedWith(venue, "Caña");
+      const placedId = await presented(party);
+      const salesBefore = await salesOf(placedId);
+      venue.card.crashNextCollect("captured");
+      expect((await pay(placedId)).status).toBe(500);
+      const before = snapshot();
+      const revision = revisionOf(party.partyId);
+
+      const answer = await depart(party.partyId, {
+        expectedPartyRevision: revision,
+        reason: REASON,
+      });
+
+      expect(answer).toMatchObject({
+        status: 409,
+        json: { code: "order.payment_in_flight", params: { workingOrderId: placedId } },
+      });
+      expect(snapshot()).toEqual(before);
+      expect(revisionOf(party.partyId)).toBe(revision);
+      expect(await salesOf(placedId)).toEqual(salesBefore);
+      expect(await departuresOf(placedId)).toEqual([]);
+      expect(await statusOf(venue, placedId)).toBe("placed");
+      await expectNothingWritten(party.partyId, party.tabId);
+    });
+
+    it("records the departure after the bill's card was declined", async () => {
+      const party = await seatedWith(venue, "Caña");
+      const placedId = await presented(party);
+      venue.card.failNextCollect();
+      expect(await pay(placedId)).toEqual({ status: 200, json: { outcome: "declined" } });
+
+      const answer = await depart(party.partyId, {
+        expectedPartyRevision: revisionOf(party.partyId),
+        reason: REASON,
+      });
+
+      expect(answer.status).toBe(200);
+      const [invoiced] = await salesOf(placedId);
+      expect(invoiced).toMatchObject({ total: 1800, settledAt: null });
+      expect(await departuresOf(placedId)).toEqual([
+        expect.objectContaining({ saleId: invoiced!.id, amount: 1800 }),
+      ]);
+      expect(cardPaymentsOf(placedId)).toEqual([{ state: "failed", saleId: null }]);
+      expect((await partyState(party.partyId)).state).toBe("closed");
+    });
+  });
+  it("refuses a departure while a card captured for the party's second presented bill is not yet on a sale, writing nothing", async () => {
+    const party = await seatedWith(venue, "Caña");
+    const firstId = await placedCounterBillMovedTo(venue, ticketThenPayZone, party, true);
+    const secondId = await placedCounterBillMovedTo(venue, prepayZone, party);
+    venue.card.crashNextCollect("captured");
+    expect((await pay(secondId)).status).toBe(500);
+    const before = snapshot();
+    const revision = revisionOf(party.partyId);
+
+    const answer = await depart(party.partyId, { expectedPartyRevision: revision, reason: REASON });
+
+    expect(answer).toMatchObject({
+      status: 409,
+      json: { code: "order.payment_in_flight", params: { workingOrderId: secondId } },
+    });
+    expect(snapshot()).toEqual(before);
+    expect(revisionOf(party.partyId)).toBe(revision);
+    for (const billId of [party.tabId, firstId, secondId]) {
+      expect(await departuresOf(billId)).toEqual([]);
+    }
+    expect(await statusOf(venue, firstId)).toBe("placed");
+    expect(await statusOf(venue, secondId)).toBe("placed");
+    await expectNothingWritten(party.partyId, party.tabId);
+  });
+});
+
 describe("a bill that owes nothing", () => {
   it("settles a presented bill whose credit note brought it to nothing, so no sale is left owing nothing", async () => {
     const party = await seatedWith(venue, "Botella tinto");

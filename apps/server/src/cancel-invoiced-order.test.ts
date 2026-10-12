@@ -1491,38 +1491,6 @@ describe("cancelling an invoiced order while a card is paying it", () => {
     expect(await creditsOf(original.id)).toEqual([]);
   });
 
-  it("refuses while either of two cards paying the order at once is at its reader", async () => {
-    const id = await placed([{ name: "Caña", quantity: "1" }]);
-    const original = await invoiceOf(id);
-    const first = new FakePaymentProvider(venue.db);
-    const second = new FakePaymentProvider(venue.db);
-    const releaseFirst = first.holdNextCollect();
-    first.failNextCollect();
-    const releaseSecond = second.holdNextCollect();
-    const pay = (provider: FakePaymentProvider) =>
-      payWorkingOrderIntegrated(
-        { db: venue.db, backend: venue.backend, clock: venue.clock, provider },
-        venue.cfg,
-        { id, lines: [] },
-      );
-    const firstPaying = pay(first);
-    await expect.poll(() => first.collectCalls.length).toBe(1);
-    const secondPaying = pay(second);
-    await expect.poll(() => second.collectCalls.length).toBe(1);
-
-    releaseFirst();
-    const firstPaid = await firstPaying;
-    const refused = await observeRefusal(id, cancel(id));
-    releaseSecond();
-    const secondPaid = await secondPaying;
-
-    expect(firstPaid.outcome).toBe("declined");
-    expectUnwritten(refused, { status: 409, code: "order.payment_in_flight" });
-    expect(secondPaid.outcome).toBe("captured");
-    expect(await statusOf(venue, id)).toBe("settled");
-    expect(await creditsOf(original.id)).toEqual([]);
-  });
-
   it("credits the invoice once a declined card has left the reader", async () => {
     const id = await placed([{ name: "Caña", quantity: "1" }]);
     const original = await invoiceOf(id);

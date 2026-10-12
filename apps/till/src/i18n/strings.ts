@@ -870,6 +870,7 @@ export const en = {
   "pin.invalid": "Wrong PIN, try again",
   "pin.throttled": "Too many wrong PINs. Wait a moment, then try again",
   "sale.error": "Could not complete the sale, try again",
+  "sale.payment_in_flight": "A card payment for this order is in progress. Wait for it to finish.",
   // A PERMANENT refusal, unlike `sale.error`: retrying cannot work. It must never say nothing was
   // charged, because a settle path can reach it after a card was already charged on a terminal.
   "sale.refused":
@@ -2031,6 +2032,7 @@ export const es: Record<StringKey, string> = {
   "pin.invalid": "PIN incorrecto, inténtalo de nuevo",
   "pin.throttled": "Demasiados PIN incorrectos. Espera un momento y vuelve a intentarlo",
   "sale.error": "No se pudo completar la venta, inténtalo de nuevo",
+  "sale.payment_in_flight": "Se está cobrando este pedido con tarjeta. Espera a que termine.",
   "sale.refused":
     "Esta venta no se puede registrar en Hacienda. La caja no ha registrado nada y reintentar no servirá de nada: hay que corregir los datos de facturación del local, así que avisa a quien configuró esta caja. Si ya has cobrado con tarjeta en el datáfono, devuelve el importe ahí.",
   "take_payment.not_permitted": "No tienes permiso para cobrar",

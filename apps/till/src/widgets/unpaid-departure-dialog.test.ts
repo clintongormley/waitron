@@ -152,6 +152,13 @@ describe("till-unpaid-departure-dialog: refusals", () => {
     expect(actions(el).error).toBe("");
   });
 
+  it("says a card payment is in progress for order.payment_in_flight, beside no field", async () => {
+    const el = await mount({ refusal: { code: "order.payment_in_flight" } });
+
+    expect(actions(el).error).toBe(t("sale.payment_in_flight"));
+    expect(reason(el).error).toBe("");
+  });
+
   it("says a departure that got no answer may have been recorded", async () => {
     const el = await mount({ refusal: { code: "network" } });
 

@@ -42,6 +42,7 @@ import {
   saleId as brandSaleId,
   seriesId as brandSeriesId,
 } from "@waitron/shared";
+import { FakePaymentProvider } from "@waitron/payments/src/testing/fake-provider.js";
 import {
   insertAcceptedOffline,
   insertAttempting,
@@ -77,7 +78,7 @@ import {
   payWorkingOrderIntegratedOrchestration as payWorkingOrderIntegrated,
   releaseStalePaymentAttempts,
 } from "./till-sale.js";
-import type { IntegratedPayDeps } from "./till-sale.js";
+import type { IntegratedPayDeps, IntegratedPayOutcome } from "./till-sale.js";
 import { decodeTicket, opensDrawer } from "./testing/decode-ticket.js";
 import { offerProducts } from "./testing/zone-offers.js";
 import "./errors.js";
@@ -238,8 +239,6 @@ function integratedDeps(
   return { deps: { db: app, backend, clock, provider, readerRef: "reader_1" }, client };
 }
 
-/** A provider that runs `onCollect` (to simulate a concurrent settle) then returns a canned result —
- * for the finalize-time backstop tests, where the point is the DB state at P3, not the reader. */
 function cannedProvider(
   onCollect: () => Promise<void>,
   state: PaymentResultState,
@@ -265,6 +264,42 @@ function cannedProvider(
     refund: () => Promise.reject(new Error("cannedProvider: refund unused")),
     partialRefund: () => Promise.reject(new Error("cannedProvider: partialRefund unused")),
   };
+}
+
+/**
+ * A reader that writes its captured row, then, before its own pay's P3 runs, has a second Pay of the
+ * same order find that charge unfiled and file it (`recover` / `recover-settle`). `second()` is that
+ * Pay's outcome; `reader` is the client it would have asked.
+ */
+function chargedThenFiledBySecondPay(cfg: DeviceRequestConfig) {
+  const { deps, client: reader } = integratedDeps(cfg, suite.db);
+  let second: IntegratedPayOutcome | undefined;
+  const provider: PaymentProvider = {
+    ...cannedProvider(() => Promise.resolve(), "captured"),
+    async collect(params): Promise<PaymentResult> {
+      const paymentRef = `pi-ref-${randomUUID()}`;
+      const settledAt = new Date();
+      await withTransaction(suite.db, (tx) =>
+        insertCapturedPayment(tx, {
+          origin: params.origin,
+          workingOrderId: params.workingOrderId,
+          provider: "stripe",
+          paymentRef,
+          amount: params.amount,
+          settledAt,
+        }),
+      );
+      second = await payWorkingOrderIntegrated(deps, cfg, { id: params.workingOrderId, lines: [] });
+      return {
+        provider: "stripe",
+        paymentRef,
+        state: "captured",
+        amount: params.amount,
+        settledAt,
+      };
+    },
+  };
+  return { provider, reader, second: () => second };
 }
 
 // --- verification reads (not part of the behaviour under test) -----------------------------------
@@ -1125,10 +1160,7 @@ describe("payWorkingOrderIntegrated (split-transaction integrated pay, ordering 
     expect(client.lastCreateIntent).toBeUndefined();
   });
 
-  it("concurrent winner: a sale filed between collect and finalize makes P3 REPLAY, filing nothing (duplicate backstop)", async () => {
-    // A placed order: its card collect writes no in-flight mark, so a cash collect at another till
-    // can still settle it while the reader runs. On an open order that cash pay is refused (plan
-    // D22), which the D22 cases below cover.
+  it("a second Pay that files the first card's charge before the first finalises makes P3 REPLAY it, filing nothing (duplicate backstop)", async () => {
     const { cfg, cafe } = await modeVenue("ticket_then_pay");
     const app = suite.db;
     const id = randomUUID();
@@ -1139,27 +1171,29 @@ describe("payWorkingOrderIntegrated (split-transaction integrated pay, ordering 
     });
     await placeOrder({ db: suite.db, backend, clock }, cfg, id, OPERATOR);
 
-    // Mid-`collect` (after P1 committed, before P3) a concurrent cash collect settles this id. P3's
-    // `recordSale` is refused by `sales_working_order_id_key` and replays the winner's ticket.
-    const provider = cannedProvider(async () => {
-      await collectOrder({ db: suite.db, backend, clock }, cfg, {
-        id,
-        lines: [],
-        tender: { method: "cash", amount: "5.00" },
-      });
-    }, "captured");
+    // The second Pay files the sale from the first card's charge; the first's `recordSale` is then
+    // refused by `sales_working_order_id_key` and replays that sale's ticket.
+    const { provider, reader, second } = chargedThenFiledBySecondPay(cfg);
     const deps: IntegratedPayDeps = { db: app, backend, clock, provider };
 
     const out = await payWorkingOrderIntegrated(deps, cfg, { id, lines: [] });
 
+    const filed = second();
+    expect(filed?.outcome).toBe("captured");
+    if (filed?.outcome !== "captured") throw new Error("unreachable");
+    expect(reader.lastCreateIntent).toBeUndefined();
     expect(out.outcome).toBe("captured");
     if (out.outcome !== "captured") throw new Error("unreachable");
-    // A replay describes the same payment; it does not dispense the recorded change again.
+    expect(out.ticket.invoiceNumber).toBe(filed.ticket.invoiceNumber);
     expect(out.ticket.total).toBe("1.50");
-    expect(out.ticket.tender).toEqual({ method: "cash", change: "3.50" });
+    expect(out.ticket.tender.method).toBe("card");
     expect(await saleCount(id)).toBe(1);
     expect(await registroCount(id)).toBe(1);
-    expect(await tendersFor(id)).toEqual([{ method: "cash", amount: "1.50", tipAmount: "0.00" }]);
+    expect(await orderState(id)).toEqual({ status: "settled", settledAtSet: true });
+    expect(await tendersFor(id)).toEqual([{ method: "card", amount: "1.50", tipAmount: "0.00" }]);
+    expect(await paymentsFor(id)).toEqual([
+      { provider: "stripe", state: "captured", externalRef: null, linkedToSale: true },
+    ]);
   });
 
   it("a capture whose payment cannot be associated rolls back the whole sale (P3 is atomic)", async () => {
@@ -1221,7 +1255,7 @@ describe("payWorkingOrderIntegrated (split-transaction integrated pay, ordering 
   });
 });
 
-// A captured payment with no sale (P2 committed, P3 never ran) must be finished WITHOUT charging
+// A captured payment with no sale (P2 committed, P3 has not run) must be finished WITHOUT charging
 // again. The state is seeded directly, as the row `collect` leaves behind.
 describe("payWorkingOrderIntegrated — capture idempotency (recovery window + concurrency)", () => {
   /** Seed an OPEN order with a locked café line and a captured stripe payment whose `sale_id` is
@@ -1516,9 +1550,7 @@ describe("payWorkingOrderIntegrated — capture idempotency (recovery window + c
     expect(await rawPaymentsFor(id)).toEqual([{ state: "captured", hasSale: false }]);
   });
 
-  it("two concurrent pays for one placed order file ONE sale; the loser replays (one sale/settlement)", async () => {
-    // Placed, because a second card pay of an OPEN order is refused while the first runs (plan
-    // D22); a placed order's collect writes no mark, so both still reach the reader.
+  it("two concurrent pays for one placed order: one is captured, the other is refused before asking its reader, and ONE sale is filed", async () => {
     const { cfg, cafe } = await modeVenue("ticket_then_pay");
     const id = randomUUID();
     await parkOrder({ db: suite.db }, cfg, {
@@ -1529,27 +1561,25 @@ describe("payWorkingOrderIntegrated — capture idempotency (recovery window + c
     });
     await placeOrder({ db: suite.db, backend, clock }, cfg, id, OPERATOR);
 
-    // Two orchestrations, each with its own reader, pay the SAME placed order, interleaved by
-    // `Promise.allSettled`. P1 commits before `collect`, so both capture; P3's duplicate backstop
-    // files exactly one sale and the loser replays.
-    const { deps: depsA } = integratedDeps(cfg, suite.db);
-    const { deps: depsB } = integratedDeps(cfg, suite.db);
+    const readers = [new FakePaymentProvider(suite.db), new FakePaymentProvider(suite.db)];
+    const releases = readers.map((reader) => reader.holdNextCollect());
     const req = { id, lines: [] };
+    const paying = Promise.allSettled(
+      readers.map((provider) =>
+        payWorkingOrderIntegrated({ db: suite.db, backend, clock, provider }, cfg, req),
+      ),
+    );
+    await expect.poll(() => readers.map((reader) => reader.collectCalls.length)).toContain(1);
+    const winner = readers.findIndex((reader) => reader.collectCalls.length === 1);
+    releases.forEach((release) => release());
+    const settled = await paying;
 
-    const [a, b] = await Promise.allSettled([
-      payWorkingOrderIntegrated(depsA, cfg, req),
-      payWorkingOrderIntegrated(depsB, cfg, req),
-    ]);
-
-    if (a.status !== "fulfilled" || b.status !== "fulfilled") {
-      throw new Error(`both pays should settle: a=${JSON.stringify(a)} b=${JSON.stringify(b)}`);
-    }
-    expect(a.value.outcome).toBe("captured");
-    expect(b.value.outcome).toBe("captured");
-    if (a.value.outcome !== "captured" || b.value.outcome !== "captured") {
-      throw new Error("unreachable");
-    }
-    expect(a.value.ticket.invoiceNumber).toBe(b.value.ticket.invoiceNumber);
+    expect(readers[1 - winner]!.collectCalls).toHaveLength(0);
+    expect(settled[winner]).toMatchObject({ status: "fulfilled", value: { outcome: "captured" } });
+    expect(settled[1 - winner]).toMatchObject({
+      status: "rejected",
+      reason: { code: "order.payment_in_flight", params: { workingOrderId: id } },
+    });
     expect(await saleCount(id)).toBe(1);
     expect(await registroCount(id)).toBe(1);
   });
@@ -1678,32 +1708,33 @@ describe("payWorkingOrderIntegrated — already-issued bill settlement", () => {
     expect(await rawPaymentsFor(id)).toEqual([{ state: "failed", hasSale: false }]);
   });
 
-  it("a concurrent collect that settles the invoice first makes finalizeSettle REPLAY via sale.already_settled", async () => {
+  it("a second Pay that settles the invoice from the first card's charge before the first finalises makes finalizeSettle REPLAY via sale.already_settled", async () => {
     const { cfg, cafe } = await modeVenue("ticket_then_pay");
     const app = suite.db;
     const { id } = await placedIssuedBill(cfg, cafe);
 
-    // Mid-`collect` (after P1, before P3) a concurrent cash collect settles the invoice. P3's
-    // `settleSale` refuses with `sale.already_settled`, and this replays rather than settling twice.
-    const provider = cannedProvider(async () => {
-      await collectOrder({ db: suite.db, backend, clock }, cfg, {
-        id,
-        lines: [],
-        tender: { method: "cash", amount: "1.50" },
-      });
-    }, "captured");
+    // The second Pay settles the invoice from the first card's charge; the first's `settleSale`
+    // then refuses with `sale.already_settled`, and it replays rather than settling twice.
+    const { provider, reader, second } = chargedThenFiledBySecondPay(cfg);
     const deps: IntegratedPayDeps = { db: app, backend, clock, provider };
 
     const out = await payWorkingOrderIntegrated(deps, cfg, { id, lines: [] });
 
+    const settled = second();
+    expect(settled?.outcome).toBe("captured");
+    if (settled?.outcome !== "captured") throw new Error("unreachable");
+    expect(reader.lastCreateIntent).toBeUndefined();
     expect(out.outcome).toBe("captured");
     if (out.outcome !== "captured") throw new Error("unreachable");
+    expect(out.ticket.invoiceNumber).toBe(settled.ticket.invoiceNumber);
     expect(out.ticket.total).toBe("1.50");
-    // Replayed the cash winner's settlement; the integrated pay settled nothing of its own.
     expect(await saleCount(id)).toBe(1);
     expect(await registroCount(id)).toBe(1);
     expect(await orderState(id)).toEqual({ status: "settled", settledAtSet: true });
-    expect(await tendersFor(id)).toEqual([{ method: "cash", amount: "1.50", tipAmount: "0.00" }]);
+    expect(await tendersFor(id)).toEqual([{ method: "card", amount: "1.50", tipAmount: "0.00" }]);
+    expect(await paymentsFor(id)).toEqual([
+      { provider: "stripe", state: "captured", externalRef: null, linkedToSale: true },
+    ]);
   });
 
   it("a settle whose payment cannot be associated rolls back — the invoice stays OUTSTANDING (P3 is atomic)", async () => {

@@ -603,7 +603,8 @@ old-chain evidence and its adviser answer. Independent queue items may proceed u
     `apps/server/src/cancel-invoiced-order.test.ts`. No route issues a credit note other than this
     one.
   - **The credit note is not printed** for the customer (asesor Q32 (b)).
-  - **A placed order with no invoice is not checked against stored card payments.** Its cancel
+  - **A placed order with no invoice is not checked against stored card payments when it is
+    cancelled.** Its cancel
     sees a card running at the reader in this process, but not a stored payment its provider has
     not resolved, nor one captured and not yet filed; the cancel had no payment check at all
     before C126.

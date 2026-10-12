@@ -10164,6 +10164,37 @@ describe("till-app", () => {
       expect(ticket(el)).toBeNull();
     });
 
+    it("keeps Find a bill open saying a card payment is in progress when refused order.payment_in_flight", async () => {
+      const { el } = await mountApp({
+        collectOrder: vi.fn().mockRejectedValue({
+          code: "order.payment_in_flight",
+          status: 409,
+          workingOrderId: "wo-debt",
+        }),
+      });
+      await toCounter(el);
+      el.shadowRoot!.querySelector<HTMLElement>("till-tab-shell")!
+        .shadowRoot!.querySelector<HTMLElement>(".find-bill")!
+        .click();
+      await el.updateComplete;
+      const dialog = el.shadowRoot!.querySelector("till-find-bill-dialog")!;
+      dialog.dispatchEvent(
+        new CustomEvent("find-bill-pay", {
+          detail: {
+            workingOrderId: "wo-debt",
+            tender: { method: "cash", amount: "30.00" },
+            invoiced: true,
+          },
+          bubbles: true,
+          composed: true,
+        }),
+      );
+      await flush(el);
+      expect(el.shadowRoot!.querySelector("till-find-bill-dialog")).toBe(dialog);
+      expect(dialog.error).toBe("sale.payment_in_flight");
+      expect(ticket(el)).toBeNull();
+    });
+
     it("tells the operator when Find a bill collection is refused for payment permission", async () => {
       const { el } = await mountApp({
         collectOrder: vi.fn().mockRejectedValue({
@@ -10262,6 +10293,31 @@ describe("till-app", () => {
 
       const banner = el.shadowRoot!.querySelector('[role="alert"]')!;
       expect(banner.textContent).toContain(t("take_payment.not_permitted"));
+      expect(banner.textContent).not.toContain(t("sale.error"));
+      expect(tenderPay(el).stage).toBe("collect");
+    });
+
+    it("collect-order: says a card payment is in progress when refused order.payment_in_flight", async () => {
+      const { el } = await mountApp({
+        zonePolicy: { serviceMode: "ticket_then_pay" },
+        getTill: vi.fn().mockResolvedValue({ ...till, orderFlow: "ticket_then_pay" }),
+        collectOrder: vi.fn().mockRejectedValue({
+          code: "order.payment_in_flight",
+          status: 409,
+          workingOrderId: "wo-1",
+        }),
+      });
+      const c = await toCounter(el);
+      c.store.addProduct(cafe, "2");
+      await el.updateComplete;
+      emit(c, "place-order");
+      await flush(el);
+
+      emit(counter(el)!, "collect-order", { method: "cash", amount: "5" });
+      await flush(el);
+
+      const banner = el.shadowRoot!.querySelector('[role="alert"]')!;
+      expect(banner.textContent).toContain(t("sale.payment_in_flight"));
       expect(banner.textContent).not.toContain(t("sale.error"));
       expect(tenderPay(el).stage).toBe("collect");
     });
@@ -14260,7 +14316,11 @@ describe("a counter pay, place or hold refused for a reason the operator can act
     "product.unavailable",
     "product.not_sold_separately",
   ]) {
-    it.each(actions)(
+    // A refused reader card says a card payment is in progress instead; its own case follows.
+    const shown = actions.filter(
+      ([type]) => code !== "order.payment_in_flight" || type !== "collect-card",
+    );
+    it.each(shown)(
       `${code}: %s shows the code's own message, not the generic one`,
       async (type, detail, method, orderFlow, generic) => {
         const { el } = await mountApp({
@@ -14306,6 +14366,24 @@ describe("a counter pay, place or hold refused for a reason the operator can act
       expect(c.store.lines).toHaveLength(2);
     });
   }
+
+  it("order.payment_in_flight: a refused reader card says a card payment is in progress", async () => {
+    const { el } = await mountApp({
+      pay: vi.fn().mockRejectedValue({ code: "order.payment_in_flight", status: 409 }),
+    });
+    const c = await toCounter(el);
+    c.store.addProduct(cafe, "1");
+    await el.updateComplete;
+
+    emit(c, "collect-card", {});
+    await flush(el);
+
+    const banner = el.shadowRoot!.querySelector('[role="alert"]')!;
+    expect(banner.textContent).toContain(t("sale.payment_in_flight"));
+    expect(banner.textContent).not.toContain(codeMessage("order.payment_in_flight"));
+    expect(banner.textContent).not.toContain(t("sale.error"));
+    expect(c.store.lines).toHaveLength(1);
+  });
 
   it("clears the coded message when the next action starts", async () => {
     const recordSale = vi

@@ -300,10 +300,12 @@ declare module "@waitron/shared" {
      * it. Also a cancel of a PLACED order whose invoice a card payment is paying: one its provider
      * has not resolved, or one captured or accepted offline that no sale records yet
      * (`ordersWithUnfiledPayment`); or a cancel of any placed order while an integrated card
-     * collection of it runs in this process (`paymentAttemptIsLive`). Also a request to set a placed
-     * order's invoice choice or receipt language, or a different receipt language sent with a pay
-     * or collect of it, while such a payment or collection exists, invoice or none
-     * (`refusePlacedPaymentInFlight`). The caller waits for the payment to settle or fail.
+     * collection of it runs in this process (`paymentAttemptIsLive`). Also, while such a payment or
+     * collection exists (`refusePlacedPaymentInFlight`): a collect of a placed order, an unpaid
+     * departure recorded for its party, and a card payment (`/api/pay`) of it other than one that
+     * files a card already charged, invoice or none; and setting the invoice choice or receipt
+     * language of a placed order with no invoice yet. The caller waits for the payment to settle or
+     * fail.
      */
     "order.payment_in_flight": { workingOrderId: string };
     /**

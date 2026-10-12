@@ -463,18 +463,15 @@ function refuseUnavailableInvoiceRequest(invoiceType: unknown, recipient: unknow
  * Store the receipt language a pay request sent on an existing order that has no sale yet, as its
  * own update one revision on: `working_orders_enforce_transition` refuses a placed order's language
  * changing in the update that settles it. `order` is the row as the caller read it in this
- * transaction, with nothing written to it since. A different language is refused while another
- * card payment of a placed order is underway, since that payment files in the stored one.
+ * transaction, with nothing written to it since.
  */
 async function storeSentReceiptLanguage(
-  db: Database,
   tx: Transaction,
   workingOrderId: string,
   order: { status: string; revision: number; receiptLocale: string | null },
   language: string | undefined,
 ): Promise<void> {
   if (language === undefined || order.receiptLocale === language) return;
-  if (order.status === "placed") await refusePlacedPaymentInFlight(db, tx, workingOrderId);
   await tx
     .update(workingOrders)
     .set({ receiptLocale: language, revision: order.revision + 1 })
@@ -643,7 +640,7 @@ async function runPayWorkingOrder(
           },
         });
       } else {
-        await storeSentReceiptLanguage(deps.db, tx, req.id, locked, req.receiptLanguage);
+        await storeSentReceiptLanguage(tx, req.id, locked, req.receiptLanguage);
         order = await priceStoredOrderForIssuance(tx, req.id);
       }
 
@@ -968,14 +965,15 @@ async function readOutstandingSaleForOrder(
  *  - P3 (tx B). File or settle the sale, associate the captured payment and settle the order,
  *    atomically.
  *
- * P1's serialisation ends at its own commit, so two pays for one id can both pass P1 with the order
- * unsettled and both reach P3 — which is why `finalizeCapture` and `finalizeSettle` each keep a
- * duplicate backstop, while `finalizeRecovery`, `finalizeSettleRecovery`, the `owes-nothing`
- * settlement in P1 and `collectOrder` (one transaction end to end) need none.
+ * A second Pay on the same provider that arrives after this payment's charge is written and before
+ * its P3 runs takes the `recover` / `recover-settle` branch and files that charge itself — which is
+ * why `finalizeCapture` and `finalizeSettle` each keep a duplicate backstop, while
+ * `finalizeRecovery`, `finalizeSettleRecovery`, the `owes-nothing` settlement in P1 and
+ * `collectOrder` (one transaction end to end) need none.
  *
  * P1's result:
  *  - `replay` — already `settled`; return the stored ticket, file nothing.
- *  - `recover` / `recover-settle` — a captured payment with no sale (P2 committed, P3 never ran).
+ *  - `recover` / `recover-settle` — a captured payment with no sale (P2 committed, P3 has not run).
  *    Finish it WITHOUT charging again: file a sale, or settle the already-issued invoice when there is
  *    one, since a second `recordSale` would collide with it.
  *  - `owes-nothing` — a sale was already issued and its corrections leave nothing owed, or there is
@@ -1001,29 +999,15 @@ async function runIntegratedPay(
   admit: WriteAdmission,
 ): Promise<IntegratedPayOutcome> {
   const live = liveAttemptsOf(deps.db);
-  // The mark this call wrote, once P1 has written it; unregistered however the call ends.
-  let marked: string | null = null;
-  let heldPlaced = false;
+  // This call's entry in the live map, once P1 has registered it; unregistered however the call ends.
+  let held: string | null = null;
   try {
-    return await payIntegrated(
-      deps,
-      cfg,
-      req,
-      operatorId,
-      live,
-      admit,
-      (attemptAt) => {
-        marked = attemptAt;
-        live.set(req.id, attemptAt);
-      },
-      () => {
-        heldPlaced = true;
-        holdPlacedAttempt(deps.db, req.id);
-      },
-    );
+    return await payIntegrated(deps, cfg, req, operatorId, live, admit, (entry) => {
+      held = entry;
+      live.set(req.id, entry);
+    });
   } finally {
-    if (marked !== null && live.get(req.id) === marked) live.delete(req.id);
-    if (heldPlaced) releasePlacedAttempt(deps.db, req.id);
+    if (held !== null && live.get(req.id) === held) live.delete(req.id);
   }
 }
 
@@ -1034,8 +1018,7 @@ async function payIntegrated(
   operatorId: string | undefined,
   live: ReadonlyMap<string, string>,
   admit: WriteAdmission,
-  onMarked: (attemptAt: string) => void,
-  onPlacedCollect: () => void,
+  onLive: (entry: string) => void,
 ): Promise<IntegratedPayOutcome> {
   // ---- P1 (tx A) ----
   const prepared = await withTransaction(deps.db, async (tx) => {
@@ -1080,7 +1063,7 @@ async function payIntegrated(
       await refuseBillWithPayments(tx, req.id);
       const outstanding = await readOutstandingSaleForOrder(tx, req.id);
 
-      // A captured payment with no sale: P2 committed but P3 never ran. Driving `collect` again
+      // A captured payment with no sale: P2 committed but P3 has not run. Driving `collect` again
       // would charge the card a SECOND time.
       const captured = await findCapturedPaymentForWorkingOrder(tx, {
         provider: deps.provider.provider,
@@ -1092,6 +1075,8 @@ async function payIntegrated(
           : { kind: "recover" as const, captured };
       }
 
+      if (locked.status === "placed") await refusePlacedPaymentInFlight(deps.db, tx, [req.id]);
+
       if (outstanding !== undefined) {
         if (compareDecimal(outstanding.amountDue, ZERO) <= 0) {
           // Called only to refuse a malformed tip when tips are on; none is charged on a bill that
@@ -1102,7 +1087,7 @@ async function payIntegrated(
             ticket: await settleOwingNothing(tx, deps, cfg, req.id, outstanding.saleId),
           };
         }
-        if (locked.status === "placed") onPlacedCollect();
+        if (locked.status === "placed") onLive(PLACED_ATTEMPT);
         return { kind: "settle" as const, outstanding };
       }
 
@@ -1118,7 +1103,7 @@ async function payIntegrated(
     }
 
     if (locked !== undefined) {
-      await storeSentReceiptLanguage(deps.db, tx, req.id, locked, req.receiptLanguage);
+      await storeSentReceiptLanguage(tx, req.id, locked, req.receiptLanguage);
     }
     const order: GrossOrder =
       locked === undefined
@@ -1170,13 +1155,11 @@ async function payIntegrated(
         .update(workingOrders)
         .set({ paymentAttemptAt: attemptAt })
         .where(eq(workingOrders.id, req.id));
-      // Inside the transaction, so no release pass runs between the mark and its registration.
-      onMarked(attemptAt);
-    } else {
-      // Inside the transaction, so a cancel either runs first, and this P1 reads it `abandoned`, or
-      // runs after and sees the attempt live.
-      onPlacedCollect();
     }
+    // Inside the transaction, so no release pass runs between a mark and its registration, and a
+    // check of this order in any transaction after this one (`refusePlacedPaymentInFlight`, a
+    // cancel's `paymentAttemptIsLive`) sees the attempt live until this call ends.
+    onLive(attemptAt ?? PLACED_ATTEMPT);
     return {
       kind: "collect" as const,
       gross,
@@ -1264,56 +1247,32 @@ export function paymentAttemptIsLive(db: Database, workingOrderId: string): bool
 }
 
 /**
- * Refuse `order.payment_in_flight` while a card payment of PLACED order `workingOrderId` could
- * still file its sale: an integrated collection of it running in this process, or a payment its
- * provider has not resolved or no sale records yet. A placed order's collection writes no mark, so
+ * Refuse `order.payment_in_flight` while a card payment of any of these PLACED orders could still
+ * file its sale: an integrated collection of it running in this process, or a payment its provider
+ * has not resolved or no sale records yet. A placed order's collection writes no mark, so
  * `refusePaymentInFlight` does not see one.
  */
 export async function refusePlacedPaymentInFlight(
   db: Database,
   tx: Transaction,
-  workingOrderId: string,
+  orderIds: readonly string[],
 ): Promise<void> {
-  if (
-    paymentAttemptIsLive(db, workingOrderId) ||
-    (await ordersWithUnfiledPayment(tx, [workingOrderId])).has(workingOrderId)
-  ) {
-    throw new AppError("order.payment_in_flight", { workingOrderId });
+  const live = liveAttemptsOf(db);
+  const notLive = orderIds.filter((id) => !live.has(id));
+  const unfiled =
+    notLive.length === 0 ? new Set<string>() : await ordersWithUnfiledPayment(tx, notLive);
+  const inFlight = orderIds.find((id) => live.has(id) || unfiled.has(id));
+  if (inFlight !== undefined) {
+    throw new AppError("order.payment_in_flight", { workingOrderId: inFlight });
   }
 }
 
 /** A placed order writes no mark, so its entry in the live map carries this instead of one. */
 const PLACED_ATTEMPT = "placed";
 
-/** How many integrated attempts on each placed order are running: two pays of one placed order may
- * both reach the reader, and the entry must outlive the first to finish. */
-const placedAttemptsOf = perDatabase(() => new Map<string, number>());
-
-function holdPlacedAttempt(db: Database, workingOrderId: string): void {
-  const held = placedAttemptsOf(db);
-  held.set(workingOrderId, (held.get(workingOrderId) ?? 0) + 1);
-  liveAttemptsOf(db).set(workingOrderId, PLACED_ATTEMPT);
-}
-
-function releasePlacedAttempt(db: Database, workingOrderId: string): void {
-  const held = placedAttemptsOf(db);
-  const left = held.get(workingOrderId)! - 1;
-  if (left > 0) {
-    held.set(workingOrderId, left);
-    return;
-  }
-  held.delete(workingOrderId);
-  const live = liveAttemptsOf(db);
-  if (live.get(workingOrderId) === PLACED_ATTEMPT) live.delete(workingOrderId);
-}
-
 /**
  * Which of these orders has a payment that is, or could still become, a capture no sale records:
- * an attempt its provider has not resolved, or a capture not yet filed. This decides whether a
- * mark may be RELEASED, whether Pay may go ahead over one, and whether a placed order's invoice
- * may be credited (`cancelPlacedOrder`), and whether a placed order's invoice choice or receipt
- * language may change (`refusePlacedPaymentInFlight`); the check of the mark itself
- * (`refuseOrderPaymentMarked`) reads only the mark.
+ * an attempt its provider has not resolved, or a capture not yet filed.
  */
 export async function ordersWithUnfiledPayment(
   tx: Transaction,
@@ -1408,9 +1367,9 @@ export async function releaseStalePaymentAttempts(db: Database): Promise<number>
  * P3 of {@link payWorkingOrderIntegrated}: file the immediate card sale, link the captured payment and
  * settle the order in ONE transaction.
  *
- * Two pays can both commit a P1 that saw the order unsettled and both arrive here. The loser's P3 runs
- * after the winner's committed, its `recordSale` is refused by `sales_working_order_id_key`, and it
- * replays the winner's ticket instead of filing a second record. The replay prints nothing.
+ * A second Pay can file this payment's charge (`finalizeRecovery`) before this runs; `recordSale` is
+ * then refused by `sales_working_order_id_key`, and this replays that sale's ticket instead of
+ * filing a second record. The replay prints nothing.
  *
  * The tender records the WHOLE card charge (`total + tip`) with the tip on it; the fiscal `total`
  * stays ex-tip, a tip being on no invoice.
@@ -1533,7 +1492,7 @@ async function finalizeCapture(
 }
 
 /**
- * File the sale for a captured payment that has none (P2 committed, P3 never ran) WITHOUT charging
+ * File the sale for a captured payment that has none (P2 committed, P3 has not run) WITHOUT charging
  * again: file from the order's STORED locked lines and associate THIS captured row, in ONE
  * transaction. A concurrent recovery needs no backstop: its whole transaction runs after the winner
  * committed, reads the order `settled`, and replays.
@@ -1725,10 +1684,9 @@ export async function fireDishesAtPayment(
  * The card was charged `amountDue + tip`, and the tender records that whole charge with the tip on
  * it, outside the fiscal total.
  *
- * A concurrent collect or recovery can settle the invoice between P1 and here (the
- * three-transaction split, see {@link finalizeCapture}); `settleSale` then refuses with
- * `sale.already_settled`, and this replays the settled ticket in a fresh transaction, settling
- * nothing.
+ * A second Pay can settle the invoice from this payment's charge (`finalizeSettleRecovery`) before
+ * this runs; `settleSale` then refuses with `sale.already_settled`, and this replays the settled
+ * ticket in a fresh transaction, settling nothing.
  */
 async function finalizeSettle(
   deps: IntegratedPayDeps,
@@ -1938,6 +1896,7 @@ async function runCollectOrder(
       throw new AppError("working_order.not_placed", { workingOrderId: req.id });
     }
     await refuseBillWithPayments(tx, req.id);
+    await refusePlacedPaymentInFlight(deps.db, tx, [req.id]);
 
     // AFTER the replay check, so a retry is never refused for its body shape.
     if (req.tender.method !== "cash" && req.tender.method !== "card") {
@@ -1994,7 +1953,7 @@ async function runCollectOrder(
     }
 
     await refuseUnavailableFullInvoice(tx, req.id);
-    await storeSentReceiptLanguage(deps.db, tx, req.id, locked, req.receiptLanguage);
+    await storeSentReceiptLanguage(tx, req.id, locked, req.receiptLanguage);
     const order = await priceStoredOrderForIssuance(tx, req.id);
     return fileImmediateSale(tx, deps, cfg, req.id, req.tender, order, operatorId);
   });
