@@ -181,6 +181,8 @@ describe("restoreDatabase consumes a database file", () => {
     ).rejects.toMatchObject({ code: "restore.unsafe_entry_path" });
     await oldIntact(venueDir);
     expect(await readFile(`${target}.incoming`, "utf8")).toBe("STALE");
+    await rm(source);
+    expect((await stat(protectedPath)).nlink).toBe(1);
     const alias = join(root, "venue-alias");
     await symlink(venueDir, alias);
     await expect(

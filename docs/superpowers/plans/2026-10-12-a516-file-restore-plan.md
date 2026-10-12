@@ -227,3 +227,14 @@ permission to add necessary boot tests after that split applies. Deleting setup 
 cases; deleting the link-count or missing-source mapping fails one each; restored placement,
 file-artifact and boot-setup suites pass 48. This adds no boot production behavior. SQLite may change
 journal metadata when it opens a private validation file; no byte-identical-placement claim is made.
+
+
+### Rebase and alias control, 2026-10-12
+
+Lane B's reload change also edits `boot.ts`; rebasing onto main `df3048a4` merged cleanly.
+The affected setup/placement/file-restore/build-header suites pass 55 tests. Review approval is
+retained across this rebase. The link-count refusal could mask the protected-path assertion while
+its fixture still held a second link. The fixture now removes that extra source name before the
+symlink-parent case and checks the protected file has one link. All prior refusal assertions remain.
+Deleting the protected-path predicate in an independent installed shallow clone fails seven cases;
+restoring it passes all 20 placement cases. The owned clone was removed and absence checked.
