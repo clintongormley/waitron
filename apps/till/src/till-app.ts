@@ -1542,7 +1542,27 @@ export class TillApp extends LitElement {
       kind: this.#deviceKind,
       timeoutSeconds: this.#inactivityTimeoutSeconds,
       onIdle: this.#onIdle,
+      readerPaymentPending: this.#readerPayments.size > 0,
     });
+  }
+
+  readonly #readerPayments = new Set<{ orderId?: string }>();
+
+  async #withReaderPayment<T>(
+    reader: boolean,
+    run: () => Promise<T>,
+    orderId?: string,
+  ): Promise<T> {
+    if (!reader) return run();
+    const attempt = { orderId };
+    this.#readerPayments.add(attempt);
+    this.#configureSessionActivity();
+    try {
+      return await run();
+    } finally {
+      // A late answer from a departed operator must not reset the new operator's idle time.
+      if (this.#readerPayments.delete(attempt)) this.#configureSessionActivity();
+    }
   }
 
   override connectedCallback(): void {
@@ -3591,20 +3611,25 @@ export class TillApp extends LitElement {
       if (this.#cancelledDemoReaderOrders.has(id)) return;
       reachedFiscal = true;
       const language = this.#chosenReceiptLanguage(id);
-      const out: PayOutcome = await this.api.pay({
+      const out: PayOutcome = await this.#withReaderPayment(
+        true,
+        () =>
+          this.api.pay({
+            id,
+            lines,
+            ...(this.invoiceChoice?.orderId === id ? this.invoiceChoice.invoice : {}),
+            ...(language === undefined ? {} : { receiptLanguage: language }),
+            ...(detail.tip ? { tip: detail.tip } : {}),
+            ...(detail.allowOffline ? { allowOffline: true } : {}),
+            ...(detail.simulationOutcome === undefined
+              ? {}
+              : { simulationOutcome: detail.simulationOutcome }),
+            // Omitted, the server uses the paying device's chosen reader, else its profile's default.
+            ...(detail.readerId === undefined ? {} : { readerId: detail.readerId }),
+            ...(demoAttemptId === undefined ? {} : { demoAttemptId }),
+          }),
         id,
-        lines,
-        ...(this.invoiceChoice?.orderId === id ? this.invoiceChoice.invoice : {}),
-        ...(language === undefined ? {} : { receiptLanguage: language }),
-        ...(detail.tip ? { tip: detail.tip } : {}),
-        ...(detail.allowOffline ? { allowOffline: true } : {}),
-        ...(detail.simulationOutcome === undefined
-          ? {}
-          : { simulationOutcome: detail.simulationOutcome }),
-        // Omitted, the server uses the paying device's chosen reader, else its profile's default.
-        ...(detail.readerId === undefined ? {} : { readerId: detail.readerId }),
-        ...(demoAttemptId === undefined ? {} : { demoAttemptId }),
-      });
+      );
       if (session !== this.#operatorSession) return;
       if (out.outcome === "captured") {
         this.result = out.ticket;
@@ -3666,9 +3691,15 @@ export class TillApp extends LitElement {
     const attemptId = this.#demoAttempt?.orderId === id ? this.#demoAttempt.attemptId : undefined;
     if (attemptId === undefined) return;
     this.#cancelledDemoReaderOrders.add(id);
+    const waiting = [...this.#readerPayments].filter((attempt) => attempt.orderId === id);
     try {
-      if (!(await this.api.cancelDemoReaderPayment(id, attemptId)))
+      if (!(await this.api.cancelDemoReaderPayment(id, attemptId))) {
         this.#cancelledDemoReaderOrders.delete(id);
+      } else {
+        let ended = false;
+        for (const attempt of waiting) ended = this.#readerPayments.delete(attempt) || ended;
+        if (ended) this.#configureSessionActivity();
+      }
     } catch (error) {
       this.#cancelledDemoReaderOrders.delete(id);
       this.errorKey = counterError(error, "sale.unconfirmed");
@@ -8380,6 +8411,7 @@ export class TillApp extends LitElement {
   }
 
   #endOperatorSession(): void {
+    this.#readerPayments.clear();
     this.#stopDepartmentTransfers();
     this.#resetPartylessDraft();
     this.leave.forceReset();
@@ -8641,10 +8673,12 @@ export class TillApp extends LitElement {
     };
     await this.#holdingReload(async () => {
       try {
-        const result = await this.#resend(
-          (signal) => this.api.takeBillPayment(open.billId, submission.request, { signal }),
-          limit.signal,
-          () => session === this.#operatorSession,
+        const result = await this.#withReaderPayment(asked.card?.entry === "reader", () =>
+          this.#resend(
+            (signal) => this.api.takeBillPayment(open.billId, submission.request, { signal }),
+            limit.signal,
+            () => session === this.#operatorSession,
+          ),
         );
         settle();
         await this.#onBillPaid(open, result);

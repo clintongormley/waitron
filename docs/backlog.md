@@ -2677,10 +2677,6 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   that moment (nothing was saved yet), and a place waiting on that question holds a pressed Reload
   until someone touches the till. Left open by A491.
 
-- **A till signs its staff out after its profile's idle time while its own card payment waits at
-  the reader.** Seen once on the dev stack with the Demo card reader: the counter profile's 5
-  minutes passed while the payment waited, the sale was still filed once, and that till never
-  showed its receipt. Timer: `apps/till/src/session-activity.ts`. Left open by A526.
 
 - **With the service closed, a wide till's menu area shows nothing, and the "Service area" picker
   and the "Keep … open later" button go with it.** Seen once at 1280 wide. Read, not run: the sale
