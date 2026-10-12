@@ -570,11 +570,13 @@ A different authored or demo schedule is not described as that first weekday sch
 ### Zone closed times
 
 You subtract a zone's closed times from its department's service day, rather than writing another
-opening schedule. `zone_closed_times` in `packages/venue-service/src/schema/zone-closed-times.ts`
-links each range to a zone and either a weekday or a named day. The writers `replaceZoneClosedWeek`
-and `saveZoneClosedDate` in `zone-closed-times.ts` validate the ranges against the business-day
-changeover, on quarter-hour boundaries. A date must have own hours before you can save its closed
-times. `closedZoneIdsAt` uses that named day's dated ranges, including repeats, or the business day's
+opening schedule. A zone's week of closed times is in the season tables (see "Seasons and season
+weeks" below). `zone_closed_times` in `packages/venue-service/src/schema/zone-closed-times.ts` holds
+a zone's closed ranges for a named day. `saveZoneClosedDate` in `zone-closed-times.ts` writes them,
+validated against the business-day changeover, on quarter-hour boundaries; `switchNamedDayHours`
+(`hours.ts`) copies the season's day into them when a named day takes own hours, and the
+special-date copy (`MENU_TIMETABLE_CALENDAR_PARTICIPANT`, `menu-timetable.ts`) copies a named day's
+ranges to its duplicate. A date must have own hours before you can save its closed times. `closedZoneIdsAt` uses that named day's dated ranges, including repeats, or the business day's
 season week (`zone_days`, through `resolveZoneClosedDays` in `day-resolver.ts`) otherwise. No dated closed ranges means no zone-specific closure on an own-hours day;
 it does not inherit the zone's normal-week closure. The start is closed and the end is open.
 When the venue clock is unreadable, this zone check reports no closed zone; department checks
@@ -612,9 +614,10 @@ provisioning and, for a venue with none, by `targetSeasons` before a week write
 A week saved with no season named goes into every season; a week saved with a season named
 changes that season alone (`replaceMenuWeek` in `packages/venue-service/src/menu-timetable.ts`,
 `replaceZoneClosedWeek` in `packages/venue-service/src/zone-closed-times.ts`). The old tables,
-`menu_day_timetables` with `menu_slots` and `zone_closed_times`, hold named-day rows only (the case
-"a week written with no season named leaves no weekday row in the old tables" in
-`packages/venue-service/src/season-weeks.test.ts`).
+`menu_day_timetables` with `menu_slots` and `zone_closed_times`, get no weekday row from any
+writer (the case "a week written with no season named leaves no weekday row in the old tables" in
+`packages/venue-service/src/season-weeks.test.ts`). A venue database that ran #1577 (A506-1) and
+was not reset still holds the weekday rows written then, and nothing reads them.
 
 A configuration transfer carries the five tables (`VENUE_SERVICE_CONFIGURATION_TRANSFER` in
 `packages/venue-service/src/configuration-transfer.ts`). `importConfigurationTables`
@@ -644,7 +647,7 @@ configuration bundle" in `packages/venue-service/src/configuration-transfer.test
 
 W98 keeps each department's menu timetable in four venue-service tables, all classified `state`
 (`packages/venue-service/src/schema/menus.ts`): `menu_periods` (a named period such as "Mañanas"
-and its menu), `menu_day_timetables` (one weekday of the department's week, or one special date),
+and its menu), `menu_day_timetables` (one department's timetable for one special date),
 `menu_slots` (a named period placed on that day, wall-clock times) and `zone_period_menus` (a
 zone's own menu for one named period). They are not opening-hours rows: a menu period has its own
 boundaries and a menu, and opening hours never stop a sale. What they share with Hours is the
@@ -661,9 +664,8 @@ calendar.
   that would leave a slot overlapping a neighbouring day's across a midnight (`overlap`), or a copied
   or moved slot opening or closing at a minute the clock skips there (`clock_skips`). A duplicate's
   copies are checked together, after every target exists.
-- "No row" carries meaning twice, as for hours: a weekday with no `menu_day_timetables` row has no
-  slots (the all-day menu all day), and a special date with no row for a department follows that
-  department's week. A row with no slots on a special date replaces the week with the all-day menu.
+- A special date with no `menu_day_timetables` row for a department follows that department's
+  week. A row with no slots on a special date replaces the week with the all-day menu.
 - A zone's override names a named period, not a slot, so it holds on every day and special date
   that places the period. Deleting a period is refused `menu_period.in_use` while any slot places
   it, past special dates included; once none does, its zones' overrides and the routing cells'
@@ -1431,8 +1433,9 @@ src/configuration-transfer.test.ts`: period colours and ordered staff-menu rows 
 second real venue under new period, department and menu IDs. The server roundtrip uses 04:30:
 21:00–03:00 imports, 21:00–05:00 is refused with `setup.request_invalid`, field `menu_slots`.
 Replacing the export's changeover with 06:00 in an installed disposable checkout made that
-refusal assertion fail. The callback context now carries `createdAt`, `timeZone`, and
-`dayCutover` (`packages/module/src/module.ts`, `apps/server/src/configuration-transfer.ts`).
+refusal assertion fail. (2026-10-12, A506-2: the case now refuses a `department_day_ranges` range
+ending 05:00, at field `department_day_ranges`.) The callback context now carries `createdAt`,
+`timeZone`, and `dayCutover` (`packages/module/src/module.ts`, `apps/server/src/configuration-transfer.ts`).
 
 The menu validator uses `parseServiceDay`, so ranges stop at the business-day boundary and
 use quarter-hours. Special-date endpoints below changeover are checked on the next calendar
