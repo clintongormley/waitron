@@ -20,6 +20,8 @@ import type { TillMenuBrowser } from "./widgets/menu-browser.js";
 import { productUnit } from "./widgets/product-name.js";
 import type { TillDeadEndsSection } from "./widgets/dead-ends-section.js";
 import { TillApp } from "./till-app.js";
+import { TillApi as CollectApi } from "./api/client.js";
+import { SUBMIT_RETRY_PAUSE_MS } from "./state/draft-sync.js";
 import { ServerRouter } from "./api/server-router.js";
 import { diag } from "./diagnostics.js";
 import { currentLocale, setLocale, t } from "./i18n/t.js";
@@ -10292,11 +10294,107 @@ describe("till-app", () => {
       emit(c, "mark-collected", { orderId: "wo-1" });
       await flush(el);
 
-      expect(currentApi.markCollected).toHaveBeenCalledWith("wo-1");
+      expect(currentApi.markCollected).toHaveBeenCalledWith(
+        "wo-1",
+        expect.stringMatching(/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/),
+        { signal: expect.any(AbortSignal) },
+      );
       // once on entering the counter, once after the handover — so the collected order drops off the queue.
       expect(currentApi.getStationQueue).toHaveBeenCalledTimes(2);
       // The refresh returned an EMPTY queue (the order handed over), so the has-items gate hides the card.
       expect(stationQueueWidget(el)).toBeNull();
+    });
+
+    it("prep Collect resends a lost reply with the same wire submission id", async () => {
+      const fetch = vi
+        .fn()
+        .mockRejectedValueOnce(new TypeError("Failed to fetch"))
+        .mockResolvedValue(new Response(null, { status: 200 }));
+      const client = new CollectApi("", fetch);
+      const { el } = await mountApp({
+        zonePolicy: { serviceMode: "ticket_then_pay" },
+        getTill: vi.fn().mockResolvedValue({ ...till, orderFlow: "ticket_then_pay" }),
+        getStationQueue: vi
+          .fn()
+          .mockResolvedValueOnce({ items: [stationGroup], notices: [] })
+          .mockResolvedValue({ items: [], notices: [] }),
+        markCollected: client.markCollected.bind(client),
+      });
+      const c = await toCounter(el);
+      vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+      try {
+        emit(c, "mark-collected", { orderId: "wo-1" });
+        await vi.advanceTimersByTimeAsync(0);
+        await el.updateComplete;
+        expect(fetch).toHaveBeenCalledTimes(1);
+        await vi.advanceTimersByTimeAsync(SUBMIT_RETRY_PAUSE_MS);
+        await vi.advanceTimersByTimeAsync(0);
+        await el.updateComplete;
+        expect(fetch).toHaveBeenCalledTimes(2);
+        const [first, second] = fetch.mock.calls;
+        expect(first![0]).toBe("/api/orders/wo-1/collect");
+        const body = JSON.parse(first![1].body);
+        expect(body).toEqual({
+          submissionId: expect.stringMatching(/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/),
+        });
+        expect(second![1].body).toBe(first![1].body);
+        expect(second![1].signal).toBe(first![1].signal);
+        expect(stationQueueWidget(el)).toBeNull();
+        expect(el.shadowRoot!.querySelector('[role="alert"]')).toBeNull();
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it("a second prep Collect press while its handover is out sends nothing more", async () => {
+      let finish!: () => void;
+      const markCollected = vi.fn(
+        (_id: string, _submissionId?: string) =>
+          new Promise<void>((resolve) => {
+            finish = resolve;
+          }),
+      );
+      const { el } = await mountApp({
+        zonePolicy: { serviceMode: "ticket_then_pay" },
+        getTill: vi.fn().mockResolvedValue({ ...till, orderFlow: "ticket_then_pay" }),
+        markCollected,
+      });
+      const c = await toCounter(el);
+      emit(c, "mark-collected", { orderId: "wo-1" });
+      emit(c, "mark-collected", { orderId: "wo-1" });
+      await flush(el);
+      expect(markCollected).toHaveBeenCalledTimes(1);
+      finish();
+      await flush(el);
+      emit(c, "mark-collected", { orderId: "wo-1" });
+      await flush(el);
+      expect(markCollected).toHaveBeenCalledTimes(2);
+      expect(markCollected.mock.calls[1]![1]).not.toBe(markCollected.mock.calls[0]![1]);
+      finish();
+      await flush(el);
+    });
+
+    it("prep Collect does not resend after the operator signs out", async () => {
+      const markCollected = vi.fn().mockRejectedValue(new TypeError("Failed to fetch"));
+      const { el } = await mountApp({
+        zonePolicy: { serviceMode: "ticket_then_pay" },
+        getTill: vi.fn().mockResolvedValue({ ...till, orderFlow: "ticket_then_pay" }),
+        markCollected,
+      });
+      const c = await toCounter(el);
+      vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+      try {
+        emit(c, "mark-collected", { orderId: "wo-1" });
+        await vi.advanceTimersByTimeAsync(0);
+        emit(c, "logout");
+        await vi.advanceTimersByTimeAsync(0);
+        await vi.advanceTimersByTimeAsync(SUBMIT_RETRY_PAUSE_MS);
+        await el.updateComplete;
+        expect(markCollected).toHaveBeenCalledTimes(1);
+        expect(el.shadowRoot!.querySelector('[role="alert"]')).toBeNull();
+      } finally {
+        vi.useRealTimers();
+      }
     });
 
     it("a failed mark-collected still refreshes the queue and shows a non-fatal error", async () => {

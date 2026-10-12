@@ -304,10 +304,82 @@ describe("till-station-screen", () => {
       }),
     );
     await flush(el);
-    expect(api.markCollected).toHaveBeenCalledWith("wo-1");
+    expect(api.markCollected).toHaveBeenCalledWith(
+      "wo-1",
+      expect.stringMatching(/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/),
+      { signal: expect.any(AbortSignal) },
+    );
     // Reloaded: once on connect, once after the handover — so the collected order drops off the display.
     expect(api.getStationQueue).toHaveBeenCalledTimes(2);
     expect(escaped).not.toHaveBeenCalled();
+  });
+
+  it("station Collect resends a lost reply with the same wire submission id", async () => {
+    const fetch = vi
+      .fn()
+      .mockRejectedValueOnce(new TypeError("Failed to fetch"))
+      .mockResolvedValue(new Response(null, { status: 200 }));
+    const client = new StationTodayApi("", fetch);
+    const api = stubApi({
+      markCollected: client.markCollected.bind(client),
+      getStationQueue: vi
+        .fn()
+        .mockResolvedValueOnce({ items: cocinaQueue, notices: [] })
+        .mockResolvedValue({ items: [], notices: [] }),
+    });
+    const { el } = await mountWidget<TillStationScreen>("till-station-screen", { api });
+    await flush(el);
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    try {
+      queueWidget(el)!.dispatchEvent(
+        new CustomEvent("mark-collected", {
+          detail: { orderId: "wo-1" },
+          bubbles: true,
+          composed: true,
+        }),
+      );
+      await flush(el);
+      expect(fetch).toHaveBeenCalledTimes(1);
+      await vi.advanceTimersByTimeAsync(SUBMIT_RETRY_PAUSE_MS);
+      await flush(el);
+      expect(fetch).toHaveBeenCalledTimes(2);
+      const [first, second] = fetch.mock.calls;
+      expect(first![0]).toBe("/api/orders/wo-1/collect");
+      expect(JSON.parse(first![1].body)).toEqual({
+        submissionId: expect.stringMatching(/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/),
+      });
+      expect(second![1].body).toBe(first![1].body);
+      expect(second![1].signal).toBe(first![1].signal);
+      expect(queueWidget(el)!.groups).toEqual([]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("station Collect does not resend across disconnect and reconnect", async () => {
+    const markCollected = vi.fn().mockRejectedValue(new TypeError("Failed to fetch"));
+    const api = stubApi({ markCollected });
+    const { el, host } = await mountWidget<TillStationScreen>("till-station-screen", { api });
+    await flush(el);
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    try {
+      queueWidget(el)!.dispatchEvent(
+        new CustomEvent("mark-collected", {
+          detail: { orderId: "wo-1" },
+          bubbles: true,
+          composed: true,
+        }),
+      );
+      await flush(el);
+      el.remove();
+      host.append(el);
+      await flush(el);
+      await vi.advanceTimersByTimeAsync(SUBMIT_RETRY_PAUSE_MS);
+      await flush(el);
+      expect(markCollected).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("a failed advance still reloads the queue (reconciling to server truth)", async () => {
