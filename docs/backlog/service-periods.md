@@ -165,7 +165,10 @@ and nothing writes the old weekday rows of `menu_day_timetables`, `menu_slots` o
 - A506-5: the department and zone delete previews still count rows of the old tables, which only
   named days write now (`packages/venue-service/src/service-delete-settings.ts`).
 - A venue database that ran #1577 and was not reset still holds weekday rows that no hours reader
-  uses; A506-5 drops the tables.
+  uses; A506-5 drops the tables. Until then, deleting a period one of those rows' slots names fails
+  with the database's `FOREIGN KEY constraint failed` rather than `menu_period.in_use`, and the period
+  stays (measured 2026-10-12 with a hand-inserted weekday slot; a named-day slot gave
+  `menu_period.in_use`).
 
 **Why.** One standard week does not fit a venue whose hours change with the season, and copying a
 week into future dates would bury the special days among ordinary ones.
