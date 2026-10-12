@@ -68,7 +68,7 @@ async function bill(full = false) {
 }
 
 describe("stored bill invoice selection", () => {
-  it("selects the standard series activated in this transaction instead of the boot selection", async () => {
+  it("reads the standard series activated earlier in the issuance transaction", async () => {
     const order = await bill();
     const selected = await withTransaction(suite.db, async (tx) => {
       await tx
@@ -108,7 +108,7 @@ describe("stored bill invoice selection", () => {
     });
   });
 
-  it("refuses ambiguous live standard series instead of using the cached one", async () => {
+  it("refuses ambiguous live standard series", async () => {
     const order = await bill();
     await withTransaction(suite.db, (tx) =>
       tx.insert(invoiceSeries).values({

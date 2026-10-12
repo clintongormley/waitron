@@ -155,6 +155,10 @@ describe("tryLoadTillConfig", () => {
     expect(tryLoadTillConfig({})).toBeUndefined();
   });
 
+  it("treats the retired series key alone as setup mode", () => {
+    expect(tryLoadTillConfig({ WAITRON_TILL_SERIES_ID: "stale" })).toBeUndefined();
+  });
+
   it("treats both present-but-empty (VAR=) as none set → undefined", () => {
     const allEmpty = Object.fromEntries(ID_VARS.map((v) => [v, ""]));
     expect(tryLoadTillConfig(allEmpty)).toBeUndefined();

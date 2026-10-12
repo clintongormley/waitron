@@ -117,7 +117,7 @@ export interface MirrorPromotionResult extends PromotionResult {
 }
 
 export interface MirrorPromoteDeps extends PromoteDeps {
-  readonly persistTradingEnv: (seriesId: string) => Promise<void>;
+  readonly persistTradingEnv: () => Promise<void>;
 }
 
 /**
@@ -174,8 +174,7 @@ export async function promoteMirrorToPrimary(
     },
   );
 
-  // Before the point of no return: see `MirrorPromoteDeps.persistTradingEnv`.
-  await deps.persistTradingEnv(seriesId);
+  await deps.persistTradingEnv();
 
   await withTransaction(deps.db, async (tx) => {
     await commitMirrorPromotionTx(tx, deps.nodeId, document);

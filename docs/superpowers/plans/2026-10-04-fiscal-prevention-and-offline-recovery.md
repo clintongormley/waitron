@@ -228,17 +228,17 @@ performs no network access. The local allocation ledger is an audit copy, not ou
 `working-order.ts`, `bill-payments.ts`, `restore.ts`, and every consumer of
 `WAITRON_TILL_SERIES_ID`/stored `seriesId`; `packages/db/src/reserved-identity.ts` where needed.
 
-- [x] Trace readers in code, deployment, sealed state, adoption/promotion bundles, tests and docs
+- [ ] Trace readers in code, deployment, sealed state, adoption/promotion bundles, tests and docs
   across the whole repository. Record exact existing assertions requiring owner approval.
-- [x] Write cases that activate a new series while a sale is queued, then sell through each
+- [ ] Write cases that activate a new series while a sale is queued, then sell through each
   issuance path. Assert the committed sale/fiscal/outbox use the series read inside that transaction.
   A retry of an already committed sale still returns its original invoice, not the current series.
-- [x] Exercise local validation failure and failure before commit: no issued receipt escapes,
+- [ ] Exercise local validation failure and failure before commit: no issued receipt escapes,
   and invoice allocation, sale, record and outbox roll back together. A lost response after
   commit returns that same invoice on retry. Keep these checks on the real issuance entry points.
-- [x] Read the correct purpose's active series transactionally; remove the stale environment
+- [ ] Read the correct purpose's active series transactionally; remove the stale environment
   selection and every copy together. Preserve exactly one live series per required purpose.
-- [x] Test the explicit emergency-to-short switch: new allocated series, unchanged SIF/chain
+- [ ] Test the explicit emergency-to-short switch: new allocated series, unchanged SIF/chain
   unless another recovery independently requires it, old invoices unchanged, no switch on reconnect.
 - [ ] Run affected sale, bill, working-order, boot, restore, adoption and promotion suites, plus
   the environment guards selected by the removed variable. Finish for owner review.

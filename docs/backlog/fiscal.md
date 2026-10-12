@@ -400,6 +400,8 @@ publishing identity. The switch, replay, rollback and reconnect cases are in
 `apps/server/src/transactional-series.test.ts`; the integrated-card switch cases are in
 `apps/server/src/till-sale-integrated.db.test.ts`.
 Task 4's allocation activation remains open, followed by the dependent recovery tasks.
+When activation is connected to recovery, extend the reconnect qualification through that runtime
+path; today's test exercises an offline and then successful fiscal drain without a series switch.
 The owner answered its format question with first symbol `0–7` and 128 random bits.
 
 

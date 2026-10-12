@@ -220,6 +220,18 @@ async function setupVenue(orderFlow: OrderFlow = "prepay"): Promise<SeededVenue>
   };
 }
 
+async function anotherNodeSeries(cfg: DeviceRequestConfig): Promise<void> {
+  await withTransaction(suite.db, async (tx) => {
+    const [other] = await tx
+      .insert(nodes)
+      .values({ locationId: cfg.locationId, name: "Other box" })
+      .returning();
+    await tx
+      .insert(invoiceSeries)
+      .values({ nodeId: other!.id, code: "OTHER-P999999", purpose: "standard", nextNumber: 99 });
+  });
+}
+
 async function modeVenue(mode: OrderFlow): Promise<SeededVenue> {
   const venue = await setupVenue(mode);
   return { ...venue, cfg: { ...venue.cfg } };
@@ -941,6 +953,7 @@ describe("payWorkingOrderIntegrated (split-transaction integrated pay, ordering 
 
   it("reads the active series after a card capture that overlaps a series switch", async () => {
     const { cfg, cafe, seriesId } = await setupVenue();
+    await anotherNodeSeries(cfg);
     const { deps } = integratedDeps(cfg, suite.db);
     const provider = deps.provider;
     let activeId: string | undefined;
@@ -990,6 +1003,7 @@ describe("payWorkingOrderIntegrated (split-transaction integrated pay, ordering 
 
   it("issues on a newly active series and replays that invoice after a later switch", async () => {
     const { cfg, cafe, seriesId } = await setupVenue();
+    await anotherNodeSeries(cfg);
     const id = randomUUID();
     const [fresh] = await withTransaction(suite.db, async (tx) => {
       await tx

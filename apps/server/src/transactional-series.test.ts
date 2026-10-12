@@ -1,7 +1,8 @@
 import { randomUUID } from "node:crypto";
 import { and, eq, isNull, sql } from "drizzle-orm";
-import { describe, expect, it } from "vitest";
-import { invoiceSeries, sales, withTransaction } from "@waitron/db";
+import { describe, expect, it, vi } from "vitest";
+import { billPayments, invoiceSeries, nodes, printJobs, sales, withTransaction } from "@waitron/db";
+import { payments } from "@waitron/payments";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import type { FiscalBackend } from "@waitron/fiscal";
@@ -15,6 +16,26 @@ import { provisionBillVenue, send, tabWith, type BillVenue } from "./testing/bil
 const suite = useVenueDb({ migrations: migrationOptionsFor(manifestSets(), null) });
 const emergency = "A-E00000000000000000000000001";
 const short = "A-P000042";
+
+async function venueWithOtherNode() {
+  const v = await provisionBillVenue(suite.db);
+  await withTransaction(v.db, async (tx) => {
+    const [other] = await tx
+      .insert(nodes)
+      .values({
+        locationId: v.cfg.locationId,
+        name: "Other box",
+      })
+      .returning();
+    await tx.insert(invoiceSeries).values({
+      nodeId: other!.id,
+      code: "OTHER-P999999",
+      purpose: "standard",
+      nextNumber: 99,
+    });
+  });
+  return v;
+}
 
 async function activate(v: BillVenue, code: string) {
   return withTransaction(v.db, async (tx) => {
@@ -101,6 +122,9 @@ async function snapshot(v: BillVenue) {
   return {
     series: await v.db.select().from(invoiceSeries),
     sales: await v.db.select().from(sales),
+    payments: await v.db.select().from(payments),
+    billPayments: await v.db.select().from(billPayments),
+    jobs: await v.db.select().from(printJobs),
     records: records(v),
     outbox: v.db.all(sql`select * from envios order by registro_id`),
     sif: v.db.all(sql`select * from registro_sif order by id`),
@@ -111,7 +135,7 @@ describe("transactional active series qualification", () => {
   it.each(["walk-up", "held order", "unpaid invoice", "bill payment"])(
     "%s uses the explicit short allocation without changing the SIF or old invoice",
     async (path) => {
-      const v = await provisionBillVenue(suite.db);
+      const v = await venueWithOtherNode();
       const emergencySeries = await activate(v, emergency);
       const oldId = await prepare(v, "walk-up");
       const original = await issue(v, "walk-up", oldId);
@@ -147,7 +171,7 @@ describe("transactional active series qualification", () => {
   it.each(["walk-up", "held order", "unpaid invoice"])(
     "%s rolls back allocation, invoice, record and outbox when filing throws after writing",
     async (path) => {
-      const v = await provisionBillVenue(suite.db);
+      const v = await venueWithOtherNode();
       await activate(v, emergency);
       const id = await prepare(v, path);
       const before = await snapshot(v);
@@ -165,8 +189,48 @@ describe("transactional active series qualification", () => {
     },
   );
 
+  it("bill payment rolls back a written fiscal record and replays its eventual committed invoice", async () => {
+    const v = await venueWithOtherNode();
+    await activate(v, emergency);
+    const id = await prepare(v, "bill payment");
+    const before = await snapshot(v);
+    const realWrite = v.backend.recordSale.bind(v.backend);
+    const failedWrite = vi.spyOn(v.backend, "recordSale").mockImplementation(async (tx, sale) => {
+      await realWrite(tx, sale);
+      throw new Error("synthetic failure after fiscal record");
+    });
+    const body = {
+      submissionId: randomUUID(),
+      kind: "contribution",
+      amount: "3.00",
+      method: "cash",
+      tendered: "3.00",
+      applied: "3.00",
+      tip: "0.00",
+    };
+    const request = () =>
+      send(v.appTipsOff, v.cookie, "POST", `/api/working-orders/${id}/payments`, body);
+    try {
+      const failed = await request();
+      expect(failed.status).toBe(500);
+      expect(failed.json.code).toBe("server.internal");
+      expect(failedWrite).toHaveBeenCalledTimes(1);
+      expect(await snapshot(v)).toEqual(before);
+    } finally {
+      failedWrite.mockRestore();
+    }
+    const result = await request();
+    expect(result.status).toBe(200);
+    const committed = await snapshot(v);
+    const [sale] = await v.db.select().from(sales).where(eq(sales.workingOrderId, id));
+    expect(sale!.invoiceNumber).toBe(1);
+    const replay = await request();
+    expect(replay).toEqual(result);
+    expect(await snapshot(v)).toEqual(committed);
+  });
+
   it("keeps the emergency series through offline drain and successful reconnection", async () => {
-    const v = await provisionBillVenue(suite.db);
+    const v = await venueWithOtherNode();
     const active = await activate(v, emergency);
     await issue(v, "walk-up", await prepare(v, "walk-up"));
     const before = await v.db.select().from(invoiceSeries);

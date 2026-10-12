@@ -1,5 +1,5 @@
 import { eq, sql } from "drizzle-orm";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { isAppError, locationId as brandLocationId } from "@waitron/shared";
 import {
   captureError,
@@ -325,10 +325,7 @@ describe("promoteMirrorToPrimary", () => {
     nodeId: string;
     standardSeriesId: string;
     endorsement: Endorsement;
-    deps: (
-      log: PromoteDeps["log"],
-      persistTradingEnv?: (seriesId: string) => Promise<void>,
-    ) => MirrorPromoteDeps;
+    deps: (log: PromoteDeps["log"], persistTradingEnv?: () => Promise<void>) => MirrorPromoteDeps;
   }> {
     const db = suite.db;
     await stampDeployment(db, "preproduction");
@@ -393,7 +390,16 @@ describe("promoteMirrorToPrimary", () => {
     };
   }
 
-  it("flips mode+singleton to primary, mints an endorsed term-bumped doc, and returns the corrected seriesId", async () => {
+  it("persists trading identity without handing the callback a cached series", async () => {
+    const { db, deps, nodeId } = await mirror();
+    await writeNodeMembership(db, heldTermThreeDoc(nodeId, "old-primary"));
+    const persist = vi.fn(async () => {});
+    await promoteMirrorToPrimary(deps(noopLog, persist), { oldNodeNeutralised: true });
+    expect(persist).toHaveBeenCalledTimes(1);
+    expect(persist).toHaveBeenCalledWith();
+  });
+
+  it("flips mode+singleton to primary, mints an endorsed term-bumped doc, and returns the validated standard seriesId", async () => {
     const { db, deps, nodeId, standardSeriesId, endorsement } = await mirror();
     await writeNodeMembership(db, heldTermThreeDoc(nodeId, "old-primary", []));
 
@@ -423,8 +429,8 @@ describe("promoteMirrorToPrimary", () => {
 
     const error = await captureError(() =>
       promoteMirrorToPrimary(
-        deps(noopLog, async (seriesId) => {
-          persisted.push(seriesId);
+        deps(noopLog, async () => {
+          persisted.push("persisted");
         }),
         { oldNodeNeutralised: true },
       ),
@@ -436,22 +442,22 @@ describe("promoteMirrorToPrimary", () => {
     expect(await readSingletonRole(db, nodeId)).toBe("secondary");
   });
 
-  it("persists the corrected trading.env BEFORE the point-of-no-return (a persist failure aborts the flip)", async () => {
+  it("persists trading identity BEFORE the point-of-no-return (a persist failure aborts the flip)", async () => {
     // A persist that throws must leave the node a mirror; had the flip run first, it would be primary.
-    const { db, deps, nodeId, standardSeriesId } = await mirror();
+    const { db, deps, nodeId } = await mirror();
     await writeNodeMembership(db, heldTermThreeDoc(nodeId, "old-primary"));
     const persisted: string[] = [];
     const err = await captureError(() =>
       promoteMirrorToPrimary(
-        deps(noopLog, async (seriesId) => {
-          persisted.push(seriesId);
+        deps(noopLog, async () => {
+          persisted.push("persisted");
           throw new Error("disk full");
         }),
         { oldNodeNeutralised: true },
       ),
     );
     expect((err as Error).message).toBe("disk full");
-    expect(persisted).toEqual([standardSeriesId]);
+    expect(persisted).toEqual(["persisted"]);
     expect(await readDeploymentMode(db, nodeId)).toBe("mirror");
     expect(await readSingletonRole(db, nodeId)).toBe("secondary");
     expect((await readNodeMembership(db))?.body.term).toBe(3);
@@ -462,8 +468,8 @@ describe("promoteMirrorToPrimary", () => {
     const persisted: string[] = [];
     const err = await captureError(() =>
       promoteMirrorToPrimary(
-        deps(noopLog, async (seriesId) => {
-          persisted.push(seriesId);
+        deps(noopLog, async () => {
+          persisted.push("persisted");
         }),
         { oldNodeNeutralised: false },
       ),
@@ -491,8 +497,8 @@ describe("promoteMirrorToPrimary", () => {
     const persisted: string[] = [];
     const err = await captureError(() =>
       promoteMirrorToPrimary(
-        deps(noopLog, async (seriesId) => {
-          persisted.push(seriesId);
+        deps(noopLog, async () => {
+          persisted.push("persisted");
         }),
         { oldNodeNeutralised: true },
       ),
@@ -525,8 +531,8 @@ describe("promoteMirrorToPrimary", () => {
     const persisted: string[] = [];
     const err = await captureError(() =>
       promoteMirrorToPrimary(
-        deps(noopLog, async (seriesId) => {
-          persisted.push(seriesId);
+        deps(noopLog, async () => {
+          persisted.push("persisted");
         }),
         { oldNodeNeutralised: true },
       ),
@@ -556,8 +562,8 @@ describe("promoteMirrorToPrimary", () => {
     const persisted: string[] = [];
     const err = await captureError(() =>
       promoteMirrorToPrimary(
-        deps(noopLog, async (seriesId) => {
-          persisted.push(seriesId);
+        deps(noopLog, async () => {
+          persisted.push("persisted");
         }),
         { oldNodeNeutralised: true },
       ),
