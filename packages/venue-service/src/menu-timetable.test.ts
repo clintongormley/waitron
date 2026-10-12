@@ -4,6 +4,7 @@ import { and, eq, isNotNull, sql } from "drizzle-orm";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import {
   CATALOGUE_MIGRATIONS,
+  addProductToMenu,
   addMember,
   requireMenuRoot,
   buildMenuDocument,
@@ -21,10 +22,12 @@ import {
   kitchenStations,
   locations,
   withTransaction,
+  workingOrderLines,
   type Database,
   type Transaction,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
+import { seedNode } from "@waitron/db/testing/seed.js";
 import { locationId as brandLocationId, type LocationId } from "@waitron/shared";
 import { insertNamedDay, keepWeekOn } from "./testing/named-day-rows.js";
 import { addDays } from "./hours-rules.js";
@@ -44,7 +47,7 @@ import type { MenuSlot, MenuWeekDay } from "./menu-timetable-types.js";
 import { VENUE_SERVICE_MIGRATIONS } from "./migrations.js";
 import { readSeasons } from "./seasons.js";
 import type { PaintRange } from "./day-paint.js";
-import { saveSpecialDay } from "./special-days.js";
+import { deleteSpecialDay, saveSpecialDay } from "./special-days.js";
 import { replaceZoneClosedWeek } from "./zone-closed-times.js";
 import {
   configureZone,
@@ -53,11 +56,17 @@ import {
   listZoneOffers,
   listVenueReadiness,
   resolveZoneContext,
+  recordOrderServiceContext,
+  recordWorkingLineContexts,
 } from "./operations.js";
 import { menuDayTimetables, menuPeriods, menuPeriodStaffMenus, menuSlots } from "./schema/menus.js";
 import { specialDates } from "./schema/hours.js";
 import { periodExtensions } from "./schema/period-extensions.js";
-import { departmentDayRanges, departmentDays as departmentDayRows } from "./schema/seasons.js";
+import {
+  departmentDayRanges,
+  departmentDays as departmentDayRows,
+  specialDayDates,
+} from "./schema/seasons.js";
 import { routingCellPeriods, routingCells } from "./schema/routing.js";
 import { offerMenuThroughZone } from "./testing/zone-menus.js";
 import { clockChangeAfter, minutesAfter } from "./testing/clock-change.js";
@@ -1652,6 +1661,124 @@ describe("a zone moved to another department", () => {
       defaultMenuId: v.menus.Desayunos,
       periodId: v.periods.mananas,
     });
+  });
+});
+
+/** Adds Tortilla to Desayunos, republishes it, and records one Sala order line from it. */
+async function recordedLine(v: Timed) {
+  const nodeId = await seedNode(db, v.locationId);
+  await db.execute(sql`
+    insert into units (id, seed_key, name, abbreviation, precision, hardware_unit)
+    values (${randomUUID()}, 'each', '{"en":"each"}', '{"en":"ea"}', 0, null)`);
+  return scoped(async (tx) => {
+    const product = await createProduct(tx, {
+      catalogueId: v.menus.Desayunos,
+      categoryId: null,
+      name: "Tortilla",
+      pricingUnit: "each",
+      unitPrice: "0.00",
+      vatClass: "general",
+    });
+    const offer = await addProductToMenu(tx, {
+      menuId: v.menus.Desayunos,
+      productId: product.id,
+      grossPrice: "4.50",
+    });
+    await publish(tx, v.menus.Desayunos);
+    const orderId = randomUUID();
+    await tx.execute(sql`
+      insert into working_orders (id, source, location_id, node_id, order_number, opened_at)
+      values (${orderId}, 'dashboard', ${v.locationId}, ${nodeId}, 1, ${AT.toISOString()})`);
+    await recordOrderServiceContext(tx, v.cfg, orderId, v.sala);
+    const lineId = randomUUID();
+    await tx.insert(workingOrderLines).values({
+      id: lineId,
+      workingOrderId: orderId,
+      lineNo: 1,
+      productId: product.id,
+      name: "Tortilla",
+      descriptions: { "es-ES": "Tortilla" },
+      quantity: 1000,
+      unitPriceGross: 450,
+      vatClass: "general",
+      lineTotal: 450,
+      category: "Uncategorised",
+    });
+    await recordWorkingLineContexts(
+      tx,
+      v.cfg,
+      orderId,
+      [{ workingOrderLineId: lineId, menuItemId: offer.id }],
+      await listZoneOffers(tx, v.cfg, v.sala),
+    );
+  });
+}
+
+const lineContexts = () =>
+  db.execute(sql`select * from working_line_contexts order by working_order_line_id`);
+
+/** The restaurant's painted day rows and ranges a special day holds on `date`. */
+const paintOn = async (v: Venue, date: string) => {
+  const onDate = and(eq(specialDayDates.locationId, v.locationId), eq(specialDayDates.date, date));
+  const days = await db
+    .select({ id: departmentDayRows.id })
+    .from(departmentDayRows)
+    .innerJoin(specialDayDates, eq(specialDayDates.id, departmentDayRows.specialDayDateId))
+    .where(onDate);
+  const ranges = await db
+    .select({
+      periodId: departmentDayRanges.periodId,
+      startsAt: departmentDayRanges.startsAt,
+      endsAt: departmentDayRanges.endsAt,
+    })
+    .from(departmentDayRanges)
+    .innerJoin(departmentDayRows, eq(departmentDayRows.id, departmentDayRanges.dayId))
+    .innerJoin(specialDayDates, eq(specialDayDates.id, departmentDayRows.specialDayDateId))
+    .where(onDate);
+  return { days: days.length, ranges };
+};
+
+describe("a special day cleared or deleted", () => {
+  it("lets clearing and deleting a date restore the week independently of its neighbour", async () => {
+    const v = await timed();
+    const { periods } = v;
+    await recordedLine(v);
+    const recorded = await lineContexts();
+    expect(recorded.rows).toHaveLength(1);
+    const christmas = await saveDay(v, CHRISTMAS, {
+      paint: [
+        slot(periods.mananas, "09:00", "11:00"),
+        { periodId: null, startsAt: "11:00", endsAt: "12:00" },
+      ],
+    });
+    await saveDay(v, "2026-12-26", { paint: [slot(periods.mananas, "01:00", "03:00")] });
+    const neighbour = await paintOn(v, "2026-12-26");
+    expect(neighbour.ranges).toHaveLength(1);
+    // The week runs Mañanas until 12:00; the painted date closes at 11:00.
+    expect(await choice(v, v.sala, madrid(CHRISTMAS, "11:30"))).toEqual({
+      defaultMenuId: null,
+      periodId: null,
+    });
+
+    await saveDay(v, CHRISTMAS, { id: christmas.id });
+    expect(await paintOn(v, CHRISTMAS)).toEqual({ days: 0, ranges: [] });
+    expect(await choice(v, v.sala, madrid(CHRISTMAS, "11:30"))).toEqual({
+      defaultMenuId: v.menus.Desayunos,
+      periodId: periods.mananas,
+    });
+
+    await scoped((tx) => deleteSpecialDay(tx, v.cfg, christmas.id, AT, 0));
+    expect(await paintOn(v, CHRISTMAS)).toEqual({ days: 0, ranges: [] });
+    expect(
+      await db.select().from(specialDayDates).where(eq(specialDayDates.specialDayId, christmas.id)),
+    ).toEqual([]);
+    for (const time of ["10:00", "11:30"])
+      expect(await choice(v, v.sala, madrid(CHRISTMAS, time))).toEqual({
+        defaultMenuId: v.menus.Desayunos,
+        periodId: periods.mananas,
+      });
+    expect(await paintOn(v, "2026-12-26")).toEqual(neighbour);
+    expect((await lineContexts()).rows).toEqual(recorded.rows);
   });
 });
 
