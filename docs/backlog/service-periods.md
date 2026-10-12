@@ -100,6 +100,8 @@ each conflict in a season's week.
 A506-4 landed in #1597: special days are stored and saved through the API, the till sells and
 closes by their paint, end-offset and changeover checks read them, and a configuration transfer
 carries and checks them; the dashboard shows none of their paint until A506-5.
+A506-3b landed in #NNNN: the zone editor's closed-times summary reads the current season's week
+and names the season; a zone's single `week` left the Opening hours model.
 
 **Left open by A506-1, for the later parts.**
 - No test yet gives a second department its own week on the same named day.
@@ -121,11 +123,6 @@ carries and checks them; the dashboard shows none of their paint until A506-5.
   the route's reads.
 
 **Left open by A506-3, for the later parts.**
-- A506-3b (waits for A493): the Departments and zones summary of a zone's closed times
-  (`packages/venue-service/src/dashboard/department-zones.ts`) still reads the zone's single `week`,
-  the current season's, without naming the season; spec section 7 wants "Winter: closed after 23:30
-  Mon–Thu". A493 moves that code to `zone-closed-week.ts`, so A506-3 left it alone.
-  The zone's `week` leaves `OpeningHoursModel` with it.
 - A506-6: a Day-tab draft takes its season when Save is pressed; once a season's start can move, a
   draft built for one season could be saved under the next. Season edits should bump the clock
   revision or refuse a draft built before them.
