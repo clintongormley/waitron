@@ -623,17 +623,22 @@ inserting the bundle's, so the target's four provisioned seasons give way to the
 the case "arrives as exactly the exported seasons, and the imported venue sells and closes by
 them" in `apps/server/src/configuration-transfer.test.ts` renames and moves one season before
 export, finds the target holding the exported four, and asks `resolveDepartmentService` and
-`closedZoneIdsAt` about one Saturday in each of two seasons.
+`closedZoneIdsAt` about one Saturday in each of two seasons. The import keeps no old weekday row:
+the transfer's `afterImport` deletes the `menu_day_timetables` and `zone_closed_times` rows that
+name a weekday, and named-day rows stay (the case "leaves a bundle's old weekday rows behind and
+serves the week from its seasons" in the same file).
 
 `validateSeasonWeeks` (`packages/venue-service/src/configuration-transfer.ts`) refuses, among
 others: a season start that is not a common year's date or is `02-29`; a range off the
 quarter-hour or overlapping another on the same day; a department range with no period (Closed)
-and a zone range of any kind but `closed`; and a period end offset reaching the next placement in
-the same season's week. It accepts a season with fewer than seven day rows, compares no
-placements across a season boundary, and checks no skipped clock hour, as a season week has no
-date. A season day naming a special-day date is refused, because the bundle carries no
-`special_days` or `special_day_dates`. The cases are under "season weeks in a configuration
-bundle" in `packages/venue-service/src/configuration-transfer.test.ts`.
+and a zone range of any kind but `closed`. It accepts a season with fewer than seven day rows, and
+checks no skipped clock hour, as a season week has no date. A season day naming a special-day date
+is refused, because the bundle carries no `special_days` or `special_day_dates`.
+`validateEndOffsets`, beside it, refuses a period end offset reaching the next placement: within a
+season's week, from each season's last day to the next season's first on every weekday, and
+between each named day and the days either side of it, a day without hours of its own read from
+the season that holds it. It reads no old weekday row. The cases are under "season weeks in a
+configuration bundle" in `packages/venue-service/src/configuration-transfer.test.ts`.
 
 ### Earlier W98 menu timetable model
 
