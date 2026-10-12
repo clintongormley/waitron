@@ -16,7 +16,7 @@ import { configureZone, createDepartment } from "./operations.js";
 import { saveSpecialDate, duplicateSpecialDate } from "./hours.js";
 import { VENUE_SERVICE_CALENDAR_PARTICIPANTS } from "./calendar-participants.js";
 import { readOpeningHoursModel } from "./menu-timetable.js";
-import { zoneClosedTimes } from "./schema/zone-closed-times.js";
+import { seasons, zoneDayRanges, zoneDays } from "./schema/seasons.js";
 import * as closures from "./zone-closed-times.js";
 import { listZoneOffers, menuState } from "./operations.js";
 import { VENUE_SERVICE } from "./service.js";
@@ -151,12 +151,32 @@ describe("zone closed times", () => {
     await expect(
       tx((db) => replaceZoneClosedWeek(db, b.cfg, b.terrace, week([]), 0)),
     ).rejects.toMatchObject({ code: "service_zone.not_found" });
+    const seasonIds = await suite.db
+      .select({ id: seasons.id })
+      .from(seasons)
+      .where(eq(seasons.locationId, b.cfg.locationId))
+      .orderBy(seasons.id);
+    expect(seasonIds).toHaveLength(4);
     expect(
       await suite.db
-        .select({ weekday: zoneClosedTimes.weekday })
-        .from(zoneClosedTimes)
-        .where(eq(zoneClosedTimes.zoneId, b.terrace)),
-    ).toEqual([{ weekday: 1 }]);
+        .select({
+          seasonId: zoneDays.seasonId,
+          weekday: zoneDays.weekday,
+          startsAt: zoneDayRanges.startsAt,
+          endsAt: zoneDayRanges.endsAt,
+        })
+        .from(zoneDayRanges)
+        .innerJoin(zoneDays, eq(zoneDays.id, zoneDayRanges.dayId))
+        .where(eq(zoneDays.zoneId, b.terrace))
+        .orderBy(zoneDays.seasonId),
+    ).toEqual(
+      seasonIds.map((season) => ({
+        seasonId: season.id,
+        weekday: 1,
+        startsAt: "23:00:00",
+        endsAt: "06:00:00",
+      })),
+    );
   });
   it("refuses keeping-week and foreign named days before writing dated rows", async () => {
     const a = await venue(),

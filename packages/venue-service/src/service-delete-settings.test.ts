@@ -632,19 +632,55 @@ async function paintSeasons(tx: Transaction) {
 const seasonLines = (impact: { key: string }[]) =>
   impact.filter((item) => ["timetables", "slots", "seasons"].includes(item.key));
 
-it("the delete impact counts a week saved with no season once per season, beside its old timetables and slots", async () => {
+it("the delete impact counts a week saved with no season once per season, beside a named day's own timetables, slots and closures", async () => {
   await run(async (tx) => {
     const { f, week } = await paintSeasons(tx);
     await week();
+    expect(await tx.select().from(menuDayTimetables)).toEqual([]);
+    const [named] = await tx
+      .insert(specialDates)
+      .values({ ...f.cfg, date: "2030-01-08", name: "Holiday", ownHours: true })
+      .returning();
+    const [timetable] = await tx
+      .insert(menuDayTimetables)
+      .values({ departmentId: f.department, specialDateId: named!.id })
+      .returning();
+    const [lunch] = await tx
+      .select()
+      .from(menuPeriods)
+      .where(eq(menuPeriods.departmentId, f.department));
+    await tx.insert(menuSlots).values(
+      [
+        ["09:00:00", "11:00:00"],
+        ["13:00:00", "16:00:00"],
+      ].map(([startsAt, endsAt]) => ({
+        timetableId: timetable!.id,
+        departmentId: f.department,
+        periodId: lunch!.id,
+        startsAt: startsAt!,
+        endsAt: endsAt!,
+      })),
+    );
+    await tx.insert(zoneClosedTimes).values({
+      zoneId: f.gone,
+      specialDateId: named!.id,
+      startsAt: "22:00:00",
+      endsAt: "23:30:00",
+    });
 
-    expect(
-      seasonLines(
-        await readServiceDeleteSettings(tx, f.cfg, [f.gone, f.forbidden, f.allowed], f.department),
-      ),
-    ).toEqual([
+    const impact = await readServiceDeleteSettings(
+      tx,
+      f.cfg,
+      [f.gone, f.forbidden, f.allowed],
+      f.department,
+    );
+    expect(seasonLines(impact)).toEqual([
       { key: "timetables", count: 1, targets: [] },
       { key: "slots", count: 2, targets: [] },
       { key: "seasons", count: 4, targets: [] },
+    ]);
+    expect(impact.filter((item) => item.key === "zone_closed_times")).toEqual([
+      { key: "zone_closed_times", count: 1, targets: [] },
     ]);
   });
 });

@@ -5205,10 +5205,13 @@ it.each([-15, 14])(
       for (const key of ["period_id", "department_id", "customer_id", "staff_id"])
         expect(original).not.toContain(row[key]);
     const bad = structuredClone(bundle);
-    const slot = bad.tables.menu_slots!.find((row) => row.period_id === original[4])!;
-    slot.ends_at = "05:00:00";
+    const range = bad.tables.department_day_ranges!.find((row) => row.period_id === original[4])!;
+    range.ends_at = "05:00:00";
     expect(() => validateConfigurationBundle(bad, ALL_MODULES, versions)).toThrowError(
-      expect.objectContaining({ code: "setup.request_invalid", params: { field: "menu_slots" } }),
+      expect.objectContaining({
+        code: "setup.request_invalid",
+        params: { field: "department_day_ranges" },
+      }),
     );
   },
 );

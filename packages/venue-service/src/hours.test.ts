@@ -48,6 +48,7 @@ import type { VenueScope } from "./operations.js";
 import { specialDates } from "./schema/hours.js";
 import { departments, zoneServicePolicies } from "./schema/service.js";
 import { menuDayTimetables, menuSlots } from "./schema/menus.js";
+import { departmentDayRanges, zoneDayRanges, zoneDays } from "./schema/seasons.js";
 import { zoneClosedTimes } from "./schema/zone-closed-times.js";
 import { replaceMenuWeek, saveMenuPeriod, saveSpecialDateMenus } from "./menu-timetable.js";
 import { readSeasons } from "./seasons.js";
@@ -2831,11 +2832,14 @@ describe("named-day own-hours switching", () => {
     const { f } = await setup();
     const day = await saveDate(f, null, specialInput());
     expect(await snapshot(day.id)).toEqual({ days: [], slots: [], closures: [] });
-    const before = await db.select().from(menuSlots);
+    const before = await db.select().from(departmentDayRanges);
+    expect(before).not.toEqual([]);
     await saveDate(f, day.id, specialInput({ ownHours: true }));
     expect((await snapshot(day.id)).slots).toHaveLength(1);
     expect(
-      (await db.select().from(menuSlots)).filter((s) => before.some((b) => b.id === s.id)),
+      (await db.select().from(departmentDayRanges)).filter((s) =>
+        before.some((b) => b.id === s.id),
+      ),
     ).toEqual(before);
   });
 
@@ -2861,15 +2865,18 @@ describe("named-day own-hours switching", () => {
     expect(before.closures).toHaveLength(2);
     await saveDate(f, day.id, specialInput({ ownHours: false }));
     expect(await snapshot(day.id)).toEqual({ days: [], slots: [], closures: [] });
-    expect(
-      await db
-        .select()
-        .from(zoneClosedTimes)
-        .innerJoin(zoneServicePolicies, eq(zoneServicePolicies.zoneId, zoneClosedTimes.zoneId))
-        .where(
-          and(eq(zoneClosedTimes.weekday, 5), eq(zoneServicePolicies.locationId, f.cfg.locationId)),
-        ),
-    ).toHaveLength(1);
+    const fridays = await db
+      .select({ seasonId: zoneDays.seasonId, startsAt: zoneDayRanges.startsAt })
+      .from(zoneDayRanges)
+      .innerJoin(zoneDays, eq(zoneDays.id, zoneDayRanges.dayId))
+      .innerJoin(zoneServicePolicies, eq(zoneServicePolicies.zoneId, zoneDays.zoneId))
+      .where(and(eq(zoneDays.weekday, 5), eq(zoneServicePolicies.locationId, f.cfg.locationId)));
+    const seasons = await withTransaction(db, (tx) => readSeasons(tx, f.cfg));
+    expect(seasons).toHaveLength(4);
+    expect(new Set(fridays.map((row) => row.seasonId))).toEqual(
+      new Set(seasons.map((season) => season.id)),
+    );
+    expect(fridays.map((row) => row.startsAt)).toEqual(seasons.map(() => "13:00:00"));
   });
 
   it("keeps dated edits and row identities when own hours remain on", async () => {
