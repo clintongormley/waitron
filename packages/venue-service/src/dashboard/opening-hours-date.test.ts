@@ -345,8 +345,11 @@ it("adds a date range through the shared dialog without changing its weekday", a
   range.shadowRoot!.querySelector<HTMLElement>("[data-test=save-range]")!.click();
   await week.updateComplete;
   expect(writes).toEqual([]);
-  expect(week.department.week).toEqual([
-    { weekday: 1, slots: [{ periodId: "p1", startsAt: "10:00", endsAt: "14:00" }] },
+  expect(week.department.seasonWeeks).toEqual([
+    {
+      seasonId: "autumn",
+      week: [{ weekday: 1, slots: [{ periodId: "p1", startsAt: "10:00", endsAt: "14:00" }] }],
+    },
   ]);
   save(week).click();
   await expect.poll(() => writes.length).toBe(1);
