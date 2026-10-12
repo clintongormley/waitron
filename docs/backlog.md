@@ -1857,8 +1857,21 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   assistive technology and Shift+arrow needs a keyboard, so a screen-reader user on a touch screen
   cannot resize a table (accepted by the A502 coordinator, not yet by the owner). Left open by A466 (A429 slice 2) / A502 part 3.
 
-- **Small floor plan canvas details:** `reveal` does not count the side dots, and on a turned
-  table the resize cursor points the screen's way, not the side's. Left open by A466 (A429 slice 2) / A502 part 3.
+- **Small floor plan canvas details:** `reveal` does not count the side dots. Left open by A466 (A429 slice 2) / A502 part 3.
+
+- **A548 — on a turned floor plan table, each size dot's cursor points the way that dot drags**
+  (owner, 2026-10-12). Today the cursor belongs to the table's own side, not to where the dot is
+  drawn. On a table turned a quarter, the dot at the top is the table's left side, so hovering it
+  shows a left-right ↔ arrow, although dragging it already moves up and down
+  ([screenshot](backlog/mockups/a548-turned-table-dots.png), Counter 1 turned 90°). Owner's choice:
+  the dots stay on the table's sides at every angle, diagonal at 30° as today, and only the cursor
+  changes. It is the nearest of the four resize cursors (`ns-`, `ew-`, `nesw-`, `nwse-resize`) to
+  the direction the dot moves, which is what `outward(side, rotation)`
+  (`packages/ui/src/floor-plan-geometry.ts`) works out for the drag. The cursors are fixed per
+  `data-side` in the CSS of `packages/ui/src/components/wt-floor-plan-canvas.ts`, and both the dots
+  and their larger grab areas (`.resize-handle`) carry one. Points to settle in the change: the
+  cursor held during a drag (the pointer leaves the dot); a test that fails today at 90° and at a
+  diagonal such as 45°, and passes at 0°.
 
 - **A470 — the till's floor map follow-ups (2026-10-10).** Small gaps the till's map left: an
   unmeasured screen-reader activation and two wordings. Left open by A429 slice 3.
