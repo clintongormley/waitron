@@ -24,6 +24,7 @@ import { VENUE_SERVICE_MIGRATIONS } from "./migrations.js";
 import type { VenueScope } from "./operations.js";
 import { holidayGeographies } from "./schema/holidays.js";
 import { specialDates } from "./schema/hours.js";
+import { specialDayDates, specialDays } from "./schema/seasons.js";
 
 const suite = useVenueDb({
   migrations: [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS, VENUE_SERVICE_MIGRATIONS],
@@ -182,6 +183,19 @@ async function moveTo(cfg: VenueScope, address: Address) {
 
 const run = <T>(fn: (tx: Transaction) => Promise<T>) => withTransaction(db, fn);
 
+/** A special day closed all day on `date`, written straight to its tables. */
+async function specialDay(cfg: VenueScope, date: string, name: string, repeatsYearly = false) {
+  await run(async (tx) => {
+    const [day] = await tx
+      .insert(specialDays)
+      .values({ locationId: cfg.locationId, name, repeatsYearly })
+      .returning({ id: specialDays.id });
+    await tx
+      .insert(specialDayDates)
+      .values({ specialDayId: day!.id, locationId: cfg.locationId, date, closedAllDay: true });
+  });
+}
+
 async function seedRetainedGeographyWithWorkingDay(
   tx: Transaction,
   cfg: VenueScope,
@@ -281,6 +295,18 @@ describe("reading a venue's holidays", () => {
     });
   });
 
+  it("does not count a special day as a local holiday, whatever its name", async () => {
+    const cfg = await venue();
+    await specialDay(cfg, "2026-12-19", "Fiesta mayor", true);
+    const read = await run((tx) => store.readHolidays(tx, cfg, "2026-12-01", "2027-11-30"));
+    expect(read.coverage.map(({ local, sourceIds }) => ({ local, sourceIds }))).toEqual([
+      { local: "none_entered", sourceIds: ["ZZ-ANNEX"] },
+      { local: "none_entered", sourceIds: ["ZZ-ANNEX"] },
+    ]);
+    expect(read.sources.map(({ kind }) => kind)).toEqual(["official"]);
+    expect(read.facts.map(({ date }) => date)).toEqual(["2027-01-01"]);
+  });
+
   it("keeps a working named day and retained geography out of holiday facts, coverage and sources", async () => {
     const cfg = await venue();
     await run((tx) => seedRetainedGeographyWithWorkingDay(tx, cfg, "2026-01-01", "Fiesta mayor"));
@@ -306,16 +332,9 @@ describe("reading a venue's holidays", () => {
     ]);
   });
 
-  it("gives each civil year its own coverage, counting entries in the whole year", async () => {
+  it("gives each civil year its own coverage, with a special day in neither", async () => {
     const cfg = await venue();
-    await run((tx) =>
-      tx.insert(specialDates).values({
-        locationId: cfg.locationId,
-        date: "2026-03-19",
-        name: "Our holiday",
-        kind: "holiday",
-      }),
-    );
+    await specialDay(cfg, "2026-03-19", "Our holiday");
     const read = await run((tx) => store.readHolidays(tx, cfg, "2026-12-01", "2027-01-31"));
     expect(read.facts.map(({ id }) => id)).toEqual(["shipped:new-year-2027"]);
     expect(read.coverage).toEqual([
@@ -325,9 +344,9 @@ describe("reading a venue's holidays", () => {
         provinceCode: "10",
         regionCode: "R1",
         nationalRegional: "complete",
-        local: "owner_entered",
+        local: "none_entered",
         dataVersion: "ZZ-2026.1",
-        sourceIds: ["ZZ-ANNEX", `owner:named-days:${cfg.locationId}`],
+        sourceIds: ["ZZ-ANNEX"],
       },
       {
         year: 2027,
@@ -340,10 +359,7 @@ describe("reading a venue's holidays", () => {
         sourceIds: ["ZZ-ANNEX"],
       },
     ]);
-    expect(read.sources.map(({ id }) => id)).toEqual([
-      "ZZ-ANNEX",
-      `owner:named-days:${cfg.locationId}`,
-    ]);
+    expect(read.sources.map(({ id }) => id)).toEqual(["ZZ-ANNEX"]);
   });
 
   it("reports a year the pack does not ship as missing", async () => {
@@ -486,16 +502,9 @@ describe("an address that does not resolve", () => {
     });
   });
 
-  it("counts own named holidays for a known province whose region is unknown", async () => {
+  it("reports no local holidays for a known province whose region is unknown, a special day included", async () => {
     const cfg = await venue({ province: "Lostshire" });
-    await run((tx) =>
-      tx.insert(specialDates).values({
-        locationId: cfg.locationId,
-        date: "2026-03-19",
-        name: "Our holiday",
-        kind: "holiday",
-      }),
-    );
+    await specialDay(cfg, "2026-03-19", "Our holiday");
     const read = await run((tx) => store.readHolidays(tx, cfg, ...year));
     expect(read.facts).toEqual([]);
     expect(read.coverage).toMatchObject([
@@ -503,8 +512,8 @@ describe("an address that does not resolve", () => {
         provinceCode: "40",
         regionCode: null,
         nationalRegional: "unknown_region",
-        local: "owner_entered",
-        sourceIds: [`owner:named-days:${cfg.locationId}`],
+        local: "none_entered",
+        sourceIds: [],
       },
     ]);
   });
@@ -803,108 +812,26 @@ describe("no network", () => {
   });
 });
 
-describe("own named holidays contribute yearly owner coverage", () => {
-  it("counts repeats for the whole year without a geography and leaves facts unchanged", async () => {
-    const cfg = await venue();
-    await run((tx) =>
-      tx.insert(specialDates).values({
-        locationId: cfg.locationId,
-        date: "2026-12-25",
-        name: "Town holiday",
-        kind: "holiday",
-        repeatOn: "12-25",
-      }),
-    );
-    const read = await run((tx) => store.readHolidays(tx, cfg, "2027-01-01", "2027-01-01"));
-    expect(read.coverage[0]!.local).toBe("owner_entered");
-    expect(read.facts.map(({ name }) => name)).toEqual(["New Year"]);
-    expect(
-      read.coverage[0]!.sourceIds.every((id) => read.sources.some((source) => source.id === id)),
-    ).toBe(true);
-    expect(read.sources.filter(({ kind }) => kind === "owner")).toHaveLength(1);
-    expect(
-      (await run((tx) => store.readHolidays(tx, cfg, "2025-01-01", "2025-01-01"))).coverage[0]!
-        .local,
-    ).toBe("none_entered");
-    expect(
-      await run((tx) =>
-        tx
-          .select()
-          .from(holidayGeographies)
-          .where(eq(holidayGeographies.locationId, cfg.locationId)),
-      ),
-    ).toEqual([]);
-  });
-  it("ignores another venue's own holidays and named working days", async () => {
-    const cfg = await venue();
-    const other = await venue();
-    await run((tx) =>
-      tx.insert(specialDates).values([
-        {
-          locationId: cfg.locationId,
-          date: "2026-12-25",
-          name: "Party",
-          kind: "working_day",
-        },
-        {
-          locationId: other.locationId,
-          date: "2026-12-25",
-          name: "Foreign holiday",
-          kind: "holiday",
-        },
-      ]),
-    );
-    expect(
-      (await run((tx) => store.readHolidays(tx, cfg, "2026-01-01", "2026-01-01"))).coverage[0]!
-        .local,
-    ).toBe("none_entered");
-  });
-});
-
-it("counts own holidays even when the public-holiday address cannot resolve", async () => {
+it("reports an unresolved address when the public-holiday address cannot resolve, a special day included", async () => {
   const cfg = await venue({ country: "XY", province: null, city: null });
-  await run((tx) =>
-    tx.insert(specialDates).values({
-      locationId: cfg.locationId,
-      date: "2026-12-25",
-      name: "Our holiday",
-      kind: "holiday",
-    }),
-  );
+  await specialDay(cfg, "2026-12-25", "Our holiday");
   const read = await run((tx) => store.readHolidays(tx, cfg, "2026-01-01", "2026-01-01"));
   expect(read.coverage[0]).toMatchObject({
     nationalRegional: "unsupported_country",
-    local: "owner_entered",
+    local: "address_unresolved",
+    sourceIds: [],
   });
   expect(read.facts).toEqual([]);
 });
 
-it("lets a Spanish venue add more own holidays than the informational local number", async () => {
+it("lets a Spanish venue add more special days than the informational local number", async () => {
   const cfg = await venue({ country: "ES", province: "Sevilla", city: "Sevilla" });
   for (const date of ["2026-03-19", "2026-06-04", "2026-09-08"])
-    await run((tx) =>
-      saveSpecialDate(
-        tx,
-        cfg,
-        null,
-        {
-          date,
-          name: `Own ${date}`,
-          kind: "holiday",
-          ownHours: false,
-          repeats: false,
-          closeWholeVenue: false,
-          cells: [],
-        },
-        new Date("2026-01-01T12:00:00Z"),
-        undefined,
-        0,
-      ),
-    );
+    await specialDay(cfg, date, `Own ${date}`);
   expect(
     (
       await run((tx) =>
-        tx.select().from(specialDates).where(eq(specialDates.locationId, cfg.locationId)),
+        tx.select().from(specialDayDates).where(eq(specialDayDates.locationId, cfg.locationId)),
       )
     )
       .map(({ date }) => date)
@@ -917,7 +844,7 @@ it("lets a Spanish venue add more own holidays than the informational local numb
   expect(
     (await run((tx) => packageIndex.readHolidays(tx, cfg, "2026-12-01", "2026-12-01"))).coverage[0]!
       .local,
-  ).toBe("owner_entered");
+  ).toBe("none_entered");
 });
 
 it("reuses a holiday area's geography for an equivalent city spelling", async () => {

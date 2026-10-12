@@ -5,7 +5,6 @@ import { CATALOGUE_MIGRATIONS } from "@waitron/catalogue";
 import { CORE_MIGRATIONS, catalogues, locations, tenants, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { locationId } from "@waitron/shared";
-import { readCalendarDays } from "./hours.js";
 import {
   readOpeningHoursModel,
   replaceMenuWeek,
@@ -13,8 +12,7 @@ import {
   saveMenuPeriod,
 } from "./menu-timetable.js";
 import { VENUE_SERVICE_MIGRATIONS } from "./migrations.js";
-import * as namedDayReads from "./named-days.js";
-import { namedDaysBetween, namedDaysOn } from "./named-days.js";
+import { readSpecialDaysModel } from "./named-days.js";
 import { specialDates } from "./schema/hours.js";
 import {
   departmentDayRanges,
@@ -22,7 +20,7 @@ import {
   specialDayDates,
   specialDays,
 } from "./schema/seasons.js";
-import { menuDayTimetables, menuSlots } from "./schema/menus.js";
+import { menuDayTimetables } from "./schema/menus.js";
 import { departments, departmentSalePolicies } from "./schema/service.js";
 
 const suite = useVenueDb({
@@ -104,6 +102,37 @@ async function fixture() {
   });
 }
 type Fixture = Awaited<ReturnType<typeof fixture>>;
+async function special(
+  f: Fixture,
+  name: string,
+  dates: readonly (string | { date: string; closedAllDay: boolean })[],
+  repeatsYearly = false,
+  paint: readonly { periodId: string | null; startsAt: string; endsAt: string }[] = [],
+) {
+  return run(async (tx) => {
+    const [row] = await tx
+      .insert(specialDays)
+      .values({ locationId: f.cfg.locationId, name, repeatsYearly })
+      .returning({ id: specialDays.id });
+    for (const entry of dates) {
+      const { date, closedAllDay } =
+        typeof entry === "string" ? { date: entry, closedAllDay: false } : entry;
+      const [stored] = await tx
+        .insert(specialDayDates)
+        .values({ specialDayId: row!.id, locationId: f.cfg.locationId, date, closedAllDay })
+        .returning({ id: specialDayDates.id });
+      if (paint.length === 0) continue;
+      const [day] = await tx
+        .insert(departmentDays)
+        .values({ departmentId: f.department, specialDayDateId: stored!.id })
+        .returning({ id: departmentDays.id });
+      await tx
+        .insert(departmentDayRanges)
+        .values(paint.map((range) => ({ dayId: day!.id, departmentId: f.department, ...range })));
+    }
+    return row!.id;
+  });
+}
 async function day(
   f: Fixture,
   date: string,
@@ -122,80 +151,57 @@ async function day(
     return row!;
   });
 }
-async function dated(f: Fixture, id: string, startsAt?: string, endsAt = "15:00:00") {
-  await run(async (tx) => {
-    const [row] = await tx
-      .insert(menuDayTimetables)
-      .values({ departmentId: f.department, specialDateId: id })
-      .returning();
-    if (startsAt !== undefined)
-      await tx.insert(menuSlots).values({
-        timetableId: row!.id,
-        departmentId: f.department,
-        periodId: f.period,
-        startsAt,
-        endsAt,
-      });
-  });
+async function dated(f: Fixture, id: string) {
+  await run((tx) =>
+    tx.insert(menuDayTimetables).values({ departmentId: f.department, specialDateId: id }),
+  );
 }
 const service = (f: Fixture, at: string, department = f.department) =>
   run((tx) => resolveDepartmentService(tx, f.cfg, department, new Date(at)));
+const read = (
+  f: Fixture,
+  from: string,
+  to = from,
+  facts: readonly import("./hours-types.js").HolidayFact[] = [],
+) => run((tx) => readSpecialDaysModel(tx, f.cfg, from, to, now, async () => facts));
+const named = async (f: Fixture, from: string, to = from) =>
+  (await read(f, from, to)).days.flatMap(({ date, specialDay }) =>
+    specialDay === null ? [] : [{ date, ...specialDay }],
+  );
 
-describe("named-day occurrences read from the venue", () => {
-  it("returns the stored identity on each occurrence, and never before its first year", async () => {
+describe("special-day occurrences in the Calendar", () => {
+  it("shows a repeating special day on each occurrence, and never before its first year", async () => {
     const f = await fixture();
-    const row = await day(f, "2026-12-25", {
-      repeatOn: "12-25",
-      kind: "holiday",
-      closeWholeVenue: true,
-    });
-    const found = await run((tx) =>
-      namedDaysOn(tx, f.cfg, ["2025-12-25", "2026-12-25", "2027-12-25", "2027-12-26"]),
-    );
-    expect([...found.keys()]).toEqual(["2026-12-25", "2027-12-25"]);
-    expect(found.get("2027-12-25")).toEqual({
-      id: row.id,
-      date: "2027-12-25",
-      storedDate: "2026-12-25",
-      name: "Navidad",
-      kind: "holiday",
-      repeats: true,
-      ownHours: false,
-      closeWholeVenue: true,
-    });
+    const id = await special(f, "Navidad", [{ date: "2026-12-25", closedAllDay: true }], true);
+    expect(await named(f, "2025-12-25")).toEqual([]);
+    expect(await named(f, "2027-12-25", "2027-12-26")).toEqual([
+      { date: "2027-12-25", id, name: "Navidad" },
+    ]);
   });
   it("includes both ends, respects one-offs and leap days, and sorts a range across years", async () => {
     const f = await fixture();
-    const leap = await day(f, "2024-02-29", { repeatOn: "02-29", ownHours: true });
-    const christmas = await day(f, "2026-12-25", { repeatOn: "12-25" });
-    const one = await day(f, "2028-01-01");
-    const found = await run((tx) => namedDaysBetween(tx, f.cfg, "2027-12-25", "2028-02-29"));
-    expect(found.map(({ id, date }) => ({ id, date }))).toEqual([
-      { id: christmas.id, date: "2027-12-25" },
-      { id: one.id, date: "2028-01-01" },
-      { id: leap.id, date: "2028-02-29" },
+    const leap = await special(f, "Leap", ["2024-02-29"], true);
+    const christmas = await special(f, "Navidad", ["2026-12-25"], true);
+    const one = await special(f, "New Year", ["2028-01-01"]);
+    expect(
+      (await named(f, "2027-12-25", "2028-02-29")).map(({ id, date }) => ({ id, date })),
+    ).toEqual([
+      { id: christmas, date: "2027-12-25" },
+      { id: one, date: "2028-01-01" },
+      { id: leap, date: "2028-02-29" },
     ]);
-    expect(await run((tx) => namedDaysOn(tx, f.cfg, []))).toEqual(new Map());
   });
-  it("ignores another venue's named days", async () => {
+  it("ignores another venue's special days", async () => {
     const f = await fixture();
     const other = await fixture();
-    await day(other, "2020-12-25", { repeatOn: "12-25", closeWholeVenue: true });
-    expect(await run((tx) => namedDaysOn(tx, f.cfg, ["2027-12-25"]))).toEqual(new Map());
+    await special(other, "Navidad", [{ date: "2020-12-25", closedAllDay: true }], true);
+    expect(await read(f, "2027-12-25")).toMatchObject({
+      days: [{ date: "2027-12-25", specialDay: null, tone: "standard", closed: false }],
+    });
   });
 });
 
 describe("departments and calendar follow named days", () => {
-  it("ignores a retained empty dated row when own hours is off, in resolver and calendar", async () => {
-    const f = await fixture();
-    const row = await day(f, "2026-12-25", { kind: "holiday" });
-    await dated(f, row.id);
-    expect((await service(f, "2026-12-25T12:00:00Z")).periodId).toBe(f.period);
-    await suite.db.update(departments).set({ active: false }).where(eq(departments.id, f.other));
-    expect(
-      (await run((tx) => readCalendarDays(tx, f.cfg, "2026-12-25", "2026-12-25")))[0]!.tone,
-    ).toBe("purple");
-  });
   it("uses a repeating special day's range through a skipped clock minute in a later year", async () => {
     const f = await fixture();
     await run(async (tx) => {
@@ -234,44 +240,26 @@ describe("departments and calendar follow named days", () => {
   });
 });
 
-describe("named-days Calendar model", () => {
-  const read = async (
-    f: Fixture,
-    from: string,
-    to = from,
-    facts: readonly import("./hours-types.js").HolidayFact[] = [],
-  ) => {
-    expect(namedDayReads).toHaveProperty("readNamedDaysModel", expect.any(Function));
-    return run((tx) =>
-      namedDayReads.readNamedDaysModel(tx, f.cfg, from, to, now, async () => facts),
-    );
-  };
-  it("keeps both names and public tone when a named working day shares a public holiday", async () => {
+describe("special-days Calendar model", () => {
+  const christmas = (scope: "national" | "regional" | "local") => ({
+    id: "public",
+    date: "2026-12-25",
+    name: "Christmas",
+    scope,
+    sourceId: "official",
+  });
+  it("keeps the public-holiday tone, with its special day attached, on a public holiday edited into a special day", async () => {
     const f = await fixture();
-    const row = await day(f, "2026-12-25", { name: "Anniversary", ownHours: true });
-    const holiday = {
-      id: "public",
-      date: "2026-12-25",
-      name: "Christmas",
-      scope: "national" as const,
-      sourceId: "official",
-    };
-    const model = await read(f, "2026-12-25", "2026-12-25", [holiday]);
+    const id = await special(f, "Anniversary", ["2026-12-25"], false, [
+      { periodId: f.period, startsAt: "12:00", endsAt: "18:00" },
+    ]);
+    const model = await read(f, "2026-12-25", "2026-12-25", [christmas("national")]);
     expect(model.days).toEqual([
       {
         date: "2026-12-25",
-        namedDay: {
-          id: row.id,
-          date: "2026-12-25",
-          name: "Anniversary",
-          kind: "working_day",
-          repeats: false,
-          ownHours: true,
-          closeWholeVenue: false,
-        },
-        holidays: [holiday],
+        specialDay: { id, name: "Anniversary" },
+        holidays: [christmas("national")],
         tone: "public_holiday",
-        ownHours: true,
         closed: false,
       },
     ]);
@@ -284,57 +272,46 @@ describe("named-days Calendar model", () => {
       localHolidaysPerYear: 0,
     });
   });
-  it("shows a repeating own holiday in a later year with its stored identity", async () => {
+  it("draws a special day as a special day, in a later year too, and a local holiday does not change that", async () => {
     const f = await fixture();
-    const row = await day(f, "2026-12-25", { repeatOn: "12-25", kind: "holiday" });
+    const id = await special(f, "Navidad", ["2026-12-25"], true);
     expect((await read(f, "2027-12-25")).days).toEqual([
       {
         date: "2027-12-25",
-        namedDay: {
-          id: row.id,
-          date: "2026-12-25",
-          name: "Navidad",
-          kind: "holiday",
-          repeats: true,
-          ownHours: false,
-          closeWholeVenue: false,
-        },
+        specialDay: { id, name: "Navidad" },
         holidays: [],
-        tone: "own_holiday",
-        ownHours: false,
+        tone: "special_day",
         closed: false,
       },
     ]);
+    expect((await read(f, "2026-12-25", "2026-12-25", [christmas("local")])).days[0]).toMatchObject(
+      { tone: "special_day", holidays: [christmas("local")] },
+    );
   });
   it("keeps a closed public holiday red independently of its closure", async () => {
     const f = await fixture();
-    await day(f, "2026-12-25", { closeWholeVenue: true });
-    const holiday = {
-      id: "public",
-      date: "2026-12-25",
-      name: "Christmas",
-      scope: "regional" as const,
-      sourceId: "official",
-    };
-    expect((await read(f, "2026-12-25", "2026-12-25", [holiday])).days[0]).toMatchObject({
-      tone: "public_holiday",
-      closed: true,
-      ownHours: false,
-    });
+    await special(f, "Navidad", [{ date: "2026-12-25", closedAllDay: true }]);
+    expect(
+      (await read(f, "2026-12-25", "2026-12-25", [christmas("regional")])).days[0],
+    ).toMatchObject({ tone: "public_holiday", closed: true });
   });
-  it("marks closure from empty own department hours and ignores inactive departments", async () => {
+  it("marks closure from a special day's Closed paint and ignores inactive departments", async () => {
     const f = await fixture();
-    const row = await day(f, "2026-12-25", { ownHours: true });
-    await dated(f, row.id);
+    await special(f, "Navidad", ["2026-12-25"], false, [
+      { periodId: null, startsAt: "12:00", endsAt: "16:00" },
+    ]);
+    expect((await read(f, "2026-12-25")).days[0]).toMatchObject({
+      tone: "special_day",
+      closed: false,
+    });
     await suite.db.update(departments).set({ active: false }).where(eq(departments.id, f.other));
     expect((await read(f, "2026-12-25")).days[0]).toMatchObject({
-      tone: "working_day",
+      tone: "special_day",
       closed: true,
-      ownHours: true,
     });
     expect((await read(f, "2026-12-26")).days[0]).toMatchObject({
       tone: "standard",
-      namedDay: null,
+      specialDay: null,
       closed: false,
     });
     await suite.db
@@ -343,29 +320,17 @@ describe("named-days Calendar model", () => {
       .where(eq(departments.id, f.department));
     expect((await read(f, "2026-12-26")).days[0]).toMatchObject({ tone: "closed", closed: true });
   });
-});
-
-it("shows the same one-off named day in Calendar and Opening hours", async () => {
-  const f = await fixture();
-  const row = await day(f, "2026-12-25");
-  const model = await run((tx) =>
-    namedDayReads.readNamedDaysModel(tx, f.cfg, "2026-12-25", "2026-12-25", now),
-  );
-  const expected = {
-    id: row.id,
-    date: "2026-12-25",
-    name: "Navidad",
-    kind: "working_day",
-    repeats: false,
-    ownHours: false,
-    closeWholeVenue: false,
-  };
-  expect(model.days[0]!.namedDay).toEqual(expected);
-  expect(
-    (await run((tx) => readOpeningHoursModel(tx, f.cfg, now))).namedDays.find(
-      ({ id }) => id === row.id,
-    ),
-  ).toEqual(expected);
+  it("ignores the retired named days", async () => {
+    const f = await fixture();
+    await day(f, "2026-12-25", { kind: "holiday", closeWholeVenue: true });
+    expect((await read(f, "2026-12-25")).days[0]).toEqual({
+      date: "2026-12-25",
+      specialDay: null,
+      holidays: [],
+      tone: "standard",
+      closed: false,
+    });
+  });
 });
 
 it("returns the country's area options and the chosen venue area without inventing a geography", async () => {
@@ -381,7 +346,7 @@ it("returns the country's area options and the chosen venue area without inventi
       .where(eq(locations.id, f.cfg.locationId));
   });
   const before = await run((tx) =>
-    namedDayReads.readNamedDaysModel(tx, f.cfg, "2026-02-02", "2026-02-02", now),
+    readSpecialDaysModel(tx, f.cfg, "2026-02-02", "2026-02-02", now),
   );
   expect(before.area).toEqual({
     addressKey: JSON.stringify(["ES", "38", "santa cruz"]),
@@ -398,9 +363,7 @@ it("returns the country's area options and the chosen venue area without inventi
   expect(before.localHolidaysPerYear).toBe(2);
   const { saveHolidayArea } = await import("./holidays.js");
   await run((tx) => saveHolidayArea(tx, f.cfg, { areaKey: "tenerife" }));
-  const after = await run((tx) =>
-    namedDayReads.readNamedDaysModel(tx, f.cfg, "2026-02-02", "2026-02-02", now),
-  );
+  const after = await run((tx) => readSpecialDaysModel(tx, f.cfg, "2026-02-02", "2026-02-02", now));
   expect(after.area).toEqual({ ...before.area, required: false, chosen: "tenerife" });
   expect(after.days[0]!.tone).toBe("public_holiday");
   await suite.db
@@ -408,6 +371,10 @@ it("returns the country's area options and the chosen venue area without inventi
     .set({ timeZone: "unreadable" })
     .where(eq(locations.id, f.cfg.locationId));
   expect(
-    await run((tx) => namedDayReads.readNamedDaysModel(tx, f.cfg, "2026-02-02", "2026-02-02", now)),
-  ).toMatchObject({ civilDate: null, clockReadable: false });
+    await run((tx) => readSpecialDaysModel(tx, f.cfg, "2026-02-02", "2026-02-02", now)),
+  ).toMatchObject({
+    civilDate: null,
+    clockReadable: false,
+    days: [{ date: "2026-02-02", tone: "public_holiday", closed: false }],
+  });
 });

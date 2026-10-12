@@ -5,14 +5,13 @@ import { CATALOGUE_MIGRATIONS } from "@waitron/catalogue";
 import { CORE_MIGRATIONS, catalogues, locations, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { locationId } from "@waitron/shared";
-import { readCalendarDays, saveSpecialDate } from "./hours.js";
-import { readNamedDaysModel } from "./named-days.js";
-import { replaceMenuWeek, saveMenuPeriod, saveSpecialDateMenus } from "./menu-timetable.js";
+import { readCalendarDays } from "./hours.js";
+import { readSpecialDaysModel } from "./named-days.js";
+import { replaceMenuWeek, saveMenuPeriod } from "./menu-timetable.js";
 import { VENUE_SERVICE_MIGRATIONS } from "./migrations.js";
 import { readSeasons } from "./seasons.js";
-import { specialDates } from "./schema/hours.js";
-import { menuDayTimetables, menuSlots } from "./schema/menus.js";
 import { departments } from "./schema/service.js";
+import { saveSpecialDay } from "./special-days.js";
 
 const suite = useVenueDb({
   migrations: [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS, VENUE_SERVICE_MIGRATIONS],
@@ -99,10 +98,33 @@ async function fixture() {
   });
 }
 
+type Fixture = Awaited<ReturnType<typeof fixture>>;
+const special = (
+  f: Fixture,
+  date: string,
+  closedAllDay: boolean,
+  ranges: readonly { periodId: string | null; startsAt: string; endsAt: string }[] = [],
+) =>
+  withTransaction(suite.db, (tx) =>
+    saveSpecialDay(
+      tx,
+      f.cfg,
+      null,
+      {
+        name: `Special ${date}`,
+        repeatsYearly: false,
+        dates: [{ date, closedAllDay }],
+        paint: ranges.length === 0 ? [] : [{ departmentId: f.department, date, ranges }],
+      },
+      at,
+      0,
+    ),
+  );
+
 const tones = async (cfg: Awaited<ReturnType<typeof fixture>>["cfg"], from: string, to = from) =>
   withTransaction(suite.db, async (tx) => {
     const calendar = await readCalendarDays(tx, cfg, from, to);
-    const model = await readNamedDaysModel(tx, cfg, from, to, at);
+    const model = await readSpecialDaysModel(tx, cfg, from, to, at);
     return {
       calendar: calendar.map((day) => day.tone),
       model: model.days.map((day) => day.tone),
@@ -162,27 +184,12 @@ describe("calendar follows department service periods", () => {
     ]);
   });
 
-  it("keeps a named day without its own timetable closed like the standard week", async () => {
+  it("keeps a special day without paint closed like the standard week", async () => {
     const f = await fixture();
-    await withTransaction(suite.db, async (tx) => {
-      await saveSpecialDate(
-        tx,
-        f.cfg,
-        null,
-        {
-          date: "2026-10-20",
-          name: "Named Tuesday",
-          closeWholeVenue: false,
-          cells: [],
-        },
-        at,
-        undefined,
-        0,
-      );
-    });
+    await special(f, "2026-10-20", false);
     expect(await tones(f.cfg, "2026-10-20")).toEqual({
-      calendar: ["closed"],
-      model: ["working_day"],
+      calendar: ["special_day"],
+      model: ["special_day"],
       closed: [true],
     });
     expect(await tones(f.cfg, "2026-10-27")).toEqual({
@@ -192,130 +199,50 @@ describe("calendar follows department service periods", () => {
     });
   });
 
-  it("uses an explicit empty special-day timetable, and falls back to the week when absent", async () => {
+  it("closes a day painted Closed over its hours, and follows the week where nothing is painted", async () => {
     const f = await fixture();
-    await withTransaction(suite.db, async (tx) => {
-      const special = await saveSpecialDate(
-        tx,
-        f.cfg,
-        null,
-        {
-          date: "2026-10-19",
-          name: "Closed Monday",
-          closeWholeVenue: false,
-          cells: [],
-        },
-        at,
-        undefined,
-        0,
-      );
-      await tx.update(specialDates).set({ ownHours: true }).where(eq(specialDates.id, special.id));
-      await saveSpecialDateMenus(tx, f.cfg, special.id, f.department, [], at, 0);
-      await saveSpecialDate(
-        tx,
-        f.cfg,
-        null,
-        {
-          date: "2026-10-26",
-          name: "Normal Monday",
-          closeWholeVenue: false,
-          cells: [],
-        },
-        at,
-        undefined,
-        0,
-      );
-    });
+    await special(f, "2026-10-19", false, [{ periodId: null, startsAt: "22:00", endsAt: "03:00" }]);
+    await special(f, "2026-10-26", false);
     expect(await tones(f.cfg, "2026-10-19")).toEqual({
-      calendar: ["closed"],
-      model: ["working_day"],
+      calendar: ["special_day"],
+      model: ["special_day"],
       closed: [true],
     });
     expect(await tones(f.cfg, "2026-10-26")).toEqual({
-      calendar: ["blue"],
-      model: ["working_day"],
+      calendar: ["special_day"],
+      model: ["special_day"],
       closed: [false],
     });
   });
 
-  it("uses special-day ranges to open a closed weekday, and whole-venue closure wins", async () => {
+  it("uses special-day paint to open a closed weekday, and the Closed tick wins", async () => {
     const f = await fixture();
-    await withTransaction(suite.db, async (tx) => {
-      for (const [date, closeWholeVenue] of [
-        ["2026-10-20", false],
-        ["2026-10-27", true],
-      ] as const) {
-        const special = await saveSpecialDate(
-          tx,
-          f.cfg,
-          null,
-          { date, name: "Special Tuesday", closeWholeVenue, cells: [] },
-          at,
-          undefined,
-          0,
-        );
-        await tx
-          .update(specialDates)
-          .set({ ownHours: !closeWholeVenue })
-          .where(eq(specialDates.id, special.id));
-        if (closeWholeVenue) {
-          const [day] = await tx
-            .insert(menuDayTimetables)
-            .values({ departmentId: f.department, specialDateId: special.id })
-            .returning();
-          await tx.insert(menuSlots).values({
-            timetableId: day!.id,
-            departmentId: f.department,
-            periodId: f.period,
-            startsAt: "10:00:00",
-            endsAt: "14:00:00",
-          });
-        } else {
-          await saveSpecialDateMenus(
-            tx,
-            f.cfg,
-            special.id,
-            f.department,
-            [{ periodId: f.period, startsAt: "10:00", endsAt: "14:00" }],
-            at,
-            0,
-          );
-        }
-      }
-    });
+    const lunch = [{ periodId: f.period, startsAt: "10:00", endsAt: "14:00" }];
+    await special(f, "2026-10-20", false, lunch);
+    await special(f, "2026-10-27", true, lunch);
     expect(await tones(f.cfg, "2026-10-20")).toEqual({
-      calendar: ["blue"],
-      model: ["working_day"],
+      calendar: ["special_day"],
+      model: ["special_day"],
       closed: [false],
     });
     expect(await tones(f.cfg, "2026-10-27")).toEqual({
-      calendar: ["closed"],
-      model: ["working_day"],
+      calendar: ["special_day"],
+      model: ["special_day"],
       closed: [true],
     });
   });
 
-  it("a whole-venue named closure overrides a normally open weekday", async () => {
+  it("a special day's Closed tick overrides a normally open weekday", async () => {
     const f = await fixture();
     expect(await tones(f.cfg, "2026-10-19")).toEqual({
       calendar: ["standard"],
       model: ["standard"],
       closed: [false],
     });
-    await withTransaction(suite.db, (tx) =>
-      saveSpecialDate(
-        tx,
-        f.cfg,
-        null,
-        { date: "2026-10-19", name: "Venue closed", closeWholeVenue: true, cells: [] },
-        at,
-        undefined,
-        0,
-      ),
-    );
+    await special(f, "2026-10-19", true);
     expect(await tones(f.cfg, "2026-10-19")).toEqual({
-      calendar: ["closed"],
-      model: ["working_day"],
+      calendar: ["special_day"],
+      model: ["special_day"],
       closed: [true],
     });
   });
