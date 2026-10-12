@@ -6170,6 +6170,11 @@ describe("seasons in a configuration transfer", () => {
       });
       await tx.execute(sql`insert into zone_closed_times (id, zone_id, weekday, special_date_id, starts_at, ends_at)
         values (${randomUUID()}, ${zone.id}, 6, null, '20:00:00', '23:00:00')`);
+      const saturdayTimetable = randomUUID();
+      await tx.execute(sql`insert into menu_day_timetables (id, department_id, weekday, special_date_id)
+        values (${saturdayTimetable}, ${department.id}, 6, null)`);
+      await tx.execute(sql`insert into menu_slots (id, timetable_id, department_id, period_id, starts_at, ends_at)
+        values (${randomUUID()}, ${saturdayTimetable}, ${department.id}, ${dinner}, '20:00:00', '02:00:00')`);
       const named = await saveSpecialDate(
         tx,
         scope,

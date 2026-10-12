@@ -60,7 +60,6 @@ export async function businessDayClockConflicts(
       departmentName: departments.name,
       periodName: menuPeriods.name,
       specialDateName: specialDates.name,
-      weekday: menuDayTimetables.weekday,
       specialDateId: menuDayTimetables.specialDateId,
       date: specialDates.date,
       repeatOn: specialDates.repeatOn,
@@ -103,7 +102,6 @@ export async function businessDayClockConflicts(
       zoneName: floorZones.name,
       specialDateName: specialDates.name,
       zoneId: zoneClosedTimes.zoneId,
-      weekday: zoneClosedTimes.weekday,
       specialDateId: zoneClosedTimes.specialDateId,
       date: specialDates.date,
       repeatOn: specialDates.repeatOn,
@@ -151,11 +149,11 @@ export async function businessDayClockConflicts(
       .id;
   const undated = { specialDateName: null, specialDateId: null, date: null, repeatOn: null };
   const periods: Placement[] = [
-    ...named.map((row) => ({ ...row, seasonId: null })),
+    ...named.map((row) => ({ ...row, weekday: null, seasonId: null })),
     ...seasonPeriods.map((row) => ({ ...row, ...undated })),
   ];
   const closures: Omit<Placement, "offset">[] = [
-    ...namedClosures.map((row) => ({ ...row, seasonId: null })),
+    ...namedClosures.map((row) => ({ ...row, weekday: null, seasonId: null })),
     ...seasonClosures.map((row) => ({ ...row, ...undated })),
   ];
   const calendar = await tx

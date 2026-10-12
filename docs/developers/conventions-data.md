@@ -611,9 +611,9 @@ provisioning and, for a venue with none, by `targetSeasons` before a week write
 
 A week saved with no season named goes into every season; a week saved with a season named
 changes that season alone (`replaceMenuWeek` in `packages/venue-service/src/menu-timetable.ts`,
-`replaceZoneClosedWeek` in `packages/venue-service/src/zone-closed-times.ts`). Until A506-2, a
-week saved with no season named also writes the old weekday rows, `menu_day_timetables` with
-`menu_slots` and `zone_closed_times`, beside them (the "keeping the old weekday rows" cases in
+`replaceZoneClosedWeek` in `packages/venue-service/src/zone-closed-times.ts`). The old tables,
+`menu_day_timetables` with `menu_slots` and `zone_closed_times`, hold named-day rows only (the case
+"a week written with no season named leaves no weekday row in the old tables" in
 `packages/venue-service/src/season-weeks.test.ts`).
 
 A configuration transfer carries the five tables (`VENUE_SERVICE_CONFIGURATION_TRANSFER` in

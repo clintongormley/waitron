@@ -785,40 +785,21 @@ export async function replaceMenuWeek(
     departmentId,
     week.slots.map((slots, weekday) => ({ field: `days.${week.indexOf[weekday]}.slots`, slots })),
   );
-  const existing = await tx
-    .select({ id: menuDayTimetables.id, weekday: menuDayTimetables.weekday })
-    .from(menuDayTimetables)
-    .where(
-      and(eq(menuDayTimetables.departmentId, departmentId), isNotNull(menuDayTimetables.weekday)),
-    );
-  const currentSlots = await slotsByTimetable(
-    tx,
-    existing.map((day) => day.id),
-  );
   const targets = await targetSeasons(tx, cfg, options.seasonId);
   const samePeriod = (a: ServiceRange, b: ServiceRange) => a.periodId === b.periodId;
   const seasonWeek = week.slots.map((slots) => joinTouching(slots, samePeriod));
   const seasonsNow = (
     await readDepartmentSeasonWeeks(tx, cfg, [departmentId], clock.dayCutover)
   ).get(departmentId);
-  const changed =
-    (options.seasonId === undefined &&
-      week.slots.some(
-        (slots, weekday) =>
-          !sameScheduleRanges(
-            currentSlots.get(existing.find((day) => day.weekday === weekday)?.id ?? "") ?? [],
-            slots,
-          ),
-      )) ||
-    targets.some((season) =>
-      seasonWeek.some(
-        (ranges, weekday) =>
-          !sameScheduleRanges(
-            joinTouching(seasonsNow?.get(season.id)?.[weekday] ?? [], samePeriod),
-            ranges,
-          ),
-      ),
-    );
+  const changed = targets.some((season) =>
+    seasonWeek.some(
+      (ranges, weekday) =>
+        !sameScheduleRanges(
+          joinTouching(seasonsNow?.get(season.id)?.[weekday] ?? [], samePeriod),
+          ranges,
+        ),
+    ),
+  );
   await assertBusinessDayScheduleWrite(
     tx,
     cfg,
@@ -827,16 +808,6 @@ export async function replaceMenuWeek(
     expectedClockRevision,
     clock,
   );
-  if (options.seasonId === undefined) {
-    const idOf = (weekday: number) => existing.find((row) => row.weekday === weekday)?.id;
-    const emptied = [0, 1, 2, 3, 4, 5, 6]
-      .filter((weekday) => week.slots[weekday]!.length === 0)
-      .flatMap((weekday) => idOf(weekday) ?? []);
-    if (emptied.length > 0)
-      await tx.delete(menuDayTimetables).where(inArray(menuDayTimetables.id, emptied));
-    for (const [weekday, slots] of week.slots.entries())
-      if (slots.length > 0) await writeDay(tx, idOf(weekday), { departmentId, weekday }, slots);
-  }
   const holding = seasonsHolding(
     seasonsNow,
     targets.map((season) => season.id),
