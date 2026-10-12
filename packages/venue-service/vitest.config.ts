@@ -4,6 +4,10 @@ import { parkPointerCommands } from "@waitron/ui/src/vitest-park-pointer.js";
 
 export default defineConfig({
   test: {
+    // Probe, never merged (A527): Vitest reads connectTimeout from this root block only.
+    browser: process.env.A527_PROBE_CONNECT_TIMEOUT
+      ? { connectTimeout: Number(process.env.A527_PROBE_CONNECT_TIMEOUT) }
+      : {},
     projects: [
       {
         test: {

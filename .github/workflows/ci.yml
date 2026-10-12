@@ -1339,13 +1339,13 @@ jobs:
           TMPDIR: /dev/shm
           DEBUG: "vitest:browser:pool,vitest:browser:playwright,vitest:browser:api,pw:browser"
           VITEST_PW_DEBUG: "1"
+          A527_PROBE_CONNECT_TIMEOUT: ${{ matrix.shard == 2 && '1' || '' }}
         run: |
           set -euo pipefail
           pnpm --filter "@waitron/venue-service" test:shard \
             --shard=${{ matrix.shard }}/4 \
             --outputFile=.vitest-reports/blob-${{ matrix.shard }}.json \
             --reporter="$GITHUB_WORKSPACE/scripts/vitest-file-progress.mjs" \
-            $([ "${{ matrix.shard }}" = 2 ] && echo --browser.connectTimeout=1) \
             2>&1 | tee "$RUNNER_TEMP/shard-diagnostics/shard.log" \
             | grep -v --line-buffered 'vitest:browser:api .*Triggering command'
 
