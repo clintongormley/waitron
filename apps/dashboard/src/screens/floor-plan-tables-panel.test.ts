@@ -37,7 +37,6 @@ const draft: FloorPlanDraft = {
     table("m3", "Terrace 2"),
     table("m4", "Terrace bar 3"),
   ],
-  joins: [],
 };
 
 async function mount(props: Partial<FloorPlanTablesPanel> = {}) {
@@ -86,7 +85,7 @@ it("lists the tables in numeric order, placed ones marked", async () => {
 
 it("sorts a name with leading spaces by its trimmed name", async () => {
   const el = await open({
-    draft: { tables: [...draft.tables, table("m5", "  Terrace 3")], joins: [] },
+    draft: { tables: [...draft.tables, table("m5", "  Terrace 3")] },
   });
   expect(rows(el).map(nameOf)).toEqual([
     "Terrace 1",
@@ -99,7 +98,7 @@ it("sorts a name with leading spaces by its trimmed name", async () => {
 
 it("shows each row's marker, name, seats and a bin, under Name and Seats heads", async () => {
   const el = await open({
-    draft: { tables: [table("m1", "Terrace 1", true, 4), table("m3", "Terrace 2")], joins: [] },
+    draft: { tables: [table("m1", "Terrace 1", true, 4), table("m3", "Terrace 2")] },
   });
   const [placed, spare] = rows(el);
   expect(placed!.querySelector("[data-marker]")!.getAttribute("data-marker")).toBe("placed");
@@ -121,7 +120,7 @@ it("shows each row's marker, name, seats and a bin, under Name and Seats heads",
 });
 
 it("starts the Name and Seats heads where each row's name and seats start", async () => {
-  const el = await open({ draft: { tables: [table("m1", "Terrace 1", true, 4)], joins: [] } });
+  const el = await open({ draft: { tables: [table("m1", "Terrace 1", true, 4)] } });
   const [nameHead, seatsHead] = [...el.shadowRoot!.querySelectorAll("[data-head]")].map(
     (head) => head.getBoundingClientRect().left,
   );
@@ -223,7 +222,7 @@ it("marks the selected table's row as current", async () => {
 
 it("names a table with a blank name Unnamed", async () => {
   const el = await open({
-    draft: { tables: [table("m1", "  "), table("m2", "Terrace 1")], joins: [] },
+    draft: { tables: [table("m1", "  "), table("m2", "Terrace 1")] },
   });
   expect(rows(el).map(nameOf)).toEqual(["Terrace 1", "Unnamed"]);
 });

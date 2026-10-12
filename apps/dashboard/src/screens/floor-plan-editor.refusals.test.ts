@@ -41,7 +41,6 @@ function plan(): FloorPlan {
       { id: "m2", liveTableId: "l2", label: "T2", seats: 2, fixed: true, placement: null },
       { id: "m9", liveTableId: "l9", label: "T9", seats: null, fixed: false, placement: null },
     ],
-    joins: [{ id: "j1", seats: 6, tableIds: ["m1", "m2"] }],
   };
 }
 
@@ -217,18 +216,6 @@ it("an invalid field the panel does not show selects the table and shows the ref
   expect(message(el)).toBe("Check the floor plan's tables and try again");
 });
 
-it("a refusal about a join selects nothing and shows its own sentence", async () => {
-  const el = await open(refusing(invalid("joins.0.tableKeys")));
-  await change(el, changePlacement(opened(), "m1", { x: 5, y: 4 }));
-  canvas(el).dispatchEvent(
-    new CustomEvent("wt-table-select", { detail: { key: "m1" }, bubbles: true, composed: true }),
-  );
-  await press(el, "save");
-  expect(canvas(el).selected).toBe("m1");
-  expect(el.fieldError).toBeNull();
-  expect(message(el)).toBe("Check the floor plan's tables and try again");
-});
-
 const booked = (params: Record<string, unknown>) => ({ code: "table.booked", params });
 
 /** The plan with m2 placed, away from m1. */
@@ -376,7 +363,6 @@ it("a booked table's mark goes at the next Save, which sends it back", async () 
     "m9",
     "m2",
   ]);
-  expect(saveFloorPlan.mock.calls[1]![1].joins).toEqual([{ seats: 6, tableKeys: ["m1", "m2"] }]);
   expect(drawn(el, "m2")?.refused).toBeUndefined();
 });
 
@@ -406,39 +392,13 @@ it("a booked table's mark goes when it is moved, rotated, edited or deleted agai
   }
 });
 
-it("a booked table whose delete was the only change comes back with its join, leaving Save quiet", async () => {
+it("a booked table whose delete was the only change comes back, leaving Save quiet", async () => {
   const el = await openPlaced(
     vi.fn().mockRejectedValue(booked({ tableId: "l2", date: "2026-10-12", time: "21:00" })),
   );
   await change(el, deleteTable(draftFromPlan(placedM2()), "m2"));
   await press(el, "save");
   expect(drawn(el, "m2")?.refused).toBe("Booked 12 Oct, 21:00");
-  expect(el["draft"]!.joins).toEqual([{ key: "j1", seats: 6, tableKeys: ["m1", "m2"] }]);
-  expect(button(el, "save").disabled).toBe(true);
-});
-
-it("a booked table taken out of a join of three, as the only change, leaves Save quiet when it comes back", async () => {
-  const three: FloorPlan = {
-    ...placedM2(),
-    tables: [
-      ...placedM2().tables,
-      { id: "m3", liveTableId: "l3", label: "T3", seats: 2, fixed: false, placement: null },
-    ],
-    joins: [{ id: "j1", seats: 8, tableIds: ["m1", "m2", "m3"] }],
-  };
-  const el = await open(
-    stubApi({
-      getFloorPlan: vi.fn().mockResolvedValue(three),
-      saveFloorPlan: vi
-        .fn()
-        .mockRejectedValue(booked({ tableId: "l2", date: "2026-10-12", time: "21:00" })),
-    }),
-  );
-  await change(el, deleteTable(draftFromPlan(three), "m2"));
-  expect(el["draft"]!.joins).toEqual([{ key: "j1", seats: 8, tableKeys: ["m1", "m3"] }]);
-  await press(el, "save");
-  expect(drawn(el, "m2")?.refused).toBe("Booked 12 Oct, 21:00");
-  expect(el["draft"]!.joins).toEqual([{ key: "j1", seats: 8, tableKeys: ["m1", "m2", "m3"] }]);
   expect(button(el, "save").disabled).toBe(true);
 });
 
@@ -718,7 +678,7 @@ it("Save does not send while a Reload read is pending", async () => {
 
 it("a save still pending on one zone does not stop Save on the next", async () => {
   const saveFloorPlan = vi.fn().mockReturnValue(new Promise(() => {}));
-  const bar: FloorPlan = { ...plan(), zoneId: "z2", tables: [plan().tables[0]!], joins: [] };
+  const bar: FloorPlan = { ...plan(), zoneId: "z2", tables: [plan().tables[0]!] };
   const getFloorPlan = vi.fn((zoneId: string) => Promise.resolve(zoneId === "z2" ? bar : plan()));
   const el = await open(stubApi({ saveFloorPlan, getFloorPlan }));
   await change(el, changePlacement(opened(), "m1", { x: 5, y: 4 }));

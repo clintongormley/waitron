@@ -2,7 +2,7 @@ import { NEW_TABLE_SIZE, clampToGrid, firstFreeSpot } from "@waitron/ui";
 import type { FloorPlan, FloorPlanSave, PlanPlacement } from "../api/client.js";
 import { t } from "../i18n/t.js";
 
-/** The most seats a table or a join may hold. */
+/** The most seats a table may hold. */
 export const MAX_SEATS = 999;
 
 export interface DraftTable {
@@ -15,15 +15,8 @@ export interface DraftTable {
   placement: PlanPlacement | null;
 }
 
-export interface DraftJoin {
-  key: string;
-  seats: number;
-  tableKeys: string[];
-}
-
 export interface FloorPlanDraft {
   tables: DraftTable[];
-  joins: DraftJoin[];
 }
 
 /** A panel or dialog's new draft for the page; changes sharing a `mergeKey` make one undo step. */
@@ -48,8 +41,6 @@ export function tableName(table: Pick<DraftTable, "label"> | undefined): string 
 
 type TablePatch = Partial<Pick<DraftTable, "label" | "seats" | "fixed" | "placement">>;
 
-const MIN_JOIN_TABLES = 2;
-
 export function draftFromPlan(plan: FloorPlan): FloorPlanDraft {
   return {
     tables: plan.tables.map((t) => ({
@@ -61,7 +52,6 @@ export function draftFromPlan(plan: FloorPlan): FloorPlanDraft {
       fixed: t.fixed,
       placement: t.placement === null ? null : { ...t.placement },
     })),
-    joins: plan.joins.map((j) => ({ key: j.id, seats: j.seats, tableKeys: [...j.tableIds] })),
   };
 }
 
@@ -76,7 +66,6 @@ export function saveFromDraft(revision: number, draft: FloorPlanDraft): FloorPla
       fixed: t.fixed,
       placement: t.placement,
     })),
-    joins: draft.joins.map((j) => ({ seats: j.seats, tableKeys: [...j.tableKeys] })),
   };
 }
 
@@ -89,12 +78,10 @@ export function rekeyDraft(
   draft: FloorPlanDraft,
   ids: Readonly<Record<string, string>>,
 ): FloorPlanDraft {
-  const rekey = rekeyWith(ids);
   return {
     tables: draft.tables.map((t) =>
       Object.hasOwn(ids, t.key) ? { ...t, key: ids[t.key]!, id: ids[t.key]! } : t,
     ),
-    joins: draft.joins.map((j) => ({ ...j, tableKeys: j.tableKeys.map(rekey) })),
   };
 }
 
@@ -134,21 +121,15 @@ function sameTable(a: DraftTable, b: DraftTable): boolean {
   );
 }
 
-function joinSignatures(joins: readonly DraftJoin[]): string[] {
-  return joins.map((j) => JSON.stringify([j.seats, [...j.tableKeys].sort()])).sort();
-}
-
-/** Same tables by key with the same values, and the same joins as sets of members with their seats. */
+/** Same tables by key with the same values. */
 export function sameDraft(a: FloorPlanDraft, b: FloorPlanDraft): boolean {
-  if (a.tables.length !== b.tables.length || a.joins.length !== b.joins.length) return false;
+  if (a.tables.length !== b.tables.length) return false;
   const byKey = new Map(b.tables.map((t) => [t.key, t]));
   for (const t of a.tables) {
     const other = byKey.get(t.key);
     if (other === undefined || !sameTable(t, other)) return false;
   }
-  const left = joinSignatures(a.joins);
-  const right = joinSignatures(b.joins);
-  return left.every((s, i) => s === right[i]);
+  return true;
 }
 
 export function checkDraft(
@@ -213,53 +194,16 @@ export function placeTable(draft: FloorPlanDraft, key: string, at?: PlanPlacemen
   });
 }
 
-const tableSet = (tableKeys: readonly string[]): string => JSON.stringify([...tableKeys].sort());
-
-/** A join the delete shrinks to the same tables as another goes, as the server refuses two: a
- *  join the delete did not touch survives, else the first shrunk one. */
 export function deleteTable(draft: FloorPlanDraft, key: string): FloorPlanDraft {
-  const target = draft.tables.find((t) => t.key === key);
-  if (target === undefined) return draft;
-  const untouched = new Set(
-    draft.joins.filter((j) => !j.tableKeys.includes(key)).map((j) => tableSet(j.tableKeys)),
-  );
-  const shrunk = new Set<string>();
-  return {
-    tables: draft.tables.filter((t) => t.key !== key),
-    joins: draft.joins.flatMap((j) => {
-      if (!j.tableKeys.includes(key)) return [j];
-      const tableKeys = j.tableKeys.filter((k) => k !== key);
-      const set = tableSet(tableKeys);
-      if (tableKeys.length < MIN_JOIN_TABLES || untouched.has(set) || shrunk.has(set)) return [];
-      shrunk.add(set);
-      return [{ ...j, tableKeys }];
-    }),
-  };
+  if (!draft.tables.some((t) => t.key === key)) return draft;
+  return { ...draft, tables: draft.tables.filter((t) => t.key !== key) };
 }
 
-/** Puts a table back, as given, after the others, with each of `joins` through it whose other
- *  tables the draft still holds. A join of three or more keeps its key when the table leaves it,
- *  so a draft join with that key is replaced by the given one, in place. */
-export function restoreTable(
-  draft: FloorPlanDraft,
-  table: DraftTable,
-  joins: readonly DraftJoin[] = [],
-): FloorPlanDraft {
+/** Puts a table back, as given, after the others. */
+export function restoreTable(draft: FloorPlanDraft, table: DraftTable): FloorPlanDraft {
   if (draft.tables.some((t) => t.key === table.key)) return draft;
   const placement = table.placement === null ? null : { ...table.placement };
-  const tables = [...draft.tables, { ...table, placement }];
-  const present = new Set(tables.map((t) => t.key));
-  const back = new Map(
-    joins
-      .filter((j) => j.tableKeys.includes(table.key) && j.tableKeys.every((k) => present.has(k)))
-      .map((j) => [j.key, { ...j, tableKeys: [...j.tableKeys] }]),
-  );
-  const kept = draft.joins.map((j) => {
-    const saved = back.get(j.key);
-    back.delete(j.key);
-    return saved ?? j;
-  });
-  return { tables, joins: [...kept, ...back.values()] };
+  return { ...draft, tables: [...draft.tables, { ...table, placement }] };
 }
 
 export function addTables(
@@ -282,18 +226,4 @@ export function addTables(
       })),
     ],
   };
-}
-
-export function addJoin(
-  draft: FloorPlanDraft,
-  tableKeys: string[],
-  seats: number,
-  key: string,
-): FloorPlanDraft {
-  return { ...draft, joins: [...draft.joins, { key, seats, tableKeys: [...tableKeys] }] };
-}
-
-export function removeJoin(draft: FloorPlanDraft, joinKey: string): FloorPlanDraft {
-  if (!draft.joins.some((j) => j.key === joinKey)) return draft;
-  return { ...draft, joins: draft.joins.filter((j) => j.key !== joinKey) };
 }

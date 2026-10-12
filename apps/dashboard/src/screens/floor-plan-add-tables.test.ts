@@ -34,7 +34,6 @@ const draft: FloorPlanDraft = {
     table("m3", "Terrace 2"),
     table("m4", "Terrace bar 3"),
   ],
-  joins: [],
 };
 
 function listen(el: FloorPlanAddTables) {
@@ -289,7 +288,7 @@ it("opens afresh after an add", async () => {
   const el = await openAdd();
   await set(el, addField(el, "table-count"), "3");
   await pressAdd(el);
-  el.draft = { tables: [...draft.tables, table("x", "Terrace 11")], joins: [] };
+  el.draft = { tables: [...draft.tables, table("x", "Terrace 11")] };
   await show(el);
   expect(addField(el, "table-count").value).toBe("1");
   expect(preview(el)).toBe("Terrace 12");

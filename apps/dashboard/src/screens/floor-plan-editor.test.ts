@@ -33,7 +33,6 @@ function terrace(revision = 3): FloorPlan {
       { id: "m1", liveTableId: "l1", label: "T1", seats: 4, fixed: false, placement },
       { id: "m2", liveTableId: "l2", label: "T2", seats: 2, fixed: false, placement: null },
     ],
-    joins: [],
   };
 }
 
@@ -42,7 +41,6 @@ const bar: FloorPlan = {
   revision: 1,
   savedAt: "2026-10-01T10:00:00.000Z",
   tables: [{ id: "b1", liveTableId: "l5", label: "B1", seats: 2, fixed: false, placement }],
-  joins: [],
 };
 
 function stubApi(overrides: Partial<DashboardApi> = {}): DashboardApi {
@@ -912,11 +910,6 @@ async function askDelete(el: FloorPlanEditor, key: string): Promise<WtModal> {
 const closeOf = (dialog: WtModal) =>
   new Promise((resolve) => dialog.addEventListener("wt-close", resolve, { once: true }));
 
-const joinedTerrace = (): FloorPlan => ({
-  ...terrace(),
-  joins: [{ id: "j1", seats: 6, tableIds: ["m1", "m2"] }],
-});
-
 it.each([
   ["en-GB", "Delete T2?", "It leaves the tables list and the plan.", "Cancel", "Delete"],
   ["es-ES", "¿Eliminar T2?", "Sale de la lista de mesas y del plano.", "Cancelar", "Eliminar"],
@@ -941,7 +934,7 @@ it.each([
 );
 
 it("Cancel on the delete question changes nothing and closes it", async () => {
-  const el = await open(stubApi({ getFloorPlan: vi.fn().mockResolvedValue(joinedTerrace()) }));
+  const el = await open(stubApi({ getFloorPlan: vi.fn().mockResolvedValue(terrace()) }));
   const dialog = await askDelete(el, "m2");
   const closed = closeOf(dialog);
   await press(el, "delete-cancel");
@@ -971,8 +964,8 @@ it("Escape on the delete question changes nothing, closes it and does not start 
   expectSaveQuiet(el);
 });
 
-it("Delete on the question removes the table and its join as one step, clears its selection and closes", async () => {
-  const el = await open(stubApi({ getFloorPlan: vi.fn().mockResolvedValue(joinedTerrace()) }));
+it("Delete on the question removes the table as one step, clears its selection and closes", async () => {
+  const el = await open(stubApi({ getFloorPlan: vi.fn().mockResolvedValue(terrace()) }));
   await fromCanvas(el, "wt-table-select", { key: "m1" });
   const dialog = await askDelete(el, "m1");
   const closed = closeOf(dialog);
@@ -982,7 +975,6 @@ it("Delete on the question removes the table and its join as one step, clears it
   expect(dialog.open).toBe(false);
   const panel = el.shadowRoot!.querySelector("floor-plan-tables-panel")!;
   expect(panel.draft.tables.map((t) => t.key)).toEqual(["m2"]);
-  expect(panel.draft.joins).toEqual([]);
   expect(canvas(el).selected).toBeNull();
   expectSaveAwake(el);
   await press(el, "undo");
@@ -1158,12 +1150,8 @@ it.each([
   expect(hintText(el)).toBeNull();
 });
 
-it("Undo of a Delete brings back the table and its join", async () => {
-  const joined: FloorPlan = {
-    ...terrace(),
-    joins: [{ id: "j1", seats: 6, tableIds: ["m1", "m2"] }],
-  };
-  const el = await open(stubApi({ getFloorPlan: vi.fn().mockResolvedValue(joined) }));
+it("Undo of a Delete brings back the table", async () => {
+  const el = await open(stubApi({ getFloorPlan: vi.fn().mockResolvedValue(terrace()) }));
   await fromCanvas(el, "wt-table-select", { key: "m1" });
   await askDelete(el, "m1");
   await press(el, "delete-confirm");
@@ -1173,8 +1161,6 @@ it("Undo of a Delete brings back the table and its join", async () => {
   await press(el, "undo");
   expectSaveQuiet(el);
   expect(canvas(el).tables.map((t) => t.key)).toEqual(["m1"]);
-  const panel = el.shadowRoot!.querySelector("floor-plan-tables-panel")!;
-  expect(panel.draft.joins).toEqual([{ key: "j1", seats: 6, tableKeys: ["m1", "m2"] }]);
 });
 
 it("puts the selected table's panel above the tables list, beside the canvas and in the sheet", async () => {

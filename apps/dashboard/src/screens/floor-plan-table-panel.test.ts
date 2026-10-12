@@ -29,7 +29,6 @@ const plan: FloorPlan = {
     { id: "m2", liveTableId: "l2", label: "T2", seats: 2, fixed: true, placement: null },
     { id: "m9", liveTableId: "l9", label: "T9", seats: null, fixed: false, placement: null },
   ],
-  joins: [{ id: "j1", seats: 6, tableIds: ["m1", "m2"] }],
 };
 
 const opened = (): FloorPlanDraft => draftFromPlan(plan);

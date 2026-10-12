@@ -4560,7 +4560,6 @@ describe("the floor plan editor inside the real page", () => {
           },
           { id: "m2", liveTableId: "l2", label: "T2", seats: 2, fixed: true, placement: null },
         ],
-        joins: [],
       }),
       listZones: vi
         .fn()

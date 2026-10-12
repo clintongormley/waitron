@@ -37,7 +37,6 @@ const plan: FloorPlan = {
       placement: { x: 14, y: 3, width: 6, height: 6, shape: "round", rotation: 0 },
     },
   ],
-  joins: [],
 };
 
 function stubApi(

@@ -33,7 +33,6 @@ const plan = (zoneId: string, id: string): FloorPlan => ({
   tables: [
     { id, liveTableId: `l-${id}`, label: id.toUpperCase(), seats: 4, fixed: false, placement },
   ],
-  joins: [],
 });
 
 async function mount() {

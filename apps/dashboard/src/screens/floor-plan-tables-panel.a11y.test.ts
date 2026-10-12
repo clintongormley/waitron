@@ -26,7 +26,6 @@ const props: Partial<FloorPlanTablesPanel> = {
       table("m3", "T3", true, null),
       table("m4", "T4", false, null),
     ],
-    joins: [],
   } satisfies FloorPlanDraft,
   selected: "m3",
   marks: new Map([["m4", "Booked 12 Oct, 21:00"]]),
