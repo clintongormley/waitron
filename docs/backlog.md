@@ -2663,6 +2663,11 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   as "Moved to another server. Enter your PIN." (`server.switched`, held only in the page's memory;
   read, not run). Left open by A491.
 
+- **A pressed Reload and the till's "which station?" question**, two edges found by reading, not
+  run: a hold that is refused and asks for a station again still reloads if Reload is pressed in
+  that moment (nothing was saved yet), and a place waiting on that question holds a pressed Reload
+  until someone touches the till. Left open by A491.
+
 ### Printers, the print agent and receipts
 
 _Formerly A3, A8 and B6; part of A9._ Detail: [backlog/printers.md](backlog/printers.md).
