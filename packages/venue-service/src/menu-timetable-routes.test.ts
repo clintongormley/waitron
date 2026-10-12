@@ -287,7 +287,12 @@ describe("the opening-hours routes", () => {
     );
     let model = await r.model();
     const restaurant = restaurantOf(model, r);
-    expect(restaurant.week.find((day) => day.weekday === 1)!.slots).toEqual(monday);
+    expect(model.currentSeasonId).not.toBeNull();
+    expect(
+      restaurant.seasonWeeks
+        .find((entry) => entry.seasonId === model.currentSeasonId)!
+        .week.find((day) => day.weekday === 1)!.slots,
+    ).toEqual(monday);
     expect(restaurant.dates).toEqual([{ specialDateId: r.christmas, slots: christmas }]);
     expect(model.namedDays.find((date) => date.id === r.christmas)!.name).toBe("Navidad");
 
