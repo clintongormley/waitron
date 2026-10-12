@@ -381,6 +381,47 @@ describe("saveSpecialDay", () => {
     });
   });
 
+  it("names a refused range by its place in the request, not in changeover order", async () => {
+    const v = await venue();
+    const input = (date: string, ranges: unknown[]) => ({
+      name: "Order",
+      repeatsYearly: false,
+      dates: dates([date]),
+      paint: [{ departmentId: v.restaurant, date, ranges }],
+    });
+    expect(
+      await refusal(
+        save(
+          v,
+          null,
+          input("2030-12-24", [
+            { periodId: v.lunch, startsAt: "14:00", endsAt: "16:00" },
+            { periodId: v.drinks, startsAt: "12:00", endsAt: "14:00" },
+          ]),
+        ),
+      ),
+    ).toEqual({
+      code: "special_day.invalid",
+      params: { field: "paint.0.ranges.1.periodId", departmentId: v.restaurant },
+    });
+    expect(
+      await refusal(
+        save(
+          v,
+          null,
+          input("2026-03-28", [
+            { periodId: v.dinner, startsAt: "05:00", endsAt: "05:30" },
+            { periodId: v.dinner, startsAt: "02:15", endsAt: "04:00" },
+          ]),
+          new Date("2026-01-10"),
+        ),
+      ),
+    ).toEqual({
+      code: "special_day.invalid",
+      params: { field: "paint.0.ranges.1.startsAt", reason: "clock_skips", date: "2026-03-28" },
+    });
+  });
+
   it("refuses a zone paint kind it does not know", async () => {
     const v = await venue();
     expect(

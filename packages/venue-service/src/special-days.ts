@@ -182,10 +182,13 @@ const record = (value: unknown, field: string): Record<string, unknown> => {
   return value as Record<string, unknown>;
 };
 
+/** `position` is the range's place in the request, which `parseRanges` reorders. */
+type Placed<T> = T & { position: number };
+
 interface ParsedEntry<T> {
   ownerId: string;
   date: LocalDate;
-  ranges: T[];
+  ranges: Placed<T>[];
   field: string;
 }
 
@@ -218,7 +221,10 @@ function parseEntries<T extends ClosedRange>(
         `${field}.ranges`,
         cutover,
         (at, reason) => invalid(at, reason === undefined ? {} : { reason }),
-        read,
+        (item, at, range): Placed<T> => ({
+          ...read(item, at, range),
+          position: Number(at.slice(at.lastIndexOf(".") + 1)),
+        }),
       ),
     )[0]!;
     return { ownerId: ownerId.toLowerCase(), date, ranges, field };
@@ -295,9 +301,11 @@ async function assertOwnPeriods(
     ).map((row) => [row.id, row.departmentId]),
   );
   for (const entry of paint)
-    entry.ranges.forEach((range, index) => {
+    entry.ranges.forEach((range) => {
       if (range.periodId !== null && owner.get(range.periodId) !== entry.ownerId)
-        invalid(`${entry.field}.ranges.${index}.periodId`, { departmentId: entry.ownerId });
+        invalid(`${entry.field}.ranges.${range.position}.periodId`, {
+          departmentId: entry.ownerId,
+        });
     });
 }
 
@@ -314,11 +322,13 @@ function assertNoSkippedTimes(
     const date = repeats
       ? (nextOccurrence({ date: entry.date, repeats }, today ?? entry.date) ?? entry.date)
       : entry.date;
-    entry.ranges.forEach((range, index) => {
+    for (const range of entry.ranges)
       for (const end of ["startsAt", "endsAt"] as const)
         if (clockTimeSkippedInDay(clock, date, range[end], end === "endsAt"))
-          invalid(`${entry.field}.ranges.${index}.${end}`, { reason: "clock_skips", date });
-    });
+          invalid(`${entry.field}.ranges.${range.position}.${end}`, {
+            reason: "clock_skips",
+            date,
+          });
   }
 }
 
