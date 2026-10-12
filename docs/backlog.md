@@ -343,6 +343,21 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   paging, and `heldRecords` reads every `rechazado`/`detenido` row; neither has a production caller
   yet, so the screen should add an open-only filter or paging when it calls them. From W41s.
 
+- **`FiscalBackend.pendingCount` leaves out set-aside (`retenido`) records**, as it leaves out held
+  (`detenido`) ones, so neither counts as unconfirmed there. It has no production caller yet (see
+  the `pendingCount` entry above); decide what "unconfirmed" includes before anything reads it.
+  Left open by #1596.
+
+- **The reconcile sweep may raise a second "accepted with errors" warning** when it corrects a
+  record the drain is still sending (`packages/fiscal-verifactu/src/reconcile.ts`); only one case
+  opens, as cases are one per record. Found by reading in #1596's review, not run; nothing runs the
+  sweep yet, so check it when the sweep is scheduled.
+
+- **The test "does not send a successor past a cancellation held for its original"**
+  (`packages/fiscal-verifactu/src/drain.test.ts`) still reads like the old hold. It is true for the
+  first pass it checks, but since #1596 a cancellation of a refused original is set aside and holds
+  nothing: retitle it on the next touch.
+
 - **A 0.00 simplified invoice:** B17's departure, and since B28 (#1005) Pay on a bill whose total is
   zero, file one; whether AEAT accepts it was not tested. Left open by service Task 17 (#991, a
   table that leaves without paying).
