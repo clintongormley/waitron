@@ -393,6 +393,14 @@ invoice still owed; and what happens when the customer never pays. An F1 also ne
 
 ## W41s. Fiscal prevention and offline recovery — DESIGN AND REVISED PLAN APPROVED (2026-10-04)
 
+**Update, 2026-10-12: W41s-3d landed as
+[#1309](https://github.com/clintongormley/waitron/pull/1309), commit
+`5e99c6781df6512f6bac4127937f0146e61e2ecc`.** The first eligible brake-held record retries
+hourly. A refused same-code retry retains the first stop time in the alert, as the owner chose.
+The owner authorised landing W41s items after green checks and resolved findings; an important
+unresolved decision still needs an answer. W41s-4 is next; manual release remains Task 8.
+The 2026-10-11 status below describes the candidate before landing.
+
 **Update, 2026-10-11: queued again in Lane E, after A435-6.** The owner resumed W41s-3d
 first, then W41s-4, -5, -6, -1b, -7, -8, -9, -10a, -10b, -11 and -C in campaign order.
 Each fiscal implementation still needs the owner's approval to land. W41s-3d is on draft
