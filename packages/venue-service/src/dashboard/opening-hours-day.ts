@@ -318,9 +318,10 @@ export class OpeningHoursDay extends LitElement {
       this.detail = undefined;
       return;
     }
-    this.api.specialDays.readSpecialDay(id).then(
+    this.api.specialDays.readSpecialDay(id, { passive: true }).then(
       (detail) => {
-        if (this.isConnected && this.detailCalendar === calendar) this.detail = detail;
+        if (this.isConnected && this.detailCalendar === calendar)
+          this.detail = structuredClone(detail);
       },
       () => {
         if (this.isConnected && this.detailCalendar === calendar) this.calendarError = true;
@@ -619,7 +620,9 @@ export class OpeningHoursDay extends LitElement {
     this.skippedTime = false;
     this.offsetClash = false;
     try {
-      await this.api.saveDatePaint(special.detail, { paint, zonePaint }, this.draftRevision);
+      // The latest read of the same day, so a rename or added date made meanwhile is not undone.
+      const stored = this.detail?.id === special.detail.id ? this.detail : special.detail;
+      await this.api.saveDatePaint(stored, { paint, zonePaint }, this.draftRevision);
       if (generation !== this.generation || !this.isConnected) return;
       this.baseline = submitted;
       this.scope?.commit(this.baseline);
@@ -657,7 +660,15 @@ export class OpeningHoursDay extends LitElement {
       this.errorDepartment = department;
     else if (typeof zone === "string" && this.draft.zones[zone]) {
       this.errorZone = zone;
-      this.error = t(this.skippedTime ? "menu.time_skipped" : "opening.closed_invalid");
+      this.error = t(
+        this.skippedTime
+          ? "menu.time_skipped"
+          : this.offsetClash
+            ? "menu.offset_timetable"
+            : field === "zonePaint" || /^zonePaint\.\d+\.ranges(?:\.|$)/.test(field)
+              ? "opening.closed_invalid"
+              : "opening.check_day",
+      );
     }
   }
   private async savePeriod(
@@ -729,6 +740,9 @@ export class OpeningHoursDay extends LitElement {
     const opening = this.opening,
       child = this.periodOpening,
       special = this.special(),
+      named = special
+        ? undefined
+        : this.calendar?.days?.find((row) => row.date === this.date)?.specialDay,
       state = saveActionState(this.scope),
       closed = special?.closed,
       season = seasonOn(this.model.seasons, this.date)?.name,
@@ -745,7 +759,7 @@ export class OpeningHoursDay extends LitElement {
           >‹</wt-button
         >
         <p data-test="day-date">
-          ${formatDate(this.date)}${special ? ` · ${special.detail.name}` : nothing}
+          ${formatDate(this.date)}${special ? ` · ${special.detail.name}` : named ? ` · ${named.name}` : nothing}
         </p>
         <wt-button
           variant="secondary"
@@ -759,47 +773,52 @@ export class OpeningHoursDay extends LitElement {
       ${
         closed
           ? html`<p>${t("hours.closed")}</p>`
-          : !special && !this.readOnly
-            ? html`<wt-button
-                data-test="own-date"
-                variant="secondary"
-                ?disabled=${blocked || !this.calendar || this.calendarError}
-                @click=${(event: Event) => {
-                  if (
-                    !this.isConnected ||
-                    this.readOnly ||
-                    this.saving ||
-                    this.creating ||
-                    this.opening ||
-                    this.zoneOpening ||
-                    !this.calendar ||
-                    this.calendarError
-                  )
-                    return;
-                  const button = event.currentTarget as HTMLElement;
-                  this.dispatchEvent(
-                    new CustomEvent<SpecialDayAction>("special-day-action", {
-                      detail: {
-                        kind: "open",
-                        date: this.date,
-                        specialDay:
-                          this.calendar.days?.find((day) => day.date === this.date)?.specialDay ??
-                          null,
-                        holidays:
-                          this.calendar.days?.find((day) => day.date === this.date)?.holidays ?? [],
-                        returnTo: () => (button.isConnected ? button : null),
-                      },
-                      bubbles: true,
-                      composed: true,
-                    }),
-                  );
-                }}
-                >${t("special.make")}</wt-button
-              >`
-            : nothing
+          : named
+            ? this.calendarError
+              ? nothing
+              : html`<p class="note">${t("special.loading")}</p>`
+            : !special && !this.readOnly
+              ? html`<wt-button
+                  data-test="own-date"
+                  variant="secondary"
+                  ?disabled=${blocked || !this.calendar || this.calendarError}
+                  @click=${(event: Event) => {
+                    if (
+                      !this.isConnected ||
+                      this.readOnly ||
+                      this.saving ||
+                      this.creating ||
+                      this.opening ||
+                      this.zoneOpening ||
+                      !this.calendar ||
+                      this.calendarError
+                    )
+                      return;
+                    const button = event.currentTarget as HTMLElement;
+                    this.dispatchEvent(
+                      new CustomEvent<SpecialDayAction>("special-day-action", {
+                        detail: {
+                          kind: "open",
+                          date: this.date,
+                          specialDay:
+                            this.calendar.days?.find((day) => day.date === this.date)?.specialDay ??
+                            null,
+                          holidays:
+                            this.calendar.days?.find((day) => day.date === this.date)?.holidays ??
+                            [],
+                          returnTo: () => (button.isConnected ? button : null),
+                        },
+                        bubbles: true,
+                        composed: true,
+                      }),
+                    );
+                  }}
+                  >${t("special.make")}</wt-button
+                >`
+              : nothing
       }
       ${this.calendarError ? html`<p class="refusal">${t("opening.load_error")}</p>` : nothing}
-      ${special || season === undefined ? nothing : html`<p class="note">${format("opening.follows_season", { season })}</p>`}
+      ${special || named || season === undefined ? nothing : html`<p class="note">${format("opening.follows_season", { season })}</p>`}
       ${
         this.departments().length
           ? html`<service-grid

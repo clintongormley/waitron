@@ -951,3 +951,115 @@ it("shows a skipped-time refusal on a painted department's entry beside that dep
     .toContain(t("menu.time_skipped"));
   expect(day.shadowRoot!.querySelector("[data-department-error=bar]")).toBeNull();
 });
+
+it("reads the special day's detail passively, at mount and on each calendar refresh", async () => {
+  const request = paintDayRequest([]);
+  const reads: unknown[][] = [];
+  const day = await mountPaint((async (path, method, body, options) => {
+    if (path.includes("/special-days/")) reads.push([path, options]);
+    return request(path, method, body, options);
+  }) as DashboardRequest);
+  expect(day.shadowRoot!.querySelector("[data-test=day-date]")!.textContent).toContain("Party");
+  screen.api.specialDays.rereadWatches();
+  await expect.poll(() => reads.length).toBe(2);
+  expect(reads).toEqual([
+    ["/management-api/venue-service/special-days/party", { passive: true }],
+    ["/management-api/venue-service/special-days/party", { passive: true }],
+  ]);
+});
+
+it("saves the name, repeat setting and dates of the latest read of the special day it opened on", async () => {
+  const writes: Recorded[] = [];
+  const request = paintDayRequest(writes);
+  let current = partyDetail();
+  let reads = 0;
+  const day = await mountPaint((async (path, method, body, options) => {
+    if (method === "GET" && path.endsWith("/special-days/party")) {
+      reads++;
+      return structuredClone(current);
+    }
+    return request(path, method, body, options);
+  }) as DashboardRequest);
+  endDinnerAt(day, "22:00");
+  await day.updateComplete;
+  current = {
+    ...partyDetail(),
+    name: "Party night",
+    repeatsYearly: true,
+    dates: [
+      { date: PARTY_DATE, closedAllDay: false },
+      { date: "2026-10-20", closedAllDay: false },
+    ],
+  };
+  screen.api.specialDays.rereadWatches();
+  await expect.poll(() => reads).toBe(2);
+  await new Promise((done) => setTimeout(done, 20));
+  await day.updateComplete;
+  save(day).click();
+  await expect.poll(() => writes.length).toBe(1);
+  expect(writes[0]).toEqual({
+    path: "/management-api/venue-service/special-days/party",
+    method: "PUT",
+    body: {
+      name: "Party night",
+      repeatsYearly: true,
+      dates: [
+        { date: PARTY_DATE, closedAllDay: false },
+        { date: "2026-10-20", closedAllDay: false },
+      ],
+      paint: [
+        {
+          departmentId: "restaurant",
+          date: PARTY_DATE,
+          ranges: [{ periodId: null, startsAt: "22:00", endsAt: "23:30" }],
+        },
+      ],
+      expectedClockRevision: 4,
+    },
+  });
+});
+
+async function mountNamedWithoutDetail(detailRead: () => Promise<unknown>) {
+  vi.setSystemTime(new Date("2026-10-13T12:00:00Z"));
+  const request = paintDayRequest([]);
+  let calendars = 0;
+  screen = document.createElement("dashboard-opening-hours-screen");
+  screen.api = new OpeningHoursApi((async (path, method, body, options) => {
+    if (path.includes("/named-days?")) calendars++;
+    return method === "GET" && path.endsWith("/special-days/party")
+      ? detailRead()
+      : request(path, method, body, options);
+  }) as DashboardRequest);
+  applyTokens(screen);
+  document.body.append(screen);
+  await expect.poll(() => screen.shadowRoot?.querySelector("opening-hours-day")).not.toBeNull();
+  const day = screen.shadowRoot!.querySelector("opening-hours-day")!;
+  await expect.poll(() => calendars).toBe(1);
+  await expect
+    .poll(() => day.shadowRoot!.querySelector("[data-test=day-date]")!.textContent)
+    .toContain("Party");
+  return day;
+}
+const expectNamedNotEditable = (day: HTMLElementTagNameMap["opening-hours-day"]) => {
+  expect(day.shadowRoot!.querySelector("[data-test=own-date]")).toBeNull();
+  expect(day.shadowRoot!.textContent).not.toContain("Follows the");
+  expect(save(day)).toBeNull();
+  expect(grid(day).columns.every((column) => column.editable === false)).toBe(true);
+};
+
+it("names a special date and keeps its grid read-only while the special day's detail is loading", async () => {
+  const day = await mountNamedWithoutDetail(() => new Promise(() => {}));
+  expectNamedNotEditable(day);
+  expect(day.shadowRoot!.textContent).toContain(t("special.loading"));
+});
+
+it("names a special date and keeps its grid read-only after the special day's detail fails to load", async () => {
+  const day = await mountNamedWithoutDetail(async () => {
+    throw new Error("offline");
+  });
+  await expect
+    .poll(() => day.shadowRoot!.textContent)
+    .toContain("Opening hours could not be loaded");
+  expectNamedNotEditable(day);
+  expect(day.shadowRoot!.textContent).not.toContain(t("special.loading"));
+});

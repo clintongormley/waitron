@@ -12,6 +12,7 @@ import {
   paintDayRequest,
   type Recorded,
 } from "../testing/special-day-fixture.js";
+import { t } from "./strings.js";
 import "./opening-hours-screen.js";
 let screen: HTMLElementTagNameMap["dashboard-opening-hours-screen"];
 const original = location.href;
@@ -764,4 +765,36 @@ it("shows a refusal naming a zone's date beside that zone only", async () => {
     .not.toBeNull();
   expect(day.shadowRoot!.querySelector("[data-department-error]")).toBeNull();
   expect(save(day).disabled).toBe(false);
+});
+
+it.each([
+  ["a date the request lacks", { field: "zonePaint.0.date" }, "opening.check_day"],
+  [
+    "a clock skip",
+    { field: "zonePaint.0.ranges.0.endsAt", reason: "clock_skips", date: PARTY_DATE },
+    "menu.time_skipped",
+  ],
+  ["an end offset", { field: "zonePaint.0", reason: "end_offset" }, "menu.offset_timetable"],
+  [
+    "overlapping ranges",
+    { field: "zonePaint.0.ranges", reason: "overlap" },
+    "opening.closed_invalid",
+  ],
+  [
+    "a kept date's ranges",
+    { field: "zonePaint", zoneId: "terrace", date: "2026-10-20" },
+    "opening.closed_invalid",
+  ],
+] as const)("explains a zone refusal about %s with its own sentence", async (_, params, key) => {
+  const day = await mountPaint(
+    paintDayRequest([], async () => {
+      throw { code: "special_day.invalid", params };
+    }),
+  );
+  shortenTerrace(day);
+  await day.updateComplete;
+  save(day).click();
+  await expect
+    .poll(() => day.shadowRoot!.querySelector("[data-zone-error=terrace]")?.textContent)
+    .toBe(t(key));
 });
