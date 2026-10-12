@@ -241,41 +241,6 @@ describe("resolveDepartmentDays", () => {
     });
   });
 
-  it("closes a named day that closes the whole venue", async () => {
-    const v = await autumnAndWinter();
-    await namedDay(v, "2030-11-30", { closeWholeVenue: true });
-    const days = await departmentDays(v, ["2030-11-30"]);
-    expect(days.get("2030-11-30")?.ranges).toEqual([]);
-  });
-
-  it("serves a named day's own hours, and the season's week when it has none", async () => {
-    const v = await autumnAndWinter();
-    const own = await namedDay(v, "2030-11-30", { ownHours: true });
-    await namedDay(v, "2030-12-01", { ownHours: true });
-    await scoped((tx) =>
-      saveSpecialDateMenus(
-        tx,
-        v.cfg,
-        own,
-        v.departmentId,
-        [
-          { periodId: v.lateBar, startsAt: "22:00", endsAt: "03:00" },
-          { periodId: v.breakfast, startsAt: "10:00", endsAt: "12:00" },
-        ],
-        AT,
-        0,
-      ),
-    );
-    const days = await departmentDays(v, ["2030-11-30", "2030-12-01"]);
-    expect(days.get("2030-11-30")?.ranges).toEqual([
-      { periodId: v.breakfast, startsAt: "10:00", endsAt: "12:00" },
-      { periodId: v.lateBar, startsAt: "22:00", endsAt: "03:00" },
-    ]);
-    expect(days.get("2030-12-01")?.ranges).toEqual([
-      { periodId: v.breakfast, startsAt: "09:00", endsAt: "12:00" },
-    ]);
-  });
-
   it("sorts each day from its own changeover", async () => {
     const v = await autumnAndWinter();
     await menuSeason(v, v.seasons.Winter!, {
@@ -301,33 +266,6 @@ describe("resolveDepartmentDays", () => {
       "04:30",
       "20:00",
     ]);
-  });
-
-  it("closes a named day whose own timetable has no slots", async () => {
-    const v = await autumnAndWinter();
-    const own = await namedDay(v, "2030-11-30", { ownHours: true });
-    await scoped((tx) => saveSpecialDateMenus(tx, v.cfg, own, v.departmentId, [], AT, 0));
-    const days = await departmentDays(v, ["2030-11-30"]);
-    expect(days.get("2030-11-30")?.ranges).toEqual([]);
-  });
-
-  it("closes a named day with its own hours that also closes the whole venue", async () => {
-    const v = await autumnAndWinter();
-    const own = await namedDay(v, "2030-11-30", { ownHours: true });
-    await scoped((tx) =>
-      saveSpecialDateMenus(
-        tx,
-        v.cfg,
-        own,
-        v.departmentId,
-        [{ periodId: v.lateBar, startsAt: "22:00", endsAt: "03:00" }],
-        AT,
-        0,
-      ),
-    );
-    await db.update(specialDates).set({ closeWholeVenue: true }).where(eq(specialDates.id, own));
-    const days = await departmentDays(v, ["2030-11-30"]);
-    expect(days.get("2030-11-30")?.ranges).toEqual([]);
   });
 
   it("answers an empty map for no days", async () => {
@@ -561,47 +499,6 @@ describe("resolveZoneClosedDays", () => {
     const days = await zoneDays(v, undefined, ["2030-11-30"]);
     expect(days.get(v.sala)?.get("2030-11-30")).toEqual([{ startsAt: "15:00", endsAt: "19:00" }]);
     expect(days.get(v.terraza)?.get("2030-11-30")).toEqual([]);
-  });
-
-  it("closes nothing on a named day that closes the whole venue", async () => {
-    const v = await zones();
-    await namedDay(v, "2030-11-30", { closeWholeVenue: true });
-    const days = await zoneDays(v, [v.sala], ["2030-11-30"]);
-    expect(days.get(v.sala)?.get("2030-11-30")).toEqual([]);
-  });
-
-  it("uses a named day's own closures, and none when it saved none", async () => {
-    const v = await zones();
-    const own = await namedDay(v, "2030-11-30", { ownHours: true });
-    await namedDay(v, "2030-12-01", { ownHours: true });
-    await scoped((tx) =>
-      saveZoneClosedDate(
-        tx,
-        v.cfg,
-        own,
-        v.terraza,
-        [{ startsAt: "18:00", endsAt: "20:00" }],
-        0,
-        AT,
-      ),
-    );
-    const days = await zoneDays(v, undefined, ["2030-11-30", "2030-12-01"]);
-    expect(days.get(v.terraza)?.get("2030-11-30")).toEqual([
-      { startsAt: "18:00", endsAt: "20:00" },
-    ]);
-    expect(days.get(v.sala)?.get("2030-11-30")).toEqual([]);
-    expect(days.get(v.sala)?.get("2030-12-01")).toEqual([]);
-  });
-
-  it("closes nothing on a named day with its own closures that also closes the whole venue", async () => {
-    const v = await zones();
-    const own = await namedDay(v, "2030-11-30", { ownHours: true });
-    await scoped((tx) =>
-      saveZoneClosedDate(tx, v.cfg, own, v.sala, [{ startsAt: "18:00", endsAt: "20:00" }], 0, AT),
-    );
-    await db.update(specialDates).set({ closeWholeVenue: true }).where(eq(specialDates.id, own));
-    const days = await zoneDays(v, [v.sala], ["2030-11-30"]);
-    expect(days.get(v.sala)?.get("2030-11-30")).toEqual([]);
   });
 
   it("answers an empty map for no days", async () => {
@@ -870,7 +767,7 @@ describe("special-day paint over the season", () => {
     });
   });
 
-  it("lets a special day win over a named day on the same date", async () => {
+  it("lays a special day's Closed paint over the department's season, leaving zones their week", async () => {
     const v = await venue();
     await menuSeason(v, v.seasons.Winter!, {
       [FRIDAY]: [{ periodId: v.dinner, startsAt: "20:00", endsAt: "23:30" }],
@@ -878,7 +775,6 @@ describe("special-day paint over the season", () => {
     await zoneSeason(v, v.sala, v.seasons.Winter!, {
       [FRIDAY]: [{ startsAt: "22:00", endsAt: "23:00" }],
     });
-    await namedDay(v, "2030-12-13", { closeWholeVenue: true });
     await specialDay(v, "2030-12-13", {
       paint: { [v.departmentId]: [{ periodId: null, startsAt: "22:00", endsAt: "23:30" }] },
     });

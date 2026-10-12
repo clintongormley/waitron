@@ -383,7 +383,7 @@ describe("zones closed at an instant", () => {
       tx((db) => VENUE_SERVICE.assertZoneTakesNewOrders(db, v.cfg, v.bar, instant)),
     ).resolves.toBeUndefined();
   });
-  it("reads the clock, named day and closed times once for a batch", async () => {
+  it("reads the clock, special days and closed times once for a batch", async () => {
     const v = await venue();
     await tx((db) => replaceZoneClosedWeek(db, v.cfg, v.terrace, week(mondayNight), 0));
     const reads = (zoneIds: string[]) =>
@@ -411,14 +411,13 @@ describe("zones closed at an instant", () => {
       for (const table of [
         "locations",
         "seasons",
-        "special_dates",
         "special_day_dates",
         "zone_days",
         "zone_extensions",
       ])
         expect(texts.filter((text) => text.includes(`from "${table}"`))).toHaveLength(1);
       expect(texts.filter((text) => text.includes(`from "zone_closed_times"`))).toHaveLength(0);
-      expect(texts).toHaveLength(6);
+      expect(texts).toHaveLength(5);
     }
     expect(three).toHaveLength(one.length);
   });

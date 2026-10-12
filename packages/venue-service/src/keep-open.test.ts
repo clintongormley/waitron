@@ -800,7 +800,7 @@ it("shows the effective extension after a manager moves the closure start", asyn
   ).toMatchObject({ closesAt: "01:30", extendedUntil: "01:30", running: true });
 });
 
-it("reads the clock, the seasons and the named days once for a zone's keep-open choices", async () => {
+it("reads the clock, the seasons and the special days once for a zone's keep-open choices", async () => {
   const f = await zoneFixture();
   await run(async (tx) => {
     const session = (tx as unknown as { session: { prepareQuery: (...args: never[]) => unknown } })
@@ -811,7 +811,7 @@ it("reads the clock, the seasons and the named days once for a zone's keep-open 
       expect(zone).toMatchObject({ endsAt: "23:30", running: true });
       const sql = spy.mock.calls.map(([q]) => (q as unknown as { sql: string }).sql);
       expect(sql.filter((q) => q.includes('from "seasons"'))).toHaveLength(1);
-      expect(sql.filter((q) => q.includes('from "special_dates"'))).toHaveLength(1);
+      expect(sql.filter((q) => q.includes('from "special_day_dates"'))).toHaveLength(1);
       expect(sql.filter((q) => q.includes('from "locations"'))).toHaveLength(1);
     } finally {
       spy.mockRestore();
@@ -819,7 +819,7 @@ it("reads the clock, the seasons and the named days once for a zone's keep-open 
   });
 });
 
-it("reads the clock, the seasons and the named days once for a period's and a zone's keep-open choices", async () => {
+it("reads the clock, the seasons and the special days once for a period's and a zone's keep-open choices", async () => {
   const f = await zoneFixture();
   await run(async (tx) => {
     const session = (tx as unknown as { session: { prepareQuery: (...args: never[]) => unknown } })
@@ -831,7 +831,7 @@ it("reads the clock, the seasons and the named days once for a period's and a zo
       expect(answer.zone).toMatchObject({ endsAt: "23:30", running: true });
       const sql = spy.mock.calls.map(([q]) => (q as unknown as { sql: string }).sql);
       expect(sql.filter((q) => q.includes('from "seasons"'))).toHaveLength(1);
-      expect(sql.filter((q) => q.includes('from "special_dates"'))).toHaveLength(1);
+      expect(sql.filter((q) => q.includes('from "special_day_dates"'))).toHaveLength(1);
       expect(sql.filter((q) => q.includes('from "locations"'))).toHaveLength(1);
     } finally {
       spy.mockRestore();

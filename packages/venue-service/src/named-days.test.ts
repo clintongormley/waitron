@@ -186,15 +186,6 @@ describe("named-day occurrences read from the venue", () => {
 });
 
 describe("departments and calendar follow named days", () => {
-  it("closes on a repeating day but follows Lunch in the year before it starts", async () => {
-    const f = await fixture();
-    await day(f, "2026-12-25", { repeatOn: "12-25", closeWholeVenue: true });
-    expect((await service(f, "2027-12-25T12:00:00Z")).open).toBe(false);
-    expect((await service(f, "2025-12-25T12:00:00Z")).periodId).toBe(f.period);
-    const calendar = await run((tx) => readCalendarDays(tx, f.cfg, "2027-12-25", "2027-12-25"));
-    expect(calendar[0]!.tone).toBe("closed");
-    expect(calendar[0]!.specialDate?.name).toBe("Navidad");
-  });
   it("ignores a retained empty dated row when own hours is off, in resolver and calendar", async () => {
     const f = await fixture();
     const row = await day(f, "2026-12-25", { kind: "holiday" });
@@ -204,25 +195,6 @@ describe("departments and calendar follow named days", () => {
     expect(
       (await run((tx) => readCalendarDays(tx, f.cfg, "2026-12-25", "2026-12-25")))[0]!.tone,
     ).toBe("purple");
-  });
-  it("uses own hours on repeating dates and the normal week for a department with no row", async () => {
-    const f = await fixture();
-    const row = await day(f, "2026-12-25", { repeatOn: "12-25", ownHours: true });
-    await dated(f, row.id, "13:00:00");
-    expect((await service(f, "2027-12-25T11:30:00Z")).open).toBe(false);
-    expect((await service(f, "2027-12-25T13:00:00Z")).periodId).toBe(f.period);
-    expect((await service(f, "2027-12-25T11:30:00Z", f.other)).periodId).toBe(f.otherPeriod);
-    expect((await service(f, "2027-12-25T14:00:00Z")).open).toBe(false);
-  });
-  it("closes an own-hours date with an empty department row", async () => {
-    const f = await fixture();
-    const row = await day(f, "2026-12-25", { repeatOn: "12-25", ownHours: true });
-    await dated(f, row.id);
-    expect((await service(f, "2027-12-25T12:00:00Z")).open).toBe(false);
-    await suite.db.update(departments).set({ active: false }).where(eq(departments.id, f.other));
-    expect(
-      (await run((tx) => readCalendarDays(tx, f.cfg, "2027-12-25", "2027-12-25")))[0]!.tone,
-    ).toBe("closed");
   });
   it("uses a repeating special day's range through a skipped clock minute in a later year", async () => {
     const f = await fixture();
