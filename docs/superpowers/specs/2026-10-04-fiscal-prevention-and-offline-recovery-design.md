@@ -390,9 +390,12 @@ up to 100 characters (`verifactu/src/validate.ts:694`). The `IdSistemaInformatic
 requires exactly two uppercase letters or digits (`verifactu/src/validate.ts:650–661`). These
 are library checks, not a claim that AEAT has accepted these example values.
 
+**2026-10-12 correction (owner approved):** the first-symbol range below is `0`–`7`;
+26 Base32 symbols carry 130 bits, and this range restricts the value to 128 bits.
+
 Generate an emergency suffix from 128 unbiased random bits with the operating system's
 cryptographic generator. Encode it as 26 Crockford Base32 characters using
-`0123456789ABCDEFGHJKMNPQRSTVWXYZ`; the first symbol must be `0`–`3`, so a decoded value outside
+`0123456789ABCDEFGHJKMNPQRSTVWXYZ`; the first symbol must be `0`–`7`, so a decoded value outside
 the 128-bit range is refused. Do not use the wall clock, a device identifier or the restored counter as
 entropy. Distinct independent draws collide with probability about `n(n-1)/2^129` after `n`
 emergency allocations; they provide a probability, never a uniqueness guarantee. A manual entry

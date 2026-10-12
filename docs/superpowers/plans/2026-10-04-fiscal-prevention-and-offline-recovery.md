@@ -222,6 +222,16 @@ performs no network access. The local allocation ledger is an audit copy, not ou
   golden huella and `inmutabilidad`; use a second restored database in the repeat-recovery control.
   Finish for owner review with the Task 0 scope approval attached.
 
+**2026-10-12 checkpoint:** `allocation-identity.ts` validates installation formats, encodes
+16 bytes as the approved emergency name, checks the separate manual checksum, and checks the
+complete allocated series set against requested bases and purposes. Its sibling tests cover
+invalid formats, duplication and substitution; `allocation-boundaries.test.ts` runs the actual
+library validator over complete records at the 60-character invoice limit and a 61-character
+control. No activation or schema change is connected yet. Before those writes, the owner must
+settle who signs paper reservations and how fresh offline hardware trusts that key (§9.2).
+The next step remains allocation/approval scope and authority validation, then atomic writes
+and every entry-point replacement above; this checkpoint does not complete Task 4.
+
 ## Task 5: select active series inside issuance transactions
 
 **Modify:** `apps/server/src/till-config.ts`, `trading-config.ts`, `till-sale.ts`,
