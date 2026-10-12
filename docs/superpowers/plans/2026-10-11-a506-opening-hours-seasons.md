@@ -41,7 +41,17 @@ project and real-Chromium browser project).
 
 ---
 
-## Three owner questions are pending — read `~/waitron-campaign/questions.md` first
+## Three owner questions — answered 2026-10-11 (lane A `questions.md`, ~22:45 and ~22:50)
+
+**Answers, written into the spec and this plan by A506-4 (2026-10-12):** question 1 — the default
+(nothing changes). Question 2 — **(b): "Every year" follows the holiday's official name, and the
+venue is warned when a year's list has no holiday of that name** (spec §5). A506-4 builds the
+same-month-and-day repeat, which stays the rule for a date that is not a public holiday; A506-5
+adds `special_day_dates.holiday_name` in its migration and makes a repeating holiday date follow
+the name (Task 5.1b); A506-6's year view and A506-5's readiness line show the warning; the
+dialog's and painter's note changes (Tasks 5.3, 9.3). Question 3 — **(c): a fourth Prep stations
+tab, "Times", with a station picker** (spec §9; Task 12.2 rewritten). The table below is the
+question as it was put.
 
 The spec's section 16 put three defaults to the owner (lane A `questions.md`, heading
 "A506 — spec written (main 1f321faa8): three defaults for you to confirm or change (2026-10-11
@@ -1061,6 +1071,11 @@ edited").
 
 **Behaviour this PR removes:** none (named days still work; the two refuse each other's dates).
 
+**Repeating, in this PR:** the same month and day every year from the first year (owner's
+question 2 adds holiday-name following in A506-5, Task 5.1b). Keep "does this special-day date
+occur on this day, and where does it fall in year Y" in ONE helper in `special-days.ts`, used by
+the resolver, the date-taken check, the bridge and the end-offset set, so A506-5 changes one place.
+
 ### Task 4.0: Re-check on the base.
 
 ### Task 4.1: Laying paint over a season (pure)
@@ -1311,6 +1326,28 @@ reads special days only), `zone-closed-times.ts`; tests moved: the resolver and 
 - [ ] **Step 2: Implement** — delete the branches. **Step 3: Run** the listed files.
   **Commit** — `feat(venue-service): the till reads special days only (A506-5)`.
 
+### Task 5.1b: A repeating holiday date follows the holiday's name (owner, question 2)
+
+**Files:** `schema/special-days.ts` (or wherever A506-1 declared `special_day_dates`:
+`holiday_name`, nullable label, no CHECK — a plain added column, so drizzle adds it without a
+table rebuild; read the generated SQL and confirm there is no `DROP TABLE`), Task 5.8's generated
+migration (one migration for the PR), `special-days.ts` (the occurrence helper; the save records
+the name), `day-resolver.ts`, `period-end-offset.ts`, `holidays.ts` (a read of the venue's list for
+one year), `operations.ts` (`listVenueReadiness`), `configuration-transfer.ts`, `errors.ts` if a
+code is needed, and their tests.
+
+- [ ] **Step 1: Failing tests** (spec §5): saving a special day on a date that is a public holiday
+  in the venue's list stores that holiday's official name, and on an ordinary date stores none; a
+  repeating date named "Viernes Santo" on 2026-04-03 applies on the date the 2027 list gives
+  "Viernes Santo" (a test pack or list with a 2027 year) and not on 2027-04-03; a repeating
+  25 December named "Natividad del Señor" applies on 2027-12-25; a 2027 list without the name, and
+  a year with no list, apply nothing that year and produce the warning line (readiness, current or
+  next year only); a date with no holiday name repeats on its month and day as before; the
+  date-taken check and the end-offset set use each year's resolved date. Expected: fail.
+- [ ] **Step 2: Implement** in the one occurrence helper A506-4 left; the resolver reads the venue's
+  list for a year only when a repeating date carries a holiday name, once per request.
+- [ ] **Step 3: Run**, guards for the schema change. **Commit**.
+
 ### Task 5.2: The Calendar's model over special days; holidays
 
 **Files:** `holidays.ts` (`readHolidays`: no `ownHolidays`, no `owner:named-days` source, local
@@ -1343,9 +1380,9 @@ path, the client reads it in 5.3), `named-day-rules.ts` → `repeat-rules.ts` an
 `hours-calendar.ts` (+ tests), `strings.ts`
 
 The dialog holds: Name (required), Dates (chips, "+ Add dates…" with single dates or a range from
-two date fields), Every year (No / Yes, same dates) with, on a special day holding a public-holiday
-date, the note "Every year repeats this date; a holiday that moves needs next year's date added."
-(Q2 rule, see the questions table), and one Closed tick per date ("Closed all day"). A public holiday
+two date fields), Every year (No / Yes) with, on a special day holding a public-holiday
+date, the note "Every year follows the holiday's name to its date each year." (owner's question 2,
+spec §5), and one Closed tick per date ("Closed all day"). A public holiday
 opens it pre-filled with the holiday's name and date, and when a special day of that name exists,
 first offers "Add to <name>" (spec §5). The dialog sends the A495 revision.
 
@@ -1597,7 +1634,8 @@ Mockup 1: twelve months, days coloured by season (season colours from `--wt-*` t
 if none fit and say so), marks for Public holiday, Special day, Closed with a legend; ‹ › step
 years; the chips of Task 6.3; "+ Special day" opening A506-5's special-day dialog; the
 local-holiday sentence "Town holidays are not in the official lists — add them as special days."
-when the pack has no local holidays; the "Public holidays for 2027 are not available yet" line
+when the pack has no local holidays; the warning line for a repeating holiday date with no match in the shown year (spec §5:
+"Viernes Santo (Every year) has no public holiday of that name in 2027"); the "Public holidays for 2027 are not available yet" line
 under the legend; a month name opens the Day tab for that month's first day until A506-7.
 
 - [ ] **Step 1: Failing browser tests** for each behaviour above (by the days' marks and classes,
@@ -1851,9 +1889,9 @@ special day holds are marked (from the month read) but not blocked (the server r
 
 Mockup 4, on `painter-frame.ts`: one column per date (the grid comes in Task 9.4); under each date
 heading its Closed tick (whole venue, whichever department is shown); side panel: Name (required),
-Dates (chips, "+ Add dates…" with `add-dates-calendar.ts`), Every year (No / Yes, same dates) with
-the note "Every year repeats this date; a holiday that moves needs next year's date added." on a
-special day holding a public-holiday date (Q2 rule), and the "season shows through" explanation;
+Dates (chips, "+ Add dates…" with `add-dates-calendar.ts`), Every year (No / Yes) with
+the note "Every year follows the holiday's name to its date each year." on a special day holding a
+public-holiday date (owner's question 2, spec §5), and the "season shows through" explanation;
 Delete in the bar (confirm; its dates follow their seasons again).
 
 - [ ] **Failing browser tests:** adding and removing dates; the Closed tick; the note on a holiday
@@ -2027,7 +2065,7 @@ progress → **Commit**, `/finish-branch`.
 the All departments week view (`opening-hours-all.ts`) if anything is left of it, the `week=normal`
 mode of `GET …/stations/:stationId/service-times`, `service-grid.ts` if now unused.
 
-### Task 12.0: Re-check on the base; read A507 as landed and questions.md for Q3.
+### Task 12.0: Re-check on the base; read A507 as landed. Q3 is answered (c): a Prep stations tab.
 
 ### Task 12.1: Station times per date from the resolver
 
@@ -2040,11 +2078,14 @@ and routing; the `week` parameter removed; at most 42 days as today), tests, `ro
 ### Task 12.2: The Times page
 
 **Files:** Create dashboard `station-times-screen.ts` (+ `.test`, `.a11y`); modify
-`station-table.ts` (as A507 left it: "Times" in the row menu), `prep-stations-screen.ts`,
+`prep-stations-screen.ts` (a fourth tab, "Times"), the dashboard address for that tab
+(`apps/dashboard/src/navigation.ts` if the Prep stations tabs are named there),
 `opening-hours-client.ts` or `routing-client.ts` (whichever A507 left the station reads in),
 `strings.ts`
-- [ ] Failing browser tests: "Times" opens a full page with the month view of A506-7's layout and
-  one bar per day for that station, ‹ › months → implement → run → LOOK → **Commit**.
+- [ ] Failing browser tests: the "Times" tab shows a station picker at the top (owner, question 3
+  (c)) and, for the chosen station, the month view of A506-7's layout, read-only, one bar per day,
+  ‹ › months; changing the station redraws the month; the tab and station survive a reload through
+  the address → implement → run → LOOK → **Commit**.
 
 ### Task 12.3: Remove what is left; close the backlog
 
@@ -2052,7 +2093,7 @@ and routing; the `week` parameter removed; at most 42 days as today), tests, `ro
 (every remaining claim about the Week, Day, Calendar, Real week or station view); `docs/backlog.md`
 (delete the A506 entry); `docs/backlog/service-periods.md` (delete the A506 section; decisions cited
 elsewhere move to `## Decisions and deliberate limits`; open points become short entries — at least
-"following a moving public holiday year to year" and "A504's floor plan per period" from spec §17)
+"A504's floor plan per period" from spec §17)
 - [ ] Grep proof `rg -n 'opening-hours-(station|all|week|day|zone-week|date)|real-week|hours-calendar|named-day-(editor|copy)|named-days-client|named-day-rules' packages apps docs/developers`
   (A506-5 renamed `named-day-rules.ts` to `repeat-rules.ts`, so no live name is caught)
   answers nothing → run → LOOK → **Commit**, `/finish-branch`. If A507 holds this PR back and
