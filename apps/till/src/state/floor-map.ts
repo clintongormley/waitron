@@ -1,7 +1,7 @@
 import type { FloorMapDot, FloorMapFill, FloorMapTable } from "@waitron/ui";
 import type { TableState } from "../api/client.js";
 import { countText, t } from "../i18n/t.js";
-import { stillJoined } from "./floor-today.js";
+import { onTodaysPlan } from "./floor-today.js";
 import { signalOf } from "./table-signals.js";
 
 export interface StandInStatus {
@@ -136,13 +136,6 @@ export function drawnGroupKey(table: TableState, linkId: string | null): string 
   if (linkId !== null) return `link:${linkId}`;
   return table.today?.joinId == null ? `table:${table.id}` : `join:${table.today.joinId}`;
 }
-
-/** A still-joined part can keep a place on today's map, and is drawn as its joined table only. */
-const onTodaysPlan = (table: TableState): boolean =>
-  table.today !== null &&
-  table.today.placement !== null &&
-  !table.today.takenOff &&
-  !stillJoined(table);
 
 /**
  * Every member of a merge, and every table of a party drawn as two or more groups, carries the same

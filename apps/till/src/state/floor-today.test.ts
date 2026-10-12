@@ -409,4 +409,14 @@ describe("spares and taken-off tables", () => {
       y: 0,
     });
   });
+
+  it("leaves a placed part still in a joined table out of the spare's crop", () => {
+    const square = { width: 8, height: 8 };
+    const left = table("l", "1", { today: today({ placement: place(0, 0, square) }) });
+    const right = table("r", "2", { today: today({ placement: place(20, 0, square) }) });
+    const part = table("c3", "Counter 3", {
+      today: today({ placement: place(500, 500, square), inJoinedTable: "Long table" }),
+    });
+    expect(spareSpot([left, right, part])).toEqual({ x: 10, y: 0 });
+  });
 });
