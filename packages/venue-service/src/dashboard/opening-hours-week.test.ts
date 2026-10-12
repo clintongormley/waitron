@@ -988,6 +988,6 @@ describe("the season picker", () => {
     history.replaceState(null, "", "/manage/opening-hours/view/week/season/summer?week=2026-10-12");
     await mount(undefined, false, seasonal());
     expect(seasonPicker()).toBeNull();
-    expect(editor().seasonId).not.toBe("summer");
+    expect(editor().seasonId).toBe("winter");
   });
 });
