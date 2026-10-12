@@ -1,8 +1,8 @@
-import { and, eq, inArray, isNotNull } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import type { Transaction } from "@waitron/db";
 import { readLocationClock } from "@waitron/reporting";
 import { AppError } from "@waitron/shared";
-import { storedTime, type VenueScope } from "./operations.js";
+import { storedTime, wireTime, type VenueScope } from "./operations.js";
 import {
   departmentDayRanges,
   departmentDays,
@@ -16,7 +16,6 @@ import { rangeSpan, type ClosedRange, type ServiceRange } from "./service-day.js
 import "./errors.js";
 
 const WEEKDAYS = [0, 1, 2, 3, 4, 5, 6] as const;
-const wire = (time: string) => time.slice(0, 5);
 
 /** Touching ranges of the same period become one; input sorted from the changeover. */
 export function joinTouching<T extends { startsAt: string; endsAt: string }>(
@@ -26,7 +25,11 @@ export function joinTouching<T extends { startsAt: string; endsAt: string }>(
   const joined: T[] = [];
   for (const range of ranges) {
     const last = joined.at(-1);
-    if (last !== undefined && wire(last.endsAt) === wire(range.startsAt) && same(last, range))
+    if (
+      last !== undefined &&
+      wireTime(last.endsAt) === wireTime(range.startsAt) &&
+      same(last, range)
+    )
       joined[joined.length - 1] = { ...last, endsAt: range.endsAt };
     else joined.push({ ...range });
   }
@@ -151,7 +154,6 @@ export async function readDepartmentSeasonWeeks(
     .where(
       and(
         eq(seasons.locationId, cfg.locationId),
-        isNotNull(departmentDays.seasonId),
         departmentIds === undefined
           ? undefined
           : inArray(departmentDays.departmentId, [...departmentIds]),
@@ -165,7 +167,11 @@ export async function readDepartmentSeasonWeeks(
       range:
         row.startsAt === null
           ? null
-          : { periodId: row.periodId!, startsAt: wire(row.startsAt), endsAt: wire(row.endsAt!) },
+          : {
+              periodId: row.periodId!,
+              startsAt: wireTime(row.startsAt),
+              endsAt: wireTime(row.endsAt!),
+            },
     })),
     dayCutover,
   );
@@ -193,7 +199,6 @@ export async function readZoneSeasonWeeks(
     .where(
       and(
         eq(seasons.locationId, cfg.locationId),
-        isNotNull(zoneDays.seasonId),
         zoneIds === undefined ? undefined : inArray(zoneDays.zoneId, [...zoneIds]),
       ),
     );
@@ -203,7 +208,9 @@ export async function readZoneSeasonWeeks(
       seasonId: row.seasonId!,
       weekday: row.weekday!,
       range:
-        row.startsAt === null ? null : { startsAt: wire(row.startsAt), endsAt: wire(row.endsAt!) },
+        row.startsAt === null
+          ? null
+          : { startsAt: wireTime(row.startsAt), endsAt: wireTime(row.endsAt!) },
     })),
     dayCutover,
   );

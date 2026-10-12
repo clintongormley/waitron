@@ -36,7 +36,13 @@ import type {
   MenuSlot,
   PeriodRoutingUse,
 } from "./menu-timetable-types.js";
-import { assertDepartment, resolveZoneContext, storedTime, type VenueScope } from "./operations.js";
+import {
+  assertDepartment,
+  resolveZoneContext,
+  storedTime,
+  wireTime,
+  type VenueScope,
+} from "./operations.js";
 import { specialDates } from "./schema/hours.js";
 import { nextOccurrence } from "./named-day-rules.js";
 import { menuDayTimetables, menuPeriods, menuPeriodStaffMenus, menuSlots } from "./schema/menus.js";
@@ -59,8 +65,6 @@ import {
   type ServiceDayContext,
 } from "./service-day-context.js";
 import "./errors.js";
-
-const wire = (time: string) => time.slice(0, 5);
 
 export async function placeOpenPeriod(
   tx: Transaction,
@@ -184,8 +188,8 @@ async function slotsByTimetable(
     .orderBy(asc(menuSlots.startsAt), asc(menuSlots.id)))
     byTimetable.get(row.timetableId)!.push({
       periodId: row.periodId,
-      startsAt: wire(row.startsAt),
-      endsAt: wire(row.endsAt),
+      startsAt: wireTime(row.startsAt),
+      endsAt: wireTime(row.endsAt),
     });
   return byTimetable;
 }
@@ -370,8 +374,8 @@ export async function departmentDay(
       ? null
       : {
           periodId: row.periodId,
-          startsAt: wire(row.startsAt),
-          endsAt: wire(row.endsAt),
+          startsAt: wireTime(row.startsAt),
+          endsAt: wireTime(row.endsAt),
         };
   return {
     periods,
@@ -933,7 +937,7 @@ async function assertCalendarRanges(
         parseClosedRanges(
           closures
             .filter((row) => row.zoneId === zoneId)
-            .map((row) => ({ startsAt: wire(row.startsAt), endsAt: wire(row.endsAt) })),
+            .map((row) => ({ startsAt: wireTime(row.startsAt), endsAt: wireTime(row.endsAt) })),
           field,
           cutover,
         );

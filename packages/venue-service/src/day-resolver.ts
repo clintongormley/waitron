@@ -4,7 +4,7 @@ import { cutoverForBusinessDay, type BusinessDayClock } from "@waitron/shared";
 import { weekdayOf } from "./hours-rules.js";
 import type { LocalDate } from "./hours-types.js";
 import { namedDaysOn } from "./named-days.js";
-import type { VenueScope } from "./operations.js";
+import { wireTime, type VenueScope } from "./operations.js";
 import { menuDayTimetables, menuSlots } from "./schema/menus.js";
 import { zoneServicePolicies } from "./schema/service.js";
 import { zoneClosedTimes } from "./schema/zone-closed-times.js";
@@ -18,8 +18,6 @@ export interface ResolvedDepartmentDay {
   seasonId: string | null;
   ranges: ServiceRange[];
 }
-
-const wire = (time: string) => time.slice(0, 5);
 
 function fromChangeover<T extends { startsAt: string; endsAt: string }>(
   ranges: readonly T[],
@@ -83,8 +81,8 @@ export async function resolveDepartmentDays(
       if (row.startsAt !== null)
         ranges.push({
           periodId: row.periodId!,
-          startsAt: wire(row.startsAt),
-          endsAt: wire(row.endsAt!),
+          startsAt: wireTime(row.startsAt),
+          endsAt: wireTime(row.endsAt!),
         });
     }
   for (const day of businessDays) {
@@ -143,7 +141,7 @@ export async function resolveZoneClosedDays(
       const key = `${row.zoneId}/${row.specialDateId}`;
       const ranges = own.get(key) ?? [];
       own.set(key, ranges);
-      ranges.push({ startsAt: wire(row.startsAt), endsAt: wire(row.endsAt) });
+      ranges.push({ startsAt: wireTime(row.startsAt), endsAt: wireTime(row.endsAt) });
     }
   for (const zoneId of zones) {
     const days = new Map<LocalDate, ClosedRange[]>();

@@ -81,6 +81,11 @@ export function storedTime(value: string): string {
   return value.length === 5 ? `${value}:00` : value;
 }
 
+/** A stored `HH:MM:SS` time as the `HH:MM` the wire carries. */
+export function wireTime(value: string): string {
+  return value.slice(0, 5);
+}
+
 /** The default list is restricted to zones that can start a new order. */
 export async function listServiceZones(
   tx: Transaction,
