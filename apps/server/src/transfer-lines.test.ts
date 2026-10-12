@@ -206,8 +206,11 @@ async function openBeside(
     const id = randomUUID();
     await createOpenOrder(tx, cfg, id, lines, null, {
       partyId: party.id,
-      ...(zoneless ? {} : { zoneId: context!.zoneId }),
+      zoneId: context!.zoneId,
     });
+    if (zoneless) {
+      await tx.run(sql`delete from order_service_contexts where working_order_id = ${id}`);
+    }
     return id;
   });
 }
