@@ -127,6 +127,7 @@ export interface BusinessDayStartPreview {
     zoneId?: string;
     zoneName?: string;
     weekday?: number;
+    seasonId?: string;
     specialDateId?: string;
     specialDateName?: string;
     date?: string;

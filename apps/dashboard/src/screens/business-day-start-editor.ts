@@ -475,7 +475,7 @@ export class BusinessDayStartEditor extends LitElement {
                                   >
                                 </p>
                                 <ul data-test="conflict-rows">
-                                  ${preview.conflicts.map((conflict) => html`<li>${this.#conflict(conflict)}</li>`)}
+                                  ${[...new Set(preview.conflicts.map((conflict) => this.#conflict(conflict)))].map((line) => html`<li>${line}</li>`)}
                                 </ul>`
                             : nothing
                         }
