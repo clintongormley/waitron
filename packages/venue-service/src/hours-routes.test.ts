@@ -33,9 +33,10 @@ import {
   startManagementSession,
 } from "@waitron/identity";
 import type { ModuleRouteContext } from "@waitron/module";
-import type { NamedDaysModel } from "./holiday-types.js";
+import type { SpecialDaysModel } from "./holiday-types.js";
 import { readCalendarDays } from "./hours.js";
-import { readNamedDaysModel } from "./named-days.js";
+import { readSpecialDaysModel } from "./named-days.js";
+import { saveSpecialDay } from "./special-days.js";
 import { readOpeningHoursModel } from "./menu-timetable.js";
 import { AppError, locationId } from "@waitron/shared";
 import { MANAGEMENT_COOKIE, type Logger } from "@waitron/server-kit";
@@ -52,7 +53,7 @@ import { routingModel } from "./routing-store.js";
 import { VENUE_SERVICE_ROUTES } from "./routes.js";
 import { specialDates } from "./schema/hours.js";
 import { departments } from "./schema/service.js";
-import { replaceMenuWeek, saveMenuPeriod, saveSpecialDateMenus } from "./menu-timetable.js";
+import { replaceMenuWeek, saveMenuPeriod } from "./menu-timetable.js";
 import { setStationToday } from "./station-times.js";
 import { clockChangeAfter, minutesAfter } from "./testing/clock-change.js";
 
@@ -286,6 +287,36 @@ const venueDates = (fx: Fixture) =>
 const createDate = (fx: Fixture, value: SpecialDateInput) =>
   withTransaction(db, (tx) => saveSpecialDate(tx, fx.cfg, null, value, new Date(), undefined, 0));
 
+const createDay = (
+  fx: Fixture,
+  date: string,
+  options: {
+    name?: string;
+    closedAllDay?: boolean;
+    repeatsYearly?: boolean;
+    paint?: {
+      departmentId: string;
+      ranges: { periodId: string | null; startsAt: string; endsAt: string }[];
+    }[];
+    at?: Date;
+  } = {},
+) =>
+  withTransaction(db, (tx) =>
+    saveSpecialDay(
+      tx,
+      fx.cfg,
+      null,
+      {
+        name: options.name ?? "Staff party",
+        repeatsYearly: options.repeatsYearly ?? false,
+        dates: [{ date, closedAllDay: options.closedAllDay ?? false }],
+        paint: (options.paint ?? []).map((entry) => ({ ...entry, date })),
+      },
+      options.at ?? new Date(),
+      0,
+    ),
+  );
+
 describe("reading Hours", () => {
   it.each([
     { at: "2026-10-12T03:59:59.999Z", businessDay: "2026-10-11" },
@@ -299,10 +330,7 @@ describe("reading Hours", () => {
         vi.useRealTimers();
       });
       const fx = await fixture();
-      const party = await createDate(
-        fx,
-        input({ cells: [{ subject: fx.bar, cell: { mode: "closed", periods: [] } }] }),
-      );
+      const party = await createDay(fx, "2030-10-15");
       const response = await send(
         fx,
         "GET",
@@ -310,7 +338,7 @@ describe("reading Hours", () => {
         fx.supervisor,
       );
       expect(response.status).toBe(200);
-      const model = (await response.json()) as NamedDaysModel;
+      const model = (await response.json()) as SpecialDaysModel;
       expect(model.civilDate).toBe("2026-10-12");
       expect(model).toEqual({
         businessDayClock: { timeZone: "Europe/Madrid", dayCutover: "06:00", cutoverChanges: [] },
@@ -322,38 +350,15 @@ describe("reading Hours", () => {
         civilDate: "2026-10-12",
         clockReadable: true,
         days: [
-          {
-            date: "2030-10-14",
-            namedDay: null,
-            holidays: [],
-            tone: "standard",
-            ownHours: false,
-            closed: false,
-          },
+          { date: "2030-10-14", specialDay: null, holidays: [], tone: "standard", closed: false },
           {
             date: "2030-10-15",
-            namedDay: {
-              kind: "working_day",
-              repeats: false,
-              ownHours: false,
-              id: party.id,
-              date: "2030-10-15",
-              name: "Staff party",
-              closeWholeVenue: false,
-            },
+            specialDay: { id: party.id, name: "Staff party" },
             holidays: [],
-            tone: "working_day",
-            ownHours: false,
+            tone: "special_day",
             closed: false,
           },
-          {
-            date: "2030-10-16",
-            namedDay: null,
-            holidays: [],
-            tone: "standard",
-            ownHours: false,
-            closed: false,
-          },
+          { date: "2030-10-16", specialDay: null, holidays: [], tone: "standard", closed: false },
         ],
         // No tenant row is stored here, so there is no country to read holidays for.
         holidayCoverage: [
@@ -454,16 +459,19 @@ describe("reading Hours", () => {
       );
       return period;
     });
-    const special = await createDate(fx, input({ date: "2030-10-14", cells: [] }));
-    await db.update(specialDates).set({ ownHours: true }).where(eq(specialDates.id, special.id));
-    await withTransaction(db, (tx) =>
-      saveSpecialDateMenus(tx, fx.cfg, special.id, fx.departmentIds.deli, [], new Date(), 0),
-    );
+    await createDay(fx, "2030-10-14", {
+      paint: [
+        {
+          departmentId: fx.departmentIds.deli,
+          ranges: [{ periodId: null, startsAt: "09:00", endsAt: "17:00" }],
+        },
+      ],
+    });
     const model = (await (
       await send(fx, "GET", "/named-days?from=2030-10-14&to=2030-10-15", fx.manager)
-    ).json()) as NamedDaysModel;
+    ).json()) as SpecialDaysModel;
     expect(model.days.map((day) => day.closed)).toEqual([true, true]);
-    expect(model.days.map((day) => day.tone)).toEqual(["working_day", "closed"]);
+    expect(model.days.map((day) => day.tone)).toEqual(["special_day", "closed"]);
     await db
       .update(departments)
       .set({ active: false })
@@ -471,7 +479,7 @@ describe("reading Hours", () => {
     const deli = await withTransaction(db, (tx) =>
       readCalendarDays(tx, fx.cfg, "2030-10-14", "2030-10-15"),
     );
-    expect(deli.map((day) => day.tone)).toEqual(["closed", "closed"]);
+    expect(deli.map((day) => day.tone)).toEqual(["special_day", "closed"]);
     await withTransaction(db, (tx) =>
       replaceMenuWeek(
         tx,
@@ -489,20 +497,20 @@ describe("reading Hours", () => {
     const open = await withTransaction(db, (tx) =>
       readCalendarDays(tx, fx.cfg, "2030-10-14", "2030-10-15"),
     );
-    expect(open.map((day) => day.tone)).toEqual(["closed", "standard"]);
+    expect(open.map((day) => [day.tone, day.closed])).toEqual([
+      ["special_day", true],
+      ["standard", false],
+    ]);
   });
 
   it("reads the model in the same number of statements whatever the range and its special dates", async () => {
     const fx = await fixture();
     for (const date of ["2030-11-03", "2030-11-10", "2030-11-17", "2030-11-24"])
-      await createDate(
-        fx,
-        input({ date, cells: [{ subject: fx.deli, cell: { mode: "closed", periods: [] } }] }),
-      );
+      await createDay(fx, date, { name: date, closedAllDay: true });
     const statements = (from: string, to: string) =>
       withTransaction(db, async (tx) => {
         const reads = vi.spyOn(tx, "select");
-        const model = await readNamedDaysModel(tx, fx.cfg, from, to, new Date());
+        const model = await readSpecialDaysModel(tx, fx.cfg, from, to, new Date());
         const count = reads.mock.calls.length;
         reads.mockRestore();
         return { count, days: model.days.length };
@@ -532,18 +540,21 @@ describe("reading Hours", () => {
           0,
         ),
       );
+    const days: Record<string, string> = {};
+    for (const date of ["2030-10-12", "2030-10-15", "2030-10-16"])
+      days[date] = (await createDay(fx, date, { name: date, at })).id;
     const read = () =>
-      withTransaction(db, (tx) => readNamedDaysModel(tx, fx.cfg, "2030-10-13", "2030-10-15", at));
+      withTransaction(db, (tx) => readSpecialDaysModel(tx, fx.cfg, "2030-10-13", "2030-10-15", at));
 
     const model = await read();
     expect(model.civilDate).toBe("2030-10-06");
     expect(
       (await withTransaction(db, (tx) => readOpeningHoursModel(tx, fx.cfg, at))).namedDays,
     ).toEqual([saved["2030-10-05"], saved["2030-10-14"], saved["2032-12-25"]]);
-    expect(model.days.map((day) => day.namedDay?.id ?? null)).toEqual([
+    expect(model.days.map((day) => day.specialDay?.id ?? null)).toEqual([
       null,
-      saved["2030-10-14"]!.id,
       null,
+      days["2030-10-15"],
     ]);
     for (const field of ["specialDates", "specialCells", "subjects", "week"])
       expect(model).not.toHaveProperty(field);
@@ -956,7 +967,7 @@ describe("Hours when the venue's clock changes", () => {
     });
 
   const model = (fx: Fixture, at: Date) =>
-    withTransaction(db, (tx) => readNamedDaysModel(tx, fx.cfg, "2026-10-12", "2026-10-18", at));
+    withTransaction(db, (tx) => readSpecialDaysModel(tx, fx.cfg, "2026-10-12", "2026-10-18", at));
 
   it("moves the civil date with a new time zone, keeping named days without closing stations", async () => {
     const fx = await fixture();
@@ -1099,10 +1110,7 @@ describe("named-day HTTP writes", () => {
 describe("named-days Calendar route", () => {
   it("returns the venue-scoped model for a venue viewer", async () => {
     const fx = await fixture();
-    const day = await createDate(
-      fx,
-      input({ kind: "holiday", repeats: true, closeWholeVenue: true }),
-    );
+    const day = await createDay(fx, "2030-10-15", { repeatsYearly: true, closedAllDay: true });
     const response = await send(
       fx,
       "GET",
@@ -1114,28 +1122,12 @@ describe("named-days Calendar route", () => {
     expect(model.days).toEqual([
       {
         date: "2031-10-15",
-        namedDay: {
-          id: day.id,
-          date: "2030-10-15",
-          name: "Staff party",
-          kind: "holiday",
-          repeats: true,
-          ownHours: false,
-          closeWholeVenue: true,
-        },
+        specialDay: { id: day.id, name: "Staff party" },
         holidays: [],
-        tone: "own_holiday",
-        ownHours: false,
+        tone: "special_day",
         closed: true,
       },
-      {
-        date: "2031-10-16",
-        namedDay: null,
-        holidays: [],
-        tone: "standard",
-        ownHours: false,
-        closed: false,
-      },
+      { date: "2031-10-16", specialDay: null, holidays: [], tone: "standard", closed: false },
     ]);
   });
   it("requires the existing venue view authorization", async () => {

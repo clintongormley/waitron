@@ -118,7 +118,6 @@ import {
   readHolidayAreaModel,
   readProfileServiceAccess,
   readSpecialDate,
-  readCalendarDays,
   saveHolidayArea,
   saveSpecialDate,
   saveMenuPeriod,
@@ -4497,6 +4496,16 @@ describe("named days in a configuration transfer", () => {
     expect(dayStates.rows[0]!.n).toBe(0);
   });
 
+  const namedOn = async (
+    tx: Parameters<Parameters<typeof withTransaction>[1]>[0],
+    cfg: { locationId: string },
+    date: string,
+  ) =>
+    (
+      await tx.execute<{ date: string; name: string }>(sql`
+        select date, name from special_dates where location_id = ${cfg.locationId} and date = ${date}`)
+    ).rows[0] ?? null;
+
   it("leaves default station hours behind while keeping its named day and open state", async () => {
     const source = await applyVenue(planVenue(venue("B44002211"), ALL_MODULES), {
       db: suite.db,
@@ -4549,19 +4558,19 @@ describe("named days in a configuration transfer", () => {
     const imported = await named(targetSuite.db, target);
     const importedPase = { kind: "station" as const, id: imported.stations.get("Pase")! };
     const read = await withTransaction(targetSuite.db, async (tx) => ({
-      eve: await readCalendarDays(tx, imported.cfg, "2026-12-31", "2026-12-31"),
-      tuesday: await readCalendarDays(tx, imported.cfg, "2026-10-06", "2026-10-06"),
+      eve: await namedOn(tx, imported.cfg, "2026-12-31"),
+      tuesday: await namedOn(tx, imported.cfg, "2026-10-06"),
       // 23:00 in Madrid on New Year's Eve, and noon on an ordinary Tuesday.
       states: [
         await stationStates(tx, imported.cfg, new Date("2026-12-31T22:00:00Z")),
         await stationStates(tx, imported.cfg, AT),
       ],
     }));
-    expect(read.eve[0]!.specialDate).toMatchObject({
+    expect(read.eve).toMatchObject({
       date: "2026-12-31",
       name: "New Year's Eve",
     });
-    expect(read.tuesday[0]!.specialDate).toBeNull();
+    expect(read.tuesday).toBeNull();
     for (const states of read.states)
       expect(states.get(importedPase.id)).toMatchObject({ isDefault: true, open: true });
   });
@@ -4842,7 +4851,7 @@ describe("public holidays in a configuration transfer", () => {
       expect.objectContaining({
         year: 2026,
         nationalRegional: "complete",
-        local: "owner_entered",
+        local: "none_entered",
         dataVersion: "ES-2026.1",
       }),
     ]);

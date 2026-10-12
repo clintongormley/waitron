@@ -16,7 +16,8 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
 import { locationId as brandLocationId } from "@waitron/shared";
 import { readHolidays, readHolidayAreaModel } from "./holidays.js";
-import { readNamedDaysModel } from "./named-days.js";
+import { readSpecialDaysModel } from "./named-days.js";
+import { saveSpecialDay } from "./special-days.js";
 import { readSpecialDate, saveSpecialDate } from "./hours.js";
 import { readSeasons } from "./seasons.js";
 import { VENUE_SERVICE_MIGRATIONS } from "./migrations.js";
@@ -385,7 +386,7 @@ describe("VENUE_SERVICE_PROVISIONING", () => {
         await db.execute(sql`
           select
             (select count(*) from holiday_geographies) as geographies,
-            (select count(*) from special_dates) as entries`)
+            (select count(*) from special_days) as entries`)
       ).rows[0];
 
     await runSeed();
@@ -409,34 +410,27 @@ describe("VENUE_SERVICE_PROVISIONING", () => {
     expect(fresh.model).toMatchObject({ chosen: null });
 
     const entry = await db.transaction((tx) =>
-      saveSpecialDate(
+      saveSpecialDay(
         tx,
         cfg,
         null,
         {
-          date: "2026-06-04",
           name: "Corpus Christi",
-          kind: "holiday",
-          closeWholeVenue: false,
-          cells: [],
+          repeatsYearly: false,
+          dates: [{ date: "2026-06-04", closedAllDay: false }],
         },
         new Date("2026-01-01T12:00:00Z"),
-        undefined,
         0,
       ),
     );
     const readDays = () =>
       db.transaction((tx) =>
-        readNamedDaysModel(tx, cfg, "2026-06-04", "2026-06-04", new Date("2026-01-01T12:00:00Z")),
+        readSpecialDaysModel(tx, cfg, "2026-06-04", "2026-06-04", new Date("2026-01-01T12:00:00Z")),
       );
     const before = await readDays();
     await runSeed();
     expect(await readDays()).toEqual(before);
-    expect(before.days[0]!.namedDay).toMatchObject({
-      id: entry.id,
-      name: "Corpus Christi",
-      kind: "holiday",
-    });
+    expect(before.days[0]!.specialDay).toEqual({ id: entry.id, name: "Corpus Christi" });
     expect(await stored()).toEqual({ geographies: 0, entries: 1 });
   });
 
