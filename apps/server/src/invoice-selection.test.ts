@@ -68,6 +68,62 @@ async function bill(full = false) {
 }
 
 describe("stored bill invoice selection", () => {
+  it("selects the standard series activated in this transaction instead of the boot selection", async () => {
+    const order = await bill();
+    const selected = await withTransaction(suite.db, async (tx) => {
+      await tx
+        .update(invoiceSeries)
+        .set({ retiredAt: new Date() })
+        .where(eq(invoiceSeries.id, order.cfg.seriesId));
+      const [fresh] = await tx
+        .insert(invoiceSeries)
+        .values({
+          nodeId: order.cfg.nodeId,
+          code: "FS-P000042",
+          purpose: "standard",
+        })
+        .returning();
+      const result = await selectOrderInvoice(tx, policy, order.cfg, order.id, decimal("3.00"));
+      return { result, freshId: fresh!.id };
+    });
+    expect(selected.result.sale.seriesId).toBe(selected.freshId);
+    expect(selected.result.sale.seriesId).not.toBe(order.cfg.seriesId);
+  });
+
+  it("refuses F2 when the cached series is retired and no standard series is live", async () => {
+    const order = await bill();
+    await withTransaction(suite.db, (tx) =>
+      tx
+        .update(invoiceSeries)
+        .set({ retiredAt: new Date() })
+        .where(eq(invoiceSeries.id, order.cfg.seriesId)),
+    );
+    await expect(
+      withTransaction(suite.db, (tx) =>
+        selectOrderInvoice(tx, policy, order.cfg, order.id, decimal("3.00")),
+      ),
+    ).rejects.toMatchObject({
+      code: "series.no_standard_for_node",
+      params: { nodeId: order.cfg.nodeId },
+    });
+  });
+
+  it("refuses ambiguous live standard series instead of using the cached one", async () => {
+    const order = await bill();
+    await withTransaction(suite.db, (tx) =>
+      tx.insert(invoiceSeries).values({
+        nodeId: order.cfg.nodeId,
+        code: "SECOND",
+        purpose: "standard",
+      }),
+    );
+    await expect(
+      withTransaction(suite.db, (tx) =>
+        selectOrderInvoice(tx, policy, order.cfg, order.id, decimal("3.00")),
+      ),
+    ).rejects.toThrow("more than one standard series");
+  });
+
   it.each(["0.00", "3.00", "3000.00"])(
     "keeps F2 ticket numbering for a bill at %s",
     async (total) => {

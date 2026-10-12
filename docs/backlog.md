@@ -296,7 +296,10 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   checks and resolved findings; an important unresolved decision still goes to the owner. Q5(f)
   and Q33–Q40 in the adviser document are revised, and Q41 covers issued invoices missing from the
   backup. Task 3 can use the published receipts; D2 retains its remaining plan gates, and D5 still
-  needs old-chain evidence and its adviser answer. [Detail](backlog/fiscal.md#w41s-fiscal-prevention-and-offline-recovery--design-and-revised-plan-approved-2026-10-04)
+  needs old-chain evidence and its adviser answer. **Open allocation decision (W41s-4):**
+  §9.1 requires 128 random bits but limits the first of 26 Base32 symbols to `0–3`, which
+  admits only 127 bits. Decide whether to allow `0–7` or reduce the entropy requirement.
+  Transactional series selection (W41s-5) is independent of that decision. [Detail](backlog/fiscal.md#w41s-fiscal-prevention-and-offline-recovery--design-and-revised-plan-approved-2026-10-04)
 
 - **Still open after W41s-3 (#1289)** — no probe has yet shown what AEAT does with a record sent
   after a 3000 conflict or after a held cancellation; the owner chose (2026-10-06) to keep holding

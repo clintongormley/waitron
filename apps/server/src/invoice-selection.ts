@@ -117,7 +117,11 @@ export async function selectOrderInvoice(
     return {
       invoiceType: "F2",
       recipient: undefined,
-      sale: { seriesId: cfg.seriesId, counterparty: null, recipientAddress: null },
+      sale: {
+        seriesId: seriesId(await readLiveSeriesIdTx(tx, cfg.nodeId, "standard")),
+        counterparty: null,
+        recipientAddress: null,
+      },
       ...receiptLocale,
     };
   }
