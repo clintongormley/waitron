@@ -170,7 +170,7 @@ it("starts on the venue business day before changeover, showing only active depa
     [{ periodId: "p1", startsAt: "10:00", endsAt: "14:00" }],
     [{ periodId: "p2", startsAt: "09:00", endsAt: "18:00" }],
   ]);
-  expect(day.shadowRoot!.textContent).toContain("Changes every Monday");
+  expect(day.shadowRoot!.textContent).toContain("Changes every Monday in Autumn");
   expect(screen.shadowRoot!.querySelector("[name=departmentId]")).toBeNull();
   expect(save(day).disabled).toBe(true);
   expect(save(day).variant).toBe("secondary");
@@ -224,9 +224,9 @@ it("stages a weekday edit and preserves every other day in its seven-day PUT", a
   await expect.poll(() => save(day).disabled).toBe(true);
 });
 it.each([
-  ["2030-12-02", "winter"],
-  ["2030-11-25", "autumn"],
-])("saves an ordinary %s's weekday in that date's season", async (date, seasonId) => {
+  ["2030-12-02", "winter", "Winter"],
+  ["2030-11-25", "autumn", "Autumn"],
+])("saves an ordinary %s's weekday in that date's season", async (date, seasonId, seasonName) => {
   vi.setSystemTime(new Date(`${date}T12:00:00Z`));
   const writes: unknown[] = [];
   const day = await mount(
@@ -252,7 +252,7 @@ it.each([
       })),
     },
   );
-  expect(day.shadowRoot!.textContent).toContain("Changes every Monday");
+  expect(day.shadowRoot!.textContent).toContain(`Changes every Monday in ${seasonName}`);
   resize(day);
   await day.updateComplete;
   save(day).click();
@@ -382,7 +382,7 @@ it("navigates dates and writes a named date's ranges only, including an inherite
   ]);
   day.shadowRoot!.querySelector<HTMLElement>("[data-test=previous-day]")!.click();
   await day.updateComplete;
-  await expect.poll(() => day.shadowRoot!.textContent).toContain("Changes every Monday");
+  await expect.poll(() => day.shadowRoot!.textContent).toContain("Changes every Monday in Autumn");
 });
 it("commits a successful department before a later refusal and retries only the remaining draft", async () => {
   const writes: unknown[] = [];
@@ -465,7 +465,7 @@ it("keeps a dirty ordinary day's write target when a new named date arrives in t
     namedDays: [{ ...day.model.namedDays[0]!, date: "2026-10-12" }],
   };
   await day.updateComplete;
-  expect(day.shadowRoot!.textContent).toContain("Changes every Monday");
+  expect(day.shadowRoot!.textContent).toContain("Changes every Monday in Autumn");
   save(day).click();
   await expect.poll(() => writes.length).toBe(1);
   expect((writes[0] as unknown[])[0]).toBe(
@@ -799,7 +799,7 @@ it.each([
 it("updates a clean model, preserves dirty drafts across disabled departments and reads Spanish recurrence", async () => {
   setLocale("es");
   const day = await mount();
-  expect(day.shadowRoot!.textContent).toContain("Cambia cada lunes");
+  expect(day.shadowRoot!.textContent).toContain("Cambia cada lunes en Autumn");
   const model = {
     ...day.model,
     departments: day.model.departments.map((department, i) =>
@@ -979,7 +979,7 @@ it.each([true, false])(
           },
         ],
       ]);
-    expect(day.shadowRoot!.textContent).toContain("Changes every Tuesday");
+    expect(day.shadowRoot!.textContent).toContain("Changes every Tuesday in Autumn");
   },
 );
 
