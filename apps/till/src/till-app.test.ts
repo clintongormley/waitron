@@ -10348,8 +10348,8 @@ describe("till-app", () => {
 
     it("a second prep Collect press while its handover is out sends nothing more", async () => {
       let finish!: () => void;
-      const markCollected = vi.fn(
-        (_id: string, _submissionId?: string) =>
+      const markCollected = vi.fn<(id: string, submissionId?: string) => Promise<void>>(
+        () =>
           new Promise<void>((resolve) => {
             finish = resolve;
           }),
