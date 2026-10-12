@@ -66,9 +66,9 @@ per save with the feed silent and four with it delivering (2026-10-06).
 its read-ordering tests remain while Opening hours uses the calendar.
 
 2026-10-10: A366 slice 4 Part B removes the legacy Hours client and Calendar mode.
-Opening hours Calendar uses `NamedDaysApi`
-(`packages/venue-service/src/dashboard/named-days-client.ts`) and its named-day dependencies.
-The Hours read counts above describe the retired page, not the current Calendar.
+2026-10-13, A506-5: Opening hours Calendar uses `SpecialDaysApi`
+(`packages/venue-service/src/dashboard/special-days-client.ts`) and the query dependencies it
+names. The Hours read counts above describe the retired page, not the current Calendar.
 
 Use passive requests for automatic refreshes so leaving a dashboard open does not keep its session
 alive. `DashboardQueries` handles that distinction for core screens. A module using `request`

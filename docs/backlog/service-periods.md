@@ -58,12 +58,8 @@ and hours proposals; the historical spec keeps its dated pointers.
 
 ## Smaller notes from the Hours reviews
 
-- Smaller notes: the participant-failure route case checks the status, not the body's code;
-  nothing pins which of two repeated
-  midnights a clock change picks; with
-  the whole-venue closure on, a kept period at a skipped minute is refused on a field the closure
-  has disabled; on a phone the calendar's cells break a long
-  special-date name mid-word (a design choice for the owner). The separate Hours client's
+- Smaller notes: nothing pins which of two repeated midnights a clock change picks; on a phone the
+  calendar's cells break a long special-day name mid-word (a design choice for the owner). The separate Hours client's
   read-window and lifecycle notes and station-cell checks are retired with that page (slice 4 Part B).
 
 ## Province edits in Venue details
@@ -78,9 +74,7 @@ and hours proposals; the historical spec keeps its dated pointers.
 
 - **Smaller notes from the reviews:** there is no control to clear a chosen area back to "not
   chosen" (the route accepts it); the area names "Arán" and "Lleida, fuera del territorio de
-  Arán" are Spanish data labels shown untranslated in English; `renameSpecialDate`
-  checks the name before the date's id, so a blank name for another venue's date answers
-  `hours.invalid` rather than not found.
+  Arán" are Spanish data labels shown untranslated in English.
 
 ## A506. Opening hours rebuilt around seasons and special days
 
@@ -107,20 +101,9 @@ and names the season; a zone's single `week` left the Opening hours model.
 - No test yet gives a second department its own week on the same named day.
 
 **Left open by A506-2, for the later parts.**
-- A506-5: the department and zone delete previews still count rows of the old tables, which only
-  named days write now (`packages/venue-service/src/service-delete-settings.ts`).
-- A venue database that ran #1577 and was not reset still holds weekday rows that no hours reader
-  uses; A506-5 drops the tables. Until then, deleting a period one of those rows' slots names fails
-  with the database's `FOREIGN KEY constraint failed` rather than `menu_period.in_use`, and the period
-  stays (measured 2026-10-12 with a hand-inserted weekday slot; a named-day slot gave
-  `menu_period.in_use`).
 - A506-6: when seasons become editable, adding, deleting or moving one must re-check end offsets
   across the boundaries it changes (`findSeasonEndOffsetClash`,
   `packages/venue-service/src/period-end-offset.ts`).
-- The `routing` live-query list (`packages/venue-service/src/dashboard/live-queries.ts`) still names
-  `menu_slots` and `menu_day_timetables`, which #1590's review found its route no longer reads, so an
-  edit to a named day's hours reloads the routing screen for nothing. Drop them after checking
-  the route's reads.
 
 **Left open by A506-3, for the later parts.**
 - A506-6: a Day-tab draft takes its season when Save is pressed; once a season's start can move, a
@@ -146,9 +129,7 @@ and names the season; a zone's single `week` left the Opening hours model.
 - `assertOwnPeriods` and `skippedSlot` in `packages/venue-service/src/menu-timetable.ts` name a refused
   slot by its sorted position, not its position in the request (read in the code, not run).
 - The clock-skip check runs before touching ranges are joined: two halves of one period meeting at a
-  skipped 02:30 are refused, while the joined range is accepted. The named-day path does the same.
-- The `holidays` live-query list (both copies) names `special_days` and `special_day_dates`, which
-  its route does not read until A506-5, so saving a special day reloads the Holidays screen for nothing.
+  skipped 02:30 are refused, while the joined range is accepted.
 - A506-5, when named days go: the rule "special day, then named day, then season" is written out in
   `day-resolver.ts` (twice), `business-day-schedule.ts` and `period-end-offset.ts`, and the end-offset
   check relies on list order for it; special-day paint is read by four separately written queries in
@@ -159,6 +140,14 @@ and names the season; a zone's single `week` left the Opening hours model.
 - `business-day-schedule.ts` copies the changeover lookup of `packages/shared/src/business-day-clock.ts`
   (`oldCutoverOn`) to avoid validating the clock on every day; a lookup exported from `shared` that
   validates once would remove the copy.
+
+**Left open by A506-5, for the later parts.**
+- The zone editor's closed-times summary uses its sentences without a season name
+  (`venue.zone_closed_days`, `venue.zone_closed_summary`, and `venue.zone_open_with_department`)
+  only when the venue has no seasons at all: `zoneClosedWeek`
+  (`packages/venue-service/src/dashboard/zone-closed-week.ts`) picks them when neither the current
+  season nor a first season exists. Provisioning gives every venue four seasons, so this is
+  believed unreachable — read in the code, not run; no test names those keys.
 
 **Why.** One standard week does not fit a venue whose hours change with the season, and copying a
 week into future dates would bury the special days among ordinary ones.
