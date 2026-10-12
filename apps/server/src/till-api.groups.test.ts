@@ -1914,6 +1914,10 @@ describe("POST /api/parties/:id/groups/split-line", () => {
     };
     const path = `/api/parties/${party.partyId}/groups/split-line`;
     const beforeCommands = await commandCount(party.partyId);
+    const beforeEvents = await eventCount(party.partyId);
+    const [billBefore] = await inTx(venue, (tx) =>
+      tx.select().from(workingOrders).where(eq(workingOrders.id, party.tabId)),
+    );
     const [original] = await inTx(venue, (tx) =>
       tx.select().from(workingOrderLines).where(eq(workingOrderLines.id, body.lineId!)),
     );
@@ -1958,6 +1962,27 @@ describe("POST /api/parties/:id/groups/split-line", () => {
     expect(rows[0]!.id).toBe(original!.id);
     expect(new Set(rows.map((row) => row.id)).size).toBe(4);
     expect(await commandCount(party.partyId)).toBe(beforeCommands + 1);
+    const [billAfter] = await inTx(venue, (tx) =>
+      tx.select().from(workingOrders).where(eq(workingOrders.id, party.tabId)),
+    );
+    expect(billAfter!.revision).toBe(billBefore!.revision + 1);
+    expect(await eventCount(party.partyId)).toBe(beforeEvents + 1);
+    const [event] = await inTx(venue, (tx) =>
+      tx
+        .select()
+        .from(orderGroupEvents)
+        .where(
+          and(
+            eq(orderGroupEvents.partyId, party.partyId),
+            eq(orderGroupEvents.kind, "lines_moved"),
+          ),
+        ),
+    );
+    expect(event).toMatchObject({
+      groupId: group.id,
+      actorId: original!.creditedTo,
+      detail: { splitLineId: original!.id },
+    });
     const before = await snapshot(party);
     expect((await call("POST", path, body)).json).toEqual(answer.json);
     expect(await snapshot(party)).toEqual(before);
@@ -2080,5 +2105,32 @@ describe("POST /api/parties/:id/groups/split-line", () => {
     expect(answer.status).toBe(200);
     expect(answer.json).toEqual({ revision: command.expectedPartyRevision + 1 });
     expect(await dishLines(party.tabId)).toHaveLength(2);
+  });
+  it("refuses a fractional quantity before any unit has been copied", async () => {
+    const party = await seated();
+    const submitted = await submit(party.partyId, [
+      { lines: [dish("Tarta", "3")], release: "hold" },
+    ]);
+    expect(submitted.status).toBe(200);
+    const group = (submitted.json as unknown as SubmitAnswer).groups[0]!;
+    const lineId = group.lineIds[0]!;
+    await inTx(venue, (tx) =>
+      tx.update(workingOrderLines).set({ quantity: 2500 }).where(eq(workingOrderLines.id, lineId)),
+    );
+    const before = await snapshot(party);
+    const copy = vi.spyOn(VENUE_SERVICE, "copyLineContext");
+    try {
+      const answer = await call("POST", `/api/parties/${party.partyId}/groups/split-line`, {
+        submissionId: randomUUID(),
+        expectedPartyRevision: await revisionOf(party.partyId),
+        lineId,
+      });
+      expect(answer.status).toBe(400);
+      expect(answer.json).toMatchObject({ code: "tab.transfer_quantity_invalid" });
+      expect(copy).not.toHaveBeenCalled();
+      expect(await snapshot(party)).toEqual(before);
+    } finally {
+      copy.mockRestore();
+    }
   });
 });

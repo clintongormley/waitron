@@ -1,7 +1,7 @@
 import { setRoutingCell } from "@waitron/venue-service";
 import { randomUUID } from "node:crypto";
 import { and, asc, eq, inArray, isNotNull, sql } from "drizzle-orm";
-import { beforeAll, describe, expect, expectTypeOf, it } from "vitest";
+import { beforeAll, describe, expect, expectTypeOf, it, vi } from "vitest";
 import {
   devices,
   diningTables,
@@ -64,6 +64,7 @@ import {
   sendLines,
   updateHeldOrder,
   updateOrderLine,
+  splitUnitsWithinOrder,
   type TillSaleDeps,
 } from "./working-order.js";
 import { seatTable } from "./parties.js";
@@ -4545,5 +4546,120 @@ describe("splitting a held line into units", () => {
       );
     }
     expect(answer.groups).toHaveLength(1);
+  });
+  it.each([200, 1000])(
+    "reads the bill's source lines once for %s units and gives the event loop a turn",
+    async (quantity) => {
+      const v = await setupVenue();
+      const s = await seated(v);
+      await submit(v, s.partyId, [
+        { release: "hold", lines: [line(v, "steak", String(quantity))] },
+      ]);
+      const [source] = await linesOf(s.partyId);
+      const command = await args(s.partyId);
+      let yielded = false;
+      const result = await inTx(async (tx) => {
+        const selects = vi.spyOn(tx, "select");
+        try {
+          setImmediate(() => {
+            yielded = true;
+          });
+          const result = await splitHeldLineIntoUnits(tx, v.cfg, s.partyId, source!.id, command);
+          const sourceReads = selects.mock.calls.filter(
+            ([fields]) =>
+              fields?.unitPriceGross === workingOrderLines.unitPriceGross &&
+              fields?.ticketFiredAt === ticketItems.firedAt,
+          );
+          expect(sourceReads).toHaveLength(1);
+          expect(yielded).toBe(true);
+          return result;
+        } finally {
+          selects.mockRestore();
+        }
+      });
+      expect(result).toEqual({ revision: command.expectedPartyRevision + 1 });
+      const rows = await linesOf(s.partyId);
+      expect(rows).toHaveLength(quantity);
+      expect(rows.every((row) => row.quantity === 1000 && row.groupId === source!.groupId)).toBe(
+        true,
+      );
+    },
+  );
+  it.each([1000, 1500, 2500])(
+    "the batch splitter refuses stored quantity %s before writing",
+    async (quantity) => {
+      const v = await setupVenue();
+      const s = await seated(v);
+      await submit(v, s.partyId, [{ release: "hold", lines: [line(v, "steak", "3")] }]);
+      const [source] = await linesOf(s.partyId);
+      await db
+        .update(workingOrderLines)
+        .set({ quantity })
+        .where(eq(workingOrderLines.id, source!.id));
+      await expectRefusedWithNothingWritten(
+        v,
+        s.partyId,
+        () => inTx((tx) => splitUnitsWithinOrder(tx, v.cfg, s.tabId, source!.lineNo)),
+        { code: "tab.transfer_quantity_invalid" },
+      );
+    },
+  );
+  it("refuses a weighed line even when its saved quantity is a whole number", async () => {
+    const v = await setupVenue();
+    const s = await seated(v);
+    await submit(v, s.partyId, [{ release: "hold", lines: [line(v, "steak", "2")] }]);
+    const [source] = await linesOf(s.partyId);
+    await db
+      .update(workingOrderLines)
+      .set({ unitPrecision: 3, unitName: { en: "kg", es: "kg" } })
+      .where(eq(workingOrderLines.id, source!.id));
+    const command = await args(s.partyId);
+    await expectRefusedWithNothingWritten(
+      v,
+      s.partyId,
+      () => inTx((tx) => splitHeldLineIntoUnits(tx, v.cfg, s.partyId, source!.id, command)),
+      { code: "tab.transfer_quantity_invalid" },
+    );
+  });
+  it("a concurrent reader sees the unsplit committed line until the entire split commits", async () => {
+    const v = await setupVenue();
+    const s = await seated(v);
+    await submit(v, s.partyId, [{ release: "hold", lines: [line(v, "steak", "64")] }]);
+    const [source] = await linesOf(s.partyId);
+    const command = await args(s.partyId);
+    let copied!: () => void;
+    const firstCopy = new Promise<void>((resolve) => {
+      copied = resolve;
+    });
+    let release!: () => void;
+    const readerDone = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    let blocked = false;
+    const copy = VENUE_SERVICE.copyLineContext;
+    const gate = vi.spyOn(VENUE_SERVICE, "copyLineContext").mockImplementation(async (...args) => {
+      await copy(...args);
+      if (!blocked) {
+        blocked = true;
+        copied();
+        await readerDone;
+      }
+    });
+    const splitting = inTx((tx) =>
+      splitHeldLineIntoUnits(tx, v.cfg, s.partyId, source!.id, command),
+    );
+    try {
+      await firstCopy;
+      expect((await linesOf(s.partyId)).map((row) => [row.id, row.quantity])).toEqual([
+        [source!.id, 64000],
+      ]);
+      release();
+      await splitting;
+      expect(await linesOf(s.partyId)).toHaveLength(64);
+    } finally {
+      release();
+      await splitting;
+      gate.mockRestore();
+    }
   });
 });

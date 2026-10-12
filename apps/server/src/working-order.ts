@@ -43,6 +43,7 @@ import {
   partyOfOrder,
 } from "./parties.js";
 import { randomUUID } from "node:crypto";
+import { setImmediate as nextTurn } from "node:timers/promises";
 import { and, eq, exists, inArray, isNotNull, isNull, ne, notInArray, or, sql } from "drizzle-orm";
 import type { GetColumnData, SQL } from "drizzle-orm";
 import { alias } from "drizzle-orm/sqlite-core";
@@ -3615,6 +3616,17 @@ export async function carveOffLines(
   transfers: { lineNo: number; quantity?: string }[],
   opts: { refuseHeld: boolean; splitExtras?: boolean },
 ): Promise<{ splitFrom: Map<string, string>; splitLines: Map<string, SplitRow> }> {
+  return carveLines(tx, cfg, fromTabId, toTabId, transfers, opts);
+}
+
+async function carveLines(
+  tx: Transaction,
+  cfg: TillConfig,
+  fromTabId: string,
+  toTabId: string,
+  transfers: { lineNo: number; quantity?: string }[],
+  opts: { refuseHeld: boolean; splitExtras?: boolean; splitIntoUnits?: boolean },
+): Promise<{ splitFrom: Map<string, string>; splitLines: Map<string, SplitRow> }> {
   // Every line, not only the named ones: which dishes carry modifiers needs the whole tab.
   const sourceRows = await tx
     .select({
@@ -3715,6 +3727,10 @@ export async function carveOffLines(
         positive: true,
       });
       inRange = compareDecimal(decimal(t.quantity), decimal(line.quantity)) <= 0;
+      if (opts.splitIntoUnits) {
+        const units = stringToThousandths(line.quantity);
+        inRange = inRange && line.unitPrecision === 0 && units >= 2000 && units % 1000 === 0;
+      }
     } catch {
       inRange = false;
     }
@@ -3722,7 +3738,7 @@ export async function carveOffLines(
       throw new AppError("tab.transfer_quantity_invalid", {
         tabId: fromTabId,
         lineNo: t.lineNo,
-        quantity: t.quantity,
+        quantity: opts.splitIntoUnits ? line.quantity : t.quantity,
       });
     }
     if (compareDecimal(decimal(t.quantity), decimal(line.quantity)) === 0) {
@@ -3762,7 +3778,9 @@ export async function carveOffLines(
     partials.map(({ line, quantity }) => ({
       id: line.id,
       lineNo: line.lineNo,
-      keeps: decimalToThousandths(line.quantity) - stringToThousandths(quantity),
+      keeps: opts.splitIntoUnits
+        ? 1000
+        : decimalToThousandths(line.quantity) - stringToThousandths(quantity),
     })),
   );
 
@@ -3843,38 +3861,50 @@ export async function carveOffLines(
       await VENUE_SERVICE.copyLineContext(tx, cfg, row.id, splitRowId);
       return splitRowId;
     };
-    for (const { line, quantity, children } of partials) {
-      const remaining = subtractDecimal(decimal(line.quantity), decimal(quantity));
-      const splitLineId = await splitRow(line, remaining, decimal(quantity), null);
-      // Numbered straight after their dish: a receipt reads a dish's extras from the rows after it.
-      for (const child of children) {
-        const splitChildId = await splitRow(child.row, child.remaining, child.moved, splitLineId);
-        if (child.row.ticketItemId !== null) {
+    for (const partial of partials) {
+      let line = partial.line;
+      const { quantity, children } = partial;
+      const count = opts.splitIntoUnits ? stringToThousandths(line.quantity) / 1000 - 1 : 1;
+      for (let part = 0; part < count; part += 1) {
+        const remaining = subtractDecimal(decimal(line.quantity), decimal(quantity));
+        const splitLineId = await splitRow(line, remaining, decimal(quantity), null);
+        // Numbered straight after their dish: a receipt reads a dish's extras from the rows after it.
+        for (const child of children) {
+          const splitChildId = await splitRow(child.row, child.remaining, child.moved, splitLineId);
+          if (child.row.ticketItemId !== null) {
+            const splitTicketId = await splitTicketItem(
+              tx,
+              child.row.ticketItemId,
+              child.row.quantity,
+              toTabId,
+              splitChildId,
+              child.moved,
+            );
+            splitFrom.set(splitTicketId, child.row.ticketItemId);
+            await copyKitchenJobLines(tx, child.row.id, splitChildId);
+            movedLineIds.push(child.row.id);
+          }
+        }
+        if (line.ticketItemId !== null) {
           const splitTicketId = await splitTicketItem(
             tx,
-            child.row.ticketItemId,
-            child.row.quantity,
+            line.ticketItemId,
+            line.quantity,
             toTabId,
-            splitChildId,
-            child.moved,
+            splitLineId,
+            quantity,
           );
-          splitFrom.set(splitTicketId, child.row.ticketItemId);
-          await copyKitchenJobLines(tx, child.row.id, splitChildId);
-          movedLineIds.push(child.row.id);
+          splitFrom.set(splitTicketId, line.ticketItemId);
+          await copyKitchenJobLines(tx, line.id, splitLineId);
+          movedLineIds.push(line.id);
         }
-      }
-      if (line.ticketItemId !== null) {
-        const splitTicketId = await splitTicketItem(
-          tx,
-          line.ticketItemId,
-          line.quantity,
-          toTabId,
-          splitLineId,
-          quantity,
-        );
-        splitFrom.set(splitTicketId, line.ticketItemId);
-        await copyKitchenJobLines(tx, line.id, splitLineId);
-        movedLineIds.push(line.id);
+
+        line = {
+          ...line,
+          quantity: remaining,
+          servedQuantity: Math.min(line.servedQuantity, decimalToThousandths(remaining)),
+        };
+        if (opts.splitIntoUnits && (part + 1) % 32 === 0) await nextTurn();
       }
     }
   }
@@ -3946,6 +3976,18 @@ export async function splitLinesWithinOrder(
     ...opts,
   });
   return splitLines;
+}
+
+export async function splitUnitsWithinOrder(
+  tx: Transaction,
+  cfg: TillConfig,
+  orderId: string,
+  lineNo: number,
+): Promise<void> {
+  await carveLines(tx, cfg, orderId, orderId, [{ lineNo, quantity: "1" }], {
+    refuseHeld: false,
+    splitIntoUnits: true,
+  });
 }
 
 /**

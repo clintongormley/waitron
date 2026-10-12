@@ -40,6 +40,7 @@ import {
   type RoutingOnce,
   refusePaymentInFlight,
   splitLinesWithinOrder,
+  splitUnitsWithinOrder,
   type TabRoundLine,
 } from "./working-order.js";
 import "./errors.js";
@@ -783,7 +784,6 @@ export async function splitHeldLineIntoUnits(
         .select({
           workingOrderId: workingOrderLines.workingOrderId,
           lineNo: workingOrderLines.lineNo,
-          quantity: workingOrderLines.quantity,
           groupId: workingOrderLines.groupId,
           groupState: orderGroups.state,
           billStatus: workingOrders.status,
@@ -804,18 +804,7 @@ export async function splitHeldLineIntoUnits(
         throw new AppError("group.not_held", { groupId: line.groupId! });
       if (line.billStatus !== "open")
         throw new AppError("working_order.not_open", { workingOrderId: line.workingOrderId });
-      if (line.quantity < 2000 || line.quantity % 1000 !== 0) {
-        throw new AppError("tab.transfer_quantity_invalid", {
-          tabId: line.workingOrderId,
-          lineNo: line.lineNo,
-          quantity: thousandthsToDecimal(line.quantity),
-        });
-      }
-      for (let remaining = line.quantity; remaining > 1000; remaining -= 1000) {
-        await splitLinesWithinOrder(tx, cfg, line.workingOrderId, [
-          { lineNo: line.lineNo, quantity: "1" },
-        ]);
-      }
+      await splitUnitsWithinOrder(tx, cfg, line.workingOrderId, line.lineNo);
       await bumpRevision(tx, [line.workingOrderId]);
       await recordGroupEvent(tx, {
         partyId,
