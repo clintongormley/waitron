@@ -43,3 +43,12 @@ export {
 } from "./restore.js";
 export { liveSeriesBases, MAX_BASE_CODE_LENGTH, stripOwnSuffixes } from "./reserved-series.js";
 export { FISCAL_CLASSIFICATION } from "./classification.js";
+export { drawEmergencyIdentity, validateAllocationEnvelope } from "./allocation-envelope.js";
+export type {
+  AllocationContext,
+  AllocationRefusal,
+  AllocationValidation,
+  EmergencyDraw,
+  FiscalAllocation,
+  RecoveryApproval,
+} from "./allocation-envelope.js";

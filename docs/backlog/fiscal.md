@@ -219,7 +219,10 @@ Task 4's allocation activation remains open, followed by the dependent recovery 
 The owner selected a separate external paper-custodian key on 2026-10-12, with independent
 fingerprint comparison against the current outside register on replacement hardware. Signed
 paper evidence and the [custodian tool](../developers/paper-custodian.md) are on the Task 4 branch;
-persistent activation and recovery-pack enrolment remain open. The existing recovery kit carries the old box's pointer
+persistent activation and recovery-pack enrolment remain open. The Task 4 branch also validates
+paper/emergency allocation and approval envelopes against separately supplied host context.
+Committed replay, schema changes and activation writes are still open; Cloud input remains refused
+until its separate trusted adapter exists. The existing recovery kit carries the old box's pointer
 signer; it does not declare a paper custodian (`packages/stream/src/kit.ts`, `RecoveryKit`).
 Keep activation disconnected until its full validation and atomic writes are implemented; emergency input formats alone
 provide no reservation or consumption evidence.

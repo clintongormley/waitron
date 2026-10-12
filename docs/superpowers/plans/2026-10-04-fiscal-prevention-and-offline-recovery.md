@@ -242,6 +242,21 @@ and key replacement. No persistent allocation, SIF representation or activation 
 changed. Next: validate the complete allocation/approval envelope, then the coupled schema,
 all-or-nothing activation and entry-point replacement above. Task 4 remains incomplete.
 
+**2026-10-12 envelope checkpoint:** `allocation-envelope.ts` validates the complete paper or
+emergency allocation and administrator approval. Its context is supplied separately by the host:
+taxpayer, software, environment, configured series, source/backup, target node, event, operator,
+reauthentication and outside authority. Initial setup explicitly confirms `oldMachineAbsent`;
+recovery confirms `oldMachineOffline` instead. The parser refuses extra fields and returns detached,
+frozen values. Current paper-entry state remains an outside operational assertion, not something
+the signature proves. Emergency input must match an in-process cryptographic draw, its separate
+checksum and the recorded outside incident; missing history requires explicit uncertainty.
+Cloud input is refused until the separate registry adapter supplies trusted evidence.
+
+No activation or schema change is connected. A committed prior activation is referred to the
+future replay operation rather than authorised as a new activation. Next: trace and replace the
+numeric SIF/series consumers together, generate and qualify the schema migration, then implement
+atomic activation and committed replay plus every entry-point replacement. Task 4 remains open.
+
 ## Task 5: select active series inside issuance transactions
 
 **Modify:** `apps/server/src/till-config.ts`, `trading-config.ts`, `till-sale.ts`,
