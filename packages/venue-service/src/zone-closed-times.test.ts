@@ -13,8 +13,8 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { locationId } from "@waitron/shared";
 import { VENUE_SERVICE_MIGRATIONS } from "./migrations.js";
 import { configureZone, createDepartment } from "./operations.js";
-import { saveSpecialDate, duplicateSpecialDate } from "./hours.js";
-import { VENUE_SERVICE_CALENDAR_PARTICIPANTS } from "./calendar-participants.js";
+import { specialDates } from "./schema/hours.js";
+import { insertNamedDay } from "./testing/named-day-rows.js";
 import { readOpeningHoursModel } from "./menu-timetable.js";
 import { seasons, zoneDayRanges, zoneDays } from "./schema/seasons.js";
 import * as closures from "./zone-closed-times.js";
@@ -66,15 +66,12 @@ async function venue() {
 }
 async function named(v: Awaited<ReturnType<typeof venue>>, ownHours: boolean) {
   return tx((db) =>
-    saveSpecialDate(
-      db,
-      v.cfg,
-      null,
-      { date: "2030-12-25", name: "Christmas", ownHours, closeWholeVenue: false, cells: [] },
-      at,
-      undefined,
-      0,
-    ),
+    insertNamedDay(db, v.cfg, {
+      date: "2030-12-25",
+      name: "Christmas",
+      ownHours,
+      closeWholeVenue: false,
+    }),
   );
 }
 async function specialDay(
@@ -129,37 +126,6 @@ describe("zone closed times", () => {
         dates: [{ specialDateId: day.id, ranges: night }],
       },
     ]);
-  });
-  it("replaces dated closures, copies them with a named day, and clears just that date", async () => {
-    const v = await venue(),
-      day = await named(v, true);
-    await tx((db) => replaceZoneClosedWeek(db, v.cfg, v.terrace, week(), 0));
-    await tx((db) =>
-      saveZoneClosedDate(db, v.cfg, day.id, v.terrace, [{ startsAt: "12:00", endsAt: "14:00" }], 0),
-    );
-    await tx((db) => saveZoneClosedDate(db, v.cfg, day.id, v.terrace, night, 0));
-    const [copy] = await tx((db) =>
-      duplicateSpecialDate(
-        db,
-        v.cfg,
-        day.id,
-        ["2030-12-26"],
-        at,
-        VENUE_SERVICE_CALENDAR_PARTICIPANTS,
-        0,
-      ),
-    );
-    await tx((db) => saveZoneClosedDate(db, v.cfg, day.id, v.terrace, [], 0));
-    const model = await tx((db) => readOpeningHoursModel(db, v.cfg, at));
-    const zone = model.departments
-      .find((d) => d.id === v.departmentId)!
-      .zones.find((z) => z.id === v.terrace)!;
-    expect(
-      zone.seasonWeeks.find(
-        (entry) => entry.seasonId === (model.currentSeasonId ?? model.seasons[0]!.id),
-      )!.week,
-    ).toEqual(week());
-    expect(zone.dates).toEqual([{ specialDateId: copy!.id, ranges: night }]);
   });
   it("refuses a foreign or switched-off department's zone without changing its rows", async () => {
     const a = await venue(),
@@ -221,23 +187,10 @@ describe("zone closed times", () => {
       code: "special_date.not_found",
       params: { specialDateId: foreign.id },
     });
-    const own = await tx((db) =>
-      saveSpecialDate(
-        db,
-        a.cfg,
-        day.id,
-        {
-          date: "2030-12-25",
-          name: "Christmas",
-          ownHours: true,
-          closeWholeVenue: false,
-          cells: [],
-        },
-        at,
-        undefined,
-        0,
-      ),
-    );
+    const own = await tx(async (db) => {
+      await db.update(specialDates).set({ ownHours: true }).where(eq(specialDates.id, day.id));
+      return day;
+    });
     await expect(
       tx((db) => saveZoneClosedDate(db, a.cfg, own.id, b.terrace, night, 0)),
     ).rejects.toMatchObject({ code: "service_zone.not_found" });

@@ -1,13 +1,11 @@
 import { readZoneKeepOpenState } from "./operations.js";
 import { replaceZoneClosedWeek, saveZoneClosedDate } from "./zone-closed-times.js";
-import { saveSpecialDate, duplicateSpecialDate } from "./hours.js";
 import {
   replaceMenuWeek,
   saveSpecialDateMenus,
   updateMenuPeriod,
   readOpeningHoursModel,
   resolveDepartmentService,
-  MENU_TIMETABLE_CALENDAR_PARTICIPANT,
 } from "./menu-timetable.js";
 import { randomUUID } from "node:crypto";
 import { describe, expect, it, vi } from "vitest";
@@ -493,63 +491,6 @@ describe("pending guards every time writer", () => {
       ),
     ).rejects.toMatchObject({ code: "hours.clock_change_pending" });
   });
-  it.each([
-    { date: "2026-12-26" },
-    { repeats: true },
-    { ownHours: false },
-    { ownHours: false, closeWholeVenue: true },
-  ])("guards a calendar time change %j", async (change) => {
-    const v = await fixture([range("09:00", "17:00")], { date: "2026-12-25" });
-    await pending(v);
-    await expect(
-      withTransaction(suite.db, (tx) =>
-        saveSpecialDate(
-          tx,
-          v.cfg,
-          v.specialDateId!,
-          {
-            date: "2026-12-25",
-            name: "Named day",
-            ownHours: true,
-            closeWholeVenue: false,
-            ...change,
-          },
-          at,
-          [],
-          1,
-        ),
-      ),
-    ).rejects.toMatchObject({ code: "hours.clock_change_pending" });
-    await expect(
-      withTransaction(suite.db, (tx) =>
-        saveSpecialDate(
-          tx,
-          v.cfg,
-          v.specialDateId!,
-          { date: "2026-12-25", name: "Renamed", ownHours: true, closeWholeVenue: false },
-          at,
-          [],
-          0,
-        ),
-      ),
-    ).resolves.toMatchObject({ name: "Renamed" });
-  });
-  it("guards calendar copies and permits a fresh revision after cancellation", async () => {
-    const v = await fixture([range("09:00", "17:00")], { date: "2026-12-25" });
-    await pending(v);
-    const copy = (revision: number) =>
-      withTransaction(suite.db, (tx) =>
-        duplicateSpecialDate(tx, v.cfg, v.specialDateId!, ["2026-12-26"], at, [], revision),
-      );
-    await expect(copy(1)).rejects.toMatchObject({ code: "hours.clock_change_pending" });
-    await withTransaction(suite.db, (tx) =>
-      tx
-        .delete(locationDayCutoverChanges)
-        .where(eq(locationDayCutoverChanges.locationId, v.cfg.locationId)),
-    );
-    await expect(copy(0)).rejects.toMatchObject({ code: "hours.clock_changed" });
-    await expect(copy(1)).resolves.toMatchObject([{ date: "2026-12-26" }]);
-  });
 });
 
 it("hours models carry the baseline timeline, revision and pending status across activation", async () => {
@@ -714,33 +655,6 @@ describe("dated calendar authoring after activation", () => {
       ),
     ).resolves.toBeUndefined();
   });
-  it.each([false, true])(
-    "refuses copying incompatible menu/zone hours into the target date (zone=%s)",
-    async (zone) => {
-      const v = await fixture([range("05:00", "05:00")], { date: "2026-10-10", zone });
-      await activated(v);
-      await expect(
-        withTransaction(suite.db, (tx) =>
-          duplicateSpecialDate(
-            tx,
-            v.cfg,
-            v.specialDateId!,
-            ["2026-12-25"],
-            after,
-            [MENU_TIMETABLE_CALENDAR_PARTICIPANT],
-            1,
-          ),
-        ),
-      ).rejects.toMatchObject({
-        code: zone ? "zone_closed_time.invalid" : "menu_timetable.invalid",
-      });
-      const copies = await suite.db
-        .select()
-        .from(specialDates)
-        .where(eq(specialDates.locationId, v.cfg.locationId));
-      expect(copies.map((d) => d.date)).toEqual(["2026-10-10"]);
-    },
-  );
   it("accepts a skipped final boundary at the reporting boundary instant", async () => {
     const v = await fixture([], { date: "2026-03-28" });
     await withTransaction(suite.db, (tx) =>

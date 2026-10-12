@@ -30,7 +30,7 @@ import {
 import type { ModuleRouteContext } from "@waitron/module";
 import { locationId as brandLocationId } from "@waitron/shared";
 import { MANAGEMENT_COOKIE, type Logger } from "@waitron/server-kit";
-import { saveSpecialDate } from "./hours.js";
+import { insertNamedDay, keepWeekOn } from "./testing/named-day-rows.js";
 import { readOpeningHoursModel, saveMenuPeriod } from "./menu-timetable.js";
 import type { MenuSlot, OpeningHoursModel } from "./menu-timetable-types.js";
 import { VENUE_SERVICE_MIGRATIONS } from "./migrations.js";
@@ -110,21 +110,13 @@ async function routed() {
       )
     ).id;
     const christmas = (
-      await saveSpecialDate(
-        tx,
-        cfg,
-        null,
-        {
-          date: "2030-12-25",
-          name: "Navidad",
-          closeWholeVenue: false,
-          ownHours: true,
-          cells: [],
-        },
-        new Date(),
-        undefined,
-        0,
-      )
+      await insertNamedDay(tx, cfg, {
+        date: "2030-12-25",
+        name: "Navidad",
+        closeWholeVenue: false,
+        ownHours: true,
+        cells: [],
+      })
     ).id;
     const person = async (role: "manager" | "supervisor" | "staff") => {
       const [row] = await tx
@@ -303,17 +295,7 @@ describe("the opening-hours routes", () => {
       404,
     );
     await answers(await r.send("DELETE", dateTimetable, r.manager), 404);
-    await answers(
-      await r.send("PUT", `/special-dates/${r.christmas}`, r.manager, {
-        date: "2030-12-25",
-        name: "Navidad",
-        colour: "red",
-        closeWholeVenue: false,
-        ownHours: false,
-        cells: [],
-      }),
-      200,
-    );
+    await scoped((tx) => keepWeekOn(tx, r.christmas));
     await answers(await r.send("DELETE", `/menu-periods/${mediodia.id}`, r.manager), 204);
     model = await r.model();
     expect(restaurantOf(model, r).dates).toEqual([]);
@@ -772,17 +754,7 @@ it("reports offset placement refusals on the submitted field and retains the com
 
 it("refuses dated writes on a day keeping the week and no longer offers per-department clearing", async () => {
   const r = await routed();
-  await answers(
-    await r.send("PUT", `/special-dates/${r.christmas}`, r.manager, {
-      date: "2030-12-25",
-      name: "Navidad",
-      colour: "red",
-      closeWholeVenue: false,
-      ownHours: false,
-      cells: [],
-    }),
-    200,
-  );
+  await scoped((tx) => keepWeekOn(tx, r.christmas));
   const path = `/special-dates/${r.christmas}/menu-timetables/${r.restaurant}`;
   await answers(await r.send("PUT", path, r.manager, { slots: [] }), 409, {
     code: "special_date.keeps_week",

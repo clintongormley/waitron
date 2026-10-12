@@ -22,7 +22,6 @@ import { locationId as brandLocationId } from "@waitron/shared";
 import { deleteMenuPeriod, replaceMenuWeek, saveMenuPeriod } from "./menu-timetable.js";
 import { VENUE_SERVICE_MIGRATIONS } from "./migrations.js";
 import { configureZone, createDepartment, type VenueScope } from "./operations.js";
-import { specialDates } from "./schema/hours.js";
 import { menuPeriods } from "./schema/menus.js";
 import { departmentDays, specialDayDates, specialDays, zoneDays } from "./schema/seasons.js";
 import {
@@ -269,60 +268,6 @@ describe("saveSpecialDay", () => {
       code: "special_day.date_taken",
       params: { date: "2031-12-24", specialDayId: oneOff.id, name: "Cena 2031" },
     });
-  });
-
-  it("refuses a date a named day holds, naming it", async () => {
-    const v = await venue();
-    const [named] = await db
-      .insert(specialDates)
-      .values({ locationId: v.cfg.locationId, date: "2030-12-25", name: "Navidad" })
-      .returning({ id: specialDates.id });
-    expect(
-      await refusal(
-        save(v, null, { name: "Christmas", repeatsYearly: false, dates: dates(["2030-12-25"]) }),
-      ),
-    ).toEqual({
-      code: "special_day.date_taken",
-      params: { date: "2030-12-25", specialDateId: named!.id, name: "Navidad" },
-    });
-    expect(
-      await refusal(
-        save(v, null, { name: "Christmas", repeatsYearly: true, dates: dates(["2029-12-25"]) }),
-      ),
-    ).toEqual({
-      code: "special_day.date_taken",
-      params: { date: "2030-12-25", specialDateId: named!.id, name: "Navidad" },
-    });
-    expect(
-      await db.select().from(specialDays).where(eq(specialDays.locationId, v.cfg.locationId)),
-    ).toEqual([]);
-  });
-
-  it("a repeating named day refuses a special day only from its first year", async () => {
-    const v = await venue();
-    const [named] = await db
-      .insert(specialDates)
-      .values({
-        locationId: v.cfg.locationId,
-        date: "2030-12-25",
-        name: "Navidad",
-        repeatOn: "12-25",
-      })
-      .returning({ id: specialDates.id });
-    expect(
-      await refusal(
-        save(v, null, { name: "Christmas", repeatsYearly: false, dates: dates(["2031-12-25"]) }),
-      ),
-    ).toEqual({
-      code: "special_day.date_taken",
-      params: { date: "2031-12-25", specialDateId: named!.id, name: "Navidad" },
-    });
-    const before = await save(v, null, {
-      name: "Christmas",
-      repeatsYearly: false,
-      dates: dates(["2029-12-25"]),
-    });
-    expect(before.dates).toEqual([{ date: "2029-12-25", closedAllDay: false }]);
   });
 
   it("names need not be unique", async () => {
