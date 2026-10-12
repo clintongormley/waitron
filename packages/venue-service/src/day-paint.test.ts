@@ -188,3 +188,25 @@ describe("zonePaintFromEdit", () => {
   it("gives no paint for unedited closures", () =>
     expect(zonePaintFromEdit(season, season, CUTOVER)).toEqual([]));
 });
+
+describe("off the quarter hour", () => {
+  it("keeps the day under a changeover off the quarter hour", () =>
+    expect(layerPaint(winter, [], "06:10")).toEqual(winter));
+
+  it("keeps a zone's closures under a changeover off the quarter hour", () =>
+    expect(layerZonePaint([{ startsAt: "22:00", endsAt: "23:30" }], [], "06:10")).toEqual([
+      { startsAt: "22:00", endsAt: "23:30" },
+    ]));
+
+  it("keeps range times off the quarter hour as they are", () =>
+    expect(
+      layerPaint(
+        [{ periodId: DINNER, startsAt: "20:10", endsAt: "23:20" }],
+        [{ periodId: LUNCH, startsAt: "13:05", endsAt: "15:55" }],
+        CUTOVER,
+      ),
+    ).toEqual([
+      { periodId: LUNCH, startsAt: "13:05", endsAt: "15:55" },
+      { periodId: DINNER, startsAt: "20:10", endsAt: "23:20" },
+    ]));
+});

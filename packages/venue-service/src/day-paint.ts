@@ -15,8 +15,8 @@ export interface ZonePaint {
 
 // Kept free of runtime imports so the dashboard can load it: the arithmetic mirrors
 // `rangeSpan` (service-day.ts) and the join mirrors `joinTouching` (season-weeks.ts).
-const STEP = 15;
-const STEPS = 1440 / STEP;
+// Minute by minute: a changeover or a range time may fall on any minute.
+const STEPS = 1440;
 
 function clockMinutes(time: string): number {
   return Number(time.slice(0, 2)) * 60 + Number(time.slice(3, 5));
@@ -27,11 +27,11 @@ function stepSpan(range: ClosedRange, cutover: string): [number, number] {
   const start = (clockMinutes(range.startsAt) - from + 1440) % 1440;
   // The changeover is the exclusive end, allowing one range to fill the whole day.
   const end = (clockMinutes(range.endsAt) - from + 1440) % 1440 || 1440;
-  return [start / STEP, end / STEP];
+  return [start, end];
 }
 
 function clockAt(step: number, cutover: string): string {
-  const minute = (clockMinutes(cutover) + step * STEP) % 1440;
+  const minute = (clockMinutes(cutover) + step) % 1440;
   const pad = (n: number) => String(n).padStart(2, "0");
   return `${pad(Math.floor(minute / 60))}:${pad(minute % 60)}`;
 }
