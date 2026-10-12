@@ -461,7 +461,61 @@ describe("checkZonePlanSave", () => {
     expect(error.code).toBe("table.label_taken");
     expect(error.params).toEqual({ label: p });
   });
+
+  it.each<[string, (entries: SaveEntry[]) => SaveEntry[], string]>([
+    ["made of one table", (e) => patched(e, "long", { partKeys: ["c3"] }), "tables.3.partKeys"],
+    [
+      "naming a part twice",
+      (e) => patched(e, "long", { partKeys: ["c3", "c3", "c4"] }),
+      "tables.3.partKeys",
+    ],
+    [
+      "naming a key not in the save",
+      (e) => patched(e, "long", { partKeys: ["c3", "c4", "zz"] }),
+      "tables.3.partKeys",
+    ],
+    [
+      "naming itself",
+      (e) => patched(e, "long", { partKeys: ["long", "c3", "c4"] }),
+      "tables.3.partKeys",
+    ],
+    ["with a part on the plan", (e) => patched(e, "c4", { placement: PLACE }), "tables.3.partKeys"],
+    [
+      "with a joined table as a part",
+      (e) => [
+        ...patched(e, "long", { partKeys: ["c3", "bar"] }),
+        { ...unplaced("bar", "Bar"), partKeys: ["c4", "c5"] },
+      ],
+      "tables.3.partKeys",
+    ],
+    [
+      "sharing a part with another",
+      (e) => [
+        ...e,
+        { ...unplaced("bar", "Bar"), placement: PLACE, partKeys: ["c5", "c6"] },
+        unplaced("c6", "Counter 6"),
+      ],
+      "tables.4.partKeys",
+    ],
+    ["with no seats", (e) => patched(e, "long", { seats: null }), "tables.3.seats"],
+    ["with 0 seats", (e) => patched(e, "long", { seats: 0 }), "tables.3.seats"],
+  ])("refuses a joined table %s, naming its field", async (_, vary, field) => {
+    const z = await zone();
+    const error = await refusal(check(z, { revision: 0, tables: vary(longTableEntries()) }));
+    expect({ code: error.code, params: error.params }).toEqual({
+      code: "floor_plan.invalid",
+      params: { field },
+    });
+  });
 });
+
+function patched(entries: SaveEntry[], key: string, patch: Partial<SaveEntry>): SaveEntry[] {
+  return entries.map((e) => (e.key === key ? { ...e, ...patch } : e));
+}
+
+function unplaced(key: string, label: string): SaveEntry {
+  return { key, label: fresh(label), seats: 4, fixed: false, placement: null, partKeys: [] };
+}
 
 describe("saveZonePlan", () => {
   type Entry = ZonePlanSave["tables"][number];
@@ -879,6 +933,26 @@ describe("saveZonePlan", () => {
     );
 
     expect(error.code).toBe("floor_plan.out_of_date");
+    expect(await inTx(v, (tx) => readZonePlan(tx, v.cfg, z))).toEqual(before);
+  });
+
+  it("writes nothing when a joined table is refused", async () => {
+    const z = await zone();
+    const entries = longTableEntries();
+    const { ids } = await save(z, { revision: 0, tables: entries });
+    const before = await inTx(v, (tx) => readZonePlan(tx, v.cfg, z));
+
+    const error = await refusal(
+      save(z, {
+        revision: 1,
+        tables: patched(asSaved(entries, ids), "long", { partKeys: ["c3"] }),
+      }),
+    );
+
+    expect({ code: error.code, params: error.params }).toEqual({
+      code: "floor_plan.invalid",
+      params: { field: "tables.3.partKeys" },
+    });
     expect(await inTx(v, (tx) => readZonePlan(tx, v.cfg, z))).toEqual(before);
   });
 

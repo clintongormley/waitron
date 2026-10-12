@@ -170,6 +170,28 @@ function checkEntries(input: ZonePlanSave): void {
       ids.add(ref);
     }
   });
+  checkParts(input.tables);
+}
+
+function checkParts(tables: ZonePlanSave["tables"]): void {
+  const byKey = new Map(tables.map((table) => [table.key, table]));
+  const claimed = new Set<string>();
+  tables.forEach((table, index) => {
+    if (table.partKeys.length === 0) return;
+    const at = `tables.${index}.partKeys`;
+    if (table.partKeys.length < 2) throw invalid(at);
+    if (new Set(table.partKeys).size !== table.partKeys.length) throw invalid(at);
+    for (const key of table.partKeys) {
+      const part = byKey.get(key);
+      if (part === undefined) throw invalid(at);
+      if (key === table.key) throw invalid(at);
+      if (part.placement !== null) throw invalid(at);
+      if (part.partKeys.length > 0) throw invalid(at);
+      if (claimed.has(key)) throw invalid(at);
+      claimed.add(key);
+    }
+    if (table.seats === null || table.seats < 1) throw invalid(`tables.${index}.seats`);
+  });
 }
 
 async function namesTaken(tx: Transaction, cfg: TillConfig, zoneId: string): Promise<Set<string>> {
