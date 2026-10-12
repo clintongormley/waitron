@@ -10,9 +10,7 @@ name: Mutation testing
 # packages/ui is SHARDED like packages/db, because one job stopped fitting. Job wall times from
 # `gh run view`: run 36380351019 (2026-09-28) 15m28s; run 37267389722 (2026-10-05) 90m11s; run
 # 38206876422 (2026-10-12) cancelled at its 185-minute limit. Over the same three runs Stryker's
-# logs read 35 → 44 → 60 files to mutate and 850 → 1863 → 2912 tests in its first run. The sharded
-# job's durations are measured by its first dispatch; its 20 shards and 30-minute limit are a
-# starting point until then.
+# logs read 35 → 44 → 60 files to mutate and 850 → 1863 → 2912 tests in its first run.
 
 on:
   schedule:
@@ -88,6 +86,7 @@ jobs:
   # range in a shard of its own. Why, on run 38233718266 at 20 shards: wt-combobox.ts and
   # wt-dialog.ts, each alone in a shard, hit the 30-minute limit (716 of 780 and 325 of 382 mutants
   # tested), and one of wt-data-table.ts's four ranges took 28.7 minutes.
+  # At 30 shards, run 38241392066: the slowest shard took 17 minutes.
   mutation-ui:
     strategy:
       fail-fast: false
