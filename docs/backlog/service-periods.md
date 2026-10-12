@@ -94,11 +94,12 @@ boards: the list, Edit department, Edit zone and Edit receipt.
 readiness checked before new payment dispatch and the no-field fiscal slot handled at boot.
 Receipt dialogs, language settings and the public preview use department-owned content.
 Zone editors save name and raw policy overrides together. The protected department and zone
-editors now open over the combined list. Department settings save name, trading name,
-service settings and transfers without writing receipt policy. Pointer and keyboard zone moves
-are implemented, including independent pending writes and queued refreshes. Legacy action/leave
-assertion ports, obsolete helper retirement, the full product look and the whole-branch audit
-remain. The branch is unpublished; the two legacy shell suites still have failing cases.
+editors open over the combined list. Department settings preserve receipt policy. Pointer and
+keyboard zone moves, independent pending writes and queued refreshes are implemented.
+The shell action/leave and real dashboard host checks now pass at the dialog/list boundary,
+including permissions, focus, Cancel and sidebar return. Legacy zone policy/read/accessibility
+assertions have replacement suites. Old helper/suite retirement, the complete source/prose audit
+and final visual acceptance remain. The branch is unpublished.
 
 **The list.** "Departments and zones" becomes one list. Each department is a row, and its zones are
 indented beneath it. The columns are name, service style (how orders start), counter service (when

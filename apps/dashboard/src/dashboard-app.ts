@@ -1630,7 +1630,11 @@ export class DashboardApp extends LitElement {
 
   #selectScreen(screen: ScreenId): void {
     const destination = this.#permittedScreen(screen);
-    void Promise.resolve(this.#writeScreenUrl(destination)).then((outcome) => {
+    const navigation =
+      destination === "venue-operations"
+        ? this.#url.write({ dashboard: destination, department: null, view: null, zone: null })
+        : this.#writeScreenUrl(destination);
+    void Promise.resolve(navigation).then((outcome) => {
       if (outcome === "proceeded" && this.isConnected && this.screen === destination) {
         this.#openGroupOf(destination);
         this.drawerOpen = false;

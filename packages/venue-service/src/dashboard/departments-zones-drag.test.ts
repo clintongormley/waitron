@@ -157,6 +157,23 @@ it("a pending move disables only conflicting grips and a refusal preserves assig
   expect(
     (table.shadowRoot!.querySelector('[data-test="zone-grip-z2"]') as HTMLButtonElement).disabled,
   ).toBe(false);
+  const edit = table.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>(
+    '[data-test="edit-zone-z1"]',
+  )!;
+  const remove = table.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>(
+    '[data-test="delete-zone-z1"]',
+  )!;
+  expect(edit.disabled, "the moving zone cannot open a competing editor").toBe(true);
+  expect(remove.disabled, "the moving zone cannot be deleted mid-request").toBe(true);
+  const otherEdit = table.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>(
+    '[data-test="edit-zone-z2"]',
+  )!;
+  expect(otherEdit.disabled).toBe(false);
+  const opened = vi.fn();
+  el.addEventListener("edit-zone", opened);
+  edit.click();
+  table.shadowRoot!.querySelector<HTMLElement>('[data-test="open-zone-name-z1"]')!.click();
+  expect(opened).not.toHaveBeenCalled();
   finish();
   await expect
     .poll(() => el.shadowRoot!.querySelector('[role="alert"]')?.textContent)
@@ -247,4 +264,60 @@ it("another zone can move while the first zone's request is pending", async () =
   } finally {
     for (const release of releases) release();
   }
+});
+
+it.each(["department", "zone"] as const)(
+  "a deleted %s cancels a lifted target before release",
+  async (kind) => {
+    const { el, table, writes, grip } = await setup();
+    const target = table.shadowRoot!.querySelector('[data-row-key="department:d2"]')!;
+    pointer(grip, "pointerdown", point(grip));
+    pointer(document, "pointermove", point(target));
+    const at = point(target);
+    const next = structuredClone(el.model!);
+    if (kind === "department") next.departments = next.departments.filter((row) => row.id !== "d2");
+    else {
+      next.zones = next.zones.filter((row) => row.id !== "z1");
+      next.floorZones = next.floorZones.filter((row) => row.id !== "z1");
+    }
+    el.model = next;
+    await el.updateComplete;
+    await table.updateComplete;
+    pointer(document, "pointerup", at);
+    expect(writes).toEqual([]);
+    expect(table.shadowRoot!.querySelector('[data-test="lifted-zone-row"]')).toBeNull();
+    expect(table.shadowRoot!.querySelector('[part~="drop-into"]')).toBeNull();
+  },
+);
+it("the drop uses a department's position after scrolling", async () => {
+  const { el, table, writes, grip } = await setup();
+  el.style.height = "200px";
+  const scroller = table.shadowRoot!.querySelector<HTMLElement>(".scroll")!;
+  scroller.style.maxHeight = "180px";
+  scroller.style.overflowY = "auto";
+  const next = structuredClone(el.model!);
+  for (let i = 3; i <= 12; i++)
+    next.departments.push({
+      id: `d${i}`,
+      name: `Department ${i}`,
+      tradingName: `Trading ${i}`,
+      active: true,
+    });
+  el.model = next;
+  await el.updateComplete;
+  await table.updateComplete;
+  const target = table.shadowRoot!.querySelector<HTMLElement>('[data-row-key="department:d12"]')!;
+  expect(target.getBoundingClientRect().top).toBeGreaterThan(
+    scroller.getBoundingClientRect().bottom,
+  );
+  pointer(grip, "pointerdown", point(grip));
+  pointer(document, "pointermove", { ...point(grip), clientY: point(grip).clientY + 8 });
+  scroller.scrollTop = scroller.scrollHeight;
+  await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+  expect(target.getBoundingClientRect().top).toBeLessThan(scroller.getBoundingClientRect().bottom);
+  pointer(document, "pointermove", point(target));
+  pointer(document, "pointerup", point(target));
+  await expect
+    .poll(() => writes)
+    .toEqual([["/management-api/venue-service/zones/z1", "PUT", { departmentId: "d12" }]]);
 });

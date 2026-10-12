@@ -116,6 +116,7 @@ export class DepartmentSettings extends LitElement {
   @property({ attribute: false }) api?: VenueServiceApi;
   @property({ attribute: false }) model?: VenueServiceView;
   @property() departmentId = "";
+  @property({ type: Boolean }) refreshing = false;
   @state() private draft?: DepartmentSettingsInput;
   @state() private busy = false;
   @state() private attempted = false;
@@ -388,6 +389,7 @@ export class DepartmentSettings extends LitElement {
     if (
       !this.isConnected ||
       this.busy ||
+      this.refreshing ||
       !this.department?.active ||
       saveActionState(this.scope).unchanged
     )
@@ -423,7 +425,7 @@ export class DepartmentSettings extends LitElement {
     }
   }
   private async cancel() {
-    if (this.busy || !this.scope) return;
+    if (this.busy || this.refreshing || !this.scope) return;
     const id = this.departmentId,
       generation = this.generation;
     const proceed = () => {
@@ -443,8 +445,8 @@ export class DepartmentSettings extends LitElement {
     return this.scope?.isDirty() ?? false;
   }
   async requestLeave(reason: LeaveReason): Promise<boolean> {
-    if (!this.isConnected || this.busy) return false;
-    if (!this.scope || !this.leave) return true;
+    if (!this.isConnected || this.busy || this.refreshing) return false;
+    if (!this.scope || !this.leave || !this.scope.isDirty()) return true;
     const id = this.departmentId,
       generation = this.generation;
     const outcome = await this.leave.request({ scopes: [this.scope.id], reason, proceed() {} });
@@ -632,7 +634,7 @@ export class DepartmentSettings extends LitElement {
             </section>`
           : nothing
       }
-      ${row.active ? html`<wt-form-actions .error=${[this.failure, Object.keys(errors).length ? t("venue.fix_fields") : ""].filter(Boolean).join(" ")}><wt-button slot="cancel" variant="secondary" data-test="cancel-editor" ?disabled=${this.busy} @click=${() => void this.cancel()}>${t("venue.cancel")}</wt-button><wt-button data-test="save-editor" variant=${state.variant} ?disabled=${this.busy || state.unchanged || (this.attempted && Object.keys(this.errors).length > 0)} @click=${() => void this.save()}>${t("venue.save")}</wt-button></wt-form-actions>` : nothing}
+      ${row.active ? html`<wt-form-actions .error=${[this.failure, Object.keys(errors).length ? t("venue.fix_fields") : ""].filter(Boolean).join(" ")}><wt-button slot="cancel" variant="secondary" data-test="cancel-editor" ?disabled=${this.busy || this.refreshing} @click=${() => void this.cancel()}>${t("venue.cancel")}</wt-button><wt-button data-test="save-editor" variant=${this.refreshing ? "secondary" : state.variant} ?disabled=${this.busy || this.refreshing || state.unchanged || (this.attempted && Object.keys(this.errors).length > 0)} @click=${() => void this.save()}>${t("venue.save")}</wt-button></wt-form-actions>` : nothing}
     </div>`;
   }
 }

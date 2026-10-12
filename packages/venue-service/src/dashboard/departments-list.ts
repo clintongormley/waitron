@@ -73,6 +73,12 @@ export class DepartmentsList extends LitElement {
         color: var(--wt-color-text-muted);
         font-style: italic;
       }
+      wt-data-table::part(name-link) {
+        display: inline-block;
+        max-inline-size: var(--wt-cell-name-max-width);
+        overflow-wrap: anywhere;
+        vertical-align: middle;
+      }
       wt-data-table::part(zone-grip) {
         cursor: grab;
         color: var(--wt-color-text-muted);
@@ -175,6 +181,7 @@ export class DepartmentsList extends LitElement {
     }
   }
   @property({ attribute: false }) model?: VenueServiceView;
+  @property({ attribute: false }) receiptAvailable?: (department: Department) => boolean;
 
   #emit(name: string, detail?: { departmentId: string } | { zoneId: string; focus?: boolean }) {
     this.dispatchEvent(new CustomEvent(name, { detail, bubbles: true, composed: true }));
@@ -207,6 +214,7 @@ export class DepartmentsList extends LitElement {
   }
 
   #open(row: DepartmentZoneRow) {
+    if (row.kind === "zone" && this.moving.has(row.id)) return;
     this.#emit(
       row.kind === "department" ? "open-department" : "edit-zone",
       row.kind === "department" ? { departmentId: row.id } : { zoneId: row.id },
@@ -271,6 +279,11 @@ export class DepartmentsList extends LitElement {
           },
         ]
       : [{ key: `edit-zone-${row.id}`, label: t("venue.edit"), event: "edit-zone" }];
+    if (department && this.receiptAvailable && !this.receiptAvailable(row))
+      actions.splice(
+        actions.findIndex((action) => action.event === "edit-receipt"),
+        1,
+      );
     const detail = department ? { departmentId: row.id } : { zoneId: row.id };
     const placed =
       this.planZone === row.id && this.plan && placedTables(this.plan.tables).length > 0;
@@ -284,12 +297,27 @@ export class DepartmentsList extends LitElement {
           this.#watchPlan(row.id);
       }}
     >
-      ${actions.map((action) => html`<wt-button variant="secondary" data-test=${action.key} @click=${() => this.#emit(action.event, detail)}>${action.label}</wt-button>`)}
+      ${actions.map(
+        (action) =>
+          html`<wt-button
+            variant="secondary"
+            data-test=${action.key}
+            ?disabled=${!department && this.moving.has(row.id)}
+            @click=${() => {
+              if (department || !this.moving.has(row.id)) this.#emit(action.event, detail);
+            }}
+            >${action.label}</wt-button
+          >`,
+      )}
       ${department ? nothing : html`${this.planZone === row.id && this.planFailed ? html`<p role="alert" part="setup-issue">${t("venue.floor_plan_load_error")}</p>` : nothing}<a part="link" data-test=${`floor-plan-zone-${row.id}`} href=${`/manage/floor-plan/zone/${encodeURIComponent(row.id)}?back=${encodeURIComponent("/manage/venue-operations")}`}>${t(placed ? "venue.zone_floor_plan" : "venue.zone_add_floor_plan")}</a>`}
       <wt-button
         variant="danger"
         data-test=${`delete-${row.kind}-${row.id}`}
-        @click=${() => this.#emit(department ? "delete-department" : "delete-zone", detail)}
+        ?disabled=${!department && this.moving.has(row.id)}
+        @click=${() => {
+          if (department || !this.moving.has(row.id))
+            this.#emit(department ? "delete-department" : "delete-zone", detail);
+        }}
         >${t("venue.delete")}</wt-button
       >
     </wt-row-actions>`;
@@ -336,7 +364,7 @@ export class DepartmentsList extends LitElement {
                   </button>`
                 : nothing
             }<a
-              part="link"
+              part="link name-link"
               data-own-click
               data-test=${`open-${row.kind}-name-${row.id}`}
               href=${row.kind === "department" ? `/manage/venue-operations/department/${encodeURIComponent(row.id)}` : `/manage/venue-operations/department/${encodeURIComponent(row.departmentId)}/view/zones/zone/${encodeURIComponent(row.id)}`}

@@ -13,6 +13,7 @@ export class DepartmentEditDialog extends LitElement {
   @property({ attribute: false }) api!: VenueServiceApi;
   @property({ attribute: false }) model!: VenueServiceView;
   @property() departmentId = "";
+  @property({ type: Boolean }) refreshing = false;
   @state() private dismissed = false;
   private shownDepartment = "";
   protected override willUpdate(changed: PropertyValues<this>) {
@@ -81,6 +82,7 @@ export class DepartmentEditDialog extends LitElement {
           .api=${this.api}
           .model=${this.model}
           .departmentId=${department.id}
+          .refreshing=${this.refreshing}
           @saved=${this.saved}
           @cancelled=${(event: Event) => {
             event.stopPropagation();

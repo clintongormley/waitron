@@ -183,3 +183,26 @@ passed. This does not complete Task 4: the two unchanged legacy shell action/lea
 still report 23 failures and 15 passes. Port every relevant behavior before retiring their
 old page/dialog helpers, then perform the full managed look and source/prose audit. No full
 review, push, PR or landing has run.
+
+
+Task 4 host qualification checkpoint (2026-10-12): the former shell action/leave checks now
+exercise the protected editors and list. The real dashboard host checks Cancel, Escape,
+Back/Forward, exact receipt subjects, permissions and sidebar return; its full file passed 430
+cases. The ports exposed missing focus return, a second Save during refresh, dirty Cancel asking
+the coordinator twice, a cancelled navigation replacing the opener, hidden receipt permissions
+and the sidebar retaining a deep link. Each was reproduced before its fix. Save remains quiet
+while a retained draft waits for refresh, and pending moves block Edit/Delete for only that zone.
+
+The zone owner's policy, hours, floor-preview and lifecycle assertions now also run at the new
+dialog. Accessibility ports retain transfer/refusal, preview/hours and long-name geometry checks.
+The long-name check exposed an unbounded name link; the bounded link passes at phone and desktop
+widths. An installed copy failed the focus, refresh, Cancel, receipt-offer, sidebar and name-width
+removal controls, then passed the restored host/leave/warning and real-app selections. Removing a
+name wrapper passed, so that wrapper was removed rather than claimed necessary.
+
+Managed captures cover the list, editors and field errors, dirty question, zone menu, floor-plan
+Cancel return, receipt and Venue language in EN/ES, both themes and 390/1280 widths. Spanish
+captures wait for the locale repaint; early captures without that wait are discarded. This is
+still not whole Task 4 or whole-feature acceptance: old helper/suite retirement, the complete
+consumer/prose audit and the remaining drag/delete/printed/till/onboarding acceptance states are
+pending. No whole-branch review, PR or intermediate publication is authorised by this checkpoint.

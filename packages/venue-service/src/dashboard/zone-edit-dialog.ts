@@ -69,6 +69,7 @@ export class ZoneEditDialog extends LitElement {
   @property({ attribute: false }) api!: VenueServiceApi;
   @property({ attribute: false }) model!: VenueServiceView;
   @property() zoneId = "";
+  @property({ type: Boolean }) refreshing = false;
   @state() private draft?: ZoneEditInput;
   @state() private busy = false;
   @state() private attempted = false;
@@ -266,7 +267,7 @@ export class ZoneEditDialog extends LitElement {
     return this.draft?.name.trim() ? {} : { name: t("venue.field_required") };
   }
   private readonly beforeClose = async (reason: LeaveReason) => {
-    if (!this.isConnected || this.busy) return false;
+    if (!this.isConnected || this.busy || this.refreshing) return false;
     if (!this.scope || !this.leave) return true;
     const id = this.zoneId,
       generation = this.generation;
@@ -279,6 +280,7 @@ export class ZoneEditDialog extends LitElement {
       !this.zone ||
       !this.api ||
       this.busy ||
+      this.refreshing ||
       saveActionState(this.scope).unchanged
     )
       return;
@@ -410,15 +412,15 @@ export class ZoneEditDialog extends LitElement {
             <wt-button
               slot="cancel"
               variant="secondary"
-              ?disabled=${this.busy}
+              ?disabled=${this.busy || this.refreshing}
               @click=${() => void this.shadowRoot!.querySelector("wt-modal")!.requestClose("cancel")}
               >${t("venue.cancel")}</wt-button
             >
             <wt-button
               data-test="save-editor"
               .loading=${this.busy}
-              variant=${action.variant}
-              ?disabled=${this.busy || action.unchanged || (this.attempted && Object.keys(this.errors).length > 0)}
+              variant=${this.refreshing ? "secondary" : action.variant}
+              ?disabled=${this.busy || this.refreshing || action.unchanged || (this.attempted && Object.keys(this.errors).length > 0)}
               @click=${() => void this.save()}
               >${t("venue.save")}</wt-button
             >
