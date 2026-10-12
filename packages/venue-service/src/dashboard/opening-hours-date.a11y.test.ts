@@ -3,6 +3,8 @@ import { afterEach, describe, expect, test, vi } from "vitest";
 import { setLocale, type DashboardRequest } from "@waitron/dashboard-kit";
 import { cleanup, host } from "@waitron/ui/src/test-helpers.js";
 import { mountThemed, expectNoA11yViolations } from "@waitron/ui/src/a11y-helpers.js";
+import { namedWeekModel } from "../testing/real-week-model.js";
+import type { SpecialDayDetail } from "../special-days.js";
 import { OpeningHoursApi } from "./opening-hours-client.js";
 import "./opening-hours-screen.js";
 afterEach(() => {
@@ -12,7 +14,7 @@ afterEach(() => {
   setLocale("en");
 });
 describe.each(["light", "dark"] as const)("Opening special date (%s)", (theme) => {
-  test.each(["viewer", "empty"])("%s", async (state) => {
+  test.each(["viewer", "empty", "special", "closed"])("%s", async (state) => {
     setLocale("en");
     vi.setSystemTime(new Date("2026-10-12T12:00:00Z"));
     history.replaceState(null, "", "/manage/opening-hours?week=2026-10-12");
@@ -60,7 +62,42 @@ describe.each(["light", "dark"] as const)("Opening special date (%s)", (theme) =
         },
       ],
     };
-    screen.api = new OpeningHoursApi(withOpeningStations((async () => model) as DashboardRequest));
+    const party: SpecialDayDetail = {
+      id: "party",
+      name: "Party",
+      repeatsYearly: false,
+      dates: [{ date: "2026-10-13", closedAllDay: state === "closed" }],
+      paint: [
+        {
+          departmentId: "d1",
+          date: "2026-10-13",
+          ranges: [{ periodId: "p1", startsAt: "12:00", endsAt: "13:00" }],
+        },
+      ],
+      zonePaint: [],
+    };
+    const dated = state === "special" || state === "closed";
+    screen.api = new OpeningHoursApi(
+      withOpeningStations((async (path: string) =>
+        !dated
+          ? model
+          : path.includes("/named-days?")
+            ? {
+                ...namedWeekModel(),
+                days: [
+                  {
+                    date: "2026-10-13",
+                    specialDay: { id: "party", name: "Party" },
+                    holidays: [],
+                    tone: "special_day",
+                    closed: state === "closed",
+                  },
+                ],
+              }
+            : path.endsWith("/special-days/party")
+              ? structuredClone(party)
+              : model) as DashboardRequest),
+    );
     wrapper.appendChild(screen);
     await expect.poll(() => screen.shadowRoot?.querySelector("opening-hours-week")).not.toBeNull();
     await screen.updateComplete;
@@ -69,6 +106,17 @@ describe.each(["light", "dark"] as const)("Opening special date (%s)", (theme) =
         "opening-hours-week",
       );
     await week?.updateComplete;
+    if (dated) {
+      const grid = week!.shadowRoot!.querySelector("service-grid")!;
+      await expect
+        .poll(() => grid.columns[1]!.slots)
+        .toEqual(
+          state === "closed" ? [] : [{ periodId: "p1", startsAt: "12:00", endsAt: "13:00" }],
+        );
+      expect(grid.columns[1]!.label).toContain("Party");
+      expect(grid.columns[1]!.label.endsWith(" · Closed")).toBe(state === "closed");
+      expect(week!.shadowRoot!.querySelectorAll("a[data-test=day-link]")).toHaveLength(7);
+    }
     await expectNoA11yViolations(host);
   });
 });

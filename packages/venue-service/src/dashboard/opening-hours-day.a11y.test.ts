@@ -1,10 +1,12 @@
 import { everyDateSpecial } from "../testing/special-day-fixture.js";
+import { namedWeekModel } from "../testing/real-week-model.js";
 import { withOpeningStations } from "../testing/opening-hours-stations-request.js";
 import { afterEach, describe, expect, test, vi } from "vitest";
 import { setLocale, type DashboardRequest } from "@waitron/dashboard-kit";
 import { cleanup, host } from "@waitron/ui/src/test-helpers.js";
 import { mountThemed, expectNoA11yViolations } from "@waitron/ui/src/a11y-helpers.js";
 import { OpeningHoursApi } from "./opening-hours-client.js";
+import { t } from "./strings.js";
 import "./opening-hours-screen.js";
 const originalUrl = location.href;
 afterEach(() => {
@@ -37,7 +39,8 @@ describe.each(["light", "dark"] as const)("Opening Day (%s)", (theme) => {
       withOpeningStations((async (path, method) => {
         if (method !== "GET")
           throw { code: "special_day.invalid", params: { field: "paint.0.ranges" } };
-        const special = everyDateSpecial(path);
+        if (state === "normal" && path.includes("/named-days?")) return namedWeekModel();
+        const special = everyDateSpecial(path, state === "closed");
         if (special) return special;
         return {
           businessDayClock: { timeZone: "Europe/Madrid", dayCutover: "06:00", cutoverChanges: [] },
@@ -50,20 +53,7 @@ describe.each(["light", "dark"] as const)("Opening Day (%s)", (theme) => {
           currentSeasonId: "autumn",
           dayCutover: "06:00",
           menus: [{ id: "m1", name: "Lunch menu", active: true, includes: [] }],
-          namedDays:
-            state === "special" || state === "closed"
-              ? [
-                  {
-                    id: "s1",
-                    date: "2026-10-12",
-                    name: "Holiday",
-                    kind: "working_day" as const,
-                    repeats: false,
-                    ownHours: true,
-                    closeWholeVenue: state === "closed",
-                  },
-                ]
-              : [],
+          namedDays: [],
           departments:
             state === "empty"
               ? []
@@ -125,6 +115,27 @@ describe.each(["light", "dark"] as const)("Opening Day (%s)", (theme) => {
       )!;
     await day.updateComplete;
     const grid = day.shadowRoot!.querySelector("service-grid");
+    const shown = (selector: string) => !!day.shadowRoot!.querySelector(selector);
+    if (state === "normal") {
+      await expect.poll(() => shown("[data-test=own-date]")).toBe(true);
+      expect(day.shadowRoot!.querySelector(".note")!.textContent).toBe("Follows the Autumn week");
+      expect(shown("[data-test=save-day]")).toBe(false);
+    }
+    if (state === "special") {
+      await expect.poll(() => shown("[data-test=save-day]")).toBe(true);
+      expect(day.shadowRoot!.querySelector("[data-test=day-date]")!.textContent).toContain(
+        "Special 2026-10-12",
+      );
+      expect(shown("[data-test=own-date]")).toBe(false);
+      expect(shown(".note")).toBe(false);
+    }
+    if (state === "closed") {
+      await expect
+        .poll(() => day.shadowRoot!.querySelector(".date-nav + p")?.textContent)
+        .toBe(t("hours.closed"));
+      expect(shown("[data-test=save-day]")).toBe(false);
+      expect(shown("[data-test=own-date]")).toBe(false);
+    }
     if (state === "refused") {
       grid!.dispatchEvent(
         new CustomEvent("grid-block-change", {

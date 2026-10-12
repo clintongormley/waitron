@@ -137,8 +137,9 @@ export function paintDayRequest(
 }
 
 /** Answers the calendar and special-day reads as though each date asked about were the one date of
- *  its own unpainted special day, "Special <date>"; null for any other path. */
-export function everyDateSpecial(path: string): unknown {
+ *  its own unpainted special day, "Special <date>", closed all day when `closed`; null for any other
+ *  path. */
+export function everyDateSpecial(path: string, closed = false): unknown {
   if (path.includes("/named-days?")) {
     const query = new URLSearchParams(path.slice(path.indexOf("?") + 1));
     const days = [];
@@ -148,7 +149,7 @@ export function everyDateSpecial(path: string): unknown {
         specialDay: { id: `day-${date}`, name: `Special ${date}` },
         holidays: [],
         tone: "special_day" as const,
-        closed: false,
+        closed,
       });
     return { ...namedWeekModel(), days };
   }
@@ -159,7 +160,7 @@ export function everyDateSpecial(path: string): unknown {
         id: `day-${id}`,
         name: `Special ${id}`,
         repeatsYearly: false,
-        dates: [{ date: id, closedAllDay: false }],
+        dates: [{ date: id, closedAllDay: closed }],
         paint: [],
         zonePaint: [],
       };
