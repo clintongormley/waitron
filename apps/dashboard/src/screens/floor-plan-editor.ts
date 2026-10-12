@@ -272,9 +272,15 @@ export class FloorPlanEditor extends LitElement {
         gap: var(--wt-space-4);
       }
       .side {
+        display: flex;
+        flex-direction: column;
         min-height: 0;
         overflow-y: auto;
         overscroll-behavior: contain;
+      }
+      /* Grows so that its Add tables, last, sits at the column's foot (mockup 1). */
+      .side floor-plan-tables-panel {
+        flex: 1 0 auto;
       }
       .layout.narrow {
         display: block;
