@@ -410,6 +410,7 @@ On an own-hours day, a department without a dated timetable row follows its seas
 that weekday; a dated row with no ranges closes that department. `resolveDepartmentDays` in
 `packages/venue-service/src/day-resolver.ts` selects the dated row only for own-hours days,
 then falls back to the business day's season week when there is no row. Whole-venue closure closes departments.
+A special-day date comes first: Closed all day, or its paint laid over the season's day (see "Special days" below).
 Switching to own hours copies that weekday's department ranges and zone closed times from the
 season holding the date; switching back removes the dated schedules (`switchNamedDayHours` in `hours.ts`).
 The individual department's Follow the normal week DELETE route is retired (`routes.ts` and
@@ -576,8 +577,8 @@ a zone's closed ranges for a named day. `saveZoneClosedDate` in `zone-closed-tim
 validated against the business-day changeover, on quarter-hour boundaries; `switchNamedDayHours`
 (`hours.ts`) copies the season's day into them when a named day takes own hours, and the
 special-date copy (`MENU_TIMETABLE_CALENDAR_PARTICIPANT`, `menu-timetable.ts`) copies a named day's
-ranges to its duplicate. A date must have own hours before you can save its closed times. `closedZoneIdsAt` uses that named day's dated ranges, including repeats, or the business day's
-season week (`zone_days`, through `resolveZoneClosedDays` in `day-resolver.ts`) otherwise. No dated closed ranges means no zone-specific closure on an own-hours day;
+ranges to its duplicate. A date must have own hours before you can save its closed times. On a special-day date `closedZoneIdsAt` lays the date's zone paint over the season's closures (`layerZonePaint`); otherwise it uses that named day's dated ranges, including repeats, or the business day's
+season week (`zone_days`, through `resolveZoneClosedDays` in `day-resolver.ts`). No dated closed ranges means no zone-specific closure on an own-hours day;
 it does not inherit the zone's normal-week closure. The start is closed and the end is open.
 When the venue clock is unreadable, this zone check reports no closed zone; department checks
 remain separate.
@@ -627,7 +628,7 @@ was not reset still holds the weekday rows written then. No opening-hours reader
 department and zone delete previews still count them, and the venue's configuration export still
 carries them.
 
-A configuration transfer carries the five tables (`VENUE_SERVICE_CONFIGURATION_TRANSFER` in
+A configuration transfer carries the five season tables (`VENUE_SERVICE_CONFIGURATION_TRANSFER` in
 `packages/venue-service/src/configuration-transfer.ts`). `importConfigurationTables`
 (`apps/server/src/configuration-transfer.ts`) deletes every row of a transferred table before
 inserting the bundle's, so the target's four provisioned seasons give way to the exported ones:
@@ -660,7 +661,7 @@ named-day grace case under "named days in configuration transfer".
 
 ### Special days
 
-**2026-10-12, A506-4.** A special day is a name, a `repeats_yearly` flag and one or more dates
+**2026-10-12, A506-4.** A special day is a name, a `repeats_yearly` flag and a list of dates, possibly empty
 (`special_days`, `special_day_dates`); each date is Closed all day or carries paint, which
 `department_days` and `zone_days` rows naming `special_day_date_id` hold (no season, no weekday).
 A department range with no period is Closed; a zone range is `closed` or `open`. Paint is laid
@@ -668,8 +669,9 @@ over the season's day for that date (`layerPaint`, `layerZonePaint` in
 `packages/venue-service/src/day-paint.ts`); a Closed-all-day date closes every department.
 Whether a date falls on a day is decided in one place, `specialDateIn` and `sharedSpecialDate`
 (`packages/venue-service/src/special-days.ts`): a repeating date from its first year on, and a
-29 February only in leap years. `saveSpecialDay` in the same file is the writer; until A506-5
-only the API writes special days, and the dashboard shows none of their paint.
+29 February only in leap years. `saveSpecialDay` in the same file is the writer behind the API; a
+configuration import inserts a bundle's rows directly (below). Until A506-5 the dashboard neither
+writes special days nor shows their paint.
 
 **The bridge.** Until A506-5 removes named days, a named day and a special day never stand on one
 date. `assertDatesFree` (`special-days.ts`) refuses a special-day save with

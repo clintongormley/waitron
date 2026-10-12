@@ -259,7 +259,8 @@ interface ParsedEntry<T> {
 }
 
 /** Each entry of a `paint` or `zonePaint` list, refusing a date the input lacks and a second entry
- *  for one owner and date (the resolver reads paint unordered, so their ranges must not meet). */
+ *  for one owner and date (the save replaces an owner's date whole, so a second entry would
+ *  silently discard the first). */
 function parseEntries<T extends ClosedRange>(
   value: unknown,
   list: "paint" | "zonePaint",
@@ -571,7 +572,7 @@ export async function readSpecialDay(
 
 /** Saves a special day in the caller's transaction. Dates are compared by value, so a kept date keeps
  *  its row and every paint the request does not name; a named (owner, date) is replaced whole, and
- *  given empty ranges it is cleared. Every check runs before the first write. */
+ *  given empty ranges it is cleared. */
 export async function saveSpecialDay(
   tx: Transaction,
   cfg: VenueScope,

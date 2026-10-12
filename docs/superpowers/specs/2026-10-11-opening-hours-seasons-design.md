@@ -71,7 +71,7 @@ cascade` foreign key).
 | --- | --- |
 | Season | A named stretch of the year, from its start date to the day before the next season's start. Repeats every year. |
 | Season week | One department's seven days in one season, painted with periods. |
-| Special day | A name over one or more dates, optionally repeating on the same dates every year, with paint laid over the season. |
+| Special day | A name over one or more dates, optionally repeating every year (on the same month and day, or, for a public holiday's date, wherever the holiday's name falls; section 5), with paint laid over the season. |
 | Public holiday | A date from the official lists for the venue's address. It is a mark on the calendar, not a stored row; it becomes a special day only when someone edits it. |
 | Ordinary date | A date that is in no special day. It follows its season's week. |
 | Paint | A range on one day, in 15-minute steps, naming a period or Closed. |
@@ -92,7 +92,7 @@ cascade` foreign key).
   request. Past days are not kept as they were, since nothing reads past hours (section 2). A start
   cannot be 29 February (not every year has it) and two seasons cannot start on the same day — both
   refused with `season.invalid` naming `startsOn` **(default)**.
-- **Adding and removing seasons** **(default, asked of the owner)**. "+ Season" asks for a name and a
+- **Adding and removing seasons** **(default, confirmed by the owner 2026-10-11)**. "+ Season" asks for a name and a
   start date; the new season takes its days from the season they belonged to and starts with a COPY
   of that season's weeks, so no date's hours change until someone paints. Deleting a season gives its
   days to the season before it and deletes its weeks, after a confirmation naming the departments
@@ -109,7 +109,7 @@ cascade` foreign key).
   special days. Today's own-holiday / working-day split goes, with the three readers in section 2;
   section 10.1 says what the Calendar shows instead.
 - **One special day is a name over any number of dates** ("Christmas company dinners", 14–23
-  December), optionally repeating on the same dates every year. Dates are added on a small calendar,
+  December), optionally repeating every year (on the same month and day, or, for a public holiday's date, wherever the holiday's name falls; see below). Dates are added on a small calendar,
   singly or as ranges. Names need not be unique **(default)**: one-off "Viernes Santo" in 2026 and
   another in 2027 can both exist.
 - **A date belongs to at most one special day.** Adding a date another special day already covers is
@@ -332,7 +332,7 @@ All of the owner's painter text in backlog A506 applies as written; in short:
 
 - One column per date instead of Monday to Sunday; the season's hours drawn faded under the paint.
 - A side panel: Name (required), Dates (chips; "+ Add dates…" opens a small calendar for single
-  dates or ranges), Every year (No / Yes, same dates), and the "season shows through" explanation.
+  dates or ranges), Every year (No / Yes), and the "season shows through" explanation.
 - Each date has its Closed tick under its heading (the whole venue, section 5).
 - Delete (in the bar) deletes the special day: its dates follow their seasons again.
 - **Saving keeps what was not edited.** The save compares the date list by value: it adds the dates

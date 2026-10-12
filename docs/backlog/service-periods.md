@@ -84,7 +84,7 @@ and hours proposals; the historical spec keeps its dated pointers.
 
 ## A506. Opening hours rebuilt around seasons and special days
 
-**A506 (owner, 2026-10-11) — OPEN.** Agreed with the owner over mockups. Spec (2026-10-11, three defaults asked of the owner):
+**A506 (owner, 2026-10-11) — OPEN.** Agreed with the owner over mockups. Spec (2026-10-11; the owner's three questions answered the same evening):
 [opening hours seasons design](../superpowers/specs/2026-10-11-opening-hours-seasons-design.md). Supersedes
 section 9.2, and the named-day hours of section 7, of
 [the 2026-10-07 service times spec](../superpowers/specs/2026-10-07-service-times-departments-and-stations-design.md).
@@ -114,8 +114,7 @@ carries and checks them; the dashboard shows none of their paint until A506-5.
   `menu_period.in_use`).
 - A506-6: when seasons become editable, adding, deleting or moving one must re-check end offsets
   across the boundaries it changes (`findSeasonEndOffsetClash`,
-  `packages/venue-service/src/period-end-offset.ts`); today the check runs on week writes and on
-  import only.
+  `packages/venue-service/src/period-end-offset.ts`).
 - The `routing` live-query list (`packages/venue-service/src/dashboard/live-queries.ts`) still names
   `menu_slots` and `menu_day_timetables`, which #1590's review found its route no longer reads, so an
   edit to a named day's hours reloads the routing screen for nothing. Drop them after checking

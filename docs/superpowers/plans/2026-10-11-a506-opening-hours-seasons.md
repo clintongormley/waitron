@@ -1537,7 +1537,7 @@ pointer if the section is historical), `docs/developers/design-system.md` (Calen
 **Behaviour this PR removes:** the Calendar tab (its holiday-area chooser and special-day dialog
 move into the year view).
 
-### Task 6.0: Re-check on the base; read questions.md for Q1.
+### Task 6.0: Re-check on the base. Q1 is answered: the default.
 
 ### Task 6.1: Editing seasons on the server
 
@@ -1865,7 +1865,7 @@ editor (`opening-hours-day.ts`) with their tests, including `opening-hours-day-z
 What the dialog did that the spec keeps — the public-holiday pre-fill, the "Add to <name>" offer
 and the "Every year" note — moves into the painter (Tasks 9.3 and 9.3b).
 
-### Task 9.0: Re-check on the base; read questions.md for Q2.
+### Task 9.0: Re-check on the base. Q2 is answered (b): see Task 5.1b and spec section 5.
 
 ### Task 9.1: Season days for any dates (server read)
 

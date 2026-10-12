@@ -369,7 +369,7 @@ export async function businessDayClockConflicts(
       day.repeatOn !== null && day.date <= repeat ? repeat : null,
     ];
   });
-  // `cutoverForBusinessDay` validates the clock on every call; validated once, the rest is its lookup.
+  // `cutoverForBusinessDay` validates the clock and the day on every call; here the clock is validated once.
   let validated = false;
   const oldCutoverOn = (date: string) => {
     if (!validated) cutoverForBusinessDay(before, date);

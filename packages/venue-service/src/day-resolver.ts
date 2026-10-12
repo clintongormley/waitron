@@ -109,8 +109,9 @@ function ownHoursOn(plan: DayPlan, businessDays: readonly LocalDate[]): string[]
   ];
 }
 
-/** A named day closing the whole venue has no hours; one with its own hours keeps its own
- *  timetable, or the season's week when it saved none; any other day has its season's week. */
+/** A special-day date closed all day has no hours, and otherwise has its paint laid over the
+ *  season's day. A named day closing the whole venue has no hours; one with its own hours keeps its
+ *  own timetable, or the season's week when it saved none. Any other day has its season's week. */
 export async function resolveDepartmentDays(
   tx: Transaction,
   cfg: VenueScope,
@@ -183,8 +184,10 @@ export async function resolveDepartmentDays(
   return resolved;
 }
 
-/** A named day closing the whole venue closes no zone (the venue is shut); one with its own hours
- *  has only its own closures, none when it saved none; any other day has its season's week. */
+/** A special-day date closed all day closes no zone, and otherwise has its zone paint laid over
+ *  the season's closures. A named day closing the whole venue closes no zone (the venue is shut);
+ *  one with its own hours has only its own closures, none when it saved none. Any other day has its
+ *  season's week. */
 export async function resolveZoneClosedDays(
   tx: Transaction,
   cfg: VenueScope,

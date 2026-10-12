@@ -125,7 +125,7 @@ export function layerZonePaint(
   return toClosedRanges(steps, cutover);
 }
 
-/** The smallest paint that turns `season` into `edited` (used by A506-5's date editor). */
+/** The smallest paint that turns `season` into `edited`. */
 export function paintFromEdit(
   season: readonly ServiceRange[],
   edited: readonly ServiceRange[],
@@ -140,7 +140,7 @@ export function paintFromEdit(
 }
 
 /** The same for a zone: "closed" where the edit closes time the season left open, "open" where it
- *  opens time the season closed (used by A506-5's date editor for zones). */
+ *  opens time the season closed. */
 export function zonePaintFromEdit(
   season: readonly ClosedRange[],
   edited: readonly ClosedRange[],
