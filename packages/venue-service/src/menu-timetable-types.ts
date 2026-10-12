@@ -24,7 +24,6 @@ export interface MenuWeekDay {
 
 export type MenuPeriodUse =
   | { kind: "week"; weekday: number }
-  | { kind: "special_date"; specialDateId: string; date: LocalDate }
   | { kind: "special_day"; specialDayId: string; name: string; date: LocalDate };
 
 export interface DepartmentService {

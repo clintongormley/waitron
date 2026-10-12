@@ -1,6 +1,5 @@
 import type { BusinessDayScheduleStatus } from "./service-day-context.js";
 // Public-holiday types and constants only, safe to import in the browser.
-import type { NamedDayKind } from "./repeat-rules.js";
 import type { CalendarDay, HolidayFact, LocalDate } from "./hours-types.js";
 
 export interface HolidayCoverage {
@@ -48,15 +47,6 @@ export interface HolidayAreaModel {
   chosen: string | null;
 }
 
-export interface NamedDay {
-  id: string;
-  date: LocalDate;
-  name: string;
-  kind: NamedDayKind;
-  repeats: boolean;
-  ownHours: boolean;
-  closeWholeVenue: boolean;
-}
 export interface SpecialDaysModel extends BusinessDayScheduleStatus {
   timeZone: string;
   dayCutover: string;

@@ -267,10 +267,6 @@ const en = {
   "prep.save_error": "The change could not be saved.",
   "prep.fix_fields": "Correct the highlighted fields to continue.",
   "prep.station_disabled": "This station is disabled. Choose an active station.",
-  "prep.default_hours_clash":
-    "{name} would go back to its saved hours, which overlap a day next to the special date on {date}. Move or delete that special date on the Hours page first.",
-  "prep.default_hours_skipped":
-    "{name} would go back to its saved hours, and its hours on the special date {date} use a time the clock skips. Move or delete that special date on the Hours page first.",
   "prep.delete": "Delete",
   "prep.delete_heading": "Delete station",
   "prep.delete_refusals": "Before you delete",
@@ -1040,10 +1036,6 @@ const es: Record<keyof typeof en, string> = {
   "prep.save_error": "No se pudo guardar el cambio.",
   "prep.fix_fields": "Corrige los campos marcados para continuar.",
   "prep.station_disabled": "Esta estación está deshabilitada. Elige una estación activa.",
-  "prep.default_hours_clash":
-    "{name} volvería a su horario guardado, que se solapa con un día junto a la fecha especial del {date}. Cambia de día o borra primero esa fecha especial en la página Horarios.",
-  "prep.default_hours_skipped":
-    "{name} volvería a su horario guardado, y su horario en la fecha especial del {date} usa una hora que el reloj se salta. Cambia de día o borra primero esa fecha especial en la página Horarios.",
   "prep.delete": "Eliminar",
   "prep.delete_heading": "Eliminar estación",
   "prep.delete_refusals": "Antes de eliminar",

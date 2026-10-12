@@ -33,7 +33,6 @@ import type {
   PeriodRoutingUse,
 } from "./menu-timetable-types.js";
 import { assertDepartment, resolveZoneContext, wireTime, type VenueScope } from "./operations.js";
-import { specialDates } from "./schema/hours.js";
 import {
   holidayDatesFor,
   holidayHorizon,
@@ -41,7 +40,7 @@ import {
   readSpecialDaySchedules,
   specialDateIn,
 } from "./special-days.js";
-import { menuDayTimetables, menuPeriods, menuPeriodStaffMenus, menuSlots } from "./schema/menus.js";
+import { menuPeriods, menuPeriodStaffMenus } from "./schema/menus.js";
 import { departments } from "./schema/service.js";
 import { routingCellPeriods, routingCells } from "./schema/routing.js";
 import { periodExtensions } from "./schema/period-extensions.js";
@@ -601,25 +600,13 @@ export async function updateMenuPeriod(
   );
 }
 
-/** Every day that places each listed period: weekdays in order, then special dates by date, then
- *  special-day dates by date. */
+/** Every day that places each listed period: weekdays in order, then special-day dates by date. */
 async function periodUses(
   tx: Transaction,
   periodIds: readonly string[],
 ): Promise<Map<string, MenuPeriodUse[]>> {
   const uses = new Map<string, MenuPeriodUse[]>(periodIds.map((id) => [id, []]));
   if (periodIds.length === 0) return uses;
-  const dated = await tx
-    .selectDistinct({
-      periodId: menuSlots.periodId,
-      specialDateId: specialDates.id,
-      date: specialDates.date,
-    })
-    .from(menuSlots)
-    .innerJoin(menuDayTimetables, eq(menuDayTimetables.id, menuSlots.timetableId))
-    .innerJoin(specialDates, eq(specialDates.id, menuDayTimetables.specialDateId))
-    .where(inArray(menuSlots.periodId, [...periodIds]))
-    .orderBy(asc(specialDates.date));
   const painted = await tx
     .selectDistinct({ periodId: departmentDayRanges.periodId, weekday: departmentDays.weekday })
     .from(departmentDayRanges)
@@ -648,12 +635,6 @@ async function periodUses(
   for (const [periodId, days] of weekdays)
     for (const weekday of [...days].sort((a, b) => a - b))
       uses.get(periodId)!.push({ kind: "week", weekday });
-  for (const row of dated)
-    uses.get(row.periodId)!.push({
-      kind: "special_date",
-      specialDateId: row.specialDateId,
-      date: row.date,
-    });
   for (const row of specialDayPaint)
     uses.get(row.periodId!)!.push({
       kind: "special_day",

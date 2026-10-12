@@ -1,4 +1,3 @@
-import { specialDates } from "./schema/hours.js";
 import { randomUUID } from "node:crypto";
 import { describe, expect, it } from "vitest";
 import { CATALOGUE_MIGRATIONS } from "@waitron/catalogue";
@@ -41,20 +40,11 @@ async function fixture() {
         isDefault: true,
       })
       .returning();
-    const [special] = await tx
-      .insert(specialDates)
-      .values({
-        locationId: cfg.locationId,
-        date: "2026-10-09",
-        name: "Festival",
-        closeWholeVenue: false,
-      })
-      .returning();
-    return { cfg, other: other!.id, department: department!.id, special: special!.id };
+    return { cfg, other: other!.id, department: department!.id };
   });
 }
 
-/** A special day "Festival" on 2026-10-09, the fixture's named date, written straight to its tables. */
+/** A special day "Festival" on 2026-10-09, written straight to its tables. */
 async function festival(f: Awaited<ReturnType<typeof fixture>>) {
   return withTransaction(suite.db, async (tx) => {
     const [day] = await tx

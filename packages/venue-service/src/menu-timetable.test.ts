@@ -1283,13 +1283,11 @@ describe("the timetable's writers", () => {
           : null,
       );
     // Saturday 3 October is past at AT: its clash with the Friday before is history.
-    const past = await makeDate(v, "2026-10-03");
-    await dateMenus(v, past.id, [slot(periods.mananas, "01:00", "03:00")]);
+    await saveDay(v, "2026-10-03", { paint: [slot(periods.mananas, "01:00", "03:00")] });
     await scoped((tx) => replaceMenuWeek(tx, v.cfg, v.restaurant, fridayTail("03:00"), AT, 0));
     await scoped((tx) => replaceMenuWeek(tx, v.cfg, v.restaurant, fridayTail("02:00"), AT, 0));
     // Tuesday 6 October is yesterday at AT, so it is read, but its pair with Monday is past.
-    const yesterday = await makeDate(v, "2026-10-06");
-    await dateMenus(v, yesterday.id, [slot(periods.mananas, "01:00", "03:00")]);
+    await saveDay(v, "2026-10-06", { paint: [slot(periods.mananas, "01:00", "03:00")] });
     await scoped((tx) =>
       replaceMenuWeek(
         tx,
@@ -1304,8 +1302,7 @@ describe("the timetable's writers", () => {
     );
     await scoped((tx) => replaceMenuWeek(tx, v.cfg, v.restaurant, fridayTail("02:00"), AT, 0));
 
-    const coming = await makeDate(v, "2026-10-24");
-    await dateMenus(v, coming.id, [slot(periods.mananas, "02:30", "05:00")]);
+    await saveDay(v, "2026-10-24", { paint: [slot(periods.mananas, "02:30", "05:00")] });
     await scoped((tx) => replaceMenuWeek(tx, v.cfg, v.restaurant, fridayTail("03:00"), AT, 0));
     // The replacement week was written.
     expect((await resolve(v, v.sala, madrid("2026-10-31", "02:30"))).periodId).toBe(
@@ -1860,6 +1857,17 @@ describe("statements", () => {
       prepared.mockRestore();
       return texts;
     });
+
+  it("deletes a period without reading the retired dated timetables or named days", async () => {
+    const v = await timed();
+    const statements = await statementsOf((tx) => deleteMenuPeriod(tx, v.cfg, v.periods.brunch));
+    expect(
+      statements.filter((text) => /"(menu_slots|menu_day_timetables|special_dates)"/.test(text)),
+    ).toEqual([]);
+    expect(await db.select().from(menuPeriods).where(eq(menuPeriods.id, v.periods.brunch))).toEqual(
+      [],
+    );
+  });
 
   it("moves a zone to its new department without accessing retired zone menu tables", async () => {
     const v = await timed();

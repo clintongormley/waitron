@@ -40,7 +40,7 @@ import {
   type RoutingSelectionRules,
 } from "../routing.js";
 import type { RoutingChange, RoutingMove, StationTimes } from "../routing-types.js";
-import { format, formatDate } from "./hours-view.js";
+import { format } from "./hours-view.js";
 import { QUERY_DEPENDENCIES } from "./live-queries.js";
 import type {
   PrepStation,
@@ -489,17 +489,6 @@ export class PrepStationsScreen extends LitElement {
       this.busy = false;
     }
   }
-  /** A refused Make default: the outgoing default's saved hours could not resume. */
-  #defaultRefusal(error: unknown): string {
-    const params = (error as { params?: Record<string, unknown> } | undefined)?.params;
-    const name = this.view?.stations.find((station) => station.id === params?.subjectId)?.name;
-    if (codeOf(error) !== "hours.invalid" || name === undefined || typeof params?.date !== "string")
-      return t("prep.save_error");
-    return format(
-      params.field === "date" ? "prep.default_hours_clash" : "prep.default_hours_skipped",
-      { name, date: formatDate(params.date) },
-    );
-  }
   /** The grid's open editor closes once its choice is written. */
   #closeCellEditor(): void {
     this.renderRoot.querySelector("venue-routing-grid")?.closeEditor();
@@ -516,7 +505,7 @@ export class PrepStationsScreen extends LitElement {
       await this.api.setDefaultStation(stationId);
     } catch (error) {
       if (this.#cellRun !== run || !this.isConnected) return;
-      const message = this.#defaultRefusal(error);
+      const message = t("prep.save_error");
       this.cellChoice = null;
       this.#showError(message);
       this.defaultRefusal = { ...refusalOf(error), message };
@@ -806,11 +795,7 @@ export class PrepStationsScreen extends LitElement {
               align="start"
               data-test=${`make-default-${station.id}`}
               ?disabled=${this.busy}
-              @click=${() =>
-                void this.#act(
-                  () => this.api.setDefaultStation(station.id),
-                  (error) => this.#defaultRefusal(error),
-                )}
+              @click=${() => void this.#act(() => this.api.setDefaultStation(station.id))}
               >${t("prep.make_default")}</wt-button
             >`
           : nothing
