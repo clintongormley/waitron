@@ -1257,7 +1257,8 @@ export class TillApp extends LitElement {
   }
 
   /** A press waiting for requests is dropped once the box stops serving this till or the till is
-   * used again: either changes what the operator agreed to lose. The bar stays to be pressed again. */
+   * used again: either changes what the operator agreed to lose. The bar stays to be pressed again.
+   * Taking the till off the page drops it too (`disconnectedCallback`). */
   #reloadWhenSettled(): void {
     if (!this.#reloadAsked) return;
     if (!this.#boxServesTill()) {
@@ -2422,7 +2423,8 @@ export class TillApp extends LitElement {
     // `router` may be assigned after `connectedCallback`.
     if (changed.has("router")) this.#subscribeRouter();
     if (changed.has("frontDoor")) this.#decideReload();
-    // `submitting` and `cardAttemptsOver` are state, so a payment that settles comes through here.
+    // `submitting`, `parking`, `placing` and `cardAttemptsOver` are state, so a request that settles
+    // comes through here.
     this.#reloadWhenSettled();
     // An answer can move the app off the order while the dialog is open. An apply already out
     // carries on without the dialog; #applyAdjustment says what its answer does then.

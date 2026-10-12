@@ -423,7 +423,7 @@ reuse its id — after no answer, or after a refusal that keeps the id (`#unansw
 answered (`#resend`, around `resendUnanswered`, and the station screen's dish move, which it
 announces with a `hold-reload` event), a whole bill payment or refund, a prep-queue Collect, and
 a sign-out's save of the draft. A signed-in person counts because a reload signs them out. The bar's Reload
-waits only for requests still out (`#requestsOut()`: `submitting`, `parking`, `placing`, a card
+waits only for what `#requestsOut()` counts (`submitting`, `parking`, `placing`, a card
 attempt, or a held request), then reloads once, unless the operator touches or types on the till,
 or the box stops serving it, first; then the press is dropped and the bar stays to be pressed
 again. A till taken off the page drops the press.
@@ -432,10 +432,11 @@ Guards: `packages/diagnostics/src/build-watch.test.ts`, `apps/server/src/build-h
 build-header lines in `apps/server/src/boot.test.ts`, the "build updates" cases in
 `apps/dashboard/src/dashboard-app.test.ts`, the "when the server reports another build" cases in
 `apps/till/src/till-app-boot-and-counter.test.ts` and its "box update meets a box reset or a
-refused device" cases, and the box-update cases in `apps/till/src/till-app-bill-payments.test.ts`,
+refused device" cases, and the local-copy case among its "department transfers across operator
+lifetimes" cases, and the box-update cases in `apps/till/src/till-app-bill-payments.test.ts`,
 `apps/till/src/till-app-drafts.test.ts`, `apps/till/src/till-app-adjustments.test.ts`,
 `apps/till/src/till-app-counter-move-station.test.ts`, `apps/till/src/till-app-parties.test.ts`
-and `apps/till/src/till-app.test.ts` (a kitchen display's dish move). No test
+and `apps/till/src/till-app.test.ts` (a kitchen display's dish move, and a held order's receipt language). No test
 checks the wiring in either app's `main.ts`. It was run once instead, on 2026-10-11, on the demo
 stack (`wa-wt demo`) in Playwright's Chromium, with a route that swapped the header's value for
 another build: the header reached both pages through the Vite dev servers (`0.0.0`, not `null`);
