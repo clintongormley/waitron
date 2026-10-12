@@ -198,8 +198,10 @@ export function rotateTable(draft: FloorPlanDraft, key: string, rotation: number
   );
 }
 
-export function placeTable(draft: FloorPlanDraft, key: string): FloorPlanDraft {
+/** Puts a spare table at `at` as given, overlaps included, or else at the first free spot. */
+export function placeTable(draft: FloorPlanDraft, key: string, at?: PlanPlacement): FloorPlanDraft {
   if (draft.tables.find((t) => t.key === key)?.placement != null) return draft;
+  if (at !== undefined) return patchTable(draft, key, { placement: at });
   const placed = draft.tables.flatMap((t) =>
     t.placement === null || t.key === key ? [] : [t.placement],
   );
