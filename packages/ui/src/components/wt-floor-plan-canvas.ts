@@ -1,4 +1,4 @@
-import { LitElement, type TemplateResult, css, html, nothing } from "lit";
+import { LitElement, type PropertyValues, type TemplateResult, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { repeat } from "lit/directives/repeat.js";
 import { styleMap } from "lit/directives/style-map.js";
@@ -351,10 +351,15 @@ export class WtFloorPlanCanvas extends LitElement {
    * After a drag, the plan's layout before its drop and with it, and the box's size. Until the
    * tables show another layout or the box is resized, the room and the grid only grow, as during
    * the drag: less room at scroll 0, or a grid too short for its scroll, cannot be scrolled away,
-   * so what was under the pointer would jump when it let go.
+   * so what was under the pointer would jump when it let go. After an arrow key's change (`key`),
+   * the room shrinks only by what is scrolled, so no other table moves.
    */
-  #hold: { before: string; after: string; visible: { columns: number; rows: number } } | null =
-    null;
+  #hold: {
+    before: string;
+    after: string;
+    visible: { columns: number; rows: number };
+    key: boolean;
+  } | null = null;
 
   /** Squares `#origin` changed by in this update, scrolled away in `updated` so nothing drawn moves
    *  where the scroll allows. */
@@ -397,12 +402,12 @@ export class WtFloorPlanCanvas extends LitElement {
     return this.draft?.key === t.key ? this.draft.placement : t.placement;
   }
 
-  override willUpdate(): void {
+  override willUpdate(changed: PropertyValues<this>): void {
     const placements = this.tables.map((t) => this.#placementOf(t));
     const box = bounds(placements);
     const plan = gridExtent(placements, { columns: 0, rows: 0 });
-    const holds = this.#holds();
-    if (!holds) {
+    const hold = this.#holding(changed.has("tables"));
+    if (hold !== "drag") {
       const host = getComputedStyle(this);
       // The arrow's far corner sits on the table's corner diagonal, which a turn can point along
       // either axis, so its reach past the table's turned box is the side times √2.
@@ -417,13 +422,18 @@ export class WtFloorPlanCanvas extends LitElement {
     let y = this.#margin + (box === null ? 0 : Math.max(0, Math.ceil(-box.y - 1e-9)));
     let columns: number;
     let rows: number;
-    if (holds) {
+    if (hold === "drag") {
       // Only grows, and the grid by as much again, so `updated` can scroll the growth away.
       x = Math.max(this.#origin.x, x);
       y = Math.max(this.#origin.y, y);
       columns = Math.max(this.#size.columns + x - this.#origin.x, x + plan.columns);
       rows = Math.max(this.#size.rows + y - this.#origin.y, y + plan.rows);
     } else {
+      if (hold === "key") {
+        const viewport = this.renderRoot.querySelector<HTMLElement>(".viewport")!;
+        x = Math.max(x, this.#origin.x - Math.floor(viewport.scrollLeft / GRID_SQUARE_PX));
+        y = Math.max(y, this.#origin.y - Math.floor(viewport.scrollTop / GRID_SQUARE_PX));
+      }
       columns = Math.max(this.visible.columns, x + plan.columns);
       rows = Math.max(this.visible.rows, y + plan.rows);
     }
@@ -436,14 +446,25 @@ export class WtFloorPlanCanvas extends LitElement {
     this.#size = { columns, rows };
   }
 
-  #holds(): boolean {
-    if (this.#drag !== null) return true;
-    if (this.#hold === null) return false;
-    const { before, after, visible } = this.#hold;
+  /** `answered`: the tables were set in this update; set back to the layout before a change, they
+   *  undo or refuse it. */
+  #holding(answered: boolean): "drag" | "key" | null {
+    if (this.#drag !== null) return "drag";
+    if (this.#hold === null) return null;
+    const { before, after, visible, key } = this.#hold;
     const now = this.#layout(null);
     const resized = visible.columns !== this.visible.columns || visible.rows !== this.visible.rows;
-    if (resized || (now !== before && now !== after)) this.#hold = null;
-    return this.#hold !== null;
+    const undone = answered && now === before && before !== after;
+    if (resized || undone || (now !== before && now !== after)) {
+      this.#hold = null;
+      return null;
+    }
+    return key ? "key" : "drag";
+  }
+
+  #keyHold(change: Draft): void {
+    const after = this.#layout(change);
+    this.#hold = { before: this.#layout(null), after, visible: this.visible, key: true };
   }
 
   #layout(drop: Draft | null): string {
@@ -687,7 +708,9 @@ export class WtFloorPlanCanvas extends LitElement {
     e.stopPropagation();
     const x = clampToGrid(t.placement.x + arrow.dx);
     const y = clampToGrid(t.placement.y + arrow.dy);
-    if (x !== t.placement.x || y !== t.placement.y) this.#move(t.key, x, y);
+    if (x === t.placement.x && y === t.placement.y) return;
+    this.#keyHold({ key: t.key, placement: { ...t.placement, x, y } });
+    this.#move(t.key, x, y);
   }
 
   #onTableResizeKey(e: KeyboardEvent, t: PlanCanvasTable): void {
@@ -715,7 +738,9 @@ export class WtFloorPlanCanvas extends LitElement {
     if (step === 0) return;
     e.preventDefault();
     e.stopPropagation();
-    this.#rotate(t.key, snapRotation(t.placement.rotation + step));
+    const rotation = snapRotation(t.placement.rotation + step);
+    this.#keyHold({ key: t.key, placement: { ...t.placement, rotation } });
+    this.#rotate(t.key, rotation);
   }
 
   #onPointerDown(
@@ -811,7 +836,12 @@ export class WtFloorPlanCanvas extends LitElement {
 
   #endDrag(drop: Draft | null = null): void {
     if (this.#drag !== null) {
-      this.#hold = { before: this.#layout(null), after: this.#layout(drop), visible: this.visible };
+      this.#hold = {
+        before: this.#layout(null),
+        after: this.#layout(drop),
+        visible: this.visible,
+        key: false,
+      };
       if (this.#drag.kind === "resize") this.requestUpdate();
     }
     this.#drag = null;

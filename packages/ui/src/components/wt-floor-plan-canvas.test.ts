@@ -1992,6 +1992,55 @@ it("the first tables drawn after an empty plan show a turned corner table unscro
   expect(box.top).toBeGreaterThanOrEqual(view.top);
 });
 
+it.each([
+  ["a nudge", 45, "table", "{ArrowRight}"],
+  ["a turn back", 30, "handle", "{ArrowLeft}"],
+] as const)(
+  "in a plan that fits, %s of a turned corner table by its keys moves no other table",
+  async (_, rotation, target, key) => {
+    const el = await canvas([table("t1", "T1", { rotation }), table("t2", "T2", { x: 20 })], {
+      selected: "t1",
+    });
+    applyChanges(el);
+    await settled(el);
+    const before = onScreen(el);
+    const layout = JSON.stringify(el.tables);
+    (target === "table" ? button(el, "t1") : handles(el)[0]!).focus();
+    await userEvent.keyboard(key);
+    await settled(el);
+    await settled(el);
+    expect(JSON.stringify(el.tables)).not.toBe(layout);
+    const now = onScreen(el);
+    expect(Math.abs(now.t2!.left - before.t2!.left)).toBeLessThanOrEqual(0.5);
+    expect(Math.abs(now.t2!.top - before.t2!.top)).toBeLessThanOrEqual(0.5);
+  },
+);
+
+it.each([
+  ["an undo after a corner drop", true],
+  ["a refused corner drop", false],
+])("%s leaves no extra room once the earlier layout comes back", async (_, applied) => {
+  const earlier = [table("t1", "T1", { x: 10, y: 10, rotation: 45 }), table("t2", "T2", { x: 26 })];
+  const el = await canvas(earlier);
+  if (applied) applyChanges(el);
+  await settled(el);
+  const grid = part(el, "grid").getBoundingClientRect();
+  const scroll = { width: viewportOf(el).scrollWidth, height: viewportOf(el).scrollHeight };
+  await dropAndCompare(el, "t1", -120, -120);
+  expect(el.tables[0]!.placement).toMatchObject(applied ? { x: 0, y: 0 } : { x: 10, y: 10 });
+  el.tables = earlier.map((t) => ({ ...t, placement: { ...t.placement } }));
+  await settled(el);
+  await settled(el);
+  const now = part(el, "grid").getBoundingClientRect();
+  expect({ width: now.width, height: now.height }).toEqual({
+    width: grid.width,
+    height: grid.height,
+  });
+  expect({ width: viewportOf(el).scrollWidth, height: viewportOf(el).scrollHeight }).toEqual(
+    scroll,
+  );
+});
+
 it("names the rotate handle with a table name holding replacement patterns", async () => {
   const el = await canvas([table("t1", "A$&B$'C")], { selected: "t1" });
   expect(handles(el)[0]!.getAttribute("aria-label")).toBe("Rotate A$&B$'C");
