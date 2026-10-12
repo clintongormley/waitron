@@ -66,9 +66,33 @@ describe("mergeAllergenMaps", () => {
   });
 
   it("leaves the source out when two different sources hold only commas and spaces", () => {
-    const a = { gluten: { presence: "contains" as const, source: " , " } };
-    const b = { gluten: { presence: "contains" as const, source: "," } };
-    expect(mergeAllergenMaps(a, b)).toEqual({ gluten: { presence: "contains" } });
+    expect(mergeAllergenMaps(gluten(" , "), gluten(","))).toEqual({
+      gluten: { presence: "contains" },
+    });
+  });
+
+  it("drops a lone source holding only commas and spaces", () => {
+    expect(mergeAllergenMaps(gluten(" , "), {})).toEqual({ gluten: { presence: "contains" } });
+    expect(mergeAllergenMaps({}, gluten(" , "))).toEqual({ gluten: { presence: "contains" } });
+  });
+
+  const permutations = (items: string[]): string[][] =>
+    items.length <= 1
+      ? [items]
+      : items.flatMap((item, i) =>
+          permutations([...items.slice(0, i), ...items.slice(i + 1)]).map((rest) => [
+            item,
+            ...rest,
+          ]),
+        );
+
+  it("gives one result in every fold order when some sources hold only commas and spaces", () => {
+    for (const order of permutations([",", " , ", "wheat flour, spelt"])) {
+      expect(fold(order)).toEqual(gluten("wheat flour, spelt"));
+    }
+    for (const order of permutations([" , ", " , ", ","])) {
+      expect(fold(order)).toEqual({ gluten: { presence: "contains" } });
+    }
   });
 });
 
