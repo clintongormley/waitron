@@ -1,15 +1,15 @@
 import { describe, expect, it } from "vitest";
-import { and, eq } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import { CORE_MIGRATIONS, catalogues, locations, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTenant, seedNode } from "@waitron/db/testing/seed.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { locationId } from "@waitron/shared";
 import {
+  departmentDayRanges,
+  departmentDays,
   departments,
   menuPeriods,
-  menuSlots,
-  menuDayTimetables,
   replaceMenuWeek,
   saveMenuPeriod,
   VENUE_SERVICE_PROVISIONING,
@@ -125,19 +125,23 @@ describe("setup's saved first opening hours", () => {
 
   it("has no full-week summary when a weekday has no range", async () => {
     const { cfg, department } = await seed();
-    const [tuesday] = await suite.db
-      .select()
-      .from(menuDayTimetables)
-      .where(
-        and(eq(menuDayTimetables.departmentId, department.id), eq(menuDayTimetables.weekday, 2)),
-      );
-    await suite.db.delete(menuSlots).where(eq(menuSlots.timetableId, tuesday!.id));
+    const tuesdays = await suite.db
+      .select({ id: departmentDays.id })
+      .from(departmentDays)
+      .where(and(eq(departmentDays.departmentId, department.id), eq(departmentDays.weekday, 2)));
+    expect(tuesdays.length).toBeGreaterThan(0);
+    await suite.db.delete(departmentDayRanges).where(
+      inArray(
+        departmentDayRanges.dayId,
+        tuesdays.map((day) => day.id),
+      ),
+    );
     expect(await readSetupOpeningHours(suite.db, cfg)).toBeUndefined();
   });
 
   it("does not describe an authored shorter week as the first weekday schedule", async () => {
     const { cfg } = await seed();
-    await suite.db.update(menuSlots).set({ endsAt: "16:00:00" });
+    await suite.db.update(departmentDayRanges).set({ endsAt: "16:00:00" });
     expect(await readSetupOpeningHours(suite.db, cfg)).toBeUndefined();
   });
 });

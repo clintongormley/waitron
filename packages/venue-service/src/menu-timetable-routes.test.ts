@@ -797,6 +797,7 @@ describe("zone closed-time routes", () => {
       {
         id: r.barra,
         name: "Barra",
+        seasonWeeks: saved.seasons.map((season) => ({ seasonId: season.id, week: days })),
         week: days,
         dates: [{ specialDateId: r.christmas, ranges: [{ startsAt: "06:00", endsAt: "06:00" }] }],
       },

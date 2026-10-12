@@ -9,6 +9,12 @@ const annual = {
   ownHours: true,
   closeWholeVenue: false,
 };
+const AUTUMN = { id: "autumn", name: "Autumn", startsOn: "09-01" };
+const lunchWeek = [
+  { weekday: 1, slots: [{ periodId: "p1", startsAt: "10:00", endsAt: "14:00" }] },
+  { weekday: 2, slots: [{ periodId: "p1", startsAt: "10:00", endsAt: "14:00" }] },
+];
+const terraceWeek = [{ weekday: 2, ranges: [{ startsAt: "22:00", endsAt: "06:00" }] }];
 export function realWeekModel(): OpeningHoursModel {
   return {
     businessDayClock: { timeZone: "Europe/Madrid", dayCutover: "06:00", cutoverChanges: [] },
@@ -19,6 +25,8 @@ export function realWeekModel(): OpeningHoursModel {
     clockReadable: true,
     dayCutover: "06:00",
     menus: [],
+    seasons: [AUTUMN],
+    currentSeasonId: AUTUMN.id,
     namedDays: [
       annual,
       { ...annual, id: "second", date: "2026-10-14", repeats: false },
@@ -48,10 +56,8 @@ export function realWeekModel(): OpeningHoursModel {
             routingUses: [],
           },
         ],
-        week: [
-          { weekday: 1, slots: [{ periodId: "p1", startsAt: "10:00", endsAt: "14:00" }] },
-          { weekday: 2, slots: [{ periodId: "p1", startsAt: "10:00", endsAt: "14:00" }] },
-        ],
+        seasonWeeks: [{ seasonId: AUTUMN.id, week: structuredClone(lunchWeek) }],
+        week: structuredClone(lunchWeek),
         dates: [
           {
             specialDateId: "annual/day",
@@ -66,7 +72,8 @@ export function realWeekModel(): OpeningHoursModel {
           {
             id: "z1",
             name: "Terrace",
-            week: [{ weekday: 2, ranges: [{ startsAt: "22:00", endsAt: "06:00" }] }],
+            seasonWeeks: [{ seasonId: AUTUMN.id, week: structuredClone(terraceWeek) }],
+            week: structuredClone(terraceWeek),
             dates: [
               { specialDateId: "annual/day", ranges: [{ startsAt: "23:00", endsAt: "06:00" }] },
             ],

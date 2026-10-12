@@ -54,10 +54,13 @@ import { resolveDepartmentDays, type DayPlan } from "./day-resolver.js";
 import {
   joinTouching,
   readDepartmentSeasonWeeks,
+  seasonWeekList,
   seasonsHolding,
   targetSeasons,
   writeDepartmentSeasonWeeks,
 } from "./season-weeks.js";
+import { seasonOn } from "./season-rules.js";
+import { readSeasons } from "./seasons.js";
 import { departmentDayRanges, departmentDays } from "./schema/seasons.js";
 import { zoneClosedTimes } from "./schema/zone-closed-times.js";
 import {
@@ -1164,13 +1167,18 @@ export async function readOpeningHoursModel(
     .select({
       id: menuDayTimetables.id,
       departmentId: menuDayTimetables.departmentId,
-      weekday: menuDayTimetables.weekday,
       specialDateId: menuDayTimetables.specialDateId,
     })
     .from(menuDayTimetables)
     .innerJoin(departments, eq(departments.id, menuDayTimetables.departmentId))
-    .where(and(eq(departments.locationId, cfg.locationId), eq(departments.active, true)))
-    .orderBy(asc(menuDayTimetables.weekday), asc(menuDayTimetables.specialDateId));
+    .where(
+      and(
+        eq(departments.locationId, cfg.locationId),
+        eq(departments.active, true),
+        isNotNull(menuDayTimetables.specialDateId),
+      ),
+    )
+    .orderBy(asc(menuDayTimetables.specialDateId));
   const slots = await slotsByTimetable(
     tx,
     timetables.map((row) => row.id),
@@ -1180,7 +1188,16 @@ export async function readOpeningHoursModel(
       .get(id)!
       .slice()
       .sort((a, b) => rangeSpan(a, cutover).start - rangeSpan(b, cutover).start);
-  const zones = await readZoneClosedTimes(tx, cfg, cutover);
+  const seasonList = await readSeasons(tx, cfg);
+  const currentSeasonId =
+    moment === null ? null : (seasonOn(seasonList, moment.businessDay)?.id ?? null);
+  const seasonWeeks = await readDepartmentSeasonWeeks(
+    tx,
+    cfg,
+    departmentRows.map((department) => department.id),
+    cutover,
+  );
+  const zones = await readZoneClosedTimes(tx, cfg, cutover, currentSeasonId, seasonList);
   const dateRows = await tx
     .select({
       id: specialDates.id,
@@ -1231,13 +1248,24 @@ export async function readOpeningHoursModel(
       includes: directIncludedMenus(graph, menu.id).map((id) => menuNames.get(id)!),
     })),
     namedDays: dates,
+    seasons: seasonList,
+    currentSeasonId,
     departments: departmentRows.map((department) => {
       const days = timetables.filter((row) => row.departmentId === department.id);
+      const stored = seasonWeeks.get(department.id);
+      const weeks = seasonWeekList(seasonList, stored, currentSeasonId);
+      const shape = (week: ServiceRange[][]) => week.map((slots, weekday) => ({ weekday, slots }));
       return {
         ...department,
         zones: zones
           .filter((zone) => zone.departmentId === department.id)
-          .map(({ id, name, week, dates }) => ({ id, name, week, dates })),
+          .map(({ id, name, seasonWeeks, week, dates }) => ({
+            id,
+            name,
+            seasonWeeks,
+            week,
+            dates,
+          })),
         periods: periods
           .filter((period) => period.departmentId === department.id)
           .map(({ id, name, colour, menuId, endOffsetMinutes }) => ({
@@ -1249,18 +1277,18 @@ export async function readOpeningHoursModel(
             staffMenuIds: staff
               .filter((entry) => entry.periodId === id)
               .map((entry) => entry.menuId),
-            weekdays: days
-              .filter(
-                (day) =>
-                  day.weekday !== null && ranges(day.id).some((range) => range.periodId === id),
-              )
-              .map((day) => day.weekday!),
+            weekdays: [0, 1, 2, 3, 4, 5, 6].filter((weekday) =>
+              [...(stored?.values() ?? [])].some((week) =>
+                week[weekday]!.some((range) => range.periodId === id),
+              ),
+            ),
             routingUses: routingUses.get(id) ?? [],
           })),
-        week: [0, 1, 2, 3, 4, 5, 6].map((weekday) => {
-          const day = days.find((row) => row.weekday === weekday);
-          return { weekday, slots: day === undefined ? [] : ranges(day.id) };
-        }),
+        seasonWeeks: weeks.seasonWeeks.map((entry) => ({
+          seasonId: entry.seasonId,
+          week: shape(entry.week),
+        })),
+        week: shape(weeks.week),
         dates: days
           .filter((row) => row.specialDateId !== null)
           .map((day) => ({ specialDateId: day.specialDateId!, slots: ranges(day.id) })),

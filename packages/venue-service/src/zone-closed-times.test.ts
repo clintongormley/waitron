@@ -86,11 +86,20 @@ describe("zone closed times", () => {
     await tx((db) => saveZoneClosedDate(db, v.cfg, day.id, v.terrace, night, 0));
     await tx((db) => replaceZoneClosedWeek(db, v.cfg, v.terrace, week([]), 0));
     const model = await tx((db) => readOpeningHoursModel(db, v.cfg, at));
+    const inEverySeason = <T>(week: T) =>
+      model.seasons.map((season) => ({ seasonId: season.id, week }));
     expect(model.departments.find((d) => d.id === v.departmentId)!.zones).toEqual([
-      { id: v.bar, name: "Bar", week: week([{ startsAt: "06:00", endsAt: "06:00" }]), dates: [] },
+      {
+        id: v.bar,
+        name: "Bar",
+        seasonWeeks: inEverySeason(week([{ startsAt: "06:00", endsAt: "06:00" }])),
+        week: week([{ startsAt: "06:00", endsAt: "06:00" }]),
+        dates: [],
+      },
       {
         id: v.terrace,
         name: "Terrace",
+        seasonWeeks: inEverySeason(week([])),
         week: week([]),
         dates: [{ specialDateId: day.id, ranges: night }],
       },

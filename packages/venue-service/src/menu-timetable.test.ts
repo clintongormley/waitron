@@ -54,6 +54,7 @@ import {
 import type { MenuSlot, MenuWeekDay } from "./menu-timetable-types.js";
 import { VENUE_SERVICE_MIGRATIONS } from "./migrations.js";
 import { readSeasons } from "./seasons.js";
+import { replaceZoneClosedWeek } from "./zone-closed-times.js";
 import {
   configureZone,
   createDepartment,
@@ -1484,6 +1485,184 @@ describe("a period painted in one season only", () => {
   });
 });
 
+describe("the opening-hours model's seasons", () => {
+  it("lists the seasons, every season's week, and the current season's week by business day", async () => {
+    const v = await venue({ timetable: false });
+    const seasons = await scoped(async (tx) => {
+      const dinner = (
+        await saveMenuPeriod(
+          tx,
+          v.cfg,
+          v.restaurant,
+          { name: "Dinner", menuId: v.menus.Cena, staffMenuIds: [] },
+          0,
+        )
+      ).id;
+      await replaceMenuWeek(
+        tx,
+        v.cfg,
+        v.restaurant,
+        weekOf(() => []),
+        AT,
+        0,
+      );
+      const winter = (await readSeasons(tx, v.cfg)).find((season) => season.name === "Winter")!;
+      await replaceMenuWeek(
+        tx,
+        v.cfg,
+        v.restaurant,
+        weekOf((weekday) => (weekday === 5 ? [slot(dinner, "20:00", "23:00")] : [])),
+        AT,
+        0,
+        { seasonId: winter.id },
+      );
+      await replaceZoneClosedWeek(
+        tx,
+        v.cfg,
+        v.sala,
+        [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({
+          weekday,
+          ranges: weekday === 5 ? [{ startsAt: "16:00", endsAt: "18:00" }] : [],
+        })),
+        0,
+        AT,
+        { seasonId: winter.id },
+      );
+      return { dinner, all: await readSeasons(tx, v.cfg) };
+    });
+    const id = (name: string) => seasons.all.find((season) => season.name === name)!.id;
+    const empty = <K extends string>(key: K) =>
+      [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({ weekday, [key]: [] }));
+    const dinnerFriday = [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({
+      weekday,
+      slots: weekday === 5 ? [slot(seasons.dinner, "20:00", "23:00")] : [],
+    }));
+    const closedFriday = [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({
+      weekday,
+      ranges: weekday === 5 ? [{ startsAt: "16:00", endsAt: "18:00" }] : [],
+    }));
+
+    const december = await scoped((tx) =>
+      readOpeningHoursModel(tx, v.cfg, madrid("2026-12-04", "12:00")),
+    );
+    expect(december.seasons).toEqual([
+      { id: id("Spring"), name: "Spring", startsOn: "03-01" },
+      { id: id("Summer"), name: "Summer", startsOn: "06-01" },
+      { id: id("Autumn"), name: "Autumn", startsOn: "09-01" },
+      { id: id("Winter"), name: "Winter", startsOn: "12-01" },
+    ]);
+    expect(december.currentSeasonId).toBe(id("Winter"));
+    const restaurant = december.departments.find((department) => department.id === v.restaurant)!;
+    expect(restaurant.seasonWeeks).toEqual([
+      { seasonId: id("Spring"), week: empty("slots") },
+      { seasonId: id("Summer"), week: empty("slots") },
+      { seasonId: id("Autumn"), week: empty("slots") },
+      { seasonId: id("Winter"), week: dinnerFriday },
+    ]);
+    expect(restaurant.week).toEqual(dinnerFriday);
+    expect(restaurant.periods.find((period) => period.id === seasons.dinner)!.weekdays).toEqual([
+      5,
+    ]);
+    const sala = restaurant.zones.find((zone) => zone.id === v.sala)!;
+    expect(sala.seasonWeeks).toEqual([
+      { seasonId: id("Spring"), week: empty("ranges") },
+      { seasonId: id("Summer"), week: empty("ranges") },
+      { seasonId: id("Autumn"), week: empty("ranges") },
+      { seasonId: id("Winter"), week: closedFriday },
+    ]);
+    expect(sala.week).toEqual(closedFriday);
+
+    const july = await scoped((tx) =>
+      readOpeningHoursModel(tx, v.cfg, madrid("2026-07-03", "12:00")),
+    );
+    expect(july.currentSeasonId).toBe(id("Summer"));
+    const summer = july.departments.find((department) => department.id === v.restaurant)!;
+    expect(summer.week[5]).toEqual({ weekday: 5, slots: [] });
+    expect(summer.zones.find((zone) => zone.id === v.sala)!.week[5]).toEqual({
+      weekday: 5,
+      ranges: [],
+    });
+    expect(summer.seasonWeeks).toEqual(restaurant.seasonWeeks);
+  });
+
+  it("before the day's changeover, takes the season of the business day still running", async () => {
+    const v = await venue({ timetable: false });
+    await scoped((tx) =>
+      replaceMenuWeek(
+        tx,
+        v.cfg,
+        v.restaurant,
+        weekOf(() => []),
+        AT,
+        0,
+      ),
+    );
+    const ids = await scoped((tx) => readSeasons(tx, v.cfg));
+    const model = await scoped((tx) =>
+      readOpeningHoursModel(tx, v.cfg, madrid("2026-12-01", "03:00")),
+    );
+    expect(model.currentSeasonId).toBe(ids.find((season) => season.name === "Autumn")!.id);
+  });
+
+  it("when the clock cannot be read, has no current season and shows the first season's week", async () => {
+    const v = await venue({ timetable: false });
+    const spring = await scoped(async (tx) => {
+      const dinner = (
+        await saveMenuPeriod(
+          tx,
+          v.cfg,
+          v.restaurant,
+          { name: "Dinner", menuId: v.menus.Cena, staffMenuIds: [] },
+          0,
+        )
+      ).id;
+      await replaceMenuWeek(
+        tx,
+        v.cfg,
+        v.restaurant,
+        weekOf(() => []),
+        AT,
+        0,
+      );
+      const first = (await readSeasons(tx, v.cfg))[0]!;
+      await replaceMenuWeek(
+        tx,
+        v.cfg,
+        v.restaurant,
+        weekOf((weekday) => (weekday === 2 ? [slot(dinner, "20:00", "23:00")] : [])),
+        AT,
+        0,
+        { seasonId: first.id },
+      );
+      await tx.execute(
+        sql`update locations set time_zone = 'Mars/Base' where id = ${v.locationId}`,
+      );
+      return { dinner, first };
+    });
+    const model = await scoped((tx) => readOpeningHoursModel(tx, v.cfg, AT));
+    expect(spring.first.name).toBe("Spring");
+    expect(model.currentSeasonId).toBeNull();
+    const restaurant = model.departments.find((department) => department.id === v.restaurant)!;
+    expect(restaurant.week[2]).toEqual({
+      weekday: 2,
+      slots: [slot(spring.dinner, "20:00", "23:00")],
+    });
+  });
+
+  it("gives a venue with no seasons no season weeks and an empty week", async () => {
+    const v = await venue({ timetable: false });
+    const model = await scoped((tx) => readOpeningHoursModel(tx, v.cfg, AT));
+    expect(model.seasons).toEqual([]);
+    expect(model.currentSeasonId).toBeNull();
+    const restaurant = model.departments.find((department) => department.id === v.restaurant)!;
+    expect(restaurant.seasonWeeks).toEqual([]);
+    expect(restaurant.week).toEqual(
+      [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({ weekday, slots: [] })),
+    );
+    expect(restaurant.zones.find((zone) => zone.id === v.sala)!.seasonWeeks).toEqual([]);
+  });
+});
+
 describe("a period no longer placed anywhere but a past special date", () => {
   it("is shown with that date, which can be cleared, so the period can be deleted", async () => {
     const v = await timed();
@@ -2146,6 +2325,8 @@ describe("the editor's model", () => {
     const yesterday = await makeDate(v, "2026-10-06", { name: "Ayer" });
     const earlier = await makeDate(v, "2026-10-05", { name: "Anteayer" });
     const model = await scoped((tx) => readOpeningHoursModel(tx, v.cfg, AT));
+    const seasonIds = (await scoped((tx) => readSeasons(tx, v.cfg))).map((season) => season.id);
+    const inEverySeason = <T>(week: T) => seasonIds.map((seasonId) => ({ seasonId, week }));
 
     expect(model.dayCutover).toBe("06:00");
     expect(model.departments.map((department) => department.id)).toEqual(
@@ -2161,18 +2342,27 @@ describe("the editor's model", () => {
         {
           id: v.barra,
           name: "Barra",
+          seasonWeeks: inEverySeason(
+            [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({ weekday, ranges: [] })),
+          ),
           week: [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({ weekday, ranges: [] })),
           dates: [],
         },
         {
           id: v.sala,
           name: "Sala",
+          seasonWeeks: inEverySeason(
+            [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({ weekday, ranges: [] })),
+          ),
           week: [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({ weekday, ranges: [] })),
           dates: [],
         },
         {
           id: v.terraza,
           name: "Terraza",
+          seasonWeeks: inEverySeason(
+            [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({ weekday, ranges: [] })),
+          ),
           week: [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({ weekday, ranges: [] })),
           dates: [],
         },
@@ -2229,6 +2419,7 @@ describe("the editor's model", () => {
           routingUses: [],
         },
       ],
+      seasonWeeks: inEverySeason(restaurantWeek(periods)),
       week: restaurantWeek(periods),
       dates: [{ specialDateId: christmas.id, slots: [slot(periods.brunch, "11:00", "15:00")] }],
     });
@@ -2963,6 +3154,8 @@ describe("department service periods", () => {
       })(),
     );
     const model = await scoped((tx) => readOpeningHoursModel(tx, v.cfg, AT));
+    const seasonIds = (await scoped((tx) => readSeasons(tx, v.cfg))).map((season) => season.id);
+    const inEverySeason = <T>(week: T) => seasonIds.map((seasonId) => ({ seasonId, week }));
     expect(model.dayCutover).toBe("06:00");
     expect(model.departments.map((department) => department.id)).toEqual([v.restaurant]);
     expect(
@@ -2976,18 +3169,27 @@ describe("department service periods", () => {
         {
           id: v.barra,
           name: "Barra",
+          seasonWeeks: inEverySeason(
+            [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({ weekday, ranges: [] })),
+          ),
           week: [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({ weekday, ranges: [] })),
           dates: [],
         },
         {
           id: v.sala,
           name: "Sala",
+          seasonWeeks: inEverySeason(
+            [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({ weekday, ranges: [] })),
+          ),
           week: [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({ weekday, ranges: [] })),
           dates: [],
         },
         {
           id: v.terraza,
           name: "Terraza",
+          seasonWeeks: inEverySeason(
+            [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({ weekday, ranges: [] })),
+          ),
           week: [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({ weekday, ranges: [] })),
           dates: [],
         },
@@ -3024,6 +3226,17 @@ describe("department service periods", () => {
           routingUses: [],
         },
       ],
+      seasonWeeks: inEverySeason(
+        weekOf((weekday) =>
+          weekday === 5
+            ? [
+                slot(v.lunch, "12:00", "14:00"),
+                slot(v.afternoon, "14:00", "19:00"),
+                slot(v.night, "21:00", "03:00"),
+              ]
+            : [],
+        ),
+      ),
       week: weekOf((weekday) =>
         weekday === 5
           ? [

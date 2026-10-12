@@ -27,6 +27,8 @@ export function fixture(): OpeningHoursModel {
     timeZone: "Europe/Madrid",
     clockReadable: true,
     dayCutover: "06:00",
+    seasons: [],
+    currentSeasonId: null,
     namedDays: [],
     menus: [{ id: "m1", name: "Lunch menu", active: true, includes: [] }],
     departments: [
@@ -47,6 +49,7 @@ export function fixture(): OpeningHoursModel {
             routingUses: [],
           },
         ],
+        seasonWeeks: [],
         week: Array.from({ length: 7 }, (_, weekday) => ({
           weekday,
           slots: weekday === 1 ? [{ periodId: "p1", startsAt: "10:00", endsAt: "14:00" }] : [],

@@ -41,6 +41,8 @@ function model(): OpeningHoursModel {
       { id: "drinks", name: "Drinks", active: true, includes: [] },
       { id: "staff", name: "Staff snacks", active: true, includes: [] },
     ],
+    seasons: [],
+    currentSeasonId: null,
     namedDays: [],
     departments: [
       {
@@ -60,10 +62,20 @@ function model(): OpeningHoursModel {
             routingUses: [],
           },
         ],
+        seasonWeeks: [],
         week: Array.from({ length: 7 }, (_, weekday) => ({ weekday, slots: [] })),
         dates: [],
       },
-      { id: "deli", name: "Deli", active: false, zones: [], periods: [], week: [], dates: [] },
+      {
+        id: "deli",
+        name: "Deli",
+        active: false,
+        zones: [],
+        periods: [],
+        seasonWeeks: [],
+        week: [],
+        dates: [],
+      },
     ],
   };
 }
@@ -655,7 +667,16 @@ it("explains an empty venue and falls back to an inactive department when there 
   expect(el.shadowRoot!.textContent).toContain("No departments yet.");
   expect(el.shadowRoot!.querySelector("wt-combobox")).toBeNull();
   data.departments = [
-    { id: "deli", name: "Deli", active: false, zones: [], periods: [], week: [], dates: [] },
+    {
+      id: "deli",
+      name: "Deli",
+      active: false,
+      zones: [],
+      periods: [],
+      seasonWeeks: [],
+      week: [],
+      dates: [],
+    },
   ];
   el.api.rereadWatches();
   await expect
@@ -1045,12 +1066,23 @@ it("sends an offset-only edit through the real period client and closes before a
 
 function pickerModel(): OpeningHoursModel {
   const data = model();
-  data.departments[0]!.zones = [{ id: "terrace", name: "Terrace", week: [], dates: [] }];
+  data.departments[0]!.zones = [
+    { id: "terrace", name: "Terrace", seasonWeeks: [], week: [], dates: [] },
+  ];
   return {
     ...data,
     departments: [
       ...data.departments,
-      { id: "bar", name: "Bar", active: true, zones: [], periods: [], week: [], dates: [] },
+      {
+        id: "bar",
+        name: "Bar",
+        active: true,
+        zones: [],
+        periods: [],
+        seasonWeeks: [],
+        week: [],
+        dates: [],
+      },
     ],
   };
 }

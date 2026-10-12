@@ -27,6 +27,8 @@ function fixture(own = true): OpeningHoursModel {
     clockReadable: true,
     dayCutover: "06:00",
     menus: [{ id: "m1", name: "Lunch menu", active: true, includes: [] }],
+    seasons: [],
+    currentSeasonId: null,
     namedDays: [special, { ...special, id: "s2", date: "2026-10-13", name: "Party" }],
     departments: [
       {
@@ -46,6 +48,7 @@ function fixture(own = true): OpeningHoursModel {
             routingUses: [],
           },
         ],
+        seasonWeeks: [],
         week: [{ weekday: 1, slots: [{ periodId: "p1", startsAt: "10:00", endsAt: "14:00" }] }],
         dates: own
           ? [
@@ -212,6 +215,7 @@ it("ignores grid events for plain dates in a real week", async () => {
   });
   week.department = {
     ...week.department,
+    seasonWeeks: [],
     week: [
       ...week.department.week,
       { weekday: 0, slots: [{ periodId: "p1", startsAt: "09:00", endsAt: "12:00" }] },

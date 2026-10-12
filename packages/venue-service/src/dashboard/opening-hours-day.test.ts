@@ -18,6 +18,8 @@ export function dayFixture(): OpeningHoursModel {
     clockReadable: true,
     dayCutover: "06:00",
     menus: [{ id: "m1", name: "Lunch menu", active: true, includes: [] }],
+    seasons: [],
+    currentSeasonId: null,
     namedDays: [
       {
         id: "s/1",
@@ -47,6 +49,7 @@ export function dayFixture(): OpeningHoursModel {
             routingUses: [],
           },
         ],
+        seasonWeeks: [],
         week: [
           { weekday: 1, slots: [{ periodId: "p1", startsAt: "10:00", endsAt: "14:00" }] },
           { weekday: 2, slots: [{ periodId: "p1", startsAt: "11:00", endsAt: "15:00" }] },
@@ -72,6 +75,7 @@ export function dayFixture(): OpeningHoursModel {
             routingUses: [],
           },
         ],
+        seasonWeeks: [],
         week: [
           { weekday: 1, slots: [{ periodId: "p2", startsAt: "09:00", endsAt: "18:00" }] },
           { weekday: 2, slots: [{ periodId: "p2", startsAt: "09:00", endsAt: "18:00" }] },
@@ -84,6 +88,7 @@ export function dayFixture(): OpeningHoursModel {
         active: false,
         zones: [],
         periods: [],
+        seasonWeeks: [],
         week: [],
         dates: [],
       },

@@ -13,6 +13,8 @@ const model: OpeningHoursModel = {
   dayCutover: "06:00",
   menus: [],
   departments: [],
+  seasons: [],
+  currentSeasonId: null,
   namedDays: [],
 };
 const base = "/management-api/venue-service";
@@ -111,6 +113,7 @@ describe("OpeningHoursApi", () => {
             name: "Restaurant",
             active: true,
             zones: [],
+            seasonWeeks: [],
             week: [],
             dates: [],
             periods: [

@@ -28,6 +28,8 @@ const model: OpeningHoursModel = {
   clockReadable: true,
   dayCutover: "06:00",
   menus: [],
+  seasons: [],
+  currentSeasonId: null,
   namedDays: [],
   departments: [
     {
@@ -38,6 +40,7 @@ const model: OpeningHoursModel = {
         {
           id: "z1",
           name: "Terrace",
+          seasonWeeks: [],
           week: [{ weekday: 1, ranges: [{ startsAt: "10:00", endsAt: "11:00" }] }],
           dates: [],
         },
@@ -54,6 +57,7 @@ const model: OpeningHoursModel = {
           routingUses: [],
         },
       ],
+      seasonWeeks: [],
       week: [{ weekday: 1, slots: [{ periodId: "p1", startsAt: "09:00", endsAt: "14:00" }] }],
       dates: [],
     },
