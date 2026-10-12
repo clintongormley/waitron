@@ -4466,6 +4466,15 @@ the tree. What remains, largest first:
   (`scripts/vitest-file-progress.mjs`); that run was cancelled, not timed out, after 3m26s with no
   output.
 
+- **A catalogue test fails now and then on two products made in the same millisecond (found by
+  A521).** "listProducts carries each product's recipe diet derivation, null where it has none"
+  (`packages/catalogue/src/operations.test.ts`) expects "stew" before "plain", but `listProducts`
+  orders by `createdAt` and then `id`, and ids are random (`newId`, `packages/db/src/schema/columns.ts`),
+  so two products created in the same millisecond come back in either order. Running the whole file
+  failed it 1 time in 3 on A521's branch and 2 times in 5 on main's `derivation.ts`; six runs of
+  the test alone all passed. The tie-break explanation is from reading the code, not measured.
+  Next: make the test independent of the tie (or give the two products different times).
+
 _Formerly B9, and the old Track C's development-stack and house-rules items; part of A9._ Detail: [backlog/ci.md](backlog/ci.md).
 
 - **A dev venue built before A230 keeps the tax ID `50000000K`**, whose sales 0.2.1 refuses;

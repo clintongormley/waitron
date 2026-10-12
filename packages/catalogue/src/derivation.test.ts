@@ -64,6 +64,12 @@ describe("mergeAllergenMaps", () => {
       gluten("wheat flour, spelt"),
     );
   });
+
+  it("leaves the source out when two different sources hold only commas and spaces", () => {
+    const a = { gluten: { presence: "contains" as const, source: " , " } };
+    const b = { gluten: { presence: "contains" as const, source: "," } };
+    expect(mergeAllergenMaps(a, b)).toEqual({ gluten: { presence: "contains" } });
+  });
 });
 
 describe("republish", () => {

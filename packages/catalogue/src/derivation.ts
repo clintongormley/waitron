@@ -21,8 +21,8 @@ export function mergeAllergenMaps(a: ProductAllergens, b: ProductAllergens): Pro
       da?.presence === "contains" || db?.presence === "contains" ? "contains" : "may_contain";
     const sources = [...new Set([da?.source, db?.source].filter((s): s is string => Boolean(s)))];
     const decl: AllergenDeclaration = { presence };
-    if (sources.length === 1) decl.source = sources[0];
-    if (sources.length > 1) decl.source = mergeSourceLists(sources);
+    const source = sources.length > 1 ? mergeSourceLists(sources) : sources[0];
+    if (source) decl.source = source;
     out[code] = decl;
   }
   return out;
