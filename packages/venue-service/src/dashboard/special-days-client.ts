@@ -41,8 +41,13 @@ export class SpecialDaysApi {
   listSpecialDays(): Promise<SpecialDaySummary[]> {
     return this.request<SpecialDaySummary[]>(`${BASE}/special-days`, "GET");
   }
-  readSpecialDay(id: string): Promise<SpecialDayDetail> {
-    return this.request<SpecialDayDetail>(`${BASE}/special-days/${encodeURIComponent(id)}`, "GET");
+  readSpecialDay(id: string, options?: { passive?: boolean }): Promise<SpecialDayDetail> {
+    return this.request<SpecialDayDetail>(
+      `${BASE}/special-days/${encodeURIComponent(id)}`,
+      "GET",
+      undefined,
+      options,
+    );
   }
   async saveSpecialDay(
     id: string | null,

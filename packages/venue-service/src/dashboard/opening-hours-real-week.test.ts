@@ -8,6 +8,13 @@ import {
   realWeekModel as fixture,
   namedWeekModel as calendarFixture,
 } from "../testing/real-week-model.js";
+import type { SpecialDayDetail } from "../special-days.js";
+import {
+  PARTY_DATE,
+  paintDayModel,
+  paintDayRequest,
+  partyDetail,
+} from "../testing/special-day-fixture.js";
 import "./opening-hours-screen.js";
 let screen: HTMLElementTagNameMap["dashboard-opening-hours-screen"];
 const original = location.href;
@@ -501,4 +508,176 @@ it.each([
   };
   expect(await saveIn(path)).not.toBeNull();
   expect(await saveIn(`${path}?week=2030-11-25`)).toBeNull();
+});
+
+const paintedParty = (): SpecialDayDetail => ({
+  ...partyDetail(),
+  paint: [
+    {
+      departmentId: "restaurant",
+      date: PARTY_DATE,
+      ranges: [{ periodId: null, startsAt: "22:00", endsAt: "23:30" }],
+    },
+  ],
+  zonePaint: [
+    {
+      zoneId: "terrace",
+      date: PARTY_DATE,
+      ranges: [{ kind: "open", startsAt: "22:00", endsAt: "23:00" }],
+    },
+  ],
+});
+async function mountPainted(address: string, tag: string, reads: string[] = []) {
+  history.replaceState(null, "", address);
+  const request = paintDayRequest([], undefined, paintDayModel(), paintedParty());
+  screen = document.createElement("dashboard-opening-hours-screen");
+  screen.api = new OpeningHoursApi((async (path, method, body) => {
+    if (method === "GET" && path.includes("/special-days/")) reads.push(path);
+    return request(path, method, body);
+  }) as DashboardRequest);
+  applyTokens(screen);
+  document.body.append(screen);
+  await expect.poll(() => screen.shadowRoot?.querySelector(tag)).not.toBeNull();
+  const view = screen.shadowRoot!.querySelector(tag) as HTMLElement & {
+    updateComplete: Promise<unknown>;
+  };
+  await view.updateComplete;
+  return view;
+}
+const dinner = (startsAt: string, endsAt: string) => ({ periodId: "dinner", startsAt, endsAt });
+it.each([
+  ["department", "/manage/opening-hours/view/week/department/restaurant", "opening-hours-week"],
+  [
+    "zone",
+    "/manage/opening-hours/view/week/department/restaurant/zone/terrace",
+    "opening-hours-zone-week",
+  ],
+])(
+  "in the real week a %s's dated columns are read-only and each links to its date's Day view",
+  async (_, path, tag) => {
+    const view = await mountPainted(`${path}?week=2026-10-12`, tag);
+    const grid = view.shadowRoot!.querySelector("service-grid")!;
+    expect(grid.columns.map((column) => column.editable)).toEqual(Array(7).fill(false));
+    expect(view.shadowRoot!.querySelector("[data-test=save-date]")).toBeNull();
+    expect(view.shadowRoot!.querySelector("[data-test=save-week]")).toBeNull();
+    expect(view.shadowRoot!.querySelector("[data-test=own-date]")).toBeNull();
+    const links = [
+      ...view.shadowRoot!.querySelectorAll<HTMLAnchorElement>("a[data-test=day-link]"),
+    ];
+    expect(links.map((link) => new URL(link.href).pathname)).toEqual(
+      ["12", "13", "14", "15", "16", "17", "18"].map(
+        (day) => `/manage/opening-hours/view/day/date/2026-10-${day}`,
+      ),
+    );
+    links[1]!.click();
+    await expect.poll(() => screen.shadowRoot!.querySelector("opening-hours-day")).not.toBeNull();
+    expect(location.pathname).toContain("/view/day/");
+    expect(location.pathname).toContain("/date/2026-10-13");
+    const day = screen.shadowRoot!.querySelector("opening-hours-day")!;
+    expect(day.date).toBe(PARTY_DATE);
+  },
+);
+it("a viewer still has each dated column's Day link", async () => {
+  const view = await mountPainted(
+    "/manage/opening-hours/view/week/department/restaurant?week=2026-10-12",
+    "opening-hours-week",
+  );
+  screen.readOnly = true;
+  await screen.updateComplete;
+  await view.updateComplete;
+  expect(view.shadowRoot!.querySelectorAll("a[data-test=day-link]")).toHaveLength(7);
+});
+it("the Day view opens on the address's date", async () => {
+  await mountPainted("/manage/opening-hours/view/day/date/2026-10-14", "opening-hours-day");
+  expect(screen.shadowRoot!.querySelector("opening-hours-day")!.date).toBe("2026-10-14");
+});
+it("a special date's column draws its stored paint over the season and names it; an ordinary date draws the season", async () => {
+  const reads: string[] = [];
+  const view = await mountPainted(
+    "/manage/opening-hours/view/week/department/restaurant?week=2026-10-12",
+    "opening-hours-week",
+    reads,
+  );
+  const grid = view.shadowRoot!.querySelector("service-grid")!;
+  await expect.poll(() => grid.columns[1]!.slots).toEqual([dinner("20:00", "22:00")]);
+  expect(grid.columns[1]!.label).toContain("Party");
+  expect(grid.columns[2]!.slots).toEqual([dinner("20:00", "23:30")]);
+  expect(grid.columns[2]!.label).not.toContain("Party");
+  expect(reads).toEqual(["/management-api/venue-service/special-days/party"]);
+});
+it("a special date's zone column draws its stored zone paint over the department's painted hours", async () => {
+  const view = await mountPainted(
+    "/manage/opening-hours/view/week/department/restaurant/zone/terrace?week=2026-10-12",
+    "opening-hours-zone-week",
+  );
+  const grid = view.shadowRoot!.querySelector("service-grid")!;
+  await expect
+    .poll(() => grid.columns[1]!.closed)
+    .toEqual([{ startsAt: "23:00", endsAt: "23:30" }]);
+  expect(grid.columns[1]!.slots).toEqual([dinner("20:00", "22:00")]);
+  expect(grid.columns[1]!.label).toContain("Party");
+  expect(grid.columns[2]!.closed).toEqual([{ startsAt: "22:00", endsAt: "23:30" }]);
+  expect(grid.columns[2]!.slots).toEqual([dinner("20:00", "23:30")]);
+});
+it("the All view draws a special date's stored paint over the season and names it", async () => {
+  const view = await mountPainted(
+    "/manage/opening-hours/view/week/department/all?week=2026-10-12",
+    "opening-hours-all",
+  );
+  const grid = view.shadowRoot!.querySelector("service-grid")!;
+  const column = (key: string) => grid.columns.find((entry) => entry.key === key)!;
+  await expect.poll(() => column("2:restaurant").slots).toEqual([dinner("20:00", "22:00")]);
+  expect(column("2:restaurant").label).toContain("Party");
+  expect(column("2:bar").slots).toEqual([
+    { periodId: "drinks", startsAt: "18:00", endsAt: "02:00" },
+  ]);
+  expect(column("3:restaurant").slots).toEqual([dinner("20:00", "23:30")]);
+});
+it("a date the calendar marks closed all day draws no hours and says Closed", async () => {
+  history.replaceState(
+    null,
+    "",
+    "/manage/opening-hours/view/week/department/restaurant?week=2026-10-12",
+  );
+  const closed = { ...paintedParty(), dates: [{ date: PARTY_DATE, closedAllDay: true }] };
+  const request = paintDayRequest([], undefined, paintDayModel(), closed);
+  screen = document.createElement("dashboard-opening-hours-screen");
+  screen.api = new OpeningHoursApi(request);
+  document.body.append(screen);
+  await expect.poll(() => screen.shadowRoot?.querySelector("opening-hours-week")).not.toBeNull();
+  const grid = screen
+    .shadowRoot!.querySelector("opening-hours-week")!
+    .shadowRoot!.querySelector("service-grid")!;
+  await expect.poll(() => grid.columns[1]!.label).toContain("Closed");
+  expect(grid.columns[1]!.slots).toEqual([]);
+});
+it("says the week could not be loaded when a special day's read fails", async () => {
+  history.replaceState(
+    null,
+    "",
+    "/manage/opening-hours/view/week/department/restaurant?week=2026-10-12",
+  );
+  const request = paintDayRequest([], undefined, paintDayModel(), paintedParty());
+  screen = document.createElement("dashboard-opening-hours-screen");
+  screen.api = new OpeningHoursApi((async (path, method, body) => {
+    if (path.includes("/special-days/")) throw new Error("offline");
+    return request(path, method, body);
+  }) as DashboardRequest);
+  document.body.append(screen);
+  await expect
+    .poll(() => screen.shadowRoot?.querySelector("[role=alert]")?.textContent)
+    .toBe("Opening hours could not be loaded. It will be tried again.");
+});
+it("leaves a modified click on a Day link to the browser", async () => {
+  const view = await mountPainted(
+    "/manage/opening-hours/view/week/department/restaurant?week=2026-10-12",
+    "opening-hours-week",
+  );
+  const link = view.shadowRoot!.querySelector<HTMLAnchorElement>("a[data-test=day-link]")!;
+  const click = new MouseEvent("click", { bubbles: true, cancelable: true, ctrlKey: true });
+  link.addEventListener("click", (event) => event.preventDefault(), { once: true });
+  link.dispatchEvent(click);
+  await screen.updateComplete;
+  expect(screen.shadowRoot!.querySelector("opening-hours-day")).toBeNull();
+  expect(location.pathname).toBe("/manage/opening-hours/view/week/department/restaurant");
 });

@@ -1,8 +1,7 @@
 import type { BusinessDayClock } from "@waitron/shared";
 import { serviceDayContext } from "../service-day-context.js";
 import { businessDayAt } from "@waitron/shared";
-import { layerPaint, layerZonePaint, paintFromEdit, zonePaintFromEdit } from "../day-paint.js";
-import { occursOn } from "../repeat-rules.js";
+import { paintFromEdit, zonePaintFromEdit } from "../day-paint.js";
 import type { SpecialDayDetail } from "../special-days.js";
 import { LitElement, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
@@ -26,6 +25,7 @@ import type { PeriodEditor } from "./period-editor.js";
 import type { SpecialDaysModel } from "../holiday-types.js";
 import type { SpecialDayAction } from "./hours-calendar.js";
 import { seasonIdOn } from "./real-week.js";
+import { paintedClosed, paintedSlots, specialOn, type DatedSpecial } from "./special-date.js";
 import { seasonWeek } from "./season-choice.js";
 import { format, formatDate } from "./hours-view.js";
 import { t } from "./strings.js";
@@ -40,8 +40,6 @@ type Zone = Department["zones"][number];
 type ClosedDay = { weekday: number; ranges: ClosedRange[] };
 type Draft = { menus: Record<string, MenuWeekDay[]>; zones: Record<string, ClosedDay[]> };
 type Opening = { department: Department; index?: number; input: ServiceRange };
-/** The special day standing on the shown date, `date` being the stored date its paint is keyed by. */
-type Special = { detail: SpecialDayDetail; date: string; closed: boolean };
 type SeasonDay = { menus: Record<string, ServiceRange[]>; zones: Record<string, ClosedRange[]> };
 const minuteOfServiceDay = (time: string, cutover: string) =>
   (Number(time.slice(0, 2)) * 60 +
@@ -133,7 +131,7 @@ export class OpeningHoursDay extends LitElement {
   @property({ attribute: false }) api!: OpeningHoursApi;
   @property({ attribute: false }) model!: OpeningHoursModel;
   @property({ type: Boolean }) readOnly = false;
-  @state() private date = "";
+  @property() date = "";
   @state() private draft: Draft = { menus: {}, zones: {} };
   @state() private opening?: Opening;
   @state() private periodOpening?: { range: Opening };
@@ -156,7 +154,7 @@ export class OpeningHoursDay extends LitElement {
   private baseline: Draft = { menus: {}, zones: {} };
   private source?: OpeningHoursModel;
   private contextDepartments: readonly Department[] = [];
-  private contextSpecial?: Special;
+  private contextSpecial?: DatedSpecial;
   private seasonDay: SeasonDay = { menus: {}, zones: {} };
   @state() private detail?: SpecialDayDetail;
   private sourceDetail?: SpecialDayDetail;
@@ -262,24 +260,11 @@ export class OpeningHoursDay extends LitElement {
   private special() {
     return this.contextSpecial;
   }
-  /** The special day on the shown date: the stored date itself, or for a repeating day the date
-   *  that falls on it — on the same month and day, or on the public holiday of its name. */
-  private specialOn(): Special | undefined {
-    const day = this.calendar?.days?.find((row) => row.date === this.date);
-    const detail = this.detail;
-    if (!day?.specialDay || detail?.id !== day.specialDay.id) return undefined;
-    const year = Number(this.date.slice(0, 4));
-    const entry =
-      detail.dates.find((row) => row.date === this.date) ??
-      (detail.repeatsYearly
-        ? detail.dates.find((row) =>
-            row.holidayName !== undefined && year > Number(row.date.slice(0, 4))
-              ? day.holidays.some((holiday) => holiday.name === row.holidayName)
-              : occursOn({ date: row.date, repeats: true }, this.date),
-          )
-        : undefined);
-    return (
-      entry && { detail: structuredClone(detail), date: entry.date, closed: entry.closedAllDay }
+  private specialOn(): DatedSpecial | undefined {
+    return specialOn(
+      this.calendar?.days?.find((row) => row.date === this.date),
+      this.detail,
+      this.date,
     );
   }
   private seed(): Draft {
@@ -303,14 +288,7 @@ export class OpeningHoursDay extends LitElement {
           })),
         }));
         this.seasonDay.menus[department.id] = days[weekday]!.slots.map((slot) => ({ ...slot }));
-        if (special)
-          days[weekday]!.slots = layerPaint(
-            days[weekday]!.slots,
-            special.detail.paint.find(
-              (row) => row.date === special.date && row.departmentId === department.id,
-            )?.ranges ?? [],
-            cutover,
-          );
+        days[weekday]!.slots = paintedSlots(days[weekday]!.slots, special, department.id, cutover);
         return [department.id, days];
       }),
     );
@@ -325,14 +303,7 @@ export class OpeningHoursDay extends LitElement {
             })),
           }));
           this.seasonDay.zones[zone.id] = days[weekday]!.ranges.map((range) => ({ ...range }));
-          if (special)
-            days[weekday]!.ranges = layerZonePaint(
-              days[weekday]!.ranges,
-              special.detail.zonePaint.find(
-                (row) => row.date === special.date && row.zoneId === zone.id,
-              )?.ranges ?? [],
-              cutover,
-            );
+          days[weekday]!.ranges = paintedClosed(days[weekday]!.ranges, special, zone.id, cutover);
           return [zone.id, days];
         }),
       ),

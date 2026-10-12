@@ -3,6 +3,9 @@ import { applyTokens } from "@waitron/ui";
 import { setLocale } from "@waitron/dashboard-kit";
 import type { OpeningHoursModel } from "../menu-timetable-types.js";
 import type { ServiceGrid } from "./service-grid.js";
+import type { SpecialDaysModel } from "../holiday-types.js";
+import type { SpecialDayDetail } from "../special-days.js";
+import { namedWeekModel } from "../testing/real-week-model.js";
 import "./opening-hours-screen.js";
 
 type All = HTMLElementTagNameMap["opening-hours-all"];
@@ -152,32 +155,40 @@ it("updates headings and periods from the next model snapshot", async () => {
   expect(el.shadowRoot!.textContent).toContain("Dining room");
 });
 
-it("shows dated ranges and whole-venue closure when a named day is selected", async () => {
+it("shows dated ranges and whole-venue closure when a special day is on the date", async () => {
   const el = await mount();
-  el.departments = [
-    {
-      ...allDepartments()[0]!,
-      dates: [
-        {
-          specialDateId: "named",
-          slots: [{ periodId: "lunch", startsAt: "14:00", endsAt: "17:00" }],
-        },
-      ],
-    },
-    allDepartments()[1]!,
-  ];
+  const detail: SpecialDayDetail = {
+    id: "named",
+    name: "Own Monday",
+    repeatsYearly: false,
+    dates: [{ date: "2026-10-12", closedAllDay: false }],
+    paint: [
+      {
+        departmentId: "restaurant",
+        date: "2026-10-12",
+        ranges: [
+          { periodId: null, startsAt: "12:00", endsAt: "14:00" },
+          { periodId: "lunch", startsAt: "14:00", endsAt: "17:00" },
+        ],
+      },
+    ],
+    zonePaint: [],
+  };
+  const calendar = (closed: boolean): SpecialDaysModel => ({
+    ...namedWeekModel(),
+    days: [
+      {
+        date: "2026-10-12",
+        specialDay: { id: "named", name: "Own Monday" },
+        holidays: [],
+        tone: "special_day",
+        closed,
+      },
+    ],
+  });
   el.weekStart = "2026-10-12";
-  el.namedDays = [
-    {
-      id: "named",
-      date: "2026-10-12",
-      name: "Own Monday",
-      kind: "working_day" as const,
-      repeats: false,
-      ownHours: true,
-      closeWholeVenue: false,
-    },
-  ];
+  el.calendar = calendar(false);
+  el.specials = new Map([[detail.id, detail]]);
   await el.updateComplete;
   const grid = el.shadowRoot!.querySelector<ServiceGrid>("service-grid")!;
   expect(grid.columns).toHaveLength(14);
@@ -186,7 +197,7 @@ it("shows dated ranges and whole-venue closure when a named day is selected", as
   ]);
   expect(grid.columns[1]!.slots).toEqual([]);
   el.weekStart = "2026-10-12";
-  el.namedDays = [{ ...el.namedDays[0]!, ownHours: false, closeWholeVenue: true }];
+  el.calendar = calendar(true);
   await el.updateComplete;
   expect(grid.columns.slice(0, 2).every((column) => column.slots.length === 0)).toBe(true);
   expect(grid.columns[3]!.slots).toEqual([

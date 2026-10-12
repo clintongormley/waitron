@@ -1,10 +1,5 @@
 import type { DashboardRequest, LiveData } from "@waitron/dashboard-kit";
-import type {
-  MenuPeriodInput,
-  MenuSlot,
-  MenuWeekDay,
-  OpeningHoursModel,
-} from "../menu-timetable-types.js";
+import type { MenuPeriodInput, MenuWeekDay, OpeningHoursModel } from "../menu-timetable-types.js";
 import type { ClosedRange } from "../service-day.js";
 import type { SpecialDayDetail, SpecialDayInput } from "../special-days.js";
 import { QUERY_DEPENDENCIES } from "./live-queries.js";
@@ -156,29 +151,5 @@ export class OpeningHoursApi {
       ...(zonePaint.length ? { zonePaint } : {}),
       expectedClockRevision,
     });
-  }
-  saveZoneDate(
-    specialDateId: string,
-    zoneId: string,
-    ranges: readonly ClosedRange[],
-    expectedClockRevision: number,
-  ): Promise<void> {
-    return this.request(
-      `${BASE}/special-dates/${at(specialDateId)}/zone-closed-times/${at(zoneId)}`,
-      "PUT",
-      { ranges, expectedClockRevision },
-    );
-  }
-  saveDateMenus(
-    specialDateId: string,
-    departmentId: string,
-    slots: readonly MenuSlot[],
-    expectedClockRevision: number,
-  ): Promise<void> {
-    return this.request(
-      `${BASE}/special-dates/${at(specialDateId)}/menu-timetables/${at(departmentId)}`,
-      "PUT",
-      { slots, expectedClockRevision },
-    );
   }
 }

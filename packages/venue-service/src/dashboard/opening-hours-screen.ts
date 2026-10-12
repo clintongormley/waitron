@@ -112,6 +112,8 @@ export class OpeningHoursScreen extends LitElement {
   @state() private month = "";
   @state() private weekStart = "";
   @state() private namedWeek?: SpecialDaysModel;
+  @state() private weekSpecials: ReadonlyMap<string, SpecialDayDetail> = new Map();
+  @state() private dayDate = "";
   @state() private namedReadError = "";
   private weekDetach?: () => void;
   private watchedWeek = "";
@@ -136,6 +138,7 @@ export class OpeningHoursScreen extends LitElement {
         station: "station",
         month: "month",
         season: "season",
+        date: "date",
       },
     },
   });
@@ -154,6 +157,8 @@ export class OpeningHoursScreen extends LitElement {
       "";
     const month = this.url.read("month") ?? "";
     this.month = /^\d{4}-(0[1-9]|1[0-2])$/.test(month) ? month : "";
+    const date = this.url.read("date") ?? "";
+    this.dayDate = isLocalDate(date) ? date : "";
     const week =
       new URL(navigationGuardFor(window)?.href ?? location.href).searchParams.get("week") ?? "";
     this.weekStart = isLocalDate(week) && weekdayOf(week) === 1 ? week : "";
@@ -357,6 +362,7 @@ export class OpeningHoursScreen extends LitElement {
     this.weekDetach?.();
     this.watchedWeek = week;
     this.namedWeek = undefined;
+    this.weekSpecials = new Map();
     this.namedReadError = "";
     if (week)
       this.weekDetach = this.api.specialDays.watchSpecialDays(
@@ -366,6 +372,7 @@ export class OpeningHoursScreen extends LitElement {
           if (this.isConnected && this.watchedWeek === week) {
             this.namedWeek = model;
             this.namedReadError = "";
+            this.readWeekSpecials(model, week);
           }
         },
         () => {
@@ -376,6 +383,29 @@ export class OpeningHoursScreen extends LitElement {
           if (this.isConnected && this.watchedWeek === week) this.namedReadError = "";
         },
       );
+  }
+  /** Each distinct special day in the shown week, read once per calendar snapshot. */
+  private readWeekSpecials(model: SpecialDaysModel, week: string) {
+    const ids = [
+      ...new Set((model.days ?? []).flatMap((day) => (day.specialDay ? [day.specialDay.id] : []))),
+    ];
+    const current = () => this.isConnected && this.watchedWeek === week && this.namedWeek === model;
+    void Promise.all(
+      ids.map((id) => this.api.specialDays.readSpecialDay(id, { passive: true })),
+    ).then(
+      (details) => {
+        if (current()) this.weekSpecials = new Map(details.map((detail) => [detail.id, detail]));
+      },
+      () => {
+        if (current()) this.namedReadError = t("opening.load_error");
+      },
+    );
+  }
+  private openDay(event: CustomEvent<{ date: string }>) {
+    event.stopPropagation();
+    void Promise.resolve(
+      this.url.write({ dashboard: "opening-hours", view: "day", date: event.detail.date }),
+    ).then(() => this.followUrl());
   }
   private async writeWeek(week: string, replace = false) {
     if (!this.isConnected || this.view !== "week") return;
@@ -587,27 +617,16 @@ export class OpeningHoursScreen extends LitElement {
       this.namedAction ||
       ![
         this.shadowRoot?.querySelector("hours-calendar"),
-        this.shadowRoot?.querySelector("opening-hours-week"),
-        this.shadowRoot?.querySelector("opening-hours-zone-week"),
         this.shadowRoot?.querySelector("opening-hours-day"),
       ].some((component) => component === event.currentTarget)
     )
       return;
-    if (
-      event.currentTarget !== this.shadowRoot?.querySelector("hours-calendar") &&
-      event.currentTarget !== this.shadowRoot?.querySelector("opening-hours-day") &&
-      (!this.namedWeek || this.namedReadError)
-    )
-      return;
     const { specialDay: sent, ...detail } = event.detail;
-    const known = this.namedWeek?.days?.find((day) => day.date === detail.date);
-    const specialDay: SpecialDayRef | null =
-      sent === undefined ? (known?.specialDay ?? null) : sent;
+    const specialDay: SpecialDayRef | null = sent ?? null;
     if (detail.kind === "delete" && !specialDay) return;
     const action: OpenSpecialDay = {
       ...detail,
-      holidays: known?.holidays ?? detail.holidays,
-      clockRevision: this.namedWeek?.clockRevision ?? this.model!.clockRevision,
+      clockRevision: this.model!.clockRevision,
     };
     this.namedDeleteError = "";
     this.specialReadError = "";
@@ -986,7 +1005,8 @@ export class OpeningHoursScreen extends LitElement {
                             .weekStart=${this.weekStart}
                             .seasonId=${this.season}
                             .seasons=${this.model.seasons}
-                            .namedDays=${this.model.namedDays}
+                            .calendar=${this.namedWeek}
+                            .specials=${this.weekSpecials}
                             @department-open=${(event: CustomEvent<{ departmentId: string }>) => {
                               event.stopPropagation();
                               void this.chooseDepartment(event.detail.departmentId);
@@ -1006,9 +1026,9 @@ export class OpeningHoursScreen extends LitElement {
                                 .dayCutover=${this.model.dayCutover}
                                 .readOnly=${this.readOnly}
                                 .weekStart=${this.weekStart}
-                                .namedDays=${this.model.namedDays}
-                                .dateActionsReady=${!!this.namedWeek && !this.namedReadError}
-                                @special-day-action=${this.openNamedDay}
+                                .calendar=${this.namedWeek}
+                                .specials=${this.weekSpecials}
+                                @day-open=${this.openDay}
                               ></opening-hours-zone-week>`,
                             )
                           : this.view === "week" && department
@@ -1025,10 +1045,10 @@ export class OpeningHoursScreen extends LitElement {
                                   .dayCutover=${this.model!.dayCutover}
                                   .timeZone=${this.model!.clockReadable ? this.model!.timeZone : undefined}
                                   .weekStart=${this.weekStart}
-                                  .namedDays=${this.model.namedDays}
-                                  .dateActionsReady=${!!this.namedWeek && !this.namedReadError}
+                                  .calendar=${this.namedWeek}
+                                  .specials=${this.weekSpecials}
                                   .readOnly=${this.readOnly}
-                                  @special-day-action=${this.openNamedDay}
+                                  @day-open=${this.openDay}
                                 ></opening-hours-week>`,
                               )
                             : nothing
@@ -1060,7 +1080,7 @@ export class OpeningHoursScreen extends LitElement {
                   }
                 </div>
                 <div slot="day">
-                  ${this.view === "day" ? html`<opening-hours-day .api=${this.api} .model=${this.model} .readOnly=${this.readOnly} @special-day-action=${this.openNamedDay}></opening-hours-day>` : nothing}
+                  ${this.view === "day" ? html`<opening-hours-day .api=${this.api} .model=${this.model} .date=${this.dayDate} .readOnly=${this.readOnly} @special-day-action=${this.openNamedDay}></opening-hours-day>` : nothing}
                 </div>
               </wt-tabs>`
       }
