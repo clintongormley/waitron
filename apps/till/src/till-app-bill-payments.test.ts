@@ -2152,9 +2152,13 @@ describe("till-app: a partly paid order at the counter", () => {
     emit(counter(el), "logout");
     await discardUnsavedLeave(el);
     await flush(el);
-    failEarlier(new TypeError("Failed to fetch"));
-    // The send waits one retry pause, then sees the session has ended and gives up.
-    await new Promise((resolve) => setTimeout(resolve, SUBMIT_RETRY_PAUSE_MS));
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    try {
+      failEarlier(new TypeError("Failed to fetch"));
+      await vi.advanceTimersByTimeAsync(SUBMIT_RETRY_PAUSE_MS);
+    } finally {
+      vi.useRealTimers();
+    }
     await flush(el);
     emit(lock(el), "logged-in", { personId: "p2", displayName: "Luis", permissions: [] });
     await flush(el);
@@ -3695,9 +3699,13 @@ describe("till-app: giving back a bill payment", () => {
     emit(tableOrder(el), "logout");
     await discardUnsavedLeave(el);
     await flush(el);
-    failEarlier(new TypeError("Failed to fetch"));
-    // The send waits one retry pause, then sees the session has ended and gives up.
-    await new Promise((resolve) => setTimeout(resolve, SUBMIT_RETRY_PAUSE_MS));
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    try {
+      failEarlier(new TypeError("Failed to fetch"));
+      await vi.advanceTimersByTimeAsync(SUBMIT_RETRY_PAUSE_MS);
+    } finally {
+      vi.useRealTimers();
+    }
     await flush(el);
     await signInAndAskRefund(el, cashPaid);
 

@@ -4689,11 +4689,6 @@ _Formerly B9, and the old Track C's development-stack and house-rules items; par
   to currency fields."
   [Detail](backlog/catalogue.md#catalogue-no-two-categories-with-one-parent-and-no-two-active-products-share-a-name-w72-to-w72h-left-open)
 
-- **Two till tests wait a fixed real time for a resend to give up** (found 2026-09-30, B13). **Next
-  action:** run that pause on fake timers, as the lost-reply case in `till-app-drafts.test.ts`'s "a
-  Send the session outlives" does.
-  [Detail](backlog/ci.md#two-till-tests-wait-a-fixed-real-time-for-a-resend-to-give-up)
-
 - **Tests that close a dialog and then check after a single `flush` were not searched** (A452,
   #1487). A452 made browser tests wait for a dialog's `wt-close` before checking what a screen does
   on close, but its search found only a click or Escape followed within three lines by a wait; one
