@@ -1477,6 +1477,55 @@ describe("the venue-service shards' test databases", () => {
 });
 
 /**
+ * A venue-service shard whose browser never starts leaves a record of each start-up step; why:
+ * ci-and-gates.md, "A failed venue-service shard keeps its browser start-up record". Reads ci.yml
+ * as TEXT: it never runs a shard, so it cannot tell that the channels still print anything.
+ */
+describe("the venue-service shards' browser start-up record", () => {
+  const body = job("test-venue-service").body.filter((line) => !line.trim().startsWith("#"));
+  const step = shardStep(body) ?? [];
+  const record = '"$RUNNER_TEMP/shard-diagnostics/shard.log"';
+
+  it("turns on Vitest's browser channels and Playwright's browser log for the shard", () => {
+    expect(step.length, "no venue-service shard step").toBeGreaterThan(0);
+    const debug = step.map((line) => /^ {10}DEBUG: "?([^"]*)"?\s*$/.exec(line)?.[1]).find(Boolean);
+    expect(debug?.split(",").sort()).toEqual([
+      "pw:browser",
+      "vitest:browser:api",
+      "vitest:browser:playwright",
+      "vitest:browser:pool",
+    ]);
+    expect(step).toContain('          VITEST_PW_DEBUG: "1"');
+  });
+
+  it("writes the shard's whole output to the record", () => {
+    expect(step.join("\n")).toContain(`2>&1 | tee ${record}`);
+  });
+
+  it("samples the runner's memory and processes into the same folder", () => {
+    const sampler = body.findIndex((line) => /^ {6}- name: Sample the runner/.test(line));
+    const shard = body.findIndex((line) => /^ {6}- name: Run the .* shard\s*$/.test(line));
+    expect(sampler, "no sampler step").toBeGreaterThan(-1);
+    expect(sampler, "the sampler must start before the shard").toBeLessThan(shard);
+    expect(body.slice(sampler, shard).join("\n")).toContain(
+      '"$RUNNER_TEMP/shard-diagnostics/resources.log"',
+    );
+  });
+
+  it("keeps the folder as an artifact when the shard fails, and only then", () => {
+    const named = body.findIndex((line) =>
+      /^ {10}name: venue-service-diagnostics-\$\{\{\s*matrix\.shard\s*\}\}\s*$/.test(line),
+    );
+    expect(named, "no diagnostics artifact").toBeGreaterThan(-1);
+    const start = body.findLastIndex((line, at) => at < named && /^ {6}- /.test(line));
+    const upload = body.slice(start, named + 3);
+    expect(upload).toContain("        if: failure()");
+    expect(upload.join("\n")).toContain("actions/upload-artifact@");
+    expect(upload).toContain("          path: ${{ runner.temp }}/shard-diagnostics/");
+  });
+});
+
+/**
  * The stream loop and pause tests, and the S3 test server's own suite, run in a job of their own,
  * beside the apps/server shards: between them they need two downloaded binaries. Their blob joins
  * the server's coverage merge. Read from ci.yml as TEXT, so a step an `if:` switches off still
