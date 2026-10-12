@@ -1436,10 +1436,12 @@ Measured 2026-10-08 with `pnpm --filter @waitron/venue-service exec vitest run
 src/configuration-transfer.test.ts` and `pnpm --filter @waitron/server exec vitest run
 src/configuration-transfer.test.ts`: period colours and ordered staff-menu rows travelled to a
 second real venue under new period, department and menu IDs. The server roundtrip uses 04:30:
-21:00–03:00 imports, 21:00–05:00 is refused with `setup.request_invalid`, field `menu_slots`.
-Replacing the export's changeover with 06:00 in an installed disposable checkout made that
-refusal assertion fail. (2026-10-12, A506-2: the case now refuses a `department_day_ranges` range
-ending 05:00, at field `department_day_ranges`.) The callback context now carries `createdAt`,
+21:00–03:00 imports, and a `department_day_ranges` range ending 05:00 is refused with
+`setup.request_invalid`, field `department_day_ranges`. Measured 2026-10-12: with the source
+venue's changeover set to 06:00 instead of 04:30, `pnpm --filter @waitron/server exec vitest run
+src/configuration-transfer.test.ts -t "round-trips service periods with end offset"` failed both
+cases at that refusal assertion ("expected function to throw an error, but it didn't"); with
+04:30 restored both passed. The callback context now carries `createdAt`,
 `timeZone`, and `dayCutover` (`packages/module/src/module.ts`, `apps/server/src/configuration-transfer.ts`).
 
 The menu validator uses `parseServiceDay`, so ranges stop at the business-day boundary and
