@@ -719,18 +719,17 @@ async function periodUses(
 ): Promise<Map<string, MenuPeriodUse[]>> {
   const uses = new Map<string, MenuPeriodUse[]>(periodIds.map((id) => [id, []]));
   if (periodIds.length === 0) return uses;
-  const rows = await tx
+  const dated = await tx
     .selectDistinct({
       periodId: menuSlots.periodId,
-      weekday: menuDayTimetables.weekday,
       specialDateId: specialDates.id,
       date: specialDates.date,
     })
     .from(menuSlots)
     .innerJoin(menuDayTimetables, eq(menuDayTimetables.id, menuSlots.timetableId))
-    .leftJoin(specialDates, eq(specialDates.id, menuDayTimetables.specialDateId))
+    .innerJoin(specialDates, eq(specialDates.id, menuDayTimetables.specialDateId))
     .where(inArray(menuSlots.periodId, [...periodIds]))
-    .orderBy(asc(menuDayTimetables.weekday), asc(specialDates.date));
+    .orderBy(asc(specialDates.date));
   const painted = await tx
     .selectDistinct({ periodId: departmentDayRanges.periodId, weekday: departmentDays.weekday })
     .from(departmentDayRanges)
@@ -742,17 +741,15 @@ async function periodUses(
       ),
     );
   const weekdays = new Map<string, Set<number>>(periodIds.map((id) => [id, new Set()]));
-  for (const row of [...rows, ...painted])
-    if (row.weekday !== null) weekdays.get(row.periodId!)!.add(row.weekday);
-  const dated = rows.filter((row) => row.weekday === null);
+  for (const row of painted) weekdays.get(row.periodId!)!.add(row.weekday!);
   for (const [periodId, days] of weekdays)
     for (const weekday of [...days].sort((a, b) => a - b))
       uses.get(periodId)!.push({ kind: "week", weekday });
   for (const row of dated)
     uses.get(row.periodId)!.push({
       kind: "special_date",
-      specialDateId: row.specialDateId!,
-      date: row.date!,
+      specialDateId: row.specialDateId,
+      date: row.date,
     });
   return uses;
 }
