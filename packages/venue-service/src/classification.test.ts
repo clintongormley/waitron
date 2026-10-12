@@ -87,6 +87,23 @@ describe("VENUE_SERVICE_CLASSIFICATION", () => {
       ["kitchen_notices", "state"],
     ]);
   });
+  it("classifies seasons, special days and their day rows as replicated state", () => {
+    const seasons = [
+      "seasons",
+      "special_days",
+      "special_day_dates",
+      "department_days",
+      "department_day_ranges",
+      "zone_days",
+      "zone_day_ranges",
+    ];
+    expect(
+      VENUE_SERVICE_CLASSIFICATION.filter((entry) => seasons.includes(entry.table)).map((entry) => [
+        entry.table,
+        entry.class,
+      ]),
+    ).toEqual(seasons.map((table) => [table, "state"]));
+  });
 
   it("classifies each owned table once, with only issued receipt headers in the ledger", () => {
     const tables = VENUE_SERVICE_CLASSIFICATION.map((entry) => entry.table);

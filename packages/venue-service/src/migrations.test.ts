@@ -58,6 +58,13 @@ const TABLES = [
   "device_kitchen_screen_stations",
   "device_kitchen_screen_zones",
   "device_kitchen_screen_removals",
+  "seasons",
+  "special_days",
+  "special_day_dates",
+  "department_days",
+  "department_day_ranges",
+  "zone_days",
+  "zone_day_ranges",
 ];
 
 /** One row of `pragma table_info`. `pk` is 0 for a non-key column and the 1-based position in the
@@ -344,6 +351,48 @@ describe("the venue-service migration set carries no tenant column", () => {
           "(station_id) -> kitchen_stations(id)",
           "(zone_id) -> floor_zones(id)",
         ],
+      },
+      seasons: {
+        primaryKey: ["id"],
+        foreignKeys: ["(location_id) -> locations(id)"],
+      },
+      special_days: {
+        primaryKey: ["id"],
+        foreignKeys: ["(location_id) -> locations(id)"],
+      },
+      special_day_dates: {
+        primaryKey: ["id"],
+        foreignKeys: [
+          "(location_id) -> locations(id)",
+          "(special_day_id) -> special_days(id) on delete cascade",
+        ],
+      },
+      department_days: {
+        primaryKey: ["id"],
+        foreignKeys: [
+          "(department_id) -> departments(id) on delete cascade",
+          "(season_id) -> seasons(id) on delete cascade",
+          "(special_day_date_id) -> special_day_dates(id) on delete cascade",
+        ],
+      },
+      department_day_ranges: {
+        primaryKey: ["id"],
+        foreignKeys: [
+          "(day_id, department_id) -> department_days(id, department_id) on delete cascade",
+          "(period_id, department_id) -> menu_periods(id, department_id)",
+        ],
+      },
+      zone_days: {
+        primaryKey: ["id"],
+        foreignKeys: [
+          "(season_id) -> seasons(id) on delete cascade",
+          "(special_day_date_id) -> special_day_dates(id) on delete cascade",
+          "(zone_id) -> zone_service_policies(zone_id) on delete cascade",
+        ],
+      },
+      zone_day_ranges: {
+        primaryKey: ["id"],
+        foreignKeys: ["(day_id) -> zone_days(id) on delete cascade"],
       },
     });
   });
@@ -1206,6 +1255,69 @@ describe("the venue-service foreign keys refuse a missing target", () => {
           (working_order_id, location_id, zone_id, department_id, service_mode)
         values (${missing}, ${v.locationId}, ${v.zoneId}, ${v.departmentId}, 'prepay')`,
       "order_service_contexts_order_fk",
+    );
+  });
+
+  it("a season's week rows go with the season, and a special day's dates with the special day", async () => {
+    const v = await venue();
+    const periodId = randomUUID();
+    await db.execute(sql`insert into menu_periods (id, department_id, name, menu_id)
+      values (${periodId}, ${v.departmentId}, 'Lunch', ${v.menuId})`);
+    const seasonId = randomUUID();
+    await db.execute(sql`insert into seasons (id, location_id, name, starts_on)
+      values (${seasonId}, ${v.locationId}, 'Summer', '06-01')`);
+    const weekDayId = randomUUID();
+    await db.execute(sql`insert into department_days (id, department_id, season_id, weekday)
+      values (${weekDayId}, ${v.departmentId}, ${seasonId}, 6)`);
+    await db.execute(sql`insert into department_day_ranges
+        (id, day_id, department_id, period_id, starts_at, ends_at)
+      values (${randomUUID()}, ${weekDayId}, ${v.departmentId}, ${periodId}, '12:00:00', '16:00:00')`);
+    await db.execute(sql`delete from seasons where id = ${seasonId}`);
+    expect(
+      (await db.execute(sql`select id from department_days where id = ${weekDayId}`)).rows,
+    ).toEqual([]);
+    expect(
+      (await db.execute(sql`select id from department_day_ranges where day_id = ${weekDayId}`))
+        .rows,
+    ).toEqual([]);
+
+    const specialDayId = randomUUID();
+    await db.execute(sql`insert into special_days (id, location_id, name)
+      values (${specialDayId}, ${v.locationId}, 'Fiesta')`);
+    const dateId = randomUUID();
+    await db.execute(sql`insert into special_day_dates (id, special_day_id, location_id, date)
+      values (${dateId}, ${specialDayId}, ${v.locationId}, '2026-08-15')`);
+    const dateDayId = randomUUID();
+    await db.execute(sql`insert into department_days (id, department_id, special_day_date_id)
+      values (${dateDayId}, ${v.departmentId}, ${dateId})`);
+    await db.execute(sql`insert into department_day_ranges
+        (id, day_id, department_id, period_id, starts_at, ends_at)
+      values (${randomUUID()}, ${dateDayId}, ${v.departmentId}, null, '00:00:00', '23:45:00')`);
+    await db.execute(sql`delete from special_days where id = ${specialDayId}`);
+    expect(
+      (await db.execute(sql`select id from special_day_dates where id = ${dateId}`)).rows,
+    ).toEqual([]);
+    expect(
+      (await db.execute(sql`select id from department_days where id = ${dateDayId}`)).rows,
+    ).toEqual([]);
+    expect(
+      (await db.execute(sql`select id from department_day_ranges where day_id = ${dateDayId}`))
+        .rows,
+    ).toEqual([]);
+
+    const otherDayId = randomUUID();
+    await db.execute(sql`insert into special_days (id, location_id, name)
+      values (${otherDayId}, ${v.locationId}, 'Feria')`);
+    await db.execute(sql`insert into special_day_dates (id, special_day_id, location_id, date)
+      values (${randomUUID()}, ${otherDayId}, ${v.locationId}, '2026-09-08')`);
+    const error = await captureError(() =>
+      db.transaction((tx) =>
+        tx.execute(sql`insert into special_day_dates (id, special_day_id, location_id, date)
+          values (${randomUUID()}, ${otherDayId}, ${v.locationId}, '2026-09-08')`),
+      ),
+    );
+    expect(engineErrorMessage(error)).toContain(
+      "UNIQUE constraint failed: special_day_dates.location_id, special_day_dates.date",
     );
   });
 });

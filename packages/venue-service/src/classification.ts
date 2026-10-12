@@ -39,6 +39,13 @@ export const VENUE_SERVICE_CLASSIFICATION: readonly ClassifiedTable[] = [
   classify("kitchen_notices", "state", STATE),
   classify("special_dates", "state", STATE),
   classify("holiday_geographies", "state", STATE),
+  classify("seasons", "state", STATE),
+  classify("special_days", "state", STATE),
+  classify("special_day_dates", "state", STATE),
+  classify("department_days", "state", STATE),
+  classify("department_day_ranges", "state", STATE),
+  classify("zone_days", "state", STATE),
+  classify("zone_day_ranges", "state", STATE),
 ];
 
 export const VENUE_SERVICE_CHANGE_SOURCES: readonly ChangeSource[] =
