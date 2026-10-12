@@ -1244,6 +1244,16 @@ it("Shift+ArrowRight sends, announces and badges nothing when its side cannot gr
   expect(badgeOf(el)).toBeNull();
 });
 
+it("Shift+ArrowLeft shrinks a table turned 90° at the grid's top edge", async () => {
+  const el = await canvas([table("t1", "T1", { x: 10, y: 0, width: 8, height: 4, rotation: 90 })], {
+    selected: "t1",
+  });
+  const seen = resizes(el);
+  button(el, "t1").focus();
+  await userEvent.keyboard("{Shift>}{ArrowLeft}{/Shift}");
+  expect(seen.map((e) => e.detail)).toEqual([{ key: "t1", x: 11, y: 0, width: 7, height: 4 }]);
+});
+
 /** The midpoint of `p`'s own left side, in squares. */
 function leftMidpoint(p: PlanPlacement): { x: number; y: number } {
   const radians = (p.rotation * Math.PI) / 180;

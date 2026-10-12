@@ -89,8 +89,9 @@ function roundShift(squares: number): number {
 
 /**
  * `p` with its own `side` moved `squares` outwards (inwards when negative), keeping the opposite
- * side's midpoint within half a square of where it is drawn. The size stays 1–99; where the whole
- * change would take x or y off the grid, the side moves only as far as fits.
+ * side's midpoint's x and y each within half a square of where it is drawn. The size stays 1–99;
+ * at the grid's edge a growth stops where x and y fit, and a shrink lets the opposite side move
+ * instead.
  */
 export function resizeFrom(p: PlanPlacement, side: PlanSide, squares: number): PlanPlacement {
   const across = side === "left" || side === "right" ? "width" : "height";
@@ -100,7 +101,8 @@ export function resizeFrom(p: PlanPlacement, side: PlanSide, squares: number): P
     const grown = across === "width" ? { width: p.width + growth } : { height: p.height + growth };
     const x = p.x + roundShift((out.x * growth) / 2 - (across === "width" ? growth / 2 : 0));
     const y = p.y + roundShift((out.y * growth) / 2 - (across === "height" ? growth / 2 : 0));
-    if (x === clampToGrid(x) && y === clampToGrid(y)) return { ...p, ...grown, x, y };
+    if (growth < 0 || (x === clampToGrid(x) && y === clampToGrid(y)))
+      return { ...p, ...grown, x: clampToGrid(x), y: clampToGrid(y) };
   }
   return p;
 }

@@ -260,7 +260,7 @@ describe("floor plan geometry", () => {
       }
     });
 
-    it("holds the size to 1–99 squares and the place to x and y of 0 or more", () => {
+    it("holds the size to 1–99 squares", () => {
       expect(resizeFrom(table(10, 10, 8, 4), "right", -20).width).toBe(1);
       expect(resizeFrom(table(10, 10, 8, 4), "bottom", 200).height).toBe(99);
       expect(resizeFrom(table(10, 10, 98, 4), "left", 5)).toMatchObject({ x: 9, width: 99 });
@@ -275,6 +275,13 @@ describe("floor plan geometry", () => {
       // Turned 90°, the left side is drawn at the top and the right side at the bottom, which is
       // drawn at y 7 with its midpoint at x 14 both before (centre 14, 3) and after (centre 14, 2).
       expect(resizeFrom(table(10, 1, 8, 4, 90), "left", 4)).toEqual(table(9, 0, 10, 4, 90));
+    });
+
+    it("shrinks a side at the grid's edge, moving the opposite side instead", () => {
+      // Turned 90° at y 0, the right side faces down and the left side up; shrinking the right
+      // side would put y at -1, so y stays 0 and the left side, drawn at the top, moves down.
+      expect(resizeFrom(table(10, 0, 8, 4, 90), "right", -1)).toEqual(table(11, 0, 7, 4, 90));
+      expect(resizeFrom(table(10, 0, 8, 4, 270), "left", -1)).toEqual(table(11, 0, 7, 4, 270));
     });
 
     it.each([0, 45, 90, 180, 270])("undoes a resize with the opposite one at %i°", (rotation) => {
