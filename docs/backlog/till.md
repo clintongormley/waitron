@@ -260,18 +260,26 @@ screen is designed.
 for joins and how the till merges and splits tables. Until A503 part 1 a saved join was a seat
 count for tables each placed on their own; part 1 removed saved joins and their copy, and a merge's
 seats now come only from the waiter, whose seats prompt opens empty
-([design](../superpowers/specs/2026-10-12-a503-joined-tables-design.md)).
+([design](../superpowers/specs/2026-10-12-a503-joined-tables-design.md)). Part 2 (#1601) added
+joined tables: the editor's Add joined table and Made of, the till's copy at each reset, a part
+still joined refused `table.in_joined_table` and hidden from the till's pickers, and bookings
+refusing a part. What remains is below.
 
-- **Add joined table** in the editor asks for a name, a seat count, and the tables it is made of,
-  chosen from tables not on the plan
-  ([mockup 5](mockups/a502-a503-floor-plan-editor/5-add-joined-table.png); the tables list in
-  [mockup 2](mockups/a502-a503-floor-plan-editor/2-tables-list-nothing-selected.png)). The joined table is placed on the plan as
-  one table; its parts are marked "in <joined table>" in the tables list and cannot be placed on
-  their own. The list's last column shows what a joined table is made of. The made-of picker lists
-  tables in number order, as the tables list does.
 - **On the till a joined table can be split.** Its parts go side by side inside the outline the
-  joined table took up, each with its own seats.
-- A joined table's seats need their own upper bound.
+  joined table took up, each with its own seats. First: a table keeps its width and height when it
+  is taken off the plan (owner's answer to the design's question 5), which today's placement check
+  on `floor_plan_tables` does not allow — measure what drizzle-kit generates before choosing the
+  storage (part 2's plan, "Left for part 3").
+- **A joined table with fewer than two parts still joined is not refused yet** — for example two
+  of its three parts still held by parties at the reset, or a part in a service merge. The split's
+  record is where that refusal belongs (#1601, design gap 1).
+- **A part placed on today's map** while its joined table waited, and free when the joined table
+  went live, keeps its place on today's map until the next reset; the till hides it, and the split's
+  layout must expect it.
+- **Join again**, and a reset waiting for free parts.
+- The Made of picker is a dropdown, not mockup 5's inline list (no inline multi-pick primitive
+  exists); and at 1280 px the tables list's Made of column wraps to two lines, and in Spanish the
+  two Add buttons stack.
 
 ## A504. Floor plans published for a future date, and one per service period
 

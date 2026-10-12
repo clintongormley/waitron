@@ -1887,9 +1887,23 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
 
 - **A503. Joined tables replace saved joins (owner, 2026-10-11).** A table made of other tables
   is set up in the editor and starts the day as one table; the till can split it. Part 1 (#1598)
-  removed saved joins; joined tables, the till's Split and Join again remain, and Split waits on the
-  owner's answer to where a part's size comes from (design, "Owner question").
+  removed saved joins; part 2 (#1601) added joined tables in the editor, the till and bookings. The
+  till's Split and Join again remain; Split starts by deciding how a part keeps its size off the
+  plan (the owner answered: it keeps its width and height).
   [Detail](backlog/till.md#a503-joined-tables-replace-saved-joins)
+
+- **A550. Making a booked table part of a joined table is not refused (2026-10-12).** The floor
+  plan editor's save refuses deleting a booked table (`table.booked`) but not making one a part; the
+  booking stays, and seating it is refused `table.in_joined_table` once the reset applies, so staff
+  must move it by hand. Left open by A503 part 2 (#1601, design gap 2). Next: decide whether the save
+  refuses it, as a delete is refused, or only warns.
+
+- **A551. The booking form shows two sentences at its foot when a Table refusal meets its own
+  checks (2026-10-12).** Its own checks (for example a blank Name) mark no field and print their
+  own sentence at the bottom instead of the shared "Correct the highlighted fields to continue.";
+  since #1601 a refused Table is marked under Table with that shared sentence, so a Save with Name
+  blank while the Table refusal shows prints both. The own-checks behaviour predates #1601. Next:
+  make the form's own checks mark their fields and use the shared sentence (CLAUDE.md §3, forms).
 
 - **A545. Deleting a zone: two of its deletes are not what any test checks (2026-10-12).**
   `clear` in `apps/server/src/floor-delete.ts` deletes today's merges, but `removeLiveTables`
