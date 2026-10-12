@@ -6,19 +6,16 @@
   "vitest": {
     "configFile": "vitest.config.ts"
   },
-  "mutate": [
-    "src/**/*.ts",
-    "!src/**/*.test.ts",
-    "!src/test-helpers.ts",
-    "!src/a11y-helpers.ts",
-    "!src/tokens/token-test-helpers.ts"
-  ],
-  "thresholds": { "high": 95, "low": 90, "break": 90 },
+  "mutate": ["src/**/*.ts", "!src/**/*.test.ts", "!src/test-helpers.ts", "!src/a11y-helpers.ts"],
+  "thresholds": { "high": 95, "low": 90 },
   "incremental": true,
   "incrementalFile": "reports/stryker-incremental.json",
-  "reporters": ["clear-text", "progress", "html"],
+  "reporters": ["clear-text", "progress", "html", "json"],
   "htmlReporter": {
     "fileName": "reports/mutation/index.html"
+  },
+  "jsonReporter": {
+    "fileName": "reports/mutation/mutation.json"
   },
   "coverageAnalysis": "perTest"
 }

@@ -104,9 +104,9 @@ More: [ci-and-gates.md](docs/developers/ci-and-gates.md).
 
 **A mutation floor of 90 breaks the run in every mutation-tested package — `ui`, `ui-core`,
 `shared`, `fiscal` and `db`** (the owner's 90-everywhere decision of 2026-09-19). WHERE it bites
-differs — on a pull request, only in the weekly run, or only locally — and neither `fiscal`'s nor
+differs — on a pull request, only in the nightly run, or only locally — and neither `fiscal`'s nor
 `db`'s floor is package-wide. Guard: `scripts/mutation-break-thresholds.test.mjs`, weaker than its
-name — it reads the workflow as TEXT for db's bar. Which package bites where:
+name — it reads the workflow as TEXT for db's and ui's bars. Which package bites where:
 [ci-and-gates.md](docs/developers/ci-and-gates.md).
 
 Traps, each of which cost a round trip. The mechanism behind every one is in
@@ -748,6 +748,12 @@ browser test** — most of these rules exist because a test passed while proving
   pages have no harness: write the rendered string to a file and open it with the workspace's
   playwright Chromium. Cost: a corrupted colour on `/setup/trust`, and an image library that
   answered 500 to the first person who opened it.
+- **In `packages/db`, whose Stryker config sets `ignoreStatic`, a test loads a source module with
+  `import()` inside a case only when that case asserts on what the module builds as it loads** (as
+  `describeSchemaConformance`'s `reload` does); otherwise it imports at the top of the file. Stryker
+  counts the case as covering the module's load-time code and runs those mutants against it alone. Cost: db's mutation score
+  read about 86% on three weekly runs (A539). Nothing guards it. Receipt:
+  [ci-and-gates.md](docs/developers/ci-and-gates.md#reading-packagesdbs-score-by-hand).
 - **`toMatchObject` checks only the keys you list**; a key you never list is never checked at all.
 - **A default you did not state is not a value you tested**, and a library default can be computed
   from the RUNNING runtime. State it at every call site that shares it. Guard: the two

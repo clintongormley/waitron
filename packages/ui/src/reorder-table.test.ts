@@ -1,7 +1,7 @@
 import { LitElement, css, html, nothing } from "lit";
 import { customElement, property } from "lit/decorators.js";
 import { repeat } from "lit/directives/repeat.js";
-import { commands } from "vitest/browser";
+import { commands, userEvent } from "vitest/browser";
 import { afterEach, expect, it, vi } from "vitest";
 import { cleanup, middleWithin, mount as mountHtml, textLines } from "./test-helpers.js";
 import { ReorderController, type ReorderModel } from "./reorder-table.js";
@@ -1120,3 +1120,266 @@ it.each(["up", "leave", "cancel", "disconnect", "fits"])(
     }
   },
 );
+
+it("announces nothing and keeps the order when the last row is moved down", async () => {
+  const el = await mount();
+  press(el, "c", "ArrowDown");
+  await el.updateComplete;
+  expect(order(el)).toEqual(["a", "b", "c"]);
+  expect(el.shadowRoot!.querySelector('[role="status"]')!.textContent).toBe("");
+});
+
+/** A host that keeps its order in a plain field, so only the controller asks it to render again. */
+@customElement("test-reorder-plain-host")
+class PlainReorderHost extends LitElement {
+  readonly ids = ["a", "b", "c"];
+  readonly #reorder = new ReorderController(
+    this,
+    {
+      order: () => this.ids,
+      move: (id, to) => {
+        this.ids.splice(this.ids.indexOf(id), 1);
+        this.ids.splice(to, 0, id);
+      },
+      label: (id) => id,
+      busy: () => false,
+      reorderLabel: "Reorder",
+    } satisfies ReorderModel,
+    { announce: announcement },
+  );
+  override render() {
+    return html`<table>
+        <tbody>
+          ${repeat(
+            this.ids,
+            (id) => id,
+            (id) =>
+              html`<tr data-choice=${id}>
+                <td>${this.#reorder.handle(id)}</td>
+              </tr>`,
+          )}
+        </tbody>
+      </table>
+      ${this.#reorder.liveRegion()}`;
+  }
+}
+declare global {
+  interface HTMLElementTagNameMap {
+    "test-reorder-plain-host": PlainReorderHost;
+  }
+}
+
+it("shows a key move and its announcement even when the host's move does not itself render", async () => {
+  const { el } = await mountWidget<PlainReorderHost>("test-reorder-plain-host", {});
+  press(el, "a", "ArrowDown");
+  await el.updateComplete;
+  expect(order(el)).toEqual(["b", "a", "c"]);
+  expect(el.shadowRoot!.querySelector('[role="status"]')!.textContent).toBe(
+    "a moved to position 2 of 3",
+  );
+  expect(el.shadowRoot!.activeElement).toBe(handle(el, "a"));
+});
+
+it("asks the model for no move while the pointer is over the dragged row itself or outside every row", async () => {
+  const el = await mountVolatile();
+  pointer(handle(el, "a"), "pointerdown", 1, rowCentre(el, "a"));
+  pointer(document, "pointermove", 1, rowCentre(el, "a"));
+  const last = row(el, "c").getBoundingClientRect();
+  pointer(document, "pointermove", 1, last.bottom + 500);
+  expect(el.moves).toEqual([]);
+  pointer(document, "pointerup", 1);
+});
+
+it("keeps dragging when a key other than Escape is pressed", async () => {
+  const el = await mountVolatile();
+  pointer(handle(el, "a"), "pointerdown", 1, rowCentre(el, "a"));
+  for (const key of ["Shift", "a", "Enter"])
+    document.dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true }));
+  expect(row(el, "a").hasAttribute("data-dragging")).toBe(true);
+  expect(el.drops).toEqual([]);
+  pointer(document, "pointermove", 1, rowCentre(el, "b"));
+  await el.updateComplete;
+  expect(order(el)).toEqual(["b", "a", "c"]);
+  pointer(document, "pointerup", 1);
+});
+
+it("ends a drag on Escape even inside an element that stops the key, and keeps the key from anything else", async () => {
+  const el = await mountVolatile();
+  const panel = document.createElement("div");
+  const field = document.createElement("button");
+  panel.append(field);
+  el.parentElement!.append(panel);
+  panel.addEventListener("keydown", (event) => event.stopPropagation());
+  const heard: string[] = [];
+  field.addEventListener("keydown", (event) => heard.push(event.key));
+  pointer(handle(el, "a"), "pointerdown", 1, rowCentre(el, "a"));
+  field.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+  expect(row(el, "a").hasAttribute("data-dragging")).toBe(false);
+  expect(el.drops).toEqual(["a"]);
+  expect(heard).toEqual([]);
+});
+
+it("keeps a modal dialog open when Escape ends a drag inside it", async () => {
+  const el = await mountVolatile();
+  const dialog = document.createElement("dialog");
+  el.parentElement!.append(dialog);
+  dialog.append(el);
+  dialog.showModal();
+  try {
+    await el.updateComplete;
+    handle(el, "a").focus();
+    pointer(handle(el, "a"), "pointerdown", 1, rowCentre(el, "a"));
+    await userEvent.keyboard("{Escape}");
+    expect(el.drops).toEqual(["a"]);
+    expect(dialog.open).toBe(true);
+    await userEvent.keyboard("{Escape}");
+    expect(dialog.open).toBe(false);
+  } finally {
+    dialog.close();
+  }
+});
+
+it("keeps the dragged row under the pointer once the rows it passed start sliding", async () => {
+  const el = await mountTimed("7s");
+  const a = box(el, "a");
+  const b = box(el, "b");
+  pointer(handle(el, "a"), "pointerdown", 1, a.top + a.height / 2);
+  pointer(document, "pointermove", 1, b.top + b.height / 2);
+  await el.updateComplete;
+  expect(order(el)).toEqual(["b", "a", "c"]);
+  await nextFrame();
+  await nextFrame();
+  near(box(el, "a").top, b.top);
+  expect(row(el, "a").hasAttribute("data-sliding")).toBe(false);
+  pointer(document, "pointerup", 1);
+});
+
+it("lets a passed row's slide run on when a later move leaves that row where it was", async () => {
+  const el = await mountTimed("7s", [...three(), { id: "d", name: "Four" }]);
+  const a = box(el, "a");
+  pointer(handle(el, "a"), "pointerdown", 1, a.top + a.height / 2);
+  pointer(document, "pointermove", 1, rowCentre(el, "b"));
+  await el.updateComplete;
+  await nextFrame();
+  const slide = row(el, "b").getAnimations()[0]!;
+  await slide.ready;
+  const drawn = box(el, "b").top;
+  pointer(document, "pointermove", 1, rowCentre(el, "c"));
+  await el.updateComplete;
+  expect(order(el)).toEqual(["b", "c", "a", "d"]);
+  await nextFrame();
+  // The same slide, still running, not one started again from where the row was drawn.
+  expect(row(el, "b").getAnimations()).toHaveLength(1);
+  expect(row(el, "b").getAnimations()[0]).toBe(slide);
+  expect(slide.playState).toBe("running");
+  expect(box(el, "b").top).toBeLessThan(drawn);
+  expect(slides(el, "c")).toEqual(["transform"]);
+  pointer(document, "pointerup", 1);
+});
+
+it("keeps a held row under the pointer between frames while the edge scroll moves the list", async () => {
+  const el = await mount(Array.from({ length: 40 }, (_, i) => ({ id: `r${i}`, name: `Row ${i}` })));
+  el.parentElement!.style.setProperty("--wt-duration-move", "0s");
+  const box = document.createElement("div");
+  box.style.cssText = "position:fixed;top:100px;left:100px;width:300px;height:220px;overflow:auto";
+  el.parentElement!.append(box);
+  box.append(el);
+  const held = el.shadowRoot!.querySelector<HTMLElement>('tr[data-choice="r0"]')!;
+  const start = held.getBoundingClientRect();
+  const edge = box.getBoundingClientRect();
+  const at = (type: string, target: EventTarget, clientY: number) =>
+    target.dispatchEvent(
+      new PointerEvent(type, { bubbles: true, pointerId: 86, clientX: edge.left + 20, clientY }),
+    );
+  at("pointerdown", handle(el, "r0"), start.top + 10);
+  const y = edge.bottom - 8;
+  at("pointermove", document, y);
+  try {
+    await expect.poll(() => box.scrollTop, { timeout: 1500 }).toBeGreaterThan(40);
+    const offsets: number[] = [];
+    for (let i = 0; i < 20; i++) {
+      await new Promise((resolve) => setTimeout(resolve, 4));
+      offsets.push(Math.round(y - held.getBoundingClientRect().top));
+    }
+    expect(box.scrollTop).toBeLessThan(box.scrollHeight - box.clientHeight);
+    expect(new Set(offsets)).toEqual(new Set([10]));
+  } finally {
+    at("pointerup", document, y);
+  }
+});
+
+it("swaps a short row up into a taller one only within the short row's height of its top", async () => {
+  const el = await mount([
+    { id: "a", name: "One", height: 50 },
+    { id: "b", name: "Two", height: 150 },
+    { id: "c", name: "Three", height: 50 },
+  ]);
+  const b = box(el, "b");
+  const c = box(el, "c");
+  pointer(handle(el, "c"), "pointerdown", 1, c.top + c.height / 2);
+  pointer(document, "pointermove", 1, b.bottom - 10);
+  await el.updateComplete;
+  expect(order(el)).toEqual(["a", "b", "c"]);
+  pointer(document, "pointermove", 1, b.top + c.height);
+  await el.updateComplete;
+  expect(order(el)).toEqual(["a", "c", "b"]);
+  pointer(document, "pointerup", 1);
+});
+
+it("swaps a short row down into a taller one from the short row's height above its bottom", async () => {
+  const el = await mount([
+    { id: "a", name: "One", height: 50 },
+    { id: "b", name: "Two", height: 150 },
+  ]);
+  const a = box(el, "a");
+  const b = box(el, "b");
+  pointer(handle(el, "a"), "pointerdown", 1, a.top + a.height / 2);
+  pointer(document, "pointermove", 1, b.bottom - a.height - 1);
+  await el.updateComplete;
+  expect(order(el)).toEqual(["a", "b"]);
+  pointer(document, "pointermove", 1, b.bottom - a.height);
+  await el.updateComplete;
+  expect(order(el)).toEqual(["b", "a"]);
+  pointer(document, "pointerup", 1);
+});
+
+it.each(["first", "last"] as const)(
+  "counts the %s pixel row of the list as inside it",
+  async (end) => {
+    const el = await mount();
+    const a = box(el, "a");
+    const c = box(el, "c");
+    const dragged = end === "first" ? "b" : "a";
+    pointer(handle(el, dragged), "pointerdown", 1, rowCentre(el, dragged));
+    pointer(document, "pointermove", 1, end === "first" ? a.top : c.bottom);
+    await el.updateComplete;
+    expect(order(el)).toEqual(end === "first" ? ["b", "a", "c"] : ["b", "c", "a"]);
+    pointer(document, "pointerup", 1);
+  },
+);
+
+it("edge scrolls a row pressed inside the edge band while the pointer has not moved", async () => {
+  const el = await mount(Array.from({ length: 40 }, (_, i) => ({ id: `r${i}`, name: `Row ${i}` })));
+  const box = document.createElement("div");
+  box.style.cssText = "position:fixed;top:100px;left:100px;width:300px;height:220px;overflow:auto";
+  el.parentElement!.append(box);
+  box.append(el);
+  const edge = box.getBoundingClientRect();
+  const pressed = [...el.shadowRoot!.querySelectorAll<HTMLElement>("[data-test^=drag-]")].find(
+    (button) => button.getBoundingClientRect().bottom > edge.bottom - 10,
+  )!;
+  const at = pressed.getBoundingClientRect();
+  pressed.dispatchEvent(
+    new PointerEvent("pointerdown", {
+      bubbles: true,
+      pointerId: 87,
+      clientX: at.left + 5,
+      clientY: edge.bottom - 5,
+    }),
+  );
+  try {
+    await expect.poll(() => box.scrollTop, { timeout: 1500 }).toBeGreaterThan(40);
+  } finally {
+    document.dispatchEvent(new PointerEvent("pointerup", { pointerId: 87 }));
+  }
+});

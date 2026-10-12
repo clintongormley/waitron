@@ -672,3 +672,108 @@ describe("as a control on the page", () => {
     expect(gone).toHaveBeenCalledOnce();
   });
 });
+
+describe("at the edges", () => {
+  test("a deadline reached this very moment reads now, and no clock is left running", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] });
+    vi.setSystemTime(Date.parse(AT));
+    const el = (await mount(
+      `<wt-relative-time datetime="${AT}" locale="en-GB" future></wt-relative-time>`,
+    )) as WtRelativeTime;
+    expect(words(el)).toBe("now");
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  test("a moment that is this very moment re-reads a whole second later, not at once", async () => {
+    const wakes = vi.spyOn(globalThis, "setTimeout");
+    expect(words(await shown(0))).toBe("now");
+    expect(wakes).toHaveBeenLastCalledWith(expect.any(Function), SECOND);
+  });
+
+  test("tells a screen reader the exact time is collapsed before anyone has touched it", async () => {
+    const { button } = parts(await shown(MINUTE));
+    expect(button.getAttribute("aria-expanded")).toBe("false");
+  });
+
+  test("a touch lifting off the phrase leaves the exact time the mouse opened", async () => {
+    const el = await shown(MINUTE);
+    const { button, tip } = parts(el);
+    await userEvent.hover(button);
+    await vi.waitFor(() => expect(tip.matches(":popover-open")).toBe(true));
+    el.dispatchEvent(new PointerEvent("pointerleave", { pointerType: "touch" }));
+    expect(tip.matches(":popover-open")).toBe(true);
+  });
+
+  test("once a click elsewhere closes a tapped exact time, hovering shows it only while the mouse stays", async () => {
+    const el = await shown(MINUTE);
+    el.style.position = "fixed";
+    el.style.insetInlineStart = "50%";
+    el.style.insetBlockStart = "40%";
+    const { button, tip } = parts(el);
+    // Text, not a control, so the click takes no focus and only the browser's own dismissal acts.
+    const outside = document.createElement("p");
+    outside.textContent = "Outside";
+    host.append(outside);
+    await userEvent.click(button);
+    await vi.waitFor(() => expect(tip.matches(":popover-open")).toBe(true));
+    await userEvent.click(outside);
+    await vi.waitFor(() => expect(tip.matches(":popover-open")).toBe(false));
+    await vi.waitFor(() => expect(button.getAttribute("aria-expanded")).toBe("false"));
+
+    // Closed, a resize no longer moves it.
+    const left = tip.style.left;
+    el.style.insetInlineStart = "10%";
+    window.dispatchEvent(new Event("resize"));
+    expect(tip.style.left).toBe(left);
+
+    await userEvent.hover(button);
+    await vi.waitFor(() => expect(tip.matches(":popover-open")).toBe(true));
+    await commands.parkPointer();
+    await vi.waitFor(() => expect(tip.matches(":popover-open")).toBe(false));
+  });
+
+  test("the Escape that closes it never reaches a key handler on the page around it", async () => {
+    const el = await shown(MINUTE);
+    const { button, tip } = parts(el);
+    const heard: string[] = [];
+    host.addEventListener("keydown", (event) => heard.push(event.key));
+    await userEvent.click(button);
+    await vi.waitFor(() => expect(tip.matches(":popover-open")).toBe(true));
+    await userEvent.keyboard("{Escape}");
+    await vi.waitFor(() => expect(tip.matches(":popover-open")).toBe(false));
+    expect(heard).toEqual([]);
+    await userEvent.keyboard("{Escape}");
+    expect(heard).toEqual(["Escape"]);
+  });
+
+  test("stays open when focus moves onto the phrase it describes", async () => {
+    const el = await shown(MINUTE);
+    const { button, tip } = parts(el);
+    await userEvent.hover(button);
+    await vi.waitFor(() => expect(tip.matches(":popover-open")).toBe(true));
+    button.focus();
+    expect(el.shadowRoot!.activeElement).toBe(button);
+    expect(tip.matches(":popover-open")).toBe(true);
+  });
+
+  test("goes below the phrase when it fits there with exactly 8px to spare, and above when it does not", async () => {
+    const el = await shown(MINUTE);
+    el.style.position = "fixed";
+    el.style.insetInlineStart = "40%";
+    el.style.insetBlockStart = "100px";
+    const { button, tip } = parts(el);
+    button.click();
+    const height = tip.getBoundingClientRect().height;
+    tip.hidePopover();
+    const fitsExactly = 100 + (innerHeight - 8 - height - button.getBoundingClientRect().bottom);
+    el.style.insetBlockStart = `${fitsExactly}px`;
+    button.click();
+    expect(button.getBoundingClientRect().bottom + height).toBe(innerHeight - 8);
+    expect(tip.getBoundingClientRect().top).toBeCloseTo(button.getBoundingClientRect().bottom, 0);
+    tip.hidePopover();
+
+    el.style.insetBlockStart = `${fitsExactly + 4}px`;
+    button.click();
+    expect(tip.getBoundingClientRect().bottom).toBeCloseTo(button.getBoundingClientRect().top, 0);
+  });
+});

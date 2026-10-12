@@ -886,6 +886,25 @@ From **Variants as products (#511–#556) — what is left open.** How the model
   measured 2026-09-24 at 1280px). **Next action:** decide whether a long name there may wrap
   mid-word.
 
+## A541. A `wt-disclosure` reopened after an animated close snaps open with no animation
+
+- **A541. A `wt-disclosure` reopened after an animated close snaps open with no animation** — OPEN,
+  found by A539's mutation tests, not fixed. The transition-end handler sets `body.hidden = true`
+  directly, so Lit's recorded `?hidden` stays false; on reopen Lit leaves the body hidden while
+  `updated()` measures it, reads 0 → 0 and unhides it at once. Repro:
+  `<wt-disclosure heading="Kitchen" open><div style="height: 200px">body</div></wt-disclosure>`,
+  click the header, let the close finish, click again — no height transition starts.
+  (`packages/ui/src/components/wt-disclosure.ts`.)
+
+## A542. An open `wt-dialog` moved in the page stays open but is no longer modal
+
+- **A542. An open `wt-dialog` moved in the page stays open but is no longer modal** — OPEN, found
+  by A539's mutation tests, not fixed. A probe read `[open, :modal]` as `[true, true]` before
+  removing and re-attaching it and `[true, false]` after, with `el.open` still true; out of modal
+  the window no longer bounds its height, so a long body grows past the screen. Likely Chromium
+  closing modality on removal; the fix would re-show it modally on reconnect.
+  (`packages/ui/src/components/wt-dialog.ts`.)
+
 ## Decisions and deliberate limits
 
 - **An open tab offers to reload after a box update (A491, owner 2026-10-11).** How it works:

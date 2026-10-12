@@ -47,7 +47,7 @@ The package test installs an actual tarball and Lit into a temporary directory,
 checks declarations, builds the consumer without workspace aliases and opens it in
 Chromium. It checks keyboard submission, password reveal, accessible errors,
 themes, isolated component imports and a missing-file negative control. CI runs
-this proof alongside both UI packages' coverage; weekly mutation tests cover both.
+this proof alongside both UI packages' coverage; nightly mutation tests cover both.
 
 The tarball carries the repository's existing `LICENSE` and `LICENSE-GRANTS.md`
 under `dist/`. This extraction does not change their terms.

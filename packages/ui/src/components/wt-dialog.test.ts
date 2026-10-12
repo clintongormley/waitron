@@ -1301,3 +1301,284 @@ test("delayed native reports from two consecutive openings report only the curre
   expect(el.shadowRoot!.querySelector("dialog")!.open).toBe(false);
   expect(closes).toHaveBeenCalledOnce();
 });
+
+test("an approved close still closes after its owner sets open to true again while asking", async () => {
+  const el = (await mount('<wt-dialog heading="Edit">draft</wt-dialog>')) as WtDialog;
+  let answer!: (allow: boolean) => void;
+  const decide = vi.fn(() => new Promise<boolean>((resolve) => (answer = resolve)));
+  el.beforeClose = decide;
+  el.open = true;
+  await el.updateComplete;
+  const closing = el.requestClose("cancel");
+  el.open = true;
+  await el.updateComplete;
+  expect(await el.requestClose("cancel"), "a second request while the first is asking").toBe(false);
+  expect(decide).toHaveBeenCalledOnce();
+  answer(true);
+  expect(await closing).toBe(true);
+  expect(el.shadowRoot!.querySelector("dialog")!.open).toBe(false);
+});
+
+test("describes nothing when it is given no description", async () => {
+  const el = (await mount('<wt-dialog heading="Void sale">body</wt-dialog>')) as Openable;
+  el.open = true;
+  await el.updateComplete;
+  const dialog = el.shadowRoot!.querySelector("dialog")!;
+  await expect.element(page.elementLocator(dialog)).toHaveAccessibleDescription("");
+  expect(el.shadowRoot!.querySelector(".body")!.textContent!.trim()).toBe("Void sale");
+});
+
+test("makes the body a tab stop when the window shrinks below its content", async () => {
+  const { body } = await openAtPhoneSize('<div style="height: 400px">Order</div>');
+  await frame();
+  await frame();
+  expect(body.scrollHeight, "before: scrollHeight").toBe(body.clientHeight);
+  expect(body.tabIndex, "before: tabIndex").toBe(-1);
+  await page.viewport(390, 300);
+  expect(body.scrollHeight, "shrunk: scrollHeight").toBeGreaterThan(body.clientHeight);
+  await vi.waitFor(() => expect(body.tabIndex, "shrunk: tabIndex").toBe(0));
+});
+
+test.each([
+  ["", "here"],
+  [", after it is moved while open", "moved"],
+  [", forwarded through a slot", "forwarded"],
+] as const)(
+  "makes the body a tab stop when a narrower window wraps content out of a fixed-height wrapper%s",
+  async (_, how) => {
+    const before = [window.innerWidth, window.innerHeight] as const;
+    await page.viewport(1000, 700);
+    onTestFinished(() => page.viewport(...before));
+    const tile = '<span style="display: inline-block; width: 100px; height: 40px"></span>';
+    const content = `<div style="width: 320px; height: 1px"></div><div style="width: 30vw; height: 200px">${tile.repeat(6)}</div>`;
+    let el: Openable;
+    if (how === "forwarded") {
+      const panel = await mount(`<div>${content}</div>`);
+      panel.attachShadow({ mode: "open" }).innerHTML =
+        '<wt-dialog heading="Edit order"><slot></slot></wt-dialog>';
+      el = panel.shadowRoot!.querySelector("wt-dialog") as Openable;
+      await el.updateComplete;
+    } else el = (await mount(`<wt-dialog heading="Edit order">${content}</wt-dialog>`)) as Openable;
+    el.open = true;
+    await el.updateComplete;
+    if (how === "moved") {
+      const parent = el.parentNode!;
+      el.remove();
+      parent.append(el);
+    }
+    const body = el.shadowRoot!.querySelector<HTMLElement>(".body")!;
+    await frame();
+    await frame();
+    expect(body.scrollHeight, "before: scrollHeight").toBe(body.clientHeight);
+    expect(body.tabIndex, "before: tabIndex").toBe(-1);
+    await page.viewport(500, 700);
+    expect(body.scrollHeight, "narrowed: scrollHeight").toBeGreaterThan(body.clientHeight);
+    await vi.waitFor(() => expect(body.tabIndex, "narrowed: tabIndex").toBe(0));
+  },
+);
+
+test("asks for no frame for content changes after it is moved while closed", async () => {
+  const el = await mount(
+    '<wt-dialog heading="Edit order"><div style="height: 200px"><p>Line</p></div></wt-dialog>',
+  );
+  const parent = el.parentNode!;
+  el.remove();
+  parent.append(el);
+  const frames = vi.spyOn(window, "requestAnimationFrame");
+  onTestFinished(() => frames.mockRestore());
+  const inner = el.querySelector("p")!;
+  inner.textContent = "Lines";
+  await Promise.resolve();
+  inner.style.color = "red";
+  await Promise.resolve();
+  expect(frames).not.toHaveBeenCalled();
+});
+
+test("shows in its first render the messages of the action rows in its footer and no others", async () => {
+  const updated = vi.spyOn(WtDialog.prototype, "updated");
+  try {
+    const el = await mount(`<wt-dialog heading="Edit">
+      <wt-form-actions error="Check the name."><button>Check</button></wt-form-actions>
+      <span slot="footer">Draft</span>
+      <wt-form-actions slot="footer" error="Could not save."><button>Save</button></wt-form-actions>
+    </wt-dialog>`);
+    expect(el.shadowRoot!.querySelector(".body > [data-error]")?.textContent).toBe(
+      "Could not save.",
+    );
+    await new Promise((resolve) => setTimeout(resolve));
+    expect(updated).toHaveBeenCalledTimes(1);
+  } finally {
+    updated.mockRestore();
+  }
+});
+
+test("puts focus beside the dialog, not at the top of the page, when the page body had it at opening", async () => {
+  const section = await mount(
+    '<div><wt-dialog heading="Choose a unit"><button>Each</button></wt-dialog><button>Near</button></div>',
+  );
+  const far = document.createElement("button");
+  far.textContent = "Far";
+  host.prepend(far);
+  const el = section.querySelector("wt-dialog") as Openable;
+  await el.updateComplete;
+  (document.activeElement as HTMLElement | null)?.blur();
+  await openAndClose(el, document.body, "Escape");
+  expect(deepActiveElement()).toBe(section.lastElementChild);
+});
+
+test("leaves opening focus on a short dialog's autofocus field", async () => {
+  const el = (await mount(
+    '<wt-dialog heading="Rename"><input name="first" /><input name="second" autofocus /></wt-dialog>',
+  )) as Openable;
+  el.open = true;
+  await el.updateComplete;
+  expect(deepActiveElement()).toBe(el.querySelector('[name="second"]'));
+});
+
+test("names an overflowing body after the dialog's label once its heading is removed", async () => {
+  const { el, body } = await openAtPhoneSize('<div style="height: 1800px">Long order</div>');
+  await vi.waitFor(() => expect(body.tabIndex).toBe(0));
+  const dialog = el as Openable & { heading: string };
+  dialog.heading = "";
+  el.setAttribute("aria-label", "Order notes");
+  await dialog.updateComplete;
+  await expect.element(page.elementLocator(body)).toHaveAccessibleName("Order notes");
+});
+
+test("gives an overflowing body no name when the dialog has neither a heading nor a label", async () => {
+  const before = [window.innerWidth, window.innerHeight] as const;
+  await page.viewport(390, 700);
+  onTestFinished(() => page.viewport(...before));
+  const el = (await mount(
+    '<wt-dialog><div style="height: 1800px">Long order</div></wt-dialog>',
+  )) as Openable;
+  el.open = true;
+  await el.updateComplete;
+  const body = el.shadowRoot!.querySelector<HTMLElement>(".body")!;
+  expect(body.tabIndex).toBe(0);
+  await expect.element(page.elementLocator(body)).toHaveAccessibleName("");
+});
+
+test("drops an overflowing body's name when the dialog's label is removed, and its label when it is short again", async () => {
+  const before = [window.innerWidth, window.innerHeight] as const;
+  await page.viewport(390, 700);
+  onTestFinished(() => page.viewport(...before));
+  const el = (await mount(
+    '<wt-dialog aria-label="Edit order"><div style="height: 1800px">Long order</div></wt-dialog>',
+  )) as Openable;
+  el.open = true;
+  await el.updateComplete;
+  const body = el.shadowRoot!.querySelector<HTMLElement>(".body")!;
+  await expect.element(page.elementLocator(body)).toHaveAccessibleName("Edit order");
+  el.removeAttribute("aria-label");
+  await el.updateComplete;
+  await expect.element(page.elementLocator(body)).toHaveAccessibleName("");
+
+  el.setAttribute("aria-label", "Edit order");
+  await el.updateComplete;
+  await expect.element(page.elementLocator(body)).toHaveAccessibleName("Edit order");
+  el.querySelector("div")!.remove();
+  await vi.waitFor(() => expect(body.tabIndex, "a body short again: tabIndex").toBe(-1));
+  for (const name of ["role", "aria-labelledby", "aria-label"])
+    expect(body.getAttribute(name), `a body short again: ${name}`).toBeNull();
+});
+
+test.each([
+  ["a bare field", '<input name="note" />'],
+  [
+    "a field inside a wrapper that takes focus only from script",
+    '<div tabindex="-1"><label>Note <input name="note" /></label></div>',
+  ],
+])("opens a long dialog with focus on its first field when that is %s", async (_, field) => {
+  await openAtPhoneSize(`${field}<div style="height: 1800px">Long order</div>`);
+  expect(deepActiveElement()).toBe(document.querySelector('input[name="note"]'));
+});
+
+test("opens a long dialog with focus on its first field when its content is forwarded through a slot", async () => {
+  const before = [window.innerWidth, window.innerHeight] as const;
+  await page.viewport(390, 700);
+  onTestFinished(() => page.viewport(...before));
+  const panel = await mount(
+    '<div><input name="note" /><div style="height: 1800px">Long order</div></div>',
+  );
+  panel.attachShadow({ mode: "open" }).innerHTML =
+    '<wt-dialog heading="Edit order"><slot></slot></wt-dialog>';
+  const el = panel.shadowRoot!.querySelector("wt-dialog") as Openable;
+  await el.updateComplete;
+  el.open = true;
+  await el.updateComplete;
+  expect(deepActiveElement()).toBe(panel.querySelector("input"));
+});
+
+test("asks its guard before a close request that comes without a key press, such as a back gesture", async () => {
+  const el = (await mount('<wt-dialog heading="Edit">draft</wt-dialog>')) as WtDialog;
+  let answer!: (allow: boolean) => void;
+  const decide = vi.fn(() => new Promise<boolean>((resolve) => (answer = resolve)));
+  el.beforeClose = decide;
+  el.open = true;
+  await el.updateComplete;
+  const dialog = el.shadowRoot!.querySelector("dialog")!;
+  const closes = vi.fn();
+  el.addEventListener("wt-close", closes);
+
+  dialog.requestClose();
+  await closeReportsDelivered();
+  expect(dialog.open).toBe(true);
+  expect(decide).toHaveBeenCalledExactlyOnceWith("escape");
+  answer(true);
+  await vi.waitFor(() => expect(closes).toHaveBeenCalledOnce());
+  expect(dialog.open).toBe(false);
+});
+
+test("in a guarded dialog, types keys other than Escape and keeps its Escape from the page", async () => {
+  const el = (await mount(
+    '<wt-dialog heading="Edit"><input name="note" /></wt-dialog>',
+  )) as WtDialog;
+  const decide = vi.fn(async () => false);
+  el.beforeClose = decide;
+  el.open = true;
+  await el.updateComplete;
+  const seen: string[] = [];
+  const listen = (event: KeyboardEvent) => seen.push(event.key);
+  document.addEventListener("keydown", listen);
+  onTestFinished(() => document.removeEventListener("keydown", listen));
+  const field = el.querySelector("input")!;
+  field.focus();
+
+  await userEvent.keyboard("ab{Escape}");
+  expect(field.value).toBe("ab");
+  expect(decide).toHaveBeenCalledExactlyOnceWith("escape");
+  expect(seen).toEqual(["a", "b"]);
+});
+
+test("scrolls a body row's new message only just into view", async () => {
+  const { el, body } = await openAtPhoneSize(
+    '<input name="note" /><div style="height: 1800px">Lines</div><wt-form-actions><button>Check</button></wt-form-actions><div style="height: 1800px">More lines</div>',
+  );
+  const row = el.querySelector("wt-form-actions")!;
+  expect(body.scrollTop).toBe(0);
+  row.error = "Check the name.";
+  const message = (await formMessageOf(row))!;
+  await vi.waitFor(() => expect(body.scrollTop).toBeGreaterThan(0));
+  const frameBox = body.getBoundingClientRect();
+  const box = message.getBoundingClientRect();
+  expect(box.bottom).toBeLessThanOrEqual(frameBox.bottom + 1);
+  expect(box.top, "in the lower half of the body").toBeGreaterThan(
+    frameBox.top + frameBox.height / 2,
+  );
+});
+
+test.each(closings)(
+  "closed by %s, puts focus beside what had it at opening when that and the dialog's focused field were both removed",
+  async (how) => {
+    const { el, target, nearby } = await scene();
+    await openAndClose(el, target, how, () => {
+      target.remove();
+      const focused = deepActiveElement() as HTMLElement;
+      expect(el.contains(focused), "focus is in the dialog").toBe(true);
+      focused.remove();
+      expect(document.activeElement, "focus has fallen to the page body").toBe(document.body);
+    });
+    expect(deepActiveElement()).toBe(nearby);
+  },
+);

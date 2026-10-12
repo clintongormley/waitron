@@ -238,11 +238,33 @@ describe("the command", () => {
       report("src/b.ts", { status: "Killed" }, { status: "Survived" }),
     ]);
 
-    const result = run(root, "--shards", "2", "--break", "70");
+    const result = run(root, "--package", "db", "--shards", "2", "--break", "70");
 
     expect(result.stderr).toBe("");
     expect(result.status).toBe(0);
     expect(result.stdout).toContain("75.00%");
+  });
+
+  it("names the package it was given in the score line", () => {
+    const root = shardDirectory([report("src/a.ts", { status: "Killed" })]);
+
+    const result = run(root, "--package", "ui", "--shards", "1", "--break", "50");
+
+    expect(result.status).toBe(0);
+    expect(result.stdout).toContain("@waitron/ui mutation score 100.00%");
+    expect(result.stdout).not.toContain("@waitron/db");
+  });
+
+  it("refuses to score without a --package, saying how to call it", () => {
+    const root = shardDirectory([report("src/a.ts", { status: "Killed" })]);
+
+    const result = run(root, "--shards", "1", "--break", "50");
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain(
+      "usage: mutation-aggregate.mjs <dir> --package <name> --shards <n> --break <score>",
+    );
+    expect(result.stdout).toBe("");
   });
 
   it("refuses when a shard is missing, however many json files are lying around", () => {
@@ -252,7 +274,7 @@ describe("the command", () => {
     ]);
     writeFileSync(join(root, "mutation-report-db-shard-1", "second.json"), JSON.stringify({}));
 
-    const result = run(root, "--shards", "3", "--break", "50");
+    const result = run(root, "--package", "db", "--shards", "3", "--break", "50");
 
     expect(result.status).toBe(1);
     expect(result.stderr).toContain("expected 3 shard reports");
@@ -261,7 +283,7 @@ describe("the command", () => {
   it("fails when the package is below the bar", () => {
     const root = shardDirectory([report("src/a.ts", { status: "Killed" }, { status: "Survived" })]);
 
-    const result = run(root, "--shards", "1", "--break", "90");
+    const result = run(root, "--package", "db", "--shards", "1", "--break", "90");
 
     expect(result.status).toBe(1);
     expect(result.stderr).toContain("50.00%");
@@ -271,7 +293,7 @@ describe("the command", () => {
   it("refuses to score a run that is missing a shard's report", () => {
     const root = shardDirectory([report("src/a.ts", { status: "Killed" })]);
 
-    const result = run(root, "--shards", "10", "--break", "90");
+    const result = run(root, "--package", "db", "--shards", "10", "--break", "90");
 
     expect(result.status).toBe(1);
     expect(result.stderr).toContain("found 1 in 1 file(s)");
@@ -285,7 +307,7 @@ describe("the command", () => {
     ]);
 
     // The package as a whole clears 60 (two of three mutants detected); one file does not.
-    const result = run(root, "--shards", "2", "--break", "60");
+    const result = run(root, "--package", "db", "--shards", "2", "--break", "60");
 
     expect(result.status).toBe(0);
     expect(result.stdout).toContain("src/bad.ts");
@@ -305,7 +327,7 @@ describe("the command", () => {
       report("src/good.ts", { status: "Killed" }),
     ]);
 
-    const result = run(root, "--shards", "2", "--break", "90");
+    const result = run(root, "--package", "db", "--shards", "2", "--break", "90");
 
     expect(result.status).toBe(0);
     expect(result.stdout).toContain(
@@ -320,7 +342,7 @@ describe("the command", () => {
       report("src/good.ts", { status: "Killed" }),
     ]);
 
-    const result = run(root, "--shards", "2", "--break", "0");
+    const result = run(root, "--package", "db", "--shards", "2", "--break", "0");
 
     expect(result.status).toBe(0);
     expect(result.stdout).toContain("not measured — 1 Ignored  src/unmeasured.ts");
@@ -332,7 +354,7 @@ describe("the command", () => {
       report("src/good.ts", { status: "Killed" }),
     ]);
 
-    const result = run(root, "--shards", "2", "--break", "90");
+    const result = run(root, "--package", "db", "--shards", "2", "--break", "90");
 
     expect(result.status).toBe(0);
     expect(result.stdout).toContain("not measured — no mutants  src/empty.ts");
@@ -344,7 +366,7 @@ describe("the command", () => {
       report("src/good.ts", { status: "Killed" }, { status: "Killed" }, { status: "Killed" }),
     ]);
 
-    const result = run(root, "--shards", "2", "--break", "50");
+    const result = run(root, "--package", "db", "--shards", "2", "--break", "50");
 
     expect(result.status).toBe(0);
     expect(result.stdout).toMatch(/ 0\.00%\s+0\/2\s+src\/dead\.ts/);
@@ -352,23 +374,35 @@ describe("the command", () => {
   });
 });
 
-// The shard COUNT is written twice in `.github/workflows/mutation.yml`: once as the matrix list the
-// shard jobs come from, and once as the `--shards` argument the aggregate job uses to refuse a
-// run with a report missing. The shard SCRIPT avoids that by reading `strategy.job-total`, which a
-// separate job cannot see. This reads the workflow as TEXT, so it checks those two numbers and
-// nothing else about the file — it cannot tell you the aggregate job runs, only that if it does it
-// expects as many reports as the matrix produces.
+// The shard COUNT is written twice per sharded package in `.github/workflows/mutation.yml`: once as
+// the matrix list the `mutation-<pkg>` shard jobs come from, and once as the `--shards` argument its
+// `mutation-<pkg>-aggregate` job uses to refuse a run with a report missing. The shard SCRIPT avoids
+// that by reading `strategy.job-total`, which a separate job cannot see. This reads the workflow as
+// TEXT, so it checks those pairs of numbers and nothing else about the file — it cannot tell you the
+// aggregate job runs, only that if it does it expects as many reports as its own matrix produces.
 describe("the shard count in the mutation workflow", () => {
   const workflow = readFileSync(join(here, "..", ".github", "workflows", "mutation.yml"), "utf8");
 
-  it("matches between the shard matrix and the aggregate job's --shards", () => {
-    const matrix = workflow.match(/shard: \[([^\]]*)\]/);
-    expect(matrix, "no `shard: [...]` matrix in mutation.yml").not.toBeNull();
-    const shards = matrix[1].split(",").length;
+  /** One job's text: from its `  <id>:` line to the next line at that indent (a job or its comment). */
+  function section(id) {
+    const start = workflow.indexOf(`\n  ${id}:\n`);
+    expect(start, `no \`${id}\` job in mutation.yml`).toBeGreaterThan(-1);
+    const rest = workflow.slice(start + 1);
+    const end = rest.slice(1).search(/\n {2}\S/);
+    return end === -1 ? rest : rest.slice(0, end + 1);
+  }
 
-    const argument = workflow.match(/--shards (\d+)/);
-    expect(argument, "no `--shards <n>` argument in mutation.yml").not.toBeNull();
+  it.each(["db", "ui"])(
+    "matches between mutation-%s's shard matrix and its own aggregate job's --shards",
+    (pkg) => {
+      const matrix = section(`mutation-${pkg}`).match(/shard: \[([^\]]*)\]/);
+      expect(matrix, `no \`shard: [...]\` matrix in mutation-${pkg}`).not.toBeNull();
+      const shards = matrix[1].split(",").length;
 
-    expect(Number(argument[1])).toBe(shards);
-  });
+      const argument = section(`mutation-${pkg}-aggregate`).match(/--shards (\d+)/);
+      expect(argument, `no \`--shards <n>\` in mutation-${pkg}-aggregate`).not.toBeNull();
+
+      expect(Number(argument[1])).toBe(shards);
+    },
+  );
 });

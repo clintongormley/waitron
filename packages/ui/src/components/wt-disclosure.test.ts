@@ -657,3 +657,56 @@ test("a summary row marked as a placeholder draws its value in italic, its name 
   ]);
   expect(getComputedStyle(rows[1]!.querySelector(".summary-label")!).fontStyle).toBe("normal");
 });
+
+test("a height transition of the content's own ending does not cut the section's opening short", async () => {
+  const el = await mount(
+    '<wt-disclosure heading="Kitchen"><div class="child" style="height: 200px; transition: height 1ms">body</div></wt-disclosure>',
+  );
+  const disclosure = el as import("./wt-disclosure.js").WtDisclosure;
+  const body = el.shadowRoot!.querySelector<HTMLElement>(".body")!;
+  const child = el.querySelector<HTMLElement>(".child")!;
+  el.shadowRoot!.querySelector<HTMLElement>("button.header")!.click();
+  await disclosure.updateComplete;
+  const opening = await pauseHeightTransition(body);
+  opening.currentTime = Number(opening.effect!.getTiming().duration) / 2;
+  const midway = body.getBoundingClientRect().height;
+  expect(midway).toBeLessThan(200);
+
+  // Heard on the host, so the section's body has heard it first.
+  const childDone = new Promise((resolve) =>
+    el.addEventListener("transitionend", resolve, { once: true }),
+  );
+  child.style.height = "201px";
+  await childDone;
+  expect(body.getBoundingClientRect().height).toBeCloseTo(midway, 0);
+  await finishHeightTransition(body, opening);
+  expect(body.getBoundingClientRect().height).toBe(201);
+});
+
+test("changing the heading while the section opens lets the opening carry on where it is", async () => {
+  const el = await mount(
+    '<wt-disclosure heading="Kitchen"><div style="height: 200px">body</div></wt-disclosure>',
+  );
+  const disclosure = el as import("./wt-disclosure.js").WtDisclosure;
+  const body = el.shadowRoot!.querySelector<HTMLElement>(".body")!;
+  el.shadowRoot!.querySelector<HTMLElement>("button.header")!.click();
+  await disclosure.updateComplete;
+  const opening = await pauseHeightTransition(body);
+  opening.currentTime = Number(opening.effect!.getTiming().duration) / 2;
+  const midway = body.getBoundingClientRect().height;
+
+  disclosure.heading = "Bar";
+  await disclosure.updateComplete;
+  await new Promise<void>((resolve) => {
+    requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
+  });
+  expect(opening.playState).toBe("paused");
+  expect(body.getBoundingClientRect().height).toBeCloseTo(midway, 0);
+  opening.finish();
+  // Chromium sends the finished transition's end event only once another frame is drawn.
+  await new Promise<void>((resolve) => {
+    requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
+  });
+  await finishHeightTransition(body, opening);
+  expect(body.getBoundingClientRect().height).toBe(200);
+});

@@ -13,7 +13,7 @@ name: image-nightly
 
 on:
   schedule:
-    - cron: "0 3 * * *" # nightly, 03:00 UTC — clear of stripe-sandbox (04:00) and mutation (Mon 05:00)
+    - cron: "0 3 * * *" # nightly, 03:00 UTC — clear of stripe-sandbox (04:00) and mutation (05:00)
   workflow_dispatch:
 
 # The same guard mutation.yml and stripe-sandbox.yml set on this trigger shape: a manual dispatch

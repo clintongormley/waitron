@@ -2,10 +2,10 @@ import { readdirSync, readFileSync, statSync } from "node:fs";
 import { dirname, join } from "node:path";
 
 /**
- * Merges the `mutation-db` shard reports into ONE score for `packages/db`.
+ * Merges a sharded package's mutation reports into ONE score for that package.
  *
- * Each shard mutates its own slice and publishes its own report, so a `thresholds.break` in
- * `packages/db/stryker.config.json` would gate each SLICE rather than the package. This reads every
+ * Each shard mutates its own slice and publishes its own report, so a `thresholds.break` in the
+ * package's `stryker.config.json` would gate each SLICE rather than the package. This reads every
  * shard's json report, adds the mutants up, and gates the total.
  *
  * Status handling follows Stryker's own definition of the mutation score.
@@ -123,10 +123,10 @@ export function findReports(dir) {
   return out.sort();
 }
 
-// CLI: `node scripts/mutation-aggregate.mjs <dir> --shards <n> --break <score>` reads every json
-// report under <dir> — the directory the workflow downloads the shard artifacts into — and prints
-// one score for the package, exiting 1 below `--break`. Ignored for coverage because the suite
-// exercises it in a CHILD process, which the v8 provider does not see.
+// CLI: `node scripts/mutation-aggregate.mjs <dir> --package <name> --shards <n> --break <score>`
+// reads every json report under <dir> — the directory the workflow downloads the shard artifacts
+// into — and prints one score for the package, exiting 1 below `--break`. Ignored for coverage
+// because the suite exercises it in a CHILD process, which the v8 provider does not see.
 /* v8 ignore start */
 if (process.argv[1] && process.argv[1].endsWith("mutation-aggregate.mjs")) {
   const die = (message) => {
@@ -138,9 +138,11 @@ if (process.argv[1] && process.argv[1].endsWith("mutation-aggregate.mjs")) {
     return at === -1 ? undefined : process.argv[at + 1];
   };
 
+  const usage = "usage: mutation-aggregate.mjs <dir> --package <name> --shards <n> --break <score>";
   const dir = process.argv[2];
-  if (dir === undefined || dir.startsWith("--"))
-    die("usage: mutation-aggregate.mjs <dir> --shards <n> --break <score>");
+  if (dir === undefined || dir.startsWith("--")) die(usage);
+  const name = flag("package");
+  if (name === undefined || name === "" || name.startsWith("--")) die(usage);
   const shards = Number(flag("shards"));
   const breakAt = Number(flag("break"));
   if (!Number.isInteger(shards) || shards < 1) die(`--shards must be a positive integer`);
@@ -171,7 +173,7 @@ if (process.argv[1] && process.argv[1].endsWith("mutation-aggregate.mjs")) {
         `${file.score.toFixed(2).padStart(7)}%  ${String(file.killed).padStart(5)}/${String(file.valid).padEnd(5)}  ${file.path}`,
       );
   console.log(
-    `\n@waitron/db mutation score ${result.score.toFixed(2)}% (${result.killed} of ${result.valid} mutants detected, ${directories.size} shards)`,
+    `\n@waitron/${name} mutation score ${result.score.toFixed(2)}% (${result.killed} of ${result.valid} mutants detected, ${directories.size} shards)`,
   );
   if (result.score < breakAt)
     die(`score ${result.score.toFixed(2)}% is below the break threshold of ${breakAt}`);

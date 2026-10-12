@@ -1010,16 +1010,55 @@ describe("the test shards", () => {
     );
   });
 
-  it("keeps weekly mutation checks for both UI packages", () => {
+  // Nightly and by hand (owner, 2026-10-12). Weaker than its name: it reads mutation.yml as TEXT.
+  it("runs mutation checks for ui, ui-core and db every night and by hand", () => {
     const workflow = readFileSync(join(repoRoot, ".github/workflows/mutation.yml"), "utf8");
-    const ui = workflow.slice(workflow.indexOf("  mutation:"), workflow.indexOf("  mutation-db:"));
-    expect(ui).toContain("package: [ui, ui-core]");
+    expect(workflowTriggers(workflow).sort()).toEqual(["schedule", "workflow_dispatch"]);
+    const crons = [...workflow.matchAll(/^ {4}- cron: "([^"]*)"/gm)].map((match) => match[1]);
+    expect(crons.length, "no cron line in mutation.yml").toBeGreaterThan(0);
+    for (const cron of crons) expect(cron, "a cron that skips a day").toMatch(/^\d+ \d+ \* \* \*$/);
+    // One job's text: from its `  <id>:` line to the next line at that indent (a job or its comment).
+    const section = (id) => {
+      const start = workflow.indexOf(`\n  ${id}:\n`);
+      expect(start, `no \`${id}\` job in mutation.yml`).toBeGreaterThan(-1);
+      const rest = workflow.slice(start + 1);
+      const end = rest.slice(1).search(/\n {2}\S/);
+      return end === -1 ? rest : rest.slice(0, end + 1);
+    };
+    const lines = (text) => text.split("\n").map((line) => line.trim());
+
+    const uiCore = section("mutation");
+    expect(uiCore).toContain("package: [ui-core]");
+    expect(uiCore).toContain("fail-fast: false");
+    expect(lines(uiCore)).toContain("- run: pnpm --filter @waitron/${{ matrix.package }} mutation");
+    expect(uiCore).toContain("name: mutation-report-${{ matrix.package }}");
+    expect(uiCore).toContain("path: packages/${{ matrix.package }}/reports/mutation/");
+
+    const ui = section("mutation-ui");
+    expect(ui).toMatch(/shard: \[1(, \d+)*\]/);
     expect(ui).toContain("fail-fast: false");
-    expect(ui.split("\n").map((line) => line.trim())).toContain(
-      "- run: pnpm --filter @waitron/${{ matrix.package }} mutation",
-    );
-    expect(ui).toContain("name: mutation-report-${{ matrix.package }}");
-    expect(ui).toContain("path: packages/${{ matrix.package }}/reports/mutation/");
+    expect(ui).toContain("pnpm --filter @waitron/ui exec playwright install chromium");
+    expect(lines(ui)).toContain('FILES=$(node scripts/mutation-shard.mjs ui "$SHARD" "$TOTAL")');
+    expect(lines(ui)).toContain('pnpm --filter @waitron/ui exec stryker run --mutate "$FILES"');
+    expect(ui).toContain("name: mutation-report-ui-shard-${{ matrix.shard }}");
+    expect(ui).toContain("path: packages/ui/reports/mutation/");
+
+    const aggregate = section("mutation-ui-aggregate");
+    expect(aggregate).toContain("needs: mutation-ui");
+    expect(aggregate).toContain("if: always()");
+    expect(aggregate).toContain("pattern: mutation-report-ui-shard-*");
+
+    const db = section("mutation-db");
+    expect(db).toMatch(/shard: \[1(, \d+)*\]/);
+    expect(db).toContain("fail-fast: false");
+    expect(lines(db)).toContain('FILES=$(node scripts/mutation-shard.mjs db "$SHARD" "$TOTAL")');
+    expect(lines(db)).toContain('pnpm --filter @waitron/db exec stryker run --mutate "$FILES"');
+    expect(db).toContain("name: mutation-report-db-shard-${{ matrix.shard }}");
+    expect(db).toContain("path: packages/db/reports/mutation/");
+    const dbAggregate = section("mutation-db-aggregate");
+    expect(dbAggregate).toContain("needs: mutation-db");
+    expect(dbAggregate).toContain("if: always()");
+    expect(dbAggregate).toContain("pattern: mutation-report-db-shard-*");
   });
 
   it("isolates Bookings from the light bins", () => {

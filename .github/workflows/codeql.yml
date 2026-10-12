@@ -6,7 +6,7 @@ name: CodeQL
 
 on:
   schedule:
-    - cron: "37 1 * * *" # nightly, 01:37 UTC — clear of image-nightly (03:00) and stripe-sandbox (04:00)
+    - cron: "37 1 * * *" # nightly, 01:37 UTC — clear of image-nightly (03:00), stripe-sandbox (04:00) and mutation (05:00)
   workflow_dispatch:
 
 concurrency:

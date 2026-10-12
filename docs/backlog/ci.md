@@ -66,22 +66,6 @@ Next: make the test independent of the tie (or give the two products different t
   happen, and `startS3TestServer` now recovers from it; the Waitron servers' own ports still have the
   gap.
 
-## Nobody has timed `packages/db/src/testing/schema-conformance.ts` under a mutation run
-
-- **Nobody has timed `packages/db/src/testing/schema-conformance.ts` under a mutation run — OPEN
-  (2026-09-23).** `packages/db`'s mutation run is split across ten parallel CI jobs by
-  `scripts/mutation-shard.mjs`, which packs whole files into jobs by file size in bytes. That file is
-  now the largest file the run mutates — recompute with
-  `find packages/db/src -name '*.ts' ! -name '*.test.ts' -exec wc -lc {} + | sort -k2 -nr | head`
-  rather than trusting a figure written here. `sales.ts` is the single entry in that script's
-  `HEAVY_FILES`, the mechanism for splitting one file across several jobs. **The new file's runtime
-  was not measured and no `HEAVY_FILES` entry was added**, so whether it drags a job out the way
-  `sales.ts` did is unknown — and size alone does not settle it, since what dominated `sales.ts` was
-  that nearly the whole suite covers its mutants. Nothing on a pull request will say either:
-  `packages/db`'s mutation score and its job durations belong to the weekly `mutation.yml` run
-  (`CLAUDE.md` §2). **Next action:** read the job durations from the next weekly run, and add a
-  `HEAVY_FILES` entry if that file's job is the long one.
-
 ## The spawn-timeout guard compares a bound against the LARGEST SINGLE wait, never the sum
 
 - **The spawn-timeout guard compares a bound against the LARGEST SINGLE wait, never the sum — OPEN,
@@ -236,11 +220,12 @@ decides whether the rule covers every agent, then the two docs follow.
 ## The shard layout was measured against an engine that is gone
 
 **The shard layout was measured against an engine that is gone — OPEN (found 2026-09-23, task F1's
-review wave).** The shard counts and their sizing arguments were all measured against PGlite and
-none has been re-measured — `mutation.yml`'s ten-shard matrix for `packages/db` most of all, whose
-comment says so explicitly. Read the next weekly run's shard durations before treating any of them
-as current. No local command produces the numbers, so re-cutting the matrix has to wait for a real
-weekly run.
+review wave).** The shard counts and their sizing arguments were all measured against PGlite.
+`packages/db`'s ten mutation shards have since been timed on SQLite: 5m00s to 11m41s on run
+38206876422 and 2.9 to 12.2 minutes on run 38241392066 (shard 10 the longest both times), and
+`mutation.yml`'s comment above `mutation-db` says ten may now be more than the work needs. The count
+has not been re-cut from those times. No local command produces the numbers, so re-cutting it has
+to wait for a real run.
 
 ## The PGlite throughput bench no longer matches the shape it says it matches
 
@@ -255,20 +240,22 @@ decisions across and re-baseline, or change the sentence to say what it is.
 
 **Left behind by gating `packages/db`'s mutation score (#472, 2026-09-20).** **The gate never runs
 on a pull request, so thinning a `packages/db` test merges green.** `.github/workflows/mutation.yml`
-fires on a weekly schedule and on `workflow_dispatch` only, and `mutation-db-aggregate` lives in it,
-so a change that removes an assertion the score depended on reddens the following Monday. The ten db
-shards took about 50 minutes of wall clock, which is why nobody has put them on the merge path.
-Either accept the weekly lag and say so where a reader meets the gate, or find a cheaper
+fires nightly and on `workflow_dispatch` only, and `mutation-db-aggregate` lives in it, so a change
+that removes an assertion the score depended on reddens the next night. The ten db shards run side
+by side, 2.9 to 12.2 minutes each on run `38241392066`, but a pull request that started them would
+take ten of the roughly 20 jobs the account was seen running at once at most
+([ci-and-gates.md](../developers/ci-and-gates.md#mutation-testing-runs-nightly-at-0500-utc)).
+Either accept the overnight lag and say so where a reader meets the gate, or find a cheaper
 per-pull-request signal.
 
 ## `packages/ui/src/vitest-park-pointer.ts` is mutated and has no tests
 
 **Left behind by raising the `packages/ui` mutation score (#466, 2026-09-20).**
 **`packages/ui/src/vitest-park-pointer.ts` is mutated and has no tests.** It is test-only plumbing
-the Vitest config loads — the same class as `src/test-helpers.ts`, `src/a11y-helpers.ts` and
-`src/tokens/token-test-helpers.ts`, which `packages/ui/stryker.config.json` already excludes from
-`mutate`. Adding a fourth exclusion is the consistent move and also shrinks the denominator the
-`break: 90` is measured against. Owner's call.
+the Vitest config loads — the same class as `src/test-helpers.ts` and `src/a11y-helpers.ts`, which
+`packages/ui/stryker.config.json` excludes from `mutate`. Adding a third exclusion is the consistent
+move and also shrinks the denominator `mutation-ui-aggregate`'s bar of 90 is measured against.
+Owner's call.
 
 ## A pull request that changes only front-end code gets no SPA bundle built anywhere in CI
 

@@ -3790,6 +3790,21 @@ _Formerly A7, and the dashboard entries in the opening part of the old Track A (
   is seen again**: `wt-banner` puts its message in two animation frames after it joins the page.
   Not run in a hidden tab. Left open by A491.
 
+- **A541. A `wt-disclosure` reopened after an animated close snaps open with no animation** — OPEN,
+  found by A539's mutation tests, not fixed. The close sets `body.hidden` behind Lit's back, so the
+  reopen measures a hidden body and unhides it at once (`packages/ui/src/components/wt-disclosure.ts`).
+  [Detail](backlog/dashboard.md#a541-a-wt-disclosure-reopened-after-an-animated-close-snaps-open-with-no-animation)
+
+- **A542. An open `wt-dialog` moved in the page stays open but is no longer modal** — OPEN, found
+  by A539's mutation tests, not fixed. Out of modal, a long body grows past the screen
+  (`packages/ui/src/components/wt-dialog.ts`).
+  [Detail](backlog/dashboard.md#a542-an-open-wt-dialog-moved-in-the-page-stays-open-but-is-no-longer-modal)
+
+- **A543. During a flat tree search without `collapseDescendants`, `wt-data-table`'s `isExpanded()`
+  answers false for a row the table draws open** (`aria-expanded="true"`) — OPEN, found by A539's
+  mutation tests, not fixed. Outside a search it answers true for the same row
+  (`packages/ui/src/components/wt-data-table.ts`).
+
 ### Interface languages
 
 _Formerly entries spread across the old sections, C125 among them; part of A9._ Detail: [backlog/languages.md](backlog/languages.md).
@@ -4546,12 +4561,6 @@ _Formerly B9, and the old Track C's development-stack and house-rules items; par
   can be folded back into `till-app.test.ts` and `tender-pay.test.ts`. Left open by `apps/till`'s
   move to the high coverage bar (#536).
 
-- **Nobody has timed `packages/db/src/testing/schema-conformance.ts` under a mutation run — OPEN
-  (2026-09-23).** **The new file's runtime was not measured and no `HEAVY_FILES` entry was added**,
-  so whether it drags a job out the way `sales.ts` did is unknown. **Next action:** read the job
-  durations from the next weekly run, and add a `HEAVY_FILES` entry if that file's job is the long
-  one. [Detail](backlog/ci.md#nobody-has-timed-packagesdbsrctestingschema-conformancets-under-a-mutation-run)
-
 - **The spawn-timeout guard compares a bound against the LARGEST SINGLE wait, never the sum — OPEN,
   and the guard cannot close it.** A case that waits several times can still outlast a bound that
   passes this check. [Detail](backlog/ci.md#the-spawn-timeout-guard-compares-a-bound-against-the-largest-single-wait-never-the-sum)
@@ -4622,11 +4631,6 @@ _Formerly B9, and the old Track C's development-stack and house-rules items; par
   unnamed `unique()` itself, so nothing reaches it
   (`packages/db/src/testing/schema-conformance.ts`). Found while pruning comments.
 
-- **`packages/db/src/schema/columns.test.ts` still imports `../index.js` and `./drawer-opens.js`
-  dynamically**; the comment #585 deleted was the only note that this was meant to be temporary, so
-  making them static imports is a small code follow-up. Found by #585's review in files outside
-  `packages/db/src/schema`, not changed there.
-
 - **In `packages/db/src/change-log.test.ts` the case under "THIS CASE NO LONGER SEPARATES ANYTHING"
   repeats the first case under another name** (a test change, not a comment one). Found by #589
   (`packages/db` outside `src/schema`), not changed.
@@ -4644,9 +4648,8 @@ _Formerly B9, and the old Track C's development-stack and house-rules items; par
   [Detail](backlog/ci.md#--no-verify-the-docs-say-claude-never-the-hook-says-agents-never)
 
 - **The shard layout was measured against an engine that is gone** — OPEN (found 2026-09-23, task
-  F1's review wave). Read the next weekly run's shard durations before treating any of them as
-  current. No local command produces the numbers, so re-cutting the matrix has to wait for a real
-  weekly run. [Detail](backlog/ci.md#the-shard-layout-was-measured-against-an-engine-that-is-gone)
+  F1's review wave). `packages/db`'s ten mutation shards have been timed on SQLite (2.9 to 12.2
+  minutes on run 38241392066), but the count has not been re-cut from those times. [Detail](backlog/ci.md#the-shard-layout-was-measured-against-an-engine-that-is-gone)
 
 - **The PGlite throughput bench no longer matches the shape it says it matches** — OPEN (found
   2026-09-21, task P6). Either bring the three decisions across and re-baseline, or change the
@@ -4654,13 +4657,20 @@ _Formerly B9, and the old Track C's development-stack and house-rules items; par
   [Detail](backlog/ci.md#the-pglite-throughput-bench-no-longer-matches-the-shape-it-says-it-matches)
 
 - **The gate never runs on a pull request, so thinning a `packages/db` test merges green** — left
-  behind by gating `packages/db`'s mutation score (#472, 2026-09-20). Either accept the weekly lag
-  and say so where a reader meets the gate, or find a cheaper per-pull-request signal.
+  behind by gating `packages/db`'s mutation score (#472, 2026-09-20). Either accept the overnight
+  lag and say so where a reader meets the gate, or find a cheaper per-pull-request signal.
   [Detail](backlog/ci.md#the-gate-never-runs-on-a-pull-request-so-thinning-a-packagesdb-test-merges-green)
 
+- **`packages/db`'s static mutants are not in its mutation score** — OPEN, left by A539.
+  `"ignoreStatic": true` in `packages/db/stryker.config.json` leaves out every mutant in code that
+  runs when a module loads (322 `Ignored` on run 38256003987, 229 of them in
+  `src/classification.ts`). Stryker runs every test for each static mutant; what measuring them
+  would cost has not been timed. Owner's call.
+
 - **`packages/ui/src/vitest-park-pointer.ts` is mutated and has no tests** — left behind by raising
-  the `packages/ui` mutation score (#466, 2026-09-20). Adding a fourth exclusion is the consistent
-  move and also shrinks the denominator the `break: 90` is measured against. Owner's call.
+  the `packages/ui` mutation score (#466, 2026-09-20). Adding a third exclusion is the consistent
+  move and also shrinks the denominator `mutation-ui-aggregate`'s bar of 90 is measured against.
+  Owner's call.
   [Detail](backlog/ci.md#packagesuisrcvitest-park-pointerts-is-mutated-and-has-no-tests)
 
 - **A pull request that changes only front-end code gets no SPA bundle built anywhere in CI** — left
@@ -4672,10 +4682,6 @@ _Formerly B9, and the old Track C's development-stack and house-rules items; par
   provisioning seat (`packages/catalogue/src/provisioning.ts` seeds units) executes once migrations
   succeed, outside `withDevMigrationHint`, so a seeding failure there on a stale database gets no
   curated line. Nobody has hit this.
-
-- **Read the first weekly mutation results for both UI packages after the split**; the split
-  preserved the 90% gates but did not measure their new full mutation scores. Left open by the
-  shared account controls (`@waitron/ui-core` owns the seven account controls).
 
 - **`apps/server/src/rejoin-command.test.ts`'s sidecar assertions do not test the wipe** (its
   fixture closes the handles first, which removes the sidecars). The wipe's sidecar removal is
