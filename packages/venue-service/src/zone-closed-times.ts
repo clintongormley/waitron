@@ -60,8 +60,13 @@ export async function replaceZoneClosedWeek(
   const seasonWeek = [0, 1, 2, 3, 4, 5, 6].map((weekday) =>
     joinTouching(week.get(weekday)!, () => true),
   );
-  let changed: boolean;
-  if (options.seasonId === undefined) {
+  const seasonsNow = (await readZoneSeasonWeeks(tx, cfg, [zoneId], clock.dayCutover)).get(zoneId);
+  let changed = targets.some((season) =>
+    seasonWeek.some(
+      (ranges, weekday) => !sameScheduleRanges(seasonsNow?.get(season.id)?.[weekday] ?? [], ranges),
+    ),
+  );
+  if (!changed && options.seasonId === undefined) {
     const current = await tx
       .select()
       .from(zoneClosedTimes)
@@ -72,13 +77,6 @@ export async function replaceZoneClosedWeek(
           current.filter((row) => row.weekday === weekday),
           ranges,
         ),
-    );
-  } else {
-    const current = (await readZoneSeasonWeeks(tx, cfg, [zoneId]))
-      .get(zoneId)
-      ?.get(options.seasonId);
-    changed = seasonWeek.some(
-      (ranges, weekday) => !sameScheduleRanges(current?.[weekday] ?? [], ranges),
     );
   }
   await assertBusinessDayScheduleWrite(

@@ -21,7 +21,7 @@ import { locationId as brandLocationId } from "@waitron/shared";
 import { readOpeningHoursModel, replaceMenuWeek, saveMenuPeriod } from "./menu-timetable.js";
 import { VENUE_SERVICE_MIGRATIONS } from "./migrations.js";
 import { configureZone, createDepartment, type VenueScope } from "./operations.js";
-import { departmentDayRanges, seasons, zoneDayRanges } from "./schema/seasons.js";
+import { departmentDayRanges, seasons, zoneDayRanges, zoneDays } from "./schema/seasons.js";
 import {
   joinTouching,
   readDepartmentSeasonWeeks,
@@ -30,7 +30,6 @@ import {
   writeZoneSeasonWeek,
 } from "./season-weeks.js";
 import { readSeasons } from "./seasons.js";
-import { clearServiceDeleteSettings } from "./service-delete-settings.js";
 import type { ServiceRange } from "./service-day.js";
 import { readZoneClosedTimes, replaceZoneClosedWeek } from "./zone-closed-times.js";
 
@@ -160,6 +159,28 @@ describe("replaceMenuWeek writes season weeks", () => {
     expect(department.week.find((day) => day.weekday === TUESDAY)!.slots).toEqual([lunch]);
   });
 
+  it("with no season named, counts a season's differing week as a time change, so a stale clock revision is refused", async () => {
+    const v = await venue();
+    const lunch = { periodId: v.lunch, startsAt: "13:00", endsAt: "16:00" };
+    const dinner = { periodId: v.dinner, startsAt: "20:00", endsAt: "23:00" };
+    await scoped((tx) => replaceMenuWeek(tx, v.cfg, v.departmentId, menuWeek([lunch]), AT, 0));
+    const { Winter } = await seasonIds(v);
+    await scoped((tx) =>
+      replaceMenuWeek(tx, v.cfg, v.departmentId, menuWeek([dinner]), AT, 0, {
+        seasonId: Winter!,
+      }),
+    );
+    await expect(
+      scoped((tx) => replaceMenuWeek(tx, v.cfg, v.departmentId, menuWeek([lunch]), AT, 5)),
+    ).rejects.toMatchObject({ code: "hours.clock_changed" });
+    expect((await departmentTuesdays(v)).Winter).toEqual([dinner]);
+    await scoped((tx) => replaceMenuWeek(tx, v.cfg, v.departmentId, menuWeek([lunch]), AT, 0));
+    expect(await departmentTuesdays(v)).toEqual(everySeason([lunch]));
+    await expect(
+      scoped((tx) => replaceMenuWeek(tx, v.cfg, v.departmentId, menuWeek([lunch]), AT, 5)),
+    ).resolves.toBeUndefined();
+  });
+
   it("joins touching ranges of one period, and keeps touching ranges of two periods apart", async () => {
     const v = await venue();
     await scoped((tx) =>
@@ -268,6 +289,28 @@ describe("replaceZoneClosedWeek writes season weeks", () => {
     expect(zone!.week[TUESDAY]!.ranges).toEqual([night]);
   });
 
+  it("with no season named, counts a season's differing week as a time change, so a stale clock revision is refused", async () => {
+    const v = await venue();
+    const night = { startsAt: "23:00", endsAt: "02:00" };
+    const afternoon = { startsAt: "16:00", endsAt: "19:00" };
+    await scoped((tx) => replaceZoneClosedWeek(tx, v.cfg, v.zoneId, closedWeek([night]), 0, AT));
+    const { Winter } = await seasonIds(v);
+    await scoped((tx) =>
+      replaceZoneClosedWeek(tx, v.cfg, v.zoneId, closedWeek([afternoon]), 0, AT, {
+        seasonId: Winter!,
+      }),
+    );
+    await expect(
+      scoped((tx) => replaceZoneClosedWeek(tx, v.cfg, v.zoneId, closedWeek([night]), 5, AT)),
+    ).rejects.toMatchObject({ code: "hours.clock_changed" });
+    expect((await zoneTuesdays(v)).Winter).toEqual([afternoon]);
+    await scoped((tx) => replaceZoneClosedWeek(tx, v.cfg, v.zoneId, closedWeek([night]), 0, AT));
+    expect(await zoneTuesdays(v)).toEqual(everySeason([night]));
+    await expect(
+      scoped((tx) => replaceZoneClosedWeek(tx, v.cfg, v.zoneId, closedWeek([night]), 5, AT)),
+    ).resolves.toBeUndefined();
+  });
+
   it("joins touching closed ranges", async () => {
     const v = await venue();
     await scoped((tx) =>
@@ -316,9 +359,12 @@ describe("replaceZoneClosedWeek writes season weeks", () => {
       weekday === TUESDAY ? [{ startsAt: "13:00", endsAt: "16:00", kind: "open" }] : [],
     );
     await scoped((tx) => writeZoneSeasonWeek(tx, v.zoneId, Winter!, week));
-    const kinds = await db.select({ kind: zoneDayRanges.kind }).from(zoneDayRanges);
-    expect(kinds.length).toBeGreaterThan(0);
-    expect(new Set(kinds.map((row) => row.kind))).toEqual(new Set(["closed"]));
+    const kinds = await db
+      .select({ kind: zoneDayRanges.kind })
+      .from(zoneDayRanges)
+      .innerJoin(zoneDays, eq(zoneDays.id, zoneDayRanges.dayId))
+      .where(eq(zoneDays.zoneId, v.zoneId));
+    expect(kinds).toEqual([{ kind: "closed" }]);
   });
 });
 
@@ -349,33 +395,6 @@ describe("joinTouching", () => {
     ];
     joinTouching(input, same);
     expect(input[0]!.endsAt).toBe("10:00");
-  });
-});
-
-describe("clearing a deleted department's settings", () => {
-  it("takes its season weeks with its periods", async () => {
-    const v = await venue();
-    await scoped(async (tx) => {
-      await replaceMenuWeek(
-        tx,
-        v.cfg,
-        v.departmentId,
-        menuWeek([{ periodId: v.lunch, startsAt: "13:00", endsAt: "16:00" }]),
-        AT,
-        0,
-      );
-      await replaceZoneClosedWeek(
-        tx,
-        v.cfg,
-        v.zoneId,
-        closedWeek([{ startsAt: "17:00", endsAt: "19:00" }]),
-        0,
-        AT,
-      );
-    });
-    await scoped((tx) => clearServiceDeleteSettings(tx, v.cfg, [v.zoneId], v.departmentId));
-    expect(await scoped((tx) => readDepartmentSeasonWeeks(tx, v.cfg))).toEqual(new Map());
-    expect(await scoped((tx) => readZoneSeasonWeeks(tx, v.cfg))).toEqual(new Map());
   });
 });
 

@@ -828,24 +828,24 @@ export async function replaceMenuWeek(
   const seasonWeek = week.slots.map((slots) =>
     joinTouching(slots, (a, b) => a.periodId === b.periodId),
   );
-  const seasonNow =
-    options.seasonId === undefined
-      ? undefined
-      : (await readDepartmentSeasonWeeks(tx, cfg, [departmentId]))
-          .get(departmentId)
-          ?.get(options.seasonId);
+  const seasonsNow = (
+    await readDepartmentSeasonWeeks(tx, cfg, [departmentId], clock.dayCutover)
+  ).get(departmentId);
   const changed =
-    options.seasonId === undefined
-      ? week.slots.some(
-          (slots, weekday) =>
-            !sameScheduleRanges(
-              currentSlots.get(existing.find((day) => day.weekday === weekday)?.id ?? "") ?? [],
-              slots,
-            ),
-        )
-      : seasonWeek.some(
-          (ranges, weekday) => !sameScheduleRanges(seasonNow?.[weekday] ?? [], ranges),
-        );
+    (options.seasonId === undefined &&
+      week.slots.some(
+        (slots, weekday) =>
+          !sameScheduleRanges(
+            currentSlots.get(existing.find((day) => day.weekday === weekday)?.id ?? "") ?? [],
+            slots,
+          ),
+      )) ||
+    targets.some((season) =>
+      seasonWeek.some(
+        (ranges, weekday) =>
+          !sameScheduleRanges(seasonsNow?.get(season.id)?.[weekday] ?? [], ranges),
+      ),
+    );
   await assertBusinessDayScheduleWrite(
     tx,
     cfg,

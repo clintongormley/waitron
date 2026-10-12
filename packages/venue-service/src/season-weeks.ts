@@ -132,9 +132,10 @@ export async function readDepartmentSeasonWeeks(
   tx: Transaction,
   cfg: VenueScope,
   departmentIds?: readonly string[],
+  cutover?: string,
 ): Promise<Map<string, Map<string, ServiceRange[][]>>> {
   if (departmentIds?.length === 0) return new Map();
-  const { dayCutover } = await readLocationClock(tx, cfg.locationId);
+  const dayCutover = cutover ?? (await readLocationClock(tx, cfg.locationId)).dayCutover;
   const rows = await tx
     .select({
       departmentId: departmentDays.departmentId,
@@ -174,9 +175,10 @@ export async function readZoneSeasonWeeks(
   tx: Transaction,
   cfg: VenueScope,
   zoneIds?: readonly string[],
+  cutover?: string,
 ): Promise<Map<string, Map<string, ClosedRange[][]>>> {
   if (zoneIds?.length === 0) return new Map();
-  const { dayCutover } = await readLocationClock(tx, cfg.locationId);
+  const dayCutover = cutover ?? (await readLocationClock(tx, cfg.locationId)).dayCutover;
   const rows = await tx
     .select({
       zoneId: zoneDays.zoneId,
