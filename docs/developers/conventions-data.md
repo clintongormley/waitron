@@ -604,35 +604,35 @@ Pricing still reads static offer membership; zone closures do not change recorde
 **2026-10-12, A506-1.** `seasons` holds a location's seasons, each a name and an `MM-DD` start;
 `department_days` and `department_day_ranges` hold each department's week per season, and
 `zone_days` and `zone_day_ranges` each zone's closed times per season
-(`packages/venue-service/src/schema/seasons.ts`). A venue gets four seasons at provisioning
-(`ensureDefaultSeasons`, `packages/venue-service/src/provisioning.ts:148`), or at the first week
-write if it has none (`targetSeasons`, `packages/venue-service/src/season-weeks.ts:38`).
+(`packages/venue-service/src/schema/seasons.ts`). A venue gets four seasons from
+`ensureDefaultSeasons` (`packages/venue-service/src/seasons.ts`), called by venue-service
+provisioning and, for a venue with none, by `targetSeasons` before a week write
+(`packages/venue-service/src/season-weeks.ts`).
 
 A week saved with no season named goes into every season; a week saved with a season named
-changes that season alone (`replaceMenuWeek`, `packages/venue-service/src/menu-timetable.ts:825`;
-`replaceZoneClosedWeek`, `packages/venue-service/src/zone-closed-times.ts:106`). Until A506-2, a
+changes that season alone (`replaceMenuWeek` in `packages/venue-service/src/menu-timetable.ts`,
+`replaceZoneClosedWeek` in `packages/venue-service/src/zone-closed-times.ts`). Until A506-2, a
 week saved with no season named also writes the old weekday rows, `menu_day_timetables` with
-`menu_slots` and `zone_closed_times`, beside them (`menu-timetable.ts:815`,
-`zone-closed-times.ts:90`; the "keeping the old weekday rows" cases in
+`menu_slots` and `zone_closed_times`, beside them (the "keeping the old weekday rows" cases in
 `packages/venue-service/src/season-weeks.test.ts`).
 
-A configuration transfer carries the five tables
-(`VENUE_SERVICE_CONFIGURATION_TRANSFER`, `packages/venue-service/src/configuration-transfer.ts:639`).
-The import deletes every row of a transferred table before inserting the bundle's
-(`apps/server/src/configuration-transfer.ts:679`), so the target's four provisioned seasons give
-way to the exported ones: the case "arrives as exactly the exported seasons, and the imported
-venue sells and closes by them" in `apps/server/src/configuration-transfer.test.ts` renames and
-moves one season before export, finds the target holding the exported four, and asks
-`resolveDepartmentService` and `closedZoneIdsAt` for one Saturday in each of two seasons.
-`validateSeasonWeeks` (`configuration-transfer.ts:312`) refuses a bundle a week writer could not
-have written: a season start that is not a common year's date or is `02-29`, a range off the
-quarter-hour or overlapping another on the same day, a Closed department range or an open zone
-range (`configuration-transfer.ts:363`), and a period end offset reaching the next placement in
-the same season's week (`configuration-transfer.ts:389`). It does not compare placements across
-a season boundary, and it checks no skipped clock hour, as a season week has no date. A season
-day naming a special-day date is refused (`configuration-transfer.ts:289`), because the bundle
-carries no `special_days` or `special_day_dates`. The cases are under "season weeks in a
-configuration bundle" in `packages/venue-service/src/configuration-transfer.test.ts`.
+A configuration transfer carries the five tables (`VENUE_SERVICE_CONFIGURATION_TRANSFER` in
+`packages/venue-service/src/configuration-transfer.ts`). `importConfigurationTables`
+(`apps/server/src/configuration-transfer.ts`) deletes every row of a transferred table before
+inserting the bundle's, so the target's four provisioned seasons give way to the exported ones:
+the case "arrives as exactly the exported seasons, and the imported venue sells and closes by
+them" in `apps/server/src/configuration-transfer.test.ts` renames and moves one season before
+export, finds the target holding the exported four, and asks `resolveDepartmentService` and
+`closedZoneIdsAt` about one Saturday in each of two seasons.
+
+`validateSeasonWeeks` in the same file refuses, among others: a season start that is not a common
+year's date or is `02-29`; a range off the quarter-hour or overlapping another on the same day; a
+department range with no period (Closed) and a zone range of any kind but `closed`; and a period
+end offset reaching the next placement in the same season's week. It accepts a season with fewer
+than seven day rows, compares no placements across a season boundary, and checks no skipped clock
+hour, as a season week has no date. A season day naming a special-day date is refused, because
+the bundle carries no `special_days` or `special_day_dates`. The cases are under "season weeks in
+a configuration bundle" in `packages/venue-service/src/configuration-transfer.test.ts`.
 
 ### Earlier W98 menu timetable model
 

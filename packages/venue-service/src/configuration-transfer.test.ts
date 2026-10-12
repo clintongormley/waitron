@@ -1879,6 +1879,14 @@ describe("season weeks in a configuration bundle", () => {
     expect(() => validate(tables, clock)).toThrowError(refusal(field));
   });
 
+  it("accepts zone season weeks in a bundle with no periods", () => {
+    const tables = seasonTables();
+    delete tables.menu_periods;
+    tables.department_days = [];
+    tables.department_day_ranges = [];
+    expect(() => validate(tables, clock)).not.toThrow();
+  });
+
   it("refuses season weeks without the bundle's changeover", () => {
     expect(() => validate(seasonTables())).toThrowError(refusal("department_day_ranges"));
     const zoneOnly = seasonTables();
