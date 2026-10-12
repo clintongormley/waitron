@@ -11,6 +11,7 @@ import type { OpeningHoursApi } from "./opening-hours-client.js";
 import type { GridBlockChange, GridBlockOpen, GridRangeSelection } from "./service-grid.js";
 import { t } from "./strings.js";
 import { dateInWeek, namedOn, realDayLabel, giveOwnHours } from "./real-week.js";
+import { seasonWeek } from "./season-choice.js";
 import { format } from "./hours-view.js";
 import "./service-grid.js";
 import "./range-dialog.js";
@@ -133,9 +134,10 @@ export class OpeningHoursZoneWeek extends LitElement {
     this.draftClock = this.businessDayClock;
     this.draft = Array.from({ length: 7 }, (_, weekday) => ({
       weekday,
-      ranges: (this.zone.week.find((day) => day.weekday === weekday)?.ranges ?? []).map(
-        (range) => ({ ...range }),
-      ),
+      ranges: (
+        seasonWeek(this.zone.seasonWeeks, this.seasonId).find((day) => day.weekday === weekday)
+          ?.ranges ?? []
+      ).map((range) => ({ ...range })),
     }));
     this.contextDays = this.namedDays.map((day) => ({ ...day }));
     if (this.weekStart)
@@ -210,7 +212,8 @@ export class OpeningHoursZoneWeek extends LitElement {
       (named?.ownHours
         ? this.department.dates.find((row) => row.specialDateId === named.id)?.slots
         : undefined) ??
-      this.department.week.find((day) => day.weekday === weekday)?.slots ??
+      seasonWeek(this.department.seasonWeeks, this.seasonId).find((day) => day.weekday === weekday)
+        ?.slots ??
       []
     );
   }

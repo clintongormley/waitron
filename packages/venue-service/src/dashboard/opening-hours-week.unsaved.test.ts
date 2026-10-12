@@ -40,6 +40,7 @@ class WeekLeaveApp extends LitElement {
         return;
       }
       if (this.failRead) throw new Error("offline");
+      if (seasonalModel) return structuredClone(seasonalModel);
       return {
         businessDayClock: { timeZone: "Europe/Madrid", dayCutover: "06:00", cutoverChanges: [] },
         clockRevision: 0,
@@ -68,6 +69,14 @@ class WeekLeaveApp extends LitElement {
                 weekdays: [1],
               },
             ],
+            seasonWeeks: [
+              {
+                seasonId: "autumn",
+                week: [
+                  { weekday: 1, slots: [{ periodId: "p1", startsAt: "10:00", endsAt: "14:00" }] },
+                ],
+              },
+            ],
             week: [{ weekday: 1, slots: [{ periodId: "p1", startsAt: "10:00", endsAt: "14:00" }] }],
             dates: [],
           },
@@ -81,12 +90,14 @@ class WeekLeaveApp extends LitElement {
   }
 }
 customElements.define("week-leave-test-app", WeekLeaveApp);
+let seasonalModel: unknown;
 let app: WeekLeaveApp;
 const originalUrl = location.href;
 beforeEach(() => {
   history.replaceState(null, "", "/manage/opening-hours");
 });
 afterEach(() => {
+  seasonalModel = undefined;
   app?.remove();
   setLocale("en");
   history.replaceState(null, "", originalUrl);
@@ -265,5 +276,82 @@ describe.each(["en", "es"])("Retained week save contract (%s)", (locale) => {
     await choose("keep");
     expect(await request).toBe("kept");
     expect(unload()).toBe(true);
+  });
+});
+
+describe.each(["en", "es"])("Changing season (%s)", (locale) => {
+  it("asks before leaving an edited Winter for Summer", async () => {
+    setLocale(locale);
+    const monday = (startsAt: string) => [
+      { weekday: 1, slots: [{ periodId: "p1", startsAt, endsAt: "14:00" }] },
+    ];
+    seasonalModel = {
+      businessDayClock: { timeZone: "Europe/Madrid", dayCutover: "06:00", cutoverChanges: [] },
+      clockRevision: 0,
+      currentBusinessDay: "2026-10-12",
+      pending: null,
+      timeZone: "Europe/Madrid",
+      clockReadable: true,
+      dayCutover: "06:00",
+      menus: [],
+      seasons: [
+        { id: "summer", name: "Summer", startsOn: "06-01" },
+        { id: "winter", name: "Winter", startsOn: "12-01" },
+      ],
+      currentSeasonId: "winter",
+      namedDays: [],
+      departments: [
+        {
+          id: "d1",
+          name: "Restaurant",
+          active: true,
+          periods: [
+            {
+              id: "p1",
+              name: "Lunch",
+              colour: "blue",
+              menuId: "m1",
+              staffMenuIds: [],
+              endOffsetMinutes: 0,
+              weekdays: [1],
+            },
+          ],
+          seasonWeeks: [
+            { seasonId: "summer", week: monday("11:00") },
+            { seasonId: "winter", week: monday("10:00") },
+          ],
+          week: monday("10:00"),
+          dates: [],
+        },
+      ],
+    };
+    const { screen, week } = await mount();
+    await change(week);
+    const picker = () =>
+      screen.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-combobox"]>("[name=seasonId]")!;
+    const pick = () =>
+      picker().dispatchEvent(
+        new CustomEvent("wt-change", {
+          detail: { value: "summer" },
+          bubbles: true,
+          composed: true,
+        }),
+      );
+    const grid = () =>
+      screen
+        .shadowRoot!.querySelector("opening-hours-week")!
+        .shadowRoot!.querySelector<HTMLElementTagNameMap["service-grid"]>("service-grid")!;
+    pick();
+    await choose("keep");
+    expect(location.pathname).toBe("/manage/opening-hours");
+    expect(screen.shadowRoot!.querySelector("opening-hours-week")).toBe(week);
+    expect(picker().value).toBe("winter");
+    expect(grid().columns[0]!.slots[0]!.endsAt).toBe("15:00");
+    pick();
+    await choose("discard");
+    await expect.poll(() => location.pathname).toBe("/manage/opening-hours/season/summer");
+    await expect.poll(() => picker().value).toBe("summer");
+    await expect.poll(() => grid().columns[0]!.slots[0]!.startsAt).toBe("11:00");
+    expect(unload()).toBe(false);
   });
 });

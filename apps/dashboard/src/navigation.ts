@@ -12,6 +12,7 @@ export const dashboardPath: UrlPathConfig = {
       zone: "zone",
       station: "station",
       month: "month",
+      season: "season",
     },
     "venue-operations": { department: "department", view: "view", zone: "zone" },
     menus: { menu: "menu", view: "view", "price-filter": "filter" },

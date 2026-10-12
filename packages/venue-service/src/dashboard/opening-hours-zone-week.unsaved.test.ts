@@ -72,6 +72,12 @@ class ZoneWeekLeaveApp extends LitElement {
               {
                 id: "z1",
                 name: "Terrace",
+                seasonWeeks: [
+                  {
+                    seasonId: "autumn",
+                    week: [{ weekday: 1, ranges: [{ startsAt: "10:00", endsAt: "14:00" }] }],
+                  },
+                ],
                 week: [{ weekday: 1, ranges: [{ startsAt: "10:00", endsAt: "14:00" }] }],
                 dates: this.realWeek
                   ? [1, 2].map((day) => ({
@@ -90,6 +96,14 @@ class ZoneWeekLeaveApp extends LitElement {
                 staffMenuIds: [],
                 endOffsetMinutes: 0,
                 weekdays: [1],
+              },
+            ],
+            seasonWeeks: [
+              {
+                seasonId: "autumn",
+                week: [
+                  { weekday: 1, slots: [{ periodId: "p1", startsAt: "10:00", endsAt: "14:00" }] },
+                ],
               },
             ],
             week: [{ weekday: 1, slots: [{ periodId: "p1", startsAt: "10:00", endsAt: "14:00" }] }],

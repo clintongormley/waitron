@@ -1166,6 +1166,39 @@ it("links All departments headings to a department and returns to the all view",
   await expect.poll(() => location.pathname).toBe("/manage/opening-hours/view/week/department/all");
   expect(el.shadowRoot!.querySelector("opening-hours-week")).toBeNull();
 });
+it("draws the picked season's standard week for All departments", async () => {
+  history.replaceState(null, "", "/manage/opening-hours/view/week/department/all/season/summer");
+  const data = pickerModel();
+  const monday = (startsAt: string) => [
+    { weekday: 1, slots: [{ periodId: "p1", startsAt, endsAt: "14:00" }] },
+  ];
+  const el = await mount((async () =>
+    structuredClone({
+      ...data,
+      seasons: [
+        { id: "autumn", name: "Autumn", startsOn: "09-01" },
+        { id: "summer", name: "Summer", startsOn: "06-01" },
+      ],
+      currentSeasonId: "autumn",
+      departments: data.departments.map((department) =>
+        department.id === "restaurant"
+          ? {
+              ...department,
+              seasonWeeks: [
+                { seasonId: "autumn", week: monday("10:00") },
+                { seasonId: "summer", week: monday("12:00") },
+              ],
+            }
+          : department,
+      ),
+    })) as DashboardRequest);
+  const all = el.shadowRoot!.querySelector<LitElement>("opening-hours-all")!;
+  await all.updateComplete;
+  expect(
+    all.shadowRoot!.querySelector("service-grid")!.columns.find((c) => c.key === "1:restaurant")!
+      .slots,
+  ).toEqual([{ periodId: "p1", startsAt: "12:00", endsAt: "14:00" }]);
+});
 it("ignores a zone belonging to another department and unknown picker values", async () => {
   history.replaceState(null, "", "/manage/opening-hours/view/week/department/bar/zone/terrace");
   const el = await mount((async () => structuredClone(pickerModel())) as DashboardRequest);

@@ -61,6 +61,14 @@ describe.each(["light", "dark"] as const)("Opening special date (%s)", (theme) =
               routingUses: [],
             },
           ],
+          seasonWeeks: [
+            {
+              seasonId: "autumn",
+              week: [
+                { weekday: 1, slots: [{ periodId: "p1", startsAt: "10:00", endsAt: "14:00" }] },
+              ],
+            },
+          ],
           week: [{ weekday: 1, slots: [{ periodId: "p1", startsAt: "10:00", endsAt: "14:00" }] }],
           dates:
             state === "following"

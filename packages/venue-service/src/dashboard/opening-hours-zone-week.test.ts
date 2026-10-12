@@ -40,7 +40,12 @@ const model: OpeningHoursModel = {
         {
           id: "z1",
           name: "Terrace",
-          seasonWeeks: [],
+          seasonWeeks: [
+            {
+              seasonId: "autumn",
+              week: [{ weekday: 1, ranges: [{ startsAt: "10:00", endsAt: "11:00" }] }],
+            },
+          ],
           week: [{ weekday: 1, ranges: [{ startsAt: "10:00", endsAt: "11:00" }] }],
           dates: [],
         },
@@ -57,7 +62,12 @@ const model: OpeningHoursModel = {
           routingUses: [],
         },
       ],
-      seasonWeeks: [],
+      seasonWeeks: [
+        {
+          seasonId: "autumn",
+          week: [{ weekday: 1, slots: [{ periodId: "p1", startsAt: "09:00", endsAt: "14:00" }] }],
+        },
+      ],
       week: [{ weekday: 1, slots: [{ periodId: "p1", startsAt: "09:00", endsAt: "14:00" }] }],
       dates: [],
     },
@@ -66,12 +76,13 @@ const model: OpeningHoursModel = {
 async function mount(
   write?: (path: string, method: string, body: unknown) => Promise<unknown>,
   readOnly = false,
+  data: OpeningHoursModel = model,
 ) {
   screen = document.createElement("dashboard-opening-hours-screen");
   screen.readOnly = readOnly;
   screen.api = new OpeningHoursApi(
     withOpeningStations((async (path, method, body) =>
-      method === "GET" ? structuredClone(model) : write?.(path, method, body)) as DashboardRequest),
+      method === "GET" ? structuredClone(data) : write?.(path, method, body)) as DashboardRequest),
   );
   applyTokens(screen);
   document.body.append(screen);
@@ -292,3 +303,62 @@ it.each(["success", "refusal"])(
     ]);
   },
 );
+
+it("draws the picked season's closed times over that season's department hours, and saves that season", async () => {
+  history.replaceState(
+    null,
+    "",
+    "/manage/opening-hours/view/week/department/d1/zone/z1/season/summer",
+  );
+  const seasons = [
+    { id: "autumn", name: "Autumn", startsOn: "09-01" },
+    { id: "summer", name: "Summer", startsOn: "06-01" },
+  ];
+  const department = model.departments[0]!;
+  const zone = department.zones![0]!;
+  const writes: unknown[] = [];
+  const week = await mount(
+    async (...args) => {
+      writes.push(args);
+    },
+    false,
+    {
+      ...model,
+      seasons,
+      departments: [
+        {
+          ...department,
+          seasonWeeks: [
+            { seasonId: "autumn", week: department.week },
+            {
+              seasonId: "summer",
+              week: [
+                { weekday: 1, slots: [{ periodId: "p1", startsAt: "12:00", endsAt: "16:00" }] },
+              ],
+            },
+          ],
+          zones: [
+            {
+              ...zone,
+              seasonWeeks: [
+                { seasonId: "autumn", week: zone.week },
+                {
+                  seasonId: "summer",
+                  week: [{ weekday: 1, ranges: [{ startsAt: "13:00", endsAt: "14:00" }] }],
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    },
+  );
+  expect(grid(week).columns[0]!.slots).toEqual([
+    { periodId: "p1", startsAt: "12:00", endsAt: "16:00" },
+  ]);
+  expect(grid(week).columns[0]!.closed).toEqual([{ startsAt: "13:00", endsAt: "14:00" }]);
+  await drag(week);
+  save(week).click();
+  await expect.poll(() => writes.length).toBe(1);
+  expect((writes[0] as [string, string, { seasonId: string }])[2].seasonId).toBe("summer");
+});

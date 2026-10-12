@@ -14,6 +14,7 @@ import type { PeriodEditor } from "./period-editor.js";
 import { t } from "./strings.js";
 import { format } from "./hours-view.js";
 import { dateInWeek, namedOn, realDayLabel, giveOwnHours } from "./real-week.js";
+import { seasonWeek } from "./season-choice.js";
 import "./service-grid.js";
 import "./range-dialog.js";
 import "./period-editor.js";
@@ -49,10 +50,13 @@ const sameWeek = (a: readonly MenuWeekDay[], b: readonly MenuWeekDay[]) =>
       )
     );
   });
-const weekOf = (department: Department): MenuWeekDay[] =>
+const weekOf = (department: Department, seasonId: string): MenuWeekDay[] =>
   Array.from({ length: 7 }, (_, weekday) => ({
     weekday,
-    slots: (department.week.find((day) => day.weekday === weekday)?.slots ?? []).map((slot) => ({
+    slots: (
+      seasonWeek(department.seasonWeeks, seasonId).find((day) => day.weekday === weekday)?.slots ??
+      []
+    ).map((slot) => ({
       ...slot,
     })),
   }));
@@ -243,7 +247,7 @@ export class OpeningHoursWeek extends LitElement {
     return { days: this.draft, following: false };
   }
   private seedDraft() {
-    this.draft = weekOf(this.department);
+    this.draft = weekOf(this.department, this.seasonId);
     this.contextDays = this.namedDays.map((day) => ({ ...day }));
     if (this.weekStart) {
       this.dateFollowing.clear();

@@ -108,7 +108,15 @@ it("dated department columns carry their own historical, transition and future c
     weekStart: "2026-11-02",
     dayCutover: "07:00",
     readOnly: true,
-    department: { id: "d", name: "Restaurant", active: true, week: [], dates: [], periods: [] },
+    department: {
+      id: "d",
+      name: "Restaurant",
+      active: true,
+      seasonWeeks: [],
+      week: [],
+      dates: [],
+      periods: [],
+    },
   });
   applyTokens(el);
   document.body.append(el);
@@ -138,7 +146,17 @@ it("normal-week columns keep their explicit reference instead of choosing a hist
       dayCutover: "05:00",
       cutoverChanges: [{ effectiveBusinessDay: "2026-11-04", dayCutover: "07:00" }],
     },
-    departments: [{ id: "d", name: "Restaurant", active: true, week: [], dates: [], periods: [] }],
+    departments: [
+      {
+        id: "d",
+        name: "Restaurant",
+        active: true,
+        seasonWeeks: [],
+        week: [],
+        dates: [],
+        periods: [],
+      },
+    ],
   });
   document.body.append(el);
   hosts.push(el);
@@ -262,7 +280,15 @@ for (const kind of ["all", "station"] as const) {
       cutoverChanges: [{ effectiveBusinessDay: "2026-11-04", dayCutover: "07:00" }],
     };
     const departments = [
-      { id: "d", name: "Restaurant", active: true, week: [], dates: [], periods: [] },
+      {
+        id: "d",
+        name: "Restaurant",
+        active: true,
+        seasonWeeks: [],
+        week: [],
+        dates: [],
+        periods: [],
+      },
     ];
     Object.assign(el, {
       weekStart: "2026-11-02",

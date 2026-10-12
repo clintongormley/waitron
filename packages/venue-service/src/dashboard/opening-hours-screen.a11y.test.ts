@@ -189,3 +189,50 @@ describe.each(["en", "es"] as const)("Signed offset list (%s)", (locale) => {
     });
   });
 });
+
+describe.each(["light", "dark"] as const)("Week with a season picker (%s)", (theme) => {
+  test("standard week", async () => {
+    setLocale("en");
+    history.replaceState(null, "", "/manage/opening-hours/view/week");
+    const wrapper = await mountThemed("<div></div>", theme);
+    const screen = document.createElement("dashboard-opening-hours-screen") as OpeningHoursScreen;
+    const seasons = [
+      { id: "summer", name: "Summer", startsOn: "06-01" },
+      { id: "winter", name: "Winter", startsOn: "12-01" },
+    ];
+    screen.api = new OpeningHoursApi(
+      withOpeningStations((async () => ({
+        businessDayClock: { timeZone: "Europe/Madrid", dayCutover: "06:00", cutoverChanges: [] },
+        clockRevision: 0,
+        currentBusinessDay: "2026-10-12",
+        pending: null,
+        timeZone: "Europe/Madrid",
+        clockReadable: true,
+        dayCutover: "06:00",
+        seasons,
+        currentSeasonId: "summer",
+        namedDays: [],
+        menus: [{ id: "lunch", name: "Lunch menu", active: true, includes: [] }],
+        departments: [
+          {
+            id: "restaurant",
+            name: "Restaurant",
+            active: true,
+            zones: [],
+            seasonWeeks: seasons.map((season) => ({ seasonId: season.id, week: [] })),
+            week: [],
+            dates: [],
+            periods: [],
+          },
+        ],
+      })) as DashboardRequest),
+    );
+    wrapper.appendChild(screen);
+    await expect.poll(() => screen.shadowRoot!.querySelector("[name=seasonId]")).not.toBeNull();
+    await expect.poll(() => screen.shadowRoot!.querySelector("opening-hours-week")).not.toBeNull();
+    await screen.shadowRoot!.querySelector<HTMLElementTagNameMap["opening-hours-week"]>(
+      "opening-hours-week",
+    )!.updateComplete;
+    await expectNoA11yViolations(host);
+  });
+});

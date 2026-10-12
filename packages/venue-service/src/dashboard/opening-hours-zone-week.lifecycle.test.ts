@@ -17,6 +17,7 @@ async function mount(real = false, refusal?: unknown) {
   week = document.createElement("opening-hours-zone-week");
   week.department = data.departments[0]!;
   week.zone = week.department.zones[0]!;
+  week.seasonId = data.seasons[0]!.id;
   week.namedDays = data.namedDays;
   week.weekStart = real ? "2026-10-12" : "";
   week.api = new OpeningHoursApi((async (path, method, body) => {

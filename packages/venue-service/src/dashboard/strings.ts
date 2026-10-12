@@ -101,6 +101,7 @@ const en = {
   "venue.floor_plan_load_error": "The floor plan could not be loaded. It will be tried again.",
   "opening.title": "Opening hours",
   "opening.show": "Show",
+  "opening.season": "Season",
   "opening.all_departments": "All departments",
   "opening.zone_placeholder": "{name}: closed times",
   "opening.clock_unreadable":
@@ -867,6 +868,7 @@ const es: Record<keyof typeof en, string> = {
   "venue.floor_plan_load_error": "No se ha podido cargar el plano de sala. Se volverá a intentar.",
   "opening.title": "Horario de apertura",
   "opening.show": "Mostrar",
+  "opening.season": "Temporada",
   "opening.all_departments": "Todos los departamentos",
   "opening.zone_placeholder": "{name}: horarios de cierre",
   "opening.clock_unreadable":
