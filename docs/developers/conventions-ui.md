@@ -420,7 +420,7 @@ the table-free draft holds a line (`#store`, `#partylessDraft`), any draft is un
 (`parking`, `placing`), a card attempt is running (`#cardAttemptsRunning`), a bill payment or refund kept its send for a resend that must
 reuse its id — after no answer, or after a refusal that keeps the id (`#unansweredPayment`,
 `#unansweredRefund`), or a request is held by `#holdingReload`: every request sent again until
-answered (`#resend`, around `resendUnanswered`, and the station screen's dish move, which it
+answered (`#resend`, around `resendUnanswered`, and the station screen's dish move and Collect, which it
 announces with a `hold-reload` event), a whole bill payment or refund, a prep-queue Collect, and
 a sign-out's save of the draft. A signed-in person counts because a reload signs them out. The bar's Reload
 waits only for what `#requestsOut()` counts (`submitting`, `parking`, `placing`, a card

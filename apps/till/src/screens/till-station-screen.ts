@@ -253,6 +253,7 @@ export class TillStationScreen extends LitElement {
   /** Why the last Move could not read the stations; its own field, so a queue read never clears it. */
   @state() private moveErrorCode?: string;
   #moveOpening = false;
+  #collectGeneration = 0;
   #tableChangedNext: string | null = null;
   #lastGoodAt = new Date();
   #initialConsumed = false;
@@ -336,6 +337,7 @@ export class TillStationScreen extends LitElement {
 
   override disconnectedCallback(): void {
     super.disconnectedCallback();
+    this.#collectGeneration++;
     clearInterval(this.#refreshTimer);
     for (const read of this.#refreshReads) read.abort();
     this.#refreshReads.clear();
@@ -624,7 +626,28 @@ export class TillStationScreen extends LitElement {
     // a stray composed event.
     if (this.deviceMode) return;
     const { orderId } = (event as CustomEvent<{ orderId: string }>).detail;
-    await this.#advance(() => this.api.markCollected(orderId));
+    const generation = this.#collectGeneration;
+    const submissionId = crypto.randomUUID();
+    const limit = limited(TABLE_REQUEST_LIMIT_MS);
+    try {
+      await this.#advance(() => {
+        const sent = resendUnanswered(
+          (signal) => this.api.markCollected(orderId, submissionId, { signal }),
+          limit.signal,
+          () => this.isConnected && generation === this.#collectGeneration,
+        );
+        this.dispatchEvent(
+          new CustomEvent<HoldReloadDetail>("hold-reload", {
+            detail: { until: sent },
+            bubbles: true,
+            composed: true,
+          }),
+        );
+        return sent;
+      });
+    } finally {
+      limit.done();
+    }
   }
 
   async #onFireCourse(event: Event): Promise<void> {
