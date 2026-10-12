@@ -63,7 +63,6 @@ function model(): OpeningHoursModel {
           },
         ],
         seasonWeeks: [],
-        week: Array.from({ length: 7 }, (_, weekday) => ({ weekday, slots: [] })),
         dates: [],
       },
       {
@@ -73,7 +72,6 @@ function model(): OpeningHoursModel {
         zones: [],
         periods: [],
         seasonWeeks: [],
-        week: [],
         dates: [],
       },
     ],
@@ -674,7 +672,6 @@ it("explains an empty venue and falls back to an inactive department when there 
       zones: [],
       periods: [],
       seasonWeeks: [],
-      week: [],
       dates: [],
     },
   ];
@@ -1080,7 +1077,6 @@ function pickerModel(): OpeningHoursModel {
         zones: [],
         periods: [],
         seasonWeeks: [],
-        week: [],
         dates: [],
       },
     ],

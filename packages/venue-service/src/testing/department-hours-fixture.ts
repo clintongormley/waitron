@@ -25,7 +25,6 @@ export function departmentHoursModel(): OpeningHoursModel {
         active: true,
         periods: [],
         seasonWeeks: [{ seasonId: AUTUMN.id, week: [] }],
-        week: [],
         dates: [],
         zones: [
           {

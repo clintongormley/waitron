@@ -89,7 +89,6 @@ class OpeningLeaveApp extends LitElement {
             id: "restaurant",
             name: "Restaurant",
             active: true,
-            week: [],
             dates: [],
             periods: [
               {

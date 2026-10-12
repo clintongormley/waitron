@@ -68,7 +68,6 @@ const model: OpeningHoursModel = {
           week: [{ weekday: 1, slots: [{ periodId: "p1", startsAt: "09:00", endsAt: "14:00" }] }],
         },
       ],
-      week: [{ weekday: 1, slots: [{ periodId: "p1", startsAt: "09:00", endsAt: "14:00" }] }],
       dates: [],
     },
   ],
@@ -329,7 +328,7 @@ it("draws the picked season's closed times over that season's department hours, 
         {
           ...department,
           seasonWeeks: [
-            { seasonId: "autumn", week: department.week },
+            { seasonId: "autumn", week: department.seasonWeeks[0]!.week },
             {
               seasonId: "summer",
               week: [

@@ -1265,7 +1265,6 @@ export async function readOpeningHoursModel(
           seasonId: entry.seasonId,
           week: shape(entry.week),
         })),
-        week: shape(weeks.week),
         dates: days
           .filter((row) => row.specialDateId !== null)
           .map((day) => ({ specialDateId: day.specialDateId!, slots: ranges(day.id) })),

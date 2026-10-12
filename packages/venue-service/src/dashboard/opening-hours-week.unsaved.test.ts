@@ -79,7 +79,6 @@ class WeekLeaveApp extends LitElement {
                 ],
               },
             ],
-            week: [{ weekday: 1, slots: [{ periodId: "p1", startsAt: "10:00", endsAt: "14:00" }] }],
             dates: [],
           },
         ],
@@ -322,7 +321,6 @@ describe.each(["en", "es"])("Changing season (%s)", (locale) => {
             { seasonId: "summer", week: monday("11:00") },
             { seasonId: "winter", week: monday("10:00") },
           ],
-          week: monday("10:00"),
           dates: [],
         },
       ],
@@ -354,6 +352,31 @@ describe.each(["en", "es"])("Changing season (%s)", (locale) => {
     await expect.poll(() => location.pathname).toBe("/manage/opening-hours/season/summer");
     await expect.poll(() => picker().value).toBe("summer");
     await expect.poll(() => grid().columns[0]!.slots[0]!.startsAt).toBe("11:00");
+    expect(unload()).toBe(false);
+  });
+});
+
+describe("A reread with no unsaved draft", () => {
+  it("moves to the current season when the held season is deleted", async () => {
+    history.replaceState(null, "", "/manage/opening-hours/view/week/season/autumn");
+    seasonalModel = twoSeasons(["autumn", "winter"], "autumn");
+    const { screen } = await mount();
+    const reads = app.reads;
+    seasonalModel = twoSeasons(["winter"], "winter");
+    app.api.rereadWatches();
+    await expect.poll(() => app.reads).toBeGreaterThan(reads);
+    const picker = () =>
+      screen.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-combobox"]>("[name=seasonId]")!;
+    await expect.poll(() => picker().value).toBe("winter");
+    await expect
+      .poll(
+        () =>
+          screen
+            .shadowRoot!.querySelector("opening-hours-week")!
+            .shadowRoot!.querySelector<HTMLElementTagNameMap["service-grid"]>("service-grid")!
+            .columns[0]!.slots[0]!.startsAt,
+      )
+      .toBe("11:00");
     expect(unload()).toBe(false);
   });
 });
@@ -398,7 +421,6 @@ function twoSeasons(seasonIds: string[], currentSeasonId: string) {
           seasonId,
           week: monday(seasonId === "autumn" ? "10:00" : "11:00"),
         })),
-        week: monday("10:00"),
         dates: [],
       },
     ],

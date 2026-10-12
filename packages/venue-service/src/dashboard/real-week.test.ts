@@ -17,7 +17,6 @@ function model(): Pick<OpeningHoursModel, "seasons" | "departments"> {
         active: true,
         periods: [],
         dates: [],
-        week: [{ weekday: 1, slots: slot("08:00") }],
         seasonWeeks: [
           { seasonId: "winter", week: [{ weekday: 1, slots: slot("12:00") }] },
           { seasonId: "autumn", week: [{ weekday: 1, slots: slot("10:00") }] },

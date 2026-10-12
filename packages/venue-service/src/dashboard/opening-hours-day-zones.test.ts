@@ -545,3 +545,25 @@ it.each(["success", "refusal"])(
     ]);
   },
 );
+it("reads a zone's season weeks once per reseed, not once per weekday", async () => {
+  const day = await mount();
+  const model = fixture();
+  let reads = 0;
+  const [zone] = model.departments[0]!.zones;
+  const { seasonWeeks, ...rest } = zone!;
+  const counted = Object.defineProperty({ ...rest }, "seasonWeeks", {
+    enumerable: true,
+    get: () => {
+      reads++;
+      return seasonWeeks;
+    },
+  }) as typeof zone;
+  model.departments = [{ ...model.departments[0]!, zones: [counted!] }];
+  day.model = model;
+  await day.updateComplete;
+  expect(grid(day).columns.find((column) => column.key === "zone:z1")!.closed).toEqual([
+    { startsAt: "23:00", endsAt: "06:00" },
+  ]);
+  expect(reads).toBeGreaterThan(0);
+  expect(reads).toBeLessThan(7);
+});

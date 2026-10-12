@@ -412,3 +412,98 @@ it("keeps a staged date's original named-day target through a replacement snapsh
       ],
     ]);
 });
+
+function seasonBoundaryModel() {
+  const data = fixture();
+  const slots = (hour: string) =>
+    Array.from({ length: 7 }, (_, weekday) => ({
+      weekday,
+      slots: [{ periodId: "p1", startsAt: "10:00", endsAt: `${hour}:0${weekday}` }],
+    }));
+  const ranges = (hour: string) =>
+    Array.from({ length: 7 }, (_, weekday) => ({
+      weekday,
+      ranges: [{ startsAt: `${hour}:0${weekday}`, endsAt: "06:00" }],
+    }));
+  data.seasons = [
+    { id: "autumn", name: "Autumn", startsOn: "09-01" },
+    { id: "winter", name: "Winter", startsOn: "12-01" },
+  ];
+  data.currentSeasonId = "autumn";
+  data.namedDays = [];
+  const [department] = data.departments;
+  data.departments = [
+    {
+      ...department!,
+      dates: [],
+      seasonWeeks: [
+        { seasonId: "autumn", week: slots("14") },
+        { seasonId: "winter", week: slots("15") },
+      ],
+      zones: [
+        {
+          ...department!.zones[0]!,
+          dates: [],
+          seasonWeeks: [
+            { seasonId: "autumn", week: ranges("22") },
+            { seasonId: "winter", week: ranges("23") },
+          ],
+        },
+      ],
+    },
+  ];
+  return data;
+}
+const autumnThenWinterSunday = (hours: [string, string]) =>
+  [1, 2, 3, 4, 5, 6, 0].map((weekday) => `${weekday === 0 ? hours[1] : hours[0]}:0${weekday}`);
+async function mountAt(address: string, tag: string) {
+  history.replaceState(null, "", address);
+  const data = seasonBoundaryModel();
+  screen = document.createElement("dashboard-opening-hours-screen");
+  screen.api = new OpeningHoursApi(
+    withOpeningStations((async (path, method) =>
+      method === "GET"
+        ? path.includes("named-days?")
+          ? calendarFixture()
+          : structuredClone(data)
+        : undefined) as DashboardRequest),
+  );
+  applyTokens(screen);
+  document.body.append(screen);
+  await expect.poll(() => screen.shadowRoot?.querySelector(tag)).not.toBeNull();
+  const view = screen.shadowRoot!.querySelector(tag) as HTMLElement & {
+    updateComplete: Promise<unknown>;
+  };
+  await view.updateComplete;
+  return view.shadowRoot!.querySelector("service-grid")!;
+}
+it("in the real week from Monday 25 Nov 2030, a department shows Autumn's Monday to Saturday and Winter's Sunday", async () => {
+  const grid = await mountAt(
+    "/manage/opening-hours/view/week/department/d1?week=2030-11-25",
+    "opening-hours-week",
+  );
+  expect(grid.columns.map((column) => column.slots[0]?.endsAt)).toEqual(
+    autumnThenWinterSunday(["14", "15"]),
+  );
+});
+it("in the real week from Monday 25 Nov 2030, a zone shows Autumn's Monday to Saturday and Winter's Sunday, behind each date's department hours", async () => {
+  const grid = await mountAt(
+    "/manage/opening-hours/view/week/department/d1/zone/z1?week=2030-11-25",
+    "opening-hours-zone-week",
+  );
+  expect(grid.columns.map((column) => column.closed?.[0]?.startsAt)).toEqual(
+    autumnThenWinterSunday(["22", "23"]),
+  );
+  expect(grid.columns.map((column) => column.slots[0]?.endsAt)).toEqual(
+    autumnThenWinterSunday(["14", "15"]),
+  );
+});
+it("in the real week from Monday 25 Nov 2030, the All view shows Autumn's Monday to Saturday and Winter's Sunday", async () => {
+  const grid = await mountAt(
+    "/manage/opening-hours/view/week/department/all?week=2030-11-25",
+    "opening-hours-all",
+  );
+  expect(grid.columns.map((column) => column.slots[0]?.endsAt)).toEqual(
+    autumnThenWinterSunday(["14", "15"]),
+  );
+});

@@ -69,7 +69,6 @@ async function mount(
           },
         ],
         seasonWeeks: [{ seasonId: "autumn", week: [] }],
-        week: [],
         dates: [{ specialDateId: "s1", slots: [] }],
       },
     ],

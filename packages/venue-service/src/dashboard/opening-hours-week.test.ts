@@ -58,10 +58,6 @@ export function fixture(): OpeningHoursModel {
             })),
           },
         ],
-        week: Array.from({ length: 7 }, (_, weekday) => ({
-          weekday,
-          slots: weekday === 1 ? [{ periodId: "p1", startsAt: "10:00", endsAt: "14:00" }] : [],
-        })),
         dates: [],
       },
     ],
@@ -742,7 +738,7 @@ it("a departed nested Cancel cannot close the next child editor", async () => {
 
 it("preserves all six other weekdays when staging a Sunday range", async () => {
   const model = fixture();
-  model.departments[0]!.week = [
+  const sixDays = [
     { weekday: 0, slots: [] },
     { weekday: 1, slots: [{ periodId: "p1", startsAt: "10:00", endsAt: "14:00" }] },
     { weekday: 2, slots: [{ periodId: "p1", startsAt: "11:00", endsAt: "15:00" }] },
@@ -751,7 +747,7 @@ it("preserves all six other weekdays when staging a Sunday range", async () => {
     { weekday: 5, slots: [{ periodId: "p1", startsAt: "20:00", endsAt: "03:00" }] },
     { weekday: 6, slots: [{ periodId: "p1", startsAt: "09:00", endsAt: "12:00" }] },
   ];
-  model.departments[0]!.seasonWeeks = [{ seasonId: "autumn", week: model.departments[0]!.week }];
+  model.departments[0]!.seasonWeeks = [{ seasonId: "autumn", week: sixDays }];
   const writes: unknown[] = [];
   const week = await mount(
     async (...args) => {

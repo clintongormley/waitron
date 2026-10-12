@@ -54,7 +54,6 @@ function model(): OpeningHoursModel {
             ],
           },
         ],
-        week: [{ weekday: 1, slots: [{ periodId: "lunch", startsAt: "12:00", endsAt: "16:00" }] }],
         dates: [],
       },
       {
@@ -82,7 +81,6 @@ function model(): OpeningHoursModel {
             ],
           },
         ],
-        week: [{ weekday: 2, slots: [{ periodId: "dinner", startsAt: "18:00", endsAt: "23:00" }] }],
         dates: [],
       },
     ],

@@ -50,7 +50,6 @@ describe.each(["light", "dark"] as const)("Opening hours (%s)", (theme) => {
               id: "restaurant",
               name: "Restaurant",
               active: true,
-              week: [],
               dates: [],
               periods:
                 state === "empty"
@@ -141,7 +140,6 @@ describe.each(["en", "es"] as const)("Signed offset list (%s)", (locale) => {
                 id: "restaurant",
                 name: "Restaurant",
                 active: true,
-                week: [],
                 dates: [],
                 periods: [-15, 0, 14].map((offset, index) => ({
                   id: `p${index}`,
@@ -220,7 +218,6 @@ describe.each(["light", "dark"] as const)("Week with a season picker (%s)", (the
             active: true,
             zones: [],
             seasonWeeks: seasons.map((season) => ({ seasonId: season.id, week: [] })),
-            week: [],
             dates: [],
             periods: [],
           },

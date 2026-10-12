@@ -157,9 +157,6 @@ function hoursFixture(): OpeningHoursModel {
           ],
         },
       ],
-      week: [
-        { weekday: 1, slots: [{ periodId: `p${index + 1}`, startsAt: "10:00", endsAt: "14:00" }] },
-      ],
       dates: [],
     })),
   };

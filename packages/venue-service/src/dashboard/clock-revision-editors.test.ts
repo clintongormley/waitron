@@ -34,10 +34,6 @@ const department = {
       })),
     },
   ],
-  week: Array.from({ length: 7 }, (_, weekday) => ({
-    weekday,
-    slots: weekday === 1 ? [{ periodId: "period", startsAt: "10:00", endsAt: "14:00" }] : [],
-  })),
   dates: [],
 };
 const zone = {

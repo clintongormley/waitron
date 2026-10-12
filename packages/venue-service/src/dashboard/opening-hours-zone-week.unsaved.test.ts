@@ -106,7 +106,6 @@ class ZoneWeekLeaveApp extends LitElement {
                 ],
               },
             ],
-            week: [{ weekday: 1, slots: [{ periodId: "p1", startsAt: "10:00", endsAt: "14:00" }] }],
             dates: [],
           },
         ],

@@ -58,10 +58,6 @@ export function dayFixture(): OpeningHoursModel {
             ],
           },
         ],
-        week: [
-          { weekday: 1, slots: [{ periodId: "p1", startsAt: "10:00", endsAt: "14:00" }] },
-          { weekday: 2, slots: [{ periodId: "p1", startsAt: "11:00", endsAt: "15:00" }] },
-        ],
         dates: [
           { specialDateId: "s/1", slots: [{ periodId: "p1", startsAt: "12:00", endsAt: "16:00" }] },
         ],
@@ -92,10 +88,6 @@ export function dayFixture(): OpeningHoursModel {
             ],
           },
         ],
-        week: [
-          { weekday: 1, slots: [{ periodId: "p2", startsAt: "09:00", endsAt: "18:00" }] },
-          { weekday: 2, slots: [{ periodId: "p2", startsAt: "09:00", endsAt: "18:00" }] },
-        ],
         dates: [],
       },
       {
@@ -105,7 +97,6 @@ export function dayFixture(): OpeningHoursModel {
         zones: [],
         periods: [],
         seasonWeeks: [],
-        week: [],
         dates: [],
       },
     ],

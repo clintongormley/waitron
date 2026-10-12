@@ -167,7 +167,12 @@ export class OpeningHoursScreen extends LitElement {
     this.detach = this.api.watchOpeningHours(
       (model) => {
         this.model = model;
-        if (!this.season) this.resolveSeason();
+        if (
+          !this.season ||
+          (!model.seasons.some((season) => season.id === this.season) &&
+            !leaveCoordinatorFor(this)?.isDirty())
+        )
+          this.resolveSeason();
         this.readError = "";
       },
       () => {
@@ -931,6 +936,7 @@ export class OpeningHoursScreen extends LitElement {
                                 .department=${department!}
                                 .zone=${this.zone()!}
                                 .seasonId=${this.season}
+                                .seasons=${this.model.seasons}
                                 .clockRevision=${this.model.clockRevision}
                                 .businessDayClock=${this.model.businessDayClock}
                                 .dayCutover=${this.model.dayCutover}
@@ -948,6 +954,7 @@ export class OpeningHoursScreen extends LitElement {
                                   .api=${this.api}
                                   .department=${department}
                                   .seasonId=${this.season}
+                                  .seasons=${this.model.seasons}
                                   .menus=${this.model!.menus}
                                   .clockRevision=${this.model!.clockRevision}
                                   .businessDayClock=${this.model!.businessDayClock}

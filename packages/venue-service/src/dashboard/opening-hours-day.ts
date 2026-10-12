@@ -274,18 +274,19 @@ export class OpeningHoursDay extends LitElement {
     );
     const zones = Object.fromEntries(
       this.departments().flatMap((department) =>
-        (department.zones ?? []).map((zone) => [
-          zone.id,
-          Array.from({ length: 7 }, (_, day) => ({
-            weekday: day,
-            ranges: (special?.ownHours && day === weekday
-              ? (zone.dates.find((row) => row.specialDateId === special.id)?.ranges ?? [])
-              : (zoneSeasonWeekOn(this.model, department.id, zone.id, this.date).find(
-                  (row) => row.weekday === day,
-                )?.ranges ?? [])
-            ).map((range) => ({ ...range })),
-          })),
-        ]),
+        (department.zones ?? []).map((zone) => {
+          const week = zoneSeasonWeekOn(this.model, department.id, zone.id, this.date);
+          return [
+            zone.id,
+            Array.from({ length: 7 }, (_, day) => ({
+              weekday: day,
+              ranges: (special?.ownHours && day === weekday
+                ? (zone.dates.find((row) => row.specialDateId === special.id)?.ranges ?? [])
+                : (week.find((row) => row.weekday === day)?.ranges ?? [])
+              ).map((range) => ({ ...range })),
+            })),
+          ];
+        }),
       ),
     );
     return { menus, zones };

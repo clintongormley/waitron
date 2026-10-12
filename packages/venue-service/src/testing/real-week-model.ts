@@ -57,7 +57,6 @@ export function realWeekModel(): OpeningHoursModel {
           },
         ],
         seasonWeeks: [{ seasonId: AUTUMN.id, week: structuredClone(lunchWeek) }],
-        week: structuredClone(lunchWeek),
         dates: [
           {
             specialDateId: "annual/day",

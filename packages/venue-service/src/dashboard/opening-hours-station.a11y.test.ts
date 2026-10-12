@@ -87,7 +87,6 @@ describe.each(["en", "es"] as const)("Station week %s", (locale) => {
                 name: locale === "en" ? "Restaurant" : "Restaurante",
                 active: true,
                 zones: [],
-                week: [],
                 dates: [],
                 periods: [
                   {
@@ -107,7 +106,6 @@ describe.each(["en", "es"] as const)("Station week %s", (locale) => {
                 name: "Bar",
                 active: true,
                 zones: [],
-                week: [],
                 dates: [],
                 periods: [
                   {

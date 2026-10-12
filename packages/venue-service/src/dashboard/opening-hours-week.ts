@@ -13,7 +13,7 @@ import type { RangeDialog } from "./range-dialog.js";
 import type { PeriodEditor } from "./period-editor.js";
 import { t } from "./strings.js";
 import { format } from "./hours-view.js";
-import { dateInWeek, namedOn, realDayLabel, giveOwnHours } from "./real-week.js";
+import { dateInWeek, namedOn, realDayLabel, giveOwnHours, seasonIdOf } from "./real-week.js";
 import { seasonWeek } from "./season-choice.js";
 import "./service-grid.js";
 import "./range-dialog.js";
@@ -50,12 +50,12 @@ const sameWeek = (a: readonly MenuWeekDay[], b: readonly MenuWeekDay[]) =>
       )
     );
   });
-const weekOf = (department: Department, seasonId: string): MenuWeekDay[] =>
+const weekOf = (department: Department, seasonOf: (weekday: number) => string): MenuWeekDay[] =>
   Array.from({ length: 7 }, (_, weekday) => ({
     weekday,
     slots: (
-      seasonWeek(department.seasonWeeks, seasonId).find((day) => day.weekday === weekday)?.slots ??
-      []
+      seasonWeek(department.seasonWeeks, seasonOf(weekday)).find((day) => day.weekday === weekday)
+        ?.slots ?? []
     ).map((slot) => ({
       ...slot,
     })),
@@ -104,6 +104,7 @@ export class OpeningHoursWeek extends LitElement {
   @property({ attribute: false }) api!: OpeningHoursApi;
   @property({ attribute: false }) department!: Department;
   @property() seasonId = "";
+  @property({ attribute: false }) seasons: OpeningHoursModel["seasons"] = [];
   @property({ attribute: false }) menus: OpeningHoursModel["menus"] = [];
   @property({ attribute: false }) timeZone?: string;
   @property() dayCutover = "06:00";
@@ -247,7 +248,9 @@ export class OpeningHoursWeek extends LitElement {
     return { days: this.draft, following: false };
   }
   private seedDraft() {
-    this.draft = weekOf(this.department, this.seasonId);
+    this.draft = weekOf(this.department, (weekday) =>
+      seasonIdOf(this.seasons, this.seasonId, this.weekStart, weekday),
+    );
     this.contextDays = this.namedDays.map((day) => ({ ...day }));
     if (this.weekStart) {
       this.dateFollowing.clear();

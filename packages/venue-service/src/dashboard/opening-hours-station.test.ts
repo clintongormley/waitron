@@ -37,7 +37,6 @@ const model = {
       active: true,
       zones: [],
       dates: [],
-      week: [],
       periods: [
         {
           id: "lunch",

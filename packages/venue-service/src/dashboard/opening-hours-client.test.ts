@@ -114,7 +114,6 @@ describe("OpeningHoursApi", () => {
             active: true,
             zones: [],
             seasonWeeks: [],
-            week: [],
             dates: [],
             periods: [
               {

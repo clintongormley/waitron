@@ -39,7 +39,6 @@ function allDepartments(): OpeningHoursModel["departments"] {
           ],
         },
       ],
-      week: [{ weekday: 1, slots: [{ periodId: "lunch", startsAt: "12:00", endsAt: "16:00" }] }],
       dates: [],
     },
     {
@@ -67,7 +66,6 @@ function allDepartments(): OpeningHoursModel["departments"] {
           ],
         },
       ],
-      week: [{ weekday: 2, slots: [{ periodId: "dinner", startsAt: "18:00", endsAt: "23:00" }] }],
       dates: [],
     },
     {
@@ -77,7 +75,6 @@ function allDepartments(): OpeningHoursModel["departments"] {
       zones: [],
       periods: [],
       seasonWeeks: [],
-      week: [],
       dates: [],
     },
   ];
@@ -147,7 +144,7 @@ it("opens a heading's department with a composed event and a usable link", async
 });
 it("updates headings and periods from the next model snapshot", async () => {
   const el = await mount();
-  el.departments = [{ ...allDepartments()[0]!, name: "Dining room", seasonWeeks: [], week: [] }];
+  el.departments = [{ ...allDepartments()[0]!, name: "Dining room", seasonWeeks: [] }];
   await el.updateComplete;
   const grid = el.shadowRoot!.querySelector<ServiceGrid>("service-grid")!;
   expect(grid.columns).toHaveLength(7);

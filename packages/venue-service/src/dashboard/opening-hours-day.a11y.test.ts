@@ -109,12 +109,6 @@ describe.each(["light", "dark"] as const)("Opening Day (%s)", (theme) => {
                       ],
                     },
                   ],
-                  week: [
-                    {
-                      weekday: 1,
-                      slots: [{ periodId: `p${i + 1}`, startsAt: "10:00", endsAt: "14:00" }],
-                    },
-                  ],
                   dates: [],
                 })),
         };
