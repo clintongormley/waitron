@@ -13,11 +13,13 @@ import { diningTables } from "./dining-tables.js";
 import {
   floorPlans,
   floorPlanTableParts,
+  floorPlanTableSizes,
   floorPlanTables,
   floorResetTableParts,
   floorResetTables,
   floorTodayJoinTables,
   floorTodayJoins,
+  floorTodaySplitParts,
   floorTodayTables,
   floorTodayZones,
   rangeCheck,
@@ -616,6 +618,161 @@ describe("floor plan tables", () => {
       { joinedResetTableId: reset.long, partResetTableId: reset.counter4, label: "Counter 4" },
       { joinedResetTableId: reset.long, partResetTableId: reset.counter5, label: "Counter 5" },
     ]);
+  });
+
+  it("keeps one size per master table, 1 to 99 squares each way", async () => {
+    const t = await insertCounterTables();
+    await inTx((tx) =>
+      tx.insert(floorPlanTableSizes).values({ planTableId: t.counter3, width: 2, height: 2 }),
+    );
+    const duplicate = await captureError(() =>
+      inTx((tx) =>
+        tx.insert(floorPlanTableSizes).values({ planTableId: t.counter3, width: 3, height: 3 }),
+      ),
+    );
+    expect(
+      refusalOn(duplicate, UNIQUE_VIOLATION, {
+        table: "floor_plan_table_sizes",
+        columns: ["plan_table_id"],
+      }),
+    ).toBe(true);
+    const narrow = await captureError(() =>
+      inTx((tx) =>
+        tx.insert(floorPlanTableSizes).values({ planTableId: t.counter4, width: 0, height: 2 }),
+      ),
+    );
+    expect(checkFailed(narrow, "floor_plan_table_sizes_width_ck")).toBe(true);
+    const deep = await captureError(() =>
+      inTx((tx) =>
+        tx.insert(floorPlanTableSizes).values({ planTableId: t.counter4, width: 2, height: 100 }),
+      ),
+    );
+    expect(checkFailed(deep, "floor_plan_table_sizes_height_ck")).toBe(true);
+    const sizes = await inTx((tx) => tx.select().from(floorPlanTableSizes));
+    expect(sizes).toHaveLength(1);
+  });
+
+  it("refuses deleting a master table that keeps a size", async () => {
+    const t = await insertCounterTables();
+    await inTx((tx) =>
+      tx.insert(floorPlanTableSizes).values({ planTableId: t.counter3, width: 2, height: 2 }),
+    );
+    const error = await captureError(() =>
+      inTx((tx) => tx.delete(floorPlanTables).where(eq(floorPlanTables.id, t.counter3))),
+    );
+    expect(isRefusal(error, FOREIGN_KEY_VIOLATION)).toBe(true);
+    const tables = await inTx((tx) => tx.select({ id: floorPlanTables.id }).from(floorPlanTables));
+    expect(tables.map((row) => row.id).sort()).toEqual(
+      [t.long, t.counter3, t.counter4, t.counter5].sort(),
+    );
+    const sizes = await inTx((tx) => tx.select().from(floorPlanTableSizes));
+    expect(sizes).toHaveLength(1);
+  });
+
+  async function insertLiveCounterTables(): Promise<{
+    long: string;
+    counter3: string;
+    counter4: string;
+    counter5: string;
+    bar: string;
+  }> {
+    return inTx(async (tx) => {
+      const rows = await tx
+        .insert(diningTables)
+        .values(
+          ["Long table", "Counter 3", "Counter 4", "Counter 5", "Bar"].map((label) => ({
+            locationId: LOCATION,
+            label,
+            zoneId: ZONE,
+          })),
+        )
+        .returning({ id: diningTables.id });
+      return {
+        long: rows[0]!.id,
+        counter3: rows[1]!.id,
+        counter4: rows[2]!.id,
+        counter5: rows[3]!.id,
+        bar: rows[4]!.id,
+      };
+    });
+  }
+
+  it("keeps a live table split off one joined table only", async () => {
+    const t = await insertLiveCounterTables();
+    await inTx((tx) =>
+      tx.insert(floorTodaySplitParts).values([
+        { joinedTableId: t.long, partTableId: t.counter3 },
+        { joinedTableId: t.long, partTableId: t.counter4 },
+      ]),
+    );
+    const twice = await captureError(() =>
+      inTx((tx) =>
+        tx.insert(floorTodaySplitParts).values({ joinedTableId: t.bar, partTableId: t.counter3 }),
+      ),
+    );
+    expect(
+      refusalOn(twice, UNIQUE_VIOLATION, {
+        table: "floor_today_split_parts",
+        columns: ["part_table_id"],
+      }),
+    ).toBe(true);
+    const itself = await captureError(() =>
+      inTx((tx) =>
+        tx.insert(floorTodaySplitParts).values({ joinedTableId: t.long, partTableId: t.long }),
+      ),
+    );
+    expect(checkFailed(itself, "floor_today_split_parts_not_self_ck")).toBe(true);
+    const splits = await inTx((tx) => tx.select().from(floorTodaySplitParts));
+    expect(splits).toHaveLength(2);
+  });
+
+  it("refuses deleting a live table a split record names, either way round", async () => {
+    const t = await insertLiveCounterTables();
+    await inTx((tx) =>
+      tx.insert(floorTodaySplitParts).values({ joinedTableId: t.long, partTableId: t.counter3 }),
+    );
+    for (const doomed of [t.counter3, t.long]) {
+      const error = await captureError(() =>
+        inTx((tx) => tx.delete(diningTables).where(eq(diningTables.id, doomed))),
+      );
+      expect(isRefusal(error, FOREIGN_KEY_VIOLATION)).toBe(true);
+    }
+    const live = await inTx((tx) => tx.select({ id: diningTables.id }).from(diningTables));
+    expect(live.map((row) => row.id)).toEqual(expect.arrayContaining([t.long, t.counter3]));
+    const splits = await inTx((tx) => tx.select().from(floorTodaySplitParts));
+    expect(splits).toHaveLength(1);
+  });
+
+  it("round-trips a kept size and a split record", async () => {
+    const plan = await insertCounterTables();
+    const live = await insertLiveCounterTables();
+    await inTx(async (tx) => {
+      await tx
+        .insert(floorPlanTableSizes)
+        .values({ planTableId: plan.counter3, width: 2, height: 3 });
+      await tx
+        .insert(floorTodaySplitParts)
+        .values({ joinedTableId: live.long, partTableId: live.counter5 });
+    });
+    const sizes = await inTx((tx) =>
+      tx
+        .select({
+          planTableId: floorPlanTableSizes.planTableId,
+          width: floorPlanTableSizes.width,
+          height: floorPlanTableSizes.height,
+        })
+        .from(floorPlanTableSizes),
+    );
+    expect(sizes).toEqual([{ planTableId: plan.counter3, width: 2, height: 3 }]);
+    const splits = await inTx((tx) =>
+      tx
+        .select({
+          joinedTableId: floorTodaySplitParts.joinedTableId,
+          partTableId: floorTodaySplitParts.partTableId,
+        })
+        .from(floorTodaySplitParts),
+    );
+    expect(splits).toEqual([{ joinedTableId: live.long, partTableId: live.counter5 }]);
   });
 
   it("has no saved joins: their four tables are gone", () => {

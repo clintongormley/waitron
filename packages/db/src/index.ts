@@ -88,11 +88,13 @@ export {
   floorPlanShape,
   floorPlans,
   floorPlanTableParts,
+  floorPlanTableSizes,
   floorPlanTables,
   floorResetTableParts,
   floorResetTables,
   floorTodayJoinTables,
   floorTodayJoins,
+  floorTodaySplitParts,
   floorTodayTables,
   floorTodayZones,
 } from "./schema/floor-plans.js";
