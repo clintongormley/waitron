@@ -4,19 +4,13 @@ import { eq } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import {
-  floorZones,
-  diningTables,
-  floorTodayTables,
-  floorTodayZones,
-  locations,
-} from "@waitron/db";
+import { floorZones, diningTables, floorTodayTables, locations } from "@waitron/db";
 import { hashPin, loginWithPin, persons } from "@waitron/identity";
 import { ALL_MODULES, enabledTableRemovals } from "./modules.js";
 import { mountTillApi } from "./till-api.js";
 import { SESSION_COOKIE } from "./till-session.js";
 import { inTx, seat, setupPartyVenue, type PartyVenue } from "./testing/party-venue.js";
-import { mergeOf, plannedZone, resaveMaster, todayRow } from "./testing/floor-today-venue.js";
+import { mergeOf, plannedZone, todayRow } from "./testing/floor-today-venue.js";
 import { seedSessionDevice } from "./testing/session-device.js";
 import "./errors.js";
 
@@ -93,14 +87,13 @@ async function floorToday(tableId: string): Promise<FloorToday> {
 }
 
 /** A at (0, 0) and B at (20, 0), both 8 × 8 and free. */
-async function twoTables(joins: { seats: number; keys: string[] }[] = [], now?: Date) {
+async function twoTables(now?: Date) {
   const { table, zoneId, master } = await plannedZone(
     v,
     [
       { key: "a", place: { x: 0, y: 0 } },
       { key: "b", place: { x: 20, y: 0 } },
     ],
-    joins,
     now,
   );
   return { a: table.a!, b: table.b!, zoneId, master };
@@ -144,7 +137,7 @@ describe("merging and splitting free tables", () => {
     expect(await todayRow(v, a)).toEqual(before);
   });
 
-  it("asks for seats when no saved join has exactly these tables", async () => {
+  it("asks for seats when a merge sends none", async () => {
     const unsaved = await twoTables();
     expect(
       await refusal(today(unsaved.a, "merge", { targetId: unsaved.b, side: "right" })),
@@ -153,48 +146,6 @@ describe("merging and splitting free tables", () => {
       body: { error: { code: "merge.seats_required", params: {} } },
     });
     expect(await mergeOf(v, unsaved.a)).toBeNull();
-
-    const saved = await twoTables([{ seats: 10, keys: ["a", "b"] }]);
-    await expect204(today(saved.a, "merge", { targetId: saved.b, side: "right" }));
-    expect(await floorToday(saved.a)).toMatchObject({ joinSeats: 10 });
-  });
-
-  it("a join saved in the editor waits for the next reset", async () => {
-    // The app's clock, so the routes' catch-up falls on the same business day and resets nothing.
-    const now = v.clock.now().instant;
-    const { a, b, zoneId, master } = await twoTables([], now);
-    await resaveMaster(
-      v,
-      zoneId,
-      { joins: [{ seats: 6, masterIds: [master.a!, master.b!] }] },
-      now,
-    );
-    const generation = async () => {
-      const [row] = await inTx(v, (tx) =>
-        tx
-          .select({ generation: floorTodayZones.generation })
-          .from(floorTodayZones)
-          .where(eq(floorTodayZones.zoneId, zoneId)),
-      );
-      return row!.generation;
-    };
-    const built = await generation();
-
-    expect(await refusal(today(a, "merge", { targetId: b, side: "right" }))).toEqual({
-      status: 400,
-      body: { error: { code: "merge.seats_required", params: {} } },
-    });
-    expect(await mergeOf(v, a)).toBeNull();
-    expect(await generation()).toBe(built);
-
-    const reset = await app.request(`/api/zones/${zoneId}/today/reset`, {
-      method: "POST",
-      headers: { "content-type": "application/json", cookie },
-      body: "{}",
-    });
-    expect(reset.status, await reset.clone().text()).toBe(204);
-    await expect204(today(a, "merge", { targetId: b, side: "right" }));
-    expect(await floorToday(a)).toMatchObject({ joinSeats: 6 });
   });
 
   it("refuses to merge a seated table or one needing clearing, and to split a seated merge here", async () => {

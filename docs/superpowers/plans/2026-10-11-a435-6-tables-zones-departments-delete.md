@@ -1,5 +1,9 @@
 # A435 step 6: Tables, zones and departments Delete Implementation Plan
 
+> **2026-10-12, A503 part 1:** saved joins (`floor_plan_joins`, `floor_reset_joins` and their member
+> tables) are gone. See
+> [the A503 design](../specs/2026-10-12-a503-joined-tables-design.md).
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development to implement this plan task-by-task, in the queue's registered feature worktree. Use checkbox steps. One implementer or reviewer may edit/run tests there at a time. Each task has a budget below 100 tool calls; return a precise handoff at a passing or explained RED boundary before reaching that limit. The separate plan author writes only this document; the driver supplies its fresh-context plan review.
 
 **Goal:** Permanently delete zones and departments with one complete impact confirmation, while preserving the newer saved-plan/today's-plan table lifecycle and every historical fact.

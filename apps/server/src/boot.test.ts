@@ -1654,7 +1654,6 @@ describe("startServer, against a migrated venue directory", () => {
           await send("PUT", `/zones/${zoneId}/floor-plan`, {
             revision: 0,
             tables: [table],
-            joins: [],
           })
         ).status,
       ).toBe(200);
@@ -1679,7 +1678,6 @@ describe("startServer, against a migrated venue directory", () => {
       const removal = await send("PUT", `/zones/${zoneId}/floor-plan`, {
         revision: 1,
         tables: [],
-        joins: [],
       });
       expect(removal.status).toBe(409);
       expect(await removal.json()).toMatchObject({

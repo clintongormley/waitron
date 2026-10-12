@@ -38,13 +38,12 @@ export async function tableServiceZone(v: PartyVenue): Promise<string> {
 }
 
 /**
- * A fresh table-service zone, its live tables, and a first saved master holding `entries` and
- * `joins`, which builds today's plan. Labels are made unique.
+ * A fresh table-service zone, its live tables, and a first saved master holding `entries`, which
+ * builds today's plan. Labels are made unique.
  */
 export async function plannedZone(
   v: PartyVenue,
   entries: PlannedEntry[],
-  joins: { seats: number; keys: string[] }[] = [],
   now: Date = new Date(),
 ): Promise<{
   zoneId: string;
@@ -77,61 +76,13 @@ export async function plannedZone(
     });
   }
   const { revision, ids } = await inTx(v, (tx) =>
-    saveZonePlan(
-      tx,
-      v.cfg,
-      REMOVALS,
-      zoneId,
-      {
-        revision: 0,
-        tables,
-        joins: joins.map((join) => ({ seats: join.seats, tableKeys: join.keys })),
-      },
-      now,
-    ),
+    saveZonePlan(tx, v.cfg, REMOVALS, zoneId, { revision: 0, tables }, now),
   );
   const plan = await inTx(v, (tx) => readZonePlan(tx, v.cfg, zoneId));
   for (const entry of entries) {
     table[entry.key] = plan.tables.find((t) => t.id === ids[entry.key])!.liveTableId!;
   }
   return { zoneId, table, master: ids, revision };
-}
-
-/** Saves the zone's master again as `readZonePlan` reads it, without `drop`, with exactly `joins` (by master table id). Runs no reset (the zone has a today's plan). */
-export async function resaveMaster(
-  v: PartyVenue,
-  zoneId: string,
-  change: { joins: { seats: number; masterIds: string[] }[]; drop?: string[] },
-  now: Date = new Date(),
-): Promise<number> {
-  return inTx(v, async (tx) => {
-    const plan = await readZonePlan(tx, v.cfg, zoneId);
-    const drop = new Set(change.drop ?? []);
-    const tables: ZonePlanSave["tables"] = plan.tables.flatMap((t) =>
-      t.id === null || drop.has(t.id)
-        ? []
-        : [
-            {
-              id: t.id,
-              key: t.id,
-              label: t.label,
-              seats: t.seats,
-              fixed: t.fixed,
-              placement: t.placement,
-            },
-          ],
-    );
-    const joins = change.joins.map((join) => ({ seats: join.seats, tableKeys: join.masterIds }));
-    const saved = await saveZonePlan(
-      tx,
-      v.cfg,
-      REMOVALS,
-      zoneId,
-      { revision: plan.revision, tables, joins },
-      now,
-    );
-    return saved.revision;
-  });
 }
 
 export async function todayRow(

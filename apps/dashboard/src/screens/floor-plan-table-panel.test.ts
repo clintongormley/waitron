@@ -29,7 +29,6 @@ const plan: FloorPlan = {
     { id: "m2", liveTableId: "l2", label: "T2", seats: 2, fixed: true, placement: null },
     { id: "m9", liveTableId: "l9", label: "T9", seats: null, fixed: false, placement: null },
   ],
-  joins: [{ id: "j1", seats: 6, tableIds: ["m1", "m2"] }],
 };
 
 const opened = (): FloorPlanDraft => draftFromPlan(plan);
@@ -344,79 +343,10 @@ it("shows nothing for a table the draft does not hold", async () => {
   expect(el.shadowRoot!.querySelector("[name]")).toBeNull();
 });
 
-const joinRows = (el: FloorPlanTablePanel) => [
-  ...el.shadowRoot!.querySelectorAll<HTMLElement>("[data-join]"),
-];
-
-it("lists the table's joins and removes one", async () => {
+it("has no Joins section and no Add join", async () => {
   const el = await open();
-  const { changes } = listen(el);
-  expect(el.shadowRoot!.querySelector("[data-joins-heading]")!.textContent!.trim()).toBe("Joins");
-  expect(
-    joinRows(el).map((row) => row.querySelector("[data-join-text]")!.textContent!.trim()),
-  ).toEqual(["with T2 · seats 6"]);
-  joinRows(el)[0]!.querySelector<HTMLElement>("[data-test=remove-join]")!.click();
-  expect(changes).toHaveLength(1);
-  expect(changes[0]!.draft.joins).toEqual([]);
   await el.updateComplete;
-  expect(joinRows(el)).toEqual([]);
-});
-
-it("names a join's unnamed table Unnamed and lists several with commas", async () => {
-  let draft = patchTable(opened(), "m2", { label: " " });
-  draft = { ...draft, joins: [{ key: "j1", seats: 8, tableKeys: ["m2", "m1", "m9"] }] };
-  const el = await open({ draft });
-  expect(joinRows(el)[0]!.querySelector("[data-join-text]")!.textContent!.trim()).toBe(
-    "with Unnamed, T9 · seats 8",
-  );
-});
-
-it("shows only the joins the selected table is in", async () => {
-  const el = await open({ tableKey: "m9" });
-  expect(joinRows(el)).toEqual([]);
-});
-
-it("Add join asks the page to open the dialog for this table", async () => {
-  const el = await open();
-  const asked: unknown[] = [];
-  el.addEventListener("floor-plan-add-join", (e) => asked.push((e as CustomEvent).detail));
-  const add = action(el, "add-join")!;
-  expect(add.textContent!.trim()).toBe("Add join");
-  add.click();
-  expect(asked).toEqual([{ tableKey: "m1" }]);
-});
-
-it("shows the joins in Spanish", async () => {
-  setLocale("es-ES");
-  const el = await open();
-  expect(el.shadowRoot!.querySelector("[data-joins-heading]")!.textContent!.trim()).toBe("Uniones");
-  expect(joinRows(el)[0]!.querySelector("[data-join-text]")!.textContent!.trim()).toBe(
-    "con T2 · 6 plazas",
-  );
-  expect(action(el, "add-join")!.textContent!.trim()).toBe("Añadir unión");
-});
-
-it("shows a join's table name as typed, even one that looks like a placeholder", async () => {
-  const draft = patchTable(opened(), "m2", { label: "$& {seats}" });
-  const el = await open({ draft });
-  expect(joinRows(el)[0]!.querySelector("[data-join-text]")!.textContent!.trim()).toBe(
-    "with $& {seats} · seats 6",
-  );
-});
-
-it("names each Remove after its join's tables", async () => {
-  const draft = {
-    ...opened(),
-    joins: [...opened().joins, { key: "j2", seats: 8, tableKeys: ["m1", "m2", "m9"] }],
-  };
-  const el = await open({ draft });
-  const labels = joinRows(el).map((row) =>
-    row.querySelector("[data-test=remove-join]")!.getAttribute("aria-label"),
-  );
-  expect(labels).toEqual(["Remove: T2", "Remove: T2, T9"]);
-  setLocale("es-ES");
-  await el.updateComplete;
-  expect(
-    joinRows(el)[0]!.querySelector("[data-test=remove-join]")!.getAttribute("aria-label"),
-  ).toBe("Eliminar: T2");
+  expect(el.shadowRoot!.querySelector("[data-joins-heading]")).toBeNull();
+  expect(el.shadowRoot!.querySelector("[data-test=add-join]")).toBeNull();
+  expect(el.shadowRoot!.querySelector("[data-join]")).toBeNull();
 });

@@ -49,7 +49,6 @@ function plan(m1x = 2): FloorPlan {
       { id: "m2", liveTableId: "l2", label: "T2", seats: 2, fixed: true, placement: null },
       { id: "m9", liveTableId: "l9", label: "T9", seats: null, fixed: false, placement: null },
     ],
-    joins: [{ id: "j1", seats: 6, tableIds: ["m1", "m2"] }],
   };
 }
 
@@ -145,7 +144,7 @@ it("a press that reaches an untouched Save's handler sends nothing and shows not
   expect(message(el)).toBe("");
 });
 
-it("Save sends the draft with a key per table and joins as keys", async () => {
+it("Save sends the draft with a key per table", async () => {
   const api = stubApi();
   const el = await open(api);
   await move(el, "m1", 5);
@@ -154,7 +153,6 @@ it("Save sends the draft with a key per table and joins as keys", async () => {
   expect(api.saveFloorPlan).toHaveBeenCalledWith("z1", saveFromDraft(3, moved));
   const body = vi.mocked(api.saveFloorPlan).mock.calls[0]![1];
   expect(body.tables[0]!.placement!.x).toBe(5);
-  expect(body.joins).toEqual([{ seats: 6, tableKeys: ["m1", "m2"] }]);
 });
 
 it("a save marks the sent draft saved at once and reads the plan again", async () => {
@@ -250,7 +248,6 @@ it("a failed re-read after a save shows as a read's failure, and the next Save s
   expect(body.tables).toContainEqual(expect.objectContaining({ id: "m5", key: "m5", label: "T5" }));
   expect(body.tables).toContainEqual(expect.objectContaining({ id: "m9", key: "m9" }));
   expect(body.tables.every((t) => !/^(new|live):/.test(t.key))).toBe(true);
-  expect(body.joins).toEqual([{ seats: 6, tableKeys: ["m1", "m2"] }]);
 });
 
 it("a first save's re-read gives a new table its live table", async () => {
@@ -482,7 +479,7 @@ it("an accepted save whose answer lands after another zone opened changes nothin
     .fn()
     .mockReturnValueOnce(write.promise)
     .mockReturnValue(new Promise(() => {}));
-  const bar: FloorPlan = { ...plan(), zoneId: "z2", tables: [plan().tables[0]!], joins: [] };
+  const bar: FloorPlan = { ...plan(), zoneId: "z2", tables: [plan().tables[0]!] };
   const getFloorPlan = vi.fn((zoneId: string) => Promise.resolve(zoneId === "z2" ? bar : plan()));
   const el = await open(stubApi({ saveFloorPlan, getFloorPlan }));
   await move(el, "m1", 5);
@@ -524,7 +521,7 @@ it("a refused save whose answer lands after another zone opened shows nothing, a
     .fn()
     .mockReturnValueOnce(write.promise)
     .mockReturnValue(new Promise(() => {}));
-  const bar: FloorPlan = { ...plan(), zoneId: "z2", tables: [plan().tables[0]!], joins: [] };
+  const bar: FloorPlan = { ...plan(), zoneId: "z2", tables: [plan().tables[0]!] };
   const getFloorPlan = vi.fn((zoneId: string) => Promise.resolve(zoneId === "z2" ? bar : plan()));
   const el = await open(stubApi({ saveFloorPlan, getFloorPlan }));
   await move(el, "m1", 5);
@@ -668,7 +665,7 @@ it("Reload drops the selection of a table the newer plan no longer has", async (
   const saveFloorPlan = vi
     .fn()
     .mockRejectedValue({ code: "floor_plan.out_of_date", params: { zoneId: "z1", revision: 4 } });
-  const newer: FloorPlan = { ...plan(), revision: 4, tables: plan().tables.slice(1), joins: [] };
+  const newer: FloorPlan = { ...plan(), revision: 4, tables: plan().tables.slice(1) };
   const getFloorPlan = vi.fn().mockResolvedValueOnce(plan()).mockResolvedValueOnce(newer);
   const el = await open(stubApi({ saveFloorPlan, getFloorPlan }));
   await fromCanvas(el, "wt-table-select", { key: "m1" });

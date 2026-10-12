@@ -21,7 +21,6 @@ const draft: FloorPlanDraft = {
       placement: null,
     },
   ],
-  joins: [],
 };
 
 class PanelLeaveApp extends LitElement {

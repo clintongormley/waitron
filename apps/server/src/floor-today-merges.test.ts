@@ -2,30 +2,16 @@ import { eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import {
-  diningTables,
-  floorResetJoinTables,
-  floorResetJoins,
-  floorTodayJoins,
-  floorTodayTables,
-} from "@waitron/db";
+import { diningTables, floorTodayJoins, floorTodayTables } from "@waitron/db";
 import type { JoinSide } from "@waitron/shared";
-import {
-  leaveMergesRestoring,
-  mergeMembers,
-  savedJoinSeats,
-  writeMerge,
-} from "./floor-today-merges.js";
-import { resetZone } from "./floor-today-store.js";
-import { ALL_MODULES, enabledTableRemovals } from "./modules.js";
+import { leaveMergesRestoring, mergeMembers, writeMerge } from "./floor-today-merges.js";
 import { inTx, seat, setupPartyVenue, type PartyVenue } from "./testing/party-venue.js";
-import { mergeOf, plannedZone, resaveMaster, todayRow } from "./testing/floor-today-venue.js";
+import { mergeOf, plannedZone, todayRow } from "./testing/floor-today-venue.js";
 import "./errors.js";
 
 let v: PartyVenue;
 
 const NOW = new Date("2026-10-10T12:00:00Z");
-const REMOVALS = enabledTableRemovals(ALL_MODULES);
 
 useVenueDb({
   resetPerTest: false,
@@ -62,7 +48,7 @@ const byId = <T extends { tableId: string }>(rows: T[]): T[] =>
   [...rows].sort((a, b) => a.tableId.localeCompare(b.tableId));
 
 /** A and B 8×8 at (0, 0) and (20, 0), C at (40, 0) turned 30°. */
-async function threeTables(joins: { seats: number; keys: string[] }[] = []) {
+async function threeTables() {
   return plannedZone(
     v,
     [
@@ -70,7 +56,6 @@ async function threeTables(joins: { seats: number; keys: string[] }[] = []) {
       { key: "b", place: { x: 20, y: 0 } },
       { key: "c", place: { x: 40, y: 0, rotation: 30 } },
     ],
-    joins,
     NOW,
   );
 }
@@ -100,31 +85,9 @@ describe("today's merges", () => {
     expect((await inTx(v, (tx) => mergeMembers(tx, a))).sort()).toEqual([a, b].sort());
   });
 
-  it("takes the seats from the saved join with exactly these tables", async () => {
-    const { table } = await threeTables([{ seats: 6, keys: ["a", "b"] }]);
+  it("refuses a merge without seats, and writes nothing", async () => {
+    const { table } = await threeTables();
 
-    expect(await inTx(v, (tx) => savedJoinSeats(tx, [table.b!, table.a!]))).toBe(6);
-    await merge(table.b!, table.a!, "right", null);
-
-    expect((await mergeOf(v, table.a!))!.seats).toBe(6);
-  });
-
-  it("takes the seats sent over the saved join's", async () => {
-    const { table } = await threeTables([{ seats: 6, keys: ["a", "b"] }]);
-
-    await merge(table.b!, table.a!, "right", 9);
-
-    expect((await mergeOf(v, table.a!))!.seats).toBe(9);
-  });
-
-  it("refuses a merge with no saved join and no seats, and writes nothing", async () => {
-    const { table } = await threeTables([
-      { seats: 10, keys: ["a", "b", "c"] },
-      { seats: 5, keys: ["a", "c"] },
-    ]);
-
-    expect(await inTx(v, (tx) => savedJoinSeats(tx, [table.a!, table.b!]))).toBeNull();
-    expect(await inTx(v, (tx) => savedJoinSeats(tx, [table.a!, "missing-table"]))).toBeNull();
     await expect(merge(table.b!, table.a!, "right", null)).rejects.toMatchObject({
       code: "merge.seats_required",
       params: {},
@@ -135,34 +98,8 @@ describe("today's merges", () => {
     expect(await mergeOf(v, table.b!)).toBeNull();
   });
 
-  it("finds no saved join for a table that is not in the master", async () => {
-    const { table } = await threeTables([{ seats: 6, keys: ["a", "b"] }]);
-    const loose = await v.table(`Loose ${table.a!.slice(0, 6)}`);
-
-    expect(await inTx(v, (tx) => savedJoinSeats(tx, [table.a!, loose]))).toBeNull();
-    expect(await inTx(v, (tx) => savedJoinSeats(tx, [table.a!]))).toBeNull();
-  });
-
-  it("finds no saved join when two tables stand on one master table", async () => {
-    const { table } = await threeTables([{ seats: 6, keys: ["a", "b"] }]);
-    const [b] = await inTx(v, (tx) =>
-      tx
-        .select({ planTableId: diningTables.planTableId })
-        .from(diningTables)
-        .where(eq(diningTables.id, table.b!)),
-    );
-    await inTx(v, (tx) =>
-      tx
-        .update(diningTables)
-        .set({ planTableId: b!.planTableId })
-        .where(eq(diningTables.id, table.c!)),
-    );
-
-    expect(await inTx(v, (tx) => savedJoinSeats(tx, [table.a!, table.b!, table.c!]))).toBeNull();
-  });
-
   it("grows a merge with a third table, working its seats out again", async () => {
-    const { table } = await threeTables([{ seats: 6, keys: ["a", "b"] }]);
+    const { table } = await threeTables();
     await merge(table.b!, table.a!, "right", 8);
 
     await expect(merge(table.c!, table.b!, "bottom", null)).rejects.toMatchObject({
@@ -198,16 +135,6 @@ describe("today's merges", () => {
     expect(await place(table.c!)).toEqual({ x: 0, y: 8, rotation: 0 });
   });
 
-  it("grows a merge to a saved join of three", async () => {
-    const { table } = await threeTables([{ seats: 11, keys: ["a", "b", "c"] }]);
-    await merge(table.b!, table.a!, "right", 8);
-
-    await merge(table.c!, table.a!, "left", null);
-
-    expect((await mergeOf(v, table.a!))!.seats).toBe(11);
-    expect((await mergeOf(v, table.c!))!.joinId).toBe((await mergeOf(v, table.a!))!.joinId);
-  });
-
   it("refuses a fixed table either way, a merged moving table, two zones and one table twice", async () => {
     const { table } = await plannedZone(
       v,
@@ -217,10 +144,9 @@ describe("today's merges", () => {
         { key: "c", place: { x: 40, y: 0 } },
         { key: "f", place: { x: 60, y: 0 }, fixed: true },
       ],
-      [],
       NOW,
     );
-    const other = await plannedZone(v, [{ key: "o", place: { x: 0, y: 0 } }], [], NOW);
+    const other = await plannedZone(v, [{ key: "o", place: { x: 0, y: 0 } }], NOW);
 
     await expect(merge(table.f!, table.a!, "right", 8)).rejects.toMatchObject({
       code: "table.fixed",
@@ -256,7 +182,6 @@ describe("today's merges", () => {
         { key: "s", place: null },
         { key: "t", place: { x: 40, y: 0 } },
       ],
-      [],
       NOW,
     );
     await setToday(table.t!, { takenOff: true });
@@ -357,116 +282,3 @@ async function zoneOf(tableId: string): Promise<string | null> {
   );
   return row!.zoneId;
 }
-
-describe("today's copy of the master's joins", () => {
-  const seatsOf = (tableIds: string[]) => inTx(v, (tx) => savedJoinSeats(tx, tableIds));
-  const reset = (zoneId: string) => inTx(v, (tx) => resetZone(tx, v.cfg, REMOVALS, zoneId, NOW));
-
-  async function copiedJoins(zoneId: string): Promise<{ seats: number; members: number }[]> {
-    return inTx(v, async (tx) => {
-      const joins = await tx
-        .select({ id: floorResetJoins.id, seats: floorResetJoins.seats })
-        .from(floorResetJoins)
-        .where(eq(floorResetJoins.zoneId, zoneId));
-      const answer = [];
-      for (const join of joins) {
-        const members = await tx
-          .select({ id: floorResetJoinTables.id })
-          .from(floorResetJoinTables)
-          .where(eq(floorResetJoinTables.joinId, join.id));
-        answer.push({ seats: join.seats, members: members.length });
-      }
-      return answer;
-    });
-  }
-
-  it("a join deleted from the master mid-day still gives today's merge its seats, until the next reset", async () => {
-    const { zoneId, table } = await threeTables([{ seats: 6, keys: ["a", "b"] }]);
-    await resaveMaster(v, zoneId, { joins: [] }, NOW);
-
-    expect(await seatsOf([table.a!, table.b!])).toBe(6);
-    await reset(zoneId);
-    expect(await seatsOf([table.a!, table.b!])).toBeNull();
-  });
-
-  it("a join whose master table was deleted mid-day still gives today's merge its seats", async () => {
-    const { zoneId, table, master } = await threeTables([{ seats: 6, keys: ["a", "b"] }]);
-    await resaveMaster(v, zoneId, { joins: [], drop: [master.b!] }, NOW);
-
-    expect(await seatsOf([table.a!, table.b!])).toBe(6);
-  });
-
-  it("a reset replaces the zone's copy rather than adding to it", async () => {
-    const { zoneId, table, master } = await threeTables([
-      { seats: 6, keys: ["a", "b"] },
-      { seats: 9, keys: ["a", "c"] },
-    ]);
-    await resaveMaster(
-      v,
-      zoneId,
-      { joins: [{ seats: 7, masterIds: [master.a!, master.b!] }] },
-      NOW,
-    );
-
-    await reset(zoneId);
-
-    expect(await seatsOf([table.a!, table.b!])).toBe(7);
-    expect(await seatsOf([table.a!, table.c!])).toBeNull();
-    expect(await copiedJoins(zoneId)).toEqual([{ seats: 7, members: 2 }]);
-  });
-
-  it("resetting one zone leaves another zone's copy alone", async () => {
-    const one = await threeTables([{ seats: 6, keys: ["a", "b"] }]);
-    const two = await threeTables([{ seats: 6, keys: ["a", "b"] }]);
-    await resaveMaster(v, two.zoneId, { joins: [] }, NOW);
-
-    await reset(one.zoneId);
-    expect(await seatsOf([two.table.a!, two.table.b!])).toBe(6);
-    await reset(two.zoneId);
-    expect(await seatsOf([two.table.a!, two.table.b!])).toBeNull();
-  });
-
-  it("finds no copied join when one of the tables has no reset row, or one is named twice", async () => {
-    const { table } = await threeTables([{ seats: 6, keys: ["a", "b"] }]);
-    const loose = await v.table(`Loose ${table.a!.slice(0, 6)}`);
-
-    expect(await seatsOf([table.a!, table.b!])).toBe(6);
-    expect(await seatsOf([table.a!, table.b!, loose])).toBeNull();
-    expect(await seatsOf([table.a!, table.a!, table.b!])).toBeNull();
-  });
-
-  it("copies no join whose master table two live tables follow", async () => {
-    const { zoneId, table } = await threeTables([{ seats: 6, keys: ["a", "b"] }]);
-    const [b] = await inTx(v, (tx) =>
-      tx
-        .select({ planTableId: diningTables.planTableId })
-        .from(diningTables)
-        .where(eq(diningTables.id, table.b!)),
-    );
-    await inTx(v, (tx) =>
-      tx
-        .update(diningTables)
-        .set({ planTableId: b!.planTableId })
-        .where(eq(diningTables.id, table.c!)),
-    );
-
-    await reset(zoneId);
-
-    expect(await copiedJoins(zoneId)).toEqual([]);
-    expect(await seatsOf([table.a!, table.b!])).toBeNull();
-  });
-
-  it("a reset after a copied member's master table was deleted replaces the copy without a refusal", async () => {
-    const { zoneId, table, master } = await threeTables([{ seats: 6, keys: ["a", "b"] }]);
-    await resaveMaster(v, zoneId, { joins: [], drop: [master.b!] }, NOW);
-
-    await reset(zoneId);
-
-    const [b] = await inTx(v, (tx) =>
-      tx.select({ id: diningTables.id }).from(diningTables).where(eq(diningTables.id, table.b!)),
-    );
-    expect(b).toBeUndefined();
-    expect(await copiedJoins(zoneId)).toEqual([]);
-    expect(await seatsOf([table.a!, table.b!])).toBeNull();
-  });
-});

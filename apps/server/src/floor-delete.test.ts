@@ -6,11 +6,7 @@ import {
   diningTables,
   floorPlans,
   floorPlanTables,
-  floorPlanJoins,
-  floorPlanJoinTables,
   floorResetTables,
-  floorResetJoins,
-  floorResetJoinTables,
   floorTodayTables,
   floorTodayJoins,
   floorTodayJoinTables,
@@ -80,11 +76,7 @@ const floorRows = {
   diningTables,
   floorPlans,
   floorPlanTables,
-  floorPlanJoins,
-  floorPlanJoinTables,
   floorResetTables,
-  floorResetJoins,
-  floorResetJoinTables,
   floorTodayTables,
   floorTodayJoins,
   floorTodayJoinTables,
@@ -142,27 +134,6 @@ async function planned(z: string, prefix: string, locationId = v.cfg.locationId 
       .insert(floorResetTables)
       .values({ zoneId: z, label: `${prefix} pending`, pending: true, planTableId: masters[0]!.id })
       .returning();
-    const [savedJoin] = await tx
-      .insert(floorPlanJoins)
-      .values({ planId: plan!.id, seats: 12 })
-      .returning();
-    const savedMembers = await tx
-      .insert(floorPlanJoinTables)
-      .values(masters.map((table) => ({ joinId: savedJoin!.id, planTableId: table.id })))
-      .returning();
-    const [resetJoin] = await tx
-      .insert(floorResetJoins)
-      .values({ zoneId: z, seats: 12 })
-      .returning();
-    const resetMembers = await tx
-      .insert(floorResetJoinTables)
-      .values(
-        [resets[0]!, resets[1]!, pending!].map((row) => ({
-          joinId: resetJoin!.id,
-          resetTableId: row.id,
-        })),
-      )
-      .returning();
     const today = await tx
       .insert(floorTodayTables)
       .values(live.map((table) => ({ tableId: table.id })))
@@ -197,10 +168,6 @@ async function planned(z: string, prefix: string, locationId = v.cfg.locationId 
       live,
       resets,
       pending: pending!,
-      savedJoin: savedJoin!,
-      savedMembers,
-      resetJoin: resetJoin!,
-      resetMembers,
       today,
       todayJoin: todayJoin!,
       todayMembers,
@@ -397,25 +364,11 @@ describe("floor hierarchy deletion", () => {
         { key: "tables", count: 4, targets: targets([...own.live, own.noToday]) },
         { key: "saved_tables", count: 3, targets: targets(own.masters) },
         {
-          key: "saved_joins",
-          count: 1,
-          targets: [
-            { id: own.savedJoin.id, name: "Delete saved A, Delete saved B, Delete saved C" },
-          ],
-        },
-        {
           key: "today_joins",
           count: 1,
           targets: [{ id: own.todayJoin.id, name: "Delete live A, Delete live B, Delete live C" }],
         },
         { key: "reset_targets", count: 4, targets: targets([...own.resets, own.pending]) },
-        {
-          key: "reset_joins",
-          count: 1,
-          targets: [
-            { id: own.resetJoin.id, name: "Delete pending, Delete reset 0, Delete reset 1" },
-          ],
-        },
       ],
     });
     expect(await inTx(v, snapshot)).toEqual(before);
@@ -425,11 +378,7 @@ describe("floor hierarchy deletion", () => {
       diningTables: [...own.live, own.noToday],
       floorPlans: [own.plan],
       floorPlanTables: own.masters,
-      floorPlanJoins: [own.savedJoin],
-      floorPlanJoinTables: own.savedMembers,
       floorResetTables: [...own.resets, own.pending],
-      floorResetJoins: [own.resetJoin],
-      floorResetJoinTables: own.resetMembers,
       floorTodayTables: own.today,
       floorTodayJoins: [own.todayJoin],
       floorTodayJoinTables: own.todayMembers,

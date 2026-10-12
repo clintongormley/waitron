@@ -100,7 +100,6 @@ describe("dropAction", () => {
       tableId: "b",
       targetId: "a",
       side: "right",
-      seatsGuess: 8,
       heading: "4+5",
     });
     expect(dropAction([a, b], { tableId: "b", x: 0, y: 3, targetId: "a" })).toMatchObject({
@@ -108,7 +107,7 @@ describe("dropAction", () => {
     });
   });
 
-  it("adds up today's seats of both groups, a table without seats counting 0", () => {
+  it("a table dropped on a merge goes against the member nearest the drop, named after all three", () => {
     const m1 = table("m1", "1", { today: today({ joinId: "j", seats: 2, joinSeats: 10 }) });
     const m2 = table("m2", "2", {
       today: today({ joinId: "j", seats: 3, placement: place(4, 0) }),
@@ -119,7 +118,6 @@ describe("dropAction", () => {
       tableId: "l",
       targetId: "m2",
       side: "right",
-      seatsGuess: 5,
       heading: "1+2+3",
     });
   });
@@ -133,7 +131,6 @@ describe("dropAction", () => {
       tableId: "a",
       other: null,
       merge: { moving: "b", target: "a", side: "left" },
-      seatsGuess: 8,
       heading: "4+5",
     });
   });
@@ -147,7 +144,6 @@ describe("dropAction", () => {
       tableId: "b",
       other: null,
       merge: { moving: "b", target: "a", side: "right" },
-      seatsGuess: 8,
       heading: "4+5",
     });
   });
@@ -163,7 +159,6 @@ describe("dropAction", () => {
       tableId: "b",
       other: p,
       merge: { moving: "b", target: "a", side: "right" },
-      seatsGuess: 8,
       heading: "4+5",
     });
   });
@@ -248,7 +243,6 @@ describe("dropAction", () => {
       tableId: "f1",
       other: null,
       merge: null,
-      seatsGuess: 8,
       heading: "Bar 1+2",
     });
   });
@@ -321,7 +315,6 @@ describe("pendingPlaces", () => {
         tableId: "b",
         targetId: "a",
         side: "right",
-        seatsGuess: 8,
         heading: "4+5",
       }),
     ).toEqual(new Map([["b", { ...turned, x: 11, y: 13 }]]));
@@ -332,7 +325,6 @@ describe("pendingPlaces", () => {
         tableId: "a",
         other: null,
         merge: { moving: "b", target: "a", side: "right" },
-        seatsGuess: 8,
         heading: "4+5",
       }),
     ).toEqual(new Map([["b", { ...turned, x: 11, y: 13 }]]));
@@ -369,7 +361,6 @@ describe("pendingPlaces", () => {
         tableId: "a",
         other: null,
         merge: null,
-        seatsGuess: 4,
         heading: "4",
       }),
     ).toEqual(none);

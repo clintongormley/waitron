@@ -1,22 +1,17 @@
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
 import { SQLiteSyncDialect } from "drizzle-orm/sqlite-core";
 import type { Transaction } from "../client.js";
 import { checkFailed, refusalOn } from "../constraint-target.js";
 import { CORE_MIGRATIONS } from "../migrations.js";
-import { FOREIGN_KEY_VIOLATION, UNIQUE_VIOLATION } from "../sql-state.js";
+import { UNIQUE_VIOLATION } from "../sql-state.js";
 import { withTransaction } from "../tenancy.js";
 import { captureError } from "../testing/errors.js";
-import { isRefusal } from "../unique-violation.js";
 import { useVenueDb } from "../testing/venue-db.js";
 import { diningTables } from "./dining-tables.js";
 import {
-  floorPlanJoinTables,
-  floorPlanJoins,
   floorPlans,
   floorPlanTables,
-  floorResetJoinTables,
-  floorResetJoins,
   floorResetTables,
   floorTodayJoinTables,
   floorTodayJoins,
@@ -201,81 +196,11 @@ describe("floor plan tables", () => {
     ).toBe(true);
   });
 
-  it("keeps a master table in one join only once", async () => {
-    const [tableId, joinId] = await inTx(async (tx) => {
-      const [t] = await tx
-        .insert(floorPlanTables)
-        .values({ ...GOOD_MASTER_TABLE, label: "J1" })
-        .returning({ id: floorPlanTables.id });
-      const [j] = await tx
-        .insert(floorPlanJoins)
-        .values({ planId: PLAN, seats: 8 })
-        .returning({ id: floorPlanJoins.id });
-      return [t!.id, j!.id];
-    });
-    await inTx((tx) => tx.insert(floorPlanJoinTables).values({ joinId, planTableId: tableId }));
-    const error = await captureError(() =>
-      inTx((tx) => tx.insert(floorPlanJoinTables).values({ joinId, planTableId: tableId })),
-    );
-    expect(
-      refusalOn(error, UNIQUE_VIOLATION, {
-        table: "floor_plan_join_tables",
-        columns: ["join_id", "plan_table_id"],
-      }),
-    ).toBe(true);
-  });
-
-  async function insertCopiedJoin() {
-    return inTx(async (tx) => {
-      const [reset] = await tx
-        .insert(floorResetTables)
-        .values({ zoneId: ZONE, tableId: TABLE_1, label: "T1", ...PLACED })
-        .returning({ id: floorResetTables.id });
-      const [join] = await tx
-        .insert(floorResetJoins)
-        .values({ zoneId: ZONE, seats: 6 })
-        .returning({ id: floorResetJoins.id });
-      await tx.insert(floorResetJoinTables).values({ joinId: join!.id, resetTableId: reset!.id });
-      return { resetId: reset!.id, joinId: join!.id };
-    });
-  }
-
-  it("keeps a reset row in one copied join only once", async () => {
-    const { resetId, joinId } = await insertCopiedJoin();
-    const error = await captureError(() =>
-      inTx((tx) => tx.insert(floorResetJoinTables).values({ joinId, resetTableId: resetId })),
-    );
-    expect(
-      refusalOn(error, UNIQUE_VIOLATION, {
-        table: "floor_reset_join_tables",
-        columns: ["join_id", "reset_table_id"],
-      }),
-    ).toBe(true);
-  });
-
-  it("refuses to delete a reset row a copied join names", async () => {
-    const { resetId } = await insertCopiedJoin();
-    const error = await captureError(() =>
-      inTx((tx) => tx.delete(floorResetTables).where(eq(floorResetTables.id, resetId))),
-    );
-    expect(isRefusal(error, FOREIGN_KEY_VIOLATION)).toBe(true);
-  });
-
   it.each([
-    [
-      "a master join with no seats",
-      () => inTx((tx) => tx.insert(floorPlanJoins).values({ planId: PLAN, seats: 0 })),
-      "floor_plan_joins_seats_ck",
-    ],
     [
       "a today's join with no seats",
       () => inTx((tx) => tx.insert(floorTodayJoins).values({ zoneId: ZONE, seats: 0 })),
       "floor_today_joins_seats_ck",
-    ],
-    [
-      "a copied join with no seats",
-      () => inTx((tx) => tx.insert(floorResetJoins).values({ zoneId: ZONE, seats: 0 })),
-      "floor_reset_joins_seats_ck",
     ],
     [
       "a reset row turned 20",
@@ -379,19 +304,6 @@ describe("floor plan tables", () => {
       await tx.insert(floorTodayTables).values({ tableId: TABLE_1, seats: 4, ...PLACED });
       await tx.insert(parties).values({ openedBy: PERSON, tableNames: ["T1", "T2"] });
     });
-    const copied = await inTx(async (tx) => {
-      const [reset] = await tx
-        .select({ id: floorResetTables.id })
-        .from(floorResetTables)
-        .where(eq(floorResetTables.tableId, TABLE_1));
-      const [join] = await tx
-        .insert(floorResetJoins)
-        .values({ zoneId: ZONE, seats: 6 })
-        .returning({ id: floorResetJoins.id });
-      await tx.insert(floorResetJoinTables).values({ joinId: join!.id, resetTableId: reset!.id });
-      return { resetId: reset!.id, joinId: join!.id };
-    });
-
     const [plan] = await inTx((tx) => tx.select().from(floorPlans).where(eq(floorPlans.id, PLAN)));
     expect(plan).toEqual({
       id: PLAN,
@@ -467,19 +379,15 @@ describe("floor plan tables", () => {
         .where(eq(parties.openedBy, PERSON)),
     );
     expect(party!.tableNames).toEqual(["T1", "T2"]);
-    const copiedJoins = await inTx((tx) =>
-      tx.select().from(floorResetJoins).where(eq(floorResetJoins.zoneId, ZONE)),
-    );
-    expect(copiedJoins).toEqual([{ id: copied.joinId, zoneId: ZONE, seats: 6 }]);
-    const copiedMembers = await inTx((tx) =>
-      tx
-        .select({
-          joinId: floorResetJoinTables.joinId,
-          resetTableId: floorResetJoinTables.resetTableId,
-        })
-        .from(floorResetJoinTables),
-    );
-    expect(copiedMembers).toEqual([{ joinId: copied.joinId, resetTableId: copied.resetId }]);
+  });
+
+  it("has no saved joins: their four tables are gone", () => {
+    const names = suite.db
+      .all<{ name: string }>(
+        sql`select name from sqlite_master where type = 'table' and name in ('floor_plan_joins', 'floor_plan_join_tables', 'floor_reset_joins', 'floor_reset_join_tables')`,
+      )
+      .map((row) => row.name);
+    expect(names).toEqual([]);
   });
 
   it("starts a today's zone at generation 0", async () => {

@@ -115,45 +115,6 @@ export const floorPlanTables = table(
   ],
 );
 
-export const floorPlanJoins = table(
-  "floor_plan_joins",
-  {
-    id: id("id").primaryKey().$defaultFn(newId),
-    planId: id("plan_id").notNull(),
-    seats: count("seats").notNull(),
-  },
-  (t) => [
-    foreignKey({
-      columns: [t.planId],
-      foreignColumns: [floorPlans.id],
-      name: "floor_plan_joins_plan_fk",
-    }),
-    check("floor_plan_joins_seats_ck", sql`${t.seats} >= 1`),
-  ],
-);
-
-export const floorPlanJoinTables = table(
-  "floor_plan_join_tables",
-  {
-    id: id("id").primaryKey().$defaultFn(newId),
-    joinId: id("join_id").notNull(),
-    planTableId: id("plan_table_id").notNull(),
-  },
-  (t) => [
-    unique("floor_plan_join_tables_join_table_key").on(t.joinId, t.planTableId),
-    foreignKey({
-      columns: [t.joinId],
-      foreignColumns: [floorPlanJoins.id],
-      name: "floor_plan_join_tables_join_fk",
-    }),
-    foreignKey({
-      columns: [t.planTableId],
-      foreignColumns: [floorPlanTables.id],
-      name: "floor_plan_join_tables_table_fk",
-    }),
-  ],
-);
-
 /**
  * What the zone's last reset copied: one row per planned live table, plus one per table it is to
  * create (`table_id` null).
@@ -189,52 +150,6 @@ export const floorResetTables = table(
       name: "floor_reset_tables_table_fk",
     }),
     ...placementChecks("floor_reset_tables", t),
-  ],
-);
-
-/** The master's saved joins as the zone's last reset copied them; a merge takes its seats from here. */
-export const floorResetJoins = table(
-  "floor_reset_joins",
-  {
-    id: id("id").primaryKey().$defaultFn(newId),
-    zoneId: id("zone_id").notNull(),
-    seats: count("seats").notNull(),
-  },
-  (t) => [
-    index("floor_reset_joins_zone_idx").on(t.zoneId),
-    foreignKey({
-      columns: [t.zoneId],
-      foreignColumns: [floorZones.id],
-      name: "floor_reset_joins_zone_fk",
-    }),
-    check("floor_reset_joins_seats_ck", sql`${t.seats} >= 1`),
-  ],
-);
-
-/**
- * One table of a copied join: the reset row the zone's last reset wrote for it. No cascade: a
- * cascade would shrink the join to a smaller one carrying the larger one's seats.
- */
-export const floorResetJoinTables = table(
-  "floor_reset_join_tables",
-  {
-    id: id("id").primaryKey().$defaultFn(newId),
-    joinId: id("join_id").notNull(),
-    resetTableId: id("reset_table_id").notNull(),
-  },
-  (t) => [
-    unique("floor_reset_join_tables_join_table_key").on(t.joinId, t.resetTableId),
-    index("floor_reset_join_tables_table_idx").on(t.resetTableId),
-    foreignKey({
-      columns: [t.joinId],
-      foreignColumns: [floorResetJoins.id],
-      name: "floor_reset_join_tables_join_fk",
-    }),
-    foreignKey({
-      columns: [t.resetTableId],
-      foreignColumns: [floorResetTables.id],
-      name: "floor_reset_join_tables_table_fk",
-    }),
   ],
 );
 

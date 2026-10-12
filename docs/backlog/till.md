@@ -256,12 +256,11 @@ screen is designed.
 
 ## A503. Joined tables replace saved joins
 
-**A503 (owner, 2026-10-11) — OPEN. Needs a short design before a plan.** It changes what is stored
-for joins and how the till merges and splits tables. Today a saved join is a seat count for a
-combination of tables that are each placed on their own: when staff drag one onto the other during
-service, the merged table takes its seats from today's copy of that saved join (floor plan spec
-section 6.1, `docs/superpowers/specs/2026-10-08-floor-plan-design.md`; `floor_plan_joins` and
-`floor_reset_joins`, `packages/db/src/schema/floor-plans.ts`).
+**A503 (owner, 2026-10-11) — OPEN.** It changes what is stored
+for joins and how the till merges and splits tables. Until A503 part 1 a saved join was a seat
+count for tables each placed on their own; part 1 removed saved joins and their copy, and a merge's
+seats now come only from the waiter, whose seats prompt opens empty
+([design](../superpowers/specs/2026-10-12-a503-joined-tables-design.md)).
 
 - **Add joined table** in the editor asks for a name, a seat count, and the tables it is made of,
   chosen from tables not on the plan
@@ -272,11 +271,7 @@ section 6.1, `docs/superpowers/specs/2026-10-08-floor-plan-design.md`; `floor_pl
   tables in number order, as the tables list does.
 - **On the till a joined table can be split.** Its parts go side by side inside the outline the
   joined table took up, each with its own seats.
-- **Two separate tables dragged together during service ask for the seat count.** Adding the two
-  tables' seats is wrong: two four-seat tables pushed together seat six.
-- Saved joins and the editor's Joins section go. Before go-live no data needs carrying over. "A
-  saved join's seats have no upper bound" (Small floor-plan refusals, below) goes with them; a
-  joined table's seats need their own bound.
+- A joined table's seats need their own upper bound.
 
 ## A504. Floor plans published for a future date, and one per service period
 
@@ -344,7 +339,6 @@ To decide before building:
 - **Small floor-plan refusals still missing.** Left open by A429 slice 1 (#1493).
   - `dining_tables.plan_table_id` has no unique index; no writer makes two live tables follow one
     master table today.
-  - A saved join's seats have no upper bound.
   - The delivery-release trigger accepts an empty label.
 
 ## A phone's Chrome drew a white page for the box (watch, not a job yet)

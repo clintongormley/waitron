@@ -1,3 +1,8 @@
+> 2026-10-12, A503 part 1: saved joins (`floor_plan_joins`, `floor_reset_joins` and their member
+> tables), `savedJoinSeats`, `copyJoins`, the editor's Joins section and its Join dialog are gone; a
+> merge's seats come only from the till, whose seats prompt opens empty. See
+> [the A503 design](../specs/2026-10-12-a503-joined-tables-design.md).
+
 > 2026-10-11, A476: the first-save note mentions Reset; merge seats use `merge.seats_required`,
 > and a table missing from today's plan uses `table.not_on_today_plan`. Code examples below use these names.
 

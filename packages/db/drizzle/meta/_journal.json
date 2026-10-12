@@ -1009,6 +1009,13 @@
       "when": 1791760966938,
       "tag": "0143_working_order_receipt_locale_transition",
       "breakpoints": true
+    },
+    {
+      "idx": 144,
+      "version": "6",
+      "when": 1791823133311,
+      "tag": "0144_drop_saved_joins",
+      "breakpoints": true
     }
   ]
 }

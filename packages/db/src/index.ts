@@ -84,13 +84,9 @@ export type {
 } from "./order-amendment-hash.js";
 export { diningTables } from "./schema/dining-tables.js";
 export {
-  floorPlanJoinTables,
-  floorPlanJoins,
   floorPlanShape,
   floorPlans,
   floorPlanTables,
-  floorResetJoinTables,
-  floorResetJoins,
   floorResetTables,
   floorTodayJoinTables,
   floorTodayJoins,

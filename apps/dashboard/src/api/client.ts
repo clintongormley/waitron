@@ -640,7 +640,6 @@ export interface FloorPlan {
     fixed: boolean;
     placement: PlanPlacement | null;
   }[];
-  joins: { id: string; seats: number; tableIds: string[] }[];
 }
 
 /** A master-plan save (`ZonePlanSave`); `key` names a table within the save. */
@@ -654,7 +653,6 @@ export interface FloorPlanSave {
     fixed: boolean;
     placement: PlanPlacement | null;
   }[];
-  joins: { seats: number; tableKeys: string[] }[];
 }
 
 // ── Kitchen-station + routing types ──────────────────────────────────────────────────────────────

@@ -110,9 +110,7 @@ async function labelOf(tableId: string): Promise<string | undefined> {
 }
 
 function save(zoneId: string, revision: number, tables: ZonePlanSave["tables"]) {
-  return inTx(v, (tx) =>
-    saveZonePlan(tx, v.cfg, REMOVALS, zoneId, { revision, tables, joins: [] }, NOW),
-  );
+  return inTx(v, (tx) => saveZonePlan(tx, v.cfg, REMOVALS, zoneId, { revision, tables }, NOW));
 }
 
 function place(x: number, y: number) {
@@ -121,7 +119,7 @@ function place(x: number, y: number) {
 
 describe("today's changes", () => {
   it("takes a free table off for today, keeping its place, and puts it back there", async () => {
-    const { table } = await plannedZone(v, [{ key: "a", place: { x: 12, y: 7 } }], [], NOW);
+    const { table } = await plannedZone(v, [{ key: "a", place: { x: 12, y: 7 } }], NOW);
 
     await takeOff(table.a!);
     expect(await todayRow(v, table.a!)).toMatchObject({ takenOff: true, x: 12, y: 7 });
@@ -137,7 +135,6 @@ describe("today's changes", () => {
         { key: "off", place: { x: 1, y: 2 } },
         { key: "on", place: { x: 3, y: 4 } },
       ],
-      [],
       NOW,
     );
     await takeOff(table.off!);
@@ -165,7 +162,6 @@ describe("today's changes", () => {
         { key: "merged", place: { x: 30, y: 0 } },
         { key: "partner", place: { x: 38, y: 0 } },
       ],
-      [],
       NOW,
     );
     await seat(v, table.seated!);
@@ -217,7 +213,6 @@ describe("today's changes", () => {
         { key: "b", place: { x: 10, y: 0 } },
         { key: "c", place: { x: 18, y: 0 } },
       ],
-      [],
       NOW,
     );
 
@@ -235,7 +230,7 @@ describe("today's changes", () => {
   });
 
   it("refuses seats for a taken-off table", async () => {
-    const { table } = await plannedZone(v, [{ key: "a", place: { x: 0, y: 0 } }], [], NOW);
+    const { table } = await plannedZone(v, [{ key: "a", place: { x: 0, y: 0 } }], NOW);
     await takeOff(table.a!);
 
     await expect(seats(table.a!, 6)).rejects.toMatchObject({
@@ -249,7 +244,6 @@ describe("today's changes", () => {
     const { zoneId, table, master, revision } = await plannedZone(
       v,
       [{ key: "a", seats: 4, place: { x: 10, y: 10 } }],
-      [],
       NOW,
     );
     await inTx(v, (tx) => moveToday(tx, v.cfg, table.a!, { x: 30, y: 30 }));
@@ -292,7 +286,6 @@ describe("today's changes", () => {
         { key: "a", place: { x: 0, y: 0 } },
         { key: "b", place: { x: 20, y: 0 } },
       ],
-      [],
       NOW,
     );
     await setToday(table.b!, { x: 8 });
@@ -310,7 +303,7 @@ describe("today's changes", () => {
   });
 
   it("sends a table the last reset copied as a spare back to the spares", async () => {
-    const { table } = await plannedZone(v, [{ key: "spare", place: null }], [], NOW);
+    const { table } = await plannedZone(v, [{ key: "spare", place: null }], NOW);
     await inTx(v, (tx) => placeSpareToday(tx, v.cfg, table.spare!, { x: 20, y: 10 }));
     expect(await todayRow(v, table.spare!)).toMatchObject({ x: 20 });
 
@@ -331,7 +324,6 @@ describe("today's changes", () => {
     const { zoneId, table, revision } = await plannedZone(
       v,
       [{ key: "a", place: { x: 0, y: 0 } }],
-      [],
       NOW,
     );
     await seat(v, table.a!);
@@ -357,7 +349,7 @@ describe("today's changes", () => {
   });
 
   it("does not rename a table going back to its saved place", async () => {
-    const { table } = await plannedZone(v, [{ key: "a", place: { x: 0, y: 0 } }], [], NOW);
+    const { table } = await plannedZone(v, [{ key: "a", place: { x: 0, y: 0 } }], NOW);
     const label = await labelOf(table.a!);
     const renamed = `Renamed ${randomUUID().slice(0, 6)}`;
     await inTx(v, (tx) =>

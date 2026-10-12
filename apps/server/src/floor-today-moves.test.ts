@@ -70,7 +70,7 @@ async function masterRow(id: string) {
 
 describe("today's moves", () => {
   it("moves a table on today's plan and leaves the master alone", async () => {
-    const { table, master } = await plannedZone(v, [{ key: "a", place: { x: 0, y: 0 } }], [], NOW);
+    const { table, master } = await plannedZone(v, [{ key: "a", place: { x: 0, y: 0 } }], NOW);
 
     await move(table.a!, { x: 12, y: 3 });
 
@@ -85,7 +85,6 @@ describe("today's moves", () => {
         { key: "a", place: { x: 0, y: 0 } },
         { key: "b", place: { x: 8, y: 0 } },
       ],
-      [],
       NOW,
     );
     await merge(zoneId, [table.a!, table.b!]);
@@ -107,7 +106,6 @@ describe("today's moves", () => {
         { key: "a", place: { x: 980, y: 990 } },
         { key: "b", place: { x: 990, y: 990 } },
       ],
-      [],
       NOW,
     );
     await merge(zoneId, [table.a!, table.b!]);
@@ -119,7 +117,7 @@ describe("today's moves", () => {
   });
 
   it("turns a table 15° about its centre, from 345° back to 0", async () => {
-    const { table } = await plannedZone(v, [{ key: "a", place: { x: 5, y: 6 } }], [], NOW);
+    const { table } = await plannedZone(v, [{ key: "a", place: { x: 5, y: 6 } }], NOW);
 
     await rotate(table.a!);
     expect(await todayRow(v, table.a!)).toMatchObject({ rotation: 15, x: 5, y: 6 });
@@ -130,12 +128,7 @@ describe("today's moves", () => {
   });
 
   it("refuses to move or turn a fixed table, and nothing moves", async () => {
-    const { table } = await plannedZone(
-      v,
-      [{ key: "a", fixed: true, place: { x: 3, y: 4 } }],
-      [],
-      NOW,
-    );
+    const { table } = await plannedZone(v, [{ key: "a", fixed: true, place: { x: 3, y: 4 } }], NOW);
     const before = await todayRow(v, table.a!);
 
     await expect(move(table.a!, { x: 20, y: 20 })).rejects.toMatchObject({
@@ -156,7 +149,6 @@ describe("today's moves", () => {
         { key: "a", place: { x: 0, y: 0 } },
         { key: "b", place: { x: 8, y: 0 } },
       ],
-      [],
       NOW,
     );
     await merge(zoneId, [table.a!, table.b!]);
@@ -175,7 +167,6 @@ describe("today's moves", () => {
         { key: "spare", place: null },
         { key: "off", place: { x: 0, y: 0 } },
       ],
-      [],
       NOW,
     );
     await expect(move(table.spare!, { x: 1, y: 1 })).rejects.toMatchObject({
@@ -255,7 +246,7 @@ describe("today's moves", () => {
   });
 
   it("refuses a spare that is also taken off as not on the plan", async () => {
-    const { table } = await plannedZone(v, [{ key: "spare", place: null }], [], NOW);
+    const { table } = await plannedZone(v, [{ key: "spare", place: null }], NOW);
     await setToday(table.spare!, { takenOff: true });
 
     await expect(move(table.spare!, { x: 1, y: 1 })).rejects.toMatchObject({
@@ -271,7 +262,6 @@ describe("today's moves", () => {
         { key: "spare", place: null },
         { key: "placed", place: { x: 0, y: 0, width: 12, height: 6, rotation: 30 } },
       ],
-      [],
       NOW,
     );
 
@@ -297,7 +287,6 @@ describe("today's moves", () => {
         { key: "fixed", fixed: true, place: null },
         { key: "off", place: null },
       ],
-      [],
       NOW,
     );
     await setToday(table.off!, { takenOff: true });
@@ -318,7 +307,6 @@ describe("today's moves", () => {
     const { table } = await plannedZone(
       v,
       [{ key: "fixed", fixed: true, place: { x: 3, y: 4 } }],
-      [],
       NOW,
     );
     const before = await todayRow(v, table.fixed!);
@@ -329,7 +317,7 @@ describe("today's moves", () => {
   });
 
   it("puts a placed spare back among the spares at the next reset", async () => {
-    const { zoneId, table } = await plannedZone(v, [{ key: "spare", place: null }], [], NOW);
+    const { zoneId, table } = await plannedZone(v, [{ key: "spare", place: null }], NOW);
     await placeSpare(table.spare!, { x: 20, y: 10 });
     expect(await todayRow(v, table.spare!)).toMatchObject({ x: 20 });
 

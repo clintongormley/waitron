@@ -422,10 +422,9 @@ function parseZonePlanSave(body: unknown): ZonePlanSave {
     throw new AppError("management.request_invalid", { field });
   };
   if (!isRecord(body)) refuse("body");
-  const { revision, tables, joins } = body as Record<string, unknown>;
+  const { revision, tables } = body as Record<string, unknown>;
   if (typeof revision !== "number") refuse("revision");
   if (!Array.isArray(tables)) refuse("tables");
-  if (!Array.isArray(joins)) refuse("joins");
   return {
     revision: revision as number,
     tables: (tables as unknown[]).map((table, index) => {
@@ -444,15 +443,6 @@ function parseZonePlanSave(body: unknown): ZonePlanSave {
         fixed: table.fixed as boolean,
         placement: table.placement as ZonePlanSave["tables"][number]["placement"],
       };
-    }),
-    joins: (joins as unknown[]).map((join, index) => {
-      const at = `joins.${index}`;
-      if (!isRecord(join)) return refuse(at);
-      const { tableKeys } = join;
-      if (!Array.isArray(tableKeys) || tableKeys.some((key) => typeof key !== "string")) {
-        refuse(`${at}.tableKeys`);
-      }
-      return { seats: join.seats as number, tableKeys: tableKeys as string[] };
     }),
   };
 }

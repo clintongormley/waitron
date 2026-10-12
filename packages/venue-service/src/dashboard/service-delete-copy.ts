@@ -6,10 +6,8 @@ const itemKeys = {
   tables: "venue.delete_item_tables",
   saved_tables: "venue.delete_item_saved_tables",
   zones: "venue.delete_item_zones",
-  saved_joins: "venue.delete_item_saved_joins",
   today_joins: "venue.delete_item_today_joins",
   reset_targets: "venue.delete_item_reset_targets",
-  reset_joins: "venue.delete_item_reset_joins",
   routing_rules: "venue.delete_item_routing_rules",
   routing_periods: "venue.delete_item_routing_periods",
   profile_zones: "venue.delete_item_profile_zones",
@@ -61,15 +59,9 @@ export function serviceDeleteCopy(kind: "zone" | "department"): DeleteDialogCopy
       const key = itemKeys[item.key as keyof typeof itemKeys];
       if (!key) return t("venue.delete_action_error");
       const line = format(key, { count: String(item.count), names });
-      return [
-        "tables",
-        "saved_tables",
-        "zones",
-        "saved_joins",
-        "today_joins",
-        "reset_targets",
-        "reset_joins",
-      ].includes(item.key) && names
+      return ["tables", "saved_tables", "zones", "today_joins", "reset_targets"].includes(
+        item.key,
+      ) && names
         ? `${line} ${names}`
         : line;
     },

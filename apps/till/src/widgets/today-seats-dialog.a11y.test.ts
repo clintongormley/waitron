@@ -8,13 +8,24 @@ afterEach(cleanupWidgets);
 afterEach(() => setLocale("en"));
 
 describe.each(["light", "dark"] as const)("till-today-seats-dialog a11y (%s theme)", (theme) => {
-  it("has no violations opened with a suggestion", async () => {
+  it("has no violations opened empty by a merge, and once a number is typed", async () => {
     setLocale("es-ES");
-    const { host } = await mountWidget<TillTodaySeatsDialog>(
+    const { el, host } = await mountWidget<TillTodaySeatsDialog>(
       "till-today-seats-dialog",
-      { heading: "Plazas para 4+5", seats: 8, action: "join" },
+      { heading: "Plazas para 4+5", seats: null, action: "join" },
       theme,
     );
+    await expectNoA11yViolations(host);
+    const input = el
+      .shadowRoot!.querySelector<HTMLElementTagNameMap["wt-number-stepper"]>("[name=seats]")!
+      .shadowRoot!.querySelector("input")!;
+    input.value = "6";
+    input.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
+    await el.updateComplete;
+    expect(
+      el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>("[data-seats-action]")!
+        .disabled,
+    ).toBe(false);
     await expectNoA11yViolations(host);
   });
 

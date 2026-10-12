@@ -1834,8 +1834,7 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   [Detail](backlog/till.md#a474--todays-floor-changes-on-the-till-follow-ups)
 
 - **A503. Joined tables replace saved joins (owner, 2026-10-11).** A table made of other tables
-  is set up in the editor and starts the day as one table; the till can split it. Two tables
-  pushed together during service ask for their seats. Needs a short design first.
+  is set up in the editor and starts the day as one table; the till can split it.
   [Detail](backlog/till.md#a503-joined-tables-replace-saved-joins)
 
 - **A504. Floor plans published for a future date, and one per service period (owner,
@@ -1871,8 +1870,7 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   API's wiring. Left open by A429 slice 1 (#1493).
 
 - **Small floor-plan refusals still missing.** `dining_tables.plan_table_id` has no unique index;
-  a saved join's seats have no upper bound; the delivery-release
-  trigger accepts an empty label. Left open by A429 slice 1 (#1493).
+  the delivery-release trigger accepts an empty label. Left open by A429 slice 1 (#1493).
   [Detail](backlog/till.md#small-floor-plan-refusals-still-missing)
 
 - **A phone's Chrome drew a white page for the box (2026-10-08; watch, not a job yet).** Quitting

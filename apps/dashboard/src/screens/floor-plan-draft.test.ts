@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { FloorPlan } from "../api/client.js";
 import {
-  addJoin,
   addTables,
   changePlacement,
   checkDraft,
@@ -10,7 +9,6 @@ import {
   patchTable,
   placeTable,
   rekeyDraft,
-  removeJoin,
   restoreTable,
   sameDraft,
   saveFromDraft,
@@ -29,7 +27,6 @@ const plan: FloorPlan = {
     { id: "m2", liveTableId: "l2", label: "T2", seats: 2, fixed: true, placement: null },
     { id: "m9", liveTableId: "l9", label: "T9", seats: null, fixed: false, placement: null },
   ],
-  joins: [{ id: "j1", seats: 6, tableIds: ["m1", "m2"] }],
 };
 
 function counter(prefix: string): () => string {
@@ -46,7 +43,7 @@ function table(draft: FloorPlanDraft, key: string) {
 }
 
 describe("floor plan draft", () => {
-  it("keys every master table and join by id", () => {
+  it("keys every master table by id", () => {
     const d = open();
     expect(d.tables.map((t) => t.key)).toEqual(["m1", "m2", "m9"]);
     expect(table(d, "m9")).toEqual({
@@ -67,10 +64,10 @@ describe("floor plan draft", () => {
       fixed: false,
       placement: m1Placement,
     });
-    expect(d.joins).toEqual([{ key: "j1", seats: 6, tableKeys: ["m1", "m2"] }]);
+    expect(Object.keys(d)).toEqual(["tables"]);
   });
 
-  it("sends a save with a key per table and each join as keys", () => {
+  it("sends a save with a key per table", () => {
     const save = saveFromDraft(3, open());
     expect(save).toEqual({
       revision: 3,
@@ -86,7 +83,6 @@ describe("floor plan draft", () => {
           placement: null,
         },
       ],
-      joins: [{ seats: 6, tableKeys: ["m1", "m2"] }],
     });
     expect("liveTableId" in save.tables[0]!).toBe(false);
     expect("liveTableId" in save.tables[2]!).toBe(false);
@@ -113,8 +109,7 @@ describe("floor plan draft", () => {
   });
 
   it("re-keys a saved draft from the answer's ids", () => {
-    let d = addTables(open(), [{ label: "T5", seats: 3, fixed: false }], counter("new"));
-    d = addJoin(d, ["m1", "new:1"], 5, "join:1");
+    const d = addTables(open(), [{ label: "T5", seats: 3, fixed: false }], counter("new"));
     const before = structuredClone(d);
     const r = rekeyDraft(d, { m1: "m1", m2: "m2", m9: "m9", "new:1": "m5" });
     expect(d).toEqual(before);
@@ -123,10 +118,6 @@ describe("floor plan draft", () => {
       ["m2", "m2", "l2"],
       ["m9", "m9", "l9"],
       ["m5", "m5", null],
-    ]);
-    expect(r.joins).toEqual([
-      { key: "j1", seats: 6, tableKeys: ["m1", "m2"] },
-      { key: "join:1", seats: 5, tableKeys: ["m1", "m5"] },
     ]);
     const sent = saveFromDraft(4, r).tables;
     expect(sent[2]).toEqual({
@@ -186,20 +177,6 @@ describe("floor plan draft", () => {
     const d = open();
     const reordered = { ...d, tables: [...d.tables].reverse() };
     expect(sameDraft(d, reordered)).toBe(true);
-  });
-
-  it("compares joins as sets", () => {
-    const d = open();
-    expect(sameDraft(d, { ...d, joins: [{ key: "j1", seats: 6, tableKeys: ["m2", "m1"] }] })).toBe(
-      true,
-    );
-    expect(sameDraft(d, { ...d, joins: [{ key: "j1", seats: 7, tableKeys: ["m1", "m2"] }] })).toBe(
-      false,
-    );
-    expect(sameDraft(d, removeJoin(d, "j1"))).toBe(false);
-    expect(sameDraft(d, { ...d, joins: [{ key: "j1", seats: 6, tableKeys: ["m1", "m9"] }] })).toBe(
-      false,
-    );
   });
 
   it("counts a deleted table added back as new as a change", () => {
@@ -324,61 +301,6 @@ describe("floor plan draft", () => {
     });
   });
 
-  it("deletes a table from its joins, and a join left with one table goes", () => {
-    let d = addTables(open(), [{ label: "T5", seats: 3, fixed: false }], counter("new"));
-    d = { ...d, joins: [{ key: "j1", seats: 6, tableKeys: ["m1", "m2", "new:1"] }] };
-    const before = structuredClone(d);
-    const three = deleteTable(d, "new:1");
-    expect(d).toEqual(before);
-    expect(three.tables.map((t) => t.key)).toEqual(["m1", "m2", "m9"]);
-    expect(three.joins).toEqual([{ key: "j1", seats: 6, tableKeys: ["m1", "m2"] }]);
-    const two = deleteTable(open(), "m2");
-    expect(two.tables.map((t) => t.key)).toEqual(["m1", "m9"]);
-    expect(two.joins).toEqual([]);
-  });
-
-  it("drops a join the delete leaves the same as another, keeping one it did not shrink", () => {
-    const m3 = { key: "m3", id: "m3", liveTableId: "l3", label: "T3", seats: 2, fixed: false };
-    const d: FloorPlanDraft = {
-      tables: [...open().tables, { ...m3, placement: null }],
-      joins: [
-        { key: "j2", seats: 8, tableKeys: ["m1", "m2", "m3"] },
-        { key: "j1", seats: 6, tableKeys: ["m2", "m1"] },
-      ],
-    };
-    expect(deleteTable(d, "m3").joins).toEqual([{ key: "j1", seats: 6, tableKeys: ["m2", "m1"] }]);
-  });
-
-  it("keeps the first of joins the delete shrinks to the same tables", () => {
-    const m3 = { key: "m3", id: "m3", liveTableId: "l3", label: "T3", seats: 2, fixed: false };
-    const d: FloorPlanDraft = {
-      tables: [...open().tables, { ...m3, placement: null }],
-      joins: [
-        { key: "j1", seats: 8, tableKeys: ["m1", "m2", "m3"] },
-        { key: "j2", seats: 9, tableKeys: ["m3", "m2", "m1"] },
-        { key: "j3", seats: 4, tableKeys: ["m1", "m9"] },
-      ],
-    };
-    expect(deleteTable(d, "m3").joins).toEqual([
-      { key: "j1", seats: 8, tableKeys: ["m1", "m2"] },
-      { key: "j3", seats: 4, tableKeys: ["m1", "m9"] },
-    ]);
-  });
-
-  it("puts back a booked table's dropped duplicate join, so the plan is as it was saved", () => {
-    const m3 = { key: "m3", id: "m3", liveTableId: "l3", label: "T3", seats: 2, fixed: false };
-    const saved: FloorPlanDraft = {
-      tables: [...open().tables, { ...m3, placement: null }],
-      joins: [
-        { key: "j1", seats: 6, tableKeys: ["m1", "m2"] },
-        { key: "j2", seats: 8, tableKeys: ["m1", "m2", "m3"] },
-      ],
-    };
-    const restored = restoreTable(deleteTable(saved, "m3"), table(saved, "m3"), saved.joins);
-    expect(restored.joins).toEqual(saved.joins);
-    expect(sameDraft(restored, saved)).toBe(true);
-  });
-
   it("deletes every selected master or new table, even one with a live link", () => {
     const d = open();
     const fresh = addTables(d, [{ label: "T5", seats: 3, fixed: false }], counter("new"));
@@ -418,18 +340,6 @@ describe("floor plan draft", () => {
       },
     ]);
     expect(d.tables.slice(0, 3).map((t) => t.key)).toEqual(["m1", "m2", "m9"]);
-  });
-
-  it("adds and removes a join", () => {
-    const d = open();
-    const r = removeJoin(addJoin(d, ["m1", "m9"], 4, "join:1"), "j1");
-    expect(r.joins).toEqual([{ key: "join:1", seats: 4, tableKeys: ["m1", "m9"] }]);
-    expect(d.joins).toHaveLength(1);
-  });
-
-  it("returns the same draft when removing a join it does not have", () => {
-    const d = open();
-    expect(removeJoin(d, "join:9")).toBe(d);
   });
 
   it("stores a copy of the placement it is given", () => {
@@ -492,40 +402,7 @@ describe("floor plan draft", () => {
     expect(restored.tables.map((t) => t.key)).toEqual(["m2", "m9", "m1"]);
     expect(table(restored, "m1")).toEqual(table(opened, "m1"));
     expect(table(restored, "m1").placement).not.toBe(table(opened, "m1").placement);
-    expect(restored.joins).toEqual(moved.joins);
     expect(moved.tables.some((t) => t.key === "m1")).toBe(false);
-  });
-
-  it("puts back only the opened joins through the restored table whose other tables are there", () => {
-    const m3 = { key: "m3", id: "m3", liveTableId: "l3", label: "T3", seats: 2, fixed: false };
-    const opened: FloorPlanDraft = {
-      tables: [...open().tables, { ...m3, placement: null }],
-      joins: [
-        { key: "j1", seats: 6, tableKeys: ["m1", "m2"] },
-        { key: "j2", seats: 5, tableKeys: ["m2", "m3"] },
-        { key: "j3", seats: 4, tableKeys: ["m1", "m9"] },
-      ],
-    };
-    const deleted = removeJoin(deleteTable(deleteTable(opened, "m2"), "m3"), "j3");
-    expect(deleted.joins).toEqual([]);
-    const restored = restoreTable(deleted, table(opened, "m2"), opened.joins);
-    expect(restored.joins).toEqual([opened.joins[0]]);
-    expect(restored.joins[0]!.tableKeys).not.toBe(opened.joins[0]!.tableKeys);
-    const onlyM2 = restoreTable(deleteTable(opened, "m2"), table(opened, "m2"), opened.joins);
-    expect(sameDraft(onlyM2, opened)).toBe(true);
-  });
-
-  it("replaces a join of three that kept its key when the table left it with the saved one", () => {
-    const m3 = { key: "m3", id: "m3", liveTableId: "l3", label: "T3", seats: 2, fixed: false };
-    const saved: FloorPlanDraft = {
-      tables: [...open().tables, { ...m3, placement: null }],
-      joins: [{ key: "j1", seats: 8, tableKeys: ["m1", "m2", "m3"] }],
-    };
-    const deleted = deleteTable(saved, "m2");
-    expect(deleted.joins).toEqual([{ key: "j1", seats: 8, tableKeys: ["m1", "m3"] }]);
-    const restored = restoreTable(deleted, table(saved, "m2"), saved.joins);
-    expect(restored.joins).toEqual(saved.joins);
-    expect(sameDraft(restored, saved)).toBe(true);
   });
 
   it("gives tables keyed as in another draft that draft's live tables, and leaves the rest", () => {
@@ -536,11 +413,9 @@ describe("floor plan draft", () => {
         { ...table(d, "m2"), liveTableId: null },
         { ...table(d, "m9") },
       ],
-      joins: [],
     };
     const merged = withLiveTables(d, from);
     expect(merged.tables.map((t) => t.liveTableId)).toEqual(["l7", "l2", "l9", null]);
-    expect(merged.joins).toBe(d.joins);
     expect(d.tables[0]!.liveTableId).toBe("l1");
     expect(withLiveTables(merged, from)).toBe(merged);
   });

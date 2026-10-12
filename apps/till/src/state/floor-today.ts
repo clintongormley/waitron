@@ -20,7 +20,6 @@ export type DropAction =
       tableId: string;
       targetId: string;
       side: JoinSide;
-      seatsGuess: number;
       heading: string;
     }
   | { kind: "seat"; tableId: string; withTableIds: string[]; heading: string }
@@ -30,7 +29,6 @@ export type DropAction =
       tableId: string;
       other: TableParty | null;
       merge: { moving: string; target: string; side: JoinSide } | null;
-      seatsGuess: number;
       heading: string;
     };
 
@@ -90,7 +88,6 @@ export function dropAction(zoneTables: readonly TableState[], drop: FloorMapDrop
 
   const both = [...draggedGroup.members, ...targetGroup.members];
   const heading = mergeLabel(both.map((table) => table.label));
-  const seatsGuess = both.reduce((sum, table) => sum + (table.today?.seats ?? 0), 0);
   const dropped: TodayPlacement = { ...from, x: drop.x, y: drop.y };
   const nearest = nearestMember(targetGroup.members, centre(dropped));
   const fixedSide = draggedGroup.fixed || targetGroup.fixed;
@@ -104,7 +101,7 @@ export function dropAction(zoneTables: readonly TableState[], drop: FloorMapDrop
           withTableIds: targetGroup.members.map((table) => table.id),
           heading,
         }
-      : { kind: "merge", tableId: dragged.id, targetId: nearest.id, side, seatsGuess, heading };
+      : { kind: "merge", tableId: dragged.id, targetId: nearest.id, side, heading };
   }
   const merge = fixedSide ? null : { moving: dragged.id, target: nearest.id, side };
   if (targetGroup.party !== null) {
@@ -114,7 +111,6 @@ export function dropAction(zoneTables: readonly TableState[], drop: FloorMapDrop
       tableId: dragged.id,
       other: draggedGroup.party,
       merge,
-      seatsGuess,
       heading,
     };
   }
@@ -124,7 +120,6 @@ export function dropAction(zoneTables: readonly TableState[], drop: FloorMapDrop
     tableId: nearest.id,
     other: null,
     merge,
-    seatsGuess,
     heading,
   };
 }

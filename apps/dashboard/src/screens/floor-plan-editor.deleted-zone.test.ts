@@ -21,7 +21,6 @@ const plan: FloorPlan = {
       placement: { x: 2, y: 3, width: 8, height: 8, shape: "rect", rotation: 0 },
     },
   ],
-  joins: [],
 };
 class App extends LitElement {
   readonly leave = new LeaveController(this);

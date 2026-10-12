@@ -33,7 +33,6 @@ const plan = (zoneId: string, id: string): FloorPlan => ({
   tables: [
     { id, liveTableId: `l-${id}`, label: id.toUpperCase(), seats: 4, fixed: false, placement },
   ],
-  joins: [],
 });
 
 async function mount() {
@@ -337,23 +336,6 @@ it("a leave asked of the editor alone asks about a changed Add tables", async ()
   await dialog.updateComplete;
   const proceed = vi.fn();
   // The editor's own scope names the editor element as its parent.
-  const outcome = leaveCoordinatorFor(el)!.request({ scopes: [el], reason: "navigation", proceed });
-  await choose(app, "keep");
-  expect(await outcome).toBe("kept");
-  expect(proceed).not.toHaveBeenCalled();
-});
-
-it("a leave asked of the editor alone asks about a changed Add join", async () => {
-  const { app } = await mount();
-  const el = editor(app);
-  const dialog = el.shadowRoot!.querySelector("floor-plan-add-join")!;
-  el.dispatchEvent(
-    new CustomEvent("floor-plan-add-join", { detail: { tableKey: dialog.draft.tables[0]!.key } }),
-  );
-  await dialog.updateComplete;
-  await chooseOption(dialog.shadowRoot!.querySelector("[name=join-seats]")!, "6");
-  await dialog.updateComplete;
-  const proceed = vi.fn();
   const outcome = leaveCoordinatorFor(el)!.request({ scopes: [el], reason: "navigation", proceed });
   await choose(app, "keep");
   expect(await outcome).toBe("kept");

@@ -567,7 +567,7 @@ describe("stale floor identifiers", () => {
     [
       "floor save",
       "zone.not_found",
-      (tx, f) => saveZonePlan(tx, v.cfg, [], f.zoneId, { revision: 1, tables: [], joins: [] }, now),
+      (tx, f) => saveZonePlan(tx, v.cfg, [], f.zoneId, { revision: 1, tables: [] }, now),
     ],
     ["floor reset", "zone.not_found", (tx, f) => resetZone(tx, v.cfg, [], f.zoneId, now)],
     ["floor catch-up", "zone.not_found", (tx, f) => catchUpZone(tx, v.cfg, [], f.zoneId, now)],

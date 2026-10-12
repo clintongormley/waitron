@@ -41,7 +41,6 @@ export class TillTodaySeatsDialog extends LitElement {
   ];
 
   @property() heading = "";
-  /** The number the dialog opens with: a merge's suggested sum, or today's seats. */
   @property({ attribute: false }) seats: number | null = null;
   @property() action: "join" | "save" = "save";
 
@@ -93,9 +92,7 @@ export class TillTodaySeatsDialog extends LitElement {
   }
 
   #actionState() {
-    return saveActionState(this.#scope, {
-      savableAtOpen: this.action === "join" && this.seats !== null && this.seats > 0,
-    });
+    return saveActionState(this.#scope);
   }
 
   #invalid(): boolean {

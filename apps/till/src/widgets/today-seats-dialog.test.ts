@@ -40,23 +40,24 @@ function captured(el: TillTodaySeatsDialog) {
   return seen;
 }
 
-it("opens with the suggested seats and sends the number confirmed", async () => {
-  const el = await mount({ seats: 8, action: "join" });
+it("opens empty for a merge and sends the number typed", async () => {
+  const el = await mount({ seats: null, action: "join" });
   const seen = captured(el);
   expect(el.shadowRoot!.querySelector("wt-dialog")!.heading).toBe("Seats for 4+5");
-  expect(nativeInput(el).value).toBe("8");
+  expect(nativeInput(el).value).toBe("");
   expect(nativeInput(el).name).toBe("seats");
   expect(field(el).required).toBe(true);
   expect(field(el).label).toBe("Seats");
   expect(action(el).textContent!.trim()).toBe("Join");
 
+  await type(el, "8");
   action(el).click();
 
   expect(seen.confirmed).toEqual([{ seats: 8 }]);
 });
 
 it("puts the cursor in the seats field when it opens", async () => {
-  const el = await mount({ seats: 8, action: "join" });
+  const el = await mount({ seats: null, action: "join" });
   await new Promise((resolve) => setTimeout(resolve, 0));
   expect(field(el).shadowRoot!.activeElement).toBe(nativeInput(el));
 });
@@ -128,7 +129,7 @@ it("confirms with Enter from the field", async () => {
 });
 
 it("Cancel asks to close", async () => {
-  const el = await mount({ seats: 8, action: "join" });
+  const el = await mount({ seats: null, action: "join" });
   const seen = captured(el);
   el.shadowRoot!.querySelector<HTMLElement>("[data-seats-cancel]")!.click();
   await expect.poll(() => seen.cancelled).toBe(1);
@@ -137,7 +138,7 @@ it("Cancel asks to close", async () => {
 
 it("speaks Spanish", async () => {
   setLocale("es-ES");
-  const el = await mount({ seats: 8, action: "join" });
+  const el = await mount({ seats: null, action: "join" });
   expect(field(el).label).toBe("Plazas");
   expect(field(el).decreaseLabel("Plazas")).toBe("Reducir Plazas");
   expect(field(el).increaseLabel("Plazas")).toBe("Aumentar Plazas");

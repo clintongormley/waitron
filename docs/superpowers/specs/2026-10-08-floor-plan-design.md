@@ -15,6 +15,7 @@ about what runs today; section 2 is the only part that describes today's code, a
 - [Venue operations](2026-10-03-venue-operations-design.md) (A261) §8, first bullet: the editor
   still only lays tables out and has no zone settings, but it now also creates, names and deletes
   tables, and holds their seats and saved joins.
+  > Superseded 2026-10-12 by A503 part 1 ([design](2026-10-12-a503-joined-tables-design.md)): saved joins, the editor's Joins section and the till's copy of them are gone; a service merge's seats come only from the till, whose seats prompt opens empty.
 - [Service times, departments, zones and prep stations](2026-10-07-service-times-departments-and-stations-design.md)
   (A366) §9.1's "There is no separate 'tonight' plan in this design" and §14's "A 'tonight' copy of
   the floor plan that resets each day": today's plan (section 6 here) is that copy, and it is in
@@ -105,6 +106,7 @@ the details one tap away.
   place, and:
   - **Joins:** the saved joins this table is part of ("with 5 · seats 6"), with Add (which tables,
     how many seats) and Remove. A saved join's tables are all in this zone.
+    > Superseded 2026-10-12 by A503 part 1 ([design](2026-10-12-a503-joined-tables-design.md)): saved joins, the editor's Joins section and the till's copy of them are gone; a service merge's seats come only from the till, whose seats prompt opens empty.
   - **Remove from plan:** the table becomes a spare in the saved plan; today's plan changes at its
     next reset.
   - **Delete:** section 8. It is part of the draft, so Undo brings it back until Save.
@@ -112,6 +114,7 @@ the details one tap away.
 - **Saving** writes the whole plan, its tables, their positions and its saved joins in one
   transaction. A save made from a copy older than the plan's last save is refused
   (`floor_plan.out_of_date`) and offers to reload the newer plan; it never overwrites it silently.
+  > Superseded 2026-10-12 by A503 part 1 ([design](2026-10-12-a503-joined-tables-design.md)): saved joins, the editor's Joins section and the till's copy of them are gone; a service merge's seats come only from the till, whose seats prompt opens empty.
 
 ## 5. The till's map
 
@@ -178,6 +181,8 @@ undone at the next reset anyway.
 > copy of it. Each reset copies the saved plan's joins into today's plan, and a merge takes its
 > seats from that copy; a join saved during the day waits for the next reset.
 
+> Superseded 2026-10-12 by A503 part 1 ([design](2026-10-12-a503-joined-tables-design.md)): saved joins, the editor's Joins section and the till's copy of them are gone; a service merge's seats come only from the till, whose seats prompt opens empty.
+
 ### 6.2 The other changes
 
 - **Split** on a free merge separates it; with a party seated it runs today's "split a table"
@@ -211,6 +216,7 @@ undone at the next reset anyway.
 - A table has one number, its **seats**: the most it seats properly. A saved join has its own seats
   ("4+5 seats 6"); seats are never added up automatically, because pushed-together tables lose
   places where they meet.
+  > Superseded 2026-10-12 by A503 part 1 ([design](2026-10-12-a503-joined-tables-design.md)): saved joins, the editor's Joins section and the till's copy of them are gone; a service merge's seats come only from the till, whose seats prompt opens empty.
 - **Seats are a guide, never a limit.** Bookings will plan with them (later work). The till never
   refuses or warns when more people sit down, since staff can always bring chairs.
 - No minimum party size. It is added with the bookings work if needed.
@@ -234,6 +240,7 @@ undone at the next reset anyway.
   plan from then. Delete is refused while an upcoming booking is assigned to the table: the
   booking is moved first (owner, 2026-10-08); bookings are otherwise later work. Because nothing in the past points at a table, Disable and Enable go away: a table
   is placed, a spare, or deleted.
+  > Superseded 2026-10-12 by A503 part 1 ([design](2026-10-12-a503-joined-tables-design.md)): saved joins, the editor's Joins section and the till's copy of them are gone; a service merge's seats come only from the till, whose seats prompt opens empty.
 - **Before building**, every reader of a closed party's tables and of `orders.delivery_table_id` is
   listed. Each one either moves to the copied text or is shown to read only open parties. If any of
   the tables involved is append-only, the work stops and asks the owner.
@@ -256,6 +263,8 @@ on every screen. The commit adding them states this reason.
   > Owner override, 2026-10-10: each reset also copies the saved joins into today's plan
   > (`floor_reset_joins`, `floor_reset_join_tables`), and a merge's seats come from that copy (plan
   > decision 7, Tasks 4.3e and 4.3f).
+  >
+  > Superseded 2026-10-12 by A503 part 1 ([design](2026-10-12-a503-joined-tables-design.md)): saved joins, the editor's Joins section and the till's copy of them are gone; a service merge's seats come only from the till, whose seats prompt opens empty.
 - **Today's tables:** one row per live table: seats, fixed, position, size, shape, rotation, taken
   off, and which reset it last caught up with. Each zone records the business day of its today's
   plan and a count of its resets.
@@ -316,6 +325,7 @@ Each claim is checked by running something, not by reading.
 - **Joins:** seats from a saved join, and the till asking without one; free + free, seated + free,
   seated + seated; Split puts each table back; a fixed table never moves, including when a move is
   sent straight to the route; a fixed join ends when the party leaves.
+  > Superseded 2026-10-12 by A503 part 1 ([design](2026-10-12-a503-joined-tables-design.md)): saved joins, the editor's Joins section and the till's copy of them are gone; a service merge's seats come only from the till, whose seats prompt opens empty.
 - **Spares and reset:** a placed spare is unplaced again at reset; an occupied table waits for its
   tab to close.
 - **Saving:** a save from an older copy is refused; a duplicate name is refused beside its field;
@@ -337,6 +347,7 @@ Each claim is checked by running something, not by reading.
 - Named plans per department ("Lunch"), each with a plan per zone, chosen by service period as
   menus are.
 - Bookings using seats and saved joins for availability; a minimum party size.
+  > Superseded 2026-10-12 by A503 part 1 ([design](2026-10-12-a503-joined-tables-design.md)): saved joins, the editor's Joins section and the till's copy of them are gone; a service merge's seats come only from the till, whose seats prompt opens empty.
 - Reports per zone or per table.
 - Walls, counters and other scenery on the plan.
 - Moving a table to another zone; delete and add it again instead.
