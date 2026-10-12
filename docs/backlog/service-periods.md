@@ -100,7 +100,7 @@ each conflict in a season's week.
 A506-4 landed in #1597: special days are stored and saved through the API, the till sells and
 closes by their paint, end-offset and changeover checks read them, and a configuration transfer
 carries and checks them; the dashboard shows none of their paint until A506-5.
-A506-3b landed in #NNNN: the zone editor's closed-times summary reads the current season's week
+A506-3b landed in #1599: the zone editor's closed-times summary reads the current season's week
 and names the season; a zone's single `week` left the Opening hours model.
 
 **Left open by A506-1, for the later parts.**
