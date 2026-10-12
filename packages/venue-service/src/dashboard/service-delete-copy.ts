@@ -23,6 +23,7 @@ const itemKeys = {
   staff_menus: "venue.delete_item_staff_menus",
   timetables: "venue.delete_item_timetables",
   slots: "venue.delete_item_slots",
+  seasons: "venue.delete_item_seasons",
   period_extensions: "venue.delete_item_period_extensions",
   department_policy: "venue.delete_item_department_policy",
   transfer_desks: "venue.delete_item_transfer_desks",

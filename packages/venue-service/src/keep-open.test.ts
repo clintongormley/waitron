@@ -27,6 +27,7 @@ import * as keep from "./keep-open.js";
 import { zoneExtensions } from "./schema/zone-extensions.js";
 import { closedZoneIdsAt, replaceZoneClosedWeek } from "./zone-closed-times.js";
 import { keepPeriodOpen, readKeepOpen } from "./keep-open.js";
+import { readSeasons } from "./seasons.js";
 
 const suite = useVenueDb({
   migrations: [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS, VENUE_SERVICE_MIGRATIONS],
@@ -132,6 +133,39 @@ describe("keeping a period open today", () => {
     expect(
       (await run((tx) => readKeepOpen(tx, f.cfg, f.zoneId, at("14:20")))).period,
     ).toMatchObject({ id: f.lunch, endsAt: "15:00", extendedUntil: "15:00", running: true });
+  });
+  it("keeps Lunch open on a season day", async () => {
+    const f = await fixture();
+    const autumn = (await run((tx) => readSeasons(tx, f.cfg))).find(
+      (season) => season.name === "Autumn",
+    )!.id;
+    await run((tx) =>
+      replaceMenuWeek(
+        tx,
+        f.cfg,
+        f.departmentId,
+        [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({
+          weekday,
+          slots: [{ periodId: f.lunch, startsAt: "12:00", endsAt: "15:00" }],
+        })),
+        at("12:00"),
+        0,
+        { seasonId: autumn },
+      ),
+    );
+    await run((tx) =>
+      keepPeriodOpen(tx, f.cfg, f.zoneId, { periodId: f.lunch, until: "15:30" }, at("14:50")),
+    );
+    expect(await rows(f)).toEqual([
+      expect.objectContaining({
+        businessDay: "2026-10-09",
+        startsAt: "15:00:00",
+        endsAt: "15:30:00",
+      }),
+    ]);
+    expect(
+      (await run((tx) => readKeepOpen(tx, f.cfg, f.zoneId, at("15:10")))).period,
+    ).toMatchObject({ id: f.lunch, endsAt: "15:30", extendedUntil: "15:30", running: true });
   });
   it("offers future quarter hours through the changeover and describes the next period", async () => {
     const f = await fixture({ afternoon: true });
@@ -763,6 +797,45 @@ it("shows the effective extension after a manager moves the closure start", asyn
   expect(
     (await run((tx) => menuState(tx, f.cfg, f.zoneId, instant))).service.zoneKeepOpen,
   ).toMatchObject({ closesAt: "01:30", extendedUntil: "01:30", running: true });
+});
+
+it("reads the clock, the seasons and the named days once for a zone's keep-open choices", async () => {
+  const f = await zoneFixture();
+  await run(async (tx) => {
+    const session = (tx as unknown as { session: { prepareQuery: (...args: never[]) => unknown } })
+      .session;
+    const spy = vi.spyOn(session, "prepareQuery");
+    try {
+      const zone = await keep.readZoneKeepOpen(tx, f.cfg, f.zoneId, at("23:00"));
+      expect(zone).toMatchObject({ endsAt: "23:30", running: true });
+      const sql = spy.mock.calls.map(([q]) => (q as unknown as { sql: string }).sql);
+      expect(sql.filter((q) => q.includes('from "seasons"'))).toHaveLength(1);
+      expect(sql.filter((q) => q.includes('from "special_dates"'))).toHaveLength(1);
+      expect(sql.filter((q) => q.includes('from "locations"'))).toHaveLength(1);
+    } finally {
+      spy.mockRestore();
+    }
+  });
+});
+
+it("reads the clock, the seasons and the named days once for a period's and a zone's keep-open choices", async () => {
+  const f = await zoneFixture();
+  await run(async (tx) => {
+    const session = (tx as unknown as { session: { prepareQuery: (...args: never[]) => unknown } })
+      .session;
+    const spy = vi.spyOn(session, "prepareQuery");
+    try {
+      const answer = await readKeepOpen(tx, f.cfg, f.zoneId, at("23:00"));
+      expect(answer.period).toMatchObject({ id: f.lunch, endsAt: "03:00", running: true });
+      expect(answer.zone).toMatchObject({ endsAt: "23:30", running: true });
+      const sql = spy.mock.calls.map(([q]) => (q as unknown as { sql: string }).sql);
+      expect(sql.filter((q) => q.includes('from "seasons"'))).toHaveLength(1);
+      expect(sql.filter((q) => q.includes('from "special_dates"'))).toHaveLength(1);
+      expect(sql.filter((q) => q.includes('from "locations"'))).toHaveLength(1);
+    } finally {
+      spy.mockRestore();
+    }
+  });
 });
 
 it("reads a floor closing summary without building period choices", async () => {

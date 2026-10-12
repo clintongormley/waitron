@@ -406,11 +406,12 @@ occurs only in leap years (`named-day-rules.ts`). One venue cannot hold two name
 on the same date: the writer checks repeat-versus-one-off collisions, beside the stored date and
 repeat-key indexes in `schema/hours.ts`.
 
-On an own-hours day, a department without a dated timetable row still follows its normal weekday;
-a dated row with no ranges closes that department. `resolveDepartmentService` in
-`packages/venue-service/src/menu-timetable.ts` selects the dated row only for own-hours days,
-then falls back to the weekday when there is no row. Whole-venue closure closes departments.
-Switching to own hours copies the normal week's department ranges and zone closed times;
+On an own-hours day, a department without a dated timetable row follows its season's week for
+that weekday; a dated row with no ranges closes that department. `resolveDepartmentDays` in
+`packages/venue-service/src/day-resolver.ts` selects the dated row only for own-hours days,
+then falls back to the business day's season week when there is no row. Whole-venue closure closes departments.
+Switching to own hours copies the old weekday rows' department ranges and zone closed times
+(until A506-2 moves it to the season week);
 switching back removes the dated schedules (`switchNamedDayHours` in `hours.ts`).
 The individual department's Follow the normal week DELETE route is retired (`routes.ts` and
 `dashboard/opening-hours-client.ts`); change the named day's hours choice instead.
@@ -537,7 +538,7 @@ venue's business day, from one changeover to the next. With a 06:00 changeover, 
 21:00–03:00 range ends on Saturday morning; 06:00–06:00 covers the whole business day.
 
 With a readable venue clock, a named day with own hours and no department timetable row follows
-the normal weekday. A saved dated row with no ranges
+its season's week for that weekday. A saved dated row with no ranges
 closes that department for the date's business day. Closing the whole venue closes every
 department. `menu-timetable.test.ts` and `service-day.test.ts` exercise these cases.
 
@@ -574,8 +575,8 @@ opening schedule. `zone_closed_times` in `packages/venue-service/src/schema/zone
 links each range to a zone and either a weekday or a named day. The writers `replaceZoneClosedWeek`
 and `saveZoneClosedDate` in `zone-closed-times.ts` validate the ranges against the business-day
 changeover, on quarter-hour boundaries. A date must have own hours before you can save its closed
-times. `closedZoneIdsAt` uses that named day's dated ranges, including repeats, or the normal
-weekday otherwise. No dated closed ranges means no zone-specific closure on an own-hours day;
+times. `closedZoneIdsAt` uses that named day's dated ranges, including repeats, or the business day's
+season week (`zone_days`, through `resolveZoneClosedDays` in `day-resolver.ts`) otherwise. No dated closed ranges means no zone-specific closure on an own-hours day;
 it does not inherit the zone's normal-week closure. The start is closed and the end is open.
 When the venue clock is unreadable, this zone check reports no closed zone; department checks
 remain separate.
@@ -598,6 +599,42 @@ possible: `/api/orders/:id/reprint` in `apps/server/src/till-api.ts` checks prof
 `apps/server/src/kitchen-print.ts`.
 Pricing still reads static offer membership; zone closures do not change recorded prices.
 `working-order.ts` performs the zone check when adding lines, separately from its offer read.
+
+### Seasons and season weeks
+
+**2026-10-12, A506-1.** `seasons` holds a location's seasons, each a name and an `MM-DD` start;
+`department_days` and `department_day_ranges` hold each department's week per season, and
+`zone_days` and `zone_day_ranges` each zone's closed times per season
+(`packages/venue-service/src/schema/seasons.ts`). A venue gets four seasons from
+`ensureDefaultSeasons` (`packages/venue-service/src/seasons.ts`), called by venue-service
+provisioning and, for a venue with none, by `targetSeasons` before a week write
+(`packages/venue-service/src/season-weeks.ts`).
+
+A week saved with no season named goes into every season; a week saved with a season named
+changes that season alone (`replaceMenuWeek` in `packages/venue-service/src/menu-timetable.ts`,
+`replaceZoneClosedWeek` in `packages/venue-service/src/zone-closed-times.ts`). Until A506-2, a
+week saved with no season named also writes the old weekday rows, `menu_day_timetables` with
+`menu_slots` and `zone_closed_times`, beside them (the "keeping the old weekday rows" cases in
+`packages/venue-service/src/season-weeks.test.ts`).
+
+A configuration transfer carries the five tables (`VENUE_SERVICE_CONFIGURATION_TRANSFER` in
+`packages/venue-service/src/configuration-transfer.ts`). `importConfigurationTables`
+(`apps/server/src/configuration-transfer.ts`) deletes every row of a transferred table before
+inserting the bundle's, so the target's four provisioned seasons give way to the exported ones:
+the case "arrives as exactly the exported seasons, and the imported venue sells and closes by
+them" in `apps/server/src/configuration-transfer.test.ts` renames and moves one season before
+export, finds the target holding the exported four, and asks `resolveDepartmentService` and
+`closedZoneIdsAt` about one Saturday in each of two seasons.
+
+`validateSeasonWeeks` (`packages/venue-service/src/configuration-transfer.ts`) refuses, among
+others: a season start that is not a common year's date or is `02-29`; a range off the
+quarter-hour or overlapping another on the same day; a department range with no period (Closed)
+and a zone range of any kind but `closed`; and a period end offset reaching the next placement in
+the same season's week. It accepts a season with fewer than seven day rows, compares no
+placements across a season boundary, and checks no skipped clock hour, as a season week has no
+date. A season day naming a special-day date is refused, because the bundle carries no
+`special_days` or `special_day_dates`. The cases are under "season weeks in a configuration
+bundle" in `packages/venue-service/src/configuration-transfer.test.ts`.
 
 ### Earlier W98 menu timetable model
 

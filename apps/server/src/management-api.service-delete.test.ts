@@ -183,6 +183,7 @@ describe("permanent service delete HTTP contracts", () => {
                 { key: "department_periods", count: 1, targets: [] },
                 { key: "timetables", count: 5, targets: [] },
                 { key: "slots", count: 5, targets: [] },
+                { key: "seasons", count: 4, targets: [] },
                 { key: "department_policy", count: 1, targets: [] },
                 { key: "zones", count: 1, targets: [{ id: f.zoneId, name: "Garden" }] },
               ]

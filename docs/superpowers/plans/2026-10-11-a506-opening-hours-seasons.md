@@ -686,6 +686,10 @@ own season, so "yesterday" never borrows today's. After A495, `cutover` becomes 
 `assertZoneTakesNewOrders`, `readKeepOpen`, `keepPeriodOpen`, `keepZoneOpen`, `readZoneKeepOpenState`,
 `menuState`, `listZoneOffers`, `packages/module/src/module.ts`) whose answers now come from seasons.
 
+**2026-10-12, at A506-1's finish:** the review's performance fixes added one seat,
+`readZoneClosingStates` (`packages/module/src/module.ts`), so `GET /api/zones` reads every zone's
+closed state and closing summary in one call; the seats above keep their signatures.
+
 - [ ] **Step 1: Failing tests.**
   - `day-resolver.test.ts`, **the 2030 boundary exactly as spec §14**, on Task 1.4's data:
 

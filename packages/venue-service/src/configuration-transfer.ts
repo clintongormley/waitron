@@ -8,7 +8,13 @@ import { isReadableClock } from "./hours-clock.js";
 import { occursOn, repeatKey } from "./named-day-rules.js";
 import { menuPeriodName } from "./menu-timetable-rules.js";
 import { findScheduleEndOffsetClash, parseEndOffsetMinutes } from "./period-end-offset.js";
-import { calendarDateOfTime, parseClosedRanges, parseServiceDay } from "./service-day.js";
+import {
+  calendarDateOfTime,
+  parseClosedRanges,
+  parseServiceDay,
+  type ClosedRange,
+  type ServiceRange,
+} from "./service-day.js";
 import { localTimeOccurrences } from "./hours-occurrences.js";
 import type { MenuSlot } from "./menu-timetable-types.js";
 import "./errors.js";
@@ -17,6 +23,7 @@ type Row = Record<string, unknown>;
 type Tables = Readonly<Record<string, readonly Row[]>>;
 
 const STORED_TIME = /^(?:[01]\d|2[0-3]):[0-5]\d:00$/;
+const CUTOVER = /^(?:[01]\d|2[0-3]):[0-5]\d$/;
 
 function refuse(field: string): never {
   throw new AppError("setup.request_invalid", { field });
@@ -37,6 +44,16 @@ function parsedAs<T>(table: string, parse: () => T): T {
       refuse(table);
     throw error;
   }
+}
+
+/** Each period's end offset; a row without one takes the column's default, 0. */
+function periodOffsets(tables: Tables): Map<string, number> {
+  return new Map(
+    (tables.menu_periods ?? []).map((row) => [
+      row.id as string,
+      (row.end_offset_minutes ?? 0) as number,
+    ]),
+  );
 }
 
 function ids(rows: readonly Row[] | undefined): Set<unknown> {
@@ -220,8 +237,7 @@ export function validateMenuTimetables(
     });
   }
   if ((tables.menu_slots ?? []).length === 0) return;
-  if (bundle === undefined || !/^(?:[01]\d|2[0-3]):[0-5]\d$/.test(bundle.dayCutover))
-    refuse("menu_slots");
+  if (bundle === undefined || !CUTOVER.test(bundle.dayCutover)) refuse("menu_slots");
   for (const [id, slots] of slotsByDay) {
     const parsed = parsedAs("menu_slots", () => parseServiceDay(slots, "slots", bundle.dayCutover));
     const date = days.get(id)!.date;
@@ -237,12 +253,7 @@ export function validateMenuTimetables(
           refuse(`menu_slots.${end === "startsAt" ? "starts_at" : "ends_at"}`);
       }
   }
-  const offsets = new Map(
-    (tables.menu_periods ?? []).map((row) => [
-      row.id as string,
-      (row.end_offset_minutes ?? 0) as number,
-    ]),
-  );
+  const offsets = periodOffsets(tables);
   const calendar = (tables.special_dates ?? []).map((row) => ({
     date: row.date as string,
     closeWholeVenue: row.close_whole_venue === 1,
@@ -254,6 +265,129 @@ export function validateMenuTimetables(
     if (findScheduleEndOffsetClash(schedule, calendar, offsets, bundle.dayCutover) !== null)
       refuse("menu_slots");
   }
+}
+
+const SEASON_START = /^(?:0[1-9]|1[0-2])-(?:0[1-9]|[12]\d|3[01])$/;
+
+/** A season starts on a common year's MM-DD, never 02-29 (`seasons_starts_on_ck`). */
+function isSeasonStart(value: unknown): value is string {
+  if (typeof value !== "string" || !SEASON_START.test(value) || value === "02-29") return false;
+  const date = new Date(`2001-${value}T00:00:00Z`);
+  return date.getUTCDate() === Number(value.slice(3));
+}
+
+/**
+ * A season day's rows group by (owner, season, weekday); special-day dates are refused because the
+ * bundle carries no `special_day_dates`.
+ */
+function seasonDays(
+  rows: readonly Row[] | undefined,
+  table: string,
+  owner: string,
+  owners: Set<unknown>,
+  seasonIds: Set<unknown>,
+): Map<unknown, { ownerId: unknown; seasonId: unknown; weekday: number }> {
+  const days = new Map<unknown, { ownerId: unknown; seasonId: unknown; weekday: number }>();
+  const held = new Set<string>();
+  for (const row of rows ?? []) {
+    if (!owners.has(row[owner])) refuse(`${table}.${owner}`);
+    if ((row.special_day_date_id ?? null) !== null) refuse(`${table}.special_day_date_id`);
+    if (!seasonIds.has(row.season_id)) refuse(`${table}.season_id`);
+    const weekday = row.weekday;
+    if (typeof weekday !== "number" || !Number.isInteger(weekday) || weekday < 0 || weekday > 6)
+      refuse(`${table}.weekday`);
+    const key = JSON.stringify([row[owner], row.season_id, weekday]);
+    if (held.has(key)) refuse(`${table}.weekday`);
+    held.add(key);
+    days.set(row.id, { ownerId: row[owner], seasonId: row.season_id, weekday });
+  }
+  return days;
+}
+
+function storedRange(row: Row, table: string): { startsAt: string; endsAt: string } {
+  for (const column of ["starts_at", "ends_at"])
+    if (typeof row[column] !== "string" || !STORED_TIME.test(row[column]))
+      refuse(`${table}.${column}`);
+  return {
+    startsAt: (row.starts_at as string).slice(0, 5),
+    endsAt: (row.ends_at as string).slice(0, 5),
+  };
+}
+
+export function validateSeasonWeeks(
+  tables: Tables,
+  bundle?: { readonly dayCutover: string },
+): void {
+  const seasonIds = new Set<unknown>();
+  const starts = new Set<unknown>();
+  const names = new Set<unknown>();
+  for (const row of tables.seasons ?? []) {
+    if (typeof row.name !== "string" || row.name.trim() === "" || names.has(row.name))
+      refuse("seasons.name");
+    if (!isSeasonStart(row.starts_on) || starts.has(row.starts_on)) refuse("seasons.starts_on");
+    names.add(row.name);
+    starts.add(row.starts_on);
+    seasonIds.add(row.id);
+  }
+  const departmentDays = seasonDays(
+    tables.department_days,
+    "department_days",
+    "department_id",
+    ids(tables.departments),
+    seasonIds,
+  );
+  const zones = new Set((tables.zone_service_policies ?? []).map((row) => row.zone_id));
+  const zoneDays = seasonDays(tables.zone_days, "zone_days", "zone_id", zones, seasonIds);
+  const departmentRanges = tables.department_day_ranges ?? [];
+  const zoneRanges = tables.zone_day_ranges ?? [];
+  if (departmentRanges.length + zoneRanges.length === 0) return;
+  if (bundle === undefined || !CUTOVER.test(bundle.dayCutover))
+    refuse(departmentRanges.length > 0 ? "department_day_ranges" : "zone_day_ranges");
+
+  const periodDepartment = new Map(
+    (tables.menu_periods ?? []).map((row) => [row.id, row.department_id]),
+  );
+  const departmentWeeks = new Map<unknown, ServiceRange[]>(
+    [...departmentDays.keys()].map((id) => [id, []]),
+  );
+  for (const row of departmentRanges) {
+    const day = departmentDays.get(row.day_id);
+    if (day === undefined) refuse("department_day_ranges.day_id");
+    if (row.department_id !== day.ownerId) refuse("department_day_ranges.department_id");
+    // Closed (a null period) belongs to a special-day date only.
+    if (typeof row.period_id !== "string" || periodDepartment.get(row.period_id) !== day.ownerId)
+      refuse("department_day_ranges.period_id");
+    departmentWeeks
+      .get(row.day_id)!
+      .push({ periodId: row.period_id, ...storedRange(row, "department_day_ranges") });
+  }
+  const zoneWeeks = new Map<unknown, ClosedRange[]>([...zoneDays.keys()].map((id) => [id, []]));
+  for (const row of zoneRanges) {
+    if (!zoneDays.has(row.day_id)) refuse("zone_day_ranges.day_id");
+    // "open" belongs to a special-day date only; an export always carries the not-null column.
+    if (row.kind !== "closed") refuse("zone_day_ranges.kind");
+    zoneWeeks.get(row.day_id)!.push(storedRange(row, "zone_day_ranges"));
+  }
+  const parsed = new Map<unknown, ServiceRange[]>();
+  for (const [id, ranges] of departmentWeeks)
+    parsed.set(
+      id,
+      parsedAs("department_day_ranges", () => parseServiceDay(ranges, "slots", bundle.dayCutover)),
+    );
+  for (const ranges of zoneWeeks.values())
+    parsedAs("zone_day_ranges", () => parseClosedRanges(ranges, "ranges", bundle.dayCutover));
+
+  const offsets = periodOffsets(tables);
+  const weeks = new Map<string, { weekday: number; date: null; slots: ServiceRange[] }[]>();
+  for (const [id, day] of departmentDays) {
+    const key = JSON.stringify([day.ownerId, day.seasonId]);
+    const week = weeks.get(key) ?? [];
+    week.push({ weekday: day.weekday, date: null, slots: parsed.get(id)! });
+    weeks.set(key, week);
+  }
+  for (const week of weeks.values())
+    if (findScheduleEndOffsetClash(week, [], offsets, bundle.dayCutover) !== null)
+      refuse("department_day_ranges");
 }
 
 function validateDepartmentTransfers(tables: Tables): void {
@@ -407,8 +541,7 @@ function validateServiceHierarchy(tables: Tables): void {
 function validateZoneClosedTimes(tables: Tables, bundle?: { readonly dayCutover: string }): void {
   const rows = tables.zone_closed_times ?? [];
   if (rows.length === 0) return;
-  if (bundle === undefined || !/^(?:[01]\d|2[0-3]):[0-5]\d$/.test(bundle.dayCutover))
-    refuse("zone_closed_times");
+  if (bundle === undefined || !CUTOVER.test(bundle.dayCutover)) refuse("zone_closed_times");
   const zones = ids(tables.floor_zones);
   const configured = new Set((tables.zone_service_policies ?? []).map((row) => row.zone_id));
   const days = new Map((tables.special_dates ?? []).map((row) => [row.id, row]));
@@ -474,6 +607,7 @@ function validateVenueServiceConfiguration(
   validateHolidayConfiguration(tables);
   validateMenuTimetables(tables, bundle);
   validateZoneClosedTimes(tables, bundle);
+  validateSeasonWeeks(tables, bundle);
   validateDepartmentTransfers(tables);
   validateRoutingConfiguration(tables);
 }
@@ -501,6 +635,11 @@ export const VENUE_SERVICE_CONFIGURATION_TRANSFER = {
     { name: "menu_day_timetables" },
     { name: "menu_slots" },
     { name: "routing_cell_periods" },
+    { name: "seasons", locationColumns: ["location_id"] },
+    { name: "department_days" },
+    { name: "department_day_ranges" },
+    { name: "zone_days" },
+    { name: "zone_day_ranges" },
     { name: "zone_closed_times" },
     { name: "holiday_geographies", locationColumns: ["location_id"] },
   ],

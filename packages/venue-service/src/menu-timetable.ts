@@ -11,7 +11,7 @@ import { readLocationClock } from "@waitron/reporting";
 import { AppError, createLabelComparator, type BusinessDayClock } from "@waitron/shared";
 
 import { isReadableClock, venueLocalMoment } from "./hours-clock.js";
-import { addDays, weekdayOf } from "./hours-rules.js";
+import { addDays } from "./hours-rules.js";
 import {
   clockTimeSkippedInDay,
   parseServiceDay,
@@ -36,15 +36,29 @@ import type {
   MenuSlot,
   PeriodRoutingUse,
 } from "./menu-timetable-types.js";
-import { assertDepartment, resolveZoneContext, storedTime, type VenueScope } from "./operations.js";
+import {
+  assertDepartment,
+  resolveZoneContext,
+  storedTime,
+  wireTime,
+  type VenueScope,
+} from "./operations.js";
 import { specialDates } from "./schema/hours.js";
-import { namedDaysOn } from "./named-days.js";
 import { nextOccurrence } from "./named-day-rules.js";
 import { menuDayTimetables, menuPeriods, menuPeriodStaffMenus, menuSlots } from "./schema/menus.js";
 import { departments } from "./schema/service.js";
 import { routingCellPeriods, routingCells } from "./schema/routing.js";
 import { periodExtensions } from "./schema/period-extensions.js";
 import { readZoneClosedTimes } from "./zone-closed-times.js";
+import { resolveDepartmentDays, type DayPlan } from "./day-resolver.js";
+import {
+  joinTouching,
+  readDepartmentSeasonWeeks,
+  seasonsHolding,
+  targetSeasons,
+  writeDepartmentSeasonWeeks,
+} from "./season-weeks.js";
+import { departmentDayRanges, departmentDays } from "./schema/seasons.js";
 import { zoneClosedTimes } from "./schema/zone-closed-times.js";
 import {
   scheduleCutovers,
@@ -52,8 +66,6 @@ import {
   type ServiceDayContext,
 } from "./service-day-context.js";
 import "./errors.js";
-
-const wire = (time: string) => time.slice(0, 5);
 
 export async function placeOpenPeriod(
   tx: Transaction,
@@ -177,8 +189,8 @@ async function slotsByTimetable(
     .orderBy(asc(menuSlots.startsAt), asc(menuSlots.id)))
     byTimetable.get(row.timetableId)!.push({
       periodId: row.periodId,
-      startsAt: wire(row.startsAt),
-      endsAt: wire(row.endsAt),
+      startsAt: wireTime(row.startsAt),
+      endsAt: wireTime(row.endsAt),
     });
   return byTimetable;
 }
@@ -320,6 +332,7 @@ export async function departmentDay(
   departmentId: string,
   moment: ServiceMoment | null,
   clock: BusinessDayClock,
+  plan?: DayPlan,
 ) {
   const periods = await tx
     .select({
@@ -338,55 +351,14 @@ export async function departmentDay(
     .orderBy(asc(menuPeriodStaffMenus.displayOrder), asc(menuPeriodStaffMenus.menuId));
   if (moment === null) return { periods, staff, ranges: [], previousRanges: [], extension: null };
   const yesterday = addDays(moment.businessDay, -1);
-  const named = await namedDaysOn(tx, cfg, [yesterday, moment.businessDay]);
-  const dates = [...named.values()];
-  const timetables = await tx
-    .select({
-      id: menuDayTimetables.id,
-      weekday: menuDayTimetables.weekday,
-      specialDateId: menuDayTimetables.specialDateId,
-    })
-    .from(menuDayTimetables)
-    .where(
-      and(
-        eq(menuDayTimetables.departmentId, departmentId),
-        or(
-          inArray(menuDayTimetables.weekday, [weekdayOf(yesterday), moment.weekday]),
-          dates.length === 0
-            ? undefined
-            : inArray(
-                menuDayTimetables.specialDateId,
-                dates.map((date) => date.id),
-              ),
-        ),
-      ),
-    );
-  const timetableOn = (date: string) => {
-    const special = named.get(date);
-    if (special?.closeWholeVenue) return undefined;
-    return (
-      (!special?.ownHours
-        ? undefined
-        : timetables.find((entry) => entry.specialDateId === special.id)) ??
-      timetables.find((entry) => entry.weekday === weekdayOf(date))
-    );
-  };
-  const today = timetableOn(moment.businessDay);
-  const previous = timetableOn(yesterday);
-  const slots = await slotsByTimetable(
+  const days = await resolveDepartmentDays(
     tx,
-    [today?.id, previous?.id].filter((id): id is string => id !== undefined),
+    cfg,
+    departmentId,
+    [yesterday, moment.businessDay],
+    clock,
+    plan,
   );
-  const rangesOn = (id: string | undefined, date: string): ServiceRange[] =>
-    id === undefined
-      ? []
-      : (slots.get(id) ?? [])
-          .slice()
-          .sort(
-            (a, b) =>
-              rangeSpan(a, serviceDayContext(clock, date).dayCutover).start -
-              rangeSpan(b, serviceDayContext(clock, date).dayCutover).start,
-          );
   const [row] = await tx
     .select({
       periodId: periodExtensions.periodId,
@@ -405,14 +377,14 @@ export async function departmentDay(
       ? null
       : {
           periodId: row.periodId,
-          startsAt: wire(row.startsAt),
-          endsAt: wire(row.endsAt),
+          startsAt: wireTime(row.startsAt),
+          endsAt: wireTime(row.endsAt),
         };
   return {
     periods,
     staff,
-    ranges: rangesOn(today?.id, moment.businessDay),
-    previousRanges: rangesOn(previous?.id, yesterday),
+    ranges: days.get(moment.businessDay)!.ranges,
+    previousRanges: days.get(yesterday)!.ranges,
     extension,
   };
 }
@@ -468,11 +440,12 @@ export async function resolveDepartmentService(
   cfg: VenueScope,
   departmentId: string,
   at: Date,
+  prepared?: { clock: BusinessDayClock; plan?: DayPlan },
 ): Promise<DepartmentService> {
   await assertDepartment(tx, cfg, departmentId);
-  const clock = await readLocationClock(tx, cfg.locationId);
+  const clock = prepared?.clock ?? (await readLocationClock(tx, cfg.locationId));
   const moment = serviceMomentAt(at, clock);
-  const day = await departmentDay(tx, cfg, departmentId, moment, clock);
+  const day = await departmentDay(tx, cfg, departmentId, moment, clock, prepared?.plan);
   const { periods, staff } = day;
   const menusOf = (periodId: string): string[] => {
     const period = periods.find((entry) => entry.id === periodId)!;
@@ -750,9 +723,23 @@ async function periodUses(
     .leftJoin(specialDates, eq(specialDates.id, menuDayTimetables.specialDateId))
     .where(inArray(menuSlots.periodId, [...periodIds]))
     .orderBy(asc(menuDayTimetables.weekday), asc(specialDates.date));
-  const week = rows.filter((row) => row.weekday !== null);
+  const painted = await tx
+    .selectDistinct({ periodId: departmentDayRanges.periodId, weekday: departmentDays.weekday })
+    .from(departmentDayRanges)
+    .innerJoin(departmentDays, eq(departmentDays.id, departmentDayRanges.dayId))
+    .where(
+      and(
+        isNotNull(departmentDays.seasonId),
+        inArray(departmentDayRanges.periodId, [...periodIds]),
+      ),
+    );
+  const weekdays = new Map<string, Set<number>>(periodIds.map((id) => [id, new Set()]));
+  for (const row of [...rows, ...painted])
+    if (row.weekday !== null) weekdays.get(row.periodId!)!.add(row.weekday);
   const dated = rows.filter((row) => row.weekday === null);
-  for (const row of week) uses.get(row.periodId)!.push({ kind: "week", weekday: row.weekday! });
+  for (const [periodId, days] of weekdays)
+    for (const weekday of [...days].sort((a, b) => a - b))
+      uses.get(periodId)!.push({ kind: "week", weekday });
   for (const row of dated)
     uses.get(row.periodId)!.push({
       kind: "special_date",
@@ -780,6 +767,7 @@ export async function replaceMenuWeek(
   days: unknown,
   at: Date,
   expectedClockRevision: number,
+  options: { seasonId?: string } = {},
 ): Promise<void> {
   const clock = await readLocationClock(tx, cfg.locationId);
   const week = parseMenuWeek(days, (value, field) => {
@@ -802,13 +790,30 @@ export async function replaceMenuWeek(
     tx,
     existing.map((day) => day.id),
   );
-  const changed = week.slots.some(
-    (slots, weekday) =>
-      !sameScheduleRanges(
-        currentSlots.get(existing.find((day) => day.weekday === weekday)?.id ?? "") ?? [],
-        slots,
+  const targets = await targetSeasons(tx, cfg, options.seasonId);
+  const samePeriod = (a: ServiceRange, b: ServiceRange) => a.periodId === b.periodId;
+  const seasonWeek = week.slots.map((slots) => joinTouching(slots, samePeriod));
+  const seasonsNow = (
+    await readDepartmentSeasonWeeks(tx, cfg, [departmentId], clock.dayCutover)
+  ).get(departmentId);
+  const changed =
+    (options.seasonId === undefined &&
+      week.slots.some(
+        (slots, weekday) =>
+          !sameScheduleRanges(
+            currentSlots.get(existing.find((day) => day.weekday === weekday)?.id ?? "") ?? [],
+            slots,
+          ),
+      )) ||
+    targets.some((season) =>
+      seasonWeek.some(
+        (ranges, weekday) =>
+          !sameScheduleRanges(
+            joinTouching(seasonsNow?.get(season.id)?.[weekday] ?? [], samePeriod),
+            ranges,
+          ),
       ),
-  );
+    );
   await assertBusinessDayScheduleWrite(
     tx,
     cfg,
@@ -817,14 +822,27 @@ export async function replaceMenuWeek(
     expectedClockRevision,
     clock,
   );
-  const idOf = (weekday: number) => existing.find((row) => row.weekday === weekday)?.id;
-  const emptied = [0, 1, 2, 3, 4, 5, 6]
-    .filter((weekday) => week.slots[weekday]!.length === 0)
-    .flatMap((weekday) => idOf(weekday) ?? []);
-  if (emptied.length > 0)
-    await tx.delete(menuDayTimetables).where(inArray(menuDayTimetables.id, emptied));
-  for (const [weekday, slots] of week.slots.entries())
-    if (slots.length > 0) await writeDay(tx, idOf(weekday), { departmentId, weekday }, slots);
+  if (options.seasonId === undefined) {
+    const idOf = (weekday: number) => existing.find((row) => row.weekday === weekday)?.id;
+    const emptied = [0, 1, 2, 3, 4, 5, 6]
+      .filter((weekday) => week.slots[weekday]!.length === 0)
+      .flatMap((weekday) => idOf(weekday) ?? []);
+    if (emptied.length > 0)
+      await tx.delete(menuDayTimetables).where(inArray(menuDayTimetables.id, emptied));
+    for (const [weekday, slots] of week.slots.entries())
+      if (slots.length > 0) await writeDay(tx, idOf(weekday), { departmentId, weekday }, slots);
+  }
+  const holding = seasonsHolding(
+    seasonsNow,
+    targets.map((season) => season.id),
+    seasonWeek,
+  );
+  await writeDepartmentSeasonWeeks(
+    tx,
+    departmentId,
+    targets.flatMap((season) => (holding.has(season.id) ? [] : [season.id])),
+    seasonWeek,
+  );
   const clash = await endOffsetClash(tx, cfg, departmentId, false, clock);
   if (clash !== null)
     invalidTimetable(
@@ -932,7 +950,7 @@ async function assertCalendarRanges(
         parseClosedRanges(
           closures
             .filter((row) => row.zoneId === zoneId)
-            .map((row) => ({ startsAt: wire(row.startsAt), endsAt: wire(row.endsAt) })),
+            .map((row) => ({ startsAt: wireTime(row.startsAt), endsAt: wireTime(row.endsAt) })),
           field,
           cutover,
         );

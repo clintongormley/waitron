@@ -1,7 +1,13 @@
 import { randomUUID } from "node:crypto";
 import { sql, eq } from "drizzle-orm";
 import { describe, expect, it, vi } from "vitest";
-import { CORE_MIGRATIONS, floorZones, locations, withTransaction } from "@waitron/db";
+import {
+  CORE_MIGRATIONS,
+  floorZones,
+  locations,
+  withTransaction,
+  type Transaction,
+} from "@waitron/db";
 import { CATALOGUE_MIGRATIONS } from "@waitron/catalogue";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { locationId } from "@waitron/shared";
@@ -15,6 +21,7 @@ import * as closures from "./zone-closed-times.js";
 import { listZoneOffers, menuState } from "./operations.js";
 import { VENUE_SERVICE } from "./service.js";
 import { replaceZoneClosedWeek, saveZoneClosedDate } from "./zone-closed-times.js";
+import { ensureDefaultSeasons } from "./seasons.js";
 
 const suite = useVenueDb({
   migrations: [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS, VENUE_SERVICE_MIGRATIONS],
@@ -51,8 +58,8 @@ async function venue() {
     };
     const terrace = await zone("Terrace", 2);
     const bar = await zone("Bar", 1);
-    await zone("Disabled", 0, false);
-    return { cfg, departmentId, terrace, bar };
+    const disabled = await zone("Disabled", 0, false);
+    return { cfg, departmentId, terrace, bar, disabled };
   });
 }
 async function named(v: Awaited<ReturnType<typeof venue>>, ownHours: boolean) {
@@ -281,6 +288,23 @@ describe("zones closed at an instant", () => {
       ...(await tx((db) => closures.closedZoneIdsAt(db, v.cfg, new Date("2041-10-07T21:45:00Z")))),
     ]).toEqual([v.terrace]);
   });
+  it("closes a zone by the season of the business day", async () => {
+    const v = await venue();
+    const seasons = await tx((db) => ensureDefaultSeasons(db, v.cfg));
+    const winter = seasons.find((season) => season.name === "Winter")!.id;
+    const friday = [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({
+      weekday,
+      ranges: weekday === 5 ? [{ startsAt: "22:00", endsAt: "23:30" }] : [],
+    }));
+    await tx((db) =>
+      replaceZoneClosedWeek(db, v.cfg, v.terrace, friday, 0, at, { seasonId: winter }),
+    );
+    const closedAt = (instant: string) =>
+      tx((db) => closures.closedZoneIdsAt(db, v.cfg, new Date(instant)));
+    // 22:30 in Madrid on Friday 29 November (Autumn) and Friday 6 December 2030 (Winter).
+    expect([...(await closedAt("2030-11-29T21:30:00Z"))]).toEqual([]);
+    expect([...(await closedAt("2030-12-06T21:30:00Z"))]).toEqual([v.terrace]);
+  });
   it("scopes the batch to this location and the selected zones", async () => {
     const v = await venue(),
       other = await venue();
@@ -346,25 +370,103 @@ describe("zones closed at an instant", () => {
   it("reads the clock, named day and closed times once for a batch", async () => {
     const v = await venue();
     await tx((db) => replaceZoneClosedWeek(db, v.cfg, v.terrace, week(mondayNight), 0));
-    await tx(async (db) => {
-      const session = (
-        db as unknown as { session: { prepareQuery: (...args: never[]) => unknown } }
-      ).session;
-      const spy = vi.spyOn(session, "prepareQuery");
-      try {
-        const closed = await closures.closedZoneIdsAt(db, v.cfg, new Date("2030-10-07T21:45:00Z"), [
-          v.bar,
-          v.terrace,
-        ]);
-        expect([...closed]).toEqual([v.terrace]);
-        const texts = spy.mock.calls.map(([query]) => (query as unknown as { sql: string }).sql);
-        for (const table of ["locations", "special_dates", "zone_closed_times", "zone_extensions"])
-          expect(texts.filter((text) => text.includes(`from "${table}"`))).toHaveLength(1);
-        expect(texts).toHaveLength(4);
-      } finally {
-        spy.mockRestore();
-      }
+    const reads = (zoneIds: string[]) =>
+      tx(async (db) => {
+        const session = (
+          db as unknown as { session: { prepareQuery: (...args: never[]) => unknown } }
+        ).session;
+        const spy = vi.spyOn(session, "prepareQuery");
+        try {
+          const closed = await closures.closedZoneIdsAt(
+            db,
+            v.cfg,
+            new Date("2030-10-07T21:45:00Z"),
+            zoneIds,
+          );
+          expect([...closed]).toEqual([v.terrace]);
+          return spy.mock.calls.map(([query]) => (query as unknown as { sql: string }).sql);
+        } finally {
+          spy.mockRestore();
+        }
+      });
+    const one = await reads([v.terrace]);
+    const three = await reads([v.bar, v.terrace, v.disabled]);
+    for (const texts of [one, three]) {
+      for (const table of ["locations", "seasons", "special_dates", "zone_days", "zone_extensions"])
+        expect(texts.filter((text) => text.includes(`from "${table}"`))).toHaveLength(1);
+      expect(texts.filter((text) => text.includes(`from "zone_closed_times"`))).toHaveLength(0);
+      expect(texts).toHaveLength(5);
+    }
+    expect(three).toHaveLength(one.length);
+  });
+  it("reads several zones' floor closing summaries in the statements one zone takes, answering as one zone at a time does", async () => {
+    const v = await venue();
+    await tx((db) => replaceZoneClosedWeek(db, v.cfg, v.terrace, week(mondayNight), 0));
+    await tx((db) =>
+      replaceZoneClosedWeek(db, v.cfg, v.bar, week([{ startsAt: "23:45", endsAt: "02:00" }]), 0),
+    );
+    const instant = new Date("2030-10-07T21:40:00Z");
+    const ids = [v.terrace, v.bar, v.disabled];
+    const single = await tx(async (db) => {
+      const answers = new Map<string, unknown>();
+      for (const id of ids)
+        answers.set(id, await VENUE_SERVICE.readZoneKeepOpenState(db, v.cfg, id, instant));
+      return answers;
     });
+    expect(single).toEqual(
+      new Map([
+        [
+          v.terrace,
+          {
+            zoneId: v.terrace,
+            zoneName: "Terrace",
+            closesAt: "23:30",
+            running: false,
+            extendedUntil: null,
+          },
+        ],
+        [
+          v.bar,
+          { zoneId: v.bar, zoneName: "Bar", closesAt: "23:45", running: true, extendedUntil: null },
+        ],
+        [v.disabled, null],
+      ]),
+    );
+    const counted = <T>(read: (db: Transaction) => Promise<T>) =>
+      tx(async (db) => {
+        const session = (
+          db as unknown as { session: { prepareQuery: (...args: never[]) => unknown } }
+        ).session;
+        const spy = vi.spyOn(session, "prepareQuery");
+        try {
+          const answers = await read(db);
+          return {
+            answers,
+            texts: spy.mock.calls.map(([query]) => (query as unknown as { sql: string }).sql),
+          };
+        } finally {
+          spy.mockRestore();
+        }
+      });
+    const batch = (zoneIds: string[]) =>
+      counted((db) => VENUE_SERVICE.readZoneClosingStates(db, v.cfg, zoneIds, instant));
+    const keepOpen = (states: ReadonlyMap<string, { keepOpen: unknown }>) =>
+      new Map([...states].map(([id, state]) => [id, state.keepOpen]));
+    const one = await batch([v.terrace]);
+    const three = await batch(ids);
+    expect(keepOpen(one.answers)).toEqual(new Map([[v.terrace, single.get(v.terrace)]]));
+    expect(keepOpen(three.answers)).toEqual(single);
+    expect(three.texts).toHaveLength(one.texts.length);
+    expect((await batch([])).answers).toEqual(new Map());
+    const closedOnly = await counted((db) =>
+      VENUE_SERVICE.closedZoneIdsAt(db, v.cfg, instant, ids),
+    );
+    expect(new Map([...three.answers].map(([id, state]) => [id, state.closed]))).toEqual(
+      new Map(ids.map((id) => [id, closedOnly.answers.has(id)])),
+    );
+    expect([...closedOnly.answers]).toEqual([v.terrace]);
+    // Beyond the closed check, the summaries cost only the read of the closing zones' names.
+    expect(three.texts).toHaveLength(closedOnly.texts.length + 1);
   });
 });
 

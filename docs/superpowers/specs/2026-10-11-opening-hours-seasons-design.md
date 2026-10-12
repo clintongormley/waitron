@@ -396,6 +396,10 @@ sample values for the new tables (owner rule of 2026-10-11 in lane A's queue).
 | `dashboard/department-zones.ts` zone summary (`:349-400`) | Section 7. |
 | Links into today's tabs: `department-zones.ts:461` (a zone's week), `departments-list.ts:76` and `department-page.ts:94` (readiness "set up periods"), `station-table.ts:78` (a station's week), `apps/setup/src/screens/done-screen.ts:187` | Zone → the season painter on that zone; readiness → the Periods page; station → its Times view; setup Done → the Opening hours year. |
 
+**2026-10-12 (A506-1):** `GET /api/zones` now reads through one seat, `readZoneClosingStates`
+(`packages/module/src/module.ts`), which answers each zone's closed state and closing summary
+together; see the plan's Task 1.5 note.
+
 The plan re-runs this follow-the-call-chain search on the base it is written from, since other lanes
 are changing these files now (section 15).
 

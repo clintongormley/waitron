@@ -40,6 +40,11 @@ it("refreshes the routing grid and the operations screen on a routing cell chang
     "sections",
     "section_members",
     "catalogues",
+    "seasons",
+    "department_days",
+    "department_day_ranges",
+    "zone_days",
+    "zone_day_ranges",
   ]);
   expect(QUERY_DEPENDENCIES.operations).toEqual([
     "locations",
@@ -65,6 +70,11 @@ it("refreshes the routing grid and the operations screen on a routing cell chang
     "sections",
     "section_members",
     "menu_items",
+    "seasons",
+    "department_days",
+    "department_day_ranges",
+    "zone_days",
+    "zone_day_ranges",
   ]);
 });
 
@@ -88,6 +98,11 @@ it("refreshes Opening hours from its periods, ranges, dates, menu names and the 
     "categories",
     "category_details",
     "products",
+    "seasons",
+    "department_days",
+    "department_day_ranges",
+    "zone_days",
+    "zone_day_ranges",
   ]);
 });
 
@@ -148,10 +163,29 @@ it.each(["zone-delete-impact", "department-delete-impact"] as const)(
       "menu_period_staff_menus",
       "menu_day_timetables",
       "menu_slots",
+      "department_days",
+      "department_day_ranges",
+      "zone_days",
+      "zone_day_ranges",
       "period_extensions",
       "department_transfer_desks",
       "department_transfer_destinations",
       "department_transfer_requests",
     ]);
+  },
+);
+
+it.each(["opening-hours", "operations", "routing", "named-days"] as const)(
+  "refreshes %s when a season or a season week changes",
+  (interest) => {
+    expect(QUERY_DEPENDENCIES[interest]).toEqual(
+      expect.arrayContaining([
+        "seasons",
+        "department_days",
+        "department_day_ranges",
+        "zone_days",
+        "zone_day_ranges",
+      ]),
+    );
   },
 );

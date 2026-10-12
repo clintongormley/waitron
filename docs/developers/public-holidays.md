@@ -73,7 +73,9 @@ An own holiday is your assertion; these paths do not check a municipal list.
 
 `VENUE_SERVICE_CONFIGURATION_TRANSFER` in `packages/venue-service/src/configuration-transfer.ts`
 carries named days and retained holiday-area geographies, without local-holiday entries or the
-retired colour. It also carries dated department schedules and zone closed times. Public facts,
+retired colour. It also carries dated department schedules, zone closed times, and seasons with
+their department and zone weeks (see "Seasons and season weeks" in
+[conventions-data.md](conventions-data.md)). Public facts,
 source hashes and shipped data versions come from the receiving build's pack.
 
 `validateHolidayConfiguration` validates geographies and area choices against the receiving packs;

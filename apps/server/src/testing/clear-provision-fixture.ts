@@ -5,6 +5,10 @@ import type { Database } from "@waitron/db";
 export async function clearProvisionFixture(db: Database): Promise<void> {
   await db.transaction(async (tx) => {
     for (const table of [
+      // A season day's range keys its period with no delete rule; the days take their ranges.
+      "department_days",
+      "zone_days",
+      "seasons",
       "period_extensions",
       "zone_extensions",
       "holiday_geographies",

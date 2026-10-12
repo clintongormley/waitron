@@ -69,9 +69,16 @@ it("upgrades a populated predecessor with its installed change-feed and append-o
     },
   };
   await suite.db.insert(tenantReceipts).values({ receipt });
+  const predecessorTables = new Set(
+    suite.db
+      .all<{ name: string }>(sql`select name from sqlite_master where type = 'table'`)
+      .map((row) => row.name),
+  );
   await installChangeFeed(
     suite.db,
-    VENUE_SERVICE_CHANGE_SOURCES.filter((source) => source.table !== "department_receipts"),
+    VENUE_SERVICE_CHANGE_SOURCES.filter(
+      (source) => source.table !== "department_receipts" && predecessorTables.has(source.table),
+    ),
   );
   const before = suite.db.all<{ name: string }>(
     sql`select name from sqlite_master where type = 'trigger' order by name`,

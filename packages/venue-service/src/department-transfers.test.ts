@@ -510,13 +510,16 @@ describe("departmental tab transfers", () => {
         .update(locations)
         .set({ timeZone: "Europe/Madrid", dayCutover: "06:00" })
         .where(eq(locations.id, v.cfg.locationId));
-      await tx.insert(service.zoneClosedTimes).values(
+      await service.replaceZoneClosedWeek(
+        tx,
+        v.cfg,
+        v.bz,
         [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({
-          zoneId: v.bz,
           weekday,
-          startsAt: "23:30:00",
-          endsAt: "06:00:00",
+          ranges: [{ startsAt: "23:30", endsAt: "06:00" }],
         })),
+        0,
+        new Date("2026-10-05T12:00:00Z"),
       );
     });
     const before = await suite.db.select().from(workingOrders).where(eq(workingOrders.id, v.tab));

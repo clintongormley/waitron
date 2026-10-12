@@ -83,6 +83,7 @@ it.each([
   ],
   ["timetables", "Removes {count} menu timetables.", "Quita {count} horarios de menús."],
   ["slots", "Removes {count} menu slots.", "Quita {count} franjas de menús."],
+  ["seasons", "Removes hours in {count} seasons.", "Quita los horarios de {count} temporadas."],
   [
     "period_extensions",
     "Removes {count} period extensions.",

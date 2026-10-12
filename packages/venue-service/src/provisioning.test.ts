@@ -18,6 +18,7 @@ import { locationId as brandLocationId } from "@waitron/shared";
 import { readHolidays, readHolidayAreaModel } from "./holidays.js";
 import { readNamedDaysModel } from "./named-days.js";
 import { readSpecialDate, saveSpecialDate } from "./hours.js";
+import { readSeasons } from "./seasons.js";
 import { VENUE_SERVICE_MIGRATIONS } from "./migrations.js";
 import { createServiceZone } from "./operations.js";
 import { readProfileKitchenScreens } from "./kitchen-screens.js";
@@ -102,6 +103,30 @@ describe("VENUE_SERVICE_PROVISIONING", () => {
     const rows = await db.execute<{ name: string; trading_name: string }>(sql`
       select name, trading_name from departments where location_id = ${locationId}`);
     expect(rows.rows).toEqual([{ name: "La Plaza", trading_name: "La Plaza" }]);
+  });
+
+  it("gives the venue the four default seasons", async () => {
+    await seedTenant(db);
+    const [location] = await db
+      .insert(locations)
+      .values({
+        name: "Seasonal",
+        invoiceLocales: ["en-GB"],
+        operationDescription: "Hospitality",
+      })
+      .returning({ id: locations.id });
+    const locationId = brandLocationId(location!.id);
+    const node = { locationId, nodeId: await seedNode(db, locationId) };
+
+    await db.transaction((tx) => VENUE_SERVICE_PROVISIONING.seed!.run(tx, node));
+
+    const read = await db.transaction((tx) => readSeasons(tx, { locationId }));
+    expect(read.map(({ name, startsOn }) => ({ name, startsOn }))).toEqual([
+      { name: "Spring", startsOn: "03-01" },
+      { name: "Summer", startsOn: "06-01" },
+      { name: "Autumn", startsOn: "09-01" },
+      { name: "Winter", startsOn: "12-01" },
+    ]);
   });
 
   it("seeds quick-sale and receipt defaults without a zone override", async () => {

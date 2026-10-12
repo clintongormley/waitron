@@ -53,6 +53,7 @@ import {
 } from "./menu-timetable.js";
 import type { MenuSlot, MenuWeekDay } from "./menu-timetable-types.js";
 import { VENUE_SERVICE_MIGRATIONS } from "./migrations.js";
+import { readSeasons } from "./seasons.js";
 import {
   configureZone,
   createDepartment,
@@ -1445,6 +1446,41 @@ describe("the timetable's writers", () => {
         .from(menuPeriodStaffMenus)
         .where(eq(menuPeriodStaffMenus.periodId, periods.noches)),
     ).toEqual([]);
+  });
+});
+
+describe("a period painted in one season only", () => {
+  it("refuses deleting a period painted in one season only", async () => {
+    const v = await timed();
+    const { periods } = v;
+    const winter = (await scoped((tx) => readSeasons(tx, v.cfg))).find(
+      (season) => season.name === "Winter",
+    )!;
+    await scoped((tx) =>
+      replaceMenuWeek(
+        tx,
+        v.cfg,
+        v.restaurant,
+        restaurantWeek(periods, (weekday) =>
+          weekday === 2 ? [slot(periods.brunch, "09:00", "12:00")] : null,
+        ),
+        AT,
+        0,
+        { seasonId: winter.id },
+      ),
+    );
+    await expect(scoped((tx) => deleteMenuPeriod(tx, v.cfg, periods.brunch))).rejects.toMatchObject(
+      {
+        code: "menu_period.in_use",
+        params: { periodId: periods.brunch, uses: [{ kind: "week", weekday: 2 }] },
+      },
+    );
+    expect(
+      await db
+        .select({ id: menuPeriods.id })
+        .from(menuPeriods)
+        .where(eq(menuPeriods.id, periods.brunch)),
+    ).toEqual([{ id: periods.brunch }]);
   });
 });
 

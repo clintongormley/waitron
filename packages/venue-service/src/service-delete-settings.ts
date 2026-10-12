@@ -1,4 +1,4 @@
-import { and, asc, eq, inArray, or } from "drizzle-orm";
+import { and, asc, eq, inArray, isNotNull, or } from "drizzle-orm";
 import { deviceProfiles, devices, floorZones, type Transaction } from "@waitron/db";
 import { createLabelComparator, type DeleteImpactItem, type DeleteTarget } from "@waitron/shared";
 import type { VenueScope } from "./operations.js";
@@ -15,6 +15,7 @@ import { menuPeriods, menuPeriodStaffMenus, menuDayTimetables, menuSlots } from 
 import { zoneClosedTimes } from "./schema/zone-closed-times.js";
 import { zoneExtensions } from "./schema/zone-extensions.js";
 import { periodExtensions } from "./schema/period-extensions.js";
+import { departmentDayRanges, departmentDays, zoneDayRanges, zoneDays } from "./schema/seasons.js";
 import {
   departmentTransferDesks,
   departmentTransferDestinations,
@@ -192,6 +193,18 @@ async function settings(
     .select()
     .from(menuSlots)
     .where(eq(menuSlots.departmentId, departmentId ?? ""));
+  const departmentSeasons = await tx
+    .selectDistinct({ seasonId: departmentDays.seasonId })
+    .from(departmentDays)
+    .innerJoin(departmentDayRanges, eq(departmentDayRanges.dayId, departmentDays.id))
+    .where(
+      and(eq(departmentDays.departmentId, departmentId ?? ""), isNotNull(departmentDays.seasonId)),
+    );
+  const zoneSeasons = await tx
+    .selectDistinct({ seasonId: zoneDays.seasonId })
+    .from(zoneDays)
+    .innerJoin(zoneDayRanges, eq(zoneDayRanges.dayId, zoneDays.id))
+    .where(and(inArray(zoneDays.zoneId, zoneIds), isNotNull(zoneDays.seasonId)));
   const periodExtra = await tx
     .select()
     .from(periodExtensions)
@@ -292,6 +305,11 @@ async function settings(
     { key: "staff_menus", count: staff.length, targets: [] },
     { key: "timetables", count: timetables.length, targets: [] },
     { key: "slots", count: slots.length, targets: [] },
+    {
+      key: "seasons",
+      count: new Set([...departmentSeasons, ...zoneSeasons].map((row) => row.seasonId)).size,
+      targets: [],
+    },
     { key: "period_extensions", count: periodExtra.length, targets: [] },
     { key: "department_policy", count: departmentPolicy.length, targets: [] },
     {
@@ -358,6 +376,7 @@ export async function clearServiceDeleteSettings(
   );
   await tx.delete(zoneExtensions).where(inArray(zoneExtensions.zoneId, selected.zoneIds));
   await tx.delete(zoneClosedTimes).where(inArray(zoneClosedTimes.zoneId, selected.zoneIds));
+  await tx.delete(zoneDays).where(inArray(zoneDays.zoneId, selected.zoneIds));
   await tx.delete(zoneSalePolicies).where(inArray(zoneSalePolicies.zoneId, selected.zoneIds));
   for (const start of selected.starts)
     await tx
@@ -390,6 +409,7 @@ export async function clearServiceDeleteSettings(
     await tx
       .delete(menuDayTimetables)
       .where(eq(menuDayTimetables.departmentId, selected.departmentId));
+    await tx.delete(departmentDays).where(eq(departmentDays.departmentId, selected.departmentId));
     await tx.delete(menuPeriods).where(eq(menuPeriods.departmentId, selected.departmentId));
     await tx
       .delete(departmentSalePolicies)
