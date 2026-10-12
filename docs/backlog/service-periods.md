@@ -151,17 +151,16 @@ Pre-live, so venues reset rather than carry today's hours across (CLAUDE.md §3)
 till sells and closes by the business day's season, and a configuration transfer carries and
 checks them. Special days are not written yet. A506-2: every server reader reads the season tables,
 and nothing writes the old weekday rows of `menu_day_timetables`, `menu_slots` or `zone_closed_times`.
+A506-3: the two week routes save one named season; the Week tab has a season picker, and the Day tab
+and every real week draw each date's own season; the Business day start dialog names each conflict's
+season.
 
 **Left open by A506-1, for the later parts.**
-- A506-3: `season.not_found` (`packages/venue-service/src/errors.ts`) has no HTTP status yet.
 - A506-4: a configuration transfer carries no special days, and refuses a day row that names a
   special-day date (`packages/venue-service/src/configuration-transfer.ts`).
 - No test yet gives a second department its own week on the same named day.
 
 **Left open by A506-2, for the later parts.**
-- A506-3: the Business day start dialog shows no season names, and its conflict count can exceed
-  the lines it shows when the same range sits at a different position in two seasons
-  (`businessDayClockConflicts`, `packages/venue-service/src/business-day-schedule.ts`).
 - A506-5: the department and zone delete previews still count rows of the old tables, which only
   named days write now (`packages/venue-service/src/service-delete-settings.ts`).
 - A venue database that ran #1577 and was not reset still holds weekday rows that no hours reader
@@ -177,6 +176,18 @@ and nothing writes the old weekday rows of `menu_day_timetables`, `menu_slots` o
   `menu_slots` and `menu_day_timetables`, which #1590's review found its route no longer reads, so an
   edit to a named day's hours reloads the routing screen for nothing. Drop them after checking
   the route's reads.
+
+**Left open by A506-3, for the later parts.**
+- A506-3b (waits for A493): the Departments and zones summary of a zone's closed times
+  (`packages/venue-service/src/dashboard/department-zones.ts`) still reads the zone's single `week`,
+  the current season's, without naming the season; spec section 7 wants "Winter: closed after 23:30
+  Mon–Thu". A493 moves that code to `zone-closed-week.ts`, so A506-3 left it alone.
+  The zone's `week` leaves `OpeningHoursModel` with it.
+- A506-6: a Day-tab draft takes its season when Save is pressed; once a season's start can move, a
+  draft built for one season could be saved under the next. Season edits should bump the clock
+  revision or refuse a draft built before them.
+- With no season in the address, a Week tab left open across a season change keeps showing the old
+  season (the picker names it) until the address changes.
 
 **Why.** One standard week does not fit a venue whose hours change with the season, and copying a
 week into future dates would bury the special days among ordinary ones.
