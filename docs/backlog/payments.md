@@ -116,13 +116,17 @@ their full text.
   its open points are in [till.md](till.md#owner-questions-each-with-the-default-built-answer-when-convenient)).
   One difference from the decision
   above: a card reader now has one holding device at a time, and a scan or a confirmed choice from
-  the dropdown moves it to the waiter's device. NFC (W102, not queued: it needs a real NFC handheld and tag to probe — owner 2026-10-08) and
-  Tap-to-Pay are still open._
-- **Still pending: NFC** — tapping a phone on an NFC sticker to pick a reader (plan Task 5),
-  W102 — not queued; it waits for a real NFC handheld (Chrome for Android) and a tag to
-  probe on, since a simulated NFC test cannot show hardware support (owner 2026-10-08). Left open
-  by W100 (#1332); the plan is the
+  the dropdown moves it to the waiter's device. NFC (W102) and Tap-to-Pay are still open._
+- **Still pending: NFC** — tapping a phone on an NFC sticker to pick up a card reader or portable
+  printer (plan Task 5), W102. Left open by W100 (#1332); the plan is the
   [equipment plan](../superpowers/plans/2026-10-04-device-equipment-and-independent-drawers.md).
+  The hardware probe is done on a OnePlus 13 with Chrome 154 and metal-backed NTAG-type stickers
+  ([results](../research/2026-10-12-nfc-probe-oneplus-13.md)), so W102 can be queued: plan Task 5's
+  failing test, then the reader path. What the probe settles for the build: the sticker holds a
+  **text record** of `formatEquipmentCode`'s text (owner, 2026-10-12); the till scans whenever it is
+  in front, or a tap brings up Android's own tag viewer; opening the camera stops NFC, so the QR
+  scanner and NFC take turns; a lost tap reaches the page as nothing at all. Still to check during
+  the build: the first permission grant on the box's own `https://waitron.local` address.
 
 ## A guest paying from their own phone
 
@@ -204,6 +208,13 @@ that no caller reaches them from inside a transaction body, where waiting for th
 on itself.
 
 ## Decisions and deliberate limits
+
+- **An equipment NFC sticker holds a text record, not a web address** (owner, 2026-10-12, W102).
+  On the OnePlus 13 probe, a web-address sticker tapped while the installed till was not in front
+  reloaded the till with that address, discarding what it showed, and Chrome 154 ignored the
+  manifest setting meant to prevent it. A web address also ties the sticker to one address that a
+  later move to the cloud would not follow. A text sticker tapped then brings up Android's own tag
+  viewer instead. [Results](../research/2026-10-12-nfc-probe-oneplus-13.md).
 
 - **A placed order takes one card payment at a time** (A526, 2026-10-12; defaults sent to the owner
   as an FYI the same day and built). While a card payment of a placed order is in flight — running

@@ -1,0 +1,260 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>NFC probe</title>
+<link rel="manifest" href="/manifest.json">
+<style>
+  :root { --bg:#fff; --fg:#111; --muted:#666; --line:#ddd; --ok:#1a7f37; --bad:#c62828; --accent:#1f6feb; --card:#f6f8fa; }
+  @media (prefers-color-scheme: dark) { :root { --bg:#111; --fg:#eee; --muted:#999; --line:#333; --ok:#3fb950; --bad:#f85149; --accent:#58a6ff; --card:#1b1f24; } }
+  * { box-sizing: border-box; }
+  body { margin:0; padding:16px; background:var(--bg); color:var(--fg); font:16px/1.4 system-ui, sans-serif; }
+  h1 { font-size:20px; margin:0 0 8px; }
+  h2 { font-size:16px; margin:20px 0 8px; }
+  section { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:12px; margin-bottom:12px; }
+  button { font:inherit; padding:12px 14px; border-radius:8px; border:1px solid var(--accent); background:var(--accent); color:#fff; margin:4px 4px 4px 0; }
+  button.quiet { background:transparent; color:var(--accent); }
+  button:disabled { opacity:.4; }
+  select, input, textarea { font:inherit; padding:10px; border-radius:8px; border:1px solid var(--line); background:var(--bg); color:var(--fg); width:100%; margin:4px 0; }
+  label { display:block; margin-top:6px; color:var(--muted); font-size:14px; }
+  #status { font-weight:600; }
+  #count { font-size:28px; font-weight:700; }
+  #log { list-style:none; padding:0; margin:0; font:13px/1.35 ui-monospace, monospace; }
+  #log li { border-bottom:1px solid var(--line); padding:6px 0; white-space:pre-wrap; word-break:break-all; }
+  .ok { color:var(--ok); } .bad { color:var(--bad); }
+  video { width:100%; max-height:30vh; border-radius:8px; background:#000; display:none; }
+</style>
+</head>
+<body>
+<h1>NFC probe</h1>
+<div id="env"></div>
+
+<section>
+  <h2>1. Read</h2>
+  <div id="status">Not scanning</div>
+  <div>Reads this session: <span id="count">0</span></div>
+  <button id="scan">Start scanning</button>
+  <button id="stop" class="quiet">Stop</button>
+  <button id="reset" class="quiet">Reset count</button>
+</section>
+
+<section>
+  <h2>2. Write a tag</h2>
+  <label>Equipment kind<select id="kind"><option value="reader">reader</option><option value="printer">printer</option></select></label>
+  <label>Equipment id<input id="eqid"></label>
+  <button id="newid" class="quiet">New random id</button>
+  <label>How to store it<select id="format">
+    <option value="text">Text record (planned)</option>
+    <option value="external">Custom external record (waitron.io:equipment)</option>
+    <option value="url">Web address record (for the "does Android open it" test)</option>
+  </select></label>
+  <button id="write">Write — then hold a tag to the phone</button>
+</section>
+
+<section>
+  <h2>3. Lock a tag (permanent)</h2>
+  <label><input type="checkbox" id="lockok" style="width:auto"> I understand a locked tag can never be rewritten</label>
+  <button id="lock" disabled>Lock — then hold the tag to the phone</button>
+</section>
+
+<section>
+  <h2>4. Camera at the same time</h2>
+  <button id="cam">Open rear camera</button>
+  <video id="video" playsinline muted></video>
+</section>
+
+<section>
+  <h2>5. Notes</h2>
+  <button id="buzz" class="quiet">Test vibrate</button>
+  <label>What you saw or felt (e.g. "Android opened Chrome", "no buzz")<textarea id="note" rows="2"></textarea></label>
+  <button id="sendnote">Add note to log</button>
+</section>
+
+<h2>Log</h2>
+<ul id="log"></ul>
+
+<script type="module">
+const $ = (id) => document.getElementById(id);
+const PREFIX = "waitron-equipment:";
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const EXTERNAL = "waitron.io:equipment";
+const session = Math.random().toString(36).slice(2, 8);
+let reads = 0;
+let scanAbort = null;
+let lastRead = null;
+
+// Same rules as packages/shared/src/equipment-code.ts parseEquipmentCode.
+function parseEquipmentCode(text) {
+  if (!text.startsWith(PREFIX)) return null;
+  const parts = text.slice(PREFIX.length).split(":");
+  if (parts.length !== 2) return null;
+  const [kind, id] = parts;
+  if (!["printer", "reader"].includes(kind) || !UUID.test(id)) return null;
+  return { kind, id: id.toLowerCase() };
+}
+
+function log(type, data, cls = "") {
+  const entry = { t: new Date().toISOString(), session, visibility: document.visibilityState, type, ...data };
+  const li = document.createElement("li");
+  li.className = cls;
+  li.textContent = `${entry.t.slice(11, 23)} ${type} ${JSON.stringify(data)}`;
+  $("log").prepend(li);
+  fetch("/log", { method: "POST", body: JSON.stringify(entry), keepalive: true }).catch(() => {});
+}
+
+function errInfo(e) { return { name: e?.name, message: e?.message ?? String(e) }; }
+
+async function environment() {
+  const env = {
+    userAgent: navigator.userAgent,
+    origin: location.origin,
+    secureContext: window.isSecureContext,
+    ndefReader: "NDEFReader" in window,
+    makeReadOnly: "NDEFReader" in window && "makeReadOnly" in NDEFReader.prototype,
+    standalone: matchMedia("(display-mode: standalone)").matches,
+    vibrate: "vibrate" in navigator,
+    launchQueue: "launchQueue" in window,
+  };
+  try {
+    const hi = await navigator.userAgentData?.getHighEntropyValues(["model", "platformVersion", "fullVersionList"]);
+    if (hi) Object.assign(env, { model: hi.model, androidVersion: hi.platformVersion, browsers: hi.fullVersionList?.map((b) => `${b.brand} ${b.version}`) });
+  } catch (e) { env.highEntropyError = errInfo(e); }
+  try { env.nfcPermission = (await navigator.permissions.query({ name: "nfc" })).state; }
+  catch (e) { env.nfcPermissionError = errInfo(e); }
+  $("env").textContent = `${env.model ?? "?"} · Android ${env.androidVersion ?? "?"} · NDEFReader ${env.ndefReader ? "yes" : "NO"} · permission ${env.nfcPermission ?? "?"} · ${env.standalone ? "installed app" : "browser tab"}`;
+  log("environment", env);
+  return env;
+}
+
+function describeRecord(r) {
+  const out = { recordType: r.recordType, mediaType: r.mediaType, id: r.id, encoding: r.encoding, lang: r.lang, bytes: r.data?.byteLength ?? 0 };
+  if (r.data && (["text", "url", "absolute-url", "mime", "unknown"].includes(r.recordType) || r.recordType.includes(":"))) {
+    try { out.text = new TextDecoder(r.encoding || "utf-8").decode(r.data); } catch (e) { out.decodeError = errInfo(e); }
+  }
+  if (out.text !== undefined) out.equipment = parseEquipmentCode(out.text);
+  return out;
+}
+
+async function startScan(trigger) {
+  if (!("NDEFReader" in window)) return log("scan-unavailable", { trigger }, "bad");
+  scanAbort?.abort();
+  scanAbort = new AbortController();
+  const reader = new NDEFReader();
+  reader.onreading = (event) => {
+    reads++;
+    $("count").textContent = reads;
+    const now = Date.now();
+    const records = [...event.message.records].map(describeRecord);
+    const ours = records.find((r) => r.equipment);
+    log("reading", { serialNumber: event.serialNumber, records, sinceLastReadMs: lastRead ? now - lastRead : null, recognised: ours?.equipment ?? null }, ours ? "ok" : "bad");
+    lastRead = now;
+  };
+  reader.onreadingerror = (event) => log("reading-error", { detail: String(event) }, "bad");
+  try {
+    await reader.scan({ signal: scanAbort.signal });
+    $("status").textContent = "Scanning — tap a tag";
+    log("scan-started", { trigger }, "ok");
+  } catch (e) {
+    $("status").textContent = `Scan failed: ${e.name}`;
+    log("scan-failed", { trigger, ...errInfo(e) }, "bad");
+  }
+}
+
+$("scan").onclick = () => startScan("button");
+$("stop").onclick = () => { scanAbort?.abort(); scanAbort = null; $("status").textContent = "Not scanning"; log("scan-stopped", {}); };
+$("reset").onclick = () => { reads = 0; lastRead = null; $("count").textContent = "0"; log("count-reset", {}); };
+$("newid").onclick = () => { $("eqid").value = crypto.randomUUID(); };
+$("eqid").value = crypto.randomUUID();
+
+$("write").onclick = async () => {
+  const code = `${PREFIX}${$("kind").value}:${$("eqid").value.trim()}`;
+  const format = $("format").value;
+  const record =
+    format === "text" ? { recordType: "text", data: code, lang: "en" } :
+    format === "external" ? { recordType: EXTERNAL, data: new TextEncoder().encode(code) } :
+    { recordType: "url", data: `${location.origin}/?from-tag=${encodeURIComponent(code)}` };
+  const abort = new AbortController();
+  const timer = setTimeout(() => abort.abort(), 20000);
+  log("write-waiting", { format, code });
+  try {
+    await new NDEFReader().write({ records: [record] }, { signal: abort.signal, overwrite: true });
+    log("write-ok", { format, code }, "ok");
+  } catch (e) { log("write-failed", { format, code, ...errInfo(e) }, "bad"); }
+  finally { clearTimeout(timer); }
+};
+
+$("lockok").onchange = () => { $("lock").disabled = !$("lockok").checked; };
+$("lock").onclick = async () => {
+  const abort = new AbortController();
+  const timer = setTimeout(() => abort.abort(), 20000);
+  log("lock-waiting", {});
+  try { await new NDEFReader().makeReadOnly({ signal: abort.signal }); log("lock-ok", {}, "ok"); }
+  catch (e) { log("lock-failed", errInfo(e), "bad"); }
+  finally { clearTimeout(timer); $("lockok").checked = false; $("lock").disabled = true; }
+};
+
+let stream = null;
+$("cam").onclick = async () => {
+  if (stream) {
+    stream.getTracks().forEach((t) => t.stop()); stream = null;
+    $("video").style.display = "none"; $("cam").textContent = "Open rear camera"; log("camera-closed", {});
+    return;
+  }
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
+    $("video").srcObject = stream; $("video").style.display = "block"; await $("video").play();
+    $("cam").textContent = "Close camera"; log("camera-open", {}, "ok");
+  } catch (e) { log("camera-failed", errInfo(e), "bad"); }
+};
+
+$("buzz").onclick = () => log("vibrate", { accepted: navigator.vibrate?.(200) ?? "unsupported" });
+$("sendnote").onclick = () => { const text = $("note").value.trim(); if (text) { log("note", { text }); $("note").value = ""; } };
+
+document.addEventListener("visibilitychange", () => log("visibility", { state: document.visibilityState, scanning: scanAbort !== null }));
+window.addEventListener("pageshow", (e) => log("pageshow", { persisted: e.persisted }));
+
+const env = await environment();
+// Option (a): a page opened by a web-address tag hands the code to an already-open page and
+// closes; with no taker it stays and becomes the page.
+const channel = new BroadcastChannel("nfc-probe");
+channel.onmessage = ({ data }) => {
+  if (data.type === "handoff") {
+    log("handoff-received", { code: data.code, from: data.from, recognised: parseEquipmentCode(data.code) }, "ok");
+    channel.postMessage({ type: "ack", to: data.from, by: session });
+  }
+};
+const fromTag = new URLSearchParams(location.search).get("from-tag");
+if (fromTag !== null) {
+  log("opened-from-tag", { code: fromTag, recognised: parseEquipmentCode(fromTag), historyLength: history.length });
+  history.replaceState(null, "", "/");
+  const acked = await new Promise((resolve) => {
+    const timer = setTimeout(() => resolve(null), 700);
+    channel.addEventListener("message", ({ data }) => {
+      if (data.type === "ack" && data.to === session) { clearTimeout(timer); resolve(data.by); }
+    });
+    channel.postMessage({ type: "handoff", code: fromTag, from: session });
+  });
+  if (acked) {
+    log("handoff-acked", { by: acked }, "ok");
+    setTimeout(() => {
+      window.close();
+      setTimeout(() => log("close-did-not-close", {}, "bad"), 1000);
+    }, 300);
+  } else {
+    log("handoff-no-taker", { staying: true });
+  }
+}
+// Installed app: does focus-existing hand the tag's address to the open page without reloading it?
+if ("launchQueue" in window) {
+  window.launchQueue.setConsumer((params) => {
+    const target = params.targetURL ? new URL(params.targetURL) : null;
+    const code = target?.searchParams.get("from-tag") ?? null;
+    log("launch-queue", { targetURL: params.targetURL, recognised: code && parseEquipmentCode(code), scrollY: Math.round(scrollY) }, code ? "ok" : "");
+  });
+}
+// Test 4: once permission is granted, scanning should start with no button press.
+if (env.nfcPermission === "granted") startScan("auto-on-load");
+</script>
+</body>
+</html>
