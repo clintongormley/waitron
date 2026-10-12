@@ -171,15 +171,6 @@ export function seasonWeekList<T>(
   }));
 }
 
-/** The week of `current`: the first season's when null, seven empty days when there are no seasons. */
-export function shownSeasonWeek<T>(
-  seasonWeeks: readonly { seasonId: string; week: T[][] }[],
-  current: string | null,
-): T[][] {
-  const shown = seasonWeeks.find((entry) => entry.seasonId === current) ?? seasonWeeks[0];
-  return shown?.week ?? WEEKDAYS.map((): T[] => []);
-}
-
 export interface SeasonDays {
   seasonIds: readonly string[];
   weekdays: readonly number[];

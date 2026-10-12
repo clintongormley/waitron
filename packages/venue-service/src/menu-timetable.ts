@@ -1222,7 +1222,7 @@ export async function readOpeningHoursModel(
     departmentRows.map((department) => department.id),
     cutover,
   );
-  const zones = await readZoneClosedTimes(tx, cfg, cutover, currentSeasonId, seasonList);
+  const zones = await readZoneClosedTimes(tx, cfg, cutover, seasonList);
   const dateRows = await tx
     .select({
       id: specialDates.id,

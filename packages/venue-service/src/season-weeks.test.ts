@@ -292,18 +292,20 @@ describe("replaceMenuWeek writes season weeks", () => {
 });
 
 describe("replaceZoneClosedWeek writes season weeks", () => {
-  it("with no season named, gives a venue without seasons its four and closes every one, and a zone's week is the current season's", async () => {
+  it("with no season named, gives a venue without seasons its four and closes every one, and the zone's read shows each season's week", async () => {
     const v = await venue();
     const night = { startsAt: "23:00", endsAt: "02:00" };
     await scoped((tx) => replaceZoneClosedWeek(tx, v.cfg, v.zoneId, closedWeek([night]), 0, AT));
     expect(Object.keys(await seasonIds(v))).toEqual(["Spring", "Summer", "Autumn", "Winter"]);
     expect(await zoneTuesdays(v)).toEqual(everySeason([night]));
     const { Autumn } = await seasonIds(v);
-    const [zone] = await scoped((tx) => readZoneClosedTimes(tx, v.cfg, "06:00", Autumn!));
-    expect(zone!.week[TUESDAY]!.ranges).toEqual([night]);
+    const [zone] = await scoped((tx) => readZoneClosedTimes(tx, v.cfg, "06:00"));
+    expect(zone!.seasonWeeks.find((s) => s.seasonId === Autumn)!.week[TUESDAY]!.ranges).toEqual([
+      night,
+    ]);
   });
 
-  it("with a season named, changes that season alone, and a zone's week is the current season's", async () => {
+  it("with a season named, changes that season alone, and the zone's read shows each season's week", async () => {
     const v = await venue();
     const night = { startsAt: "23:00", endsAt: "02:00" };
     const afternoon = { startsAt: "16:00", endsAt: "19:00" };
@@ -320,11 +322,15 @@ describe("replaceZoneClosedWeek writes season weeks", () => {
       Autumn: [night],
       Winter: [afternoon],
     });
-    const [winterZone] = await scoped((tx) => readZoneClosedTimes(tx, v.cfg, "06:00", Winter!));
-    expect(winterZone!.week[TUESDAY]!.ranges).toEqual([afternoon]);
+    const [winterZone] = await scoped((tx) => readZoneClosedTimes(tx, v.cfg, "06:00"));
+    expect(
+      winterZone!.seasonWeeks.find((s) => s.seasonId === Winter)!.week[TUESDAY]!.ranges,
+    ).toEqual([afternoon]);
     const { Autumn } = await seasonIds(v);
-    const [zone] = await scoped((tx) => readZoneClosedTimes(tx, v.cfg, "06:00", Autumn!));
-    expect(zone!.week[TUESDAY]!.ranges).toEqual([night]);
+    const [zone] = await scoped((tx) => readZoneClosedTimes(tx, v.cfg, "06:00"));
+    expect(zone!.seasonWeeks.find((s) => s.seasonId === Autumn)!.week[TUESDAY]!.ranges).toEqual([
+      night,
+    ]);
   });
 
   it("with no season named, counts a season's differing week as a time change, so a stale clock revision is refused", async () => {

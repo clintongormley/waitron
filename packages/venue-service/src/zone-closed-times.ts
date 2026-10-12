@@ -17,7 +17,6 @@ import {
   joinTouching,
   readZoneSeasonWeeks,
   seasonWeekList,
-  shownSeasonWeek,
   seasonsHolding,
   targetSeasons,
   writeZoneSeasonWeeks,
@@ -153,7 +152,6 @@ export async function readZoneClosedTimes(
   tx: Transaction,
   cfg: VenueScope,
   cutover: string,
-  currentSeasonId: string | null = null,
   venueSeasons?: readonly Season[],
 ) {
   const zones = await tx
@@ -204,14 +202,12 @@ export async function readZoneClosedTimes(
   return zones.map((zone) => {
     const own = rows.filter((row) => row.zoneId === zone.id);
     const seasonWeeks = seasonWeekList(seasonList, stored.get(zone.id));
-    const week = shownSeasonWeek(seasonWeeks, currentSeasonId);
     return {
       ...zone,
       seasonWeeks: seasonWeeks.map((entry) => ({
         seasonId: entry.seasonId,
         week: days(entry.week),
       })),
-      week: days(week),
       dates: [
         ...new Set(own.flatMap((row) => (row.specialDateId === null ? [] : [row.specialDateId]))),
       ]
