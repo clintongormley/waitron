@@ -257,6 +257,21 @@ future replay operation rather than authorised as a new activation. Next: trace 
 numeric SIF/series consumers together, generate and qualify the schema migration, then implement
 atomic activation and committed replay plus every entry-point replacement. Task 4 remains open.
 
+**2026-10-12 migration qualification checkpoint:** a disposable clone of the envelope
+checkpoint generated the SIF integer-to-text rebuild and exercised it through `applyMigrations`
+with an existing record written by `seedSale` and `appendToChain`. Default generated SQL refused
+the populated parent drop. Deferral plus an explicit zero-violation assertion before deferral OFF
+retained the sampled record, chain and append-only triggers; the orphan control refused and
+rolled back. Deleting the assertion let the orphan commit and failed that refusal test.
+The candidate passed the migration-upgrade and four schema/trigger suites. The experiment and
+its limits are recorded in [the migration notes](../../developers/conventions-data.md).
+
+No candidate SQL or schema edit is installed on this branch. Regenerate the complete schema,
+including the allocation ledger, and repeat these controls on that final tree. Preserve shipped
+SQL byte for byte. The numeric consumer inventory is a search inventory, not a completed audit;
+replace those consumers with the schema and atomic activation in one working milestone.
+Task 4 remains incomplete, with no activation entry point connected.
+
 ## Task 5: select active series inside issuance transactions
 
 **Modify:** `apps/server/src/till-config.ts`, `trading-config.ts`, `till-sale.ts`,

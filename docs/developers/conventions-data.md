@@ -1421,6 +1421,30 @@ has sold from a menu. Today this costs
 nothing beyond a reset, while the rule of no data-migration code until production stands. Once a
 venue is live, a rebuild has to carry the child rows across by hand.
 
+**2026-10-12, W41s-4 migration experiment; no migration shipped.** Before changing
+`registro_sif.numero_instalacion` from integer to text, qualify the generated parent rebuild
+against fiscal records. In a disposable clone of `21ce89a2b`, drizzle-kit 0.31.11 generated that
+rebuild after the column became `label` and its CHECK became a length bound of 1–30 characters.
+On Node v26.7.0, the generated SQL migrated a SIF with no record but failed at
+`DROP TABLE registro_sif` when `seedSale` and `appendToChain` had written a record referring to it.
+
+The experiment replaced the generated foreign-key toggles with `defer_foreign_keys=ON`,
+then checked `pragma_foreign_key_check` through a temporary table whose CHECK required zero
+violations, before setting deferral OFF. Through `applyMigrations`, with the change feed installed
+before migration, that candidate retained the complete fiscal-record and chain rows and the
+record's append-only trigger pair. Deliberately changing the copied SIF id refused the integrity
+CHECK and rolled back the SIF rebuild and journal advance. Removing the integrity check let that
+orphan commit; the same refusal test then failed. Commands in the disposable clone were
+`pnpm --filter @waitron/fiscal-verifactu exec vitest run src/allocation-boot-migration.probe.test.ts`
+and the deletion control with `-t 'deferred orphan control with check'`. The temporary probe and
+SQL are retained with the campaign's migration receipts.
+
+This experiment covers this SIF rebuild and its sampled records. It does not cover cascading
+children, every possible stored value, or the future allocation ledger and runtime consumers.
+The candidate also passed the migration-upgrade, schema-constraints, append-only-triggers,
+behavioural-triggers and migrations-match-schema suites. Repeat the product and integrity
+controls against the final schema and generated migration before connecting activation.
+
 `scripts/module-graph-honesty.test.ts` derives its edge kinds from the SQL text, and says so. **Two
 hedges from its own header belong here, because a failing test can never restore them.** The
 `EXECUTE (FUNCTION|PROCEDURE)` detector was DELETED as dead syntax — SQLite has no functions, so

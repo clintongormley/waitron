@@ -224,6 +224,9 @@ paper/emergency allocation and approval envelopes against separately supplied ho
 Committed replay, schema changes and activation writes are still open; Cloud input remains refused
 until its separate trusted adapter exists. The existing recovery kit carries the old box's pointer
 signer; it does not declare a paper custodian (`packages/stream/src/kit.ts`, `RecoveryKit`).
+A disposable SIF text-schema candidate has passed populated-record migration and integrity
+controls, recorded in [the migration notes](../developers/conventions-data.md). The complete
+allocation schema and consumers still need that qualification together.
 Keep activation disconnected until its full validation and atomic writes are implemented; emergency input formats alone
 provide no reservation or consumption evidence.
 When activation is connected to recovery, extend the reconnect qualification through that runtime
