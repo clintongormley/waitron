@@ -1505,16 +1505,24 @@ describe("/management-api/stations (KDS-1 config)", () => {
 
       let removed = false;
       const removeDate = async () => {
-        if (removed) return;
+        if (removed) return [];
+        const statuses: number[] = [];
         for (const id of [later.id, earlier.id])
-          await req(
-            dayPath(id),
-            { method: "DELETE", body: JSON.stringify({ expectedClockRevision: 0 }) },
-            managerCookie,
+          statuses.push(
+            (
+              await req(
+                dayPath(id),
+                { method: "DELETE", body: JSON.stringify({ expectedClockRevision: 0 }) },
+                managerCookie,
+              )
+            ).status,
           );
         removed = true;
+        return statuses;
       };
-      onTestFinished(removeDate);
+      onTestFinished(async () => {
+        await removeDate();
+      });
       const before = await listStations();
       const keptDate = await readDay(later.id);
       const newName = unique("Resume new default");
@@ -1544,7 +1552,7 @@ describe("/management-api/stations (KDS-1 config)", () => {
       expect(list.some((s) => s.name === newName)).toBe(choice === "new");
       expect(list).toHaveLength(before.length + (choice === "new" ? 1 : 0));
       expect(await readDay(later.id)).toEqual(keptDate);
-      await removeDate();
+      expect(await removeDate()).toEqual([204, 204]);
       expect(
         (await req(`/stations/${kitchen}/default`, { method: "POST" }, managerCookie)).status,
       ).toBe(204);
