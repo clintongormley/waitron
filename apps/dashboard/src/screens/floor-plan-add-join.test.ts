@@ -7,6 +7,7 @@ import type { FloorPlanAddJoin } from "./floor-plan-add-join.js";
 import { currentLocale, setLocale } from "../i18n/t.js";
 import type { FloorPlan } from "../api/client.js";
 import {
+  addTables,
   deleteTable,
   draftFromPlan,
   patchTable,
@@ -185,10 +186,25 @@ it("Add join offers the zone's other tables only", async () => {
   ]);
 });
 
+it("offers the other tables in number order, whatever order the draft holds them in", async () => {
+  const fromServer = draftFromPlan({
+    ...plan,
+    tables: [
+      ...plan.tables.slice(0, 1),
+      { id: "m10", liveTableId: "l10", label: "T10", seats: 4, fixed: false, placement: null },
+      ...plan.tables.slice(1),
+    ],
+  });
+  const draft = addTables(fromServer, [{ label: "T3", seats: 2, fixed: false }], () => "new:1");
+  const el = await mount(draft);
+  await show(el);
+  expect(field(el, "join-tables").options.map((o) => o.label)).toEqual(["T2", "T3", "T9", "T10"]);
+});
+
 it("offers an unnamed table as Unnamed", async () => {
   const el = await mount(patchTable(draftFromPlan(plan), "m2", { label: "  " }));
   await show(el);
-  expect(field(el, "join-tables").options[0]).toEqual({ value: "m2", label: "Unnamed" });
+  expect(field(el, "join-tables").options).toContainEqual({ value: "m2", label: "Unnamed" });
 });
 
 it("opens empty again after an add", async () => {
