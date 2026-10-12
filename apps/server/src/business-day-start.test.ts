@@ -54,10 +54,14 @@ function request(method: string, path: string, body?: unknown, cookie = venue.ma
     ...(body === undefined ? {} : { body: JSON.stringify(body) }),
   });
 }
-async function authorRange(startsAt: string, endsAt: string) {
+async function authorRange(
+  startsAt: string,
+  endsAt: string,
+  options: { name?: string; everySeason?: boolean } = {},
+) {
   return inTx(async (tx) => {
     const department = await createDepartment(tx, venue.cfg, {
-      name: "Late service",
+      name: options.name ?? "Late service",
       orderStart: "counter",
     });
     const menuId = (await tx.execute<{ id: string }>(sql`select id from catalogues limit 1`))
@@ -89,7 +93,7 @@ async function authorRange(startsAt: string, endsAt: string) {
       })),
       at,
       0,
-      { seasonId },
+      options.everySeason ? {} : { seasonId },
     );
     return { department, period };
   });
@@ -612,6 +616,30 @@ describe("dated start schedule refusal", () => {
     expect(response.status).toBe(409);
     expect(await response.json()).toMatchObject({
       error: { code: "venue.business_day_hours_conflict", params: { conflictCount: 7 } },
+    });
+    expect(await clockRows()).toEqual(saved);
+  });
+  it("counts a range painted in every season once and lists every department through the real boundary", async () => {
+    const late = await authorRange("05:00", "05:00", { everySeason: true });
+    const bar = await authorRange("05:00", "05:00", { everySeason: true, name: "Bar" });
+    const saved = await clockRows();
+    const query = new URLSearchParams(proposal() as unknown as Record<string, string>);
+    const preview = await request("GET", `/business-day-start/preview?${query}`);
+    expect(preview.status).toBe(200);
+    const body = (await preview.json()) as {
+      conflictCount: number;
+      conflicts: { departmentId: string; seasonId?: string }[];
+    };
+    expect(body.conflictCount).toBe(14);
+    expect(body.conflicts).toHaveLength(56);
+    expect(new Set(body.conflicts.map((c) => c.departmentId))).toEqual(
+      new Set([late.department.id, bar.department.id]),
+    );
+    expect(new Set(body.conflicts.map((c) => c.seasonId)).size).toBe(4);
+    const response = await request("PUT", "/business-day-start", proposal());
+    expect(response.status).toBe(409);
+    expect(await response.json()).toMatchObject({
+      error: { code: "venue.business_day_hours_conflict", params: { conflictCount: 14 } },
     });
     expect(await clockRows()).toEqual(saved);
   });
