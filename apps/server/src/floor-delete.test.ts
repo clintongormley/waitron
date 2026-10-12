@@ -7,6 +7,7 @@ import {
   floorPlans,
   floorPlanTableParts,
   floorPlanTables,
+  floorResetTableParts,
   floorResetTables,
   floorTodayTables,
   floorTodayJoins,
@@ -79,6 +80,7 @@ const floorRows = {
   floorPlans,
   floorPlanTables,
   floorPlanTableParts,
+  floorResetTableParts,
   floorResetTables,
   floorTodayTables,
   floorTodayJoins,
@@ -522,9 +524,22 @@ describe("floor hierarchy deletion", () => {
           .from(floorPlanTableParts)
           .where(inArray(floorPlanTableParts.joinedTableId, masterIds)),
       );
+    const copiedOf = () =>
+      inTx(v, (tx) =>
+        tx
+          .select({ id: floorResetTableParts.id })
+          .from(floorResetTableParts)
+          .innerJoin(
+            floorResetTables,
+            eq(floorResetTables.id, floorResetTableParts.joinedResetTableId),
+          )
+          .where(eq(floorResetTables.zoneId, zoneId)),
+      );
     expect(await partsOf()).toHaveLength(3);
+    expect(await copiedOf()).toHaveLength(3);
     await inTx(v, (tx) => seatFor().clear(tx, [zoneId], NOW));
     expect(await partsOf()).toEqual([]);
+    expect(await inTx(v, (tx) => tx.select().from(floorResetTableParts))).toEqual([]);
     expect(
       await inTx(v, (tx) =>
         tx.select().from(floorPlanTables).where(inArray(floorPlanTables.id, masterIds)),

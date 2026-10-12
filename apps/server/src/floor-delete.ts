@@ -5,6 +5,7 @@ import {
   floorPlans,
   floorPlanTableParts,
   floorPlanTables,
+  floorResetTableParts,
   floorResetTables,
   floorTodayJoins,
   floorTodayJoinTables,
@@ -162,6 +163,17 @@ export function floorDeletionFor(
       const [refusal] = await refusalsFor(tx, cfg, removals, floor.tables, now);
       if (refusal)
         throw new AppError(refusal.code as ErrorCode, refusal.params as ErrorParams[ErrorCode]);
+      await tx
+        .delete(floorResetTableParts)
+        .where(
+          inArray(
+            floorResetTableParts.joinedResetTableId,
+            tx
+              .select({ id: floorResetTables.id })
+              .from(floorResetTables)
+              .where(inArray(floorResetTables.zoneId, floor.ids)),
+          ),
+        );
       await tx.delete(floorResetTables).where(inArray(floorResetTables.zoneId, floor.ids));
       const kept = await removeLiveTables(
         tx,

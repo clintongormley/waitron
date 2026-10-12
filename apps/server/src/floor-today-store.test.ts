@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { sql, and, eq } from "drizzle-orm";
+import { sql, and, eq, inArray } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -16,11 +16,14 @@ import {
   floorZones,
   locations,
   locationDayCutoverChanges,
+  stillJoinedPart,
 } from "@waitron/db";
 import type { TableRemoval } from "@waitron/module";
 import { AppError } from "@waitron/shared";
 import { zoneSalePolicies, zoneServicePolicies } from "@waitron/venue-service";
+import { readZonePlan, saveZonePlan, type ZonePlanSave } from "./floor-plan.js";
 import { catchUpZone, ensureToday, resetZone, todayBusinessDay } from "./floor-today-store.js";
+import { ALL_MODULES, enabledTableRemovals } from "./modules.js";
 import { finishTable } from "./parties.js";
 import { updateZone } from "./tables.js";
 import {
@@ -32,6 +35,7 @@ import {
   tableRow,
   type PartyVenue,
 } from "./testing/party-venue.js";
+import { plannedZone } from "./testing/floor-today-venue.js";
 import { listTablesWithState } from "./working-order.js";
 import "./errors.js";
 
@@ -988,3 +992,183 @@ it.each(["03:00", "07:00"])(
     }
   },
 );
+
+describe("the parts of joined tables in the till's copy", () => {
+  const REMOVALS = enabledTableRemovals(ALL_MODULES);
+  const placed = (x: number) => ({
+    x,
+    y: 0,
+    width: 8,
+    height: 8,
+    shape: "rect" as const,
+    rotation: 0,
+  });
+  const LONG_AND_COUNTERS = [
+    { key: "c3", label: "Counter 3", seats: 2, place: null },
+    { key: "c4", label: "Counter 4", seats: 6, place: null },
+    { key: "c5", label: "Counter 5", seats: 4, place: null },
+    { key: "long", label: "Long table", seats: 10, partKeys: ["c3", "c4", "c5"] },
+  ];
+
+  /** The zone's copied parts, as the master tables their reset rows follow. */
+  async function copiedParts(zoneId: string): Promise<{ joined: string; part: string }[]> {
+    const rows = await inTx(v, async (tx) =>
+      tx.all<{ joined: string; part: string }>(sql`
+        select joined_row.plan_table_id as joined, part_row.plan_table_id as part
+        from floor_reset_table_parts copied
+        join floor_reset_tables joined_row on joined_row.id = copied.joined_reset_table_id
+        join floor_reset_tables part_row on part_row.id = copied.part_reset_table_id
+        where joined_row.zone_id = ${zoneId}`),
+    );
+    return rows.sort((a, b) => a.part.localeCompare(b.part));
+  }
+
+  const partsOf = (master: Record<string, string>, joined: string, parts: string[]) =>
+    parts
+      .map((part) => ({ joined: master[joined]!, part: master[part]! }))
+      .sort((a, b) => a.part.localeCompare(b.part));
+
+  async function stillJoined(ids: string[]): Promise<Record<string, number>> {
+    const rows = await inTx(v, (tx) =>
+      tx
+        .select({ id: diningTables.id, joined: stillJoinedPart(diningTables.id) })
+        .from(diningTables)
+        .where(inArray(diningTables.id, ids)),
+    );
+    return Object.fromEntries(rows.map((row) => [row.id, Number(row.joined)]));
+  }
+
+  /** Saves the zone's plan again, as read, after `change`. */
+  async function resave(
+    zoneId: string,
+    change: (tables: ZonePlanSave["tables"]) => ZonePlanSave["tables"],
+  ): Promise<Record<string, string>> {
+    const plan = await inTx(v, (tx) => readZonePlan(tx, v.cfg, zoneId));
+    const tables = plan.tables.map((table) => ({
+      id: table.id,
+      key: table.id,
+      label: table.label,
+      seats: table.seats,
+      fixed: table.fixed,
+      placement: table.placement,
+      partKeys: table.partIds,
+    }));
+    const { ids } = await inTx(v, (tx) =>
+      saveZonePlan(
+        tx,
+        v.cfg,
+        REMOVALS,
+        zoneId,
+        { revision: plan.revision, tables: change(tables) },
+        NOW,
+      ),
+    );
+    return ids;
+  }
+
+  it("copies Long table's three parts into the till's copy at the reset", async () => {
+    const { zoneId, master, table } = await plannedZone(v, LONG_AND_COUNTERS, NOW);
+    expect(await copiedParts(zoneId)).toEqual(partsOf(master, "long", ["c3", "c4", "c5"]));
+    expect(await stillJoined([table.c3!, table.c4!, table.c5!, table.long!])).toEqual({
+      [table.c3!]: 1,
+      [table.c4!]: 1,
+      [table.c5!]: 1,
+      [table.long!]: 0,
+    });
+  });
+
+  it("keeps the copy until the next reset", async () => {
+    const { zoneId, master } = await plannedZone(
+      v,
+      [
+        { key: "c3", label: "Counter 3", seats: 2, place: null },
+        { key: "c4", label: "Counter 4", seats: 6, place: null },
+        { key: "c5", label: "Counter 5", seats: 4, place: null },
+        { key: "bar", label: "Bar", seats: 4 },
+      ],
+      NOW,
+    );
+    const ids = await resave(zoneId, (tables) => [
+      ...tables,
+      {
+        key: "long",
+        label: `Long table ${randomUUID().slice(0, 6)}`,
+        seats: 10,
+        fixed: false,
+        placement: placed(20),
+        partKeys: [master.c3!, master.c4!, master.c5!],
+      },
+    ]);
+    expect(await copiedParts(zoneId)).toEqual([]);
+    await reset(zoneId);
+    expect(await copiedParts(zoneId)).toEqual(
+      partsOf({ ...master, long: ids.long! }, "long", ["c3", "c4", "c5"]),
+    );
+  });
+
+  it("takes out a part the saved plan dropped, at the next reset", async () => {
+    const { zoneId, master } = await plannedZone(v, LONG_AND_COUNTERS, NOW);
+    await resave(zoneId, (tables) =>
+      tables.map((table) =>
+        table.id === master.long ? { ...table, partKeys: [master.c3!, master.c4!] } : table,
+      ),
+    );
+    expect(await copiedParts(zoneId)).toHaveLength(3);
+    await reset(zoneId);
+    expect(await copiedParts(zoneId)).toEqual(partsOf(master, "long", ["c3", "c4"]));
+  });
+
+  it("copies no parts for a joined table two live tables follow", async () => {
+    const { zoneId, master, table } = await plannedZone(
+      v,
+      [...LONG_AND_COUNTERS, { key: "plain", label: "Plain", seats: 4, place: { x: 40, y: 0 } }],
+      NOW,
+    );
+    await inTx(v, (tx) =>
+      tx
+        .update(diningTables)
+        .set({ planTableId: master.long! })
+        .where(eq(diningTables.id, table.plain!)),
+    );
+    await reset(zoneId);
+    expect(await copiedParts(zoneId)).toEqual([]);
+  });
+
+  it("a joined table whose name an occupied table still holds leaves its parts in service", async () => {
+    const { zoneId, master, table } = await plannedZone(v, [{ key: "t9", label: "T9" }], NOW);
+    await seat(v, table.t9!);
+    const [t9] = (await inTx(v, (tx) => readZonePlan(tx, v.cfg, zoneId))).tables;
+    await resave(zoneId, (tables) => [
+      ...tables.filter((entry) => entry.id !== master.t9),
+      ...["Counter 3", "Counter 4", "Counter 5"].map((label, i) => ({
+        key: `c${i + 3}`,
+        label: `${label} ${randomUUID().slice(0, 6)}`,
+        seats: [2, 6, 4][i]!,
+        fixed: false,
+        placement: null,
+        partKeys: [],
+      })),
+      {
+        key: "long",
+        label: t9!.label,
+        seats: 10,
+        fixed: false,
+        placement: placed(20),
+        partKeys: ["c3", "c4", "c5"],
+      },
+    ]);
+    await reset(zoneId);
+
+    const rows = await inTx(v, (tx) =>
+      tx.select().from(floorResetTables).where(eq(floorResetTables.zoneId, zoneId)),
+    );
+    const longRow = rows.find((row) => row.label === t9!.label && row.tableId !== table.t9);
+    expect(longRow).toMatchObject({ tableId: null, pending: true });
+    expect(await copiedParts(zoneId)).toHaveLength(3);
+    const counters = rows
+      .filter((row) => row.label.startsWith("Counter "))
+      .map((row) => row.tableId!);
+    expect(counters).toHaveLength(3);
+    expect(await stillJoined(counters)).toEqual(Object.fromEntries(counters.map((id) => [id, 0])));
+  });
+});
