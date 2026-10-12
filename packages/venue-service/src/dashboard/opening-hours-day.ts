@@ -278,7 +278,9 @@ export class OpeningHoursDay extends LitElement {
               : occursOn({ date: row.date, repeats: true }, this.date),
           )
         : undefined);
-    return entry && { detail, date: entry.date, closed: entry.closedAllDay };
+    return (
+      entry && { detail: structuredClone(detail), date: entry.date, closed: entry.closedAllDay }
+    );
   }
   private seed(): Draft {
     this.contextDepartments = structuredClone(
