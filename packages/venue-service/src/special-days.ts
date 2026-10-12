@@ -7,7 +7,7 @@ import type { PaintRange, ZonePaint } from "./day-paint.js";
 import { isReadableClock, venueLocalMoment } from "./hours-clock.js";
 import { isLocalDate } from "./hours-rules.js";
 import type { LocalDate } from "./hours-types.js";
-import { nextOccurrence, occurrenceIn, repeatKey } from "./named-day-rules.js";
+import { nextOccurrence, occurrenceIn, repeatKey } from "./repeat-rules.js";
 import { storedTime, wireTime, type VenueScope } from "./operations.js";
 import {
   departmentDayRanges,

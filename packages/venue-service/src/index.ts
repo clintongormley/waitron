@@ -60,7 +60,7 @@ export { CALENDAR_COLOURS, HOURS_RANGE_MAX_DAYS, WEEK_DISPLAY_ORDER } from "./ho
 export * from "./department-transfers.js";
 export { withdrawPendingDepartmentTransfers } from "./department-transfer-lifecycle.js";
 
-export { readNamedDaysModel, namedDaysOn, namedDaysBetween } from "./named-days.js";
+export { readSpecialDaysModel } from "./named-days.js";
 
 export { replaceZoneClosedWeek } from "./zone-closed-times.js";
 

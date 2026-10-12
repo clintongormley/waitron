@@ -7,7 +7,7 @@ import type { PackLookup } from "./holidays.js";
 import { addDays, isLocalDate, parseSpecialDateInput } from "./hours-rules.js";
 import { CALENDAR_COLOURS, type CalendarColour, type LocalDate } from "./hours-types.js";
 import { isReadableClock } from "./hours-clock.js";
-import { occursOn, repeatKey } from "./named-day-rules.js";
+import { occursOn, repeatKey } from "./repeat-rules.js";
 import { menuPeriodName } from "./menu-timetable-rules.js";
 import {
   findSeasonEndOffsetClash,

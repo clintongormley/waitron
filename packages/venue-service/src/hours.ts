@@ -1,6 +1,7 @@
 import { assertBusinessDayScheduleWrite } from "./business-day-schedule.js";
-import { and, asc, eq, ne, sql } from "drizzle-orm";
+import { and, asc, eq, inArray, ne, sql } from "drizzle-orm";
 import { newId, type Transaction } from "@waitron/db";
+import { readLocationClock } from "@waitron/reporting";
 import { AppError } from "@waitron/shared";
 import {
   invalidHours,
@@ -23,12 +24,13 @@ import { readDepartmentSeasonWeeks, readZoneSeasonWeeks } from "./season-weeks.j
 import { readSeasons } from "./seasons.js";
 import { specialDates } from "./schema/hours.js";
 import { specialDayDates, specialDays } from "./schema/seasons.js";
+import { departments } from "./schema/service.js";
 import { sharedSpecialDate } from "./special-days.js";
-import { namedDaysOn } from "./named-days.js";
-import { repeatKey } from "./named-day-rules.js";
-import { readOpeningHoursModel } from "./menu-timetable.js";
+import { readDayPlan, resolveDepartmentDays } from "./day-resolver.js";
+import { repeatKey } from "./repeat-rules.js";
 import { menuDayTimetables, menuSlots } from "./schema/menus.js";
 import { zoneClosedTimes } from "./schema/zone-closed-times.js";
+import { isReadableZone } from "./hours-clock.js";
 import "./errors.js";
 
 async function requireSpecialDate(tx: Transaction, cfg: VenueScope, id: string) {
@@ -358,59 +360,62 @@ export async function deleteSpecialDate(
   for (const participant of participants) await participant.afterChange?.(tx, cfg, "date", at);
 }
 
-function calendarDays(
-  opening: Awaited<ReturnType<typeof readOpeningHoursModel>>,
+/** Each date's special day, public holidays and tone. A date is closed when its special day closes
+ *  it all day or no active department has hours on it; a public holiday's tone wins over a special
+ *  day's, and an official local holiday's does not. */
+async function calendarDays(
+  tx: Transaction,
+  cfg: VenueScope,
   dates: readonly LocalDate[],
-  named: Awaited<ReturnType<typeof namedDaysOn>>,
   holidays: readonly HolidayFact[],
-): CalendarDay[] {
+): Promise<CalendarDay[]> {
+  const stored = await readLocationClock(tx, cfg.locationId);
+  // A business day's cutover never reads the zone (`cutoverAt`, @waitron/shared
+  // business-day-clock.ts), so a venue whose zone cannot be read still has its days drawn.
+  const clock = isReadableZone(stored.timeZone) ? stored : { ...stored, timeZone: "UTC" };
+  const plan = await readDayPlan(tx, cfg, dates);
+  const specialIds = [
+    ...new Set([...plan.special.values()].flatMap((day) => (day ? [day.specialDayId] : []))),
+  ];
+  const names = new Map(
+    specialIds.length === 0
+      ? []
+      : (
+          await tx
+            .select({ id: specialDays.id, name: specialDays.name })
+            .from(specialDays)
+            .where(inArray(specialDays.id, specialIds))
+        ).map(({ id, name }) => [id, name]),
+  );
+  const active = await tx
+    .select({ id: departments.id })
+    .from(departments)
+    .where(and(eq(departments.locationId, cfg.locationId), eq(departments.active, true)));
+  const open = new Set<LocalDate>();
+  for (const { id } of active)
+    for (const [date, day] of await resolveDepartmentDays(tx, cfg, id, dates, clock, plan))
+      if (day.ranges.length > 0) open.add(date);
   const factsOn = new Map<LocalDate, HolidayFact[]>();
-  for (const fact of holidays) {
-    const facts = factsOn.get(fact.date);
-    if (facts === undefined) factsOn.set(fact.date, [fact]);
-    else facts.push(fact);
-  }
-  const active = opening.departments.filter((department) => department.active);
+  for (const fact of holidays) factsOn.set(fact.date, [...(factsOn.get(fact.date) ?? []), fact]);
   return dates.map((date) => {
-    const seasonId = seasonOn(opening.seasons, date)?.id;
-    const occurrence = named.get(date);
-    const special =
-      occurrence === undefined
-        ? null
-        : {
-            id: occurrence.id,
-            date,
-            name: occurrence.name,
-            kind: occurrence.kind,
-            repeats: occurrence.repeats,
-            ownHours: occurrence.ownHours,
-            closeWholeVenue: occurrence.closeWholeVenue,
-          };
-    const open =
-      !special?.closeWholeVenue &&
-      active.some((department) => {
-        const own = !occurrence?.ownHours
-          ? undefined
-          : department.dates.find((day) => day.specialDateId === occurrence.id);
-        const slots =
-          own?.slots ??
-          department.seasonWeeks
-            .find((entry) => entry.seasonId === seasonId)
-            ?.week.find((day) => day.weekday === weekdayOf(date))!.slots ??
-          [];
-        return slots.length > 0;
-      });
+    const special = plan.special.get(date) ?? null;
+    const dayHolidays = factsOn.get(date) ?? [];
+    const closed = !open.has(date);
     return {
       date,
-      specialDate: special,
-      holidays: factsOn.get(date) ?? [],
-      tone: open
-        ? special === null
-          ? "standard"
-          : special.kind === "holiday"
-            ? "purple"
-            : "blue"
-        : "closed",
+      specialDay:
+        special === null
+          ? null
+          : { id: special.specialDayId, name: names.get(special.specialDayId)! },
+      holidays: dayHolidays,
+      tone: dayHolidays.some(({ scope }) => scope !== "local")
+        ? "public_holiday"
+        : special !== null
+          ? "special_day"
+          : closed
+            ? "closed"
+            : "standard",
+      closed,
     };
   });
 }
@@ -444,11 +449,5 @@ export async function readCalendarDays(
   holidays?: HolidayReader,
 ): Promise<CalendarDay[]> {
   const dates = rangeDates(from, to);
-  const named = await namedDaysOn(tx, cfg, dates);
-  return calendarDays(
-    await readOpeningHoursModel(tx, cfg, new Date()),
-    dates,
-    named,
-    await readHolidays(tx, cfg, dates, holidays),
-  );
+  return calendarDays(tx, cfg, dates, await readHolidays(tx, cfg, dates, holidays));
 }

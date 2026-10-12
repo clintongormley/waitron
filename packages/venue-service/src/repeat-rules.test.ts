@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { nextOccurrence, occurrenceIn, occursOn, repeatKey } from "./named-day-rules.js";
+import { nextOccurrence, occurrenceIn, occursOn, repeatKey } from "./repeat-rules.js";
 
 const xmas = { date: "2026-12-25", repeats: true };
 const once = { ...xmas, repeats: false };

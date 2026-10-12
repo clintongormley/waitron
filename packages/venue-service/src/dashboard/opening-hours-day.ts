@@ -1,7 +1,7 @@
 import type { BusinessDayClock } from "@waitron/shared";
 import { serviceDayContext } from "../service-day-context.js";
 import { businessDayAt } from "@waitron/shared";
-import { occursOn } from "../named-day-rules.js";
+import { occursOn } from "../repeat-rules.js";
 import { LitElement, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { keyed } from "lit/directives/keyed.js";

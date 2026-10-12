@@ -5,7 +5,7 @@ import { AppError } from "@waitron/shared";
 import type { VenueScope } from "./operations.js";
 import type { LocalDate } from "./hours-types.js";
 import { addDays, isLocalDate, weekdayOf } from "./hours-rules.js";
-import { occursOn } from "./named-day-rules.js";
+import { occursOn } from "./repeat-rules.js";
 import { seasonOn } from "./season-rules.js";
 import { readOpeningHoursModel } from "./menu-timetable.js";
 import { periodProductIds } from "./routing-periods.js";

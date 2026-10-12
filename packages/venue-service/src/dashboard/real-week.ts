@@ -1,5 +1,5 @@
 import { addDays } from "../hours-rules.js";
-import { occursOn } from "../named-day-rules.js";
+import { occursOn } from "../repeat-rules.js";
 import type { NamedDay } from "../holiday-types.js";
 import type { OpeningHoursModel } from "../menu-timetable-types.js";
 import { seasonOn } from "../season-rules.js";

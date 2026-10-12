@@ -27,7 +27,7 @@ import {
 import { seasonOnSorted } from "./season-rules.js";
 import { addDays, weekdayOf } from "./hours-rules.js";
 import { layerPaint, type PaintRange } from "./day-paint.js";
-import { repeatKey } from "./named-day-rules.js";
+import { repeatKey } from "./repeat-rules.js";
 import {
   holidayDatesFor,
   holidayHorizon,

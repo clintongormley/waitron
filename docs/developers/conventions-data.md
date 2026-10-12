@@ -402,7 +402,7 @@ kind `holiday` or `working_day`, an optional annual repeat, and either the norma
 hours or whole-venue closure. `saveSpecialDate` in `packages/venue-service/src/hours.ts` checks
 those choices and occurrence collisions; `namedDaysOn` in `named-days.ts` resolves annual
 occurrences from their first date onward. A repeated day retains one stored identity. February 29
-occurs only in leap years (`named-day-rules.ts`). One venue cannot hold two named days occurring
+occurs only in leap years (`repeat-rules.ts`). One venue cannot hold two named days occurring
 on the same date: the writer checks repeat-versus-one-off collisions, beside the stored date and
 repeat-key indexes in `schema/hours.ts`.
 

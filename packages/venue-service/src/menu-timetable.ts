@@ -44,7 +44,7 @@ import {
   type VenueScope,
 } from "./operations.js";
 import { specialDates } from "./schema/hours.js";
-import { nextOccurrence } from "./named-day-rules.js";
+import { nextOccurrence } from "./repeat-rules.js";
 import {
   holidayDatesFor,
   holidayHorizon,

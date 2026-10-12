@@ -1,7 +1,7 @@
 // Browser-safe structural rules for opening hours, shared by the writers in `./hours.ts`.
 import { AppError } from "@waitron/shared";
 import { HOURS_RANGE_MAX_DAYS, type LocalDate, type SpecialDateInput } from "./hours-types.js";
-import { NAMED_DAY_KINDS, type NamedDayKind } from "./named-day-rules.js";
+import { NAMED_DAY_KINDS, type NamedDayKind } from "./repeat-rules.js";
 import "./errors.js";
 
 const DATE_SHAPE = /^\d{4}-\d{2}-\d{2}$/;

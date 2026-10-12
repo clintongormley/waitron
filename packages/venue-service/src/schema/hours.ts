@@ -1,7 +1,7 @@
 import { sql } from "drizzle-orm";
 import { check, foreignKey, uniqueIndex } from "drizzle-orm/sqlite-core";
 import { day, enumCheck, enumType, flag, id, label, locations, newId, table } from "@waitron/db";
-import { NAMED_DAY_KINDS } from "../named-day-rules.js";
+import { NAMED_DAY_KINDS } from "../repeat-rules.js";
 
 export const specialDates = table(
   "special_dates",

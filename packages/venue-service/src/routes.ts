@@ -334,7 +334,7 @@ function requirePreviewChange(body: Record<string, unknown>): RoutingChange {
 }
 
 import { stationServiceTimes } from "./station-service-times.js";
-import { readNamedDaysModel } from "./named-days.js";
+import { readSpecialDaysModel } from "./named-days.js";
 
 export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
   mount(app, ctx: ModuleRouteContext, log: Logger): void {
@@ -389,7 +389,7 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
         const to = c.req.query("to") ?? "";
         const at = new Date();
         return c.json(
-          await viewed(sessionId, (tx) => readNamedDaysModel(tx, ctx.cfg, from, to, at)),
+          await viewed(sessionId, (tx) => readSpecialDaysModel(tx, ctx.cfg, from, to, at)),
         );
       }),
     );

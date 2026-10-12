@@ -21,7 +21,7 @@ import type { NamedDay } from "../holiday-types.js";
 import type { HolidayFact } from "../hours-types.js";
 import { holidayDateName } from "../holiday-naming.js";
 import { isLocalDate } from "../hours-rules.js";
-import { NAMED_DAY_KINDS } from "../named-day-rules.js";
+import { NAMED_DAY_KINDS } from "../repeat-rules.js";
 import { t } from "./strings.js";
 
 export type NamedDayInput = Omit<NamedDay, "id">;
