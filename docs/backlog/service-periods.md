@@ -169,6 +169,14 @@ and nothing writes the old weekday rows of `menu_day_timetables`, `menu_slots` o
   with the database's `FOREIGN KEY constraint failed` rather than `menu_period.in_use`, and the period
   stays (measured 2026-10-12 with a hand-inserted weekday slot; a named-day slot gave
   `menu_period.in_use`).
+- A506-6: when seasons become editable, adding, deleting or moving one must re-check end offsets
+  across the boundaries it changes (`findSeasonEndOffsetClash`,
+  `packages/venue-service/src/period-end-offset.ts`); today the check runs on week writes and on
+  import only.
+- The `routing` live-query list (`packages/venue-service/src/dashboard/live-queries.ts`) still names
+  `menu_slots` and `menu_day_timetables`, which #1590's review found its route no longer reads, so an
+  edit to a named day's hours reloads the routing screen for nothing. Drop them after checking
+  the route's reads.
 
 **Why.** One standard week does not fit a venue whose hours change with the season, and copying a
 week into future dates would bury the special days among ordinary ones.
