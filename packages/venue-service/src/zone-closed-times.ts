@@ -93,13 +93,9 @@ export async function replaceZoneClosedWeek(
   );
 }
 
-export async function readZoneClosedTimes(
-  tx: Transaction,
-  cfg: VenueScope,
-  cutover: string,
-  venueSeasons?: readonly Season[],
-) {
-  const zones = await tx
+/** The venue's active zones that serve an active department. */
+export async function readServiceZones(tx: Transaction, cfg: VenueScope) {
+  return tx
     .select({
       id: floorZones.id,
       name: floorZones.name,
@@ -117,6 +113,15 @@ export async function readZoneClosedTimes(
       ),
     )
     .orderBy(asc(floorZones.displayOrder), asc(floorZones.id));
+}
+
+export async function readZoneClosedTimes(
+  tx: Transaction,
+  cfg: VenueScope,
+  cutover: string,
+  venueSeasons?: readonly Season[],
+) {
+  const zones = await readServiceZones(tx, cfg);
   const seasonList = venueSeasons ?? (await readSeasons(tx, cfg));
   const stored = await readZoneSeasonWeeks(
     tx,

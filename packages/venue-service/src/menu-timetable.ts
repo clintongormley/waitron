@@ -849,22 +849,18 @@ async function readRoutingUses(
   return uses;
 }
 
-export async function readOpeningHoursModel(
-  tx: Transaction,
-  cfg: VenueScope,
-  at: Date,
-): Promise<OpeningHoursModel> {
-  const clock = await readLocationClock(tx, cfg.locationId);
-  const moment = serviceMomentAt(at, clock);
-  const status = await readBusinessDayScheduleStatus(tx, cfg, clock, at);
-  const cutover =
-    moment === null ? clock.dayCutover : serviceDayContext(clock, moment.businessDay).dayCutover;
-  const departmentRows = await tx
+/** The venue's active departments, the default first. */
+export async function readActiveDepartments(tx: Transaction, cfg: VenueScope) {
+  return tx
     .select({ id: departments.id, name: departments.name, active: departments.active })
     .from(departments)
     .where(and(eq(departments.locationId, cfg.locationId), eq(departments.active, true)))
     .orderBy(desc(departments.isDefault), asc(departments.name), asc(departments.id));
-  const periods = await tx
+}
+
+/** The menu periods of the venue's active departments. */
+export async function readActivePeriods(tx: Transaction, cfg: VenueScope) {
+  return tx
     .select({
       id: menuPeriods.id,
       departmentId: menuPeriods.departmentId,
@@ -877,6 +873,20 @@ export async function readOpeningHoursModel(
     .innerJoin(departments, eq(departments.id, menuPeriods.departmentId))
     .where(and(eq(departments.locationId, cfg.locationId), eq(departments.active, true)))
     .orderBy(asc(menuPeriods.name), asc(menuPeriods.id));
+}
+
+export async function readOpeningHoursModel(
+  tx: Transaction,
+  cfg: VenueScope,
+  at: Date,
+): Promise<OpeningHoursModel> {
+  const clock = await readLocationClock(tx, cfg.locationId);
+  const moment = serviceMomentAt(at, clock);
+  const status = await readBusinessDayScheduleStatus(tx, cfg, clock, at);
+  const cutover =
+    moment === null ? clock.dayCutover : serviceDayContext(clock, moment.businessDay).dayCutover;
+  const departmentRows = await readActiveDepartments(tx, cfg);
+  const periods = await readActivePeriods(tx, cfg);
   const staff = await tx
     .select({ periodId: menuPeriodStaffMenus.periodId, menuId: menuPeriodStaffMenus.menuId })
     .from(menuPeriodStaffMenus)

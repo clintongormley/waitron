@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
-import { expect, it } from "vitest";
+import { expect, it, vi } from "vitest";
 import {
   CATALOGUE_MIGRATIONS,
   addProductToMenu,
@@ -680,4 +680,25 @@ it("in normal mode shows, on every date, the week of the season holding the firs
     expect(
       await stationServiceTimes(db, f.cfg, f.station, "2030-12-01", "2030-12-02", "normal"),
     ).toEqual({ always: null, days: seasonDates.slice(6).map(lunchOn(f, ["2030-12-02"])) });
+  }));
+
+it("reads the seasons and each season week once over a 42-day range, dated or normal", async () =>
+  tx(async (db) => {
+    const f = await fixture(db);
+    const session = (db as unknown as { session: { prepareQuery: (...args: never[]) => unknown } })
+      .session;
+    for (const mode of ["dated", "normal"] as const) {
+      const spy = vi.spyOn(session, "prepareQuery");
+      try {
+        await stationServiceTimes(db, f.cfg, f.station, "2030-11-01", "2030-12-12", mode);
+        const texts = spy.mock.calls.map(([query]) => (query as unknown as { sql: string }).sql);
+        for (const table of ["seasons", "department_days", "zone_days"])
+          expect(
+            texts.filter((text) => text.includes(`from "${table}"`)),
+            `${mode} ${table}`,
+          ).toHaveLength(1);
+      } finally {
+        spy.mockRestore();
+      }
+    }
   }));

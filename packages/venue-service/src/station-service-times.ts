@@ -1,6 +1,7 @@
 import { and, eq, sql } from "drizzle-orm";
 import { kitchenStations, products, type Transaction } from "@waitron/db";
 import { effectiveProductColumns, parentJoin, parentProducts } from "@waitron/catalogue";
+import { readLocationClock } from "@waitron/reporting";
 import { AppError } from "@waitron/shared";
 import type { VenueScope } from "./operations.js";
 import type { LocalDate } from "./hours-types.js";
@@ -12,7 +13,9 @@ import {
   type DayPlan,
 } from "./day-resolver.js";
 import { seasonOn } from "./season-rules.js";
-import { readOpeningHoursModel } from "./menu-timetable.js";
+import { readActiveDepartments, readActivePeriods } from "./menu-timetable.js";
+import { readSeasons } from "./seasons.js";
+import { readServiceZones } from "./zone-closed-times.js";
 import { periodProductIds } from "./routing-periods.js";
 import { loadRoutingRules } from "./routing-store.js";
 import { selectRoutingCell } from "./routing.js";
@@ -98,12 +101,16 @@ export async function stationServiceTimes(
   if (station.isDefault) return { always: "default", days: [] };
 
   // Planning excludes daily station overrides and kept-open extensions.
-  const model = await readOpeningHoursModel(tx, cfg, new Date(`${from}T00:00:00Z`));
-  const departments = model.departments.filter((department) => department.active);
-  const offered = await periodProductIds(
-    tx,
-    departments.flatMap((department) => department.periods),
-  );
+  const clock = await readLocationClock(tx, cfg.locationId);
+  const periods = await readActivePeriods(tx, cfg);
+  const zones = await readServiceZones(tx, cfg);
+  const departments = (await readActiveDepartments(tx, cfg)).map((department) => ({
+    id: department.id,
+    periods: periods.filter((period) => period.departmentId === department.id),
+    zones: zones.filter((zone) => zone.departmentId === department.id),
+  }));
+  const seasons = await readSeasons(tx, cfg);
+  const offered = await periodProductIds(tx, periods);
   const productRows = await tx
     .select({
       routedId: sql<string>`coalesce(${products.parentId}, ${products.id})`,
@@ -146,15 +153,14 @@ export async function stationServiceTimes(
     }
   }
   const dates = Array.from({ length: dayCount }, (_, index) => addDays(from, index));
-  const clock = model.businessDayClock;
-  const normalSeasonId = seasonOn(model.seasons, from)?.id ?? null;
+  const normalSeasonId = seasonOn(seasons, from)?.id ?? null;
   const plan: DayPlan =
     week === "normal"
       ? {
           seasonIdOn: new Map(dates.map((date) => [date, normalSeasonId])),
           special: new Map(dates.map((date) => [date, null])),
         }
-      : await readDayPlan(tx, cfg, dates);
+      : await readDayPlan(tx, cfg, dates, seasons);
   const departmentDays = await resolveDepartmentsDays(
     tx,
     cfg,

@@ -7,7 +7,7 @@ import { addDays, weekdayOf } from "./hours-rules.js";
 import type { LocalDate } from "./hours-types.js";
 import type { VenueScope } from "./operations.js";
 import { zoneServicePolicies } from "./schema/service.js";
-import { seasonOn } from "./season-rules.js";
+import { seasonOn, type Season } from "./season-rules.js";
 import { readDepartmentSeasonWeeks, readZoneSeasonWeeks, type SeasonDays } from "./season-weeks.js";
 import { readSeasons } from "./seasons.js";
 import { rangeSpan, serviceMomentAt, type ClosedRange, type ServiceRange } from "./service-day.js";
@@ -36,8 +36,9 @@ export async function readDayPlan(
   tx: Transaction,
   cfg: VenueScope,
   businessDays: readonly LocalDate[],
+  venueSeasons?: readonly Season[],
 ): Promise<DayPlan> {
-  const seasons = await readSeasons(tx, cfg);
+  const seasons = venueSeasons ?? (await readSeasons(tx, cfg));
   return {
     seasonIdOn: new Map(businessDays.map((day) => [day, seasonOn(seasons, day)?.id ?? null])),
     special: await specialDaysOn(tx, cfg, businessDays),
