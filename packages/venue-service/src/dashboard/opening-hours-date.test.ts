@@ -27,8 +27,8 @@ function fixture(own = true): OpeningHoursModel {
     clockReadable: true,
     dayCutover: "06:00",
     menus: [{ id: "m1", name: "Lunch menu", active: true, includes: [] }],
-    seasons: [],
-    currentSeasonId: null,
+    seasons: [{ id: "autumn", name: "Autumn", startsOn: "09-01" }],
+    currentSeasonId: "autumn",
     namedDays: [special, { ...special, id: "s2", date: "2026-10-13", name: "Party" }],
     departments: [
       {
@@ -48,8 +48,12 @@ function fixture(own = true): OpeningHoursModel {
             routingUses: [],
           },
         ],
-        seasonWeeks: [],
-        week: [{ weekday: 1, slots: [{ periodId: "p1", startsAt: "10:00", endsAt: "14:00" }] }],
+        seasonWeeks: [
+          {
+            seasonId: "autumn",
+            week: [{ weekday: 1, slots: [{ periodId: "p1", startsAt: "10:00", endsAt: "14:00" }] }],
+          },
+        ],
         dates: own
           ? [
               {
@@ -215,10 +219,14 @@ it("ignores grid events for plain dates in a real week", async () => {
   });
   week.department = {
     ...week.department,
-    seasonWeeks: [],
-    week: [
-      ...week.department.week,
-      { weekday: 0, slots: [{ periodId: "p1", startsAt: "09:00", endsAt: "12:00" }] },
+    seasonWeeks: [
+      {
+        seasonId: "autumn",
+        week: [
+          ...week.department.seasonWeeks[0]!.week,
+          { weekday: 0, slots: [{ periodId: "p1", startsAt: "09:00", endsAt: "12:00" }] },
+        ],
+      },
     ],
   };
   await week.updateComplete;
@@ -239,7 +247,7 @@ it("ignores grid events for plain dates in a real week", async () => {
 });
 it("keeps a date unchanged when its inherited weekday is already empty until Closed is chosen", async () => {
   const week = await mount(false);
-  week.department = { ...week.department, week: [] };
+  week.department = { ...week.department, seasonWeeks: [{ seasonId: "autumn", week: [] }] };
   await week.updateComplete;
   expect(grid(week).columns[0]!.slots).toEqual([]);
   expect(save(week).disabled).toBe(true);
@@ -336,8 +344,11 @@ it("adds a date range through the shared dialog without changing its weekday", a
   range.shadowRoot!.querySelector<HTMLElement>("[data-test=save-range]")!.click();
   await week.updateComplete;
   expect(writes).toEqual([]);
-  expect(week.department.week).toEqual([
-    { weekday: 1, slots: [{ periodId: "p1", startsAt: "10:00", endsAt: "14:00" }] },
+  expect(week.department.seasonWeeks).toEqual([
+    {
+      seasonId: "autumn",
+      week: [{ weekday: 1, slots: [{ periodId: "p1", startsAt: "10:00", endsAt: "14:00" }] }],
+    },
   ]);
   save(week).click();
   await expect.poll(() => writes.length).toBe(1);

@@ -1888,16 +1888,20 @@ form's own checks disable the action; an error that comes back from a request ne
   action quiet and disabled until something changes (enabled at once if it opens already savable),
   and any other form has it enabled unless it waits for a choice, a selection or a load (below).
 
-The zone's normal-week editor draws seven closed-time columns over its department's periods.
+The zone's normal-week editor draws seven closed-time columns over its department's periods in the same season.
 Dragging stages a closed range; opening a closed block edits its two times or deletes it, with
 no period choice. Copy this day and Clear change only the closed ranges. One Save writes all
-seven weekdays; a refusal naming a submitted day appears in that day's header and leaves the
+seven weekdays of the picked season; a refusal naming a submitted day appears in that day's header and leaves the
 staged week available to retry. Its Save follows the draft comparison below, including after
 removal and reconnect. In a real week, a named day with own hours shows its dated closed
 times over the department’s dated periods. Each date has its own Save; plain dates stay read-only
 and offer Give this date its own hours. A whole-venue closure says Closed and offers no action.
 
-The Opening hours normal-week editor stages its seven days before one Save. Each day's menu
+The Opening hours normal-week editor stages its seven days before one Save. A Season picker beside
+the department picker chooses which season's week the tab edits: the address's season when the
+venue has it, else the current season, else the first. Save writes that season alone, and an
+unsaved draft asks before the picker changes season. In a real week each date follows its own
+season, and the picker is not offered. Each day's menu
 copies its ranges to selected weekdays or clears them locally. A range dialog stages its two
 times and period; Add period… opens the period editor above it, then returns to the same range.
 Save on the week waits while a child chooser is open. A server refusal that names a day sits in
@@ -1918,8 +1922,9 @@ changeover belongs to the next morning. A skipped-time refusal
 names the clock gap at the date header and keeps Save available for retry. The Day tab starts on your venue's business date; Previous cannot go earlier. Each active
 department is followed by a narrow column for each of its active zones. Dragging in a zone stages
 closed times over the department's periods; opening a closed block edits its times or deletes it.
-Previous/next date actions ask before discarding a staged draft. A date without own hours shows
-“Changes every {weekday}” and saves that weekday in the normal week. Its heading offers Give this
+Previous/next date actions ask before discarding a staged draft. When a season holds the date, a date
+without own hours shows “Changes every {weekday} in {season}” and saves that weekday in that
+season's week; when none does, it shows no note. Its heading offers Give this
 date its own hours after its calendar facts load, opening an existing named day's editor or
 prefilling a public holiday's name and kind. A named day with own hours saves that date's
 department ranges and zone closed times. A whole-venue closure says Closed and offers no editing
@@ -3514,7 +3519,8 @@ also sets the default station, for someone with `venue.configure`. The page is o
 someone with `venue_service.manage`; a supervisor is not offered it.
 
 Department opening hours belong to `/manage/opening-hours`, with Week, Periods, Day and Calendar
-tabs; `/department/<id>` selects the department and `/view/periods` selects its periods. The Week
+tabs; `/department/<id>` selects the department and `/view/periods` selects its periods, and on the Week
+tab `/season/<id>` selects the season (in the standard week only; the fallback is in Forms above). The Week
 and Day editing contract is in Forms above. After provisioning, setup's completion screen shows
 the first saved Open schedule, when it is still Monday to Friday, 09:00–17:00, with a link to
 that department's Opening hours.

@@ -36,17 +36,29 @@ describe.each(["en", "es"])("Zone week %s", (locale) => {
               routingUses: [],
             },
           ],
-          seasonWeeks: [],
-          week: [{ weekday: 1, slots: [{ periodId: "p1", startsAt: "10:00", endsAt: "14:00" }] }],
+          seasonWeeks: [
+            {
+              seasonId: "s",
+              week: [
+                { weekday: 1, slots: [{ periodId: "p1", startsAt: "10:00", endsAt: "14:00" }] },
+              ],
+            },
+          ],
           dates: [],
         };
         week.zone = {
           id: "z1",
           name: "Terrace",
-          seasonWeeks: [],
+          seasonWeeks: [
+            {
+              seasonId: "s",
+              week: [{ weekday: 1, ranges: [{ startsAt: "11:00", endsAt: "12:00" }] }],
+            },
+          ],
           week: [{ weekday: 1, ranges: [{ startsAt: "11:00", endsAt: "12:00" }] }],
           dates: [],
         };
+        week.seasonId = "s";
         week.readOnly = state === "viewer";
         wrapper.appendChild(week);
         await week.updateComplete;

@@ -122,6 +122,7 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "hours.clock_changed": 409,
   "venue.business_day_hours_conflict": 409,
   "special_date.not_found": 404,
+  "season.not_found": 404,
   "special_date.date_taken": 409,
   "zone_closed_time.invalid": 400,
   "special_date.keeps_week": 409,
@@ -1048,7 +1049,7 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
         const sessionId = requireManagementSession(c);
         const departmentId = requireUuidParam(c.req.param("departmentId"), "DepartmentId");
         const body = await readJsonBody<Record<string, unknown>>(c);
-        onlyKeys(body, ["days", "expectedClockRevision"]);
+        onlyKeys(body, ["days", "seasonId", "expectedClockRevision"]);
         await gated(sessionId, (tx) =>
           replaceMenuWeek(
             tx,
@@ -1057,6 +1058,7 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
             body.days as readonly MenuWeekDay[],
             new Date(),
             body.expectedClockRevision as number,
+            { seasonId: requireBodyUuid(body.seasonId, "seasonId") },
           ),
         );
         return c.body(null, 204);
@@ -1068,7 +1070,7 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
         const sessionId = requireManagementSession(c);
         const zoneId = requireUuidParam(c.req.param("zoneId"), "ZoneId");
         const body = await readJsonBody<Record<string, unknown>>(c);
-        onlyKeys(body, ["days", "expectedClockRevision"]);
+        onlyKeys(body, ["days", "seasonId", "expectedClockRevision"]);
         await gated(sessionId, (tx) =>
           replaceZoneClosedWeek(
             tx,
@@ -1076,6 +1078,8 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
             zoneId,
             body.days,
             body.expectedClockRevision as number,
+            new Date(),
+            { seasonId: requireBodyUuid(body.seasonId, "seasonId") },
           ),
         );
         return c.body(null, 204);

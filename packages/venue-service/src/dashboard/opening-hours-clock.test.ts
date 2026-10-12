@@ -37,6 +37,8 @@ async function mount(
     dayCutover: "06:00",
     timeZone,
     clockReadable,
+    seasons: [{ id: "autumn", name: "Autumn", startsOn: "09-01" }],
+    currentSeasonId: "autumn",
     menus: [{ id: "m1", name: "Night menu", active: true, includes: [] }],
     namedDays: [
       {
@@ -66,7 +68,7 @@ async function mount(
             routingUses: [],
           },
         ],
-        week: [],
+        seasonWeeks: [{ seasonId: "autumn", week: [] }],
         dates: [{ specialDateId: "s1", slots: [] }],
       },
     ],

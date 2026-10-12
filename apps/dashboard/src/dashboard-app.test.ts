@@ -7700,13 +7700,15 @@ describe("mounted public department pages", () => {
           dayCutover: "06:00",
           menus: [],
           namedDays: [],
+          seasons: [],
+          currentSeasonId: null,
           departments: model.departments.map(({ id, name, active }) => ({
             id,
             name,
             active,
             zones: [],
             periods: [],
-            week: [],
+            seasonWeeks: [],
             dates: [],
           })),
         } as never;

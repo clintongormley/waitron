@@ -207,7 +207,6 @@ describe("VENUE_SERVICE_DASHBOARD", () => {
           name: "Restaurant",
           active: true,
           periods: [],
-          week: [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({ weekday, slots: [] })),
           dates: [],
         },
       ],

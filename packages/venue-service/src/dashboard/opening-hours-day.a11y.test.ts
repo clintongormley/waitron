@@ -43,6 +43,8 @@ describe.each(["light", "dark"] as const)("Opening Day (%s)", (theme) => {
           pending: null,
           timeZone: "Europe/Madrid",
           clockReadable: state !== "clock",
+          seasons: [{ id: "autumn", name: "Autumn", startsOn: "09-01" }],
+          currentSeasonId: "autumn",
           dayCutover: "06:00",
           menus: [{ id: "m1", name: "Lunch menu", active: true, includes: [] }],
           namedDays:
@@ -72,6 +74,14 @@ describe.each(["light", "dark"] as const)("Opening Day (%s)", (theme) => {
                         {
                           id: "z1",
                           name: "Terrace",
+                          seasonWeeks: [
+                            {
+                              seasonId: "autumn",
+                              week: [
+                                { weekday: 1, ranges: [{ startsAt: "23:00", endsAt: "06:00" }] },
+                              ],
+                            },
+                          ],
                           week: [{ weekday: 1, ranges: [{ startsAt: "23:00", endsAt: "06:00" }] }],
                           dates: [],
                         },
@@ -88,10 +98,15 @@ describe.each(["light", "dark"] as const)("Opening Day (%s)", (theme) => {
                       routingUses: [],
                     },
                   ],
-                  week: [
+                  seasonWeeks: [
                     {
-                      weekday: 1,
-                      slots: [{ periodId: `p${i + 1}`, startsAt: "10:00", endsAt: "14:00" }],
+                      seasonId: "autumn",
+                      week: [
+                        {
+                          weekday: 1,
+                          slots: [{ periodId: `p${i + 1}`, startsAt: "10:00", endsAt: "14:00" }],
+                        },
+                      ],
                     },
                   ],
                   dates: [],

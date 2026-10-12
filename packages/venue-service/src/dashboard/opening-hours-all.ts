@@ -5,7 +5,8 @@ import { customElement, property } from "lit/decorators.js";
 import { baseStyles } from "@waitron/ui";
 import type { OpeningHoursModel } from "../menu-timetable-types.js";
 import { t } from "./strings.js";
-import { dateInWeek, namedOn, realDayLabel } from "./real-week.js";
+import { dateInWeek, namedOn, realDayLabel, seasonIdOf } from "./real-week.js";
+import { seasonWeek } from "./season-choice.js";
 import "./service-grid.js";
 
 @customElement("opening-hours-all")
@@ -28,6 +29,8 @@ export class OpeningHoursAll extends LitElement {
   @property({ attribute: false }) businessDayClock?: BusinessDayClock;
   @property() dayCutover = "06:00";
   @property() weekStart = "";
+  @property() seasonId = "";
+  @property({ attribute: false }) seasons: OpeningHoursModel["seasons"] = [];
   @property({ attribute: false }) namedDays: OpeningHoursModel["namedDays"] = [];
   override render() {
     const departments = this.departments.filter((department) => department.active);
@@ -35,6 +38,10 @@ export class OpeningHoursAll extends LitElement {
     const columns = weekdays.flatMap((weekday) =>
       departments.map((department) => {
         const named = this.weekStart ? namedOn(this.namedDays, this.weekStart, weekday) : undefined;
+        const week = seasonWeek(
+          department.seasonWeeks,
+          seasonIdOf(this.seasons, this.seasonId, this.weekStart, weekday),
+        );
         return {
           key: `${weekday}:${department.id}`,
           clock:
@@ -48,9 +55,9 @@ export class OpeningHoursAll extends LitElement {
             ? []
             : named?.ownHours
               ? (department.dates.find((day) => day.specialDateId === named.id)?.slots ??
-                department.week.find((day) => day.weekday === weekday)?.slots ??
+                week.find((day) => day.weekday === weekday)?.slots ??
                 [])
-              : (department.week.find((day) => day.weekday === weekday)?.slots ?? []),
+              : (week.find((day) => day.weekday === weekday)?.slots ?? []),
           periods: department.periods,
           editable: false,
           narrow: true,

@@ -25,15 +25,26 @@ const department = {
       routingUses: [],
     },
   ],
-  week: Array.from({ length: 7 }, (_, weekday) => ({
-    weekday,
-    slots: weekday === 1 ? [{ periodId: "period", startsAt: "10:00", endsAt: "14:00" }] : [],
-  })),
+  seasonWeeks: [
+    {
+      seasonId: "season",
+      week: Array.from({ length: 7 }, (_, weekday) => ({
+        weekday,
+        slots: weekday === 1 ? [{ periodId: "period", startsAt: "10:00", endsAt: "14:00" }] : [],
+      })),
+    },
+  ],
   dates: [],
 };
 const zone = {
   id: "zone",
   name: "Terrace",
+  seasonWeeks: [
+    {
+      seasonId: "season",
+      week: [{ weekday: 1, ranges: [{ startsAt: "10:00", endsAt: "11:00" }] }],
+    },
+  ],
   week: [{ weekday: 1, ranges: [{ startsAt: "10:00", endsAt: "11:00" }] }],
   dates: [],
 };
@@ -55,6 +66,7 @@ for (const kind of ["department", "zone"] as const) {
       api,
       department: structuredClone(department),
       zone: structuredClone(zone),
+      seasonId: "season",
       clockRevision: 7,
     });
     applyTokens(el);
@@ -105,6 +117,7 @@ for (const kind of ["department", "zone"] as const) {
       api,
       department: structuredClone(department),
       zone: structuredClone(zone),
+      seasonId: "season",
       clockRevision: 7,
     });
     applyTokens(el);

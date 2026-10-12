@@ -393,3 +393,61 @@ it("presents preview boundaries on the venue clock while retaining each exact in
   );
   expect(view.textContent).not.toContain(".000Z");
 });
+
+const seasonConflict = (seasonName: string | undefined, rangeIndex = 0) => ({
+  departmentId: "d",
+  departmentName: "Restaurant",
+  weekday: 1,
+  ...(seasonName === undefined ? {} : { seasonId: seasonName.toLowerCase(), seasonName }),
+  periodId: "p",
+  periodName: "Dinner",
+  startsAt: "22:00",
+  endsAt: "04:30",
+  rangeIndex,
+  reason: "endpoint_day" as const,
+});
+async function conflictLines(
+  conflicts: BusinessDayStartPreview["conflicts"],
+  conflictCount: number,
+): Promise<{ lines: (string | null)[]; count: string | undefined }> {
+  const { el } = await rig({
+    previewBusinessDayStart: async () => ({ ...preview(), conflicts, conflictCount }),
+  });
+  await click(el, "change");
+  await change(el, "effectiveBusinessDay", "2026-11-04");
+  await change(el, "dayCutover", "03:00");
+  return {
+    lines: [...el.shadowRoot!.querySelectorAll("[data-test=conflict-rows] li")].map(
+      (line) => line.textContent,
+    ),
+    count: q(el, "[data-test=conflicts]")?.textContent?.replace(/\s+/g, " ").trim(),
+  };
+}
+
+it.each([
+  ["en-GB", "Mon · Dinner · 22:00–04:30 · Range crosses the new start"],
+  ["es-ES", "Lun · Dinner · 22:00–04:30 · El tramo cruza el nuevo inicio"],
+])("puts the season's name before a season conflict's line (%s)", async (locale, rest) => {
+  setLocale(locale);
+  const { lines } = await conflictLines([seasonConflict("Winter")], 1);
+  expect(lines).toEqual([`Winter: Restaurant · ${rest}`]);
+});
+
+it("leaves a conflict without a season as it was", async () => {
+  setLocale("en-GB");
+  const { lines } = await conflictLines([seasonConflict(undefined)], 1);
+  expect(lines).toEqual(["Restaurant · Mon · Dinner · 22:00–04:30 · Range crosses the new start"]);
+});
+
+it("counts the distinct lines it shows", async () => {
+  setLocale("en-GB");
+  const sameSeason = await conflictLines(
+    [seasonConflict("Winter", 0), seasonConflict("Winter", 1)],
+    2,
+  );
+  expect(sameSeason.lines).toHaveLength(1);
+  expect(sameSeason.count).toBe("Conflicting schedules: 1. Review opening hours");
+  const twoSeasons = await conflictLines([seasonConflict("Winter"), seasonConflict("Autumn")], 1);
+  expect(twoSeasons.lines).toHaveLength(2);
+  expect(twoSeasons.count).toBe("Conflicting schedules: 2. Review opening hours");
+});

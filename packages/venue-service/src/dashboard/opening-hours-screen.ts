@@ -42,6 +42,7 @@ import type { NamedDaysModel } from "../holiday-types.js";
 import "@waitron/ui/src/components/wt-switch.js";
 import { format, formatDate } from "./hours-view.js";
 import { t } from "./strings.js";
+import { chosenSeasonId, seasonOptions } from "./season-choice.js";
 
 type Department = OpeningHoursModel["departments"][number];
 type Period = Department["periods"][number];
@@ -95,6 +96,9 @@ export class OpeningHoursScreen extends LitElement {
   @state() private departmentId = "";
   @state() private zoneId = "";
   @state() private stationId = "";
+  private requestedSeason = "";
+  /** Held rather than derived per render, so a reread never swaps out an editor holding a draft. */
+  @state() private season = "";
   @state() private stations: OpeningStation[] = [];
   @state() private stationReadError = "";
   private stationsDetach?: () => void;
@@ -124,6 +128,7 @@ export class OpeningHoursScreen extends LitElement {
         zone: "zone",
         station: "station",
         month: "month",
+        season: "season",
       },
     },
   });
@@ -133,6 +138,7 @@ export class OpeningHoursScreen extends LitElement {
     this.view = view === "periods" || view === "day" || view === "calendar" ? view : "week";
     this.departmentId = this.url.read("department") ?? "";
     this.zoneId = this.url.read("zone") ?? "";
+    this.requestedSeason = this.url.read("season") ?? "";
     this.stationId =
       this.url.read("station") ??
       new URL(navigationGuardFor(window)?.href ?? location.href).searchParams.get("station") ??
@@ -142,6 +148,7 @@ export class OpeningHoursScreen extends LitElement {
     const week =
       new URL(navigationGuardFor(window)?.href ?? location.href).searchParams.get("week") ?? "";
     this.weekStart = isLocalDate(week) && weekdayOf(week) === 1 ? week : "";
+    this.resolveSeason();
   }
   override connectedCallback() {
     super.connectedCallback();
@@ -160,6 +167,12 @@ export class OpeningHoursScreen extends LitElement {
     this.detach = this.api.watchOpeningHours(
       (model) => {
         this.model = model;
+        if (
+          !this.season ||
+          (!model.seasons.some((season) => season.id === this.season) &&
+            !leaveCoordinatorFor(this)?.isDirty())
+        )
+          this.resolveSeason();
         this.readError = "";
       },
       () => {
@@ -270,6 +283,22 @@ export class OpeningHoursScreen extends LitElement {
         ["station"],
       );
     }
+    this.followUrl();
+  }
+  /** The picker, and so the address's season, governs only the standard week. */
+  private resolveSeason() {
+    this.season =
+      this.model && this.view === "week" && !this.stationId
+        ? chosenSeasonId(
+            this.model.seasons,
+            this.model.currentSeasonId,
+            this.weekStart ? "" : this.requestedSeason,
+          )
+        : "";
+  }
+  private async chooseSeason(value: string) {
+    if (!this.isConnected || !this.model?.seasons.some((season) => season.id === value)) return;
+    await this.url.write({ dashboard: "opening-hours", season: value });
     this.followUrl();
   }
   private currentWeek() {
@@ -823,6 +852,33 @@ export class OpeningHoursScreen extends LitElement {
                           void this.chooseDepartment(event.detail.value);
                         }}
                       ></wt-combobox>
+                      ${
+                        this.view === "week" &&
+                        !this.weekStart &&
+                        !this.stationId &&
+                        this.model.seasons.length
+                          ? html`<wt-combobox
+                              name="seasonId"
+                              label=${t("opening.season")}
+                              search="never"
+                              .options=${seasonOptions(this.model.seasons)}
+                              .value=${this.season}
+                              @wt-change=${(event: CustomEvent<{ value: string }>) => {
+                                event.stopPropagation();
+                                if (
+                                  !this.isConnected ||
+                                  event.currentTarget !==
+                                    this.shadowRoot?.querySelector("[name=seasonId]")
+                                )
+                                  return;
+                                (
+                                  event.currentTarget as HTMLElementTagNameMap["wt-combobox"]
+                                ).value = this.season;
+                                void this.chooseSeason(event.detail.value);
+                              }}
+                            ></wt-combobox>`
+                          : nothing
+                      }
                       ${this.stationReadError ? html`<p role="alert">${this.stationReadError}</p>` : nothing}
                     </div>`
                   : this.view === "day" || this.view === "calendar"
@@ -864,6 +920,8 @@ export class OpeningHoursScreen extends LitElement {
                             .businessDayClock=${this.model.businessDayClock}
                             .dayCutover=${this.model.dayCutover}
                             .weekStart=${this.weekStart}
+                            .seasonId=${this.season}
+                            .seasons=${this.model.seasons}
                             .namedDays=${this.model.namedDays}
                             @department-open=${(event: CustomEvent<{ departmentId: string }>) => {
                               event.stopPropagation();
@@ -872,11 +930,13 @@ export class OpeningHoursScreen extends LitElement {
                           ></opening-hours-all>`
                         : this.view === "week" && this.zone()
                           ? keyed(
-                              `${this.zone()!.id}:${this.weekStart}`,
+                              `${this.zone()!.id}:${this.weekStart}:${this.season}`,
                               html`<opening-hours-zone-week
                                 .api=${this.api}
                                 .department=${department!}
                                 .zone=${this.zone()!}
+                                .seasonId=${this.season}
+                                .seasons=${this.model.seasons}
                                 .clockRevision=${this.model.clockRevision}
                                 .businessDayClock=${this.model.businessDayClock}
                                 .dayCutover=${this.model.dayCutover}
@@ -889,10 +949,12 @@ export class OpeningHoursScreen extends LitElement {
                             )
                           : this.view === "week" && department
                             ? keyed(
-                                `${department.id}:${this.weekStart}`,
+                                `${department.id}:${this.weekStart}:${this.season}`,
                                 html`<opening-hours-week
                                   .api=${this.api}
                                   .department=${department}
+                                  .seasonId=${this.season}
+                                  .seasons=${this.model.seasons}
                                   .menus=${this.model!.menus}
                                   .clockRevision=${this.model!.clockRevision}
                                   .businessDayClock=${this.model!.businessDayClock}

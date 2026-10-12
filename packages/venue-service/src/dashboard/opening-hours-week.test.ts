@@ -1,5 +1,5 @@
 import { withOpeningStations } from "../testing/opening-hours-stations-request.js";
-import { afterEach, beforeEach, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { LitElement } from "lit";
 import { applyTokens } from "@waitron/ui";
 import { setLocale, type DashboardRequest } from "@waitron/dashboard-kit";
@@ -27,8 +27,8 @@ export function fixture(): OpeningHoursModel {
     timeZone: "Europe/Madrid",
     clockReadable: true,
     dayCutover: "06:00",
-    seasons: [],
-    currentSeasonId: null,
+    seasons: [{ id: "autumn", name: "Autumn", startsOn: "09-01" }],
+    currentSeasonId: "autumn",
     namedDays: [],
     menus: [{ id: "m1", name: "Lunch menu", active: true, includes: [] }],
     departments: [
@@ -49,11 +49,15 @@ export function fixture(): OpeningHoursModel {
             routingUses: [],
           },
         ],
-        seasonWeeks: [],
-        week: Array.from({ length: 7 }, (_, weekday) => ({
-          weekday,
-          slots: weekday === 1 ? [{ periodId: "p1", startsAt: "10:00", endsAt: "14:00" }] : [],
-        })),
+        seasonWeeks: [
+          {
+            seasonId: "autumn",
+            week: Array.from({ length: 7 }, (_, weekday) => ({
+              weekday,
+              slots: weekday === 1 ? [{ periodId: "p1", startsAt: "10:00", endsAt: "14:00" }] : [],
+            })),
+          },
+        ],
         dates: [],
       },
     ],
@@ -138,6 +142,7 @@ it("stages an added range and submits the seven days together only on Save", asy
     method: "PUT",
     body: {
       expectedClockRevision: 0,
+      seasonId: "autumn",
       days: [
         { weekday: 0, slots: [] },
         { weekday: 1, slots: [{ periodId: "p1", startsAt: "10:00", endsAt: "14:00" }] },
@@ -733,7 +738,7 @@ it("a departed nested Cancel cannot close the next child editor", async () => {
 
 it("preserves all six other weekdays when staging a Sunday range", async () => {
   const model = fixture();
-  model.departments[0]!.week = [
+  const sixDays = [
     { weekday: 0, slots: [] },
     { weekday: 1, slots: [{ periodId: "p1", startsAt: "10:00", endsAt: "14:00" }] },
     { weekday: 2, slots: [{ periodId: "p1", startsAt: "11:00", endsAt: "15:00" }] },
@@ -742,6 +747,7 @@ it("preserves all six other weekdays when staging a Sunday range", async () => {
     { weekday: 5, slots: [{ periodId: "p1", startsAt: "20:00", endsAt: "03:00" }] },
     { weekday: 6, slots: [{ periodId: "p1", startsAt: "09:00", endsAt: "12:00" }] },
   ];
+  model.departments[0]!.seasonWeeks = [{ seasonId: "autumn", week: sixDays }];
   const writes: unknown[] = [];
   const week = await mount(
     async (...args) => {
@@ -768,6 +774,7 @@ it("preserves all six other weekdays when staging a Sunday range", async () => {
       "PUT",
       {
         expectedClockRevision: 0,
+        seasonId: "autumn",
         days: [
           { weekday: 0, slots: [{ periodId: "p1", startsAt: "13:00", endsAt: "17:00" }] },
           { weekday: 1, slots: [{ periodId: "p1", startsAt: "10:00", endsAt: "14:00" }] },
@@ -844,4 +851,139 @@ it("keeps a created period's signed offset in its wire body and nested range cho
     dialog.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-combobox"]>("[name=periodId]")!
       .value,
   ).toBe("late");
+});
+
+const seasonStarts = { spring: "09:00", summer: "11:00", autumn: "10:00", winter: "12:00" };
+function seasonal(currentSeasonId: string | null = "winter"): OpeningHoursModel {
+  const model = fixture();
+  const seasons = [
+    { id: "spring", name: "Spring", startsOn: "03-01" },
+    { id: "summer", name: "Summer", startsOn: "06-01" },
+    { id: "autumn", name: "Autumn", startsOn: "09-01" },
+    { id: "winter", name: "Winter", startsOn: "12-01" },
+  ];
+  const department = model.departments[0]!;
+  return {
+    ...model,
+    seasons,
+    currentSeasonId,
+    departments: [
+      {
+        ...department,
+        seasonWeeks: seasons.map((season) => ({
+          seasonId: season.id,
+          week: Array.from({ length: 7 }, (_, weekday) => ({
+            weekday,
+            slots:
+              weekday === 1
+                ? [
+                    {
+                      periodId: "p1",
+                      startsAt: seasonStarts[season.id as keyof typeof seasonStarts],
+                      endsAt: "14:00",
+                    },
+                  ]
+                : [],
+          })),
+        })),
+      },
+    ],
+  };
+}
+const seasonPicker = () =>
+  screen.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-combobox"]>("[name=seasonId]")!;
+const editor = () =>
+  screen.shadowRoot!.querySelector<HTMLElementTagNameMap["opening-hours-week"]>(
+    "opening-hours-week",
+  )!;
+describe("the season picker", () => {
+  it.each([
+    ["en", "Winter · 1 Dec – 28 Feb"],
+    ["es", "Winter · 1 dic – 28 feb"],
+  ])(
+    "opens on the current season's week and names each season by its days (%s)",
+    async (locale, label) => {
+      setLocale(locale);
+      const week = await mount(undefined, false, seasonal());
+      expect(seasonPicker().value).toBe("winter");
+      expect(seasonPicker().options.map((option) => option.value)).toEqual([
+        "spring",
+        "summer",
+        "autumn",
+        "winter",
+      ]);
+      expect(seasonPicker().options[3]!.label).toBe(label);
+      expect(grid(week).columns[0]!.slots[0]!.startsAt).toBe("12:00");
+    },
+  );
+  it.each([
+    ["no season in the address", "/manage/opening-hours", "winter", "winter"],
+    ["an unknown season", "/manage/opening-hours/view/week/season/gone", "winter", "winter"],
+    ["a named season", "/manage/opening-hours/view/week/season/summer", "winter", "summer"],
+    ["no current season", "/manage/opening-hours", null, "spring"],
+    [
+      "an unknown season and no current one",
+      "/manage/opening-hours/view/week/season/gone",
+      null,
+      "spring",
+    ],
+  ])("with %s, shows the right season", async (_, address, current, shown) => {
+    history.replaceState(null, "", address);
+    const week = await mount(undefined, false, seasonal(current));
+    expect(seasonPicker().value).toBe(shown);
+    expect(grid(week).columns[0]!.slots[0]!.startsAt).toBe(
+      seasonStarts[shown as keyof typeof seasonStarts],
+    );
+  });
+  it("choosing Summer redraws Summer's week, names it in the address, and Save sends it", async () => {
+    const writes: unknown[] = [];
+    await mount(
+      async (url, method, body) => {
+        writes.push({ url, method, body });
+      },
+      false,
+      seasonal(),
+    );
+    emit(seasonPicker(), "wt-change", { value: "gone" });
+    await screen.updateComplete;
+    expect(location.pathname).toBe("/manage/opening-hours");
+    expect(seasonPicker().value).toBe("winter");
+    emit(seasonPicker(), "wt-change", { value: "summer" });
+    await expect.poll(() => location.pathname).toBe("/manage/opening-hours/season/summer");
+    await expect.poll(() => seasonPicker().value).toBe("summer");
+    await expect.poll(() => grid(editor())?.columns[0]!.slots[0]!.startsAt).toBe("11:00");
+    const week = editor();
+    await week.updateComplete;
+    const save =
+      week.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>("[data-test=save-week]")!;
+    expect(save.disabled).toBe(true);
+    expect(save.variant).toBe("secondary");
+    await add(week);
+    expect(save.disabled).toBe(false);
+    save.click();
+    await expect.poll(() => writes.length).toBe(1);
+    expect(writes[0]).toEqual({
+      url: "/management-api/venue-service/departments/d1/menu-week",
+      method: "PUT",
+      body: {
+        expectedClockRevision: 0,
+        seasonId: "summer",
+        days: [
+          { weekday: 0, slots: [] },
+          { weekday: 1, slots: [{ periodId: "p1", startsAt: "11:00", endsAt: "14:00" }] },
+          { weekday: 2, slots: [{ periodId: "p1", startsAt: "11:00", endsAt: "15:00" }] },
+          { weekday: 3, slots: [] },
+          { weekday: 4, slots: [] },
+          { weekday: 5, slots: [] },
+          { weekday: 6, slots: [] },
+        ],
+      },
+    });
+  });
+  it("is not offered in the real week, which does not follow the address's season", async () => {
+    history.replaceState(null, "", "/manage/opening-hours/view/week/season/summer?week=2026-10-12");
+    await mount(undefined, false, seasonal());
+    expect(seasonPicker()).toBeNull();
+    expect(editor().seasonId).toBe("winter");
+  });
 });

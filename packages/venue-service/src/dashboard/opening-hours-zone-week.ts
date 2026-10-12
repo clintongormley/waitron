@@ -10,7 +10,8 @@ import type { ClosedRange } from "../service-day.js";
 import type { OpeningHoursApi } from "./opening-hours-client.js";
 import type { GridBlockChange, GridBlockOpen, GridRangeSelection } from "./service-grid.js";
 import { t } from "./strings.js";
-import { dateInWeek, namedOn, realDayLabel, giveOwnHours } from "./real-week.js";
+import { dateInWeek, namedOn, realDayLabel, giveOwnHours, seasonIdOf } from "./real-week.js";
+import { seasonWeek } from "./season-choice.js";
 import { format } from "./hours-view.js";
 import "./service-grid.js";
 import "./range-dialog.js";
@@ -77,6 +78,8 @@ export class OpeningHoursZoneWeek extends LitElement {
   @property({ attribute: false }) api!: OpeningHoursApi;
   @property({ attribute: false }) department!: Department;
   @property({ attribute: false }) zone!: Zone;
+  @property() seasonId = "";
+  @property({ attribute: false }) seasons: OpeningHoursModel["seasons"] = [];
   @property() dayCutover = "06:00";
   @property({ attribute: false }) clockRevision!: number;
   private draftRevision!: number;
@@ -132,9 +135,11 @@ export class OpeningHoursZoneWeek extends LitElement {
     this.draftClock = this.businessDayClock;
     this.draft = Array.from({ length: 7 }, (_, weekday) => ({
       weekday,
-      ranges: (this.zone.week.find((day) => day.weekday === weekday)?.ranges ?? []).map(
-        (range) => ({ ...range }),
-      ),
+      ranges: (
+        seasonWeek(this.zone.seasonWeeks, this.seasonOf(weekday)).find(
+          (day) => day.weekday === weekday,
+        )?.ranges ?? []
+      ).map((range) => ({ ...range })),
     }));
     this.contextDays = this.namedDays.map((day) => ({ ...day }));
     if (this.weekStart)
@@ -199,6 +204,9 @@ export class OpeningHoursZoneWeek extends LitElement {
       (!!this.namedDay(weekday)?.ownHours && !this.namedDay(weekday)?.closeWholeVenue)
     );
   }
+  private seasonOf(weekday: number) {
+    return seasonIdOf(this.seasons, this.seasonId, this.weekStart, weekday);
+  }
   private dayLabel(weekday: number) {
     return realDayLabel(this.weekStart, weekday, this.namedDay(weekday));
   }
@@ -209,7 +217,9 @@ export class OpeningHoursZoneWeek extends LitElement {
       (named?.ownHours
         ? this.department.dates.find((row) => row.specialDateId === named.id)?.slots
         : undefined) ??
-      this.department.week.find((day) => day.weekday === weekday)?.slots ??
+      seasonWeek(this.department.seasonWeeks, this.seasonOf(weekday)).find(
+        (day) => day.weekday === weekday,
+      )?.slots ??
       []
     );
   }
@@ -301,7 +311,8 @@ export class OpeningHoursZoneWeek extends LitElement {
           submitted[weekday]!.ranges,
           this.draftRevision,
         );
-      } else await this.api.saveZoneWeek(this.zone.id, submitted, this.draftRevision);
+      } else
+        await this.api.saveZoneWeek(this.zone.id, this.seasonId, submitted, this.draftRevision);
     } catch (error) {
       if (generation !== this.generation || !this.isConnected) return;
       const invalid = codeOf(error) === "zone_closed_time.invalid";

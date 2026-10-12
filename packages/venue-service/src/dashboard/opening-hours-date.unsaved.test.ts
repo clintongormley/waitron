@@ -25,6 +25,8 @@ class DateLeaveApp extends LitElement {
         pending: null,
         timeZone: "Europe/Madrid",
         clockReadable: true,
+        seasons: [{ id: "autumn", name: "Autumn", startsOn: "09-01" }],
+        currentSeasonId: "autumn",
         dayCutover: "06:00",
         menus: [],
         namedDays: [
@@ -64,7 +66,14 @@ class DateLeaveApp extends LitElement {
                 routingUses: [],
               },
             ],
-            week: [{ weekday: 1, slots: [{ periodId: "p1", startsAt: "10:00", endsAt: "14:00" }] }],
+            seasonWeeks: [
+              {
+                seasonId: "autumn",
+                week: [
+                  { weekday: 1, slots: [{ periodId: "p1", startsAt: "10:00", endsAt: "14:00" }] },
+                ],
+              },
+            ],
             dates: [
               {
                 specialDateId: "s1",

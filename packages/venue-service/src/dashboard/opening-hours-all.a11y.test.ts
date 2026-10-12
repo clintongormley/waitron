@@ -24,8 +24,8 @@ function model(): OpeningHoursModel {
     timeZone: "Europe/Madrid",
     clockReadable: true,
     dayCutover: "06:00",
-    seasons: [],
-    currentSeasonId: null,
+    seasons: [{ id: "autumn", name: "Autumn", startsOn: "09-01" }],
+    currentSeasonId: "autumn",
     namedDays: [],
     menus: [],
     departments: [
@@ -46,8 +46,14 @@ function model(): OpeningHoursModel {
             routingUses: [],
           },
         ],
-        seasonWeeks: [],
-        week: [{ weekday: 1, slots: [{ periodId: "lunch", startsAt: "12:00", endsAt: "16:00" }] }],
+        seasonWeeks: [
+          {
+            seasonId: "autumn",
+            week: [
+              { weekday: 1, slots: [{ periodId: "lunch", startsAt: "12:00", endsAt: "16:00" }] },
+            ],
+          },
+        ],
         dates: [],
       },
       {
@@ -67,8 +73,14 @@ function model(): OpeningHoursModel {
             routingUses: [],
           },
         ],
-        seasonWeeks: [],
-        week: [{ weekday: 2, slots: [{ periodId: "dinner", startsAt: "18:00", endsAt: "23:00" }] }],
+        seasonWeeks: [
+          {
+            seasonId: "autumn",
+            week: [
+              { weekday: 2, slots: [{ periodId: "dinner", startsAt: "18:00", endsAt: "23:00" }] },
+            ],
+          },
+        ],
         dates: [],
       },
     ],
@@ -108,6 +120,7 @@ describe.each(["en", "es"] as const)("Opening hours choices (%s)", (locale) => {
           const scroll = grid.shadowRoot!.querySelector<HTMLElement>(".scroll")!;
           scroll.scrollTop = 400;
           expect(grid.columns).toHaveLength(14);
+          expect(grid.columns.flatMap((column) => column.slots)).toHaveLength(2);
           expect(screen.shadowRoot!.querySelector("opening-hours-week")).toBeNull();
         } else {
           const zone = screen.shadowRoot!.querySelector("opening-hours-zone-week")!;

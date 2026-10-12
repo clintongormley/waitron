@@ -28,6 +28,8 @@ class DayLeaveApp extends LitElement {
         clockReadable: true,
         dayCutover: "06:00",
         menus: [],
+        seasons: [{ id: "autumn", name: "Autumn", startsOn: "09-01" }],
+        currentSeasonId: "autumn",
         namedDays: [],
         departments: [
           {
@@ -38,6 +40,12 @@ class DayLeaveApp extends LitElement {
               {
                 id: "z1",
                 name: "Terrace",
+                seasonWeeks: [
+                  {
+                    seasonId: "autumn",
+                    week: [{ weekday: 1, ranges: [{ startsAt: "23:00", endsAt: "06:00" }] }],
+                  },
+                ],
                 week: [{ weekday: 1, ranges: [{ startsAt: "23:00", endsAt: "06:00" }] }],
                 dates: [],
               },
@@ -53,7 +61,14 @@ class DayLeaveApp extends LitElement {
                 weekdays: [1],
               },
             ],
-            week: [{ weekday: 1, slots: [{ periodId: "p1", startsAt: "10:00", endsAt: "14:00" }] }],
+            seasonWeeks: [
+              {
+                seasonId: "autumn",
+                week: [
+                  { weekday: 1, slots: [{ periodId: "p1", startsAt: "10:00", endsAt: "14:00" }] },
+                ],
+              },
+            ],
             dates: [],
           },
         ],
@@ -192,6 +207,7 @@ describe.each(["en", "es"])("Day draft (%s)", (locale) => {
       "PUT",
       {
         expectedClockRevision: 0,
+        seasonId: "autumn",
         days: [
           { weekday: 0, slots: [] },
           { weekday: 1, slots: [{ periodId: "p1", startsAt: "10:00", endsAt: "15:00" }] },

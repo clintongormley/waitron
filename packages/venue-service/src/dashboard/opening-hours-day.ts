@@ -16,12 +16,15 @@ import {
 import type { MenuPeriodInput, MenuWeekDay, OpeningHoursModel } from "../menu-timetable-types.js";
 import type { ClosedRange, ServiceRange } from "../service-day.js";
 import { addDays, weekdayOf } from "../hours-rules.js";
+import { seasonOn } from "../season-rules.js";
 import type { OpeningHoursApi } from "./opening-hours-client.js";
 import type { GridBlockChange, GridBlockOpen, GridRangeSelection } from "./service-grid.js";
 import type { RangeDialog } from "./range-dialog.js";
 import type { PeriodEditor } from "./period-editor.js";
 import type { NamedDaysModel } from "../holiday-types.js";
 import type { NamedCalendarAction } from "./hours-calendar.js";
+import { seasonIdOn } from "./real-week.js";
+import { seasonWeek } from "./season-choice.js";
 import { format, formatDate } from "./hours-view.js";
 import { t } from "./strings.js";
 import "./service-grid.js";
@@ -254,12 +257,14 @@ export class OpeningHoursDay extends LitElement {
     if (this.contextSpecial) this.contextSpecial = { ...this.contextSpecial };
     if (!this.date) return { menus: {}, zones: {} };
     const special = this.special(),
-      weekday = weekdayOf(this.date);
+      weekday = weekdayOf(this.date),
+      seasonId = seasonIdOn(this.model.seasons, this.date);
     const menus = Object.fromEntries(
       this.departments().map((department) => {
+        const week = seasonWeek(department.seasonWeeks, seasonId);
         const days: MenuWeekDay[] = Array.from({ length: 7 }, (_, day) => ({
           weekday: day,
-          slots: (department.week.find((row) => row.weekday === day)?.slots ?? []).map((slot) => ({
+          slots: (week.find((row) => row.weekday === day)?.slots ?? []).map((slot) => ({
             ...slot,
           })),
         }));
@@ -271,16 +276,19 @@ export class OpeningHoursDay extends LitElement {
     );
     const zones = Object.fromEntries(
       this.departments().flatMap((department) =>
-        (department.zones ?? []).map((zone) => [
-          zone.id,
-          Array.from({ length: 7 }, (_, day) => ({
-            weekday: day,
-            ranges: (special?.ownHours && day === weekday
-              ? (zone.dates.find((row) => row.specialDateId === special.id)?.ranges ?? [])
-              : (zone.week.find((row) => row.weekday === day)?.ranges ?? [])
-            ).map((range) => ({ ...range })),
-          })),
-        ]),
+        (department.zones ?? []).map((zone) => {
+          const week = seasonWeek(zone.seasonWeeks, seasonId);
+          return [
+            zone.id,
+            Array.from({ length: 7 }, (_, day) => ({
+              weekday: day,
+              ranges: (special?.ownHours && day === weekday
+                ? (zone.dates.find((row) => row.specialDateId === special.id)?.ranges ?? [])
+                : (week.find((row) => row.weekday === day)?.ranges ?? [])
+              ).map((range) => ({ ...range })),
+            })),
+          ];
+        }),
       ),
     );
     return { menus, zones };
@@ -532,7 +540,8 @@ export class OpeningHoursDay extends LitElement {
     const submitted = clone(this.draft),
       generation = this.generation,
       special = this.special(),
-      weekday = weekdayOf(this.date);
+      weekday = weekdayOf(this.date),
+      seasonId = seasonIdOn(this.model.seasons, this.date);
     this.saving = true;
     this.error = "";
     this.errorDepartment = "";
@@ -551,7 +560,7 @@ export class OpeningHoursDay extends LitElement {
               days[weekday]!.slots,
               this.draftRevision,
             );
-          else await this.api.saveWeek(department.id, days, this.draftRevision);
+          else await this.api.saveWeek(department.id, seasonId, days, this.draftRevision);
         } catch (error) {
           if (generation !== this.generation || !this.isConnected) return;
           this.error = t("menu.save_error");
@@ -591,7 +600,7 @@ export class OpeningHoursDay extends LitElement {
                 days[weekday]!.ranges,
                 this.draftRevision,
               );
-            else await this.api.saveZoneWeek(zone.id, days, this.draftRevision);
+            else await this.api.saveZoneWeek(zone.id, seasonId, days, this.draftRevision);
           } catch (error) {
             if (generation !== this.generation || !this.isConnected) return;
             const invalid = codeOf(error) === "zone_closed_time.invalid";
@@ -694,6 +703,7 @@ export class OpeningHoursDay extends LitElement {
       special = this.special(),
       state = saveActionState(this.scope),
       closed = special?.closeWholeVenue,
+      season = seasonOn(this.model.seasons, this.date)?.name,
       zoneOpening = this.zoneOpening,
       blocked = this.readOnly || this.saving || !!opening || !!zoneOpening;
     return html`<div class="date-nav">
@@ -755,7 +765,7 @@ export class OpeningHoursDay extends LitElement {
             : nothing
       }
       ${this.calendarError ? html`<p class="refusal">${t("opening.load_error")}</p>` : nothing}
-      ${closed || special?.ownHours ? nothing : html`<p class="note">${format("opening.changes_weekday", { weekday: t(`hours.day_in_sentence.${weekdayOf(this.date)}` as Parameters<typeof t>[0]) })}</p>`}
+      ${closed || special?.ownHours || season === undefined ? nothing : html`<p class="note">${format("opening.changes_weekday", { weekday: t(`hours.day_in_sentence.${weekdayOf(this.date)}` as Parameters<typeof t>[0]), season })}</p>`}
       ${
         this.departments().length
           ? html`<service-grid

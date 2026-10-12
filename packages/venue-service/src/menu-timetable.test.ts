@@ -1559,7 +1559,9 @@ describe("the opening-hours model's seasons", () => {
       { seasonId: id("Autumn"), week: empty("slots") },
       { seasonId: id("Winter"), week: dinnerFriday },
     ]);
-    expect(restaurant.week).toEqual(dinnerFriday);
+    expect(
+      restaurant.seasonWeeks.find((entry) => entry.seasonId === december.currentSeasonId)!.week,
+    ).toEqual(dinnerFriday);
     expect(restaurant.periods.find((period) => period.id === seasons.dinner)!.weekdays).toEqual([
       5,
     ]);
@@ -1577,7 +1579,9 @@ describe("the opening-hours model's seasons", () => {
     );
     expect(july.currentSeasonId).toBe(id("Summer"));
     const summer = july.departments.find((department) => department.id === v.restaurant)!;
-    expect(summer.week[5]).toEqual({ weekday: 5, slots: [] });
+    expect(
+      summer.seasonWeeks.find((entry) => entry.seasonId === july.currentSeasonId)!.week[5],
+    ).toEqual({ weekday: 5, slots: [] });
     expect(summer.zones.find((zone) => zone.id === v.sala)!.week[5]).toEqual({
       weekday: 5,
       ranges: [],
@@ -1604,7 +1608,7 @@ describe("the opening-hours model's seasons", () => {
     expect(model.currentSeasonId).toBe(ids.find((season) => season.name === "Autumn")!.id);
   });
 
-  it("when the clock cannot be read, has no current season and shows the first season's week", async () => {
+  it("when the clock cannot be read, has no current season and still lists the first season's week", async () => {
     const v = await venue({ timetable: false });
     const spring = await scoped(async (tx) => {
       const dinner = (
@@ -1643,22 +1647,20 @@ describe("the opening-hours model's seasons", () => {
     expect(spring.first.name).toBe("Spring");
     expect(model.currentSeasonId).toBeNull();
     const restaurant = model.departments.find((department) => department.id === v.restaurant)!;
-    expect(restaurant.week[2]).toEqual({
+    expect(restaurant.seasonWeeks[0]!.seasonId).toBe(spring.first.id);
+    expect(restaurant.seasonWeeks[0]!.week[2]).toEqual({
       weekday: 2,
       slots: [slot(spring.dinner, "20:00", "23:00")],
     });
   });
 
-  it("gives a venue with no seasons no season weeks and an empty week", async () => {
+  it("gives a venue with no seasons no season weeks", async () => {
     const v = await venue({ timetable: false });
     const model = await scoped((tx) => readOpeningHoursModel(tx, v.cfg, AT));
     expect(model.seasons).toEqual([]);
     expect(model.currentSeasonId).toBeNull();
     const restaurant = model.departments.find((department) => department.id === v.restaurant)!;
     expect(restaurant.seasonWeeks).toEqual([]);
-    expect(restaurant.week).toEqual(
-      [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({ weekday, slots: [] })),
-    );
     expect(restaurant.zones.find((zone) => zone.id === v.sala)!.seasonWeeks).toEqual([]);
   });
 });
@@ -2284,12 +2286,13 @@ describe("statements", () => {
 });
 
 describe("the editor's model", () => {
-  it("lists a venue with no periods, and every department's empty week", async () => {
+  it("lists a venue with no periods and no seasons, and no department season weeks", async () => {
     const v = await venue({ timetable: false });
     const model = await scoped((tx) => readOpeningHoursModel(tx, v.cfg, AT));
+    expect(model.seasons).toEqual([]);
     for (const department of model.departments) {
       expect(department.periods).toEqual([]);
-      expect(department.week).toEqual(weekOf(() => []));
+      expect(department.seasonWeeks).toEqual([]);
     }
   });
 
@@ -2309,7 +2312,7 @@ describe("the editor's model", () => {
     expect(model.menus.filter((menu) => !menu.active)).toHaveLength(1);
   });
 
-  it("lists every department, its periods with their days, its week and its special-date ranges", async () => {
+  it("lists every department, its periods with their days, its season weeks and its special-date ranges", async () => {
     const v = await timed();
     const { menus, periods } = v;
     await scoped(async (tx) => {
@@ -2420,7 +2423,6 @@ describe("the editor's model", () => {
         },
       ],
       seasonWeeks: inEverySeason(restaurantWeek(periods)),
-      week: restaurantWeek(periods),
       dates: [{ specialDateId: christmas.id, slots: [slot(periods.brunch, "11:00", "15:00")] }],
     });
     expect(model.departments.find((department) => department.id === v.deli)).toBeUndefined();
@@ -3236,15 +3238,6 @@ describe("department service periods", () => {
               ]
             : [],
         ),
-      ),
-      week: weekOf((weekday) =>
-        weekday === 5
-          ? [
-              slot(v.lunch, "12:00", "14:00"),
-              slot(v.afternoon, "14:00", "19:00"),
-              slot(v.night, "21:00", "03:00"),
-            ]
-          : [],
       ),
       dates: [{ specialDateId: date.id, slots: [] }],
     });

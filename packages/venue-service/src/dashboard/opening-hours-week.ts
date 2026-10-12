@@ -13,7 +13,8 @@ import type { RangeDialog } from "./range-dialog.js";
 import type { PeriodEditor } from "./period-editor.js";
 import { t } from "./strings.js";
 import { format } from "./hours-view.js";
-import { dateInWeek, namedOn, realDayLabel, giveOwnHours } from "./real-week.js";
+import { dateInWeek, namedOn, realDayLabel, giveOwnHours, seasonIdOf } from "./real-week.js";
+import { seasonWeek } from "./season-choice.js";
 import "./service-grid.js";
 import "./range-dialog.js";
 import "./period-editor.js";
@@ -49,10 +50,13 @@ const sameWeek = (a: readonly MenuWeekDay[], b: readonly MenuWeekDay[]) =>
       )
     );
   });
-const weekOf = (department: Department): MenuWeekDay[] =>
+const weekOf = (department: Department, seasonOf: (weekday: number) => string): MenuWeekDay[] =>
   Array.from({ length: 7 }, (_, weekday) => ({
     weekday,
-    slots: (department.week.find((day) => day.weekday === weekday)?.slots ?? []).map((slot) => ({
+    slots: (
+      seasonWeek(department.seasonWeeks, seasonOf(weekday)).find((day) => day.weekday === weekday)
+        ?.slots ?? []
+    ).map((slot) => ({
       ...slot,
     })),
   }));
@@ -99,6 +103,8 @@ export class OpeningHoursWeek extends LitElement {
   ];
   @property({ attribute: false }) api!: OpeningHoursApi;
   @property({ attribute: false }) department!: Department;
+  @property() seasonId = "";
+  @property({ attribute: false }) seasons: OpeningHoursModel["seasons"] = [];
   @property({ attribute: false }) menus: OpeningHoursModel["menus"] = [];
   @property({ attribute: false }) timeZone?: string;
   @property() dayCutover = "06:00";
@@ -242,7 +248,9 @@ export class OpeningHoursWeek extends LitElement {
     return { days: this.draft, following: false };
   }
   private seedDraft() {
-    this.draft = weekOf(this.department);
+    this.draft = weekOf(this.department, (weekday) =>
+      seasonIdOf(this.seasons, this.seasonId, this.weekStart, weekday),
+    );
     this.contextDays = this.namedDays.map((day) => ({ ...day }));
     if (this.weekStart) {
       this.dateFollowing.clear();
@@ -371,7 +379,7 @@ export class OpeningHoursWeek extends LitElement {
           input[weekday]!.slots,
           this.draftRevision,
         );
-      } else await this.api.saveWeek(this.department.id, input, this.draftRevision);
+      } else await this.api.saveWeek(this.department.id, this.seasonId, input, this.draftRevision);
     } catch (error) {
       if (generation !== this.generation || !this.isConnected) return;
       this.error =

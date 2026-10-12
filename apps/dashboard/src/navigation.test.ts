@@ -190,6 +190,7 @@ it("declares no Station hours destination while retaining Opening hours navigati
     zone: "zone",
     station: "station",
     month: "month",
+    season: "season",
   });
 });
 

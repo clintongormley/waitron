@@ -18,8 +18,8 @@ export function dayFixture(): OpeningHoursModel {
     clockReadable: true,
     dayCutover: "06:00",
     menus: [{ id: "m1", name: "Lunch menu", active: true, includes: [] }],
-    seasons: [],
-    currentSeasonId: null,
+    seasons: [{ id: "autumn", name: "Autumn", startsOn: "09-01" }],
+    currentSeasonId: "autumn",
     namedDays: [
       {
         id: "s/1",
@@ -49,10 +49,14 @@ export function dayFixture(): OpeningHoursModel {
             routingUses: [],
           },
         ],
-        seasonWeeks: [],
-        week: [
-          { weekday: 1, slots: [{ periodId: "p1", startsAt: "10:00", endsAt: "14:00" }] },
-          { weekday: 2, slots: [{ periodId: "p1", startsAt: "11:00", endsAt: "15:00" }] },
+        seasonWeeks: [
+          {
+            seasonId: "autumn",
+            week: [
+              { weekday: 1, slots: [{ periodId: "p1", startsAt: "10:00", endsAt: "14:00" }] },
+              { weekday: 2, slots: [{ periodId: "p1", startsAt: "11:00", endsAt: "15:00" }] },
+            ],
+          },
         ],
         dates: [
           { specialDateId: "s/1", slots: [{ periodId: "p1", startsAt: "12:00", endsAt: "16:00" }] },
@@ -75,10 +79,14 @@ export function dayFixture(): OpeningHoursModel {
             routingUses: [],
           },
         ],
-        seasonWeeks: [],
-        week: [
-          { weekday: 1, slots: [{ periodId: "p2", startsAt: "09:00", endsAt: "18:00" }] },
-          { weekday: 2, slots: [{ periodId: "p2", startsAt: "09:00", endsAt: "18:00" }] },
+        seasonWeeks: [
+          {
+            seasonId: "autumn",
+            week: [
+              { weekday: 1, slots: [{ periodId: "p2", startsAt: "09:00", endsAt: "18:00" }] },
+              { weekday: 2, slots: [{ periodId: "p2", startsAt: "09:00", endsAt: "18:00" }] },
+            ],
+          },
         ],
         dates: [],
       },
@@ -89,7 +97,6 @@ export function dayFixture(): OpeningHoursModel {
         zones: [],
         periods: [],
         seasonWeeks: [],
-        week: [],
         dates: [],
       },
     ],
@@ -163,7 +170,7 @@ it("starts on the venue business day before changeover, showing only active depa
     [{ periodId: "p1", startsAt: "10:00", endsAt: "14:00" }],
     [{ periodId: "p2", startsAt: "09:00", endsAt: "18:00" }],
   ]);
-  expect(day.shadowRoot!.textContent).toContain("Changes every Monday");
+  expect(day.shadowRoot!.textContent).toContain("Changes every Monday in Autumn");
   expect(screen.shadowRoot!.querySelector("[name=departmentId]")).toBeNull();
   expect(save(day).disabled).toBe(true);
   expect(save(day).variant).toBe("secondary");
@@ -201,6 +208,7 @@ it("stages a weekday edit and preserves every other day in its seven-day PUT", a
       "PUT",
       {
         expectedClockRevision: 0,
+        seasonId: "autumn",
         days: [
           { weekday: 0, slots: [] },
           { weekday: 1, slots: [{ periodId: "p1", startsAt: "10:00", endsAt: "15:00" }] },
@@ -214,6 +222,131 @@ it("stages a weekday edit and preserves every other day in its seven-day PUT", a
     ],
   ]);
   await expect.poll(() => save(day).disabled).toBe(true);
+});
+it.each([
+  ["2030-12-02", "winter", "Winter"],
+  ["2030-11-25", "autumn", "Autumn"],
+])("saves an ordinary %s's weekday in that date's season", async (date, seasonId, seasonName) => {
+  vi.setSystemTime(new Date(`${date}T12:00:00Z`));
+  const writes: unknown[] = [];
+  const day = await mount(
+    async (...args) => {
+      writes.push(args);
+    },
+    {
+      ...dayFixture(),
+      currentBusinessDay: date,
+      seasons: [
+        { id: "spring", name: "Spring", startsOn: "03-01" },
+        { id: "summer", name: "Summer", startsOn: "06-01" },
+        { id: "autumn", name: "Autumn", startsOn: "09-01" },
+        { id: "winter", name: "Winter", startsOn: "12-01" },
+      ],
+      currentSeasonId: "spring",
+      departments: dayFixture().departments.map((department) => ({
+        ...department,
+        seasonWeeks: ["spring", "summer", "autumn", "winter"].map((id) => ({
+          seasonId: id,
+          week: department.seasonWeeks[0]?.week ?? [],
+        })),
+      })),
+    },
+  );
+  expect(day.shadowRoot!.textContent).toContain(`Changes every Monday in ${seasonName}`);
+  resize(day);
+  await day.updateComplete;
+  save(day).click();
+  await expect.poll(() => writes.length).toBe(1);
+  expect(writes).toEqual([
+    [
+      "/management-api/venue-service/departments/d1/menu-week",
+      "PUT",
+      expect.objectContaining({ seasonId }),
+    ],
+  ]);
+});
+const seasonSlots = (endsAt: (weekday: number) => string) =>
+  Array.from({ length: 7 }, (_, weekday) => ({
+    weekday,
+    slots: [{ periodId: "p1", startsAt: "10:00", endsAt: endsAt(weekday) }],
+  }));
+const winterWeek = seasonSlots((weekday) => `13:0${weekday}`);
+const autumnWeek = seasonSlots((weekday) => `14:0${weekday}`);
+function seasonsFixture(date: string): OpeningHoursModel {
+  const model = dayFixture();
+  return {
+    ...model,
+    currentBusinessDay: date,
+    seasons: [
+      { id: "autumn", name: "Autumn", startsOn: "09-01" },
+      { id: "winter", name: "Winter", startsOn: "12-01" },
+    ],
+    currentSeasonId: "autumn",
+    departments: model.departments.map((department) =>
+      department.id === "d1"
+        ? {
+            ...department,
+            seasonWeeks: [
+              { seasonId: "autumn", week: autumnWeek },
+              { seasonId: "winter", week: winterWeek },
+            ],
+          }
+        : department,
+    ),
+  };
+}
+it.each([
+  ["2030-12-02", winterWeek],
+  ["2030-11-25", autumnWeek],
+])("shows %s's own season's Monday", async (date, week) => {
+  vi.setSystemTime(new Date(`${date}T12:00:00Z`));
+  const day = await mount(undefined, seasonsFixture(date));
+  expect(grid(day).columns[0]!.slots).toEqual(week[1]!.slots);
+});
+it.each([
+  ["2030-12-02", "en", "Changes every Monday in Winter"],
+  ["2030-11-25", "en", "Changes every Monday in Autumn"],
+  ["2030-12-02", "es", "Cambia cada lunes en Winter"],
+  ["2030-11-25", "es", "Cambia cada lunes en Autumn"],
+] as const)(
+  "notes that saving %s in %s changes its weekday in its season",
+  async (date, locale, note) => {
+    setLocale(locale);
+    vi.setSystemTime(new Date(`${date}T12:00:00Z`));
+    const day = await mount(undefined, seasonsFixture(date));
+    expect(day.shadowRoot!.querySelector(".note")!.textContent).toBe(note);
+  },
+);
+it("shows no weekday note when no season holds the date", async () => {
+  const day = await mount(undefined, { ...dayFixture(), seasons: [], currentSeasonId: null });
+  expect(grid(day).columns.map((c) => c.key)).toEqual(["d1", "d2"]);
+  expect(day.shadowRoot!.querySelector(".note")).toBeNull();
+});
+it("saves Monday 2 Dec 2030 as Winter's whole week, not the current Autumn's", async () => {
+  vi.setSystemTime(new Date("2030-12-02T12:00:00Z"));
+  const writes: unknown[] = [];
+  const day = await mount(async (...args) => {
+    writes.push(args);
+  }, seasonsFixture("2030-12-02"));
+  resize(day);
+  await day.updateComplete;
+  save(day).click();
+  await expect.poll(() => writes.length).toBe(1);
+  expect(writes).toEqual([
+    [
+      "/management-api/venue-service/departments/d1/menu-week",
+      "PUT",
+      {
+        expectedClockRevision: 0,
+        seasonId: "winter",
+        days: winterWeek.map((row) =>
+          row.weekday === 1
+            ? { weekday: 1, slots: [{ periodId: "p1", startsAt: "10:00", endsAt: "15:00" }] }
+            : row,
+        ),
+      },
+    ],
+  ]);
 });
 it("navigates dates and writes a named date's ranges only, including an inherited department", async () => {
   const writes: unknown[] = [];
@@ -249,7 +382,7 @@ it("navigates dates and writes a named date's ranges only, including an inherite
   ]);
   day.shadowRoot!.querySelector<HTMLElement>("[data-test=previous-day]")!.click();
   await day.updateComplete;
-  await expect.poll(() => day.shadowRoot!.textContent).toContain("Changes every Monday");
+  await expect.poll(() => day.shadowRoot!.textContent).toContain("Changes every Monday in Autumn");
 });
 it("commits a successful department before a later refusal and retries only the remaining draft", async () => {
   const writes: unknown[] = [];
@@ -332,7 +465,7 @@ it("keeps a dirty ordinary day's write target when a new named date arrives in t
     namedDays: [{ ...day.model.namedDays[0]!, date: "2026-10-12" }],
   };
   await day.updateComplete;
-  expect(day.shadowRoot!.textContent).toContain("Changes every Monday");
+  expect(day.shadowRoot!.textContent).toContain("Changes every Monday in Autumn");
   save(day).click();
   await expect.poll(() => writes.length).toBe(1);
   expect((writes[0] as unknown[])[0]).toBe(
@@ -666,16 +799,19 @@ it.each([
 it("updates a clean model, preserves dirty drafts across disabled departments and reads Spanish recurrence", async () => {
   setLocale("es");
   const day = await mount();
-  expect(day.shadowRoot!.textContent).toContain("Cambia cada lunes");
+  expect(day.shadowRoot!.textContent).toContain("Cambia cada lunes en Autumn");
   const model = {
     ...day.model,
     departments: day.model.departments.map((department, i) =>
       i === 0
         ? {
             ...department,
-            week: department.week.map((row) => ({
-              ...row,
-              slots: row.slots.map((slot) => ({ ...slot, endsAt: "16:00" })),
+            seasonWeeks: department.seasonWeeks.map((entry) => ({
+              ...entry,
+              week: entry.week.map((row) => ({
+                ...row,
+                slots: row.slots.map((slot) => ({ ...slot, endsAt: "16:00" })),
+              })),
             })),
           }
         : department,
@@ -830,6 +966,7 @@ it.each([true, false])(
           "PUT",
           {
             expectedClockRevision: 0,
+            seasonId: "autumn",
             days: [
               { weekday: 0, slots: [] },
               { weekday: 1, slots: [{ periodId: "p1", startsAt: "10:00", endsAt: "14:00" }] },
@@ -842,7 +979,7 @@ it.each([true, false])(
           },
         ],
       ]);
-    expect(day.shadowRoot!.textContent).toContain("Changes every Tuesday");
+    expect(day.shadowRoot!.textContent).toContain("Changes every Tuesday in Autumn");
   },
 );
 
@@ -922,6 +1059,7 @@ it("a dirty Day draft keeps its opened revision and hours through a passive cloc
   await expect.poll(() => writes.length).toBe(1);
   expect(writes[0]).toMatchObject({
     expectedClockRevision: 0,
+    seasonId: "autumn",
     days: expect.arrayContaining([
       { weekday: 1, slots: [{ periodId: "p1", startsAt: "10:00", endsAt: "15:00" }] },
     ]),

@@ -30,6 +30,7 @@ class WeekLeaveApp extends LitElement {
     super.disconnectedCallback();
   }
   writes: unknown[][] = [];
+  reads = 0;
   failRead = false;
   failWrite = false;
   readonly api = new OpeningHoursApi(
@@ -40,6 +41,8 @@ class WeekLeaveApp extends LitElement {
         return;
       }
       if (this.failRead) throw new Error("offline");
+      this.reads += 1;
+      if (seasonalModel) return structuredClone(seasonalModel);
       return {
         businessDayClock: { timeZone: "Europe/Madrid", dayCutover: "06:00", cutoverChanges: [] },
         clockRevision: 0,
@@ -49,6 +52,8 @@ class WeekLeaveApp extends LitElement {
         clockReadable: true,
         dayCutover: "06:00",
         menus: [],
+        seasons: [{ id: "autumn", name: "Autumn", startsOn: "09-01" }],
+        currentSeasonId: "autumn",
         namedDays: [],
         departments: [
           {
@@ -66,7 +71,14 @@ class WeekLeaveApp extends LitElement {
                 weekdays: [1],
               },
             ],
-            week: [{ weekday: 1, slots: [{ periodId: "p1", startsAt: "10:00", endsAt: "14:00" }] }],
+            seasonWeeks: [
+              {
+                seasonId: "autumn",
+                week: [
+                  { weekday: 1, slots: [{ periodId: "p1", startsAt: "10:00", endsAt: "14:00" }] },
+                ],
+              },
+            ],
             dates: [],
           },
         ],
@@ -79,12 +91,14 @@ class WeekLeaveApp extends LitElement {
   }
 }
 customElements.define("week-leave-test-app", WeekLeaveApp);
+let seasonalModel: unknown;
 let app: WeekLeaveApp;
 const originalUrl = location.href;
 beforeEach(() => {
   history.replaceState(null, "", "/manage/opening-hours");
 });
 afterEach(() => {
+  seasonalModel = undefined;
   app?.remove();
   setLocale("en");
   history.replaceState(null, "", originalUrl);
@@ -206,6 +220,7 @@ describe.each(["en", "es"])("Retained week save contract (%s)", (locale) => {
         "PUT",
         {
           expectedClockRevision: 0,
+          seasonId: "autumn",
           days: [
             { weekday: 0, slots: [] },
             { weekday: 1, slots: [{ periodId: "p1", startsAt: "10:00", endsAt: "15:00" }] },
@@ -240,6 +255,7 @@ describe.each(["en", "es"])("Retained week save contract (%s)", (locale) => {
         "PUT",
         {
           expectedClockRevision: 0,
+          seasonId: "autumn",
           days: [
             { weekday: 0, slots: [] },
             { weekday: 1, slots: [{ periodId: "p1", startsAt: "10:00", endsAt: "15:00" }] },
@@ -261,5 +277,186 @@ describe.each(["en", "es"])("Retained week save contract (%s)", (locale) => {
     await choose("keep");
     expect(await request).toBe("kept");
     expect(unload()).toBe(true);
+  });
+});
+
+describe.each(["en", "es"])("Changing season (%s)", (locale) => {
+  it("asks before leaving an edited Winter for Summer", async () => {
+    setLocale(locale);
+    const monday = (startsAt: string) => [
+      { weekday: 1, slots: [{ periodId: "p1", startsAt, endsAt: "14:00" }] },
+    ];
+    seasonalModel = {
+      businessDayClock: { timeZone: "Europe/Madrid", dayCutover: "06:00", cutoverChanges: [] },
+      clockRevision: 0,
+      currentBusinessDay: "2026-10-12",
+      pending: null,
+      timeZone: "Europe/Madrid",
+      clockReadable: true,
+      dayCutover: "06:00",
+      menus: [],
+      seasons: [
+        { id: "summer", name: "Summer", startsOn: "06-01" },
+        { id: "winter", name: "Winter", startsOn: "12-01" },
+      ],
+      currentSeasonId: "winter",
+      namedDays: [],
+      departments: [
+        {
+          id: "d1",
+          name: "Restaurant",
+          active: true,
+          periods: [
+            {
+              id: "p1",
+              name: "Lunch",
+              colour: "blue",
+              menuId: "m1",
+              staffMenuIds: [],
+              endOffsetMinutes: 0,
+              weekdays: [1],
+            },
+          ],
+          seasonWeeks: [
+            { seasonId: "summer", week: monday("11:00") },
+            { seasonId: "winter", week: monday("10:00") },
+          ],
+          dates: [],
+        },
+      ],
+    };
+    const { screen, week } = await mount();
+    await change(week);
+    const picker = () =>
+      screen.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-combobox"]>("[name=seasonId]")!;
+    const pick = () =>
+      picker().dispatchEvent(
+        new CustomEvent("wt-change", {
+          detail: { value: "summer" },
+          bubbles: true,
+          composed: true,
+        }),
+      );
+    const grid = () =>
+      screen
+        .shadowRoot!.querySelector("opening-hours-week")!
+        .shadowRoot!.querySelector<HTMLElementTagNameMap["service-grid"]>("service-grid")!;
+    pick();
+    await choose("keep");
+    expect(location.pathname).toBe("/manage/opening-hours");
+    expect(screen.shadowRoot!.querySelector("opening-hours-week")).toBe(week);
+    expect(picker().value).toBe("winter");
+    expect(grid().columns[0]!.slots[0]!.endsAt).toBe("15:00");
+    pick();
+    await choose("discard");
+    await expect.poll(() => location.pathname).toBe("/manage/opening-hours/season/summer");
+    await expect.poll(() => picker().value).toBe("summer");
+    await expect.poll(() => grid().columns[0]!.slots[0]!.startsAt).toBe("11:00");
+    expect(unload()).toBe(false);
+  });
+});
+
+describe("A reread with no unsaved draft", () => {
+  it("moves to the current season when the held season is deleted", async () => {
+    history.replaceState(null, "", "/manage/opening-hours/view/week/season/autumn");
+    seasonalModel = twoSeasons(["autumn", "winter"], "autumn");
+    const { screen } = await mount();
+    const reads = app.reads;
+    seasonalModel = twoSeasons(["winter"], "winter");
+    app.api.rereadWatches();
+    await expect.poll(() => app.reads).toBeGreaterThan(reads);
+    const picker = () =>
+      screen.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-combobox"]>("[name=seasonId]")!;
+    await expect.poll(() => picker().value).toBe("winter");
+    await expect
+      .poll(
+        () =>
+          screen
+            .shadowRoot!.querySelector("opening-hours-week")!
+            .shadowRoot!.querySelector<HTMLElementTagNameMap["service-grid"]>("service-grid")!
+            .columns[0]!.slots[0]!.startsAt,
+      )
+      .toBe("11:00");
+    expect(unload()).toBe(false);
+  });
+});
+
+function twoSeasons(seasonIds: string[], currentSeasonId: string) {
+  const monday = (startsAt: string) => [
+    { weekday: 1, slots: [{ periodId: "p1", startsAt, endsAt: "14:00" }] },
+  ];
+  const all = [
+    { id: "autumn", name: "Autumn", startsOn: "09-01" },
+    { id: "winter", name: "Winter", startsOn: "12-01" },
+  ];
+  return {
+    businessDayClock: { timeZone: "Europe/Madrid", dayCutover: "06:00", cutoverChanges: [] },
+    clockRevision: 0,
+    currentBusinessDay: "2026-11-30",
+    pending: null,
+    timeZone: "Europe/Madrid",
+    clockReadable: true,
+    dayCutover: "06:00",
+    menus: [],
+    seasons: all.filter((season) => seasonIds.includes(season.id)),
+    currentSeasonId,
+    namedDays: [],
+    departments: [
+      {
+        id: "d1",
+        name: "Restaurant",
+        active: true,
+        periods: [
+          {
+            id: "p1",
+            name: "Lunch",
+            colour: "blue",
+            menuId: "m1",
+            staffMenuIds: [],
+            endOffsetMinutes: 0,
+            weekdays: [1],
+          },
+        ],
+        seasonWeeks: seasonIds.map((seasonId) => ({
+          seasonId,
+          week: monday(seasonId === "autumn" ? "10:00" : "11:00"),
+        })),
+        dates: [],
+      },
+    ],
+  };
+}
+describe("A reread under an unsaved draft", () => {
+  it.each([
+    ["the current season is unchanged", "/manage/opening-hours", ["autumn", "winter"], "autumn"],
+    ["the current season moves", "/manage/opening-hours", ["autumn", "winter"], "winter"],
+    [
+      "the addressed season is deleted",
+      "/manage/opening-hours/view/week/season/autumn",
+      ["winter"],
+      "winter",
+    ],
+  ])("keeps the editor and its draft when %s", async (_, address, nextSeasons, nextCurrent) => {
+    history.replaceState(null, "", address);
+    seasonalModel = twoSeasons(["autumn", "winter"], "autumn");
+    const { screen, week } = await mount();
+    await change(week);
+    expect(unload()).toBe(true);
+    const reads = app.reads;
+    seasonalModel = twoSeasons(nextSeasons, nextCurrent);
+    app.api.rereadWatches();
+    await expect.poll(() => app.reads).toBeGreaterThan(reads);
+    await new Promise((done) => setTimeout(done, 0));
+    await screen.updateComplete;
+    expect(screen.shadowRoot!.querySelector("opening-hours-week")).toBe(week);
+    expect(
+      week.shadowRoot!.querySelector<HTMLElementTagNameMap["service-grid"]>("service-grid")!
+        .columns[0]!.slots[0]!.endsAt,
+    ).toBe("15:00");
+    expect(unload()).toBe(true);
+    expect(
+      screen.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-combobox"]>("[name=seasonId]")!
+        .value,
+    ).toBe("autumn");
   });
 });

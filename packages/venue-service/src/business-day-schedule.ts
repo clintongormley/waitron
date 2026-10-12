@@ -139,14 +139,16 @@ export async function businessDayClockConflicts(
     .where(and(eq(zoneServicePolicies.locationId, cfg.locationId), isNotNull(zoneDays.seasonId)))
     .orderBy(asc(zoneDayRanges.id));
   const seasonList = await tx
-    .select({ id: seasons.id, startsOn: seasons.startsOn })
+    .select({ id: seasons.id, name: seasons.name, startsOn: seasons.startsOn })
     .from(seasons)
     .where(eq(seasons.locationId, cfg.locationId))
     .orderBy(asc(seasons.startsOn));
+  const seasonById = new Map<string | null, { index: number; name: string }>(
+    seasonList.map((season, index) => [season.id, { index, name: season.name }]),
+  );
   const seasonOf = (date: string) => seasonOnSorted(seasonList, date)?.id ?? null;
   const nextSeason = (seasonId: string) =>
-    seasonList[(seasonList.findIndex((season) => season.id === seasonId) + 1) % seasonList.length]!
-      .id;
+    seasonList[((seasonById.get(seasonId)?.index ?? -1) + 1) % seasonList.length]!.id;
   const undated = { specialDateName: null, specialDateId: null, date: null, repeatOn: null };
   const periods: Placement[] = [
     ...named.map((row) => ({ ...row, weekday: null, seasonId: null })),
@@ -197,7 +199,9 @@ export async function businessDayClockConflicts(
       placement.date < addDays(effectiveBusinessDay, -1)
     )
       continue;
-    const key = `${placement.departmentId}/${placement.zoneId ?? ""}/${placement.specialDateId ?? `${placement.seasonId}:${placement.weekday}`}`;
+    // A season's position in the venue's order leads its key, so the sorted groups list seasons by `startsOn`.
+    const season = `${String(seasonById.get(placement.seasonId)?.index ?? -1).padStart(4, "0")}:${placement.seasonId}`;
+    const key = `${placement.departmentId}/${placement.zoneId ?? ""}/${placement.specialDateId ?? `${season}:${placement.weekday}`}`;
     groups.set(key, [...(groups.get(key) ?? []), placement]);
   }
   const conflicts: BusinessDayClockConflict[] = [];
@@ -316,6 +320,7 @@ export async function businessDayClockConflicts(
         inStrip(((newCutoff % 1440) + 1440) % 1440)
       )
         reason = "transition_strip";
+      const seasonName = seasonById.get(p.seasonId)?.name;
       if (reason !== null)
         conflicts.push({
           departmentId: p.departmentId,
@@ -328,6 +333,7 @@ export async function businessDayClockConflicts(
           ...(p.zoneId === undefined ? {} : { zoneId: p.zoneId }),
           ...(p.weekday === null ? {} : { weekday: p.weekday }),
           ...(p.seasonId === null ? {} : { seasonId: p.seasonId }),
+          ...(seasonName === undefined ? {} : { seasonName }),
           ...(p.specialDateId === null ? {} : { specialDateId: p.specialDateId }),
           ...(p.date === null ? {} : { date: p.date }),
           ...(p.periodId === undefined ? {} : { periodId: p.periodId }),
@@ -336,10 +342,10 @@ export async function businessDayClockConflicts(
         });
     }
   }
-  // The cap and the count are of distinct conflicts once `seasonId` is set aside; the same range at
+  // The cap and the count are of distinct conflicts once the season is set aside; the same range at
   // another position in another season counts again.
   const rangeKey = (conflict: BusinessDayClockConflict) =>
-    JSON.stringify({ ...conflict, seasonId: undefined });
+    JSON.stringify({ ...conflict, seasonId: undefined, seasonName: undefined });
   const keys = conflicts.map(rangeKey);
   const ranges = [...new Set(keys)];
   const listed = new Set(ranges.slice(0, 20));

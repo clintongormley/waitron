@@ -130,7 +130,7 @@ const everySeason = <T>(value: T) => ({
 });
 
 describe("replaceMenuWeek writes season weeks", () => {
-  it("with no season named, gives a venue without seasons its four and paints every one, and the model's week is the current season's", async () => {
+  it("with no season named, gives a venue without seasons its four and paints every one, and the model's current season week holds it", async () => {
     const v = await venue();
     expect(await scoped((tx) => readSeasons(tx, v.cfg))).toEqual([]);
     const lunch = { periodId: v.lunch, startsAt: "13:00", endsAt: "16:00" };
@@ -143,10 +143,14 @@ describe("replaceMenuWeek writes season weeks", () => {
     const model = await scoped((tx) => readOpeningHoursModel(tx, v.cfg, AT));
     expect(model.currentSeasonId).toBe((await seasonIds(v)).Autumn);
     const department = model.departments.find((entry) => entry.id === v.departmentId)!;
-    expect(department.week.find((day) => day.weekday === TUESDAY)!.slots).toEqual([lunch]);
+    expect(
+      department.seasonWeeks
+        .find((entry) => entry.seasonId === model.currentSeasonId)!
+        .week.find((day) => day.weekday === TUESDAY)!.slots,
+    ).toEqual([lunch]);
   });
 
-  it("with a season named, changes that season alone, and the model's week stays the current season's", async () => {
+  it("with a season named, changes that season alone, and the model's current season week keeps the old week", async () => {
     const v = await venue();
     const lunch = { periodId: v.lunch, startsAt: "13:00", endsAt: "16:00" };
     const dinner = { periodId: v.dinner, startsAt: "20:00", endsAt: "23:00" };
@@ -166,7 +170,11 @@ describe("replaceMenuWeek writes season weeks", () => {
     const model = await scoped((tx) => readOpeningHoursModel(tx, v.cfg, AT));
     expect(model.currentSeasonId).toBe((await seasonIds(v)).Autumn);
     const department = model.departments.find((entry) => entry.id === v.departmentId)!;
-    expect(department.week.find((day) => day.weekday === TUESDAY)!.slots).toEqual([lunch]);
+    expect(
+      department.seasonWeeks
+        .find((entry) => entry.seasonId === model.currentSeasonId)!
+        .week.find((day) => day.weekday === TUESDAY)!.slots,
+    ).toEqual([lunch]);
   });
 
   it("with no season named, counts a season's differing week as a time change, so a stale clock revision is refused", async () => {
