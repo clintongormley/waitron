@@ -1,5 +1,5 @@
 import { readSaleOperationDescription } from "./sale-operation-description.js";
-import { tableInService } from "@waitron/db";
+import { stillJoinedPart, tableInService } from "@waitron/db";
 import { readStationQueueMoves, type StationQueueMove } from "./station-queue-moves.js";
 import {
   checkedInvoiceChoiceDelivery,
@@ -7162,6 +7162,8 @@ export interface TableToday {
   takenOff: boolean;
   joinId: string | null;
   joinSeats: number | null;
+  /** The live name of the joined table this table is still a part of; `null` when it is in none. */
+  inJoinedTable: string | null;
 }
 
 /** One row of the occupancy read-model. */
@@ -7420,6 +7422,16 @@ async function readTodayTables(
     .leftJoin(floorTodayJoinTables, eq(floorTodayJoinTables.tableId, floorTodayTables.tableId))
     .leftJoin(floorTodayJoins, eq(floorTodayJoins.id, floorTodayJoinTables.joinId))
     .where(eq(diningTables.locationId, locationId));
+  const parts = await tx.execute<{ table_id: string; label: string }>(sql`
+    select part_row.table_id, joined_table.label
+    from floor_reset_table_parts joined_part
+    inner join floor_reset_tables part_row on part_row.id = joined_part.part_reset_table_id
+    inner join floor_reset_tables joined_row on joined_row.id = joined_part.joined_reset_table_id
+    inner join dining_tables joined_table on joined_table.id = joined_row.table_id
+    where joined_table.location_id = ${locationId}
+      and ${stillJoinedPart(sql`part_row.table_id`)}
+  `);
+  const joinedName = new Map(parts.rows.map((part) => [part.table_id, part.label]));
   return new Map(
     rows.map((row) => [
       row.tableId,
@@ -7430,6 +7442,7 @@ async function readTodayTables(
         takenOff: row.takenOff,
         joinId: row.joinId,
         joinSeats: row.joinSeats,
+        inJoinedTable: joinedName.get(row.tableId) ?? null,
       },
     ]),
   );

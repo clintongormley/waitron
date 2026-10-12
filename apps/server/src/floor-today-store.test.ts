@@ -1134,6 +1134,48 @@ describe("the parts of joined tables in the till's copy", () => {
     expect(await copiedParts(zoneId)).toEqual([]);
   });
 
+  it("removes a former part a party held once it is free, keeping the other copied parts", async () => {
+    const { zoneId, master, table } = await plannedZone(
+      v,
+      [
+        { key: "c3", label: "Counter 3", seats: 2, place: { x: 0, y: 0 } },
+        { key: "c4", label: "Counter 4", seats: 6, place: { x: 20, y: 0 } },
+        { key: "c5", label: "Counter 5", seats: 4, place: { x: 40, y: 0 } },
+      ],
+      NOW,
+    );
+    const { partyId } = await seat(v, table.c3!);
+    const ids = await resave(zoneId, (tables) => [
+      ...tables.map((entry) => ({ ...entry, placement: null })),
+      {
+        key: "long",
+        label: `Long table ${randomUUID().slice(0, 6)}`,
+        seats: 10,
+        fixed: false,
+        placement: placed(20),
+        partKeys: [master.c3!, master.c4!, master.c5!],
+      },
+    ]);
+    await reset(zoneId);
+    expect(await copiedParts(zoneId)).toHaveLength(3);
+    await resave(zoneId, (tables) =>
+      tables
+        .filter((entry) => entry.id !== master.c3)
+        .map((entry) =>
+          entry.id === ids.long ? { ...entry, partKeys: [master.c4!, master.c5!] } : entry,
+        ),
+    );
+    await reset(zoneId);
+    expect((await liveTablesOf(zoneId)).map((t) => t.id)).toContain(table.c3);
+    await finish(partyId);
+    await catchUp(zoneId);
+
+    expect((await liveTablesOf(zoneId)).map((t) => t.id)).not.toContain(table.c3);
+    expect(await copiedParts(zoneId)).toEqual(
+      partsOf({ ...master, long: ids.long! }, "long", ["c4", "c5"]),
+    );
+  });
+
   it("a joined table whose name an occupied table still holds leaves its parts in service", async () => {
     const { zoneId, master, table } = await plannedZone(v, [{ key: "t9", label: "T9" }], NOW);
     await seat(v, table.t9!);

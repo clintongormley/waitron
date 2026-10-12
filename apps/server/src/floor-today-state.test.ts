@@ -108,6 +108,7 @@ describe("the till's table-state answer carries today's plan", () => {
       takenOff: false,
       joinId,
       joinSeats: 7,
+      inJoinedTable: null,
     });
     expect(states.get(b)!.today).toEqual({
       placement: place(20, 5, { width: 10, rotation: 45 }),
@@ -116,6 +117,7 @@ describe("the till's table-state answer carries today's plan", () => {
       takenOff: false,
       joinId,
       joinSeats: 7,
+      inJoinedTable: null,
     });
     expect(states.get(spare)!.today).toEqual({
       placement: null,
@@ -124,6 +126,7 @@ describe("the till's table-state answer carries today's plan", () => {
       takenOff: false,
       joinId: null,
       joinSeats: null,
+      inJoinedTable: null,
     });
     expect(states.get(off)!.today).toEqual({
       placement: null,
@@ -132,6 +135,44 @@ describe("the till's table-state answer carries today's plan", () => {
       takenOff: true,
       joinId: null,
       joinSeats: null,
+      inJoinedTable: null,
     });
+  });
+
+  it("names the joined table on each part, and on nothing else", async () => {
+    const zoneId = await zone();
+    const [long, c3, c4, c5, plain] = [
+      fresh("Long"),
+      fresh("Counter 3"),
+      fresh("Counter 4"),
+      fresh("Counter 5"),
+      fresh("Plain"),
+    ];
+    const entries: Entry[] = [
+      { key: "c3", label: c3, seats: 2, fixed: false, placement: null, partKeys: [] },
+      { key: "c4", label: c4, seats: 6, fixed: false, placement: null, partKeys: [] },
+      { key: "c5", label: c5, seats: 4, fixed: false, placement: null, partKeys: [] },
+      {
+        key: "long",
+        label: long,
+        seats: 10,
+        fixed: false,
+        placement: place(3, 5),
+        partKeys: ["c3", "c4", "c5"],
+      },
+      { key: "plain", label: plain, seats: 4, fixed: false, placement: place(30, 5), partKeys: [] },
+    ];
+    await inTx(v, (tx) =>
+      saveZonePlan(tx, v.cfg, REMOVALS, zoneId, { revision: 0, tables: entries }, NOW),
+    );
+    const plan = await inTx(v, (tx) => readZonePlan(tx, v.cfg, zoneId));
+    const liveId = (label: string) => plan.tables.find((t) => t.label === label)!.liveTableId!;
+
+    const states = await read();
+    for (const part of [c3, c4, c5]) {
+      expect(states.get(liveId(part))!.today.inJoinedTable).toBe(long);
+    }
+    expect(states.get(liveId(long))!.today.inJoinedTable).toBeNull();
+    expect(states.get(liveId(plain))!.today.inJoinedTable).toBeNull();
   });
 });

@@ -95,6 +95,14 @@ async function readFloor(): Promise<{ id: string; label: string }[]> {
   return (await answer.json()) as { id: string; label: string }[];
 }
 
+/** Each table the till's floor read lists, with the joined table it names, if any. */
+async function readJoined(): Promise<Map<string, string | null>> {
+  const answer = await send("GET", "/api/tables/state");
+  expect(answer.status).toBe(200);
+  const tables = (await answer.json()) as { id: string; today: { inJoinedTable: string | null } }[];
+  return new Map(tables.map((t) => [t.id, t.today.inJoinedTable]));
+}
+
 async function seatAt(tableId: string): Promise<string> {
   const answer = await send("POST", `/api/tables/${tableId}/seat`, {});
   expect(answer.status).toBe(200);
@@ -247,6 +255,41 @@ describe("the till's floor routes catch today's plan up", () => {
       tx.select().from(workingOrders).where(eq(workingOrders.id, order)),
     );
     expect(released).toMatchObject({ deliveryTableId: null, deliveryTableLabel: label });
+  });
+
+  it("a table made a part while a party sits at it stays in service until the party finishes", async () => {
+    const zoneId = await zone();
+    const [long, c3, c4, c5] = [
+      fresh("Long"),
+      fresh("Counter 3"),
+      fresh("Counter 4"),
+      fresh("Counter 5"),
+    ];
+    const first = await save(zoneId, 0, [
+      entry("c3", c3, { seats: 2, placement: place(0, 0) }),
+      entry("c4", c4, { seats: 6, placement: place(20, 0) }),
+      entry("c5", c5, { seats: 4, placement: place(40, 0) }),
+    ]);
+    const plan = await inTx(v, (tx) => readZonePlan(tx, v.cfg, zoneId));
+    const liveOf = (key: string) => plan.tables.find((t) => t.id === first.ids[key])!.liveTableId!;
+    const [t3, t4, t5] = [liveOf("c3"), liveOf("c4"), liveOf("c5")];
+    const partyId = await seatAt(t3);
+    await save(zoneId, first.revision, [
+      entry("c3", c3, { id: first.ids.c3, seats: 2, placement: null }),
+      entry("c4", c4, { id: first.ids.c4, seats: 6, placement: null }),
+      entry("c5", c5, { id: first.ids.c5, seats: 4, placement: null }),
+      entry("long", long, { seats: 10, placement: place(0, 20), partKeys: ["c3", "c4", "c5"] }),
+    ]);
+    const answer = await send("POST", `/api/zones/${zoneId}/today/reset`, {});
+    expect(answer.status).toBe(204);
+
+    const before = await readJoined();
+    expect(before.get(t3)).toBeNull();
+    expect(before.get(t4)).toBe(long);
+    expect(before.get(t5)).toBe(long);
+
+    await finish(partyId);
+    expect((await readJoined()).get(t3)).toBe(long);
   });
 
   it("does nothing when no reset happened while the table was taken", async () => {
