@@ -3449,9 +3449,7 @@ _Formerly A7, and the dashboard entries in the opening part of the old Track A (
   runs along the top of the footer, which looks like the modal's scrolling body showing a focus ring
   — not traced, and not checked against `main`; an observation from the implementer's session.
   A502 part 2 saw the same line above the buttons of the floor plan editor's compact "Delete
-  {name}?" question, opened by a click: the modal's body takes focus on open and draws its 2 px
-  focus outline (`packages/ui/src/components/wt-modal.ts`). Other modals opened by a click were not
-  checked.
+  {name}?" question, opened by a click.
 
 - **Request refusals that still land in the bottom message, or under a field in generic words — OPEN
   (left by C54, #853).** In the forms C54 surveyed (the dashboard, the setup wizard, and the
