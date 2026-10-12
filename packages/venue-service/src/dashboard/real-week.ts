@@ -10,7 +10,7 @@ import type { NamedCalendarAction } from "./hours-calendar.js";
 export const dateInWeek = (monday: string, weekday: number) => addDays(monday, (weekday + 6) % 7);
 export const namedOn = (days: readonly NamedDay[], monday: string, weekday: number) =>
   monday ? days.find((day) => occursOn(day, dateInWeek(monday, weekday))) : undefined;
-const seasonIdOn = (seasons: OpeningHoursModel["seasons"], date: string) =>
+export const seasonIdOn = (seasons: OpeningHoursModel["seasons"], date: string) =>
   seasonOn(seasons, date)?.id ?? "";
 /** The picked season governs the standard week; in a real week each date follows its own season. */
 export const seasonIdOf = (
