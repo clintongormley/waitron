@@ -78,6 +78,7 @@ import {
 import "./errors.js";
 import { replaceZoneClosedWeek, saveZoneClosedDate } from "./zone-closed-times.js";
 import { parseEndOffsetMinutes } from "./period-end-offset.js";
+import { deleteSpecialDay, readSpecialDay, saveSpecialDay } from "./special-days.js";
 
 const STATUS: Record<string, ContentfulStatusCode> = {
   "management_session.required": 401,
@@ -130,6 +131,9 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "special_date.keeps_week": 409,
   "station.always_open": 409,
   "holiday.invalid": 400,
+  "special_day.invalid": 400,
+  "special_day.not_found": 404,
+  "special_day.date_taken": 409,
 };
 const run = createErrorBoundary(STATUS, "venue_service.failed");
 const PAID_WHEN = new Set(["prepay", "ticket_then_pay"]);
@@ -488,6 +492,77 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
             VENUE_SERVICE_CALENDAR_PARTICIPANTS,
             body.expectedClockRevision as number,
           ),
+        );
+        return c.body(null, 204);
+      }),
+    );
+
+    const SPECIAL_DAY_KEYS = [
+      "name",
+      "repeatsYearly",
+      "dates",
+      "paint",
+      "zonePaint",
+      "expectedClockRevision",
+    ] as const;
+
+    app.get("/management-api/venue-service/special-days/:id", (c) =>
+      run(c, log, async () => {
+        const sessionId = requireManagementSession(c);
+        const id = requireUuidParam(c.req.param("id"), "SpecialDayId");
+        return c.json(await viewed(sessionId, (tx) => readSpecialDay(tx, ctx.cfg, id)));
+      }),
+    );
+
+    app.post("/management-api/venue-service/special-days", (c) =>
+      run(c, log, async () => {
+        const sessionId = requireManagementSession(c);
+        const body = await readJsonBody<Record<string, unknown>>(c);
+        const saved = await gated(sessionId, (tx) => {
+          onlyKeys(body, SPECIAL_DAY_KEYS);
+          const { expectedClockRevision, ...input } = body;
+          return saveSpecialDay(
+            tx,
+            ctx.cfg,
+            null,
+            input,
+            new Date(),
+            expectedClockRevision as number,
+          );
+        });
+        return c.json(saved, 201);
+      }),
+    );
+
+    app.put("/management-api/venue-service/special-days/:id", (c) =>
+      run(c, log, async () => {
+        const sessionId = requireManagementSession(c);
+        const id = requireUuidParam(c.req.param("id"), "SpecialDayId");
+        const body = await readJsonBody<Record<string, unknown>>(c);
+        return c.json(
+          await gated(sessionId, (tx) => {
+            onlyKeys(body, SPECIAL_DAY_KEYS);
+            const { expectedClockRevision, ...input } = body;
+            return saveSpecialDay(
+              tx,
+              ctx.cfg,
+              id,
+              input,
+              new Date(),
+              expectedClockRevision as number,
+            );
+          }),
+        );
+      }),
+    );
+
+    app.delete("/management-api/venue-service/special-days/:id", (c) =>
+      run(c, log, async () => {
+        const sessionId = requireManagementSession(c);
+        const id = requireUuidParam(c.req.param("id"), "SpecialDayId");
+        const body = await readJsonBody<{ expectedClockRevision: number }>(c);
+        await gated(sessionId, (tx) =>
+          deleteSpecialDay(tx, ctx.cfg, id, new Date(), body.expectedClockRevision as number),
         );
         return c.body(null, 204);
       }),
