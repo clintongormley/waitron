@@ -690,17 +690,29 @@ describe("named-days Calendar route", () => {
 });
 
 describe("retired special-date routes", () => {
-  it("answers 404 to every special-date writer for a manager", async () => {
+  it("answers the unmatched-route 404 to every special-date writer for a manager and leaves a named day as it was", async () => {
     const fx = await fixture();
-    const id = randomUUID();
-    const body = { date: "2030-10-15", name: "Staff party", closeWholeVenue: false };
+    const day = await createDate(fx, input({ date: "2030-10-15", name: "Staff party" }));
+    const row = () => db.select().from(specialDates).where(eq(specialDates.id, day.id));
+    const before = await row();
+    expect(before).toHaveLength(1);
+    const body = { date: "2030-10-15", name: "Renamed party", closeWholeVenue: false };
     for (const [method, path, sent] of [
-      ["POST", "/special-dates", body],
-      ["PUT", `/special-dates/${id}`, body],
-      ["POST", `/special-dates/${id}/duplicate`, { dates: ["2030-10-16"] }],
-      ["DELETE", `/special-dates/${id}`, undefined],
-    ] as const)
-      expect((await send(fx, method, path, fx.manager, sent)).status).toBe(404);
+      ["POST", "/special-dates", { ...body, date: "2030-10-16" }],
+      ["PUT", `/special-dates/${day.id}`, body],
+      ["POST", `/special-dates/${day.id}/duplicate`, { dates: ["2030-10-17"] }],
+      ["DELETE", `/special-dates/${day.id}`, undefined],
+    ] as const) {
+      const response = await send(fx, method, path, fx.manager, sent);
+      expect({ method, path, status: response.status, body: await response.text() }).toEqual({
+        method,
+        path,
+        status: 404,
+        body: "404 Not Found",
+      });
+      expect(await row()).toEqual(before);
+    }
+    expect(await venueDates(fx)).toEqual([{ id: day.id, date: "2030-10-15", name: "Staff party" }]);
   });
 });
 
