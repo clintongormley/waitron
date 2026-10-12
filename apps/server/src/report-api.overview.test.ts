@@ -6,6 +6,8 @@ import { describe, expect, it } from "vitest";
 import {
   CORE_MIGRATIONS,
   diningTables,
+  floorResetTableParts,
+  floorResetTables,
   floorZones,
   parties,
   partyTables,
@@ -246,6 +248,50 @@ describe("mountReportApi — /reports/overview", () => {
     await suite.db.delete(floorTodayTables).where(eq(floorTodayTables.tableId, closed!.id));
     await suite.db.delete(diningTables).where(eq(diningTables.id, closed!.id));
     await suite.db.delete(diningTables).where(eq(diningTables.id, absent!.id));
+    await suite.db.delete(floorZones).where(eq(floorZones.id, zone!.id));
+  });
+
+  it("does not count a part still joined", async () => {
+    const [zone] = await suite.db
+      .insert(floorZones)
+      .values({ locationId, name: "Counter" })
+      .returning();
+    const tables = await suite.db
+      .insert(diningTables)
+      .values(
+        ["Long table", "Counter 3", "Counter 4", "Counter 5"].map((label) => ({
+          locationId,
+          zoneId: zone!.id,
+          label,
+        })),
+      )
+      .returning();
+    await suite.db.insert(floorTodayTables).values(tables.map((t) => ({ tableId: t.id })));
+    const rows = await suite.db
+      .insert(floorResetTables)
+      .values(
+        tables.map((t, i) => ({
+          zoneId: zone!.id,
+          tableId: t.id,
+          label: t.label,
+          seats: [10, 2, 6, 4][i]!,
+        })),
+      )
+      .returning();
+    await suite.db
+      .insert(floorResetTableParts)
+      .values(
+        rows.slice(1).map((row) => ({ joinedResetTableId: rows[0]!.id, partResetTableId: row.id })),
+      );
+    const response = await get(mountApp());
+    expect(response.status).toBe(200);
+    expect(((await response.json()) as OverviewBody).openTables).toEqual({ open: 1, total: 3 });
+    await suite.db.delete(floorResetTableParts);
+    await suite.db.delete(floorResetTables).where(eq(floorResetTables.zoneId, zone!.id));
+    for (const t of tables) {
+      await suite.db.delete(floorTodayTables).where(eq(floorTodayTables.tableId, t.id));
+      await suite.db.delete(diningTables).where(eq(diningTables.id, t.id));
+    }
     await suite.db.delete(floorZones).where(eq(floorZones.id, zone!.id));
   });
 

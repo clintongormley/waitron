@@ -14,6 +14,8 @@ import {
   billPayments,
   billPaymentRefunds,
   diningTables,
+  floorResetTableParts,
+  floorResetTables,
   parties,
   kitchenStations,
   workingOrderLines,
@@ -1100,6 +1102,47 @@ describe("departmental tab transfers", () => {
     await expect(accept(v, 0, v.bz, table!.id)).rejects.toMatchObject({
       code: "department_transfer.destination_invalid",
       params: { field: "tableId" },
+    });
+    expect(
+      await suite.db
+        .select()
+        .from(departmentTransferRequests)
+        .where(eq(departmentTransferRequests.id, v.request.id)),
+    ).toEqual([v.request]);
+  });
+
+  it("refuses a destination table still part of a joined table", async () => {
+    const v = await pending();
+    const tables = await suite.db
+      .insert(diningTables)
+      .values(
+        ["Long table", "Counter 3", "Counter 4", "Counter 5"].map((label) => ({
+          locationId: v.cfg.locationId,
+          zoneId: v.bz,
+          label: `${label} ${randomUUID()}`,
+        })),
+      )
+      .returning();
+    await suite.db.insert(floorTodayTables).values(tables.map((t) => ({ tableId: t.id })));
+    const rows = await suite.db
+      .insert(floorResetTables)
+      .values(
+        tables.map((t, i) => ({
+          zoneId: v.bz,
+          tableId: t.id,
+          label: t.label,
+          seats: [10, 2, 6, 4][i]!,
+        })),
+      )
+      .returning();
+    await suite.db
+      .insert(floorResetTableParts)
+      .values(
+        rows.slice(1).map((row) => ({ joinedResetTableId: rows[0]!.id, partResetTableId: row.id })),
+      );
+    await expect(accept(v, 0, v.bz, tables[2]!.id)).rejects.toMatchObject({
+      code: "table.in_joined_table",
+      params: { tableId: tables[2]!.id, field: "tableId" },
     });
     expect(
       await suite.db

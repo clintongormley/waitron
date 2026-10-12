@@ -1,4 +1,4 @@
-import { tableInService } from "@waitron/db";
+import { stillJoinedPart, tableInService } from "@waitron/db";
 // Registers `management.request_invalid`, which the query screens below throw.
 import "./errors.js";
 import type { Hono } from "hono";
@@ -154,6 +154,7 @@ async function countOpenTables(
     from dining_tables dt
     join nodes n on n.location_id = dt.location_id
     where n.id = ${nodeId} and ${tableInService(sql`dt.id`)}
+      and not ${stillJoinedPart(sql`dt.id`)}
   `);
   return { open: Number(rows[0]!.open), total: Number(rows[0]!.total) };
 }
