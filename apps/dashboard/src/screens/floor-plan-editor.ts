@@ -18,7 +18,9 @@ import {
 } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
+import "@waitron/ui/src/components/wt-icon.js";
 import "@waitron/ui/src/components/wt-floor-plan-canvas.js";
+import "@waitron/ui/src/components/wt-modal.js";
 import "@waitron/ui/src/components/wt-sheet.js";
 import "./floor-plan-add-join.js";
 import "./floor-plan-add-tables.js";
@@ -72,7 +74,7 @@ interface StagedPlan {
 
 const HOME = "/manage";
 
-/** Below this width of the page itself, the side panel becomes a bottom sheet. */
+/** Below this width, measured inside the editor's modal, the side panel becomes a bottom sheet. */
 const NARROW_PX = 600;
 
 /** The editor's one message, remembering whether a read or an action set it (CLAUDE.md §3). */
@@ -191,6 +193,7 @@ export class FloorPlanEditor extends LitElement {
         flex-wrap: wrap;
         align-items: flex-end;
         gap: var(--wt-space-2) var(--wt-space-4);
+        margin-block-end: var(--wt-space-4);
       }
       h1 {
         margin: 0;
@@ -205,13 +208,20 @@ export class FloorPlanEditor extends LitElement {
       header.narrow wt-button[data-action="load-newer"] {
         flex-basis: 100%;
       }
+      .history {
+        display: inline-flex;
+        gap: var(--wt-space-2);
+      }
+      header:not(.narrow) a.close {
+        margin-inline-start: var(--wt-space-4);
+      }
       /* Room on a phone for fonts wider than macOS's system font. */
-      header.narrow wt-button::part(button),
+      header.narrow wt-button:not([shape="round"])::part(button),
       header.narrow a.close {
-        padding-inline: var(--wt-space-3);
+        padding-inline: var(--wt-space-2);
       }
       .note {
-        margin: var(--wt-space-2) 0 var(--wt-space-4);
+        margin: var(--wt-space-1) 0 0;
         color: var(--wt-color-text-muted);
         font-size: var(--wt-font-size-sm);
       }
@@ -219,25 +229,55 @@ export class FloorPlanEditor extends LitElement {
         margin: var(--wt-space-4) 0;
         color: var(--wt-color-danger);
       }
+      /* Fills the modal's body; only the canvas, the side column and the sheet's body scroll. */
+      .frame {
+        display: flex;
+        flex-direction: column;
+        height: 100%;
+      }
+      .frame > * {
+        flex: none;
+      }
+      /* The shell's toast positions itself against this strip. */
+      .notices {
+        position: relative;
+      }
+      .frame > .layout {
+        flex: 1 1 0;
+        min-height: 0;
+      }
       wt-floor-plan-canvas {
-        height: 70vh;
+        height: 100%;
       }
       .layout {
         display: grid;
         grid-template-columns:
           minmax(0, 1fr)
           minmax(calc(var(--wt-space-6) * 6), calc(var(--wt-space-6) * 9));
+        grid-template-rows: minmax(0, 1fr);
         gap: var(--wt-space-4);
-        align-items: start;
+      }
+      .side {
+        min-height: 0;
+        overflow-y: auto;
+        overscroll-behavior: contain;
       }
       .layout.narrow {
         display: block;
+        position: relative;
+        container-type: size;
+      }
+      /* Inside the modal the canvas box is shorter than the window, so the sheet's own 60dvh
+         ceiling would leave too little canvas above it to lift a table into. */
+      .layout.narrow wt-sheet::part(body) {
+        max-height: min(60dvh, calc(60cqh - var(--wt-tap-min)));
       }
       .width-probe {
         height: 0;
       }
       wt-sheet {
-        position: sticky;
+        position: absolute;
+        inset-inline: 0;
         bottom: 0;
       }
       /* The same box as a wt-button variant="secondary". */
@@ -332,14 +372,19 @@ export class FloorPlanEditor extends LitElement {
   /** The sheet grows and shrinks with its panels after it is drawn, so its height is watched. */
   readonly #sheetResize = new ResizeObserver(() => void this.#reveal());
   #watchedSheet: WtSheet | null = null;
-  /** Set by a new selection or the sheet opening, cleared by the user's press, wheel or page
-   *  scroll, so a later change in the sheet's height never moves a canvas the user has panned. */
+  /** Set by a new selection or the sheet opening, cleared by the user's press or wheel, so a later
+   *  change in the sheet's height never moves a canvas the user has panned. */
   #revealing = false;
   /** Set when a check or refusal points at a table, which may already be selected, with the sheet
    *  already open: what it draws beside the table (a reason) still has to be lifted. */
   #flagged = false;
   readonly #userScrolls = (): void => {
     this.#revealing = false;
+  };
+  /** Escape takes Cancel's path, which the shell guards; the modal stays until the route changes. */
+  readonly #leave = async (): Promise<boolean> => {
+    this.renderRoot.querySelector<HTMLElement>("a.close")?.click();
+    return false;
   };
 
   constructor() {
@@ -376,7 +421,6 @@ export class FloorPlanEditor extends LitElement {
         .catch(() => {});
     window.addEventListener("pointerdown", this.#userScrolls, { capture: true, passive: true });
     window.addEventListener("wheel", this.#userScrolls, { capture: true, passive: true });
-    window.addEventListener("scroll", this.#userScrolls, { passive: true });
     void this.updateComplete.then(() => {
       if (this.isConnected) this.#resize.observe(this.renderRoot.querySelector(".width-probe")!);
     });
@@ -390,7 +434,6 @@ export class FloorPlanEditor extends LitElement {
     this.#watchedSheet = null;
     window.removeEventListener("pointerdown", this.#userScrolls, { capture: true });
     window.removeEventListener("wheel", this.#userScrolls, { capture: true });
-    window.removeEventListener("scroll", this.#userScrolls);
     this.#disposeScope();
     super.disconnectedCallback();
   }
@@ -782,7 +825,12 @@ export class FloorPlanEditor extends LitElement {
     } catch (error) {
       if (this.isConnected && request === this.#request) {
         this.loadingNewer = false;
-        this.#showReadFailure(error);
+        if (replace) {
+          const code = codeOf(error);
+          this.message = actionMessage(() => codeMessage(code));
+        } else {
+          this.#showReadFailure(error);
+        }
       }
       return;
     }
@@ -1009,72 +1057,90 @@ export class FloorPlanEditor extends LitElement {
   override render() {
     const save = saveActionState(this.#scope);
     const history = this.#history;
+    // On a phone an empty cancel slot would still take a gap the row lacks room for.
+    const historySlot = this.narrow ? "cancel" : "secondary";
     return html`
-      <div class="width-probe"></div>
-      <header class=${this.narrow ? "narrow" : ""}>
-        <h1>${this.zoneName ?? t("floor_plan_editor.title")}</h1>
-        <wt-form-actions .error=${this.message === null ? "" : this.message.text()}>
-          <a slot="cancel" class="close" data-action="close" href=${closeHref(this.back)}
-            >${t("action.close")}</a
-          >
-          ${
-            this.outOfDate && !this.saving
-              ? html`<wt-button
-                  slot="secondary"
-                  data-action="load-newer"
+      <wt-modal
+        size="full"
+        .open=${true}
+        .beforeClose=${this.#leave}
+        aria-label=${this.zoneName ?? t("floor_plan_editor.title")}
+      >
+        <div class="frame">
+          <div class="notices"><slot name="notices"></slot></div>
+          <div class="width-probe"></div>
+          <header class=${this.narrow ? "narrow" : ""}>
+            <div>
+              <h1>${this.zoneName ?? t("floor_plan_editor.title")}</h1>
+              ${
+                this.plan === null
+                  ? nothing
+                  : html`<p class="note" data-note>
+                      ${t(this.revision === 0 ? "floor_plan_editor.first_note" : "floor_plan_editor.note")}
+                    </p>`
+              }
+            </div>
+            <wt-form-actions .error=${this.message === null ? "" : this.message.text()}>
+              ${
+                this.outOfDate && !this.saving
+                  ? html`<wt-button
+                      slot="secondary"
+                      data-action="load-newer"
+                      variant="secondary"
+                      @click=${this.#loadNewer}
+                      >${t("floor_plan_editor.reload")}</wt-button
+                    >`
+                  : nothing
+              }
+              <span slot=${historySlot} class="history">
+                <wt-button
+                  data-action="undo"
+                  shape="round"
                   variant="secondary"
-                  @click=${this.#loadNewer}
-                  >${t("floor_plan_editor.reload")}</wt-button
-                >`
-              : nothing
+                  aria-label=${t("floor_plan_editor.undo")}
+                  ?disabled=${!history?.canUndo}
+                  @click=${() => this.#step(history?.undo())}
+                  ><wt-icon name="undo"></wt-icon
+                ></wt-button>
+                <wt-button
+                  data-action="redo"
+                  shape="round"
+                  variant="secondary"
+                  aria-label=${t("floor_plan_editor.redo")}
+                  ?disabled=${!history?.canRedo}
+                  @click=${() => this.#step(history?.redo())}
+                  ><wt-icon name="redo"></wt-icon
+                ></wt-button>
+              </span>
+              <a slot="secondary" class="close" data-action="close" href=${closeHref(this.back)}
+                >${t("action.cancel")}</a
+              >
+              <wt-button
+                data-action="save"
+                variant=${save.variant}
+                ?disabled=${
+                  save.unchanged ||
+                  this.saving ||
+                  this.loadingNewer ||
+                  this.mark?.from === "check" ||
+                  this.typedMarks.length > 0
+                }
+                @click=${this.#save}
+                >${t("action.save")}</wt-button
+              >
+            </wt-form-actions>
+          </header>
+          ${
+            this.loadError !== null
+              ? html`<p class="load-error" role="alert" data-load-error>
+                  ${codeMessage(this.loadError)}
+                </p>`
+              : this.draft === null
+                ? nothing
+                : this.#body(this.draft)
           }
-          <wt-button
-            slot="secondary"
-            data-action="undo"
-            variant="secondary"
-            ?disabled=${!history?.canUndo}
-            @click=${() => this.#step(history?.undo())}
-            >${t("floor_plan_editor.undo")}</wt-button
-          >
-          <wt-button
-            slot="secondary"
-            data-action="redo"
-            variant="secondary"
-            ?disabled=${!history?.canRedo}
-            @click=${() => this.#step(history?.redo())}
-            >${t("floor_plan_editor.redo")}</wt-button
-          >
-          <wt-button
-            data-action="save"
-            variant=${save.variant}
-            ?disabled=${
-              save.unchanged ||
-              this.saving ||
-              this.loadingNewer ||
-              this.mark?.from === "check" ||
-              this.typedMarks.length > 0
-            }
-            @click=${this.#save}
-            >${t("action.save")}</wt-button
-          >
-        </wt-form-actions>
-      </header>
-      ${
-        this.plan === null
-          ? nothing
-          : html`<p class="note" data-note>
-              ${t(this.revision === 0 ? "floor_plan_editor.first_note" : "floor_plan_editor.note")}
-            </p>`
-      }
-      ${
-        this.loadError !== null
-          ? html`<p class="load-error" role="alert" data-load-error>
-              ${codeMessage(this.loadError)}
-            </p>`
-          : this.draft === null
-            ? nothing
-            : this.#body(this.draft)
-      }
+        </div>
+      </wt-modal>
     `;
   }
 }

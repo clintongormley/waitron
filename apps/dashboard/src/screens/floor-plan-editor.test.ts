@@ -7,6 +7,7 @@ import "./floor-plan-editor.js";
 import type { FloorPlanEditor } from "./floor-plan-editor.js";
 import type { DashboardApi, FloorPlan } from "../api/client.js";
 import { currentLocale, setLocale } from "../i18n/t.js";
+import { DASHBOARD_ICONS } from "../icons.js";
 import { addTables, draftFromPlan, patchTable, type FloorPlanDraft } from "./floor-plan-draft.js";
 
 const originalUrl = location.href;
@@ -112,27 +113,102 @@ it("heads a zone the zone list lacks as Floor plan", async () => {
   expect(heading(el)).toBe("Floor plan");
 });
 
+it("draws the editor in an open full-window modal named after the zone", async () => {
+  await viewport(1280, 800);
+  const el = await open();
+  const modal = el.shadowRoot!.querySelector<WtModal>("wt-modal[size=full]")!;
+  expect(modal).not.toBeNull();
+  expect(modal.open).toBe(true);
+  expect(modal.getAttribute("aria-label")).toBe("Terrace");
+  for (const part of ["header", "wt-floor-plan-canvas", ".side"])
+    expect(modal.contains(el.shadowRoot!.querySelector(part))).toBe(true);
+});
+
+it("names the modal Floor plan for a zone the zone list lacks", async () => {
+  const el = await open(stubApi({ listZones: vi.fn().mockResolvedValue([]) }));
+  const modal = el.shadowRoot!.querySelector<WtModal>("wt-modal[size=full]")!;
+  expect(modal.getAttribute("aria-label")).toBe("Floor plan");
+});
+
+it("keeps a load failure and its Cancel inside the modal", async () => {
+  const el = await open(
+    stubApi({
+      getFloorPlan: vi.fn().mockRejectedValue({ code: "zone.not_found" }),
+    }),
+  );
+  const modal = el.shadowRoot!.querySelector<WtModal>("wt-modal[size=full]")!;
+  expect(modal.open).toBe(true);
+  expect(modal.contains(el.shadowRoot!.querySelector("[data-load-error]"))).toBe(true);
+  expect(modal.contains(el.shadowRoot!.querySelector("[data-action=close]"))).toBe(true);
+});
+
 it("draws placed tables and leaves unplaced ones off the canvas", async () => {
   const el = await open();
   expect(canvas(el).tables.map((t) => t.key)).toEqual(["m1"]);
   expect(canvas(el).tables[0]).toEqual({ key: "m1", label: "T1", fixed: false, placement });
 });
 
-it("says what a first save does, and when a saved plan's changes reach the till", async () => {
-  const first = await open(
-    stubApi({
-      getFloorPlan: vi.fn().mockResolvedValue(terrace(0)) as DashboardApi["getFloorPlan"],
-    }),
-  );
-  expect(first.shadowRoot!.querySelector("[data-note]")!.textContent!.trim()).toBe(
-    "Your first save goes live now; later changes tomorrow, or sooner with Reset to saved plan on the till.",
-  );
-  cleanupWidgets();
-  const saved = await open();
-  expect(saved.shadowRoot!.querySelector("[data-note]")!.textContent!.trim()).toBe(
-    "Your changes go live tomorrow, or sooner with Reset to saved plan on the till.",
-  );
-});
+it.each([
+  [
+    "en-GB",
+    "Your first save goes live now; later changes tomorrow, unless you “Reset to saved plan” on the till.",
+    "Changes will go live tomorrow, unless you “Reset to saved plan” on the till.",
+  ],
+  [
+    "es-ES",
+    "Tu primer guardado se aplica ya; los cambios posteriores, mañana, salvo que uses «Volver al plano guardado» en el TPV.",
+    "Los cambios se aplicarán mañana, salvo que uses «Volver al plano guardado» en el TPV.",
+  ],
+])(
+  "says under the zone's name what a first save does, and when a saved plan's changes reach the till (%s)",
+  async (locale, firstNote, laterNote) => {
+    setLocale(locale);
+    const note = (el: FloorPlanEditor) => {
+      const header = el.shadowRoot!.querySelector("header")!;
+      const p = header.querySelector("[data-note]")!;
+      expect(header.querySelector("h1")!.compareDocumentPosition(p)).toBe(
+        Node.DOCUMENT_POSITION_FOLLOWING,
+      );
+      expect(p.compareDocumentPosition(header.querySelector("wt-form-actions")!)).toBe(
+        Node.DOCUMENT_POSITION_FOLLOWING,
+      );
+      return p.textContent!.trim();
+    };
+    const first = await open(
+      stubApi({
+        getFloorPlan: vi.fn().mockResolvedValue(terrace(0)) as DashboardApi["getFloorPlan"],
+      }),
+    );
+    expect(note(first)).toBe(firstNote);
+    cleanupWidgets();
+    const saved = await open();
+    expect(note(saved)).toBe(laterNote);
+  },
+);
+
+it.each([
+  ["en-GB", "Undo", "Redo", "Cancel"],
+  ["es-ES", "Deshacer", "Rehacer", "Cancelar"],
+])(
+  "draws Undo and Redo as round icon buttons named by their labels, and Cancel as a link (%s)",
+  async (locale, undo, redo, cancel) => {
+    setLocale(locale);
+    const el = await open();
+    for (const [action, name] of [
+      ["undo", undo],
+      ["redo", redo],
+    ] as const) {
+      const b = button(el, action);
+      expect(b.shape).toBe("round");
+      expect(b.variant).toBe("secondary");
+      expect(b.getAttribute("aria-label")).toBe(name);
+      expect(b.textContent!.trim()).toBe("");
+      expect(b.querySelector(`wt-icon[name=${action}]`)).not.toBeNull();
+      expect(DASHBOARD_ICONS[action]).toMatch(/^M/);
+    }
+    expect(el.shadowRoot!.querySelector("a[data-action=close]")!.textContent!.trim()).toBe(cancel);
+  },
+);
 
 it("a move from the canvas changes the draft and wakes Save", async () => {
   const el = await open();
@@ -288,7 +364,7 @@ it("a load failure shows its sentence and no canvas", async () => {
   expect(el.shadowRoot!.querySelector("a[data-action=close]")).not.toBeNull();
 });
 
-it("Close links to the way back, or to /manage when it is not a dashboard path", async () => {
+it("Cancel links to the way back, or to /manage when it is not a dashboard path", async () => {
   const close = (el: FloorPlanEditor) =>
     el.shadowRoot!.querySelector("a[data-action=close]")!.getAttribute("href");
   const back = await open(stubApi(), "/manage/floor-plan/zone/z1?back=%2Fmanage%2Foverview");
@@ -460,6 +536,47 @@ it("tells the panel when it sits in the sheet", async () => {
   ).toBe(true);
 });
 
+const modalBody = (el: FloorPlanEditor) =>
+  el.shadowRoot!.querySelector<WtModal>("wt-modal[size=full]")!.shadowRoot!.querySelector(".body")!;
+
+it("at 1280 px fills the modal's height with the canvas and a side column as tall", async () => {
+  await viewport(1280, 800);
+  const el = await open();
+  await expect.poll(() => el.shadowRoot!.querySelector(".side")).not.toBeNull();
+  const space = parseFloat(getComputedStyle(el).getPropertyValue("--wt-space-5"));
+  const body = modalBody(el).getBoundingClientRect();
+  const box = canvas(el).getBoundingClientRect();
+  const side = el.shadowRoot!.querySelector(".side")!.getBoundingClientRect();
+  expect(body.bottom - box.bottom).toBeLessThanOrEqual(space + 0.5);
+  expect(Math.abs(side.height - box.height)).toBeLessThanOrEqual(0.5);
+});
+
+it("decides the sheet by the modal's width, not the width of the page around the editor", async () => {
+  await viewport(1280, 800);
+  const el = await open();
+  el.parentElement!.style.width = "500px";
+  await frames(3);
+  await el.updateComplete;
+  expect(sheet(el)).toBeNull();
+  expect(el.shadowRoot!.querySelector(".side")).not.toBeNull();
+});
+
+it("at 390 px docks the sheet over the bottom of the canvas, and nothing else scrolls", async () => {
+  await viewport(390, 844);
+  const el = await open(lowApi());
+  await expect.poll(() => sheet(el)).not.toBeNull();
+  const body = modalBody(el);
+  for (const step of ["collapsed", "expanded"]) {
+    if (step === "expanded") await expandSheet(el);
+    await frames(2);
+    const box = canvas(el).getBoundingClientRect();
+    const docked = sheet(el)!.getBoundingClientRect();
+    expect(Math.abs(docked.bottom - box.bottom), step).toBeLessThanOrEqual(0.5);
+    expect(docked.top, step).toBeGreaterThan(box.top);
+    expect(body.scrollHeight, step).toBe(body.clientHeight);
+  }
+});
+
 /** Terrace with T1 and T2 low on the canvas, where an expanded sheet at 390 × 844 covers them. */
 const lowApi = () =>
   stubApi({
@@ -580,25 +697,6 @@ it("at 390 px leaves the user's own pan alone when the sheet grows after it", as
   expect(sheet(el)!.getBoundingClientRect().height).toBeGreaterThan(height);
   expect(view.scrollTop).toBe(0);
   expect(window.scrollY).toBe(pageY);
-});
-
-it("at 390 px leaves the canvas alone when the sheet grows after the user scrolls the page", async () => {
-  await viewport(390, 844);
-  const el = await open(lowApi());
-  await expect.poll(() => sheet(el)).not.toBeNull();
-  await expandSheet(el);
-  await fromCanvas(el, "wt-table-select", { key: "m1" });
-  await expect.poll(() => aboveSheet(el, "m1")).toBe(true);
-  const view = canvas(el).shadowRoot!.querySelector(".viewport")!;
-  const panned = view.scrollTop;
-  window.scrollTo(0, 200);
-  await frames(2);
-  sheet(el)!.style.paddingTop = "100px";
-  await frames(3);
-  await el.updateComplete;
-  await canvas(el).updateComplete;
-  expect(aboveSheet(el, "m1")).toBe(false);
-  expect(view.scrollTop).toBe(panned);
 });
 
 it("leaves the canvas where it is at 1280 px", async () => {

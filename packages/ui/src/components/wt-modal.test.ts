@@ -231,6 +231,23 @@ test.each([
   else expect(rect.height).toBeCloseTo(852, 0);
 });
 
+test.each([
+  [1280, 800, { left: 24, top: 24, right: 1256, bottom: 776 }],
+  [390, 844, { left: 4, top: 4, right: 386, bottom: 840 }],
+])(
+  "fills a %i × %i viewport less its margins on every side when full",
+  async (width, height, expected) => {
+    await page.viewport(width, height);
+    try {
+      const modal = await openModal(undefined, 'size="full"');
+      const { left, top, right, bottom } = dialogOf(modal).getBoundingClientRect();
+      expect({ left, top, right, bottom }).toEqual(expected);
+    } finally {
+      await page.viewport(1280, 900);
+    }
+  },
+);
+
 // On a phone the side margin is --wt-space-1 (4px), so every size is the viewport less 8px.
 test.each([
   [390, 844, 382],
@@ -238,7 +255,7 @@ test.each([
 ])("fills a %i × %i phone less its margins at every size", async (width, height, expected) => {
   await page.viewport(width, height);
   try {
-    for (const size of ['size="compact"', 'size="standard"', 'size="wide"', ""]) {
+    for (const size of ['size="compact"', 'size="standard"', 'size="wide"', 'size="full"', ""]) {
       const modal = await openModal(undefined, size);
       const rect = dialogOf(modal).getBoundingClientRect();
       expect(rect.width, size || "no size").toBeCloseTo(expected, 0);
@@ -294,7 +311,7 @@ test.each([
   expect(dialogOf(modal).getBoundingClientRect().width).toBeCloseTo(350, 0);
 });
 
-test.each(["compact", "standard"])(
+test.each(["compact", "standard", "full"])(
   "keeps a wide and an unsized modal opened inside a %s modal at the wide width",
   async (size) => {
     await page.viewport(1280, 900);

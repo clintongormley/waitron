@@ -4542,7 +4542,7 @@ it("keeps the desktop sidebar in the page beside the content", async () => {
 });
 
 describe("the floor plan editor inside the real page", () => {
-  const floorPlanApi = (locale: string) =>
+  const floorPlanApi = (locale: string, overrides: Record<string, unknown> = {}) =>
     stubApi({
       getMe: vi.fn().mockResolvedValue({
         ...meResponse,
@@ -4570,17 +4570,44 @@ describe("the floor plan editor inside the real page", () => {
         .fn()
         .mockResolvedValue([{ id: "z1", name: "Terrace", displayOrder: 0, active: true }]),
       listTables: vi.fn().mockResolvedValue([]),
+      ...overrides,
     });
 
-  const openEditor = async (locale: string, width: number) => {
+  const openEditor = async (
+    locale: string,
+    width: number,
+    overrides: Record<string, unknown> = {},
+  ) => {
     history.replaceState(null, "", "/manage/floor-plan/zone/z1");
-    const mounted = await mountInRealPage(floorPlanApi(locale), width, 844);
+    const mounted = await mountInRealPage(floorPlanApi(locale, overrides), width, 844);
     const editor = mounted.el.shadowRoot!.querySelector<HTMLElement>(
       "dashboard-floor-plan-editor",
     )!;
     await expect.poll(() => editor.shadowRoot?.querySelector("[data-action=save]")).not.toBeNull();
     return { ...mounted, editor };
   };
+
+  const dialogBox = (editor: HTMLElement) =>
+    editor
+      .shadowRoot!.querySelector("wt-modal")!
+      .shadowRoot!.querySelector("dialog")!
+      .getBoundingClientRect();
+
+  it("covers the banner and the sidebar with the editor", async () => {
+    const { el, editor, unmount } = await openEditor("en-GB", 1280);
+    try {
+      for (const selector of ["[data-test=brand-banner]", ".sidebar"]) {
+        const box = el.shadowRoot!.querySelector(selector)!.getBoundingClientRect();
+        await expect
+          .poll(() =>
+            el.shadowRoot!.elementFromPoint(box.left + box.width / 2, box.top + box.height / 2),
+          )
+          .toBe(editor);
+      }
+    } finally {
+      await unmount();
+    }
+  });
 
   const headerTops = (editor: HTMLElement) =>
     ["[data-action=close]", "[data-action=undo]", "[data-action=redo]", "[data-action=save]"].map(
@@ -4594,9 +4621,9 @@ describe("the floor plan editor inside the real page", () => {
     ["es-ES", "the system font", ""],
     ["es-ES", "a wider font", 'Verdana, "DejaVu Sans"'],
   ])(
-    "keeps Close, Undo, Redo and Save on one row at 390 px, 4 px inside the main column's clipping edge (%s, %s)",
+    "keeps Undo, Redo, Cancel and Save on one row at 390 px, in a modal 4 px from the window's edges (%s, %s)",
     async (locale, _name, font) => {
-      const { el, editor, unmount } = await openEditor(locale, 390);
+      const { editor, unmount } = await openEditor(locale, 390);
       try {
         await expect.poll(() => editor.shadowRoot!.querySelector("wt-sheet")).not.toBeNull();
         if (font !== "") {
@@ -4604,10 +4631,7 @@ describe("the floor plan editor inside the real page", () => {
           await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
         }
         expect(new Set(headerTops(editor)).size).toBe(1);
-        const main = el.shadowRoot!.querySelector(".main")!.getBoundingClientRect();
-        expect(main.left).toBe(0);
-        expect(main.right).toBe(window.innerWidth);
-        const box = editor.getBoundingClientRect();
+        const box = dialogBox(editor);
         expect(box.left).toBe(4);
         expect(box.right).toBe(window.innerWidth - 4);
         expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(window.innerWidth);
@@ -4617,17 +4641,129 @@ describe("the floor plan editor inside the real page", () => {
     },
   );
 
-  it("keeps the page's usual inset around the editor at desktop width", async () => {
+  it("covers the window less 24 px at desktop width", async () => {
     const { el, editor, unmount } = await openEditor("en-GB", 1280);
     try {
-      const main = el.shadowRoot!.querySelector(".main")!.getBoundingClientRect();
-      const box = editor.getBoundingClientRect();
-      expect(box.left).toBe(main.left + 16);
-      expect(box.right).toBe(main.right - 16);
+      const box = dialogBox(editor);
+      expect(box.left).toBe(24);
+      expect(box.right).toBe(window.innerWidth - 24);
+      expect(box.top).toBe(24);
+      expect(box.bottom).toBe(window.innerHeight - 24);
       expect(window.innerWidth - el.getBoundingClientRect().right).toBe(24);
     } finally {
       await unmount();
     }
+  });
+
+  describe("the shell's alert toast and update bar", () => {
+    const alert = (id: string): AlertView => ({
+      key: `incident:${id}`,
+      kind: "event",
+      code: "payment.offline_forward_declined",
+      params: { amount: "12.50", paymentRef: `pi_${id}` },
+      severity: "warning",
+      since: "2026-09-14T12:00:00.000Z",
+      area: "payments",
+    });
+    const toast = (el: DashboardApp) =>
+      el.shadowRoot!.querySelector<WtToast>("[data-test=alert-toast]")!;
+    const bar = (el: DashboardApp) =>
+      el.shadowRoot!.querySelector<HTMLElement>("wt-banner[data-test=update-bar]")!;
+    const centreOf = (element: Element) => {
+      const box = element.getBoundingClientRect();
+      return [box.left + box.width / 2, box.top + box.height / 2] as const;
+    };
+
+    /** Opens the editor, then raises one alert so the toast opens, and reports another build so the
+     * update bar shows. */
+    const openWithNotices = async (width: number) => {
+      const liveData = new LiveData();
+      const listAlerts = vi
+        .fn()
+        .mockResolvedValueOnce({ visible: true, alerts: [alert("1")] })
+        .mockResolvedValue({ visible: true, alerts: [alert("1"), alert("2")] });
+      const mounted = await openEditor("en-GB", width, { listAlerts, liveData });
+      const reload = vi.fn();
+      mounted.el.reload = reload;
+      await vi.waitFor(() => expect(listAlerts).toHaveBeenCalled());
+      liveData.invalidate([{ type: "incidents", id: "new" }]);
+      window.dispatchEvent(new Event(BUILD_CHANGED_EVENT));
+      await vi.waitFor(() => expect(toast(mounted.el).open).toBe(true));
+      await expect.poll(() => bar(mounted.el)).not.toBeNull();
+      await toast(mounted.el).updateComplete;
+      await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+      return { ...mounted, reload };
+    };
+
+    it.each([1280, 390])(
+      "draws both above the editor's modal at %i px, inside the modal",
+      async (width) => {
+        const { el, editor, unmount } = await openWithNotices(width);
+        try {
+          const [toastX, toastY] = centreOf(toast(el).shadowRoot!.querySelector(".toast")!);
+          expect(el.shadowRoot!.elementFromPoint(toastX, toastY)).toBe(toast(el));
+          const [barX, barY] = centreOf(bar(el));
+          expect(el.shadowRoot!.elementFromPoint(barX, barY)).toBe(bar(el));
+          const dialog = dialogBox(editor);
+          for (const notice of [toast(el), bar(el)]) {
+            const box = notice.getBoundingClientRect();
+            expect(box.left).toBeGreaterThanOrEqual(dialog.left);
+            expect(box.right).toBeLessThanOrEqual(dialog.right);
+            expect(box.top).toBeGreaterThanOrEqual(dialog.top);
+            expect(notice.closest(".banner-row")).toBeNull();
+          }
+        } finally {
+          await unmount();
+        }
+      },
+    );
+
+    it("reloads from the update bar's Reload, pressed with a real pointer", async () => {
+      const { el, reload, unmount } = await openWithNotices(1280);
+      try {
+        await userEvent.click(
+          bar(el).shadowRoot!.querySelector("wt-button")!.shadowRoot!.querySelector("button")!,
+        );
+        expect(reload).toHaveBeenCalledOnce();
+      } finally {
+        await unmount();
+      }
+    });
+
+    it("closes the toast from its close button, pressed with a real pointer", async () => {
+      const { el, unmount } = await openWithNotices(1280);
+      try {
+        await userEvent.click(toast(el).shadowRoot!.querySelector<HTMLButtonElement>(".close")!);
+        await expect.poll(() => toast(el).open).toBe(false);
+      } finally {
+        await unmount();
+      }
+    });
+
+    it("lets the toast close itself once its time is up", async () => {
+      const { el, unmount } = await openWithNotices(1280);
+      try {
+        toast(el).duration = 50;
+        await expect.poll(() => toast(el).open).toBe(false);
+      } finally {
+        await unmount();
+      }
+    });
+
+    it("keeps both in the banner row on another screen", async () => {
+      history.replaceState(null, "", "/manage/overview");
+      const { el, unmount } = await mountInRealPage(floorPlanApi("en-GB"), 1280, 844);
+      try {
+        window.dispatchEvent(new Event(BUILD_CHANGED_EVENT));
+        await expect.poll(() => bar(el)).not.toBeNull();
+        expect(
+          el.shadowRoot!.querySelector(".banner-row > [data-test=alert-toast]"),
+        ).not.toBeNull();
+        expect(el.shadowRoot!.querySelector(".banner-row > [data-test=update-bar]")).not.toBeNull();
+      } finally {
+        await unmount();
+      }
+    });
   });
 
   it("keeps another screen's padding at 390 px", async () => {

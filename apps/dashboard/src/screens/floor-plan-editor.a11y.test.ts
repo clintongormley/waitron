@@ -143,6 +143,35 @@ describe.each(["light", "dark"] as const)("floor-plan-editor a11y (%s theme)", (
     await expectNoA11yViolations(host);
   });
 
+  it("shows a failed Reload accessibly", async () => {
+    const { el, host } = await open(
+      stubApi(
+        vi.fn().mockResolvedValueOnce(plan).mockRejectedValueOnce({ code: "connection.failed" }),
+        vi.fn().mockRejectedValue({ code: "floor_plan.out_of_date", params: { zoneId: "z1" } }),
+      ),
+      theme,
+    );
+    el.shadowRoot!.querySelector("wt-floor-plan-canvas")!.dispatchEvent(
+      new CustomEvent("wt-table-move", {
+        detail: { key: "m1", x: 5, y: 4 },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+    await el.updateComplete;
+    el.shadowRoot!.querySelector<HTMLElement>("wt-button[data-action=save]")!.click();
+    await expect
+      .poll(() => el.shadowRoot!.querySelector("wt-button[data-action=load-newer]"))
+      .not.toBeNull();
+    const failed = el.shadowRoot!.querySelector("wt-form-actions")!.error;
+    el.shadowRoot!.querySelector<HTMLElement>("wt-button[data-action=load-newer]")!.click();
+    await expect
+      .poll(() => el.shadowRoot!.querySelector("wt-form-actions")!.error)
+      .not.toBe(failed);
+    expect(el.shadowRoot!.querySelector("wt-button[data-action=load-newer]")).not.toBeNull();
+    await expectNoA11yViolations(host);
+  });
+
   it("shows the tables list accessibly", async () => {
     const before = [window.innerWidth, window.innerHeight] as const;
     await page.viewport(1280, 800);

@@ -642,18 +642,10 @@ export class DashboardApp extends LitElement {
           padding-inline-start: 0;
           border-inline-start: 0;
         }
-        /* The closed drawer is moved out past .layout's left edge; where the page keeps its padding,
-           its last strip would show there. */
+        /* The closed drawer is moved out past .layout's left edge, which is not the window's: the
+           page's own padding would show its last strip. */
         .layout {
           overflow: clip;
-        }
-        /* Reaches over index.html's body padding to give the floor plan editor's header room on a
-           phone (one row at 390 px). The 4px stays inside .main, which clips: a focus ring needs it. */
-        .shell.edge {
-          margin-inline: calc(-1 * var(--wt-space-5));
-        }
-        .shell.edge .body {
-          padding-inline: var(--wt-space-1);
         }
         .alert-toast {
           inset-inline: var(--wt-space-2);
@@ -1380,30 +1372,14 @@ export class DashboardApp extends LitElement {
     return html`
       ${this.leaveConfirmation()}
       <div
-        class=${classMap({ shell: true, edge: this.screen === "floor-plan" })}
+        class="shell"
         @focusin=${(e: FocusEvent) => this.#onShellFocusIn(e)}
         @keydown=${(e: KeyboardEvent) => this.#onLayoutKeydown(e)}
         @wt-locale-selected=${(e: CustomEvent<{ code: string }>) => void this.#onLocaleSelected(e)}
       >
         ${this.#demoBar(true)}
         <div class="banner-row">
-          ${this.#banner(true, true)} ${this.#updateBar()}
-          <wt-toast
-            class="alert-toast"
-            data-test="alert-toast"
-            .open=${this.alertToast !== null}
-            .message=${
-              this.alertToast === null
-                ? ""
-                : this.alertToast.alerts.length === 1
-                  ? alertMessage(this.alertToast.alerts[0]!.code, this.alertToast.alerts[0]!.params)
-                  : t("alerts.toast_many").replace("{count}", String(this.alertToast.alerts.length))
-            }
-            tone=${this.alertToast?.tone ?? "info"}
-            close-label=${t("action.close")}
-            @wt-activate=${(e: Event) => this.#onToastActivate(e)}
-            @wt-close=${(e: Event) => this.#onToastClose(e)}
-          ></wt-toast>
+          ${this.#banner(true, true)} ${this.#noticesInEditor() ? nothing : this.#notices()}
         </div>
         <div class=${classMap({ layout: true, "drawer-open": this.drawerOpen })}>
           <!-- At desktop width the sidebar is in-flow; below the
@@ -1444,7 +1420,7 @@ export class DashboardApp extends LitElement {
             <!-- keyed on the active locale: a switch changes the key, so Lit discards and rebuilds the
                  screen subtree, repainting every child in the new language (screens hold no controller). -->
             <div
-              class=${classMap({ body: true, fill: this.screen === "catalogue" || this.screen === "floor-plan" })}
+              class=${classMap({ body: true, fill: this.screen === "catalogue" })}
               @wt-edit-product=${this.#onEditProduct}
             >
               ${
@@ -1464,11 +1440,39 @@ export class DashboardApp extends LitElement {
     `;
   }
 
-  #updateBar(): TemplateResult | typeof nothing {
+  /** The floor plan editor's modal makes everything outside its own subtree inert, so there the
+   * shell's notices are slotted into the editor instead of the banner row. */
+  #noticesInEditor(): boolean {
+    return this.screen === "floor-plan" && this.contentLanguagesReady;
+  }
+
+  #notices(slot?: string): TemplateResult {
+    return html`${this.#updateBar(slot)}
+      <wt-toast
+        class="alert-toast"
+        data-test="alert-toast"
+        slot=${slot ?? nothing}
+        .open=${this.alertToast !== null}
+        .message=${
+          this.alertToast === null
+            ? ""
+            : this.alertToast.alerts.length === 1
+              ? alertMessage(this.alertToast.alerts[0]!.code, this.alertToast.alerts[0]!.params)
+              : t("alerts.toast_many").replace("{count}", String(this.alertToast.alerts.length))
+        }
+        tone=${this.alertToast?.tone ?? "info"}
+        close-label=${t("action.close")}
+        @wt-activate=${(e: Event) => this.#onToastActivate(e)}
+        @wt-close=${(e: Event) => this.#onToastClose(e)}
+      ></wt-toast>`;
+  }
+
+  #updateBar(slot?: string): TemplateResult | typeof nothing {
     // A reset box has its own notice, with its own Reload, on the sign-in page.
     if (!this.updateAvailable || this.sessionNoticeCode === "node.reset") return nothing;
     return html`<wt-banner
       data-test="update-bar"
+      slot=${slot ?? nothing}
       message=${t("update.message")}
       action-label=${t("update.reload")}
       @wt-banner-action=${() => this.reload()}
@@ -2048,7 +2052,9 @@ export class DashboardApp extends LitElement {
           .api=${this.api}
         ></dashboard-canvas-editor-screen>`;
       case "floor-plan":
-        return html`<dashboard-floor-plan-editor .api=${this.api}></dashboard-floor-plan-editor>`;
+        return html`<dashboard-floor-plan-editor .api=${this.api}
+          >${this.#notices("notices")}</dashboard-floor-plan-editor
+        >`;
       case "device-profiles":
         return html`<dashboard-device-profiles-screen
           .api=${this.api}
