@@ -1,5 +1,5 @@
 import { nowIso, unpaidDepartures } from "@waitron/db";
-import type { Transaction } from "@waitron/db";
+import type { Database, Transaction } from "@waitron/db";
 import type { TrustedClock, FiscalBackend } from "@waitron/fiscal";
 import { authorize } from "@waitron/identity";
 import type { Override, PinAttempts } from "@waitron/identity";
@@ -9,7 +9,7 @@ import { billOwes, checkAndBumpParty, closeParty, readBillsOfParties } from "./p
 import { readIssuedSales } from "./sale-due.js";
 import type { Logger } from "./logger.js";
 import type { DeviceRequestConfig } from "./till-config.js";
-import { settleIssuedOwingNothing } from "./till-sale.js";
+import { refusePlacedPaymentInFlight, settleIssuedOwingNothing } from "./till-sale.js";
 import {
   issueUnpaidInvoice,
   markOrderPlaced,
@@ -47,17 +47,10 @@ export interface RecordedDeparture {
  * A bill owing nothing once invoiced (its credit notes cancel its invoice, or every line was given
  * away) gets no row and is settled as collecting it settles it ({@link settleIssuedOwingNothing}),
  * so the party closes with no departure rows when every bill owes nothing (why: B17, #991).
- *
- * Refused, writing nothing: `unpaid_departure.nothing_outstanding` when no bill is still to pay
- * ({@link billOwes}), which is no bill Finish table refuses as unpaid,
- * `unpaid_departure.unfired_dishes` for a bill to be invoiced holding a dish the kitchen is not
- * making ({@link ordersWithUnfiredDish}: never sent, held, or recalled), and
- * `unpaid_departure.bill_holds_payment` for an open bill holding a payment, one given back in full
- * included. A retry after the party has closed is `party.not_open`, as it is for Finish.
  */
 export async function recordUnpaidDeparture(
   tx: Transaction,
-  deps: { backend: FiscalBackend; clock: TrustedClock; log?: Logger },
+  deps: { db: Database; backend: FiscalBackend; clock: TrustedClock; log?: Logger },
   cfg: DeviceRequestConfig,
   partyId: string,
   req: UnpaidDepartureRequest,
@@ -99,6 +92,11 @@ export async function recordUnpaidDeparture(
   // What is left of the in-flight check once no bill holds a payment: a card at the reader for a
   // whole bill, which marks the bill rather than writing a payment of it.
   await refusePaymentInFlight(tx, [...openIds]);
+  for (const bill of owing) {
+    if (bill.status === "placed") {
+      await refusePlacedPaymentInFlight(deps.db, tx, bill.workingOrderId);
+    }
+  }
 
   const invoices = [];
   for (const bill of toInvoice) {
