@@ -213,11 +213,11 @@ function skippedSlot(
   return null;
 }
 
-/** Writes one day's row if it is new, and replaces its slots by deleting then inserting them. */
+/** Writes one named day's row if it is new, and replaces its slots by deleting then inserting them. */
 async function writeDay(
   tx: Transaction,
   existingId: string | undefined,
-  values: { departmentId: string; weekday?: number; specialDateId?: string },
+  values: { departmentId: string; specialDateId: string },
   slots: readonly MenuSlot[],
 ): Promise<void> {
   const id = existingId ?? newId();
