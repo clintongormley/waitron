@@ -20,8 +20,8 @@ resource samples and a runner snapshot, 14 days). How to read one, and the measu
 
 Next: when the message appears again, download that shard's artifact and find the first start-up
 step missing from `shard.log`; fix that step. Do not raise `connectTimeout`, add a retry or lower
-concurrency first. A raised limit goes in the root config's `browser` block, the only place Vitest
-4.1.11 reads it.
+concurrency first. A raised limit goes in the outer config's `test.browser` block, the only place
+Vitest 4.1.11 reads it.
 
 ## The stream pause test's frozen-bucket control failed once in CI
 

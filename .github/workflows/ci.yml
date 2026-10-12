@@ -1346,7 +1346,7 @@ jobs:
             --outputFile=.vitest-reports/blob-${{ matrix.shard }}.json \
             --reporter="$GITHUB_WORKSPACE/scripts/vitest-file-progress.mjs" \
             2>&1 | tee "$RUNNER_TEMP/shard-diagnostics/shard.log" \
-            | grep -v --line-buffered 'vitest:browser:api .*Triggering command'
+            | { grep -v --line-buffered 'vitest:browser:api .*Triggering command' || [ $? -eq 1 ]; }
 
       # No blob means the shard ran nothing; see test-heavy's upload step.
       - name: Upload the venue-service coverage blob

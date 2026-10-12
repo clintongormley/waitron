@@ -247,7 +247,7 @@ function shardDenominator(body) {
   return undefined;
 }
 
-/** The blob artifact's base name from an `upload-artifact` `name: <base>-${{ matrix.shard }}`. */
+/** The FIRST matrix-named upload's base name (`name: <base>-${{ matrix.shard }}`): the blob. */
 function artifactUploadBase(body) {
   const line = body.find((candidate) =>
     /^ {10}name: \S+-\$\{\{\s*matrix\.shard\s*\}\}\s*$/.test(candidate),
@@ -255,7 +255,7 @@ function artifactUploadBase(body) {
   return line === undefined ? undefined : /name: (\S+?)-\$\{\{/.exec(line)?.[1];
 }
 
-/** The non-comment lines of the step uploading the matrix-named blob artifact, or undefined. */
+/** The non-comment lines of the FIRST matrix-named upload step (the blob), or undefined. */
 function artifactUploadStep(body) {
   const named = body.findIndex((line) =>
     /^ {10}name: \S+-\$\{\{\s*matrix\.shard\s*\}\}\s*$/.test(line),
@@ -1500,6 +1500,13 @@ describe("the venue-service shards' browser start-up record", () => {
 
   it("writes the shard's whole output to the record", () => {
     expect(step.join("\n")).toContain(`2>&1 | tee ${record}`);
+  });
+
+  it("does not fail a passing shard whose log the filter leaves empty", () => {
+    expect(step).toContain("          set -euo pipefail");
+    expect(step.join("\n")).toMatch(
+      /\| \{ grep -v --line-buffered '[^']*' \|\| \[ \$\? -eq 1 \]; \}\s*$/,
+    );
   });
 
   it("samples the runner's memory and processes into the same folder", () => {

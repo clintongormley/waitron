@@ -1733,8 +1733,9 @@ makes its directory under `os.tmpdir()` (`packages/db/src/testing/venue-db.ts`),
 wait for the runner's disk (previous section: 300 separate commits took 128 to 709 ms on the disk
 against 8 to 22 ms in memory). It is the CI step's environment, so a local run still uses the system
 temporary directory. On one runner in shard 2, `/dev/shm` (7,995 MB) held at most 14 MB until the
-browser started, then 2,090 MB at its peak: Playwright puts Chromium's profile there too (its launch
-line reads `--user-data-dir=/dev/shm/playwright_chromiumdev_profile-…`). Next section.
+browser started, then 2,090 MB at its peak once Chromium ran. Chromium's profile was there (its
+launch line reads `--user-data-dir=/dev/shm/playwright_chromiumdev_profile-…`); how the 2,090 MB
+split between the profile and Chromium's other use of `/dev/shm` was not measured. Next section.
 
 Why. Main run 38142687186's job `test-venue-service (4)` (2026-10-11), in region `westus`, hit its
 10-minute limit. Against two green runs of the same shard that day, 38158202160 and 38156571198, the
@@ -1764,8 +1765,8 @@ than its name: it reads `ci.yml` as TEXT, so a step an `if:` switches off, or a 
 On 2026-10-11, [run 38170156450 attempt 1's venue-service shard 2](https://github.com/clintongormley/waitron/actions/runs/38170156450/job/114561139899)
 passed its 317 database tests, printed nothing for three minutes, and failed with
 `Failed to connect to the browser session … within the timeout` before any browser test started.
-Its log could not say which start-up step never happened. Each `test-venue-service` shard now
-keeps a record that can.
+Its log could not say which start-up step had not happened when the timer ran out. Each
+`test-venue-service` shard now keeps a record that can.
 
 What the job does:
 
@@ -1795,8 +1796,9 @@ order, each with its time:
 4. `vitest:browser:api … Browser API connected to orchestrator` — the page connected.
 5. `vitest:browser:pool … run test` — the page also reported ready; tests start.
 
-The first missing line is the step that never happened. Readiness has no line of its own: line 4
-present and line 5 absent means the page connected and never reported ready.
+The first missing line is the step that did not happen before the timer ran out. Readiness has no
+line of its own: line 4 present and line 5 absent means the page connected and did not report ready
+in time.
 
 The old log leaves two readings of its three minutes. The last database test ended at 20:03:05.7
 and the error printed at 20:06:05.4, against a 60 s timer. Either about two minutes passed before
@@ -1808,9 +1810,9 @@ times tell the two readings apart.
 **What the probes measured** (2026-10-12):
 
 - **No reproduction in 100 repeats.** Probe run 38189152637 ran shard `2/4` exactly as CI does, on
-  25 runners at a time, four times: 100 of 100 passed. In the last attempt's 25 records (GitHub
-  keeps one attempt's artifacts), the first browser test started 0.54 to 2.07 s after its session
-  was created, median 0.92 s. On attempt 1's first runner, sampled every 2 s, `/dev/shm`
+  25 runners at a time, four times: 100 of 100 passed. In the last attempt's 25 records (the run's
+  artifact list held only the last attempt's), the first browser test started 0.54 to 2.07 s after
+  its session was created, median 0.92 s. On attempt 1's first runner, sampled every 2 s, `/dev/shm`
   (7,995 MB) held at most 14 MB before the browser started and peaked at 2,090 MB once Chromium ran,
   and available memory was never below 11,527 MB.
 - **The record works on a real failure.** Probe pull request #1573 (run 38192012149) forced shard 2
@@ -1821,19 +1823,16 @@ times tell the two readings apart.
   every attempt), the message appears in the log of one failed test job: the one above. Those runs
   hold 868 venue-service shard jobs.
 
-**Vitest reads `connectTimeout` from the root config's `browser` block, and nowhere else.**
-Measured locally on Vitest 4.1.11 with `src/dashboard/hours-view.test.ts`:
-`--browser.connectTimeout=1` on the command line, and `connectTimeout: 1` in the browser project's
-own `browser` block, each left the file passing (12 tests); `test.browser.connectTimeout: 1` at the
-root failed it with the message above and `Tests no tests`. The first forced-failure probe used
-the command-line flag and passed, which is how this was found. A change that raises the limit
-belongs in the root block, and a test of that change needs the root block's failure as its
-control.
+The first forced-failure probe set the limit on the command line and passed: Vitest reads
+`connectTimeout` from the outer config's `test.browser` block only
+([testing-guide.md](testing-guide.md#vitest-reads-a-browsers-connecttimeout-from-the-outer-config-only)).
 
-Guard: the four "browser start-up record" cases in `scripts/ci-workflow.test.mjs`, weaker than
-their name: they read `ci.yml` as TEXT and never run a shard, so a Vitest or Playwright upgrade that
-renames a debug channel would leave the record silent while the cases pass. The channel names above
-were read from Vitest 4.1.11 and Playwright 1.63.0.
+Guard: the cases under "the venue-service shards' browser start-up record" in
+`scripts/ci-workflow.test.mjs`, weaker than their name: they read `ci.yml` as TEXT and never run a
+shard, so a Vitest or Playwright upgrade that renames a debug channel would leave the record silent
+while the cases pass. They never read the snapshot step or what the job log's `grep -v` hides, and
+a step an `if:` switches off still passes. The channel names above were read from Vitest 4.1.11 and
+Playwright 1.63.0.
 
 ## `prettier --check` on an ignored path prints the same line as a clean one
 
