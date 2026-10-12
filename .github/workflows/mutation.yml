@@ -1,17 +1,19 @@
 name: Mutation testing
 
-# Mutation testing runs the full real-Chromium suite once per surviving mutant
-# (tens to low hundreds of extra Vitest invocations even with perTest coverage
-# analysis narrowing which tests run per mutant). The last figure for the ui job
-# is 12m32s, on the 2026-09-14 weekly (`gh run view 34808295788`: 05:04:35 →
-# 05:17:07) — which predates both Stryker 10 and the 2026-09-20 tests, so it is
-# indicative rather than current, and the direction either change moved it has not
-# been measured. Either way it does not belong gating merges the way ci.yml's
-# coverage jobs do: it doesn't tell you "did I break something,"
-# it tells you "how good are my tests," which is a slower-moving signal worth
-# reviewing periodically rather than blocking merges on. Scheduled weekly, plus
-# on-demand via workflow_dispatch so it can be run against a specific branch
-# (e.g. from a PR) without waiting for the schedule.
+# Mutation testing runs the real-Chromium (ui, ui-core) or database-backed (db) suite once per
+# surviving mutant, so it does not belong gating merges the way ci.yml's coverage jobs do: it
+# doesn't tell you "did I break something," it tells you "how good are my tests," which is a
+# slower-moving signal worth reviewing periodically rather than blocking merges on. Scheduled
+# weekly, plus on-demand via workflow_dispatch so it can be run against a specific branch (e.g. from
+# a PR) without waiting for the schedule.
+#
+# packages/ui is SHARDED like packages/db, because one job stopped fitting. Job wall times from
+# `gh run view`: run 36380351019 (2026-09-28) 15m28s; run 37267389722 (2026-10-05) 90m11s; run
+# 38206876422 (2026-10-12) cancelled at its 185-minute limit. Over the same three runs Stryker's
+# logs read 35 → 44 → 60 files to mutate and 850 → 1863 → 2912 tests in its first run. The sharded
+# job's durations are measured by its first dispatch; its 20 shards and 30-minute limit are a
+# starting point until then.
+
 on:
   schedule:
     - cron: "0 5 * * 1" # Monday 05:00 UTC
@@ -29,9 +31,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        package: [ui, ui-core]
+        package: [ui-core]
     runs-on: ubuntu-latest
-    timeout-minutes: 185
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v7
 
@@ -66,7 +68,7 @@ jobs:
       # requires.
       - run: pnpm --filter @waitron/${{ matrix.package }} exec playwright install chromium
 
-      # stryker.config.json sets thresholds.break to 90, so this step FAILS the
+      # ui-core's stryker.config.json sets thresholds.break to 90, so this step FAILS the
       # job if the score drops below it. The report is still published below
       # either way, which is what a human reads to find the new survivors.
       - run: pnpm --filter @waitron/${{ matrix.package }} mutation
@@ -79,18 +81,104 @@ jobs:
           path: packages/${{ matrix.package }}/reports/mutation/
           retention-days: 30
 
+  # packages/ui, sharded the same way as packages/db below, and gated the same way: no
+  # thresholds.break in packages/ui/stryker.config.json, one bar on the merged score in
+  # `mutation-ui-aggregate`. scripts/mutation-shard.mjs picks ui's files from that config's `mutate`
+  # list and splits src/components/wt-data-table.ts, which held 1943 of the package's 4897 scored
+  # mutants on run 37267389722, across several shards.
+  mutation-ui:
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20]
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 9.15.0
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: ".nvmrc"
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Resolve installed Playwright version
+        id: playwright-version
+        run: echo "version=$(pnpm --filter @waitron/ui exec playwright --version | awk '{print $2}')" >> "$GITHUB_OUTPUT"
+
+      - name: Cache Playwright browsers
+        uses: actions/cache@v6
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ steps.playwright-version.outputs.version }}
+
+      # No `--with-deps`, for the reason given on the `mutation` job above.
+      - run: pnpm --filter @waitron/ui exec playwright install chromium
+
+      - name: Run mutation shard ${{ matrix.shard }} of ${{ strategy.job-total }}
+        env:
+          SHARD: ${{ matrix.shard }}
+          TOTAL: ${{ strategy.job-total }}
+        run: |
+          set -euo pipefail
+          FILES=$(node scripts/mutation-shard.mjs ui "$SHARD" "$TOTAL")
+          # Never hand stryker an empty `--mutate ""`, for the reason given on `mutation-db` below.
+          if [ -z "$FILES" ]; then
+            echo "shard $SHARD/$TOTAL selected no files — refusing to run stryker with an empty --mutate" >&2
+            exit 1
+          fi
+          echo "Shard $SHARD/$TOTAL mutates: $FILES"
+          pnpm --filter @waitron/ui exec stryker run --mutate "$FILES"
+
+      - name: Upload mutation report
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: mutation-report-ui-shard-${{ matrix.shard }}
+          path: packages/ui/reports/mutation/
+          retention-days: 30
+
+  # packages/ui's gate, for the reasons given on `mutation-db-aggregate` below.
+  mutation-ui-aggregate:
+    needs: mutation-ui
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+
+      # No pnpm here, as on `mutation-db-aggregate`.
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: ".nvmrc"
+          package-manager-cache: false
+
+      - name: Download every shard report
+        uses: actions/download-artifact@v8
+        with:
+          pattern: mutation-report-ui-shard-*
+          path: mutation-reports
+
+      - name: Score the package
+        run: node scripts/mutation-aggregate.mjs mutation-reports --package ui --shards 20 --break 90
+
   # packages/db, SHARDED across a matrix. Stryker over @waitron/db mutates thousands of
   # database-backed mutants (every suite here opens a venue database and applies a schema), which on
   # ONE 2-vCPU runner was ~10h — past GitHub's 6h job limit, so the job never once completed.
   #
-  # EVERY TIMING IN THIS NOTE, and the shard count they argue for, was measured while that database
-  # was PGlite — a WASM PostgreSQL booted per suite. The storage switch replaced it with SQLite
-  # files on disk, and NOTHING here has been re-measured since: the run ids below are still real
-  # runs, but they are evidence about the old engine. Ten shards may now be more than the work
-  # needs. Read the next weekly run's shard durations before treating any figure below as current. Treat
-  # ~10h as a FLOOR, not a current figure: it was Stryker's own ETA at 749 mutants, and the set
-  # has grown a great deal since (a whole-package `--dryRunOnly` read 2649 on 2026-09-19). That
-  # is why the count lives in dated receipts rather than in this sentence.
+  # EVERY TIMING IN THIS NOTE below this paragraph, and the shard count they argue for, was measured
+  # while that database was PGlite — a WASM PostgreSQL booted per suite. The storage switch replaced
+  # it with SQLite files on disk. On SQLite, run 38206876422 (2026-10-12) took 5m00s to 11m41s per
+  # shard, shard 10 the longest (job wall times from `gh run view`), so ten shards may now be more
+  # than the work needs. Treat ~10h as a FLOOR for the PGlite engine, not a current figure: it was
+  # Stryker's own ETA at 749 mutants, and the set has grown a great deal since (a whole-package
+  # `--dryRunOnly` read 2649 on 2026-09-19). That is why the count lives in dated receipts rather
+  # than in this sentence.
   # Measured on run 32374126111:
   # `ignoreStatic` dropped 1545 → 749 mutants and the dry run finished in 6m48s (both stryker keys
   # working), but the mutation phase's own ETA was ~10h and it was cancelled at the wall.
@@ -145,7 +233,7 @@ jobs:
           TOTAL: ${{ strategy.job-total }}
         run: |
           set -euo pipefail
-          FILES=$(node scripts/mutation-shard.mjs "$SHARD" "$TOTAL")
+          FILES=$(node scripts/mutation-shard.mjs db "$SHARD" "$TOTAL")
           # Defence in depth: the script already exits non-zero on an empty selection (so `set -e`
           # fails the step), but never hand stryker an empty `--mutate ""` — it would be a confusing
           # no-op rather than a loud failure. Raised by Copilot on PR #115.
@@ -195,4 +283,4 @@ jobs:
           path: mutation-reports
 
       - name: Score the package
-        run: node scripts/mutation-aggregate.mjs mutation-reports --shards 10 --break 90
+        run: node scripts/mutation-aggregate.mjs mutation-reports --package db --shards 10 --break 90
