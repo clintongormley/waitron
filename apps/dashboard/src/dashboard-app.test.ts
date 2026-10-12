@@ -4621,7 +4621,7 @@ describe("the floor plan editor inside the real page", () => {
     ["es-ES", "the system font", ""],
     ["es-ES", "a wider font", 'Verdana, "DejaVu Sans"'],
   ])(
-    "keeps Cancel, Undo, Redo and Save on one row at 390 px, in a modal 4 px from the window's edges (%s, %s)",
+    "keeps Undo, Redo, Cancel and Save on one row at 390 px, in a modal 4 px from the window's edges (%s, %s)",
     async (locale, _name, font) => {
       const { editor, unmount } = await openEditor(locale, 390);
       try {

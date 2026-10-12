@@ -385,7 +385,7 @@ it.each([
   ["es-ES", "the system font", ""],
   ["es-ES", "a wider font", 'Verdana, "DejaVu Sans"'],
 ])(
-  "keeps Cancel, Undo, Redo and Save on one row at 390 px with Reload shown (%s, %s)",
+  "keeps Undo, Redo, Cancel and Save on one row at 390 px with Reload shown (%s, %s)",
   async (locale, _name, font) => {
     setLocale(locale);
     const before = [window.innerWidth, window.innerHeight] as const;
@@ -600,7 +600,7 @@ describe.each([
     expect(top(button(el, "redo")!)).toBe(row);
   };
 
-  it("keeps Cancel, Undo, Redo and Save on one row", async () => {
+  it("keeps Undo, Redo, Cancel and Save on one row", async () => {
     expectOneRow(await narrow(stubApi()));
   });
 
