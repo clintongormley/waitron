@@ -5,7 +5,6 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { createFakeAeat } from "@waitron/verifactu/testing";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
 import {
-  appendCancellation,
   appendPendingAlta,
   collideAtAeat,
   seedPendingEnvios,
@@ -234,11 +233,11 @@ describe("fiscalSubmissionSource — a chain held after refusals with one code",
   it("raises nothing for a record held behind a run shorter than the limit", async () => {
     const aeat = fakeAeat();
     const seeded = await seedPendingEnvios(suite.db, { count: 1 });
-    const [, refused] = await fileOnChain(aeat, seeded, 2, [1100, 1100], at(1));
-    // A cancellation of a refused record is held, with no case of its own.
-    const cancellation = await appendCancellation(suite.db, seeded, refused!, 4);
-    await runDrain(aeat, at(2));
-    expect(await estadoOf(cancellation)).toBe("detenido");
+    await fileOnChain(aeat, seeded, 2, [1100, 1100], at(1));
+    const held = await appendPendingAlta(suite.db, seeded, 4);
+    await suite.db.execute(sql`
+      update envios set estado = 'detenido', incidencia = true where registro_id = ${held.registroId}
+    `);
 
     expect(await refusalAlerts()).toEqual([]);
   });

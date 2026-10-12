@@ -633,11 +633,15 @@ async function claimBatch(
 
 /**
  * Holds a row `claimBatch` just claimed, in the claim's own transaction so it never reaches
- * `client.submit`, when an earlier row of its chain is `detenido`, when it is a cancellation
- * whose original (same chain, same invoice identity) is `rechazado`, or when this is its first
+ * `client.submit`, when an earlier row of its chain is `detenido`, or when this is its first
  * claim and the `SAME_CODE_REFUSAL_LIMIT` rows immediately before it on its chain are all
  * `rechazado` with one and the same code. A held row becomes `detenido` with `incidencia`, so
  * every later claimed row of its chain is held with it.
+ *
+ * A cancellation whose original (same chain, same invoice identity) is `rechazado` is set aside
+ * instead: `retenido`, with a filing case of its own (`fiscal.anulacion_retenida`) for a person to
+ * resolve, never sent, and holding nothing behind it. Nothing in this repository sets
+ * `SinRegistroPrevio`, which AEAT documents for cancelling an original it refused.
  *
  * A row still awaiting its answer (`pendiente` or `enviando`) breaks a run. So when the row right
  * after a run was sent and its answer is unreadable or missing, the run rule does not hold the rows
@@ -648,8 +652,7 @@ async function claimBatch(
  * original is an earlier row of the chain.
  *
  * Short of such a run, a `rechazado` row holds nothing behind it (design §7.1,
- * docs/superpowers/specs/2026-10-04-fiscal-prevention-and-offline-recovery-design.md). A cancellation of a
- * rejected original is held because nothing in this repository sets `SinRegistroPrevio`.
+ * docs/superpowers/specs/2026-10-04-fiscal-prevention-and-offline-recovery-design.md).
  *
  * The run rule holds only a row claimed for the first time: `claimBatch` has incremented
  * `intentos` in this transaction, so a first claim reads 1 here. A row with `intentos` above 1
@@ -660,8 +663,8 @@ async function claimBatch(
  * all on its node (`appendToChain`, ./chain.ts), and naming the node lets
  * `registros_node_secuencia_idx` serve that walk.
  *
- * No incident and no case of its own: `heldRecords` (./filing-cases.ts) lists each held record
- * beside the case that holds it. A `halted` ack is written per held id, because this
+ * A held row gets no incident and no case of its own: `heldRecords` (./filing-cases.ts) lists each
+ * held record beside the case that holds it. A `halted` ack is written per held id, because this
  * bulk UPDATE bypasses `setEstado`'s `writeAck`.
  *
  * Of these holds, only the run's is lifted by the drain: `claimProbes` sends its first held record
@@ -675,36 +678,46 @@ async function haltOpenChainClaims(
 ): Promise<DueRow[]> {
   if (claimed.length === 0) return claimed;
   const ids = claimed.map((row) => row.id);
-  const blocked = await tx.execute<{ id: string }>(sql`
-    select r.id from registros_facturacion r
-    where r.id in ${ids}
-      and (exists (
-        select 1 from envios held_envio
-        join registros_facturacion held on held.id = held_envio.registro_id
-        where held.sif_id = r.sif_id and held.secuencia < r.secuencia
-          and held_envio.estado = 'detenido'
-      ) or (r.tipo_registro = 'anulacion' and exists (
-        select 1 from registros_facturacion original
-        join envios original_envio on original_envio.registro_id = original.id
-        where original.tipo_registro = 'alta'
-          and original.sif_id = r.sif_id
-          and original.id_emisor_factura = r.id_emisor_factura
-          and original.num_serie_factura = r.num_serie_factura
-          and original.fecha_expedicion_factura = r.fecha_expedicion_factura
-          and original_envio.estado = 'rechazado'
-      )) or (exists (
-        select 1 from envios own where own.registro_id = r.id and own.intentos = 1
-      ) and ${sameCodeRunBefore("r")}))
+  const flagged = await tx.execute<{ id: string; set_aside: number }>(sql`
+    select id, set_aside from (
+      select r.id,
+        (r.tipo_registro = 'anulacion' and exists (
+          select 1 from registros_facturacion original
+          join envios original_envio on original_envio.registro_id = original.id
+          where original.tipo_registro = 'alta'
+            and original.sif_id = r.sif_id
+            and original.id_emisor_factura = r.id_emisor_factura
+            and original.num_serie_factura = r.num_serie_factura
+            and original.fecha_expedicion_factura = r.fecha_expedicion_factura
+            and original_envio.estado = 'rechazado'
+        )) as set_aside,
+        (exists (
+          select 1 from envios held_envio
+          join registros_facturacion held on held.id = held_envio.registro_id
+          where held.sif_id = r.sif_id and held.secuencia < r.secuencia
+            and held_envio.estado = 'detenido'
+        ) or (exists (
+          select 1 from envios own where own.registro_id = r.id and own.intentos = 1
+        ) and ${sameCodeRunBefore("r")})) as held
+      from registros_facturacion r
+      where r.id in ${ids}
+    ) where set_aside or held
   `);
-  if (blocked.rows.length === 0) return claimed;
-  const blockedIds = new Set(blocked.rows.map((row) => row.id));
+  if (flagged.rows.length === 0) return claimed;
+  const setAside = new Set(flagged.rows.filter((row) => row.set_aside === 1).map((row) => row.id));
+  const blockedIds = new Set(flagged.rows.map((row) => row.id));
 
-  // `claimed` is in `claimBatch`'s chain order, so a chain is held from its first held row on.
+  // `claimed` is in `claimBatch`'s chain order, so a chain is held from its first held row on. A
+  // cancellation of a refused original is set aside whatever else applies: it is never sent, and
+  // it holds nothing behind it.
   const heldChains = new Set<string>();
   const kept: DueRow[] = [];
   const haltedIds: string[] = [];
+  const setAsideRows: DueRow[] = [];
   for (const row of claimed) {
-    if (blockedIds.has(row.id) || heldChains.has(row.sif_id)) {
+    if (setAside.has(row.id)) {
+      setAsideRows.push(row);
+    } else if (blockedIds.has(row.id) || heldChains.has(row.sif_id)) {
       heldChains.add(row.sif_id);
       haltedIds.push(row.id);
     } else {
@@ -717,6 +730,16 @@ async function haltOpenChainClaims(
     `);
     for (const id of haltedIds) await writeAck(tx, id, now);
     result.recordsHalted += haltedIds.length;
+  }
+  for (const row of setAsideRows) {
+    await setEstado(tx, row.id, "retenido", now, { csv: null, incidencia: true });
+    await openFilingCase(tx, {
+      registroId: row.id,
+      cause: "fiscal.anulacion_retenida",
+      evidence: { codigo: null, mensaje: null, csv: null },
+      now,
+    });
+    result.recordsHalted += 1;
   }
   return kept;
 }

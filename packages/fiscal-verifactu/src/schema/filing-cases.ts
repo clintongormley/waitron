@@ -11,7 +11,8 @@ export type FilingCaseCause =
   | "fiscal.registro_rechazado"
   | "fiscal.huella_divergente"
   | "fiscal.duplicado_anulado"
-  | "fiscal.aceptado_con_errores";
+  | "fiscal.aceptado_con_errores"
+  | "fiscal.anulacion_retenida";
 
 /** What AEAT said about the record when the case opened. `csv` is the envío's. */
 export interface FilingCaseEvidence {

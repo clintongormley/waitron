@@ -18,7 +18,6 @@ import {
 } from "./drain.js";
 import { ackStateOf } from "./acks.js";
 import {
-  appendCancellation,
   appendPendingAlta,
   seedIndependentChain,
   seedPendingEnvios,
@@ -640,18 +639,18 @@ describe("drain — per-record resolution: rejection, halting, incidents", () =>
       serverNow: new Date("2026-07-21T00:00:00Z"),
       tiempoEsperaInicial: 5,
     });
-    const seeded = await seedPendingEnvios(suite.db, { count: 2 });
-    aeat.reject(seeded.facturaKeys[1]!, 1100, "Campo obligatorio ausente");
+    const seeded = await seedPendingEnvios(suite.db, { count: 3 });
+    for (const key of seeded.facturaKeys) aeat.reject(key, 1100, "Campo obligatorio ausente");
     const deps = drainDeps(staticResolver(aeat.client()));
     await drain(deps, new Date("2026-07-21T00:01:00Z"));
-    // A cancellation of the refused secuencia 2 is held when claimed, leaving the chain with an
+    // Three refusals with one code: secuencia 4 is held when claimed, leaving the chain with an
     // OPEN halt.
-    await appendCancellation(suite.db, seeded, seeded.registroIds[1]!, 3);
+    await appendPendingAlta(suite.db, seeded, 4);
     const first = await drain(deps, new Date("2026-07-21T00:01:30Z"));
     expect(first.recordsHalted).toBe(1);
 
     // A NEW record lands on the same chain while the halt is still open.
-    await appendPendingAlta(suite.db, seeded, 4);
+    await appendPendingAlta(suite.db, seeded, 5);
 
     const second = await drain(deps, new Date("2026-07-21T00:02:00Z"));
 
@@ -659,7 +658,7 @@ describe("drain — per-record resolution: rejection, halting, incidents", () =>
       await withTransaction(suite.db, (tx) =>
         tx.execute<{ estado: string; incidencia: number }>(sql`
         select e.estado, e.incidencia from envios e join registros_facturacion r on r.id = e.registro_id
-        where r.node_id = ${seeded.nodeId} and r.secuencia = 4
+        where r.node_id = ${seeded.nodeId} and r.secuencia = 5
       `),
       ),
     );
@@ -668,9 +667,9 @@ describe("drain — per-record resolution: rejection, halting, incidents", () =>
     expect(second.recordsSubmitted).toBe(0);
     expect(second.recordsHalted).toBe(1);
 
-    // AEAT's own store has no record under secuencia 4's identity.
+    // AEAT's own store has no record under secuencia 5's identity.
     const stored = aeat.stored();
-    expect(stored.some((s) => s.key.startsWith(`${seeded.nif}|S4/`))).toBe(false);
+    expect(stored.some((s) => s.key.startsWith(`${seeded.nif}|S5/`))).toBe(false);
   });
 
   /**
@@ -682,13 +681,11 @@ describe("drain — per-record resolution: rejection, halting, incidents", () =>
       serverNow: new Date("2026-07-21T00:00:00Z"),
       tiempoEsperaInicial: 5,
     });
-    const seeded = await seedPendingEnvios(suite.db, { count: 2 });
-    aeat.reject(seeded.facturaKeys[1]!, 1100, "Campo obligatorio ausente");
+    const seeded = await seedPendingEnvios(suite.db, { count: 3 });
+    for (const key of seeded.facturaKeys) aeat.reject(key, 1100, "Campo obligatorio ausente");
     const deps = drainDeps(staticResolver(aeat.client()));
-    await drain(deps, new Date("2026-07-21T00:01:00Z"));
-    await appendCancellation(suite.db, seeded, seeded.registroIds[1]!, 3);
-    const first = await drain(deps, new Date("2026-07-21T00:01:15Z"));
-    expect(first.recordsHalted).toBe(1); // chain A: the cancellation of the refused secuencia 2
+    const first = await drain(deps, new Date("2026-07-21T00:01:00Z"));
+    expect(first.recordsHalted).toBe(3); // chain A: three refusals with one code
 
     // Chain A (halted) and chain B (healthy) both fall due together, claimed in one batch.
     const chainA4 = await appendPendingAlta(suite.db, seeded, 4);
@@ -1307,14 +1304,14 @@ describe("drain — error 3000 Anulada on a resent anulación", () => {
     expect(result.recordsAccepted).toBe(0);
     expect((await chainRows()).map((row) => row.estado)).toEqual(["rechazado", "pendiente"]);
 
-    // The original's refusal holds the cancellation at its next claim; it is never sent.
+    // The original's refusal sets the cancellation aside at its next claim; it is never sent.
     const next = await drain(drainDeps(staticResolver(aeat.client())), secondPass);
 
     expect(next.recordsSubmitted).toBe(0);
     expect(aeat.stored()).toEqual([
       expect.objectContaining({ estado: "Correcto", huella: "D".repeat(64) }),
     ]);
-    expect((await chainRows()).map((row) => row.estado)).toEqual(["rechazado", "detenido"]);
+    expect((await chainRows()).map((row) => row.estado)).toEqual(["rechazado", "retenido"]);
   });
 
   it("does not send a successor past a cancellation held for its original", async () => {
@@ -1362,7 +1359,7 @@ describe("drain — error 3000 Anulada on a resent anulación", () => {
 
     expect(second.recordsSubmitted).toBe(0);
     expect(second.recordsHalted).toBe(1);
-    expect((await chainRows()).map((row) => row.estado)).toEqual(["rechazado", "detenido"]);
+    expect((await chainRows()).map((row) => row.estado)).toEqual(["rechazado", "retenido"]);
     expect(await incidentCodes()).toHaveLength(1);
   });
 });
@@ -1488,17 +1485,16 @@ describe("drain — a reply line with no recognisable status", () => {
  * chain-halt path bypasses `setEstado`'s `writeAck`, so it must write its own `halted` acks.
  */
 describe("drain — halted records get a halted ack (the bulk chain-halt path)", () => {
-  it("writes a rejected ack for a rejection and a halted ack for a record held behind a held cancellation", async () => {
+  it("writes a rejected ack for a rejection and a halted ack for a record the same-code brake holds", async () => {
     const aeat = createFakeAeat({ serverNow: new Date("2026-07-21T00:00:00Z") });
-    const seeded = await seedPendingEnvios(suite.db, { count: 1 });
-    aeat.reject(seeded.facturaKeys[0]!, 1100, "Campo obligatorio ausente"); // reject the first record
+    const seeded = await seedPendingEnvios(suite.db, { count: 3 });
+    for (const key of seeded.facturaKeys) aeat.reject(key, 1100, "Campo obligatorio ausente");
     const deps = drainDeps(staticResolver(aeat.client()));
     await drain(deps, new Date("2026-07-21T00:01:00Z"));
-    await appendCancellation(suite.db, seeded, seeded.registroIds[0]!, 2);
-    await appendPendingAlta(suite.db, seeded, 3);
+    await appendPendingAlta(suite.db, seeded, 4);
     await drain(deps, new Date("2026-07-21T00:03:00Z"));
 
-    // secuencia 1 rejected, 2 its cancellation held, 3 held behind it by `haltOpenChainClaims`.
+    // secuencia 1-3 rejected with one code, 4 held behind them by `haltOpenChainClaims`.
     const envios = await withTransaction(suite.db, (tx) =>
       tx.execute<{ registro_id: string; secuencia: number; estado: string }>(sql`
         select e.registro_id, r.secuencia, e.estado from envios e
@@ -1507,7 +1503,12 @@ describe("drain — halted records get a halted ack (the bulk chain-halt path)",
         order by r.secuencia
       `),
     );
-    expect(envios.rows.map((r) => r.estado)).toEqual(["rechazado", "detenido", "detenido"]);
+    expect(envios.rows.map((r) => r.estado)).toEqual([
+      "rechazado",
+      "rechazado",
+      "rechazado",
+      "detenido",
+    ]);
 
     const acks = await withTransaction(suite.db, (tx) =>
       tx.execute<{ registro_id: string; state: string }>(
@@ -1519,7 +1520,7 @@ describe("drain — halted records get a halted ack (the bulk chain-halt path)",
     const rejected = envios.rows.find((r) => r.secuencia === 1)!;
     expect(ackState.get(rejected.registro_id)).toBe("rejected");
 
-    const halted = envios.rows.find((r) => r.secuencia === 3)!;
+    const halted = envios.rows.find((r) => r.secuencia === 4)!;
     expect(ackState.get(halted.registro_id)).toBe("halted");
 
     // Every terminal row is acked, and every ack agrees with its committed estado.

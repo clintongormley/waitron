@@ -698,14 +698,14 @@ describe("drain — a chain stopped by the same-code brake sends its first held 
       expect(wire.sent).toHaveLength(2);
     });
 
-    it("a chain whose earliest held record is a cancellation of a refused original is never probed", async () => {
+    it("a cancellation of a refused original after a run is set aside and never probed", async () => {
       const aeat = fakeAeat();
       const seeded = await seedPendingEnvios(suite.db, { count: 3 });
       for (const key of seeded.facturaKeys) aeat.reject(key, RUN_CODE, "Rechazo");
       await drain(deps(aeat.client()), T0);
       const cancellation = await appendCancellation(suite.db, seeded, seeded.registroIds[2]!, 4);
       await drain(deps(aeat.client()), T);
-      expect(await envioOf(cancellation)).toMatchObject({ estado: "detenido" });
+      expect(await envioOf(cancellation)).toMatchObject({ estado: "retenido" });
       const wire = recording(aeat.client());
 
       await drain(deps(wire.client), at(2 * HOUR));

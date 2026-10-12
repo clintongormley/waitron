@@ -112,6 +112,13 @@ declare module "@waitron/shared" {
     };
 
     /**
+     * `./drain.ts`'s `haltOpenChainClaims`: a cancellation whose original AEAT refused, set aside
+     * (`retenido`) and never sent. A filing-case cause, not an incident: the case is the person's
+     * prompt to resolve the original and the cancellation together.
+     */
+    "fiscal.anulacion_retenida": { registroId: string };
+
+    /**
      * `./drain.ts`: AEAT accepted this record but flagged it (`EstadoRegistro="AceptadoConErrores"`).
      * A warning: the record counts as accepted, but a human should still see why AEAT flagged it.
      */

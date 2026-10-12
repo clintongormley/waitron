@@ -24,7 +24,7 @@ export interface Ack {
 
 /**
  * The SINGLE source of truth for the envío-estado → `AckState` mapping. `aceptado`,
- * `aceptado_con_errores`, `rechazado` and `detenido` map to the state a downstream consumer acts
+ * `aceptado_con_errores`, `rechazado`, `detenido` and `retenido` map to the state a downstream consumer acts
  * on; `pendiente` and `enviando` yield `null` — there is nothing to acknowledge yet, so `writeAck`
  * no-ops on them.
  */
@@ -37,6 +37,7 @@ export function ackStateOf(estado: string): AckState | null {
     case "rechazado":
       return "rejected";
     case "detenido":
+    case "retenido":
       return "halted";
     default:
       return null; // pendiente / enviando — nothing to acknowledge yet

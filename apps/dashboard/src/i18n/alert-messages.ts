@@ -139,6 +139,10 @@ export const ALERT_MESSAGES: Readonly<
     en: "The tax agency (AEAT) already holds this invoice record as cancelled. Contact support.",
     es: "La AEAT ya tiene este registro de facturación como anulado. Contacta con soporte.",
   },
+  "fiscal.anulacion_retenida": {
+    en: "A cancellation was not sent because the tax agency (AEAT) refused the original invoice. Contact support.",
+    es: "No se ha enviado una anulación porque la AEAT rechazó la factura original. Contacta con soporte.",
+  },
   "fiscal.huella_divergente": {
     en: "An invoice record's fingerprint does not match the copy the tax agency (AEAT) holds. Contact support.",
     es: "La huella de un registro de facturación no coincide con la copia de la AEAT. Contacta con soporte.",
