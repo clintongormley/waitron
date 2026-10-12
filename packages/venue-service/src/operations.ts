@@ -708,16 +708,14 @@ export async function setZoneSalePolicyOverride<K extends keyof ZonePolicyField>
     });
 }
 
-export interface DepartmentSettingsInput extends DepartmentPolicyField {
+export interface DepartmentEditInput extends Pick<
+  DepartmentPolicyField,
+  "orderStart" | "paidWhen" | "collectionNumber"
+> {
   name: string;
   tradingName: string;
   transfers?: { receivingProfileId: string | null; destinationDepartmentIds: string[] };
 }
-
-export type DepartmentEditInput = Pick<
-  DepartmentSettingsInput,
-  "name" | "tradingName" | "orderStart" | "paidWhen" | "collectionNumber" | "transfers"
->;
 
 export async function saveDepartmentEditSettings(
   tx: Transaction,
@@ -743,39 +741,6 @@ export async function saveDepartmentEditSettings(
       printTradingName: false,
     })
     .onConflictDoUpdate({ target: departmentSalePolicies.departmentId, set: settings });
-  if (input.transfers !== undefined)
-    await setDepartmentTransferSettings(tx, cfg, departmentId, input.transfers);
-}
-
-export async function saveDepartmentSettings(
-  tx: Transaction,
-  cfg: VenueScope,
-  departmentId: string,
-  input: DepartmentSettingsInput,
-): Promise<void> {
-  await setDepartmentSalePolicyField(
-    tx,
-    cfg,
-    departmentId,
-    "printTradingName",
-    input.printTradingName,
-  );
-  await updateDepartment(tx, cfg, departmentId, input);
-  await setDepartmentSalePolicyField(tx, cfg, departmentId, "paidWhen", input.paidWhen);
-  await setDepartmentSalePolicyField(
-    tx,
-    cfg,
-    departmentId,
-    "collectionNumber",
-    input.collectionNumber,
-  );
-  await setDepartmentSalePolicyField(
-    tx,
-    cfg,
-    departmentId,
-    "receiptPrintMode",
-    input.receiptPrintMode,
-  );
   if (input.transfers !== undefined)
     await setDepartmentTransferSettings(tx, cfg, departmentId, input.transfers);
 }

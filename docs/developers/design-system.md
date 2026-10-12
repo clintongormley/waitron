@@ -3896,22 +3896,10 @@ cases in `apps/till/src/screens/till-counter-screen.layout.test.ts` hold those a
 
 ### Departments and zones
 
-You open a department from the list, even when the venue has only one. Its page keeps a
-Departments parent link above the name and offers Settings, Zones and, with `layout.configure`,
-Receipt tabs. Settings holds the
-name, trading name, service settings and transfers. Zones shows the department's zones and the
-selected zone's settings. With `layout.configure`, Edit the receipt opens a live department's Receipt tab. Venue settings keeps the global logo, subtitle,
-footer, address switch, receipt language and sales description. Department contacts never
-inherit the stored global phone or email. The Zones tab shows the selected zone's normal-week closed times under its name, with a link
-that opens that zone in Opening hours. Identical ranges share a day group; more than two groups
-show a day count. A week without closed ranges says the zone opens with its department. Named-day
-exceptions stay in Opening hours.
-Under it, a zone whose master floor plan has placed tables shows a small read-only preview
-(`wt-floor-plan-preview`, refreshed live) above Edit floor plan, which opens the zone's floor plan
-editor, whose Cancel (or Escape) returns to the zone. Its header ends with Undo and Redo, then
-Cancel beside Save — the owner's exception to Cancel on the left (A502). The editor opens as a full-window modal over
-the dashboard, with the dashboard's alert toast and update bar still shown, and pressable, at its top. A zone with no placed tables shows Add a floor plan to the
-same editor instead, and a failed read adds an alert line above the link.
+You open one list, with each department followed by its indented zones. The columns show name,
+how orders start, counter service and receipt printing. Each row opens its Edit dialog. A
+zone's inherited value is muted and italic; an explicit override stays normal even when it
+matches the department. The row menus stay pinned at the end.
 
 Beside the plan, or in its bottom sheet on a phone, the editor shows a hint on how to choose and
 place a table while none is selected, then the selected table's form, then the tables list, with
@@ -3933,18 +3921,46 @@ the place is not saved. A table that never had a place, pressed when the plan ha
 changes nothing and says "No room on the plan." Cases: `floor-plan-tables-panel.test.ts` and the
 `floor-plan-editor*.test.ts` files beside it in `apps/dashboard/src/screens/`.
 
-How orders start chooses Table service or Counter service. Counter service has a separate
-paid-when choice and collection-ticket choice. Print a receipt offers Always (`auto`) or
-On request (`on_request`). A zone's empty choice follows its department: the placeholder
-contains only the inherited value, without a Follow prefix. Explicit choices remain overrides,
-even when equal to the department's value. Cancel precedes Save in the forms and dialogs.
+A department's menu offers Edit, Add a zone, Edit receipt and Delete. A zone's menu offers
+Edit, Add or Edit floor plan, and Delete. Unassigned zones keep their Add to department action.
+The sidebar returns to the bare list. An editor's deep link keeps that list underneath it;
+closing the editor returns focus to its originating row menu, or Add when that row is gone.
 
-The list's row menus stay pinned at the end. The dialogs ignore Escape and close requests
-while their write is pending. Regression cases live in
-`packages/venue-service/src/dashboard/department-dialogs.test.ts`,
-`packages/venue-service/src/dashboard/departments-list.test.ts` and
-`packages/venue-service/src/dashboard/department-zones.test.ts`.
+Edit department holds name, trading name, service settings and transfers. Edit zone holds its
+name and four raw service overrides. Each override offers “Same as department (…)”, and saving
+that choice writes null. How orders start chooses Table service or Counter service. Counter
+service has a paid-when choice and a collection-ticket choice. The zone's name and policy save
+in one request. Edit department preserves the department's receipt policy.
 
+Edit receipt holds receipt printing, trading-name printing, address printing, logo, phone,
+email, the installed tax-agency description field, subtitle and footer. The form and printed
+preview sit beside each other where they fit and stack on a phone. Language headings name the
+languages staff may print in, with the venue's receipt language first. A new department has no
+authored receipt content. Venue settings holds the receipt language; there is no venue receipt
+page or live venue fallback for receipt decoration.
+
+The zone editor shows its normal-week closed times and an Opening hours link. Identical ranges
+share a day group; more than two groups show a day count. Named-day exceptions stay in Opening
+hours. A zone with placed tables shows a read-only floor-plan preview above Edit floor plan;
+otherwise it offers Add floor plan. Failed reads show their own messages without clearing an
+action refusal. The floor-plan editor returns to the list. Its header ends with Undo and Redo,
+then Cancel beside Save, the owner's exception to Cancel on the left (A502).
+
+A zone's grip moves it to another live department. The row stays visible while you drag it,
+and Escape cancels. Keyboard users pick up the grip with Space, choose with arrows and move
+with Enter; focus returns to the grip after refresh. Pending moves block conflicting actions
+for that zone while another zone remains usable.
+
+Cancel precedes Save in the department and zone editors. They ignore close requests while a
+write is pending. A later edit remains dirty against the submitted values when that write
+finishes. A late name-clash refusal marks only the name it was submitted for. Reconnecting a
+retained editor keeps its draft and restores its native modal.
+
+Behavioral cases live in `packages/venue-service/src/dashboard/departments-zones-list.test.ts`,
+`packages/venue-service/src/dashboard/departments-zones-drag.test.ts`,
+`packages/venue-service/src/dashboard/service-edit-dialog.legacy.test.ts` and the
+`department-edit-dialog` and `zone-edit-dialog` suites beside them. Permanent Delete keeps its
+separate `service-delete-dialog` and `service-delete-editors` suites.
 
 ### Permanent department and zone Delete
 

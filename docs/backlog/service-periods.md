@@ -90,16 +90,13 @@ Disable with permanent Delete in the same screens
 mockup is the private canvas https://claude.ai/artifact/Tya5FcmK39ESBkQ2hTaA7s, which has four
 boards: the list, Edit department, Edit zone and Edit receipt.
 
-**Branch checkpoint, 2026-10-12.** Product issuance uses department descriptions, with
-readiness checked before new payment dispatch and the no-field fiscal slot handled at boot.
-Receipt dialogs, language settings and the public preview use department-owned content.
-Zone editors save name and raw policy overrides together. The protected department and zone
-editors open over the combined list. Department settings preserve receipt policy. Pointer and
-keyboard zone moves, independent pending writes and queued refreshes are implemented.
-The shell action/leave and real dashboard host checks now pass at the dialog/list boundary,
-including permissions, focus, Cancel and sidebar return. Legacy zone policy/read/accessibility
-assertions have replacement suites. Old helper/suite retirement, the complete source/prose audit
-and final visual acceptance remain. The branch is unpublished.
+**Branch checkpoint, 2026-10-12.** Product issuance and receipt dialogs use department-owned
+content. Department and zone dialogs sit over the combined list; zones save their name and raw
+policy overrides together. The old department page, zone panel, Rename/Move dialogs and combined
+internal department writer are retired. Their retained policy, deletion, live-read, layout and
+leave checks now run at the replacement owners. Late name replies, reconnect and departed zone
+controls have regression cases. The complete consumer/prose audit, remaining drag/delete/printed/
+till/onboarding acceptance and final review are still open. The branch is unpublished.
 
 **The list.** "Departments and zones" becomes one list. Each department is a row, and its zones are
 indented beneath it. The columns are name, service style (how orders start), counter service (when
@@ -150,11 +147,10 @@ logo, subtitle, footer, address switch and tax-agency description. A new departm
 empty receipt. The venue's receipt language moves to Venue settings. Nothing is live, so stored
 venue defaults may be dropped rather than carried over (CLAUDE.md §3, last rule).
 
-**Remaining implementation:** connect the protected department dialog and a protected zone editor
-to the unified list; retire the department page and its remaining helpers while preserving the
-behavioral assertions; add zone dragging; complete managed visual checks and the whole-branch audit.
-Receipt assertion ports and department write separation have focused passing checks; package-wide
-coverage and the final review remain part of the unpublished branch's acceptance.
+**Remaining acceptance:** complete the whole touched-source/prose audit and the final managed
+visual states, then rebase overlapping code and run the full branch review and current-head CI.
+Package-wide coverage remains part of that CI gate. No partial feature has been published.
+
 
 ## A506. Opening hours rebuilt around seasons and special days
 

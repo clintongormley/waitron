@@ -344,7 +344,7 @@ export class DepartmentSettings extends LitElement {
       ...(this.draft?.tradingName.trim() ? {} : { tradingName: t("venue.field_required") }),
     };
   }
-  private fieldRefusal(error: unknown) {
+  private fieldRefusal(error: unknown, submitted: DepartmentSettingsInput) {
     const { code, params } = (error ?? {}) as { code?: string; params?: Record<string, unknown> };
     let field: Field | undefined;
     let message = t("venue.field_refused");
@@ -361,6 +361,7 @@ export class DepartmentSettings extends LitElement {
     if (code === "management.request_invalid" && fields.includes(params?.field as Field))
       field = params!.field as Field;
     if (code === "department.name_taken") {
+      if (this.draft?.name.trim() !== submitted.name.trim()) return;
       field = "name";
       message = t("venue.department_name_taken");
     }
@@ -419,7 +420,7 @@ export class DepartmentSettings extends LitElement {
         this.emit("saved", { departmentId: id });
       }
     } catch (error) {
-      if (this.current(id, generation)) this.fieldRefusal(error);
+      if (this.current(id, generation)) this.fieldRefusal(error, submitted);
     } finally {
       if (this.current(id, generation)) this.busy = false;
     }

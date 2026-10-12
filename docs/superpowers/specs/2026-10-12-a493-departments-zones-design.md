@@ -171,3 +171,14 @@ The original quoted copies-only explanation predates A497. The current A493 back
 names languages staff can choose for the receipt itself; the dialog now says “Available at the
 till” rather than describing every other language as a requested copy. The selection paths use
 `readOfferedReceiptLanguages` in `working-order.ts`, `till-sale.ts` and `till-api.ts`.
+
+
+## Task 4 retirement qualification (2026-10-12)
+
+The historical consumer table above names the retired department page and zone panel. Current
+subjects open protected editors over `departments-list`; Rename and Move dialog kinds no longer
+exist. Creation, unassigned assignment and permanent Delete remain. The internal writer now takes
+`DepartmentEditInput` directly, without the old receipt-policy fields. The policy-only zone
+operation and its public client remain for the independent route contract specified above.
+The live loader, inherited-policy flow, geometry and deleted-editor assertions are ported to
+these owners; complete branch acceptance and review remain pending.

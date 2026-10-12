@@ -83,9 +83,7 @@ async function choose(decision: "keep" | "discard") {
 }
 const cases: DepartmentDialog[] = [
   { kind: "add-department" },
-  { kind: "rename-department", row: model.departments[0]! },
   { kind: "add-zone", departmentId: "d1" },
-  { kind: "rename-zone", row: { id: "z1", name: "Patio" } },
 ];
 it.each(cases)("$kind asks before closing, Keep preserves and Discard closes", async (dialog) => {
   const el = await mount(dialog);
@@ -123,7 +121,7 @@ it.each(cases)(
   },
 );
 it("an old save cannot commit a draft reconnected while its request was pending", async () => {
-  const el = await mount(cases[1]!);
+  const el = await mount(cases[0]!);
   let finish!: () => void;
   el.api = testApi(
     vi.fn(
@@ -144,15 +142,15 @@ it("an old save cannot commit a draft reconnected while its request was pending"
   await el.updateComplete;
   expect(field(el).value).toBe("Draft");
   expect(unload()).toBe(true);
-  expect(el.dialog).toEqual(cases[1]);
+  expect(el.dialog).toEqual(cases[0]);
 });
 it("replacing a dialog cancels its leave question and ignores retained old buttons", async () => {
-  const el = await mount(cases[1]!);
+  const el = await mount(cases[0]!);
   await change(el, "Draft");
   const old = el.shadowRoot!.querySelector<HTMLElement>("[data-test=save-editor]")!;
   const close = el.shadowRoot!.querySelector("wt-modal")!.requestClose("cancel");
   await app.updateComplete;
-  el.dialog = cases[2];
+  el.dialog = cases[1];
   await el.updateComplete;
   expect(await close).toBe(false);
   old.click();
@@ -161,7 +159,7 @@ it("replacing a dialog cancels its leave question and ignores retained old butto
   expect(unload()).toBe(false);
 });
 
-it.each(["move-zone", "add-to-department"] as const)(
+it.each(["add-to-department"] as const)(
   "%s keeps its destination through the leave question and reconnect",
   async (kind) => {
     const el = await mount({ kind, row: { id: "z1", name: "Patio" } });
@@ -240,15 +238,11 @@ it.each(cases)(
     expect(request.mock.calls).toEqual([
       dialog.kind === "add-department"
         ? ["/management-api/venue-service/departments", "POST", { name: "Submitted name" }]
-        : dialog.kind === "rename-department"
-          ? ["/management-api/venue-service/departments/d1", "PATCH", { name: "Submitted name" }]
-          : dialog.kind === "add-zone"
-            ? [
-                "/management-api/venue-service/zones",
-                "POST",
-                { name: "Submitted name", departmentId: "d1" },
-              ]
-            : ["/management-api/zones/z1", "PATCH", { name: "Submitted name" }],
+        : [
+            "/management-api/venue-service/zones",
+            "POST",
+            { name: "Submitted name", departmentId: "d1" },
+          ],
     ]);
   },
 );
@@ -297,7 +291,7 @@ it.each(
 );
 
 it("disconnecting a dialog with a pending leave question closes the question and releases its draft", async () => {
-  const el = await mount(cases[1]!);
+  const el = await mount(cases[0]!);
   await change(el, "Unsaved rename");
   const modal = el.shadowRoot!.querySelector("wt-modal")!;
   const closing = modal.requestClose("cancel");
@@ -320,7 +314,7 @@ it.each(cases)("$kind ignores a stale discard after a replacement dialog opens",
   await expect.poll(() => question.open).toBe(true);
   const oldCancel = el.shadowRoot!.querySelector<HTMLElement>("[data-test=cancel-editor]")!;
   const oldSave = el.shadowRoot!.querySelector<HTMLElement>("[data-test=save-editor]")!;
-  el.dialog = { kind: "rename-department", row: model.departments[1]! };
+  el.dialog = { kind: "add-zone", departmentId: "d2" };
   await el.updateComplete;
   expect(await closing).toBe(false);
   await expect.poll(() => question.open).toBe(false);
@@ -354,17 +348,12 @@ const acceptedNames = [
   },
   {
     dialog: cases[1]!,
-    request: ["/management-api/venue-service/departments/d1", "PATCH", { name: "Accepted name" }],
-  },
-  {
-    dialog: cases[2]!,
     request: [
       "/management-api/venue-service/zones",
       "POST",
       { name: "Accepted name", departmentId: "d1" },
     ],
   },
-  { dialog: cases[3]!, request: ["/management-api/zones/z1", "PATCH", { name: "Accepted name" }] },
 ];
 it.each(acceptedNames)(
   "$dialog.kind commits a save while a discard question is pending",
@@ -390,7 +379,7 @@ it.each(acceptedNames)(
     await el.updateComplete;
     expect(request.mock.calls).toEqual([accepted]);
     expect(unload()).toBe(false);
-    el.dialog = { kind: "rename-department", row: model.departments[1]! };
+    el.dialog = { kind: "add-zone", departmentId: "d2" };
     await el.updateComplete;
     await change(el, "Later draft");
     question.dispatchEvent(

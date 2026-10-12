@@ -25,9 +25,9 @@ import "@waitron/ui/src/components/wt-delete-dialog.js";
 
 export type DepartmentDialog =
   | { kind: "add-department" }
-  | { kind: "rename-department" | "delete-department"; row: Department }
+  | { kind: "delete-department"; row: Department }
   | { kind: "add-zone"; departmentId: string }
-  | { kind: "rename-zone" | "move-zone" | "add-to-department" | "delete-zone"; row: FloorZone };
+  | { kind: "add-to-department" | "delete-zone"; row: FloorZone };
 type Draft = { name: string; departmentId: string };
 const copy = (value: Draft): Draft => ({ ...value });
 const equal = (a: Draft, b: Draft) =>
@@ -138,7 +138,7 @@ export class DepartmentDialogs extends LitElement {
     return this.dialog?.kind.startsWith("delete") ?? false;
   }
   private get moving() {
-    return this.dialog?.kind === "move-zone" || this.dialog?.kind === "add-to-department";
+    return this.dialog?.kind === "add-to-department";
   }
   private get choices() {
     const dialog = this.dialog;
@@ -351,12 +351,6 @@ export class DepartmentDialogs extends LitElement {
           detail = { departmentId: row.id };
           break;
         }
-        case "rename-department":
-          await this.api.updateDepartment(dialog.row.id, {
-            name: submitted.name.trim(),
-          });
-          detail = { departmentId: dialog.row.id };
-          break;
         case "add-zone": {
           const row = await this.api.createZone({
             name: submitted.name.trim(),
@@ -365,11 +359,6 @@ export class DepartmentDialogs extends LitElement {
           detail = { zoneId: row.id };
           break;
         }
-        case "rename-zone":
-          await this.api.updateZone(dialog.row.id, { name: submitted.name.trim() });
-          detail = { zoneId: dialog.row.id };
-          break;
-        case "move-zone":
         case "add-to-department":
           await this.api.configureZone(dialog.row.id, {
             departmentId: submitted.departmentId,
@@ -410,11 +399,6 @@ export class DepartmentDialogs extends LitElement {
         return t("venue.add_department");
       case "add-zone":
         return t("venue.add_zone");
-      case "rename-department":
-      case "rename-zone":
-        return `${t("venue.rename")}: ${dialog.row.name}`;
-      case "move-zone":
-        return t("venue.move_to_department");
       case "add-to-department":
         return t("venue.add_to_department");
       case "delete-department":

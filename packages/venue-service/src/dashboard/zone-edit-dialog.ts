@@ -59,6 +59,10 @@ export class ZoneEditDialog extends LitElement {
       .muted {
         color: var(--wt-color-text-muted);
       }
+      .zone-context {
+        display: grid;
+        gap: var(--wt-space-2);
+      }
       .form {
         display: grid;
         gap: var(--wt-space-4);
@@ -96,8 +100,19 @@ export class ZoneEditDialog extends LitElement {
   override connectedCallback() {
     super.connectedCallback();
     this.requestUpdate();
+    const modal = this.shadowRoot?.querySelector("wt-modal");
+    if (modal)
+      void modal.updateComplete.then(() => {
+        if (
+          this.isConnected &&
+          !this.dismissed &&
+          this.shadowRoot?.querySelector("wt-modal") === modal
+        )
+          modal.open = true;
+      });
   }
   override disconnectedCallback() {
+    this.shadowRoot?.querySelector("wt-modal")?.closeAfter("security");
     this.watchPlan(undefined, undefined);
     this.hoursDetach?.();
     this.hoursDetach = undefined;
@@ -312,6 +327,7 @@ export class ZoneEditDialog extends LitElement {
     } catch (error) {
       if (!this.current(id, generation)) return;
       const { code, params } = (error ?? {}) as { code?: string; params?: { field?: Field } };
+      if (code === "zone.name_taken" && this.draft?.name.trim() !== submitted.name) return;
       const field =
         code === "zone.name_taken"
           ? "name"
@@ -334,6 +350,8 @@ export class ZoneEditDialog extends LitElement {
   override render(): unknown {
     const zone = this.zone;
     if (!zone || !this.draft) return nothing;
+    const generation = this.generation,
+      current = () => this.current(zone.id, generation);
     const department = this.model.salePolicies.departments.find(
       (policy) => policy.departmentId === zone.departmentId,
     );
@@ -368,7 +386,10 @@ export class ZoneEditDialog extends LitElement {
       >
         <div
           class="form"
-          @keydown=${(event: KeyboardEvent) => submitOnEnter(event, this.shadowRoot!.querySelector("[data-test=save-editor]"))}
+          @keydown=${(event: KeyboardEvent) => {
+            if (current())
+              submitOnEnter(event, this.shadowRoot!.querySelector("[data-test=save-editor]"));
+          }}
         >
           <wt-input
             name="name"
@@ -378,10 +399,10 @@ export class ZoneEditDialog extends LitElement {
             .error=${errors.name ?? ""}
             @wt-change=${(event: CustomEvent<{ value: string }>) => {
               event.stopPropagation();
-              this.changed("name", event.detail.value);
+              if (current()) this.changed("name", event.detail.value);
             }}
           ></wt-input>
-          <div>
+          <div class="zone-context">
             ${this.hoursFailed ? html`<p role="alert">${t("opening.load_error")}</p>` : nothing}
             <p class="muted" data-test="closed-week-summary">
               ${zoneClosedWeek(this.hours, zone.departmentId, zone.id)}
@@ -401,6 +422,7 @@ export class ZoneEditDialog extends LitElement {
             .errors=${errors}
             @service-settings-change=${(event: CustomEvent<{ value: ServiceSettingsValue }>) => {
               event.stopPropagation();
+              if (!current()) return;
               for (const field of policyFields)
                 if (this.draft![field] !== event.detail.value[field])
                   this.changed(field, event.detail.value[field]);
@@ -413,7 +435,10 @@ export class ZoneEditDialog extends LitElement {
               slot="cancel"
               variant="secondary"
               ?disabled=${this.busy || this.refreshing}
-              @click=${() => void this.shadowRoot!.querySelector("wt-modal")!.requestClose("cancel")}
+              @click=${() => {
+                if (current())
+                  void this.shadowRoot!.querySelector("wt-modal")!.requestClose("cancel");
+              }}
               >${t("venue.cancel")}</wt-button
             >
             <wt-button
@@ -421,7 +446,9 @@ export class ZoneEditDialog extends LitElement {
               .loading=${this.busy}
               variant=${this.refreshing ? "secondary" : action.variant}
               ?disabled=${this.busy || this.refreshing || action.unchanged || (this.attempted && Object.keys(this.errors).length > 0)}
-              @click=${() => void this.save()}
+              @click=${() => {
+                if (current()) void this.save();
+              }}
               >${t("venue.save")}</wt-button
             >
           </wt-form-actions>

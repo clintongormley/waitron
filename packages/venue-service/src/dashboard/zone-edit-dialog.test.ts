@@ -340,3 +340,38 @@ it("changed policy events stay inside the editor and an explicit policy saves wi
   ]);
   expect(outside).not.toHaveBeenCalled();
 });
+
+it.each(["en", "es"])(
+  "a late zone name clash does not mark newer native input in %s",
+  async (locale) => {
+    setLocale(locale);
+    let reject!: (error: unknown) => void;
+    const writes: unknown[][] = [];
+    const { el, modal } = await mountZoneEditor((async (path, method = "GET", body) => {
+      if (method === "GET") return { tables: [] };
+      writes.push([path, method, body]);
+      await new Promise<void>((_resolve, refuse) => {
+        reject = refuse;
+      });
+    }) as import("@waitron/dashboard-kit").DashboardRequest);
+    const change = async (value: string) => {
+      await editZoneName(el, value);
+    };
+    await change("Reserved");
+    zoneSave(el).click();
+    await expect.poll(() => writes.length).toBe(1);
+    await change("Available now");
+    reject({ code: "zone.name_taken", params: { name: "Reserved" } });
+    await expect.poll(() => zoneSave(el).disabled).toBe(false);
+    const name = el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>("[name=name]")!;
+    await name.updateComplete;
+    expect(name.error).toBe("");
+    expect(name.shadowRoot!.querySelector("input")!.value).toBe("Available now");
+    expect(el.shadowRoot!.querySelector("wt-form-actions")!.error).toBe("");
+    expect(el.shadowRoot!.querySelector("[data-test=enable-name-clash]")).toBeNull();
+    expect(modal.open).toBe(true);
+    expect(zoneSave(el).variant).toBe("primary");
+    expect(writes).toHaveLength(1);
+    expect((writes[0]![2] as { name: string }).name).toBe("Reserved");
+  },
+);

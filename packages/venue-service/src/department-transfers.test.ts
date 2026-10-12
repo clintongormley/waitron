@@ -1322,14 +1322,14 @@ describe("combined department transfer settings", () => {
   it("saves a usable receiving profile with the department fields", async () => {
     const v = await venue();
     await withTransaction(suite.db, async (tx) => {
-      await service.saveDepartmentSettings(tx, v.cfg, v.b, {
+      await service.setDepartmentSalePolicyField(tx, v.cfg, v.b, "printTradingName", true);
+      await service.setDepartmentSalePolicyField(tx, v.cfg, v.b, "receiptPrintMode", "on_request");
+      await service.saveDepartmentEditSettings(tx, v.cfg, v.b, {
         name: "New restaurant",
         tradingName: "Receipt name",
-        printTradingName: true,
         orderStart: "counter",
         paidWhen: "ticket_then_pay",
         collectionNumber: "numbered",
-        receiptPrintMode: "on_request",
         transfers: { receivingProfileId: v.profile, destinationDepartmentIds: [v.a] },
       });
       expect(await service.readDepartmentTransferSettings(tx, v.cfg, v.b)).toEqual({
@@ -1358,18 +1358,24 @@ describe("combined department transfer settings", () => {
       transfers: await service.readDepartmentTransferSettings(tx, v.cfg, v.a),
     }));
     await expect(
-      withTransaction(suite.db, (tx) =>
-        service.saveDepartmentSettings(tx, v.cfg, v.a, {
+      withTransaction(suite.db, async (tx) => {
+        await service.setDepartmentSalePolicyField(tx, v.cfg, v.a, "printTradingName", true);
+        await service.setDepartmentSalePolicyField(
+          tx,
+          v.cfg,
+          v.a,
+          "receiptPrintMode",
+          "on_request",
+        );
+        await service.saveDepartmentEditSettings(tx, v.cfg, v.a, {
           name: "New deli",
           tradingName: "Changed receipt",
-          printTradingName: true,
           orderStart: "counter",
           paidWhen: "ticket_then_pay",
           collectionNumber: "numbered",
-          receiptPrintMode: "on_request",
           transfers: { receivingProfileId: v.profile, destinationDepartmentIds: [v.b] },
-        }),
-      ),
+        });
+      }),
     ).rejects.toMatchObject({
       code: "department_transfer.settings_invalid",
       params: { field: "receivingProfileId" },

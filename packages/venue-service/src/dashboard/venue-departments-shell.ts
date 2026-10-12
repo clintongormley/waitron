@@ -100,7 +100,7 @@ export class VenueDepartmentsShell extends LitElement {
       );
       if (!department?.active) return;
       dialog = { kind, departmentId: department.id };
-    } else if (kind === "rename-department" || kind === "delete-department") {
+    } else if (kind === "delete-department") {
       const row = this.model.departments.find((row) => row.id === event.detail.departmentId);
       if (!row || row.active === false) return;
       dialog = { kind, row };
@@ -445,11 +445,8 @@ export class VenueDepartmentsShell extends LitElement {
   override render() {
     return html`<div
         @add-department=${this.#openDialog}
-        @rename-department=${this.#openDialog}
         @delete-department=${this.#openDialog}
         @add-zone=${this.#openDialog}
-        @rename-zone=${this.#openDialog}
-        @move-zone=${this.#openDialog}
         @add-to-department=${this.#openDialog}
         @delete-zone=${this.#openDialog}
         @saved=${this.#saved}

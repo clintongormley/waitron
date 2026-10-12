@@ -150,3 +150,41 @@ it("an old native close event cannot dismiss the replacement department", async 
   expect(next.open).toBe(true);
   expect(closed).not.toHaveBeenCalled();
 });
+
+it.each(["en", "es"])(
+  "a late department name clash does not mark newer native input in %s",
+  async (locale) => {
+    setLocale(locale);
+    let reject!: (error: unknown) => void;
+    const writes: unknown[][] = [];
+    const { form, modal } = await mount((async (path, method = "GET", body) => {
+      if (method === "GET")
+        return path.endsWith("/profiles")
+          ? []
+          : { receivingProfileId: null, destinationDepartmentIds: [], profiles: [] };
+      writes.push([path, method, body]);
+      await new Promise<void>((_resolve, refuse) => {
+        reject = refuse;
+      });
+    }) as import("@waitron/dashboard-kit").DashboardRequest);
+    const change = async (value: string) => {
+      await editDepartmentField(form, "name", value);
+    };
+    await change("Reserved");
+    departmentSave(form).click();
+    await expect.poll(() => writes.length).toBe(1);
+    await change("Available now");
+    reject({ code: "department.name_taken", params: { name: "Reserved" } });
+    await expect.poll(() => departmentSave(form).disabled).toBe(false);
+    const name = form.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>("[name=name]")!;
+    await name.updateComplete;
+    expect(name.error).toBe("");
+    expect(name.shadowRoot!.querySelector("input")!.value).toBe("Available now");
+    expect(form.shadowRoot!.querySelector("wt-form-actions")!.error).toBe("");
+    expect(form.shadowRoot!.querySelector("[data-test=enable-name-clash]")).toBeNull();
+    expect(modal.open).toBe(true);
+    expect(departmentSave(form).variant).toBe("primary");
+    expect(writes).toHaveLength(1);
+    expect((writes[0]![2] as { name: string }).name).toBe("Reserved");
+  },
+);

@@ -6,7 +6,6 @@ import { applyTokens, LeaveController } from "@waitron/ui";
 import { setLocale, type DashboardRequest } from "@waitron/dashboard-kit";
 import { VenueServiceApi, type VenueServiceView } from "./client.js";
 import "./department-settings.js";
-import "./department-page.js";
 const model: VenueServiceView = {
   departments: [
     {

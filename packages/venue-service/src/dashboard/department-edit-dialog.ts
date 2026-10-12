@@ -16,6 +16,24 @@ export class DepartmentEditDialog extends LitElement {
   @property({ type: Boolean }) refreshing = false;
   @state() private dismissed = false;
   private shownDepartment = "";
+  override connectedCallback() {
+    super.connectedCallback();
+    this.requestUpdate();
+    const modal = this.shadowRoot?.querySelector("wt-modal");
+    if (modal)
+      void modal.updateComplete.then(() => {
+        if (
+          this.isConnected &&
+          !this.dismissed &&
+          this.shadowRoot?.querySelector("wt-modal") === modal
+        )
+          modal.open = true;
+      });
+  }
+  override disconnectedCallback() {
+    this.shadowRoot?.querySelector("wt-modal")?.closeAfter("security");
+    super.disconnectedCallback();
+  }
   protected override willUpdate(changed: PropertyValues<this>) {
     if (changed.has("departmentId")) this.dismissed = false;
     if (this.model?.departments.some((row) => row.id === this.departmentId && row.active))

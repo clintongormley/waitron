@@ -206,3 +206,28 @@ captures wait for the locale repaint; early captures without that wait are disca
 still not whole Task 4 or whole-feature acceptance: old helper/suite retirement, the complete
 consumer/prose audit and the remaining drag/delete/printed/till/onboarding acceptance states are
 pending. No whole-branch review, PR or intermediate publication is authorised by this checkpoint.
+
+
+Task 4 helper-retirement checkpoint (2026-10-12): the old department page and zone panel,
+Rename/Move branches and internal combined department writer are retired. Creation, unassigned
+assignment and permanent Delete stay in `department-dialogs`. Existing policy, hours, floor-plan,
+readiness, geometry, live-loader and deletion checks now exercise the list and protected editors.
+The internal settings ports retain all 353 matcher calls across the three touched suites; receipt
+policy goes through its separate operation, and the missing-policy case still calls the narrow
+editor while the row is absent. Transfers still test rollback around the whole transaction.
+
+The name ports reproduced a late clash marking newer input. Retained controls reproduced an old
+zone changing its replacement, and reconnect cases reproduced native dialogs outside the modal
+layer. The old floor-link spacing check also failed. Their fixes precede the final 31-file browser
+run (489 cases), three-file database run (168), six root files (2472) and the unedited fiscal pair
+(20). Two package type checks and focused lint/format pass. Six installed removal controls fail at
+the intended assertions; restored editor suites pass 54 cases. The candidate is removed.
+
+All eight managed EN/ES, light/dark, 390/1280 host sheets were inspected. They cover current list,
+editors, invalid fields and bottom messages, discard, zone menus and floor-preview/return, receipt
+and Venue language. They do not complete the drag/delete/printed/till/onboarding acceptance. The
+first login raced the managed server's recorded restart and returned 502; no visual receipt rests
+on that attempt. A first native Cancel run did not open its question; the port now asserts that
+its real click arrived and the dirty scope existed, and the final run passes. No cause or repair
+claim is made for that first click. Source/prose audit, remaining acceptance and Task 5 remain; no
+whole-branch review, PR or intermediate publication has run.
