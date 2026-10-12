@@ -672,6 +672,30 @@ and 14,907 ms beside 72, on the owner's Mac, which reports 18 CPUs (2026-09-26).
 `apps/server/src/boot.ts`, so the default 256 MiB limit applied, the same run failed with `timed out
 waiting for the fold-back: the stream reads {"state":"streaming",…}, the side file 27558712 bytes`.
 
+**If the fill times out, read the progress samples first (A529).** The pause test logs
+`stream pause sellers` at each seller phase's start and finish, every ten seconds while it runs,
+and when a seller fails. You get the elapsed time, completed sales, summed request times, slowest
+request, summed waits around the supervisor's measurement, file size and the first 32 bytes'
+page size, checkpoint sequence and salt pair. The sums cover three concurrent sellers, so they
+can exceed elapsed time. On failure, `stream pause failure context` also keeps the last twenty
+stream events and the synthetic S3 server's log before teardown resumes that server. An unreadable
+context does not replace the original failure.
+
+These are observations, not a consistent database snapshot: Litestream can change the file between
+its size and header reads. The helper opens the file read-only and checks its header length, magic
+and version; it does not check the header checksum or read transaction frames. A changed salt pair
+at the same file size is evidence to investigate reuse, not evidence about which process caused it.
+
+A514's exact-merge run `38203241435` failed after 3,897 sales in 180,380 ms: 5,047,032 bytes became
+15,499,472, short of the 16 MiB limit. The next three main runs passed, filling in 328, 1,044 and
+2,607 sales respectively (`38204208851`, `38205059307`, `38209456913`). Those logs lack header
+samples, so they do not establish why growth differed. A529 leaves that cause open rather than
+raising the deadline or lowering the limit.
+
+| Source | Source wording | What the diagnostic reads |
+| --- | --- | --- |
+| [SQLite WAL format](https://www.sqlite.org/fileformat.html#wal_file_format) | "The WAL header is 32 bytes in size"; "Checkpoint sequence number" | Big-endian page size at byte 8, checkpoint sequence at byte 12, and the salt pair at bytes 16–23. The same source's WAL Reset section describes salt changes and optional truncation. |
+
 **In CI their temporary files are in memory.** `test-server-stream` runs the loop and pause tests,
 and the S3 test server's own suite, with `TMPDIR=/dev/shm`, pinned by
 `scripts/ci-workflow.test.mjs`, which reads `ci.yml` as text. It is the CI step's environment, not

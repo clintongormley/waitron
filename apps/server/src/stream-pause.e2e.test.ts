@@ -65,6 +65,7 @@ import {
   type S3TestServer,
 } from "./testing/s3-test-server.js";
 import { freePort } from "./testing/free-ports.js";
+import { readSideFile } from "./testing/stream-pause-diagnostics.js";
 
 const INSTALL = "node scripts/setup-litestream.mjs && node scripts/setup-s3-test-server.mjs";
 const REQUIRED = process.env.CI === "true" || process.env.WAITRON_REQUIRE_STREAM_BINARIES === "1";
@@ -479,29 +480,76 @@ describe("the stream's pause at the side-file limit, with sales on the server's 
         const began = Date.now();
         let sold = 0;
         let stop = false;
-        return Promise.all(
-          Array.from({ length: SELLERS }, async () => {
-            const mine: TimedSale[] = [];
-            let walBefore = walStart;
-            while (!stop) {
-              await beforeEachSale?.();
-              if (stop) break;
-              if (deadline !== undefined && Date.now() > deadline.at) {
-                stop = true;
-                throw new Error(
-                  `timed out waiting for ${deadline.what}: the stream reads ${JSON.stringify(stream())}, the side file ${walBefore} bytes, ` +
-                    `${sold} sales in ${Date.now() - began} ms from ${walStart} bytes`,
-                );
-              }
-              const sale = await sell(walBefore);
-              mine.push(sale);
-              sold += 1;
-              walBefore = sale.walAfter;
-              if (done(sale, sold)) stop = true;
+        let saleMs = 0;
+        let slowestSaleMs = 0;
+        let gateWaitMs = 0;
+        const report = (event: "start" | "progress" | "failed" | "finished") => {
+          console.log(
+            "stream pause sellers",
+            JSON.stringify({
+              event,
+              phase: deadline?.what ?? "timed sales",
+              elapsedMs: Date.now() - began,
+              sold,
+              saleMs,
+              slowestSaleMs,
+              gateWaitMs,
+              wal: readSideFile(walPath),
+              stream: stream(),
+            }),
+          );
+        };
+        report("start");
+        const progress = setInterval(() => report("progress"), 10_000);
+        const sellers = Array.from({ length: SELLERS }, async () => {
+          const mine: TimedSale[] = [];
+          let walBefore = walStart;
+          while (!stop) {
+            const gateStarted = performance.now();
+            await beforeEachSale?.();
+            gateWaitMs += performance.now() - gateStarted;
+            if (stop) break;
+            if (deadline !== undefined && Date.now() > deadline.at) {
+              stop = true;
+              throw new Error(
+                `timed out waiting for ${deadline.what}: the stream reads ${JSON.stringify(stream())}, the side file ${walBefore} bytes, ` +
+                  `${sold} sales in ${Date.now() - began} ms from ${walStart} bytes`,
+              );
             }
-            return mine;
-          }),
-        );
+            const sale = await sell(walBefore);
+            mine.push(sale);
+            sold += 1;
+            saleMs += sale.ms;
+            slowestSaleMs = Math.max(slowestSaleMs, sale.ms);
+            walBefore = sale.walAfter;
+            if (done(sale, sold)) stop = true;
+          }
+          return mine;
+        });
+        try {
+          return await Promise.all(sellers);
+        } catch (error) {
+          stop = true;
+          report("failed");
+          try {
+            console.error(
+              "stream pause failure context",
+              JSON.stringify({
+                events: (await streamEvents(join(stateDir, "logs"))).slice(-20),
+                s3: s3?.log(),
+              }),
+            );
+          } catch (contextError) {
+            console.error("stream pause context unavailable", {
+              errorCode: (contextError as NodeJS.ErrnoException).code ?? "unreadable",
+            });
+          }
+          throw error;
+        } finally {
+          clearInterval(progress);
+          await Promise.allSettled(sellers);
+          report("finished");
+        }
       };
       const crosses = (sale: TimedSale) =>
         sale.walBefore >= WAL_LIMIT_BYTES && sale.walAfter < WAL_LIMIT_BYTES;
