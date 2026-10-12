@@ -2055,4 +2055,30 @@ describe("POST /api/parties/:id/groups/split-line", () => {
       expect(await snapshot(party)).toEqual(before);
     },
   );
+  it("refuses a missing body line with 400 and accepts the stored UUID in upper case", async () => {
+    const party = await seated();
+    const submitted = await submit(party.partyId, [
+      { lines: [dish("Tarta", "2")], release: "hold" },
+    ]);
+    expect(submitted.status).toBe(200);
+    const group = (submitted.json as unknown as SubmitAnswer).groups[0]!;
+    const path = `/api/parties/${party.partyId}/groups/split-line`;
+    const command = {
+      submissionId: randomUUID(),
+      expectedPartyRevision: await revisionOf(party.partyId),
+    };
+    const missing = randomUUID();
+    const before = await snapshot(party);
+    const refused = await call("POST", path, { ...command, lineId: missing });
+    expect(refused.status).toBe(400);
+    expect(refused.json).toEqual(refusal("group.not_found", { lineId: missing }));
+    expect(await snapshot(party)).toEqual(before);
+    const answer = await call("POST", path, {
+      ...command,
+      lineId: group.lineIds[0]!.toUpperCase(),
+    });
+    expect(answer.status).toBe(200);
+    expect(answer.json).toEqual({ revision: command.expectedPartyRevision + 1 });
+    expect(await dishLines(party.tabId)).toHaveLength(2);
+  });
 });

@@ -567,6 +567,7 @@ export const STATUS: Record<string, ContentfulStatusCode> = {
 };
 
 export const run = createErrorBoundary(STATUS, "till.failed");
+const runSplitLine = createErrorBoundary({ ...STATUS, "group.not_found": 400 }, "till.failed");
 
 export type Run = typeof run;
 
@@ -2734,14 +2735,14 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
   );
 
   app.post("/api/parties/:id/groups/split-line", (c) =>
-    run(c, log, async () => {
+    runSplitLine(c, log, async () => {
       const session = await requireSession(deps, c, { action: "take-orders" });
       const cfg = requestCfg(deps.cfg, session);
       const partyId = requirePartyParam(c.req.param("id"));
       const body = asObject(await readRawJsonBody<unknown>(c));
       const command = groupCommand(session.personId, body);
       if (typeof body.lineId !== "string" || !isUuid(body.lineId)) throw invalid("lineId");
-      const lineId = body.lineId;
+      const lineId = body.lineId.toLowerCase();
       const answer = await withTransaction(deps.db, async (tx) => {
         await checkZones(tx, deps.cfg, session, [{ partyId }]);
         return splitHeldLineIntoUnits(tx, cfg, partyId, lineId, command);
