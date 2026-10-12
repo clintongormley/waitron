@@ -5969,6 +5969,92 @@ it("round-trips a deleted service hierarchy while remapping only its live namesa
   expect(target.locationId).not.toBe(source.locationId);
 });
 
+it("carries Long table's parts, naming the imported tables", async () => {
+  const source = await applyVenue(planVenue(venue("B12348765"), ALL_MODULES), {
+    db: suite.db,
+    modules: ALL_MODULES,
+  });
+  const cfg: TillConfig = {
+    locationId: locationId(source.locationId),
+    nodeId: nodeId(source.nodeId),
+    locale: "es-ES",
+    invoiceLocales: ["es-ES"],
+    tipsEnabled: false,
+    simplifiedInvoiceLimit: null,
+  };
+  const removals = enabledTableRemovals(ALL_MODULES);
+  const offPlan = (key: string, label: string, seats: number) => ({
+    key,
+    label,
+    fixed: false,
+    seats,
+    placement: null,
+    partKeys: [],
+  });
+  const sourceIds = await withTransaction(suite.db, async (tx) => {
+    const department = await createDepartment(tx, cfg, { name: "Joined service" });
+    const zone = await createServiceZone(tx, cfg, {
+      name: "Joined zone",
+      departmentId: department.id,
+    });
+    const { ids } = await saveZonePlan(
+      tx,
+      cfg,
+      removals,
+      zone.id,
+      {
+        revision: 0,
+        tables: [
+          offPlan("c3", "Counter 3", 2),
+          offPlan("c4", "Counter 4", 6),
+          offPlan("c5", "Counter 5", 4),
+          {
+            key: "long",
+            label: "Long table",
+            fixed: false,
+            seats: 10,
+            placement: { x: 0, y: 0, width: 8, height: 8, rotation: 0, shape: "rect" },
+            partKeys: ["c3", "c4", "c5"],
+          },
+        ],
+      },
+      new Date("2026-10-11T12:00:00Z"),
+    );
+    const parts = await tx.execute<{ id: string }>(sql`select id from floor_plan_table_parts`);
+    return [...Object.values(ids), ...parts.rows.map((row) => row.id)];
+  });
+  const versions = await schemaVersionsByModule(suite.db, ALL_MODULES);
+  const transferred = await buildConfigurationBundle(
+    suite.db,
+    source,
+    ALL_MODULES,
+    new Date("2026-10-11T12:00:00Z"),
+    versions,
+  );
+  await applyVenue(planVenue(venue("B98765431"), ALL_MODULES), {
+    db: targetSuite.db,
+    modules: ALL_MODULES,
+    beforeCommit: (tx, result) =>
+      importConfigurationTables(tx, transferred, result, ALL_MODULES, versions),
+  });
+  const rows = await targetSuite.db.execute<{
+    id: string;
+    joined_id: string;
+    joined: string;
+    part_id: string;
+    part: string;
+  }>(
+    sql`select x.id, j.id joined_id, j.label joined, p.id part_id, p.label part from floor_plan_table_parts x join floor_plan_tables j on j.id=x.joined_table_id join floor_plan_tables p on p.id=x.part_table_id join floor_plans f on f.id=j.plan_id join floor_zones z on z.id=f.zone_id where z.name='Joined zone' order by p.label`,
+  );
+  expect(rows.rows.map((row) => [row.joined, row.part])).toEqual([
+    ["Long table", "Counter 3"],
+    ["Long table", "Counter 4"],
+    ["Long table", "Counter 5"],
+  ]);
+  for (const row of rows.rows)
+    for (const id of [row.id, row.joined_id, row.part_id]) expect(sourceIds).not.toContain(id);
+});
+
 describe("dated business-day configuration transfer", () => {
   it("exports the active start, leaves history behind and imports a fresh clock", async () => {
     const source = await applyVenue(planVenue(venue("B77112233"), ALL_MODULES), {

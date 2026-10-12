@@ -820,6 +820,7 @@ const FLOOR_ROWS = [
   "dining_tables",
   "floor_plans",
   "floor_plan_tables",
+  "floor_plan_table_parts",
   "floor_reset_tables",
   "floor_today_tables",
   "floor_today_zones",
