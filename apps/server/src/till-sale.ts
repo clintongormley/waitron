@@ -1938,6 +1938,7 @@ async function runCollectOrder(
       throw new AppError("working_order.not_placed", { workingOrderId: req.id });
     }
     await refuseBillWithPayments(tx, req.id);
+    await refusePlacedPaymentInFlight(deps.db, tx, req.id);
 
     // AFTER the replay check, so a retry is never refused for its body shape.
     if (req.tender.method !== "cash" && req.tender.method !== "card") {
