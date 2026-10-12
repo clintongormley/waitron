@@ -33,12 +33,6 @@ import { createDemoVenueProvisioner } from "./testing/provision-venue.js";
 const LOCALE: SeedLocale = "en";
 const DEPARTMENT_TRADING_NAMES = getCountryPack("ES")!.demo!.departmentTradingNames;
 
-/** The seeded venue's civil date; the demo venue is in Madrid. */
-const venueToday = () =>
-  new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Madrid" }).format(new Date());
-/** The years whose Spanish holiday data `@waitron/country-es` ships, and its name for 25 December. */
-const SHIPPED_CHRISTMAS: Record<string, string> = { "2026": "Natividad del Señor" };
-
 const suite = useVenueDb({
   migrations: migrationOptionsFor(manifestSets(), null),
   timeoutMs: 60_000,
@@ -54,6 +48,7 @@ const provisionVenue = createDemoVenueProvisioner(() => suite.db, {
 describe("seedDemoRestaurant", () => {
   afterEach(() => {
     vi.unstubAllEnvs();
+    vi.useRealTimers();
   });
 
   it.each(["06:00", "05:00"])(
@@ -151,6 +146,7 @@ describe("seedDemoRestaurant", () => {
   });
 
   it("seeds Christmas Day as a closed special day that repeats every year", async () => {
+    vi.useFakeTimers({ toFake: ["Date"], now: new Date("2026-10-06T10:00:00Z") });
     const venue = await provisionVenue();
     await seedDemoRestaurant(suite.db, {
       venue,
@@ -169,14 +165,13 @@ describe("seedDemoRestaurant", () => {
       select s.name, s.repeats_yearly, d.date, d.closed_all_day, d.holiday_name
       from special_days s join special_day_dates d on d.special_day_id = s.id
       where s.location_id = ${venue.locationId}`);
-    const today = venueToday();
     expect(rows).toEqual([
       {
         name: "Christmas Day",
         repeats_yearly: 1,
-        date: `${today.slice(0, 4)}-12-25`,
+        date: "2026-12-25",
         closed_all_day: 1,
-        holiday_name: SHIPPED_CHRISTMAS[today.slice(0, 4)] ?? null,
+        holiday_name: "Natividad del Señor",
       },
     ]);
   });
