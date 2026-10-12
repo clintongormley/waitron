@@ -6,22 +6,16 @@ import { loadTillConfig, tryLoadTillConfig } from "./till-config.js";
 // happy-path assertion rather than passing by coincidence — every id is the SAME shape but a
 // DIFFERENT value. Version/variant nibbles are irrelevant: the brand only checks 8-4-4-4-12 hex.
 const NODE = "33333333-3333-4333-8333-333333333333";
-const SERIES = "44444444-4444-4444-8444-444444444444";
 const LOCATION = "55555555-5555-4555-8555-555555555555";
 
 const base = {
   WAITRON_TILL_NODE_ID: NODE,
-  WAITRON_TILL_SERIES_ID: SERIES,
   WAITRON_TILL_LOCATION_ID: LOCATION,
 };
 
 /** The env-var name each id is sourced from — the same list `loadTillConfig` walks. Table-driven so
  * every id gets the missing and invalid cases without a copy of each per variable. */
-const ID_VARS = [
-  "WAITRON_TILL_NODE_ID",
-  "WAITRON_TILL_SERIES_ID",
-  "WAITRON_TILL_LOCATION_ID",
-] as const;
+const ID_VARS = ["WAITRON_TILL_NODE_ID", "WAITRON_TILL_LOCATION_ID"] as const;
 
 function codeOf(error: unknown): string {
   return isAppError(error) ? error.code : `not an AppError: ${String(error)}`;
@@ -39,13 +33,25 @@ function captureThrow(fn: () => unknown): unknown {
 }
 
 describe("loadTillConfig", () => {
-  it("brands the three ids from their env vars and defaults locale to es-ES", () => {
+  it("boots from node and location without a cached series", () => {
+    const identity = { ...base };
+    const loaded = tryLoadTillConfig(identity);
+    expect(loaded).toMatchObject({ nodeId: NODE, locationId: LOCATION });
+    expect(loaded).not.toHaveProperty("seriesId");
+  });
+
+  it("ignores a stale series variable instead of accepting it as runtime selection", () => {
+    const loaded = loadTillConfig({ ...base, WAITRON_TILL_SERIES_ID: "stale" });
+    expect(loaded).not.toHaveProperty("seriesId");
+    expect(loaded.nodeId).toBe(NODE);
+  });
+
+  it("brands the two ids from their env vars and defaults locale to es-ES", () => {
     const config = loadTillConfig(base);
     // toEqual, not toMatchObject: it also asserts nothing extra — no `cardProvider`/`stripeReaderId`/
     // `sumupReaderId` key at all.
     expect(config).toEqual({
       nodeId: NODE,
-      seriesId: SERIES,
       locationId: LOCATION,
       locale: "es-ES",
       invoiceLocales: ["es-ES"],
@@ -144,22 +150,25 @@ describe("loadTillConfig", () => {
 });
 
 describe("tryLoadTillConfig", () => {
-  it("returns undefined when NONE of the three ids are set (setup mode)", () => {
+  it("returns undefined when NONE of the two ids are set (setup mode)", () => {
     // An unprovisioned box has no venue: that is SETUP MODE, not a misconfiguration.
     expect(tryLoadTillConfig({})).toBeUndefined();
   });
 
-  it("treats all three present-but-empty (VAR=) as none set → undefined", () => {
+  it("treats the retired series key alone as setup mode", () => {
+    expect(tryLoadTillConfig({ WAITRON_TILL_SERIES_ID: "stale" })).toBeUndefined();
+  });
+
+  it("treats both present-but-empty (VAR=) as none set → undefined", () => {
     const allEmpty = Object.fromEntries(ID_VARS.map((v) => [v, ""]));
     expect(tryLoadTillConfig(allEmpty)).toBeUndefined();
   });
 
-  it("loads the full config when ALL three are set (the same shape loadTillConfig returns)", () => {
+  it("loads the full config when BOTH are set (the same shape loadTillConfig returns)", () => {
     // Spot-checks nothing: `toEqual` the whole object, so a wrapper that dropped or reshaped a field
     // relative to `loadTillConfig` (the delegate) would fail here, not slip through on one field.
     expect(tryLoadTillConfig(base)).toEqual({
       nodeId: NODE,
-      seriesId: SERIES,
       locationId: LOCATION,
       locale: "es-ES",
       invoiceLocales: ["es-ES"],
@@ -186,13 +195,12 @@ describe("tryLoadTillConfig", () => {
     });
   });
 
-  it("names the FIRST missing variable (in WAITRON_TILL_{NODE,SERIES,LOCATION}_ID order) when several are absent", () => {
-    // NODE and SERIES both absent → NODE is named (it comes first in the list).
+  it("names the missing node when the location is present", () => {
+    // NODE is absent while LOCATION is present.
     const error = captureThrow(() =>
       tryLoadTillConfig({
         ...base,
         WAITRON_TILL_NODE_ID: undefined,
-        WAITRON_TILL_SERIES_ID: undefined,
       }),
     );
     expect(codeOf(error)).toBe("server.config_invalid");

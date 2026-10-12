@@ -18,7 +18,6 @@ import {
   centsToDecimal,
   locationId as brandLocationId,
   nodeId as brandNodeId,
-  seriesId as brandSeriesId,
   thousandthsToDecimal,
   type ExtraSelection,
   jobOrigin,
@@ -83,7 +82,6 @@ async function setupVenue(): Promise<Seeded> {
   const cfg: OriginConfig = {
     origin: jobOrigin("dashboard"),
     nodeId: brandNodeId(nodeId),
-    seriesId: brandSeriesId(randomUUID()),
     locationId: brandLocationId(locationId),
     locale: LOCALE,
     invoiceLocales: [LOCALE],

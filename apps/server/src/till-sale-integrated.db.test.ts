@@ -138,7 +138,6 @@ function nextNif(): string {
 function tillConfigFromVenue(venue: VenueResult): TillConfig {
   return {
     nodeId: brandNodeId(venue.nodeId),
-    seriesId: brandSeriesId(venue.seriesIds[0]!),
     locationId: brandLocationId(venue.locationId),
     locale: LOCALE,
     invoiceLocales: [LOCALE],
@@ -151,6 +150,7 @@ function tillConfigFromVenue(venue: VenueResult): TillConfig {
 type OfferedProduct = AvailableProduct & { menuItemId: string; zoneId: string };
 
 interface SeededVenue {
+  seriesId: ReturnType<typeof brandSeriesId>;
   cfg: DeviceRequestConfig;
   cafe: OfferedProduct;
 }
@@ -215,8 +215,21 @@ async function setupVenue(orderFlow: OrderFlow = "prepay"): Promise<SeededVenue>
   const cafe = available.find((p) => p.name === "Café")!;
   return {
     cfg,
+    seriesId: brandSeriesId(venue.seriesIds[0]!),
     cafe: { ...cafe, menuItemId: offers.offerFor(cafe.id), zoneId: offers.zoneId },
   };
+}
+
+async function anotherNodeSeries(cfg: DeviceRequestConfig): Promise<void> {
+  await withTransaction(suite.db, async (tx) => {
+    const [other] = await tx
+      .insert(nodes)
+      .values({ locationId: cfg.locationId, name: "Other box" })
+      .returning();
+    await tx
+      .insert(invoiceSeries)
+      .values({ nodeId: other!.id, code: "OTHER-P999999", purpose: "standard", nextNumber: 99 });
+  });
 }
 
 async function modeVenue(mode: OrderFlow): Promise<SeededVenue> {
@@ -936,6 +949,102 @@ describe("payWorkingOrderIntegrated (split-transaction integrated pay, ordering 
     expect(await registroCount(id)).toBe(0);
     expect(await orderState(id)).toEqual({ status: "open", settledAtSet: false });
     expect(await rawPaymentsFor(id)).toEqual([{ state: "failed", hasSale: false }]);
+  });
+
+  it("reads the active series after a card capture that overlaps a series switch", async () => {
+    const { cfg, cafe, seriesId } = await setupVenue();
+    await anotherNodeSeries(cfg);
+    const { deps } = integratedDeps(cfg, suite.db);
+    const provider = deps.provider;
+    let activeId: string | undefined;
+    const switchingProvider: PaymentProvider = {
+      ...provider,
+      provider: provider.provider,
+      capabilities: provider.capabilities,
+      collect: async (params) => {
+        const captured = await provider.collect(params);
+        const [fresh] = await withTransaction(suite.db, async (tx) => {
+          await tx
+            .update(invoiceSeries)
+            .set({ retiredAt: new Date() })
+            .where(eq(invoiceSeries.id, seriesId));
+          return tx
+            .insert(invoiceSeries)
+            .values({
+              nodeId: cfg.nodeId,
+              code: "A-P000099",
+              purpose: "standard",
+              nextNumber: 11,
+            })
+            .returning();
+        });
+        activeId = fresh!.id;
+        return captured;
+      },
+      forward: (...args) => provider.forward(...args),
+      resolvePending: (...args) => provider.resolvePending(...args),
+      void: (...args) => provider.void(...args),
+      refund: (...args) => provider.refund(...args),
+      partialRefund: (...args) => provider.partialRefund!(...args),
+    };
+    const id = randomUUID();
+    const result = await payWorkingOrderIntegrated({ ...deps, provider: switchingProvider }, cfg, {
+      id,
+      zoneId: cafe.zoneId,
+      lines: [{ menuItemId: cafe.menuItemId, quantity: "1" }],
+    });
+    expect(result.outcome).toBe("captured");
+    expect(activeId).toBeDefined();
+    const [sale] = await suite.db.select().from(sales).where(eq(sales.workingOrderId, id));
+    expect(sale!.seriesId).toBe(activeId);
+    expect(sale!.invoiceNumber).toBe(11);
+    expect(await registroCount(id)).toBe(1);
+  });
+
+  it("issues on a newly active series and replays that invoice after a later switch", async () => {
+    const { cfg, cafe, seriesId } = await setupVenue();
+    await anotherNodeSeries(cfg);
+    const id = randomUUID();
+    const [fresh] = await withTransaction(suite.db, async (tx) => {
+      await tx
+        .update(invoiceSeries)
+        .set({ retiredAt: new Date() })
+        .where(eq(invoiceSeries.id, seriesId));
+      return tx
+        .insert(invoiceSeries)
+        .values({
+          nodeId: cfg.nodeId,
+          code: "A-P000042",
+          purpose: "standard",
+          nextNumber: 7,
+        })
+        .returning();
+    });
+    const { deps } = integratedDeps(cfg, suite.db);
+    const first = await payWorkingOrderIntegrated(deps, cfg, {
+      id,
+      zoneId: cafe.zoneId,
+      lines: [{ menuItemId: cafe.menuItemId, quantity: "1" }],
+    });
+    expect(first.outcome).toBe("captured");
+    const [sale] = await suite.db.select().from(sales).where(eq(sales.workingOrderId, id));
+    expect(sale!.seriesId).toBe(fresh!.id);
+    expect(sale!.invoiceNumber).toBe(7);
+    await withTransaction(suite.db, async (tx) => {
+      await tx
+        .update(invoiceSeries)
+        .set({ retiredAt: new Date() })
+        .where(eq(invoiceSeries.id, fresh!.id));
+      await tx
+        .insert(invoiceSeries)
+        .values({ nodeId: cfg.nodeId, code: "A-P000043", purpose: "standard" });
+    });
+    const retry = await payWorkingOrderIntegrated(deps, cfg, { id, lines: [] });
+    expect(retry).toEqual(first);
+    expect(await saleCount(id)).toBe(1);
+    expect(await registroCount(id)).toBe(1);
+    const [unchanged] = await suite.db.select().from(sales).where(eq(sales.workingOrderId, id));
+    expect(unchanged).toEqual(sale);
   });
 
   it("a settled order replays its ticket without re-collecting", async () => {

@@ -65,6 +65,7 @@ let backend: FiscalBackend;
 let clock: TrustedClock;
 
 interface Venue {
+  seriesId: ReturnType<typeof brandSeriesId>;
   cfg: DeviceRequestConfig;
   offers: ZoneOffers;
   cana: string;
@@ -151,7 +152,12 @@ async function provision(db: typeof suite.db): Promise<Venue> {
       vatClass: "general",
     });
     await assignCatalogueToLocation(tx, provisioned.locationId, cat.id);
-    return { cfg, offers: await offerProducts(tx, cfg, { zone: "tables" }), cana: cana.id };
+    return {
+      cfg,
+      seriesId: brandSeriesId(provisioned.seriesIds[0]!),
+      offers: await offerProducts(tx, cfg, { zone: "tables" }),
+      cana: cana.id,
+    };
   });
 }
 
@@ -159,6 +165,7 @@ const inTx = <T>(fn: (tx: Transaction) => Promise<T>): Promise<T> => withTransac
 const fiscal = () => ({ db: suite.db, backend, clock });
 
 interface Till {
+  seriesId: ReturnType<typeof brandSeriesId>;
   cfg: DeviceRequestConfig;
   operator: { personId: string; sessionId: string };
   printerId: string;
@@ -192,7 +199,12 @@ async function freshTill(): Promise<Till> {
     deviceId: cfg.origin.deviceId,
     personId: OPERATOR,
   });
-  return { cfg, operator: { personId: OPERATOR, sessionId }, printerId: printer.id };
+  return {
+    cfg,
+    seriesId: venue.seriesId,
+    operator: { personId: OPERATOR, sessionId },
+    printerId: printer.id,
+  };
 }
 
 /** A fresh €3.00 bill at a fresh table. */
@@ -249,7 +261,7 @@ async function writes(billId: string, till: Till) {
       await tx
         .select({ nextNumber: invoiceSeries.nextNumber })
         .from(invoiceSeries)
-        .where(eq(invoiceSeries.id, till.cfg.seriesId))
+        .where(eq(invoiceSeries.id, till.seriesId))
     )[0]!.nextNumber,
     jobs: await tx
       .select({ kind: printJobs.kind })

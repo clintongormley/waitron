@@ -11,11 +11,7 @@ import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { assignCatalogueToLocation, createCatalogue, createProduct } from "@waitron/catalogue";
 import { createPrinter } from "@waitron/printing";
 import type { PrintConfig } from "@waitron/printing";
-import {
-  locationId as brandLocationId,
-  nodeId as brandNodeId,
-  seriesId as brandSeriesId,
-} from "@waitron/shared";
+import { locationId as brandLocationId, nodeId as brandNodeId } from "@waitron/shared";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
 import type { Logger } from "./logger.js";
 import { mountTillApi } from "./till-api.js";
@@ -86,7 +82,6 @@ const suite = useVenueDb({
 function makeCfg(locationId: string, nodeId: string): TillConfig {
   return {
     nodeId: brandNodeId(nodeId),
-    seriesId: brandSeriesId(randomUUID()),
     locationId: brandLocationId(locationId),
     locale: "es-ES",
     invoiceLocales: ["es-ES"],

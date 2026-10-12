@@ -39,28 +39,17 @@ for a server using its persisted self-signed leaf (`vite.config.ts`).
    and invoice series a sellable venue needs — see
    ["Provisioning a venue"](../server/README.md#provisioning-a-venue) in the server README.
 
-2. **Read its three ids.** The `venue` command prints the node id; read all three the server needs with
-   the query below, against `venue.db` inside the venue directory — any SQLite client will do,
-   since the venue is just a folder of files. There is one taxpayer per database and no tenant
-   column, so nothing here is scoped by a tenant — the location is the only thing that narrows it,
-   and a single-location venue has just the one:
+2. **Read its node and location ids.** The `venue` command prints the node id. Query
+   `venue.db` inside your provisioned directory for its location:
 
    ```sql
-   select l.id as location_id, n.id as node_id, s.id as series_id
+   select l.id as location_id, n.id as node_id
    from locations l
-   join nodes n on n.location_id = l.id
-   join invoice_series s on s.node_id = n.id and s.purpose = 'standard' and s.retired_at is null;
+   join nodes n on n.location_id = l.id;
    ```
 
-   Run on 2026-10-04 with `sqlite3` 3.51.0 against a database migrated with every set and
-   provisioned by `applyVenue` (one location, one node, two series, no till), it returns exactly those
-   three columns and one row — the rectificative series is filtered out by `purpose`. The control, a
-   column the schema does not have, fails to prepare.
-
-   A231 adds a `full` series to a newly provisioned venue. The query still selects the `standard`
-   series for the till; it does not select the new `full` series.
-
-   A cold restore rewrites `trading.env` with your new live series id automatically.
+   Invoice issuance reads the live series for the invoice's purpose inside its write transaction,
+   so switching series does not require a server restart.
 
 3. **Boot the server** with those ids as the `WAITRON_TILL_*` env. This is the normal server boot
    ([server README](../server/README.md#running-it)) — the credential key ring and the rest apply
@@ -72,7 +61,6 @@ for a server using its persisted self-signed leaf (`vite.config.ts`).
    WAITRON_CREDENTIALS_KEY=<base64, 32 bytes> \
    WAITRON_TILL_LOCATION_ID=<location_id> \
    WAITRON_TILL_NODE_ID=<node_id> \
-   WAITRON_TILL_SERIES_ID=<series_id> \
    WAITRON_TILL_LOCALE=es-ES \
    node apps/server/dist/server.js
    ```
@@ -93,7 +81,6 @@ for a server using its persisted self-signed leaf (`vite.config.ts`).
 | -------------------------- | -------- | ------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `WAITRON_TILL_LOCATION_ID` | yes      | —       | The venue's location on this node.                                                                                                                                                                                                                                                                                                                   |
 | `WAITRON_TILL_NODE_ID`     | yes      | —       | The compute node whose SIF/chain sales file to.                                                                                                                                                                                                                                                                                                      |
-| `WAITRON_TILL_SERIES_ID`   | yes      | —       | The standard invoice series.                                                                                                                                                                                                                                                                                                                         |
 | `WAITRON_TILL_LOCALE`      | no       | `es-ES` | Overrides the default UI language. A few other things read it too, among them the kitchen's unit names, the payment slip's date and money format, and the dish-text language a sale falls back to when the venue has saved no content languages. Not the receipt's language: that is the location's by default, or the one staff choose at the till. |
 | `WAITRON_TILL_TIPS`        | no       | off     | Offer a tip prompt at card collect. Only `true` or `1` enable it.                                                                                                                                                                                                                                                                                    |
 

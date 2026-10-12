@@ -67,7 +67,6 @@ import {
   decimal,
   locationId as brandLocationId,
   nodeId as brandNodeId,
-  seriesId as brandSeriesId,
 } from "@waitron/shared";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
 import { cardReaders, type PaymentProvider } from "@waitron/payments";
@@ -304,7 +303,6 @@ function collect(
 function makeCfg(locationId: string, nodeId: string): TillConfig {
   return {
     nodeId: brandNodeId(nodeId),
-    seriesId: brandSeriesId(randomUUID()),
     locationId: brandLocationId(locationId),
     locale: "es-ES",
     invoiceLocales: ["es-ES"],

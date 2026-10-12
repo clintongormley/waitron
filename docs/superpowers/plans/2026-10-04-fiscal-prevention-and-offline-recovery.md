@@ -243,6 +243,13 @@ performs no network access. The local allocation ledger is an audit copy, not ou
 - [ ] Run affected sale, bill, working-order, boot, restore, adoption and promotion suites, plus
   the environment guards selected by the removed variable. Finish for owner review.
 
+**2026-10-12 implementation remap:** F2 and F1 share `selectOrderInvoice` in
+`apps/server/src/invoice-selection.ts`; F1 and corrective series were already read live.
+The cached standard-series field was removed from configuration, mirror designation and restored
+identity together. Fixture ids remain separate from request configuration. Task 4's activation
+protocol is independent and is not implemented here. The switch qualification changes series
+explicitly through a transaction and keeps the SIF unchanged.
+
 ## Task 6: recovery pack and offline administrator procedure
 
 **Create:** `apps/server/src/fiscal-recovery.ts`, `fiscal-recovery.test.ts`,

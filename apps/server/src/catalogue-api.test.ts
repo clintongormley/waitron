@@ -18,7 +18,6 @@ import type { ExtraList, ExtraListRow, OptionList, OptionListRow } from "@waitro
 import {
   locationId as brandLocationId,
   nodeId as brandNodeId,
-  seriesId as brandSeriesId,
   type ContentLanguageRules,
 } from "@waitron/shared";
 import type { Logger } from "./logger.js";
@@ -612,7 +611,6 @@ beforeEach(async () => {
 function venueCfg(): TillConfig {
   return {
     nodeId: brandNodeId("11111111-1111-4111-8111-111111111111"),
-    seriesId: brandSeriesId(crypto.randomUUID()),
     locationId: brandLocationId(locationId),
     locale: "es-ES",
     invoiceLocales: ["es-ES"],

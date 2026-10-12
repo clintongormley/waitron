@@ -14,7 +14,6 @@ const SAMPLE_BUNDLE: MirrorBundle = {
   designated: {
     locationId: "22222222-2222-2222-2222-222222222222",
     nodeId: "44444444-4444-4444-4444-444444444444",
-    seriesId: "66666666-6666-6666-6666-666666666666",
   },
   tenant: { country: "ES", taxId: "B00000000" },
   primaryNode: { name: "Caja 1", filingModule: "fiscal-verifactu", taxModule: null },
@@ -72,6 +71,16 @@ afterEach(async () => {
 });
 
 describe("fetchMirrorBundle — the real HTTP bundle fetcher (C2b Task 9)", () => {
+  it("fetches a designated node and location with no cached invoice series", async () => {
+    const identity = { ...SAMPLE_BUNDLE.designated };
+    const expected = { ...SAMPLE_BUNDLE, designated: identity };
+    const app = new Hono();
+    app.post("/management-api/mirror-bundle", (c) => c.json(expected));
+    const bundle = await fetchMirrorBundle(await startServer(app), CREDENTIAL, STANDBY);
+    expect(bundle).toEqual(expected);
+    expect(bundle.designated).not.toHaveProperty("seriesId");
+  });
+
   it("POSTs the credential to /management-api/mirror-bundle and parses a 200 into a MirrorBundle", async () => {
     let seen: { method: string; path: string; body: string } | undefined;
     const app = new Hono();

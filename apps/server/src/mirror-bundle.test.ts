@@ -91,7 +91,6 @@ async function setupVenue(): Promise<AdoptResult> {
   const designated: AdoptResult = {
     locationId: venue.locationId,
     nodeId: venue.nodeId,
-    seriesId: venue.seriesIds[0]!,
   };
   await establishNodeIdentity({ ownerDb: db, ring: RING }, designated.nodeId);
   return designated;
@@ -128,6 +127,15 @@ afterAll(async () => {
 });
 
 describe("assembleMirrorBundle (primary side)", () => {
+  it("carries no cached invoice series in the designated trading identity", async () => {
+    const standby = { nodeId: crypto.randomUUID(), publicKey: STANDBY_PUB };
+    const stale = { ...designated, seriesId: "cached" };
+    const bundle = await assembleMirrorBundle({ ...baseDeps(), designated: stale, standby });
+    expect(bundle.designated).not.toHaveProperty("seriesId");
+    expect(bundle.designated.nodeId).toBe(designated.nodeId);
+    expect(bundle.designated.locationId).toBe(designated.locationId);
+  });
+
   it("assembles a bundle carrying tenant + node identity and the box's connection details", async () => {
     const standby = { nodeId: crypto.randomUUID(), publicKey: STANDBY_PUB };
 

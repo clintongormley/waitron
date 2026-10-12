@@ -7,11 +7,7 @@ import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { bookings } from "@waitron/bookings";
 import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
-import {
-  locationId as brandLocationId,
-  nodeId as brandNodeId,
-  seriesId as brandSeriesId,
-} from "@waitron/shared";
+import { locationId as brandLocationId, nodeId as brandNodeId } from "@waitron/shared";
 import type { TillConfig } from "./till-config.js";
 import { createTable } from "./testing/live-table.js";
 import { listTablesWithState } from "./working-order.js";
@@ -50,7 +46,6 @@ async function setupVenue(): Promise<TillConfig> {
   const nodeId = await seedNode(db, brandLocationId(locationId));
   return {
     nodeId: brandNodeId(nodeId),
-    seriesId: brandSeriesId(randomUUID()),
     locationId: brandLocationId(locationId),
     locale: LOCALE,
     invoiceLocales: [LOCALE],

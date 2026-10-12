@@ -44,6 +44,7 @@ import type { BackupManifest } from "./backup-manifest.js";
 import type { Logger } from "./logger.js";
 import {
   type RestoreDeps,
+  readArtifactIdentity,
   clearReplacedDatabases,
   restoreDatabase as placeDatabaseFile,
   restoreFromArtifact,
@@ -81,7 +82,7 @@ const T = {
 };
 const TRADING_ENV = formatEnvFile({
   WAITRON_TILL_NODE_ID: T.nodeId,
-  WAITRON_TILL_SERIES_ID: T.seriesId,
+
   WAITRON_TILL_LOCATION_ID: T.locationId,
   DATABASE_URL: "postgres://app@localhost/waitron",
   WAITRON_MIGRATIONS_DATABASE_URL: "postgres://owner@localhost/waitron",
@@ -860,12 +861,12 @@ describe("restore hooks (identity phase)", () => {
       { code: `FA-1-${sif.numeroInstalacion}`, purpose: "rectificative" },
       { code: `FF-${sif.numeroInstalacion}`, purpose: "full" },
     ]);
-    expect(
-      parseEnvFile(await readFile(join(stateDir, "trading.env"), "utf8")).WAITRON_TILL_SERIES_ID,
-    ).toBe(rows[0]!.id);
+    expect(parseEnvFile(await readFile(join(stateDir, "trading.env"), "utf8"))).toEqual(
+      parseEnvFile(TRADING_ENV),
+    );
   });
 
-  it("canonicalizes a sole identity alias before rewriting and publishing it", async () => {
+  it("canonicalizes a sole identity alias before publishing it", async () => {
     const entries = FULL_ENTRIES.map((entry) =>
       entry.name === "secrets/trading.env" ? { ...entry, name: "secrets/./trading.env" } : entry,
     );
@@ -891,7 +892,9 @@ describe("restore hooks (identity phase)", () => {
     const { rows } = await suite.db.execute<{ id: string }>(
       sql`select id from invoice_series where node_id = ${T.nodeId} and code = 'FA-9'`,
     );
-    expect(written.WAITRON_TILL_SERIES_ID).toBe(rows[0]!.id);
+    expect(rows).toHaveLength(1);
+    expect(written).toEqual(parseEnvFile(TRADING_ENV));
+    expect(written).not.toHaveProperty("WAITRON_TILL_SERIES_ID");
   });
 
   it("rejects duplicate identity destinations during validation before set-aside", async () => {
@@ -969,7 +972,6 @@ describe("restore hooks (identity phase)", () => {
       formatEnvFile({
         WAITRON_TILL_NODE_ID: "stale",
         WAITRON_TILL_LOCATION_ID: "stale",
-        WAITRON_TILL_SERIES_ID: "stale",
       }),
     );
     const hook = vi.fn(async () => ({ report: "ok" }));
@@ -1036,7 +1038,7 @@ describe("restore hooks (identity phase)", () => {
     });
   });
 
-  it("series returned → old retired + new opened in the SAME transaction, trading.env rewritten in exactly one key", async () => {
+  it("series returned → old retired + new opened in the SAME transaction, trading.env keeps its node and location identity", async () => {
     const hook: RestoreHook = async () => ({
       report: "ok",
       series: [
@@ -1055,10 +1057,8 @@ describe("restore hooks (identity phase)", () => {
     ]);
     const written = parseEnvFile(await readFile(join(stateDir, "trading.env"), "utf8"));
     const original = parseEnvFile(TRADING_ENV);
-    expect(written.WAITRON_TILL_SERIES_ID).not.toBe(T.seriesId);
-    expect({ ...written, WAITRON_TILL_SERIES_ID: original.WAITRON_TILL_SERIES_ID }).toEqual(
-      original,
-    );
+    expect(written).not.toHaveProperty("WAITRON_TILL_SERIES_ID");
+    expect(written).toEqual(original);
     expect(Object.keys(written)).toEqual(Object.keys(original)); // order preserved
   });
 
@@ -1097,7 +1097,7 @@ describe("restore hooks (identity phase)", () => {
     await expect(stat(join(stateDir, "trading.env"))).rejects.toMatchObject({ code: "ENOENT" });
   });
 
-  it("no series returned but the artifact's series id is not the live standard one → env is corrected", async () => {
+  it("no series returned after standard series replacement → env identity is unchanged", async () => {
     await suite.db.insert(invoiceSeries).values({ nodeId: T.nodeId, code: "FB" });
     await suite.db
       .update(invoiceSeries)
@@ -1109,7 +1109,9 @@ describe("restore hooks (identity phase)", () => {
       .select({ id: invoiceSeries.id })
       .from(invoiceSeries)
       .where(eq(invoiceSeries.code, "FB"));
-    expect(written.WAITRON_TILL_SERIES_ID).toBe(fb!.id);
+    expect(fb!.id).not.toBe(T.seriesId);
+    expect(written).toEqual(parseEnvFile(TRADING_ENV));
+    expect(written).not.toHaveProperty("WAITRON_TILL_SERIES_ID");
   });
 
   it("no series returned and TWO live standard series in the restored db → refused (loud), no identity written", async () => {
@@ -1700,6 +1702,20 @@ describe("clearReplacedDatabases", () => {
     });
     expect(log).toHaveBeenCalledWith("info", "restore.db.aside_removed", {
       folder: ".venue.db-replaced-second",
+    });
+  });
+});
+
+describe("transactional series restore identity", () => {
+  it("requires only node and location from the sealed identity", () => {
+    const env = formatEnvFile({
+      WAITRON_TILL_NODE_ID: T.nodeId,
+      WAITRON_TILL_LOCATION_ID: T.locationId,
+    });
+    expect(
+      readArtifactIdentity([{ name: "secrets/trading.env", bytes: Buffer.from(env) }]),
+    ).toEqual({
+      node: { nodeId: T.nodeId, locationId: T.locationId },
     });
   });
 });

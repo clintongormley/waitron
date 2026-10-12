@@ -46,7 +46,6 @@ import {
 import {
   locationId as brandLocationId,
   nodeId as brandNodeId,
-  seriesId as brandSeriesId,
   type SupportedLocale,
 } from "@waitron/shared";
 import { fakeHost } from "@waitron/print-agent/testing/fake-host.js";
@@ -123,7 +122,6 @@ async function seedPrintRouteFixture(db: Database) {
   // Knock and accept must share this one cfg: every join-request statement filters by node.
   cfg = {
     nodeId: brandNodeId(randomUUID()),
-    seriesId: brandSeriesId(randomUUID()),
     locationId: brandLocationId(locationId),
     locale: "es-ES",
     invoiceLocales: ["es-ES"],

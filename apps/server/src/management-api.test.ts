@@ -37,11 +37,7 @@ import {
   VENUE_SERVICE_ROUTES,
   VENUE_SERVICE_PERMISSIONS,
 } from "@waitron/venue-service";
-import {
-  locationId as brandLocationId,
-  nodeId as brandNodeId,
-  seriesId as brandSeriesId,
-} from "@waitron/shared";
+import { locationId as brandLocationId, nodeId as brandNodeId } from "@waitron/shared";
 import type { Logger } from "./logger.js";
 import { ALL_MODULES } from "./modules.js";
 import { createTable, switchOff } from "./testing/live-table.js";
@@ -175,7 +171,6 @@ async function setupTenant(): Promise<{ venue: VenueResult; managerId: string; s
 function tillConfigFromVenue(venue: VenueResult): TillConfig {
   return {
     nodeId: brandNodeId(venue.nodeId),
-    seriesId: brandSeriesId(venue.seriesIds[0]!),
     locationId: brandLocationId(venue.locationId),
     locale: LOCALE,
     invoiceLocales: [LOCALE],

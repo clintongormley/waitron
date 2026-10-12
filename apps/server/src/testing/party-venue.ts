@@ -25,11 +25,7 @@ import { hashPassword, hashPin } from "@waitron/identity";
 import { applyVenue, planVenue } from "@waitron/provisioning";
 import { offerMenuThroughZone } from "@waitron/venue-service/testing/zone-menus.js";
 import type { VenueResult } from "@waitron/provisioning";
-import {
-  locationId as brandLocationId,
-  nodeId as brandNodeId,
-  seriesId as brandSeriesId,
-} from "@waitron/shared";
+import { locationId as brandLocationId, nodeId as brandNodeId } from "@waitron/shared";
 import { splitBill } from "../bill-actions.js";
 import { takeBillPayment } from "../bill-payments.js";
 import { deploymentEnvironment } from "../config.js";
@@ -132,7 +128,6 @@ export async function setupPartyVenue(db: Database): Promise<PartyVenue> {
   );
   const cfg = await deviceRequestCfg(db, {
     nodeId: brandNodeId(venue.nodeId),
-    seriesId: brandSeriesId(venue.seriesIds[0]!),
     locationId: brandLocationId(venue.locationId),
     locale: LOCALE,
     invoiceLocales: [LOCALE],

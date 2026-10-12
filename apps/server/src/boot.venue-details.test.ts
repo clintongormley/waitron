@@ -88,7 +88,7 @@ describe("a running venue's account email clock", () => {
           WAITRON_MANAGEMENT_RP_ID: "dashboard.example.com",
           WAITRON_MANAGEMENT_ORIGIN: ORIGIN,
           WAITRON_TILL_NODE_ID: venue.cfg.nodeId,
-          WAITRON_TILL_SERIES_ID: venue.cfg.seriesId,
+
           WAITRON_TILL_LOCATION_ID: venue.cfg.locationId,
           WAITRON_MIGRATIONS_DIR: migrationsRoot,
           WAITRON_ENV: "preproduction",

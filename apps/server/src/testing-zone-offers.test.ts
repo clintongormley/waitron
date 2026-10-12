@@ -28,12 +28,7 @@ import {
   createProduct,
   writeProductModifiers,
 } from "@waitron/catalogue";
-import {
-  locationId as brandLocationId,
-  nodeId as brandNodeId,
-  seriesId as brandSeriesId,
-  jobOrigin,
-} from "@waitron/shared";
+import { locationId as brandLocationId, nodeId as brandNodeId, jobOrigin } from "@waitron/shared";
 import { addTabRound, parkOrder } from "./working-order.js";
 import { createStation } from "./kitchen.js";
 import { createTable } from "./testing/live-table.js";
@@ -73,7 +68,6 @@ async function seedVenue(db: Database): Promise<Venue> {
   const cfg: OriginConfig = {
     origin: jobOrigin("dashboard"),
     nodeId: brandNodeId(await seedNode(db, locationId)),
-    seriesId: brandSeriesId(randomUUID()),
     locationId,
     locale: "es-ES",
     invoiceLocales: ["es-ES"],

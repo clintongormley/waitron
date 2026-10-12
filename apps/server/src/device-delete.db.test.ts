@@ -384,7 +384,7 @@ async function seed() {
     recordSale(tx, backend, {
       origin: deviceOrigin(barTill),
       nodeId: cfg.nodeId,
-      seriesId: cfg.seriesId,
+      seriesId: venue.seriesId,
       locale: "es-ES",
       invoiceLocales: ["es-ES"],
       total: "1.00",

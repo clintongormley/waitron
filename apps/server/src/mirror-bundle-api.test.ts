@@ -144,7 +144,6 @@ async function setupVenue(): Promise<{
   const designated: AdoptResult = {
     locationId: venue.locationId,
     nodeId: venue.nodeId,
-    seriesId: venue.seriesIds[0]!,
   };
   await establishNodeIdentity({ ownerDb: db, ring: RING }, designated.nodeId);
   const primaryPublicKey = (await readMembershipTrustSet(db))[designated.nodeId]!;

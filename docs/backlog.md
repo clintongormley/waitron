@@ -296,7 +296,9 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   checks and resolved findings; an important unresolved decision still goes to the owner. Q5(f)
   and Q33–Q40 in the adviser document are revised, and Q41 covers issued invoices missing from the
   backup. Task 3 can use the published receipts; D2 retains its remaining plan gates, and D5 still
-  needs old-chain evidence and its adviser answer. [Detail](backlog/fiscal.md#w41s-fiscal-prevention-and-offline-recovery--design-and-revised-plan-approved-2026-10-04)
+  needs old-chain evidence and its adviser answer. Task 5 reads the live series during issuance
+  and retires the boot series setting. Task 4 still owes allocation activation; the owner selected
+  first symbol `0–7` with 128 random bits. The later recovery and resolution tasks remain open. [Detail](backlog/fiscal.md#w41s-fiscal-prevention-and-offline-recovery--design-and-revised-plan-approved-2026-10-04)
 
 - **Still open after W41s-3 (#1289)** — no probe has yet shown what AEAT does with a record sent
   after a 3000 conflict or after a held cancellation; the owner chose (2026-10-06) to keep holding

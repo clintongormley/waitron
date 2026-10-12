@@ -57,10 +57,10 @@ async function bill(full = false) {
       .returning();
     return {
       id: order!.id,
+      seriesId: seriesId(standard!.id),
       fullSeriesId: fullSeries!.id,
       cfg: {
         nodeId: nodeId(node!.id),
-        seriesId: seriesId(standard!.id),
         simplifiedInvoiceLimit: decimal("3000.00"),
       },
     };
@@ -68,6 +68,62 @@ async function bill(full = false) {
 }
 
 describe("stored bill invoice selection", () => {
+  it("reads the standard series activated earlier in the issuance transaction", async () => {
+    const order = await bill();
+    const selected = await withTransaction(suite.db, async (tx) => {
+      await tx
+        .update(invoiceSeries)
+        .set({ retiredAt: new Date() })
+        .where(eq(invoiceSeries.id, order.seriesId));
+      const [fresh] = await tx
+        .insert(invoiceSeries)
+        .values({
+          nodeId: order.cfg.nodeId,
+          code: "FS-P000042",
+          purpose: "standard",
+        })
+        .returning();
+      const result = await selectOrderInvoice(tx, policy, order.cfg, order.id, decimal("3.00"));
+      return { result, freshId: fresh!.id };
+    });
+    expect(selected.result.sale.seriesId).toBe(selected.freshId);
+    expect(selected.result.sale.seriesId).not.toBe(order.seriesId);
+  });
+
+  it("refuses F2 when the cached series is retired and no standard series is live", async () => {
+    const order = await bill();
+    await withTransaction(suite.db, (tx) =>
+      tx
+        .update(invoiceSeries)
+        .set({ retiredAt: new Date() })
+        .where(eq(invoiceSeries.id, order.seriesId)),
+    );
+    await expect(
+      withTransaction(suite.db, (tx) =>
+        selectOrderInvoice(tx, policy, order.cfg, order.id, decimal("3.00")),
+      ),
+    ).rejects.toMatchObject({
+      code: "series.no_standard_for_node",
+      params: { nodeId: order.cfg.nodeId },
+    });
+  });
+
+  it("refuses ambiguous live standard series", async () => {
+    const order = await bill();
+    await withTransaction(suite.db, (tx) =>
+      tx.insert(invoiceSeries).values({
+        nodeId: order.cfg.nodeId,
+        code: "SECOND",
+        purpose: "standard",
+      }),
+    );
+    await expect(
+      withTransaction(suite.db, (tx) =>
+        selectOrderInvoice(tx, policy, order.cfg, order.id, decimal("3.00")),
+      ),
+    ).rejects.toThrow("more than one standard series");
+  });
+
   it.each(["0.00", "3.00", "3000.00"])(
     "keeps F2 ticket numbering for a bill at %s",
     async (total) => {
@@ -79,7 +135,7 @@ describe("stored bill invoice selection", () => {
         invoiceType: "F2",
         recipient: undefined,
         sale: {
-          seriesId: order.cfg.seriesId,
+          seriesId: order.seriesId,
           counterparty: null,
           recipientAddress: null,
         },
@@ -140,7 +196,7 @@ describe("stored bill invoice selection", () => {
       ),
     );
     expect(selected.sale.counterparty).toBeNull();
-    expect(selected.sale.seriesId).toBe(order.cfg.seriesId);
+    expect(selected.sale.seriesId).toBe(order.seriesId);
   });
 
   it.each(["missing", "retired", "wrong-node"])(

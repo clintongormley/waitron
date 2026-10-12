@@ -8,7 +8,6 @@ import { deploymentEnvironment, isDevMode, loadConfig, loadTunnelConfig } from "
 // Distinct per field so a mis-wired till mapping fails rather than passing by coincidence.
 const TILL_ENV = {
   WAITRON_TILL_NODE_ID: "33333333-3333-4333-8333-333333333333",
-  WAITRON_TILL_SERIES_ID: "44444444-4444-4444-8444-444444444444",
   WAITRON_TILL_LOCATION_ID: "55555555-5555-4555-8555-555555555555",
 };
 
@@ -20,7 +19,6 @@ const STATE_ROOT = "/opt/waitron/state";
 
 const EXPECTED_TILL = {
   nodeId: TILL_ENV.WAITRON_TILL_NODE_ID,
-  seriesId: TILL_ENV.WAITRON_TILL_SERIES_ID,
   locationId: TILL_ENV.WAITRON_TILL_LOCATION_ID,
   locale: "es-ES",
   invoiceLocales: ["es-ES"],
@@ -109,7 +107,7 @@ describe("loadConfig", () => {
   });
 
   // Setup mode: an unprovisioned box has no till identity, and loading does not throw.
-  it("leaves config.till undefined when the three WAITRON_TILL_*_ID are absent, else populates it", () => {
+  it("leaves config.till undefined when both WAITRON_TILL_*_ID are absent, else populates it", () => {
     const setup = loadConfig({}, ROOT, STATE_ROOT);
     expect(setup.till).toBeUndefined();
 

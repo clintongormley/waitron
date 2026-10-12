@@ -32,7 +32,6 @@ import {
   type DeleteImpact,
   locationId as brandLocationId,
   nodeId as brandNodeId,
-  seriesId as brandSeriesId,
 } from "@waitron/shared";
 import { FakeFiscalBackend } from "@waitron/fiscal/src/testing/fake-backend.js";
 import { mountPaymentsApi } from "./payments-api.js";
@@ -201,7 +200,6 @@ function saleDeps() {
 function cfgOf(venue: Venue): TillConfig {
   return {
     nodeId: brandNodeId(randomUUID()),
-    seriesId: brandSeriesId(randomUUID()),
     locationId: brandLocationId(venue.locationId),
     locale: "es-ES",
     invoiceLocales: ["es-ES"],

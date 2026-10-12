@@ -112,18 +112,12 @@ export async function promoteLocalSecondaryToPrimary(
 }
 
 export interface MirrorPromotionResult extends PromotionResult {
-  /** This node's own reserved series, disjoint from the old primary's, now in trading.env. */
+  /** The standard series validated for this node. */
   readonly seriesId: string;
 }
 
 export interface MirrorPromoteDeps extends PromoteDeps {
-  /**
-   * Called BEFORE the point of no return. A corrected `seriesId` is inert while the node is still a
-   * read-only mirror, so writing it early is safe if the promote then aborts, and a process crash
-   * between the two can never boot the node primary on the old primary's series. Power loss still
-   * can: `writeFileAtomic` does not fsync.
-   */
-  readonly persistTradingEnv: (seriesId: string) => Promise<void>;
+  readonly persistTradingEnv: () => Promise<void>;
 }
 
 /**
@@ -180,8 +174,7 @@ export async function promoteMirrorToPrimary(
     },
   );
 
-  // Before the point of no return: see `MirrorPromoteDeps.persistTradingEnv`.
-  await deps.persistTradingEnv(seriesId);
+  await deps.persistTradingEnv();
 
   await withTransaction(deps.db, async (tx) => {
     await commitMirrorPromotionTx(tx, deps.nodeId, document);

@@ -153,7 +153,7 @@ async function venueWith(
   const cfg = await deviceRequestCfg(suite.db, {
     ...loadTillConfig({
       WAITRON_TILL_NODE_ID: venue.nodeId,
-      WAITRON_TILL_SERIES_ID: venue.seriesIds[0]!,
+
       WAITRON_TILL_LOCATION_ID: venue.locationId,
       ...(envLocale === undefined ? {} : { WAITRON_TILL_LOCALE: envLocale }),
     }),

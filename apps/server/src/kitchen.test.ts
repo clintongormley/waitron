@@ -17,12 +17,7 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { CATALOGUE_MIGRATIONS } from "@waitron/catalogue";
 import { VENUE_SERVICE_MIGRATIONS } from "@waitron/venue-service";
 import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
-import {
-  AppError,
-  locationId as brandLocationId,
-  nodeId as brandNodeId,
-  seriesId as brandSeriesId,
-} from "@waitron/shared";
+import { AppError, locationId as brandLocationId, nodeId as brandNodeId } from "@waitron/shared";
 import type { TillConfig } from "./till-config.js";
 import {
   createCourse,
@@ -66,7 +61,6 @@ async function setupVenue(): Promise<TillConfig> {
   const nodeId = await seedNode(db, brandLocationId(locationId));
   return {
     nodeId: brandNodeId(nodeId),
-    seriesId: brandSeriesId(randomUUID()),
     locationId: brandLocationId(locationId),
     locale: LOCALE,
     invoiceLocales: [LOCALE],

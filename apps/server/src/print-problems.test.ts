@@ -29,11 +29,7 @@ import {
   resendPrintJob,
   updatePrinter,
 } from "@waitron/printing";
-import {
-  locationId as brandLocationId,
-  nodeId as brandNodeId,
-  seriesId as brandSeriesId,
-} from "@waitron/shared";
+import { locationId as brandLocationId, nodeId as brandNodeId } from "@waitron/shared";
 import type { DeviceRequestConfig, TillConfig } from "./till-config.js";
 import { deviceRequestCfg } from "./testing/session-device.js";
 import { createStation } from "./kitchen.js";
@@ -113,7 +109,6 @@ async function setupVenue(): Promise<Venue> {
   const nodeId = await seedNode(db, brandLocationId(locationId));
   const cfg = await deviceRequestCfg(db, {
     nodeId: brandNodeId(nodeId),
-    seriesId: brandSeriesId(randomUUID()),
     locationId: brandLocationId(locationId),
     locale: LOCALE,
     invoiceLocales: [LOCALE],

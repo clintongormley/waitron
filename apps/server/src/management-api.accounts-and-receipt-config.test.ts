@@ -22,11 +22,7 @@ import { DEFAULT_RECEIPT, getPrintedReceipt } from "@waitron/layouts";
 import { mediaImages, uploadImage } from "@waitron/media";
 import { samplePreparedImage } from "@waitron/media/testing/sample-image.js";
 import { applyVenue, planVenue } from "@waitron/provisioning";
-import {
-  locationId as brandLocationId,
-  nodeId as brandNodeId,
-  seriesId as brandSeriesId,
-} from "@waitron/shared";
+import { locationId as brandLocationId, nodeId as brandNodeId } from "@waitron/shared";
 import type { Logger } from "./logger.js";
 import type { TillConfig } from "./till-config.js";
 import type { AccountEmailSender } from "./account-email.js";
@@ -120,7 +116,6 @@ async function setupTenant(): Promise<{ managerId: string; staffId: string }> {
   );
   venueCfg = {
     nodeId: brandNodeId(venue.nodeId),
-    seriesId: brandSeriesId(venue.seriesIds[0]!),
     locationId: brandLocationId(venue.locationId),
     locale: LOCALE,
     invoiceLocales: [LOCALE],

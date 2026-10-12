@@ -599,7 +599,7 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
             bytes: Buffer.from(
               [
                 "WAITRON_TILL_NODE_ID=c0000000-0000-4000-8000-000000000008",
-                "WAITRON_TILL_SERIES_ID=c0000000-0000-4000-8000-000000000004",
+
                 "WAITRON_TILL_LOCATION_ID=c0000000-0000-4000-8000-000000000002",
                 "",
               ].join("\n"),
@@ -940,7 +940,7 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
               bytes: Buffer.from(
                 [
                   "WAITRON_TILL_NODE_ID=c0000000-0000-4000-8000-000000000008",
-                  "WAITRON_TILL_SERIES_ID=c0000000-0000-4000-8000-000000000004",
+
                   "WAITRON_TILL_LOCATION_ID=c0000000-0000-4000-8000-000000000002",
                   "",
                 ].join("\n"),
@@ -1049,7 +1049,6 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
       designated: {
         locationId: "22222222-2222-4222-8222-222222222222",
         nodeId: "44444444-4444-4444-8444-444444444444",
-        seriesId: "55555555-5555-4555-8555-555555555555",
       },
       tenant: { country: "ES", taxId: "80000001K" },
       primaryNode: { name: "Caja 1", filingModule: "fiscal-verifactu", taxModule: null },

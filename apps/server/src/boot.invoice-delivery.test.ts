@@ -177,7 +177,7 @@ async function fixture(environment: "preproduction" | "production" = "preproduct
     WAITRON_CREDENTIALS_KEY_VERSION: "1",
     WAITRON_TILL_LOCATION_ID: location!.id,
     WAITRON_TILL_NODE_ID: node,
-    WAITRON_TILL_SERIES_ID: series!.id,
+
     WAITRON_ONBOARDING_INTENT: "demo",
   };
   return {

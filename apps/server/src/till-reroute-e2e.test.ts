@@ -174,17 +174,12 @@ async function seedVenue(db: Database): Promise<void> {
     .onConflictDoNothing({ target: devices.id });
 }
 
-/** The env for a PRIMARY (selling) boot of `nodeId`/`seriesId` on `venueDir` at `port`. */
-function primaryEnv(
-  venueDir: string,
-  port: number,
-  nodeId: string,
-  seriesId: string,
-): Record<string, string> {
+/** The env for a PRIMARY boot of `nodeId` on `venueDir` at `port`. */
+function primaryEnv(venueDir: string, port: number, nodeId: string): Record<string, string> {
   return {
     ...KEY_ENV,
     WAITRON_TILL_NODE_ID: nodeId,
-    WAITRON_TILL_SERIES_ID: seriesId,
+
     WAITRON_TILL_LOCATION_ID: LOCATION,
     WAITRON_VENUE_DIR: venueDir,
     WAITRON_HTTP_PORT: String(port),
@@ -199,7 +194,7 @@ function mirrorEnv(venueDir: string, port: number): Record<string, string> {
   return {
     ...KEY_ENV,
     WAITRON_TILL_NODE_ID: NODE_B,
-    WAITRON_TILL_SERIES_ID: SERIES_B,
+
     WAITRON_TILL_LOCATION_ID: LOCATION,
     WAITRON_VENUE_DIR: venueDir,
     WAITRON_HTTP_PORT: String(port),
@@ -299,7 +294,7 @@ afterAll(async () => {
 describe("till reroute — two instances, one venue", () => {
   it("A primary, B standby; A goes down; B promoted+restarted; the device cookie follows and the venue's tab is inherited", async () => {
     const [portA, portB] = await freePorts(2);
-    const serverA = await startServer(primaryEnv(venueDirA, portA, NODE_A, SERIES_A));
+    const serverA = await startServer(primaryEnv(venueDirA, portA, NODE_A));
     // B's boot is inside the try so a rejection there still closes A in the finally (no leaked listener).
     let serverB: StartedServer | undefined;
     try {
@@ -347,7 +342,7 @@ describe("till reroute — two instances, one venue", () => {
       await serverB.close();
       serverB = undefined;
 
-      const serverB2 = await startServer(primaryEnv(venueDirB, portB, NODE_B, SERIES_B));
+      const serverB2 = await startServer(primaryEnv(venueDirB, portB, NODE_B));
       try {
         // The promoted, restarted B now accepts sales — pinned to the fixture's `bPrimary` body.
         expect(await probe(portB)).toEqual(FIXTURE.bPrimary);

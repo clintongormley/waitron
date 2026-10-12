@@ -156,7 +156,7 @@ export async function assembleMirrorBundle(deps: AssembleDeps): Promise<MirrorBu
   );
 
   return {
-    designated: deps.designated,
+    designated: { nodeId: deps.designated.nodeId, locationId: deps.designated.locationId },
     tenant: { country: tenant.country, taxId: tenant.taxId },
     primaryNode: {
       name: primaryNode.name,

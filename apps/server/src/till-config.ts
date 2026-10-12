@@ -2,8 +2,8 @@
 // throws its codes.
 import "./errors.js";
 import { eq } from "drizzle-orm";
-import { AppError, locationId, nodeId, seriesId } from "@waitron/shared";
-import type { Decimal, DeviceOrigin, LocationId, NodeId, Origin, SeriesId } from "@waitron/shared";
+import { AppError, locationId, nodeId } from "@waitron/shared";
+import type { Decimal, DeviceOrigin, LocationId, NodeId, Origin } from "@waitron/shared";
 import { nodes, withTransaction } from "@waitron/db";
 import type { Database } from "@waitron/db";
 import { isUnset } from "./env-value.js";
@@ -14,7 +14,6 @@ export type OrderFlow = "prepay" | "ticket_then_pay";
  * stamped. */
 export interface TillConfig {
   nodeId: NodeId;
-  seriesId: SeriesId;
   locationId: LocationId;
   /** `WAITRON_TILL_LOCALE`, defaulted. Not the receipt's language. */
   locale: string;
@@ -84,7 +83,6 @@ export function loadTillConfig(env: NodeJS.ProcessEnv): TillIdentityConfig {
 
   return {
     nodeId: brand("WAITRON_TILL_NODE_ID", nodeId, required(env, "WAITRON_TILL_NODE_ID")),
-    seriesId: brand("WAITRON_TILL_SERIES_ID", seriesId, required(env, "WAITRON_TILL_SERIES_ID")),
     locationId: brand(
       "WAITRON_TILL_LOCATION_ID",
       locationId,
@@ -98,14 +96,10 @@ export function loadTillConfig(env: NodeJS.ProcessEnv): TillIdentityConfig {
 }
 
 /** Order matters: a partial set names the FIRST missing variable in this order. */
-const TILL_ID_VARS = [
-  "WAITRON_TILL_NODE_ID",
-  "WAITRON_TILL_SERIES_ID",
-  "WAITRON_TILL_LOCATION_ID",
-] as const;
+const TILL_ID_VARS = ["WAITRON_TILL_NODE_ID", "WAITRON_TILL_LOCATION_ID"] as const;
 
 /**
- * None of the three ids set is setup mode (`undefined`), not a fault. Some but not all set is a
+ * Neither of the two ids set is setup mode (`undefined`), not a fault. Some but not all set is a
  * misconfiguration, refused rather than silently degraded to setup mode.
  */
 export function tryLoadTillConfig(env: NodeJS.ProcessEnv): TillIdentityConfig | undefined {

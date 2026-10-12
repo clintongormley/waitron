@@ -379,7 +379,7 @@ describe("the stream's pause at the side-file limit, with sales on the server's 
         join(stateDir, "trading.env"),
         formatEnvFile({
           WAITRON_TILL_NODE_ID: box.nodeId,
-          WAITRON_TILL_SERIES_ID: box.seriesId,
+
           WAITRON_TILL_LOCATION_ID: box.locationId,
           WAITRON_ENV: "preproduction",
         }),

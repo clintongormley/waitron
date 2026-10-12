@@ -23,7 +23,6 @@ import {
   decimal,
   locationId as brandLocationId,
   nodeId as brandNodeId,
-  seriesId as brandSeriesId,
   jobOrigin,
   MEDIA_FILENAME,
 } from "@waitron/shared";
@@ -62,7 +61,6 @@ function tillConfigFor(venue: Venue): OriginConfig {
   return {
     origin: jobOrigin("dashboard"),
     nodeId: brandNodeId(venue.nodeId),
-    seriesId: brandSeriesId(venue.seriesId),
     locationId: brandLocationId(venue.locationId),
     locale: SEED_INVOICE_LOCALE[LOCALE],
     invoiceLocales: [SEED_INVOICE_LOCALE[LOCALE]],

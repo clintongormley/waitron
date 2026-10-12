@@ -1,5 +1,10 @@
 # A fiscal chain that AEAT disagrees with — design (W41s)
 
+**2026-10-12, W41s-5:** the server now reads the live standard or full series inside issuance.
+Startup and saved trading identity carry node and location, without a cached standard-series id.
+The references below to the boot series setting describe the earlier implementation.
+
+
 > **Design update, 2026-10-04:** read
 > [Preventing fiscal conflicts and recovering offline](2026-10-04-fiscal-prevention-and-offline-recovery-design.md)
 > first. It records the owner's offline-recovery requirements, revises allocation and the

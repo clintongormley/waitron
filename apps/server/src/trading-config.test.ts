@@ -16,7 +16,6 @@ const newDir = async () => {
 
 const cfg: TradingConfig = {
   nodeId: "node-3",
-  seriesId: "series-4",
   locationId: "location-5",
   environment: "production",
   onboardingIntent: "live",
@@ -24,6 +23,13 @@ const cfg: TradingConfig = {
 };
 
 describe("writeTradingEnv", () => {
+  it("persists node and location without a cached invoice series", async () => {
+    const env = await readFile(await writeTradingEnv(await newDir(), cfg), "utf8");
+    expect(env).not.toContain("WAITRON_TILL_SERIES_ID");
+    expect(env).toContain("WAITRON_TILL_NODE_ID=node-3\n");
+    expect(env).toContain("WAITRON_TILL_LOCATION_ID=location-5\n");
+  });
+
   it("returns the <stateDir>/trading.env path it wrote", async () => {
     const d = await newDir();
     const path = await writeTradingEnv(d, cfg);
@@ -37,7 +43,6 @@ describe("writeTradingEnv", () => {
     const env = await readFile(await writeTradingEnv(d, cfg), "utf8");
     expect(env).toBe(
       "WAITRON_TILL_NODE_ID=node-3\n" +
-        "WAITRON_TILL_SERIES_ID=series-4\n" +
         "WAITRON_TILL_LOCATION_ID=location-5\n" +
         "WAITRON_ENV=production\n" +
         "WAITRON_ONBOARDING_INTENT=live\n" +
@@ -61,7 +66,6 @@ describe("writeTradingEnv", () => {
     const env = await readFile(await writeTradingEnv(d, { ...cfg, accountKey: undefined }), "utf8");
     expect(env).toBe(
       "WAITRON_TILL_NODE_ID=node-3\n" +
-        "WAITRON_TILL_SERIES_ID=series-4\n" +
         "WAITRON_TILL_LOCATION_ID=location-5\n" +
         "WAITRON_ENV=production\n" +
         "WAITRON_ONBOARDING_INTENT=live\n",

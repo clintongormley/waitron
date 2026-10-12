@@ -129,8 +129,6 @@ function nextNif(): string {
 function tillConfigFromVenue(venue: VenueResult): TillConfig {
   return {
     nodeId: brandNodeId(venue.nodeId),
-    // planVenue emits the standard series first, then the rectificative one.
-    seriesId: brandSeriesId(venue.seriesIds[0]!),
     locationId: brandLocationId(venue.locationId),
     locale: LOCALE,
     invoiceLocales: [LOCALE],
@@ -145,6 +143,7 @@ function tillConfigFromVenue(venue: VenueResult): TillConfig {
  */
 async function setupVenue(options: { variants?: boolean } = {}): Promise<{
   cfg: DeviceRequestConfig;
+  seriesId: ReturnType<typeof brandSeriesId>;
   available: AvailableProduct[];
   zoneId: string;
   waterOfferId: string;
@@ -268,7 +267,7 @@ async function setupVenue(options: { variants?: boolean } = {}): Promise<{
     };
   });
   const offers = await withTransaction(suite.db, (tx) => offerProducts(tx, cfg));
-  return { cfg, ...catalogue, offers };
+  return { cfg, seriesId: brandSeriesId(venue.seriesIds[0]!), ...catalogue, offers };
 }
 
 beforeAll(() => {
@@ -2547,7 +2546,7 @@ describe("per-answer receipt presentation", () => {
 
 describe("receipt presentation sources", () => {
   it("treats absent and explicitly null saved departments as venue-only, and clears previous defaults", async () => {
-    const { cfg } = await setupVenue();
+    const { cfg, seriesId } = await setupVenue();
     const global = {
       headerSubtitle: "Venue subtitle",
       footerMessage: "Venue footer",
@@ -2581,7 +2580,7 @@ describe("receipt presentation sources", () => {
       recordSale(tx, backend, {
         origin: cfg.origin,
         nodeId: cfg.nodeId,
-        seriesId: cfg.seriesId,
+        seriesId,
         locale: "es-ES",
         invoiceLocales: ["es-ES"],
         clock,

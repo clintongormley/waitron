@@ -263,7 +263,7 @@ async function buildArtifact(older: boolean, artifact: string): Promise<void> {
         bytes: Buffer.from(
           formatEnvFile({
             WAITRON_TILL_NODE_ID: F.nodeId,
-            WAITRON_TILL_SERIES_ID: F.seriesId,
+
             WAITRON_TILL_LOCATION_ID: F.locationId,
             WAITRON_ENV: "preproduction",
           }),
@@ -326,7 +326,7 @@ afterAll(async () => {
 });
 
 describe("fiscal restore, end to end", () => {
-  it("re-registers the SIF, retires and replaces the series, rewrites trading.env, keeps the ledger immutable", async () => {
+  it("re-registers the SIF, replaces series, publishes trading identity, and keeps the ledger immutable", async () => {
     const dirs = await arrangeDirs();
     await drive(dirs);
 
@@ -363,9 +363,10 @@ describe("fiscal restore, end to end", () => {
         { code: `RE-${n}`, retired: false, next: 1 },
       ]);
       const env = parseEnvFile(await readFile(join(dirs.stateDir, "trading.env"), "utf8"));
-      expect(env.WAITRON_TILL_SERIES_ID).toBe(await readStandardSeriesId(db, F.nodeId));
+      expect(env).not.toHaveProperty("WAITRON_TILL_SERIES_ID");
+      expect(await readStandardSeriesId(db, F.nodeId)).not.toBe(F.seriesId);
       expect(env.WAITRON_TILL_NODE_ID).toBe(F.nodeId);
-      // A key the rewrite does not touch survives it.
+      // The restored identity keeps the deployment environment.
       expect(env.WAITRON_ENV).toBe("preproduction");
       expect(env.WAITRON_TILL_LOCATION_ID).toBe(F.locationId);
       expect(await readFile(join(dirs.stateDir, "secrets.env"), "utf8")).toBe(

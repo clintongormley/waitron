@@ -7,7 +7,7 @@ import { seedTenant } from "@waitron/db/testing/seed.js";
 import { IDENTITY_MIGRATIONS, hashPin, persons, startManagementSession } from "@waitron/identity";
 import { CATALOGUE_MIGRATIONS, activateDueMenuPublications } from "@waitron/catalogue";
 import type { MenuPreview, MenuPublicationsAnswer, MenuStatus } from "@waitron/catalogue";
-import { locationId as brandLocationId, nodeId as brandNodeId, seriesId } from "@waitron/shared";
+import { locationId as brandLocationId, nodeId as brandNodeId } from "@waitron/shared";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import type { Logger } from "./logger.js";
 import { mountCatalogueApi } from "./catalogue-api.js";
@@ -89,7 +89,6 @@ function mountApp(): Hono {
       db: suite.db,
       venueCfg: {
         nodeId: brandNodeId("11111111-1111-4111-8111-111111111111"),
-        seriesId: seriesId(crypto.randomUUID()),
         locationId: brandLocationId(locationId),
         locale: "es-ES",
         invoiceLocales: ["es-ES"],

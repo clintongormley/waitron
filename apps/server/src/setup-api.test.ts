@@ -510,9 +510,9 @@ describe("POST /setup-api/provision — orchestration, onboarding intent, cert g
     expect(await verifyPin("1357", req.venue.admin.pinHash)).toBe(true);
     expect(await verifyPassword("correct-horse-battery", req.venue.admin.passwordHash)).toBe(true);
 
+    expect(persistTrading.mock.calls[0][0]).not.toHaveProperty("seriesId");
     expect(persistTrading.mock.calls[0][0]).toEqual({
       nodeId: NODE_ID,
-      seriesId: SERIES_ID_0,
       locationId: LOCATION_ID,
       environment: "preproduction",
       onboardingIntent: "demo",

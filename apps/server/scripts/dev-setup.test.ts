@@ -39,7 +39,6 @@ const sampleEnv: DevEnv = {
   WAITRON_CREDENTIALS_KEY: "c2FtcGxlLTMyLWJ5dGUta2V5LWZvci10ZXN0aW5nLW9r",
   WAITRON_CREDENTIALS_KEY_VERSION: "1",
   WAITRON_TILL_NODE_ID: "33333333-3333-3333-3333-333333333333",
-  WAITRON_TILL_SERIES_ID: "44444444-4444-4444-4444-444444444444",
   WAITRON_TILL_LOCATION_ID: "55555555-5555-5555-5555-555555555555",
   WAITRON_TILL_LOCALE: "en-GB",
 };
@@ -57,7 +56,6 @@ describe("renderEnvFile", () => {
       "WAITRON_CREDENTIALS_KEY=c2FtcGxlLTMyLWJ5dGUta2V5LWZvci10ZXN0aW5nLW9r",
       "WAITRON_CREDENTIALS_KEY_VERSION=1",
       "WAITRON_TILL_NODE_ID=33333333-3333-3333-3333-333333333333",
-      "WAITRON_TILL_SERIES_ID=44444444-4444-4444-4444-444444444444",
       "WAITRON_TILL_LOCATION_ID=55555555-5555-5555-5555-555555555555",
       "WAITRON_TILL_LOCALE=en-GB",
     ]);
@@ -203,11 +201,7 @@ describe("devSetup against a real venue directory", () => {
     const written = parseEnvFile(readFileSync(envPath, "utf8"));
     expect(written).toEqual({ ...first.env });
     expect(written).not.toHaveProperty("WAITRON_TILL_TILL_ID");
-    for (const key of [
-      "WAITRON_TILL_NODE_ID",
-      "WAITRON_TILL_SERIES_ID",
-      "WAITRON_TILL_LOCATION_ID",
-    ] as const) {
+    for (const key of ["WAITRON_TILL_NODE_ID", "WAITRON_TILL_LOCATION_ID"] as const) {
       expect(first.env[key]).toMatch(/^[0-9a-f-]{36}$/);
     }
     expect(first.env.WAITRON_VENUE_DIR).toBe(venueDir);
@@ -272,7 +266,7 @@ describe("devSetup against a real venue directory", () => {
     expect(config.httpPort).toBe(8080);
     expect(config.venueDir).toBe(venueDir);
     expect(config.till).toBeDefined();
-    expect(config.till?.seriesId).toBe(first.env.WAITRON_TILL_SERIES_ID);
+    expect(config.till).not.toHaveProperty("seriesId");
     expect(config.till?.locationId).toBe(first.env.WAITRON_TILL_LOCATION_ID);
     const ring = loadKeyRing(written);
     expect(ring.current.key).toHaveLength(32);
@@ -290,7 +284,7 @@ describe("devSetup against a real venue directory", () => {
     expect(second.reused).toBe(true);
     expect(await devicesCount()).toBe(5);
     expect(second.env.WAITRON_TILL_NODE_ID).toBe(first.env.WAITRON_TILL_NODE_ID);
-    expect(second.env.WAITRON_TILL_SERIES_ID).toBe(first.env.WAITRON_TILL_SERIES_ID);
+    expect(second.env).not.toHaveProperty("WAITRON_TILL_SERIES_ID");
     expect(second.env.WAITRON_TILL_LOCATION_ID).toBe(first.env.WAITRON_TILL_LOCATION_ID);
   });
 

@@ -87,7 +87,7 @@ export function checkedInvoiceRecipient(
 export async function selectOrderInvoice(
   tx: Transaction,
   backend: Pick<FiscalBackend, "recipientNameMaxLength">,
-  cfg: Pick<TillConfig, "nodeId" | "seriesId" | "simplifiedInvoiceLimit">,
+  cfg: Pick<TillConfig, "nodeId" | "simplifiedInvoiceLimit">,
   orderId: string,
   total: Decimal,
 ): Promise<{
@@ -117,7 +117,11 @@ export async function selectOrderInvoice(
     return {
       invoiceType: "F2",
       recipient: undefined,
-      sale: { seriesId: cfg.seriesId, counterparty: null, recipientAddress: null },
+      sale: {
+        seriesId: seriesId(await readLiveSeriesIdTx(tx, cfg.nodeId, "standard")),
+        counterparty: null,
+        recipientAddress: null,
+      },
       ...receiptLocale,
     };
   }

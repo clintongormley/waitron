@@ -23,11 +23,7 @@ import {
   updateProduct,
   writeProductModifiers,
 } from "@waitron/catalogue";
-import {
-  locationId as brandLocationId,
-  nodeId as brandNodeId,
-  seriesId as brandSeriesId,
-} from "@waitron/shared";
+import { locationId as brandLocationId, nodeId as brandNodeId } from "@waitron/shared";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
 import { createCourse, createStation, setProductCourse } from "./kitchen.js";
 import { createTable } from "./testing/live-table.js";
@@ -76,7 +72,6 @@ async function setup() {
   const nodeId = await seedNode(db, locationId);
   const cfg: TillConfig = {
     nodeId: brandNodeId(nodeId),
-    seriesId: brandSeriesId(randomUUID()),
     locationId,
     locale: "es-ES",
     invoiceLocales: ["es-ES"],

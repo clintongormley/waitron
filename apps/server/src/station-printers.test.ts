@@ -11,11 +11,7 @@ import {
 import type { Database, Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
-import {
-  locationId as brandLocationId,
-  nodeId as brandNodeId,
-  seriesId as brandSeriesId,
-} from "@waitron/shared";
+import { locationId as brandLocationId, nodeId as brandNodeId } from "@waitron/shared";
 import { createPrinter, updatePrinter } from "@waitron/printing";
 import type { PrintConfig } from "@waitron/printing";
 import type { TillConfig } from "./till-config.js";
@@ -53,7 +49,6 @@ async function setupVenue(): Promise<TillConfig> {
   const nodeId = await seedNode(db, brandLocationId(locationId));
   return {
     nodeId: brandNodeId(nodeId),
-    seriesId: brandSeriesId(randomUUID()),
     locationId: brandLocationId(locationId),
     locale: LOCALE,
     invoiceLocales: [LOCALE],

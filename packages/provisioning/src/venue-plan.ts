@@ -10,12 +10,10 @@ import { resolveFiscalModules } from "./fiscal-modules.js";
 import "@waitron/fiscal"; // side-effect: registers fiscal.regime_not_implemented on ErrorParams
 import "./errors.js"; // side-effect: registers provisioning.invalid_locales on ErrorParams
 
-/** The three ids that name a mirror's venue for `trading.env` — the shape a mirror bundle
- * designates. */
+/** The node and location designated by a mirror bundle. */
 export interface AdoptResult {
   locationId: string;
   nodeId: string;
-  seriesId: string;
 }
 
 export interface VenueRequest {

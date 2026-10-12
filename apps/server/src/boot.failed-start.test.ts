@@ -73,9 +73,10 @@ vi.mock("./append-only-watch.js", async (importOriginal) => {
   return { ...actual, startAppendOnlyWatch: vi.fn(actual.startAppendOnlyWatch) };
 });
 
+const SEEDED_SERIES_ID = "44444444-4444-4444-8444-444444444444";
 const TILL_ENV = {
   WAITRON_TILL_NODE_ID: "33333333-3333-4333-8333-333333333333",
-  WAITRON_TILL_SERIES_ID: "44444444-4444-4444-8444-444444444444",
+
   WAITRON_TILL_LOCATION_ID: "55555555-5555-4555-8555-555555555555",
 };
 
@@ -174,7 +175,7 @@ async function seedVenue(directory: string): Promise<void> {
       filingModule: "verifactu",
     });
     await db.insert(invoiceSeries).values({
-      id: TILL_ENV.WAITRON_TILL_SERIES_ID,
+      id: SEEDED_SERIES_ID,
       nodeId: TILL_ENV.WAITRON_TILL_NODE_ID,
       code: "A",
     });

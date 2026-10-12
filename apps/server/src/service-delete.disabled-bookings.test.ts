@@ -5,7 +5,7 @@ import { diningTables, locations, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { locationId, nodeId, seriesId } from "@waitron/shared";
+import { locationId, nodeId } from "@waitron/shared";
 import {
   createDepartment,
   createServiceZone,
@@ -41,7 +41,6 @@ it("deletes through the real core seat when the optional bookings table was neve
   const cfg: TillConfig = {
     locationId: locationId(location!.id),
     nodeId: nodeId(randomUUID()),
-    seriesId: seriesId(randomUUID()),
     locale: "en-GB",
     invoiceLocales: ["en-GB"],
     tipsEnabled: false,

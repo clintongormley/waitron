@@ -393,6 +393,18 @@ invoice still owed; and what happens when the customer never pays. An F1 also ne
 
 ## W41s. Fiscal prevention and offline recovery — DESIGN AND REVISED PLAN APPROVED (2026-10-04)
 
+**2026-10-12, Task 5:** invoice issuance reads the live series inside its transaction.
+Startup, development seeds, mirror bundles and saved trading identity carry node and location
+without a cached invoice-series id. Restore still checks live standard and full series before
+publishing identity. The switch, replay, rollback and reconnect cases are in
+`apps/server/src/transactional-series.test.ts`; the integrated-card switch cases are in
+`apps/server/src/till-sale-integrated.db.test.ts`.
+Task 4's allocation activation remains open, followed by the dependent recovery tasks.
+When activation is connected to recovery, extend the reconnect qualification through that runtime
+path; today's test exercises an offline and then successful fiscal drain without a series switch.
+The owner answered its format question with first symbol `0–7` and 128 random bits.
+
+
 **Update, 2026-10-12: W41s-3d landed as
 [#1309](https://github.com/clintongormley/waitron/pull/1309), commit
 `5e99c6781df6512f6bac4127937f0146e61e2ecc`.** The first eligible brake-held record retries

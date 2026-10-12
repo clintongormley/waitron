@@ -243,7 +243,7 @@ export async function billlessSale(venue: OrderVenue): Promise<string> {
     recordSale(tx, venue.backend, {
       origin: venue.cfg.origin,
       nodeId: venue.cfg.nodeId,
-      seriesId: venue.cfg.seriesId,
+      seriesId: venue.seriesId,
       locale: venue.cfg.locale,
       invoiceLocales: venue.cfg.invoiceLocales,
       total: "12.10",

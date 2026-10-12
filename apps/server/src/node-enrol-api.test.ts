@@ -7,11 +7,7 @@ import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { authenticateAgent } from "@waitron/printing";
 import { AppError } from "@waitron/shared";
-import {
-  locationId as brandLocationId,
-  nodeId as brandNodeId,
-  seriesId as brandSeriesId,
-} from "@waitron/shared";
+import { locationId as brandLocationId, nodeId as brandNodeId } from "@waitron/shared";
 import { mountNodeEnrolApi } from "./node-enrol-api.js";
 import type { EnrolRateLimiter } from "./enrol-rate-limit.js";
 import type { TillConfig } from "./till-config.js";
@@ -63,7 +59,6 @@ beforeAll(async () => {
 function cfgOf(tenant: Tenant): TillConfig {
   return {
     nodeId: brandNodeId(randomUUID()),
-    seriesId: brandSeriesId(randomUUID()),
     locationId: brandLocationId(tenant.locationId),
     locale: "es-ES",
     invoiceLocales: ["es-ES"],
