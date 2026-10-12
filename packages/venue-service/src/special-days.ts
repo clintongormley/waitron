@@ -714,8 +714,11 @@ export async function saveSpecialDay(
     parsed.zonePaint.map((entry) => entry.ownerId),
   );
   await assertOwnPeriods(tx, parsed.paint);
+  // Kept paint changes meaning only when the repeat setting changes; otherwise a yearly day's next
+  // occurrence moving on would refuse a rename over paint the request never touched.
+  const recheck = stored !== null && stored.repeatsYearly !== parsed.repeatsYearly;
   const retainedPaint = retainedEntries(
-    (stored?.paint ?? []).map(({ departmentId, ...entry }) => ({
+    (recheck ? stored.paint : []).map(({ departmentId, ...entry }) => ({
       ownerId: departmentId,
       ...entry,
     })),
@@ -727,7 +730,10 @@ export async function saveSpecialDay(
     readPaintRange,
   );
   const retainedZonePaint = retainedEntries(
-    (stored?.zonePaint ?? []).map(({ zoneId, ...entry }) => ({ ownerId: zoneId, ...entry })),
+    (recheck ? stored.zonePaint : []).map(({ zoneId, ...entry }) => ({
+      ownerId: zoneId,
+      ...entry,
+    })),
     "zonePaint",
     "zoneId",
     parsed.zonePaint,

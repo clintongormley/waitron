@@ -874,6 +874,19 @@ describe("saveSpecialDay", () => {
       });
       expect(await read(v, saved.id)).toEqual(saved);
     });
+
+    it("renaming a yearly day a year later keeps paint the request leaves out unchecked", async () => {
+      const v = await venue();
+      const saved = await save(v, null, skipping("2025-03-28", true, v), new Date("2025-01-10"));
+      const renamed = await save(
+        v,
+        saved.id,
+        { name: "Renamed", repeatsYearly: true, dates: saved.dates },
+        new Date("2026-01-10"),
+      );
+      expect(renamed.name).toBe("Renamed");
+      expect(renamed.paint).toEqual(saved.paint);
+    });
   });
 
   describe("a retained changeover change (03:00 from 2031)", () => {
