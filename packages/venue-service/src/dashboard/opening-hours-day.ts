@@ -793,7 +793,10 @@ export class OpeningHoursDay extends LitElement {
                 ?disabled=${blocked || !this.calendar || this.calendarError}
                 @click=${(event: Event) => {
                   if (
-                    !this.editable() ||
+                    !this.isConnected ||
+                    this.readOnly ||
+                    this.saving ||
+                    this.creating ||
                     this.opening ||
                     this.zoneOpening ||
                     !this.calendar ||

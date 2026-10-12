@@ -4,6 +4,7 @@ import { applyTokens } from "@waitron/ui";
 import { setLocale, type DashboardRequest } from "@waitron/dashboard-kit";
 import { OpeningHoursApi } from "./opening-hours-client.js";
 import type { SpecialDaysModel } from "../holiday-types.js";
+import type { SpecialDayDetail } from "../special-days.js";
 import { realWeekModel, namedWeekModel } from "../testing/real-week-model.js";
 import {
   PARTY_DATE,
@@ -53,22 +54,42 @@ function fixture() {
     })),
   };
 }
+/** The calendar for `path`'s dates, `detail` standing on each of its dates. */
+function calendarOf(detail: SpecialDayDetail, path: string): SpecialDaysModel {
+  const query = new URLSearchParams(path.slice(path.indexOf("?") + 1));
+  return {
+    ...namedWeekModel(),
+    days: detail.dates
+      .filter(({ date }) => query.get("from")! <= date && date <= query.get("to")!)
+      .map(({ date, closedAllDay }) => ({
+        date,
+        specialDay: { id: detail.id, name: detail.name },
+        holidays: [],
+        tone: "special_day" as const,
+        closed: closedAllDay,
+      })),
+  };
+}
+const ordinary = async () => namedWeekModel();
 async function mount(
   write: (path: string, method: string, body: unknown) => Promise<unknown> = async () => {},
   model = fixture(),
-  named?: () => Promise<SpecialDaysModel>,
+  named?: (path: string) => Promise<SpecialDaysModel>,
+  detail?: SpecialDayDetail,
 ) {
   screen = document.createElement("dashboard-opening-hours-screen");
   screen.api = new OpeningHoursApi(
     withOpeningStations((async (path, method, body) =>
       method === "GET"
         ? path.includes("named-days?")
-          ? (named?.() ?? everyDateSpecial(path))
-          : /\/special-days\/day-/.test(path)
-            ? everyDateSpecial(path)
-            : path.endsWith("/special-days")
-              ? []
-              : structuredClone(model)
+          ? (named?.(path) ?? (detail ? calendarOf(detail, path) : everyDateSpecial(path)))
+          : detail && path.endsWith(`/special-days/${detail.id}`)
+            ? detail
+            : /\/special-days\/day-/.test(path)
+              ? everyDateSpecial(path)
+              : path.endsWith("/special-days")
+                ? []
+                : structuredClone(model)
         : write(path, method, body)) as DashboardRequest),
   );
   applyTokens(screen);
@@ -248,9 +269,21 @@ it("saves department and zone changes to the named occurrence and retains comple
 it("shows Closed and refuses all grid actions on a whole-venue closure", async () => {
   vi.setSystemTime(new Date("2026-10-15T12:00:00Z"));
   const writes: unknown[][] = [];
-  const day = await mount(async (...args) => {
-    writes.push(args);
-  });
+  const day = await mount(
+    async (...args) => {
+      writes.push(args);
+    },
+    fixture(),
+    undefined,
+    {
+      id: "staff-party",
+      name: "Staff party",
+      repeatsYearly: false,
+      dates: [{ date: "2026-10-15", closedAllDay: true }],
+      paint: [],
+      zonePaint: [],
+    },
+  );
   expect(day.shadowRoot!.textContent).toContain("Closed");
   expect(grid(day).columns.every((column) => !column.editable && column.slots.length === 0)).toBe(
     true,
@@ -265,7 +298,7 @@ it("shows Closed and refuses all grid actions on a whole-venue closure", async (
 });
 it("opens the special-day dialog on the Day's date from the Day heading", async () => {
   vi.setSystemTime(new Date("2026-10-16T12:00:00Z"));
-  const day = await mount();
+  const day = await mount(undefined, fixture(), ordinary);
   const own =
     day.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>("[data-test=own-date]")!;
   expect(own).not.toBeNull();
