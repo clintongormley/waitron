@@ -694,10 +694,10 @@ _Formerly the catalogue and menus entries in the opening part of the old Track A
   the NUL; closing it needs a migration. Found by #609 (`packages/media`), not fixable in a
   comments-only change.
 
-- **`mergeAllergenMaps` (`src/derivation.ts`) can list a source twice and order sources differently
-  from run to run** — found by #603 while pruning comments. The comment now says so; the code is
-  unchanged.
-  [Detail](backlog/catalogue.md#mergeallergenmaps-srcderivationts-can-list-a-source-twice-and-order-sources-differently-from-run-to-run)
+- **Leftovers from #603's catalogue comment prune** — refusals that look unreachable, PostgreSQL-era
+  integer bounds and key ordering, insert orders pinned by four transfer tests, and test titles to
+  rename in `packages/catalogue`.
+  [Detail](backlog/catalogue.md#leftovers-from-603s-catalogue-comment-prune)
 
 - **The media library still reads every matching image for search and name sorting, inside the venue
   write lock** — OPEN (found 2026-09-23, task F1's review wave). The route (`GET /management-api/images`)

@@ -3,14 +3,9 @@
 The open entries are listed in [the backlog](../backlog.md), under "Menus and the catalogue". This file holds
 their full text.
 
-## `mergeAllergenMaps` (`src/derivation.ts`) can list a source twice and order sources differently from run to run
+## Leftovers from #603's catalogue comment prune
 
-- Found by #603 (`packages/catalogue`). **`mergeAllergenMaps` (`src/derivation.ts`) can list a
-  source twice and order sources differently from run to run**: `recomputeProductDerivations`
-  (`packages/recipes/src/recipes.ts`) feeds it ingredient rows in no fixed order, and #603's
-  review measured, with three or more sources, barley/rye/wheat folded in two orders giving
-  "barley, rye, wheat" and "barley, wheat, rye", and barley/rye/barley giving "barley, barley,
-  rye". The comment now says so; the code is unchanged. Read only, not run: `writeItems`
+- Found by #603 (`packages/catalogue`). Read only, not run: `writeItems`
   (`src/extras.ts`) and `writeLabels` (`src/options.ts`) each keep a refusal after their insert
   that looks unreachable now (duplicate and foreign ids are refused earlier and one write runs at
   a time). `MAX_MODIFIER_INTEGER` (`src/modifier-limits.ts`, 2147483647) and the extras
