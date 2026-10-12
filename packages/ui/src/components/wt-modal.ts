@@ -5,7 +5,7 @@ import { WtDialog } from "./wt-dialog.js";
 @customElement("wt-modal")
 export class WtModal extends WtDialog {
   /** Unset, or any other value, is wide. */
-  @property({ reflect: true }) size?: "compact" | "standard" | "wide";
+  @property({ reflect: true }) size?: "compact" | "standard" | "wide" | "full";
 
   protected override readonly bodyTabStop = "always";
 
@@ -32,6 +32,12 @@ export class WtModal extends WtDialog {
           var(--wt-modal-standard-width),
           calc(100dvw - 2 * var(--wt-modal-inline-margin))
         );
+      }
+
+      :host([size="full"]) dialog {
+        width: calc(100dvw - 2 * var(--wt-modal-inline-margin));
+        height: calc(100dvh - 2 * var(--wt-modal-inline-margin));
+        max-height: calc(100dvh - 2 * var(--wt-modal-inline-margin));
       }
 
       .body {

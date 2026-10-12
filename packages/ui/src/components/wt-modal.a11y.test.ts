@@ -27,7 +27,7 @@ describe.each(["light", "dark"] as const)("wt-modal a11y (%s theme)", (theme) =>
     await expectNoA11yViolations(host);
   });
 
-  test.each(["compact", "standard"])("an open %s modal", async (size) => {
+  test.each(["compact", "standard", "full"])("an open %s modal", async (size) => {
     const modal = (await mountThemed(
       `<wt-modal heading="Add printer" size="${size}">
         <wt-input name="printer-name" label="Printer name"></wt-input>
