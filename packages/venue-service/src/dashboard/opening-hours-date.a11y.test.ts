@@ -31,7 +31,6 @@ describe.each(["light", "dark"] as const)("Opening special date (%s)", (theme) =
       seasons: [{ id: "autumn", name: "Autumn", startsOn: "09-01" }],
       currentSeasonId: "autumn",
       dayCutover: "06:00",
-      namedDays: [],
       menus: [],
       departments: [
         {
@@ -58,7 +57,6 @@ describe.each(["light", "dark"] as const)("Opening special date (%s)", (theme) =
               ],
             },
           ],
-          dates: [],
         },
       ],
     };

@@ -53,7 +53,6 @@ describe.each(["light", "dark"] as const)("Opening Day (%s)", (theme) => {
           currentSeasonId: "autumn",
           dayCutover: "06:00",
           menus: [{ id: "m1", name: "Lunch menu", active: true, includes: [] }],
-          namedDays: [],
           departments:
             state === "empty"
               ? []
@@ -76,7 +75,6 @@ describe.each(["light", "dark"] as const)("Opening Day (%s)", (theme) => {
                             },
                           ],
                           week: [{ weekday: 1, ranges: [{ startsAt: "23:00", endsAt: "06:00" }] }],
-                          dates: [],
                         },
                       ],
                   periods: [
@@ -102,7 +100,6 @@ describe.each(["light", "dark"] as const)("Opening Day (%s)", (theme) => {
                       ],
                     },
                   ],
-                  dates: [],
                 })),
         };
       }) as DashboardRequest),

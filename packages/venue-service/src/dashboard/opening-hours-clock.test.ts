@@ -39,7 +39,6 @@ async function mount(
     seasons: [{ id: "autumn", name: "Autumn", startsOn: "09-01" }],
     currentSeasonId: "autumn",
     menus: [{ id: "m1", name: "Night menu", active: true, includes: [] }],
-    namedDays: [],
     departments: [
       {
         id: "d1",
@@ -58,7 +57,6 @@ async function mount(
           },
         ],
         seasonWeeks: [{ seasonId: "autumn", week: [] }],
-        dates: [],
       },
     ],
   };

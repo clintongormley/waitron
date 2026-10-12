@@ -34,7 +34,6 @@ const department = {
       })),
     },
   ],
-  dates: [],
 };
 const zone = {
   id: "zone",
@@ -46,7 +45,6 @@ const zone = {
     },
   ],
   week: [{ weekday: 1, ranges: [{ startsAt: "10:00", endsAt: "11:00" }] }],
-  dates: [],
 };
 for (const kind of ["department", "zone"] as const) {
   it(`${kind} keeps a dirty draft's opening clock revision through a live model replacement`, async () => {

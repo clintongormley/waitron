@@ -33,7 +33,6 @@ class DayLeaveApp extends LitElement {
         menus: [],
         seasons: [{ id: "autumn", name: "Autumn", startsOn: "09-01" }],
         currentSeasonId: "autumn",
-        namedDays: [],
         departments: [
           {
             id: "d1",
@@ -50,7 +49,6 @@ class DayLeaveApp extends LitElement {
                   },
                 ],
                 week: [{ weekday: 1, ranges: [{ startsAt: "23:00", endsAt: "06:00" }] }],
-                dates: [],
               },
             ],
             periods: [
@@ -72,7 +70,6 @@ class DayLeaveApp extends LitElement {
                 ],
               },
             ],
-            dates: [],
           },
         ],
       };

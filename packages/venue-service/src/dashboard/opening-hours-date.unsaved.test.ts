@@ -25,7 +25,6 @@ class DateLeaveApp extends LitElement {
         currentSeasonId: "autumn",
         dayCutover: "06:00",
         menus: [],
-        namedDays: [],
         departments: [
           {
             id: "d1",
@@ -51,7 +50,6 @@ class DateLeaveApp extends LitElement {
                 ],
               },
             ],
-            dates: [],
           },
         ],
       };

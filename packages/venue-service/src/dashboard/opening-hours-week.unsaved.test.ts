@@ -54,7 +54,6 @@ class WeekLeaveApp extends LitElement {
         menus: [],
         seasons: [{ id: "autumn", name: "Autumn", startsOn: "09-01" }],
         currentSeasonId: "autumn",
-        namedDays: [],
         departments: [
           {
             id: "d1",
@@ -79,7 +78,6 @@ class WeekLeaveApp extends LitElement {
                 ],
               },
             ],
-            dates: [],
           },
         ],
       };
@@ -300,7 +298,6 @@ describe.each(["en", "es"])("Changing season (%s)", (locale) => {
         { id: "winter", name: "Winter", startsOn: "12-01" },
       ],
       currentSeasonId: "winter",
-      namedDays: [],
       departments: [
         {
           id: "d1",
@@ -321,7 +318,6 @@ describe.each(["en", "es"])("Changing season (%s)", (locale) => {
             { seasonId: "summer", week: monday("11:00") },
             { seasonId: "winter", week: monday("10:00") },
           ],
-          dates: [],
         },
       ],
     };
@@ -400,7 +396,6 @@ function twoSeasons(seasonIds: string[], currentSeasonId: string) {
     menus: [],
     seasons: all.filter((season) => seasonIds.includes(season.id)),
     currentSeasonId,
-    namedDays: [],
     departments: [
       {
         id: "d1",
@@ -421,7 +416,6 @@ function twoSeasons(seasonIds: string[], currentSeasonId: string) {
           seasonId,
           week: monday(seasonId === "autumn" ? "10:00" : "11:00"),
         })),
-        dates: [],
       },
     ],
   };

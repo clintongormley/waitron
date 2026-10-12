@@ -131,9 +131,7 @@ function hoursFixture(): OpeningHoursModel {
       id,
       name: id,
       active: true,
-      zones: [
-        { id: `z${index + 1}`, name: `Zone ${index + 1}`, seasonWeeks: [], week: [], dates: [] },
-      ],
+      zones: [{ id: `z${index + 1}`, name: `Zone ${index + 1}`, seasonWeeks: [], week: [] }],
       periods: [
         {
           id: `p${index + 1}`,
@@ -157,7 +155,6 @@ function hoursFixture(): OpeningHoursModel {
           ],
         },
       ],
-      dates: [],
     })),
   };
 }

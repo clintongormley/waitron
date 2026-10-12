@@ -43,14 +43,12 @@ describe.each(["light", "dark"] as const)("Opening hours (%s)", (theme) => {
           timeZone: "Europe/Madrid",
           clockReadable: state !== "unreadable-viewer",
           dayCutover: "06:00",
-          namedDays: [],
           menus: [{ id: "lunch", name: "Lunch menu", active: true, includes: [] }],
           departments: [
             {
               id: "restaurant",
               name: "Restaurant",
               active: true,
-              dates: [],
               periods:
                 state === "empty"
                   ? []
@@ -133,14 +131,12 @@ describe.each(["en", "es"] as const)("Signed offset list (%s)", (locale) => {
             timeZone: "Europe/Madrid",
             clockReadable: true,
             dayCutover: "06:00",
-            namedDays: [],
             menus: [{ id: "lunch", name: "Lunch menu", active: true, includes: [] }],
             departments: [
               {
                 id: "restaurant",
                 name: "Restaurant",
                 active: true,
-                dates: [],
                 periods: [-15, 0, 14].map((offset, index) => ({
                   id: `p${index}`,
                   name: ["Breakfast", "Lunch", "Dinner"][index],
@@ -209,7 +205,6 @@ describe.each(["light", "dark"] as const)("Week with a season picker (%s)", (the
         dayCutover: "06:00",
         seasons,
         currentSeasonId: "summer",
-        namedDays: [],
         menus: [{ id: "lunch", name: "Lunch menu", active: true, includes: [] }],
         departments: [
           {
@@ -218,7 +213,6 @@ describe.each(["light", "dark"] as const)("Week with a season picker (%s)", (the
             active: true,
             zones: [],
             seasonWeeks: seasons.map((season) => ({ seasonId: season.id, week: [] })),
-            dates: [],
             periods: [],
           },
         ],

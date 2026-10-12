@@ -48,7 +48,6 @@ function planRequest(plans: (zone: string) => Promise<unknown>): DashboardReques
         clockReadable: true,
         dayCutover: "06:00",
         menus: [],
-        namedDays: [],
         departments: [],
       };
     reads.push(decodeURIComponent(zone));
