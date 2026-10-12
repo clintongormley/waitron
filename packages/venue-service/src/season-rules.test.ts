@@ -32,4 +32,9 @@ describe("seasonLastDay", () => {
 
   it("ends the year's last season on 12-31 when the first starts on 01-01", () =>
     expect(seasonLastDay([{ startsOn: "01-01" }, { startsOn: "07-01" }], "07-01")).toBe("12-31"));
+
+  it("answers an empty list as it answers a lone season: the day before its own start", () => {
+    expect(seasonLastDay([], "03-01")).toBe("02-28");
+    expect(seasonLastDay([{ startsOn: "03-01" }], "03-01")).toBe("02-28");
+  });
 });
