@@ -65,7 +65,7 @@ async function requireActiveTable(
     throw new AppError("table.not_found", { tableId });
   }
   if (table.part === 1) {
-    throw new AppError("table.in_joined_table", { tableId });
+    throw new AppError("table.in_joined_table", { tableId, field: "tableId" });
   }
 }
 

@@ -111,6 +111,8 @@ export class BookingsScreen extends LitElement {
   @state() private seatingId: string | null = null;
   @state() private seatTableId = "";
   @state() private errorKey: string | null = null;
+  /** A save's refusal naming the table, which the form shows under its Table field. */
+  @state() private tableRefusal: string | null = null;
   /** Whether `errorKey` is a read's failure, the only message the reads' recovery may clear. */
   #readErrorShown = false;
   // Single-flight, so a double-fired event makes at most one call.
@@ -124,6 +126,12 @@ export class BookingsScreen extends LitElement {
   #showError(code: string | null, fromRead = false): void {
     this.errorKey = code;
     this.#readErrorShown = fromRead;
+  }
+
+  #showSaveRefusal(error: unknown): void {
+    const field = (error as { params?: { field?: unknown } } | null)?.params?.field;
+    if (field === "tableId") this.tableRefusal = codeOf(error);
+    else this.#showError(codeOf(error));
   }
 
   /** A read's failure never replaces an action's message. */
@@ -200,6 +208,7 @@ export class BookingsScreen extends LitElement {
 
   #openForm(): void {
     this.#showError(null);
+    this.tableRefusal = null;
     this.editingBooking = null;
     this.formOpen = true;
   }
@@ -209,6 +218,7 @@ export class BookingsScreen extends LitElement {
     if (found === undefined) return;
     this.#showError(null);
     this.editingBooking = found;
+    this.tableRefusal = null;
     this.formOpen = true;
   }
 
@@ -218,6 +228,7 @@ export class BookingsScreen extends LitElement {
     const write = this.shadowRoot!.querySelector("dashboard-booking-form")!.writeCompletion();
     this.busy = true;
     this.#showError(null);
+    this.tableRefusal = null;
     let written = false;
     try {
       await this.api.createBooking(event.detail);
@@ -226,7 +237,7 @@ export class BookingsScreen extends LitElement {
       await this.#reload();
     } catch (error) {
       if (written) this.#showReadError(error);
-      else if (write.isCurrent()) this.#showError(codeOf(error));
+      else if (write.isCurrent()) this.#showSaveRefusal(error);
     } finally {
       this.busy = false;
     }
@@ -238,6 +249,7 @@ export class BookingsScreen extends LitElement {
     const write = this.shadowRoot!.querySelector("dashboard-booking-form")!.writeCompletion();
     this.busy = true;
     this.#showError(null);
+    this.tableRefusal = null;
     let written = false;
     try {
       await this.api.updateBooking(event.detail.id, event.detail.patch);
@@ -246,7 +258,7 @@ export class BookingsScreen extends LitElement {
       await this.#reload();
     } catch (error) {
       if (written) this.#showReadError(error);
-      else if (write.isCurrent()) this.#showError(codeOf(error));
+      else if (write.isCurrent()) this.#showSaveRefusal(error);
     } finally {
       this.busy = false;
     }
@@ -436,6 +448,7 @@ export class BookingsScreen extends LitElement {
         .tables=${this.tables}
         .defaultDate=${this.date}
         .busy=${this.busy}
+        .tableRefusal=${this.tableRefusal}
         @create-booking=${(e: CustomEvent<BookingInput>) => void this.#onCreate(e)}
         @update-booking=${(e: CustomEvent<UpdateBookingDetail>) => void this.#onUpdate(e)}
         @wt-close=${() => (this.formOpen = false)}

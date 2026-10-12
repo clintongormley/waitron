@@ -810,7 +810,7 @@ describe("a part of a joined table on the saved plan", () => {
     for (const date of ["2026-08-20", "2027-01-15"]) {
       await expect(book(cfg, createdBy, date, table.c4)).rejects.toMatchObject({
         code: "table.in_joined_table",
-        params: { tableId: table.c4 },
+        params: { tableId: table.c4, field: "tableId" },
       });
     }
     const count = await db.execute<{ n: number }>(sql`select count(*) as n from bookings`);
@@ -830,7 +830,10 @@ describe("a part of a joined table on the saved plan", () => {
     const { id } = await book(cfg, createdBy, "2026-08-20", table.long);
     await expect(
       scoped(cfg, (tx) => updateBooking(tx, cfg, id, { tableId: table.c5 })),
-    ).rejects.toMatchObject({ code: "table.in_joined_table", params: { tableId: table.c5 } });
+    ).rejects.toMatchObject({
+      code: "table.in_joined_table",
+      params: { tableId: table.c5, field: "tableId" },
+    });
     expect((await scoped(cfg, (tx) => getBooking(tx, cfg, id)))!.tableId).toBe(table.long);
   });
 });
