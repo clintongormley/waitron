@@ -15,7 +15,6 @@ import { addDays } from "./hours-rules.js";
 import {
   clockTimeSkippedInDay,
   parseServiceDay,
-  parseClosedRanges,
   rangeInForce,
   rangeSpan,
   rangeSpanInDay,
@@ -24,7 +23,6 @@ import {
   type ServiceMoment,
   type ServiceRange,
 } from "./service-day.js";
-import type { SpecialDateParticipant } from "./hours.js";
 import { CALENDAR_COLOURS, type LocalDate } from "./hours-types.js";
 import { invalidTimetable, menuPeriodName, parseMenuWeek } from "./menu-timetable-rules.js";
 import { findSeasonEndOffsetClash, parseEndOffsetMinutes } from "./period-end-offset.js";
@@ -74,7 +72,6 @@ import {
   specialDayDates,
   specialDays,
 } from "./schema/seasons.js";
-import { zoneClosedTimes } from "./schema/zone-closed-times.js";
 import {
   scheduleCutovers,
   serviceDayContext,
@@ -318,16 +315,6 @@ export function scheduleEndOffsetClash(tx: Transaction, cfg: VenueScope, clock?:
 export async function assertPeriodEndOffsets(tx: Transaction, cfg: VenueScope): Promise<void> {
   const clash = await endOffsetClash(tx, cfg, undefined, true);
   if (clash !== null) invalidTimetable("dayCutover", { reason: "end_offset", ...clash });
-}
-
-async function assertCalendarEndOffsets(
-  tx: Transaction,
-  cfg: VenueScope,
-  field: string,
-  clock?: BusinessDayClock,
-): Promise<void> {
-  const clash = await endOffsetClash(tx, cfg, undefined, false, clock);
-  if (clash !== null) throw new AppError("hours.invalid", { field, date: clash.date });
 }
 
 export async function departmentDay(
@@ -899,104 +886,6 @@ export async function saveSpecialDateMenus(
   const clash = await endOffsetClash(tx, cfg, departmentId, false, clock.clock);
   if (clash !== null) invalidTimetable("slots", { reason: "end_offset", ...clash });
 }
-
-async function dateTimetables(tx: Transaction, specialDateId: string) {
-  const rows = await tx
-    .select({ id: menuDayTimetables.id, departmentId: menuDayTimetables.departmentId })
-    .from(menuDayTimetables)
-    .where(eq(menuDayTimetables.specialDateId, specialDateId))
-    .orderBy(asc(menuDayTimetables.departmentId));
-  const slots = await slotsByTimetable(
-    tx,
-    rows.map((row) => row.id),
-  );
-  return rows.map((row) => ({ departmentId: row.departmentId, slots: slots.get(row.id)! }));
-}
-
-async function assertPlaced(
-  clock: VenueClock,
-  timetables: readonly { departmentId: string; slots: MenuSlot[] }[],
-  dates: readonly LocalDate[],
-): Promise<void> {
-  for (const { departmentId, slots } of timetables)
-    for (const date of dates) {
-      parseServiceDay(slots, "date", serviceDayContext(clock.clock, date).dayCutover);
-      if (skippedSlot(clock, date, slots) !== null)
-        invalidTimetable("date", { date, departmentId, reason: "clock_skips" });
-    }
-}
-
-async function assertCalendarRanges(
-  tx: Transaction,
-  cfg: VenueScope,
-  field: string,
-  clock: BusinessDayClock,
-): Promise<void> {
-  const dates = await tx
-    .select()
-    .from(specialDates)
-    .where(eq(specialDates.locationId, cfg.locationId));
-  for (const date of dates) {
-    const cutovers = scheduleCutovers(clock, date.repeatOn === null ? date.date : undefined);
-    for (const day of await dateTimetables(tx, date.id))
-      for (const cutover of cutovers) parseServiceDay(day.slots, field, cutover);
-    const closures = await tx
-      .select()
-      .from(zoneClosedTimes)
-      .where(eq(zoneClosedTimes.specialDateId, date.id));
-    for (const zoneId of new Set(closures.map((row) => row.zoneId)))
-      for (const cutover of cutovers)
-        parseClosedRanges(
-          closures
-            .filter((row) => row.zoneId === zoneId)
-            .map((row) => ({ startsAt: wireTime(row.startsAt), endsAt: wireTime(row.endsAt) })),
-          field,
-          cutover,
-        );
-  }
-}
-
-/**
- * Hours hands this every duplicate, move and delete of a special date, in its transaction. A
- * duplicate's copies are written target by target and checked together once all exist.
- */
-export const MENU_TIMETABLE_CALENDAR_PARTICIPANT: SpecialDateParticipant = {
-  async copy(tx, _cfg, sourceId, targetId) {
-    const closures = await tx
-      .select({
-        zoneId: zoneClosedTimes.zoneId,
-        startsAt: zoneClosedTimes.startsAt,
-        endsAt: zoneClosedTimes.endsAt,
-      })
-      .from(zoneClosedTimes)
-      .where(eq(zoneClosedTimes.specialDateId, sourceId));
-    if (closures.length > 0)
-      await tx
-        .insert(zoneClosedTimes)
-        .values(closures.map((row) => ({ ...row, specialDateId: targetId })));
-    for (const { departmentId, slots } of await dateTimetables(tx, sourceId))
-      await writeDay(tx, undefined, { departmentId, specialDateId: targetId }, slots);
-  },
-  async afterCopies(tx, cfg, sourceId, targets, at) {
-    const clock = await readVenueClock(tx, cfg, at);
-    await assertPlaced(
-      clock,
-      await dateTimetables(tx, sourceId),
-      targets.map((target) => target.date),
-    );
-    await assertCalendarRanges(tx, cfg, "date", clock.clock);
-    await assertCalendarEndOffsets(tx, cfg, "date", clock.clock);
-  },
-  async beforeMove(tx, cfg, id, toDate, at) {
-    await assertPlaced(await readVenueClock(tx, cfg, at), await dateTimetables(tx, id), [toDate]);
-  },
-  async afterChange(tx, cfg, field) {
-    const clock = await readLocationClock(tx, cfg.locationId);
-    await assertCalendarRanges(tx, cfg, field, clock);
-    await assertCalendarEndOffsets(tx, cfg, field, clock);
-  },
-  async beforeDelete() {},
-};
 
 type Folder = { id: string; name: string; parentId: string | null };
 

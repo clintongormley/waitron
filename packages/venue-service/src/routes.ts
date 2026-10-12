@@ -65,10 +65,7 @@ import {
   setRoutingCell,
 } from "./routing-store.js";
 import type { RouteTarget } from "./routing.js";
-import { VENUE_SERVICE_CALENDAR_PARTICIPANTS } from "./calendar-participants.js";
-import { duplicateHolidayNamedSpecialDates, readHolidays, saveHolidayArea } from "./holidays.js";
-import { deleteSpecialDate, saveSpecialDate } from "./hours.js";
-import type { LocalDate, SpecialDateInput } from "./hours-types.js";
+import { readHolidays, saveHolidayArea } from "./holidays.js";
 import type { CellAddress, PeriodLine, RoutingChange } from "./routing-types.js";
 import {
   listDepartmentTransferProfiles,
@@ -417,88 +414,6 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
           return saveHolidayArea(tx, ctx.cfg, body);
         });
         return geography === null ? c.body(null, 204) : c.json(geography);
-      }),
-    );
-
-    app.post("/management-api/venue-service/special-dates", (c) =>
-      run(c, log, async () => {
-        const sessionId = requireManagementSession(c);
-        const body = await readJsonBody<SpecialDateInput & { expectedClockRevision: number }>(c);
-        return c.json(
-          await gated(sessionId, (tx) =>
-            saveSpecialDate(
-              tx,
-              ctx.cfg,
-              null,
-              body,
-              new Date(),
-              VENUE_SERVICE_CALENDAR_PARTICIPANTS,
-              body.expectedClockRevision as number,
-            ),
-          ),
-          201,
-        );
-      }),
-    );
-
-    app.put("/management-api/venue-service/special-dates/:id", (c) =>
-      run(c, log, async () => {
-        const sessionId = requireManagementSession(c);
-        const id = requireUuidParam(c.req.param("id"), "SpecialDateId");
-        const body = await readJsonBody<SpecialDateInput & { expectedClockRevision: number }>(c);
-        return c.json(
-          await gated(sessionId, (tx) =>
-            saveSpecialDate(
-              tx,
-              ctx.cfg,
-              id,
-              body,
-              new Date(),
-              VENUE_SERVICE_CALENDAR_PARTICIPANTS,
-              body.expectedClockRevision as number,
-            ),
-          ),
-        );
-      }),
-    );
-
-    app.post("/management-api/venue-service/special-dates/:id/duplicate", (c) =>
-      run(c, log, async () => {
-        const sessionId = requireManagementSession(c);
-        const id = requireUuidParam(c.req.param("id"), "SpecialDateId");
-        const body = await readJsonBody<Record<string, unknown>>(c);
-        const copies = await gated(sessionId, (tx) => {
-          onlyKeys(body, ["dates", "expectedClockRevision"]);
-          return duplicateHolidayNamedSpecialDates(
-            tx,
-            ctx.cfg,
-            id,
-            body.dates as readonly LocalDate[],
-            new Date(),
-            VENUE_SERVICE_CALENDAR_PARTICIPANTS,
-            body.expectedClockRevision as number,
-          );
-        });
-        return c.json(copies, 201);
-      }),
-    );
-
-    app.delete("/management-api/venue-service/special-dates/:id", (c) =>
-      run(c, log, async () => {
-        const sessionId = requireManagementSession(c);
-        const id = requireUuidParam(c.req.param("id"), "SpecialDateId");
-        const body = await readJsonBody<{ expectedClockRevision: number }>(c);
-        await gated(sessionId, (tx) =>
-          deleteSpecialDate(
-            tx,
-            ctx.cfg,
-            id,
-            new Date(),
-            VENUE_SERVICE_CALENDAR_PARTICIPANTS,
-            body.expectedClockRevision as number,
-          ),
-        );
-        return c.body(null, 204);
       }),
     );
 

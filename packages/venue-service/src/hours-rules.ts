@@ -68,14 +68,3 @@ export function parseSpecialDateInput(value: unknown): SpecialDateInput {
     closeWholeVenue,
   };
 }
-
-/** The target dates of a duplication: a non-empty list of real dates, none of them twice. */
-export function parseDuplicateDates(value: unknown): LocalDate[] {
-  if (!Array.isArray(value) || value.length === 0) invalidHours("dates");
-  const seen = new Set<LocalDate>();
-  return value.map((date: unknown, index) => {
-    if (!isLocalDate(date) || seen.has(date)) invalidHours(`dates.${index}`);
-    seen.add(date);
-    return date;
-  });
-}

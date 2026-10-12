@@ -689,6 +689,21 @@ describe("named-days Calendar route", () => {
   });
 });
 
+describe("retired special-date routes", () => {
+  it("answers 404 to every special-date writer for a manager", async () => {
+    const fx = await fixture();
+    const id = randomUUID();
+    const body = { date: "2030-10-15", name: "Staff party", closeWholeVenue: false };
+    for (const [method, path, sent] of [
+      ["POST", "/special-dates", body],
+      ["PUT", `/special-dates/${id}`, body],
+      ["POST", `/special-dates/${id}/duplicate`, { dates: ["2030-10-16"] }],
+      ["DELETE", `/special-dates/${id}`, undefined],
+    ] as const)
+      expect((await send(fx, method, path, fx.manager, sent)).status).toBe(404);
+  });
+});
+
 describe("retired station-hours range route", () => {
   it.each([
     "/hours?from=2030-10-14&to=2030-10-16",

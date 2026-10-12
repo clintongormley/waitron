@@ -6,7 +6,6 @@ export * from "./service-delete.js";
 export * from "./keep-open.js";
 export type { MenuUse } from "./errors.js";
 export {
-  MENU_TIMETABLE_CALENDAR_PARTICIPANT,
   assertPeriodEndOffsets,
   deleteMenuPeriod,
   readOpeningHoursModel,
@@ -33,19 +32,8 @@ export { VENUE_SERVICE_CHANGE_SOURCES } from "./classification.js";
 export * from "./routing.js";
 export * from "./routing-store.js";
 export * from "./station-times.js";
+export { readCalendarDays, type HolidayReader } from "./hours.js";
 export {
-  deleteSpecialDate,
-  duplicateSpecialDate,
-  readCalendarDays,
-  readSpecialDate,
-  renameSpecialDate,
-  saveSpecialDate,
-  type HolidayReader,
-  type SpecialDateParticipant,
-} from "./hours.js";
-export { VENUE_SERVICE_CALENDAR_PARTICIPANTS } from "./calendar-participants.js";
-export {
-  duplicateHolidayNamedSpecialDates,
   readHolidayFacts,
   readHolidays,
   readHolidayAreaModel,

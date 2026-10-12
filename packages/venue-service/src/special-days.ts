@@ -18,7 +18,6 @@ import {
   zoneDayRanges,
   zoneDays,
 } from "./schema/seasons.js";
-import { specialDates } from "./schema/hours.js";
 import { menuPeriods } from "./schema/menus.js";
 import { departments, zoneServicePolicies } from "./schema/service.js";
 import { readHolidayDates } from "./holidays.js";
@@ -706,34 +705,6 @@ async function assertDatesFree(
         throw new AppError("special_day.date_taken", {
           date: shared,
           specialDayId: other.specialDayId,
-          name: other.name,
-        });
-    }
-  const named = await tx
-    .select({
-      specialDateId: specialDates.id,
-      name: specialDates.name,
-      date: specialDates.date,
-      repeatOn: specialDates.repeatOn,
-    })
-    .from(specialDates)
-    .where(
-      and(
-        eq(specialDates.locationId, cfg.locationId),
-        inArray(sql`substr(${specialDates.date}, 6)`, [...new Set(dates.map(repeatKey))]),
-      ),
-    )
-    .orderBy(asc(specialDates.date));
-  for (const { date, repeats } of rules)
-    for (const other of named) {
-      const shared = sharedSpecialDate(
-        { date, repeats },
-        { date: other.date, repeats: other.repeatOn !== null },
-      );
-      if (shared !== null)
-        throw new AppError("special_day.date_taken", {
-          date: shared,
-          specialDateId: other.specialDateId,
           name: other.name,
         });
     }

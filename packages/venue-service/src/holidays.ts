@@ -8,7 +8,7 @@ import {
 import { getCountryPack } from "@waitron/country-packs";
 import { locations, readTenant, type Transaction } from "@waitron/db";
 import { AppError } from "@waitron/shared";
-import { compareHolidayFacts, holidayDateName } from "./holiday-naming.js";
+import { compareHolidayFacts } from "./holiday-naming.js";
 import { holidayCityKey } from "./holiday-rules.js";
 import {
   type HolidayCoverage,
@@ -18,14 +18,9 @@ import {
   type HolidayAreaModel,
 } from "./holiday-types.js";
 import { rangeDates } from "./hours-rules.js";
-import type { HolidayFact, LocalDate, SpecialDate } from "./hours-types.js";
+import type { HolidayFact, LocalDate } from "./hours-types.js";
 import type { HolidayDates } from "./special-days.js";
-import {
-  duplicateSpecialDate,
-  renameSpecialDate,
-  type HolidayReader,
-  type SpecialDateParticipant,
-} from "./hours.js";
+import type { HolidayReader } from "./hours.js";
 import type { VenueScope } from "./operations.js";
 import { holidayGeographies } from "./schema/holidays.js";
 import "./errors.js";
@@ -276,50 +271,10 @@ export function createHolidayStore(findPack: PackLookup = getCountryPack) {
     return geographyOf(updated!, address);
   }
 
-  /**
-   * Hours' duplicate, after which each copy on a holiday takes that date's holiday name; a copy on
-   * any other date keeps the source's name. Targets may be years apart, so facts are read one civil
-   * year at a time.
-   */
-  async function duplicateHolidayNamedSpecialDates(
-    tx: Transaction,
-    cfg: VenueScope,
-    sourceId: string,
-    dates: readonly LocalDate[],
-    at: Date,
-    participants: readonly SpecialDateParticipant[] = [],
-    expectedClockRevision: number,
-  ): Promise<SpecialDate[]> {
-    const copies = await duplicateSpecialDate(
-      tx,
-      cfg,
-      sourceId,
-      dates,
-      at,
-      participants,
-      expectedClockRevision,
-    );
-    const byYear = new Map<number, LocalDate[]>();
-    for (const { date } of copies)
-      byYear.set(yearOf(date), [...(byYear.get(yearOf(date)) ?? []), date]);
-    const facts: HolidayFact[] = [];
-    for (const targets of byYear.values()) {
-      targets.sort();
-      facts.push(...(await readHolidays(tx, cfg, targets[0]!, targets[targets.length - 1]!)).facts);
-    }
-    const named: SpecialDate[] = [];
-    for (const copy of copies) {
-      const name = holidayDateName(facts, copy.date, copy.name);
-      named.push(name === copy.name ? copy : await renameSpecialDate(tx, cfg, copy.id, name));
-    }
-    return named;
-  }
-
   return {
     readHolidays,
     readHolidayDates,
     readHolidayFacts,
-    duplicateHolidayNamedSpecialDates,
     readHolidayAreaModel,
     saveHolidayArea,
   };
@@ -327,11 +282,5 @@ export function createHolidayStore(findPack: PackLookup = getCountryPack) {
 
 const INSTALLED = createHolidayStore();
 
-export const {
-  readHolidays,
-  readHolidayDates,
-  readHolidayAreaModel,
-  saveHolidayArea,
-  duplicateHolidayNamedSpecialDates,
-} = INSTALLED;
+export const { readHolidays, readHolidayDates, readHolidayAreaModel, saveHolidayArea } = INSTALLED;
 export const readHolidayFacts: HolidayReader = INSTALLED.readHolidayFacts;
