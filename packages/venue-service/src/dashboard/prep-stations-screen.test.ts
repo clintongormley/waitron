@@ -3148,6 +3148,61 @@ describe("Routing grid", () => {
     expect(q(el, '[data-test="routing-preview"]')).toBeNull();
   });
 
+  it("a product row's choice that moves products saves at once, without the notice", async () => {
+    const { a, el } = await mountGrid({ preview: vi.fn().mockResolvedValue([breadMove]) });
+    const water = { row: { kind: "product", productId: "water" }, zoneId: null };
+    await chooseCell(el, "p:water", "every", "Kitchen");
+    await vi.waitFor(() => expect(a.setCell).toHaveBeenCalledExactlyOnceWith(water, kitchenTarget));
+    expect(a.preview).toHaveBeenCalledExactlyOnceWith({
+      kind: "cell",
+      address: water,
+      target: kitchenTarget,
+    });
+    expect(q(el, '[data-test="routing-preview"]')).toBeNull();
+  });
+
+  it("a preview refused on a product row shows beside its cell and writes nothing", async () => {
+    const { a, el } = await mountGrid({
+      preview: vi.fn().mockRejectedValue({ code: "route.station_inactive" }),
+    });
+    await chooseCell(el, "p:water", "every", "Kitchen");
+    await gridOf(el).updateComplete;
+    await vi.waitFor(() =>
+      expect(cellCombo(el, "p:water", "every").error).toBe(
+        "This station is disabled. Choose an active station.",
+      ),
+    );
+    expect(q(el, '[data-test="routing-preview"]')).toBeNull();
+    expect(a.setCell).not.toHaveBeenCalled();
+  });
+
+  it("a category row's choice that moves products still opens the notice", async () => {
+    const { a, el } = await mountGrid({ preview: vi.fn().mockResolvedValue([breadMove]) });
+    await chooseCell(el, "c:food", "every", "Kitchen");
+    expect(q(el, '[data-test="routing-preview"]')).not.toBeNull();
+    expect(a.setCell).not.toHaveBeenCalled();
+  });
+
+  it("the notice names a category under a parent by its own name", async () => {
+    const nested = gridView();
+    nested.routing.cells = [
+      ...nested.routing.cells,
+      {
+        row: { kind: "category", categoryId: "cocktails" },
+        zoneId: null,
+        target: { kind: "station", stationId: "bar" },
+      },
+    ];
+    const { el } = await mountGrid({
+      load: vi.fn().mockResolvedValue(nested),
+      preview: vi.fn().mockResolvedValue([breadMove]),
+    });
+    await chooseCell(el, "c:cocktails", "every", "Kitchen");
+    const text = q(el, '[data-test="routing-preview"]')!.textContent!;
+    expect(text).toContain("Cocktails, Every zone: this changes Bar to Kitchen.");
+    expect(text).not.toContain("Drinks ›");
+  });
+
   it("the preview lists each moved product with its old and new destinations, and No replacement for a dead end", async () => {
     setLocale("en");
     const { a, el } = await mountGrid({
@@ -3182,11 +3237,189 @@ describe("Routing grid", () => {
     await chooseCell(el, "c:food", "every", "No preparation");
     const rows = [...el.shadowRoot!.querySelectorAll('[data-test="routing-preview"] tbody tr')];
     expect(rows.map((row) => row.textContent!.replace(/\s+/g, " ").trim())).toEqual([
-      "Bread Any service zone No station No preparation",
+      "Bread Every zone No station No preparation",
       "Bread Terrace Bar unknown",
       "Bread Terrace Bar No replacement",
     ]);
     expect(a.setCell).not.toHaveBeenCalled();
+  });
+
+  describe("the notice's summary", () => {
+    const lunch = {
+      id: "lunch",
+      departmentId: "dining",
+      departmentName: "Dining",
+      colour: "blue" as const,
+      name: "Lunch",
+      productIds: [],
+    };
+    const barTarget = { kind: "station", stationId: "bar" };
+    const move = (id: string, extra: object = {}) => ({
+      productId: id,
+      productName: id,
+      zoneId: "terrace",
+      zoneName: "Terrace",
+      from: kitchenTarget,
+      to: barTarget,
+      toNoReplacement: false,
+      periodIds: null,
+      ...extra,
+    });
+    const atLunch = { periodIds: ["lunch"] };
+    /** CLANDESTINA, its variant DOUBLE and 13 more products, all moving at Lunch, in the server's order. */
+    const lunchMoves = [
+      move("CLANDESTINA", atLunch),
+      move("CREMA", atLunch),
+      move("DOUBLE", {
+        ...atLunch,
+        variantOf: { productId: "CLANDESTINA", productName: "CLANDESTINA" },
+      }),
+      ...Array.from({ length: 12 }, (_, i) => move(`P${String(i + 1).padStart(2, "0")}`, atLunch)),
+    ];
+    function summaryView(periods = [lunch]): PrepStationsView {
+      const next = gridView();
+      next.routing.periods = periods;
+      next.routing.zones = [
+        { id: "patio", name: "Patio", departmentId: null },
+        { id: "terrace", name: "Terrace", departmentId: null },
+      ];
+      return next;
+    }
+    async function openNotice(moves: object[], periods = [lunch]) {
+      const { el } = await mountGrid({
+        load: vi.fn().mockResolvedValue(summaryView(periods)),
+        preview: vi.fn().mockResolvedValue(moves),
+      });
+      await chooseCell(el, "c:food", "every", "Bar");
+      return { el, preview: q(el, '[data-test="routing-preview"]')! };
+    }
+    const sentences = (preview: Element) =>
+      [...preview.querySelectorAll('[data-test="preview-group"]')].map((p) =>
+        p.textContent!.replace(/\s+/g, " ").trim(),
+      );
+    const rowNames = (preview: Element) =>
+      [...preview.querySelectorAll("tbody tr")].map((row) =>
+        row.querySelector("td")!.textContent!.replace(/\s+/g, " ").trim(),
+      );
+
+    it("counts a variant under its product: one sentence for the group", async () => {
+      setLocale("en");
+      const { preview } = await openNotice(lunchMoves);
+      expect(sentences(preview)).toEqual([
+        "Food, Terrace: 14 products move from Kitchen to Bar during Lunch.",
+      ]);
+    });
+
+    it("one sentence per zone, periods, from and to: no zone first, then the model's zones, all day before timed", async () => {
+      setLocale("en");
+      const { preview } = await openNotice([
+        move("Bread", atLunch),
+        move("Bread"),
+        move("Bread", { zoneId: "patio", zoneName: "Patio", to: null, toNoReplacement: true }),
+        move("Bread", { zoneId: null, zoneName: null, from: null }),
+        move("Cake", { zoneId: null, zoneName: null, from: null }),
+      ]);
+      expect(sentences(preview)).toEqual([
+        "Food, Every zone: 2 products move from No station to Bar.",
+        "Food, Patio: 1 product moves from Kitchen to No replacement.",
+        "Food, Terrace: 1 product moves from Kitchen to Bar.",
+        "Food, Terrace: 1 product moves from Kitchen to Bar during Lunch.",
+      ]);
+    });
+
+    it("groups by which periods, not by how their names read: the same set in any order is one group", async () => {
+      setLocale("en");
+      const dinner = { ...lunch, id: "dinner", name: "Dinner" };
+      const lunchAndDinner = { ...lunch, id: "lunch-and-dinner", name: "Lunch, Dinner" };
+      const periods = [lunch, dinner, lunchAndDinner];
+      const separate = await openNotice(
+        [
+          move("Bread", { periodIds: ["lunch", "dinner"] }),
+          move("Cake", { periodIds: ["lunch-and-dinner"] }),
+        ],
+        periods,
+      );
+      expect(sentences(separate.preview)).toEqual([
+        "Food, Terrace: 1 product moves from Kitchen to Bar during Lunch, Dinner.",
+        "Food, Terrace: 1 product moves from Kitchen to Bar during Lunch, Dinner.",
+      ]);
+      separate.el.remove();
+      const reordered = await openNotice(
+        [
+          move("Bread", { periodIds: ["lunch", "dinner"] }),
+          move("Cake", { periodIds: ["dinner", "lunch"] }),
+        ],
+        periods,
+      );
+      expect(sentences(reordered.preview)).toEqual([
+        "Food, Terrace: 2 products move from Kitchen to Bar during Lunch, Dinner.",
+      ]);
+    });
+
+    it("names a move with no zone the way the first sentence does, in English and Spanish", async () => {
+      const noZone = [move("Bread", { zoneId: null, zoneName: null })];
+      const zoneCells = (preview: Element) =>
+        [...preview.querySelectorAll("tbody tr")].map((row) =>
+          row.querySelectorAll("td")[1]!.textContent!.trim(),
+        );
+      setLocale("en");
+      const en = await openNotice(noZone);
+      expect(sentences(en.preview)).toEqual([
+        "Food, Every zone: 1 product moves from Kitchen to Bar.",
+      ]);
+      expect(zoneCells(en.preview)).toEqual(["Every zone"]);
+      en.el.remove();
+      setLocale("es");
+      const es = await openNotice(noZone);
+      expect(sentences(es.preview)).toEqual([
+        "Food, Todas las zonas: 1 producto pasa de Kitchen a Bar.",
+      ]);
+      expect(zoneCells(es.preview)).toEqual(["Todas las zonas"]);
+    });
+
+    it("an extra counts once in its group whatever dishes carry it", async () => {
+      setLocale("en");
+      const { preview } = await openNotice([
+        move("Burger"),
+        move("Cheese", { dish: { productId: "Burger", productName: "Burger" } }),
+        move("Cheese", { dish: { productId: "Pizza", productName: "Pizza" } }),
+      ]);
+      expect(sentences(preview)).toEqual(["Food, Terrace: 2 products move from Kitchen to Bar."]);
+    });
+
+    it("keeps the list behind a closed Show products, a variant named after its product", async () => {
+      setLocale("en");
+      const { preview } = await openNotice(lunchMoves);
+      const disclosure = preview.querySelector("wt-disclosure")!;
+      expect(disclosure.heading).toBe("Show products");
+      expect(disclosure.open).toBe(false);
+      const table = disclosure.querySelector("table")!;
+      expect(table.checkVisibility()).toBe(false);
+      disclosure.shadowRoot!.querySelector<HTMLElement>(".header")!.click();
+      await disclosure.updateComplete;
+      expect(table.checkVisibility()).toBe(true);
+      expect(rowNames(preview).slice(0, 3)).toEqual([
+        "CLANDESTINA during Lunch",
+        "CLANDESTINA (DOUBLE) during Lunch",
+        "CREMA during Lunch",
+      ]);
+      expect(rowNames(preview)).toHaveLength(15);
+    });
+
+    it("says it in Spanish", async () => {
+      setLocale("es");
+      const { preview } = await openNotice([...lunchMoves, move("Bread")]);
+      expect(sentences(preview)).toEqual([
+        "Food, Terrace: 1 producto pasa de Kitchen a Bar.",
+        "Food, Terrace: 14 productos pasan de Kitchen a Bar durante Lunch.",
+      ]);
+      expect(preview.querySelector("wt-disclosure")!.heading).toBe("Ver productos");
+      expect(rowNames(preview).slice(0, 3)).toEqual([
+        "Bread",
+        "CLANDESTINA durante Lunch",
+        "CLANDESTINA (DOUBLE) durante Lunch",
+      ]);
+    });
   });
 
   describe("period lines", () => {
@@ -3312,6 +3545,52 @@ describe("Routing grid", () => {
           .textContent!.replace(/\s+/g, " ")
           .trim(),
       ).toBe("Bread during Lunch (Dining), Lunch (Bar)");
+    });
+
+    it.each([
+      ["en", "Food, Every zone: this changes Bar to Bar (Lunch: Kitchen)."],
+      ["es", "Food, Todas las zonas: esto cambia Bar por Bar (Lunch: Kitchen)."],
+    ] as const)(
+      "the notice's first sentence names the lines a choice adds (%s)",
+      async (locale, sentence) => {
+        setLocale(locale);
+        const { el } = await mountGrid({
+          load: vi.fn().mockResolvedValue(timedView()),
+          preview: vi.fn().mockResolvedValue([breadMove]),
+        });
+        await saveLunchLine(el);
+        expect(q(el, '[data-test="routing-preview"]')!.textContent).toContain(sentence);
+      },
+    );
+
+    it("clearing a cell with stored lines names its lines and the inherited ones", async () => {
+      setLocale("en");
+      const lined = timedView();
+      lined.routing.cells = [
+        {
+          row: { kind: "category", categoryId: "drinks" },
+          zoneId: null,
+          target: { kind: "station", stationId: "bar" },
+          periods: [{ periodId: "lunch", target: { kind: "station", stationId: "kitchen" } }],
+        },
+        {
+          row: { kind: "category", categoryId: "cocktails" },
+          zoneId: null,
+          target: { kind: "station", stationId: "kitchen" },
+          periods: [
+            { periodId: "lunch", target: { kind: "station", stationId: "bar" } },
+            { periodId: "staff", target: { kind: "no_preparation" } },
+          ],
+        },
+      ];
+      const { el } = await mountGrid({
+        load: vi.fn().mockResolvedValue(lined),
+        preview: vi.fn().mockResolvedValue([breadMove]),
+      });
+      await chooseCell(el, "c:cocktails", "every", "Clear setting");
+      expect(q(el, '[data-test="routing-preview"]')!.textContent).toContain(
+        "Cocktails, Every zone: this changes Kitchen (Lunch: Bar; Staff lunch: No preparation) to Bar (Lunch: Kitchen).",
+      );
     });
 
     it("draws the waiting choice's lines in its cell while its preview is open", async () => {

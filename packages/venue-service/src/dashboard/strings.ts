@@ -246,7 +246,14 @@ const en = {
   "prep.cancel": "Cancel",
   "prep.confirm": "Confirm",
   "prep.preview_title": "Review route change",
-  "prep.preview_moves": "These products will be made somewhere else:",
+  "prep.preview_group_one": "{row}, {zone}: 1 product moves from {from} to {to}.",
+  "prep.preview_group_many": "{row}, {zone}: {count} products move from {from} to {to}.",
+  "prep.preview_group_one_during":
+    "{row}, {zone}: 1 product moves from {from} to {to} during {periods}.",
+  "prep.preview_group_many_during":
+    "{row}, {zone}: {count} products move from {from} to {to} during {periods}.",
+  "prep.preview_show_products": "Show products",
+  "prep.preview_variant": "{product} ({variant})",
   "prep.preview_none": "No product changes where it is made.",
   "prep.preview_product": "Product",
   "prep.preview_extra": "{extra} — with {dish}",
@@ -289,7 +296,6 @@ const en = {
   "prep.delete_station_daily_destinations": "These closed stations use normal routing: {names}.",
   "prep.actions": "Actions",
   "prep.service_zone": "Service zone",
-  "prep.any_zone": "Any service zone",
   "hours.clock_change_pending": "Cancel the pending business-day change before editing hours.",
   "hours.clock_changed": "The business-day start changed. Reload hours.",
   "venue.business_day_hours_conflict": "Adjust the conflicting hours first.",
@@ -728,6 +734,7 @@ const en = {
     "No default prep station is active. Choose one so items with no other setting have a station to go to.",
   "routing.refusal_at": "{row}, {zone}: {message}",
   "routing.preview_change": "{row}, {zone}: this changes {from} to {to}.",
+  "routing.preview_value_lines": "{station} ({lines})",
   "routing.target_unavailable":
     "This row or zone is no longer in the grid. Cancel, then choose again.",
   "routing.dropped_zone": "Your choice was not saved: its zone is no longer in the grid.",
@@ -1005,7 +1012,14 @@ const es: Record<keyof typeof en, string> = {
   "prep.cancel": "Cancelar",
   "prep.confirm": "Confirmar",
   "prep.preview_title": "Revisar cambio de ruta",
-  "prep.preview_moves": "Estos productos se prepararán en otro lugar:",
+  "prep.preview_group_one": "{row}, {zone}: 1 producto pasa de {from} a {to}.",
+  "prep.preview_group_many": "{row}, {zone}: {count} productos pasan de {from} a {to}.",
+  "prep.preview_group_one_during":
+    "{row}, {zone}: 1 producto pasa de {from} a {to} durante {periods}.",
+  "prep.preview_group_many_during":
+    "{row}, {zone}: {count} productos pasan de {from} a {to} durante {periods}.",
+  "prep.preview_show_products": "Ver productos",
+  "prep.preview_variant": "{product} ({variant})",
   "prep.preview_none": "Ningún producto cambia de lugar de preparación.",
   "prep.preview_product": "Producto",
   "prep.preview_extra": "{extra} — con {dish}",
@@ -1050,7 +1064,6 @@ const es: Record<keyof typeof en, string> = {
     "Estas estaciones cerradas usan el enrutamiento normal: {names}.",
   "prep.actions": "Acciones",
   "prep.service_zone": "Zona de servicio",
-  "prep.any_zone": "Cualquier zona de servicio",
   "hours.clock_change_pending": "Cancela el cambio pendiente del día antes de editar horarios.",
   "hours.clock_changed": "Ha cambiado el inicio del día. Recarga los horarios.",
   "venue.business_day_hours_conflict": "Ajusta primero los horarios en conflicto.",
@@ -1504,6 +1517,7 @@ const es: Record<keyof typeof en, string> = {
     "Ninguna estación de preparación predeterminada está activa. Elige una para que los artículos sin otro ajuste tengan una estación a la que ir.",
   "routing.refusal_at": "{row}, {zone}: {message}",
   "routing.preview_change": "{row}, {zone}: esto cambia {from} por {to}.",
+  "routing.preview_value_lines": "{station} ({lines})",
   "routing.target_unavailable":
     "Esta fila o zona ya no está en la cuadrícula. Cancela y vuelve a elegir.",
   "routing.dropped_zone": "Tu elección no se ha guardado: su zona ya no está en la cuadrícula.",

@@ -42,6 +42,7 @@ describe.each(["light", "dark"] as const)("prep stations accessibility (%s)", (t
     "invalid",
     "grid",
     "grid-preview",
+    "grid-preview-products-shown",
     "grid-refusal",
     "grid-disabled-target",
     "grid-dropped",
@@ -174,7 +175,7 @@ describe.each(["light", "dark"] as const)("prep stations accessibility (%s)", (t
       expect(el.shadowRoot!.querySelector('[data-test="route-tester"]')).toBeNull();
       if (state === "grid-disabled-target")
         expect(grid.shadowRoot!.querySelector('[data-test="disabled-target"]')).not.toBeNull();
-      if (state === "grid-preview" || state === "grid-refusal") {
+      if (state.startsWith("grid-preview") || state === "grid-refusal") {
         grid.dispatchEvent(
           new CustomEvent("routing-cell-change", {
             detail: {
@@ -186,6 +187,12 @@ describe.each(["light", "dark"] as const)("prep stations accessibility (%s)", (t
         await vi.waitFor(() =>
           expect(el.shadowRoot!.querySelector('[data-test="routing-preview"]')).not.toBeNull(),
         );
+      }
+      if (state === "grid-preview-products-shown") {
+        const disclosure = el.shadowRoot!.querySelector("wt-disclosure")!;
+        disclosure.open = true;
+        await disclosure.updateComplete;
+        expect(disclosure.querySelector("table")!.checkVisibility()).toBe(true);
       }
       if (state === "grid-dropped") {
         // A zone the grid no longer draws, as when a refresh removed it during the preview.

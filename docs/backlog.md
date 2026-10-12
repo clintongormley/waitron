@@ -1394,11 +1394,6 @@ _Formerly entries spread across the old sections, A261's venue-operations steps 
 
 _Formerly the kitchen entries in the opening part of the old Track A (before A1), and kitchen entries elsewhere; part of A9._ Detail: [backlog/kitchen.md](backlog/kitchen.md).
 
-- **A507. Prep stations made lighter: a shorter route-change notice (owner, 2026-10-11)** — left
-  open by A507 part 1 (#1564) and A507 part 2 (#1568). The route-change notice no longer asks for a
-  product's own edit and summarises a category's.
-  [Detail](backlog/kitchen.md#a507-prep-stations-made-lighter)
-
 - **A routing period line naming another location's period is flagged but never drawn** (left open
   by A455, #1492): the server marks it `notOffered`, but the grid (`routing-grid-model.ts`) and the
   cell editor (`routing-cell-editor.ts`) drop a line whose period is not in the model's periods, so
@@ -3171,6 +3166,13 @@ _Formerly A7, and the dashboard entries in the opening part of the old Track A (
   buttons — in a dialog, at the end of the dialog's body" (design-system.md → Forms), and in a
   full-height dialog those are not the same place. Options: push the message to the bottom of the
   body, or into the footer.
+
+- **A short notice in a full-height dialog leaves most of it empty** (found by A507's look, owner
+  decision needed). The Prep stations route-change notice (`size="wide"`, `#previewDialog` in
+  `packages/venue-service/src/dashboard/prep-stations-screen.ts`) now holds its sentences with its
+  product list closed, but `wt-modal` gives every dialog except a compact one the full
+  screen height (`packages/ui/src/components/wt-modal.ts:17`), so at 1280 wide most of it is blank.
+  Decide whether a wide dialog should shrink to fit its content.
 
 - **A disabled primary button reads as clickable in dark** (found by A507's look). `wt-button` only
   fades a disabled button (`packages/ui-core/src/components/wt-button.ts:44-45`, opacity
