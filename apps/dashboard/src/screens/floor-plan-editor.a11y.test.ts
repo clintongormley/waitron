@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, onTestFinished, vi } from "vitest";
 import { page } from "vitest/browser";
 import type { WtModal, WtSheet } from "@waitron/ui";
-import { chooseOption } from "@waitron/ui/src/test-helpers.js";
+import { chooseOption, chooseOptions } from "@waitron/ui/src/test-helpers.js";
 import { draftFromPlan, patchTable } from "./floor-plan-draft.js";
 import { currentLocale, setLocale } from "../i18n/t.js";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "../widgets/test-helpers.js";
@@ -74,7 +74,62 @@ async function openAddTables(el: FloorPlanEditor) {
   return { panel, dialog };
 }
 
+const offPlan: FloorPlan = {
+  ...plan,
+  tables: [
+    ...plan.tables,
+    ...(
+      [
+        ["m3", "Counter 3", 2],
+        ["m4", "Counter 4", 6],
+        ["m5", "Counter 5", 4],
+      ] as const
+    ).map(([id, label, seats]) => ({
+      id,
+      liveTableId: null,
+      label,
+      seats,
+      fixed: false,
+      placement: null,
+      partIds: [],
+    })),
+  ],
+};
+
+async function openAddJoinedTable(el: FloorPlanEditor) {
+  el.shadowRoot!.querySelector("floor-plan-tables-panel")!
+    .shadowRoot!.querySelector<HTMLElement>("wt-button[data-action=add-joined-table]")!
+    .click();
+  const panel = el.shadowRoot!.querySelector("floor-plan-add-joined-table")!;
+  await panel.updateComplete;
+  const dialog = panel.shadowRoot!.querySelector<WtModal>(
+    "wt-modal[data-dialog=add-joined-table]",
+  )!;
+  await dialog.updateComplete;
+  return { panel, dialog };
+}
+
 describe.each(["light", "dark"] as const)("floor-plan-editor a11y (%s theme)", (theme) => {
+  it("shows Add joined table open, empty and filled, accessibly", async () => {
+    const locale = currentLocale();
+    setLocale("en-GB");
+    onTestFinished(() => setLocale(locale));
+    const { el, host } = await open(stubApi(vi.fn().mockResolvedValue(offPlan)), theme);
+    const { panel, dialog } = await openAddJoinedTable(el);
+    expect(dialog.open).toBe(true);
+    await expectNoA11yViolations(host);
+    await chooseOption(dialog.querySelector("[name=table-name]")!, "Long table");
+    await chooseOption(dialog.querySelector("[name=seats]")!, "10");
+    await chooseOptions(dialog.querySelector("[name=made-of]")!, ["m3", "m4", "m5"]);
+    await panel.updateComplete;
+    expect(
+      dialog.querySelector<HTMLElement & { disabled: boolean }>(
+        "wt-button[data-action=add-confirm]",
+      )!.disabled,
+    ).toBe(false);
+    await expectNoA11yViolations(host);
+  });
+
   it("shows Add tables open, automatic, accessibly", async () => {
     const locale = currentLocale();
     setLocale("en-GB");

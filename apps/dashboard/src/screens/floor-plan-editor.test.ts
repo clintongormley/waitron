@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, expect, it, onTestFinished, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
 import type { WtButton, WtFloorPlanCanvas, WtModal, WtSheet } from "@waitron/ui";
-import { chooseOption } from "@waitron/ui/src/test-helpers.js";
+import { chooseOption, chooseOptions } from "@waitron/ui/src/test-helpers.js";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import "./floor-plan-editor.js";
 import type { FloorPlanEditor } from "./floor-plan-editor.js";
@@ -881,6 +881,54 @@ it("gives added tables keys no draft table holds, through saves, undo and redo",
   keysUnique();
   await press(el, "redo");
   expect(keysUnique()).toEqual(["m1", "m2", "m5", "m6", "new:5"]);
+});
+
+it("Add joined table from the list opens the window, and Add puts Long table in the list not placed", async () => {
+  const counters = terrace();
+  counters.tables.push(
+    ...(
+      [
+        ["m3", "Counter 3", 2],
+        ["m4", "Counter 4", 6],
+        ["m5", "Counter 5", 4],
+      ] as const
+    ).map(([id, label, seats]) => ({
+      id,
+      liveTableId: null,
+      label,
+      seats,
+      fixed: false,
+      placement: null,
+      partIds: [],
+    })),
+  );
+  const el = await open(stubApi({ getFloorPlan: vi.fn().mockResolvedValue(counters) }));
+  panelOf(el)
+    .shadowRoot!.querySelector<HTMLElement>("wt-button[data-action=add-joined-table]")!
+    .click();
+  const window = el.shadowRoot!.querySelector("floor-plan-add-joined-table")!;
+  await window.updateComplete;
+  const modal = window.shadowRoot!.querySelector<WtModal>(
+    "wt-modal[data-dialog=add-joined-table]",
+  )!;
+  await modal.updateComplete;
+  expect(modal.open).toBe(true);
+  expect(window.takenElsewhere).toBeInstanceOf(Set);
+  await chooseOption(modal.querySelector("[name=table-name]")!, "Long table");
+  await chooseOption(modal.querySelector("[name=seats]")!, "10");
+  await chooseOptions(modal.querySelector("[name=made-of]")!, ["m3", "m4", "m5"]);
+  await window.updateComplete;
+  modal.querySelector<HTMLElement>("wt-button[data-action=add-confirm]")!.click();
+  await el.updateComplete;
+  await expect.poll(() => modal.open).toBe(false);
+  const long = panelOf(el).draft.tables.find((t) => t.label === "Long table");
+  expect(long).toMatchObject({ seats: 10, placement: null, parts: ["m3", "m4", "m5"] });
+  await panelOf(el).updateComplete;
+  const row = panelOf(el).shadowRoot!.querySelector<HTMLElement>(`[data-table="${long!.key}"]`)!;
+  expect(row.querySelector("[data-marker]")!.getAttribute("data-marker")).toBe("spare");
+  expect(row.querySelector("[data-made-of]")!.textContent!.trim()).toBe("Counter 3, 4, 5");
+  expect(canvas(el).tables.some((t) => t.key === long!.key && t.placement !== null)).toBe(false);
+  expectSaveAwake(el);
 });
 
 const sizes: [[number, number], [number, number]][] = [

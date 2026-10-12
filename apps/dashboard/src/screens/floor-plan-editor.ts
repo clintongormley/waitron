@@ -23,6 +23,7 @@ import "@waitron/ui/src/components/wt-icon.js";
 import "@waitron/ui/src/components/wt-floor-plan-canvas.js";
 import "@waitron/ui/src/components/wt-modal.js";
 import "@waitron/ui/src/components/wt-sheet.js";
+import "./floor-plan-add-joined-table.js";
 import "./floor-plan-add-tables.js";
 import "./floor-plan-table-panel.js";
 import "./floor-plan-tables-panel.js";
@@ -417,6 +418,9 @@ export class FloorPlanEditor extends LitElement {
     });
     this.addEventListener("floor-plan-add-tables", () => {
       this.renderRoot.querySelector("floor-plan-add-tables")?.show();
+    });
+    this.addEventListener("floor-plan-add-joined-table", () => {
+      this.renderRoot.querySelector("floor-plan-add-joined-table")?.show();
     });
     this.addEventListener("floor-plan-invalid", (event) => {
       this.#typed((event as CustomEvent<FloorPlanInvalid>).detail);
@@ -1156,6 +1160,12 @@ export class FloorPlanEditor extends LitElement {
         .nextKey=${this.#nextKey}
         .draftParent=${this.#scopeId}
       ></floor-plan-add-tables>
+      <floor-plan-add-joined-table
+        .draft=${draft}
+        .takenElsewhere=${this.#takenElsewhere(draft)}
+        .nextKey=${this.#nextKey}
+        .draftParent=${this.#scopeId}
+      ></floor-plan-add-joined-table>
       ${this.#deleteQuestion(draft)}`;
   }
 

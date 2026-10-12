@@ -2052,6 +2052,8 @@ and nothing guards it across screens:
   [the earlier Batch 4b table](../superpowers/plans/2026-10-07-a331-save-follows-changes.md#batch-4b--the-venue-service-screens-slice-1-rewrote-lane-b-a331-4b);
 - A429 slice 2: the floor plan editor, a full-window modal whose Save sits in its header. Its leave
   cases are in `apps/dashboard/src/screens/floor-plan-editor.unsaved.test.ts`;
+- A503 part 2: the floor plan editor's Add joined table window. Its leave cases are in
+  `apps/dashboard/src/screens/floor-plan-add-joined-table.unsaved.test.ts`;
 - A494: Venue details' Change legal name dialog. Its leave cases are in
   `apps/dashboard/src/screens/legal-name-dialog.unsaved.test.ts`;
 - batch 4c: the venue-service local holiday Add and Edit (its Remove and Forget stay `danger`
