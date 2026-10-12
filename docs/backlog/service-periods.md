@@ -97,10 +97,11 @@ and nothing writes the old weekday rows of `menu_day_timetables`, `menu_slots` o
 A506-3: the two week routes save one named season; the Week tab has a season picker, and the Day tab
 and every real week draw each date's own season; the Business day start dialog names the season of
 each conflict in a season's week.
+A506-4 landed in #NNNN: special days are stored and saved through the API, the till sells and
+closes by their paint, end-offset and changeover checks read them, and a configuration transfer
+carries and checks them; the dashboard shows none of their paint until A506-5.
 
 **Left open by A506-1, for the later parts.**
-- A506-4: a configuration transfer carries no special days, and refuses a day row that names a
-  special-day date (`packages/venue-service/src/configuration-transfer.ts`).
 - No test yet gives a second department its own week on the same named day.
 
 **Left open by A506-2, for the later parts.**

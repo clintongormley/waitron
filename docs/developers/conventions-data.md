@@ -647,16 +647,44 @@ not a database error" in the same file).
 
 `validateSeasonWeeks` (`packages/venue-service/src/configuration-transfer.ts`) refuses, among
 others: a season start that is not a common year's date or is `02-29`; a range off the
-quarter-hour or overlapping another on the same day; a department range with no period (Closed)
-and a zone range of any kind but `closed`. It accepts a season with fewer than seven day rows, and
-checks no skipped clock hour, as a season week has no date. A season day naming a special-day date
-is refused, because the bundle carries no `special_days` or `special_day_dates`.
-`validateEndOffsets`, beside it, refuses a period end offset reaching the next placement: within a
-season's week, from each season's last day to the next season's first on every weekday, and
-between each named day and the days either side of it, a day without hours of its own read from
-the season that holds it. It reads no old weekday row. The cases are under "season weeks in a
+quarter-hour or overlapping another on the same day; on a season day, a department range with no
+period (Closed) and a zone range of any kind but `closed`. It accepts a season with fewer than
+seven day rows, and checks no skipped clock hour on a season day, as a season week has no date.
+A day row naming a special-day date the bundle does not hold is refused; special days themselves
+are under "Special days" below. `validateEndOffsets`, beside it, refuses a period end offset
+reaching the next placement: within a season's week, from each season's last day to the next
+season's first on every weekday, and between each special day or named day and the days either
+side of it, a day without hours of its own read from the season that holds it. It reads no old weekday row. The cases are under "season weeks in a
 configuration bundle" in `packages/venue-service/src/configuration-transfer.test.ts`, and the
 named-day grace case under "named days in configuration transfer".
+
+### Special days
+
+**2026-10-12, A506-4.** A special day is a name, a `repeats_yearly` flag and one or more dates
+(`special_days`, `special_day_dates`); each date is Closed all day or carries paint, which
+`department_days` and `zone_days` rows naming `special_day_date_id` hold (no season, no weekday).
+A department range with no period is Closed; a zone range is `closed` or `open`. Paint is laid
+over the season's day for that date (`layerPaint`, `layerZonePaint` in
+`packages/venue-service/src/day-paint.ts`); a Closed-all-day date closes every department.
+Whether a date falls on a day is decided in one place, `specialDateIn` and `sharedSpecialDate`
+(`packages/venue-service/src/special-days.ts`): a repeating date from its first year on, and a
+29 February only in leap years. `saveSpecialDay` in the same file is the writer; until A506-5
+only the API writes special days, and the dashboard shows none of their paint.
+
+**The bridge.** Until A506-5 removes named days, a named day and a special day never stand on one
+date. `assertDatesFree` (`special-days.ts`) refuses a special-day save with
+`special_day.date_taken`, naming the named day's `specialDateId`; `assertNamedDayAvailable`
+(`packages/venue-service/src/hours.ts`) refuses a named-day save with `special_date.date_taken`.
+
+A configuration transfer carries both tables under the importing venue's location
+(`VENUE_SERVICE_CONFIGURATION_TRANSFER`). The import refuses, as `setup.request_invalid` naming
+the field, a bundle the writer could not have stored: two special-day dates, or a special day and
+a named day, on one date; a special-day day row with a season or a weekday; paint off the
+quarter-hour or overlapping; paint at a time the clocks skip, a repeating date checked at its
+next occurrence from the venue's date of the bundle's `createdAt`; and a period end offset
+reaching the next day. The cases are under "special days in a configuration bundle" in
+`packages/venue-service/src/configuration-transfer.test.ts` and "special days in a configuration
+transfer" in `apps/server/src/configuration-transfer.test.ts`.
 
 ### Earlier W98 menu timetable model
 

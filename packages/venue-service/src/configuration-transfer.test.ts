@@ -2325,6 +2325,9 @@ describe("special days in a configuration bundle", () => {
     const overlap = specialTables();
     overlap.department_day_ranges!.push(range("dd-15", LUNCH, "15:00:00", "17:00:00"));
     expect(() => validate(overlap, clock)).toThrowError(refusal("department_day_ranges"));
+    const offStep = specialTables();
+    offStep.department_day_ranges![0]!.starts_at = "20:10:00";
+    expect(() => validate(offStep, clock)).toThrowError(refusal("department_day_ranges"));
     const kind = specialTables();
     kind.zone_day_ranges![0]!.kind = "half";
     expect(() => validate(kind, clock)).toThrowError(refusal("zone_day_ranges.kind"));
