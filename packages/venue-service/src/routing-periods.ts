@@ -3,7 +3,8 @@ import { products, type Transaction } from "@waitron/db";
 import { loadSectionGraph, reachableProducts } from "@waitron/catalogue";
 import type { VenueScope } from "./operations.js";
 import type { RoutingPeriod } from "./routing-types.js";
-import { menuDayTimetables, menuPeriods, menuPeriodStaffMenus, menuSlots } from "./schema/menus.js";
+import { menuPeriods, menuPeriodStaffMenus } from "./schema/menus.js";
+import { readDepartmentSeasonWeeks } from "./season-weeks.js";
 import { departments } from "./schema/service.js";
 import { rangeSpan } from "./service-day.js";
 
@@ -103,8 +104,8 @@ export async function readRoutingPeriods(
 }
 
 /**
- * Departments default first, then by name; within one, by each period's earliest start in the
- * normal week, Monday first and each day from the changeover, a period the week never places last,
+ * Departments default first, then by name; within one, by each period's earliest start in any
+ * season's week, Monday first and each day from the changeover, a period the week never places last,
  * then by name.
  */
 export async function inPeriodOrder<T extends { id: string; departmentId: string; name: string }>(
@@ -119,26 +120,17 @@ export async function inPeriodOrder<T extends { id: string; departmentId: string
     .where(eq(departments.locationId, cfg.locationId))
     .orderBy(desc(departments.isDefault), asc(departments.name), asc(departments.id));
   const departmentOrder = new Map(departmentRows.map((row, index) => [row.id, index]));
-  const slots = await tx
-    .select({
-      periodId: menuSlots.periodId,
-      weekday: menuDayTimetables.weekday,
-      startsAt: menuSlots.startsAt,
-      endsAt: menuSlots.endsAt,
-    })
-    .from(menuSlots)
-    .innerJoin(menuDayTimetables, eq(menuDayTimetables.id, menuSlots.timetableId))
-    .innerJoin(departments, eq(departments.id, menuDayTimetables.departmentId))
-    .where(and(eq(departments.locationId, cfg.locationId), isNotNull(menuDayTimetables.weekday)));
+  const weeks = await readDepartmentSeasonWeeks(tx, cfg, undefined, dayCutover);
   const firstStart = new Map<string, number>();
-  for (const slot of slots) {
-    const span = rangeSpan(
-      { startsAt: slot.startsAt.slice(0, 5), endsAt: slot.endsAt.slice(0, 5) },
-      dayCutover.slice(0, 5),
-    );
-    const start = ((slot.weekday! + 6) % 7) * 1440 + span.start;
-    firstStart.set(slot.periodId, Math.min(start, firstStart.get(slot.periodId) ?? start));
-  }
+  for (const seasonWeeks of weeks.values())
+    for (const week of seasonWeeks.values())
+      week.forEach((ranges, weekday) => {
+        for (const range of ranges) {
+          const span = rangeSpan(range, dayCutover.slice(0, 5));
+          const start = ((weekday + 6) % 7) * 1440 + span.start;
+          firstStart.set(range.periodId, Math.min(start, firstStart.get(range.periodId) ?? start));
+        }
+      });
   const startOf = (id: string) => firstStart.get(id) ?? Number.POSITIVE_INFINITY;
   return [...periods].sort(
     (a, b) =>

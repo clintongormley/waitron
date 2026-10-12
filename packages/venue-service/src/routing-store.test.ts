@@ -71,6 +71,7 @@ import {
 import type { CellAddress, RoutingCell, RoutingMove } from "./routing-types.js";
 import { closeStationForToday, setStationToday } from "./station-times.js";
 import { saveSpecialDate } from "./hours.js";
+import { ensureDefaultSeasons } from "./seasons.js";
 import { specialDates } from "./schema/hours.js";
 import { offerMenuThroughZone } from "./testing/zone-menus.js";
 
@@ -3968,6 +3969,34 @@ describe("saving a cell's period choices", () => {
       });
       const mojito = moves.filter((move) => move.productId === f.mojito);
       expect(mojito.map((move) => move.periodIds)).toEqual([order]);
+    }));
+
+  it("orders periods by their earliest start across every season's week", async () =>
+    scoped(async (tx) => {
+      const f = await choicesFixture(tx);
+      const { Summer, Winter } = Object.fromEntries(
+        (await ensureDefaultSeasons(tx, f.cfg)).map((season) => [season.name, season.id]),
+      );
+      const paint = (periodId: string, startsAt: string, endsAt: string, seasonId: string) =>
+        replaceMenuWeek(
+          tx,
+          f.cfg,
+          f.department,
+          [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({
+            weekday,
+            slots: weekday === 3 ? [{ periodId, startsAt, endsAt }] : [],
+          })),
+          new Date("2026-10-02T10:00:00Z"),
+          0,
+          { seasonId },
+        );
+      // By name Lunch sorts before Staff lunch; only Winter's earlier start puts Staff lunch first.
+      await paint(f.lunch, "12:00", "13:00", Summer!);
+      await paint(f.staffLunch, "08:00", "09:00", Winter!);
+      const order = (await routingModel(tx, f.cfg, at)).periods
+        .map((period) => period.id)
+        .filter((id) => id === f.lunch || id === f.staffLunch);
+      expect(order).toEqual([f.staffLunch, f.lunch]);
     }));
 
   it("gives each period its department and the products its menus reach, a variant by its parent, in the department's period order", async () =>
