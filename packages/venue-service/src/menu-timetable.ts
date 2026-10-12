@@ -4,16 +4,14 @@ import {
   readBusinessDayScheduleRevision,
   readBusinessDayScheduleStatus,
 } from "./business-day-schedule.js";
-import { and, asc, desc, eq, gte, inArray, isNotNull, ne, or } from "drizzle-orm";
-import { catalogues, categories, floorZones, newId, products, type Transaction } from "@waitron/db";
+import { and, asc, desc, eq, inArray, isNotNull, ne } from "drizzle-orm";
+import { catalogues, categories, floorZones, products, type Transaction } from "@waitron/db";
 import { categoryDetails, directIncludedMenus, loadSectionGraph } from "@waitron/catalogue";
 import { readLocationClock } from "@waitron/reporting";
 import { AppError, createLabelComparator, type BusinessDayClock } from "@waitron/shared";
 
-import { isReadableClock, venueLocalMoment } from "./hours-clock.js";
 import { addDays } from "./hours-rules.js";
 import {
-  clockTimeSkippedInDay,
   parseServiceDay,
   rangeInForce,
   rangeSpan,
@@ -23,7 +21,7 @@ import {
   type ServiceMoment,
   type ServiceRange,
 } from "./service-day.js";
-import { CALENDAR_COLOURS, type LocalDate } from "./hours-types.js";
+import { CALENDAR_COLOURS } from "./hours-types.js";
 import { invalidTimetable, menuPeriodName, parseMenuWeek } from "./menu-timetable-rules.js";
 import { findSeasonEndOffsetClash, parseEndOffsetMinutes } from "./period-end-offset.js";
 import type {
@@ -34,15 +32,8 @@ import type {
   MenuSlot,
   PeriodRoutingUse,
 } from "./menu-timetable-types.js";
-import {
-  assertDepartment,
-  resolveZoneContext,
-  storedTime,
-  wireTime,
-  type VenueScope,
-} from "./operations.js";
+import { assertDepartment, resolveZoneContext, wireTime, type VenueScope } from "./operations.js";
 import { specialDates } from "./schema/hours.js";
-import { nextOccurrence } from "./repeat-rules.js";
 import {
   holidayDatesFor,
   holidayHorizon,
@@ -118,20 +109,6 @@ export async function placeOpenPeriod(
   );
 }
 
-async function requireSpecialDate(tx: Transaction, cfg: VenueScope, id: string) {
-  const [row] = await tx
-    .select({
-      id: specialDates.id,
-      date: specialDates.date,
-      ownHours: specialDates.ownHours,
-      repeatOn: specialDates.repeatOn,
-    })
-    .from(specialDates)
-    .where(and(eq(specialDates.id, id), eq(specialDates.locationId, cfg.locationId)));
-  if (row === undefined) throw new AppError("special_date.not_found", { specialDateId: id });
-  return row;
-}
-
 async function requirePeriod(tx: Transaction, cfg: VenueScope, periodId: string) {
   const [row] = await tx
     .select({
@@ -169,79 +146,6 @@ async function assertOwnPeriods(
     slots.forEach((slot, index) => {
       if (!own.has(slot.periodId)) invalidTimetable(`${field}.${index}.periodId`);
     });
-}
-
-/** The venue's date at `at` and its time zone, each null when the clock cannot be read. */
-interface VenueClock {
-  clock: BusinessDayClock;
-  today: LocalDate | null;
-  zone: string | null;
-}
-
-async function readVenueClock(tx: Transaction, cfg: VenueScope, at: Date): Promise<VenueClock> {
-  const clock = await readLocationClock(tx, cfg.locationId);
-  return {
-    clock,
-    today: venueLocalMoment(at, clock)?.civilDate ?? null,
-    zone: isReadableClock(clock) ? clock.timeZone : null,
-  };
-}
-
-/** Each listed timetable's slots in start order, wire times. */
-async function slotsByTimetable(
-  tx: Transaction,
-  timetableIds: readonly string[],
-): Promise<Map<string, MenuSlot[]>> {
-  const byTimetable = new Map<string, MenuSlot[]>(timetableIds.map((id) => [id, []]));
-  if (timetableIds.length === 0) return byTimetable;
-  for (const row of await tx
-    .select()
-    .from(menuSlots)
-    .where(inArray(menuSlots.timetableId, [...timetableIds]))
-    .orderBy(asc(menuSlots.startsAt), asc(menuSlots.id)))
-    byTimetable.get(row.timetableId)!.push({
-      periodId: row.periodId,
-      startsAt: wireTime(row.startsAt),
-      endsAt: wireTime(row.endsAt),
-    });
-  return byTimetable;
-}
-
-/** The first slot that opens or closes at a minute the clock skips on `date`, or null; null too when
- * the clock cannot be read. */
-function skippedSlot(
-  clock: VenueClock,
-  date: LocalDate,
-  slots: readonly MenuSlot[],
-): { position: number; end: "startsAt" | "endsAt" } | null {
-  if (clock.zone === null) return null;
-  for (const [position, slot] of slots.entries())
-    for (const end of ["startsAt", "endsAt"] as const)
-      if (clockTimeSkippedInDay(clock.clock, date, slot[end], end === "endsAt"))
-        return { position, end };
-  return null;
-}
-
-/** Writes one named day's row if it is new, and replaces its slots by deleting then inserting them. */
-async function writeDay(
-  tx: Transaction,
-  existingId: string | undefined,
-  values: { departmentId: string; specialDateId: string },
-  slots: readonly MenuSlot[],
-): Promise<void> {
-  const id = existingId ?? newId();
-  if (existingId === undefined) await tx.insert(menuDayTimetables).values({ id, ...values });
-  else await tx.delete(menuSlots).where(eq(menuSlots.timetableId, id));
-  if (slots.length > 0)
-    await tx.insert(menuSlots).values(
-      slots.map((slot) => ({
-        timetableId: id,
-        departmentId: values.departmentId,
-        periodId: slot.periodId,
-        startsAt: storedTime(slot.startsAt),
-        endsAt: storedTime(slot.endsAt),
-      })),
-    );
 }
 
 async function endOffsetClash(
@@ -837,56 +741,6 @@ export async function replaceMenuWeek(
     );
 }
 
-export async function saveSpecialDateMenus(
-  tx: Transaction,
-  cfg: VenueScope,
-  specialDateId: string,
-  departmentId: string,
-  slots: unknown,
-  at: Date,
-  expectedClockRevision: number,
-): Promise<void> {
-  const clock = await readVenueClock(tx, cfg, at);
-  const special = await requireSpecialDate(tx, cfg, specialDateId);
-  const cutovers = scheduleCutovers(
-    clock.clock,
-    special.repeatOn === null ? special.date : undefined,
-  );
-  const parsed = cutovers.map((cutover) => parseServiceDay(slots, "slots", cutover))[0]!;
-  await assertDepartment(tx, cfg, departmentId);
-  if (!special.ownHours) throw new AppError("special_date.keeps_week", { specialDateId });
-  await assertOwnPeriods(tx, departmentId, [{ field: "slots", slots: parsed }]);
-  const occurrence = nextOccurrence(
-    { date: special.date, repeats: special.repeatOn !== null },
-    clock.today ?? special.date,
-  );
-  const skipped = skippedSlot(clock, occurrence ?? special.date, parsed);
-  if (skipped !== null)
-    invalidTimetable(`slots.${skipped.position}.${skipped.end}`, { reason: "clock_skips" });
-  const [existing] = await tx
-    .select({ id: menuDayTimetables.id })
-    .from(menuDayTimetables)
-    .where(
-      and(
-        eq(menuDayTimetables.specialDateId, specialDateId),
-        eq(menuDayTimetables.departmentId, departmentId),
-      ),
-    );
-  const currentSlots =
-    existing === undefined ? [] : (await slotsByTimetable(tx, [existing.id])).get(existing.id)!;
-  await assertBusinessDayScheduleWrite(
-    tx,
-    cfg,
-    sameScheduleRanges(currentSlots, parsed) ? "metadata" : "time",
-    at,
-    expectedClockRevision,
-    clock.clock,
-  );
-  await writeDay(tx, existing?.id, { departmentId, specialDateId }, parsed);
-  const clash = await endOffsetClash(tx, cfg, departmentId, false, clock.clock);
-  if (clash !== null) invalidTimetable("slots", { reason: "end_offset", ...clash });
-}
-
 type Folder = { id: string; name: string; parentId: string | null };
 
 /**
@@ -1048,31 +902,6 @@ export async function readOpeningHoursModel(
     .innerJoin(departments, eq(departments.id, menuPeriodStaffMenus.departmentId))
     .where(and(eq(departments.locationId, cfg.locationId), eq(departments.active, true)))
     .orderBy(asc(menuPeriodStaffMenus.displayOrder), asc(menuPeriodStaffMenus.menuId));
-  const timetables = await tx
-    .select({
-      id: menuDayTimetables.id,
-      departmentId: menuDayTimetables.departmentId,
-      specialDateId: menuDayTimetables.specialDateId,
-    })
-    .from(menuDayTimetables)
-    .innerJoin(departments, eq(departments.id, menuDayTimetables.departmentId))
-    .where(
-      and(
-        eq(departments.locationId, cfg.locationId),
-        eq(departments.active, true),
-        isNotNull(menuDayTimetables.specialDateId),
-      ),
-    )
-    .orderBy(asc(menuDayTimetables.specialDateId));
-  const slots = await slotsByTimetable(
-    tx,
-    timetables.map((row) => row.id),
-  );
-  const ranges = (id: string): ServiceRange[] =>
-    slots
-      .get(id)!
-      .slice()
-      .sort((a, b) => rangeSpan(a, cutover).start - rangeSpan(b, cutover).start);
   const seasonList = await readSeasons(tx, cfg);
   const currentSeasonId =
     moment === null ? null : (seasonOn(seasonList, moment.businessDay)?.id ?? null);
@@ -1083,39 +912,6 @@ export async function readOpeningHoursModel(
     cutover,
   );
   const zones = await readZoneClosedTimes(tx, cfg, cutover, seasonList);
-  const dateRows = await tx
-    .select({
-      id: specialDates.id,
-      date: specialDates.date,
-      name: specialDates.name,
-      kind: specialDates.kind,
-      repeatOn: specialDates.repeatOn,
-      ownHours: specialDates.ownHours,
-      closeWholeVenue: specialDates.closeWholeVenue,
-    })
-    .from(specialDates)
-    .where(
-      and(
-        eq(specialDates.locationId, cfg.locationId),
-        moment === null
-          ? undefined
-          : or(
-              gte(specialDates.date, addDays(moment.businessDay, -1)),
-              isNotNull(specialDates.repeatOn),
-              inArray(
-                specialDates.id,
-                timetables.flatMap((row) =>
-                  row.specialDateId === null ? [] : [row.specialDateId],
-                ),
-              ),
-            ),
-      ),
-    )
-    .orderBy(asc(specialDates.date));
-  const dates = dateRows.map(({ repeatOn, ...row }) => ({
-    ...row,
-    repeats: repeatOn !== null,
-  }));
   const menus = await tx
     .select({ id: catalogues.id, name: catalogues.name, active: catalogues.active })
     .from(catalogues)
@@ -1132,11 +928,9 @@ export async function readOpeningHoursModel(
       ...menu,
       includes: directIncludedMenus(graph, menu.id).map((id) => menuNames.get(id)!),
     })),
-    namedDays: dates,
     seasons: seasonList,
     currentSeasonId,
     departments: departmentRows.map((department) => {
-      const days = timetables.filter((row) => row.departmentId === department.id);
       const stored = seasonWeeks.get(department.id);
       const weeks = seasonWeekList(seasonList, stored);
       const shape = (week: ServiceRange[][]) => week.map((slots, weekday) => ({ weekday, slots }));
@@ -1144,7 +938,7 @@ export async function readOpeningHoursModel(
         ...department,
         zones: zones
           .filter((zone) => zone.departmentId === department.id)
-          .map(({ id, name, seasonWeeks, dates }) => ({ id, name, seasonWeeks, dates })),
+          .map(({ id, name, seasonWeeks }) => ({ id, name, seasonWeeks })),
         periods: periods
           .filter((period) => period.departmentId === department.id)
           .map(({ id, name, colour, menuId, endOffsetMinutes }) => ({
@@ -1167,9 +961,6 @@ export async function readOpeningHoursModel(
           seasonId: entry.seasonId,
           week: shape(entry.week),
         })),
-        dates: days
-          .filter((row) => row.specialDateId !== null)
-          .map((day) => ({ specialDateId: day.specialDateId!, slots: ranges(day.id) })),
       };
     }),
   };

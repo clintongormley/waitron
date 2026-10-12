@@ -13,7 +13,6 @@ export {
   resolveDepartmentService,
   resolveDefaultMenu,
   saveMenuPeriod,
-  saveSpecialDateMenus,
   updateMenuPeriod,
 } from "./menu-timetable.js";
 export type * from "./menu-timetable-types.js";

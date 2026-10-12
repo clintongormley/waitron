@@ -30,7 +30,6 @@ const model: OpeningHoursModel = {
   menus: [],
   seasons: [{ id: "autumn", name: "Autumn", startsOn: "09-01" }],
   currentSeasonId: "autumn",
-  namedDays: [],
   departments: [
     {
       id: "d1",
@@ -46,7 +45,6 @@ const model: OpeningHoursModel = {
               week: [{ weekday: 1, ranges: [{ startsAt: "10:00", endsAt: "11:00" }] }],
             },
           ],
-          dates: [],
         },
       ],
       periods: [
@@ -67,7 +65,6 @@ const model: OpeningHoursModel = {
           week: [{ weekday: 1, slots: [{ periodId: "p1", startsAt: "09:00", endsAt: "14:00" }] }],
         },
       ],
-      dates: [],
     },
   ],
 };

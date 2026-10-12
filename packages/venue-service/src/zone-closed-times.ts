@@ -1,10 +1,10 @@
 import { scheduleCutovers, serviceDayContext } from "./service-day-context.js";
 import { assertBusinessDayScheduleWrite, sameScheduleRanges } from "./business-day-schedule.js";
-import { and, asc, eq, inArray, isNotNull } from "drizzle-orm";
+import { and, asc, eq, inArray } from "drizzle-orm";
 import { floorZones, type Transaction } from "@waitron/db";
 import { readLocationClock } from "@waitron/reporting";
 import { AppError, type BusinessDayClock } from "@waitron/shared";
-import { resolveZoneContext, storedTime, wireTime, type VenueScope } from "./operations.js";
+import { resolveZoneContext, wireTime, type VenueScope } from "./operations.js";
 import {
   parseClosedRanges,
   type ClosedRange,
@@ -23,9 +23,7 @@ import {
 } from "./season-weeks.js";
 import type { Season } from "./season-rules.js";
 import { readSeasons } from "./seasons.js";
-import { specialDates } from "./schema/hours.js";
 import { zoneExtensions } from "./schema/zone-extensions.js";
-import { zoneClosedTimes } from "./schema/zone-closed-times.js";
 import { departments, zoneServicePolicies } from "./schema/service.js";
 import "./errors.js";
 
@@ -95,59 +93,6 @@ export async function replaceZoneClosedWeek(
   );
 }
 
-export async function saveZoneClosedDate(
-  tx: Transaction,
-  cfg: VenueScope,
-  specialDateId: string,
-  zoneId: string,
-  ranges: unknown,
-  expectedClockRevision: number,
-  at: Date = new Date(),
-): Promise<void> {
-  await resolveZoneContext(tx, cfg, zoneId);
-  const [day] = await tx
-    .select({
-      ownHours: specialDates.ownHours,
-      date: specialDates.date,
-      repeatOn: specialDates.repeatOn,
-    })
-    .from(specialDates)
-    .where(and(eq(specialDates.id, specialDateId), eq(specialDates.locationId, cfg.locationId)));
-  if (day === undefined) throw new AppError("special_date.not_found", { specialDateId });
-  if (!day.ownHours) throw new AppError("special_date.keeps_week", { specialDateId });
-  const clock = await readLocationClock(tx, cfg.locationId);
-  const cutovers = scheduleCutovers(clock, day.repeatOn === null ? day.date : undefined);
-  const parsed = cutovers.map((cutover) => parseClosedRanges(ranges, "ranges", cutover))[0]!;
-  const current = await tx
-    .select()
-    .from(zoneClosedTimes)
-    .where(
-      and(eq(zoneClosedTimes.zoneId, zoneId), eq(zoneClosedTimes.specialDateId, specialDateId)),
-    );
-  await assertBusinessDayScheduleWrite(
-    tx,
-    cfg,
-    sameScheduleRanges(current, parsed) ? "metadata" : "time",
-    at,
-    expectedClockRevision,
-    clock,
-  );
-  await tx
-    .delete(zoneClosedTimes)
-    .where(
-      and(eq(zoneClosedTimes.zoneId, zoneId), eq(zoneClosedTimes.specialDateId, specialDateId)),
-    );
-  if (parsed.length > 0)
-    await tx.insert(zoneClosedTimes).values(
-      parsed.map((range) => ({
-        zoneId,
-        specialDateId,
-        startsAt: storedTime(range.startsAt),
-        endsAt: storedTime(range.endsAt),
-      })),
-    );
-}
-
 export async function readZoneClosedTimes(
   tx: Transaction,
   cfg: VenueScope,
@@ -172,21 +117,6 @@ export async function readZoneClosedTimes(
       ),
     )
     .orderBy(asc(floorZones.displayOrder), asc(floorZones.id));
-  const rows = await tx
-    .select({
-      zoneId: zoneClosedTimes.zoneId,
-      specialDateId: zoneClosedTimes.specialDateId,
-      startsAt: zoneClosedTimes.startsAt,
-      endsAt: zoneClosedTimes.endsAt,
-    })
-    .from(zoneClosedTimes)
-    .innerJoin(zoneServicePolicies, eq(zoneServicePolicies.zoneId, zoneClosedTimes.zoneId))
-    .where(
-      and(
-        eq(zoneServicePolicies.locationId, cfg.locationId),
-        isNotNull(zoneClosedTimes.specialDateId),
-      ),
-    );
   const seasonList = venueSeasons ?? (await readSeasons(tx, cfg));
   const stored = await readZoneSeasonWeeks(
     tx,
@@ -195,12 +125,7 @@ export async function readZoneClosedTimes(
     cutover,
   );
   const days = (week: ClosedRange[][]) => week.map((ranges, weekday) => ({ weekday, ranges }));
-  const ranges = (values: typeof rows): ClosedRange[] =>
-    values
-      .map((row) => ({ startsAt: wireTime(row.startsAt), endsAt: wireTime(row.endsAt) }))
-      .sort((a, b) => rangeSpan(a, cutover).start - rangeSpan(b, cutover).start);
   return zones.map((zone) => {
-    const own = rows.filter((row) => row.zoneId === zone.id);
     const seasonWeeks = seasonWeekList(seasonList, stored.get(zone.id));
     return {
       ...zone,
@@ -208,14 +133,6 @@ export async function readZoneClosedTimes(
         seasonId: entry.seasonId,
         week: days(entry.week),
       })),
-      dates: [
-        ...new Set(own.flatMap((row) => (row.specialDateId === null ? [] : [row.specialDateId]))),
-      ]
-        .sort()
-        .map((specialDateId) => ({
-          specialDateId,
-          ranges: ranges(own.filter((row) => row.specialDateId === specialDateId)),
-        })),
     };
   });
 }

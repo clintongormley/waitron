@@ -43,7 +43,6 @@ export function paintDayModel(): OpeningHoursModel {
     menus: [{ id: "m1", name: "Menu", active: true, includes: [] }],
     seasons: [AUTUMN],
     currentSeasonId: AUTUMN.id,
-    namedDays: [],
     departments: [
       {
         id: "restaurant",
@@ -51,13 +50,11 @@ export function paintDayModel(): OpeningHoursModel {
         active: true,
         periods: [period("dinner", "Dinner", "blue")],
         seasonWeeks: [{ seasonId: AUTUMN.id, week: structuredClone(dinnerWeek) }],
-        dates: [],
         zones: [
           {
             id: "terrace",
             name: "Terrace",
             seasonWeeks: [{ seasonId: AUTUMN.id, week: structuredClone(terraceWeek) }],
-            dates: [],
           },
         ],
       },
@@ -67,7 +64,6 @@ export function paintDayModel(): OpeningHoursModel {
         active: true,
         periods: [period("drinks", "Drinks", "green")],
         seasonWeeks: [{ seasonId: AUTUMN.id, week: structuredClone(barWeek) }],
-        dates: [],
         zones: [],
       },
     ],

@@ -40,17 +40,12 @@ function fixture() {
   const model = realWeekModel();
   return {
     ...model,
-    namedDays: [
-      ...model.namedDays,
-      { ...model.namedDays[0]!, id: "normal-annual", date: "2025-10-16", ownHours: false },
-    ],
     departments: model.departments.map((department) => ({
       ...department,
       zones: department.zones.map((zone) => ({
         ...zone,
         seasonWeeks: [{ seasonId: "autumn", week: closedEveryNight() }],
         week: closedEveryNight(),
-        dates: [{ specialDateId: "annual/day", ranges: [{ startsAt: "22:00", endsAt: "06:00" }] }],
       })),
     })),
   };

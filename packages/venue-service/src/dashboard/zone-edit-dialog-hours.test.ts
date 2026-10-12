@@ -105,7 +105,6 @@ it("says the zone follows its department when the shown season's week has no clo
   const hours = model();
   const zone = hours.departments[0]!.zones[0]!;
   zone.seasonWeeks[0]!.week = [];
-  zone.dates = [{ specialDateId: "holiday", ranges: [{ startsAt: "18:00", endsAt: "06:00" }] }];
   await mount(hours);
   await expect.poll(summary).toBe("Autumn: open whenever the department is");
 });

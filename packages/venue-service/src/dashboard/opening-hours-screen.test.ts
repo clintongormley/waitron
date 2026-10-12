@@ -44,7 +44,6 @@ function model(): OpeningHoursModel {
     ],
     seasons: [],
     currentSeasonId: null,
-    namedDays: [],
     departments: [
       {
         id: "restaurant",
@@ -64,7 +63,6 @@ function model(): OpeningHoursModel {
           },
         ],
         seasonWeeks: [],
-        dates: [],
       },
       {
         id: "deli",
@@ -73,7 +71,6 @@ function model(): OpeningHoursModel {
         zones: [],
         periods: [],
         seasonWeeks: [],
-        dates: [],
       },
     ],
   };
@@ -673,7 +670,6 @@ it("explains an empty venue and falls back to an inactive department when there 
       zones: [],
       periods: [],
       seasonWeeks: [],
-      dates: [],
     },
   ];
   el.api.rereadWatches();
@@ -1100,7 +1096,7 @@ it("sends an offset-only edit through the real period client and closes before a
 
 function pickerModel(): OpeningHoursModel {
   const data = model();
-  data.departments[0]!.zones = [{ id: "terrace", name: "Terrace", seasonWeeks: [], dates: [] }];
+  data.departments[0]!.zones = [{ id: "terrace", name: "Terrace", seasonWeeks: [] }];
   return {
     ...data,
     departments: [
@@ -1112,7 +1108,6 @@ function pickerModel(): OpeningHoursModel {
         zones: [],
         periods: [],
         seasonWeeks: [],
-        dates: [],
       },
     ],
   };

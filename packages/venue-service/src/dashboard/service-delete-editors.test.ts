@@ -126,7 +126,6 @@ function hoursFixture(): OpeningHoursModel {
     dayCutover: "06:00",
     seasons: [{ id: "autumn", name: "Autumn", startsOn: "09-01" }],
     currentSeasonId: "autumn",
-    namedDays: [],
     menus: [{ id: "m1", name: "Menu", active: true, includes: [] }],
     departments: ["d1", "d2"].map((id, index) => ({
       id,

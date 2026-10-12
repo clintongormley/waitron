@@ -15,7 +15,6 @@ const model: OpeningHoursModel = {
   departments: [],
   seasons: [],
   currentSeasonId: null,
-  namedDays: [],
 };
 const base = "/management-api/venue-service";
 
@@ -110,7 +109,6 @@ describe("OpeningHoursApi", () => {
             active: true,
             zones: [],
             seasonWeeks: [],
-            dates: [],
             periods: [
               {
                 id: "p1",

@@ -26,14 +26,13 @@ function model(): OpeningHoursModel {
     dayCutover: "06:00",
     seasons: [{ id: "autumn", name: "Autumn", startsOn: "09-01" }],
     currentSeasonId: "autumn",
-    namedDays: [],
     menus: [],
     departments: [
       {
         id: "restaurant",
         name: "Restaurant",
         active: true,
-        zones: [{ id: "terrace", name: "Terrace", seasonWeeks: [], dates: [] }],
+        zones: [{ id: "terrace", name: "Terrace", seasonWeeks: [] }],
         periods: [
           {
             id: "lunch",
@@ -54,7 +53,6 @@ function model(): OpeningHoursModel {
             ],
           },
         ],
-        dates: [],
       },
       {
         id: "bar",
@@ -81,7 +79,6 @@ function model(): OpeningHoursModel {
             ],
           },
         ],
-        dates: [],
       },
     ],
   };

@@ -1,14 +1,5 @@
 import type { OpeningHoursModel } from "../menu-timetable-types.js";
 import type { SpecialDaysModel } from "../holiday-types.js";
-const annual = {
-  id: "annual/day",
-  date: "2025-10-13",
-  name: "Anniversary",
-  kind: "working_day" as const,
-  repeats: true,
-  ownHours: true,
-  closeWholeVenue: false,
-};
 const AUTUMN = { id: "autumn", name: "Autumn", startsOn: "09-01" };
 const lunchWeek = [
   { weekday: 1, slots: [{ periodId: "p1", startsAt: "10:00", endsAt: "14:00" }] },
@@ -27,18 +18,6 @@ export function realWeekModel(): OpeningHoursModel {
     menus: [],
     seasons: [AUTUMN],
     currentSeasonId: AUTUMN.id,
-    namedDays: [
-      annual,
-      { ...annual, id: "second", date: "2026-10-14", repeats: false },
-      {
-        ...annual,
-        id: "closed",
-        date: "2026-10-15",
-        repeats: false,
-        ownHours: false,
-        closeWholeVenue: true,
-      },
-    ],
     departments: [
       {
         id: "d1",
@@ -57,24 +36,11 @@ export function realWeekModel(): OpeningHoursModel {
           },
         ],
         seasonWeeks: [{ seasonId: AUTUMN.id, week: structuredClone(lunchWeek) }],
-        dates: [
-          {
-            specialDateId: "annual/day",
-            slots: [{ periodId: "p1", startsAt: "12:00", endsAt: "16:00" }],
-          },
-          {
-            specialDateId: "second",
-            slots: [{ periodId: "p1", startsAt: "12:00", endsAt: "16:00" }],
-          },
-        ],
         zones: [
           {
             id: "z1",
             name: "Terrace",
             seasonWeeks: [{ seasonId: AUTUMN.id, week: structuredClone(terraceWeek) }],
-            dates: [
-              { specialDateId: "annual/day", ranges: [{ startsAt: "23:00", endsAt: "06:00" }] },
-            ],
           },
         ],
       },

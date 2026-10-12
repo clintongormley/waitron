@@ -16,7 +16,7 @@ import { locationId } from "@waitron/shared";
 import * as service from "./index.js";
 
 import { readDepartmentLogoRasters } from "./department-receipts.js";
-import { saveZoneClosedDate } from "./zone-closed-times.js";
+import { saveSpecialDay } from "./special-days.js";
 import { placeOpenPeriod } from "./menu-timetable.js";
 import { VENUE_SERVICE_PROVISIONING } from "./provisioning.js";
 import { departments, zoneServicePolicies } from "./schema/service.js";
@@ -174,7 +174,20 @@ const actions: [string, string, (tx: Transaction, f: Fixture) => Promise<unknown
   [
     "menu date",
     "department.not_found",
-    (tx, f) => service.saveSpecialDateMenus(tx, f.cfg, f.day, f.gone, [], at, 0),
+    (tx, f) =>
+      saveSpecialDay(
+        tx,
+        f.cfg,
+        null,
+        {
+          name: "Navidad",
+          repeatsYearly: false,
+          dates: [{ date: "2030-12-25", closedAllDay: false }],
+          paint: [{ departmentId: f.gone, date: "2030-12-25", ranges: [] }],
+        },
+        at,
+        0,
+      ),
   ],
   [
     "receipt read",
@@ -230,7 +243,20 @@ const actions: [string, string, (tx: Transaction, f: Fixture) => Promise<unknown
   [
     "zone closed date",
     "service_zone.not_found",
-    (tx, f) => saveZoneClosedDate(tx, f.cfg, f.day, f.zone, [], 0, at),
+    (tx, f) =>
+      saveSpecialDay(
+        tx,
+        f.cfg,
+        null,
+        {
+          name: "Navidad",
+          repeatsYearly: false,
+          dates: [{ date: "2030-12-25", closedAllDay: false }],
+          zonePaint: [{ zoneId: f.zone, date: "2030-12-25", ranges: [] }],
+        },
+        at,
+        0,
+      ),
   ],
 ];
 describe("deleted service targets", () => {

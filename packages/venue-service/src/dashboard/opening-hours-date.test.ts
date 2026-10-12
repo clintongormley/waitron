@@ -20,7 +20,6 @@ function fixture(): OpeningHoursModel {
     menus: [{ id: "m1", name: "Lunch menu", active: true, includes: [] }],
     seasons: [{ id: "autumn", name: "Autumn", startsOn: "09-01" }],
     currentSeasonId: "autumn",
-    namedDays: [],
     departments: [
       {
         id: "d1",
@@ -45,7 +44,6 @@ function fixture(): OpeningHoursModel {
             week: [{ weekday: 1, slots: [{ periodId: "p1", startsAt: "10:00", endsAt: "14:00" }] }],
           },
         ],
-        dates: [],
       },
     ],
   };

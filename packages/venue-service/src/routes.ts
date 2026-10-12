@@ -51,11 +51,10 @@ import {
   readOpeningHoursModel,
   replaceMenuWeek,
   saveMenuPeriod,
-  saveSpecialDateMenus,
   updateMenuPeriod,
 } from "./menu-timetable.js";
 import { CALENDAR_COLOURS, type CalendarColour } from "./hours-types.js";
-import type { MenuSlot, MenuWeekDay } from "./menu-timetable-types.js";
+import type { MenuWeekDay } from "./menu-timetable-types.js";
 import { KITCHEN_TICKET_GROUPINGS, type KitchenTicketGrouping } from "./schema/settings.js";
 import { MANAGE_VENUE_SERVICE } from "./permissions.js";
 import {
@@ -73,7 +72,7 @@ import {
   setDepartmentTransferSettings,
 } from "./department-transfers.js";
 import "./errors.js";
-import { replaceZoneClosedWeek, saveZoneClosedDate } from "./zone-closed-times.js";
+import { replaceZoneClosedWeek } from "./zone-closed-times.js";
 import { parseEndOffsetMinutes } from "./period-end-offset.js";
 import {
   deleteSpecialDay,
@@ -1105,50 +1104,6 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
             body.expectedClockRevision as number,
             new Date(),
             { seasonId: requireBodyUuid(body.seasonId, "seasonId") },
-          ),
-        );
-        return c.body(null, 204);
-      }),
-    );
-    app.put("/management-api/venue-service/special-dates/:id/zone-closed-times/:zoneId", (c) =>
-      run(c, log, async () => {
-        const sessionId = requireManagementSession(c);
-        const id = requireUuidParam(c.req.param("id"), "SpecialDateId");
-        const zoneId = requireUuidParam(c.req.param("zoneId"), "ZoneId");
-        const body = await readJsonBody<Record<string, unknown>>(c);
-        onlyKeys(body, ["ranges", "expectedClockRevision"]);
-        await gated(sessionId, (tx) =>
-          saveZoneClosedDate(
-            tx,
-            ctx.cfg,
-            id,
-            zoneId,
-            body.ranges,
-            body.expectedClockRevision as number,
-          ),
-        );
-        return c.body(null, 204);
-      }),
-    );
-
-    const dateTimetable =
-      "/management-api/venue-service/special-dates/:id/menu-timetables/:departmentId";
-    app.put(dateTimetable, (c) =>
-      run(c, log, async () => {
-        const sessionId = requireManagementSession(c);
-        const id = requireUuidParam(c.req.param("id"), "SpecialDateId");
-        const departmentId = requireUuidParam(c.req.param("departmentId"), "DepartmentId");
-        const body = await readJsonBody<Record<string, unknown>>(c);
-        onlyKeys(body, ["slots", "expectedClockRevision"]);
-        await gated(sessionId, (tx) =>
-          saveSpecialDateMenus(
-            tx,
-            ctx.cfg,
-            id,
-            departmentId,
-            body.slots as MenuSlot[],
-            new Date(),
-            body.expectedClockRevision as number,
           ),
         );
         return c.body(null, 204);

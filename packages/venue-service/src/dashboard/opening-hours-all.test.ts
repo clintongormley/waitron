@@ -42,7 +42,6 @@ function allDepartments(): OpeningHoursModel["departments"] {
           ],
         },
       ],
-      dates: [],
     },
     {
       id: "bar",
@@ -69,7 +68,6 @@ function allDepartments(): OpeningHoursModel["departments"] {
           ],
         },
       ],
-      dates: [],
     },
     {
       id: "retired",
@@ -78,7 +76,6 @@ function allDepartments(): OpeningHoursModel["departments"] {
       zones: [],
       periods: [],
       seasonWeeks: [],
-      dates: [],
     },
   ];
 }

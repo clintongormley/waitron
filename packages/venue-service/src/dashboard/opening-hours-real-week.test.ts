@@ -128,7 +128,6 @@ function seasonBoundaryModel() {
   data.departments = [
     {
       ...department!,
-      dates: [],
       seasonWeeks: [
         { seasonId: "autumn", week: slots("14") },
         { seasonId: "winter", week: slots("15") },
@@ -136,7 +135,6 @@ function seasonBoundaryModel() {
       zones: [
         {
           ...department!.zones[0]!,
-          dates: [],
           seasonWeeks: [
             { seasonId: "autumn", week: ranges("22") },
             { seasonId: "winter", week: ranges("23") },

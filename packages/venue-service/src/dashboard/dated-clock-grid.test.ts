@@ -208,7 +208,6 @@ it("the Day view uses its selected business date for every department and zone c
     menus: [],
     seasons: [],
     currentSeasonId: null,
-    namedDays: [],
     departments: [
       {
         id: "d",
@@ -216,8 +215,7 @@ it("the Day view uses its selected business date for every department and zone c
         active: true,
         periods: [],
         seasonWeeks: [],
-        dates: [],
-        zones: [{ id: "z", name: "Terrace", seasonWeeks: [], dates: [] }],
+        zones: [{ id: "z", name: "Terrace", seasonWeeks: [] }],
       },
     ],
   };
