@@ -45,6 +45,22 @@ export function sharedSpecialDate(a: SpecialDayDateRule, b: SpecialDayDateRule):
   return null;
 }
 
+/** The first range end the clocks skip on a special-day date's business day, or null; a repeating
+ *  date is checked at its next occurrence from `from`. */
+export function firstSkippedEnd<T extends ClosedRange>(
+  clock: BusinessDayClock,
+  rule: SpecialDayDateRule,
+  from: LocalDate,
+  ranges: readonly T[],
+): { range: T; end: "startsAt" | "endsAt"; date: LocalDate } | null {
+  const date = rule.repeats ? (nextOccurrence(rule, from) ?? rule.date) : rule.date;
+  for (const range of ranges)
+    for (const end of ["startsAt", "endsAt"] as const)
+      if (clockTimeSkippedInDay(clock, date, range[end], end === "endsAt"))
+        return { range, end, date };
+  return null;
+}
+
 export interface SpecialDayOccurrence {
   specialDayId: string;
   dateId: string;
@@ -293,10 +309,7 @@ function parseOwnRanges<T extends ClosedRange>(
       field,
       cutover,
       (at, reason) => refuse(at, reason === undefined ? {} : { reason }),
-      (item, at, range): Placed<T> => ({
-        ...read(item, at, range),
-        position: Number(at.slice(at.lastIndexOf(".") + 1)),
-      }),
+      (item, at, range, index): Placed<T> => ({ ...read(item, at, range), position: index }),
     ),
   )[0]!;
 }
@@ -490,13 +503,17 @@ function assertNoSkippedTimes(
 ): void {
   if (!isReadableClock(clock)) return;
   for (const entry of entries) {
-    const date = repeats
-      ? (nextOccurrence({ date: entry.date, repeats }, today ?? entry.date) ?? entry.date)
-      : entry.date;
-    for (const range of entry.ranges)
-      for (const end of ["startsAt", "endsAt"] as const)
-        if (clockTimeSkippedInDay(clock, date, range[end], end === "endsAt"))
-          entry.refuse(`ranges.${range.position}.${end}`, { reason: "clock_skips", date });
+    const skipped = firstSkippedEnd(
+      clock,
+      { date: entry.date, repeats },
+      today ?? entry.date,
+      entry.ranges,
+    );
+    if (skipped !== null)
+      entry.refuse(`ranges.${skipped.range.position}.${skipped.end}`, {
+        reason: "clock_skips",
+        date: skipped.date,
+      });
   }
 }
 

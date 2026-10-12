@@ -7,7 +7,7 @@ import type { PackLookup } from "./holidays.js";
 import { addDays, isLocalDate, parseSpecialDateInput } from "./hours-rules.js";
 import { CALENDAR_COLOURS, type CalendarColour, type LocalDate } from "./hours-types.js";
 import { isReadableClock } from "./hours-clock.js";
-import { nextOccurrence, occursOn, repeatKey } from "./named-day-rules.js";
+import { occursOn, repeatKey } from "./named-day-rules.js";
 import { menuPeriodName } from "./menu-timetable-rules.js";
 import {
   findSeasonEndOffsetClash,
@@ -17,10 +17,9 @@ import {
 import type { PaintRange } from "./day-paint.js";
 import { civilDateOf } from "@waitron/reporting";
 import { ZONE_PAINT_KINDS } from "./schema/seasons.js";
-import { sharedSpecialDate, specialDateIn } from "./special-days.js";
+import { firstSkippedEnd, sharedSpecialDate, specialDateIn } from "./special-days.js";
 import {
   calendarDateOfTime,
-  clockTimeSkippedInDay,
   parseClosedRanges,
   parseServiceDay,
   type ClosedRange,
@@ -499,13 +498,9 @@ function refuseSkippedPaint(
     return;
   const clock = { timeZone, dayCutover: bundle.dayCutover, cutoverChanges: [] };
   const from = civilDateOf(createdAt, timeZone) as LocalDate;
-  for (const [dayId, ranges] of paint) {
-    const stored = dates.get(days.get(dayId)!.dateId)!;
-    const date = stored.repeats ? (nextOccurrence(stored, from) ?? stored.date) : stored.date;
-    for (const range of ranges)
-      for (const end of ["startsAt", "endsAt"] as const)
-        if (clockTimeSkippedInDay(clock, date, range[end], end === "endsAt")) refuse(table);
-  }
+  for (const [dayId, ranges] of paint)
+    if (firstSkippedEnd(clock, dates.get(days.get(dayId)!.dateId)!, from, ranges) !== null)
+      refuse(table);
 }
 
 /** Each department's end offsets over the bundle's seasons, special days and named days, under

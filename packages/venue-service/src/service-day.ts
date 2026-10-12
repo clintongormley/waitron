@@ -51,7 +51,7 @@ export function parseRanges<T extends ClosedRange>(
   field: string,
   cutover: string,
   invalid: (field: string, reason?: RangeReason) => never,
-  read: (entry: Record<string, unknown>, at: string, range: ClosedRange) => T,
+  read: (entry: Record<string, unknown>, at: string, range: ClosedRange, index: number) => T,
 ): T[] {
   if (!Array.isArray(value)) invalid(field);
   const ranges = value.map((entry: unknown, index): T => {
@@ -69,7 +69,7 @@ export function parseRanges<T extends ClosedRange>(
       clockMinutes(endsAt) % SERVICE_STEP_MINUTES !== 0
     )
       invalid(field, "step");
-    return read(entry as Record<string, unknown>, at, range);
+    return read(entry as Record<string, unknown>, at, range, index);
   });
   ranges.sort(
     (a, b) => minuteOfServiceDay(a.startsAt, cutover) - minuteOfServiceDay(b.startsAt, cutover),
