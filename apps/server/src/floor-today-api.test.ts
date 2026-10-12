@@ -208,6 +208,7 @@ describe("today's routes", () => {
             seats: 4,
             fixed: false,
             placement: { x: 50, y: 0, width: 8, height: 8, shape: "rect", rotation: 0 },
+            partKeys: [],
           },
         ],
       }),
@@ -256,6 +257,21 @@ describe("today's routes", () => {
       status: 409,
       body: { error: { code: "table.taken_off", params: { tableId: table.off! } } },
     });
+  });
+
+  it("answers 409 table.in_joined_table for placing a part", async () => {
+    const { table } = await plannedZone(v, [
+      { key: "c3", label: "Counter 3", seats: 2, place: null },
+      { key: "c4", label: "Counter 4", seats: 6, place: null },
+      { key: "c5", label: "Counter 5", seats: 4, place: null },
+      { key: "long", label: "Long table", seats: 10, partKeys: ["c3", "c4", "c5"] },
+    ]);
+
+    expect(await refusal(today(table.c4!, "place", { x: 40, y: 50 }))).toEqual({
+      status: 409,
+      body: { error: { code: "table.in_joined_table", params: { tableId: table.c4! } } },
+    });
+    expect((await floorToday(table.c4!))?.placement).toBeNull();
   });
 
   it("refuses a malformed id or body", async () => {

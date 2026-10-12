@@ -353,6 +353,36 @@ describe("till-held-orders: moving a counter order to a table", () => {
     ).toEqual(["t1", "t2", "t10"]);
   });
 
+  it("Move to table lists no part of a joined table", async () => {
+    const spare = (inJoinedTable: string | null) => ({
+      placement: null,
+      seats: 2,
+      fixed: false,
+      takenOff: false,
+      joinId: null,
+      joinSeats: null,
+      inJoinedTable,
+    });
+    const { el } = await mountWidget<TillHeldOrders>("till-held-orders", {
+      orders: [mesa],
+      tables: [
+        tableRow("c3", "Counter 3", { today: spare("Long table") }),
+        tableRow("c4", "Counter 4", { today: spare("Long table") }),
+        tableRow("c5", "Counter 5", { today: spare("Long table") }),
+        tableRow("long", "Long table"),
+        tableRow("stool-2", "Stool 2", { today: spare(null) }),
+      ],
+    });
+
+    await openPicker(el);
+
+    expect(
+      [...el.shadowRoot!.querySelectorAll<HTMLElement>("[data-target]")].map(
+        (row) => row.dataset.target,
+      ),
+    ).toEqual(["long", "stool-2"]);
+  });
+
   it("says so when the floor lists no table", async () => {
     const { el } = await mountWidget<TillHeldOrders>("till-held-orders", {
       orders: [mesa],

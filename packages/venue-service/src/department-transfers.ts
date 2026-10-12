@@ -6,6 +6,7 @@ import type {
 export type { DepartmentTransferActor, DepartmentTransferReceiver } from "@waitron/module";
 import { and, asc, desc, eq, inArray, isNull, ne, or, sql } from "drizzle-orm";
 import {
+  stillJoinedPart,
   tableInService,
   billPayments,
   billPaymentRefunds,
@@ -416,7 +417,7 @@ export async function acceptDepartmentTransfer(
     throw new AppError("department_transfer.destination_invalid", { field: "zoneId" });
   if (input.tableId !== null) {
     const [table] = await tx
-      .select({ id: diningTables.id })
+      .select({ joined: stillJoinedPart(diningTables.id).mapWith(Boolean) })
       .from(diningTables)
       .where(
         and(
@@ -428,6 +429,8 @@ export async function acceptDepartmentTransfer(
       );
     if (table === undefined)
       throw new AppError("department_transfer.destination_invalid", { field: "tableId" });
+    if (table.joined)
+      throw new AppError("table.in_joined_table", { tableId: input.tableId, field: "tableId" });
   }
   await assertZoneTakesNewOrders(tx, cfg, input.zoneId, new Date());
   const accepted = await resolveRequest(tx, request.id, receiver, {

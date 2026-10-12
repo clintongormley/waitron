@@ -1,7 +1,16 @@
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
-import { floorTodayTables, floorZones, newId, nowIso, withTransaction } from "@waitron/db";
+import {
+  floorPlanTableParts,
+  floorPlanTables,
+  floorPlans,
+  floorTodayTables,
+  floorZones,
+  newId,
+  nowIso,
+  withTransaction,
+} from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import type { CoreServices } from "@waitron/module";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -741,4 +750,90 @@ it("refuses booking a table with no today's row", async () => {
       }),
     ),
   ).rejects.toMatchObject({ code: "table.not_found", params: { tableId } });
+});
+
+describe("a part of a joined table on the saved plan", () => {
+  /** Long table (10 seats) made of Counter 3 (2), 4 (6) and 5 (4) on a saved plan, each with a live table on today's plan. */
+  async function longTable(
+    locationId: string,
+  ): Promise<Record<"long" | "c3" | "c4" | "c5", string>> {
+    const [zone] = await db
+      .insert(floorZones)
+      .values({ locationId, name: "Counter" })
+      .returning({ id: floorZones.id });
+    const [plan] = await db
+      .insert(floorPlans)
+      .values({ zoneId: zone!.id, savedAt: nowIso() })
+      .returning({ id: floorPlans.id });
+    const seats = { long: 10, c3: 2, c4: 6, c5: 4 } as const;
+    const labels = { long: "Long table", c3: "Counter 3", c4: "Counter 4", c5: "Counter 5" };
+    const master = {} as Record<keyof typeof seats, string>;
+    const live = {} as Record<keyof typeof seats, string>;
+    for (const key of ["long", "c3", "c4", "c5"] as const) {
+      const [row] = await db
+        .insert(floorPlanTables)
+        .values({ planId: plan!.id, label: labels[key], seats: seats[key] })
+        .returning({ id: floorPlanTables.id });
+      master[key] = row!.id;
+      const table = await db.execute<{ id: string }>(sql`
+        insert into dining_tables (id, created_at, location_id, zone_id, label, plan_table_id)
+        values (${newId()}, ${nowIso()}, ${locationId}, ${zone!.id}, ${labels[key]}, ${row!.id})
+        returning id`);
+      live[key] = table.rows[0]!.id;
+      await db.insert(floorTodayTables).values({ tableId: live[key] });
+    }
+    await db.insert(floorPlanTableParts).values(
+      (["c3", "c4", "c5"] as const).map((key) => ({
+        joinedTableId: master.long,
+        partTableId: master[key],
+      })),
+    );
+    return live;
+  }
+
+  function book(cfg: VenueCfg, createdBy: string, bookingDate: string, tableId: string) {
+    return scoped(cfg, (tx) =>
+      createBooking(tx, cfg, {
+        bookingDate,
+        bookingTime: "20:00",
+        partySize: 4,
+        contactName: "García",
+        tableId,
+        createdBy,
+      }),
+    );
+  }
+
+  it("refuses a booking at Counter 4, for any date", async () => {
+    const { cfg, createdBy } = await setupVenue();
+    const table = await longTable(cfg.locationId);
+    for (const date of ["2026-08-20", "2027-01-15"]) {
+      await expect(book(cfg, createdBy, date, table.c4)).rejects.toMatchObject({
+        code: "table.in_joined_table",
+        params: { tableId: table.c4, field: "tableId" },
+      });
+    }
+    const count = await db.execute<{ n: number }>(sql`select count(*) as n from bookings`);
+    expect(count.rows[0]!.n).toBe(0);
+  });
+
+  it("books Long table", async () => {
+    const { cfg, createdBy } = await setupVenue();
+    const table = await longTable(cfg.locationId);
+    const { id } = await book(cfg, createdBy, "2026-08-20", table.long);
+    expect((await scoped(cfg, (tx) => getBooking(tx, cfg, id)))!.tableId).toBe(table.long);
+  });
+
+  it("refuses an edit that moves a booking to Counter 5", async () => {
+    const { cfg, createdBy } = await setupVenue();
+    const table = await longTable(cfg.locationId);
+    const { id } = await book(cfg, createdBy, "2026-08-20", table.long);
+    await expect(
+      scoped(cfg, (tx) => updateBooking(tx, cfg, id, { tableId: table.c5 })),
+    ).rejects.toMatchObject({
+      code: "table.in_joined_table",
+      params: { tableId: table.c5, field: "tableId" },
+    });
+    expect((await scoped(cfg, (tx) => getBooking(tx, cfg, id)))!.tableId).toBe(table.long);
+  });
 });

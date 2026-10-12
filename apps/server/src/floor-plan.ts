@@ -1,7 +1,8 @@
-import { and, asc, eq, inArray, ne } from "drizzle-orm";
+import { and, asc, eq, getTableColumns, inArray, ne } from "drizzle-orm";
 import {
   diningTables,
   floorPlans,
+  floorPlanTableParts,
   floorPlanTables,
   floorResetTables,
   floorTodayZones,
@@ -24,6 +25,8 @@ export interface PlanTable {
   seats: number | null;
   fixed: boolean;
   placement: Placement | null;
+  /** A joined table's parts, in label order; empty for any other table. */
+  partIds: string[];
 }
 
 export interface ZonePlan {
@@ -44,6 +47,8 @@ export interface ZonePlanSave {
     seats: number | null;
     fixed: boolean;
     placement: Placement | null;
+    /** The save keys of a joined table's parts. */
+    partKeys: string[];
   }[];
 }
 
@@ -71,8 +76,9 @@ async function planOf(tx: Transaction, zoneId: string) {
 
 async function mastersOf(tx: Transaction, planId: string) {
   return tx
-    .select()
+    .select({ ...getTableColumns(floorPlanTables), partOf: floorPlanTableParts.joinedTableId })
     .from(floorPlanTables)
+    .leftJoin(floorPlanTableParts, eq(floorPlanTableParts.partTableId, floorPlanTables.id))
     .where(eq(floorPlanTables.planId, planId))
     .orderBy(asc(floorPlanTables.label));
 }
@@ -101,6 +107,13 @@ export async function readZonePlan(
       tx,
       masters.map((m) => m.id),
     );
+    const byJoined = new Map<string, string[]>();
+    for (const m of masters) {
+      if (m.partOf === null) continue;
+      const parts = byJoined.get(m.partOf);
+      if (parts === undefined) byJoined.set(m.partOf, [m.id]);
+      else parts.push(m.id);
+    }
     for (const master of masters) {
       tables.push({
         id: master.id,
@@ -109,6 +122,7 @@ export async function readZonePlan(
         seats: master.seats,
         fixed: master.fixed,
         placement: placementOf(master),
+        partIds: byJoined.get(master.id) ?? [],
       });
     }
   }
@@ -162,6 +176,28 @@ function checkEntries(input: ZonePlanSave): void {
       if (ids.has(ref)) throw invalid(`${at}.id`);
       ids.add(ref);
     }
+  });
+  checkParts(input.tables);
+}
+
+function checkParts(tables: ZonePlanSave["tables"]): void {
+  const byKey = new Map(tables.map((table) => [table.key, table]));
+  const claimed = new Set<string>();
+  tables.forEach((table, index) => {
+    if (table.partKeys.length === 0) return;
+    const at = `tables.${index}.partKeys`;
+    // An entry with no partKeys is a plain table, so a joined table stripped of every part
+    // saves as a plain one; the editor refuses that before sending.
+    if (table.partKeys.length < 2) throw invalid(at);
+    for (const key of table.partKeys) {
+      const part = byKey.get(key);
+      if (part === undefined) throw invalid(at);
+      if (part.placement !== null) throw invalid(at);
+      if (part.partKeys.length > 0) throw invalid(at);
+      if (claimed.has(key)) throw invalid(at);
+      claimed.add(key);
+    }
+    if (table.seats === null || table.seats < 1) throw invalid(`tables.${index}.seats`);
   });
 }
 
@@ -273,6 +309,18 @@ export async function saveZonePlan(
   }
   const planId = plan!.id;
 
+  await tx
+    .delete(floorPlanTableParts)
+    .where(
+      inArray(
+        floorPlanTableParts.joinedTableId,
+        tx
+          .select({ id: floorPlanTables.id })
+          .from(floorPlanTables)
+          .where(eq(floorPlanTables.planId, planId)),
+      ),
+    );
+
   const kept = new Set(tables.flatMap((t) => (t.id === undefined ? [] : [t.id])));
   const deleted = masters.filter((m) => !kept.has(m.id)).map((m) => m.id);
   if (deleted.length > 0) {
@@ -317,6 +365,13 @@ export async function saveZonePlan(
     if ((Object.keys(next) as (keyof typeof next)[]).every((k) => current[k] === next[k])) continue;
     await tx.update(floorPlanTables).set(next).where(eq(floorPlanTables.id, table.id));
   }
+  const parts = tables.flatMap((table) =>
+    table.partKeys.map((key) => ({
+      joinedTableId: ids.get(table.key)!,
+      partTableId: ids.get(key)!,
+    })),
+  );
+  if (parts.length > 0) await tx.insert(floorPlanTableParts).values(parts);
 
   const revision = plan!.revision + 1;
   await tx.update(floorPlans).set({ revision, savedAt }).where(eq(floorPlans.id, planId));

@@ -23,6 +23,7 @@ import "@waitron/ui/src/components/wt-icon.js";
 import "@waitron/ui/src/components/wt-floor-plan-canvas.js";
 import "@waitron/ui/src/components/wt-modal.js";
 import "@waitron/ui/src/components/wt-sheet.js";
+import "./floor-plan-add-joined-table.js";
 import "./floor-plan-add-tables.js";
 import "./floor-plan-table-panel.js";
 import "./floor-plan-tables-panel.js";
@@ -42,8 +43,10 @@ import type {
 import {
   changePlacement,
   checkDraft,
+  type DraftProblem,
   deleteTable,
   draftFromPlan,
+  joinedTableOf,
   rekeyDraft,
   rekeyWith,
   restoreTable,
@@ -99,7 +102,7 @@ interface EditorMessage {
 }
 
 /** A table field a side panel shows, so a refusal naming it can sit beside it. */
-export type FloorPlanField = "label" | "seats" | "fixed" | "shape";
+export type FloorPlanField = "label" | "seats" | "fixed" | "shape" | "parts";
 
 export interface FloorPlanFieldError {
   key: string;
@@ -138,6 +141,7 @@ const SERVER_FIELDS: Record<string, FloorPlanField> = {
   seats: "seats",
   fixed: "fixed",
   "placement.shape": "shape",
+  partKeys: "parts",
 };
 
 function fieldValue(table: DraftTable, field: FloorPlanField): unknown {
@@ -146,17 +150,13 @@ function fieldValue(table: DraftTable, field: FloorPlanField): unknown {
 }
 
 /** The marked table keeps its mark while it fails at all, even when `checkDraft` blames another. */
-function tableProblem(
-  draft: FloorPlanDraft,
-  key: string,
-): "label_missing" | "label_repeated" | null {
+function tableProblem(draft: FloorPlanDraft, key: string): DraftProblem | null {
   const table = draft.tables.find((t) => t.key === key);
   if (table === undefined) return null;
   const label = table.label.trim();
   if (label === "") return "label_missing";
-  return draft.tables.some((t) => t.key !== key && t.label.trim() === label)
-    ? "label_repeated"
-    : null;
+  if (draft.tables.some((t) => t.key !== key && t.label.trim() === label)) return "label_repeated";
+  return table.parts !== null && table.parts.length < 2 ? "parts_too_few" : null;
 }
 
 const actionMessage = (text: () => string): EditorMessage => ({ text, from: "action" });
@@ -418,6 +418,9 @@ export class FloorPlanEditor extends LitElement {
     });
     this.addEventListener("floor-plan-add-tables", () => {
       this.renderRoot.querySelector("floor-plan-add-tables")?.show();
+    });
+    this.addEventListener("floor-plan-add-joined-table", () => {
+      this.renderRoot.querySelector("floor-plan-add-joined-table")?.show();
     });
     this.addEventListener("floor-plan-invalid", (event) => {
       this.#typed((event as CustomEvent<FloorPlanInvalid>).detail);
@@ -713,11 +716,13 @@ export class FloorPlanEditor extends LitElement {
   #markProblem(problem: NonNullable<ReturnType<typeof checkDraft>>): void {
     this.#setMark({
       key: problem.key,
-      field: "label",
+      field: problem.problem === "parts_too_few" ? "parts" : "label",
       text: () =>
         problem.problem === "label_missing"
           ? t("floor_plan_editor.name_missing")
-          : codeMessage("table.label_taken"),
+          : problem.problem === "parts_too_few"
+            ? t("floor_plan_editor.parts_too_few")
+            : codeMessage("table.label_taken"),
       from: "check",
     });
   }
@@ -730,7 +735,7 @@ export class FloorPlanEditor extends LitElement {
   /** Puts a table the save could not delete back as last saved, as one undo step, marked and
    *  selected. */
   #restoreRefused(table: DraftTable, params: Record<string, unknown>): void {
-    this.#change(restoreTable(this.draft!, table));
+    this.#change(restoreTable(this.draft!, table, this.#opened!));
     const restored = this.draft!.tables.find((t) => t.key === table.key)!;
     this.refused = { table: restored, reason: () => bookedReason(params) };
     this.#selectFlagged(restored.key);
@@ -1034,6 +1039,7 @@ export class FloorPlanEditor extends LitElement {
   #deleteQuestion(draft: FloorPlanDraft) {
     const key = this.deleteAsk;
     const name = tableName(draft.tables.find((table) => table.key === key));
+    const joined = key === null ? undefined : joinedTableOf(draft, key);
     return html`<wt-modal
       data-dialog="delete-table"
       size="compact"
@@ -1044,7 +1050,13 @@ export class FloorPlanEditor extends LitElement {
         if (event.target === event.currentTarget) this.deleteAsk = null;
       }}
     >
-      <p data-delete-text>${t("floor_plan_editor.delete_text")}</p>
+      <p data-delete-text>
+        ${
+          joined === undefined
+            ? t("floor_plan_editor.delete_text")
+            : fill("floor_plan_editor.delete_part_text", { name: tableName(joined) })
+        }
+      </p>
       <wt-form-actions slot="footer"
         ><wt-button
           slot="cancel"
@@ -1148,6 +1160,12 @@ export class FloorPlanEditor extends LitElement {
         .nextKey=${this.#nextKey}
         .draftParent=${this.#scopeId}
       ></floor-plan-add-tables>
+      <floor-plan-add-joined-table
+        .draft=${draft}
+        .takenElsewhere=${this.#takenElsewhere(draft)}
+        .nextKey=${this.#nextKey}
+        .draftParent=${this.#scopeId}
+      ></floor-plan-add-joined-table>
       ${this.#deleteQuestion(draft)}`;
   }
 

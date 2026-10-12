@@ -566,3 +566,8 @@ it("has its own English and Spanish copy for a reader id the provider does not k
   expect(codeMessage(code, "en")).toBe("The payment provider has no reader with this ID");
   expect(codeMessage(code, "es")).toBe("El proveedor de pagos no tiene ningún lector con este ID");
 });
+
+it("says a part of a joined table cannot be used, in English and Spanish", () => {
+  expect(codeMessage("table.in_joined_table", "en")).toBe("That table is part of a joined table");
+  expect(codeMessage("table.in_joined_table", "es")).toBe("Esa mesa forma parte de una mesa unida");
+});

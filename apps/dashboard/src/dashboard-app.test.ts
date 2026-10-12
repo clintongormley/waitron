@@ -4557,8 +4557,17 @@ describe("the floor plan editor inside the real page", () => {
             seats: 4,
             fixed: false,
             placement: { x: 2, y: 3, width: 8, height: 8, shape: "rect", rotation: 0 },
+            partIds: [],
           },
-          { id: "m2", liveTableId: "l2", label: "T2", seats: 2, fixed: true, placement: null },
+          {
+            id: "m2",
+            liveTableId: "l2",
+            label: "T2",
+            seats: 2,
+            fixed: true,
+            placement: null,
+            partIds: [],
+          },
         ],
       }),
       listZones: vi

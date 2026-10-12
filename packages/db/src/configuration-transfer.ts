@@ -47,6 +47,7 @@ export const CORE_CONFIGURATION_TRANSFER = {
     },
     { name: "floor_plans" },
     { name: "floor_plan_tables" },
+    { name: "floor_plan_table_parts" },
     {
       name: "print_agents",
       locationColumns: ["location_id"],

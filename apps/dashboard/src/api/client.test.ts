@@ -1577,7 +1577,7 @@ describe("DashboardApi — floor plan (zones + tables)", () => {
   it("saveFloorPlan PUTs the draft and returns the new revision and ids", async () => {
     const body = {
       revision: 0,
-      tables: [{ key: "a", label: "1", seats: 4, fixed: false, placement: null }],
+      tables: [{ key: "a", label: "1", seats: 4, fixed: false, placement: null, partKeys: [] }],
     };
     const fetchImpl = vi.fn().mockResolvedValue(jsonResponse({ revision: 1, ids: { a: "t1" } }));
     const api = new DashboardApi("", fetchImpl);

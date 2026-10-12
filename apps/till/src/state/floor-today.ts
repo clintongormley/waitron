@@ -179,14 +179,30 @@ export function pendingPlaces(
   return places;
 }
 
-/** Today's tables with no place, not taken off and not fixed: what Add a spare table offers. */
+export function stillJoined(table: TableState): boolean {
+  return table.today !== null && table.today.inJoinedTable !== null;
+}
+
+/** A still-joined part can keep a place on today's map, and is drawn as its joined table only. */
+export function onTodaysPlan(table: TableState): boolean {
+  return (
+    table.today !== null &&
+    table.today.placement !== null &&
+    !table.today.takenOff &&
+    !stillJoined(table)
+  );
+}
+
+/** Today's tables with no place, not taken off, not fixed and in no joined table: what Add a spare
+ * table offers. */
 export function sparesOf(zoneTables: readonly TableState[]): TableState[] {
   return zoneTables.filter(
     (table) =>
       table.today !== null &&
       table.today.placement === null &&
       !table.today.takenOff &&
-      !table.today.fixed,
+      !table.today.fixed &&
+      !stillJoined(table),
   );
 }
 
@@ -197,9 +213,7 @@ export function takenOffOf(zoneTables: readonly TableState[]): TableState[] {
 /** Slice 4 decision 17: a spare's corner, centred in the crop the map first fits; (0, 0) with nothing placed. */
 export function spareSpot(zoneTables: readonly TableState[]): { x: number; y: number } {
   const crop = cropToTables(
-    zoneTables.flatMap((table) =>
-      table.today?.placement != null && !table.today.takenOff ? [table.today.placement] : [],
-    ),
+    zoneTables.filter(onTodaysPlan).map((table) => table.today!.placement!),
   );
   if (crop === null) return { x: 0, y: 0 };
   return {

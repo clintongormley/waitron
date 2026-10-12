@@ -43,6 +43,7 @@ function today(over: Partial<TableToday> = {}): TableToday {
     takenOff: false,
     joinId: null,
     joinSeats: null,
+    inJoinedTable: null,
     ...over,
   };
 }
@@ -286,6 +287,29 @@ describe("zones and their tables", () => {
     });
     expect(listedTables([off])).toEqual([off]);
     expect(mapTables([off])).toEqual([]);
+  });
+
+  it.each([
+    ["map", mapTables],
+    ["list", listedTables],
+  ] as const)("a still-joined part that kept its place is absent from the %s", (_name, read) => {
+    const part = table({
+      id: "c3",
+      label: "Counter 3",
+      today: today({ inJoinedTable: "Long table" }),
+    });
+    const joined = table({ id: "long", label: "Long table", today: today() });
+    expect(read([part, joined]).map((each) => each.id)).toEqual(["long"]);
+  });
+
+  it("lists a still-joined part that needs clearing, and does not draw it", () => {
+    const part = table({
+      id: "c3",
+      condition: "needs_clearing",
+      today: today({ inJoinedTable: "Long table" }),
+    });
+    expect(listedTables([part])).toEqual([part]);
+    expect(mapTables([part])).toEqual([]);
   });
 
   it("reads seats only from today or its merge, with none without a today row", () => {

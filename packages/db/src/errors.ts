@@ -15,6 +15,8 @@ declare module "@waitron/shared" {
      * secret. A DEACTIVATED table is the distinct `table.inactive`.
      */
     "table.not_found": { tableId: string };
+    /** A part of a joined table, which stands only as the joined table. Declared here: throwers in three packages. */
+    "table.in_joined_table": { tableId: string; field?: "tableId" };
     /**
      * No working order with this id where the caller looked. Declared here, as `table.not_found`
      * is, because it has throwers in more than one package. Retrieving a held order reads OPEN

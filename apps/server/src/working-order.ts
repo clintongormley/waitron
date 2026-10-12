@@ -1,5 +1,5 @@
 import { readSaleOperationDescription } from "./sale-operation-description.js";
-import { tableInService } from "@waitron/db";
+import { stillJoinedPart, tableInService } from "@waitron/db";
 import { readStationQueueMoves, type StationQueueMove } from "./station-queue-moves.js";
 import {
   checkedInvoiceChoiceDelivery,
@@ -1157,7 +1157,11 @@ export async function createOpenOrder(
   }
   if (deliveryTableId !== null) {
     const [table] = await tx
-      .select({ id: diningTables.id, zoneId: diningTables.zoneId })
+      .select({
+        id: diningTables.id,
+        zoneId: diningTables.zoneId,
+        joined: stillJoinedPart(diningTables.id).mapWith(Boolean),
+      })
       .from(diningTables)
       .where(
         and(eq(diningTables.id, deliveryTableId), eq(diningTables.locationId, cfg.locationId)),
@@ -1165,6 +1169,7 @@ export async function createOpenOrder(
     if (table === undefined) {
       throw new AppError("table.not_found", { tableId: deliveryTableId });
     }
+    if (table.joined) throw new AppError("table.in_joined_table", { tableId: deliveryTableId });
     effectiveZoneId = table.zoneId;
   }
   if (effectiveZoneId === undefined) {
@@ -1272,8 +1277,8 @@ export async function parkOrder(
 
 /**
  * Open the party's first bill at a table, clearing the table's manual status. Refused while the
- * table needs clearing and while a party holds it (an active `party_tables` row); the caller adds
- * the party's membership afterwards. The check cannot interleave with a second `openTab`, because
+ * table is still part of a joined table, while it needs clearing and while a party holds it (an
+ * active `party_tables` row); the caller adds the party's membership afterwards. The check cannot interleave with a second `openTab`, because
  * `withTransaction` IS the venue file's write lock.
  */
 export async function openTab(
@@ -1290,6 +1295,7 @@ export async function openTab(
   const [table] = await tx
     .select({
       inService: tableInService(diningTables.id).mapWith(Boolean),
+      joined: stillJoinedPart(diningTables.id).mapWith(Boolean),
       zoneId: diningTables.zoneId,
       needsClearingSince: diningTables.needsClearingSince,
     })
@@ -1300,6 +1306,9 @@ export async function openTab(
   }
   if (!table.inService) {
     throw new AppError("table.inactive", { tableId: req.tableId });
+  }
+  if (table.joined) {
+    throw new AppError("table.in_joined_table", { tableId: req.tableId });
   }
   if (table.needsClearingSince !== null) {
     throw new AppError("table.needs_clearing", { tableId: req.tableId });
@@ -7162,6 +7171,8 @@ export interface TableToday {
   takenOff: boolean;
   joinId: string | null;
   joinSeats: number | null;
+  /** The live name of the joined table this table is still a part of; `null` when it is in none. */
+  inJoinedTable: string | null;
 }
 
 /** One row of the occupancy read-model. */
@@ -7420,6 +7431,16 @@ async function readTodayTables(
     .leftJoin(floorTodayJoinTables, eq(floorTodayJoinTables.tableId, floorTodayTables.tableId))
     .leftJoin(floorTodayJoins, eq(floorTodayJoins.id, floorTodayJoinTables.joinId))
     .where(eq(diningTables.locationId, locationId));
+  const parts = await tx.execute<{ table_id: string; label: string }>(sql`
+    select part_row.table_id, joined_table.label
+    from floor_reset_table_parts joined_part
+    inner join floor_reset_tables part_row on part_row.id = joined_part.part_reset_table_id
+    inner join floor_reset_tables joined_row on joined_row.id = joined_part.joined_reset_table_id
+    inner join dining_tables joined_table on joined_table.id = joined_row.table_id
+    where joined_table.location_id = ${locationId}
+      and ${stillJoinedPart(sql`part_row.table_id`)}
+  `);
+  const joinedName = new Map(parts.rows.map((part) => [part.table_id, part.label]));
   return new Map(
     rows.map((row) => [
       row.tableId,
@@ -7430,6 +7451,7 @@ async function readTodayTables(
         takenOff: row.takenOff,
         joinId: row.joinId,
         joinSeats: row.joinSeats,
+        inJoinedTable: joinedName.get(row.tableId) ?? null,
       },
     ]),
   );

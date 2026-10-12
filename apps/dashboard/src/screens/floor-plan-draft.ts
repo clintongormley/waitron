@@ -1,6 +1,7 @@
+import { createLabelComparator } from "@waitron/shared";
 import { NEW_TABLE_SIZE, clampToGrid, firstFreeSpot } from "@waitron/ui";
 import type { FloorPlan, FloorPlanSave, PlanPlacement } from "../api/client.js";
-import { t } from "../i18n/t.js";
+import { fill, t } from "../i18n/t.js";
 
 /** The most seats a table may hold. */
 export const MAX_SEATS = 999;
@@ -13,6 +14,8 @@ export interface DraftTable {
   seats: number | null;
   fixed: boolean;
   placement: PlanPlacement | null;
+  /** A joined table's part keys, possibly too few; null for a table that is not a joined table. */
+  parts: readonly string[] | null;
 }
 
 export interface FloorPlanDraft {
@@ -39,6 +42,14 @@ export function tableName(table: Pick<DraftTable, "label"> | undefined): string 
   return table?.label.trim() || t("floor_plan_editor.unnamed");
 }
 
+export const seatCount = (seats: number) =>
+  seats === 1
+    ? t("floor_plan_editor.seat_count_one")
+    : fill("floor_plan_editor.seat_count", { count: String(seats) });
+
+export const tablesChosen = (count: number) =>
+  fill("floor_plan_editor.tables_chosen", { count: String(count) });
+
 type TablePatch = Partial<Pick<DraftTable, "label" | "seats" | "fixed" | "placement">>;
 
 export function draftFromPlan(plan: FloorPlan): FloorPlanDraft {
@@ -51,6 +62,7 @@ export function draftFromPlan(plan: FloorPlan): FloorPlanDraft {
       seats: t.seats,
       fixed: t.fixed,
       placement: t.placement === null ? null : { ...t.placement },
+      parts: t.partIds.length === 0 ? null : [...t.partIds],
     })),
   };
 }
@@ -65,6 +77,7 @@ export function saveFromDraft(revision: number, draft: FloorPlanDraft): FloorPla
       seats: t.seats,
       fixed: t.fixed,
       placement: t.placement,
+      partKeys: t.parts === null ? [] : [...t.parts],
     })),
   };
 }
@@ -78,10 +91,14 @@ export function rekeyDraft(
   draft: FloorPlanDraft,
   ids: Readonly<Record<string, string>>,
 ): FloorPlanDraft {
+  const rekey = rekeyWith(ids);
   return {
-    tables: draft.tables.map((t) =>
-      Object.hasOwn(ids, t.key) ? { ...t, key: ids[t.key]!, id: ids[t.key]! } : t,
-    ),
+    tables: draft.tables.map((t) => {
+      const parts = t.parts === null ? null : t.parts.map(rekey);
+      return Object.hasOwn(ids, t.key)
+        ? { ...t, key: ids[t.key]!, id: ids[t.key]!, parts }
+        : { ...t, parts };
+    }),
   };
 }
 
@@ -98,13 +115,20 @@ export function withLiveTables(draft: FloorPlanDraft, from: FloorPlanDraft): Flo
   return moved ? { ...draft, tables } : draft;
 }
 
+function sameParts(a: readonly string[] | null, b: readonly string[] | null): boolean {
+  if (a === null || b === null) return a === b;
+  const set = new Set(a);
+  return set.size === new Set(b).size && b.every((key) => set.has(key));
+}
+
 function sameTable(a: DraftTable, b: DraftTable): boolean {
   if (
     a.id !== b.id ||
     a.liveTableId !== b.liveTableId ||
     a.label !== b.label ||
     a.seats !== b.seats ||
-    a.fixed !== b.fixed
+    a.fixed !== b.fixed ||
+    !sameParts(a.parts, b.parts)
   ) {
     return false;
   }
@@ -132,15 +156,16 @@ export function sameDraft(a: FloorPlanDraft, b: FloorPlanDraft): boolean {
   return true;
 }
 
-export function checkDraft(
-  draft: FloorPlanDraft,
-): { key: string; problem: "label_missing" | "label_repeated" } | null {
+export type DraftProblem = "label_missing" | "label_repeated" | "parts_too_few";
+
+export function checkDraft(draft: FloorPlanDraft): { key: string; problem: DraftProblem } | null {
   const seen = new Set<string>();
   for (const t of draft.tables) {
     const label = t.label.trim();
     if (label === "") return { key: t.key, problem: "label_missing" };
     if (seen.has(label)) return { key: t.key, problem: "label_repeated" };
     seen.add(label);
+    if (t.parts !== null && t.parts.length < 2) return { key: t.key, problem: "parts_too_few" };
   }
   return null;
 }
@@ -194,16 +219,41 @@ export function placeTable(draft: FloorPlanDraft, key: string, at?: PlanPlacemen
   });
 }
 
-export function deleteTable(draft: FloorPlanDraft, key: string): FloorPlanDraft {
-  if (!draft.tables.some((t) => t.key === key)) return draft;
-  return { ...draft, tables: draft.tables.filter((t) => t.key !== key) };
+export function joinedTableOf(draft: FloorPlanDraft, key: string): DraftTable | undefined {
+  return draft.tables.find((t) => t.parts?.includes(key) === true);
 }
 
-/** Puts a table back, as given, after the others. */
-export function restoreTable(draft: FloorPlanDraft, table: DraftTable): FloorPlanDraft {
+/** Deleting a part takes it out of its joined table; a joined table's own delete frees its parts. */
+export function deleteTable(draft: FloorPlanDraft, key: string): FloorPlanDraft {
+  if (!draft.tables.some((t) => t.key === key)) return draft;
+  return {
+    ...draft,
+    tables: draft.tables.flatMap((t) => {
+      if (t.key === key) return [];
+      if (t.parts?.includes(key) !== true) return [t];
+      return [{ ...t, parts: t.parts.filter((part) => part !== key) }];
+    }),
+  };
+}
+
+/** Puts a table back, as given, after the others. A part re-joins the joined table that held it
+ *  in `opened` when that table is in the draft and no other joined table holds the part; a joined
+ *  table keeps only the parts `freeTables` would still offer it. */
+export function restoreTable(
+  draft: FloorPlanDraft,
+  table: DraftTable,
+  opened: FloorPlanDraft,
+): FloorPlanDraft {
   if (draft.tables.some((t) => t.key === table.key)) return draft;
   const placement = table.placement === null ? null : { ...table.placement };
-  return { ...draft, tables: [...draft.tables, { ...table, placement }] };
+  const free = new Set(freeTables(draft).map((t) => t.key));
+  const parts = table.parts === null ? null : table.parts.filter((part) => free.has(part));
+  const heldBy = joinedTableOf(opened, table.key)?.key;
+  const rejoins = heldBy !== undefined && joinedTableOf(draft, table.key) === undefined;
+  const tables = draft.tables.map((t) =>
+    rejoins && t.key === heldBy && t.parts !== null ? { ...t, parts: [...t.parts, table.key] } : t,
+  );
+  return { ...draft, tables: [...tables, { ...table, placement, parts }] };
 }
 
 export function addTables(
@@ -223,7 +273,65 @@ export function addTables(
         seats: t.seats,
         fixed: t.fixed,
         placement: null,
+        parts: null,
       })),
     ],
   };
+}
+
+export function addJoinedTable(
+  draft: FloorPlanDraft,
+  table: { label: string; seats: number | null; parts: readonly string[] },
+  nextKey: () => string,
+): FloorPlanDraft {
+  return {
+    ...draft,
+    tables: [
+      ...draft.tables,
+      {
+        key: nextKey(),
+        id: null,
+        liveTableId: null,
+        label: table.label,
+        seats: table.seats,
+        fixed: false,
+        placement: null,
+        parts: [...table.parts],
+      },
+    ],
+  };
+}
+
+export function setParts(
+  draft: FloorPlanDraft,
+  key: string,
+  parts: readonly string[],
+): FloorPlanDraft {
+  return mapTable(draft, key, (t) => ({ ...t, parts: [...parts] }));
+}
+
+/** Tables a joined table may be made of: off the plan, not joined tables, and in no joined table
+ *  but `joinedKey`. */
+export function freeTables(draft: FloorPlanDraft, joinedKey?: string): DraftTable[] {
+  const compare = createLabelComparator();
+  return draft.tables
+    .filter((t) => {
+      if (t.placement !== null || t.parts !== null) return false;
+      const heldBy = joinedTableOf(draft, t.key);
+      return heldBy === undefined || heldBy.key === joinedKey;
+    })
+    .sort((a, b) => compare(tableName(a), tableName(b)));
+}
+
+const NUMBERED = /^(.*\S)\s+(\d+)$/;
+
+/** The names in number order: "Counter 3, 4, 5" when every name is one prefix and a number, else
+ *  the names joined. */
+export function madeOfText(names: readonly string[]): string {
+  const sorted = [...names].sort(createLabelComparator());
+  const numbered = sorted.map((name) => NUMBERED.exec(name));
+  const prefix = numbered[0]?.[1];
+  if (prefix === undefined || numbered.some((match) => match?.[1] !== prefix))
+    return sorted.join(", ");
+  return `${prefix} ${numbered.map((match) => match![2]).join(", ")}`;
 }

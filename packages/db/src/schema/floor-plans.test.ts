@@ -4,14 +4,17 @@ import { SQLiteSyncDialect } from "drizzle-orm/sqlite-core";
 import type { Transaction } from "../client.js";
 import { checkFailed, refusalOn } from "../constraint-target.js";
 import { CORE_MIGRATIONS } from "../migrations.js";
-import { UNIQUE_VIOLATION } from "../sql-state.js";
+import { FOREIGN_KEY_VIOLATION, UNIQUE_VIOLATION } from "../sql-state.js";
 import { withTransaction } from "../tenancy.js";
+import { isRefusal } from "../unique-violation.js";
 import { captureError } from "../testing/errors.js";
 import { useVenueDb } from "../testing/venue-db.js";
 import { diningTables } from "./dining-tables.js";
 import {
   floorPlans,
+  floorPlanTableParts,
   floorPlanTables,
+  floorResetTableParts,
   floorResetTables,
   floorTodayJoinTables,
   floorTodayJoins,
@@ -379,6 +382,240 @@ describe("floor plan tables", () => {
         .where(eq(parties.openedBy, PERSON)),
     );
     expect(party!.tableNames).toEqual(["T1", "T2"]);
+  });
+
+  async function insertCounterTables(): Promise<{
+    long: string;
+    counter3: string;
+    counter4: string;
+    counter5: string;
+  }> {
+    return inTx(async (tx) => {
+      const rows = await tx
+        .insert(floorPlanTables)
+        .values([
+          { ...GOOD_MASTER_TABLE, label: "Long table", seats: 10 },
+          { planId: PLAN, label: "Counter 3", seats: 2, ...NO_PLACE },
+          { planId: PLAN, label: "Counter 4", seats: 6, ...NO_PLACE },
+          { planId: PLAN, label: "Counter 5", seats: 4, ...NO_PLACE },
+        ])
+        .returning({ id: floorPlanTables.id });
+      return {
+        long: rows[0]!.id,
+        counter3: rows[1]!.id,
+        counter4: rows[2]!.id,
+        counter5: rows[3]!.id,
+      };
+    });
+  }
+
+  async function insertCounterResetRows(): Promise<{
+    long: string;
+    counter3: string;
+    counter4: string;
+    counter5: string;
+  }> {
+    return inTx(async (tx) => {
+      const rows = await tx
+        .insert(floorResetTables)
+        .values([
+          { zoneId: ZONE, label: "Long table", seats: 10, ...PLACED },
+          { zoneId: ZONE, label: "Counter 3", seats: 2, ...NO_PLACE },
+          { zoneId: ZONE, label: "Counter 4", seats: 6, ...NO_PLACE },
+          { zoneId: ZONE, label: "Counter 5", seats: 4, ...NO_PLACE },
+        ])
+        .returning({ id: floorResetTables.id });
+      return {
+        long: rows[0]!.id,
+        counter3: rows[1]!.id,
+        counter4: rows[2]!.id,
+        counter5: rows[3]!.id,
+      };
+    });
+  }
+
+  it("keeps a master table in one joined table only", async () => {
+    const t = await insertCounterTables();
+    await inTx((tx) =>
+      tx.insert(floorPlanTableParts).values([
+        { joinedTableId: t.long, partTableId: t.counter3 },
+        { joinedTableId: t.long, partTableId: t.counter4 },
+        { joinedTableId: t.long, partTableId: t.counter5 },
+      ]),
+    );
+    const bar = await inTx(async (tx) => {
+      const [row] = await tx
+        .insert(floorPlanTables)
+        .values({ ...GOOD_MASTER_TABLE, label: "Bar" })
+        .returning({ id: floorPlanTables.id });
+      return row!.id;
+    });
+    const error = await captureError(() =>
+      inTx((tx) =>
+        tx.insert(floorPlanTableParts).values({ joinedTableId: bar, partTableId: t.counter4 }),
+      ),
+    );
+    expect(
+      refusalOn(error, UNIQUE_VIOLATION, {
+        table: "floor_plan_table_parts",
+        columns: ["part_table_id"],
+      }),
+    ).toBe(true);
+  });
+
+  it("refuses a master table joined to itself", async () => {
+    const t = await insertCounterTables();
+    const error = await captureError(() =>
+      inTx((tx) =>
+        tx.insert(floorPlanTableParts).values({ joinedTableId: t.long, partTableId: t.long }),
+      ),
+    );
+    expect(checkFailed(error, "floor_plan_table_parts_not_self_ck")).toBe(true);
+  });
+
+  it("refuses deleting a master table a joined table names, either way round", async () => {
+    const t = await insertCounterTables();
+    await inTx((tx) =>
+      tx.insert(floorPlanTableParts).values([
+        { joinedTableId: t.long, partTableId: t.counter3 },
+        { joinedTableId: t.long, partTableId: t.counter4 },
+        { joinedTableId: t.long, partTableId: t.counter5 },
+      ]),
+    );
+    for (const doomed of [t.counter4, t.long]) {
+      const error = await captureError(() =>
+        inTx((tx) => tx.delete(floorPlanTables).where(eq(floorPlanTables.id, doomed))),
+      );
+      expect(isRefusal(error, FOREIGN_KEY_VIOLATION)).toBe(true);
+    }
+    const tables = await inTx((tx) => tx.select({ id: floorPlanTables.id }).from(floorPlanTables));
+    expect(tables.map((row) => row.id).sort()).toEqual(
+      [t.long, t.counter3, t.counter4, t.counter5].sort(),
+    );
+    const parts = await inTx((tx) =>
+      tx
+        .select({
+          joinedTableId: floorPlanTableParts.joinedTableId,
+          partTableId: floorPlanTableParts.partTableId,
+        })
+        .from(floorPlanTableParts),
+    );
+    expect(parts).toHaveLength(3);
+  });
+
+  it("keeps a reset row in one copied joined table only", async () => {
+    const t = await insertCounterResetRows();
+    await inTx((tx) =>
+      tx.insert(floorResetTableParts).values([
+        { joinedResetTableId: t.long, partResetTableId: t.counter3 },
+        { joinedResetTableId: t.long, partResetTableId: t.counter4 },
+        { joinedResetTableId: t.long, partResetTableId: t.counter5 },
+      ]),
+    );
+    const bar = await inTx(async (tx) => {
+      const [row] = await tx
+        .insert(floorResetTables)
+        .values({ zoneId: ZONE, label: "Bar", ...PLACED })
+        .returning({ id: floorResetTables.id });
+      return row!.id;
+    });
+    const error = await captureError(() =>
+      inTx((tx) =>
+        tx
+          .insert(floorResetTableParts)
+          .values({ joinedResetTableId: bar, partResetTableId: t.counter4 }),
+      ),
+    );
+    expect(
+      refusalOn(error, UNIQUE_VIOLATION, {
+        table: "floor_reset_table_parts",
+        columns: ["part_reset_table_id"],
+      }),
+    ).toBe(true);
+  });
+
+  it("refuses a reset row joined to itself", async () => {
+    const t = await insertCounterResetRows();
+    const error = await captureError(() =>
+      inTx((tx) =>
+        tx
+          .insert(floorResetTableParts)
+          .values({ joinedResetTableId: t.long, partResetTableId: t.long }),
+      ),
+    );
+    expect(checkFailed(error, "floor_reset_table_parts_not_self_ck")).toBe(true);
+  });
+
+  it("refuses deleting a reset row a copied joined table names, either way round", async () => {
+    const t = await insertCounterResetRows();
+    await inTx((tx) =>
+      tx.insert(floorResetTableParts).values([
+        { joinedResetTableId: t.long, partResetTableId: t.counter3 },
+        { joinedResetTableId: t.long, partResetTableId: t.counter4 },
+        { joinedResetTableId: t.long, partResetTableId: t.counter5 },
+      ]),
+    );
+    for (const doomed of [t.counter4, t.long]) {
+      const error = await captureError(() =>
+        inTx((tx) => tx.delete(floorResetTables).where(eq(floorResetTables.id, doomed))),
+      );
+      expect(isRefusal(error, FOREIGN_KEY_VIOLATION)).toBe(true);
+    }
+    const rows = await inTx((tx) => tx.select({ id: floorResetTables.id }).from(floorResetTables));
+    expect(rows.map((row) => row.id).sort()).toEqual(
+      [t.long, t.counter3, t.counter4, t.counter5].sort(),
+    );
+    const parts = await inTx((tx) => tx.select().from(floorResetTableParts));
+    expect(parts).toHaveLength(3);
+  });
+
+  it("round-trips a joined table's parts in the plan and in the reset copy", async () => {
+    const plan = await insertCounterTables();
+    const reset = await insertCounterResetRows();
+    await inTx(async (tx) => {
+      await tx.insert(floorPlanTableParts).values([
+        { joinedTableId: plan.long, partTableId: plan.counter3 },
+        { joinedTableId: plan.long, partTableId: plan.counter4 },
+        { joinedTableId: plan.long, partTableId: plan.counter5 },
+      ]);
+      await tx.insert(floorResetTableParts).values([
+        { joinedResetTableId: reset.long, partResetTableId: reset.counter3 },
+        { joinedResetTableId: reset.long, partResetTableId: reset.counter4 },
+        { joinedResetTableId: reset.long, partResetTableId: reset.counter5 },
+      ]);
+    });
+    const planParts = await inTx((tx) =>
+      tx
+        .select({
+          joinedTableId: floorPlanTableParts.joinedTableId,
+          partTableId: floorPlanTableParts.partTableId,
+          label: floorPlanTables.label,
+        })
+        .from(floorPlanTableParts)
+        .innerJoin(floorPlanTables, eq(floorPlanTables.id, floorPlanTableParts.partTableId))
+        .orderBy(floorPlanTables.label),
+    );
+    expect(planParts).toEqual([
+      { joinedTableId: plan.long, partTableId: plan.counter3, label: "Counter 3" },
+      { joinedTableId: plan.long, partTableId: plan.counter4, label: "Counter 4" },
+      { joinedTableId: plan.long, partTableId: plan.counter5, label: "Counter 5" },
+    ]);
+    const resetParts = await inTx((tx) =>
+      tx
+        .select({
+          joinedResetTableId: floorResetTableParts.joinedResetTableId,
+          partResetTableId: floorResetTableParts.partResetTableId,
+          label: floorResetTables.label,
+        })
+        .from(floorResetTableParts)
+        .innerJoin(floorResetTables, eq(floorResetTables.id, floorResetTableParts.partResetTableId))
+        .orderBy(floorResetTables.label),
+    );
+    expect(resetParts).toEqual([
+      { joinedResetTableId: reset.long, partResetTableId: reset.counter3, label: "Counter 3" },
+      { joinedResetTableId: reset.long, partResetTableId: reset.counter4, label: "Counter 4" },
+      { joinedResetTableId: reset.long, partResetTableId: reset.counter5, label: "Counter 5" },
+    ]);
   });
 
   it("has no saved joins: their four tables are gone", () => {

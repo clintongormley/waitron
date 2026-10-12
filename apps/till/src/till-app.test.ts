@@ -8058,6 +8058,23 @@ describe("till-app", () => {
         expect(tableOrder(el)).not.toBeNull();
       });
 
+      it("a join-tables refused table.in_joined_table says so in its own words", async () => {
+        const { el } = await mountApp({
+          getTablesState: vi.fn().mockResolvedValue([openTable]),
+          listZones: vi.fn().mockResolvedValue([floorZone]),
+          joinTables: vi.fn().mockRejectedValue({ code: "table.in_joined_table", tableId: "t9" }),
+        });
+        const screen = await toTableOrder(el, openTable);
+
+        emit(screen, "join-tables", { tableId: "t9", bills: "merge" });
+        await flush(el);
+
+        expect(tableOrder(el)).not.toBeNull();
+        const banner = el.shadowRoot!.querySelector(".error")!.textContent!;
+        expect(banner).toContain(codeMessage("table.in_joined_table"));
+        expect(banner).not.toContain(t("table.error"));
+      });
+
       it("merge-bills absorbs another bill then reloads this bill's lines AND the floor", async () => {
         const mergeBills = vi.fn().mockResolvedValue(undefined);
         const getTabLines = vi.fn().mockResolvedValue({ lines: [tabLine], revision: 0 });

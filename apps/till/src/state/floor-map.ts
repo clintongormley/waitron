@@ -1,6 +1,7 @@
 import type { FloorMapDot, FloorMapFill, FloorMapTable } from "@waitron/ui";
 import type { TableState } from "../api/client.js";
 import { countText, t } from "../i18n/t.js";
+import { onTodaysPlan } from "./floor-today.js";
 import { signalOf } from "./table-signals.js";
 
 export interface StandInStatus {
@@ -142,9 +143,7 @@ export function drawnGroupKey(table: TableState, linkId: string | null): string 
  * `linkId`.
  */
 export function mapTables(zoneTables: readonly TableState[]): FloorMapTable[] {
-  const drawn = zoneTables.filter(
-    (table) => table.today !== null && table.today.placement !== null && !table.today.takenOff,
-  );
+  const drawn = zoneTables.filter(onTodaysPlan);
   const groupsOfParty = new Map<string, Set<string>>();
   for (const table of drawn) {
     if (table.party === null) continue;
@@ -184,10 +183,7 @@ const mustStayReachable = (table: TableState): boolean =>
 /** The tables on today's plan, plus every table that must stay reachable, in the order given. */
 export function listedTables(zoneTables: readonly TableState[]): TableState[] {
   return zoneTables.filter(
-    (table) =>
-      table.today === null ||
-      (table.today.placement !== null && !table.today.takenOff) ||
-      mustStayReachable(table),
+    (table) => table.today === null || onTodaysPlan(table) || mustStayReachable(table),
   );
 }
 

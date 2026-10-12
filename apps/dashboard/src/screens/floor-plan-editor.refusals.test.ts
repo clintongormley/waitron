@@ -14,6 +14,8 @@ import {
   deleteTable,
   draftFromPlan,
   patchTable,
+  placeTable,
+  setParts,
   type FloorPlanDraft,
 } from "./floor-plan-draft.js";
 
@@ -37,9 +39,25 @@ function plan(): FloorPlan {
     revision: 3,
     savedAt: "2026-10-01T10:00:00.000Z",
     tables: [
-      { id: "m1", liveTableId: "l1", label: "T1", seats: 4, fixed: false, placement },
-      { id: "m2", liveTableId: "l2", label: "T2", seats: 2, fixed: true, placement: null },
-      { id: "m9", liveTableId: "l9", label: "T9", seats: null, fixed: false, placement: null },
+      { id: "m1", liveTableId: "l1", label: "T1", seats: 4, fixed: false, placement, partIds: [] },
+      {
+        id: "m2",
+        liveTableId: "l2",
+        label: "T2",
+        seats: 2,
+        fixed: true,
+        placement: null,
+        partIds: [],
+      },
+      {
+        id: "m9",
+        liveTableId: "l9",
+        label: "T9",
+        seats: null,
+        fixed: false,
+        placement: null,
+        partIds: [],
+      },
     ],
   };
 }
@@ -522,6 +540,115 @@ it("a deleted unplaced table that is refused comes back in the tables list with 
   expect(message(el)).toBe("");
 });
 
+/** Long table (10 seats) made of Counter 3 (2), Counter 4 (6) and Counter 5 (4). */
+function joinedPlan(): FloorPlan {
+  const part = (id: string, label: string, seats: number) => ({
+    id,
+    liveTableId: `l${id}`,
+    label,
+    seats,
+    fixed: false,
+    placement: null,
+    partIds: [],
+  });
+  return {
+    ...plan(),
+    tables: [
+      part("c3", "Counter 3", 2),
+      part("c4", "Counter 4", 6),
+      part("c5", "Counter 5", 4),
+      {
+        id: "long",
+        liveTableId: "llong",
+        label: "Long table",
+        seats: 10,
+        fixed: false,
+        placement,
+        partIds: ["c3", "c4", "c5"],
+      },
+    ],
+  };
+}
+
+it("a booked part whose delete was refused comes back inside Long table", async () => {
+  const el = await open(
+    stubApi({
+      getFloorPlan: vi.fn().mockResolvedValue(joinedPlan()),
+      saveFloorPlan: vi
+        .fn()
+        .mockRejectedValue(booked({ tableId: "lc5", date: "2026-10-12", time: "21:00" })),
+    }),
+  );
+  await change(el, deleteTable(draftFromPlan(joinedPlan()), "c5"));
+  expect(el["draft"]!.tables.find((t) => t.key === "long")!.parts).toEqual(["c3", "c4"]);
+  await press(el, "save");
+  expect(el["draft"]!.tables.map((t) => t.key)).toContain("c5");
+  expect([...el["draft"]!.tables.find((t) => t.key === "long")!.parts!].sort()).toEqual([
+    "c3",
+    "c4",
+    "c5",
+  ]);
+  expect(panelRow(el, "c5")!.querySelector("[data-mark]")!.textContent!.trim()).toBe(
+    "Booked 12 Oct, 21:00",
+  );
+});
+
+it("Long table refused as booked comes back without a part placed since its delete", async () => {
+  const el = await open(
+    stubApi({
+      getFloorPlan: vi.fn().mockResolvedValue(joinedPlan()),
+      saveFloorPlan: vi
+        .fn()
+        .mockRejectedValue(booked({ tableId: "llong", date: "2026-10-12", time: "21:00" })),
+    }),
+  );
+  await change(el, placeTable(deleteTable(draftFromPlan(joinedPlan()), "long"), "c3"));
+  await press(el, "save");
+  const draft = el["draft"]!;
+  expect(draft.tables.find((t) => t.key === "long")!.parts).toEqual(["c4", "c5"]);
+  expect(draft.tables.find((t) => t.key === "c3")!.placement).not.toBeNull();
+});
+
+it("a refusal of a joined table's parts selects it and marks its Made of", async () => {
+  const el = await open(
+    stubApi({
+      getFloorPlan: vi.fn().mockResolvedValue(joinedPlan()),
+      saveFloorPlan: vi.fn().mockRejectedValue(invalid("tables.3.partKeys")),
+    }),
+  );
+  await change(el, setParts(draftFromPlan(joinedPlan()), "long", ["c3", "c4"]));
+  await press(el, "save");
+  expect(canvas(el).selected).toBe("long");
+  expect(el.fieldError).toEqual({
+    key: "long",
+    field: "parts",
+    message: "Check the floor plan's tables and try again",
+  });
+  expect(message(el)).toBe("Correct the highlighted fields to continue.");
+  expect(button(el, "save").disabled).toBe(false);
+});
+
+it("Save with a joined table of one part marks it and keeps Save disabled until it is fixed", async () => {
+  const api = stubApi({ getFloorPlan: vi.fn().mockResolvedValue(joinedPlan()) });
+  const el = await open(api);
+  const start = draftFromPlan(joinedPlan());
+  await change(el, setParts(start, "long", ["c3"]));
+  await press(el, "save");
+  expect(api.saveFloorPlan).not.toHaveBeenCalled();
+  expect(canvas(el).selected).toBe("long");
+  expect(el.fieldError).toEqual({
+    key: "long",
+    field: "parts",
+    message: "Choose at least 2 tables.",
+  });
+  expect(message(el)).toBe("Correct the highlighted fields to continue.");
+  expect(button(el, "save").disabled).toBe(true);
+  await change(el, setParts(start, "long", ["c3", "c4"]));
+  expect(el.fieldError).toBeNull();
+  expect(message(el)).toBe("");
+  expect(button(el, "save").disabled).toBe(false);
+});
+
 it("a booked table the opened plan does not hold shows the code's own sentence", async () => {
   const el = await open(refusing({ code: "table.booked", params: { tableId: "l7" } }));
   await change(el, deleteTable(opened(), "m2"));
@@ -927,8 +1054,24 @@ it("a table saved new while other edits were made comes back when its delete is 
     revision: 4,
     tables: [
       ...plan().tables.slice(0, 2),
-      { id: "m9", liveTableId: "l9", label: "T9", seats: null, fixed: false, placement: null },
-      { id: "m5", liveTableId: "l5", label: "T5", seats: 2, fixed: false, placement: t5 },
+      {
+        id: "m9",
+        liveTableId: "l9",
+        label: "T9",
+        seats: null,
+        fixed: false,
+        placement: null,
+        partIds: [],
+      },
+      {
+        id: "m5",
+        liveTableId: "l5",
+        label: "T5",
+        seats: 2,
+        fixed: false,
+        placement: t5,
+        partIds: [],
+      },
     ],
   };
   const saveFloorPlan = vi
@@ -1040,4 +1183,33 @@ it("a save refusal's sentence comes back when the draft changes after a no-room 
   await rotate(el, "m1", 90);
   expect(el.fieldError).toEqual(expect.objectContaining({ key: "m1", field: "seats" }));
   expect(message(el)).toBe("Correct the highlighted fields to continue.");
+});
+
+it("a server refusal of Long table's seats marks its Seats", async () => {
+  const el = await open(
+    stubApi({
+      getFloorPlan: vi.fn().mockResolvedValue(joinedPlan()),
+      saveFloorPlan: vi.fn().mockRejectedValue(invalid("tables.3.seats")),
+    }),
+  );
+  await change(el, patchTable(draftFromPlan(joinedPlan()), "long", { seats: 12 }));
+  await press(el, "save");
+  expect(canvas(el).selected).toBe("long");
+  expect(tablePanel(el).tableKey).toBe("long");
+  expect(panelField(el, "seats").error).toBe("Check the floor plan's tables and try again");
+  expect(panelField(el, "made-of").error).toBe("");
+});
+
+it("a server refusal of Long table's parts shows under its Made of", async () => {
+  const el = await open(
+    stubApi({
+      getFloorPlan: vi.fn().mockResolvedValue(joinedPlan()),
+      saveFloorPlan: vi.fn().mockRejectedValue(invalid("tables.3.partKeys")),
+    }),
+  );
+  await change(el, setParts(draftFromPlan(joinedPlan()), "long", ["c3", "c4"]));
+  await press(el, "save");
+  expect(tablePanel(el).tableKey).toBe("long");
+  expect(panelField(el, "made-of").error).toBe("Check the floor plan's tables and try again");
+  expect(panelField(el, "seats").error).toBe("");
 });

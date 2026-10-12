@@ -41,6 +41,7 @@ function table(
             takenOff: false,
             joinId: null,
             joinSeats: null,
+            inJoinedTable: null,
             ...today,
           },
     signals: [],

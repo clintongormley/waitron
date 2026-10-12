@@ -448,6 +448,45 @@ describe("bookings-screen", () => {
     );
   });
 
+  const refusedTable = {
+    code: "table.in_joined_table",
+    params: { tableId: "t-1", field: "tableId" },
+    status: 409,
+  };
+  it.each([
+    [
+      "a create's",
+      { createBooking: vi.fn().mockRejectedValue(refusedTable) },
+      "add-booking",
+      "create-booking",
+      { ...booking(), tableId: "t-1" },
+    ],
+    [
+      "an update's",
+      { updateBooking: vi.fn().mockRejectedValue(refusedTable) },
+      "edit-bk-early",
+      "update-booking",
+      { id: "bk-early", patch: { tableId: "t-1" } },
+    ],
+  ] as const)(
+    "shows %s refusal naming the table under the form's Table field, not on the screen",
+    async (_, overrides, opener, event, detail) => {
+      const api = stubApi(overrides);
+      const { el } = await mountWidget<BookingsScreen>("dashboard-bookings-screen", { api });
+      await flush(el);
+      await click(el, opener);
+      emitFromChild(form(el), event, detail);
+      await flush(el);
+      await form(el).updateComplete;
+      expect(form(el).open).toBe(true);
+      const table = form(el).shadowRoot!.querySelector<HTMLElement & { error: string }>(
+        "[data-test=booking-table]",
+      )!;
+      expect(table.error).toBe(codeMessage("table.in_joined_table"));
+      expect(el.shadowRoot!.querySelector("[role=alert]")).toBeNull();
+    },
+  );
+
   it("shows the error when a lifecycle move fails (no-show)", async () => {
     const api = stubApi({
       markNoShow: vi.fn().mockRejectedValue({ code: "booking.invalid_transition" }),
@@ -731,7 +770,7 @@ it.each([
   },
 );
 
-it.each(["floor_today_tables", "floor_zones"])(
+it.each(["floor_today_tables", "floor_zones", "floor_plan_table_parts"])(
   "refreshes table choices after %s changes",
   async (type) => {
     const liveData = new LiveData();

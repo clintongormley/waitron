@@ -61,6 +61,7 @@ function planned(
       takenOff: false,
       joinId: null,
       joinSeats: null,
+      inJoinedTable: null,
       ...over,
     },
     signals: [],

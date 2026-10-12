@@ -115,6 +115,31 @@ export const floorPlanTables = table(
   ],
 );
 
+/** What a joined table on the saved plan is made of: one row per part. */
+export const floorPlanTableParts = table(
+  "floor_plan_table_parts",
+  {
+    id: id("id").primaryKey().$defaultFn(newId),
+    joinedTableId: id("joined_table_id").notNull(),
+    partTableId: id("part_table_id").notNull(),
+  },
+  (t) => [
+    unique("floor_plan_table_parts_part_key").on(t.partTableId),
+    index("floor_plan_table_parts_joined_idx").on(t.joinedTableId),
+    check("floor_plan_table_parts_not_self_ck", sql`${t.joinedTableId} <> ${t.partTableId}`),
+    foreignKey({
+      columns: [t.joinedTableId],
+      foreignColumns: [floorPlanTables.id],
+      name: "floor_plan_table_parts_joined_fk",
+    }),
+    foreignKey({
+      columns: [t.partTableId],
+      foreignColumns: [floorPlanTables.id],
+      name: "floor_plan_table_parts_part_fk",
+    }),
+  ],
+);
+
 /**
  * What the zone's last reset copied: one row per planned live table, plus one per table it is to
  * create (`table_id` null).
@@ -150,6 +175,34 @@ export const floorResetTables = table(
       name: "floor_reset_tables_table_fk",
     }),
     ...placementChecks("floor_reset_tables", t),
+  ],
+);
+
+/** The parts of each joined table as the zone's last reset copied them. */
+export const floorResetTableParts = table(
+  "floor_reset_table_parts",
+  {
+    id: id("id").primaryKey().$defaultFn(newId),
+    joinedResetTableId: id("joined_reset_table_id").notNull(),
+    partResetTableId: id("part_reset_table_id").notNull(),
+  },
+  (t) => [
+    unique("floor_reset_table_parts_part_key").on(t.partResetTableId),
+    index("floor_reset_table_parts_joined_idx").on(t.joinedResetTableId),
+    check(
+      "floor_reset_table_parts_not_self_ck",
+      sql`${t.joinedResetTableId} <> ${t.partResetTableId}`,
+    ),
+    foreignKey({
+      columns: [t.joinedResetTableId],
+      foreignColumns: [floorResetTables.id],
+      name: "floor_reset_table_parts_joined_fk",
+    }),
+    foreignKey({
+      columns: [t.partResetTableId],
+      foreignColumns: [floorResetTables.id],
+      name: "floor_reset_table_parts_part_fk",
+    }),
   ],
 );
 

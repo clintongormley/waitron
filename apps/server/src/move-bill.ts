@@ -1,4 +1,4 @@
-import { tableInService } from "@waitron/db";
+import { stillJoinedPart, tableInService } from "@waitron/db";
 import { and, eq, inArray, isNull, ne, sql } from "drizzle-orm";
 import {
   diningTables,
@@ -191,7 +191,8 @@ export interface TargetTable {
  * a revision alone can match a party seated there since; a table read free (`otherPartyId: null`)
  * that a party other than `source` holds now is `party.out_of_date` for the party holding it. Then
  * the revision of a party holding it, other than `source`, is checked and moved on (P27); then the
- * table is refused when it does not exist, is out of use or needs clearing.
+ * table is refused when it does not exist, is out of use, is still part of a joined table or needs
+ * clearing.
  */
 export async function readTargetTable(
   tx: Transaction,
@@ -220,6 +221,7 @@ export async function readTargetTable(
   const [table] = await tx
     .select({
       inService: tableInService(diningTables.id).mapWith(Boolean),
+      joined: stillJoinedPart(diningTables.id).mapWith(Boolean),
       zoneId: diningTables.zoneId,
       needsClearingSince: diningTables.needsClearingSince,
     })
@@ -227,6 +229,7 @@ export async function readTargetTable(
     .where(and(eq(diningTables.id, tableId), eq(diningTables.locationId, cfg.locationId)));
   if (table === undefined) throw new AppError("table.not_found", { tableId });
   if (!table.inService) throw new AppError("table.inactive", { tableId });
+  if (table.joined) throw new AppError("table.in_joined_table", { tableId });
   if (table.needsClearingSince !== null) throw new AppError("table.needs_clearing", { tableId });
   return { holding, zoneId: table.zoneId };
 }

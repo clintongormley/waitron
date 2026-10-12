@@ -1,17 +1,22 @@
 import { describe, expect, it } from "vitest";
 import type { FloorPlan } from "../api/client.js";
 import {
+  addJoinedTable,
   addTables,
   changePlacement,
   checkDraft,
   deleteTable,
   draftFromPlan,
+  freeTables,
+  joinedTableOf,
+  madeOfText,
   patchTable,
   placeTable,
   rekeyDraft,
   restoreTable,
   sameDraft,
   saveFromDraft,
+  setParts,
   withLiveTables,
   type FloorPlanDraft,
 } from "./floor-plan-draft.js";
@@ -23,9 +28,79 @@ const plan: FloorPlan = {
   revision: 3,
   savedAt: "2026-10-01T10:00:00.000Z",
   tables: [
-    { id: "m1", liveTableId: "l1", label: "T1", seats: 4, fixed: false, placement: m1Placement },
-    { id: "m2", liveTableId: "l2", label: "T2", seats: 2, fixed: true, placement: null },
-    { id: "m9", liveTableId: "l9", label: "T9", seats: null, fixed: false, placement: null },
+    {
+      id: "m1",
+      liveTableId: "l1",
+      label: "T1",
+      seats: 4,
+      fixed: false,
+      placement: m1Placement,
+      partIds: [],
+    },
+    {
+      id: "m2",
+      liveTableId: "l2",
+      label: "T2",
+      seats: 2,
+      fixed: true,
+      placement: null,
+      partIds: [],
+    },
+    {
+      id: "m9",
+      liveTableId: "l9",
+      label: "T9",
+      seats: null,
+      fixed: false,
+      placement: null,
+      partIds: [],
+    },
+  ],
+};
+
+/** Long table (10 seats) made of Counter 3 (2), Counter 4 (6) and Counter 5 (4), beside T1. */
+const joinedPlan: FloorPlan = {
+  zoneId: "z1",
+  revision: 3,
+  savedAt: "2026-10-01T10:00:00.000Z",
+  tables: [
+    plan.tables[0]!,
+    {
+      id: "c3",
+      liveTableId: "lc3",
+      label: "Counter 3",
+      seats: 2,
+      fixed: false,
+      placement: null,
+      partIds: [],
+    },
+    {
+      id: "c4",
+      liveTableId: "lc4",
+      label: "Counter 4",
+      seats: 6,
+      fixed: false,
+      placement: null,
+      partIds: [],
+    },
+    {
+      id: "c5",
+      liveTableId: "lc5",
+      label: "Counter 5",
+      seats: 4,
+      fixed: false,
+      placement: null,
+      partIds: [],
+    },
+    {
+      id: "long",
+      liveTableId: "llong",
+      label: "Long table",
+      seats: 10,
+      fixed: false,
+      placement: m1Placement,
+      partIds: ["c3", "c4", "c5"],
+    },
   ],
 };
 
@@ -54,6 +129,7 @@ describe("floor plan draft", () => {
       seats: null,
       fixed: false,
       placement: null,
+      parts: null,
     });
     expect(table(d, "m1")).toEqual({
       key: "m1",
@@ -63,6 +139,7 @@ describe("floor plan draft", () => {
       seats: 4,
       fixed: false,
       placement: m1Placement,
+      parts: null,
     });
     expect(Object.keys(d)).toEqual(["tables"]);
   });
@@ -72,8 +149,16 @@ describe("floor plan draft", () => {
     expect(save).toEqual({
       revision: 3,
       tables: [
-        { id: "m1", key: "m1", label: "T1", seats: 4, fixed: false, placement: m1Placement },
-        { id: "m2", key: "m2", label: "T2", seats: 2, fixed: true, placement: null },
+        {
+          id: "m1",
+          key: "m1",
+          label: "T1",
+          seats: 4,
+          fixed: false,
+          placement: m1Placement,
+          partKeys: [],
+        },
+        { id: "m2", key: "m2", label: "T2", seats: 2, fixed: true, placement: null, partKeys: [] },
         {
           id: "m9",
           key: "m9",
@@ -81,6 +166,7 @@ describe("floor plan draft", () => {
           seats: null,
           fixed: false,
           placement: null,
+          partKeys: [],
         },
       ],
     });
@@ -97,13 +183,21 @@ describe("floor plan draft", () => {
       seats: 3,
       fixed: true,
       placement: null,
+      partKeys: [],
     });
   });
 
   it("sends a new table with neither id nor live table", () => {
     const d = addTables(open(), [{ label: "T5", seats: 3, fixed: true }], counter("new"));
     const sent = saveFromDraft(3, d).tables[3]!;
-    expect(sent).toEqual({ key: "new:1", label: "T5", seats: 3, fixed: true, placement: null });
+    expect(sent).toEqual({
+      key: "new:1",
+      label: "T5",
+      seats: 3,
+      fixed: true,
+      placement: null,
+      partKeys: [],
+    });
     expect("id" in sent).toBe(false);
     expect("liveTableId" in sent).toBe(false);
   });
@@ -127,6 +221,7 @@ describe("floor plan draft", () => {
       seats: null,
       fixed: false,
       placement: null,
+      partKeys: [],
     });
     expect("liveTableId" in sent[2]!).toBe(false);
     expect(sent[3]).toEqual({
@@ -136,6 +231,7 @@ describe("floor plan draft", () => {
       seats: 3,
       fixed: false,
       placement: null,
+      partKeys: [],
     });
   });
 
@@ -328,6 +424,7 @@ describe("floor plan draft", () => {
         seats: 3,
         fixed: false,
         placement: null,
+        parts: null,
       },
       {
         key: "new:2",
@@ -337,6 +434,7 @@ describe("floor plan draft", () => {
         seats: null,
         fixed: true,
         placement: null,
+        parts: null,
       },
     ]);
     expect(d.tables.slice(0, 3).map((t) => t.key)).toEqual(["m1", "m2", "m9"]);
@@ -376,6 +474,7 @@ describe("floor plan draft", () => {
         shape: "rect" as const,
         rotation: 0,
       },
+      parts: null,
     }));
     const d = { ...open(), tables: [...open().tables, ...tables] };
     const full = patchTable(d, "m1", { placement: null });
@@ -398,7 +497,7 @@ describe("floor plan draft", () => {
   it("restores a deleted table as it was opened, at the end, leaving the rest alone", () => {
     const opened = open();
     const moved = changePlacement(deleteTable(opened, "m1"), "m2", { x: 0, y: 0 });
-    const restored = restoreTable(moved, table(opened, "m1"));
+    const restored = restoreTable(moved, table(opened, "m1"), opened);
     expect(restored.tables.map((t) => t.key)).toEqual(["m2", "m9", "m1"]);
     expect(table(restored, "m1")).toEqual(table(opened, "m1"));
     expect(table(restored, "m1").placement).not.toBe(table(opened, "m1").placement);
@@ -420,8 +519,226 @@ describe("floor plan draft", () => {
     expect(withLiveTables(merged, from)).toBe(merged);
   });
 
+  it("reads a joined table's parts as keys, and a plain table as none", () => {
+    const d = draftFromPlan(joinedPlan);
+    expect(table(d, "long").parts).toEqual(["c3", "c4", "c5"]);
+    expect(table(d, "c3").parts).toBeNull();
+    expect(table(d, "m1").parts).toBeNull();
+    expect(table(d, "long").parts).not.toBe(joinedPlan.tables[4]!.partIds);
+  });
+
+  it("sends each joined table's parts as keys, and none for a plain table", () => {
+    const sent = saveFromDraft(3, draftFromPlan(joinedPlan)).tables;
+    expect(sent.map((t) => [t.key, t.partKeys])).toEqual([
+      ["m1", []],
+      ["c3", []],
+      ["c4", []],
+      ["c5", []],
+      ["long", ["c3", "c4", "c5"]],
+    ]);
+  });
+
+  it("re-keys a new joined table's new parts from the answer's ids", () => {
+    const d = addTables(
+      draftFromPlan(joinedPlan),
+      [
+        { label: "Counter 6", seats: 2, fixed: false },
+        { label: "Counter 7", seats: 2, fixed: false },
+        { label: "Short table", seats: 4, fixed: false },
+      ],
+      counter("new"),
+    );
+    const joined: FloorPlanDraft = {
+      tables: d.tables.map((t) =>
+        t.key === "new:3" ? { ...t, parts: ["new:1", "new:2", "c3"] } : t,
+      ),
+    };
+    const r = rekeyDraft(joined, { "new:1": "m6", "new:2": "m7", "new:3": "m8" });
+    expect(table(r, "m8").parts).toEqual(["m6", "m7", "c3"]);
+    expect(table(r, "long").parts).toEqual(["c3", "c4", "c5"]);
+    expect(table(joined, "new:3").parts).toEqual(["new:1", "new:2", "c3"]);
+  });
+
+  it("compares parts as sets", () => {
+    const d = draftFromPlan(joinedPlan);
+    const reordered = {
+      tables: d.tables.map((t) => (t.key === "long" ? { ...t, parts: ["c5", "c3", "c4"] } : t)),
+    };
+    expect(sameDraft(d, reordered)).toBe(true);
+    const fewer = {
+      tables: d.tables.map((t) => (t.key === "long" ? { ...t, parts: ["c3", "c4"] } : t)),
+    };
+    expect(sameDraft(d, fewer)).toBe(false);
+    const swapped = {
+      tables: d.tables.map((t) => (t.key === "long" ? { ...t, parts: ["c3", "c4", "m1"] } : t)),
+    };
+    expect(sameDraft(d, swapped)).toBe(false);
+    const emptied = { tables: d.tables.map((t) => (t.key === "c3" ? { ...t, parts: [] } : t)) };
+    expect(sameDraft(d, emptied)).toBe(false);
+  });
+
+  it("deleting a part takes it out of its joined table", () => {
+    const d = deleteTable(draftFromPlan(joinedPlan), "c4");
+    expect(d.tables.map((t) => t.key)).toEqual(["m1", "c3", "c5", "long"]);
+    expect(table(d, "long").parts).toEqual(["c3", "c5"]);
+    expect(joinedTableOf(d, "c3")?.key).toBe("long");
+    expect(joinedTableOf(d, "c4")).toBeUndefined();
+  });
+
+  it("deleting a joined table leaves its parts as plain tables", () => {
+    const d = deleteTable(draftFromPlan(joinedPlan), "long");
+    expect(d.tables.map((t) => [t.key, t.parts])).toEqual([
+      ["m1", null],
+      ["c3", null],
+      ["c4", null],
+      ["c5", null],
+    ]);
+    expect(joinedTableOf(d, "c3")).toBeUndefined();
+  });
+
+  it("a restored part re-joins Long table when Long table is still in the draft", () => {
+    const opened = draftFromPlan(joinedPlan);
+    const deleted = deleteTable(opened, "c5");
+    const restored = restoreTable(deleted, table(opened, "c5"), opened);
+    expect(table(restored, "c5")).toEqual(table(opened, "c5"));
+    expect([...table(restored, "long").parts!].sort()).toEqual(["c3", "c4", "c5"]);
+    expect(sameDraft(restored, opened)).toBe(true);
+  });
+
+  it("a restored part comes back on its own when its joined table is gone", () => {
+    const opened = draftFromPlan(joinedPlan);
+    const deleted = deleteTable(deleteTable(opened, "long"), "c5");
+    const restored = restoreTable(deleted, table(opened, "c5"), opened);
+    expect(table(restored, "c5").parts).toBeNull();
+    expect(restored.tables.filter((t) => t.parts !== null)).toEqual([]);
+  });
+
+  it("a restored part stays out of Long table when another joined table holds it", () => {
+    const opened = draftFromPlan(joinedPlan);
+    const deleted = deleteTable(opened, "c5");
+    const other: FloorPlanDraft = {
+      tables: [
+        ...deleted.tables,
+        {
+          ...table(opened, "c3"),
+          key: "new:1",
+          id: null,
+          liveTableId: null,
+          label: "Bar",
+          parts: ["c5"],
+        },
+      ],
+    };
+    const restored = restoreTable(other, table(opened, "c5"), opened);
+    expect(table(restored, "long").parts).toEqual(["c3", "c4"]);
+    expect(table(restored, "new:1").parts).toEqual(["c5"]);
+  });
+
+  it("a restored joined table keeps only parts that are still free", () => {
+    const opened = draftFromPlan(joinedPlan);
+    const deleted = deleteTable(deleteTable(opened, "long"), "c4");
+    const other: FloorPlanDraft = {
+      tables: [
+        ...deleted.tables,
+        {
+          ...table(opened, "m1"),
+          key: "new:1",
+          id: null,
+          liveTableId: null,
+          label: "Bar",
+          parts: ["c3"],
+        },
+      ],
+    };
+    const restored = restoreTable(other, table(opened, "long"), opened);
+    expect(table(restored, "long").parts).toEqual(["c5"]);
+    expect(table(restored, "new:1").parts).toEqual(["c3"]);
+  });
+
+  it("a restored joined table leaves out a part placed since", () => {
+    const opened = draftFromPlan(joinedPlan);
+    const placed = placeTable(deleteTable(opened, "long"), "c3");
+    const restored = restoreTable(placed, table(opened, "long"), opened);
+    expect(table(restored, "long").parts).toEqual(["c4", "c5"]);
+    expect(table(restored, "c3").placement).not.toBeNull();
+    expect(checkDraft(restored)).toBeNull();
+  });
+
   it("returns the draft itself when the key is already in it", () => {
     const d = open();
-    expect(restoreTable(d, { ...table(d, "m2"), label: "Other" })).toBe(d);
+    expect(restoreTable(d, { ...table(d, "m2"), label: "Other" }, d)).toBe(d);
+  });
+
+  it("adds Long table not placed, made of the tables chosen", () => {
+    const opened = draftFromPlan(joinedPlan);
+    const d = addJoinedTable(
+      deleteTable(opened, "long"),
+      { label: "Long table", seats: 10, parts: ["c3", "c4", "c5"] },
+      counter("new"),
+    );
+    expect(d.tables.at(-1)).toEqual({
+      key: "new:1",
+      id: null,
+      liveTableId: null,
+      label: "Long table",
+      seats: 10,
+      fixed: false,
+      placement: null,
+      parts: ["c3", "c4", "c5"],
+    });
+    expect(joinedTableOf(d, "c4")?.key).toBe("new:1");
+    expect(d.tables.slice(0, -1).map((t) => t.key)).toEqual(["m1", "c3", "c4", "c5"]);
+    const parts = ["c3", "c4"];
+    const own = addJoinedTable(opened, { label: "Bar", seats: 8, parts }, counter("new"));
+    expect(table(own, "new:1").parts).not.toBe(parts);
+    const set = setParts(d, "new:1", ["c3", "c5"]);
+    expect(table(set, "new:1").parts).toEqual(["c3", "c5"]);
+    expect(table(d, "new:1").parts).toEqual(["c3", "c4", "c5"]);
+    expect(setParts(d, "missing", ["c3"])).toBe(d);
+  });
+
+  it("lists the free tables in number order, a joined table's own parts included for it", () => {
+    const d = addTables(
+      draftFromPlan(joinedPlan),
+      [
+        { label: "Counter 10", seats: 2, fixed: false },
+        { label: "Counter 9", seats: 2, fixed: false },
+        { label: "Counter 11", seats: 2, fixed: false },
+      ],
+      counter("new"),
+    );
+    const withBar = addJoinedTable(d, { label: "Bar", seats: 4, parts: ["new:3"] }, () => "bar");
+    const names = (key?: string) => freeTables(withBar, key).map((t) => t.label);
+    expect(names()).toEqual(["Counter 9", "Counter 10"]);
+    expect(names("long")).toEqual([
+      "Counter 3",
+      "Counter 4",
+      "Counter 5",
+      "Counter 9",
+      "Counter 10",
+    ]);
+    expect(names("bar")).toEqual(["Counter 9", "Counter 10", "Counter 11"]);
+  });
+
+  it.each([
+    [["Counter 3", "Counter 5", "Counter 4"], "Counter 3, 4, 5"],
+    [["Window 1", "Stool 2"], "Stool 2, Window 1"],
+    [["Bar 10", "Window 1", "Bar 2"], "Bar 2, Bar 10, Window 1"],
+    [["T1", "T2"], "T1, T2"],
+    [["T10", "T2"], "T2, T10"],
+    [["Bar 2", "Bar 10"], "Bar 2, 10"],
+    [[], ""],
+  ])("writes %s as %s", (names, text) => {
+    expect(madeOfText(names)).toBe(text);
+  });
+
+  it("finds a joined table with fewer than two parts", () => {
+    const d = draftFromPlan(joinedPlan);
+    expect(checkDraft(d)).toBeNull();
+    expect(checkDraft(setParts(d, "long", ["c3"]))).toEqual({
+      key: "long",
+      problem: "parts_too_few",
+    });
+    expect(checkDraft(setParts(d, "long", []))).toEqual({ key: "long", problem: "parts_too_few" });
   });
 });

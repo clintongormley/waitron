@@ -3,7 +3,9 @@ import { and, eq, exists, getTableColumns, inArray, isNull, lt, or } from "drizz
 import {
   diningTables,
   floorPlans,
+  floorPlanTableParts,
   floorPlanTables,
+  floorResetTableParts,
   floorResetTables,
   floorTodayJoins,
   floorTodayJoinTables,
@@ -26,7 +28,7 @@ import {
 import { foodOnItsWay } from "./delivery-release.js";
 import { leaveMerges } from "./floor-today-merges.js";
 import { holdersOf } from "./parties.js";
-import { refuseUnfree, refuseUnmovable, todayOf } from "./floor-today-table.js";
+import { refuseStillJoined, refuseUnfree, refuseUnmovable, todayOf } from "./floor-today-table.js";
 import { refusedByAModule, removeLiveTables, tablesTied } from "./table-removal.js";
 import type { TillConfig } from "./till-config.js";
 import "./errors.js";
@@ -124,20 +126,63 @@ async function resetZoneFor(
     })),
     live,
   );
+  await tx
+    .delete(floorResetTableParts)
+    .where(
+      inArray(
+        floorResetTableParts.joinedResetTableId,
+        tx
+          .select({ id: floorResetTables.id })
+          .from(floorResetTables)
+          .where(eq(floorResetTables.zoneId, zoneId)),
+      ),
+    );
   await tx.delete(floorResetTables).where(eq(floorResetTables.zoneId, zoneId));
   if (targets.length > 0) {
-    await tx.insert(floorResetTables).values(
-      targets.map((target) => ({
-        zoneId,
-        tableId: target.tableId,
-        planTableId: target.planTableId,
-        ...targetRow(target),
-        remove: target.remove,
-        pending: true,
-      })),
-    );
+    const written = await tx
+      .insert(floorResetTables)
+      .values(
+        targets.map((target) => ({
+          zoneId,
+          tableId: target.tableId,
+          planTableId: target.planTableId,
+          ...targetRow(target),
+          remove: target.remove,
+          pending: true,
+        })),
+      )
+      .returning({ id: floorResetTables.id, planTableId: floorResetTables.planTableId });
+    await copyParts(tx, zoneId, written);
   }
   await catchUpZone(tx, cfg, removals, zoneId, now);
+}
+
+/** Skips a joined table more than one live table follows: its parts would join two copied tables. */
+async function copyParts(
+  tx: Transaction,
+  zoneId: string,
+  written: readonly { id: string; planTableId: string | null }[],
+): Promise<void> {
+  const master = await tx
+    .select({ joined: floorPlanTableParts.joinedTableId, part: floorPlanTableParts.partTableId })
+    .from(floorPlanTableParts)
+    .innerJoin(floorPlanTables, eq(floorPlanTables.id, floorPlanTableParts.joinedTableId))
+    .innerJoin(floorPlans, eq(floorPlans.id, floorPlanTables.planId))
+    .where(eq(floorPlans.zoneId, zoneId));
+  const rowsOf = new Map<string, string[]>();
+  for (const row of written) {
+    if (row.planTableId === null) continue;
+    rowsOf.set(row.planTableId, [...(rowsOf.get(row.planTableId) ?? []), row.id]);
+  }
+  const copied = master.flatMap(({ joined, part }) => {
+    const joinedRows = rowsOf.get(joined) ?? [];
+    if (joinedRows.length !== 1) return [];
+    return (rowsOf.get(part) ?? []).map((partRow) => ({
+      joinedResetTableId: joinedRows[0]!,
+      partResetTableId: partRow,
+    }));
+  });
+  if (copied.length > 0) await tx.insert(floorResetTableParts).values(copied);
 }
 
 function zoneTables(tx: Transaction, cfg: TillConfig, zoneId: string) {
@@ -472,6 +517,7 @@ export async function placeSpareToday(
   at: { x: number; y: number },
 ): Promise<void> {
   const { row } = await todayOf(tx, cfg, tableId);
+  await refuseStillJoined(tx, [tableId]);
   if (row.takenOff) throw new AppError("table.taken_off", { tableId });
   if (row.x !== null) return;
   if (row.fixed) throw new AppError("table.fixed", { tableId });

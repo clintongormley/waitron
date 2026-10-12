@@ -102,6 +102,7 @@ describe("till-table-details-sheet", () => {
           takenOff: false,
           joinId: "j1",
           joinSeats: 6,
+          inJoinedTable: null,
         },
       }),
     });
@@ -265,6 +266,7 @@ describe("till-table-details-sheet", () => {
           takenOff: false,
           joinId: null,
           joinSeats: null,
+          inJoinedTable: null,
         },
         signals: [{ kind: "bill_requested", requestedAt: "2026-10-10T12:00:00Z" }],
       }),

@@ -287,6 +287,43 @@ describe("booking-form", () => {
     expect(el.shadowRoot!.querySelector("[role=alert]")).toBeNull();
   });
 
+  it("shows a refusal naming the table under Table, and clears it once the table changes", async () => {
+    const { el } = await mountWidget<BookingForm>(
+      "dashboard-booking-form",
+      baseProps({ tableRefusal: "table.in_joined_table" }),
+    );
+    const field = el.shadowRoot!.querySelector<TableField & { error: string }>(
+      "[data-test=booking-table]",
+    )!;
+    expect(field.error).toBe(codeMessage("table.in_joined_table"));
+    await setSelect(el, "booking-table", "t-2");
+    expect(field.error).toBe("");
+  });
+
+  it.each([
+    ["en", "Correct the highlighted fields to continue."],
+    ["es", "Corrige los campos marcados para continuar."],
+  ] as const)(
+    "says at the bottom to correct the marked fields while Table shows a refusal (%s)",
+    async (locale, sentence) => {
+      const before = currentLocale();
+      setLocale(locale);
+      try {
+        const { el } = await mountWidget<BookingForm>(
+          "dashboard-booking-form",
+          baseProps({ tableRefusal: "table.in_joined_table" }),
+        );
+        const bottom = el.shadowRoot!.querySelector("[data-test=error]")!;
+        expect(bottom.textContent!.trim()).toBe(sentence);
+        expect(bottom.textContent).not.toContain(codeMessage("table.in_joined_table"));
+        await setSelect(el, "booking-table", "t-2");
+        expect(el.shadowRoot!.querySelector("[data-test=error]")).toBeNull();
+      } finally {
+        setLocale(before);
+      }
+    },
+  );
+
   it("submits on Enter in a field, through the confirm button", async () => {
     const { el } = await mountWidget<BookingForm>("dashboard-booking-form", baseProps());
     const events: BookingInput[] = [];

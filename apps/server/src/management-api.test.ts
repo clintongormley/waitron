@@ -2896,6 +2896,7 @@ describe("floor plans", () => {
     seats: 4,
     fixed: false,
     placement: PLACE,
+    partKeys: [] as string[],
   });
   const put = (zoneId: string, body: unknown, cookie: string | undefined = managerCookie) =>
     req(`/zones/${zoneId}/floor-plan`, { method: "PUT", body: JSON.stringify(body) }, cookie);
@@ -2976,7 +2977,7 @@ describe("floor plans", () => {
     ]);
     const body = {
       ...read,
-      tables: read.tables.map((t, i) => ({ ...t, key: `k${i}` })),
+      tables: read.tables.map((t, i) => ({ ...t, key: `k${i}`, partKeys: [] })),
     };
     const res = await put(zoneId, body);
     expect(res.status).toBe(200);
@@ -3026,6 +3027,69 @@ describe("floor plans", () => {
     expect(res.status).toBe(400);
     expect(await res.json()).toMatchObject({
       error: { code: "management.request_invalid", params: { field } },
+    });
+  });
+
+  it("saves and reads Long table's parts over HTTP", async () => {
+    const zoneId = await createZone(unique("PlanJoined"));
+    const part = (key: string, label: string, seats: number) => ({
+      ...entry(key, unique(label)),
+      seats,
+      placement: null,
+      partKeys: [],
+    });
+    const res = await put(zoneId, {
+      revision: 0,
+      tables: [
+        part("c3", "Counter 3", 2),
+        part("c4", "Counter 4", 6),
+        part("c5", "Counter 5", 4),
+        { ...entry("long", unique("Long table")), seats: 10, partKeys: ["c3", "c4", "c5"] },
+      ],
+    });
+    expect(res.status).toBe(200);
+    const { ids } = (await res.json()) as { ids: Record<string, string> };
+    const read = (await (await get(zoneId)).json()) as {
+      tables: { id: string; partIds: string[] }[];
+    };
+    const partIds = Object.fromEntries(read.tables.map((t) => [t.id, t.partIds]));
+    expect(partIds).toEqual({
+      [ids.c3!]: [],
+      [ids.c4!]: [],
+      [ids.c5!]: [],
+      [ids.long!]: [ids.c3, ids.c4, ids.c5],
+    });
+  });
+
+  it.each([
+    ["a name", "c3"],
+    ["a number in the list", [3]],
+    ["null", null],
+  ])("refuses partKeys that is %s", async (_, partKeys) => {
+    const zoneId = await createZone(unique("PlanParts"));
+    const res = await put(zoneId, {
+      revision: 0,
+      tables: [{ ...entry("a", unique("L")), partKeys }],
+    });
+    expect(res.status).toBe(400);
+    expect(await res.json()).toMatchObject({
+      error: { code: "management.request_invalid", params: { field: "tables.0.partKeys" } },
+    });
+  });
+
+  it("refuses a save without partKeys, and saves nothing", async () => {
+    const zoneId = await createZone(unique("PlanNoParts"));
+    const withoutParts = { key: "a", label: unique("L"), seats: 4, fixed: false, placement: PLACE };
+    const res = await put(zoneId, { revision: 0, tables: [withoutParts] });
+    expect(res.status).toBe(400);
+    expect(await res.json()).toMatchObject({
+      error: { code: "management.request_invalid", params: { field: "tables.0.partKeys" } },
+    });
+    expect(await (await get(zoneId)).json()).toEqual({
+      zoneId,
+      revision: 0,
+      savedAt: null,
+      tables: [],
     });
   });
 

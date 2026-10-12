@@ -1,11 +1,13 @@
 import { randomUUID } from "node:crypto";
-import { eq, sql } from "drizzle-orm";
+import { eq, inArray, sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { BOOKINGS_TABLE_REMOVAL, bookings } from "@waitron/bookings";
 import {
   diningTables,
   floorPlans,
+  floorPlanTableParts,
   floorPlanTables,
+  floorResetTableParts,
   floorResetTables,
   floorTodayTables,
   floorTodayJoins,
@@ -35,6 +37,7 @@ import {
   OPERATOR,
   type PartyVenue,
 } from "./testing/party-venue.js";
+import { plannedZone } from "./testing/floor-today-venue.js";
 import { handOverOrder, placeOrder } from "./working-order.js";
 
 let v: PartyVenue;
@@ -76,6 +79,8 @@ const floorRows = {
   diningTables,
   floorPlans,
   floorPlanTables,
+  floorPlanTableParts,
+  floorResetTableParts,
   floorResetTables,
   floorTodayTables,
   floorTodayJoins,
@@ -497,6 +502,59 @@ describe("floor hierarchy deletion", () => {
     ).toEqual([]);
     expect(
       await inTx(v, (tx) => tx.select().from(floorPlans).where(eq(floorPlans.zoneId, z))),
+    ).toEqual([]);
+  });
+
+  it("clears a zone whose saved plan holds Long table made of three tables", async () => {
+    const { zoneId, master } = await plannedZone(
+      v,
+      [
+        { key: "c3", label: "Counter 3", seats: 2, place: null },
+        { key: "c4", label: "Counter 4", seats: 6, place: null },
+        { key: "c5", label: "Counter 5", seats: 4, place: null },
+        { key: "long", label: "Long table", seats: 10, partKeys: ["c3", "c4", "c5"] },
+      ],
+      NOW,
+    );
+    const masterIds = Object.values(master);
+    const partsOf = () =>
+      inTx(v, (tx) =>
+        tx
+          .select()
+          .from(floorPlanTableParts)
+          .where(inArray(floorPlanTableParts.joinedTableId, masterIds)),
+      );
+    const copiedOf = () =>
+      inTx(v, (tx) =>
+        tx
+          .select({ id: floorResetTableParts.id })
+          .from(floorResetTableParts)
+          .innerJoin(
+            floorResetTables,
+            eq(floorResetTables.id, floorResetTableParts.joinedResetTableId),
+          )
+          .where(eq(floorResetTables.zoneId, zoneId)),
+      );
+    expect(await partsOf()).toHaveLength(3);
+    expect(await copiedOf()).toHaveLength(3);
+    await inTx(v, (tx) => seatFor().clear(tx, [zoneId], NOW));
+    expect(await partsOf()).toEqual([]);
+    expect(await inTx(v, (tx) => tx.select().from(floorResetTableParts))).toEqual([]);
+    expect(
+      await inTx(v, (tx) =>
+        tx.select().from(floorPlanTables).where(inArray(floorPlanTables.id, masterIds)),
+      ),
+    ).toEqual([]);
+    expect(
+      await inTx(v, (tx) => tx.select().from(floorPlans).where(eq(floorPlans.zoneId, zoneId))),
+    ).toEqual([]);
+    expect(
+      await inTx(v, (tx) => tx.select().from(diningTables).where(eq(diningTables.zoneId, zoneId))),
+    ).toEqual([]);
+    expect(
+      await inTx(v, (tx) =>
+        tx.select().from(floorResetTables).where(eq(floorResetTables.zoneId, zoneId)),
+      ),
     ).toEqual([]);
   });
 

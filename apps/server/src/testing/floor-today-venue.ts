@@ -12,6 +12,7 @@ export interface PlannedEntry {
   seats?: number | null;
   fixed?: boolean;
   place?: { x: number; y: number; width?: number; height?: number; rotation?: number } | null;
+  partKeys?: string[];
 }
 
 const REMOVALS = enabledTableRemovals(ALL_MODULES);
@@ -73,6 +74,7 @@ export async function plannedZone(
               shape: "rect" as const,
               rotation: place.rotation ?? 0,
             },
+      partKeys: entry.partKeys ?? [],
     });
   }
   const { revision, ids } = await inTx(v, (tx) =>

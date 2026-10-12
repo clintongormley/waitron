@@ -16,6 +16,7 @@ const table = (key: string, label: string, placed: boolean, seats: number | null
   seats,
   fixed: false,
   placement: placed ? { x: 0, y: 0, width: 8, height: 8, shape: "rect", rotation: 0 } : null,
+  parts: null,
 });
 
 const props: Partial<FloorPlanTablesPanel> = {
@@ -90,6 +91,34 @@ describe.each(["light", "dark"] as const)("floor-plan-tables-panel a11y (%s them
       el.shadowRoot!.querySelector("[data-table=m4][aria-current=true] [data-mark]"),
     ).not.toBeNull();
     await expectNoA11yViolations(host);
+  });
+
+  it("shows a joined table and its parts accessibly", async () => {
+    const { el, host } = await mountWidget<FloorPlanTablesPanel>(
+      "floor-plan-tables-panel",
+      {
+        draft: {
+          tables: [
+            table("c1", "Counter 1", true, 4),
+            table("c3", "Counter 3", false, 2),
+            table("c4", "Counter 4", false, 6),
+            table("c5", "Counter 5", false, 4),
+            { ...table("long", "Long table", true, 10), parts: ["c3", "c4", "c5"] },
+            table("s2", "Stool 2", false, 1),
+          ],
+        },
+        selected: "long",
+      },
+      theme,
+    );
+    await el.updateComplete;
+    expect(el.shadowRoot!.querySelector("[data-table=c4] [data-marker=joined]")).not.toBeNull();
+    await expectNoA11yViolations(host);
+    const part = getComputedStyle(el.shadowRoot!.querySelector("[data-table=c4] [data-marker]")!);
+    for (const ground of ["--wt-color-bg", "--wt-color-surface"])
+      expect(contrastRatio(part.backgroundColor, tokenColour(host, ground))).toBeGreaterThanOrEqual(
+        3,
+      );
   });
 
   it("shows the list inside a sheet accessibly", async () => {

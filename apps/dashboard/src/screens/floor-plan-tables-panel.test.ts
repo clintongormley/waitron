@@ -28,6 +28,7 @@ const table = (
   seats,
   fixed: false,
   placement: placed ? { x: 0, y: 0, width: 8, height: 8, shape: "rect", rotation: 0 } : null,
+  parts: null,
 });
 
 const draft: FloorPlanDraft = {
@@ -113,10 +114,10 @@ it("shows each row's marker, name, seats and a bin, under Name and Seats heads",
   const heads = [...el.shadowRoot!.querySelectorAll("[data-head]")].map((h) =>
     h.textContent!.trim(),
   );
-  expect(heads).toEqual(["Name", "Seats"]);
+  expect(heads).toEqual(["Name", "Seats", "Made of"]);
   expect(
     el.shadowRoot!.querySelector("[data-legend]")!.textContent!.replace(/\s+/g, " ").trim(),
-  ).toBe("on plan not placed");
+  ).toBe("on plan not placed in a joined table");
 });
 
 it("starts the Name and Seats heads where each row's name and seats start", async () => {
@@ -150,7 +151,7 @@ it("words its legend in Spanish", async () => {
   const el = await open();
   expect(
     el.shadowRoot!.querySelector("[data-legend]")!.textContent!.replace(/\s+/g, " ").trim(),
-  ).toBe("en el plano sin colocar");
+  ).toBe("en el plano sin colocar en una mesa unida");
 });
 
 it("draws a placed marker as a filled dot and a spare one as a hollow ring", async () => {
@@ -262,10 +263,14 @@ it("the bin asks the page to delete the table and changes nothing itself", async
   expect(selects).toEqual([]);
 });
 
-it("ends with Add tables", async () => {
+it("ends with Add tables and Add joined table", async () => {
   const el = await open();
   const elements = [...el.shadowRoot!.children].filter((c) => c.tagName !== "STYLE");
-  expect(elements.at(-1)!.matches("wt-button[data-action=add-tables]")).toBe(true);
+  expect(
+    [...elements.at(-1)!.children].map(
+      (c) => c.matches("wt-button") && c.getAttribute("data-action"),
+    ),
+  ).toEqual(["add-tables", "add-joined-table"]);
 });
 
 it("Add tables asks the page to open its dialog", async () => {
@@ -276,4 +281,125 @@ it("Add tables asks the page to open its dialog", async () => {
   expect(add.textContent!.trim()).toBe("Add tables");
   add.click();
   expect(asked).toBe(1);
+});
+
+const joined: FloorPlanDraft = {
+  tables: [
+    table("c1", "Counter 1", true, 4),
+    table("c3", "Counter 3", false, 2),
+    table("c4", "Counter 4", false, 6),
+    table("c5", "Counter 5", false, 4),
+    { ...table("long", "Long table", true, 10), parts: ["c4", "c5", "c3"] },
+    table("s2", "Stool 2", false, 1),
+  ],
+};
+
+const madeOf = (r: HTMLElement) => r.querySelector("[data-made-of]")!.textContent!.trim();
+
+it("shows a part greyed with its joined table's name, and a joined table's parts shortened", async () => {
+  const { el, host } = await mount({ draft: joined });
+  host.style.setProperty("--wt-color-text-muted", "rgb(41, 42, 43)");
+  const part = row(el, "Counter 4");
+  expect(part.querySelector("[data-marker]")!.getAttribute("data-marker")).toBe("joined");
+  expect(madeOf(part)).toBe("in Long table");
+  expect(getComputedStyle(part.querySelector("[data-name]")!).color).toBe("rgb(41, 42, 43)");
+  expect(getComputedStyle(part.querySelector("[data-seats]")!).color).toBe("rgb(41, 42, 43)");
+  expect(toggle(part).getAttribute("aria-disabled")).toBe("true");
+  expect(toggle(part).disabled).toBe(false);
+  expect(madeOf(row(el, "Long table"))).toBe("Counter 3, 4, 5");
+  expect(madeOf(row(el, "Counter 1"))).toBe("—");
+  expect(row(el, "Long table").querySelector("[data-marker]")!.getAttribute("data-marker")).toBe(
+    "placed",
+  );
+  expect(toggle(row(el, "Counter 1")).hasAttribute("aria-disabled")).toBe(false);
+  expect(rows(el).every((r) => r.querySelector("[data-action=delete]") !== null)).toBe(true);
+  const heads = [...el.shadowRoot!.querySelectorAll("[data-head]")].map((h) =>
+    h.textContent!.trim(),
+  );
+  expect(heads).toEqual(["Name", "Seats", "Made of"]);
+  expect(
+    el.shadowRoot!.querySelector("[data-legend]")!.textContent!.replace(/\s+/g, " ").trim(),
+  ).toBe("on plan not placed in a joined table");
+});
+
+it("tells a part's joined table once, in its toggle's name, and describes a marked part by its mark alone", async () => {
+  const el = await open({ draft: joined, marks: new Map([["c4", "Booked 12 Oct, 21:00"]]) });
+  const marked = toggle(row(el, "Counter 4"));
+  await expect.element(marked).toHaveAccessibleName(/^Counter 4\b.*\bin Long table$/);
+  await expect.element(marked).toHaveAccessibleDescription("Booked 12 Oct, 21:00");
+  const part = toggle(row(el, "Counter 3"));
+  await expect.element(part).toHaveAccessibleName(/^Counter 3\b.*\bin Long table$/);
+  await expect.element(part).toHaveAccessibleDescription("");
+});
+
+it("writes — in Made of for a joined table with no parts", async () => {
+  const el = await open({
+    draft: { tables: [{ ...table("long", "Long table", true, 10), parts: [] }] },
+  });
+  expect(madeOf(row(el, "Long table"))).toBe("—");
+});
+
+it("draws a part's marker as a grey square", async () => {
+  const { el, host } = await mount({ draft: joined });
+  host.style.setProperty("--wt-color-text-muted", "rgb(41, 42, 43)");
+  const marker = getComputedStyle(row(el, "Counter 3").querySelector("[data-marker]")!);
+  expect(marker.backgroundColor).toBe("rgb(41, 42, 43)");
+  expect(marker.borderRadius).not.toBe("9999px");
+});
+
+it("clicking a part changes nothing and selects nothing", async () => {
+  const el = await open({ draft: joined });
+  const { changes, selects } = listen(el);
+  let noRoom = 0;
+  el.addEventListener("floor-plan-no-room", () => noRoom++);
+  toggle(row(el, "Counter 4")).click();
+  expect(changes).toEqual([]);
+  expect(selects).toEqual([]);
+  expect(noRoom).toBe(0);
+});
+
+it("Add joined table asks the page to open its window", async () => {
+  const el = await open();
+  const asked: unknown[] = [];
+  el.addEventListener("floor-plan-add-joined-table", (e) => asked.push((e as CustomEvent).detail));
+  const add = el.shadowRoot!.querySelector<HTMLElement>("wt-button[data-action=add-joined-table]")!;
+  expect(add.getAttribute("variant")).toBe("secondary");
+  expect(add.textContent!.trim()).toBe("Add joined table");
+  add.click();
+  expect(asked).toEqual([{}]);
+});
+
+it("puts Add tables and Add joined table side by side", async () => {
+  const el = await open();
+  const add = el.shadowRoot!.querySelector("wt-button[data-action=add-tables]")!;
+  const joinedButton = el.shadowRoot!.querySelector("wt-button[data-action=add-joined-table]")!;
+  const [a, b] = [add.getBoundingClientRect(), joinedButton.getBoundingClientRect()];
+  expect(b.top).toBeCloseTo(a.top, 0);
+  expect(b.left).toBeGreaterThan(a.right);
+});
+
+it("shows the list in Spanish", async () => {
+  setLocale("es-ES");
+  const el = await open({ draft: joined });
+  const heads = [...el.shadowRoot!.querySelectorAll("[data-head]")].map((h) =>
+    h.textContent!.trim(),
+  );
+  expect(heads).toEqual(["Nombre", "Plazas", "Formada por"]);
+  expect(madeOf(row(el, "Counter 4"))).toBe("en Long table");
+  expect(
+    el.shadowRoot!.querySelector("[data-legend]")!.textContent!.replace(/\s+/g, " ").trim(),
+  ).toBe("en el plano sin colocar en una mesa unida");
+  expect(
+    el.shadowRoot!.querySelector("wt-button[data-action=add-joined-table]")!.textContent!.trim(),
+  ).toBe("Añadir mesa unida");
+});
+
+it("starts the Made of head where each row's Made of starts", async () => {
+  const el = await open({ draft: joined });
+  const madeOfHead = [...el.shadowRoot!.querySelectorAll("[data-head]")].at(-1)!;
+  for (const r of rows(el))
+    expect(r.querySelector("[data-made-of]")!.getBoundingClientRect().left).toBeCloseTo(
+      madeOfHead.getBoundingClientRect().left,
+      0,
+    );
 });

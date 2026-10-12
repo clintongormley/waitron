@@ -10,6 +10,8 @@ import type { PlanPlacement } from "../api/client.js";
 import {
   patchTable,
   placeTable,
+  joinedTableOf,
+  madeOfText,
   sendChange,
   tableName,
   type DraftTable,
@@ -26,7 +28,7 @@ export class FloorPlanTablesPanel extends LitElement {
         display: flex;
         flex-direction: column;
         gap: var(--wt-space-2);
-        --columns: var(--wt-space-3) minmax(0, 1fr) var(--wt-space-6);
+        --columns: var(--wt-space-3) minmax(0, 1fr) var(--wt-space-6) minmax(0, 1fr);
       }
       .title {
         display: flex;
@@ -62,6 +64,10 @@ export class FloorPlanTablesPanel extends LitElement {
       .marker.spare {
         background: transparent;
         border: 2px solid var(--wt-color-text-muted);
+      }
+      .marker.joined {
+        border-radius: var(--wt-radius-sm);
+        background: var(--wt-color-text-muted);
       }
       .columns,
       .toggle {
@@ -119,8 +125,17 @@ export class FloorPlanTablesPanel extends LitElement {
         outline: var(--wt-focus-ring);
         outline-offset: calc(-1 * var(--wt-focus-offset));
       }
-      .name {
+      .toggle[aria-disabled="true"] {
+        cursor: default;
+      }
+      .name,
+      .made-of {
         overflow-wrap: anywhere;
+      }
+      .made-of,
+      .toggle[aria-disabled="true"] .name,
+      .toggle[aria-disabled="true"] [data-seats] {
+        color: var(--wt-color-text-muted);
       }
       .mark {
         grid-column: 1;
@@ -138,9 +153,14 @@ export class FloorPlanTablesPanel extends LitElement {
         clip-path: inset(50%);
         white-space: nowrap;
       }
-      .add {
-        display: block;
+      .foot {
+        display: flex;
+        flex-wrap: wrap;
+        gap: var(--wt-space-2);
         margin-top: auto;
+      }
+      .foot wt-button {
+        flex: 1 1 auto;
       }
     `,
   ];
@@ -164,6 +184,7 @@ export class FloorPlanTablesPanel extends LitElement {
   }
 
   #press(table: DraftTable): void {
+    if (joinedTableOf(this.draft, table.key) !== undefined) return;
     if (table.placement === null) {
       const next = placeTable(this.draft, table.key, this.places.get(table.key));
       if (next === this.draft) {
@@ -179,11 +200,24 @@ export class FloorPlanTablesPanel extends LitElement {
       this.#send<FloorPlanSelect>("floor-plan-select", { key: null });
   }
 
+  #madeOf(table: DraftTable, joined: DraftTable | undefined): string {
+    if (joined !== undefined)
+      return fill("floor_plan_editor.in_named", { name: tableName(joined) });
+    if (table.parts === null) return "—";
+    const names = table.parts.flatMap((key) => {
+      const part = this.draft.tables.find((t) => t.key === key);
+      return part === undefined ? [] : [tableName(part)];
+    });
+    return names.length === 0 ? "—" : madeOfText(names);
+  }
+
   #row(table: DraftTable, index: number) {
     const name = tableName(table);
     const placed = table.placement !== null;
     const mark = this.marks.get(table.key);
     const markId = `mark-${index}`;
+    const joined = joinedTableOf(this.draft, table.key);
+    const marker = joined !== undefined ? "joined" : placed ? "placed" : "spare";
     return html`<li
       data-table=${table.key}
       aria-current=${this.selected === table.key ? "true" : nothing}
@@ -193,18 +227,17 @@ export class FloorPlanTablesPanel extends LitElement {
         class="toggle"
         data-action="toggle"
         aria-pressed=${placed ? "true" : "false"}
+        aria-disabled=${joined === undefined ? nothing : "true"}
         aria-describedby=${mark === undefined ? nothing : markId}
         @click=${() => this.#press(table)}
       >
-        <span
-          class="marker ${placed ? "placed" : "spare"}"
-          data-marker=${placed ? "placed" : "spare"}
-        ></span>
+        <span class="marker ${marker}" data-marker=${marker}></span>
         <span class="name" data-name>${name}</span>
         <span
           ><span class="visually-hidden">${t("floor_plan_editor.seats")} </span
           ><span data-seats>${table.seats ?? "—"}</span></span
         >
+        <span class="made-of" data-made-of>${this.#madeOf(table, joined)}</span>
       </button>
       <wt-button
         variant="ghost"
@@ -226,25 +259,34 @@ export class FloorPlanTablesPanel extends LitElement {
         <span class="legend" data-legend aria-hidden="true">
           <span><span class="marker placed"></span>${t("floor_plan_editor.on_plan")}</span>
           <span><span class="marker spare"></span>${t("floor_plan_editor.not_placed")}</span>
+          <span><span class="marker joined"></span>${t("floor_plan_editor.in_joined_table")}</span>
         </span>
       </div>
       <div class="heads" aria-hidden="true">
         <span class="columns"
           ><span data-head>${t("floor_plan_editor.name")}</span
-          ><span data-head>${t("floor_plan_editor.seats")}</span></span
+          ><span data-head>${t("floor_plan_editor.seats")}</span
+          ><span data-head>${t("floor_plan_editor.made_of")}</span></span
         >
         <wt-button variant="ghost"><wt-icon name="bin"></wt-icon></wt-button>
       </div>
       <ul>
         ${tables.map((table, index) => this.#row(table, index))}
       </ul>
-      <wt-button
-        class="add"
-        variant="secondary"
-        data-action="add-tables"
-        @click=${() => this.#send("floor-plan-add-tables", {})}
-        >${t("floor_plan_editor.add_tables")}</wt-button
-      >
+      <div class="foot">
+        <wt-button
+          variant="secondary"
+          data-action="add-tables"
+          @click=${() => this.#send("floor-plan-add-tables", {})}
+          >${t("floor_plan_editor.add_tables")}</wt-button
+        >
+        <wt-button
+          variant="secondary"
+          data-action="add-joined-table"
+          @click=${() => this.#send("floor-plan-add-joined-table", {})}
+          >${t("floor_plan_editor.add_joined_table")}</wt-button
+        >
+      </div>
     `;
   }
 }

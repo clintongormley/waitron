@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, expect, it, onTestFinished, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
 import type { WtButton, WtFloorPlanCanvas, WtModal, WtSheet } from "@waitron/ui";
-import { chooseOption } from "@waitron/ui/src/test-helpers.js";
+import { chooseOption, chooseOptions } from "@waitron/ui/src/test-helpers.js";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import "./floor-plan-editor.js";
 import type { FloorPlanEditor } from "./floor-plan-editor.js";
@@ -30,8 +30,16 @@ function terrace(revision = 3): FloorPlan {
     revision,
     savedAt: revision === 0 ? null : "2026-10-01T10:00:00.000Z",
     tables: [
-      { id: "m1", liveTableId: "l1", label: "T1", seats: 4, fixed: false, placement },
-      { id: "m2", liveTableId: "l2", label: "T2", seats: 2, fixed: false, placement: null },
+      { id: "m1", liveTableId: "l1", label: "T1", seats: 4, fixed: false, placement, partIds: [] },
+      {
+        id: "m2",
+        liveTableId: "l2",
+        label: "T2",
+        seats: 2,
+        fixed: false,
+        placement: null,
+        partIds: [],
+      },
     ],
   };
 }
@@ -40,7 +48,9 @@ const bar: FloorPlan = {
   zoneId: "z2",
   revision: 1,
   savedAt: "2026-10-01T10:00:00.000Z",
-  tables: [{ id: "b1", liveTableId: "l5", label: "B1", seats: 2, fixed: false, placement }],
+  tables: [
+    { id: "b1", liveTableId: "l5", label: "B1", seats: 2, fixed: false, placement, partIds: [] },
+  ],
 };
 
 function stubApi(overrides: Partial<DashboardApi> = {}): DashboardApi {
@@ -532,17 +542,25 @@ it("puts the panel beside the canvas at 1280 px and in a collapsed sheet at 390 
   expect(sheet(el)!.heading).toBe("Tables");
 });
 
-it("at 1280 px puts Add tables at the bottom of a side column taller than its list", async () => {
-  await viewport(1280, 800);
-  const el = await open();
-  await expect.poll(() => el.shadowRoot!.querySelector(".side")).not.toBeNull();
-  const column = el.shadowRoot!.querySelector<HTMLElement>(".side")!;
-  const add = column
-    .querySelector("floor-plan-tables-panel")!
-    .shadowRoot!.querySelector<HTMLElement>("wt-button[data-action=add-tables]")!;
-  expect(column.scrollHeight).toBe(column.clientHeight);
-  expect(add.getBoundingClientRect().bottom).toBeCloseTo(column.getBoundingClientRect().bottom, 0);
-});
+it.each(["en-GB", "es-ES"] as const)(
+  "at 1280 px in %s puts the Add buttons at the bottom of a side column taller than its list",
+  async (locale) => {
+    setLocale(locale);
+    await viewport(1280, 800);
+    const el = await open();
+    await expect.poll(() => el.shadowRoot!.querySelector(".side")).not.toBeNull();
+    const column = el.shadowRoot!.querySelector<HTMLElement>(".side")!;
+    const foot = column
+      .querySelector("floor-plan-tables-panel")!
+      .shadowRoot!.querySelector<HTMLElement>(".foot")!;
+    expect(foot.querySelector("wt-button[data-action=add-tables]")).not.toBeNull();
+    expect(column.scrollHeight).toBe(column.clientHeight);
+    expect(foot.getBoundingClientRect().bottom).toBeCloseTo(
+      column.getBoundingClientRect().bottom,
+      0,
+    );
+  },
+);
 
 it("the sheet's heading names the selected table", async () => {
   await viewport(390, 844);
@@ -830,8 +848,24 @@ it("gives added tables keys no draft table holds, through saves, undo and redo",
   });
   const saved = terrace(4);
   saved.tables.push(
-    { id: "m5", liveTableId: "l5", label: "Terrace 1", seats: 4, fixed: false, placement: null },
-    { id: "m6", liveTableId: "l6", label: "Terrace 2", seats: 4, fixed: false, placement: null },
+    {
+      id: "m5",
+      liveTableId: "l5",
+      label: "Terrace 1",
+      seats: 4,
+      fixed: false,
+      placement: null,
+      partIds: [],
+    },
+    {
+      id: "m6",
+      liveTableId: "l6",
+      label: "Terrace 2",
+      seats: 4,
+      fixed: false,
+      placement: null,
+      partIds: [],
+    },
   );
   const getFloorPlan = vi.fn().mockResolvedValueOnce(terrace()).mockResolvedValue(saved);
   const el = await open(stubApi({ saveFloorPlan, getFloorPlan }));
@@ -855,6 +889,54 @@ it("gives added tables keys no draft table holds, through saves, undo and redo",
   keysUnique();
   await press(el, "redo");
   expect(keysUnique()).toEqual(["m1", "m2", "m5", "m6", "new:5"]);
+});
+
+it("Add joined table from the list opens the window, and Add puts Long table in the list not placed", async () => {
+  const counters = terrace();
+  counters.tables.push(
+    ...(
+      [
+        ["m3", "Counter 3", 2],
+        ["m4", "Counter 4", 6],
+        ["m5", "Counter 5", 4],
+      ] as const
+    ).map(([id, label, seats]) => ({
+      id,
+      liveTableId: null,
+      label,
+      seats,
+      fixed: false,
+      placement: null,
+      partIds: [],
+    })),
+  );
+  const el = await open(stubApi({ getFloorPlan: vi.fn().mockResolvedValue(counters) }));
+  panelOf(el)
+    .shadowRoot!.querySelector<HTMLElement>("wt-button[data-action=add-joined-table]")!
+    .click();
+  const window = el.shadowRoot!.querySelector("floor-plan-add-joined-table")!;
+  await window.updateComplete;
+  const modal = window.shadowRoot!.querySelector<WtModal>(
+    "wt-modal[data-dialog=add-joined-table]",
+  )!;
+  await modal.updateComplete;
+  expect(modal.open).toBe(true);
+  expect(window.takenElsewhere).toBeInstanceOf(Set);
+  await chooseOption(modal.querySelector("[name=table-name]")!, "Long table");
+  await chooseOption(modal.querySelector("[name=seats]")!, "10");
+  await chooseOptions(modal.querySelector("[name=made-of]")!, ["m3", "m4", "m5"]);
+  await window.updateComplete;
+  modal.querySelector<HTMLElement>("wt-button[data-action=add-confirm]")!.click();
+  await el.updateComplete;
+  await expect.poll(() => modal.open).toBe(false);
+  const long = panelOf(el).draft.tables.find((t) => t.label === "Long table");
+  expect(long).toMatchObject({ seats: 10, placement: null, parts: ["m3", "m4", "m5"] });
+  await panelOf(el).updateComplete;
+  const row = panelOf(el).shadowRoot!.querySelector<HTMLElement>(`[data-table="${long!.key}"]`)!;
+  expect(row.querySelector("[data-marker]")!.getAttribute("data-marker")).toBe("spare");
+  expect(row.querySelector("[data-made-of]")!.textContent!.trim()).toBe("Counter 3, 4, 5");
+  expect(canvas(el).tables.some((t) => t.key === long!.key && t.placement !== null)).toBe(false);
+  expectSaveAwake(el);
 });
 
 const sizes: [[number, number], [number, number]][] = [
@@ -1148,6 +1230,66 @@ it.each([
   expect(hintText(el)).toBe(text);
   await fromCanvas(el, "wt-table-select", { key: "m1" });
   expect(hintText(el)).toBeNull();
+});
+
+function counters(): FloorPlan {
+  const plain = (id: string, label: string, seats: number) => ({
+    id,
+    liveTableId: `l${id}`,
+    label,
+    seats,
+    fixed: false,
+    placement: null,
+    partIds: [],
+  });
+  return {
+    zoneId: "z1",
+    revision: 3,
+    savedAt: "2026-10-01T10:00:00.000Z",
+    tables: [
+      { ...plain("c1", "Counter 1", 4), placement },
+      plain("c3", "Counter 3", 2),
+      plain("c4", "Counter 4", 6),
+      plain("c5", "Counter 5", 4),
+      {
+        ...plain("long", "Long table", 10),
+        placement: { ...placement, x: 20 },
+        partIds: ["c3", "c4", "c5"],
+      },
+    ],
+  };
+}
+
+it.each([
+  ["en-GB", "Delete Counter 4?", "It leaves the tables list and Long table."],
+  ["es-ES", "¿Eliminar Counter 4?", "Sale de la lista de mesas y de Long table."],
+])(
+  "the delete question for a part says it leaves its joined table (%s)",
+  async (locale, head, text) => {
+    setLocale(locale);
+    const el = await open(stubApi({ getFloorPlan: vi.fn().mockResolvedValue(counters()) }));
+    const dialog = await askDelete(el, "c4");
+    expect(dialog.heading).toBe(head);
+    expect(dialog.querySelector("[data-delete-text]")!.textContent!.trim()).toBe(text);
+  },
+);
+
+it("Delete on a part takes it out of Long table as one step, and Undo puts it back in", async () => {
+  const el = await open(stubApi({ getFloorPlan: vi.fn().mockResolvedValue(counters()) }));
+  const panel = () => el.shadowRoot!.querySelector("floor-plan-tables-panel")!;
+  const dialog = await askDelete(el, "c4");
+  const closed = closeOf(dialog);
+  await press(el, "delete-confirm");
+  await closed;
+  await el.updateComplete;
+  expect(panel().draft.tables.map((t) => t.key)).toEqual(["c1", "c3", "c5", "long"]);
+  expect(panel().draft.tables.find((t) => t.key === "long")!.parts).toEqual(["c3", "c5"]);
+  expectSaveAwake(el);
+  await press(el, "undo");
+  expect(panel().draft.tables.map((t) => t.key)).toEqual(["c1", "c3", "c4", "c5", "long"]);
+  expect(panel().draft.tables.find((t) => t.key === "long")!.parts).toEqual(["c3", "c4", "c5"]);
+  expectSaveQuiet(el);
+  expect(button(el, "undo").disabled).toBe(true);
 });
 
 it("Undo of a Delete brings back the table", async () => {

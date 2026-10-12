@@ -1016,6 +1016,13 @@
       "when": 1791823133311,
       "tag": "0144_drop_saved_joins",
       "breakpoints": true
+    },
+    {
+      "idx": 145,
+      "version": "6",
+      "when": 1791829889331,
+      "tag": "0145_floor_table_parts",
+      "breakpoints": true
     }
   ]
 }

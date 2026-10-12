@@ -435,6 +435,10 @@ function parseZonePlanSave(body: unknown): ZonePlanSave {
       if (typeof table.fixed !== "boolean") refuse(`${at}.fixed`);
       if (table.placement !== null && !isRecord(table.placement)) refuse(`${at}.placement`);
       const id = optionalId(table.id, `${at}.id`);
+      const partKeys = table.partKeys;
+      if (!Array.isArray(partKeys) || !partKeys.every((key) => typeof key === "string")) {
+        refuse(`${at}.partKeys`);
+      }
       return {
         ...(id === undefined ? {} : { id }),
         key: table.key as string,
@@ -442,6 +446,7 @@ function parseZonePlanSave(body: unknown): ZonePlanSave {
         seats: table.seats as number | null,
         fixed: table.fixed as boolean,
         placement: table.placement as ZonePlanSave["tables"][number]["placement"],
+        partKeys: partKeys as string[],
       };
     }),
   };

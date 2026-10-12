@@ -1595,15 +1595,16 @@ The missing guard is an item in `docs/backlog.md`, under "Modules, data and code
 
 Edit the master plan on the dashboard; work from today's plan on the till. Saving an existing
 master does not rearrange tables during service. The first save builds today's plan immediately
-(`apps/server/src/floor-plan.ts:390`). Thereafter `ensureToday` resets a live zone at the first
+(`apps/server/src/floor-plan.ts:383`). Thereafter `ensureToday` resets a live zone at the first
 floor read or change that sees a new business day, or catches up its pending reset rows
-(`apps/server/src/floor-today-store.ts:425`). Reset to saved plan takes a fresh copy explicitly.
+(`apps/server/src/floor-today-store.ts:432`). Reset to saved plan takes a fresh copy explicitly.
 
 A reset copies the master's tables into `floor_reset_tables`
-(`apps/server/src/floor-today-store.ts:129`). Occupied tables wait.
+(`apps/server/src/floor-today-store.ts:143`), and each joined table's parts into
+`floor_reset_table_parts` (`apps/server/src/floor-today-store.ts:161`). Occupied tables wait.
 After their tab closes, the next floor read or change can apply the pending rows; closing the tab
 itself does not run that catch-up. New live tables are created from those reset rows, including
-rows that had to wait for a name (`apps/server/src/floor-today-store.ts:323`). This separation keeps
+rows that had to wait for a name (`apps/server/src/floor-today-store.ts:329`). This separation keeps
 a later master edit from changing the copy a reset is still applying.
 
 A closing party keeps its table names as text and releases its `party_tables` rows
@@ -1614,6 +1615,13 @@ each module's `TableRemoval` seat before deleting the table
 (`apps/server/src/delivery-release.ts:10`). A table is in service through `tableInService`: it has a today's row in a live zone.
 That test does not exclude a table taken off today. There is no active column on `dining_tables`
 (`packages/db/src/table-in-service.ts:4`).
+A part of a joined table that the reset has applied, while the joined table has a live table, the
+part holds no open party and it is in none of today's merges, is refused `table.in_joined_table` on
+the paths that seat a party at it, move guests or a bill to it, join it to a party, merge it on
+today's map, put it on the map as a spare, name it as an order's table or accept a department
+transfer to it (`stillJoinedPart`, `packages/db/src/joined-parts.ts:9`); bookings refuse a part of
+the saved plan (`savedPart`, `packages/db/src/joined-parts.ts:29`, used at
+`packages/bookings/src/bookings.ts:55`).
 
 Measured on 2026-10-11, Node v26.7.0, after applying every manifest migration to `node:sqlite`:
 `pragma_foreign_key_list` reports six incoming keys, all `ON DELETE NO ACTION`:

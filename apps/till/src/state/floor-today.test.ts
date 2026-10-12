@@ -16,6 +16,7 @@ function today(over: Partial<TableToday> = {}): TableToday {
     takenOff: false,
     joinId: null,
     joinSeats: null,
+    inJoinedTable: null,
     ...over,
   };
 }
@@ -380,6 +381,21 @@ describe("spares and taken-off tables", () => {
     expect(takenOffOf(zone)).toEqual([off]);
   });
 
+  it("offers Stool 2 as a spare but no part of Long table", () => {
+    const part = (id: string, label: string) =>
+      table(id, label, { today: today({ placement: null, inJoinedTable: "Long table" }) });
+    const long = table("long", "Long table");
+    const stool = table("stool-2", "Stool 2", { today: today({ placement: null }) });
+    const zone = [
+      part("c3", "Counter 3"),
+      part("c4", "Counter 4"),
+      part("c5", "Counter 5"),
+      long,
+      stool,
+    ];
+    expect(sparesOf(zone)).toEqual([stool]);
+  });
+
   it("puts a spare in the middle of the zone's crop", () => {
     const square = { width: 8, height: 8 };
     const left = table("l", "1", { today: today({ placement: place(0, 0, square) }) });
@@ -392,5 +408,15 @@ describe("spares and taken-off tables", () => {
       x: 0,
       y: 0,
     });
+  });
+
+  it("leaves a placed part still in a joined table out of the spare's crop", () => {
+    const square = { width: 8, height: 8 };
+    const left = table("l", "1", { today: today({ placement: place(0, 0, square) }) });
+    const right = table("r", "2", { today: today({ placement: place(20, 0, square) }) });
+    const part = table("c3", "Counter 3", {
+      today: today({ placement: place(500, 500, square), inJoinedTable: "Long table" }),
+    });
+    expect(spareSpot([left, right, part])).toEqual({ x: 10, y: 0 });
   });
 });
