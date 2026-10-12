@@ -624,6 +624,10 @@ browser test** — most of these rules exist because a test passed while proving
   `1 skipped` and nothing else, so a local green run of `apps/server` may not have run them. Guard:
   `scripts/ci-workflow.test.mjs`, weaker than its name — it reads `ci.yml` as TEXT, so install
   commands left only in a YAML comment, or in a step an `if:` switches off, pass it.
+- **Vitest reads a browser's `connectTimeout` from the ROOT config's `browser` block only**; the
+  command-line flag and a project's own `browser` block are ignored without a word. Cost: A527's
+  first forced-failure control passed. Receipt:
+  [ci-and-gates.md](docs/developers/ci-and-gates.md#a-failed-venue-service-shard-keeps-its-browser-start-up-record).
 - **Under an AI agent (`AI_AGENT` or `CLAUDECODE` set), Vitest hides a passing test's console
   output**; unset both to see it.
 - **A Vitest run that shows no `Tests` count is no evidence that anything passed, whatever its exit

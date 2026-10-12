@@ -7,19 +7,21 @@ their full text.
 
 On 2026-10-11, [CI attempt 1's venue-service shard 2](https://github.com/clintongormley/waitron/actions/runs/38170156450/job/114561139899)
 passed 317 database tests, then reported `Failed to connect to the browser session` before any
-browser test started. Its test artifact contains the timeout stack, which does not distinguish
-an absent browser connection from an absent readiness message. The cause remains unclassified.
+browser test started; attempt 2 passed on the same commit, and so did local macOS runs of shard
+`2/4` with a warm and a cold dependency cache. The cause is still unknown.
 
-[Diagnostic attempt 2](https://github.com/clintongormley/waitron/actions/runs/38170156450/job/114564298502)
-passed all 1,092 shard tests on the same commit, `497a37a01dcf2ddb0b841b650af52e77c894785f`.
-Warm and cold dependency-cache runs of shard `2/4` in an installed macOS candidate each passed
-all 40 files and 1,092 tests. Those runs did not reproduce the failure; they do not establish a
-repair or a Linux runner resource cause. The merged coverage job passed the package's thresholds.
+A527 (2026-10-12) could not reproduce it: 100 repeats of shard `2/4` on CI's Linux runners, with
+Vitest's browser channels and Playwright's browser log on, all passed (probe run 38189152637), and
+in the newest 900 CI runs the message appears in that one job's log only. What A527 landed instead
+is a record: every `test-venue-service` shard now logs each browser start-up step with its time,
+and a failed shard keeps the artifact `venue-service-diagnostics-<shard>` (its whole output, 5 s
+resource samples and a runner snapshot, 14 days). How to read one, and the measurements:
+[ci-and-gates.md](../developers/ci-and-gates.md#a-failed-venue-service-shard-keeps-its-browser-start-up-record).
 
-Next: reproduce on Linux with `DEBUG=vitest:browser:pool,vitest:browser:playwright,vitest:browser:api`
-and `VITEST_PW_DEBUG=1`. Retain page navigation/resource errors, browser connection and readiness
-events, plus runner memory/process state. GitHub's debug-enabled rerun did not set those Vitest
-variables. Locate the missing startup event before changing timeouts, concurrency or retries.
+Next: when the message appears again, download that shard's artifact and find the first start-up
+step missing from `shard.log`; fix that step. Do not raise `connectTimeout`, add a retry or lower
+concurrency first. A raised limit goes in the root config's `browser` block, the only place Vitest
+4.1.11 reads it.
 
 ## The stream pause test's frozen-bucket control failed once in CI
 
