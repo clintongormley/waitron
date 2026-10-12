@@ -85,6 +85,29 @@ function captureEvents(el: TillTableDetailsSheet): string[] {
 }
 
 describe("till-table-details-sheet", () => {
+  it("labels Split tables… in English and Spanish", async () => {
+    const long = table({
+      id: "long",
+      label: "Long table",
+      today: {
+        placement: { x: 10, y: 20, width: 6, height: 2, shape: "rect", rotation: 0 },
+        seats: 10,
+        fixed: false,
+        takenOff: false,
+        joinId: null,
+        joinSeats: null,
+        inJoinedTable: null,
+        joined: { parts: ["c3", "c4"], splitOff: ["c5"], apart: false },
+        splitOffFrom: null,
+      },
+    });
+    const el = await mount({ table: long, heading: "Long table", actions: true });
+    expect(text(el, '[data-today-action="split-off"]')).toBe("Split tables…");
+    setLocale("es-ES");
+    const es = await mount({ table: long, heading: "Long table", actions: true });
+    expect(text(es, '[data-today-action="split-off"]')).toBe("Separar mesas…");
+  });
+
   it("is closed with no table", async () => {
     const el = await mount({ table: null });
     expect(dialogOf(el).open).toBe(false);
@@ -103,6 +126,8 @@ describe("till-table-details-sheet", () => {
           joinId: "j1",
           joinSeats: 6,
           inJoinedTable: null,
+          joined: null,
+          splitOffFrom: null,
         },
       }),
     });
@@ -267,6 +292,8 @@ describe("till-table-details-sheet", () => {
           joinId: null,
           joinSeats: null,
           inJoinedTable: null,
+          joined: null,
+          splitOffFrom: null,
         },
         signals: [{ kind: "bill_requested", requestedAt: "2026-10-10T12:00:00Z" }],
       }),

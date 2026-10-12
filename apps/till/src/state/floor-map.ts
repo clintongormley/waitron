@@ -143,7 +143,12 @@ export function drawnGroupKey(table: TableState, linkId: string | null): string 
  * `linkId`.
  */
 export function mapTables(zoneTables: readonly TableState[]): FloorMapTable[] {
-  const drawn = zoneTables.filter(onTodaysPlan);
+  // `wt-floor-map` draws in the order given, so a part split off lands on top of its joined table.
+  const onPlan = zoneTables.filter(onTodaysPlan);
+  const drawn = [
+    ...onPlan.filter((table) => table.today!.splitOffFrom === null),
+    ...onPlan.filter((table) => table.today!.splitOffFrom !== null),
+  ];
   const groupsOfParty = new Map<string, Set<string>>();
   for (const table of drawn) {
     if (table.party === null) continue;

@@ -120,7 +120,7 @@ import {
 import { segmentedOptionStyles } from "../widgets/segmented-control-styles.js";
 import { signalChipStyles, signalChips } from "../widgets/signal-chips.js";
 import { billRequestOf } from "../state/table-signals.js";
-import { stillJoined } from "../state/floor-today.js";
+import { outOfServiceJoined } from "../state/floor-today.js";
 import type { AdjustKind, AdjustTarget } from "../widgets/adjustment-dialog.js";
 import type { PayLine, PayWay } from "../widgets/bill-pay-dialog.js";
 import "../widgets/dead-ends-section.js";
@@ -4326,7 +4326,7 @@ export class TillTableOrderScreen extends LitElement {
     const own = new Set(this.party?.tableIds ?? []);
     const keepOwn = this.actionVerb === "move" && own.size > 1;
     const tables = this.tables
-      .filter((table) => !stillJoined(table))
+      .filter((table) => !outOfServiceJoined(table))
       .sort((a, b) => inNumberOrder(a.label, b.label));
     const owned = keepOwn ? tables.filter((table) => own.has(table.id)) : [];
     return [...owned, ...tables.filter((table) => !own.has(table.id))];

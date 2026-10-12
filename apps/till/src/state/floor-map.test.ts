@@ -44,6 +44,8 @@ function today(over: Partial<TableToday> = {}): TableToday {
     joinId: null,
     joinSeats: null,
     inJoinedTable: null,
+    joined: null,
+    splitOffFrom: null,
     ...over,
   };
 }
@@ -317,5 +319,23 @@ describe("zones and their tables", () => {
     expect(seatsFor(table({ today: today({ seats: 6, joinId: "j1", joinSeats: 10 }) }))).toBe(10);
     expect(seatsFor(table({}))).toBeNull();
     expect(seatsFor(table({ today: today({ seats: null }) }))).toBeNull();
+  });
+});
+
+describe("a joined table split today", () => {
+  it("draws a part split off after its joined table, so it sits on top", () => {
+    const c5 = table({
+      id: "c5",
+      label: "Counter 5",
+      today: today({ splitOffFrom: "long" }),
+    });
+    const long = table({
+      id: "long",
+      label: "Long table",
+      today: today({ joined: { parts: ["c3", "c4"], splitOff: ["c5"], apart: false } }),
+    });
+    const stool = table({ id: "stool", label: "Stool 2", today: today() });
+    expect(mapTables([c5, long, stool]).map((each) => each.id)).toEqual(["long", "stool", "c5"]);
+    expect(mapTables([long, c5, stool]).map((each) => each.id)).toEqual(["long", "stool", "c5"]);
   });
 });

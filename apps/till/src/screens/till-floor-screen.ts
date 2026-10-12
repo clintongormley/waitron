@@ -770,6 +770,8 @@ export class TillFloorScreen extends LitElement {
       case "split":
         void this.#settle(this.#split(api, table));
         return;
+      case "split-off":
+        return;
       case "rotate":
         void this.#settle(api.rotateToday(table.id));
         return;

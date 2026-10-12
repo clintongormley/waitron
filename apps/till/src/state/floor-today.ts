@@ -179,8 +179,12 @@ export function pendingPlaces(
   return places;
 }
 
-export function stillJoined(table: TableState): boolean {
-  return table.today !== null && table.today.inJoinedTable !== null;
+/** A still-joined part, or a joined table that has come apart: the till offers neither. */
+export function outOfServiceJoined(table: TableState): boolean {
+  return (
+    table.today !== null &&
+    (table.today.inJoinedTable !== null || table.today.joined?.apart === true)
+  );
 }
 
 /** A still-joined part can keep a place on today's map, and is drawn as its joined table only. */
@@ -189,7 +193,7 @@ export function onTodaysPlan(table: TableState): boolean {
     table.today !== null &&
     table.today.placement !== null &&
     !table.today.takenOff &&
-    !stillJoined(table)
+    !outOfServiceJoined(table)
   );
 }
 
@@ -202,7 +206,7 @@ export function sparesOf(zoneTables: readonly TableState[]): TableState[] {
       table.today.placement === null &&
       !table.today.takenOff &&
       !table.today.fixed &&
-      !stillJoined(table),
+      !outOfServiceJoined(table),
   );
 }
 
@@ -222,7 +226,8 @@ export function spareSpot(zoneTables: readonly TableState[]): { x: number; y: nu
   };
 }
 
-export type SheetAction = "join-with" | "split" | "rotate" | "seats" | "back" | "take-off";
+export type SheetAction =
+  "join-with" | "split" | "split-off" | "rotate" | "seats" | "back" | "take-off";
 
 /** Slice 4 decisions 12 and 16: the details sheet's changes for today that apply to `table`, in order. */
 export function sheetActions(table: TableState): SheetAction[] {
@@ -232,13 +237,16 @@ export function sheetActions(table: TableState): SheetAction[] {
   const clearing = table.condition === "needs_clearing";
   // A party-held table is `held`, never `free` (`tableCondition`, apps/server/src/working-order.ts).
   const free = table.condition === "free" && table.pendingDeliveries === 0;
+  const joined = today.joined;
+  const splitOff = today.splitOffFrom !== null;
   const applies: [SheetAction, boolean][] = [
     ["join-with", !merged && !clearing],
     ["split", merged],
+    ["split-off", joined !== null && !joined.apart && joined.parts.length >= 2],
     ["rotate", !today.fixed && !merged],
     ["seats", true],
-    ["back", true],
-    ["take-off", free && !merged],
+    ["back", !splitOff && (joined === null || joined.splitOff.length === 0)],
+    ["take-off", free && !merged && !splitOff],
   ];
   return applies.filter(([, offered]) => offered).map(([action]) => action);
 }

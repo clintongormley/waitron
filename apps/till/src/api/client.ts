@@ -1870,6 +1870,10 @@ export interface TableToday {
   joinSeats: number | null;
   /** The joined table's name while this table is one of its parts, which the till never offers. */
   inJoinedTable: string | null;
+  /** For a joined table of today's copy: its parts' ids still joined and split off today. */
+  joined: { parts: string[]; splitOff: string[]; apart: boolean } | null;
+  /** For a part split off today, its joined table's id. */
+  splitOffFrom: string | null;
 }
 
 /**

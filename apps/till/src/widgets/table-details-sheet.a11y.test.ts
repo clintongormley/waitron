@@ -69,6 +69,8 @@ const placed: TableState["today"] = {
   joinId: null,
   joinSeats: null,
   inJoinedTable: null,
+  joined: null,
+  splitOffFrom: null,
 };
 
 describe.each(["light", "dark"] as const)("till-table-details-sheet a11y (%s theme)", (theme) => {

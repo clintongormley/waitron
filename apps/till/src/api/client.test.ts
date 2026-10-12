@@ -1958,6 +1958,8 @@ describe("TillApi", () => {
           joinId: null,
           joinSeats: null,
           inJoinedTable: null,
+          joined: null,
+          splitOffFrom: null,
         },
         signals: [],
         party: null,
