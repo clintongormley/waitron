@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
   findEndOffsetClash,
-  findScheduleEndOffsetClash,
   findSeasonEndOffsetClash,
   periodOrderCutoff,
   type SeasonSchedule,
@@ -29,33 +28,31 @@ describe("wall-minute end offsets", () => {
   it("uses an explicit empty override rather than its week, and suppresses closed days", () => {
     const late = { periodId: "late", startsAt: "21:00", endsAt: "06:00" };
     const early = { periodId: "early", startsAt: "07:00", endsAt: "09:00" };
-    const days = [
-      { weekday: 1, date: null, slots: [late] },
-      { weekday: 2, date: null, slots: [{ ...early, startsAt: "09:00", endsAt: "12:00" }] },
-      { weekday: null, date: "2026-10-13", slots: [early] },
-    ];
+    const week: ServiceRange[][] = Array.from({ length: 7 }, () => []);
+    week[1] = [late];
+    week[2] = [{ ...early, startsAt: "09:00", endsAt: "12:00" }];
+    const seasons = [{ seasonId: "year", startsOn: "01-01", week }];
     const offsets = new Map([["late", 120]]);
     expect(
-      findScheduleEndOffsetClash(
-        days,
-        [{ date: "2026-10-13", closeWholeVenue: false }],
+      findSeasonEndOffsetClash(
+        seasons,
+        [{ date: "2026-10-13", closeWholeVenue: false, slots: [early] }],
         offsets,
         "06:00",
       ),
     ).toEqual({ periodId: "late", slotIndex: 0, date: "2026-10-12" });
     expect(
-      findScheduleEndOffsetClash(
-        days,
-        [{ date: "2026-10-13", closeWholeVenue: true }],
+      findSeasonEndOffsetClash(
+        seasons,
+        [{ date: "2026-10-13", closeWholeVenue: true, slots: [early] }],
         offsets,
         "06:00",
       ),
     ).toBeNull();
-    days[2]!.slots = [];
     expect(
-      findScheduleEndOffsetClash(
-        days,
-        [{ date: "2026-10-13", closeWholeVenue: false }],
+      findSeasonEndOffsetClash(
+        seasons,
+        [{ date: "2026-10-13", closeWholeVenue: false, slots: [] }],
         offsets,
         "06:00",
       ),
@@ -64,21 +61,20 @@ describe("wall-minute end offsets", () => {
 });
 
 it("checks annual neighbors beyond their saved and following years", () => {
+  const week: ServiceRange[][] = Array.from({ length: 7 }, () => []);
+  week[1] = [{ periodId: "late", startsAt: "22:00", endsAt: "04:30" }];
   expect(
-    findScheduleEndOffsetClash(
+    findSeasonEndOffsetClash(
+      [{ seasonId: "year", startsOn: "01-01", week }],
       [
         {
-          weekday: 1,
-          date: null,
-          slots: [{ periodId: "late", startsAt: "22:00", endsAt: "04:30" }],
-        },
-        {
-          weekday: null,
           date: "2026-11-06",
+          repeatOn: "11-06",
+          ownHours: true,
+          closeWholeVenue: false,
           slots: [{ periodId: "early", startsAt: "07:15", endsAt: "09:00" }],
         },
       ],
-      [{ date: "2026-11-06", repeatOn: "11-06", ownHours: true, closeWholeVenue: false }],
       new Map([["late", 180]]),
       {
         timeZone: "UTC",

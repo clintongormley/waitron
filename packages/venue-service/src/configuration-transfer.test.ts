@@ -361,7 +361,7 @@ describe("the menu timetable rows of a bundle", () => {
     expect(() => validateMenuTimetables(tables, madrid("2026-10-07T10:00:00Z"))).not.toThrow();
   });
 
-  it("refuses imported grace reaching the next business day's period", () => {
+  it("refuses imported grace reaching the next business day's period in a season week, not in old weekday rows", () => {
     const tables = menuTables();
     tables.menu_periods![1]!.end_offset_minutes = 240;
     tables.menu_day_timetables!.push({
@@ -371,11 +371,32 @@ describe("the menu timetable rows of a bundle", () => {
       special_date_id: null,
     });
     tables.menu_slots!.push(slotRow("t-saturday", MANANAS, "06:00:00", "09:00:00"));
-    expect(() => validateMenuTimetables(tables, madrid("2026-10-07T10:00:00Z"))).toThrowError(
-      refusal("menu_slots"),
+    // Old weekday rows are left behind on import, so their grace is not checked.
+    expect(() => validate(tables, madrid("2026-10-07T10:00:00Z"))).not.toThrow();
+    tables.seasons = [{ id: "s-year", location_id: "location", name: "Year", starts_on: "01-01" }];
+    tables.department_days = [5, 6].map((weekday) => ({
+      id: `d-${weekday}`,
+      department_id: RESTAURANT,
+      season_id: "s-year",
+      weekday,
+      special_day_date_id: null,
+    }));
+    tables.department_day_ranges = [
+      ["d-5", MADRUGADA, "22:00:00", "02:00:00"],
+      ["d-6", MANANAS, "06:00:00", "09:00:00"],
+    ].map(([dayId, periodId, startsAt, endsAt]) => ({
+      id: randomUUID(),
+      day_id: dayId,
+      department_id: RESTAURANT,
+      period_id: periodId,
+      starts_at: startsAt,
+      ends_at: endsAt,
+    }));
+    expect(() => validate(tables, madrid("2026-10-07T10:00:00Z"))).toThrowError(
+      refusal("department_day_ranges"),
     );
     tables.menu_periods![1]!.end_offset_minutes = 239;
-    expect(() => validateMenuTimetables(tables, madrid("2026-10-07T10:00:00Z"))).not.toThrow();
+    expect(() => validate(tables, madrid("2026-10-07T10:00:00Z"))).not.toThrow();
   });
 
   const BARRA = "z-barra";

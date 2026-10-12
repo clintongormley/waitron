@@ -4227,7 +4227,7 @@ describe("named days in a configuration transfer", () => {
     return { versions, transferred, ...ids };
   }
 
-  it("round-trips Terrace week and named-day zone closed times with fresh linked ids", async () => {
+  it("round-trips Terrace named-day zone closed times with fresh linked ids, leaving the old week row behind", async () => {
     const { versions, transferred, zoneId, dayId } = await preparedWithZoneClosures();
     expect(transferred.tables.zone_closed_times).toEqual(
       expect.arrayContaining([
@@ -4272,14 +4272,6 @@ describe("named days in a configuration transfer", () => {
         weekday: null,
         date: "2027-01-06",
         starts_at: "22:00:00",
-        ends_at: "04:00:00",
-      }),
-      expect.objectContaining({
-        name: "Terrace",
-        weekday: 5,
-        date: null,
-        special_date_id: null,
-        starts_at: "23:00:00",
         ends_at: "04:00:00",
       }),
     ]);
@@ -5163,14 +5155,19 @@ it.each([-15, 14])(
     const offset = await targetSuite.db.execute(sql`
     select end_offset_minutes from menu_periods where name='Night transfer'`);
     expect(offset.rows).toEqual([{ end_offset_minutes: endOffsetMinutes }]);
+    const seasonsHolding = await targetSuite.db.execute(sql`
+    select count(distinct t.season_id) as seasons
+    from department_day_ranges x join department_days t on t.id=x.day_id
+    join menu_periods p on p.id=x.period_id where p.name='Night transfer'`);
+    expect(seasonsHolding.rows).toEqual([{ seasons: 4 }]);
     const rows = await targetSuite.db.execute(sql`
-    select p.id as period_id, d.id as department_id, c.id as customer_id, s.menu_id as staff_id,
+    select distinct p.id as period_id, d.id as department_id, c.id as customer_id, s.menu_id as staff_id,
       d.location_id, p.name, p.colour, c.name as customer, sc.name as staff, s.display_order,
       t.weekday, x.starts_at, x.ends_at
     from menu_periods p join departments d on d.id=p.department_id
     join catalogues c on c.id=p.menu_id join menu_period_staff_menus s on s.period_id=p.id
-    join catalogues sc on sc.id=s.menu_id join menu_day_timetables t on t.department_id=d.id
-    join menu_slots x on x.timetable_id=t.id and x.period_id=p.id
+    join catalogues sc on sc.id=s.menu_id join department_days t on t.department_id=d.id
+    join department_day_ranges x on x.day_id=t.id and x.period_id=p.id
     where p.name='Night transfer' order by s.display_order`);
     expect(rows.rows).toEqual([
       {
@@ -6027,9 +6024,14 @@ describe("dated business-day configuration transfer", () => {
       endsAt: string;
       offset: number;
     }>(sql`
-      select d.weekday, s.starts_at as "startsAt", s.ends_at as "endsAt", p.end_offset_minutes as "offset"
-      from menu_slots s join menu_day_timetables d on d.id=s.timetable_id join menu_periods p on p.id=s.period_id
+      select distinct d.weekday, s.starts_at as "startsAt", s.ends_at as "endsAt", p.end_offset_minutes as "offset"
+      from department_day_ranges s join department_days d on d.id=s.day_id join menu_periods p on p.id=s.period_id
       where p.name='Clock period' order by d.weekday`);
+    const seasonsHolding = await targetSuite.db.execute(sql`
+      select count(distinct d.season_id) as seasons
+      from department_day_ranges s join department_days d on d.id=s.day_id
+      join menu_periods p on p.id=s.period_id where p.name='Clock period'`);
+    expect(seasonsHolding.rows).toEqual([{ seasons: 4 }]);
     expect(slots.rows).toEqual(
       [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({
         weekday,
