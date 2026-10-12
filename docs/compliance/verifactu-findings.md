@@ -165,6 +165,12 @@ Two consequences:
 > The 240-second figure is **mdiago's observation, not printed in AEAT's published error table**.
 > The error code, the field and the mechanism are confirmed from the table; the number is not.
 > Verify against a live `aceptado con errores` response before relying on the exact value.
+>
+> **Seen in a live reply, 2026-10-12:** AEAT's preproduction service answered code 2004 with «…
+> admitiéndose un margen de error de: 240 segundos.» (runs 38256395046 and 38256519070, saved in
+> [the successor evidence](../superpowers/specs/2026-10-12-aeat-successor-evidence.json)). Those
+> records were late, not early, so the check also catches late records; whether the margin is
+> the same on both sides was not measured. Production's figure was not observed.
 
 First record from a fresh installation carries `PrimerRegistro="S"`. AEAT returns a
 non-rejecting warning if that is claimed when records already exist for that SIF+NIF —
@@ -312,12 +318,20 @@ There is no analogue of SII's 4-day window.
 > Vendor pages claiming a "plazo legal de remisión de 24 horas" were checked and rejected.
 > No such figure appears in the RD, the Orden, or the technical spec.
 
-**Nothing rejects a late record.** `FechaHoraHusoGenRegistro` is validated only as an *upper*
-bound against AEAT clock; future-dated trips error 2004, which is non-rejecting and expressly
-exempt from subsanación. `FechaExpedicionFactura` is checked only for not-future and
-not-before-28/10/2024. Nothing compares issuance to submission time. A week-old backlog
-submits cleanly — architecturally necessary, since hourly-retried backlogs would otherwise
-always fail.
+**Nothing rejects a late record, but a late one is flagged** (corrected 2026-10-12; the earlier
+text said a late record was never flagged). `FechaExpedicionFactura` is checked only for not-future
+and not-before-28/10/2024, and nothing compares the issue date with the submission time. But
+`FechaHoraHusoGenRegistro`, the moment the record was generated, is compared with AEAT's clock.
+AEAT's validation document (v1.2.2, its `FechaHoraHusoGenRegistro` validation) describes only the upper bound, a generation
+time later than AEAT's; its error list says the time «debe ser la fecha actual del sistema de la
+AEAT» (code 2004). In AEAT's preproduction environment on 2026-10-12, records sent more than five
+minutes after they were generated came back `AceptadoConErrores` with code 2004 (run 38256395046),
+and the same probes with each record generated just before sending came back `Correcto` (runs
+38260029961 and 38261082840; [receipt](../superpowers/specs/2026-10-04-fiscal-prevention-and-offline-recovery-design.md#successor-receipt-2026-10-12-w41s-1c-both-probes-re-run-with-fresh-chains)).
+So a backlog sent after an outage is still accepted, but its records should be expected to come
+back accepted with errors. The validation document (v1.2.2, §4.3.1) exempts the 2004 case from
+correction: «Se excepciona este error de la necesidad de ser subsanado», though it words that case
+as a time later than AEAT's. Production was not tested.
 
 ### Unplanned outage: tolerated indefinitely, with obligations
 

@@ -532,6 +532,8 @@ number order.
 **There is no submission deadline.** Verified: RD 1007/2023 art. 8.1 states the duty
 qualitatively ("instantánea"), no numeric window exists anywhere in the regime, and nothing in
 AEAT's validation layer rejects a late record. A week-old backlog submits cleanly.
+_(2026-10-12: a late record is still accepted, but flagged with warning 2004 — see
+[verifactu-findings.md](../../compliance/verifactu-findings.md), "Nothing rejects a late record, but a late one is flagged".)_
 
 But "no deadline" is not "no duties". Orden art. 16.4 requires, throughout any incident:
 retry **at least hourly**, chronological ordering on recovery, `Incidencia="S"` on affected
