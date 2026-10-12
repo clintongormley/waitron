@@ -3970,6 +3970,9 @@ _Formerly B2, B3, B4, B5 and B7._ Detail: [backlog/box.md](backlog/box.md).
 - **S3-compatible bucket, then Google Drive.** The bucket stream of `venue.db` is built (slice 2);
   the archive's S3 backend is not — only `LocalFsBackend` exists for archives. The abort-aware
   per-destination timeout lands with the first network backend.
+  A538's [draft design](superpowers/specs/2026-10-12-a538-archive-s3-design.md) and
+  [implementation plan](superpowers/plans/2026-10-12-a538-archive-s3.md) are **needs-owner-review**
+  before 17 October; build work and real-AWS evidence remain open.
 
 - **Whole-state-volume capture** (its own §5-reviewed slice): capture the whole state directory EXCEPT
   an explicit exclusion set, with a completeness guard that fails when a new top-level entry is
