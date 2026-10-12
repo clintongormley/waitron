@@ -29,6 +29,12 @@ type Tables = Readonly<Record<string, readonly Row[]>>;
 const STORED_TIME = /^(?:[01]\d|2[0-3]):[0-5]\d:00$/;
 const CUTOVER = /^(?:[01]\d|2[0-3]):[0-5]\d$/;
 
+/** The minutes `menu_slots_step_ck` and `zone_closed_times_step_ck` allow. Those checks refuse an
+ *  insert at once, unlike the import's foreign keys, which wait for commit. */
+function onQuarterHour(time: string): boolean {
+  return ["00", "15", "30", "45"].includes(time.slice(3, 5));
+}
+
 function refuse(field: string): never {
   throw new AppError("setup.request_invalid", { field });
 }
@@ -225,7 +231,7 @@ export function validateMenuTimetables(
     });
   }
 
-  // A weekday day's slots are checked as rows only: the import drops them, so their ranges are not.
+  // A weekday day's slots are checked only as far as inserting them needs: the import drops them.
   const slotsByNamedDay = new Map<unknown, MenuSlot[]>(
     [...days].filter(([, day]) => day.date !== null).map(([id]) => [id, []]),
   );
@@ -238,6 +244,8 @@ export function validateMenuTimetables(
     for (const column of ["starts_at", "ends_at"])
       if (typeof row[column] !== "string" || !STORED_TIME.test(row[column]))
         refuse(`menu_slots.${column}`);
+    if (!onQuarterHour(row.starts_at as string) || !onQuarterHour(row.ends_at as string))
+      refuse("menu_slots");
     const slots = slotsByNamedDay.get(row.timetable_id);
     if (slots === undefined) continue;
     slots.push({
@@ -598,7 +606,9 @@ function validateZoneClosedTimes(tables: Tables, bundle?: { readonly dayCutover:
       if (typeof row[column] !== "string" || !STORED_TIME.test(row[column]))
         refuse(`zone_closed_times.${column}`);
     }
-    // A weekday row is checked as a row only: the import drops it, so its range is not.
+    if (!onQuarterHour(row.starts_at as string) || !onQuarterHour(row.ends_at as string))
+      refuse("zone_closed_times");
+    // A weekday row is checked only as far as inserting it needs: the import drops it.
     if (weekday !== null) continue;
     const key = JSON.stringify([row.zone_id, day]);
     const ranges = groups.get(key) ?? [];

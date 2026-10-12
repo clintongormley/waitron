@@ -6275,6 +6275,79 @@ describe("seasons in a configuration transfer", () => {
     },
   );
 
+  it.each([
+    ["menu_slots", "starts_at"],
+    ["menu_slots", "ends_at"],
+    ["zone_closed_times", "starts_at"],
+    ["zone_closed_times", "ends_at"],
+  ] as const)(
+    "refuses an old weekday %s row off the quarter-hour at %s as a bad request, not a database error",
+    async (table, column) => {
+      const source = await applyVenue(planVenue(venue("B35792470"), ALL_MODULES), {
+        db: suite.db,
+        modules: ALL_MODULES,
+      });
+      const scope = { locationId: brandLocationId(source.locationId) };
+      await withTransaction(suite.db, async (tx) => {
+        const department = await createDepartment(tx, scope, {
+          name: "Off-step rows",
+          orderStart: "table",
+        });
+        const { id: dinner } = await saveMenuPeriod(
+          tx,
+          scope,
+          department.id,
+          {
+            name: "Dinner",
+            menuId: (await createCatalogue(tx, { name: "Off-step menu" })).id,
+            staffMenuIds: [],
+          },
+          0,
+        );
+        const zone = await createServiceZone(tx, scope, {
+          name: "Off-step terrace",
+          departmentId: department.id,
+        });
+        const timetable = randomUUID();
+        await tx.execute(sql`insert into menu_day_timetables (id, department_id, weekday, special_date_id)
+          values (${timetable}, ${department.id}, 6, null)`);
+        await tx.execute(sql`insert into menu_slots (id, timetable_id, department_id, period_id, starts_at, ends_at)
+          values (${randomUUID()}, ${timetable}, ${department.id}, ${dinner}, '20:00:00', '23:00:00')`);
+        await tx.execute(sql`insert into zone_closed_times (id, zone_id, weekday, special_date_id, starts_at, ends_at)
+          values (${randomUUID()}, ${zone.id}, 6, null, '20:00:00', '23:00:00')`);
+      });
+      const versions = await schemaVersionsByModule(suite.db, ALL_MODULES);
+      const bundle = await buildConfigurationBundle(
+        suite.db,
+        source,
+        ALL_MODULES,
+        new Date("2026-10-07T10:00:00Z"),
+        versions,
+      );
+      const weekdayDays = new Set(
+        bundle.tables
+          .menu_day_timetables!.filter((row) => row.weekday !== null)
+          .map((row) => row.id),
+      );
+      const row =
+        table === "menu_slots"
+          ? bundle.tables.menu_slots!.find((slot) => weekdayDays.has(slot.timetable_id))!
+          : bundle.tables.zone_closed_times!.find((closure) => closure.weekday !== null)!;
+      row[column] = column === "starts_at" ? "20:05:00" : "22:55:00";
+      await expect(
+        applyVenue(planVenue(venue("B35792471"), ALL_MODULES), {
+          db: targetSuite.db,
+          modules: ALL_MODULES,
+          beforeCommit: (tx, result) =>
+            importConfigurationTables(tx, bundle, result, ALL_MODULES, versions),
+        }),
+      ).rejects.toMatchObject({ code: "setup.request_invalid", params: { field: table } });
+      expect(
+        (await targetSuite.db.execute<{ n: number }>(sql`select count(*) as n from tenants`)).rows,
+      ).toEqual([{ n: 0 }]);
+    },
+  );
+
   it("refuses a bundle whose grace reaches the next season's first day, and writes nothing", async () => {
     const source = await applyVenue(planVenue(venue("B35792472"), ALL_MODULES), {
       db: suite.db,

@@ -630,10 +630,14 @@ them" in `apps/server/src/configuration-transfer.test.ts` renames and moves one 
 export, finds the target holding the exported four, and asks `resolveDepartmentService` and
 `closedZoneIdsAt` about one Saturday in each of two seasons. The import keeps no old weekday row:
 the transfer's `afterImport` deletes the `menu_day_timetables` and `zone_closed_times` rows that
-name a weekday, and named-day rows stay. Such a row's own fields and the ids it names are still
-checked, its ranges are not, so a stale range crossing the bundle's changeover is no refusal (the
-cases "leaves a bundle's old weekday rows behind (%s), keeps its named-day rows, and serves the
-week from its seasons" in the same file).
+name a weekday, and named-day rows stay. The import inserts such a row before deleting it, so it
+is checked as far as the insert needs: its own fields, the ids it names, one timetable per department
+and weekday, and quarter-hour times (`menu_slots_step_ck` and `zone_closed_times_step_ck` refuse
+an off-step insert at once; the foreign keys wait for commit). Its range is not checked, so a
+stale range crossing the bundle's changeover, empty or overlapping is no refusal (the cases
+"leaves a bundle's old weekday rows behind (%s), keeps its named-day rows, and serves the week
+from its seasons" and "refuses an old weekday %s row off the quarter-hour at %s as a bad request,
+not a database error" in the same file).
 
 `validateSeasonWeeks` (`packages/venue-service/src/configuration-transfer.ts`) refuses, among
 others: a season start that is not a common year's date or is `02-29`; a range off the
@@ -1444,8 +1448,9 @@ cases at that refusal assertion ("expected function to throw an error, but it di
 04:30 restored both passed. The callback context now carries `createdAt`,
 `timeZone`, and `dayCutover` (`packages/module/src/module.ts`, `apps/server/src/configuration-transfer.ts`).
 
-The menu validator uses `parseServiceDay`, so ranges stop at the business-day boundary and
-use quarter-hours. Special-date endpoints below changeover are checked on the next calendar
+The menu validator puts a named day's slots through `parseServiceDay`, so they stop at the
+business-day boundary and use quarter-hours; an old weekday row's slots are checked only for what
+inserting them needs, quarter-hours included. Special-date endpoints below changeover are checked on the next calendar
 morning; an end exactly at changeover is next morning and a start there is the business date.
 Removing each endpoint-date branch in the disposable checkout failed its skipped-time
 assertion. Unlike station hours, the menu writer and import check skipped endpoints on past
