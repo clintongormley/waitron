@@ -171,7 +171,7 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   [Detail](backlog/fiscal.md#a231d-full-invoices-by-email-as-a-pdf-and-on-an-office-printer--part-1-landed-1399-part-2-open)
 
 - **A resent cancellation AEAT already holds now counts as accepted when AEAT's stored fingerprint
-  matches the cancellation's** (`drain.ts`'s `handleDuplicate`; a mismatch still halts with
+  matches the cancellation's** (`drain.ts`'s `handleDuplicate`; a mismatch is refused with
   `fiscal.duplicado_anulado`). Shown against the library's fake only; what real AEAT answers to a
   resent cancellation is not established. The owner may want to confirm this choice. Left open by A230 (`@waitron/verifactu` 0.2.1, #1099).
 
@@ -305,7 +305,8 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   record in that reply before the repeated-code brake takes effect (`MAX_REGISTROS_POR_ENVIO`).
   The successor probes are finished: W41s-1c's [receipt](superpowers/specs/2026-10-04-fiscal-prevention-and-offline-recovery-design.md#successor-receipt-2026-10-12-w41s-1c-both-probes-re-run-with-fresh-chains)
   records warning-free `Correcto` successors after a 3000 refusal and after an unsent
-  cancellation, and a 3000 answer to an exact re-send. Existing holds are unchanged.
+  cancellation, and a 3000 answer to an exact re-send. The hold after a 3000 conflict was dropped
+  on 2026-10-12 (owner); the other holds are unchanged.
   [Detail](backlog/fiscal.md#w41s-fiscal-prevention-and-offline-recovery--design-and-revised-plan-approved-2026-10-04)
 
 - **Follow-up (W41s Task 8, held-record resolution): release a brake hold (send the held records
@@ -331,8 +332,8 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   to the W41s-1b probe first. The W41s-1b probes have since run without an overtaking case; their
   results are in [W41s-1c's receipt](superpowers/specs/2026-10-04-fiscal-prevention-and-offline-recovery-design.md#successor-receipt-2026-10-12-w41s-1c-both-probes-re-run-with-fresh-chains).
   The decision is put to the asesor as [Q47](compliance/asesor-questions.md#q47-keeping-a-chains-later-records-unsent-added-2026-10-12)
-  (S19 in the short list), covering this hold and the holds after a 3000 conflict, behind a held
-  cancellation and after three same-code refusals. [Detail](backlog/fiscal.md#w41s-fiscal-prevention-and-offline-recovery--design-and-revised-plan-approved-2026-10-04)
+  (S19 in the short list), covering this hold and the holds behind a held cancellation and after
+  three same-code refusals. The hold after a 3000 conflict was dropped on 2026-10-12 (owner). [Detail](backlog/fiscal.md#w41s-fiscal-prevention-and-offline-recovery--design-and-revised-plan-approved-2026-10-04)
 
 - **For Task 9 (the filing screen):** `listFilingCases` reads every case and event with no filter or
   paging, and `heldRecords` reads every `rechazado`/`detenido` row; neither has a production caller

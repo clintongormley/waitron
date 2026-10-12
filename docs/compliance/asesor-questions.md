@@ -358,9 +358,10 @@ copies do not carry it.
   of an invoice issued before it?
 - **S19. Keeping a chain's later records unsent (Q47).** Each record carries the fingerprint of the
   one before it. Waitron keeps the later records of a chain unsent while an earlier record's answer
-  is unknown; after a duplicate refusal (3000) where AEAT holds a different or cancelled record under
-  that number and date; behind a cancellation it keeps back (Q40); and after three refusals in a row
-  with one code, retrying the first held record hourly. After a single refusal it keeps sending.
+  is unknown; behind a cancellation it keeps back (Q40); and after three refusals in a row with one
+  code, retrying the first held record hourly. After a single refusal, including a duplicate refusal
+  (3000) where AEAT holds a different or cancelled record under that number and date, it keeps
+  sending.
   AEAT's test service accepted, without warning, records chained to a refused record, to one refused
   as a duplicate and to a cancellation it never received. Given «no pueden quedar RF generados sin
   remitir a la AEAT» (developer FAQ §5) and the hourly retry (OM art. 16.4), may we hold them, or
@@ -507,10 +508,9 @@ copies do not carry it.
 >
 > **S19. Retener los registros posteriores de una cadena.** Cada registro lleva la huella del
 > anterior. Hoy retenemos sin remitir los registros posteriores de una cadena: mientras se desconoce
-> la respuesta a un registro anterior; cuando la AEAT rechaza uno por duplicado (error 3000) y
-> conserva con ese número y fecha otro distinto o uno anulado; detrás de una anulación que
-> retenemos; y tras tres rechazos seguidos con el mismo código, reintentando cada hora el
-> primero retenido. Tras un rechazo aislado seguimos remitiendo. En el entorno de pruebas, la AEAT
+> la respuesta a un registro anterior; detrás de una anulación que retenemos; y tras tres rechazos
+> seguidos con el mismo código, reintentando cada hora el primero retenido. Tras un rechazo aislado,
+> también por duplicado (error 3000) cuando la AEAT conserva con ese número y fecha otro registro distinto o uno anulado, seguimos remitiendo. En el entorno de pruebas, la AEAT
 > aceptó sin avisos registros encadenados a uno rechazado, a uno rechazado por duplicado y a una
 > anulación que nunca recibió. Dado que «no pueden quedar RF generados sin remitir a la AEAT» (FAQ de
 > desarrolladores §5) y que hay que reintentar el envío al menos cada hora (OM art. 16.4), ¿podemos
@@ -3096,7 +3096,8 @@ This records a question; no enquiry has been sent.
 
 **Why it matters.** Each record carries the fingerprint of the record before it on its chain. When
 one record cannot be settled, Waitron keeps the records after it unsent. On 2026-10-06 the owner kept
-holds 1 to 3 below and asked to revisit them once the asesor answers; this is that question. The
+holds 1 and 2 below, and a hold after a duplicate conflict that was dropped on 2026-10-12, and asked
+to revisit them once the asesor answers; this is that question. The
 developer FAQ, §5, says «no pueden quedar RF generados sin remitir a la AEAT»
 ([findings](verifactu-findings.md)), and the order requires a retry at least once an hour of «los
 registros de facturación pendientes de remitir» (OM art. 16.4, as quoted in
@@ -3106,34 +3107,34 @@ What Waitron does today, in `packages/fiscal-verifactu/src/drain.ts`:
 
 1. While an earlier record of the chain is being sent, or waits for a retry because its answer is
    unknown, a later record not yet sent waits, and goes once that earlier record has its answer.
-2. When AEAT refuses a record as a duplicate (3000) and holds a different record, or a cancelled
-   one, under that invoice number and date, the chain's later unsent records are held.
-3. A cancellation whose original AEAT refused, or whose original is held, is itself held and never
+2. A cancellation whose original AEAT refused, or whose original is held, is itself held and never
    sent, and the chain's later records are held behind it. Nothing in Waitron sets
    `SinRegistroPrevio` yet (Q40(c)).
-4. After three refusals in a row with one code, the chain's next records are held; the first held
+3. After three refusals in a row with one code, the chain's next records are held; the first held
    record is sent again once an hour, and an accept or a refusal with another code can release
    the rest.
 
-After a single refusal, Waitron keeps sending the later records (design D2). Nothing releases the
-holds in 2 and 3 yet: a person's release is planned (W41s Task 8), so until then those records can
-stay unsent indefinitely.
+After a single refusal, Waitron keeps sending the later records (design D2). Since 2026-10-12 that
+includes a duplicate refusal (3000) where AEAT holds a different or cancelled record under that
+invoice number and date: the owner dropped the hold there after AEAT's test service accepted, without a
+warning, a later record after a conflict over changed contents (none after a conflict over a
+cancelled record was tested). Nothing releases the hold in 2 yet: a person's release is planned
+(W41s Task 8), so until then those records can stay unsent indefinitely.
 
 > Cada registro de facturación lleva la huella del registro anterior de su cadena. Cuando un
 > registro no puede darse por resuelto, nuestro SIF retiene sin remitir los registros posteriores
-> de esa cadena en cuatro casos:
+> de esa cadena en tres casos:
 >
 > 1. mientras se desconoce la respuesta de la AEAT a un registro anterior y está pendiente su
 >    reenvío; se remiten en cuanto ese registro tiene respuesta;
-> 2. cuando la AEAT rechaza un registro por duplicado (error 3000) y conserva con ese número y
->    fecha otro registro distinto, o uno anulado (Q35, Q39);
-> 3. detrás de una anulación que retenemos porque la AEAT rechazó o tiene retenida el alta original
+> 2. detrás de una anulación que retenemos porque la AEAT rechazó o tiene retenida el alta original
 >    (Q40); esa anulación no se remite;
-> 4. tras tres rechazos seguidos con el mismo código; el primero retenido se reenvía cada hora y,
+> 3. tras tres rechazos seguidos con el mismo código; el primero retenido se reenvía cada hora y,
 >    si la respuesta es otra, pueden remitirse los demás.
 >
-> Tras un rechazo aislado seguimos remitiendo los posteriores. En los casos 2 y 3 los registros
-> quedan retenidos hasta que una persona resuelva el caso.
+> Tras un rechazo aislado seguimos remitiendo los posteriores, también tras un rechazo por duplicado
+> (error 3000) cuando la AEAT conserva con ese número y fecha otro registro distinto o uno anulado
+> (Q35, Q39). En el caso 2 los registros quedan retenidos hasta que una persona resuelva el caso.
 >
 > En el entorno de pruebas de la AEAT se aceptaron sin avisos (`Correcto`) registros encadenados a
 > uno rechazado, a uno rechazado por duplicado (también en el mismo envío) y a una anulación que la
@@ -3142,9 +3143,9 @@ stay unsent indefinitely.
 >
 > **(a)** La FAQ de desarrolladores, §5, dice que «no pueden quedar RF generados sin remitir a la
 > AEAT», y la OM, art. 16.4, exige reintentar al menos cada hora el envío de los registros
-> pendientes de remitir. ¿Es admisible retener los registros posteriores en alguno de estos cuatro
+> pendientes de remitir. ¿Es admisible retener los registros posteriores en alguno de estos tres
 > casos? ¿Influye que la espera sea breve (caso 1) o indefinida hasta que una persona resuelva
-> (casos 2 y 3)?
+> (caso 2)?
 >
 > **(b)** Si deben remitirse, ¿es correcto hacerlo en su orden, encadenados a un registro que la
 > AEAT rechazó o no recibió, o debe tratarse la cadena de otra forma?
@@ -3152,9 +3153,9 @@ stay unsent indefinitely.
 > **(c)** Si la retención es admisible, ¿hay un plazo a partir del cual deben remitirse en todo caso?
 > ¿Qué debemos conservar para justificarla si la AEAT lo requiere?
 
-**Proposed interim treatment (owner, 2026-10-06):** keep the four holds as built. Each held record
-stays unchanged, and the refused or conflicting record behind holds 2 and 3 has a filing case for a
-person to resolve.
+**Proposed interim treatment (owner, 2026-10-06; revised 2026-10-12):** keep the three holds as
+built, and keep sending after a duplicate conflict. Each held record stays unchanged, and the
+refused original behind hold 2 has a filing case for a person to resolve.
 
 **Observed in AEAT's preproduction environment (W41s-1, 2026-10-05; W41s-1c, 2026-10-12).** Records
 chained to a record refused with 1161 were `Correcto` in the same envío, in a later envío and as

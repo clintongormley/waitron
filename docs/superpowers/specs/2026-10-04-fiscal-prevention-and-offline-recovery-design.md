@@ -140,15 +140,19 @@ for the sale of the envío's first record. Whether AEAT keeps the order sent is 
 Q43); see `docs/backlog.md`.)_
 A rejection
 on its own no longer holds its chain (D2, on §7.1's receipts; only code 1161 was tested, triggered
-artificially). A conflict, or a held cancellation, holds the later unsent records of its chain. A
+artificially). A conflict, or a held cancellation, holds the later unsent records of its chain
+_(2026-10-12, owner: a conflict no longer does; it is refused with code 3000 like any refusal, and
+a held cancellation still does — see `docs/backlog/fiscal.md`)_. A
 record of the conflict's own envío is not held when the reply is applied; one whose outcome is still
 unknown is held at its next claim like any later record of that chain, and is not sent again
-_(narrowed 2026-10-07: only when it comes after the conflict on the chain)_. A
+_(narrowed 2026-10-07: only when it comes after the conflict on the chain; 2026-10-12: a
+conflict no longer holds such a record)_. A
 cancellation whose original is rejected or held is held and never sent. A failed duplicate lookup
 makes only that record's outcome unknown. Filing cases (`src/filing-cases.ts`) are append-only,
 and resolving one releases nothing until Tasks 8–9. A new ongoing alert,
 `fiscal.filing_cases_open`, counts unresolved cases. Not yet probed: a successor sent after a 3000
-conflict or after a held cancellation. **W41s-3b (built; owner review pending):** when the three
+conflict or after a held cancellation _(2026-10-12, §7.1 W41s-1c: probed after a conflict over changed contents and after a held
+cancellation; a successor after a conflict over a cancelled record is still unprobed)_. **W41s-3b (built; owner review pending):** when the three
 records immediately before a record on its chain (`SAME_CODE_REFUSAL_LIMIT` in `drain.ts`) were all
 rejected with one error code, the drain holds that record, and every later one of the chain, when
 it is claimed. The check runs between envíos, never inside one, and holds only a record never sent
