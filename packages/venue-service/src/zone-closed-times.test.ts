@@ -52,8 +52,8 @@ async function venue() {
     };
     const terrace = await zone("Terrace", 2);
     const bar = await zone("Bar", 1);
-    await zone("Disabled", 0, false);
-    return { cfg, departmentId, terrace, bar };
+    const disabled = await zone("Disabled", 0, false);
+    return { cfg, departmentId, terrace, bar, disabled };
   });
 }
 async function named(v: Awaited<ReturnType<typeof venue>>, ownHours: boolean) {
@@ -364,25 +364,34 @@ describe("zones closed at an instant", () => {
   it("reads the clock, named day and closed times once for a batch", async () => {
     const v = await venue();
     await tx((db) => replaceZoneClosedWeek(db, v.cfg, v.terrace, week(mondayNight), 0));
-    await tx(async (db) => {
-      const session = (
-        db as unknown as { session: { prepareQuery: (...args: never[]) => unknown } }
-      ).session;
-      const spy = vi.spyOn(session, "prepareQuery");
-      try {
-        const closed = await closures.closedZoneIdsAt(db, v.cfg, new Date("2030-10-07T21:45:00Z"), [
-          v.bar,
-          v.terrace,
-        ]);
-        expect([...closed]).toEqual([v.terrace]);
-        const texts = spy.mock.calls.map(([query]) => (query as unknown as { sql: string }).sql);
-        for (const table of ["locations", "special_dates", "zone_closed_times", "zone_extensions"])
-          expect(texts.filter((text) => text.includes(`from "${table}"`))).toHaveLength(1);
-        expect(texts).toHaveLength(4);
-      } finally {
-        spy.mockRestore();
-      }
-    });
+    const reads = (zoneIds: string[]) =>
+      tx(async (db) => {
+        const session = (
+          db as unknown as { session: { prepareQuery: (...args: never[]) => unknown } }
+        ).session;
+        const spy = vi.spyOn(session, "prepareQuery");
+        try {
+          const closed = await closures.closedZoneIdsAt(
+            db,
+            v.cfg,
+            new Date("2030-10-07T21:45:00Z"),
+            zoneIds,
+          );
+          expect([...closed]).toEqual([v.terrace]);
+          return spy.mock.calls.map(([query]) => (query as unknown as { sql: string }).sql);
+        } finally {
+          spy.mockRestore();
+        }
+      });
+    const one = await reads([v.terrace]);
+    const three = await reads([v.bar, v.terrace, v.disabled]);
+    for (const texts of [one, three]) {
+      for (const table of ["locations", "seasons", "special_dates", "zone_days", "zone_extensions"])
+        expect(texts.filter((text) => text.includes(`from "${table}"`))).toHaveLength(1);
+      expect(texts.filter((text) => text.includes(`from "zone_closed_times"`))).toHaveLength(0);
+      expect(texts).toHaveLength(5);
+    }
+    expect(three).toHaveLength(one.length);
   });
 });
 
