@@ -1868,6 +1868,8 @@ export interface TableToday {
   takenOff: boolean;
   joinId: string | null;
   joinSeats: number | null;
+  /** The joined table's name while this table is one of its parts, which the till never offers. */
+  inJoinedTable: string | null;
 }
 
 /**

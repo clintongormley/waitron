@@ -13,6 +13,7 @@ import {
   type SeatedRead,
 } from "./table-targets.js";
 import { paidInPart } from "../state/bill-state.js";
+import { stillJoined } from "../state/floor-today.js";
 import { signalChipStyles, signalChips } from "./signal-chips.js";
 import "./bill-choice-dialog.js";
 import type { BillChoiceDetail } from "./bill-choice-dialog.js";
@@ -234,6 +235,7 @@ export class TillHeldOrders extends LitElement {
   }
 
   #picker(order: HeldOrderSummary): TemplateResult {
+    const tables = this.tables.filter((table) => !stillJoined(table));
     return html`<wt-dialog
       ${trackDialog()}
       data-table-picker
@@ -242,10 +244,10 @@ export class TillHeldOrders extends LitElement {
       @wt-close=${() => this.#closePicker()}
     >
       ${
-        this.tables.length === 0
+        tables.length === 0
           ? html`<p class="picker-empty">${t("held.no_tables")}</p>`
           : html`<div class="action-options">
-              ${[...this.tables]
+              ${tables
                 .sort((a, b) => inNumberOrder(a.label, b.label))
                 .map((table) => tableTarget(table, undefined, (picked) => this.#pick(picked)))}
             </div>`

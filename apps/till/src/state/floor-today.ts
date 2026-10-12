@@ -179,14 +179,20 @@ export function pendingPlaces(
   return places;
 }
 
-/** Today's tables with no place, not taken off and not fixed: what Add a spare table offers. */
+export function stillJoined(table: TableState): boolean {
+  return table.today !== null && table.today.inJoinedTable !== null;
+}
+
+/** Today's tables with no place, not taken off, not fixed and in no joined table: what Add a spare
+ * table offers. */
 export function sparesOf(zoneTables: readonly TableState[]): TableState[] {
   return zoneTables.filter(
     (table) =>
       table.today !== null &&
       table.today.placement === null &&
       !table.today.takenOff &&
-      !table.today.fixed,
+      !table.today.fixed &&
+      !stillJoined(table),
   );
 }
 

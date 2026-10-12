@@ -3968,6 +3968,48 @@ describe("till-table-order-screen", () => {
       expect(moved).toEqual([{ toTableId: "t5", bills: "merge" }]);
     });
 
+    it.each([
+      ["Join a table", "join"],
+      ["Move guests", "move"],
+      ["Move this bill", "move-bill"],
+    ])("%s lists Long table but none of its parts", async (_name, action) => {
+      const spare = (inJoinedTable: string | null) => ({
+        placement: null,
+        seats: 2,
+        fixed: false,
+        takenOff: false,
+        joinId: null,
+        joinSeats: null,
+        inJoinedTable,
+      });
+      const { el } = await mount({
+        lines: [pendingLine],
+        orderId: "wo-check",
+        party: anaParty,
+        bills: partyBills().bills,
+        tables: [
+          tableState({
+            id: "t4",
+            label: "Mesa 4",
+            state: "open-tab",
+            condition: "held",
+            party: anaParty,
+          }),
+          tableState({ id: "c3", label: "Counter 3", today: spare("Long table") }),
+          tableState({ id: "c4", label: "Counter 4", today: spare("Long table") }),
+          tableState({ id: "c5", label: "Counter 5", today: spare("Long table") }),
+          tableState({ id: "long", label: "Long table" }),
+          tableState({ id: "stool-2", label: "Stool 2", today: spare(null) }),
+        ],
+      });
+      await toMenu(el);
+      click(el, `[data-action="${action}"]`);
+      await el.updateComplete;
+      expect(targetIds(el)).toContain("long");
+      expect(targetIds(el)).toContain("stool-2");
+      expect(targetIds(el).filter((id) => ["c3", "c4", "c5"].includes(id!))).toEqual([]);
+    });
+
     it("offers target tables in number order, a moving party's own tables first", async () => {
       const ana: TableParty = { ...anaParty, tableIds: ["t10", "t2"] };
       const held = (id: string, label: string) =>

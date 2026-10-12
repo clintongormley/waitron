@@ -16,6 +16,7 @@ function today(over: Partial<TableToday> = {}): TableToday {
     takenOff: false,
     joinId: null,
     joinSeats: null,
+    inJoinedTable: null,
     ...over,
   };
 }
@@ -378,6 +379,21 @@ describe("spares and taken-off tables", () => {
     const zone = [placed, spare, fixedSpare, off, unplanned];
     expect(sparesOf(zone)).toEqual([spare]);
     expect(takenOffOf(zone)).toEqual([off]);
+  });
+
+  it("offers Stool 2 as a spare but no part of Long table", () => {
+    const part = (id: string, label: string) =>
+      table(id, label, { today: today({ placement: null, inJoinedTable: "Long table" }) });
+    const long = table("long", "Long table");
+    const stool = table("stool-2", "Stool 2", { today: today({ placement: null }) });
+    const zone = [
+      part("c3", "Counter 3"),
+      part("c4", "Counter 4"),
+      part("c5", "Counter 5"),
+      long,
+      stool,
+    ];
+    expect(sparesOf(zone)).toEqual([stool]);
   });
 
   it("puts a spare in the middle of the zone's crop", () => {

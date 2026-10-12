@@ -14,6 +14,7 @@ function today(): TableToday {
     takenOff: false,
     joinId: null,
     joinSeats: null,
+    inJoinedTable: null,
   };
 }
 

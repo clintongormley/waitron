@@ -383,6 +383,7 @@ const TABLE_REFUSALS = new Set([
   "table.not_joined",
   "table.already_in_party",
   "table.inactive",
+  "table.in_joined_table",
   "party.main_bill_stays",
   "service_zone.join_mismatch",
   "service_zone.mode_incompatible",

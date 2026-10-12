@@ -206,6 +206,7 @@ const plannedTable: TableState = {
     takenOff: false,
     joinId: null,
     joinSeats: null,
+    inJoinedTable: null,
   },
   signals: [],
   party: null,

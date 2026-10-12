@@ -92,6 +92,10 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "That table is off today's plan. Put it back first",
     es: "Esa mesa está quitada hoy. Vuelve a ponerla primero",
   },
+  "table.in_joined_table": {
+    en: "That table is part of a joined table",
+    es: "Esa mesa forma parte de una mesa unida",
+  },
   "merge.seats_required": {
     en: "Enter the seats for this merge",
     es: "Indica las plazas de esta unión",

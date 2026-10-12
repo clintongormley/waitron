@@ -41,6 +41,7 @@ function table(id: string, over: Partial<TableToday> = {}): TableState {
       takenOff: false,
       joinId: null,
       joinSeats: null,
+      inJoinedTable: null,
       ...over,
     },
     signals: [],

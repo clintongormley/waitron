@@ -521,3 +521,8 @@ it("explains why an extra cannot move independently in both languages", () => {
     "Los extras no se pueden pasar por separado",
   );
 });
+
+it("says a part of a joined table cannot be used, in English and Spanish", () => {
+  expect(codeMessage("table.in_joined_table", "en")).toBe("That table is part of a joined table");
+  expect(codeMessage("table.in_joined_table", "es")).toBe("Esa mesa forma parte de una mesa unida");
+});
