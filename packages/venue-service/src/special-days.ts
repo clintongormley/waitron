@@ -1,5 +1,5 @@
 import { and, asc, eq, inArray, lte, ne, or, sql } from "drizzle-orm";
-import { newId, type Transaction } from "@waitron/db";
+import { floorZones, newId, type Transaction } from "@waitron/db";
 import { readLocationClock } from "@waitron/reporting";
 import { AppError, isUuid, type BusinessDayClock, type ErrorParams } from "@waitron/shared";
 import { assertBusinessDayScheduleWrite } from "./business-day-schedule.js";
@@ -8,13 +8,7 @@ import { isReadableClock, venueLocalMoment } from "./hours-clock.js";
 import { isLocalDate } from "./hours-rules.js";
 import type { LocalDate } from "./hours-types.js";
 import { nextOccurrence, occurrenceIn, repeatKey } from "./named-day-rules.js";
-import {
-  assertDepartment,
-  resolveZoneContext,
-  storedTime,
-  wireTime,
-  type VenueScope,
-} from "./operations.js";
+import { storedTime, wireTime, type VenueScope } from "./operations.js";
 import {
   departmentDayRanges,
   departmentDays,
@@ -26,6 +20,7 @@ import {
 } from "./schema/seasons.js";
 import { specialDates } from "./schema/hours.js";
 import { menuPeriods } from "./schema/menus.js";
+import { departments, zoneServicePolicies } from "./schema/service.js";
 import { scheduleEndOffsetClash } from "./menu-timetable.js";
 import { joinTouching } from "./season-weeks.js";
 import { scheduleCutovers } from "./service-day-context.js";
@@ -410,6 +405,57 @@ function parseInput(value: unknown, clock: BusinessDayClock) {
   return { name: name.trim(), repeatsYearly, dates, held, cutoversOf, paint, zonePaint };
 }
 
+/** Refuses the first painted department, then the first painted zone, in request order, that is not
+ *  one of the venue's active departments or active service zones. */
+async function assertPaintOwners(
+  tx: Transaction,
+  cfg: VenueScope,
+  departmentIds: readonly string[],
+  zoneIds: readonly string[],
+): Promise<void> {
+  if (departmentIds.length > 0) {
+    const found = new Set(
+      (
+        await tx
+          .select({ id: departments.id })
+          .from(departments)
+          .where(
+            and(
+              inArray(departments.id, [...new Set(departmentIds)]),
+              eq(departments.locationId, cfg.locationId),
+              eq(departments.active, true),
+            ),
+          )
+      ).map((row) => row.id),
+    );
+    const missing = departmentIds.find((id) => !found.has(id));
+    if (missing !== undefined)
+      throw new AppError("department.not_found", { departmentId: missing });
+  }
+  if (zoneIds.length > 0) {
+    const found = new Set(
+      (
+        await tx
+          .select({ id: zoneServicePolicies.zoneId })
+          .from(zoneServicePolicies)
+          .innerJoin(floorZones, eq(floorZones.id, zoneServicePolicies.zoneId))
+          .innerJoin(departments, eq(departments.id, zoneServicePolicies.departmentId))
+          .where(
+            and(
+              eq(zoneServicePolicies.locationId, cfg.locationId),
+              inArray(zoneServicePolicies.zoneId, [...new Set(zoneIds)]),
+              eq(departments.active, true),
+              eq(floorZones.active, true),
+              eq(floorZones.locationId, cfg.locationId),
+            ),
+          )
+      ).map((row) => row.id),
+    );
+    const missing = zoneIds.find((id) => !found.has(id));
+    if (missing !== undefined) throw new AppError("service_zone.not_found", { zoneId: missing });
+  }
+}
+
 /** Refuses a painted period that is not the painted department's own. */
 async function assertOwnPeriods(
   tx: Transaction,
@@ -644,10 +690,12 @@ export async function saveSpecialDay(
   const stored = id === null ? null : await readSpecialDay(tx, cfg, id);
   const clock = await readLocationClock(tx, cfg.locationId);
   const parsed = parseInput(input, clock);
-  for (const departmentId of new Set(parsed.paint.map((entry) => entry.ownerId)))
-    await assertDepartment(tx, cfg, departmentId);
-  for (const zoneId of new Set(parsed.zonePaint.map((entry) => entry.ownerId)))
-    await resolveZoneContext(tx, cfg, zoneId);
+  await assertPaintOwners(
+    tx,
+    cfg,
+    parsed.paint.map((entry) => entry.ownerId),
+    parsed.zonePaint.map((entry) => entry.ownerId),
+  );
   await assertOwnPeriods(tx, parsed.paint);
   const retainedPaint = retainedEntries(
     (stored?.paint ?? []).map(({ departmentId, ...entry }) => ({
