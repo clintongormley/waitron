@@ -96,30 +96,49 @@ export async function resolveDepartmentDays(
   clock: BusinessDayClock,
   given?: DayPlan,
 ): Promise<Map<LocalDate, ResolvedDepartmentDay>> {
-  const resolved = new Map<LocalDate, ResolvedDepartmentDay>();
-  if (businessDays.length === 0) return resolved;
+  return (
+    (await resolveDepartmentsDays(tx, cfg, [departmentId], businessDays, clock, given)).get(
+      departmentId,
+    ) ?? new Map()
+  );
+}
+
+/** {@link resolveDepartmentDays} for several departments, reading their season weeks in one
+ *  statement; keyed by department id. */
+export async function resolveDepartmentsDays(
+  tx: Transaction,
+  cfg: VenueScope,
+  departmentIds: readonly string[],
+  businessDays: readonly LocalDate[],
+  clock: BusinessDayClock,
+  given?: DayPlan,
+): Promise<Map<string, Map<LocalDate, ResolvedDepartmentDay>>> {
+  const resolved = new Map<string, Map<LocalDate, ResolvedDepartmentDay>>();
+  if (businessDays.length === 0 || departmentIds.length === 0) return resolved;
   const plan = await planFor(tx, cfg, businessDays, given);
-  const weeks =
-    (
-      await readDepartmentSeasonWeeks(
-        tx,
-        cfg,
-        [departmentId],
-        clock.dayCutover,
-        seasonDays(plan, businessDays),
-      )
-    ).get(departmentId) ?? new Map<string, ServiceRange[][]>();
-  for (const day of businessDays) {
-    const special = plan.special.get(day);
-    const seasonId = plan.seasonIdOn.get(day) ?? null;
-    const cutover = cutoverForBusinessDay(clock, day);
-    const season = (seasonId === null ? undefined : weeks.get(seasonId)?.[weekdayOf(day)]) ?? [];
-    const ranges = special
-      ? special.closedAllDay
-        ? []
-        : layerPaint(season, special.paint.get(departmentId) ?? [], cutover)
-      : season;
-    resolved.set(day, { businessDay: day, seasonId, ranges: fromChangeover(ranges, cutover) });
+  const allWeeks = await readDepartmentSeasonWeeks(
+    tx,
+    cfg,
+    departmentIds,
+    clock.dayCutover,
+    seasonDays(plan, businessDays),
+  );
+  for (const departmentId of departmentIds) {
+    const weeks = allWeeks.get(departmentId) ?? new Map<string, ServiceRange[][]>();
+    const days = new Map<LocalDate, ResolvedDepartmentDay>();
+    for (const day of businessDays) {
+      const special = plan.special.get(day);
+      const seasonId = plan.seasonIdOn.get(day) ?? null;
+      const cutover = cutoverForBusinessDay(clock, day);
+      const season = (seasonId === null ? undefined : weeks.get(seasonId)?.[weekdayOf(day)]) ?? [];
+      const ranges = special
+        ? special.closedAllDay
+          ? []
+          : layerPaint(season, special.paint.get(departmentId) ?? [], cutover)
+        : season;
+      days.set(day, { businessDay: day, seasonId, ranges: fromChangeover(ranges, cutover) });
+    }
+    resolved.set(departmentId, days);
   }
   return resolved;
 }

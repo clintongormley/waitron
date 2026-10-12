@@ -26,7 +26,7 @@ import { specialDates } from "./schema/hours.js";
 import { specialDayDates, specialDays } from "./schema/seasons.js";
 import { departments } from "./schema/service.js";
 import { sharedSpecialDate } from "./special-days.js";
-import { readDayPlan, resolveDepartmentDays } from "./day-resolver.js";
+import { readDayPlan, resolveDepartmentsDays } from "./day-resolver.js";
 import { repeatKey } from "./repeat-rules.js";
 import { menuDayTimetables, menuSlots } from "./schema/menus.js";
 import { zoneClosedTimes } from "./schema/zone-closed-times.js";
@@ -392,9 +392,16 @@ async function calendarDays(
     .from(departments)
     .where(and(eq(departments.locationId, cfg.locationId), eq(departments.active, true)));
   const open = new Set<LocalDate>();
-  for (const { id } of active)
-    for (const [date, day] of await resolveDepartmentDays(tx, cfg, id, dates, clock, plan))
-      if (day.ranges.length > 0) open.add(date);
+  const resolved = await resolveDepartmentsDays(
+    tx,
+    cfg,
+    active.map(({ id }) => id),
+    dates,
+    clock,
+    plan,
+  );
+  for (const days of resolved.values())
+    for (const [date, day] of days) if (day.ranges.length > 0) open.add(date);
   const factsOn = new Map<LocalDate, HolidayFact[]>();
   for (const fact of holidays) factsOn.set(fact.date, [...(factsOn.get(fact.date) ?? []), fact]);
   return dates.map((date) => {

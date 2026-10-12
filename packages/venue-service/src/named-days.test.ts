@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { CATALOGUE_MIGRATIONS } from "@waitron/catalogue";
 import { CORE_MIGRATIONS, catalogues, locations, tenants, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -319,6 +319,29 @@ describe("special-days Calendar model", () => {
       .set({ active: false })
       .where(eq(departments.id, f.department));
     expect((await read(f, "2026-12-26")).days[0]).toMatchObject({ tone: "closed", closed: true });
+  });
+  it("reads the same number of statements whatever the number of active departments", async () => {
+    const f = await fixture();
+    await special(f, "Navidad", ["2026-12-25"], false, [
+      { periodId: null, startsAt: "12:00", endsAt: "13:00" },
+    ]);
+    const statements = () =>
+      run(async (tx) => {
+        const reads = vi.spyOn(tx, "select");
+        await readSpecialDaysModel(tx, f.cfg, "2026-12-24", "2026-12-26", now);
+        const count = reads.mock.calls.length;
+        reads.mockRestore();
+        return count;
+      });
+    await suite.db.update(departments).set({ active: false }).where(eq(departments.id, f.other));
+    const one = await statements();
+    await suite.db.update(departments).set({ active: true }).where(eq(departments.id, f.other));
+    await suite.db.insert(departments).values({
+      locationId: f.cfg.locationId,
+      name: "Bar",
+      tradingName: "Bar",
+    });
+    expect(await statements()).toBe(one);
   });
   it("ignores the retired named days", async () => {
     const f = await fixture();
