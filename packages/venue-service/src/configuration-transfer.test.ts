@@ -1684,3 +1684,205 @@ it.each([
     refusal(`${table}.${field}`),
   );
 });
+
+describe("season weeks in a configuration bundle", () => {
+  const { validate } = VENUE_SERVICE_CONFIGURATION_TRANSFER;
+  const LUNCH = "44444444-4444-4444-8444-444444444444";
+  const LATE = "55555555-5555-4555-8555-555555555555";
+  const clock = {
+    createdAt: new Date("2026-10-07T10:00:00Z"),
+    timeZone: "Europe/Madrid",
+    dayCutover: "06:00",
+  };
+  const range = (dayId: string, periodId: string, startsAt: string, endsAt: string) => ({
+    id: randomUUID(),
+    day_id: dayId,
+    department_id: RESTAURANT,
+    period_id: periodId,
+    starts_at: startsAt,
+    ends_at: endsAt,
+  });
+  const day = (id: string, seasonId: string, weekday: number) => ({
+    id,
+    department_id: RESTAURANT,
+    season_id: seasonId,
+    weekday,
+    special_day_date_id: null,
+  });
+
+  /** Winter: Late 22:00–02:00 on Friday, Lunch 06:00–09:00 on Saturday. Autumn: Lunch on Saturday
+   *  only. Terrace closes 23:00–04:00 on a Winter Friday. */
+  function seasonTables(): Tables {
+    return {
+      departments: [{ id: RESTAURANT }],
+      floor_zones: [{ id: "terrace", active: 1 }],
+      zone_service_policies: [{ zone_id: "terrace", department_id: RESTAURANT }],
+      catalogues: [{ id: "m-lunch" }, { id: "m-late" }],
+      menu_periods: [
+        { id: LUNCH, department_id: RESTAURANT, name: "Lunch", colour: "blue", menu_id: "m-lunch" },
+        { id: LATE, department_id: RESTAURANT, name: "Late", colour: "red", menu_id: "m-late" },
+      ],
+      seasons: [
+        { id: "s-autumn", location_id: "venue", name: "Autumn", starts_on: "09-01" },
+        { id: "s-winter", location_id: "venue", name: "Winter", starts_on: "12-01" },
+      ],
+      department_days: [
+        day("w-fri", "s-winter", 5),
+        day("w-sat", "s-winter", 6),
+        day("a-fri", "s-autumn", 5),
+        day("a-sat", "s-autumn", 6),
+      ],
+      department_day_ranges: [
+        range("w-fri", LATE, "22:00:00", "02:00:00"),
+        range("w-sat", LUNCH, "06:00:00", "09:00:00"),
+        range("a-sat", LUNCH, "06:00:00", "09:00:00"),
+      ],
+      zone_days: [
+        {
+          id: "z-fri",
+          zone_id: "terrace",
+          season_id: "s-winter",
+          weekday: 5,
+          special_day_date_id: null,
+        },
+      ],
+      zone_day_ranges: [
+        {
+          id: "z-fri-1",
+          day_id: "z-fri",
+          kind: "closed",
+          starts_at: "23:00:00",
+          ends_at: "04:00:00",
+        },
+      ],
+    };
+  }
+
+  it("are transferred after the periods and zone policies they name, parents first", () => {
+    const names = VENUE_SERVICE_CONFIGURATION_TRANSFER.tables.map((table) => table.name);
+    const at = names.indexOf("seasons");
+    expect(names.slice(at, at + 5)).toEqual([
+      "seasons",
+      "department_days",
+      "department_day_ranges",
+      "zone_days",
+      "zone_day_ranges",
+    ]);
+    expect(at).toBeGreaterThan(names.indexOf("menu_periods"));
+    expect(at).toBeGreaterThan(names.indexOf("zone_service_policies"));
+    expect(VENUE_SERVICE_CONFIGURATION_TRANSFER.tables[at]).toEqual({
+      name: "seasons",
+      locationColumns: ["location_id"],
+    });
+  });
+
+  it("accepts rows the week writers could have written, and a bundle with none", () => {
+    expect(() => validate(seasonTables(), clock)).not.toThrow();
+    expect(() => validate({}, clock)).not.toThrow();
+  });
+
+  it("refuses a range off the quarter-hour at its table", () => {
+    const tables = seasonTables();
+    tables.department_day_ranges![1]!.starts_at = "13:10:00";
+    tables.department_day_ranges![1]!.ends_at = "14:00:00";
+    expect(() => validate(tables, clock)).toThrowError(refusal("department_day_ranges"));
+  });
+
+  it("refuses overlapping ranges on one season's day, but not the same hours in two seasons", () => {
+    const tables = seasonTables();
+    tables.department_day_ranges!.push(range("w-sat", LATE, "08:00:00", "10:00:00"));
+    expect(() => validate(tables, clock)).toThrowError(refusal("department_day_ranges"));
+    const apart = seasonTables();
+    apart.department_day_ranges!.push(range("a-fri", LATE, "22:00:00", "02:00:00"));
+    expect(() => validate(apart, clock)).not.toThrow();
+  });
+
+  it.each(["02-29", "13-01", "02-30", "1-05", "", 301, null])(
+    "refuses a season starting on %j",
+    (startsOn) => {
+      const tables = seasonTables();
+      tables.seasons![0]!.starts_on = startsOn;
+      expect(() => validate(tables, clock)).toThrowError(refusal("seasons.starts_on"));
+    },
+  );
+
+  it("refuses two seasons on one start or under one name", () => {
+    const sameStart = seasonTables();
+    sameStart.seasons![1]!.starts_on = "09-01";
+    expect(() => validate(sameStart, clock)).toThrowError(refusal("seasons.starts_on"));
+    const sameName = seasonTables();
+    sameName.seasons![1]!.name = "Autumn";
+    expect(() => validate(sameName, clock)).toThrowError(refusal("seasons.name"));
+    const blank = seasonTables();
+    blank.seasons![1]!.name = "  ";
+    expect(() => validate(blank, clock)).toThrowError(refusal("seasons.name"));
+  });
+
+  it("refuses a period's end offset reaching the next day's placement in the same season", () => {
+    const tables = seasonTables();
+    tables.menu_periods![1]!.end_offset_minutes = 240;
+    expect(() => validate(tables, clock)).toThrowError(refusal("department_day_ranges"));
+    tables.menu_periods![1]!.end_offset_minutes = 239;
+    expect(() => validate(tables, clock)).not.toThrow();
+  });
+
+  it("checks the end offset within each season, not across two", () => {
+    const tables = seasonTables();
+    tables.menu_periods![1]!.end_offset_minutes = 240;
+    // Winter holds no Saturday; Autumn's Saturday Lunch follows no Late in Autumn.
+    tables.department_days = tables.department_days!.filter((row) => row.id !== "w-sat");
+    tables.department_day_ranges = tables.department_day_ranges!.filter(
+      (row) => row.day_id !== "w-sat",
+    );
+    expect(() => validate(tables, clock)).not.toThrow();
+  });
+
+  it.each([
+    ["department_days", "season_id", { season_id: "missing" }],
+    ["department_days", "department_id", { department_id: "missing" }],
+    ["department_days", "weekday", { weekday: 7 }],
+    ["department_days", "weekday", { weekday: null }],
+    ["department_days", "special_day_date_id", { special_day_date_id: "sd-1" }],
+    ["department_days", "weekday", { weekday: 6 }],
+  ])("refuses a department day whose %s.%s is %j", (table, field, change) => {
+    const tables = seasonTables();
+    Object.assign(tables.department_days![0]!, change);
+    expect(() => validate(tables, clock)).toThrowError(refusal(`${table}.${field}`));
+  });
+
+  it.each([
+    ["day_id", { day_id: "missing" }],
+    ["department_id", { department_id: DELI }],
+    ["period_id", { period_id: null }],
+    ["period_id", { period_id: "66666666-6666-4666-8666-666666666666" }],
+    ["starts_at", { starts_at: "6:00" }],
+    ["ends_at", { ends_at: "24:00:00" }],
+  ])("refuses a department range whose %s is wrong", (field, change) => {
+    const tables = seasonTables();
+    tables.departments!.push({ id: DELI });
+    Object.assign(tables.department_day_ranges![1]!, change);
+    expect(() => validate(tables, clock)).toThrowError(refusal(`department_day_ranges.${field}`));
+  });
+
+  it.each([
+    ["zone_days.zone_id", "zone_days", { zone_id: "missing" }],
+    ["zone_days.season_id", "zone_days", { season_id: "missing" }],
+    ["zone_days.weekday", "zone_days", { weekday: -1 }],
+    ["zone_days.special_day_date_id", "zone_days", { special_day_date_id: "sd-1" }],
+    ["zone_day_ranges.day_id", "zone_day_ranges", { day_id: "missing" }],
+    ["zone_day_ranges.kind", "zone_day_ranges", { kind: "open" }],
+    ["zone_day_ranges.starts_at", "zone_day_ranges", { starts_at: "23:00" }],
+    ["zone_day_ranges", "zone_day_ranges", { ends_at: "23:10:00" }],
+  ])("refuses a zone row with a wrong %s", (field, table, change) => {
+    const tables = seasonTables();
+    Object.assign(tables[table]![0]!, change);
+    expect(() => validate(tables, clock)).toThrowError(refusal(field));
+  });
+
+  it("refuses season weeks without the bundle's changeover", () => {
+    expect(() => validate(seasonTables())).toThrowError(refusal("department_day_ranges"));
+    const zoneOnly = seasonTables();
+    zoneOnly.department_day_ranges = [];
+    expect(() => validate(zoneOnly)).toThrowError(refusal("zone_day_ranges"));
+  });
+});

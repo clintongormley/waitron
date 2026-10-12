@@ -147,6 +147,10 @@ section 9.2, and the named-day hours of section 7, of
 [the 2026-10-07 service times spec](../superpowers/specs/2026-10-07-service-times-departments-and-stations-design.md).
 Pre-live, so venues reset rather than carry today's hours across (CLAUDE.md §3).
 
+**Progress.** A506-1 (this PR): seasons and per-season department and zone weeks are stored, the
+till sells and closes by the business day's season, and a configuration transfer carries and
+checks them; the old weekday rows are still written beside them. Special days are not written yet.
+
 **Why.** One standard week does not fit a venue whose hours change with the season, and copying a
 week into future dates would bury the special days among ordinary ones.
 

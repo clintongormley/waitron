@@ -124,7 +124,9 @@ import {
   saveSpecialDate,
   saveMenuPeriod,
   replaceMenuWeek,
+  replaceZoneClosedWeek,
   routingModel,
+  seasons,
   setProfileServiceAccess,
   setRoutingCell,
   setStationToday,
@@ -6103,5 +6105,166 @@ describe("dated business-day configuration transfer", () => {
       });
     }
     expect(await suite.db.select().from(locationDayCutoverChanges)).toHaveLength(1);
+  });
+});
+
+describe("seasons in a configuration transfer", () => {
+  // 21:00 in Madrid (UTC+1): Saturday 30 November 2030 is in Harvest, Saturday 7 December in Winter.
+  const HARVEST_SATURDAY = new Date("2030-11-30T20:00:00Z");
+  const WINTER_SATURDAY = new Date("2030-12-07T20:00:00Z");
+  const saturday = <T>(entries: T[]) =>
+    [0, 1, 2, 3, 4, 5, 6].map((weekday) => (weekday === 6 ? entries : []));
+
+  async function seasonsOf(db: typeof suite.db, located: { locationId: string }) {
+    return db
+      .select({ name: seasons.name, startsOn: seasons.startsOn })
+      .from(seasons)
+      .where(eq(seasons.locationId, located.locationId))
+      .orderBy(seasons.startsOn);
+  }
+
+  async function saturdays(db: typeof suite.db) {
+    const rows = await db.execute(sql`
+      select s.name as season, p.name as period, r.starts_at, r.ends_at
+      from department_day_ranges r join department_days d on d.id=r.day_id
+      join seasons s on s.id=d.season_id join menu_periods p on p.id=r.period_id
+      join departments dep on dep.id=d.department_id
+      where dep.name='Season transfer' and d.weekday=6 and s.name in ('Harvest', 'Winter')
+      order by s.starts_on`);
+    return rows.rows;
+  }
+
+  it("arrives as exactly the exported seasons, and the imported venue sells and closes by them", async () => {
+    const source = await applyVenue(planVenue(venue("B35792468"), ALL_MODULES), {
+      db: suite.db,
+      modules: ALL_MODULES,
+    });
+    const scope = { locationId: brandLocationId(source.locationId) };
+    await withTransaction(suite.db, async (tx) => {
+      await tx
+        .update(seasons)
+        .set({ name: "Harvest", startsOn: "09-15" })
+        .where(and(eq(seasons.locationId, scope.locationId), eq(seasons.name, "Autumn")));
+      const ids = new Map(
+        (
+          await tx
+            .select({ id: seasons.id, name: seasons.name })
+            .from(seasons)
+            .where(eq(seasons.locationId, scope.locationId))
+        ).map((season) => [season.name, season.id]),
+      );
+      const department = await createDepartment(tx, scope, {
+        name: "Season transfer",
+        orderStart: "table",
+      });
+      const period = async (name: string) =>
+        (
+          await saveMenuPeriod(
+            tx,
+            scope,
+            department.id,
+            {
+              name,
+              menuId: (await createCatalogue(tx, { name: `${name} menu` })).id,
+              staffMenuIds: [],
+            },
+            0,
+          )
+        ).id;
+      const dinner = await period("Dinner");
+      const lateBar = await period("Late bar");
+      const week = (periodId: string) =>
+        saturday([{ periodId, startsAt: "20:00", endsAt: "02:00" }]).map((slots, weekday) => ({
+          weekday,
+          slots,
+        }));
+      await replaceMenuWeek(tx, scope, department.id, week(dinner), HARVEST_SATURDAY, 0, {
+        seasonId: ids.get("Harvest")!,
+      });
+      await replaceMenuWeek(tx, scope, department.id, week(lateBar), HARVEST_SATURDAY, 0, {
+        seasonId: ids.get("Winter")!,
+      });
+      const terrace = await createServiceZone(tx, scope, {
+        name: "Season terrace",
+        departmentId: department.id,
+      });
+      await replaceZoneClosedWeek(
+        tx,
+        scope,
+        terrace.id,
+        saturday([{ startsAt: "20:00", endsAt: "23:00" }]).map((ranges, weekday) => ({
+          weekday,
+          ranges,
+        })),
+        0,
+        HARVEST_SATURDAY,
+        { seasonId: ids.get("Winter")! },
+      );
+    });
+    const exported = await seasonsOf(suite.db, scope);
+    const versions = await schemaVersionsByModule(suite.db, ALL_MODULES);
+    const bundle = await buildConfigurationBundle(
+      suite.db,
+      source,
+      ALL_MODULES,
+      new Date("2026-10-07T10:00:00Z"),
+      versions,
+    );
+    const decoded = decodeConfigurationBundle(
+      encodeConfigurationBundle(bundle, "a strong passphrase"),
+      "a strong passphrase",
+    );
+    const target = await applyVenue(planVenue(venue("B35792469"), ALL_MODULES), {
+      db: targetSuite.db,
+      modules: ALL_MODULES,
+      beforeCommit: (tx, result) =>
+        importConfigurationTables(tx, decoded, result, ALL_MODULES, versions),
+    });
+
+    expect(exported).toEqual([
+      { name: "Spring", startsOn: "03-01" },
+      { name: "Summer", startsOn: "06-01" },
+      { name: "Harvest", startsOn: "09-15" },
+      { name: "Winter", startsOn: "12-01" },
+    ]);
+    expect(await seasonsOf(targetSuite.db, target)).toEqual(exported);
+    expect(await saturdays(targetSuite.db)).toEqual([
+      { season: "Harvest", period: "Dinner", starts_at: "20:00:00", ends_at: "02:00:00" },
+      { season: "Winter", period: "Late bar", starts_at: "20:00:00", ends_at: "02:00:00" },
+    ]);
+    expect(await saturdays(targetSuite.db)).toEqual(await saturdays(suite.db));
+
+    const targetScope = { locationId: brandLocationId(target.locationId) };
+    const [department] = await targetSuite.db
+      .select({ id: departments.id })
+      .from(departments)
+      .where(eq(departments.name, "Season transfer"));
+    const zone = await targetSuite.db.execute<{ id: string }>(
+      sql`select id from floor_zones where name='Season terrace'`,
+    );
+    const answers = await withTransaction(targetSuite.db, async (tx) => ({
+      harvest: await VENUE_SERVICE.resolveDepartmentService(
+        tx,
+        targetScope,
+        department!.id,
+        HARVEST_SATURDAY,
+      ),
+      winter: await VENUE_SERVICE.resolveDepartmentService(
+        tx,
+        targetScope,
+        department!.id,
+        WINTER_SATURDAY,
+      ),
+      closedInHarvest: await VENUE_SERVICE.closedZoneIdsAt(tx, targetScope, HARVEST_SATURDAY, [
+        zone.rows[0]!.id,
+      ]),
+      closedInWinter: await VENUE_SERVICE.closedZoneIdsAt(tx, targetScope, WINTER_SATURDAY, [
+        zone.rows[0]!.id,
+      ]),
+    }));
+    expect(answers.harvest).toMatchObject({ open: true, periodName: "Dinner" });
+    expect(answers.winter).toMatchObject({ open: true, periodName: "Late bar" });
+    expect([...answers.closedInHarvest]).toEqual([]);
+    expect([...answers.closedInWinter]).toEqual([zone.rows[0]!.id]);
   });
 });
