@@ -231,7 +231,6 @@ screen is designed.
     `packages/venue-service/src/dashboard/department-zones.ts` and `department-settings.ts`.
   - The tables list sorts on the raw name but shows the trimmed one, and does not mark the
     selected row.
-  - A failed Reload read shows nothing while the out-of-date message stands.
   - A refusal mark on table A while table B is selected leaves nothing pointing back to A.
   - The booked reason ("Booked 12 Oct, 21:00") is worded in the dashboard's core strings, not the
     bookings module's, because the module code-message route takes no parameters. The owner decided
@@ -247,10 +246,6 @@ screen is designed.
     after a drop may shift the plan by the extra room (seen only with a 15 px stand-in for a
     scrollbar, since headless Chromium's scrollbars take none).
   - Place on a plan with no free spot does nothing and says nothing.
-  - The floor plan editor's header was measured at a 390 px window only (A468). Below that,
-    whether Close, Undo, Redo and Save keep one row has not been measured in any language or font
-    (Spanish with a wide font has the least room); when they wrap, Undo and Redo sit on a row
-    above Close and Save, because `wt-form-actions`' outer row never wraps.
   - Surviving mutants in `wt-floor-plan-canvas`: the default "Rotate {name}" text,
     `super.disconnectedCallback` and `preventScroll`.
 
@@ -296,7 +291,8 @@ screen is designed.
 
 ## A502. The floor plan editor as a big modal, with handles and a shorter form
 
-**A502 (owner, 2026-10-11) — OPEN.** The editor wastes space today: the dashboard's header and menu
+**A502 (owner, 2026-10-11) — OPEN; part 1 done** (the big modal and its header, with the
+dashboard's alert toast and update bar shown at the modal's top). The editor wastes space today: the dashboard's header and menu
 stay on screen, and a selected table's form is a long column of fields. The owner's mockups, saved
 as images: [1, the editor with a table selected](mockups/a502-a503-floor-plan-editor/1-editor-table-selected.png),
 [2, the tables list](mockups/a502-a503-floor-plan-editor/2-tables-list-nothing-selected.png) (its
