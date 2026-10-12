@@ -60,26 +60,22 @@ async function fixture(header: "department" | "null" | "absent" = "department") 
     })
     .returning();
   if (header !== "absent")
-    await suite.db
-      .insert(saleReceiptHeaders)
-      .values({
-        saleId: sale!.id,
-        departmentId: header === "null" ? null : department!.id,
-        tradingName: "Recorded brand",
-        printTradingName: true,
-      });
-  await suite.db
-    .insert(tenantReceipts)
-    .values({
-      receipt: {
-        logo: `${"a".repeat(64)}.png`,
-        headerSubtitle: "Retired subtitle",
-        footerMessage: "Retired footer",
-        phone: "Retired phone",
-        email: "retired@example.test",
-        printAddress: true,
-      },
+    await suite.db.insert(saleReceiptHeaders).values({
+      saleId: sale!.id,
+      departmentId: header === "null" ? null : department!.id,
+      tradingName: "Recorded brand",
+      printTradingName: true,
     });
+  await suite.db.insert(tenantReceipts).values({
+    receipt: {
+      logo: `${"a".repeat(64)}.png`,
+      headerSubtitle: "Retired subtitle",
+      footerMessage: "Retired footer",
+      phone: "Retired phone",
+      email: "retired@example.test",
+      printAddress: true,
+    },
+  });
   const authored = async (receipt: Record<string, unknown>) => {
     await suite.db
       .insert(departmentReceipts)
