@@ -232,6 +232,16 @@ settle who signs paper reservations and how fresh offline hardware trusts that k
 The next step remains allocation/approval scope and authority validation, then atomic writes
 and every entry-point replacement above; this checkpoint does not complete Task 4.
 
+**2026-10-12 paper authority checkpoint:** the owner selected a separate external custodian
+Ed25519 key, with independent fingerprint confirmation on replacement hardware. `paper-evidence.ts`
+checks signed blocks and consumption receipts against separately enrolled trust, the outside
+register confirmations and the exact recovery scope and complete series set. The standalone
+`waitron-paper-custodian` command generates keys and signs public evidence; it does not maintain
+the master register. The [custodian procedure](../../developers/paper-custodian.md) covers enrolment
+and key replacement. No persistent allocation, SIF representation or activation entry point has
+changed. Next: validate the complete allocation/approval envelope, then the coupled schema,
+all-or-nothing activation and entry-point replacement above. Task 4 remains incomplete.
+
 ## Task 5: select active series inside issuance transactions
 
 **Modify:** `apps/server/src/till-config.ts`, `trading-config.ts`, `till-sale.ts`,

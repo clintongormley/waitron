@@ -411,6 +411,15 @@ certain uniqueness.
 
 ### 9.2 Authority and consumption
 
+**2026-10-12 decision (owner approved):** the paper custodian holds a separate Ed25519
+signing key outside venue backups. The recovery pack carries that custodian's public key and
+fingerprint; the administrator compares the fingerprint with the current outside master register
+before enrolling it on replacement offline hardware. The private key never enters a venue
+database or pack. The entry is still crossed out in the current master before activation.
+Custodian signing and enrolment tooling and a key replacement procedure are in Task 4's scope.
+The [custodian procedure](../../developers/paper-custodian.md) describes the standalone tool;
+recovery-pack integration remains Task 6.
+
 Before printing a paper block, its custodian reserves its exact serials in the master register
 and records the block ID, taxpayer, software ID, environment, allowed series bases, recipient
 venue and pack version. A venue receives a signed snapshot of that block; the master remains

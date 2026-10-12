@@ -4,7 +4,13 @@
   "private": true,
   "type": "module",
   "main": "./src/index.ts",
+  "waitron": {
+    "commands": {
+      "waitron-paper-custodian": "./dist/paper-custodian.js"
+    }
+  },
   "scripts": {
+    "build": "node ../../scripts/bundle-node.mjs src/paper-custodian-bin.ts=dist/paper-custodian.js",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
@@ -34,6 +40,7 @@
     "@waitron/migrations": "workspace:*",
     "@waitron/server-kit": "workspace:*",
     "drizzle-kit": "^0.31.11",
+    "esbuild": "^0.28.2",
     "typescript": "^7.0.0",
     "vitest": "^4.1.11"
   }

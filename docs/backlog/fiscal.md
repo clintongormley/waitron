@@ -216,10 +216,12 @@ publishing identity. The switch, replay, rollback and reconnect cases are in
 `apps/server/src/transactional-series.test.ts`; the integrated-card switch cases are in
 `apps/server/src/till-sale-integrated.db.test.ts`.
 Task 4's allocation activation remains open, followed by the dependent recovery tasks.
-Its signed paper reservations need an owner decision on the custodian's signing key and how
-fresh offline hardware trusts that key. The existing recovery kit carries the old box's pointer
+The owner selected a separate external paper-custodian key on 2026-10-12, with independent
+fingerprint comparison against the current outside register on replacement hardware. Signed
+paper evidence and the [custodian tool](../developers/paper-custodian.md) are on the Task 4 branch;
+persistent activation and recovery-pack enrolment remain open. The existing recovery kit carries the old box's pointer
 signer; it does not declare a paper custodian (`packages/stream/src/kit.ts`, `RecoveryKit`).
-Keep activation disconnected until that authority is settled; emergency input formats alone
+Keep activation disconnected until its full validation and atomic writes are implemented; emergency input formats alone
 provide no reservation or consumption evidence.
 When activation is connected to recovery, extend the reconnect qualification through that runtime
 path; today's test exercises an offline and then successful fiscal drain without a series switch.
