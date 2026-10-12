@@ -165,14 +165,14 @@ it("writes a refused table's reason below it, outside a round table's clip", asy
   expect(reasonOf(el, "s")).toBeNull();
 });
 
-it("writes a selected refused table's reason below its handle when the handle is below", async () => {
-  const el = await canvas([refusedTable("t1", "T1", "Booked at 21:00", { y: 1 })], {
+it("writes a selected refused table's reason below the table and its bottom dot", async () => {
+  const el = await canvas([refusedTable("t1", "T1", "Booked at 21:00", { y: 10 })], {
     selected: "t1",
   });
+  host.style.setProperty("--wt-space-5", "30px");
   await settled(el);
-  const handle = part(el, "rotate-handle").getBoundingClientRect();
-  expect(handle.top).toBeGreaterThanOrEqual(button(el, "t1").getBoundingClientRect().bottom);
-  expect(reasonOf(el, "t1")!.getBoundingClientRect().top).toBeGreaterThanOrEqual(handle.bottom);
+  const bottom = button(el, "t1").getBoundingClientRect().bottom;
+  expect(reasonOf(el, "t1")!.getBoundingClientRect().top).toBeGreaterThanOrEqual(bottom + 15);
 });
 
 it("keeps a refused table's reason inside the grid at its left and right edges", async () => {
@@ -658,20 +658,69 @@ it("shows the rotation handle on the selected table only, beside its button", as
   expect(handles(el)[0]!.getAttribute("aria-label")).toBe("Girar T1");
 });
 
-it("draws the handle at least a tap target square, above the table", async () => {
-  const el = await canvas([table("t1", "T1", { x: 2, y: 10 })], { selected: "t1" });
+const centreOf = (node: Element) => {
+  const r = node.getBoundingClientRect();
+  return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
+};
+
+/**
+ * Where the handle's centre belongs on screen: `away` px right of and above `key`'s own top-right
+ * corner, both turned with the table round its centre.
+ */
+function turnedCorner(el: WtFloorPlanCanvas, key: string, p: PlanPlacement, away: number) {
+  const c = centreOf(button(el, key));
+  const a = (p.rotation * Math.PI) / 180;
+  const x = (p.width * 12) / 2 + away;
+  const y = -(p.height * 12) / 2 - away;
+  return { x: c.x + x * Math.cos(a) - y * Math.sin(a), y: c.y + x * Math.sin(a) + y * Math.cos(a) };
+}
+
+it("draws the handle at least a tap target square, off the table's top-right corner", async () => {
+  const el = await canvas([table("t1", "T1", { x: 10, y: 10, width: 8, height: 4 })], {
+    selected: "t1",
+  });
   host.style.setProperty("--wt-tap-min", "50px");
   host.style.setProperty("--wt-space-1", "6px");
   const handle = handles(el)[0]!.getBoundingClientRect();
   const box = button(el, "t1").getBoundingClientRect();
   expect(handle.width).toBeGreaterThanOrEqual(50);
   expect(handle.height).toBeGreaterThanOrEqual(50);
-  expect(box.top - handle.bottom).toBe(6);
-  expect(handle.left + handle.width / 2).toBeCloseTo(box.left + box.width / 2);
+  const h = centreOf(handles(el)[0]!);
+  expect(h.x).toBeGreaterThan(box.right);
+  expect(h.y).toBeLessThan(box.top);
+  expect(Math.hypot(h.x - box.right, h.y - box.top)).toBeLessThanOrEqual(50);
   const icon = handles(el)[0]!.querySelector("wt-icon")!;
   await (icon as HTMLElement & { updateComplete: Promise<unknown> }).updateComplete;
   expect(icon.shadowRoot!.querySelector("path")).not.toBeNull();
 });
+
+it.each([90, 30, 180])(
+  "draws the handle at the table's own top-right corner turned %i°",
+  async (rotation) => {
+    const p = place({ x: 10, y: 10, width: 8, height: 4, rotation });
+    const el = await canvas([{ key: "t1", label: "T1", fixed: false, placement: p }], {
+      selected: "t1",
+    });
+    host.style.setProperty("--wt-tap-min", "50px");
+    host.style.setProperty("--wt-space-1", "6px");
+    const want = turnedCorner(el, "t1", p, 31);
+    const h = centreOf(handles(el)[0]!);
+    expect(Math.abs(h.x - want.x)).toBeLessThanOrEqual(2);
+    expect(Math.abs(h.y - want.y)).toBeLessThanOrEqual(2);
+  },
+);
+
+/** The angle the pointer must be at, clockwise from straight up round `centre`, to turn by `turn`
+ *  from a press at `from`, `r` px out. */
+function roundFrom(
+  centre: { x: number; y: number },
+  from: { x: number; y: number },
+  turn: number,
+  r = 80,
+) {
+  const a = Math.atan2(from.x - centre.x, centre.y - from.y) + (turn * Math.PI) / 180;
+  return { x: centre.x + r * Math.sin(a), y: centre.y - r * Math.cos(a) };
+}
 
 it("dragging the handle turns the table in 15° steps", async () => {
   const el = await canvas([table("t1", "T1", { x: 10, y: 10 })], { selected: "t1" });
@@ -679,20 +728,19 @@ it("dragging the handle turns the table in 15° steps", async () => {
   const box = button(el, "t1").getBoundingClientRect();
   const cx = box.left + box.width / 2;
   const cy = box.top + box.height / 2;
-  const r = 80;
-  const turnTo = async (x: number, y: number) => {
+  const turnBy = async (turn: number) => {
     const handle = handles(el)[0]!;
-    const h = handle.getBoundingClientRect();
-    pointer(handle, "pointerdown", 1, h.left + h.width / 2, h.top + h.height / 2);
-    pointer(window, "pointermove", 1, x, y);
-    await release(el, { x, y });
+    const h = centreOf(handle);
+    const to = roundFrom({ x: cx, y: cy }, h, turn);
+    pointer(handle, "pointerdown", 1, h.x, h.y);
+    pointer(window, "pointermove", 1, to.x, to.y);
+    await release(el, to);
   };
-  await turnTo(cx + r, cy);
-  await turnTo(cx, cy + r);
-  const a = (50 * Math.PI) / 180;
-  await turnTo(cx + r * Math.sin(a), cy - r * Math.cos(a));
-  await turnTo(cx - r, cy);
-  await turnTo(cx, cy - r);
+  await turnBy(90);
+  await turnBy(180);
+  await turnBy(50);
+  await turnBy(270);
+  await turnBy(0);
   expect(seen).toEqual([
     { key: "t1", rotation: 90 },
     { key: "t1", rotation: 180 },
@@ -716,9 +764,10 @@ it("the handle turns from the table's own angle, not from straight up", async ()
   pointer(window, "pointermove", 1, hx + 2, hy + 2);
   await release(el, { x: hx + 2, y: hy + 2 });
   expect(seen).toEqual([]);
+  const to = roundFrom({ x: cx, y: cy }, { x: hx, y: hy }, 90);
   pointer(handles(el)[0]!, "pointerdown", 1, hx, hy);
-  pointer(window, "pointermove", 1, cx + 80, cy);
-  await release(el, { x: cx + 80, y: cy });
+  pointer(window, "pointermove", 1, to.x, to.y);
+  await release(el, to);
   expect(seen).toEqual([{ key: "t1", rotation: 180 }]);
 });
 
@@ -734,24 +783,15 @@ it("the handle turns by how far the pointer goes round, wherever it was pressed"
   expect(seen).toEqual([{ key: "t1", rotation: 90 }]);
 });
 
-it("needs room for the handle's size and its gap to draw it above", async () => {
-  const el = await canvas([table("t1", "T1", { x: 10, y: 4 })]);
-  host.style.setProperty("--wt-space-1", "10px");
-  el.selected = "t1";
-  await el.updateComplete;
-  const h = handles(el)[0]!.getBoundingClientRect();
-  const box = button(el, "t1").getBoundingClientRect();
-  expect(h.top - box.bottom).toBe(10);
-});
-
 it("a real drag of the handle turns the table and keeps the selection", async () => {
   const el = await canvas([table("t1", "T1", { x: 10, y: 10 })], { selected: "t1" });
   await settled(el);
   const seen = rotates(el);
   const selections = selects(el);
-  await userEvent.dragAndDrop(handles(el)[0]!, part(el, "grid"), {
-    targetPosition: { x: 168 + 80, y: 168 },
-  });
+  const grid = part(el, "grid").getBoundingClientRect();
+  const h = centreOf(handles(el)[0]!);
+  const to = roundFrom({ x: 168, y: 168 }, { x: h.x - grid.left, y: h.y - grid.top }, 90);
+  await userEvent.dragAndDrop(handles(el)[0]!, part(el, "grid"), { targetPosition: to });
   expect(seen).toEqual([{ key: "t1", rotation: 90 }]);
   expect(selections).toEqual([]);
 });
@@ -776,9 +816,11 @@ it("a real drag of the handle that turns nothing keeps the selection", async () 
   await settled(el);
   const seen = rotates(el);
   const selections = selects(el);
-  await userEvent.dragAndDrop(handles(el)[0]!, part(el, "grid"), {
-    targetPosition: { x: 168, y: 20 },
-  });
+  // Further out along the line the handle was pressed on, past the handle itself.
+  const grid = part(el, "grid").getBoundingClientRect();
+  const h = centreOf(handles(el)[0]!);
+  const to = roundFrom({ x: 168, y: 168 }, { x: h.x - grid.left, y: h.y - grid.top }, 0, 150);
+  await userEvent.dragAndDrop(handles(el)[0]!, part(el, "grid"), { targetPosition: to });
   expect(seen).toEqual([]);
   expect(selections).toEqual([]);
 });
@@ -799,20 +841,24 @@ it("a real drag of a table that moves nothing keeps the selection", async () => 
   expect(selections).toEqual([]);
 });
 
-it("keeps the handle on the side it started on while the table turns", async () => {
-  const el = await canvas([table("t1", "T1", { x: 10, y: 0, width: 2, height: 10 })], {
+it("the handle stays at its corner while the table is dragged round", async () => {
+  const p = place({ x: 10, y: 10, width: 8, height: 4 });
+  const el = await canvas([{ key: "t1", label: "T1", fixed: false, placement: p }], {
     selected: "t1",
   });
-  const box = button(el, "t1").getBoundingClientRect();
-  const cx = box.left + box.width / 2;
-  const cy = box.top + box.height / 2;
-  const h = handles(el)[0]!.getBoundingClientRect();
-  pointer(handles(el)[0]!, "pointerdown", 1, h.left + h.width / 2, h.top + h.height / 2);
-  pointer(window, "pointermove", 1, cx + 80, cy);
+  host.style.setProperty("--wt-tap-min", "50px");
+  host.style.setProperty("--wt-space-1", "6px");
+  const c = centreOf(button(el, "t1"));
+  const h = centreOf(handles(el)[0]!);
+  const to = roundFrom(c, h, 90);
+  pointer(handles(el)[0]!, "pointerdown", 1, h.x, h.y);
+  pointer(window, "pointermove", 1, to.x, to.y);
   await el.updateComplete;
-  const turned = button(el, "t1").getBoundingClientRect();
-  expect(handles(el)[0]!.getBoundingClientRect().top).toBeGreaterThanOrEqual(turned.bottom);
-  pointer(window, "pointercancel", 1, cx + 80, cy);
+  const want = turnedCorner(el, "t1", { ...p, rotation: 90 }, 31);
+  const now = centreOf(handles(el)[0]!);
+  expect(Math.abs(now.x - want.x)).toBeLessThanOrEqual(2);
+  expect(Math.abs(now.y - want.y)).toBeLessThanOrEqual(2);
+  pointer(window, "pointercancel", 1, to.x, to.y);
 });
 
 it("does not read styles again while the handle is dragged", async () => {
@@ -879,26 +925,6 @@ it("a fixed table moves like any other", async () => {
     { key: "t1", x: 4, y: 3 },
     { key: "t1", x: 2, y: 4 },
   ]);
-});
-
-it("draws the handle below a table with no room above it", async () => {
-  for (const y of [0, 2]) {
-    const el = await canvas([table("t1", "T1", { x: 10, y })], { selected: "t1" });
-    const handle = handles(el)[0]!;
-    const h = handle.getBoundingClientRect();
-    const box = button(el, "t1").getBoundingClientRect();
-    expect(h.top - box.bottom, `y ${y}`).toBe(4);
-    const hit = el.shadowRoot!.elementFromPoint(h.left + h.width / 2, h.top + h.height / 2);
-    expect(hit !== null && handle.contains(hit), `y ${y}`).toBe(true);
-    cleanup();
-  }
-});
-
-it("keeps the handle above a table once there is room", async () => {
-  const el = await canvas([table("t1", "T1", { x: 10, y: 4 })], { selected: "t1" });
-  const h = handles(el)[0]!.getBoundingClientRect();
-  const box = button(el, "t1").getBoundingClientRect();
-  expect(box.top - h.bottom).toBe(4);
 });
 
 it("a tap on the handle does not turn the table", async () => {
@@ -1005,7 +1031,7 @@ it("reveal brings a refused table's reason below it into view", async () => {
   expect(reason.bottom).toBeCloseTo(view.bottom, 0);
 });
 
-it("reveal brings the handle above a table into view", async () => {
+it("reveal brings the turn arrow into view", async () => {
   const el = await canvas(
     [table("t1", "T1", { x: 2, y: 40, width: 4, height: 4 }), table("t2", "T2", { y: 80 })],
     { selected: "t1" },
@@ -1015,8 +1041,10 @@ it("reveal brings the handle above a table into view", async () => {
   el.reveal("t1");
   const view = viewportOf(el).getBoundingClientRect();
   const handle = part(el, "rotate-handle").getBoundingClientRect();
-  expect(handle.bottom).toBeLessThan(button(el, "t1").getBoundingClientRect().top);
-  expect(handle.top).toBeCloseTo(view.top, 0);
+  expect(handle.top).toBeGreaterThanOrEqual(view.top);
+  expect(handle.bottom).toBeLessThanOrEqual(view.bottom);
+  expect(handle.left).toBeGreaterThanOrEqual(view.left);
+  expect(handle.right).toBeLessThanOrEqual(view.right);
 });
 
 it("reveal brings a reason wider than its table into view sideways", async () => {
@@ -1115,8 +1143,10 @@ it("draws room for a turned table at the grid's origin, so reveal brings all of 
   expect(box.top).toBeGreaterThanOrEqual(grid.top);
   expect(box.left).toBeGreaterThanOrEqual(view.left);
   expect(box.top).toBeGreaterThanOrEqual(view.top);
-  const handle = handles(el)[0]!.getBoundingClientRect();
-  expect(handle.left + handle.width / 2).toBeCloseTo(box.left + box.width / 2, 1);
+  const want = turnedCorner(el, "t1", place({ rotation: 45 }), 26);
+  const h = centreOf(handles(el)[0]!);
+  expect(Math.abs(h.x - want.x)).toBeLessThanOrEqual(2);
+  expect(Math.abs(h.y - want.y)).toBeLessThanOrEqual(2);
 });
 
 it("a turned table dragged to the origin stays under the pointer and inside the grid", async () => {
@@ -1429,4 +1459,39 @@ it("the first tables drawn after an empty plan show a turned corner table unscro
 it("names the rotate handle with a table name holding replacement patterns", async () => {
   const el = await canvas([table("t1", "A$&B$'C")], { selected: "t1" });
   expect(handles(el)[0]!.getAttribute("aria-label")).toBe("Rotate A$&B$'C");
+});
+
+it("names the rotate handle in English when no copy is given", async () => {
+  const el = await canvas([table("t1", "T1")], { selected: "t1" });
+  expect(handles(el)[0]!.getAttribute("aria-label")).toBe("Rotate T1");
+});
+
+it("hands its removal on to Lit once", async () => {
+  const { LitElement } = await import("lit");
+  const el = await canvas([table("t1", "T1")]);
+  const disconnected = vi.spyOn(LitElement.prototype, "disconnectedCallback");
+  try {
+    el.remove();
+    expect(disconnected.mock.contexts.filter((c) => c === el)).toHaveLength(1);
+  } finally {
+    disconnected.mockRestore();
+  }
+});
+
+it("a press focuses a table partly out of view without scrolling the canvas", async () => {
+  const el = await canvas([
+    table("t1", "T1", { x: 2, y: 40, height: 8 }),
+    table("t2", "T2", { y: 80 }),
+  ]);
+  await settled(el);
+  const viewport = viewportOf(el);
+  // The table's top 48 px are above the viewport and its bottom 48 px show.
+  viewport.scrollTop = 40 * 12 + 48;
+  viewport.scrollLeft = 0;
+  const box = button(el, "t1").getBoundingClientRect();
+  pointer(button(el, "t1"), "pointerdown", 1, box.left + 5, box.bottom - 5);
+  pointer(window, "pointercancel", 1, 0, 0);
+  expect(el.shadowRoot!.activeElement).toBe(button(el, "t1"));
+  expect(viewport.scrollTop).toBe(40 * 12 + 48);
+  expect(viewport.scrollLeft).toBe(0);
 });

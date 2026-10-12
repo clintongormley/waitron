@@ -55,7 +55,7 @@ describe.each(["light", "dark"] as const)("wt-floor-plan-canvas a11y (%s theme)"
     await expectNoA11yViolations(host);
   });
 
-  test("a selected table with its rotation handle above it", async () => {
+  test("a selected table with its handles", async () => {
     const lowered = tables.map((t) => ({ ...t, placement: { ...t.placement, y: 8 } }));
     await mountCanvas(theme, { tables: lowered, selected: "b1" });
     await expectNoA11yViolations(host);
@@ -71,8 +71,11 @@ describe.each(["light", "dark"] as const)("wt-floor-plan-canvas a11y (%s theme)"
     await expectNoA11yViolations(host);
   });
 
-  test("a selected table at the top with its rotation handle below it", async () => {
-    await mountCanvas(theme, { tables, selected: "b1" });
+  test("a selected table at the top-left corner with its handles", async () => {
+    const cornered = tables.map((t) =>
+      t.key === "b1" ? { ...t, placement: { ...t.placement, x: 0, y: 0 } } : t,
+    );
+    await mountCanvas(theme, { tables: cornered, selected: "b1" });
     await expectNoA11yViolations(host);
   });
 });

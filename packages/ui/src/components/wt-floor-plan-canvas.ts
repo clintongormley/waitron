@@ -20,7 +20,8 @@ import { delegatesFocusShadowRootOptions } from "../interactive.js";
 import { registerIcons } from "./wt-icon.js";
 
 registerIcons({
-  "floor-plan-rotate": "M8 3a5 5 0 1 0 4.33 2.5l1.3-.75A6.5 6.5 0 1 1 8 1.5V0l3 2.25L8 4.5z",
+  "floor-plan-rotate":
+    "M3 3.25A9.75 9.75 0 0 1 12.75 13h-1.5A8.25 8.25 0 0 0 3 4.75zM3 1 0 4l3 3zM9 13l3 3 3-3z",
 });
 
 export interface PlanCanvasTable {
@@ -172,8 +173,15 @@ export class WtFloorPlanCanvas extends LitElement {
         text-wrap: nowrap;
       }
 
+      .frame {
+        position: absolute;
+        pointer-events: none;
+      }
+
       .rotate-handle {
         position: absolute;
+        left: calc(100% + var(--wt-space-1));
+        bottom: calc(100% + var(--wt-space-1));
         display: flex;
         align-items: center;
         justify-content: center;
@@ -181,13 +189,16 @@ export class WtFloorPlanCanvas extends LitElement {
         height: var(--wt-tap-min);
         margin: 0;
         padding: 0;
-        border: 1px solid var(--wt-color-primary);
-        border-radius: 50%;
-        background: var(--wt-color-surface-lifted);
-        color: var(--wt-color-primary-text);
+        border: none;
+        background: none;
+        color: var(--wt-color-text);
         cursor: grab;
         touch-action: none;
-        transform: translateX(-50%);
+        pointer-events: auto;
+      }
+
+      .rotate-handle:focus-visible {
+        outline: var(--wt-focus-ring);
       }
     `,
   ];
@@ -209,8 +220,6 @@ export class WtFloorPlanCanvas extends LitElement {
   #drag: Drag | null = null;
 
   #ignoreGridClick = false;
-
-  #room: number | null = null;
 
   /** Squares drawn left of and above the plan's (0, 0), so a turned table's corners past it can be
    *  scrolled to. */
@@ -341,13 +350,7 @@ export class WtFloorPlanCanvas extends LitElement {
 
   #renderTable(t: PlanCanvasTable, copy: FloorPlanCanvasCopy): TemplateResult {
     const p = this.#placementOf(t);
-    const style = styleMap({
-      left: px(this.#origin.x + p.x),
-      top: px(this.#origin.y + p.y),
-      width: px(p.width),
-      height: px(p.height),
-      transform: `rotate(${p.rotation}deg)`,
-    });
+    const style = this.#frameStyle(p);
     return html`
       <button
         type="button"
@@ -372,15 +375,23 @@ export class WtFloorPlanCanvas extends LitElement {
     `;
   }
 
-  /** Outside the table's button, so a round table's clip never cuts it. Always below, past the
-   *  handle when that is below too: the grid runs `gridExtent`'s margin past the lowest table. */
+  #frameStyle(p: PlanPlacement) {
+    return styleMap({
+      left: px(this.#origin.x + p.x),
+      top: px(this.#origin.y + p.y),
+      width: px(p.width),
+      height: px(p.height),
+      transform: `rotate(${p.rotation}deg)`,
+    });
+  }
+
+  /** Outside the table's button, so a round table's clip never cuts it. Always below, past a
+   *  selected table's bottom dot: the grid runs `gridExtent`'s margin past the lowest table. */
   #renderReason(t: PlanCanvasTable, p: PlanPlacement): TemplateResult {
     const box = this.#drawnBox(p);
-    const handleBelow = t.key === this.selected && !this.#handleAbove(t);
+    const dot = t.key === this.selected ? " + var(--wt-space-5) / 2" : "";
     const style = styleMap({
-      top: handleBelow
-        ? `calc(${px(box.y + box.height)} + var(--wt-tap-min) + 2 * var(--wt-space-1))`
-        : `calc(${px(box.y + box.height)} + var(--wt-space-1))`,
+      top: `calc(${px(box.y + box.height)}${dot} + var(--wt-space-1))`,
     });
     return html`<span
       class="refused-reason"
@@ -393,51 +404,27 @@ export class WtFloorPlanCanvas extends LitElement {
     >`;
   }
 
+  /** The frame has the table's box and turn, so the handle turns with the table's corner. */
   #renderHandle(t: PlanCanvasTable, p: PlanPlacement, copy: FloorPlanCanvasCopy): TemplateResult {
-    const box = this.#drawnBox(p);
-    const above = this.#handleAbove(t);
-    const style = styleMap({
-      left: px(box.x + box.width / 2),
-      top: above
-        ? `calc(${px(box.y)} - var(--wt-tap-min) - var(--wt-space-1))`
-        : `calc(${px(box.y + box.height)} + var(--wt-space-1))`,
-    });
-    return html`
+    return html`<div class="frame" style=${this.#frameStyle(p)}>
       <button
         type="button"
         class="rotate-handle"
         part="rotate-handle"
         aria-label=${copy.rotate.replace("{name}", () => t.label)}
-        style=${style}
         @click=${(e: Event) => e.stopPropagation()}
         @pointerdown=${(e: PointerEvent) => this.#onPointerDown(e, t, "rotate")}
         @keydown=${(e: KeyboardEvent) => this.#onHandleKey(e, t)}
       >
         <wt-icon name="floor-plan-rotate" size="lg"></wt-icon>
       </button>
-    `;
+    </div>`;
   }
 
   /** `p`'s turned box in squares from the drawn grid's corner. */
   #drawnBox(p: PlanPlacement): PlanRect {
     const box = rotatedRect(p);
     return { ...box, x: box.x + this.#origin.x, y: box.y + this.#origin.y };
-  }
-
-  /** The side follows the table's saved place, so it does not jump while a drag is drawn. */
-  #handleAbove(t: PlanCanvasTable): boolean {
-    return rotatedRect(t.placement).y * GRID_SQUARE_PX >= this.#handleRoom();
-  }
-
-  /** The handle's size and its gap in px, read once rather than on every redraw of a drag. */
-  #handleRoom(): number {
-    if (this.#room === null) {
-      const host = getComputedStyle(this);
-      this.#room =
-        parseFloat(host.getPropertyValue("--wt-tap-min")) +
-        parseFloat(host.getPropertyValue("--wt-space-1"));
-    }
-    return this.#room;
   }
 
   /** Centres each reason under its table, held inside the grid: its width is known only once drawn. */
