@@ -3876,6 +3876,20 @@ Cancel beside Save — the owner's exception to Cancel on the left (A502). The e
 the dashboard, with the dashboard's alert toast and update bar still shown, and pressable, at its top. A zone with no placed tables shows Add a floor plan to the
 same editor instead, and a failed read adds an alert line above the link.
 
+Beside the plan, or in its bottom sheet on a phone, the editor shows a hint on how to choose and
+place a table while none is selected, then the selected table's form, then the tables list, with
+Add tables last at full width. The list names its tables in number order under Name and Seats
+heads; seats blank reads "—". Each row is one button that puts the table on the plan or takes it
+off, with no question either way, and holds a marker: a filled `--wt-color-primary` circle on the
+plan, a hollow `--wt-color-text-muted` ring when not placed, so the two differ in shape as well as
+colour. A bin beside it asks "Delete {name}?" in a compact modal before the table goes. The
+selected table's row is `--wt-color-surface-lifted` with its name bold, and a table's mark or
+refusal shows under its name in `--wt-color-danger`, whichever table is selected. A table taken off
+goes back to the same place when pressed again, for as long as the editor stays open on that zone;
+the place is not saved. A table that never had a place, pressed when the plan has no free spot,
+changes nothing and says "No room on the plan." Cases: `floor-plan-tables-panel.test.ts` and the
+`floor-plan-editor*.test.ts` files beside it in `apps/dashboard/src/screens/`.
+
 How orders start chooses Table service or Counter service. Counter service has a separate
 paid-when choice and collection-ticket choice. Print a receipt offers Always (`auto`) or
 On request (`on_request`). A zone's empty choice follows its department: the placeholder
@@ -3902,7 +3916,8 @@ cannot open or save its configuration. Internal receipt printing keeps the delet
 recorded receipt settings and media; image usage names that department without linking to its editor.
 Closed today and opening hours keep their own actions. Hardware keeps Disable and Enable.
 
-Individual tables follow the master floor plan contract: Delete has Undo until Save. Saving a
+Individual tables follow the master floor plan contract: Delete, after a confirmation, has Undo
+until Save. Saving a
 master edit preserves today's deferred removal rules. See the
 [A435 step 6 reconciliation](../superpowers/plans/2026-10-11-a435-6-tables-zones-departments-delete.md)
 for the hierarchy's separate immediate cleanup and retained-history limits.
