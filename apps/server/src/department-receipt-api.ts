@@ -25,6 +25,8 @@ import { drawLogoRasters } from "./receipt-logo.js";
 import type { TillConfig } from "./till-config.js";
 import { readLocationAddress } from "./venue-address.js";
 import { readVenueReceiptLanguageRules } from "./venue-locale.js";
+import { departmentReceiptLanguages } from "./department-receipt-languages.js";
+import { checkedDepartmentReceiptWrite } from "./department-receipt-draft.js";
 
 const run = createErrorBoundary(
   {
@@ -181,6 +183,98 @@ export function mountDepartmentReceiptApi(
           settings: body.settings,
           ...(logoRasters === undefined ? {} : { logoRasters }),
         });
+      });
+      return c.body(null, 204);
+    }),
+  );
+}
+
+export function mountDepartmentReceiptSettingsApi(
+  app: Hono,
+  deps: {
+    db: Database;
+    venueCfg: () => TillConfig;
+    validateOperationDescription?: (description: string) => void;
+  },
+  log: Logger,
+): void {
+  app.get("/management-api/venue-service/departments/:id/receipt", (c) =>
+    run(c, log, async () => {
+      const sessionId = requireManagementSession(c);
+      const id = requireUuidParam(c.req.param("id"), "departmentId");
+      const cfg = deps.venueCfg();
+      const body = await withTransaction(deps.db, async (tx) => {
+        await authorize(tx, sessionId);
+        const { receiptLanguage, languages, storageLanguages } = await departmentReceiptLanguages(
+          tx,
+          cfg,
+        );
+        const receipt = await VENUE_SERVICE.readDepartmentReceipt(
+          tx,
+          { ...cfg, receiptLanguages: storageLanguages },
+          id,
+        );
+        const policy = await VENUE_SERVICE.readDepartmentReceiptPolicy(tx, cfg, id);
+        const venueAddress = await readLocationAddress(tx, cfg.locationId);
+        return {
+          receipt,
+          policy,
+          receiptLanguage,
+          languages,
+          warningLanguages: untranslatedLanguages(
+            [receipt.headerSubtitle, receipt.footerMessage],
+            languages,
+          ),
+          venueAddress,
+        };
+      });
+      return c.json(body);
+    }),
+  );
+  app.put("/management-api/venue-service/departments/:id/receipt", (c) =>
+    run(c, log, async () => {
+      const sessionId = requireManagementSession(c);
+      const id = requireUuidParam(c.req.param("id"), "departmentId");
+      const body = await readJsonBody<unknown>(c);
+      const cfg = deps.venueCfg();
+      // Decoding runs outside the write queue; permission, scope, language, policy and image are rechecked before saving.
+      const prepared = await withTransaction(deps.db, async (tx) => {
+        const checked = await checkedDepartmentReceiptWrite(
+          tx,
+          cfg,
+          id,
+          sessionId,
+          body,
+          deps.validateOperationDescription,
+        );
+        const receipt = checked.input.receipt;
+        const current = await VENUE_SERVICE.readDepartmentReceipt(tx, checked.scope, id);
+        const kept =
+          receipt.logo !== undefined && receipt.logo === current.logo
+            ? await VENUE_SERVICE.readDepartmentLogoRasters(tx, checked.scope, id)
+            : null;
+        return prepareLogo(tx, receipt.logo, kept);
+      });
+      const rasters = prepared instanceof Uint8Array ? await drawLogoRasters(prepared) : prepared;
+      await withTransaction(deps.db, async (tx) => {
+        const checked = await checkedDepartmentReceiptWrite(
+          tx,
+          cfg,
+          id,
+          sessionId,
+          body,
+          deps.validateOperationDescription,
+        );
+        const { receipt } = checked.input;
+        if (receipt.logo !== undefined && !(await imageExists(tx, receipt.logo)))
+          throw logoNotFound();
+        await VENUE_SERVICE.saveDepartmentReceiptSettings(
+          tx,
+          checked.scope,
+          id,
+          checked.input,
+          rasters,
+        );
       });
       return c.body(null, 204);
     }),

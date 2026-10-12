@@ -24,8 +24,13 @@ export async function checkedDepartmentReceiptWrite(
   managementSessionId: string,
   input: unknown,
   validateOperationDescription?: (description: string) => void,
+  options: { touch?: boolean } = {},
 ) {
-  await authorizeManager(tx, { managementSessionId, permission: "layout.configure" });
+  await authorizeManager(tx, {
+    managementSessionId,
+    permission: "layout.configure",
+    touch: options.touch,
+  });
   const languages = await departmentReceiptLanguages(tx, cfg);
   const scope = { ...cfg, receiptLanguages: languages.storageLanguages };
   const current = await VENUE_SERVICE.readDepartmentReceipt(tx, scope, departmentId);
@@ -40,7 +45,11 @@ export async function checkedDepartmentReceiptWrite(
     policy.receiptPrintMode !== checked.policy.receiptPrintMode ||
     policy.printTradingName !== checked.policy.printTradingName
   ) {
-    await authorizeManager(tx, { managementSessionId, permission: "venue_service.manage" });
+    await authorizeManager(tx, {
+      managementSessionId,
+      permission: "venue_service.manage",
+      touch: options.touch,
+    });
   }
   return { input: checked, scope };
 }
