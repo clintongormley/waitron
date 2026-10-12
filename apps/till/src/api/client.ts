@@ -3381,6 +3381,17 @@ export class TillApi {
     });
   }
 
+  splitHeldLineIntoUnits(
+    partyId: string,
+    lineId: string,
+    command: GroupCommand,
+  ): Promise<{ revision: number }> {
+    return this.#request(`/api/parties/${partyId}/groups/split-line`, "POST", {
+      ...command,
+      lineId,
+    });
+  }
+
   /** Move lines, or part of one, between held groups, or into a new held group at the end →
    * `POST /api/parties/:partyId/groups/move`. */
   moveLinesToGroup(

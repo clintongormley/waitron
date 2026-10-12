@@ -79,6 +79,7 @@ import {
   readCurrentOrders,
   markGroupAway,
   moveLinesToGroup,
+  splitHeldLineIntoUnits,
   reorderHeldGroups,
   submitGroups,
   type GroupLine,
@@ -4463,5 +4464,86 @@ describe("advance HOLD tickets (Task 6)", () => {
       expect(await printedSince(v, 5)).toHaveLength(2);
       expect(await noticesAt(v)).toHaveLength(2);
     });
+  });
+});
+
+describe("splitting a held line into units", () => {
+  it.each(["fired", "settled", "paying", "stale", "other-party", "missing"] as const)(
+    "refuses %s without changing rows, tickets, revisions, printing or history",
+    async (state) => {
+      const v = await setupVenue();
+      const s = await specExample(v);
+      const [steak] = await linesIn(s.partyId, s.mains);
+      const command = await args(s.partyId);
+      let lineId = steak!.id;
+      let code = "group.not_held";
+      if (state === "fired") await fire(v, s.partyId, s.mains);
+      if (state === "settled") {
+        await db
+          .update(workingOrders)
+          .set({ status: "settled", settledAt: new Date().toISOString() })
+          .where(eq(workingOrders.id, s.tabId));
+        code = "working_order.not_open";
+      }
+      if (state === "paying") {
+        await db
+          .update(workingOrders)
+          .set({ paymentAttemptAt: new Date().toISOString() })
+          .where(eq(workingOrders.id, s.tabId));
+        code = "order.payment_in_flight";
+      }
+      if (state === "stale") {
+        command.expectedPartyRevision -= 1;
+        code = "party.out_of_date";
+      }
+      if (state === "other-party") {
+        const other = await specExample(v);
+        lineId = (await linesIn(other.partyId, other.mains))[0]!.id;
+        code = "group.not_found";
+      }
+      if (state === "missing") {
+        lineId = randomUUID();
+        code = "group.not_found";
+      }
+      if (state === "fired") command.expectedPartyRevision = await revisionOf(s.partyId);
+      await expectRefusedWithNothingWritten(
+        v,
+        s.partyId,
+        () => inTx((tx) => splitHeldLineIntoUnits(tx, v.cfg, s.partyId, lineId, command)),
+        { code },
+      );
+    },
+  );
+
+  it("refuses a dish with extras and an extra by itself without writing", async () => {
+    const v = await setupVenue();
+    const s = await seated(v);
+    const answer = await submit(v, s.partyId, [
+      {
+        release: "hold",
+        lines: [
+          {
+            ...line(v, "steak", "3"),
+            extras: [
+              { listId: v.extrasListId, picks: [{ productId: v.productId.sauce, quantity: 1 }] },
+            ],
+          },
+        ],
+      },
+    ]);
+    const rows = await db
+      .select()
+      .from(workingOrderLines)
+      .where(eq(workingOrderLines.workingOrderId, s.tabId));
+    for (const row of rows) {
+      const command = await args(s.partyId);
+      await expectRefusedWithNothingWritten(
+        v,
+        s.partyId,
+        () => inTx((tx) => splitHeldLineIntoUnits(tx, v.cfg, s.partyId, row.id, command)),
+        { code: row.parentLineId === null ? "tab.transfer_modifier_line" : "group.not_found" },
+      );
+    }
+    expect(answer.groups).toHaveLength(1);
   });
 });

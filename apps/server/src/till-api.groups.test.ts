@@ -19,6 +19,8 @@ import { createTable } from "./testing/live-table.js";
 import { inTx, provisionBillVenue, send, tabWith, type BillVenue } from "./testing/bill-venue.js";
 import { addTabRound } from "./working-order.js";
 import "./errors.js";
+import { AppError } from "@waitron/shared";
+import { VENUE_SERVICE } from "./modules.js";
 import { splitBill } from "./bill-actions.js";
 import { cancelBody } from "./testing/cancel-line.js";
 
@@ -1895,4 +1897,162 @@ describe("POST /api/parties/:id/groups/:gid/unsnooze", () => {
       before,
     );
   });
+});
+
+describe("POST /api/parties/:id/groups/split-line", () => {
+  it("splits the stored quantity into single units under one revision and replays without writing", async () => {
+    const party = await seated();
+    const submitted = await submit(party.partyId, [
+      { lines: [dish("Tarta", "4")], release: "hold" },
+    ]);
+    expect(submitted.status).toBe(200);
+    const group = (submitted.json as unknown as SubmitAnswer).groups[0]!;
+    const body = {
+      submissionId: randomUUID(),
+      expectedPartyRevision: await revisionOf(party.partyId),
+      lineId: group.lineIds[0],
+    };
+    const path = `/api/parties/${party.partyId}/groups/split-line`;
+    const beforeCommands = await commandCount(party.partyId);
+    const [original] = await inTx(venue, (tx) =>
+      tx.select().from(workingOrderLines).where(eq(workingOrderLines.id, body.lineId!)),
+    );
+    const answer = await call("POST", path, body);
+    expect(answer.status).toBe(200);
+    expect(answer.json).toEqual({ revision: body.expectedPartyRevision + 1 });
+    const rows = await inTx(venue, (tx) =>
+      tx
+        .select()
+        .from(workingOrderLines)
+        .where(eq(workingOrderLines.workingOrderId, party.tabId))
+        .orderBy(workingOrderLines.lineNo),
+    );
+    expect(
+      rows.map((row) => [row.quantity, row.groupId, row.unitPriceGross, row.vatClass]),
+    ).toEqual(
+      Array.from({ length: 4 }, () => [
+        1000,
+        group.id,
+        original!.unitPriceGross,
+        original!.vatClass,
+      ]),
+    );
+    expect(
+      rows.map((row) => [
+        row.name,
+        row.descriptions,
+        row.optionSnapshots,
+        row.creditedTo,
+        row.classification,
+      ]),
+    ).toEqual(
+      Array.from({ length: 4 }, () => [
+        original!.name,
+        original!.descriptions,
+        original!.optionSnapshots,
+        original!.creditedTo,
+        original!.classification,
+      ]),
+    );
+    expect(rows.reduce((total, row) => total + row.lineTotal, 0)).toBe(original!.lineTotal);
+    expect(rows[0]!.id).toBe(original!.id);
+    expect(new Set(rows.map((row) => row.id)).size).toBe(4);
+    expect(await commandCount(party.partyId)).toBe(beforeCommands + 1);
+    const before = await snapshot(party);
+    expect((await call("POST", path, body)).json).toEqual(answer.json);
+    expect(await snapshot(party)).toEqual(before);
+    const reused = await call("POST", path, { ...body, lineId: randomUUID() });
+    expect(reused.status).toBe(409);
+    expect(reused.json).toEqual(
+      refusal("submission.id_reused", { submissionId: body.submissionId }),
+    );
+  });
+  it("rolls back the first unit when a later split is refused, including revisions, kitchen items and command history", async () => {
+    const party = await seated();
+    const submitted = await submit(party.partyId, [
+      { lines: [dish("Tarta", "4")], release: "hold" },
+    ]);
+    expect(submitted.status).toBe(200);
+    const group = (submitted.json as unknown as SubmitAnswer).groups[0]!;
+    const read = async () => ({
+      state: await snapshot(party),
+      rows: await inTx(venue, (tx) =>
+        tx
+          .select()
+          .from(workingOrderLines)
+          .where(eq(workingOrderLines.workingOrderId, party.tabId))
+          .orderBy(workingOrderLines.id),
+      ),
+      bills: await inTx(venue, (tx) =>
+        tx.select().from(workingOrders).where(eq(workingOrders.id, party.tabId)),
+      ),
+      tickets: await inTx(venue, (tx) =>
+        tx
+          .select()
+          .from(ticketItems)
+          .where(eq(ticketItems.workingOrderId, party.tabId))
+          .orderBy(ticketItems.id),
+      ),
+    });
+    const before = await read();
+    const copy = VENUE_SERVICE.copyLineContext;
+    let copies = 0;
+    const fail = vi.spyOn(VENUE_SERVICE, "copyLineContext").mockImplementation(async (...args) => {
+      if (++copies === 2) throw new AppError("group.not_held", { groupId: group.id });
+      return copy(...args);
+    });
+    try {
+      const answer = await call("POST", `/api/parties/${party.partyId}/groups/split-line`, {
+        submissionId: randomUUID(),
+        expectedPartyRevision: await revisionOf(party.partyId),
+        lineId: group.lineIds[0],
+      });
+      expect(answer.status).toBe(409);
+      expect(answer.json).toEqual(refusal("group.not_held", { groupId: group.id }));
+      expect(copies).toBe(2);
+      expect(await read()).toEqual(before);
+    } finally {
+      fail.mockRestore();
+    }
+  });
+
+  it.each([1000, 1500])(
+    "refuses unsplittable stored quantity %s without writing",
+    async (quantity) => {
+      const party = await seated();
+      const submitted = await submit(party.partyId, [
+        { lines: [dish("Tarta", "2")], release: "hold" },
+      ]);
+      const group = (submitted.json as unknown as SubmitAnswer).groups[0]!;
+      const lineId = group.lineIds[0]!;
+      await inTx(venue, (tx) =>
+        tx.update(workingOrderLines).set({ quantity }).where(eq(workingOrderLines.id, lineId)),
+      );
+      const before = await snapshot(party);
+      const answer = await call("POST", `/api/parties/${party.partyId}/groups/split-line`, {
+        submissionId: randomUUID(),
+        expectedPartyRevision: await revisionOf(party.partyId),
+        lineId,
+      });
+      expect(answer.status).toBe(400);
+      expect(answer.json).toMatchObject({ code: "tab.transfer_quantity_invalid" });
+      expect(await snapshot(party)).toEqual(before);
+    },
+  );
+
+  it.each([undefined, null, 4, "bad-id"])(
+    "refuses malformed line id %j with its field and writes nothing",
+    async (lineId) => {
+      const party = await withGroups();
+      const before = await snapshot(party);
+      const answer = await call("POST", `/api/parties/${party.partyId}/groups/split-line`, {
+        submissionId: randomUUID(),
+        expectedPartyRevision: await revisionOf(party.partyId),
+        lineId,
+      });
+      expect(answer.status).toBe(400);
+      expect(answer.json).toEqual(refusal("management.request_invalid", { field: "lineId" }));
+      expect(await snapshot(party)).toEqual(before);
+    },
+  );
 });

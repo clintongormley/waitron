@@ -4708,6 +4708,27 @@ describe("till-app: the order's groups", () => {
             return { revision: ++revision };
           },
         ),
+        splitHeldLineIntoUnits: vi.fn(
+          async (
+            _partyId: string,
+            lineId: string,
+            command: { submissionId: string; expectedPartyRevision: number },
+          ) => {
+            check(command);
+            const line = lines.find((each) => each.id === lineId)!;
+            held(line.groupId!);
+            const count = Number(line.quantity);
+            line.quantity = "1.000";
+            for (let unit = 1; unit < count; unit += 1) {
+              lines.splice(lines.indexOf(line) + 1, 0, {
+                ...line,
+                id: `line-${++lineNos}`,
+                lineNo: lineNos,
+              });
+            }
+            return { revision: ++revision };
+          },
+        ),
         moveLinesToGroup: vi.fn(
           async (
             _partyId: string,
@@ -4845,62 +4866,48 @@ describe("till-app: the order's groups", () => {
       ]);
     });
 
-    it("splits Steak ×2 into two rows of one, which stay separate in their group", async () => {
-      const server = editServer();
-      const { el } = await mountApp(server);
-      await openGroups(el);
+    it.each([2, 3, 4])(
+      "splits Steak ×%s with one command and keeps the resulting rows separate",
+      async (quantity) => {
+        const server = editServer(`${quantity}.000`);
+        const { el } = await mountApp(server);
+        await openGroups(el);
+        await press(el, '[data-split-group-line="line-steak"]');
+        expect(server.splitHeldLineIntoUnits.mock.calls).toEqual([
+          ["v1", "line-steak", command(3)],
+        ]);
+        expect(server.moveLinesToGroup).not.toHaveBeenCalled();
+        expect(heldGroupsList(el)[2]!.lines).toEqual([
+          ...Array<string>(quantity).fill("Steak ×1"),
+          "Fish ×1",
+        ]);
+        expect(tableOrder(el)!.shadowRoot!.querySelector("[data-split-group-line]")).toBeNull();
+        expect(banner(el)).toBeNull();
+        await press(el, '[data-group-up="g3"]');
+        expect(heldGroupsList(el)[1]!.lines).toEqual([
+          ...Array<string>(quantity).fill("Steak ×1"),
+          "Fish ×1",
+        ]);
+        emit(tableOrder(el)!, "move-guests", { toTableId: "t9", bills: "merge" });
+        await flush(el);
+        expect(api.moveGuests).toHaveBeenCalledWith("v1", "t9", "merge", {
+          expectedPartyRevision: 5,
+          otherPartyId: null,
+        });
+      },
+    );
 
-      await press(el, '[data-split-group-line="line-steak"]');
-
-      expect(server.moveLinesToGroup.mock.calls).toEqual([
-        ["v1", [{ lineId: "line-steak", quantity: "1" }], { groupId: "g3" }, command(3)],
-      ]);
-      expect(heldGroupsList(el)[2]!.lines).toEqual(["Steak ×1", "Steak ×1", "Fish ×1"]);
-      expect(tableOrder(el)!.shadowRoot!.querySelector("[data-split-group-line]")).toBeNull();
-
-      await press(el, '[data-group-up="g3"]');
-      expect(heldGroupsList(el)[1]!.lines).toEqual(["Steak ×1", "Steak ×1", "Fish ×1"]);
-    });
-
-    it("splits Steak ×3 in two requests, each with a submission id of its own and the revision the one before answered", async () => {
-      const server = editServer("3.000");
-      const { el } = await mountApp(server);
-      await openGroups(el);
-
-      await press(el, '[data-split-group-line="line-steak"]');
-
-      const calls = server.moveLinesToGroup.mock.calls;
-      expect(calls).toEqual([
-        ["v1", [{ lineId: "line-steak", quantity: "1" }], { groupId: "g3" }, command(3)],
-        ["v1", [{ lineId: "line-steak", quantity: "1" }], { groupId: "g3" }, command(4)],
-      ]);
-      expect(calls[0]![3].submissionId).not.toBe(calls[1]![3].submissionId);
-      expect(heldGroupsList(el)[2]!.lines).toEqual(["Steak ×1", "Steak ×1", "Steak ×1", "Fish ×1"]);
-      expect(banner(el)).toBeNull();
-
-      emit(tableOrder(el)!, "move-guests", { toTableId: "t9", bills: "merge" });
-      await flush(el);
-      expect(api.moveGuests).toHaveBeenCalledWith("v1", "t9", "merge", {
-        expectedPartyRevision: 5,
-        otherPartyId: null,
-      });
-    });
-
-    it("a split refused part-way keeps the rows already split, reads the order again, says so and sends no more", async () => {
+    it("a refused split keeps the whole line, reads the order again, says so and sends no more", async () => {
       const server = editServer("4.000");
-      const split = server.moveLinesToGroup;
-      split.mockImplementationOnce(split.getMockImplementation()!);
+      const split = server.splitHeldLineIntoUnits;
       split.mockRejectedValueOnce({ code: "group.not_held" });
       const { el } = await mountApp(server);
       await openGroups(el);
       const lineReads = server.getTabLines.mock.calls.length;
-
       await press(el, '[data-split-group-line="line-steak"]');
-
-      expect(split).toHaveBeenCalledTimes(2);
-      expect(split.mock.calls[1]![3]).toEqual(command(4));
+      expect(split.mock.calls).toEqual([["v1", "line-steak", command(3)]]);
       expect(server.getTabLines).toHaveBeenCalledTimes(lineReads + 1);
-      expect(heldGroupsList(el)[2]!.lines).toEqual(["Steak ×3", "Steak ×1", "Fish ×1"]);
+      expect(heldGroupsList(el)[2]!.lines).toEqual(["Steak ×4", "Fish ×1"]);
       expect(banner(el)!.textContent).toContain(codeMessage("group.not_held"));
     });
 
@@ -4951,11 +4958,10 @@ describe("till-app: the order's groups", () => {
       });
     });
 
-    it("a split whose request gets no answer stops, reads the floor again, and the next command carries the server's revision", async () => {
+    it("a split whose reply is lost reads the whole result and carries the server's revision", async () => {
       const server = editServer("4.000");
-      const split = server.moveLinesToGroup;
+      const split = server.splitHeldLineIntoUnits;
       const landed = split.getMockImplementation()!;
-      split.mockImplementationOnce(landed);
       split.mockImplementationOnce(async (...args) => {
         await landed(...args);
         throw new TypeError("offline");
@@ -4963,39 +4969,39 @@ describe("till-app: the order's groups", () => {
       const { el } = await mountApp(server);
       await openGroups(el);
       const floorReads = server.getTablesState.mock.calls.length;
-
       await press(el, '[data-split-group-line="line-steak"]');
-
-      expect(split.mock.calls.map((call) => call[3])).toEqual([command(3), command(4)]);
+      expect(split.mock.calls).toEqual([["v1", "line-steak", command(3)]]);
       expect(server.getTablesState).toHaveBeenCalledTimes(floorReads + 1);
       expect(banner(el)!.textContent).toContain(t("table.error"));
-      expect(heldGroupsList(el)[2]!.lines).toEqual(["Steak ×2", "Steak ×1", "Steak ×1", "Fish ×1"]);
-
+      expect(heldGroupsList(el)[2]!.lines).toEqual([
+        "Steak ×1",
+        "Steak ×1",
+        "Steak ×1",
+        "Steak ×1",
+        "Fish ×1",
+      ]);
       emit(tableOrder(el)!, "move-guests", { toTableId: "t9", bills: "merge" });
       await flush(el);
       expect(api.moveGuests).toHaveBeenCalledWith("v1", "t9", "merge", {
-        expectedPartyRevision: 5,
+        expectedPartyRevision: 4,
         otherPartyId: null,
       });
     });
 
-    it("a split refused part-way because another device changed the party stops, reloads the table, says so and never sends again", async () => {
+    it("a stale split leaves the whole line, reloads the table, says so and never sends again", async () => {
       const server = editServer("4.000");
-      const split = server.moveLinesToGroup;
-      split.mockImplementationOnce(split.getMockImplementation()!);
+      const split = server.splitHeldLineIntoUnits;
       split.mockRejectedValueOnce({ code: "party.out_of_date", partyId: "v1" });
       const { el } = await mountApp(server);
       await openGroups(el);
       const floorReads = server.getTablesState.mock.calls.length;
       const lineReads = server.getTabLines.mock.calls.length;
-
       await press(el, '[data-split-group-line="line-steak"]');
-
-      expect(split.mock.calls.map((call) => call[3])).toEqual([command(3), command(4)]);
+      expect(split.mock.calls).toEqual([["v1", "line-steak", command(3)]]);
       expect(server.getTablesState).toHaveBeenCalledTimes(floorReads + 1);
       expect(server.getTabLines).toHaveBeenCalledTimes(lineReads + 1);
       expect(banner(el)!.textContent).toContain(t("party.changed").replace("{table}", "4"));
-      expect(heldGroupsList(el)[2]!.lines).toEqual(["Steak ×3", "Steak ×1", "Fish ×1"]);
+      expect(heldGroupsList(el)[2]!.lines).toEqual(["Steak ×4", "Fish ×1"]);
     });
 
     it("two presses of ↑ in one turn move the group once, and show no message", async () => {
@@ -5030,10 +5036,7 @@ describe("till-app: the order's groups", () => {
       split.click();
       await flush(el);
 
-      expect(server.moveLinesToGroup.mock.calls.map((call) => call[3])).toEqual([
-        command(3),
-        command(4),
-      ]);
+      expect(server.splitHeldLineIntoUnits.mock.calls).toEqual([["v1", "line-steak", command(3)]]);
       expect(banner(el)).toBeNull();
       expect(heldGroupsList(el)[2]!.lines).toEqual(["Steak ×1", "Steak ×1", "Steak ×1", "Fish ×1"]);
     });
@@ -5114,7 +5117,7 @@ describe("till-app: the order's groups", () => {
       [
         "split-group-line",
         { lineId: "line-steak", groupId: "g3", quantity: "2.000" },
-        "moveLinesToGroup",
+        "splitHeldLineIntoUnits",
       ],
     ] as const;
 

@@ -764,6 +764,72 @@ export async function moveLinesToGroup(
   );
 }
 
+export async function splitHeldLineIntoUnits(
+  tx: Transaction,
+  cfg: TillConfig,
+  partyId: string,
+  lineId: string,
+  args: PartyCommandArgs,
+): Promise<{ revision: number }> {
+  return runServiceCommand(
+    tx,
+    { kind: "party", partyId },
+    args.submissionId,
+    "group.split_line",
+    { partyId, lineId, operatorId: args.operatorId },
+    async () => {
+      const revision = await checkAndBumpParty(tx, partyId, args.expectedPartyRevision, "open");
+      const [line] = await tx
+        .select({
+          workingOrderId: workingOrderLines.workingOrderId,
+          lineNo: workingOrderLines.lineNo,
+          quantity: workingOrderLines.quantity,
+          groupId: workingOrderLines.groupId,
+          groupState: orderGroups.state,
+          billStatus: workingOrders.status,
+        })
+        .from(workingOrderLines)
+        .innerJoin(orderGroups, eq(orderGroups.id, workingOrderLines.groupId))
+        .innerJoin(workingOrders, eq(workingOrders.id, workingOrderLines.workingOrderId))
+        .where(
+          and(
+            eq(workingOrderLines.id, lineId),
+            isNull(workingOrderLines.parentLineId),
+            eq(orderGroups.partyId, partyId),
+            ne(orderGroups.state, "removed"),
+          ),
+        );
+      if (line === undefined) throw new AppError("group.not_found", { lineId });
+      if (line.groupState !== "held")
+        throw new AppError("group.not_held", { groupId: line.groupId! });
+      if (line.billStatus !== "open")
+        throw new AppError("working_order.not_open", { workingOrderId: line.workingOrderId });
+      if (line.quantity < 2000 || line.quantity % 1000 !== 0) {
+        throw new AppError("tab.transfer_quantity_invalid", {
+          tabId: line.workingOrderId,
+          lineNo: line.lineNo,
+          quantity: thousandthsToDecimal(line.quantity),
+        });
+      }
+      for (let remaining = line.quantity; remaining > 1000; remaining -= 1000) {
+        await splitLinesWithinOrder(tx, cfg, line.workingOrderId, [
+          { lineNo: line.lineNo, quantity: "1" },
+        ]);
+      }
+      await bumpRevision(tx, [line.workingOrderId]);
+      await recordGroupEvent(tx, {
+        partyId,
+        groupId: line.groupId!,
+        kind: "lines_moved",
+        actorId: args.operatorId,
+        detail: { splitLineId: lineId },
+      });
+      return { revision };
+    },
+    cfg.madeHereSink,
+  );
+}
+
 /**
  * A new group at the end of the party's sequence, fired or held, submitted by the operator. The
  * caller puts its lines in it and records its event.

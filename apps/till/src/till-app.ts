@@ -6410,19 +6410,11 @@ export class TillApp extends LitElement {
     );
   }
 
-  /** One unit at a time moves off the line into a row of its own in the same group, each request at
-   * the revision the one before answered, until every row holds one. Each request is a command of its
-   * own, so a refusal part-way leaves the rows already split. */
   async #onSplitGroupLine(event: Event): Promise<void> {
-    const { lineId, groupId, quantity } = (event as CustomEvent<SplitGroupLineDetail>).detail;
-    await this.#onGroupCommand(async (party) => {
-      let revision = party.revision;
-      for (let units = Number.parseInt(quantity, 10); units > 1; units -= 1) {
-        revision = await this.#partyRequest(party, revision, (command) =>
-          this.api.moveLinesToGroup(party.id, [{ lineId, quantity: "1" }], { groupId }, command),
-        );
-      }
-    });
+    const { lineId } = (event as CustomEvent<SplitGroupLineDetail>).detail;
+    await this.#onGroupRequest((party, command) =>
+      this.api.splitHeldLineIntoUnits(party.id, lineId, command),
+    );
   }
 
   /** Serving, its undo and a reminder's snooze and its clearing are commands on the party whose
