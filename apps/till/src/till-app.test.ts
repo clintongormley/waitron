@@ -5934,6 +5934,40 @@ describe("till-app", () => {
     expect(ticket(el)).toBeNull();
   });
 
+  it("an edited retrieved basket held with a new label saves its lines too", async () => {
+    const setWorkingOrderLabel = vi.fn().mockResolvedValue({ revision: 4 });
+    const { el } = await mountApp({ setWorkingOrderLabel });
+    const c = await toCounter(el);
+    emit(c, "retrieve-order", { id: "wo-1" });
+    await flush(el);
+    c.store.addProduct(cafe, "1");
+    await el.updateComplete;
+    emit(c, "park-order", { label: "Ana" });
+    await flush(el);
+    expect(currentApi.updateWorkingOrder).toHaveBeenCalledExactlyOnceWith("wo-1", {
+      lines: [
+        { makeAt: null, menuItemId: "menu-item-cafe-0", quantity: "2" },
+        { makeAt: null, menuItemId: "menu-item-cafe-0", quantity: "1" },
+      ],
+      label: "Ana",
+      revision: 3,
+    });
+    expect(setWorkingOrderLabel).not.toHaveBeenCalled();
+    expect(c.store.lines).toHaveLength(0);
+  });
+
+  it("a closed order's label-only Hold shows stale instead of asking to retry", async () => {
+    const setWorkingOrderLabel = vi.fn().mockRejectedValue({ code: "working_order.not_open" });
+    const { el } = await mountApp({ setWorkingOrderLabel });
+    const c = await toCounter(el);
+    emit(c, "retrieve-order", { id: "wo-1" });
+    await flush(el);
+    emit(c, "park-order", { label: "Ana" });
+    await flush(el);
+    expect(c.store.lines).toHaveLength(1);
+    expect(el.shadowRoot!.querySelector('[role="alert"]')!.textContent).toContain(t("held.stale"));
+  });
+
   it("a label-only Hold reply after logout keeps the basket", async () => {
     let answer!: (value: { revision: number }) => void;
     const pending = new Promise<{ revision: number }>((resolve) => {

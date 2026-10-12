@@ -4289,6 +4289,8 @@ export class TillApp extends LitElement {
       ) {
         recheck = true;
         inactiveChoice = (error as { code?: string }).code === "route.station_inactive";
+      } else if ((error as { code?: string }).code === "working_order.not_open") {
+        this.errorKey = "held.stale";
       } else if ((error as { code?: string }).code === "working_order.out_of_date") {
         await this.#reloadChangedOrder(id);
       } else if (isVersionRefusal(error)) refreshed = await this.#refreshBasket();
