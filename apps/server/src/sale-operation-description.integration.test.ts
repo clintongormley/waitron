@@ -20,7 +20,6 @@ import { creditWholeInvoice, readOrderInvoice } from "./cancel-credit.js";
 import {
   payWorkingOrderIntegratedOrchestration as payIntegrated,
   payWorkingOrder,
-  collectOrderOrchestration as collectOrder,
 } from "./till-sale.js";
 import { createOpenOrder, placeOrder } from "./working-order.js";
 import { issueOrderInvoice } from "./testing/issue-order.js";
@@ -275,12 +274,7 @@ it("a concurrent winner is replayed even when its department description is subs
   let winningFacts: ReturnType<typeof facts> | undefined;
   const charged = vi.spyOn(provider, "collect").mockImplementationOnce(async (input) => {
     const result = await collect(input);
-    await collectOrder(
-      deps(),
-      venue.cfg,
-      { id, lines: [], tender: { method: "cash", amount: "3.00" } },
-      venue.operatorId,
-    );
+    await payIntegrated({ ...deps(), provider }, venue.cfg, { id, lines: [] }, venue.operatorId);
     winningFacts = facts();
     await authored();
     return result;
