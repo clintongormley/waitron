@@ -46,7 +46,7 @@ function confirmations(el: TillTodaySeatsDialog) {
   return sent;
 }
 
-it("Join waits for a number when there is no suggestion", async () => {
+it("Join waits for a number", async () => {
   for (const seats of [null, 0]) {
     const el = await mount({ seats, action: "join" });
     expect(await actionState(el)).toEqual(quiet);

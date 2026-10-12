@@ -216,6 +216,18 @@ it("an invalid field the panel does not show selects the table and shows the ref
   expect(message(el)).toBe("Check the floor plan's tables and try again");
 });
 
+it("an invalid field outside the tables keeps the selection and shows the refusal's own sentence", async () => {
+  const el = await open(refusing(invalid("tables")));
+  await change(el, changePlacement(opened(), "m1", { x: 5, y: 4 }));
+  canvas(el).dispatchEvent(
+    new CustomEvent("wt-table-select", { detail: { key: "m1" }, bubbles: true, composed: true }),
+  );
+  await press(el, "save");
+  expect(canvas(el).selected).toBe("m1");
+  expect(el.fieldError).toBeNull();
+  expect(message(el)).toBe("Check the floor plan's tables and try again");
+});
+
 const booked = (params: Record<string, unknown>) => ({ code: "table.booked", params });
 
 /** The plan with m2 placed, away from m1. */
