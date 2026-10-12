@@ -327,6 +327,18 @@ it("shows a refusal of the shape under the shape pair", async () => {
   expect(el.shadowRoot!.querySelector("[data-error=fixed]")).toBeNull();
 });
 
+it("describes each shape button by the shape refusal only while one shows", async () => {
+  const el = await open({ fieldErrors: [{ field: "shape", message: "Not allowed" }] });
+  for (const button of shapeButtons(el)) {
+    const id = button.getAttribute("aria-describedby")!;
+    expect(el.shadowRoot!.getElementById(id)!.textContent!.trim()).toBe("Not allowed");
+    await expect.element(button).toHaveAccessibleDescription("Not allowed");
+  }
+  el.fieldErrors = [];
+  await el.updateComplete;
+  expect(shapeButtons(el).map((b) => b.hasAttribute("aria-describedby"))).toEqual([false, false]);
+});
+
 it("shows nothing for a table the draft does not hold", async () => {
   const el = await open({ tableKey: "gone" });
   expect(el.shadowRoot!.querySelector("[name]")).toBeNull();

@@ -1227,6 +1227,23 @@ it("Shift and an arrow key send nothing at a size of 1 or 99", async () => {
   expect(moved).toEqual([]);
 });
 
+it("Shift+ArrowRight sends, announces and badges nothing when its side cannot grow on the grid", async () => {
+  // Turned 180°, the right side faces left, and the table already touches the grid's left edge.
+  const el = await canvas(
+    [table("t1", "T1", { x: 0, y: 10, width: 8, height: 4, rotation: 180 })],
+    {
+      selected: "t1",
+    },
+  );
+  const seen = resizes(el);
+  button(el, "t1").focus();
+  await userEvent.keyboard("{Shift>}{ArrowRight}{/Shift}");
+  await el.updateComplete;
+  expect(seen).toEqual([]);
+  expect(statusOf(el).textContent!.trim()).toBe("");
+  expect(badgeOf(el)).toBeNull();
+});
+
 /** The midpoint of `p`'s own left side, in squares. */
 function leftMidpoint(p: PlanPlacement): { x: number; y: number } {
   const radians = (p.rotation * Math.PI) / 180;
@@ -1256,6 +1273,24 @@ it.each([30, 90])(
     expect(Math.abs(after.y - before.y)).toBeLessThanOrEqual(0.5);
   },
 );
+
+it("Shift+ArrowRight then Shift+ArrowLeft on a table turned 90° puts it back where it was", async () => {
+  const p = place({ x: 10, y: 10, width: 8, height: 4, rotation: 90 });
+  const el = await canvas([{ key: "t1", label: "T1", fixed: false, placement: p }], {
+    selected: "t1",
+  });
+  const seen = resizes(el);
+  button(el, "t1").focus();
+  await userEvent.keyboard("{Shift>}{ArrowRight}{/Shift}");
+  el.tables = [{ key: "t1", label: "T1", fixed: false, placement: { ...p, ...seen[0]!.detail } }];
+  await el.updateComplete;
+  button(el, "t1").focus();
+  await userEvent.keyboard("{Shift>}{ArrowLeft}{/Shift}");
+  expect(seen.map((e) => e.detail)).toEqual([
+    { key: "t1", x: 9, y: 11, width: 9, height: 4 },
+    { key: "t1", x: 10, y: 10, width: 8, height: 4 },
+  ]);
+});
 
 it("Shift and the arrow keys on an unselected table neither resize nor move it", async () => {
   const el = await canvas([table("t1", "T1", { x: 10, y: 10 }), table("t2", "T2", { x: 30 })], {

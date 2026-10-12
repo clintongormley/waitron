@@ -264,8 +264,34 @@ describe("floor plan geometry", () => {
       expect(resizeFrom(table(10, 10, 8, 4), "right", -20).width).toBe(1);
       expect(resizeFrom(table(10, 10, 8, 4), "bottom", 200).height).toBe(99);
       expect(resizeFrom(table(10, 10, 98, 4), "left", 5)).toMatchObject({ x: 9, width: 99 });
-      expect(resizeFrom(table(1, 1, 8, 4), "left", 5)).toMatchObject({ x: 0, width: 13 });
-      expect(resizeFrom(table(1, 1, 8, 4), "top", 5)).toMatchObject({ y: 0, height: 9 });
+    });
+
+    it("grows a side at the grid's edge only as far as fits, keeping the opposite side", () => {
+      // Unturned at (1, 1): the right side is at 9 and the bottom at 5 before and after.
+      expect(resizeFrom(table(1, 1, 8, 4), "left", 5)).toEqual(table(0, 1, 9, 4));
+      expect(resizeFrom(table(1, 1, 8, 4), "top", 5)).toEqual(table(1, 0, 8, 5));
+      expect(resizeFrom(table(0, 0, 8, 4), "left", 2)).toEqual(table(0, 0, 8, 4));
+      expect(resizeFrom(table(0, 0, 8, 4), "top", 2)).toEqual(table(0, 0, 8, 4));
+      // Turned 90°, the left side is drawn at the top and the right side at the bottom, which is
+      // drawn at y 7 with its midpoint at x 14 both before (centre 14, 3) and after (centre 14, 2).
+      expect(resizeFrom(table(10, 1, 8, 4, 90), "left", 4)).toEqual(table(9, 0, 10, 4, 90));
+    });
+
+    it.each([0, 45, 90, 180, 270])("undoes a resize with the opposite one at %i°", (rotation) => {
+      const p = table(10, 10, 8, 4, rotation);
+      for (const side of ["top", "right", "bottom", "left"] as const) {
+        for (const squares of [1, 2, 3]) {
+          expect(resizeFrom(resizeFrom(p, side, squares), side, -squares)).toEqual(p);
+          expect(resizeFrom(resizeFrom(p, side, -squares), side, squares)).toEqual(p);
+        }
+      }
+    });
+
+    it("rounds a half-square shift at a right angle away from where the table was", () => {
+      // At 90° the right side faces down: one more square of width moves the centre half a square
+      // left (half the width) and half a square down (the side moving out).
+      expect(resizeFrom(table(10, 10, 8, 4, 90), "right", 1)).toEqual(table(9, 11, 9, 4, 90));
+      expect(resizeFrom(table(9, 11, 9, 4, 90), "right", -1)).toEqual(table(10, 10, 8, 4, 90));
     });
   });
 });

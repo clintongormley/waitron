@@ -12,6 +12,7 @@ import {
   bounds,
   clampToGrid,
   gridExtent,
+  outward,
   resizeFrom,
   rotatedRect,
   showsName,
@@ -70,14 +71,6 @@ export interface TableResize {
 }
 
 const SIDES: readonly PlanSide[] = ["top", "right", "bottom", "left"];
-
-/** Each side's outward direction on an unturned table. */
-const OUTWARDS: Record<PlanSide, { x: number; y: number }> = {
-  top: { x: 0, y: -1 },
-  right: { x: 1, y: 0 },
-  bottom: { x: 0, y: 1 },
-  left: { x: -1, y: 0 },
-};
 
 const DEFAULT_COPY: Required<FloorPlanCanvasCopy> = {
   label: "Floor plan",
@@ -791,13 +784,8 @@ export class WtFloorPlanCanvas extends LitElement {
       return;
     }
     if (drag.kind === "resize") {
-      const out = OUTWARDS[drag.side];
-      const radians = (p.rotation * Math.PI) / 180;
-      const [cos, sin] = [Math.cos(radians), Math.sin(radians)];
-      // The pointer's movement along the side's outward direction, turned with the table.
-      const along =
-        (e.clientX - drag.startX) * (out.x * cos - out.y * sin) +
-        (e.clientY - drag.startY) * (out.x * sin + out.y * cos);
+      const out = outward(drag.side, p.rotation);
+      const along = (e.clientX - drag.startX) * out.x + (e.clientY - drag.startY) * out.y;
       const next = resizeFrom(p, drag.side, snapToSquare(along));
       if (!sameBox(next, now)) this.draft = { key: drag.table.key, placement: next };
       return;

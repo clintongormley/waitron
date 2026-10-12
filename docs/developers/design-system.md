@@ -631,10 +631,10 @@ at the midpoints of the table's own sides. Each is pressed through a `--wt-space
 (`resize-handle`) drawn under the table's button: where the two overlap the table takes the press,
 so a selected table of any size can still be dragged, and a dot is grabbed outside the table. The
 dots are pointer only, hidden from assistive technology and not tab stops. Dragging one moves that
-side and keeps the opposite side's midpoint where it was (to the nearest square on a table turned
-by other than a right angle; `resizeFrom`, `packages/ui/src/floor-plan-geometry.ts`), with width
-and height held to 1–99; the release sends one `wt-table-resize` (`{ key, x, y, width, height }`)
-if the box changed. Shift with an arrow key on the focused selected table does the same from the
+side and keeps the opposite side's midpoint where it was to within half a square, with width and
+height held to 1–99 and the side moving only as far as keeps the table's x and y on the grid
+(`resizeFrom`, `packages/ui/src/floor-plan-geometry.ts`); the release sends one `wt-table-resize`
+(`{ key, x, y, width, height }`) if the box changed. Shift with an arrow key on the focused selected table does the same from the
 keyboard, a square a press: Shift+ArrowRight and Shift+ArrowLeft move its own right side out and
 in, Shift+ArrowDown and Shift+ArrowUp its own bottom side; on a table that is not selected they do
 nothing. The selected table's button is described by `copy.keys`, and after each keyboard resize a

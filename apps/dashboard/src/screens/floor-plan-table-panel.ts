@@ -223,13 +223,14 @@ export class FloorPlanTablePanel extends LitElement {
               data-shape=${shape}
               aria-label=${label()}
               aria-pressed=${String(placement.shape === shape)}
+              aria-describedby=${error === "" ? nothing : "shape-error"}
               @click=${() => this.#shapeTo(table, shape)}
             >
               <wt-icon name=${icon}></wt-icon>
             </button>`,
         )}
       </div>
-      ${error === "" ? nothing : html`<p class="field-error" data-error="shape">${error}</p>`}
+      ${error === "" ? nothing : html`<p id="shape-error" class="field-error" data-error="shape">${error}</p>`}
     </div>`;
   }
 

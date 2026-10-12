@@ -65,28 +65,44 @@ export type PlanSide = "top" | "right" | "bottom" | "left";
 const SIZE_MIN = 1;
 const SIZE_MAX = 99;
 
+const OUTWARDS: Record<PlanSide, { x: number; y: number }> = {
+  top: { x: 0, y: -1 },
+  right: { x: 1, y: 0 },
+  bottom: { x: 0, y: 1 },
+  left: { x: -1, y: 0 },
+};
+
+/** The unit direction `side` faces on screen, with the table turned `rotation` degrees. */
+export function outward(side: PlanSide, rotation: number): { x: number; y: number } {
+  const { x, y } = OUTWARDS[side];
+  const radians = (rotation * Math.PI) / 180;
+  const [cos, sin] = [Math.cos(radians), Math.sin(radians)];
+  return { x: x * cos - y * sin, y: x * sin + y * cos };
+}
+
+/** Whole squares, a half going away from zero so that a shift and its reverse cancel. */
+function roundShift(squares: number): number {
+  // At 90° a shift of exactly -0.5 is computed as -0.49999999999999994.
+  const clean = Math.round(squares * 1e9) / 1e9;
+  return Math.sign(clean) * Math.round(Math.abs(clean));
+}
+
 /**
  * `p` with its own `side` moved `squares` outwards (inwards when negative), keeping the opposite
- * side's midpoint where it is drawn, to the nearest square when the table is turned by other than
- * a right angle. The size stays 1–99 and the place on the grid.
+ * side's midpoint within half a square of where it is drawn. The size stays 1–99; where the whole
+ * change would take x or y off the grid, the side moves only as far as fits.
  */
 export function resizeFrom(p: PlanPlacement, side: PlanSide, squares: number): PlanPlacement {
   const across = side === "left" || side === "right" ? "width" : "height";
-  const size = Math.min(SIZE_MAX, Math.max(SIZE_MIN, p[across] + squares));
-  const width = across === "width" ? size : p.width;
-  const height = across === "height" ? size : p.height;
-  // The centre moves half the growth along the table's own axis towards the moved side.
-  const half = ((size - p[across]) / 2) * (side === "left" || side === "top" ? -1 : 1);
-  const radians = (p.rotation * Math.PI) / 180;
-  const [cos, sin] = [Math.cos(radians), Math.sin(radians)];
-  const [dx, dy] = across === "width" ? [half * cos, half * sin] : [-half * sin, half * cos];
-  return {
-    ...p,
-    x: clampToGrid(p.x + p.width / 2 + dx - width / 2),
-    y: clampToGrid(p.y + p.height / 2 + dy - height / 2),
-    width,
-    height,
-  };
+  const wanted = Math.min(SIZE_MAX, Math.max(SIZE_MIN, p[across] + squares)) - p[across];
+  const out = outward(side, p.rotation);
+  for (let growth = wanted; growth !== 0; growth -= Math.sign(growth)) {
+    const grown = across === "width" ? { width: p.width + growth } : { height: p.height + growth };
+    const x = p.x + roundShift((out.x * growth) / 2 - (across === "width" ? growth / 2 : 0));
+    const y = p.y + roundShift((out.y * growth) / 2 - (across === "height" ? growth / 2 : 0));
+    if (x === clampToGrid(x) && y === clampToGrid(y)) return { ...p, ...grown, x, y };
+  }
+  return p;
 }
 
 export function bounds(placements: readonly PlanPlacement[]): PlanRect | null {
