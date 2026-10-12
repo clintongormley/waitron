@@ -78,7 +78,8 @@ the details one tap away.
 
 > Owner override, 2026-10-11 (A502): the selected table's form is Name; Seats beside Shape; and a
 > Moveable switch, which replaces Fixed in place here and in Add tables. Width, height and turn are
-> set by handles on the plan; see [design-system.md](../../developers/design-system.md).
+> set on the plan, and Remove from plan and Delete leave the panel; its joins stay until A503. See
+> [design-system.md](../../developers/design-system.md).
 
 - **Opening it:** Departments › the zone › "Edit floor plan", or "Add a floor plan" for a zone with
   no tables. It opens full screen with the zone's name, Close, Undo, Redo and Save.
