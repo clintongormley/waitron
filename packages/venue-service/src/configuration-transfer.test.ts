@@ -1914,6 +1914,60 @@ describe("season weeks in a configuration bundle", () => {
     expect(() => validate(named("2026-11-23"), clock)).not.toThrow();
   });
 
+  /** One named day holding Late 22:00–02:00 with 240 minutes' grace, beside an Autumn week. */
+  function namedLate(
+    date: { date: string; repeat_on?: string; own_hours: number },
+    autumn: [string, number][],
+  ): Tables {
+    const tables = seasonTables();
+    tables.department_days = autumn.map(([id, weekday]) => day(id, "s-autumn", weekday));
+    tables.department_day_ranges = autumn.map(([id]) => range(id, LUNCH, "06:00:00", "09:00:00"));
+    tables.menu_periods![1]!.end_offset_minutes = 240;
+    tables.special_dates = [
+      {
+        id: "sd-late",
+        location_id: "venue",
+        name: "Fiesta",
+        colour: "red",
+        close_whole_venue: 0,
+        ...date,
+      },
+    ];
+    tables.menu_day_timetables = [
+      { id: "t-late", department_id: RESTAURANT, weekday: null, special_date_id: "sd-late" },
+    ];
+    tables.menu_slots = [
+      {
+        id: randomUUID(),
+        timetable_id: "t-late",
+        department_id: RESTAURANT,
+        period_id: LATE,
+        starts_at: "22:00:00",
+        ends_at: "02:00:00",
+      },
+    ];
+    return tables;
+  }
+
+  it("checks a repeating named day in the later years it falls on another weekday", () => {
+    // 23 November 2026 is a Monday, followed by an Autumn Tuesday with no Lunch; in 2027 it is a
+    // Tuesday, followed by the Wednesday Lunch at 06:00.
+    const once = { date: "2026-11-23", own_hours: 1 };
+    expect(() => validate(namedLate(once, [["a-wed", 3]]), clock)).not.toThrow();
+    expect(() =>
+      validate(namedLate({ ...once, repeat_on: "11-23" }, [["a-wed", 3]]), clock),
+    ).toThrowError(refusal("menu_slots"));
+  });
+
+  it("reads a named day without its own hours from its season, not from a row it holds", () => {
+    // 23 November 2026, a Monday, is followed by Tuesday's Lunch at 06:00; Autumn's Monday is empty.
+    const date = { date: "2026-11-23", own_hours: 0 };
+    expect(() => validate(namedLate(date, [["a-tue", 2]]), clock)).not.toThrow();
+    expect(() =>
+      validate(namedLate({ ...date, own_hours: 1 }, [["a-tue", 2]]), clock),
+    ).toThrowError(refusal("menu_slots"));
+  });
+
   it.each([
     ["department_days", "season_id", { season_id: "missing" }],
     ["department_days", "department_id", { department_id: "missing" }],
