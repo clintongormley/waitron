@@ -479,7 +479,10 @@ describe("reading Hours", () => {
     const deli = await withTransaction(db, (tx) =>
       readCalendarDays(tx, fx.cfg, "2030-10-14", "2030-10-15"),
     );
-    expect(deli.map((day) => day.tone)).toEqual(["special_day", "closed"]);
+    expect(deli.map((day) => [day.tone, day.closed])).toEqual([
+      ["special_day", true],
+      ["closed", true],
+    ]);
     await withTransaction(db, (tx) =>
       replaceMenuWeek(
         tx,
