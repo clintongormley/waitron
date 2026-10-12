@@ -99,6 +99,7 @@ export class OpeningHoursWeek extends LitElement {
   ];
   @property({ attribute: false }) api!: OpeningHoursApi;
   @property({ attribute: false }) department!: Department;
+  @property() seasonId = "";
   @property({ attribute: false }) menus: OpeningHoursModel["menus"] = [];
   @property({ attribute: false }) timeZone?: string;
   @property() dayCutover = "06:00";
@@ -371,7 +372,7 @@ export class OpeningHoursWeek extends LitElement {
           input[weekday]!.slots,
           this.draftRevision,
         );
-      } else await this.api.saveWeek(this.department.id, input, this.draftRevision);
+      } else await this.api.saveWeek(this.department.id, this.seasonId, input, this.draftRevision);
     } catch (error) {
       if (generation !== this.generation || !this.isConnected) return;
       this.error =

@@ -43,6 +43,8 @@ describe.each(["light", "dark"] as const)("Opening Day (%s)", (theme) => {
           pending: null,
           timeZone: "Europe/Madrid",
           clockReadable: state !== "clock",
+          seasons: [{ id: "autumn", name: "Autumn", startsOn: "09-01" }],
+          currentSeasonId: "autumn",
           dayCutover: "06:00",
           menus: [{ id: "m1", name: "Lunch menu", active: true, includes: [] }],
           namedDays:

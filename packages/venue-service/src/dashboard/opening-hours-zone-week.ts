@@ -77,6 +77,7 @@ export class OpeningHoursZoneWeek extends LitElement {
   @property({ attribute: false }) api!: OpeningHoursApi;
   @property({ attribute: false }) department!: Department;
   @property({ attribute: false }) zone!: Zone;
+  @property() seasonId = "";
   @property() dayCutover = "06:00";
   @property({ attribute: false }) clockRevision!: number;
   private draftRevision!: number;
@@ -301,7 +302,8 @@ export class OpeningHoursZoneWeek extends LitElement {
           submitted[weekday]!.ranges,
           this.draftRevision,
         );
-      } else await this.api.saveZoneWeek(this.zone.id, submitted, this.draftRevision);
+      } else
+        await this.api.saveZoneWeek(this.zone.id, this.seasonId, submitted, this.draftRevision);
     } catch (error) {
       if (generation !== this.generation || !this.isConnected) return;
       const invalid = codeOf(error) === "zone_closed_time.invalid";

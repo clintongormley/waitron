@@ -27,8 +27,8 @@ export function fixture(): OpeningHoursModel {
     timeZone: "Europe/Madrid",
     clockReadable: true,
     dayCutover: "06:00",
-    seasons: [],
-    currentSeasonId: null,
+    seasons: [{ id: "autumn", name: "Autumn", startsOn: "09-01" }],
+    currentSeasonId: "autumn",
     namedDays: [],
     menus: [{ id: "m1", name: "Lunch menu", active: true, includes: [] }],
     departments: [
@@ -138,6 +138,7 @@ it("stages an added range and submits the seven days together only on Save", asy
     method: "PUT",
     body: {
       expectedClockRevision: 0,
+      seasonId: "autumn",
       days: [
         { weekday: 0, slots: [] },
         { weekday: 1, slots: [{ periodId: "p1", startsAt: "10:00", endsAt: "14:00" }] },
@@ -768,6 +769,7 @@ it("preserves all six other weekdays when staging a Sunday range", async () => {
       "PUT",
       {
         expectedClockRevision: 0,
+        seasonId: "autumn",
         days: [
           { weekday: 0, slots: [{ periodId: "p1", startsAt: "13:00", endsAt: "17:00" }] },
           { weekday: 1, slots: [{ periodId: "p1", startsAt: "10:00", endsAt: "14:00" }] },

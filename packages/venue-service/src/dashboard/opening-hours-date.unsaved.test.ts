@@ -25,6 +25,8 @@ class DateLeaveApp extends LitElement {
         pending: null,
         timeZone: "Europe/Madrid",
         clockReadable: true,
+        seasons: [{ id: "autumn", name: "Autumn", startsOn: "09-01" }],
+        currentSeasonId: "autumn",
         dayCutover: "06:00",
         menus: [],
         namedDays: [

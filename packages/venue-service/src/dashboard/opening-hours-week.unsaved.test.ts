@@ -49,6 +49,8 @@ class WeekLeaveApp extends LitElement {
         clockReadable: true,
         dayCutover: "06:00",
         menus: [],
+        seasons: [{ id: "autumn", name: "Autumn", startsOn: "09-01" }],
+        currentSeasonId: "autumn",
         namedDays: [],
         departments: [
           {
@@ -206,6 +208,7 @@ describe.each(["en", "es"])("Retained week save contract (%s)", (locale) => {
         "PUT",
         {
           expectedClockRevision: 0,
+          seasonId: "autumn",
           days: [
             { weekday: 0, slots: [] },
             { weekday: 1, slots: [{ periodId: "p1", startsAt: "10:00", endsAt: "15:00" }] },
@@ -240,6 +243,7 @@ describe.each(["en", "es"])("Retained week save contract (%s)", (locale) => {
         "PUT",
         {
           expectedClockRevision: 0,
+          seasonId: "autumn",
           days: [
             { weekday: 0, slots: [] },
             { weekday: 1, slots: [{ periodId: "p1", startsAt: "10:00", endsAt: "15:00" }] },

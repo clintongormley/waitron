@@ -50,6 +50,8 @@ class ZoneWeekLeaveApp extends LitElement {
         clockReadable: true,
         dayCutover: "06:00",
         menus: [],
+        seasons: [{ id: "autumn", name: "Autumn", startsOn: "09-01" }],
+        currentSeasonId: "autumn",
         namedDays: this.realWeek
           ? [1, 2].map((day) => ({
               id: `s${day}`,
@@ -244,6 +246,7 @@ describe.each(["en", "es"])("Retained zone week save contract (%s)", (locale) =>
         "PUT",
         {
           expectedClockRevision: 0,
+          seasonId: "autumn",
           days: [
             { weekday: 0, ranges: [] },
             { weekday: 1, ranges: [{ startsAt: "10:00", endsAt: "15:00" }] },
@@ -278,6 +281,7 @@ describe.each(["en", "es"])("Retained zone week save contract (%s)", (locale) =>
         "PUT",
         {
           expectedClockRevision: 0,
+          seasonId: "autumn",
           days: [
             { weekday: 0, ranges: [] },
             { weekday: 1, ranges: [{ startsAt: "10:00", endsAt: "15:00" }] },

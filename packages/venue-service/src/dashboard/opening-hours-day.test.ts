@@ -18,8 +18,8 @@ export function dayFixture(): OpeningHoursModel {
     clockReadable: true,
     dayCutover: "06:00",
     menus: [{ id: "m1", name: "Lunch menu", active: true, includes: [] }],
-    seasons: [],
-    currentSeasonId: null,
+    seasons: [{ id: "autumn", name: "Autumn", startsOn: "09-01" }],
+    currentSeasonId: "autumn",
     namedDays: [
       {
         id: "s/1",
@@ -201,6 +201,7 @@ it("stages a weekday edit and preserves every other day in its seven-day PUT", a
       "PUT",
       {
         expectedClockRevision: 0,
+        seasonId: "autumn",
         days: [
           { weekday: 0, slots: [] },
           { weekday: 1, slots: [{ periodId: "p1", startsAt: "10:00", endsAt: "15:00" }] },
@@ -214,6 +215,41 @@ it("stages a weekday edit and preserves every other day in its seven-day PUT", a
     ],
   ]);
   await expect.poll(() => save(day).disabled).toBe(true);
+});
+it.each([
+  ["2030-12-02", "winter"],
+  ["2030-11-25", "autumn"],
+])("saves an ordinary %s's weekday in that date's season", async (date, seasonId) => {
+  vi.setSystemTime(new Date(`${date}T12:00:00Z`));
+  const writes: unknown[] = [];
+  const day = await mount(
+    async (...args) => {
+      writes.push(args);
+    },
+    {
+      ...dayFixture(),
+      currentBusinessDay: date,
+      seasons: [
+        { id: "spring", name: "Spring", startsOn: "03-01" },
+        { id: "summer", name: "Summer", startsOn: "06-01" },
+        { id: "autumn", name: "Autumn", startsOn: "09-01" },
+        { id: "winter", name: "Winter", startsOn: "12-01" },
+      ],
+      currentSeasonId: "spring",
+    },
+  );
+  expect(day.shadowRoot!.textContent).toContain("Changes every Monday");
+  resize(day);
+  await day.updateComplete;
+  save(day).click();
+  await expect.poll(() => writes.length).toBe(1);
+  expect(writes).toEqual([
+    [
+      "/management-api/venue-service/departments/d1/menu-week",
+      "PUT",
+      expect.objectContaining({ seasonId }),
+    ],
+  ]);
 });
 it("navigates dates and writes a named date's ranges only, including an inherited department", async () => {
   const writes: unknown[] = [];
@@ -830,6 +866,7 @@ it.each([true, false])(
           "PUT",
           {
             expectedClockRevision: 0,
+            seasonId: "autumn",
             days: [
               { weekday: 0, slots: [] },
               { weekday: 1, slots: [{ periodId: "p1", startsAt: "10:00", endsAt: "14:00" }] },
@@ -922,6 +959,7 @@ it("a dirty Day draft keeps its opened revision and hours through a passive cloc
   await expect.poll(() => writes.length).toBe(1);
   expect(writes[0]).toMatchObject({
     expectedClockRevision: 0,
+    seasonId: "autumn",
     days: expect.arrayContaining([
       { weekday: 1, slots: [{ periodId: "p1", startsAt: "10:00", endsAt: "15:00" }] },
     ]),

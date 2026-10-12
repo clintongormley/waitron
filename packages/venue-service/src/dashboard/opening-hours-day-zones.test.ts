@@ -117,6 +117,7 @@ it("stages a closed range and saves the weekday while preserving other weekdays"
       "PUT",
       {
         expectedClockRevision: 0,
+        seasonId: "autumn",
         days: [
           { weekday: 0, ranges: [{ startsAt: "23:00", endsAt: "06:00" }] },
           {

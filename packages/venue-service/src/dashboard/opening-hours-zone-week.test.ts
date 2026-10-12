@@ -28,8 +28,8 @@ const model: OpeningHoursModel = {
   clockReadable: true,
   dayCutover: "06:00",
   menus: [],
-  seasons: [],
-  currentSeasonId: null,
+  seasons: [{ id: "autumn", name: "Autumn", startsOn: "09-01" }],
+  currentSeasonId: "autumn",
   namedDays: [],
   departments: [
     {
@@ -122,6 +122,7 @@ it("a Friday drag through changeover stages closed times and Save sends all seve
       "PUT",
       {
         expectedClockRevision: 0,
+        seasonId: "autumn",
         days: [
           { weekday: 0, ranges: [] },
           { weekday: 1, ranges: [{ startsAt: "10:00", endsAt: "11:00" }] },

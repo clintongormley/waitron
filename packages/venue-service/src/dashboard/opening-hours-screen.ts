@@ -877,6 +877,7 @@ export class OpeningHoursScreen extends LitElement {
                                 .api=${this.api}
                                 .department=${department!}
                                 .zone=${this.zone()!}
+                                .seasonId=${this.model.currentSeasonId ?? this.model.seasons[0]?.id ?? ""}
                                 .clockRevision=${this.model.clockRevision}
                                 .businessDayClock=${this.model.businessDayClock}
                                 .dayCutover=${this.model.dayCutover}
@@ -893,6 +894,7 @@ export class OpeningHoursScreen extends LitElement {
                                 html`<opening-hours-week
                                   .api=${this.api}
                                   .department=${department}
+                                  .seasonId=${this.model.currentSeasonId ?? this.model.seasons[0]?.id ?? ""}
                                   .menus=${this.model!.menus}
                                   .clockRevision=${this.model!.clockRevision}
                                   .businessDayClock=${this.model!.businessDayClock}

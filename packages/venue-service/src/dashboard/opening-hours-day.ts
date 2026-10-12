@@ -16,6 +16,7 @@ import {
 import type { MenuPeriodInput, MenuWeekDay, OpeningHoursModel } from "../menu-timetable-types.js";
 import type { ClosedRange, ServiceRange } from "../service-day.js";
 import { addDays, weekdayOf } from "../hours-rules.js";
+import { seasonOn } from "../season-rules.js";
 import type { OpeningHoursApi } from "./opening-hours-client.js";
 import type { GridBlockChange, GridBlockOpen, GridRangeSelection } from "./service-grid.js";
 import type { RangeDialog } from "./range-dialog.js";
@@ -532,7 +533,8 @@ export class OpeningHoursDay extends LitElement {
     const submitted = clone(this.draft),
       generation = this.generation,
       special = this.special(),
-      weekday = weekdayOf(this.date);
+      weekday = weekdayOf(this.date),
+      seasonId = seasonOn(this.model.seasons, this.date)?.id ?? "";
     this.saving = true;
     this.error = "";
     this.errorDepartment = "";
@@ -551,7 +553,7 @@ export class OpeningHoursDay extends LitElement {
               days[weekday]!.slots,
               this.draftRevision,
             );
-          else await this.api.saveWeek(department.id, days, this.draftRevision);
+          else await this.api.saveWeek(department.id, seasonId, days, this.draftRevision);
         } catch (error) {
           if (generation !== this.generation || !this.isConnected) return;
           this.error = t("menu.save_error");
@@ -591,7 +593,7 @@ export class OpeningHoursDay extends LitElement {
                 days[weekday]!.ranges,
                 this.draftRevision,
               );
-            else await this.api.saveZoneWeek(zone.id, days, this.draftRevision);
+            else await this.api.saveZoneWeek(zone.id, seasonId, days, this.draftRevision);
           } catch (error) {
             if (generation !== this.generation || !this.isConnected) return;
             const invalid = codeOf(error) === "zone_closed_time.invalid";
