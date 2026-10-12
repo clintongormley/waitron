@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { Hono } from "hono";
 import { getDocument } from "pdfjs-dist/legacy/build/pdf.mjs";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   invoiceDeliveries,
   invoiceSeries,
@@ -659,6 +659,42 @@ describe("one job per office printer, test pages included", () => {
     v.state.now = at(60_000);
     expect((await claim(v))?.id).toBe(onX);
     expect(await outcome(v, x)).toEqual({ id: page.id, status: "unknown", failureCode: "timeout" });
+  });
+});
+
+describe("an agent asking for work", () => {
+  /** The claim's answer, and how many times it read the location's office printers. */
+  async function claimReadingPrinters(v: Venue) {
+    const session = (
+      suite.db as unknown as { session: { prepareQuery: (...args: unknown[]) => unknown } }
+    ).session;
+    const prepare = session.prepareQuery.bind(session);
+    let printerReads = 0;
+    const spy = vi.spyOn(session, "prepareQuery").mockImplementation((...args) => {
+      const { sql } = args[0] as { sql: string };
+      if (/from "page_printers" where "page_printers"\."location_id" = \?$/.test(sql)) {
+        printerReads++;
+      }
+      return prepare(...args);
+    });
+    try {
+      return { job: await claim(v), printerReads };
+    } finally {
+      spy.mockRestore();
+    }
+  }
+
+  it("reads no office printer while no test page is waiting", async () => {
+    const v = await venue();
+    const office = await printer(v, v.agentOne);
+    expect(await claimReadingPrinters(v)).toEqual({ job: undefined, printerReads: 0 });
+
+    const page = await requested(v, office);
+    expect(await claimReadingPrinters(v)).toEqual({
+      job: expect.objectContaining({ id: page.id }),
+      printerReads: 1,
+    });
+    expect(await claimReadingPrinters(v)).toEqual({ job: undefined, printerReads: 0 });
   });
 });
 

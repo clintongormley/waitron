@@ -158,7 +158,7 @@ export function mountPagePrintApi(app: Hono, deps: PagePrintApiDeps, log: Logger
           { locationId: deps.locationId, exceptPrinterIds: deps.testPages.printingOn() },
           at,
         );
-        if (invoice !== undefined) return invoice;
+        if (invoice !== undefined || !deps.testPages.anyWaiting()) return invoice;
         const printers = await tx
           .select()
           .from(pagePrinters)

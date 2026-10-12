@@ -119,6 +119,13 @@ export function createPageTestPages(now: () => Date) {
       return false;
     },
 
+    /** Whether any page waits for an agent, so a claim need not read the printers otherwise. */
+    anyWaiting(): boolean {
+      settle();
+      for (const page of pages.values()) if (page.status === "waiting") return true;
+      return false;
+    },
+
     /** The printers whose test page is out with an agent. */
     printingOn(): string[] {
       settle();
