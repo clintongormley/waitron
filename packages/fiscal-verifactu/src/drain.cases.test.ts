@@ -829,7 +829,10 @@ describe("drain — a cancellation whose original was not accepted", () => {
       [original, "fiscal.registro_rechazado"],
       [cancellation, "fiscal.anulacion_retenida"],
     ]);
-    expect(await incidentCodes()).toEqual(["fiscal.registro_rechazado"]);
+    expect(await incidentCodes()).toEqual([
+      "fiscal.anulacion_retenida",
+      "fiscal.registro_rechazado",
+    ]);
     expect(await withTransaction(suite.db, (tx) => heldRecords(tx))).toEqual([]);
   });
 

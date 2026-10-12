@@ -184,7 +184,8 @@ export async function openFilingCasesSummary(
 /**
  * Every `detenido` record that has no case of its own: the records held behind another record,
  * or behind a run of refusals with one code. A held cancellation whose original alta (same
- * `sif_id`, same invoice identity) is `rechazado` or `detenido` names its original's case. Any
+ * `sif_id`, same invoice identity) is `detenido` names its original's case; one whose original is
+ * `rechazado` is set aside with a case of its own (`./drain.ts`), so it is not listed. Any
  * other held record names the case of the nearest earlier `detenido` record on its chain
  * (`sif_id`): that record's own case, or, when it has none, the case it names in turn. With no
  * earlier `detenido` record, it names the case of the record immediately before it when that one

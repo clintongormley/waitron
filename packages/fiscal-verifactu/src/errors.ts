@@ -112,9 +112,8 @@ declare module "@waitron/shared" {
     };
 
     /**
-     * `./drain.ts`'s `haltOpenChainClaims`: a cancellation whose original AEAT refused, set aside
-     * (`retenido`) and never sent. A filing-case cause, not an incident: the case is the person's
-     * prompt to resolve the original and the cancellation together.
+     * `./drain.ts`'s `setAside`: a cancellation whose original AEAT refused, set aside
+     * (`retenido`) and never sent. Raised as an `error` incident beside its filing case.
      */
     "fiscal.anulacion_retenida": { registroId: string };
 

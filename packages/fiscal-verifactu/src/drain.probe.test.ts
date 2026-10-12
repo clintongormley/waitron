@@ -713,24 +713,40 @@ describe("drain — a chain stopped by the same-code brake sends its first held 
       expect(wire.sent).toEqual([]);
     });
 
-    it("a cancellation of the refused probe, held behind it, is not released", async () => {
+    it("a cancellation held behind the probe is set aside with its own case once the probe is refused, and the record after it is sent", async () => {
       const aeat = fakeAeat();
       const { seeded, held, heldKeys } = await brakeHold(aeat, 1);
       const [first] = held;
       const cancellation = await appendCancellation(suite.db, seeded, first!, 5);
+      const later = await appendPendingAlta(suite.db, seeded, 6);
       await drain(deps(aeat.client()), at(MINUTE));
-      expect(await envioOf(cancellation)).toMatchObject({ estado: "detenido" });
+      expect(await estados([cancellation, later.registroId])).toEqual(["detenido", "detenido"]);
       aeat.reject(heldKeys[0]!, 1200, "Rechazo 1200");
       const wire = recording(aeat.client());
 
       await drain(deps(wire.client), at(HOUR));
 
       expect(wire.sent).toEqual([[first]]);
-      expect(await envioOf(cancellation)).toMatchObject({ estado: "detenido" });
+      expect(await envioOf(first!)).toMatchObject({ estado: "rechazado" });
+      expect(await envioOf(cancellation)).toMatchObject({ estado: "retenido" });
       expect(await ackOf(cancellation)).toBe("halted");
+      const caseOf = async (id: string) =>
+        (await cases()).filter((c) => c.registroId === id).map((c) => [c.cause, c.status]);
+      expect(await caseOf(cancellation)).toEqual([["fiscal.anulacion_retenida", "open"]]);
+      expect(await incidentCodes()).toEqual([
+        "fiscal.registro_rechazado",
+        "fiscal.registro_rechazado",
+        "fiscal.registro_rechazado",
+        "fiscal.anulacion_retenida",
+        "fiscal.registro_rechazado",
+      ]);
+
+      await drain(deps(wire.client), at(HOUR + MINUTE));
+      expect(wire.sent).toEqual([[first], [later.registroId]]);
+      expect(await envioOf(later.registroId)).toMatchObject({ estado: "aceptado" });
 
       await drain(deps(wire.client), at(3 * HOUR));
-      expect(wire.sent).toHaveLength(1);
+      expect(wire.sent).toHaveLength(2);
     });
 
     it("keeps a healthy chain sending beside a stopped one", async () => {

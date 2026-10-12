@@ -402,7 +402,9 @@ cancelled record was tested ([W41s-1c receipt](../superpowers/specs/2026-10-04-f
 Three conflicts in a row now trip the same-code brake; the owner wants them to switch to a fresh
 number series automatically and keep selling instead (needs Tasks 4 and 7). A cancellation whose
 original AEAT refused is now set aside on its own (envío state `retenido`, migration
-`0005_envio_retenido`) with a filing case `fiscal.anulacion_retenida`, and holds nothing behind it.
+`0005_envio_retenido`) with an `error` incident and a filing case, both `fiscal.anulacion_retenida`,
+and holds nothing behind it; one already held behind its original is set aside in the transaction
+that records the original's refusal.
 A record accepted with errors opens a filing case unless AEAT exempts the code (2004, 2009). What
 still holds later records: the three-refusal brake and the wait behind an unknown answer.
 Statements below that a conflict or a held cancellation holds its chain describe the earlier

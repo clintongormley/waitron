@@ -1360,7 +1360,10 @@ describe("drain — error 3000 Anulada on a resent anulación", () => {
     expect(second.recordsSubmitted).toBe(0);
     expect(second.recordsHalted).toBe(1);
     expect((await chainRows()).map((row) => row.estado)).toEqual(["rechazado", "retenido"]);
-    expect(await incidentCodes()).toHaveLength(1);
+    expect(await incidentCodes()).toEqual([
+      "fiscal.anulacion_retenida",
+      "fiscal.registro_rechazado",
+    ]);
   });
 });
 
