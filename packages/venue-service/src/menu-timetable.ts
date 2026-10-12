@@ -27,7 +27,7 @@ import {
 import type { SpecialDateParticipant } from "./hours.js";
 import { CALENDAR_COLOURS, type LocalDate } from "./hours-types.js";
 import { invalidTimetable, menuPeriodName, parseMenuWeek } from "./menu-timetable-rules.js";
-import { findScheduleEndOffsetClash, parseEndOffsetMinutes } from "./period-end-offset.js";
+import { findSeasonEndOffsetClash, parseEndOffsetMinutes } from "./period-end-offset.js";
 import type {
   DepartmentService,
   OpeningHoursModel,
@@ -262,7 +262,6 @@ async function endOffsetClash(
     .select({
       id: menuDayTimetables.id,
       departmentId: menuDayTimetables.departmentId,
-      weekday: menuDayTimetables.weekday,
       specialDateId: menuDayTimetables.specialDateId,
     })
     .from(menuDayTimetables)
@@ -270,6 +269,7 @@ async function endOffsetClash(
     .where(
       and(
         eq(departments.locationId, cfg.locationId),
+        isNotNull(menuDayTimetables.specialDateId),
         departmentId === undefined ? undefined : eq(departments.id, departmentId),
       ),
     );
@@ -287,24 +287,30 @@ async function endOffsetClash(
     })
     .from(specialDates)
     .where(eq(specialDates.locationId, cfg.locationId));
-  const dateById = new Map(dates.map((date) => [date.id, date.date]));
   const offsets = new Map(periods.map((period) => [period.id, period.offset]));
-  for (const id of new Set(periods.map((period) => period.departmentId))) {
-    const clash = findScheduleEndOffsetClash(
-      timetables
-        .filter((day) => day.departmentId === id)
-        .map((day) => ({
-          weekday: day.weekday,
-          date: day.specialDateId === null ? null : dateById.get(day.specialDateId)!,
-          slots: slots.get(day.id)!,
-        })),
-      dates,
+  const departmentIds = [...new Set(periods.map((period) => period.departmentId))];
+  const allSeasons = await readSeasons(tx, cfg);
+  const weeks = await readDepartmentSeasonWeeks(tx, cfg, departmentIds, clock.dayCutover);
+  for (const id of departmentIds) {
+    const clash = findSeasonEndOffsetClash(
+      allSeasons.map((season) => ({
+        seasonId: season.id,
+        startsOn: season.startsOn,
+        week: weeks.get(id)?.get(season.id) ?? [],
+      })),
+      dates.map((date) => {
+        const own = timetables.find(
+          (day) => day.departmentId === id && day.specialDateId === date.id,
+        );
+        return { ...date, slots: own === undefined ? null : slots.get(own.id)! };
+      }),
       offsets,
       clock,
     );
     if (clash !== null) {
       return {
         periodId: clash.periodId,
+        seasonId: clash.seasonId,
         weekday: clash.weekday,
         date: clash.date,
         departmentId: id,
@@ -664,6 +670,7 @@ async function writeMenuPeriod(
       reason: "placement",
       periodId: clash.periodId,
       departmentId,
+      seasonId: clash.seasonId,
       weekday: clash.weekday,
       date: clash.date,
     });
@@ -849,7 +856,11 @@ export async function replaceMenuWeek(
   const clash = await endOffsetClash(tx, cfg, departmentId, false, clock);
   if (clash !== null)
     invalidTimetable(
-      clash.weekday === undefined ? "days" : `days.${week.indexOf[clash.weekday]}.slots`,
+      // A boundary clash lies in another season's day, which this request does not hold.
+      clash.weekday === undefined ||
+        (options.seasonId !== undefined && clash.seasonId !== options.seasonId)
+        ? "days"
+        : `days.${week.indexOf[clash.weekday]}.slots`,
       { reason: "end_offset", ...clash },
     );
 }

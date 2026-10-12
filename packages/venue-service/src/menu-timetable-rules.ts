@@ -9,6 +9,8 @@ export function invalidTimetable(
     date?: LocalDate;
     departmentId?: string;
     periodId?: string;
+    seasonId?: string;
+    weekday?: number;
     reason: "overlap" | "clock_skips" | "empty" | "order" | "step" | "end_offset";
   },
 ): never {

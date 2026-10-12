@@ -1837,6 +1837,57 @@ describe("season weeks in a configuration bundle", () => {
     expect(() => validate(tables, clock)).not.toThrow();
   });
 
+  it("refuses a period's end offset reaching the first day of the next season", () => {
+    const tables = seasonTables();
+    // Autumn's Friday Late sends until 06:00; Winter's first day, on a Saturday, opens Lunch then.
+    tables.department_days = [day("a-fri", "s-autumn", 5), day("w-sat", "s-winter", 6)];
+    tables.department_day_ranges = [
+      range("a-fri", LATE, "22:00:00", "02:00:00"),
+      range("w-sat", LUNCH, "06:00:00", "09:00:00"),
+    ];
+    tables.menu_periods![1]!.end_offset_minutes = 240;
+    expect(() => validate(tables, clock)).toThrowError(refusal("department_day_ranges"));
+    tables.menu_periods![1]!.end_offset_minutes = 239;
+    expect(() => validate(tables, clock)).not.toThrow();
+  });
+
+  it("checks a named day against its neighbour in the season holding that neighbour", () => {
+    const named = (date: string) => {
+      const tables = seasonTables();
+      tables.department_days = [day("w-tue", "s-winter", 2)];
+      tables.department_day_ranges = [range("w-tue", LUNCH, "06:00:00", "09:00:00")];
+      tables.menu_periods![1]!.end_offset_minutes = 240;
+      tables.special_dates = [
+        {
+          id: "sd-late",
+          location_id: "venue",
+          date,
+          name: "Fiesta",
+          colour: "red",
+          own_hours: 1,
+          close_whole_venue: 0,
+        },
+      ];
+      tables.menu_day_timetables = [
+        { id: "t-late", department_id: RESTAURANT, weekday: null, special_date_id: "sd-late" },
+      ];
+      tables.menu_slots = [
+        {
+          id: randomUUID(),
+          timetable_id: "t-late",
+          department_id: RESTAURANT,
+          period_id: LATE,
+          starts_at: "22:00:00",
+          ends_at: "02:00:00",
+        },
+      ];
+      return tables;
+    };
+    // 2026-11-30, a Monday, is Autumn's last day; the Tuesday after it is Winter's.
+    expect(() => validate(named("2026-11-30"), clock)).toThrowError(refusal("menu_slots"));
+    expect(() => validate(named("2026-11-23"), clock)).not.toThrow();
+  });
+
   it.each([
     ["department_days", "season_id", { season_id: "missing" }],
     ["department_days", "department_id", { department_id: "missing" }],

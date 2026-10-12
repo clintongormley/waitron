@@ -3880,6 +3880,65 @@ describe("period end-offset placement bounds", () => {
   });
 });
 
+describe("end offsets across a season boundary", () => {
+  it("refuses a season week whose first day meets the grace of the season before", async () => {
+    const v = await timed();
+    const all = await scoped((tx) => readSeasons(tx, v.cfg));
+    const autumn = all.find((season) => season.name === "Autumn")!;
+    const winter = all.find((season) => season.name === "Winter")!;
+    await scoped((tx) =>
+      replaceMenuWeek(
+        tx,
+        v.cfg,
+        v.restaurant,
+        weekOf(() => []),
+        AT,
+        0,
+      ),
+    );
+    await scoped((tx) =>
+      replaceMenuWeek(
+        tx,
+        v.cfg,
+        v.restaurant,
+        weekOf((w) => (w === 6 ? [slot(v.periods.madrugada, "20:00", "05:45")] : [])),
+        AT,
+        0,
+        { seasonId: autumn.id },
+      ),
+    );
+    await scoped((tx) =>
+      updateMenuPeriod(tx, v.cfg, v.periods.madrugada, { endOffsetMinutes: 30 }, 0),
+    );
+    const before = await scoped((tx) => readOpeningHoursModel(tx, v.cfg, AT));
+    // Autumn's Saturday sends until 06:15; Winter's first day, on a Sunday, opens at 06:00.
+    await expect(
+      scoped((tx) =>
+        replaceMenuWeek(
+          tx,
+          v.cfg,
+          v.restaurant,
+          weekOf((w) => (w === 0 ? [slot(v.periods.mananas, "06:00", "09:00")] : [])),
+          AT,
+          0,
+          { seasonId: winter.id },
+        ),
+      ),
+    ).rejects.toMatchObject({
+      code: "menu_timetable.invalid",
+      params: {
+        field: "days",
+        reason: "end_offset",
+        periodId: v.periods.madrugada,
+        departmentId: v.restaurant,
+        seasonId: autumn.id,
+        weekday: 6,
+      },
+    });
+    expect(await scoped((tx) => readOpeningHoursModel(tx, v.cfg, AT))).toEqual(before);
+  });
+});
+
 describe("calendar end-offset revalidation", () => {
   async function offsetVenue() {
     const v = await timed();

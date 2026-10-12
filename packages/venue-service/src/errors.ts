@@ -69,6 +69,7 @@ declare module "@waitron/shared" {
       reason?: "whole_minutes" | "range" | "placement";
       periodId?: string;
       departmentId?: string;
+      seasonId?: string;
       weekday?: number;
       date?: string;
     };
@@ -81,6 +82,8 @@ declare module "@waitron/shared" {
       periodId?: string;
       date?: string;
       departmentId?: string;
+      seasonId?: string;
+      weekday?: number;
       reason?: "overlap" | "clock_skips" | "empty" | "order" | "step" | "end_offset";
     };
     "zone.name_taken": { name: string };

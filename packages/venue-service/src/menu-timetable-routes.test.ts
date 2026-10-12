@@ -747,6 +747,7 @@ it("reports offset placement refusals on the submitted field and retains the com
         reason: "placement",
         periodId: r.mananas,
         departmentId: r.restaurant,
+        seasonId: before.seasons[0]!.id,
         weekday: 0,
       },
     },
