@@ -6,12 +6,15 @@ import {
   floorResetTables,
   floorTodaySplitParts,
   floorTodayTables,
+  partyTables,
   stillJoinedPart,
   type Transaction,
 } from "@waitron/db";
 import { AppError, NEW_TABLE_SIZE, compareLabels } from "@waitron/shared";
 import { refuseHeld, refuseInJoinedTable, todayOf } from "./floor-today-table.js";
-import { leaveMergesRestoring } from "./floor-today-merges.js";
+import { leaveMergesRestoring, partyRevision } from "./floor-today-merges.js";
+import { enqueueMovedSlipsFor, readPartiesSentWork } from "./kitchen-print.js";
+import { checkAndBumpParty, holderOf, leaveTables } from "./parties.js";
 import { placementColumns, placementOf, refuseDeliveryPending } from "./floor-today-store.js";
 import { partPlaces, remainingPlace, type LaidPart } from "./joined-split-layout.js";
 import type { TillConfig } from "./till-config.js";
@@ -60,6 +63,26 @@ async function partsOf(tx: Transaction, tableId: string): Promise<Part[]> {
     .sort((a, b) => compareLabels(a.label, b.label));
 }
 
+/** The party holding the joined table, if any, sits at `lastPartId` instead: not a turnover, so its status stays. */
+async function passGuestsTo(
+  tx: Transaction,
+  cfg: TillConfig,
+  tableId: string,
+  lastPartId: string,
+): Promise<void> {
+  const partyId = await holderOf(tx, tableId);
+  if (partyId === null) return;
+  await tx
+    .update(diningTables)
+    .set({ needsClearingSince: null })
+    .where(eq(diningTables.id, lastPartId));
+  const before = await readPartiesSentWork(tx, cfg, [partyId]);
+  await checkAndBumpParty(tx, partyId, await partyRevision(tx, partyId), "open");
+  await leaveTables(tx, [tableId]);
+  await tx.insert(partyTables).values({ partyId, tableId: lastPartId });
+  await enqueueMovedSlipsFor(tx, cfg, before);
+}
+
 /** Splits `partIds` off the joined table: they stand side by side in its place, and it keeps the rest. */
 export async function splitJoinedTable(
   tx: Transaction,
@@ -91,9 +114,7 @@ export async function splitJoinedTable(
   const toOne = left.length === 1;
   if (toOne) {
     await refuseDeliveryPending(tx, tableId);
-    if (today.merge === null) {
-      await refuseHeld(tx, [tableId]);
-    } else {
+    if (today.merge !== null) {
       const members = today.merge.members.map((member) => member.tableId);
       await refuseHeld(tx, members);
       await leaveMergesRestoring(tx, members);
@@ -114,7 +135,10 @@ export async function splitJoinedTable(
       .set({ ...placementColumns(places[index]!), takenOff: false })
       .where(eq(floorTodayTables.tableId, part.tableId));
   }
-  if (toOne) return;
+  if (toOne) {
+    await passGuestsTo(tx, cfg, tableId, left[0]!);
+    return;
+  }
 
   const standing = parts.flatMap((part, index) =>
     part.splitOff || splitting.has(part.tableId) ? [] : [index],

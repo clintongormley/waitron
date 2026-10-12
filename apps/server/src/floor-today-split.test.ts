@@ -2,23 +2,38 @@ import { and, asc, eq, sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
+import { randomUUID } from "node:crypto";
 import {
+  diningTables,
   floorTodaySplitParts,
   floorTodayTables,
   joinedTableApart,
+  tableServiceStatuses,
   workingOrders,
 } from "@waitron/db";
+import { writeClearingWorkflow } from "@waitron/venue-service";
 import type { AppError } from "@waitron/shared";
 import { writeMerge } from "./floor-today-merges.js";
 import { foodOnItsWay } from "./delivery-release.js";
 import { backToSaved, moveToday, takeOffToday } from "./floor-today-store.js";
 import { splitJoinedTable } from "./floor-today-split.js";
+import { finishTable } from "./parties.js";
+import { joinTables } from "./table-actions.js";
 import {
+  OPERATOR,
+  activeTablesOf,
+  billRow,
+  commandFor,
   counterOrder,
   inTx,
+  order,
+  partyAt,
+  partyRow,
   pay,
+  revisionOf,
   seat,
   setupPartyVenue,
+  tableRow,
   type PartyVenue,
 } from "./testing/party-venue.js";
 import {
@@ -304,14 +319,6 @@ describe("splitting parts off a joined table", () => {
       (z) => ({ tableId: t(z, "long"), partIds: [t(z, "c3")], seats: null }),
       (z) => ({ code: "table.in_joined_table", params: { tableId: t(z, "long") } }),
     ],
-    [
-      "down to one part while a party holds it",
-      async (z) => {
-        await seat(v, t(z, "long"));
-      },
-      (z) => ({ tableId: t(z, "long"), partIds: [t(z, "c4"), t(z, "c5")], seats: null }),
-      (z) => ({ code: "tab.already_open", params: { tableId: t(z, "long") } }),
-    ],
   ])("refuses %s, writing nothing", async (_name, setup, args, expected) => {
     const zone = await LONG_PLUS_BAR();
     await setup(zone);
@@ -455,5 +462,160 @@ describe("Back to its saved place on a joined table", () => {
     await inTx(v, (tx) => moveToday(tx, v.cfg, table.bar!, { x: 60, y: 60 }));
     await inTx(v, (tx) => backToSaved(tx, v.cfg, table.bar!));
     expect(await todayRow(v, table.bar!)).toMatchObject({ x: 40, y: 0 });
+  });
+});
+
+describe("guests at a joined table that is split", () => {
+  function noticesOn(billIds: string[]) {
+    return v.db.all<{
+      working_order_id: string;
+      kind: string;
+      line_name: string;
+      moved_to: string;
+    }>(
+      sql`
+        select working_order_id, kind, line_name, moved_to from kitchen_notices
+        where working_order_id in (${sql.join(
+          billIds.map((id) => sql`${id}`),
+          sql`, `,
+        )})
+        order by rowid`,
+    );
+  }
+
+  async function withClearing<T>(fn: () => Promise<T>): Promise<T> {
+    await inTx(v, (tx) => writeClearingWorkflow(tx, true));
+    try {
+      return await fn();
+    } finally {
+      await inTx(v, (tx) => writeClearingWorkflow(tx, false));
+    }
+  }
+
+  it("the guests and their bills stay at Long table while two parts remain", async () => {
+    const { table } = await LONG_PLUS_BAR();
+    const guests = await seat(v, table.long!);
+    await order(v, guests.tabId, "Burger");
+    const revision = await revisionOf(v, guests.partyId);
+
+    await split(table.long!, [table.c5!], 6);
+
+    expect(await partyAt(v, table.long!)).toBe(guests.partyId);
+    expect(await revisionOf(v, guests.partyId)).toBe(revision);
+    expect((await billRow(v, guests.tabId)).partyId).toBe(guests.partyId);
+  });
+
+  it("a split down to one passes the guests to the part left, and Long table needs no clearing", async () => {
+    await withClearing(async () => {
+      const { table } = await LONG_PLUS_BAR();
+      const guests = await seat(v, table.long!);
+      await order(v, guests.tabId, "Burger");
+      const revision = await revisionOf(v, guests.partyId);
+
+      await split(table.long!, [table.c4!, table.c5!], null);
+
+      expect(await partyAt(v, table.c3!)).toBe(guests.partyId);
+      expect(await partyAt(v, table.long!)).toBeNull();
+      expect((await tableRow(v, table.long!)).needsClearingSince).toBeNull();
+      expect(await revisionOf(v, guests.partyId)).toBe(revision + 1);
+      expect((await billRow(v, guests.tabId)).partyId).toBe(guests.partyId);
+    });
+  });
+
+  it("keeps every other table the guests hold", async () => {
+    const { table } = await LONG_PLUS_BAR();
+    const guests = await seat(v, table.long!);
+    const joining = {
+      bills: "merge" as const,
+      expectedPartyRevision: await revisionOf(v, guests.partyId),
+      operatorId: OPERATOR,
+    };
+    await inTx(v, (tx) => joinTables(tx, v.cfg, guests.partyId, table.bar!, joining));
+
+    await split(table.long!, [table.c4!, table.c5!], null);
+
+    expect((await activeTablesOf(v, guests.partyId)).sort()).toEqual(
+      [table.bar!, table.c3!].sort(),
+    );
+  });
+
+  it("tells the kitchen the guests' new table", async () => {
+    const { table } = await LONG_PLUS_BAR();
+    const guests = await seat(v, table.long!);
+    await order(v, guests.tabId, "Burger");
+
+    await split(table.long!, [table.c4!, table.c5!], null);
+
+    expect(await noticesOn([guests.tabId])).toEqual([
+      {
+        working_order_id: guests.tabId,
+        kind: "moved",
+        line_name: "BURG",
+        moved_to: (await tableRow(v, table.c3!)).label,
+      },
+    ]);
+  });
+
+  it("clears a stale needs-clearing mark on the part the guests pass to", async () => {
+    const { table } = await LONG_PLUS_BAR();
+    await inTx(v, (tx) =>
+      tx
+        .update(diningTables)
+        .set({ needsClearingSince: new Date().toISOString() })
+        .where(eq(diningTables.id, table.c3!)),
+    );
+    const guests = await seat(v, table.long!);
+
+    await split(table.long!, [table.c4!, table.c5!], null);
+
+    expect(await partyAt(v, table.c3!)).toBe(guests.partyId);
+    expect((await tableRow(v, table.c3!)).needsClearingSince).toBeNull();
+  });
+
+  it("leaves the last part's manual status as it is", async () => {
+    const { table } = await LONG_PLUS_BAR();
+    const statusId = await inTx(v, async (tx) => {
+      const [status] = await tx
+        .insert(tableServiceStatuses)
+        .values({ label: `Postre ${randomUUID()}`, color: "#ef4444" })
+        .returning({ id: tableServiceStatuses.id });
+      await tx
+        .update(diningTables)
+        .set({ statusId: status!.id })
+        .where(eq(diningTables.id, table.c3!));
+      return status!.id;
+    });
+    const guests = await seat(v, table.long!);
+
+    await split(table.long!, [table.c4!, table.c5!], null);
+
+    expect(await partyAt(v, table.c3!)).toBe(guests.partyId);
+    expect((await tableRow(v, table.c3!)).statusId).toBe(statusId);
+  });
+
+  it("an old read of the guests is refused after the split", async () => {
+    const { table } = await LONG_PLUS_BAR();
+    const guests = await seat(v, table.long!);
+    const stale = await commandFor(v, guests.partyId);
+
+    await split(table.long!, [table.c4!, table.c5!], null);
+    const before = {
+      party: await partyRow(v, guests.partyId),
+      tables: await activeTablesOf(v, guests.partyId),
+    };
+
+    const error = await refusalOf(
+      inTx(v, (tx) => finishTable(tx, { partyId: guests.partyId, ...stale })),
+    );
+
+    expect(error?.code).toBe("party.out_of_date");
+    expect(error?.params).toEqual({
+      partyId: guests.partyId,
+      revision: stale.expectedPartyRevision + 1,
+    });
+    expect({
+      party: await partyRow(v, guests.partyId),
+      tables: await activeTablesOf(v, guests.partyId),
+    }).toEqual(before);
   });
 });
