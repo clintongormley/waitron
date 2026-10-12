@@ -272,11 +272,6 @@ describe("the menu timetable rows of a bundle", () => {
   const MANANAS = "11111111-1111-4111-8111-111111111111";
   const MADRUGADA = "22222222-2222-4222-8222-222222222222";
   const DELI_PERIOD = "33333333-3333-4333-8333-333333333333";
-  /**
-   * The restaurant's Mañanas (Desayunos) runs 09:00–12:00 on Monday and Madrugada (Copas)
-   * 22:00–02:00 on Friday; on Christmas, a Friday, Mañanas alone runs 10:00–13:00. Barra serves
-   * Café is a staff menu in Mañanas. Deli has a period of its own.
-   */
   function menuTables(): Tables {
     return {
       departments: [

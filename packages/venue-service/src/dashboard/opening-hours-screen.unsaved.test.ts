@@ -66,7 +66,6 @@ class OpeningLeaveApp extends LitElement {
           subjects: [],
           week: [],
           days: [],
-          specialDates: [],
           specialCells: [],
           holidayCoverage: [],
           holidaySources: [],

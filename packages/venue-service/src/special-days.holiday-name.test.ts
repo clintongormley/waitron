@@ -226,7 +226,7 @@ describe("one special day's own dates under name-following", () => {
     });
   });
 
-  it("accepts a holiday date and the old month and day a year later, which never meet", async () => {
+  it("accepts a holiday date and the same month and day a year later, which never meet in this suite's invented holiday list", async () => {
     const v = await venue();
     const day = await save(v, {
       name: "Viernes Santo",

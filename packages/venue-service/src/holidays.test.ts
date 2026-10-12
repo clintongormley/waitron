@@ -224,6 +224,7 @@ async function stored() {
   return run(async (tx) => ({
     geographies: await tx.select().from(holidayGeographies).orderBy(asc(holidayGeographies.id)),
     entries: await tx.select().from(specialDays).orderBy(asc(specialDays.id)),
+    dates: await tx.select().from(specialDayDates).orderBy(asc(specialDayDates.id)),
   }));
 }
 
@@ -286,7 +287,7 @@ describe("reading a venue's holidays", () => {
         sha256: SHA,
       },
     ]);
-    expect(await stored()).toEqual({ geographies: [], entries: [] });
+    expect(await stored()).toEqual({ geographies: [], entries: [], dates: [] });
     const model = await run((tx) => store.readHolidayAreaModel(tx, cfg));
     expect(model).toEqual({
       venue: { country: "ZZ", provinceCode: "10", city: "Villa Real" },
@@ -416,7 +417,7 @@ describe("an address that does not resolve", () => {
     const model = await run((tx) => store.readHolidayAreaModel(tx, cfg));
     expect(model.venue).toEqual({ country: "ZZ", provinceCode: "10", city: null });
     expect(model.localHolidaysPerYear).toBe(1);
-    expect(await stored()).toEqual({ geographies: [], entries: [] });
+    expect(await stored()).toEqual({ geographies: [], entries: [], dates: [] });
   });
 
   for (const province of [null, "Atlantis"])
@@ -442,7 +443,7 @@ describe("an address that does not resolve", () => {
       expect(
         await refusal(() => run((tx) => store.saveHolidayArea(tx, cfg, { areaKey: null }))),
       ).toMatchObject({ code: "holiday.invalid", params: { field: "geography" } });
-      expect(await stored()).toEqual({ geographies: [], entries: [] });
+      expect(await stored()).toEqual({ geographies: [], entries: [], dates: [] });
     });
 
   it("reads a country with no installed pack as unsupported, guessing nothing", async () => {
@@ -621,13 +622,13 @@ describe("territorial areas", () => {
     expect(
       await refusal(() => run((tx) => store.saveHolidayArea(tx, cfg, { areaKey: "isle-a" }))),
     ).toMatchObject({ code: "holiday.invalid", params: { field: "geography" } });
-    expect(await stored()).toEqual({ geographies: [], entries: [] });
+    expect(await stored()).toEqual({ geographies: [], entries: [], dates: [] });
   });
 
   it("clears an area with no geography row by writing nothing", async () => {
     const cfg = await venue({ province: "Isleshire" });
     expect(await run((tx) => store.saveHolidayArea(tx, cfg, { areaKey: null }))).toBeNull();
-    expect(await stored()).toEqual({ geographies: [], entries: [] });
+    expect(await stored()).toEqual({ geographies: [], entries: [], dates: [] });
   });
 
   it("refuses an area nobody sourced, an omitted key and a wrong type", async () => {
@@ -648,7 +649,7 @@ describe("territorial areas", () => {
           run((tx) => store.saveHolidayArea(tx, cfg, input as { areaKey: string | null })),
         ),
       ).toMatchObject({ code: "holiday.invalid", params: { field: "areaKey" } });
-    expect(await stored()).toEqual({ geographies: [], entries: [] });
+    expect(await stored()).toEqual({ geographies: [], entries: [], dates: [] });
   });
 
   it("offers the Arán choice for a Spanish venue in Lleida and none in Sevilla", async () => {
@@ -679,7 +680,7 @@ describe("transactions and other callers", () => {
         throw rolledBack;
       }),
     ).rejects.toBe(rolledBack);
-    expect(await stored()).toEqual({ geographies: [], entries: [] });
+    expect(await stored()).toEqual({ geographies: [], entries: [], dates: [] });
   });
 
   it("gives a calendar reader the same facts, unaffected by special dates", async () => {
@@ -727,6 +728,9 @@ describe("transactions and other callers", () => {
     const rows = async () => ({
       stored: await stored(),
       specialDays: await run((tx) => tx.select().from(specialDays).orderBy(asc(specialDays.id))),
+      specialDayDates: await run((tx) =>
+        tx.select().from(specialDayDates).orderBy(asc(specialDayDates.id)),
+      ),
     });
     const before = await rows();
 

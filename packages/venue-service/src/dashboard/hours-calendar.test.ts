@@ -723,7 +723,7 @@ describe("Opening hours named month", () => {
   );
 });
 
-it("ignores the retired station-hours client when no named-day client is attached", async () => {
+it("ignores the retired station-hours client when no special-days client is attached", async () => {
   const watchHours = vi.fn(() => () => {});
   const el = document.createElement("hours-calendar");
   Object.assign(el, { api: { watchHours }, today: "2026-10-07" });

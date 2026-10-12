@@ -497,7 +497,7 @@ describe("pending guards every time writer", () => {
         .values({ locationId: v.cfg.locationId, effectiveBusinessDay: E, dayCutover: "07:00:00" });
     });
   }
-  it("guards normal and named menu ranges but accepts an equivalent week", async () => {
+  it("guards normal and special-day menu ranges but accepts an equivalent week", async () => {
     const v = await fixture([range("09:00", "17:00")], { date: "2026-12-25" });
     await pending(v);
     await expect(
@@ -696,7 +696,7 @@ describe("dated calendar authoring after activation", () => {
   });
 });
 
-describe("clock compatibility resolves neighboring named-day substitutions", () => {
+describe("clock compatibility resolves neighboring special-day substitutions", () => {
   async function neighbor(emptyOverride: boolean, closedAllDay: boolean) {
     const v = await fixture([range("22:00", "04:30")], { offset: 180, date: E });
     await withTransaction(suite.db, async (tx) => {
@@ -1165,7 +1165,7 @@ describe("clock compatibility reads each day's neighbours from its own season", 
       },
     });
   });
-  it("ignores a named day whose day before is another season's weekday", async () => {
+  it("ignores a special day whose day before is another season's weekday", async () => {
     const v = await fixture([range("22:00", "04:30")], { offset: 180 });
     await twoSeasons(v);
     // 2026-11-04, the Wednesday before, is in Summer; the painted Wednesday is Winter's.
@@ -1178,7 +1178,7 @@ describe("clock compatibility reads each day's neighbours from its own season", 
     );
     await expect(check(v, "07:00")).resolves.toBeUndefined();
   });
-  it("follows a named day with the next day's own season week", async () => {
+  it("follows a special day with the next day's own season week", async () => {
     const v = await fixture([range("22:00", "04:30")], { offset: 180, date: E });
     await twoSeasons(v);
     // 2026-11-05 is a Summer Thursday; only Winter paints Thursday.
@@ -1385,7 +1385,7 @@ describe("clock compatibility reads special-day paint", () => {
   });
 });
 
-/** Four seasons, three departments and `count` yearly named days and yearly special days, with
+/** Four seasons, three departments and two sets of `count` yearly special days, with
  *  fixed ids so the listed conflicts come out in one order. */
 async function busyCalendar(count: number, run = 0) {
   const fixed = (kind: number, n: number) =>
@@ -1513,7 +1513,7 @@ async function busyCalendar(count: number, run = 0) {
   });
 }
 
-it("lists the same conflicts for many yearly named days and special days", async () => {
+it("lists the same conflicts for many yearly special days", async () => {
   const cfg = await busyCalendar(50);
   const result = await withTransaction(suite.db, (tx) =>
     businessDayClockConflicts(tx, cfg, before, candidate("04:00"), E),

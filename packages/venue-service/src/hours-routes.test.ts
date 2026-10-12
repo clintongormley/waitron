@@ -547,7 +547,7 @@ describe("Hours when the venue's clock changes", () => {
   const model = (fx: Fixture, at: Date) =>
     withTransaction(db, (tx) => readSpecialDaysModel(tx, fx.cfg, "2026-10-12", "2026-10-18", at));
 
-  it("moves the civil date with a new time zone, keeping named days without closing stations", async () => {
+  it("moves the civil date with a new time zone, keeping special days without closing stations", async () => {
     const fx = await fixture();
     await createDay(fx, "2026-10-15", { at: new Date("2026-10-01T10:00:00Z") });
     const madrid = await model(fx, AT);

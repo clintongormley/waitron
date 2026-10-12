@@ -1459,7 +1459,7 @@ describe("/management-api/stations (KDS-1 config)", () => {
   });
 
   it.each(["existing", "new"] as const)(
-    "replaces the default using the %s-station action while preserving named dates",
+    "replaces the default using the %s-station action while preserving special days",
     async (choice) => {
       const kitchen = await createStation(unique("Resume kitchen"), { isDefault: true });
       const barName = unique("Resume bar");

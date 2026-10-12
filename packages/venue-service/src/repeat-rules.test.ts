@@ -5,7 +5,7 @@ const xmas = { date: "2026-12-25", repeats: true };
 const once = { ...xmas, repeats: false };
 const leap = { date: "2024-02-29", repeats: true };
 
-describe("named-day occurrences", () => {
+describe("special-day occurrences", () => {
   it.each([
     ["2026-12-25", true],
     ["2031-12-25", true],

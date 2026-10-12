@@ -663,7 +663,7 @@ function assertNoSkippedTimes(
   }
 }
 
-/** Refuses a date that another special day, or a named day, of the venue also stands on;
+/** Refuses a date that another special day of the venue also stands on;
  *  `holidays` covers the rules' years through `holidayHorizon`. */
 async function assertDatesFree(
   tx: Transaction,

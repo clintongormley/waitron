@@ -268,7 +268,7 @@ describe("station status on special dates and calendar boundaries", () => {
       expect(await statusAt(tx, f.cfg, f.upstairs, "2026-10-05T22:00:00Z")).toEqual(openState);
       expect(await statusAt(tx, f.cfg, f.upstairs, "2026-10-06T21:59:00Z")).toEqual(openState);
       expect(await statusAt(tx, f.cfg, f.upstairs, "2026-10-06T22:00:00Z")).toEqual(openState);
-      // Thursday 8 October is a named date.
+      // Thursday 8 October is a special day.
       expect(await statusAt(tx, f.cfg, f.upstairs, "2026-10-08T12:00:00Z")).toEqual(openState);
       expect(await statusAt(tx, f.cfg, f.upstairs, "2026-10-08T22:00:00Z")).toEqual(openState);
     });

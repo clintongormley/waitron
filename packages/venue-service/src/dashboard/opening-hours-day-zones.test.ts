@@ -45,7 +45,6 @@ function fixture() {
       zones: department.zones.map((zone) => ({
         ...zone,
         seasonWeeks: [{ seasonId: "autumn", week: closedEveryNight() }],
-        week: closedEveryNight(),
       })),
     })),
   };

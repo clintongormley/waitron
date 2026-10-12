@@ -184,13 +184,13 @@ describe("end offsets across seasons", () => {
     const tuesday = empty();
     tuesday[2] = [breakfast];
     winter!.week = tuesday;
-    const named = (date: string) => [{ date, closeWholeVenue: false, paint: [dinner] }];
+    const specialDay = (date: string) => [{ date, closeWholeVenue: false, paint: [dinner] }];
     // 2026-11-30, a Monday, is Autumn's last day; the Tuesday after it is Winter's.
     expect(
-      findSeasonEndOffsetClash([autumn!, winter!], named("2026-11-30"), offsets, "06:00"),
+      findSeasonEndOffsetClash([autumn!, winter!], specialDay("2026-11-30"), offsets, "06:00"),
     ).toEqual({ periodId: "dinner", slotIndex: 0, date: "2026-11-30" });
     expect(
-      findSeasonEndOffsetClash([autumn!, winter!], named("2026-11-23"), offsets, "06:00"),
+      findSeasonEndOffsetClash([autumn!, winter!], specialDay("2026-11-23"), offsets, "06:00"),
     ).toBeNull();
   });
 });

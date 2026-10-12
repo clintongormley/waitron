@@ -197,13 +197,18 @@ const dateSnapshot = (f: Fixture, subject: HoursSubject, date: LocalDate) =>
   });
 
 const storedDates = (f: Fixture) =>
-  withTransaction(db, (tx) =>
-    tx
+  withTransaction(db, async (tx) => ({
+    days: await tx
       .select()
       .from(specialDays)
       .where(eq(specialDays.locationId, f.cfg.locationId))
       .orderBy(asc(specialDays.name)),
-  );
+    dates: await tx
+      .select()
+      .from(specialDayDates)
+      .where(eq(specialDayDates.locationId, f.cfg.locationId))
+      .orderBy(asc(specialDayDates.date)),
+  }));
 
 const tone = (f: Fixture, date: LocalDate) =>
   withTransaction(db, async (tx) => (await readCalendarDays(tx, f.cfg, date, date))[0]!.tone);
@@ -681,11 +686,11 @@ describe("Hours on a real Spanish public holiday", () => {
         await dateSnapshot(f, subject, ORDINARY),
       );
     }
-    expect(await storedDates(f)).toEqual([]);
+    expect(await storedDates(f)).toEqual({ days: [], dates: [] });
   });
 });
 
-describe("named-day station occurrences", () => {
+describe("special-day station occurrences", () => {
   /** A special day "Navidad" closed all day, written straight to its tables. */
   async function closure(
     f: Fixture,

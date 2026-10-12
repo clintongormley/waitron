@@ -171,7 +171,7 @@ describe("special-day occurrences in the Calendar", () => {
   });
 });
 
-describe("departments and calendar follow named days", () => {
+describe("departments and calendar follow special days", () => {
   it("uses a repeating special day's range through a skipped clock minute in a later year", async () => {
     const f = await fixture();
     await run(async (tx) => {

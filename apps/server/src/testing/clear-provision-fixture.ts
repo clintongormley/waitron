@@ -16,7 +16,6 @@ export async function clearProvisionFixture(db: Database): Promise<void> {
       "holiday_geographies",
       "menu_period_staff_menus",
       "menu_periods",
-      // The hours tables' keys to departments and stations have no delete rule, so they go first.
       "department_sale_policies",
       "zone_sale_policies",
       "station_day_states",

@@ -4080,7 +4080,7 @@ async function insertSpecialDay(
   return { id };
 }
 
-describe("named days in a configuration transfer", () => {
+describe("special days in a configuration transfer", () => {
   /** Tuesday 6 October 2026, 12:00 in Madrid. */
   const AT = new Date("2026-10-06T10:00:00Z");
 
@@ -4102,7 +4102,7 @@ describe("named days in a configuration transfer", () => {
     };
   }
 
-  async function namedDaysByName(db: typeof suite.db, located: { locationId: string }) {
+  async function specialDaysByName(db: typeof suite.db, located: { locationId: string }) {
     const rows = await db.execute<{ date: string; name: string; closed_all_day: number }>(sql`
       select d.date, s.name, d.closed_all_day from special_day_dates d
       join special_days s on s.id = d.special_day_id
@@ -4116,7 +4116,7 @@ describe("named days in a configuration transfer", () => {
     };
   }
 
-  async function preparedWithNamedDays(taxId: string) {
+  async function preparedWithSpecialDays(taxId: string) {
     const source = await applyVenue(planVenue(venue(taxId), ALL_MODULES), {
       db: suite.db,
       modules: ALL_MODULES,
@@ -4156,15 +4156,15 @@ describe("named days in a configuration transfer", () => {
     "hours_week_periods",
     "special_date_hours",
     "special_date_hours_periods",
-  ])("exports named days without retired %s", async (table) => {
-    const { transferred } = await preparedWithNamedDays("B44009911");
+  ])("exports special days without retired %s", async (table) => {
+    const { transferred } = await preparedWithSpecialDays("B44009911");
     expect(transferred.tables).not.toHaveProperty(table);
     expect(transferred.tables.special_days).toHaveLength(3);
     expect(transferred.tables).not.toHaveProperty("station_day_states");
   });
 
   it("carries special dates with fresh ids while leaving station schedules behind", async () => {
-    const { source, versions, transferred } = await preparedWithNamedDays("B44001122");
+    const { source, versions, transferred } = await preparedWithSpecialDays("B44001122");
     expect(transferred.tables).not.toHaveProperty("station_day_states");
     for (const table of [
       "station_fallbacks",
@@ -4182,13 +4182,13 @@ describe("named days in a configuration transfer", () => {
         importConfigurationTables(tx, transferred, result, ALL_MODULES, versions),
     });
 
-    const expected = await namedDaysByName(suite.db, source);
+    const expected = await specialDaysByName(suite.db, source);
     expect(expected.dates.map((date) => date.date)).toEqual([
       "2026-12-24",
       "2026-12-25",
       "2027-01-01",
     ]);
-    const actual = await namedDaysByName(targetSuite.db, target);
+    const actual = await specialDaysByName(targetSuite.db, target);
     expect(actual.dates).toEqual(expected.dates);
 
     const sourceIds = new Set(transferred.tables.special_days!.map((row) => row.id));
@@ -4217,7 +4217,7 @@ describe("named days in a configuration transfer", () => {
         where d.location_id = ${cfg.locationId} and d.date = ${date}`)
     ).rows[0] ?? null;
 
-  it("leaves default station hours behind while keeping its named day and open state", async () => {
+  it("leaves default station hours behind while keeping its special day and open state", async () => {
     const source = await applyVenue(planVenue(venue("B44002211"), ALL_MODULES), {
       db: suite.db,
       modules: ALL_MODULES,
@@ -4300,9 +4300,9 @@ describe("named days in a configuration transfer", () => {
       beforeCommit: (tx, result) =>
         importConfigurationTables(tx, transferred, result, ALL_MODULES, versions),
     });
-    const expected = await namedDaysByName(suite.db, source);
+    const expected = await specialDaysByName(suite.db, source);
     expect(expected.dates.map((date) => date.date)).toEqual(["2026-09-25"]);
-    const actual = await namedDaysByName(targetSuite.db, target);
+    const actual = await specialDaysByName(targetSuite.db, target);
     expect(actual.dates).toEqual(expected.dates);
   });
 
@@ -4313,7 +4313,7 @@ describe("named days in a configuration transfer", () => {
     "special_date_hours",
     "special_date_hours_periods",
   ] as const)("refuses retired %s rows without retaining the target taxpayer", async (table) => {
-    const { versions, transferred } = await preparedWithNamedDays("B44006611");
+    const { versions, transferred } = await preparedWithSpecialDays("B44006611");
     const edited = structuredClone(transferred);
     edited.tables[table] = [
       { id: randomUUID(), station_id: edited.tables.kitchen_stations![0]!.id },
@@ -4337,7 +4337,7 @@ describe("named days in a configuration transfer", () => {
   });
 
   it("refuses a reintroduced station-hours table and writes no venue", async () => {
-    const { versions, transferred } = await preparedWithNamedDays("B44003311");
+    const { versions, transferred } = await preparedWithSpecialDays("B44003311");
     const edited: ConfigurationBundle = {
       ...transferred,
       tables: { ...transferred.tables, hours_week_periods: [] },
@@ -4362,7 +4362,7 @@ describe("named days in a configuration transfer", () => {
   });
 
   it("refuses a bundle exported before the hours tables existed, as an older venue-service schema", async () => {
-    const { versions, transferred } = await preparedWithNamedDays("B44004411");
+    const { versions, transferred } = await preparedWithSpecialDays("B44004411");
     const journal = JSON.parse(
       await readFile(
         new URL("../../../packages/venue-service/drizzle/meta/_journal.json", import.meta.url),

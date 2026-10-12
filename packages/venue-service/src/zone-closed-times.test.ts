@@ -263,7 +263,7 @@ describe("zones closed at an instant", () => {
       closed ? [v.terrace] : [],
     );
   });
-  it("uses dated closures instead of the week, including an empty zone override", async () => {
+  it("uses a special day's zone paint instead of the week, an open range included", async () => {
     const v = await venue();
     await tx((db) => replaceZoneClosedWeek(db, v.cfg, v.terrace, week(mondayNight), 0));
     await specialDay(v, "2030-10-07", {
