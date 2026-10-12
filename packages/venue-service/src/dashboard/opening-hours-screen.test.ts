@@ -1440,7 +1440,7 @@ describe("Calendar special-day actions", () => {
     id: "feast/2025",
     name: "Public feast",
     repeatsYearly: false,
-    dates: [{ date: "2025-10-12", closedAllDay: true }],
+    dates: [{ date: "2025-10-12", closedAllDay: true, holidayName: "Public feast" }],
     paint: [],
     zonePaint: [],
   };
@@ -1451,9 +1451,14 @@ describe("Calendar special-day actions", () => {
     dates: [{ date: "2024-10-12", closedAllDay: false }],
   };
   async function calendarMount(
-    options: { withFeast?: boolean; refuse?: unknown; readFails?: boolean } = {},
+    options: {
+      withFeast?: boolean;
+      refuse?: unknown;
+      readFails?: boolean;
+      listFails?: boolean;
+    } = {},
   ) {
-    const { withFeast = false, refuse, readFails = false } = options;
+    const { withFeast = false, refuse, readFails = false, listFails = false } = options;
     history.replaceState(null, "", "/manage/opening-hours/view/calendar/month/2026-10");
     const writes: unknown[][] = [];
     let reads = 0;
@@ -1465,6 +1470,7 @@ describe("Calendar special-day actions", () => {
         return { id: "new" };
       }
       if (path.includes("/hours?")) stationReads++;
+      if (path.endsWith("/special-days") && listFails) throw { code: "connection.failed" };
       if (path.endsWith("/special-days"))
         return withFeast
           ? [
@@ -1641,6 +1647,14 @@ describe("Calendar special-day actions", () => {
       ]);
     await expect.poll(() => el.shadowRoot!.querySelector("special-day-dialog")).toBeNull();
     await expect.poll(reads).toBe(2);
+  });
+  it("opens a public holiday's dialog with no offer when the special-day list cannot be read", async () => {
+    const { el, cal } = await calendarMount({ withFeast: true, listFails: true });
+    await action(cal, "2026-10-12", "add");
+    const form = await dialog(el);
+    expect(form.shadowRoot!.querySelector("[data-test=add-to]")).toBeNull();
+    expect(field(form, "name").value).toBe("Public feast");
+    expect(el.shadowRoot!.querySelector("[data-test=special-read-error]")).toBeNull();
   });
   it("shows a refused Add to in the offer, keeping the dialog open", async () => {
     const { el, cal, writes } = await calendarMount({

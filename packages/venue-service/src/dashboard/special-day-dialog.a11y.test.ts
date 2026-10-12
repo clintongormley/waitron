@@ -23,7 +23,7 @@ const stored = {
   repeatsYearly: true,
   dates: [
     { date: "2026-12-14", closedAllDay: false },
-    { date: "2026-12-25", closedAllDay: true },
+    { date: "2026-12-25", closedAllDay: true, holidayName: "Navidad" },
   ],
   paint: [],
   zonePaint: [],

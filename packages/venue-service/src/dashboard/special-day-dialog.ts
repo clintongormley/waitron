@@ -133,6 +133,8 @@ export class SpecialDayDialog extends LitElement {
   private savableAtOpen = false;
   /** The public holiday each stored date was saved on. */
   private storedHolidays = new Set<LocalDate>();
+  /** Dates the opened special day already held; a save keeps their stored holiday names. */
+  private storedDates = new Set<LocalDate>();
   private generation = {};
   private submittedGeneration?: object;
 
@@ -178,6 +180,7 @@ export class SpecialDayDialog extends LitElement {
             repeatsYearly: false,
             dates: isLocalDate(this.date) ? [{ date: this.date, closedAllDay: false }] : [],
           };
+      this.storedDates = new Set((this.specialDay?.dates ?? []).map((entry) => entry.date));
       this.storedHolidays = new Set(
         (this.specialDay?.dates ?? []).flatMap((entry) => (entry.holidayName ? [entry.date] : [])),
       );
@@ -448,7 +451,6 @@ export class SpecialDayDialog extends LitElement {
                 name="addTo"
                 type="date"
                 label=${t("special.to")}
-                hint=${t("special.to_hint")}
                 .value=${this.addTo}
                 .error=${this.addErrors.to ?? ""}
                 ?disabled=${this.busy}
@@ -490,8 +492,10 @@ export class SpecialDayDialog extends LitElement {
     const current = () =>
       this.isConnected && this.open && !this.busy && generation === this.generation;
     const holidayDates = new Set(this.holidays.map((holiday) => holiday.date));
-    const onHoliday = this.draft.dates.some(
-      (entry) => holidayDates.has(entry.date) || this.storedHolidays.has(entry.date),
+    const onHoliday = this.draft.dates.some((entry) =>
+      this.storedDates.has(entry.date)
+        ? this.storedHolidays.has(entry.date)
+        : holidayDates.has(entry.date),
     );
     const leap =
       this.draft.repeatsYearly && this.draft.dates.some((entry) => entry.date.endsWith("-02-29"));

@@ -624,11 +624,16 @@ export class OpeningHoursScreen extends LitElement {
         ? { ...action, detail: await this.api.specialDays.readSpecialDay(specialDay.id) }
         : {
             ...action,
-            existing: (await this.api.specialDays.listSpecialDays()).map((day) => ({
-              id: day.id,
-              name: day.name,
-              latest: day.dates.at(-1)?.date,
-            })),
+            existing: await this.api.specialDays.listSpecialDays().then(
+              (days) =>
+                days.map((day) => ({
+                  id: day.id,
+                  name: day.name,
+                  latest: day.dates.at(-1)?.date,
+                })),
+              // The list only feeds the optional "Add to <name>" offer.
+              () => [],
+            ),
           };
     } catch {
       if (this.isConnected && generation === this.generation)
@@ -708,7 +713,9 @@ export class OpeningHoursScreen extends LitElement {
     const saved = await this.writeSpecialDay(action, component, async (current) => {
       const stored = await this.api.specialDays.readSpecialDay(id);
       const dates = [
-        ...stored.dates.filter((entry) => entry.date !== date),
+        ...stored.dates
+          .filter((entry) => entry.date !== date)
+          .map((entry) => ({ date: entry.date, closedAllDay: entry.closedAllDay })),
         { date, closedAllDay: false },
       ].sort((a, b) => (a.date < b.date ? -1 : 1));
       return this.api.specialDays.saveSpecialDay(
