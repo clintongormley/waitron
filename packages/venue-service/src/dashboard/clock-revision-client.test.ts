@@ -1,7 +1,7 @@
 import { expect, it } from "vitest";
 import type { DashboardRequest } from "@waitron/dashboard-kit";
 import { OpeningHoursApi } from "./opening-hours-client.js";
-import { NamedDaysApi } from "./named-days-client.js";
+import { SpecialDaysApi } from "./special-days-client.js";
 it("sends the editor's retained revision on every time-affecting request", async () => {
   const bodies: unknown[] = [];
   const request = (async (_path, _method, body) => {
@@ -28,27 +28,22 @@ it("sends the editor's retained revision on every time-affecting request", async
     { slots: [], expectedClockRevision: 7 },
   ]);
 });
-it("sends the retained calendar revision on save, copy and removal", async () => {
+it("sends the retained calendar revision on save and removal", async () => {
   const bodies: unknown[] = [];
-  const api = new NamedDaysApi((async (_path, _method, body) => {
+  const api = new SpecialDaysApi((async (_path, _method, body) => {
     bodies.push(body);
   }) as DashboardRequest);
   const input = {
     name: "Holiday",
-    date: "2026-11-04",
-    kind: "holiday" as const,
-    repeats: false,
-    ownHours: true,
-    closeWholeVenue: false,
+    repeatsYearly: false,
+    dates: [{ date: "2026-11-04", closedAllDay: false }],
   };
-  await api.saveDay(null, input, () => true, 9);
-  await api.saveDay("date", input, () => true, 9);
-  await api.copyDay("date", ["2026-11-05"], 9);
-  await api.deleteDay("date", 9);
+  await api.saveSpecialDay(null, input, () => true, 9);
+  await api.saveSpecialDay("day", input, () => true, 9);
+  await api.deleteSpecialDay("day", 9);
   expect(bodies).toEqual([
     { ...input, expectedClockRevision: 9 },
     { ...input, expectedClockRevision: 9 },
-    { dates: ["2026-11-05"], expectedClockRevision: 9 },
     { expectedClockRevision: 9 },
   ]);
 });

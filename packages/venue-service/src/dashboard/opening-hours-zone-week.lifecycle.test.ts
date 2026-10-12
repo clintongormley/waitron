@@ -199,18 +199,19 @@ it.each(["ranges.0.endsAt", "specialDateId"])(
   },
 );
 
-it("a clean dated snapshot can retire an own-hours Save and offers the existing day's own-hours editor", async () => {
+it("a clean dated snapshot can retire an own-hours Save and offers the special-day dialog for the date", async () => {
   await mount(true);
   week.namedDays = week.namedDays.map((day) => ({ ...day, ownHours: false }));
   await week.updateComplete;
   expect(week.shadowRoot!.querySelector("[data-test=save-date]")).toBeNull();
   const events: unknown[] = [];
-  week.addEventListener("named-calendar-action", (event) =>
+  week.addEventListener("special-day-action", (event) =>
     events.push((event as CustomEvent).detail),
   );
   week.shadowRoot!.querySelector<HTMLElement>("[data-test=own-date][data-day='2']")!.click();
   expect(events).toHaveLength(1);
-  expect(events[0]).toMatchObject({ kind: "own", date: "2026-10-13", day: { id: "annual/day" } });
+  expect(events[0]).toMatchObject({ kind: "open", date: "2026-10-13" });
+  expect(Object.keys(events[0] as object)).not.toContain("specialDay");
 });
 
 it("a real week ignores range events for plain and whole-venue-closed dates", async () => {

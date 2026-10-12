@@ -2,9 +2,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
 import { setLocale, type DashboardRequest } from "@waitron/dashboard-kit";
 import { applyTokens } from "@waitron/ui";
-import type { NamedDaysModel } from "../holiday-types.js";
+import type { SpecialDaysModel } from "../holiday-types.js";
 import type { LocalDate } from "../hours-types.js";
-import { NamedDaysApi } from "./named-days-client.js";
+import { SpecialDaysApi } from "./special-days-client.js";
 import { addMonths, monthGrid, type HoursCalendar } from "./hours-calendar.js";
 import "./hours-calendar.js";
 
@@ -76,16 +76,8 @@ describe("monthGrid", () => {
 });
 
 describe("Opening hours named month", () => {
-  function namedModel(): NamedDaysModel {
-    const namedDay = {
-      id: "own",
-      date: "2026-10-13",
-      name: "Anniversary",
-      kind: "holiday" as const,
-      repeats: true,
-      ownHours: true,
-      closeWholeVenue: false,
-    };
+  function namedModel(): SpecialDaysModel {
+    const specialDay = { id: "own", name: "Anniversary" };
     return {
       businessDayClock: { timeZone: "Europe/Madrid", dayCutover: "06:00", cutoverChanges: [] },
       clockRevision: 0,
@@ -98,7 +90,7 @@ describe("Opening hours named month", () => {
       days: [
         {
           date: "2026-10-12",
-          namedDay: { ...namedDay, date: "2026-10-12", kind: "working_day", name: "Staff feast" },
+          specialDay: { id: "staff", name: "Staff feast" },
           holidays: [
             {
               id: "p",
@@ -109,39 +101,34 @@ describe("Opening hours named month", () => {
             },
           ],
           tone: "public_holiday",
-          ownHours: true,
           closed: true,
         },
         {
           date: "2026-10-13",
-          namedDay,
+          specialDay,
           holidays: [],
-          tone: "own_holiday",
-          ownHours: true,
+          tone: "special_day",
           closed: false,
         },
         {
           date: "2026-10-14",
-          namedDay: { ...namedDay, date: "2026-10-14", kind: "working_day", ownHours: false },
+          specialDay: { id: "fair", name: "Fair" },
           holidays: [],
-          tone: "working_day",
-          ownHours: false,
+          tone: "special_day",
           closed: false,
         },
         {
           date: "2026-10-15",
-          namedDay: null,
+          specialDay: null,
           holidays: [],
           tone: "closed",
-          ownHours: false,
           closed: true,
         },
         {
           date: "2026-10-16",
-          namedDay: null,
+          specialDay: null,
           holidays: [],
           tone: "standard",
-          ownHours: false,
           closed: false,
         },
       ],
@@ -163,7 +150,7 @@ describe("Opening hours named month", () => {
   async function namedMount(request?: DashboardRequest) {
     const el = document.createElement("hours-calendar");
     Object.assign(el, {
-      namedApi: new NamedDaysApi(request ?? ((async () => namedModel()) as DashboardRequest)),
+      namedApi: new SpecialDaysApi(request ?? ((async () => namedModel()) as DashboardRequest)),
       today: "2026-10-07",
     });
     applyTokens(el);
@@ -175,7 +162,7 @@ describe("Opening hours named month", () => {
     return el;
   }
   it("reads the month's whole weeks once and shows them Monday first", async () => {
-    const request = vi.fn<(path: string) => Promise<NamedDaysModel>>(async () => namedModel());
+    const request = vi.fn<(path: string) => Promise<SpecialDaysModel>>(async () => namedModel());
     const el = await namedMount(request as DashboardRequest);
     const reads = () =>
       request.mock.calls.map(([path]) => new URL(path, location.origin).search.slice(1));
@@ -199,11 +186,11 @@ describe("Opening hours named month", () => {
   });
 
   it("focuses the keyboard's target after the next month's delayed read draws its grid", async () => {
-    let resolve!: (value: NamedDaysModel) => void;
+    let resolve!: (value: SpecialDaysModel) => void;
     const el = await namedMount((async (path: string) => {
       const from = new URL(path, location.origin).searchParams.get("from")!;
       if (from === "2026-10-26")
-        return new Promise<NamedDaysModel>((done) => {
+        return new Promise<SpecialDaysModel>((done) => {
           resolve = done;
         });
       return namedModel();
@@ -254,22 +241,12 @@ describe("Opening hours named month", () => {
     expect(reads()).toHaveLength(3);
   });
   it.each(["en", "es"] as const)(
-    "%s keeps independent local coverage and repeating own-day actions without official country data",
+    "%s keeps independent local coverage and special-day actions without official country data",
     async (locale) => {
       setLocale(locale);
-      for (const local of [
-        "owner_entered",
-        "none_entered",
-        "unsupported_country",
-        "address_unresolved",
-      ] as const) {
+      for (const local of ["none_entered", "unsupported_country", "address_unresolved"] as const) {
         const el = await namedMount((async () => {
           const model = namedModel();
-          if (local !== "owner_entered") {
-            const own = model.days.find((day) => day.date === "2026-10-13")!;
-            own.namedDay = { ...own.namedDay!, kind: "working_day" };
-            own.tone = "working_day";
-          }
 
           model.holidayCoverage = [
             {
@@ -289,19 +266,17 @@ describe("Opening hours named month", () => {
           locale === "en"
             ? {
                 address_unresolved:
-                  "2026: no local holidays entered. You can add your town’s holidays as own named days without completing the holiday address.",
-                owner_entered: "2026: local holidays are the ones you entered.",
+                  "2026: no local holidays entered. You can add your town’s holidays as special days without completing the holiday address.",
                 none_entered: "2026: no local holidays entered.",
                 unsupported_country:
-                  "2026: no local holidays entered. Add your town’s holidays as own named days.",
+                  "2026: no local holidays entered. Add your town’s holidays as special days.",
               }
             : {
                 address_unresolved:
-                  "2026: no hay festivos locales introducidos. Puedes añadir los de tu municipio como días festivos propios sin completar la dirección de festivos.",
-                owner_entered: "2026: los festivos locales son los que introdujiste.",
+                  "2026: no hay festivos locales introducidos. Puedes añadir los de tu municipio como días especiales sin completar la dirección de festivos.",
                 none_entered: "2026: no hay festivos locales introducidos.",
                 unsupported_country:
-                  "2026: no hay festivos locales introducidos. Añade los de tu municipio como días festivos propios.",
+                  "2026: no hay festivos locales introducidos. Añade los de tu municipio como días especiales.",
               };
         expect(text(el.shadowRoot!.querySelector('[data-test="month-coverage"]'))).toContain(
           wanted[local],
@@ -309,49 +284,54 @@ describe("Opening hours named month", () => {
         el.shadowRoot!.querySelector<HTMLElement>("td[data-date='2026-10-13'] button")!.click();
         await el.updateComplete;
         const events: unknown[] = [];
-        el.addEventListener("named-calendar-action", (event) =>
+        el.addEventListener("special-day-action", (event) =>
           events.push((event as CustomEvent).detail),
         );
-        el.shadowRoot!.querySelector<HTMLElement>("[data-test=named-edit]")!.click();
+        el.shadowRoot!.querySelector<HTMLElement>("[data-test=special-edit]")!.click();
         expect(events).toMatchObject([
-          {
-            kind: "edit",
-            day: {
-              id: "own",
-              kind: local === "owner_entered" ? "holiday" : "working_day",
-              repeats: true,
-            },
-          },
+          { kind: "open", specialDay: { id: "own", name: "Anniversary" } },
         ]);
         el.remove();
       }
     },
   );
 
-  it("named date actions carry the stored repeating record and plain dates offer Add", async () => {
+  it("special-day actions carry the date's special day and the month's others, and plain dates offer Make", async () => {
     const el = await namedMount();
     const events: unknown[] = [];
-    el.addEventListener("named-calendar-action", (event) =>
+    el.addEventListener("special-day-action", (event) =>
       events.push((event as CustomEvent).detail),
     );
     el.shadowRoot!.querySelector<HTMLElement>("td[data-date='2026-10-13'] button")!.click();
     await el.updateComplete;
-    el.shadowRoot!.querySelector<HTMLElement>("[data-test=named-edit]")!.click();
-    expect(events).toHaveLength(1);
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=special-edit]")!.click();
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=special-delete]")!.click();
+    expect(events).toHaveLength(2);
     expect(events[0]).toMatchObject({
-      kind: "edit",
+      kind: "open",
       date: "2026-10-13",
-      day: { id: "own", repeats: true },
+      specialDay: { id: "own", name: "Anniversary" },
+      holidays: [],
+      existing: [
+        { id: "staff", name: "Staff feast" },
+        { id: "own", name: "Anniversary" },
+        { id: "fair", name: "Fair" },
+      ],
     });
+    expect(events[1]).toMatchObject({ kind: "delete", specialDay: { id: "own" } });
     const event = events[0] as { returnTo: () => HTMLElement };
-    expect(event.returnTo()).toBe(el.shadowRoot!.querySelector("[data-test=named-edit]"));
+    expect(event.returnTo()).toBe(el.shadowRoot!.querySelector("[data-test=special-edit]"));
     el.shadowRoot!.querySelector<HTMLElement>("td[data-date='2026-10-16'] button")!.click();
     await el.updateComplete;
-    expect(el.shadowRoot!.querySelector("[data-test=named-add]")).not.toBeNull();
-    expect(el.shadowRoot!.querySelector("[data-test=named-edit]")).toBeNull();
+    expect(text(el.shadowRoot!.querySelector("[data-test=special-add]")!)).toBe(
+      "Make this a special day…",
+    );
+    expect(el.shadowRoot!.querySelector("[data-test=special-edit]")).toBeNull();
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=special-add]")!.click();
+    expect(events[2]).toMatchObject({ kind: "open", date: "2026-10-16", specialDay: null });
     el.readOnly = true;
     await el.updateComplete;
-    expect(el.shadowRoot!.querySelector("[data-test^=named-]")).toBeNull();
+    expect(el.shadowRoot!.querySelector("[data-test^=special-]")).toBeNull();
   });
   it("named month keeps exactly one keyboard tab stop after changing months", async () => {
     const el = await namedMount();
@@ -362,12 +342,12 @@ describe("Opening hours named month", () => {
     await el.updateComplete;
     expect(el.shadowRoot!.querySelectorAll("td button[tabindex='0']")).toHaveLength(1);
   });
-  it("paints kind tones across each date, says Closed independently and marks own hours", async () => {
+  it("paints the public-holiday, special-day, closed and standard tones and says Closed independently", async () => {
     const el = await namedMount();
     for (const [date, fill] of [
       ["12", "palette-red"],
       ["13", "palette-purple"],
-      ["14", "palette-blue"],
+      ["14", "palette-purple"],
       ["15", "day-closed"],
       ["16", "day-standard"],
     ]) {
@@ -377,12 +357,11 @@ describe("Opening hours named month", () => {
     expect(text(day(el, "2026-10-12"))).toContain("Closed");
     expect(text(day(el, "2026-10-12"))).toContain("Public feast");
     expect(text(day(el, "2026-10-12"))).toContain("Staff feast");
-    expect(day(el, "2026-10-13").querySelector("wt-icon[name=clock]")).not.toBeNull();
-    expect(getComputedStyle(day(el, "2026-10-13").querySelector("wt-icon")!).color).toBe(
+    expect(text(day(el, "2026-10-13"))).toContain("Anniversary");
+    expect(getComputedStyle(day(el, "2026-10-13").querySelector("button")!).color).toBe(
       token(el, "--wt-color-on-palette-purple"),
     );
-    expect(text(day(el, "2026-10-13"))).toContain("Own hours");
-    expect(day(el, "2026-10-14").querySelector("wt-icon")).toBeNull();
+    expect(text(day(el, "2026-10-14"))).toContain("Fair");
     expect(el.shadowRoot!.querySelector("[data-test=date-panel]")).toBeNull();
   });
   it("saves only an offered changed area and refreshes the month passively", async () => {
@@ -448,7 +427,7 @@ describe("Opening hours named month", () => {
   });
   it("retains an area refusal through a successful passive month refresh and allows retry", async () => {
     let saves = 0;
-    const api = new NamedDaysApi((async (_path, method) => {
+    const api = new SpecialDaysApi((async (_path, method) => {
       if (method === "PUT" && ++saves === 1) throw { code: "holiday.invalid" };
       const model = namedModel();
       model.area.chosen = saves > 1 ? "aran" : null;
@@ -480,11 +459,11 @@ describe("Opening hours named month", () => {
     expect(chooser.error).toBe("");
   });
   it("discards a late old-month response, and shows both years' coverage across December", async () => {
-    let finish!: (model: NamedDaysModel) => void;
+    let finish!: (model: SpecialDaysModel) => void;
     let reads = 0;
     const el = await namedMount((async () => {
       if (++reads === 1)
-        return new Promise<NamedDaysModel>((resolve) => {
+        return new Promise<SpecialDaysModel>((resolve) => {
           finish = resolve;
         });
       const model = namedModel();
@@ -497,7 +476,7 @@ describe("Opening hours named month", () => {
           provinceCode: "41",
           regionCode: "01",
           nationalRegional: "complete",
-          local: "owner_entered",
+          local: "none_entered",
           dataVersion: "ES-2026.1",
           sourceIds: [],
         },
@@ -527,7 +506,7 @@ describe("Opening hours named month", () => {
       "2026: official national and regional holidays are included.",
     );
     expect(el.shadowRoot!.querySelector("[data-test=month-coverage]")!.textContent).toContain(
-      "2026: local holidays are the ones you entered.",
+      "2026: no local holidays entered.",
     );
     expect(el.shadowRoot!.querySelector("[name=holidayArea]")).toBeNull();
     expect(el.shadowRoot!.querySelector("[data-test=month]")!.textContent).toContain(
@@ -589,7 +568,7 @@ describe("Opening hours named month", () => {
         model.area.addressKey = addressKey;
         return model;
       }) as DashboardRequest;
-      const api = new NamedDaysApi(request);
+      const api = new SpecialDaysApi(request);
       const el = await namedMount(request);
       el.namedApi = api;
       el.remove();

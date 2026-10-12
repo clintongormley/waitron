@@ -3,7 +3,7 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { setLocale, type DashboardRequest } from "@waitron/dashboard-kit";
 import { applyTokens } from "@waitron/ui";
 import { OpeningHoursApi } from "./opening-hours-client.js";
-import type { NamedDaysModel } from "../holiday-types.js";
+import type { SpecialDaysModel } from "../holiday-types.js";
 import {
   realWeekModel as fixture,
   namedWeekModel as calendarFixture,
@@ -40,7 +40,7 @@ async function mount(
   write: (path: string, method: string, body: unknown) => Promise<unknown> = async () => {},
   zone = false,
   data = fixture(),
-  named: () => Promise<NamedDaysModel> = async () => calendarFixture(),
+  named: () => Promise<SpecialDaysModel> = async () => calendarFixture(),
 ) {
   if (zone)
     history.replaceState(
@@ -145,17 +145,16 @@ it("bounds previous at the business week and preserves query/hash when stepping"
   screen.shadowRoot!.querySelector<HTMLElement>("[data-test=previous-week]")!.click();
   await expect.poll(() => location.search).toBe("?week=2026-10-12&keep=yes");
 });
-it("opens the named-day editor for a plain date with own hours staged", async () => {
+it("opens the special-day dialog for a plain date", async () => {
   const week = await mount();
   const action = week.shadowRoot!.querySelector<HTMLElement>("[data-test=own-date][data-day='1']");
   expect(action, "plain date has own-hours action").not.toBeNull();
   action!.click();
-  await expect.poll(() => screen.shadowRoot!.querySelector("named-day-editor")).not.toBeNull();
-  const form = screen.shadowRoot!.querySelector("named-day-editor")!;
+  await expect.poll(() => screen.shadowRoot!.querySelector("special-day-dialog")).not.toBeNull();
+  const form = screen.shadowRoot!.querySelector("special-day-dialog")!;
   await form.updateComplete;
   expect(form.date).toBe("2026-10-12");
-  expect(form.ownHours).toBe(true);
-  expect(form.day).toBeUndefined();
+  expect(form.specialDay).toBeUndefined();
 });
 it("shows dated department periods behind dated zone closures and saves only that zone date", async () => {
   const writes: unknown[][] = [];
@@ -182,13 +181,13 @@ it("shows dated department periods behind dated zone closures and saves only tha
     ]);
 });
 
-it("prefills a public holiday's name and holiday kind for own hours", async () => {
+it("prefills a public holiday's name in the special-day dialog", async () => {
   const week = await mount(undefined, false, fixture(), async () => ({
     ...calendarFixture(),
     days: [
       {
         date: "2026-10-12",
-        namedDay: null,
+        specialDay: null,
         holidays: [
           {
             id: "public",
@@ -199,25 +198,21 @@ it("prefills a public holiday's name and holiday kind for own hours", async () =
           },
         ],
         tone: "public_holiday",
-        ownHours: false,
         closed: false,
       },
     ],
   }));
   await screen.updateComplete;
   week.shadowRoot!.querySelector<HTMLElement>("[data-test=own-date][data-day='1']")!.click();
-  await expect.poll(() => screen.shadowRoot!.querySelector("named-day-editor")).not.toBeNull();
-  const form = screen.shadowRoot!.querySelector("named-day-editor")!;
+  await expect.poll(() => screen.shadowRoot!.querySelector("special-day-dialog")).not.toBeNull();
+  const form = screen.shadowRoot!.querySelector("special-day-dialog")!;
   await form.updateComplete;
   expect(
     form.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>("[name=name]")!.value,
   ).toBe("National feast");
-  expect(
-    form.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-combobox"]>("[name=kind]")!.value,
-  ).toBe("holiday");
 });
 it("waits for calendar facts before opening an unnamed date's editor", async () => {
-  let resolve!: (model: NamedDaysModel) => void;
+  let resolve!: (model: SpecialDaysModel) => void;
   const week = await mount(
     undefined,
     false,
@@ -234,7 +229,7 @@ it("waits for calendar facts before opening an unnamed date's editor", async () 
   action.click();
   emit(action, "click", {});
   await screen.updateComplete;
-  expect(screen.shadowRoot!.querySelector("named-day-editor")).toBeNull();
+  expect(screen.shadowRoot!.querySelector("special-day-dialog")).toBeNull();
   resolve(calendarFixture());
   await expect.poll(() => action.disabled).toBe(false);
 });
@@ -315,21 +310,6 @@ it("explains a zone date whose named day now keeps the week and leaves retry ava
     )
     .toBe("This named day keeps the normal week. Give it its own hours first.");
   expect(save.disabled).toBe(false);
-});
-it("reuses a repeating normal-hours day's editor and stored first date", async () => {
-  const data = fixture();
-  data.namedDays = [{ ...annual, ownHours: false }];
-  const week = await mount(undefined, false, data);
-  week.shadowRoot!.querySelector<HTMLElement>("[data-test=own-date][data-day='2']")!.click();
-  await expect.poll(() => screen.shadowRoot!.querySelector("named-day-editor")).not.toBeNull();
-  const form = screen.shadowRoot!.querySelector("named-day-editor")!;
-  await form.updateComplete;
-  expect(form.day?.id).toBe("annual/day");
-  expect(
-    form.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>("[name=date]")!.value,
-  ).toBe("2025-10-13");
-  expect(form.shadowRoot!.textContent).toContain("This changes the day every year");
-  expect(form.ownHours).toBe(true);
 });
 it("a viewer has no own-date or Save action and ignores forged range edits", async () => {
   const writes: unknown[][] = [];

@@ -17,6 +17,15 @@ class OpeningLeaveApp extends LitElement {
         this.writes.push([path, method, body]);
         return;
       }
+      if (path.endsWith("/special-days/own"))
+        return {
+          id: "own",
+          name: "Anniversary",
+          repeatsYearly: true,
+          dates: [{ date: "2025-10-13", closedAllDay: false }],
+          paint: [],
+          zonePaint: [],
+        };
       if (path.includes("/named-days?"))
         return {
           businessDayClock: { timeZone: "Europe/Madrid", dayCutover: "06:00", cutoverChanges: [] },
@@ -30,18 +39,9 @@ class OpeningLeaveApp extends LitElement {
           days: [
             {
               date: "2026-10-13",
-              namedDay: {
-                id: "own",
-                date: "2025-10-13",
-                name: "Anniversary",
-                kind: "holiday",
-                repeats: true,
-                ownHours: false,
-                closeWholeVenue: false,
-              },
+              specialDay: { id: "own", name: "Anniversary" },
               holidays: [],
-              tone: "own_holiday",
-              ownHours: false,
+              tone: "special_day",
               closed: false,
             },
           ],
@@ -255,7 +255,7 @@ it("Cancel and native Escape close a period deletion without creating a draft or
 });
 
 describe.each(["en", "es"])("Calendar discard (%s)", (locale) => {
-  it.each(["edit", "copy"])("protects changed %s through close and reconnect", async (kind) => {
+  it("protects a changed special day through close and reconnect", async () => {
     setLocale(locale);
     history.replaceState(null, "", "/manage/opening-hours/view/calendar/month/2026-10");
     app = document.createElement("opening-leave-test-app") as OpeningLeaveApp;
@@ -270,19 +270,15 @@ describe.each(["en", "es"])("Calendar discard (%s)", (locale) => {
       .not.toBeNull();
     cal.shadowRoot!.querySelector<HTMLElement>("td[data-date='2026-10-13'] button")!.click();
     await cal.updateComplete;
-    cal.shadowRoot!.querySelector<HTMLElement>(`[data-test=named-${kind}]`)!.click();
-    await screen.updateComplete;
-    const form = screen.shadowRoot!.querySelector<LitElement>(
-      kind === "edit" ? "named-day-editor" : "named-day-copy",
-    )!;
+    cal.shadowRoot!.querySelector<HTMLElement>("[data-test=special-edit]")!.click();
+    await expect.poll(() => screen.shadowRoot!.querySelector("special-day-dialog")).not.toBeNull();
+    const form = screen.shadowRoot!.querySelector<LitElement>("special-day-dialog")!;
     await form.updateComplete;
-    const input = form.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>(
-      kind === "edit" ? "[name=name]" : "[name='dates.0']",
-    )!;
+    const input = form.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>("[name=name]")!;
     expect(unload()).toBe(false);
     input.dispatchEvent(
       new CustomEvent("wt-change", {
-        detail: { value: kind === "edit" ? "New anniversary" : "2026-10-25" },
+        detail: { value: "New anniversary" },
         bubbles: true,
         composed: true,
       }),
@@ -300,15 +296,11 @@ describe.each(["en", "es"])("Calendar discard (%s)", (locale) => {
     const keeping = modal.requestClose("cancel");
     await choose("keep");
     expect(await keeping).toBe(false);
-    expect(input.value).toBe(kind === "edit" ? "New anniversary" : "2026-10-25");
+    expect(input.value).toBe("New anniversary");
     const discarding = modal.requestClose("escape");
     await choose("discard");
     expect(await discarding).toBe(true);
-    await expect
-      .poll(() =>
-        screen.shadowRoot!.querySelector(kind === "edit" ? "named-day-editor" : "named-day-copy"),
-      )
-      .toBeNull();
+    await expect.poll(() => screen.shadowRoot!.querySelector("special-day-dialog")).toBeNull();
     expect(unload()).toBe(false);
     expect(app.writes).toEqual([]);
   });

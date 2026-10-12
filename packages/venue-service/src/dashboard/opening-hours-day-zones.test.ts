@@ -3,7 +3,7 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { applyTokens } from "@waitron/ui";
 import { setLocale, type DashboardRequest } from "@waitron/dashboard-kit";
 import { OpeningHoursApi } from "./opening-hours-client.js";
-import type { NamedDaysModel } from "../holiday-types.js";
+import type { SpecialDaysModel } from "../holiday-types.js";
 import { realWeekModel, namedWeekModel } from "../testing/real-week-model.js";
 import "./opening-hours-screen.js";
 let screen: HTMLElementTagNameMap["dashboard-opening-hours-screen"];
@@ -50,7 +50,7 @@ function fixture() {
 async function mount(
   write: (path: string, method: string, body: unknown) => Promise<unknown> = async () => {},
   model = fixture(),
-  named: () => Promise<NamedDaysModel> = async () => namedWeekModel(),
+  named: () => Promise<SpecialDaysModel> = async () => namedWeekModel(),
 ) {
   screen = document.createElement("dashboard-opening-hours-screen");
   screen.api = new OpeningHoursApi(
@@ -253,7 +253,7 @@ it("shows Closed and refuses all grid actions on a whole-venue closure", async (
   expect(day.shadowRoot!.querySelector("[data-test=own-date]")).toBeNull();
   expect(writes).toEqual([]);
 });
-it("opens the existing annual named-day editor with own hours enabled from the Day heading", async () => {
+it("opens the special-day dialog on the Day's date from the Day heading", async () => {
   vi.setSystemTime(new Date("2026-10-16T12:00:00Z"));
   const day = await mount();
   const own =
@@ -261,11 +261,11 @@ it("opens the existing annual named-day editor with own hours enabled from the D
   expect(own).not.toBeNull();
   await expect.poll(() => own.disabled).toBe(false);
   own.click();
-  await expect.poll(() => screen.shadowRoot!.querySelector("named-day-editor")).not.toBeNull();
-  const editor = screen.shadowRoot!.querySelector("named-day-editor")!;
+  await expect.poll(() => screen.shadowRoot!.querySelector("special-day-dialog")).not.toBeNull();
+  const editor = screen.shadowRoot!.querySelector("special-day-dialog")!;
   await editor.updateComplete;
-  expect(editor.day?.id).toBe("normal-annual");
-  expect(editor.ownHours).toBe(true);
+  expect(editor.specialDay).toBeUndefined();
+  expect(editor.date).toBe("2026-10-16");
 });
 
 it("edits and deletes only the closed block, leaving the department unchanged and undoing back to a quiet Save", async () => {
@@ -353,8 +353,8 @@ it("ignores zone edits and forged Save while a range dialog or read-only screen 
   expect(grid(day).columns[1]!.closed).toEqual([{ startsAt: "23:00", endsAt: "06:00" }]);
 });
 
-it("waits for the shown date's calendar facts and prefills a public holiday's name and kind", async () => {
-  let answer!: (model: NamedDaysModel) => void;
+it("waits for the shown date's calendar facts and prefills a public holiday's name", async () => {
+  let answer!: (model: SpecialDaysModel) => void;
   const reads: string[] = [];
   screen = document.createElement("dashboard-opening-hours-screen");
   screen.api = new OpeningHoursApi(
@@ -362,7 +362,7 @@ it("waits for the shown date's calendar facts and prefills a public holiday's na
       if (method !== "GET") return;
       if (path.includes("named-days?")) {
         reads.push(path);
-        return new Promise<NamedDaysModel>((resolve) => {
+        return new Promise<SpecialDaysModel>((resolve) => {
           answer = resolve;
         });
       }
@@ -379,14 +379,14 @@ it("waits for the shown date's calendar facts and prefills a public holiday's na
   expect(own.disabled).toBe(true);
   own.dispatchEvent(new MouseEvent("click"));
   await screen.updateComplete;
-  expect(screen.shadowRoot!.querySelector("named-day-editor")).toBeNull();
+  expect(screen.shadowRoot!.querySelector("special-day-dialog")).toBeNull();
   expect(reads).toEqual(["/management-api/venue-service/named-days?from=2026-10-12&to=2026-10-12"]);
   answer({
     ...namedWeekModel(),
     days: [
       {
         date: "2026-10-12",
-        namedDay: null,
+        specialDay: null,
         holidays: [
           {
             id: "public",
@@ -397,22 +397,18 @@ it("waits for the shown date's calendar facts and prefills a public holiday's na
           },
         ],
         tone: "public_holiday",
-        ownHours: false,
         closed: false,
       },
     ],
   });
   await expect.poll(() => own.disabled).toBe(false);
   own.click();
-  await expect.poll(() => screen.shadowRoot!.querySelector("named-day-editor")).not.toBeNull();
-  const editor = screen.shadowRoot!.querySelector("named-day-editor")!;
+  await expect.poll(() => screen.shadowRoot!.querySelector("special-day-dialog")).not.toBeNull();
+  const editor = screen.shadowRoot!.querySelector("special-day-dialog")!;
   await editor.updateComplete;
   expect(
     editor.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>("[name=name]")!.value,
   ).toBe("National feast");
-  expect(
-    editor.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-combobox"]>("[name=kind]")!.value,
-  ).toBe("holiday");
 });
 it("keeps the own-hours action blocked after a failed calendar read and recovers without clearing a save refusal", async () => {
   let fail = true;
@@ -437,7 +433,7 @@ it("keeps the own-hours action blocked after a failed calendar read and recovers
   save(day).click();
   await expect.poll(() => day.shadowRoot!.querySelector("[data-zone-error=z1]")).not.toBeNull();
   fail = false;
-  screen.api.namedDays.rereadWatches();
+  screen.api.specialDays.rereadWatches();
   await expect.poll(() => own.disabled).toBe(false);
   expect(day.shadowRoot!.querySelector("[data-zone-error=z1]")).not.toBeNull();
 });
