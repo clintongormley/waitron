@@ -625,8 +625,9 @@ them" in `apps/server/src/configuration-transfer.test.ts` renames and moves one 
 export, finds the target holding the exported four, and asks `resolveDepartmentService` and
 `closedZoneIdsAt` about one Saturday in each of two seasons.
 
-`validateSeasonWeeks` in the same file refuses, among others: a season start that is not a common
-year's date or is `02-29`; a range off the quarter-hour or overlapping another on the same day; a
+`validateSeasonWeeks` (`packages/venue-service/src/configuration-transfer.ts`) refuses, among
+others: a season start that is not a common year's date or is `02-29`; a range off the
+quarter-hour or overlapping another on the same day; a
 department range with no period (Closed) and a zone range of any kind but `closed`; and a period
 end offset reaching the next placement in the same season's week. It accepts a season with fewer
 than seven day rows, compares no placements across a season boundary, and checks no skipped clock

@@ -62,6 +62,9 @@ import {
 } from "./profile-access.js";
 import { readDeviceKitchenScreens, readProfileKitchenScreens } from "./kitchen-screens.js";
 import { resolveNewOrderZone } from "./operations.js";
+import { replaceMenuWeek } from "./menu-timetable.js";
+import { replaceZoneClosedWeek } from "./zone-closed-times.js";
+import { ensureDefaultSeasons } from "./seasons.js";
 
 const suite = useVenueDb({
   migrations: [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS, VENUE_SERVICE_MIGRATIONS],
@@ -577,6 +580,72 @@ it("delete takes the department's season days and their ranges before its period
         .from(zoneDays)
         .where(eq(zoneDays.seasonId, winter!.id)),
     ).toEqual([{ zoneId: f.elsewhere }]);
+  });
+});
+
+it("the delete impact counts the season days and ranges a season-only week and a season closure wrote", async () => {
+  await run(async (tx) => {
+    const f = await fixture(tx);
+    const [menu] = await tx.insert(catalogues).values({ name: "Published menu" }).returning();
+    const [lunch] = await tx
+      .insert(menuPeriods)
+      .values({ departmentId: f.department, name: "Lunch", menuId: menu!.id })
+      .returning();
+    const winter = (await ensureDefaultSeasons(tx, f.cfg)).find(
+      (season) => season.name === "Winter",
+    )!.id;
+    const at = new Date("2030-01-01T12:00:00Z");
+    await replaceMenuWeek(
+      tx,
+      f.cfg,
+      f.department,
+      [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({
+        weekday,
+        slots:
+          weekday === 2
+            ? [
+                { periodId: lunch!.id, startsAt: "09:00", endsAt: "11:00" },
+                { periodId: lunch!.id, startsAt: "13:00", endsAt: "16:00" },
+              ]
+            : weekday === 3
+              ? [{ periodId: lunch!.id, startsAt: "13:00", endsAt: "16:00" }]
+              : [],
+      })),
+      at,
+      0,
+      { seasonId: winter },
+    );
+    await replaceZoneClosedWeek(
+      tx,
+      f.cfg,
+      f.gone,
+      [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({
+        weekday,
+        ranges: weekday === 5 ? [{ startsAt: "22:00", endsAt: "23:30" }] : [],
+      })),
+      0,
+      at,
+      { seasonId: winter },
+    );
+    expect(await tx.select().from(menuDayTimetables)).toEqual([]);
+    expect(await tx.select().from(zoneClosedTimes)).toEqual([]);
+
+    const impact = await readServiceDeleteSettings(
+      tx,
+      f.cfg,
+      [f.gone, f.forbidden, f.allowed],
+      f.department,
+    );
+
+    expect(impact.filter((item) => item.key.startsWith("season_"))).toEqual([
+      { key: "season_days", count: 3, targets: [] },
+      { key: "season_ranges", count: 4, targets: [] },
+    ]);
+    await clearServiceDeleteSettings(tx, f.cfg, [f.gone, f.forbidden, f.allowed], f.department);
+    expect(await tx.select().from(departmentDays)).toEqual([]);
+    expect(await tx.select().from(departmentDayRanges)).toEqual([]);
+    expect(await tx.select().from(zoneDays)).toEqual([]);
+    expect(await tx.select().from(zoneDayRanges)).toEqual([]);
   });
 });
 
