@@ -376,6 +376,7 @@ export async function clearServiceDeleteSettings(
   );
   await tx.delete(zoneExtensions).where(inArray(zoneExtensions.zoneId, selected.zoneIds));
   await tx.delete(zoneClosedTimes).where(inArray(zoneClosedTimes.zoneId, selected.zoneIds));
+  await tx.delete(zoneDays).where(inArray(zoneDays.zoneId, selected.zoneIds));
   await tx.delete(zoneSalePolicies).where(inArray(zoneSalePolicies.zoneId, selected.zoneIds));
   for (const start of selected.starts)
     await tx
