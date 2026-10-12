@@ -23,7 +23,8 @@ import type { RangeDialog } from "./range-dialog.js";
 import type { PeriodEditor } from "./period-editor.js";
 import type { NamedDaysModel } from "../holiday-types.js";
 import type { NamedCalendarAction } from "./hours-calendar.js";
-import { seasonWeekOn, zoneSeasonWeekOn } from "./real-week.js";
+import { seasonIdOn } from "./real-week.js";
+import { seasonWeek } from "./season-choice.js";
 import { format, formatDate } from "./hours-view.js";
 import { t } from "./strings.js";
 import "./service-grid.js";
@@ -256,10 +257,11 @@ export class OpeningHoursDay extends LitElement {
     if (this.contextSpecial) this.contextSpecial = { ...this.contextSpecial };
     if (!this.date) return { menus: {}, zones: {} };
     const special = this.special(),
-      weekday = weekdayOf(this.date);
+      weekday = weekdayOf(this.date),
+      seasonId = seasonIdOn(this.model.seasons, this.date);
     const menus = Object.fromEntries(
       this.departments().map((department) => {
-        const week = seasonWeekOn(this.model, department.id, this.date);
+        const week = seasonWeek(department.seasonWeeks, seasonId);
         const days: MenuWeekDay[] = Array.from({ length: 7 }, (_, day) => ({
           weekday: day,
           slots: (week.find((row) => row.weekday === day)?.slots ?? []).map((slot) => ({
@@ -275,7 +277,7 @@ export class OpeningHoursDay extends LitElement {
     const zones = Object.fromEntries(
       this.departments().flatMap((department) =>
         (department.zones ?? []).map((zone) => {
-          const week = zoneSeasonWeekOn(this.model, department.id, zone.id, this.date);
+          const week = seasonWeek(zone.seasonWeeks, seasonId);
           return [
             zone.id,
             Array.from({ length: 7 }, (_, day) => ({
@@ -539,7 +541,7 @@ export class OpeningHoursDay extends LitElement {
       generation = this.generation,
       special = this.special(),
       weekday = weekdayOf(this.date),
-      seasonId = seasonOn(this.model.seasons, this.date)?.id ?? "";
+      seasonId = seasonIdOn(this.model.seasons, this.date);
     this.saving = true;
     this.error = "";
     this.errorDepartment = "";

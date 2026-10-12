@@ -96,7 +96,7 @@ export class OpeningHoursScreen extends LitElement {
   @state() private departmentId = "";
   @state() private zoneId = "";
   @state() private stationId = "";
-  @state() private requestedSeason = "";
+  private requestedSeason = "";
   /** Held rather than derived per render, so a reread never swaps out an editor holding a draft. */
   @state() private season = "";
   @state() private stations: OpeningStation[] = [];
