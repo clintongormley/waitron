@@ -530,8 +530,12 @@ async function requireSpecialDay(tx: Transaction, cfg: VenueScope, id: string) {
 }
 
 /** Every department, since a Closed-all-day tick touches them all. */
-async function checkScheduleAfterWrite(tx: Transaction, cfg: VenueScope): Promise<void> {
-  const clash = await scheduleEndOffsetClash(tx, cfg);
+async function checkScheduleAfterWrite(
+  tx: Transaction,
+  cfg: VenueScope,
+  clock?: BusinessDayClock,
+): Promise<void> {
+  const clash = await scheduleEndOffsetClash(tx, cfg, clock);
   if (clash !== null)
     invalid("paint", {
       reason: "end_offset",
@@ -759,7 +763,7 @@ export async function saveSpecialDay(
       })),
     );
   }
-  await checkScheduleAfterWrite(tx, cfg);
+  await checkScheduleAfterWrite(tx, cfg, clock);
   return readSpecialDay(tx, cfg, specialDayId);
 }
 

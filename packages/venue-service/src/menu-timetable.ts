@@ -340,8 +340,8 @@ async function endOffsetClash(
 }
 
 /** The first sending cutoff that runs into what follows it, over every department. */
-export function scheduleEndOffsetClash(tx: Transaction, cfg: VenueScope) {
-  return endOffsetClash(tx, cfg);
+export function scheduleEndOffsetClash(tx: Transaction, cfg: VenueScope, clock?: BusinessDayClock) {
+  return endOffsetClash(tx, cfg, undefined, false, clock);
 }
 
 export async function assertPeriodEndOffsets(tx: Transaction, cfg: VenueScope): Promise<void> {

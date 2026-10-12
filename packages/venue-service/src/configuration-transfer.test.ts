@@ -2243,8 +2243,10 @@ describe("special days in a configuration bundle", () => {
   it.each([
     ["special_days.name", "special_days", { name: "  " }],
     ["special_days.name", "special_days", { name: 3 }],
+    ["special_days.name", "special_days", { name: " Fiesta " }],
     ["special_days.repeats_yearly", "special_days", { repeats_yearly: 2 }],
     ["special_days.repeats_yearly", "special_days", { repeats_yearly: true }],
+    ["special_days.repeats_yearly", "special_days", { repeats_yearly: null }],
     ["special_day_dates.special_day_id", "special_day_dates", { special_day_id: "missing" }],
     ["special_day_dates.date", "special_day_dates", { date: "2025-02-30" }],
     ["special_day_dates.closed_all_day", "special_day_dates", { closed_all_day: 2 }],

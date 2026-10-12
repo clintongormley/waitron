@@ -302,8 +302,9 @@ interface ImportedSpecialDate {
 function validateSpecialDays(tables: Tables): Map<unknown, ImportedSpecialDate> {
   const repeats = new Map<unknown, boolean>();
   for (const row of tables.special_days ?? []) {
-    if (typeof row.name !== "string" || row.name.trim() === "") refuse("special_days.name");
-    const flag = row.repeats_yearly ?? 0;
+    if (typeof row.name !== "string" || row.name === "" || row.name.trim() !== row.name)
+      refuse("special_days.name");
+    const flag = row.repeats_yearly === undefined ? 0 : row.repeats_yearly;
     if (flag !== 0 && flag !== 1) refuse("special_days.repeats_yearly");
     repeats.set(row.id, flag === 1);
   }
