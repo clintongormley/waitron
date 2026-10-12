@@ -2,9 +2,8 @@ import { offerMenuThroughZone } from "@waitron/venue-service/testing/zone-menus.
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { eq } from "drizzle-orm";
-import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
-  deviceProfiles,
   locations,
   parties,
   printJobs,
@@ -25,15 +24,6 @@ import {
   writeProductModifiers,
   deactivateCatalogue,
 } from "@waitron/catalogue";
-import { VerifactuBackend } from "@waitron/fiscal-verifactu";
-import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
-import { hashPassword, hashPin, loginWithPin, persons } from "@waitron/identity";
-import { applyVenue, planVenue } from "@waitron/provisioning";
-import {
-  locationId as brandLocationId,
-  nodeId as brandNodeId,
-  seriesId as brandSeriesId,
-} from "@waitron/shared";
 import {
   createDepartment,
   departmentSalePolicies,
@@ -47,7 +37,6 @@ import {
   saveMenuPeriod,
   setRoutingCell,
   updateMenuPeriod,
-  setProfileServiceAccess,
   workingLineContexts,
   type MenuSlot,
 } from "@waitron/venue-service";
@@ -58,17 +47,15 @@ import { VENUE_SERVICE } from "./modules.js";
 import { attachPrinterToStation } from "./station-printers.js";
 import { decodeTicket } from "./testing/decode-ticket.js";
 import { createTable } from "./testing/live-table.js";
-import { deploymentEnvironment } from "./config.js";
-import { DEVICE_COOKIE } from "./device-session.js";
-import { ALL_MODULES } from "./modules.js";
-import { mountTillApi } from "./till-api.js";
 import type { TillConfig } from "./till-config.js";
-import { SESSION_COOKIE } from "./till-session.js";
-import { enrolDeviceForTest } from "./testing/enrol.js";
 import { publishWorkingMenu } from "./testing/publish-menu.js";
-import { BASIC_ACTIONS } from "./testing/session-device.js";
+import {
+  provisionSignedInTill,
+  sendAsTill,
+  SIGNED_IN_TILL_LOCALE,
+} from "./testing/signed-in-till.js";
 
-const LOCALE = "es-ES";
+const LOCALE = SIGNED_IN_TILL_LOCALE;
 
 const suite = useVenueDb({
   migrations: migrationOptionsFor(manifestSets(), null),
@@ -79,36 +66,6 @@ const suite = useVenueDb({
 const MONDAY_10_00 = new Date("2026-10-05T08:00:00Z");
 const MONDAY_12_30 = new Date("2026-10-05T10:30:00Z");
 const MONDAY_13_00 = new Date("2026-10-05T11:00:00Z");
-
-let backend: FiscalBackend;
-let clock: TrustedClock;
-
-beforeAll(() => {
-  clock = {
-    now: () => {
-      const instant = new Date();
-      return {
-        instant,
-        offsetMinutes: -instant.getTimezoneOffset(),
-        confident: true,
-        confidence: "anchored",
-        anchorAgeSeconds: 0,
-      };
-    },
-    anchor: () => {
-      throw new Error("till-api.service-periods.test: anchor() is not used");
-    },
-    currentAnchor: () => null,
-  };
-  backend = new VerifactuBackend({
-    clock,
-    db: suite.db,
-    environment: deploymentEnvironment(process.env),
-    deploymentEnvironment: deploymentEnvironment(process.env),
-    resolveClient: () =>
-      Promise.reject(new Error("till-api.service-periods.test: resolveClient is never called")),
-  });
-});
 
 afterEach(() => {
   vi.useRealTimers();
@@ -150,203 +107,117 @@ const slot = (periodId: string, startsAt: string, endsAt: string): MenuSlot => (
 });
 
 async function setupVenue(options: { timetable: boolean }): Promise<Venue> {
-  const venue = await applyVenue(
-    planVenue(
-      {
-        country: "ES",
-        taxId: nextNif(),
-        legalName: "Casa Delgado SL",
-        location: {
-          name: "Casa Delgado",
-          fiscalTerritory: "ES-common",
-          invoiceLocales: [LOCALE],
-          operationDescription: "Venta en establecimiento",
-          addressLine1: "Calle Mayor 1",
-          addressLine2: null,
-          postalCode: "28013",
-          city: "Madrid",
-          province: "Madrid",
-          timeZone: "Europe/Madrid",
-          dayCutover: "05:00",
-        },
-        seriesCode: "A",
-        rectificativeSeriesCode: "R",
-        admin: {
-          displayName: "Administradora",
-          pinHash: hashPin("1234"),
-          passwordHash: hashPassword("dashPass123"),
-          email: "owner@example.test",
-        },
-      },
-      ALL_MODULES,
-    ),
-    { db: suite.db, modules: ALL_MODULES },
-  );
-  const cfg: TillConfig = {
-    nodeId: brandNodeId(venue.nodeId),
-    seriesId: brandSeriesId(venue.seriesIds[0]!),
-    locationId: brandLocationId(venue.locationId),
-    locale: LOCALE,
-    invoiceLocales: [LOCALE],
-    tipsEnabled: false,
-    simplifiedInvoiceLimit: null,
-  };
-  const seeded = await withTransaction(suite.db, async (tx) => {
-    const restaurant = (
-      await createDepartment(tx, cfg, { name: "Restaurant", orderStart: "counter" })
-    ).id;
-    const deli = (await createDepartment(tx, cfg, { name: "Deli", orderStart: "counter" })).id;
-    for (const departmentId of [restaurant, deli]) {
-      const initialPeriods = await tx
-        .select({ id: menuPeriods.id })
-        .from(menuPeriods)
-        .where(eq(menuPeriods.departmentId, departmentId));
-      await replaceMenuWeek(
-        tx,
-        cfg,
-        departmentId,
-        [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({ weekday, slots: [] })),
-        MONDAY_10_00,
-        0,
+  return provisionSignedInTill(suite.db, {
+    taxId: nextNif(),
+    dayCutover: "05:00",
+    seed: async (tx, cfg) => {
+      const restaurant = (
+        await createDepartment(tx, cfg, { name: "Restaurant", orderStart: "counter" })
+      ).id;
+      const deli = (await createDepartment(tx, cfg, { name: "Deli", orderStart: "counter" })).id;
+      for (const departmentId of [restaurant, deli]) {
+        const initialPeriods = await tx
+          .select({ id: menuPeriods.id })
+          .from(menuPeriods)
+          .where(eq(menuPeriods.departmentId, departmentId));
+        await replaceMenuWeek(
+          tx,
+          cfg,
+          departmentId,
+          [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({ weekday, slots: [] })),
+          MONDAY_10_00,
+          0,
+        );
+        for (const period of initialPeriods) await deleteMenuPeriod(tx, cfg, period.id);
+      }
+      const zone = async (name: string, departmentId: string) =>
+        (await createServiceZone(tx, cfg, { name, departmentId })).id;
+      const barra = await zone("Barra", restaurant);
+      const sala = await zone("Sala", restaurant);
+      const terraza = await zone("Terraza", restaurant);
+      const mostrador = await zone("Mostrador deli", deli);
+      const menus = {} as Record<MenuName, string>;
+      for (const name of MENUS) menus[name] = (await createCatalogue(tx, { name })).id;
+      const product = (catalogueId: string, name: string, unitPrice: string) =>
+        createProduct(tx, {
+          catalogueId,
+          categoryId: null,
+          name,
+          pricingUnit: "each",
+          unitPrice,
+          vatClass: "general",
+        });
+      const tostada = await product(menus.Desayunos, "Tostada", "3.00");
+      const offer = async (menu: MenuName, productId: string, grossPrice?: string) =>
+        (await addProductToMenu(tx, { menuId: menus[menu], productId, grossPrice })).id;
+      const tostadaOffers = {
+        desayunos: await offer("Desayunos", tostada.id, "2.50"),
+        almuerzo: await offer("Almuerzo", tostada.id, "4.00"),
+      };
+      await offer("Café", (await product(menus["Café"], "Cortado", "1.60")).id);
+      await offer("Bebidas", (await product(menus.Bebidas, "Agua", "2.00")).id);
+      const bocadillo = await offer(
+        "Deli para llevar",
+        (await product(menus["Deli para llevar"], "Bocadillo", "6.50")).id,
       );
-      for (const period of initialPeriods) await deleteMenuPeriod(tx, cfg, period.id);
-    }
-    const zone = async (name: string, departmentId: string) =>
-      (await createServiceZone(tx, cfg, { name, departmentId })).id;
-    const barra = await zone("Barra", restaurant);
-    const sala = await zone("Sala", restaurant);
-    const terraza = await zone("Terraza", restaurant);
-    const mostrador = await zone("Mostrador deli", deli);
-    const menus = {} as Record<MenuName, string>;
-    for (const name of MENUS) menus[name] = (await createCatalogue(tx, { name })).id;
-    const product = (catalogueId: string, name: string, unitPrice: string) =>
-      createProduct(tx, {
-        catalogueId,
-        categoryId: null,
-        name,
-        pricingUnit: "each",
-        unitPrice,
-        vatClass: "general",
+      const versions = {} as Record<MenuName, string>;
+      for (const name of MENUS) versions[name] = await publishWorkingMenu(tx, menus[name]);
+      await offerMenuThroughZone(tx, cfg, mostrador, menus["Deli para llevar"], {
+        makeDefault: true,
       });
-    const tostada = await product(menus.Desayunos, "Tostada", "3.00");
-    const offer = async (menu: MenuName, productId: string, grossPrice?: string) =>
-      (await addProductToMenu(tx, { menuId: menus[menu], productId, grossPrice })).id;
-    const tostadaOffers = {
-      desayunos: await offer("Desayunos", tostada.id, "2.50"),
-      almuerzo: await offer("Almuerzo", tostada.id, "4.00"),
-    };
-    await offer("Café", (await product(menus["Café"], "Cortado", "1.60")).id);
-    await offer("Bebidas", (await product(menus.Bebidas, "Agua", "2.00")).id);
-    const bocadillo = await offer(
-      "Deli para llevar",
-      (await product(menus["Deli para llevar"], "Bocadillo", "6.50")).id,
-    );
-    const versions = {} as Record<MenuName, string>;
-    for (const name of MENUS) versions[name] = await publishWorkingMenu(tx, menus[name]);
-    await offerMenuThroughZone(tx, cfg, mostrador, menus["Deli para llevar"], {
-      makeDefault: true,
-    });
-    if (options.timetable) {
-      const period = async (name: string, menu: MenuName) =>
-        (
-          await saveMenuPeriod(
-            tx,
-            cfg,
-            restaurant,
-            {
-              name,
-              menuId: menus[menu],
-              staffMenuIds: [menus.Bebidas, menus["Café"]],
-            },
-            0,
-          )
-        ).id;
-      const mananas = await period("Mañanas", "Desayunos");
-      const mediodia = await period("Mediodía", "Almuerzo");
-      await replaceMenuWeek(
-        tx,
-        cfg,
+      if (options.timetable) {
+        const period = async (name: string, menu: MenuName) =>
+          (
+            await saveMenuPeriod(
+              tx,
+              cfg,
+              restaurant,
+              {
+                name,
+                menuId: menus[menu],
+                staffMenuIds: [menus.Bebidas, menus["Café"]],
+              },
+              0,
+            )
+          ).id;
+        const mananas = await period("Mañanas", "Desayunos");
+        const mediodia = await period("Mediodía", "Almuerzo");
+        await replaceMenuWeek(
+          tx,
+          cfg,
+          restaurant,
+          [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({
+            weekday,
+            slots: [slot(mananas, "09:00", "12:00"), slot(mediodia, "12:00", "16:00")],
+          })),
+          MONDAY_10_00,
+          0,
+        );
+      } else {
+        await offerMenuThroughZone(tx, cfg, barra, menus.Bebidas, { makeDefault: true });
+        for (const menu of [menus.Desayunos, menus.Almuerzo, menus["Café"]])
+          await offerMenuThroughZone(tx, cfg, barra, menu);
+      }
+      return {
+        departmentId: restaurant,
+        startingZoneId: barra,
         restaurant,
-        [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({
-          weekday,
-          slots: [slot(mananas, "09:00", "12:00"), slot(mediodia, "12:00", "16:00")],
-        })),
-        MONDAY_10_00,
-        0,
-      );
-    } else {
-      await offerMenuThroughZone(tx, cfg, barra, menus.Bebidas, { makeDefault: true });
-      for (const menu of [menus.Desayunos, menus.Almuerzo, menus["Café"]])
-        await offerMenuThroughZone(tx, cfg, barra, menu);
-    }
-    const [person] = await tx
-      .insert(persons)
-      .values({ displayName: "Ana", pinHash: hashPin("5555"), role: "staff" })
-      .returning({ id: persons.id });
-    return {
-      restaurant,
-      deli,
-      barra,
-      sala,
-      terraza,
-      mostrador,
-      menus,
-      versions,
-      tostada: tostadaOffers,
-      bocadillo,
-      personId: person!.id,
-    };
+        deli,
+        barra,
+        sala,
+        terraza,
+        mostrador,
+        menus,
+        versions,
+        tostada: tostadaOffers,
+        bocadillo,
+      };
+    },
   });
-  const [profile] = await suite.db
-    .insert(deviceProfiles)
-    .values({
-      name: `Till ${randomUUID()}`,
-      formFactor: "till",
-      capabilities: [...BASIC_ACTIONS, "take-cash"],
-    })
-    .returning({ id: deviceProfiles.id });
-  await withTransaction(suite.db, (tx) =>
-    setProfileServiceAccess(tx, cfg, profile!.id, {
-      departmentId: seeded.restaurant,
-      allowedZoneIds: null,
-      startingZoneId: seeded.barra,
-    }),
-  );
-  const device = await enrolDeviceForTest(suite.db, cfg, {
-    name: `Till ${randomUUID()}`,
-    profileId: profile!.id,
-  });
-  const session = await withTransaction(suite.db, (tx) =>
-    loginWithPin(tx, { deviceId: device.deviceId, personId: seeded.personId, pin: "5555" }),
-  );
-  const app = new Hono();
-  mountTillApi(
-    app,
-    { db: suite.db, backend, clock, cfg, secureCookies: false, venueLocale: LOCALE },
-    () => {},
-  );
-  return {
-    cfg,
-    app,
-    cookie: `${SESSION_COOKIE}=${session.token}; ${DEVICE_COOKIE}=${device.deviceId}.${device.token}`,
-    ...seeded,
-  };
 }
 
-async function send(
-  v: Venue,
-  method: string,
-  path: string,
-  body?: object,
-): Promise<{ status: number; body: Record<string, unknown> }> {
-  const response = await v.app.request(path, {
-    method,
-    headers: { "content-type": "application/json", cookie: v.cookie },
-    ...(body === undefined ? {} : { body: JSON.stringify(body) }),
-  });
-  const text = await response.text();
-  return { status: response.status, body: text === "" ? {} : JSON.parse(text) };
-}
+const send = (v: Venue, method: string, path: string, body?: object) =>
+  sendAsTill(v, method, path, body);
 
 const park = (v: Venue, zoneId: string, menuItemId: string, menuVersionId?: string) => {
   const id = randomUUID();
