@@ -212,12 +212,21 @@ export async function businessDayClockConflicts(
     ...row,
     ...undated,
   }));
+  const oneOffYears = new Set(
+    specialDayList.flatMap((day) =>
+      !day.repeats && day.date >= effectiveBusinessDay ? [Number(day.date.slice(0, 4))] : [],
+    ),
+  );
   const yearsFrom = new Map<number, number[]>();
   const walkedYears = (date: string): number[] => {
     const firstYear = Math.max(Number(date.slice(0, 4)), Number(effectiveBusinessDay.slice(0, 4)));
     let years = yearsFrom.get(firstYear);
     if (years === undefined) {
-      years = Array.from({ length: Math.min(400, 10000 - firstYear) }, (_, i) => firstYear + i);
+      const walked = new Set(
+        Array.from({ length: Math.min(400, 10000 - firstYear) }, (_, i) => firstYear + i),
+      );
+      for (const year of oneOffYears) walked.add(year);
+      years = [...walked];
       yearsFrom.set(firstYear, years);
     }
     return years;

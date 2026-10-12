@@ -1357,6 +1357,32 @@ describe("clock compatibility reads special-day paint", () => {
     await expect(check(v, "07:00")).resolves.toBeUndefined();
   });
 
+  it("walks a repeating special day into a one-off special day's year beyond its 400 years", async () => {
+    const v = await fixture([], { offset: 180 });
+    const eve = await withTransaction(suite.db, (tx) =>
+      paintedDay(tx, v, {
+        name: "Eve",
+        date: "2026-12-24",
+        repeatsYearly: true,
+        ranges: [{ periodId: v.periodId, startsAt: "22:00", endsAt: "04:30" }],
+      }),
+    );
+    await expect(check(v, "07:00")).resolves.toBeUndefined();
+    await withTransaction(suite.db, (tx) =>
+      paintedDay(tx, v, {
+        name: "Far day",
+        date: "2500-12-25",
+        ranges: [{ periodId: v.periodId, startsAt: "07:15", endsAt: "09:00" }],
+      }),
+    );
+    await expect(check(v, "07:00")).rejects.toMatchObject({
+      code: "venue.business_day_hours_conflict",
+      params: {
+        conflicts: [expect.objectContaining({ reason: "sending_cutoff", specialDayId: eve })],
+      },
+    });
+  });
+
   it("reads a date's paint from its special day alone, never from a named day's rows on it", async () => {
     const v = await fixture([]);
     const specialDayId = await specialDay(v, "2026-11-20", [
