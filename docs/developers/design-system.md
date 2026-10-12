@@ -2050,9 +2050,8 @@ and nothing guards it across screens:
   `*.unsaved.test.ts` suites cover reconnect. Disable confirmations have no draft and stay `danger`.
   Slice 6 replaces the inline editors described in
   [the earlier Batch 4b table](../superpowers/plans/2026-10-07-a331-save-follows-changes.md#batch-4b--the-venue-service-screens-slice-1-rewrote-lane-b-a331-4b);
-- A429 slice 2: the floor plan editor, a full-window modal whose Save sits in its header, and its Add join
-  dialog. Their leave cases are in `apps/dashboard/src/screens/floor-plan-editor.unsaved.test.ts`
-  and `apps/dashboard/src/screens/floor-plan-add-join.unsaved.test.ts`;
+- A429 slice 2: the floor plan editor, a full-window modal whose Save sits in its header. Its leave
+  cases are in `apps/dashboard/src/screens/floor-plan-editor.unsaved.test.ts`;
 - A494: Venue details' Change legal name dialog. Its leave cases are in
   `apps/dashboard/src/screens/legal-name-dialog.unsaved.test.ts`;
 - batch 4c: the venue-service local holiday Add and Edit (its Remove and Forget stay `danger`

@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, expect, it, onTestFinished, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
 import type { WtButton, WtFloorPlanCanvas, WtModal, WtSheet } from "@waitron/ui";
-import { chooseOption, chooseOptions } from "@waitron/ui/src/test-helpers.js";
+import { chooseOption } from "@waitron/ui/src/test-helpers.js";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import "./floor-plan-editor.js";
 import type { FloorPlanEditor } from "./floor-plan-editor.js";
@@ -1210,114 +1210,6 @@ it("a panel's typed name goes into the draft and Undo takes the whole typing bac
   await press(el, "undo");
   expect(canvas(el).tables[0]!.label).toBe("T1");
   expect(button(el, "undo").disabled).toBe(true);
-});
-
-const joinDialogOf = (el: FloorPlanEditor) =>
-  el.shadowRoot!.querySelector<HTMLElementTagNameMap["floor-plan-add-join"]>(
-    "floor-plan-add-join",
-  )!;
-const joinModal = (el: FloorPlanEditor) =>
-  joinDialogOf(el).shadowRoot!.querySelector<WtModal>("wt-modal[data-dialog=add-join]")!;
-const joinField = (el: FloorPlanEditor, name: string) =>
-  joinModal(el).querySelector<HTMLElement & { value: string; values: string[] }>(`[name=${name}]`)!;
-
-async function openAddJoin(el: FloorPlanEditor): Promise<void> {
-  tablePanel(el)!.shadowRoot!.querySelector<HTMLElement>("[data-test=add-join]")!.click();
-  await joinDialogOf(el).updateComplete;
-  await joinModal(el).updateComplete;
-}
-
-async function addJoinOf(el: FloorPlanEditor, others: string[], seats: string): Promise<void> {
-  await openAddJoin(el);
-  await chooseOptions(joinField(el, "join-tables"), others);
-  await chooseOption(joinField(el, "join-seats"), seats);
-  await joinDialogOf(el).updateComplete;
-  joinModal(el).querySelector<HTMLElement>("wt-button[data-action=join-confirm]")!.click();
-  await el.updateComplete;
-  await expect.poll(() => joinModal(el).open).toBe(false);
-}
-
-it("Add join from the selected table's panel adds a join with a fresh key each time", async () => {
-  const el = await open();
-  await fromCanvas(el, "wt-table-select", { key: "m1" });
-  await addJoinOf(el, ["m2"], "6");
-  expect(tablePanel(el)!.draft.joins).toEqual([
-    { key: "join:1", seats: 6, tableKeys: ["m1", "m2"] },
-  ]);
-  expect(button(el, "save").variant).toBe("primary");
-  await press(el, "undo");
-  expect(tablePanel(el)!.draft.joins).toEqual([]);
-  await addJoinOf(el, ["m2"], "5");
-  expect(tablePanel(el)!.draft.joins.map((j) => j.key)).toEqual(["join:2"]);
-});
-
-for (const [from, to] of sizes) {
-  it(`keeps Add join open with its chosen table when the page goes from ${from[0]} to ${to[0]} px`, async () => {
-    await viewport(...from);
-    const el = await open();
-    await expect.poll(() => sheet(el) !== null).toBe(from[0] < 600);
-    await fromCanvas(el, "wt-table-select", { key: "m1" });
-    await openAddJoin(el);
-    await chooseOptions(joinField(el, "join-tables"), ["m2"]);
-    await joinDialogOf(el).updateComplete;
-    const before = tablePanel(el);
-    await page.viewport(...to);
-    await expect.poll(() => sheet(el) !== null).toBe(to[0] < 600);
-    expect(tablePanel(el)).not.toBe(before);
-    await el.updateComplete;
-    expect(joinModal(el).open).toBe(true);
-    expect(joinField(el, "join-tables").values).toEqual(["m2"]);
-  });
-}
-
-it("a save answer arriving while Add join is open re-keys its chosen table", async () => {
-  const withT9 = (revision: number, id: string): FloorPlan => ({
-    ...terrace(revision),
-    tables: [
-      ...terrace(revision).tables,
-      { id, liveTableId: "l9", label: "T9", seats: null, fixed: false, placement: null },
-    ],
-  });
-  let answer!: (value: { revision: number; ids: Record<string, string> }) => void;
-  const api = stubApi({
-    getFloorPlan: vi.fn().mockResolvedValueOnce(terrace(3)).mockResolvedValue(withT9(4, "m9")),
-    saveFloorPlan: vi.fn(
-      () =>
-        new Promise<{ revision: number; ids: Record<string, string> }>((resolve) => {
-          answer = resolve;
-        }),
-    ),
-  });
-  const el = await open(api);
-  await fromCanvas(el, "floor-plan-change", {
-    draft: addTables(
-      draftFromPlan(terrace(3)),
-      [{ label: "T9", seats: null, fixed: false }],
-      () => "new:9",
-    ),
-  });
-  button(el, "save").click();
-  await el.updateComplete;
-  await fromCanvas(el, "wt-table-select", { key: "m1" });
-  await openAddJoin(el);
-  await chooseOptions(joinField(el, "join-tables"), ["new:9"]);
-  answer({ revision: 4, ids: { "new:9": "m9" } });
-  await flush(el);
-  await flush(el);
-  expect(panelOf(el).draft.tables.map((t) => t.key)).toContain("m9");
-  expect(joinModal(el).open).toBe(true);
-  expect(joinField(el, "join-tables").values).toEqual(["m9"]);
-  await chooseOption(joinField(el, "join-seats"), "4");
-  await joinDialogOf(el).updateComplete;
-  joinModal(el).querySelector<HTMLElement>("wt-button[data-action=join-confirm]")!.click();
-  await el.updateComplete;
-  expect(tablePanel(el)!.draft.joins).toEqual([
-    { key: "join:1", seats: 4, tableKeys: ["m1", "m9"] },
-  ]);
-  await tablePanel(el)!.updateComplete;
-  expect(tablePanel(el)!.shadowRoot!.querySelector("[data-join-text]")!.textContent!.trim()).toBe(
-    "with T9 · seats 4",
-  );
 });
 
 it("does not reserve an unfollowed live name backed by this zone's master plan", async () => {

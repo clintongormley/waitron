@@ -23,7 +23,6 @@ import "@waitron/ui/src/components/wt-icon.js";
 import "@waitron/ui/src/components/wt-floor-plan-canvas.js";
 import "@waitron/ui/src/components/wt-modal.js";
 import "@waitron/ui/src/components/wt-sheet.js";
-import "./floor-plan-add-join.js";
 import "./floor-plan-add-tables.js";
 import "./floor-plan-table-panel.js";
 import "./floor-plan-tables-panel.js";
@@ -59,10 +58,6 @@ import {
 
 export interface FloorPlanSelect {
   key: string | null;
-}
-
-export interface FloorPlanAddJoinAsk {
-  tableKey: string;
 }
 
 export interface FloorPlanDeleteAsk {
@@ -369,8 +364,6 @@ export class FloorPlanEditor extends LitElement {
   #newKeys = 0;
   /** Monotonic, so a key never returns: not after a save turns `new:<n>` into an id, nor on undo. */
   readonly #nextKey = (): string => `new:${++this.#newKeys}`;
-  #joinKeys = 0;
-  readonly #nextJoinKey = (): string => `join:${++this.#joinKeys}`;
   #request = 0;
   #saveRequest = 0;
   /** The refused field's value when the refusal arrived. */
@@ -425,10 +418,6 @@ export class FloorPlanEditor extends LitElement {
     });
     this.addEventListener("floor-plan-add-tables", () => {
       this.renderRoot.querySelector("floor-plan-add-tables")?.show();
-    });
-    this.addEventListener("floor-plan-add-join", (event) => {
-      const { tableKey } = (event as CustomEvent<FloorPlanAddJoinAsk>).detail;
-      this.renderRoot.querySelector("floor-plan-add-join")?.show(tableKey);
     });
     this.addEventListener("floor-plan-invalid", (event) => {
       this.#typed((event as CustomEvent<FloorPlanInvalid>).detail);
@@ -846,7 +835,6 @@ export class FloorPlanEditor extends LitElement {
     const { ids } = answer;
     const saved = rekeyDraft(sentDraft, ids);
     const current = rekeyDraft(trimLabels(this.draft!, draft), ids);
-    this.renderRoot.querySelector("floor-plan-add-join")?.rekey(ids);
     const rekey = rekeyWith(ids);
     this.#rekeyMarks(rekey);
     this.#places = new Map([...this.#places].map(([key, place]) => [rekey(key), place]));
@@ -1160,11 +1148,6 @@ export class FloorPlanEditor extends LitElement {
         .nextKey=${this.#nextKey}
         .draftParent=${this.#scopeId}
       ></floor-plan-add-tables>
-      <floor-plan-add-join
-        .draft=${draft}
-        .nextJoinKey=${this.#nextJoinKey}
-        .draftParent=${this.#scopeId}
-      ></floor-plan-add-join>
       ${this.#deleteQuestion(draft)}`;
   }
 
