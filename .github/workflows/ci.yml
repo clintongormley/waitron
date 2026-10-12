@@ -1316,16 +1316,37 @@ jobs:
 
       - run: pnpm --filter @waitron/venue-service exec playwright install chromium
 
-      # Why: ci-and-gates.md, "The venue-service shards keep their test databases in memory".
+      # This step, the shard's DEBUG channels and the two failure() steps below: ci-and-gates.md,
+      # "A failed venue-service shard keeps its browser start-up record".
+      - name: Sample the runner's memory and processes
+        run: |
+          mkdir -p "$RUNNER_TEMP/shard-diagnostics"
+          nohup bash -c '
+            while true; do
+              {
+                echo "=== $(date -u +%FT%T.%3NZ) load $(cut -d" " -f1-3 /proc/loadavg)"
+                free -m | sed -n 2,3p
+                df -m /dev/shm | tail -1
+                ps -eo pid,ppid,stat,rss,pcpu,etime,comm --sort=-rss | head -10
+              } >> "$RUNNER_TEMP/shard-diagnostics/resources.log" 2>&1
+              sleep 5
+            done' > /dev/null 2>&1 &
+
+      # Why TMPDIR: ci-and-gates.md, "The venue-service shards keep their test databases in memory".
+      # The log hides the api channel's line per browser command; the record keeps every line.
       - name: Run the venue-service shard
         env:
           TMPDIR: /dev/shm
+          DEBUG: "vitest:browser:pool,vitest:browser:playwright,vitest:browser:api,pw:browser"
+          VITEST_PW_DEBUG: "1"
         run: |
           set -euo pipefail
           pnpm --filter "@waitron/venue-service" test:shard \
             --shard=${{ matrix.shard }}/4 \
             --outputFile=.vitest-reports/blob-${{ matrix.shard }}.json \
-            --reporter="$GITHUB_WORKSPACE/scripts/vitest-file-progress.mjs"
+            --reporter="$GITHUB_WORKSPACE/scripts/vitest-file-progress.mjs" \
+            2>&1 | tee "$RUNNER_TEMP/shard-diagnostics/shard.log" \
+            | { grep -v --line-buffered 'vitest:browser:api .*Triggering command' || [ $? -eq 1 ]; }
 
       # No blob means the shard ran nothing; see test-heavy's upload step.
       - name: Upload the venue-service coverage blob
@@ -1336,6 +1357,25 @@ jobs:
           path: packages/venue-service/.vitest-reports/blob-${{ matrix.shard }}.json
           if-no-files-found: error
           retention-days: 1
+
+      - name: Snapshot the runner after a failed shard
+        if: failure()
+        run: |
+          {
+            date -u +%FT%T.%3NZ
+            free -m
+            df -m /dev/shm
+            ps -eo pid,ppid,stat,rss,pcpu,etime,args --sort=-rss | head -40
+            sudo dmesg -T | tail -80
+          } > "$RUNNER_TEMP/shard-diagnostics/after.txt" 2>&1 || true
+
+      - name: Keep the failed shard's start-up record
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: venue-service-diagnostics-${{ matrix.shard }}
+          path: ${{ runner.temp }}/shard-diagnostics/
+          retention-days: 14
 
   # The coverage gate for @waitron/venue-service: merges the test-venue-service blobs and enforces the
   # package's thresholds on the total. `--merge-reports` runs no test, so no browser is installed.

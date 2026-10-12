@@ -1732,8 +1732,10 @@ makes its directory under `os.tmpdir()` (`packages/db/src/testing/venue-db.ts`),
 `os.tmpdir()` reads `TMPDIR`. So the shard's databases live in memory, and its commits no longer
 wait for the runner's disk (previous section: 300 separate commits took 128 to 709 ms on the disk
 against 8 to 22 ms in memory). It is the CI step's environment, so a local run still uses the system
-temporary directory. How much of `/dev/shm` the shards use, and its size on CI's runners, was not
-measured.
+temporary directory. On one runner in shard 2, `/dev/shm` (7,995 MB) held at most 14 MB until the
+browser started, then 2,090 MB at its peak once Chromium ran. Chromium's profile was there (its
+launch line reads `--user-data-dir=/dev/shm/playwright_chromiumdev_profile-…`); how the 2,090 MB
+split between the profile and Chromium's other use of `/dev/shm` was not measured. Next section.
 
 Why. Main run 38142687186's job `test-venue-service (4)` (2026-10-11), in region `westus`, hit its
 10-minute limit. Against two green runs of the same shard that day, 38158202160 and 38156571198, the
@@ -1757,6 +1759,80 @@ Guard: the "venue-service shards' test databases" case in `scripts/ci-workflow.t
 than its name: it reads `ci.yml` as TEXT, so a step an `if:` switches off, or a `run:` that sets
 `TMPDIR` again, still passes, and it never checks that the tests' databases actually land under
 `TMPDIR`.
+
+### A failed venue-service shard keeps its browser start-up record
+
+On 2026-10-11, [run 38170156450 attempt 1's venue-service shard 2](https://github.com/clintongormley/waitron/actions/runs/38170156450/job/114561139899)
+passed its 317 database tests, printed nothing for three minutes, and failed with
+`Failed to connect to the browser session … within the timeout` before any browser test started.
+Its log could not say which start-up step had not happened when the timer ran out. Each
+`test-venue-service` shard now keeps a record that can.
+
+What the job does:
+
+- A step before the shard samples the runner every 5 s into
+  `$RUNNER_TEMP/shard-diagnostics/resources.log`: load, memory, `/dev/shm`, and the ten largest
+  processes.
+- The shard step turns on Vitest's browser channels and Playwright's browser log
+  (`DEBUG=vitest:browser:pool,vitest:browser:playwright,vitest:browser:api,pw:browser`, plus
+  `VITEST_PW_DEBUG=1`, which prints any page request that fails), and writes its whole output to
+  `$RUNNER_TEMP/shard-diagnostics/shard.log`. The job log hides one kind of line, the api channel's
+  `Triggering command`, one per browser command, so a passing shard's log grows by about 230 lines
+  rather than about a thousand.
+- When the shard fails, a step adds `after.txt` (memory, `/dev/shm`, every large process, the end
+  of `dmesg`), and the folder is kept for 14 days as the artifact
+  `venue-service-diagnostics-<shard>`. A passing shard keeps nothing.
+
+**Reading a record.** Vitest 4.1.11 starts its connection timer when it creates the session
+(`BrowserSessions.createSession` in `vitest/dist/chunks/cli-api.*.js`), and the session succeeds
+only when the page has connected AND reported ready. In a passing shard the lines come in this
+order, each with its time:
+
+1. `vitest:browser:pool … creating session for browser (chromium)` — the timer starts.
+2. `vitest:browser:playwright … initializing the browser`, then `pw:browser <launched> pid=…` —
+   Chromium started.
+3. `… the page is ready`, then `… browser page is created, opening http://localhost:63315/…` — the
+   page exists and is navigating.
+4. `vitest:browser:api … Browser API connected to orchestrator` — the page connected.
+5. `vitest:browser:pool … run test` — the page also reported ready; tests start.
+
+The first missing line is the step that did not happen before the timer ran out. Readiness has no
+line of its own: line 4 present and line 5 absent means the page connected and did not report ready
+in time.
+
+The old log leaves two readings of its three minutes. The last database test ended at 20:03:05.7
+and the error printed at 20:06:05.4, against a 60 s timer. Either about two minutes passed before
+the session was created, or the run took about two minutes to end after the timer fired. In the
+forced failure below, the provider had closed 1.6 s after the session was created, so a quick
+close is what a normal failure looks like; that does not show what the stuck one did. The record's
+times tell the two readings apart.
+
+**What the probes measured** (2026-10-12):
+
+- **No reproduction in 100 repeats.** Probe run 38189152637 ran shard `2/4` exactly as CI does, on
+  25 runners at a time, four times: 100 of 100 passed. In the last attempt's 25 records (the run's
+  artifact list held only the last attempt's), the first browser test started 0.54 to 2.07 s after
+  its session was created, median 0.92 s. On attempt 1's first runner, sampled every 2 s, `/dev/shm`
+  (7,995 MB) held at most 14 MB before the browser started and peaked at 2,090 MB once Chromium ran,
+  and available memory was never below 11,527 MB.
+- **The record works on a real failure.** Probe pull request #1573 (run 38192012149) forced shard 2
+  to fail with a 1 ms connection limit. It failed with the same message and kept
+  `venue-service-diagnostics-2` with all three files and steps 1–4 above timed; shards 1, 3 and 4
+  passed and kept nothing.
+- **The error is rare.** In the newest 900 CI runs (2026-10-07 02:12 to 2026-10-12 00:47 UTC,
+  every attempt), the message appears in the log of one failed test job: the one above. Those runs
+  hold 868 venue-service shard jobs.
+
+The first forced-failure probe set the limit on the command line and passed: Vitest reads
+`connectTimeout` from the outer config's `test.browser` block only
+([testing-guide.md](testing-guide.md#vitest-reads-a-browsers-connecttimeout-from-the-outer-config-only)).
+
+Guard: the cases under "the venue-service shards' browser start-up record" in
+`scripts/ci-workflow.test.mjs`, weaker than their name: they read `ci.yml` as TEXT and never run a
+shard, so a Vitest or Playwright upgrade that renames a debug channel would leave the record silent
+while the cases pass. They never read the snapshot step or what the job log's `grep -v` hides, and
+a step an `if:` switches off still passes. The channel names above were read from Vitest 4.1.11 and
+Playwright 1.63.0.
 
 ## `prettier --check` on an ignored path prints the same line as a clean one
 

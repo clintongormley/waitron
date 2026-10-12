@@ -325,6 +325,20 @@ code into one RAISES the percentage. Guard: `scripts/coverage-thresholds.test.ts
 configs as TEXT and looks for one exact string, so a config that spells the same include
 differently fails it.
 
+## Vitest reads a browser's `connectTimeout` from the outer config only
+
+Measured locally on Vitest 4.1.11 (A527, 2026-10-12) with `packages/venue-service`'s
+`src/dashboard/hours-view.test.ts`: `--browser.connectTimeout=1` on the command line, and
+`connectTimeout: 1` in the browser project's own `browser` block, each left the file passing
+(12 tests); `test.browser.connectTimeout: 1` in the outer config (a top-level `test.browser`
+beside `test.projects`, which `packages/venue-service/vitest.config.ts` does not set today) failed
+it with `Failed to connect to the browser session … within the timeout` and `Tests no tests`. Read
+in vitest 4.1.11: the session timer reads `project.vitest.config.browser.connectTimeout ?? 6e4`
+(`dist/chunks/cli-api.CnMVyzaz.js`), the outer config's, never the project's. A527's first
+forced-failure probe used the command-line flag and passed, which is how this was found. A change
+that raises the limit belongs in the outer `test.browser` block, and a test of that change needs
+that block's failure as its control.
+
 ## Vitest's per-test timeout does not bound a blocking child — it fails healthy runs that outlast it.
 
 It is tempting to read a suite's two timeouts as one overriding the other. They do different things,
@@ -678,7 +692,8 @@ passed, and the slowest frozen sale was 104 ms (run 36575480881). So in CI no ti
 a commit waiting on the runner's disk. What it gave up, in CI only, is timing sales against a real
 disk, and with it any view there of how long a sale waits behind a Litestream checkpoint on a slow
 disk (A130); its assertions are unchanged. How much of `/dev/shm` the job's tests
-use, and its size on CI's runners, was not measured; the 58 runs passed with it.
+use was not measured; the 58 runs passed with it. On one `ubuntu-latest` runner of
+`test-venue-service` in A527's probe (run 38189152637), `/dev/shm` was 7,995 MB.
 
 **A bucket question the pause is waiting on.** While paused, the supervisor asks the bucket for a
 listing and resumes once one is answered (`#bucketAnswers`, `packages/stream/src/supervisor.ts`).

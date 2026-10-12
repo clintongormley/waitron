@@ -247,7 +247,7 @@ function shardDenominator(body) {
   return undefined;
 }
 
-/** The blob artifact's base name from an `upload-artifact` `name: <base>-${{ matrix.shard }}`. */
+/** The FIRST matrix-named upload's base name (`name: <base>-${{ matrix.shard }}`): the blob. */
 function artifactUploadBase(body) {
   const line = body.find((candidate) =>
     /^ {10}name: \S+-\$\{\{\s*matrix\.shard\s*\}\}\s*$/.test(candidate),
@@ -255,7 +255,7 @@ function artifactUploadBase(body) {
   return line === undefined ? undefined : /name: (\S+?)-\$\{\{/.exec(line)?.[1];
 }
 
-/** The non-comment lines of the step uploading the matrix-named blob artifact, or undefined. */
+/** The non-comment lines of the FIRST matrix-named upload step (the blob), or undefined. */
 function artifactUploadStep(body) {
   const named = body.findIndex((line) =>
     /^ {10}name: \S+-\$\{\{\s*matrix\.shard\s*\}\}\s*$/.test(line),
@@ -1473,6 +1473,62 @@ function expectTestShardStepTmpdirInMemory(body, what) {
 describe("the venue-service shards' test databases", () => {
   it("live in memory, not on the runner's disk", () => {
     expectTestShardStepTmpdirInMemory(job("test-venue-service").body, "the venue-service shard");
+  });
+});
+
+/**
+ * A venue-service shard whose browser never starts leaves a record of each start-up step; why:
+ * ci-and-gates.md, "A failed venue-service shard keeps its browser start-up record". Reads ci.yml
+ * as TEXT: it never runs a shard, so it cannot tell that the channels still print anything.
+ */
+describe("the venue-service shards' browser start-up record", () => {
+  const body = job("test-venue-service").body.filter((line) => !line.trim().startsWith("#"));
+  const step = shardStep(body) ?? [];
+  const record = '"$RUNNER_TEMP/shard-diagnostics/shard.log"';
+
+  it("turns on Vitest's browser channels and Playwright's browser log for the shard", () => {
+    expect(step.length, "no venue-service shard step").toBeGreaterThan(0);
+    const debug = step.map((line) => /^ {10}DEBUG: "?([^"]*)"?\s*$/.exec(line)?.[1]).find(Boolean);
+    expect(debug?.split(",").sort()).toEqual([
+      "pw:browser",
+      "vitest:browser:api",
+      "vitest:browser:playwright",
+      "vitest:browser:pool",
+    ]);
+    expect(step).toContain('          VITEST_PW_DEBUG: "1"');
+  });
+
+  it("writes the shard's whole output to the record", () => {
+    expect(step.join("\n")).toContain(`2>&1 | tee ${record}`);
+  });
+
+  it("does not fail a passing shard whose log the filter leaves empty", () => {
+    expect(step).toContain("          set -euo pipefail");
+    expect(step.join("\n")).toMatch(
+      /\| \{ grep -v --line-buffered '[^']*' \|\| \[ \$\? -eq 1 \]; \}\s*$/,
+    );
+  });
+
+  it("samples the runner's memory and processes into the same folder", () => {
+    const sampler = body.findIndex((line) => /^ {6}- name: Sample the runner/.test(line));
+    const shard = body.findIndex((line) => /^ {6}- name: Run the .* shard\s*$/.test(line));
+    expect(sampler, "no sampler step").toBeGreaterThan(-1);
+    expect(sampler, "the sampler must start before the shard").toBeLessThan(shard);
+    expect(body.slice(sampler, shard).join("\n")).toContain(
+      '"$RUNNER_TEMP/shard-diagnostics/resources.log"',
+    );
+  });
+
+  it("keeps the folder as an artifact when the shard fails, and only then", () => {
+    const named = body.findIndex((line) =>
+      /^ {10}name: venue-service-diagnostics-\$\{\{\s*matrix\.shard\s*\}\}\s*$/.test(line),
+    );
+    expect(named, "no diagnostics artifact").toBeGreaterThan(-1);
+    const start = body.findLastIndex((line, at) => at < named && /^ {6}- /.test(line));
+    const upload = body.slice(start, named + 3);
+    expect(upload).toContain("        if: failure()");
+    expect(upload.join("\n")).toContain("actions/upload-artifact@");
+    expect(upload).toContain("          path: ${{ runner.temp }}/shard-diagnostics/");
   });
 });
 
