@@ -310,6 +310,23 @@ or series is written by this validator. These APIs are still unconnected to bund
 promotion. Their authenticated host context, dormant persistence, takeover consumption and
 atomic role/identity activation remain open alongside the coupled text-schema/counter transition.
 
+**2026-10-12 dormant-persistence checkpoint:** the internal `establishDormantAllocation`
+operation checks a real standby node in the primary's location, refuses a standby with an
+active SIF or series and validates the signed reservation against stored scope. It stores a
+detached proof and complete bases in the append-only `fiscal_reservations` ledger, without
+activating the spare. `dormant-allocation.test.ts` compares the active tables, checks same-event
+and concurrent retries, refuses retained event/allocation/identity reuse, rolls back a failed
+adoption body and attempts update/delete. A caller-mutation case failed with changed stored
+signature payload before the detached snapshot was added. Migration `0006_dormant_reservations`
+adds only this table and its indexes; the previous SQL files are unchanged.
+
+This internal operation is not connected to the host or exported from the public barrel.
+Authenticated host context, binding takeover consumption to this stored reservation, coupled
+text typing/counter retirement and all host consumers remain unfinished. The existing root
+append-only and fiscal schema-ownership exact lists each fail only on the new table name.
+The [list-change request](2026-10-12-w41s4-reservation-list-approval.md) specifies the two additions;
+no existing assertion or guard has changed in this checkpoint.
+
 ## Task 5: select active series inside issuance transactions
 
 **Modify:** `apps/server/src/till-config.ts`, `trading-config.ts`, `till-sale.ts`,

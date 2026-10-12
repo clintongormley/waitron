@@ -214,7 +214,12 @@ takeover. The Task 4 branch signs a dedicated paper-reservation receipt for the 
 checks its signatures, outside reserved state and stored venue scope without writing a SIF,
 chain, series, audit result or counter. The signing command requires current-register and outside
 reservation confirmations. That receipt cannot replace a takeover consumption receipt.
-Bundle, dormant-state persistence, adoption and promotion integration remain open. Takeover must
+An internal operation now retains the signed proof and complete bases in `fiscal_reservations`.
+Its database-backed tests compare all active fiscal rows, retry the same join, refuse retained
+event/allocation/identity reuse and check rollback and update/delete refusals. A caller-mutation
+case failed before the operation took a detached proof snapshot. The root append-only list and
+fiscal schema-ownership list still need approval to add this table; neither check has been edited.
+Bundle, adoption and promotion integration remain open. Takeover must
 still authenticate the administrator, isolate the old box, rule out parallel recovery and check
 outside consumption before atomic activation. All three invoice purposes stay separate.
 

@@ -10,3 +10,4 @@ export { registrosFacturacion } from "./registros.js";
 export { contadoresInstalacion, registroSif } from "./sif.js";
 
 export { fiscalAllocations } from "./allocations.js";
+export { fiscalReservations } from "./reservations.js";

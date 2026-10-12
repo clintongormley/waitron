@@ -84,7 +84,8 @@
       "registros_facturacion",
       "filing_cases",
       "filing_case_events",
-      "fiscal_allocations"
+      "fiscal_allocations",
+      "fiscal_reservations"
     ]
   },
   {
