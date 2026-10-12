@@ -301,3 +301,22 @@ now pass. Module338/server22/types/lint pass. The review's earlier per-field rep
 fails at the unchanged base and is recorded separately in the backlog, outside this replacement
 editor's scope. The deleted-zone case now releases over the target's updated coordinates;
 its behavioral no-write assertion is unchanged. Current-head hook/CI and landing remain.
+
+
+Current-head CI qualification (2026-10-12): first PR head e99dbe49 failed on unready test
+departments and a live-dependency shape pin. Shared test offer fixtures now author their
+existing location-description representative into otherwise absent department receipts;
+product runtime still has no location fallback. Signed-in callback fixtures author all of
+their created departments. Separate editor/transfer/deletion/receipt fixtures retain their
+existing assertions and gain required data. Native stream-pause runs with pinned binaries
+and passed in the 57-case selection. Receipt-print passed 108 with all 402 original matcher
+calls retained; six response suites passed 511; transfer/deletion passed 104 with 335 matchers
+retained; till receipt passed 98. The dependency pin adds only department_receipts.
+
+The unchanged contextless paid-order case in till-api.unroutable-dish.test.ts remains red:
+it deletes the whole service context but expects payment success. The current contract
+requires a department context. This is a real behavior contradiction, not another missing
+fixture; it is recorded in the backlog and lane questions for an owner ruling. No assertion,
+guard or fiscal invariant is weakened to obtain green CI. The branch must not land while
+that required case fails. Earlier local-readiness notes do not constitute current-head CI
+approval or whole-feature completion.

@@ -8,6 +8,8 @@ import { applyVenue, planVenue } from "@waitron/provisioning";
 import { locationId as brandLocationId, nodeId as brandNodeId } from "@waitron/shared";
 import {
   createDepartment,
+  departmentReceipts,
+  departments,
   deleteMenuPeriod,
   menuPeriods,
   replaceMenuWeek,
@@ -93,6 +95,17 @@ export async function provisionSignedInTill<S extends TillSeed>(
   };
   const seeded = await withTransaction(db, async (tx) => {
     const seed = await options.seed(tx, cfg);
+    for (const department of await tx
+      .select({ id: departments.id })
+      .from(departments)
+      .where(eq(departments.locationId, cfg.locationId)))
+      await tx
+        .insert(departmentReceipts)
+        .values({
+          departmentId: department.id,
+          receipt: { operationDescription: "Venta en establecimiento" },
+        })
+        .onConflictDoNothing({ target: departmentReceipts.departmentId });
     const [person] = await tx
       .insert(persons)
       .values({ displayName: "Ana", pinHash: hashPin("5555"), role: "staff" })

@@ -62,7 +62,13 @@ import type { TillConfig } from "./till-config.js";
 import { enrolDeviceForTest } from "./testing/enrol.js";
 import { publishWorkingMenu } from "./testing/publish-menu.js";
 import { offerProducts } from "./testing/zone-offers.js";
-import { configureZone, createDepartment, workingLineContexts } from "@waitron/venue-service";
+import {
+  configureZone,
+  createDepartment,
+  departmentReceipts,
+  departments,
+  workingLineContexts,
+} from "@waitron/venue-service";
 import { createTable } from "./testing/live-table.js";
 import { DEVICE_COOKIE } from "./device-session.js";
 import { SESSION_COOKIE } from "./till-session.js";
@@ -183,6 +189,15 @@ async function setupLunch(): Promise<Lunch> {
     simplifiedInvoiceLimit: null,
   };
   const seeded = await withTransaction(suite.db, async (tx) => {
+    for (const department of await tx
+      .select({ id: departments.id })
+      .from(departments)
+      .where(eq(departments.locationId, cfg.locationId)))
+      await tx.insert(departmentReceipts).values({
+        departmentId: department.id,
+        receipt: { operationDescription: "Venta en establecimiento" },
+      });
+
     const lunch = await createCatalogue(tx, { name: "Lunch" });
     const category = await createCategory(tx, { name: "Carta" });
     const product = (name: string, unitPrice: string, vatClass: "general" | "reduced") =>

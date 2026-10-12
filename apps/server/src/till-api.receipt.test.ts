@@ -246,6 +246,17 @@ async function setupVenue(): Promise<{
       .values({ displayName: "Responsable", pinHash: hashPin("5555"), role: "supervisor" })
       .returning({ id: persons.id });
     const { products: available } = await listAvailableProducts(tx, cfg.locationId);
+    for (const department of await tx
+      .select({ id: departments.id })
+      .from(departments)
+      .where(eq(departments.locationId, cfg.locationId)))
+      await tx
+        .insert(departmentReceipts)
+        .values({
+          departmentId: department.id,
+          receipt: { operationDescription: "Venta en establecimiento" },
+        })
+        .onConflictDoNothing({ target: departmentReceipts.departmentId });
     return {
       each: { ...available.find((p) => p.pricingUnit === "each")!, menuItemId: menuItem.id },
       operatorId: staff!.id,

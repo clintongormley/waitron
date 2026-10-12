@@ -316,3 +316,23 @@ period order — spec section 2).
   gap. The address-change warning names only the new city, though a province change also
   triggers it. The owner decided on 2026-10-06 not to queue these, or the clear-area control
   (listed among the smaller notes from the public holidays reviews, above).
+
+
+## A493 missing service context decision
+
+The combined list, protected department/zone/receipt editors, separate language card and
+receipt consumer changes are implemented on PR #1592. One old behavior needs an owner ruling
+before landing. The test at `apps/server/src/till-api.unroutable-dish.test.ts` deletes the whole
+`order_service_contexts` row and expects the payment and filing to succeed, leaving kitchen
+stamps and the alert's zone empty. The description resolver in
+`apps/server/src/sale-operation-description.ts` instead refuses the missing department context.
+
+Recommended: for a real order in the scoped location with no context, use the local default
+department's authored description, preserving the original payment assertions. This must not
+use a location/global description, must still refuse a missing or blank department receipt,
+and must refuse a missing or differently scoped order. Alternatively, explicitly approve
+refusal for this contextless scenario and replace the old success check with equally strict
+no-payment/no-filing assertions. The existing test remains unchanged while the decision waits.
+
+All other first-head CI fixture failures are being corrected without changing their money,
+fiscal, permission or rollback assertions. Package coverage still requires current-head CI.
