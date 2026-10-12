@@ -594,8 +594,17 @@ describe("department-owned address and fiscal description", () => {
 });
 
 describe("receipt and printing policy transaction", () => {
+  it("an absent policy uses the established sale reader default until it is repaired", async () => {
+    const f = await fixture();
+    expect(await scoped((tx) => receipts.readDepartmentReceiptPolicy(tx, f.cfg, f.id))).toEqual({
+      receiptPrintMode: "auto",
+      printTradingName: false,
+    });
+  });
+
   it("reads the department creation policy even before an authored receipt exists", async () => {
     const f = await fixture();
+    await suite.db.insert(departmentSalePolicies).values({ departmentId: f.id });
     expect(await scoped((tx) => receipts.readDepartmentReceiptPolicy(tx, f.cfg, f.id))).toEqual({
       receiptPrintMode: "auto",
       printTradingName: true,
@@ -697,6 +706,7 @@ it("keeps a JSON-looking string distinct from a JSON array", async () => {
 it("refuses another location's receipt policy while serving its owning location", async () => {
   const own = await fixture();
   const other = await fixture();
+  await suite.db.insert(departmentSalePolicies).values({ departmentId: other.id });
   await expect(
     scoped((tx) => receipts.readDepartmentReceiptPolicy(tx, own.cfg, other.id)),
   ).rejects.toMatchObject({ code: "department.not_found", params: { departmentId: other.id } });

@@ -99,8 +99,13 @@ export class DepartmentsZonesDrag {
     }
     const targets = this.targets();
     const index = targets.findIndex((row) => row.id === active.target);
-    const next =
-      targets[(index + (event.key === "ArrowDown" ? 1 : -1) + targets.length) % targets.length];
+    const nextIndex =
+      index < 0
+        ? event.key === "ArrowDown"
+          ? 0
+          : targets.length - 1
+        : (index + (event.key === "ArrowDown" ? 1 : -1) + targets.length) % targets.length;
+    const next = targets[nextIndex];
     active.target = next?.id ?? "";
     this.mark();
     this.row(`department:${active.target}`)?.scrollIntoView({ block: "nearest" });

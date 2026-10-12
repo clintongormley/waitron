@@ -348,7 +348,7 @@ export async function readDepartmentReceiptPolicy(
   if (!row) throw new AppError("department.not_found", { departmentId });
   return {
     receiptPrintMode: row.receiptPrintMode ?? "auto",
-    printTradingName: row.printTradingName ?? true,
+    printTradingName: row.printTradingName ?? false,
   };
 }
 

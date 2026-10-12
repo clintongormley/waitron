@@ -321,3 +321,32 @@ it("the drop uses a department's position after scrolling", async () => {
     .poll(() => writes)
     .toEqual([["/management-api/venue-service/zones/z1", "PUT", { departmentId: "d12" }]]);
 });
+
+it.each(["ArrowDown", "ArrowUp"])(
+  "%s selects the nearest end from an unselected keyboard move",
+  async (key) => {
+    const { el, table, grip, writes } = await setup();
+    el.model!.departments.push({ ...el.model!.departments[1]!, id: "d3", name: "Last" });
+    el.requestUpdate();
+    await el.updateComplete;
+    await table.updateComplete;
+    for (const pressed of [" ", key, "Enter"])
+      grip.dispatchEvent(
+        new KeyboardEvent("keydown", {
+          key: pressed,
+          bubbles: true,
+          composed: true,
+          cancelable: true,
+        }),
+      );
+    await expect
+      .poll(() => writes)
+      .toEqual([
+        [
+          "/management-api/venue-service/zones/z1",
+          "PUT",
+          { departmentId: key === "ArrowDown" ? "d2" : "d3" },
+        ],
+      ]);
+  },
+);
