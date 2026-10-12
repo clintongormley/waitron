@@ -335,6 +335,7 @@ describe("the till's service on a season boundary", () => {
   it("yesterday's grace uses yesterday's season", async () => {
     const v = await venue();
     await scoped((tx) => updateMenuPeriod(tx, v.cfg, v.dinner, { endOffsetMinutes: 30 }, 0, AT));
+    await scoped((tx) => updateMenuPeriod(tx, v.cfg, v.lateBar, { endOffsetMinutes: 30 }, 0, AT));
     await menuSeason(v, v.seasons.Autumn!, {
       [SATURDAY]: [{ periodId: v.dinner, startsAt: "20:00", endsAt: "05:45" }],
     });
