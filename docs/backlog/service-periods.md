@@ -152,8 +152,8 @@ till sells and closes by the business day's season, and a configuration transfer
 checks them. Special days are not written yet. A506-2: every server reader reads the season tables,
 and nothing writes the old weekday rows of `menu_day_timetables`, `menu_slots` or `zone_closed_times`.
 A506-3: the two week routes save one named season; the Week tab has a season picker, and the Day tab
-and every real week draw each date's own season; the Business day start dialog names each conflict's
-season.
+and every real week draw each date's own season; the Business day start dialog names the season of
+each conflict in a season's week.
 
 **Left open by A506-1, for the later parts.**
 - A506-4: a configuration transfer carries no special days, and refuses a day row that names a

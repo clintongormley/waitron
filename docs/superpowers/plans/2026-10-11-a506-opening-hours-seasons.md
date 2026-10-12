@@ -964,6 +964,11 @@ season"; §7's zone summary.
 
 **Review path:** FULL (the week routes start writing a single season). **Migration:** no.
 
+**2026-10-12, at A506-3's finish:** Task 3.5 (the zone summary) and the removal of a zone's `week`
+moved to A506-3b, which waits for A493 (see "Left open by A506-3" in
+`docs/backlog/service-periods.md`). A department's `week` is gone; a zone's stays, and the only reader
+of it Task 3.4's search finds is the `department-zones.ts` summary line.
+
 **Behaviour this PR removes:** `OpeningHoursModel.week` and a zone's `week`; the week routes'
 every-season write (the routes now require `seasonId`; in-process callers keep the every-season
 form).
