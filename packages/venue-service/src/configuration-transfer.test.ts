@@ -2295,6 +2295,9 @@ describe("special days in a configuration bundle", () => {
       },
     ];
     expect(() => validate(tables, clock)).toThrowError(refusal("special_day_dates.date"));
+    // The import gives every location column the importing venue's location.
+    tables.special_dates[0]!.location_id = "elsewhere";
+    expect(() => validate(tables, clock)).toThrowError(refusal("special_day_dates.date"));
     tables.special_dates[0]!.date = "2026-08-17";
     expect(() => validate(tables, clock)).not.toThrow();
   });
