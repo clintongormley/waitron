@@ -3100,7 +3100,8 @@ This records a question; no enquiry has been sent.
 
 **Why it matters.** Each record carries the fingerprint of the record before it on its chain. When
 one record cannot be settled, Waitron keeps the records after it unsent. On 2026-10-06 the owner kept
-the wait in 1 below and the holds after a duplicate conflict and behind a held cancellation, and
+the wait in 1 below and the holds after a duplicate conflict and behind a cancellation of a refused
+invoice, and
 asked to revisit them once the asesor answers; on 2026-10-12 the owner dropped the last two. This
 question is about what remains. The
 developer FAQ, §5, says «no pueden quedar RF generados sin remitir a la AEAT»

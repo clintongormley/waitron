@@ -411,8 +411,8 @@ re-sent one AEAT answers as a duplicate (3000), and one the reconciliation sweep
 (`reconcile`, no production caller yet), are judged by
 the stored copy's own error, read from the duplicate detail or AEAT's consulta. What
 still holds later records: the three-refusal brake and the wait behind an unknown answer.
-Statements below that a conflict or a held cancellation holds its chain describe the earlier
-behaviour.
+Statements below that a conflict holds its chain, or that a cancellation of a rejected original is
+held or holds its chain, describe the earlier behaviour.
 
 **2026-10-12, Task 5:** invoice issuance reads the live series inside its transaction.
 Startup, development seeds, mirror bundles and saved trading identity carry node and location
