@@ -1,9 +1,8 @@
 import type { Transaction } from "@waitron/db";
 import type { LocationId, NodeId } from "@waitron/shared";
+import type { ModuleOperationInput } from "./operation-input.js";
 
-/** The node a seed runs for. Built by the RUNNER from rows it inserted or read — never from operator
- * input; anything else a module needs (the tenant's tax id, its own product constants) it reads or
- * owns itself. */
+/** These identities come from rows the host inserted or read. */
 export interface ProvisionedNode {
   readonly locationId: LocationId;
   readonly nodeId: NodeId;
@@ -16,7 +15,7 @@ export interface NodeSeed {
   /** Runs INSIDE the caller's provisioning transaction, after the core rows exist. Returns a one-line
    * report of what it established. Re-running for an existing node is the module's call to define,
    * never an error here. */
-  run(tx: Transaction, node: ProvisionedNode): Promise<string>;
+  run(tx: Transaction, node: ProvisionedNode, operation?: ModuleOperationInput): Promise<string>;
 }
 
 /** One module's line in a provisioning run's summary: the report its `NodeSeed.run` returned. */

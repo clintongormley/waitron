@@ -79,6 +79,8 @@ export { selectVenueService } from "./venue-service-slot.js";
 export type { RestoreHook, RestoreOutcome } from "./restore.js";
 export type { OperationAuthority, OperationBinding } from "./operation-authority.js";
 export { readOperationAuthority, withOperationAuthority } from "./operation-authority.js";
+export type { ModuleOperationInput, ModuleOperations } from "./operation-input.js";
+export { moduleOperationFor, snapshotModuleOperations } from "./operation-input.js";
 export type { Reconciliation } from "./reconcile.js";
 export { reconcile } from "./reconcile.js";
 import "./errors.js";

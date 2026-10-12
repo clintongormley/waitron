@@ -235,8 +235,25 @@ wrappers require that authority and recheck it after awaited reads, before write
 The synthetic integration case combines real authentication, dormant activation and the existing
 role/membership transaction; a refused membership write rolls those rows back together. The
 wrappers are not in the fiscal public barrel and no boot or HTTP entry point uses them yet.
-They authenticate an operator, not an outside register. Initial setup, CLI recovery and break-glass
-adapters, outside continuity, text SIF/counter retirement and all host replacements remain open.
+They authenticate an operator, not an outside register. Outside continuity, text SIF/counter
+retirement and all host replacements remain open.
+
+**2026-10-12, internal setup/restore carrier:** the setup runner can pass module-owned input with
+authority attributed to the account it created in that transaction. It refuses using a retained
+administrator for this bootstrap grant and rechecks the new account's role/status before each
+seed. Host-chosen account/node IDs let outside consumption evidence name them before setup writes.
+The generic restore hook can receive opaque input and scoped authority from fresh account
+authentication; it checks module, action, target and authority lifetime before entering that hook.
+New database tests cover unchanged absent-input calls, retries, rollback and caller mutation.
+A synthetic setup integration writes a signed initial allocation with standard, full and
+rectificative series; substituting the operator or removing current outside confirmation refuses
+the transaction. This does not connect the production fiscal seats or change SIF/counter typing.
+
+The recovery-key path currently verifies the node key without authenticating a named operator.
+The [decision inventory](../superpowers/plans/2026-10-12-w41s4-break-glass-operator-decision.md)
+asks whether to select an active administrator under that key, recording the recovery method,
+or require physical account reset and fresh sign-in. That decision, CLI/staged recovery inputs,
+bundle/adoption/promotion wiring, complete schema regeneration and full qualification remain open.
 
 **2026-10-12, Task 5:** invoice issuance reads the live series inside its transaction.
 Startup, development seeds, mirror bundles and saved trading identity carry node and location

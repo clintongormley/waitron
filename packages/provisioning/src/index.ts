@@ -8,7 +8,7 @@ export { planVenue, describeVenueAction } from "./venue-plan.js";
 export type { AdoptResult, VenueRequest, VenueAction } from "./venue-plan.js";
 export { applyVenue } from "./venue-apply.js";
 export { renameTaxpayer } from "./taxpayer-name.js";
-export type { VenueApplyDeps, VenueResult } from "./venue-apply.js";
+export type { InitialModuleInput, VenueApplyDeps, VenueResult } from "./venue-apply.js";
 export { FISCAL_TERRITORIES, resolveFiscalModules } from "./fiscal-modules.js";
 export type { FiscalModules } from "./fiscal-modules.js";
 export { venueFiscalSelection } from "./venue-fiscal.js";

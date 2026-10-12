@@ -20,9 +20,11 @@ import {
   cutoverForBusinessDay,
   locationId as brandLocationId,
   nodeId as brandNodeId,
+  normaliseUuid,
 } from "@waitron/shared";
 import type { CapabilityFlag, FormFactor } from "@waitron/layouts";
 import type { SeedReport, WaitronModule } from "@waitron/module";
+import { withOperationAuthority } from "@waitron/module";
 import type { VenueAction } from "./venue-plan.js";
 import { normalizeDayCutover } from "./venue-plan.js";
 import "./errors.js";
@@ -33,8 +35,18 @@ export interface VenueApplyDeps {
   /** The modules whose seeds a `seed-module` action may name — the enabled set, in the composition
    * list's order. */
   modules: readonly WaitronModule[];
+  moduleInputs?: ReadonlyMap<string, InitialModuleInput>;
+  // A signed outside consumption names these identities before the venue transaction begins.
+  initialNodeId?: string;
+  initialAdministratorId?: string;
   /** Optional configuration import that must commit or roll back with the freshly minted venue. */
   beforeCommit?: (tx: Transaction, result: VenueResult) => Promise<void>;
+}
+
+export interface InitialModuleInput {
+  readonly eventId: string;
+  readonly sourceId: string;
+  readonly input: unknown;
 }
 
 export interface VenueResult {
@@ -62,11 +74,21 @@ export async function applyVenue(
   if (ensure === undefined || ensure.kind !== "ensure-tenant") {
     throw new Error("applyVenue: plan is missing ensure-tenant");
   }
+  const inputs = new Map(
+    [...(deps.moduleInputs ?? [])].map(([name, input]) => [name, { ...input }]),
+  );
+  const initialNodeId =
+    deps.initialNodeId === undefined ? undefined : brandNodeId(deps.initialNodeId);
+  const initialAdministratorId =
+    deps.initialAdministratorId === undefined
+      ? undefined
+      : normaliseUuid(deps.initialAdministratorId, "PersonId");
 
   return withTransaction(deps.db, async (tx) => {
     let locationId = "";
     let nodeId = "";
     let reusingVenue = false;
+    let createdAdministrator: string | undefined;
     const seeded: SeedReport[] = [];
     const seriesIds: string[] = [];
 
@@ -112,20 +134,26 @@ export async function applyVenue(
             .where(eq(persons.role, "admin"))
             .limit(1);
           if (seededAdmin.length === 0) {
-            await tx.insert(persons).values({
-              displayName: action.displayName,
-              firstNames: action.firstNames,
-              lastNames: action.lastNames,
-              locale: action.locale,
-              pinHash: action.pinHash,
-              passwordHash: action.passwordHash,
-              email: action.email,
-              // Without the folded twin, login falls back on an ASCII-only key and an address
-              // with a non-ASCII character stops matching at sign-in.
-              emailFolded: action.email === undefined ? undefined : foldForUniqueness(action.email),
-              displayNameFolded: foldForUniqueness(action.displayName),
-              role: "admin",
-            });
+            const [created] = await tx
+              .insert(persons)
+              .values({
+                id: initialAdministratorId,
+                displayName: action.displayName,
+                firstNames: action.firstNames,
+                lastNames: action.lastNames,
+                locale: action.locale,
+                pinHash: action.pinHash,
+                passwordHash: action.passwordHash,
+                email: action.email,
+                // Without the folded twin, login falls back on an ASCII-only key and an address
+                // with a non-ASCII character stops matching at sign-in.
+                emailFolded:
+                  action.email === undefined ? undefined : foldForUniqueness(action.email),
+                displayNameFolded: foldForUniqueness(action.displayName),
+                role: "admin",
+              })
+              .returning({ id: persons.id });
+            createdAdministrator = created!.id;
           }
           break;
         }
@@ -245,7 +273,7 @@ export async function applyVenue(
             nodeId = existing[0].id;
             break;
           }
-          nodeId = randomUUID();
+          nodeId = initialNodeId ?? randomUUID();
           await tx.insert(nodes).values({
             id: nodeId,
             locationId,
@@ -263,10 +291,35 @@ export async function applyVenue(
             );
           }
           if (reusingVenue) break;
-          const report = await seed.run(tx, {
+          const node = {
             locationId: brandLocationId(locationId),
             nodeId: brandNodeId(nodeId),
-          });
+          };
+          const input = inputs.get(action.module);
+          let report: string;
+          if (input === undefined) {
+            report = await seed.run(tx, node);
+          } else {
+            const [operator] =
+              createdAdministrator === undefined
+                ? []
+                : await tx
+                    .select({ id: persons.id, role: persons.role, status: persons.status })
+                    .from(persons)
+                    .where(eq(persons.id, createdAdministrator));
+            if (operator?.role !== "admin" || operator.status !== "active")
+              throw new AppError("provisioning.initial_operator_required", {});
+            const binding = Object.freeze({
+              module: action.module,
+              action: "setup",
+              eventId: input.eventId,
+              sourceId: input.sourceId,
+              targetNodeId: nodeId,
+            });
+            report = await withOperationAuthority(binding, operator.id, (authority) =>
+              seed.run(tx, node, Object.freeze({ input: input.input, binding, authority })),
+            );
+          }
           seeded.push({ module: action.module, report });
           break;
         }

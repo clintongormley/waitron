@@ -36,6 +36,11 @@ import { applyMigrations, expectedSchemaVersion, migrationOptionsFor } from "@wa
 import { SIDE_FILE_SUFFIXES, VENUE_FILE } from "@waitron/store";
 import { litestreamMetaDir } from "@waitron/stream/litestream.js";
 import { orderedMigrationSets, type ProvisionedNode, type WaitronModule } from "@waitron/module";
+import {
+  moduleOperationFor,
+  snapshotModuleOperations,
+  type ModuleOperations,
+} from "@waitron/module";
 import { codeOf } from "@waitron/server-kit";
 import { parseEnvFile } from "./env-file.js";
 import { writeFileAtomic } from "./fs-atomic.js";
@@ -608,8 +613,10 @@ export async function runRestoreHooks(args: {
   modules: readonly WaitronModule[];
   node: ProvisionedNode;
   log: Logger;
+  moduleOperations?: ModuleOperations;
 }): Promise<{ seriesId: string; reports: readonly string[] }> {
   const { node } = args;
+  const operations = snapshotModuleOperations(args.moduleOperations);
   return withTransaction(args.db, async (tx) => {
     const [known] = await tx
       .select({ id: nodes.id })
@@ -629,7 +636,8 @@ export async function runRestoreHooks(args: {
       if (hook === undefined) continue;
       let outcome;
       try {
-        outcome = await hook(tx, node);
+        const operation = moduleOperationFor(operations, m.name, node.nodeId, "restore");
+        outcome = operation === undefined ? await hook(tx, node) : await hook(tx, node, operation);
       } catch (err) {
         throw wrapHookError(m.name, err);
       }

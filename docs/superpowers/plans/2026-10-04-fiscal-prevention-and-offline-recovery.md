@@ -371,6 +371,26 @@ adapters still need their own authenticated host context. The coupled text SIF/c
 all entry-point replacements, current-main schema regeneration and final populated upgrade remain
 open. Do not publish this intermediate tree; Task 4 is incomplete.
 
+**2026-10-12 setup/restore-carrier checkpoint:** the generic seed and restore seats now accept
+optional module-owned operation input. The venue runner snapshots the supplied event/source and
+attributes setup authority only to the account it created in that transaction, rechecking its
+role/status before each module. Host-chosen account/node IDs can be supplied before outside
+consumption is signed. The generic restore runner checks a supplied operation's module, action,
+target and current authority before calling its hook. Absent inputs preserve the existing calls.
+
+A synthetic integration combines actual venue creation and scoped initial authority with a
+synthetic initial allocation signed with the paper-evidence helpers and all three purposes; wrong operator and missing current
+outside confirmation roll back the venue. Twelve installed removal controls fail assertions;
+restoring the candidate passes the new suites. Existing assertions, fiscal goldens, public fiscal
+seats, numeric SIF/counter code, shipped SQL and promotion authentication are unchanged.
+
+The real recovery-key route probe accepts a valid node key with no operator ID, a staff ID and
+an unknown ID. The wrong-key control refuses. That route supplies no named administrator to
+the activation callback. The [operator decision](2026-10-12-w41s4-break-glass-operator-decision.md)
+requires the owner's choice before adding that authority path. CLI/staged recovery inputs,
+bundle/adoption/promotion and final text SIF/counter/all-consumer/schema qualification remain
+coupled work. Do not publish this incomplete candidate; Task 4 remains open.
+
 ## Task 5: select active series inside issuance transactions
 
 **Modify:** `apps/server/src/till-config.ts`, `trading-config.ts`, `till-sale.ts`,
