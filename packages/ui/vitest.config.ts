@@ -65,7 +65,6 @@ export default defineConfig({
         // Helpers that exist only for *.test.ts files (mounting, axe).
         "src/test-helpers.ts",
         "src/a11y-helpers.ts",
-        "src/tokens/token-test-helpers.ts",
       ],
       thresholds: { statements: 98, lines: 98, functions: 98, branches: 95 },
     },

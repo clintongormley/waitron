@@ -250,10 +250,10 @@ per-pull-request signal.
 
 **Left behind by raising the `packages/ui` mutation score (#466, 2026-09-20).**
 **`packages/ui/src/vitest-park-pointer.ts` is mutated and has no tests.** It is test-only plumbing
-the Vitest config loads — the same class as `src/test-helpers.ts`, `src/a11y-helpers.ts` and
-`src/tokens/token-test-helpers.ts`, which `packages/ui/stryker.config.json` already excludes from
-`mutate`. Adding a fourth exclusion is the consistent move and also shrinks the denominator the
-`break: 90` is measured against. Owner's call.
+the Vitest config loads — the same class as `src/test-helpers.ts` and `src/a11y-helpers.ts`, which
+`packages/ui/stryker.config.json` excludes from `mutate`. Adding a third exclusion is the consistent
+move and also shrinks the denominator `mutation-ui-aggregate`'s bar of 90 is measured against.
+Owner's call.
 
 ## A pull request that changes only front-end code gets no SPA bundle built anywhere in CI
 

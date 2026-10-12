@@ -3803,7 +3803,7 @@ _Formerly A7, and the dashboard entries in the opening part of the old Track A (
 - **A543. During a flat tree search without `collapseDescendants`, `wt-data-table`'s `isExpanded()`
   answers false for a row the table draws open** (`aria-expanded="true"`) — OPEN, found by A539's
   mutation tests, not fixed. Outside a search it answers true for the same row
-  (`packages/ui/src/components/wt-data-table.ts`, near line 2257).
+  (`packages/ui/src/components/wt-data-table.ts`).
 
 ### Interface languages
 
@@ -4631,11 +4631,6 @@ _Formerly B9, and the old Track C's development-stack and house-rules items; par
   unnamed `unique()` itself, so nothing reaches it
   (`packages/db/src/testing/schema-conformance.ts`). Found while pruning comments.
 
-- **`packages/db/src/schema/columns.test.ts` still imports `../index.js` and `./drawer-opens.js`
-  dynamically**; the comment #585 deleted was the only note that this was meant to be temporary, so
-  making them static imports is a small code follow-up. Found by #585's review in files outside
-  `packages/db/src/schema`, not changed there.
-
 - **In `packages/db/src/change-log.test.ts` the case under "THIS CASE NO LONGER SEPARATES ANYTHING"
   repeats the first case under another name** (a test change, not a comment one). Found by #589
   (`packages/db` outside `src/schema`), not changed.
@@ -4666,9 +4661,16 @@ _Formerly B9, and the old Track C's development-stack and house-rules items; par
   and say so where a reader meets the gate, or find a cheaper per-pull-request signal.
   [Detail](backlog/ci.md#the-gate-never-runs-on-a-pull-request-so-thinning-a-packagesdb-test-merges-green)
 
+- **`packages/db`'s static mutants are not in its mutation score** — OPEN, left by A539.
+  `"ignoreStatic": true` in `packages/db/stryker.config.json` leaves out every mutant in code that
+  runs when a module loads (322 `Ignored` on run 38256003987, 229 of them in
+  `src/classification.ts`). Stryker runs every test for each static mutant; what measuring them
+  would cost has not been timed. Owner's call.
+
 - **`packages/ui/src/vitest-park-pointer.ts` is mutated and has no tests** — left behind by raising
-  the `packages/ui` mutation score (#466, 2026-09-20). Adding a fourth exclusion is the consistent
-  move and also shrinks the denominator the `break: 90` is measured against. Owner's call.
+  the `packages/ui` mutation score (#466, 2026-09-20). Adding a third exclusion is the consistent
+  move and also shrinks the denominator `mutation-ui-aggregate`'s bar of 90 is measured against.
+  Owner's call.
   [Detail](backlog/ci.md#packagesuisrcvitest-park-pointerts-is-mutated-and-has-no-tests)
 
 - **A pull request that changes only front-end code gets no SPA bundle built anywhere in CI** — left

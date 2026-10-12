@@ -326,14 +326,16 @@ Where each failure arrives differs, which is the part a session gets wrong:
 | `fiscal` | nothing in CI | only a local `pnpm --filter @waitron/fiscal mutation` |
 | `db` | the sharded `mutation-db` matrix plus `mutation-db-aggregate`, both in `.github/workflows/mutation.yml` | the weekly Monday run only, on the merged score of the ten shards — a single shard's own slice is never gated, and a LOCAL `pnpm --filter @waitron/db mutation` prints a score and gates nothing |
 
-Three hedges worth carrying. `packages/fiscal`'s `mutate` list names two source files, so its floor
+Four hedges worth carrying. `packages/fiscal`'s `mutate` list names two source files, so its floor
 is not a package-wide one. Neither is `packages/db`'s, for a smaller reason: one file is out of its
 `mutate` set — `src/english-only.ts`, whose only suite lives in the root vitest project and which
 nothing under `packages/db` imports, so every one of its mutants survives by construction. The
 receipt is the `!src/english-only.ts` entry in `packages/db/stryker.config.json`'s `mutate` list;
 `scripts/mutation-shard.mjs` reads each sharded package's `mutate` list from that config rather than
 keeping its own copy, and `scripts/mutation-shard.test.mjs` names `src/english-only.ts` as the one
-file db's selection leaves out. And `scripts/mutation-break-thresholds.test.mjs`, which pins which
+file db's selection leaves out. Nor do ui's and db's merged scores count every mutant: one whose
+span crosses a `HEAVY_FILES` range boundary is mutated by no shard — measured 2026-10-12 at the
+splits then in place by instrumenting each split file whole and by range, 2 in db and 26 in ui. And `scripts/mutation-break-thresholds.test.mjs`, which pins which
 package holds which bar, is weaker than its name: it reads `mutation.yml` as TEXT for db's and ui's
 bars, so a step that reached the same command through a variable would be invisible to it.
 
@@ -378,6 +380,16 @@ bar. On run 35528428168 (commit `3ad257b11`) the three such files, `src/change-f
 mutants, the deliberate kind from `"ignoreStatic": true` in `packages/db/stryker.config.json`. When
 two shard reports give one mutant two statuses outside the score, a compile or run error is kept
 over the others, so a broken measurement is not listed as a deliberate skip.
+
+A test that loads a module with `import()` inside a case makes Stryker count that case as covering
+the module's load-time code, so under `"ignoreStatic": true` the module's static mutants run against
+that one case instead of being left out (the hybrid rule in `@stryker-mutator/core` 10.0.0,
+`dist/src/mutants/mutant-test-planner.js`). Measured 2026-10-12 (A539): with
+`packages/db/src/schema/columns.test.ts` loading `../index.js` that way, `pnpm exec stryker run
+--mutate src/classification.ts,src/trigger-refusals.ts,src/venue-holder-identity.ts --force` in
+`packages/db` left 229 and 15 mutants of the first two files `Survived`; with the import at the top
+of the file, the same command left them `Ignored`. db's merged score went from 86.00% (run
+`38206876422`) to 92.40% (run `38256003987`).
 
 Receipt for the `ui` floor (2026-09-20): before the tests that branch added, the package read
 78.62% — 1658 of 2109 valid mutants — and the run exited 1 against the new threshold, which is the
@@ -453,7 +465,8 @@ instead of dominating one — and the reason recorded beside it is that it "alon
 every other N=10 shard finished <=90min". Each range of a split file runs in a shard of its own,
 and the packer spreads the other files over the remaining shards by their size in bytes.
 
-`schema-conformance.ts` runs in db shard 4 (`node scripts/mutation-shard.mjs db 4 10` lists it),
+`schema-conformance.ts` ran in db shard 4 on 2026-10-12 (`node scripts/mutation-shard.mjs db 4 10`
+listed it),
 which took 558 s on run `38241392066`, not the longest db shard (shard 10, 732 s), so it has no
 `HEAVY_FILES` entry.
 
@@ -892,7 +905,7 @@ succeeded or was skipped" above.
 
 The rule: the longest measured run that ran to its end, times two, rounded up to the next multiple
 of 5, and never under 5. A run that failed its own checks ran to its end and counts (ui's 90-minute
-mutation run did); a cancelled run does not. The window: ci.yml's latest 264 runs, 2026-10-07 08:24
+mutation run `37267389722` did); a cancelled run does not. The window: ci.yml's latest 264 runs, 2026-10-07 08:24
 to 2026-10-08T09:03:33Z, read 2026-10-08; the other workflows' latest 30 runs; `mutation-db` only
 since the SQLite switch (#489, 2026-09-23), because its earlier shards ran a different engine.
 
@@ -922,8 +935,8 @@ from the owner's four-minute bound (2026-10-09), not the doubling rule; the
 
 ui-core's figure is run `37267389722` (5m18s; its other two weekly runs, `36380351019` and
 `38206876422`, took 2m06s and 4m56s).
-`mutation-ui`'s and `mutation-ui-aggregate`'s figures are dispatch run `38256003987` on
-`70dd7f6bf`, with 30 ui shards: the slowest shard (9, `wt-data-table.ts:1029-1285`) took 23.7
+`mutation-ui`'s and `mutation-ui-aggregate`'s figures are dispatch run `38256003987`, with 30 ui
+shards: the slowest shard (9, `wt-data-table.ts:1029-1285`) took 23.7
 minutes and the aggregate under 1, so its limit is 50 by the doubling rule. The same shard took 17
 minutes on run `38241392066`, before A539 added data-table tests. On
 the previous run, `38233718266`, with 20 ui shards, `wt-combobox.ts` and `wt-dialog.ts` each reached

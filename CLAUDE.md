@@ -748,6 +748,11 @@ browser test** — most of these rules exist because a test passed while proving
   pages have no harness: write the rendered string to a file and open it with the workspace's
   playwright Chromium. Cost: a corrupted colour on `/setup/trust`, and an image library that
   answered 500 to the first person who opened it.
+- **In `packages/db`, whose Stryker config sets `ignoreStatic`, a test imports source modules at the
+  top of its file, never with `import()` inside a case**: Stryker counts that case as covering the
+  modules' load-time code and runs their static mutants against it alone. Cost: db's mutation score
+  read about 86% on three weekly runs (A539). Nothing guards it. Receipt:
+  [ci-and-gates.md](docs/developers/ci-and-gates.md#reading-packagesdbs-score-by-hand).
 - **`toMatchObject` checks only the keys you list**; a key you never list is never checked at all.
 - **A default you did not state is not a value you tested**, and a library default can be computed
   from the RUNNING runtime. State it at every call site that shares it. Guard: the two
