@@ -772,6 +772,12 @@ describe("drain — a chain stopped by the same-code brake sends its first held 
         (await cases()).filter((c) => c.registroId === cancellation).map((c) => c.cause),
       ).toEqual(["fiscal.anulacion_retenida"]);
       expect(refused.nextDueAt).toEqual(at(2 * HOUR));
+      expect(await incidentCodes()).toEqual([
+        "fiscal.registro_rechazado",
+        "fiscal.registro_rechazado",
+        "fiscal.registro_rechazado",
+        "fiscal.anulacion_retenida",
+      ]);
       expect(await refusalAlerts(at(HOUR))).toEqual([
         {
           key: `fiscal.refusals_repeated:${seeded.sifId}`,

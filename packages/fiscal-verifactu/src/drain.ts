@@ -55,8 +55,8 @@ export const DEFAULT_SKIP_RETRY_MS = 5 * 60 * 1000;
 const MAX_CONSULTA_PAGES = 10;
 const deferredBatch = new Error("Wait for a full sending batch");
 
-/** How many records immediately before a never-sent record on its chain must all be refused
- * with one code for `haltOpenChainClaims` to hold it. A record still awaiting its answer among
+/** How many records immediately before a never-sent record on its chain, set-aside records
+ * skipped (`recordsBefore`), must all be refused with one code for `haltOpenChainClaims` to hold it. A record still awaiting its answer among
  * them breaks the run. The chain's first held record is sent hourly when `claimProbes` finds it
  * due, and the hold is lifted once that send breaks the run (`releaseSettledBrakeHolds`). */
 export const SAME_CODE_REFUSAL_LIMIT = 3;
@@ -919,7 +919,7 @@ async function claimProbes(
 /**
  * The held heads the records before them on their chain no longer hold: the ones before the head
  * are not a same-code run, and the record before it is settled with a same-code run before THAT
- * record. A set-aside record is skipped on both walks, so it never releases a chain.
+ * record.
  */
 function releasableHeads(): SQL {
   return sql`

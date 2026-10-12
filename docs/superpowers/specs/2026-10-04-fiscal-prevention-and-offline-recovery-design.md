@@ -141,7 +141,8 @@ Q43); see `docs/backlog.md`.)_
 A rejection
 on its own no longer holds its chain (D2, on §7.1's receipts; only code 1161 was tested, triggered
 artificially). A conflict, or a held cancellation, holds the later unsent records of its chain
-_(2026-10-12, owner: neither does any more. A conflict is refused with code 3000 like any refusal,
+_(2026-10-12, owner: a conflict no longer does, nor does a cancellation of a refused original. A
+conflict is refused with code 3000 like any refusal,
 and a cancellation of a refused original is set aside on its own with a filing case — see
 `docs/backlog/fiscal.md`)_. A
 record of the conflict's own envío is not held when the reply is applied; one whose outcome is still
@@ -160,7 +161,8 @@ rejected with one error code, the drain holds that record, and every later one o
 it is claimed. The check runs between envíos, never inside one, and holds only a record never sent
 before. A record still awaiting AEAT's answer breaks a run: when the record right after a run was
 sent and its answer is unreadable or missing, the records added after it are sent with its retry,
-and a later record is held only once the refusals immediately before it make a run of three. The
+and a later record is held only once the refusals immediately before it make a run of three _(2026-10-12: a set-aside cancellation is
+skipped: it neither breaks a run nor counts towards one)_. The
 chain stays stopped until a release action exists (a follow-up of Task 8), and its held
 records are not retried hourly meanwhile; the ongoing alert `fiscal.refusals_repeated` names the
 code and the run's length. **The no-release/no-hourly-retry statements above describe the
