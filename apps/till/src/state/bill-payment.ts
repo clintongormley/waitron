@@ -211,7 +211,6 @@ export function refusalOf(error: unknown, changes = true): PayRefusal {
   };
 }
 
-/** A payment refused because a card payment of the same order is still at the reader. */
 export function isPaymentInFlight(error: unknown): boolean {
   return (error as { code?: unknown } | undefined)?.code === "order.payment_in_flight";
 }

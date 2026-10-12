@@ -3136,8 +3136,7 @@ _Formerly A6, and the old Track C's payments items; part of A9._ Detail: [backlo
 
 - **Tip-collection UI** — the only surface that COLLECTS a tip is the integrated-Stripe idle screen;
   cash, manual card and the handheld have none. A design decision per tender type. And `#onPayTab`
-  flattens every server code but the two permanent fiscal refusals to one `sale.error` key, hiding
-  `sale.empty_basket`.
+  shows `sale.error` for any server code it does not name, hiding `sale.empty_basket`.
 
 - **The practice-mode simulator writes no `attempting` row**, so a switch during a practice card
   payment is never refused (read, not run). Left open by W97 (#1311), beside the owner's decision
@@ -3163,10 +3162,10 @@ _Formerly A6, and the old Track C's payments items; part of A9._ Detail: [backlo
   connections to the box; W18c #1145 and W48 #1162).
 
 - **A Stripe card payment that a crash leaves `attempting` on a placed order has no manager way to
-  clear it**, and since A526 that row refuses the order's collect, card payment and unpaid departure
-  (`order.payment_in_flight`). The stuck-payment screen and its resolve take only open orders
-  (`apps/server/src/payments-api.ts`); SumUp's sweep settles its own rows, Stripe's sweep does
-  nothing. Stripe is not in use. Read, not run. Left open by A526.
+  clear it**, and it refuses that order's collect, card payment and unpaid departure
+  (`order.payment_in_flight`). The stuck-payment resolve takes only open orders
+  (`apps/server/src/payments-api.ts`), and Stripe's sweep does nothing. Stripe is not in use. Read,
+  not run. Left open by A526.
 
 - **`finalizeCapture`'s duplicate fallback can show a receipt for an order that is not settled**,
   while the card's charge stays on no sale (`apps/server/src/till-sale.ts`). Measured before A526 by
@@ -3177,8 +3176,15 @@ _Formerly A6, and the old Track C's payments items; part of A9._ Detail: [backlo
 - **The demo card reader and the test card reader write their payment rows outside the write
   queue**, so a row written while another request's transaction is open is rolled back if that
   request fails (measured during A526). SumUp and Stripe do not do this. Next: write through
-  `withTransaction`. Left open by A526.
+  `withTransaction`, once no caller is found that reaches them from inside a transaction body. Left
+  open by A526.
   [Detail](backlog/payments.md#the-demo-card-reader-and-the-test-card-reader-write-their-payment-rows-outside-the-write-queue)
+
+- **An offline card payment that forwarding moved to `settled` with no sale no longer holds its
+  placed order**: once no card payment of the order runs in this process, a collect is accepted
+  (`ordersWithUnfiledPayment`, `apps/server/src/till-sale.ts`, counts no `settled` row). A526's
+  review measured it with `FakePaymentProvider.forward`; of the adapters, only
+  `StripeOnDeviceProvider`, which no app builds, settles forwarded rows. Left open by A526.
 
 ### Users, sign-in and the dashboard shell
 

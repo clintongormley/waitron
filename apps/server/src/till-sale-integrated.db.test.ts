@@ -239,7 +239,6 @@ function integratedDeps(
   return { deps: { db: app, backend, clock, provider, readerRef: "reader_1" }, client };
 }
 
-/** A provider that runs `onCollect`, then returns a canned result. */
 function cannedProvider(
   onCollect: () => Promise<void>,
   state: PaymentResultState,

@@ -195,14 +195,13 @@ store's write queue. When another request's transaction is open on the connectio
 the write becomes a savepoint inside it (`packages/store/src/node-sqlite-adapter.ts`, read) and is
 rolled back with it if that request fails.
 
-Measured during A526: with the new refusal moved, as an experiment, ahead of the recovery step, a
-two-till test's first card payment answered `payment.not_found` and left no payment row in all of
-its 20 rounds; the implementer traced it to that card's captured row having joined the other
-till's refused request and been rolled back with it.
-The branch's review also found that the same test's rounds all took one path only because of this
-(that test was then removed). SumUp and Stripe write through `withTransaction` (read). Next: write
-these readers' rows through `withTransaction`, after checking that no caller reaches them from
-inside a transaction body, where waiting for the queue would wait on itself.
+Measured during A526, with the new refusal moved as an experiment ahead of the recovery step, in a
+two-till card-payment test since removed: in all 20 of its rounds the first card payment answered
+`payment.not_found` and left no payment row; the implementer traced this to its captured row having
+been written inside the other request's refused transaction. SumUp and Stripe write through
+`withTransaction` (read). Next: write these readers' rows through `withTransaction`, after checking
+that no caller reaches them from inside a transaction body, where waiting for the queue would wait
+on itself.
 
 ## Decisions and deliberate limits
 
@@ -212,13 +211,13 @@ inside a transaction body, where waiting for the queue would wait on itself.
   on a sale — a cash or hand-keyed card collect of the order, a second card payment of it and an
   unpaid departure of the party it belongs to are refused `order.payment_in_flight`, writing
   nothing. Pressing Pay again to file a card that was already charged is never refused, even from
-  another till and even while that card's own payment has not yet filed it: it files that charge
-  and asks no reader. A till on another payment provider is refused until a till on the provider
-  that took the charge presses Pay. A request that arrives after the order is settled gets its
-  receipt back, as a retry after a lost answer must (so a cash collect after the card settled
-  answers the card's receipt). After a reader timeout, cash waits while the provider reports the
-  card pending: with SumUp, for as long as SumUp answers PENDING, and up to 15 minutes when SumUp
-  has no record of the payment. Plan:
+  another till and even while that card's own payment has not yet filed it: it files that charge and
+  asks no reader. A till on another payment provider is refused until the charge is filed, by the
+  original payment's own last step or by a Pay from a till on the provider that took it. A request
+  that arrives after the order is settled gets its receipt back, as a retry after a lost answer must
+  (so a cash collect after the card settled answers the card's receipt). After a reader timeout,
+  cash waits while the provider reports the card pending: with SumUp, for as long as SumUp answers
+  PENDING, and up to 15 minutes when SumUp has no record of the payment. Plan:
   `docs/superpowers/plans/2026-10-12-a526-placed-order-one-payment.md`.
 
 - **A reader still paired at a provider that can unpair it (SumUp) is deleted in Waitron only
