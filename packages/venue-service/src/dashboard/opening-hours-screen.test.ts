@@ -1005,6 +1005,42 @@ it("keeps department selection on Back and Forward through the shared navigation
   }
 });
 
+it.each([
+  [
+    "en",
+    "Lunch is still placed on Monday, Nochevieja (Tue, 31 Dec 2030). Take it off those days first.",
+  ],
+  [
+    "es",
+    "Lunch sigue colocado en Lunes, Nochevieja (mar, 31 dic 2030). Quítalo de esos días primero.",
+  ],
+] as const)("names a special day preventing deletion with its date (%s)", async (locale, text) => {
+  setLocale(locale);
+  const el = await mount((async (_path, method) => {
+    if (method === "GET") return structuredClone(model());
+    throw {
+      code: "menu_period.in_use",
+      params: {
+        periodId: "p1",
+        uses: [
+          { kind: "week", weekday: 1 },
+          {
+            kind: "special_day",
+            specialDayId: "nochevieja",
+            name: "Nochevieja",
+            date: "2030-12-31",
+          },
+        ],
+      },
+    };
+  }) as DashboardRequest);
+  await removePeriod(el);
+  el.shadowRoot!.querySelector<HTMLElement>("[data-test=confirm-delete]")!.click();
+  await expect
+    .poll(() => el.shadowRoot!.querySelector("[data-test=delete-error]")?.textContent)
+    .toBe(text);
+});
+
 it("shows the Spanish Opening hours title and named-period actions", async () => {
   setLocale("es");
   const el = await mount();

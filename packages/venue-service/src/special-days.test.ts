@@ -18,10 +18,11 @@ import {
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { locationId as brandLocationId } from "@waitron/shared";
-import { replaceMenuWeek, saveMenuPeriod } from "./menu-timetable.js";
+import { deleteMenuPeriod, replaceMenuWeek, saveMenuPeriod } from "./menu-timetable.js";
 import { VENUE_SERVICE_MIGRATIONS } from "./migrations.js";
 import { configureZone, createDepartment, type VenueScope } from "./operations.js";
 import { specialDates } from "./schema/hours.js";
+import { menuPeriods } from "./schema/menus.js";
 import { departmentDays, specialDayDates, specialDays, zoneDays } from "./schema/seasons.js";
 import {
   deleteSpecialDay,
@@ -843,5 +844,43 @@ describe("deleteSpecialDay", () => {
       params: { specialDayId: missing },
     });
     expect(await read(v, before.id)).toEqual(before);
+  });
+});
+
+describe("deleteMenuPeriod", () => {
+  it("refuses a period painted only on a special day, naming the special day and each date", async () => {
+    const v = await venue();
+    const nochevieja = await save(v, null, {
+      name: "Nochevieja",
+      repeatsYearly: true,
+      dates: dates(["2030-12-31", "2030-12-30"]),
+      paint: ["2030-12-31", "2030-12-30"].map((date) => ({
+        departmentId: v.restaurant,
+        date,
+        ranges: [
+          { periodId: v.dinner, startsAt: "19:00", endsAt: "23:00" },
+          { periodId: null, startsAt: "23:00", endsAt: "23:30" },
+        ],
+      })),
+    });
+    expect(await refusal(scoped((tx) => deleteMenuPeriod(tx, v.cfg, v.dinner)))).toEqual({
+      code: "menu_period.in_use",
+      params: {
+        periodId: v.dinner,
+        uses: ["2030-12-30", "2030-12-31"].map((date) => ({
+          kind: "special_day",
+          specialDayId: nochevieja.id,
+          name: "Nochevieja",
+          date,
+        })),
+      },
+    });
+    expect(
+      await db.select({ id: menuPeriods.id }).from(menuPeriods).where(eq(menuPeriods.id, v.dinner)),
+    ).toEqual([{ id: v.dinner }]);
+    await scoped((tx) => deleteMenuPeriod(tx, v.cfg, v.lunch));
+    expect(
+      await db.select({ id: menuPeriods.id }).from(menuPeriods).where(eq(menuPeriods.id, v.lunch)),
+    ).toEqual([]);
   });
 });

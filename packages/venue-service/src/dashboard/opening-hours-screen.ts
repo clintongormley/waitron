@@ -547,7 +547,12 @@ export class OpeningHoursScreen extends LitElement {
             .map((use) =>
               use.kind === "week"
                 ? t(`hours.day.${use.weekday}` as Parameters<typeof t>[0])
-                : formatDate(use.date),
+                : use.kind === "special_day"
+                  ? format("menu.period_use_special_day", {
+                      name: use.name,
+                      date: formatDate(use.date),
+                    })
+                  : formatDate(use.date),
             )
             .join(", "),
         });

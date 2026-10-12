@@ -61,7 +61,12 @@ import {
 } from "./season-weeks.js";
 import { seasonOn } from "./season-rules.js";
 import { readSeasons } from "./seasons.js";
-import { departmentDayRanges, departmentDays } from "./schema/seasons.js";
+import {
+  departmentDayRanges,
+  departmentDays,
+  specialDayDates,
+  specialDays,
+} from "./schema/seasons.js";
 import { zoneClosedTimes } from "./schema/zone-closed-times.js";
 import {
   scheduleCutovers,
@@ -712,7 +717,8 @@ export async function updateMenuPeriod(
   );
 }
 
-/** Every day that places each listed period: weekdays in order, then special dates by date. */
+/** Every day that places each listed period: weekdays in order, then special dates by date, then
+ *  special-day dates by date. */
 async function periodUses(
   tx: Transaction,
   periodIds: readonly string[],
@@ -740,6 +746,19 @@ async function periodUses(
         inArray(departmentDayRanges.periodId, [...periodIds]),
       ),
     );
+  const specialDayPaint = await tx
+    .selectDistinct({
+      periodId: departmentDayRanges.periodId,
+      specialDayId: specialDays.id,
+      name: specialDays.name,
+      date: specialDayDates.date,
+    })
+    .from(departmentDayRanges)
+    .innerJoin(departmentDays, eq(departmentDays.id, departmentDayRanges.dayId))
+    .innerJoin(specialDayDates, eq(specialDayDates.id, departmentDays.specialDayDateId))
+    .innerJoin(specialDays, eq(specialDays.id, specialDayDates.specialDayId))
+    .where(inArray(departmentDayRanges.periodId, [...periodIds]))
+    .orderBy(asc(specialDayDates.date), asc(specialDays.id));
   const weekdays = new Map<string, Set<number>>(periodIds.map((id) => [id, new Set()]));
   for (const row of painted) weekdays.get(row.periodId!)!.add(row.weekday!);
   for (const [periodId, days] of weekdays)
@@ -749,6 +768,13 @@ async function periodUses(
     uses.get(row.periodId)!.push({
       kind: "special_date",
       specialDateId: row.specialDateId,
+      date: row.date,
+    });
+  for (const row of specialDayPaint)
+    uses.get(row.periodId!)!.push({
+      kind: "special_day",
+      specialDayId: row.specialDayId,
+      name: row.name,
       date: row.date,
     });
   return uses;
