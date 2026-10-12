@@ -21,6 +21,7 @@ import { addTabRound } from "./working-order.js";
 import "./errors.js";
 import { AppError } from "@waitron/shared";
 import { VENUE_SERVICE } from "./modules.js";
+import { readPaidQuantities } from "./bill-payments.js";
 import { splitBill } from "./bill-actions.js";
 import { cancelBody } from "./testing/cancel-line.js";
 
@@ -2132,5 +2133,50 @@ describe("POST /api/parties/:id/groups/split-line", () => {
     } finally {
       copy.mockRestore();
     }
+  });
+  it.each([1, 2])("keeps %s paid units on the source or refuses the entire split", async (paid) => {
+    const party = await seated();
+    const submitted = await submit(party.partyId, [
+      { lines: [dish("Tarta", "5")], release: "hold" },
+    ]);
+    expect(submitted.status).toBe(200);
+    const group = (submitted.json as unknown as SubmitAnswer).groups[0]!;
+    const payment = await call("POST", `/api/working-orders/${party.tabId}/payments`, {
+      submissionId: randomUUID(),
+      kind: "items",
+      lines: [{ lineNo: 1, quantity: String(paid) }],
+      method: "cash",
+      tendered: String(paid * 18),
+      applied: String(paid * 18),
+      tip: "0.00",
+    });
+    expect(payment.status).toBe(200);
+    const before = await snapshot(party);
+    const body = {
+      submissionId: randomUUID(),
+      expectedPartyRevision: await revisionOf(party.partyId),
+      lineId: group.lineIds[0]!,
+    };
+    const result = await call("POST", `/api/parties/${party.partyId}/groups/split-line`, body);
+    if (paid === 1) {
+      expect(result.status).toBe(200);
+      const rows = await inTx(venue, (tx) =>
+        tx
+          .select()
+          .from(workingOrderLines)
+          .where(eq(workingOrderLines.workingOrderId, party.tabId))
+          .orderBy(workingOrderLines.lineNo),
+      );
+      expect(rows.map((row) => row.quantity)).toEqual([1000, 1000, 1000, 1000, 1000]);
+      expect(rows[0]!.id).toBe(body.lineId);
+    } else {
+      expect(result.status).toBe(409);
+      expect(result.json).toEqual(
+        refusal("bill.line_paid", { workingOrderId: party.tabId, lineNo: 1 }),
+      );
+      expect(await snapshot(party)).toEqual(before);
+    }
+    const quantities = await inTx(venue, (tx) => readPaidQuantities(tx, party.tabId));
+    expect([...quantities]).toEqual([[body.lineId, paid * 1000]]);
   });
 });

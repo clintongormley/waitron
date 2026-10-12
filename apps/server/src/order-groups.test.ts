@@ -65,6 +65,7 @@ import {
   updateHeldOrder,
   updateOrderLine,
   splitUnitsWithinOrder,
+  splitLinesWithinOrder,
   type TillSaleDeps,
 } from "./working-order.js";
 import { seatTable } from "./parties.js";
@@ -4604,23 +4605,26 @@ describe("splitting a held line into units", () => {
       );
     },
   );
-  it("refuses a weighed line even when its saved quantity is a whole number", async () => {
-    const v = await setupVenue();
-    const s = await seated(v);
-    await submit(v, s.partyId, [{ release: "hold", lines: [line(v, "steak", "2")] }]);
-    const [source] = await linesOf(s.partyId);
-    await db
-      .update(workingOrderLines)
-      .set({ unitPrecision: 3, unitName: { en: "kg", es: "kg" } })
-      .where(eq(workingOrderLines.id, source!.id));
-    const command = await args(s.partyId);
-    await expectRefusedWithNothingWritten(
-      v,
-      s.partyId,
-      () => inTx((tx) => splitHeldLineIntoUnits(tx, v.cfg, s.partyId, source!.id, command)),
-      { code: "tab.transfer_quantity_invalid" },
-    );
-  });
+  it.each([3, null])(
+    "refuses a line with precision %s even when its saved quantity is a whole number",
+    async (precision) => {
+      const v = await setupVenue();
+      const s = await seated(v);
+      await submit(v, s.partyId, [{ release: "hold", lines: [line(v, "steak", "2")] }]);
+      const [source] = await linesOf(s.partyId);
+      await db
+        .update(workingOrderLines)
+        .set({ unitPrecision: precision, unitName: { en: "kg", es: "kg" } })
+        .where(eq(workingOrderLines.id, source!.id));
+      const command = await args(s.partyId);
+      await expectRefusedWithNothingWritten(
+        v,
+        s.partyId,
+        () => inTx((tx) => splitHeldLineIntoUnits(tx, v.cfg, s.partyId, source!.id, command)),
+        { code: "tab.transfer_quantity_invalid" },
+      );
+    },
+  );
   it("a concurrent reader sees the unsplit committed line until the entire split commits", async () => {
     const v = await setupVenue();
     const s = await seated(v);
@@ -4683,5 +4687,44 @@ describe("splitting a held line into units", () => {
     } finally {
       copy.mockRestore();
     }
+  });
+  it("the original partial splitter makes one row, retaining the other four units", async () => {
+    const v = await setupVenue();
+    const s = await seated(v);
+    await submit(v, s.partyId, [{ release: "hold", lines: [line(v, "steak", "5")] }]);
+    const [source] = await linesOf(s.partyId);
+    const result = await inTx((tx) =>
+      splitLinesWithinOrder(tx, v.cfg, s.tabId, [{ lineNo: source!.lineNo, quantity: "1" }]),
+    );
+    expect(result.size).toBe(1);
+    expect((await linesOf(s.partyId)).map((row) => row.quantity)).toEqual([4000, 1000]);
+    expect((await ticketsOf(s.partyId)).map((row) => row.quantity).sort()).toEqual([1000, 4000]);
+  });
+
+  it("keeps the total served quantity while dividing the stored rows", async () => {
+    const v = await setupVenue();
+    const s = await seated(v);
+    await submit(v, s.partyId, [{ release: "hold", lines: [line(v, "steak", "7")] }]);
+    const [source] = await linesOf(s.partyId);
+    await db
+      .update(workingOrderLines)
+      .set({ servedQuantity: 3000 })
+      .where(eq(workingOrderLines.id, source!.id));
+    const command = await args(s.partyId);
+    await inTx((tx) => splitHeldLineIntoUnits(tx, v.cfg, s.partyId, source!.id, command));
+    const rows = await db
+      .select()
+      .from(workingOrderLines)
+      .where(eq(workingOrderLines.workingOrderId, s.tabId))
+      .orderBy(workingOrderLines.lineNo);
+    expect(rows.map((row) => [row.quantity, row.servedQuantity, row.servedAt !== null])).toEqual([
+      [1000, 1000, true],
+      [1000, 0, false],
+      [1000, 0, false],
+      [1000, 0, false],
+      [1000, 0, false],
+      [1000, 1000, true],
+      [1000, 1000, true],
+    ]);
   });
 });
