@@ -15,11 +15,6 @@ it.each([
   ],
   ["zones", "Deletes {count} zones. {names}", "Elimina {count} zonas. {names}"],
   [
-    "saved_joins",
-    "Removes {count} joins from the saved plan. {names}",
-    "Quita {count} uniones del plano guardado. {names}",
-  ],
-  [
     "today_joins",
     "Removes {count} joins from today’s plan. {names}",
     "Quita {count} uniones del plano de hoy. {names}",
@@ -28,11 +23,6 @@ it.each([
     "reset_targets",
     "Removes {count} saved reset targets. {names}",
     "Quita {count} destinos de restablecimiento guardados. {names}",
-  ],
-  [
-    "reset_joins",
-    "Removes {count} saved reset joins. {names}",
-    "Quita {count} uniones de restablecimiento guardadas. {names}",
   ],
   ["routing_rules", "Removes {count} routing rules.", "Quita {count} reglas de enrutamiento."],
   [

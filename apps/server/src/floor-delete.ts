@@ -4,11 +4,7 @@ import {
   floorZones,
   floorPlans,
   floorPlanTables,
-  floorPlanJoins,
-  floorPlanJoinTables,
   floorResetTables,
-  floorResetJoins,
-  floorResetJoinTables,
   floorTodayJoins,
   floorTodayJoinTables,
   floorTodayZones,
@@ -67,24 +63,6 @@ async function inventory(tx: Transaction, cfg: TillConfig, zoneIds: readonly str
     .select()
     .from(floorPlanTables)
     .where(inArray(floorPlanTables.planId, planIds));
-  const savedJoins = await tx
-    .select()
-    .from(floorPlanJoins)
-    .where(inArray(floorPlanJoins.planId, planIds));
-  const savedMembers = await tx
-    .select({
-      joinId: floorPlanJoinTables.joinId,
-      id: floorPlanTables.id,
-      label: floorPlanTables.label,
-    })
-    .from(floorPlanJoinTables)
-    .innerJoin(floorPlanTables, eq(floorPlanTables.id, floorPlanJoinTables.planTableId))
-    .where(
-      inArray(
-        floorPlanJoinTables.joinId,
-        savedJoins.map((join) => join.id),
-      ),
-    );
   const todayJoins = await tx
     .select()
     .from(floorTodayJoins)
@@ -103,33 +81,13 @@ async function inventory(tx: Transaction, cfg: TillConfig, zoneIds: readonly str
     .select()
     .from(floorResetTables)
     .where(inArray(floorResetTables.zoneId, ids));
-  const resetJoins = await tx
-    .select()
-    .from(floorResetJoins)
-    .where(inArray(floorResetJoins.zoneId, ids));
-  const resetMembers = await tx
-    .select({
-      joinId: floorResetJoinTables.joinId,
-      id: floorResetTables.id,
-      label: floorResetTables.label,
-    })
-    .from(floorResetJoinTables)
-    .innerJoin(floorResetTables, eq(floorResetTables.id, floorResetJoinTables.resetTableId))
-    .where(
-      inArray(
-        floorResetJoinTables.joinId,
-        resetJoins.map((join) => join.id),
-      ),
-    );
   const removes: DeleteImpactItem[] = [
     { key: "tables", count: tables.length, targets: labelled(tables) },
     { key: "saved_tables", count: saved.length, targets: labelled(saved) },
-    { key: "saved_joins", count: savedJoins.length, targets: joins(savedJoins, savedMembers) },
     { key: "today_joins", count: todayJoins.length, targets: joins(todayJoins, todayMembers) },
     { key: "reset_targets", count: reset.length, targets: labelled(reset) },
-    { key: "reset_joins", count: resetJoins.length, targets: joins(resetJoins, resetMembers) },
   ].filter((item) => item.count > 0);
-  return { ids, tables, plans, saved, savedJoins, todayJoins, resetJoins, removes };
+  return { ids, tables, plans, saved, todayJoins, removes };
 }
 async function refusalsFor(
   tx: Transaction,
@@ -203,11 +161,6 @@ export function floorDeletionFor(
       const [refusal] = await refusalsFor(tx, cfg, removals, floor.tables, now);
       if (refusal)
         throw new AppError(refusal.code as ErrorCode, refusal.params as ErrorParams[ErrorCode]);
-      const resetJoinIds = floor.resetJoins.map((join) => join.id);
-      await tx
-        .delete(floorResetJoinTables)
-        .where(inArray(floorResetJoinTables.joinId, resetJoinIds));
-      await tx.delete(floorResetJoins).where(inArray(floorResetJoins.id, resetJoinIds));
       await tx.delete(floorResetTables).where(inArray(floorResetTables.zoneId, floor.ids));
       const kept = await removeLiveTables(
         tx,
@@ -254,9 +207,6 @@ export function floorDeletionFor(
             inArray(floorResetTables.planTableId, masterIds),
           ),
         );
-      const savedJoinIds = floor.savedJoins.map((join) => join.id);
-      await tx.delete(floorPlanJoinTables).where(inArray(floorPlanJoinTables.joinId, savedJoinIds));
-      await tx.delete(floorPlanJoins).where(inArray(floorPlanJoins.id, savedJoinIds));
       await tx.delete(floorPlanTables).where(inArray(floorPlanTables.id, masterIds));
       await tx.delete(floorPlans).where(
         inArray(
