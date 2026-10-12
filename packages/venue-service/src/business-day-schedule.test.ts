@@ -1158,3 +1158,76 @@ it("counts a range painted in every season once, so a capped list still names ev
   );
   expect(result.conflicts.conflicts).toHaveLength(56);
 });
+
+describe("clock compatibility reads each day's neighbours from its own season", () => {
+  async function twoSeasons(v: Awaited<ReturnType<typeof fixture>>) {
+    const [summer] = await suite.db
+      .insert(seasons)
+      .values({ locationId: v.cfg.locationId, name: "Summer", startsOn: "06-01" })
+      .returning();
+    return summer!.id;
+  }
+  it("checks a season weekday against the same season's next weekday", async () => {
+    const v = await fixture([range("22:00", "04:30")], { offset: 180 });
+    await twoSeasons(v);
+    await withTransaction(suite.db, (tx) =>
+      seasonDay(tx, {
+        departmentId: v.departmentId,
+        seasonId: v.seasonId,
+        weekday: 4,
+        periodId: v.periodId,
+        ranges: [range("07:15", "09:00")],
+      }),
+    );
+    await expect(check(v, "07:00")).rejects.toMatchObject({
+      code: "venue.business_day_hours_conflict",
+      params: {
+        conflicts: [
+          expect.objectContaining({ reason: "sending_cutoff", weekday: 3, seasonId: v.seasonId }),
+        ],
+      },
+    });
+  });
+  it("ignores a named day whose day before is another season's weekday", async () => {
+    const v = await fixture([range("22:00", "04:30")], { offset: 180 });
+    await twoSeasons(v);
+    await withTransaction(suite.db, async (tx) => {
+      const id = randomUUID(),
+        timetableId = randomUUID();
+      // 2026-11-04, the Wednesday before, is in Summer; the painted Wednesday is Winter's.
+      await tx.insert(specialDates).values({
+        id,
+        locationId: v.cfg.locationId,
+        date: "2026-11-05",
+        name: "Summer neighbour",
+        ownHours: true,
+      });
+      await tx
+        .insert(menuDayTimetables)
+        .values({ id: timetableId, departmentId: v.departmentId, specialDateId: id });
+      await tx.insert(menuSlots).values({
+        timetableId,
+        departmentId: v.departmentId,
+        periodId: v.periodId,
+        startsAt: "07:15:00",
+        endsAt: "09:00:00",
+      });
+    });
+    await expect(check(v, "07:00")).resolves.toBeUndefined();
+  });
+  it("follows a named day with the next day's own season week", async () => {
+    const v = await fixture([range("22:00", "04:30")], { offset: 180, date: E });
+    await twoSeasons(v);
+    // 2026-11-05 is a Summer Thursday; only Winter paints Thursday.
+    await withTransaction(suite.db, (tx) =>
+      seasonDay(tx, {
+        departmentId: v.departmentId,
+        seasonId: v.seasonId,
+        weekday: 4,
+        periodId: v.periodId,
+        ranges: [range("07:15", "09:00")],
+      }),
+    );
+    await expect(check(v, "07:00")).resolves.toBeUndefined();
+  });
+});
