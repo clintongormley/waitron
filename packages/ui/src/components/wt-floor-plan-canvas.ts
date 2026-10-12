@@ -40,6 +40,10 @@ export interface FloorPlanCanvasCopy {
   fixed: string;
   /** "{name}" is replaced by the table's label. */
   rotate: string;
+  /** The selected table's description: how the keys move and resize it. */
+  keys?: string;
+  /** Announced after a keyboard resize; "{width}" and "{height}" are replaced, in squares. */
+  size?: string;
 }
 
 export interface TableSelect {
@@ -75,10 +79,12 @@ const OUTWARDS: Record<PlanSide, { x: number; y: number }> = {
   left: { x: -1, y: 0 },
 };
 
-const DEFAULT_COPY: FloorPlanCanvasCopy = {
+const DEFAULT_COPY: Required<FloorPlanCanvasCopy> = {
   label: "Floor plan",
   fixed: "Fixed",
   rotate: "Rotate {name}",
+  keys: "Arrow keys move it. Shift and arrow keys resize it.",
+  size: "{width} by {height}",
 };
 
 const px = (squares: number): string => `${squares * GRID_SQUARE_PX}px`;
@@ -98,6 +104,14 @@ function sameBox(a: PlanPlacement, b: PlanPlacement): boolean {
 function angleAround(centreX: number, centreY: number, clientX: number, clientY: number): number {
   return (Math.atan2(clientX - centreX, centreY - clientY) * 180) / Math.PI;
 }
+
+/** With Shift: the side each arrow key moves, and whether out (1) or in (-1). */
+const RESIZE_KEYS: Record<string, { side: PlanSide; squares: number }> = {
+  ArrowRight: { side: "right", squares: 1 },
+  ArrowLeft: { side: "right", squares: -1 },
+  ArrowDown: { side: "bottom", squares: 1 },
+  ArrowUp: { side: "bottom", squares: -1 },
+};
 
 const ARROWS: Record<string, { dx: number; dy: number }> = {
   ArrowRight: { dx: 1, dy: 0 },
@@ -291,6 +305,15 @@ export class WtFloorPlanCanvas extends LitElement {
         transform: translateX(-50%);
         pointer-events: none;
       }
+
+      .announcement {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        overflow: hidden;
+        clip-path: inset(50%);
+        text-wrap: nowrap;
+      }
     `,
   ];
 
@@ -307,6 +330,11 @@ export class WtFloorPlanCanvas extends LitElement {
   @state() private visible = { columns: 0, rows: 0 };
 
   @state() private draft: Draft | null = null;
+
+  /** The table a keyboard resize last changed, until it loses focus. */
+  @state() private keyResized: string | null = null;
+
+  @state() private announcement = "";
 
   #drag: Drag | null = null;
 
@@ -348,7 +376,7 @@ export class WtFloorPlanCanvas extends LitElement {
     };
   });
 
-  get #copy(): FloorPlanCanvasCopy {
+  get #copy(): Required<FloorPlanCanvasCopy> {
     return { ...DEFAULT_COPY, ...this.copy };
   }
 
@@ -451,13 +479,19 @@ export class WtFloorPlanCanvas extends LitElement {
           )}
         </div>
       </div>
+      <span id="keys" hidden>${copy.keys}</span>
+      <span class="announcement" role="status">${this.announcement}</span>
     `;
   }
 
-  #renderTable(t: PlanCanvasTable, copy: FloorPlanCanvasCopy): TemplateResult {
+  #renderTable(t: PlanCanvasTable, copy: Required<FloorPlanCanvasCopy>): TemplateResult {
     const p = this.#placementOf(t);
     const style = this.#frameStyle(p);
     const selected = t.key === this.selected;
+    const described = [
+      ...(t.refused === undefined ? [] : [`reason-${t.key}`]),
+      ...(selected ? ["keys"] : []),
+    ];
     return html`
       ${selected ? this.#renderHitAreas(t, p) : nothing}
       <button
@@ -468,23 +502,20 @@ export class WtFloorPlanCanvas extends LitElement {
         data-shape=${p.shape}
         aria-pressed=${t.key === this.selected ? "true" : "false"}
         aria-label=${t.fixed ? `${t.label}, ${copy.fixed}` : t.label}
-        aria-describedby=${t.refused === undefined ? nothing : `reason-${t.key}`}
+        aria-describedby=${described.length === 0 ? nothing : described.join(" ")}
         ?data-refused=${t.refused !== undefined}
         style=${style}
         @click=${(e: Event) => this.#onTableClick(e, t.key)}
         @pointerdown=${(e: PointerEvent) => this.#onPointerDown(e, t, "move")}
         @keydown=${(e: KeyboardEvent) => this.#onTableKey(e, t)}
+        @blur=${() => this.#onTableBlur(t.key)}
       >
         ${showsName(p, GRID_SQUARE_PX) ? html`<span class="name">${t.label}</span>` : nothing}
         ${t.fixed ? html`<span class="fixed-marker" part="fixed-marker"></span>` : nothing}
       </button>
       ${t.refused === undefined ? nothing : this.#renderReason(t, p)}
       ${selected ? this.#renderHandles(t, p, copy) : nothing}
-      ${
-        this.#drag?.kind === "resize" && this.#drag.table.key === t.key
-          ? this.#renderBadge(p)
-          : nothing
-      }
+      ${this.#badged() === t.key ? this.#renderBadge(p) : nothing}
     `;
   }
 
@@ -518,7 +549,11 @@ export class WtFloorPlanCanvas extends LitElement {
   }
 
   /** The frame has the table's box and turn, so the arrow and the dots turn with the table. */
-  #renderHandles(t: PlanCanvasTable, p: PlanPlacement, copy: FloorPlanCanvasCopy): TemplateResult {
+  #renderHandles(
+    t: PlanCanvasTable,
+    p: PlanPlacement,
+    copy: Required<FloorPlanCanvasCopy>,
+  ): TemplateResult {
     const dragged = this.#drag?.kind === "resize" ? this.#drag.side : null;
     return html`<div class="frame" style=${this.#frameStyle(p)}>
       <button
@@ -573,6 +608,13 @@ export class WtFloorPlanCanvas extends LitElement {
     >`;
   }
 
+  /** The table whose size badge shows: a dot drag's, else the selected table's after a keyboard
+   *  resize. */
+  #badged(): string | null {
+    if (this.#drag?.kind === "resize") return this.#drag.table.key;
+    return this.keyResized === this.selected ? this.keyResized : null;
+  }
+
   /** `p`'s turned box in squares from the drawn grid's corner. */
   #drawnBox(p: PlanPlacement): PlanRect {
     const box = rotatedRect(p);
@@ -591,7 +633,7 @@ export class WtFloorPlanCanvas extends LitElement {
     if (reasons.length === 0) return;
     const grid = this.renderRoot.querySelector<HTMLElement>(".grid")!.clientWidth;
     const badge = this.renderRoot.querySelector<HTMLElement>(".size-badge");
-    const badged = this.#drag?.kind === "resize" ? this.#drag.table.key : null;
+    const badged = this.#badged();
     for (const reason of reasons) {
       // The badge is drawn where the reason would be, and its height is known only once drawn.
       reason.style.translate =
@@ -635,6 +677,10 @@ export class WtFloorPlanCanvas extends LitElement {
   }
 
   #onTableKey(e: KeyboardEvent, t: PlanCanvasTable): void {
+    if (e.shiftKey) {
+      this.#onTableResizeKey(e, t);
+      return;
+    }
     const arrow = ARROWS[e.key];
     if (arrow === undefined) return;
     e.preventDefault();
@@ -642,6 +688,25 @@ export class WtFloorPlanCanvas extends LitElement {
     const x = clampToGrid(t.placement.x + arrow.dx);
     const y = clampToGrid(t.placement.y + arrow.dy);
     if (x !== t.placement.x || y !== t.placement.y) this.#move(t.key, x, y);
+  }
+
+  #onTableResizeKey(e: KeyboardEvent, t: PlanCanvasTable): void {
+    const resize = RESIZE_KEYS[e.key];
+    if (resize === undefined || t.key !== this.selected) return;
+    e.preventDefault();
+    e.stopPropagation();
+    const next = resizeFrom(t.placement, resize.side, resize.squares);
+    if (sameBox(next, t.placement)) return;
+    const { x, y, width, height } = next;
+    this.#resize({ key: t.key, x, y, width, height });
+    this.keyResized = t.key;
+    this.announcement = this.#copy.size
+      .replace("{width}", () => String(width))
+      .replace("{height}", () => String(height));
+  }
+
+  #onTableBlur(key: string): void {
+    if (this.keyResized === key) this.keyResized = null;
   }
 
   #onHandleKey(e: KeyboardEvent, t: PlanCanvasTable): void {

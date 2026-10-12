@@ -1154,6 +1154,213 @@ it("draws a refused table's reason below the size badge while a dot is dragged",
   expect(reasonOf(el, "t1")!.getBoundingClientRect().top).toBe(before);
 });
 
+/** Keydowns of the arrow keys alone, so a held Shift's own keydown is not counted. */
+function arrowKeydowns(target: EventTarget): boolean[] {
+  const prevented: boolean[] = [];
+  target.addEventListener("keydown", (e) => {
+    const key = (e as KeyboardEvent).key;
+    if (key.startsWith("Arrow")) prevented.push(e.defaultPrevented);
+  });
+  return prevented;
+}
+
+const statusOf = (el: WtFloorPlanCanvas) =>
+  el.shadowRoot!.querySelector<HTMLElement>('[role="status"]')!;
+
+const KEYS_EN = "Arrow keys move it. Shift and arrow keys resize it.";
+
+it("Shift and the arrow keys move the focused selected table's right and bottom sides one square", async () => {
+  const p = place({ x: 10, y: 10, width: 8, height: 4 });
+  const el = await canvas([{ key: "t1", label: "T1", fixed: false, placement: p }], {
+    selected: "t1",
+  });
+  const seen = resizes(el);
+  const moved = moves(el);
+  const outside = arrowKeydowns(host);
+  const prevented = arrowKeydowns(button(el, "t1"));
+  button(el, "t1").focus();
+  await userEvent.keyboard("{Shift>}{ArrowRight}{ArrowLeft}{ArrowDown}{ArrowUp}{/Shift}");
+  expect(seen.map((e) => e.detail)).toEqual([
+    { key: "t1", x: 10, y: 10, width: 9, height: 4 },
+    { key: "t1", x: 10, y: 10, width: 7, height: 4 },
+    { key: "t1", x: 10, y: 10, width: 8, height: 5 },
+    { key: "t1", x: 10, y: 10, width: 8, height: 3 },
+  ]);
+  expect(seen.every((e) => e.bubbles && e.composed)).toBe(true);
+  expect(prevented).toEqual([true, true, true, true]);
+  expect(outside).toEqual([]);
+  expect(moved).toEqual([]);
+});
+
+it("Shift and an arrow key send nothing at a size of 1 or 99", async () => {
+  const el = await canvas([table("t1", "T1", { x: 10, y: 10, width: 1, height: 1 })], {
+    selected: "t1",
+  });
+  const seen = resizes(el);
+  const moved = moves(el);
+  button(el, "t1").focus();
+  await userEvent.keyboard("{Shift>}{ArrowLeft}{ArrowUp}{/Shift}");
+  el.tables = [table("t1", "T1", { x: 10, y: 10, width: 99, height: 99 })];
+  await el.updateComplete;
+  button(el, "t1").focus();
+  await userEvent.keyboard("{Shift>}{ArrowRight}{ArrowDown}{/Shift}");
+  expect(seen).toEqual([]);
+  expect(moved).toEqual([]);
+});
+
+/** The midpoint of `p`'s own left side, in squares. */
+function leftMidpoint(p: PlanPlacement): { x: number; y: number } {
+  const radians = (p.rotation * Math.PI) / 180;
+  return {
+    x: p.x + p.width / 2 - (p.width / 2) * Math.cos(radians),
+    y: p.y + p.height / 2 - (p.width / 2) * Math.sin(radians),
+  };
+}
+
+it.each([30, 90])(
+  "Shift+ArrowRight on a table turned %i° keeps its left side where it is on screen",
+  async (rotation) => {
+    const p = place({ x: 10, y: 10, width: 8, height: 4, rotation });
+    const el = await canvas([{ key: "t1", label: "T1", fixed: false, placement: p }], {
+      selected: "t1",
+    });
+    const seen = resizes(el);
+    button(el, "t1").focus();
+    await userEvent.keyboard("{Shift>}{ArrowRight}{/Shift}");
+    expect(seen.map((e) => e.detail)).toEqual([
+      { key: "t1", ...resized(resizeFrom(p, "right", 1)) },
+    ]);
+    const sent = { ...p, ...seen[0]!.detail };
+    expect(sent.width).toBe(9);
+    const [before, after] = [leftMidpoint(p), leftMidpoint(sent)];
+    expect(Math.abs(after.x - before.x)).toBeLessThanOrEqual(0.5);
+    expect(Math.abs(after.y - before.y)).toBeLessThanOrEqual(0.5);
+  },
+);
+
+it("Shift and the arrow keys on an unselected table neither resize nor move it", async () => {
+  const el = await canvas([table("t1", "T1", { x: 10, y: 10 }), table("t2", "T2", { x: 30 })], {
+    selected: "t1",
+  });
+  const seen = resizes(el);
+  const moved = moves(el);
+  button(el, "t2").focus();
+  await userEvent.keyboard("{Shift>}{ArrowRight}{ArrowLeft}{ArrowDown}{ArrowUp}{/Shift}");
+  expect(seen).toEqual([]);
+  expect(moved).toEqual([]);
+});
+
+it("the plain arrow keys on the selected table only move it", async () => {
+  const el = await canvas([table("t1", "T1", { x: 10, y: 10 })], { selected: "t1" });
+  const seen = resizes(el);
+  const moved = moves(el);
+  button(el, "t1").focus();
+  await userEvent.keyboard("{ArrowRight}{ArrowDown}");
+  expect(moved).toEqual([
+    { key: "t1", x: 11, y: 10 },
+    { key: "t1", x: 10, y: 11 },
+  ]);
+  expect(seen).toEqual([]);
+});
+
+it("Shift and the arrow keys on the turn arrow resize nothing", async () => {
+  const el = await canvas([table("t1", "T1", { x: 10, y: 10 })], { selected: "t1" });
+  const seen = resizes(el);
+  const moved = moves(el);
+  handles(el)[0]!.focus();
+  await userEvent.keyboard("{Shift>}{ArrowRight}{ArrowLeft}{ArrowDown}{ArrowUp}{/Shift}");
+  expect(seen).toEqual([]);
+  expect(moved).toEqual([]);
+});
+
+it("describes only the selected table by its keys, in English unless the copy says otherwise", async () => {
+  const el = await canvas([table("t1", "T1", { x: 10, y: 10 }), table("t2", "T2", { x: 30 })], {
+    selected: "t1",
+  });
+  await expect.element(button(el, "t1")).toHaveAccessibleDescription(KEYS_EN);
+  expect(button(el, "t2").hasAttribute("aria-describedby")).toBe(false);
+  el.copy = { keys: "Las flechas la mueven. Mayús y las flechas cambian su tamaño." };
+  await el.updateComplete;
+  await expect
+    .element(button(el, "t1"))
+    .toHaveAccessibleDescription("Las flechas la mueven. Mayús y las flechas cambian su tamaño.");
+});
+
+it("describes a selected refused table by its reason and its keys", async () => {
+  const el = await canvas([refusedTable("t1", "T1", "Booked at 21:00", { x: 10, y: 10 })], {
+    selected: "t1",
+  });
+  const ids = button(el, "t1").getAttribute("aria-describedby")!.split(" ");
+  expect(ids).toHaveLength(2);
+  expect(ids.map((id) => el.shadowRoot!.getElementById(id)!.textContent!.trim())).toEqual([
+    "Booked at 21:00",
+    KEYS_EN,
+  ]);
+  await expect.element(button(el, "t1")).toHaveAccessibleDescription(`Booked at 21:00 ${KEYS_EN}`);
+});
+
+it("announces the new size after a keyboard resize, and shows the badge until the table loses focus", async () => {
+  const el = await canvas([table("t1", "T1", { x: 10, y: 10, width: 8, height: 4 })], {
+    selected: "t1",
+  });
+  // A controlled parent's answer to each resize.
+  el.addEventListener("wt-table-resize", (e) => {
+    const { key, ...box } = (e as CustomEvent<TableResize>).detail;
+    el.tables = [table(key, "T1", box)];
+  });
+  expect(statusOf(el).textContent!.trim()).toBe("");
+  expect(badgeOf(el)).toBeNull();
+  button(el, "t1").focus();
+  await userEvent.keyboard("{Shift>}{ArrowRight}{/Shift}");
+  await el.updateComplete;
+  expect(statusOf(el).textContent!.trim()).toBe("9 by 4");
+  expect(badgeOf(el)!.textContent!.trim()).toBe("9 × 4");
+  await userEvent.keyboard("{Shift>}{ArrowDown}{/Shift}");
+  await el.updateComplete;
+  expect(statusOf(el).textContent!.trim()).toBe("9 by 5");
+  expect(badgeOf(el)!.textContent!.trim()).toBe("9 × 5");
+  await userEvent.keyboard("{ArrowRight}");
+  await el.updateComplete;
+  expect(badgeOf(el)!.textContent!.trim()).toBe("9 × 5");
+  button(el, "t1").blur();
+  await el.updateComplete;
+  expect(badgeOf(el)).toBeNull();
+});
+
+it("hides a keyboard resize's badge once its table is no longer selected", async () => {
+  const el = await canvas([table("t1", "T1", { x: 10, y: 10 })], { selected: "t1" });
+  button(el, "t1").focus();
+  await userEvent.keyboard("{Shift>}{ArrowRight}{/Shift}");
+  await el.updateComplete;
+  expect(badgeOf(el)).not.toBeNull();
+  el.selected = null;
+  await el.updateComplete;
+  expect(badgeOf(el)).toBeNull();
+});
+
+it("announces a keyboard resize in the copy's words", async () => {
+  const el = await canvas([table("t1", "T1", { x: 10, y: 10, width: 8, height: 4 })], {
+    selected: "t1",
+    copy: { size: "{width} por {height}" },
+  });
+  button(el, "t1").focus();
+  await userEvent.keyboard("{Shift>}{ArrowLeft}{/Shift}");
+  await el.updateComplete;
+  expect(statusOf(el).textContent!.trim()).toBe("7 por 4");
+});
+
+it("draws a refused table's reason below the badge a keyboard resize shows", async () => {
+  const el = await canvas([refusedTable("t1", "T1", "Booked at 21:00", { x: 10, y: 10 })], {
+    selected: "t1",
+  });
+  await settled(el);
+  button(el, "t1").focus();
+  await userEvent.keyboard("{Shift>}{ArrowRight}{/Shift}");
+  await el.updateComplete;
+  const badge = badgeOf(el)!.getBoundingClientRect();
+  expect(reasonOf(el, "t1")!.getBoundingClientRect().top).toBeGreaterThanOrEqual(badge.bottom);
+});
+
 it("writes a selected refused table's reason below every side dot at every turn", async () => {
   const el = await canvas([], { selected: "t1" });
   for (const [width, height] of [
