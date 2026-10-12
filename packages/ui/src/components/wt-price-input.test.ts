@@ -1355,3 +1355,65 @@ test("disconnecting during a font resize cancels the pending width write", async
   await settled();
   expectSignClearOfText(currency!, el.shadowRoot!.querySelector("input")!);
 });
+
+test("before its first frame is painted, a lone signed field keeps its sign clear of the amount and the room an unsigned one has", async () => {
+  const roomOf = (el: HTMLElement) => {
+    const content = contentBox(el.shadowRoot!.querySelector("input")!);
+    return content.right - content.left;
+  };
+  const plain = await mountPrice(
+    '<wt-price-input unit="kg" style="display: inline-block"></wt-price-input>',
+  );
+  const room = roomOf(plain.el);
+  // Two in turn, each the only field on the page while it is measured.
+  for (const locale of ["en-GB", "es-ES"]) {
+    const signed = await mount(
+      `<wt-price-input unit="kg" locale="${locale}" style="display: inline-block"></wt-price-input>`,
+    );
+    expect(roomOf(signed), locale).toBeCloseTo(room, 1);
+    expectSignClearOfText(
+      signed.shadowRoot!.querySelector<HTMLElement>(".currency")!,
+      signed.shadowRoot!.querySelector("input")!,
+    );
+  }
+});
+
+test.each(["en-GB", "es-ES"])(
+  "after a font resize, an unstretched %s field grows by its larger sign, keeping the room an unsigned one has",
+  async (locale) => {
+    const row = await mount(
+      `<div><wt-price-input unit="kg" style="display: inline-block"></wt-price-input><wt-price-input unit="kg" locale="${locale}" style="display: inline-block"></wt-price-input></div>`,
+    );
+    const [plain, signed] = [...row.querySelectorAll("wt-price-input")].map((el) =>
+      el.shadowRoot!.querySelector("input")!,
+    );
+    await settled();
+    const room = (input: HTMLInputElement) => {
+      const content = contentBox(input);
+      return content.right - content.left;
+    };
+    const before = signed!.getBoundingClientRect().width;
+    host.style.setProperty("--wt-font-size-md", "40px");
+    await settled();
+    await settled();
+    expect(signed!.getBoundingClientRect().width).toBeGreaterThan(before);
+    expect(room(signed!)).toBeCloseTo(room(plain!), 1);
+  },
+);
+
+test.each([
+  ["a decimal locale alone", 'decimal-locale="es-ES"', "4,50"],
+  ["a currency locale alone", 'locale="es-ES"', "4,50"],
+  [
+    "a decimal locale beside a different currency locale",
+    'decimal-locale="en-GB" locale="es-ES"',
+    "4.50",
+  ],
+  ["no locale", "", "4.50"],
+])(
+  "with %s, the placeholder is written with that locale's decimal mark",
+  async (_, attributes, shown) => {
+    const el = await mount(`<wt-price-input placeholder="4.50" ${attributes}></wt-price-input>`);
+    expect(el.shadowRoot!.querySelector("input")!.placeholder).toBe(shown);
+  },
+);
