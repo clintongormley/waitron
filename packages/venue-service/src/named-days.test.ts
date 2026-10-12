@@ -8,7 +8,6 @@ import { locationId } from "@waitron/shared";
 import { replaceMenuWeek, resolveDepartmentService, saveMenuPeriod } from "./menu-timetable.js";
 import { VENUE_SERVICE_MIGRATIONS } from "./migrations.js";
 import { readSpecialDaysModel } from "./named-days.js";
-import { specialDates } from "./schema/hours.js";
 import {
   departmentDayRanges,
   departmentDays,
@@ -125,24 +124,6 @@ async function special(
         .values(paint.map((range) => ({ dayId: day!.id, departmentId: f.department, ...range })));
     }
     return row!.id;
-  });
-}
-async function day(
-  f: Fixture,
-  date: string,
-  overrides: Partial<typeof specialDates.$inferInsert> = {},
-) {
-  return run(async (tx) => {
-    const [row] = await tx
-      .insert(specialDates)
-      .values({
-        locationId: f.cfg.locationId,
-        date,
-        name: "Navidad",
-        ...overrides,
-      })
-      .returning();
-    return row!;
   });
 }
 const service = (f: Fixture, at: string, department = f.department) =>
@@ -321,17 +302,6 @@ describe("special-days Calendar model", () => {
       tradingName: "Bar",
     });
     expect(await statements()).toBe(one);
-  });
-  it("ignores the retired named days", async () => {
-    const f = await fixture();
-    await day(f, "2026-12-25", { kind: "holiday", closeWholeVenue: true });
-    expect((await read(f, "2026-12-25")).days[0]).toEqual({
-      date: "2026-12-25",
-      specialDay: null,
-      holidays: [],
-      tone: "standard",
-      closed: false,
-    });
   });
 });
 

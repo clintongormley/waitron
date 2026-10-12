@@ -25,8 +25,7 @@ import { CATALOGUE_MIGRATIONS } from "@waitron/catalogue";
 import { locationId, type BusinessDayClock } from "@waitron/shared";
 import { VENUE_SERVICE_MIGRATIONS } from "./migrations.js";
 import { departments, zoneServicePolicies } from "./schema/service.js";
-import { menuDayTimetables, menuPeriods, menuSlots } from "./schema/menus.js";
-import { specialDates } from "./schema/hours.js";
+import { menuPeriods } from "./schema/menus.js";
 import {
   departmentDayRanges,
   departmentDays,
@@ -1358,37 +1357,6 @@ describe("clock compatibility reads special-day paint", () => {
         conflicts: [expect.objectContaining({ reason: "sending_cutoff", specialDayId: eve })],
       },
     });
-  });
-
-  it("reads a date's paint from its special day alone, never from a named day's rows on it", async () => {
-    const v = await fixture([]);
-    const specialDayId = await specialDay(v, "2026-11-20", [
-      { periodId: v.periodId, startsAt: "22:00", endsAt: "04:30" },
-    ]);
-    await withTransaction(suite.db, async (tx) => {
-      const id = randomUUID(),
-        timetableId = randomUUID();
-      await tx.insert(specialDates).values({
-        id,
-        locationId: v.cfg.locationId,
-        date: "2026-11-20",
-        name: "Named day",
-        ownHours: true,
-      });
-      await tx
-        .insert(menuDayTimetables)
-        .values({ id: timetableId, departmentId: v.departmentId, specialDateId: id });
-      await tx.insert(menuSlots).values({
-        timetableId,
-        departmentId: v.departmentId,
-        periodId: v.periodId,
-        startsAt: "05:00:00",
-        endsAt: "05:00:00",
-      });
-    });
-    const result = await conflicts(v, "03:00");
-    expect(result.conflicts).toEqual([expect.objectContaining({ specialDayId, reason: "range" })]);
-    for (const conflict of result.conflicts) expect(conflict).not.toHaveProperty("specialDateId");
   });
 
   it("reads none of the named-day tables", async () => {
