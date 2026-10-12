@@ -364,9 +364,7 @@ export class OpeningHoursZoneWeek extends LitElement {
                 .open=${true}
                 .closedTimes=${true}
                 .range=${opening.input}
-                .businessDate=${this.weekStart ? dateInWeek(this.weekStart, opening.weekday) : undefined}
-                .dayCutover=${this.dayContext(opening.weekday)?.dayCutover ?? this.dayCutover}
-                .endMinute=${this.dayContext(opening.weekday)?.endMinute ?? 1440}
+                .dayCutover=${this.dayCutover}
                 .occupied=${this.draft[opening.weekday]!.ranges.filter((_, index) => index !== opening.index)}
                 .deletable=${true}
                 @range-save=${(event: CustomEvent<{ input: ClosedRange }>) => {

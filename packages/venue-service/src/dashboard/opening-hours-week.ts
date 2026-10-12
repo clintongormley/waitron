@@ -108,7 +108,6 @@ export class OpeningHoursWeek extends LitElement {
   @property() seasonId = "";
   @property({ attribute: false }) seasons: OpeningHoursModel["seasons"] = [];
   @property({ attribute: false }) menus: OpeningHoursModel["menus"] = [];
-  @property({ attribute: false }) timeZone?: string;
   @property() dayCutover = "06:00";
   @property({ attribute: false }) clockRevision!: number;
   private draftRevision!: number;
@@ -284,7 +283,7 @@ export class OpeningHoursWeek extends LitElement {
     const slots = this.draft[opening.weekday]!.slots.map((slot) => ({ ...slot }));
     if (opening.index === undefined) slots.push({ ...event.detail.input });
     else slots[opening.index] = { ...event.detail.input };
-    const cutover = this.dayContext(opening.weekday)?.dayCutover ?? this.dayCutover;
+    const cutover = this.dayCutover;
     const minute = (time: string) =>
       (Number(time.slice(0, 2)) * 60 +
         Number(time.slice(3)) -
@@ -472,10 +471,7 @@ export class OpeningHoursWeek extends LitElement {
                 .open=${true}
                 .range=${opening.input}
                 .periods=${this.periods()}
-                .dayCutover=${this.dayContext(opening.weekday)?.dayCutover ?? this.dayCutover}
-                .endMinute=${this.dayContext(opening.weekday)?.endMinute ?? 1440}
-                .businessDate=${this.weekStart ? dateInWeek(this.weekStart, opening.weekday) : undefined}
-                .timeZone=${this.timeZone}
+                .dayCutover=${this.dayCutover}
                 .occupied=${this.draft[opening.weekday]!.slots.filter((_, index) => index !== opening.index)}
                 .deletable=${opening.index !== undefined}
                 .busy=${!!this.periodOpening || this.creating}

@@ -1043,7 +1043,6 @@ export class OpeningHoursScreen extends LitElement {
                                   .clockRevision=${this.model!.clockRevision}
                                   .businessDayClock=${this.model!.businessDayClock}
                                   .dayCutover=${this.model!.dayCutover}
-                                  .timeZone=${this.model!.clockReadable ? this.model!.timeZone : undefined}
                                   .weekStart=${this.weekStart}
                                   .calendar=${this.namedWeek}
                                   .specials=${this.weekSpecials}
