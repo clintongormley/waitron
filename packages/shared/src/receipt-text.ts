@@ -44,7 +44,7 @@ export interface VenueReceiptConfig extends VenueReceiptSettings {
 export interface ReceiptPresentation {
   receiptTrim: PrintedReceiptTrim;
   venueAddress: readonly string[];
-  venueReceiptSettings: VenueReceiptSettings;
+  receiptSettings: { printAddress: boolean };
 }
 
 function writtenText(text: ReceiptText | undefined, language: string): string | undefined {

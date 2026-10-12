@@ -2978,13 +2978,9 @@ describe("department receipt presentation on thermal jobs", () => {
                 code: "receipt.read_failed",
               },
         ];
-        expect(warning.mock.calls).toEqual(
-          source === "venue" ? [diagnostic] : [diagnostic, diagnostic],
-        );
+        expect(warning.mock.calls).toEqual(source === "venue" ? [] : [diagnostic, diagnostic]);
         expect(ticket.receiptTrim).toEqual(
-          source === "venue"
-            ? { headerSubtitle: "Own subtitle", email: "own@example.test" }
-            : { headerSubtitle: "Venue subtitle", footerMessage: "Venue footer" },
+          source === "venue" ? { headerSubtitle: "Own subtitle", email: "own@example.test" } : {},
         );
       } finally {
         if (source === "venue")
@@ -3049,7 +3045,6 @@ describe("department receipt presentation on thermal jobs", () => {
     const first = await sell();
     expect(first.receiptTrim).toEqual({
       headerSubtitle: "Original subtitle",
-      footerMessage: "Venue footer",
     });
     const [sale] = await suite.db.select().from(sales);
     const before = {
@@ -3080,12 +3075,12 @@ describe("department receipt presentation on thermal jobs", () => {
     );
     expect(replay.receiptTrim).toEqual({ headerSubtitle: "Current subtitle" });
     expect(replay.venueAddress).toEqual(["Current street", "28013 Madrid"]);
-    expect(replay.venueReceiptSettings).toEqual({ printAddress: false });
+    expect(replay.receiptSettings).toEqual({ printAddress: false });
     expect({
       ...replay,
       receiptTrim: first.receiptTrim,
       venueAddress: first.venueAddress,
-      venueReceiptSettings: first.venueReceiptSettings,
+      receiptSettings: first.receiptSettings,
     }).toEqual(first);
     expect(await registroCount(cfg)).toBe(1);
     expect({

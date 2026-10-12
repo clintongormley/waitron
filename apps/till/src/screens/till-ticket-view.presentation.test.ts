@@ -8,7 +8,7 @@ const issuer = { venueName: "Filed Legal SL", nif: "B12345678", domicile: "Filed
 const facts: TillSaleResult = {
   receiptTrim: {},
   venueAddress: [],
-  venueReceiptSettings: {},
+  receiptSettings: { printAddress: false },
   invoiceNumber: "A/42",
   issuedAt: "2026-08-05T12:34:56.000Z",
   orderLabel: null,
@@ -30,7 +30,7 @@ const rich: ReceiptPresentation = {
     footerMessage: "Hasta pronto",
   },
   venueAddress: ["Current Street", "Madrid"],
-  venueReceiptSettings: {},
+  receiptSettings: { printAddress: true },
 };
 const answer = (presentation: ReceiptPresentation): TillSaleResult & ReceiptPresentation => ({
   ...facts,
@@ -43,6 +43,20 @@ const header = (el: TillTicketView) =>
 afterEach(cleanupWidgets);
 
 describe("per-answer receipt presentation", () => {
+  it.each([false, true])(
+    "uses department address permission %j beside filed identity",
+    async (printAddress) => {
+      const { el } = await mountWidget<TillTicketView>("till-ticket-view", {
+        result: { ...answer(rich), invoiceType: "F1", receiptSettings: { printAddress } },
+        issuer,
+      });
+      expect(el.shadowRoot!.textContent!.includes("Current Street")).toBe(printAddress);
+      expect(el.shadowRoot!.textContent!.includes("Madrid")).toBe(printAddress);
+      expect(el.shadowRoot!.querySelector(".domicile")!.textContent).toBe("Filed Fiscal Street");
+      expect(el.shadowRoot!.textContent).toContain("terraza@example.com");
+    },
+  );
+
   it("renders answer trim before filed legal identity and uses its current address", async () => {
     const { el } = await mountWidget<TillTicketView>("till-ticket-view", {
       result: answer(rich),
@@ -69,12 +83,16 @@ describe("per-answer receipt presentation", () => {
     el.result = answer({
       receiptTrim: { headerSubtitle: "Comedor", footerMessage: "Gracias" },
       venueAddress: ["Edited Street"],
-      venueReceiptSettings: {},
+      receiptSettings: { printAddress: true },
     });
     await el.updateComplete;
     expect(header(el)).toEqual(["Comedor", "Filed Legal SL", "Edited Street", "NIF: B12345678"]);
     expect(el.shadowRoot!.querySelector(".footer-message")!.textContent).toBe("Gracias");
-    el.result = answer({ receiptTrim: {}, venueAddress: [], venueReceiptSettings: {} });
+    el.result = answer({
+      receiptTrim: {},
+      venueAddress: [],
+      receiptSettings: { printAddress: false },
+    });
     await el.updateComplete;
     expect(header(el)).toEqual(["Filed Legal SL", "NIF: B12345678"]);
     expect(el.shadowRoot!.querySelector(".footer-message")).toBeNull();
@@ -84,10 +102,10 @@ describe("per-answer receipt presentation", () => {
   });
 
   it.each(["F1", "F2"] as const)(
-    "global address switch hides current address for %s and preserves filed domicile",
+    "department address switch hides current address for %s and preserves filed domicile",
     async (invoiceType) => {
       const { el } = await mountWidget<TillTicketView>("till-ticket-view", {
-        result: { ...answer(rich), invoiceType, venueReceiptSettings: { printAddress: false } },
+        result: { ...answer(rich), invoiceType, receiptSettings: { printAddress: false } },
         issuer,
       });
       expect(el.shadowRoot!.textContent).not.toContain("Current Street");

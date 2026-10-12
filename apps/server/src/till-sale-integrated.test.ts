@@ -10,7 +10,7 @@ import type { TillSaleResult } from "./till-sale.js";
 const TICKET: TillSaleResult = {
   receiptTrim: {},
   venueAddress: [],
-  venueReceiptSettings: {},
+  receiptSettings: { printAddress: false },
   locale: "es-ES",
   orderLabel: null,
   orderNumber: 1,

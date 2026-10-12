@@ -192,7 +192,7 @@ const smallPartyBill: PartyBill = {
 const saleResult: TillSaleResult = {
   receiptTrim: {},
   venueAddress: [],
-  venueReceiptSettings: {},
+  receiptSettings: { printAddress: false },
   orderLabel: null,
   orderNumber: 1,
   invoiceNumber: "F-0001",
@@ -10834,14 +10834,14 @@ describe("till-app", () => {
             footerMessage: "Hasta pronto",
           },
           venueAddress: ["Current Street"],
-          venueReceiptSettings: {},
+          receiptSettings: { printAddress: true },
         },
         {
           receiptTrim: { headerSubtitle: "Comedor", email: "comedor@example.com" },
           venueAddress: ["Edited Street"],
-          venueReceiptSettings: { printAddress: false },
+          receiptSettings: { printAddress: false },
         },
-        { receiptTrim: {}, venueAddress: [], venueReceiptSettings: {} },
+        { receiptTrim: {}, venueAddress: [], receiptSettings: { printAddress: false } },
       ];
       const recordSale = vi.fn();
       for (const presentation of presentations)
@@ -10863,7 +10863,7 @@ describe("till-app", () => {
         await flush(el);
         const view = ticket(el)!;
         expect(view.result.receiptTrim).toEqual(presentation.receiptTrim);
-        expect(view.result.venueReceiptSettings).toEqual(presentation.venueReceiptSettings);
+        expect(view.result.receiptSettings).toEqual(presentation.receiptSettings);
         const printed = view.shadowRoot!.textContent!;
         expect(printed).not.toContain("Stale boot");
         expect(printed).not.toContain("Stale boot street");

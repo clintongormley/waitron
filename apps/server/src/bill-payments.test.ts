@@ -24,7 +24,6 @@ import {
   locations,
   tenders,
   tenants,
-  tenantReceipts,
   triggerRaised,
   withTransaction,
   workingOrderLines,
@@ -2969,26 +2968,28 @@ describe("the bill's payments, taken within one millisecond", () => {
 });
 
 describe("bill answer receipt presentation", () => {
-  it("resolves live defaults on direct bill issuance and resultOf replay", async () => {
+  it("resolves live department settings on direct bill issuance and resultOf replay", async () => {
     const billId = await tabWith("Caña");
-    const [original] = await inTx((tx) => tx.select().from(tenantReceipts));
+    const departmentId = await invoiceContactDepartment();
+    const [original] = await inTx((tx) =>
+      tx.select().from(departmentReceipts).where(eq(departmentReceipts.departmentId, departmentId)),
+    );
     try {
       await inTx((tx) =>
         tx
-          .insert(tenantReceipts)
+          .insert(departmentReceipts)
           .values({
+            departmentId,
             receipt: {
-              headerSubtitle: "Bill subtitle",
-              email: "venue@example.test",
+              headerSubtitle: { "es-ES": "Bill subtitle" },
               printAddress: false,
             },
           })
           .onConflictDoUpdate({
-            target: tenantReceipts.id,
+            target: departmentReceipts.departmentId,
             set: {
               receipt: {
-                headerSubtitle: "Bill subtitle",
-                email: "venue@example.test",
+                headerSubtitle: { "es-ES": "Bill subtitle" },
                 printAddress: false,
               },
             },
@@ -2997,21 +2998,32 @@ describe("bill answer receipt presentation", () => {
       const request = cash("3.00");
       const first = await take(billId, request);
       expect(first.invoice?.receiptTrim).toEqual({ headerSubtitle: "Bill subtitle" });
-      expect(first.invoice?.venueReceiptSettings).toEqual({
-        headerSubtitle: "Bill subtitle",
-        printAddress: false,
-      });
-      await inTx((tx) => tx.update(tenantReceipts).set({ receipt: {} }));
+      expect(first.invoice?.receiptSettings).toEqual({ printAddress: false });
+      await inTx((tx) =>
+        tx
+          .update(departmentReceipts)
+          .set({ receipt: {} })
+          .where(eq(departmentReceipts.departmentId, departmentId)),
+      );
       const replay = await take(billId, request);
       expect(replay.invoice?.receiptTrim).toEqual({});
-      expect(replay.invoice?.venueReceiptSettings).toEqual({});
+      expect(replay.invoice?.receiptSettings).toEqual({ printAddress: false });
       expect(replay.invoice?.invoiceNumber).toBe(first.invoice?.invoiceNumber);
       expect(replay.invoice?.tender).toEqual(first.invoice?.tender);
       expect(replay.payment).toEqual(first.payment);
       expect(replay.balance).toEqual(first.balance);
     } finally {
-      if (original === undefined) await inTx((tx) => tx.delete(tenantReceipts));
-      else await inTx((tx) => tx.update(tenantReceipts).set({ receipt: original.receipt }));
+      if (original === undefined)
+        await inTx((tx) =>
+          tx.delete(departmentReceipts).where(eq(departmentReceipts.departmentId, departmentId)),
+        );
+      else
+        await inTx((tx) =>
+          tx
+            .update(departmentReceipts)
+            .set({ receipt: original.receipt })
+            .where(eq(departmentReceipts.departmentId, departmentId)),
+        );
     }
   });
 });

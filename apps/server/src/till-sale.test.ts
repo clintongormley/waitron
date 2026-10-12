@@ -2461,6 +2461,8 @@ describe("per-answer receipt presentation", () => {
         departmentId: department!.id,
         receipt: {
           headerSubtitle: { "es-ES": "Department subtitle" },
+          footerMessage: { "es-ES": "Department footer" },
+          printAddress: true,
           email: "department@example.test",
         },
       });
@@ -2475,27 +2477,19 @@ describe("per-answer receipt presentation", () => {
       expect(first).toMatchObject({
         receiptTrim: {
           headerSubtitle: "Department subtitle",
-          footerMessage: "Venue footer",
+          footerMessage: "Department footer",
           email: "department@example.test",
         },
         venueAddress: ["Calle Mayor 1", "28013 Madrid"],
-        venueReceiptSettings: {
-          headerSubtitle: "Venue subtitle",
-          footerMessage: "Venue footer",
-          printAddress: true,
-        },
+        receiptSettings: { printAddress: true },
       });
       expect(first).toHaveProperty("receiptTrim");
       expect(first.receiptTrim).toEqual({
         headerSubtitle: "Department subtitle",
-        footerMessage: "Venue footer",
+        footerMessage: "Department footer",
         email: "department@example.test",
       });
-      expect(first.venueReceiptSettings).toEqual({
-        headerSubtitle: "Venue subtitle",
-        footerMessage: "Venue footer",
-        printAddress: true,
-      });
+      expect(first.receiptSettings).toEqual({ printAddress: true });
       const before = await suite.db.execute<{ n: number }>(
         sql`select count(*) as n from registros_facturacion`,
       );
@@ -2513,25 +2507,22 @@ describe("per-answer receipt presentation", () => {
       const replay = await recordTillSale(deps, cfg, req);
       expect(replay).toMatchObject({
         receiptTrim: {
-          headerSubtitle: "New venue subtitle",
           footerMessage: "New department footer",
         },
         venueAddress: ["Current street", "28013 Madrid"],
-        venueReceiptSettings: { headerSubtitle: "New venue subtitle", printAddress: false },
+        receiptSettings: { printAddress: false },
       });
       expect(replay.receiptTrim).toEqual({
-        headerSubtitle: "New venue subtitle",
         footerMessage: "New department footer",
       });
-      expect(replay.venueReceiptSettings).toEqual({
-        headerSubtitle: "New venue subtitle",
+      expect(replay.receiptSettings).toEqual({
         printAddress: false,
       });
       expect({
         ...replay,
         receiptTrim: first.receiptTrim,
         venueAddress: first.venueAddress,
-        venueReceiptSettings: first.venueReceiptSettings,
+        receiptSettings: first.receiptSettings,
       }).toEqual(first);
       expect(
         (
@@ -2545,7 +2536,7 @@ describe("per-answer receipt presentation", () => {
 });
 
 describe("receipt presentation sources", () => {
-  it("treats absent and explicitly null saved departments as venue-only, and clears previous defaults", async () => {
+  it("omits optional values for absent and null saved departments despite retired defaults", async () => {
     const { cfg, seriesId } = await setupVenue();
     const global = {
       headerSubtitle: "Venue subtitle",
@@ -2563,18 +2554,9 @@ describe("receipt presentation sources", () => {
     );
     expect(absent).toEqual({
       receiptHeader: undefined,
-      receiptTrim: {
-        headerSubtitle: "Venue subtitle",
-        footerMessage: "Venue footer",
-        phone: "+34910000000",
-        email: "venue@example.test",
-      },
+      receiptTrim: {},
       venueAddress: ["Calle Mayor 1", "28013 Madrid"],
-      venueReceiptSettings: {
-        headerSubtitle: "Venue subtitle",
-        footerMessage: "Venue footer",
-        printAddress: false,
-      },
+      receiptSettings: { printAddress: false },
     });
     const sale = await withTransaction(suite.db, (tx) =>
       recordSale(tx, backend, {
@@ -2620,7 +2602,7 @@ describe("receipt presentation sources", () => {
       receiptHeader: undefined,
       receiptTrim: {},
       venueAddress: ["Calle Mayor 1", "28013 Madrid"],
-      venueReceiptSettings: {},
+      receiptSettings: { printAddress: false },
     });
   });
 
@@ -2665,25 +2647,11 @@ describe("receipt presentation sources", () => {
           readReceiptPresentation(tx, cfg, saved!.saleId, "es-ES"),
         );
         expect(presentation.receiptTrim).toEqual(
-          source === "venue"
-            ? { footerMessage: "Own footer", email: "own@example.test" }
-            : source === "department"
-              ? { headerSubtitle: "Venue subtitle" }
-              : {},
+          source === "venue" ? { footerMessage: "Own footer", email: "own@example.test" } : {},
         );
         expect(presentation.venueAddress).toEqual(["Calle Mayor 1", "28013 Madrid"]);
-        expect(presentation.venueReceiptSettings).toEqual(
-          hiddenVenue ? {} : { headerSubtitle: "Venue subtitle" },
-        );
+        expect(presentation.receiptSettings).toEqual({ printAddress: false });
         expect(warning.mock.calls).toEqual([
-          ...(hiddenVenue
-            ? [
-                [
-                  "receipt.optional_read_failed",
-                  { operation: "getPrintedReceipt", receiptId: 1, code: "receipt.read_failed" },
-                ],
-              ]
-            : []),
           ...(hiddenDepartment
             ? [
                 [
@@ -2713,9 +2681,16 @@ describe("receipt presentation sources", () => {
 describe("receipt presentation address failure", () => {
   it("keeps the sale and surviving trim when the optional current-address read fails", async () => {
     const { cfg, zoneId, waterOfferId } = await setupVenue();
+    const [department] = await suite.db
+      .select()
+      .from(departments)
+      .where(eq(departments.locationId, cfg.locationId));
     await suite.db
-      .insert(tenantReceipts)
-      .values({ receipt: { headerSubtitle: "Surviving subtitle" } });
+      .insert(departmentReceipts)
+      .values({
+        departmentId: department!.id,
+        receipt: { headerSubtitle: { "es-ES": "Surviving subtitle" } },
+      });
     const address = vi
       .spyOn(venueAddressReads, "readLocationAddress")
       .mockRejectedValue(new Error("current address read refused"));

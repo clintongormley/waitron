@@ -544,9 +544,9 @@ export class TillTicketView extends LitElement {
           }
           <p class="venue">${issuer.venueName}</p>
           ${
-            r.venueReceiptSettings.printAddress === false
-              ? nothing
-              : r.venueAddress.map((line) => html`<p class="contact">${line}</p>`)
+            r.receiptSettings.printAddress
+              ? r.venueAddress.map((line) => html`<p class="contact">${line}</p>`)
+              : nothing
           }
           ${
             r.receiptTrim?.phone
