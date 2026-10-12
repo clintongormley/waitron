@@ -1,6 +1,6 @@
 import "./errors.js";
 import { and, eq, isNull } from "drizzle-orm";
-import { invoiceDeliveries, type Transaction } from "@waitron/db";
+import { invoiceDeliveries, nodes, sales, type Transaction } from "@waitron/db";
 import type { FiscalBackend } from "@waitron/fiscal";
 import { AppError } from "@waitron/shared";
 import {
@@ -9,14 +9,13 @@ import {
   type InvoiceDelivery,
 } from "./invoice-delivery.js";
 import {
-  readInvoiceDeliveries,
+  readInvoiceDeliveryState,
   rowAttempt,
   type InvoiceDeliveryAttempt,
 } from "./invoice-delivery-status.js";
-import { canEmailInvoice, saleLocation } from "./invoice-email-contact.js";
+import { canEmailInvoice } from "./invoice-email-contact.js";
 import { resendInvoicePrintJob } from "./invoice-print.js";
-import { readInvoicePrinter } from "./page-printers.js";
-import { enqueueOriginalReceipt, readOriginalReceiptPrint } from "./receipt-print.js";
+import { enqueueOriginalReceipt } from "./receipt-print.js";
 import type { OriginConfig } from "./till-config.js";
 import { readSettledTicket } from "./till-sale.js";
 
@@ -51,14 +50,12 @@ export async function requestA4Delivery(
   await expireInvoiceDeliveryClaims(tx);
   const replay = await replayed(tx, saleId, request.requestKey, isA4);
   if (replay !== undefined) return rowAttempt(replay);
-  const status = await readInvoiceDeliveries(tx, saleId, { emailAvailable: false });
-  if (status === null) throw new AppError("invoice_delivery.full_invoice_required", {});
-  const offer = status.actions.printOnA4;
+  const state = await readInvoiceDeliveryState(tx, saleId, { emailAvailable: false });
+  if (state === null) throw new AppError("invoice_delivery.full_invoice_required", {});
+  const offer = state.status.actions.printOnA4;
   if (offer === null) {
     throw new AppError(
-      (await readInvoicePrinter(tx, await saleLocation(tx, saleId))) === null
-        ? "invoice_delivery.printer_invalid"
-        : "invoice_delivery.active",
+      state.printer === null ? "invoice_delivery.printer_invalid" : "invoice_delivery.active",
       {},
     );
   }
@@ -84,9 +81,15 @@ export async function requestEmailDelivery(
     (row) => row.medium === "email" && !row.madeByRetry && row.recipient === request.recipient,
   );
   if (replay !== undefined) return rowAttempt(replay);
-  const status = await readInvoiceDeliveries(tx, saleId, { emailAvailable: true });
-  if (status === null) throw new AppError("invoice_delivery.full_invoice_required", {});
-  if (!(await canEmailInvoice(tx, saleId, request.transport))) {
+  const [sale] = await tx
+    .select({ recipient: sales.counterpartyTaxId, locationId: nodes.locationId })
+    .from(sales)
+    .innerJoin(nodes, eq(nodes.id, sales.nodeId))
+    .where(eq(sales.id, saleId));
+  if (sale === undefined) throw new AppError("invoice_delivery.not_found", {});
+  if (sale.recipient === null) throw new AppError("invoice_delivery.full_invoice_required", {});
+  const located = { id: saleId, locationId: sale.locationId };
+  if (!(await canEmailInvoice(tx, located, request.transport))) {
     throw new AppError("invoice_delivery.email_unavailable", {});
   }
   const row = await reserveInvoiceDelivery(tx, saleId, {
@@ -120,13 +123,15 @@ export async function retryEmailDelivery(
     (row) => row.madeByRetry && ended !== undefined && row.generation === ended.generation + 1,
   );
   if (replay !== undefined) return rowAttempt(replay);
-  const status = await readInvoiceDeliveries(tx, saleId, { emailAvailable: true });
-  if (status === null) throw new AppError("invoice_delivery.full_invoice_required", {});
+  const state = await readInvoiceDeliveryState(tx, saleId, { emailAvailable: true });
+  if (state === null) throw new AppError("invoice_delivery.full_invoice_required", {});
   if (ended === undefined) throw new AppError("invoice_delivery.not_found", {});
+  const { status } = state;
   if (status.current?.id !== deliveryId || status.actions.retryOriginal?.medium !== "email") {
     throw new AppError("invoice_delivery.active", {});
   }
-  if (!(await canEmailInvoice(tx, saleId, request.transport))) {
+  const located = { id: saleId, locationId: state.locationId };
+  if (!(await canEmailInvoice(tx, located, request.transport))) {
     throw new AppError("invoice_delivery.email_unavailable", {});
   }
   const row = await reserveInvoiceDelivery(tx, saleId, {
@@ -154,11 +159,11 @@ export async function switchToReceipt(
   await expireInvoiceDeliveryClaims(tx);
   const replay = await replayed(tx, sale.id, request.requestKey, isReceipt);
   if (replay !== undefined) return rowAttempt(replay);
-  const status = await readInvoiceDeliveries(tx, sale.id, { emailAvailable: false });
-  if (status === null) throw new AppError("invoice_delivery.full_invoice_required", {});
+  const state = await readInvoiceDeliveryState(tx, sale.id, { emailAvailable: false });
+  if (state === null) throw new AppError("invoice_delivery.full_invoice_required", {});
+  const { status, receipt } = state;
   const attempt = status.history.find((candidate) => candidate.id === deliveryId);
   if (attempt === undefined) throw new AppError("invoice_delivery.not_found", {});
-  const receipt = await readOriginalReceiptPrint(tx, sale.id);
   if (status.actions.receiptInstead?.deliveryId !== deliveryId) {
     if (
       attempt.status === "queued" &&

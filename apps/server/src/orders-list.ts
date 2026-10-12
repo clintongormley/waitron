@@ -677,7 +677,7 @@ async function readDeliveries(
   emailTransport: boolean,
 ): Promise<OrderDeliveries | null> {
   const status = await readInvoiceDeliveries(tx, saleId, {
-    emailAvailable: await canEmailInvoice(tx, saleId, emailTransport),
+    emailAvailable: (sale) => canEmailInvoice(tx, sale, emailTransport),
   });
   if (status === null) return null;
   const ids = [...new Set(status.history.flatMap((attempt) => attempt.personId ?? []))];

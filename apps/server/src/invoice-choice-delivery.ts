@@ -8,8 +8,7 @@ import {
 } from "./invoice-email-contact.js";
 import { optionalDocument } from "./optional-document.js";
 import { readInvoicePrinter } from "./page-printers.js";
-import { isValidEmail } from "@waitron/identity";
-import { AppError, locationId } from "@waitron/shared";
+import { AppError, isValidEmail, locationId } from "@waitron/shared";
 
 export type InvoiceChoiceDeliveryContext = {
   personId: string;

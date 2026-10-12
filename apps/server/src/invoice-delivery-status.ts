@@ -60,15 +60,40 @@ export interface InvoiceDeliveryStatus {
  */
 export type InvoiceDeliveryReadOptions = { emailAvailable: boolean };
 
+/** A full invoice's sale, as the status reader found it. */
+export type InvoiceDeliverySale = { id: string; locationId: string };
+
+/** For one sale, `emailAvailable` may be asked of it once it is known to be a full invoice. */
+export type SaleReadOptions = {
+  emailAvailable: boolean | ((sale: InvoiceDeliverySale) => Promise<boolean>);
+};
+
+/** The status, with what the reader read on the way that an action deciding on it needs again. */
+export interface InvoiceDeliveryState {
+  status: InvoiceDeliveryStatus;
+  locationId: string;
+  printer: { id: string; name: string } | null;
+  receipt: OriginalReceiptPrint;
+}
+
 /** Null for a sale that is not a full invoice. */
 export async function readInvoiceDeliveries(
   tx: Transaction,
   saleId: string,
-  options: InvoiceDeliveryReadOptions,
+  options: SaleReadOptions,
 ): Promise<InvoiceDeliveryStatus | null> {
-  const status = (await readInvoiceDeliveriesFor(tx, [saleId], options)).get(saleId);
-  if (status === undefined) throw new AppError("invoice_delivery.not_found", {});
-  return status;
+  return (await readInvoiceDeliveryState(tx, saleId, options))?.status ?? null;
+}
+
+/** {@link readInvoiceDeliveries}, with what an action needs again. */
+export async function readInvoiceDeliveryState(
+  tx: Transaction,
+  saleId: string,
+  options: SaleReadOptions,
+): Promise<InvoiceDeliveryState | null> {
+  const state = (await readStates(tx, [saleId], options.emailAvailable)).get(saleId);
+  if (state === undefined) throw new AppError("invoice_delivery.not_found", {});
+  return state;
 }
 
 /**
@@ -80,6 +105,15 @@ export async function readInvoiceDeliveriesFor(
   saleIds: readonly string[],
   options: InvoiceDeliveryReadOptions,
 ): Promise<Map<string, InvoiceDeliveryStatus | null>> {
+  const states = await readStates(tx, saleIds, options.emailAvailable);
+  return new Map([...states].map(([id, state]) => [id, state?.status ?? null]));
+}
+
+async function readStates(
+  tx: Transaction,
+  saleIds: readonly string[],
+  emailAvailable: boolean | ((sale: InvoiceDeliverySale) => Promise<boolean>),
+): Promise<Map<string, InvoiceDeliveryState | null>> {
   const ids = [...saleIds];
   const found = await tx
     .select({ id: sales.id, recipient: sales.counterpartyTaxId, locationId: nodes.locationId })
@@ -114,20 +148,32 @@ export async function readInvoiceDeliveriesFor(
   ]);
   const rowsOf = bySale(rows);
   const jobsOf = bySale(jobs);
-  return new Map(
-    found.map((sale) => [
-      sale.id,
-      sale.recipient === null
-        ? null
-        : deliveryStatus(
-            rowsOf.get(sale.id) ?? [],
-            jobsOf.get(sale.id) ?? [],
-            receipts.get(sale.id)!,
-            printers.get(sale.locationId) ?? null,
-            options.emailAvailable,
-          ),
-    ]),
-  );
+  const states = new Map<string, InvoiceDeliveryState | null>();
+  for (const sale of found) {
+    if (sale.recipient === null) {
+      states.set(sale.id, null);
+      continue;
+    }
+    const receipt = receipts.get(sale.id)!;
+    const printer = printers.get(sale.locationId) ?? null;
+    const emailable =
+      typeof emailAvailable === "boolean"
+        ? emailAvailable
+        : await emailAvailable({ id: sale.id, locationId: sale.locationId });
+    states.set(sale.id, {
+      status: deliveryStatus(
+        rowsOf.get(sale.id) ?? [],
+        jobsOf.get(sale.id) ?? [],
+        receipt,
+        printer,
+        emailable,
+      ),
+      locationId: sale.locationId,
+      printer,
+      receipt,
+    });
+  }
+  return states;
 }
 
 /** Keeps each sale's items in their order. */

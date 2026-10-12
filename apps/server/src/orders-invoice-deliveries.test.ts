@@ -429,6 +429,37 @@ describe("the order detail's delivery status", () => {
     });
   });
 
+  it("reads the sale's location once while mail can be sent", async () => {
+    email.transport = true;
+    const { billId } = await fullInvoice();
+    const session = (
+      venue.db as unknown as { session: { prepareQuery: (...args: unknown[]) => unknown } }
+    ).session;
+    const prepare = session.prepareQuery.bind(session);
+    const statements: string[] = [];
+    const spy = vi.spyOn(session, "prepareQuery").mockImplementation((...args) => {
+      statements.push((args[0] as { sql: string }).sql);
+      return prepare(...args);
+    });
+    try {
+      const detail = await send(
+        emailOrders,
+        venue.adminDashboard,
+        "GET",
+        `/management-api/orders/${billId}`,
+      );
+      expect(detail.json).toMatchObject({
+        deliveries: { actions: { email: { designation: "original" } } },
+      });
+    } finally {
+      spy.mockRestore();
+    }
+    const saleLocationReads = statements.filter((statement) =>
+      statement.includes('from "sales" inner join "nodes"'),
+    );
+    expect(saleLocationReads).toHaveLength(1);
+  });
+
   it("shows what the office printer is holding the A4 for", async () => {
     const { billId, saleId } = await fullInvoice();
     const printed = await printOnA4(venue.adminDashboard, billId, a4());

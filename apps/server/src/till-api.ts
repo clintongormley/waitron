@@ -729,13 +729,6 @@ function requireRecipient(value: unknown): string {
   return value.trim();
 }
 
-function requireRequestKey(value: unknown): string {
-  if (typeof value !== "string" || !isUuid(value)) {
-    throw new AppError("management.request_invalid", { field: "requestKey" });
-  }
-  return value;
-}
-
 /** A non-UUID names no party, so it gets the absent party's `party.not_open`. */
 export function requirePartyParam(id: string): string {
   if (!isUuid(id)) {
@@ -2196,7 +2189,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
         const saleId = await zonedSale(tx, session, id);
         await expireInvoiceDeliveryClaims(tx);
         return readInvoiceDeliveries(tx, saleId, {
-          emailAvailable: await canEmailInvoice(tx, saleId, transport),
+          emailAvailable: (sale) => canEmailInvoice(tx, sale, transport),
         });
       });
       return c.json(status);
@@ -2215,7 +2208,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       }>(c);
       if (body.medium !== "a4" && body.medium !== "email")
         throw new AppError("management.request_invalid", { field: "medium" });
-      const requestKey = requireRequestKey(body.requestKey);
+      const requestKey = requireBodyUuid(body.requestKey, "requestKey");
       const request = { requestKey, personId: session.personId };
       if (body.medium === "a4") {
         const attempt = await withTransaction(deps.db, async (tx) =>
@@ -2250,7 +2243,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       const id = requireUuidId(c.req.param("id"), "working_order.not_found");
       const deliveryId = c.req.param("deliveryId");
       const body = await readJsonBody<{ requestKey?: unknown }>(c);
-      const requestKey = requireRequestKey(body.requestKey);
+      const requestKey = requireBodyUuid(body.requestKey, "requestKey");
       const attempt = await withTransaction(deps.db, async (tx) => {
         const saleId = await zonedSale(tx, session, id);
         return switchToReceipt(
@@ -2278,7 +2271,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       const id = requireUuidId(c.req.param("id"), "working_order.not_found");
       const deliveryId = c.req.param("deliveryId");
       const body = await readJsonBody<{ requestKey?: unknown }>(c);
-      const requestKey = requireRequestKey(body.requestKey);
+      const requestKey = requireBodyUuid(body.requestKey, "requestKey");
       const transport = (await deps.invoiceEmailAvailable?.()) === true;
       const attempt = await withTransaction(deps.db, async (tx) =>
         retryEmailDelivery(tx, await zonedSale(tx, session, id), deliveryId, {

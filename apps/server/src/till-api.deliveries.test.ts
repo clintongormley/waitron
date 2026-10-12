@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { eq, sql } from "drizzle-orm";
-import { beforeAll, describe, expect, it } from "vitest";
+import { beforeAll, describe, expect, it, vi } from "vitest";
 import {
   deviceProfiles,
   devices,
@@ -420,6 +420,40 @@ async function receiptOriginal(
     await suite.db.update(printJobs).set(set).where(eq(printJobs.id, job.jobId));
   }
   return job.jobId;
+}
+
+const SALE_LOCATION_READ = /from "sales" inner join "nodes"/;
+const INVOICE_PRINTER_READ = /from "page_printers"/;
+const RECEIPT_ORIGINAL_READ =
+  /^select "print_jobs"\."sale_id", .* from "print_jobs" inner join "printers"/;
+
+/** `act`'s answer, and how many statements matching `pattern` the venue database prepared for it. */
+async function readsDuring<T>(
+  pattern: RegExp,
+  act: () => Promise<T>,
+): Promise<{ answer: T; reads: number }> {
+  const { answer, statements } = await statementsDuring(act);
+  return { answer, reads: statements.filter((statement) => pattern.test(statement)).length };
+}
+
+/** `act`'s answer, and the SQL of every statement the venue database prepared for it. */
+async function statementsDuring<T>(
+  act: () => Promise<T>,
+): Promise<{ answer: T; statements: string[] }> {
+  const session = (
+    suite.db as unknown as { session: { prepareQuery: (...args: unknown[]) => unknown } }
+  ).session;
+  const prepare = session.prepareQuery.bind(session);
+  const statements: string[] = [];
+  const spy = vi.spyOn(session, "prepareQuery").mockImplementation((...args) => {
+    statements.push((args[0] as { sql: string }).sql);
+    return prepare(...args);
+  });
+  try {
+    return { answer: await act(), statements };
+  } finally {
+    spy.mockRestore();
+  }
 }
 
 describe("GET /api/sales/:id/deliveries", () => {
@@ -1484,5 +1518,61 @@ describe("POST /api/sales/:id/deliveries/:deliveryId/to-receipt (paper instead o
     );
     expect(await jobsOf(other.saleId)).toEqual([]);
     expect(await jobsOf(saleId)).toHaveLength(1);
+  });
+});
+
+describe("what each delivery route reads", () => {
+  it("reads the sale's location once for the status", async () => {
+    const v = await venue();
+    const { orderId } = await invoice(v);
+    const { answer, reads } = await readsDuring(SALE_LOCATION_READ, () => readStatus(v, orderId));
+    expect(answer.status).toBe(200);
+    expect(reads).toBe(1);
+  });
+
+  it("decides an email request from one read of the sale, reading no printer", async () => {
+    const v = await venue();
+    const { orderId } = await invoice(v);
+    const { answer, statements } = await statementsDuring(() => emailIt(v, orderId));
+    expect(answer.status).toBe(200);
+    expect(statements.filter((statement) => SALE_LOCATION_READ.test(statement))).toHaveLength(1);
+    expect(statements.filter((statement) => INVOICE_PRINTER_READ.test(statement))).toEqual([]);
+    expect(statements.filter((statement) => RECEIPT_ORIGINAL_READ.test(statement))).toEqual([]);
+  });
+
+  it("reads the invoice printer once to refuse A4, whether one is busy or none is set up", async () => {
+    const v = await venue();
+    const busy = await invoice(v);
+    await printOnA4(v, busy.orderId);
+    expect(await readsDuring(INVOICE_PRINTER_READ, () => printOnA4(v, busy.orderId))).toEqual({
+      answer: refusal(409, "invoice_delivery.active"),
+      reads: 1,
+    });
+    await suite.db.update(pagePrinters).set({ invoiceDefault: false });
+    const none = await invoice(v);
+    expect(await readsDuring(INVOICE_PRINTER_READ, () => printOnA4(v, none.orderId))).toEqual({
+      answer: refusal(409, "invoice_delivery.printer_invalid"),
+      reads: 1,
+    });
+  });
+
+  it("reads the sale's location once to email again", async () => {
+    const v = await venue();
+    const { orderId } = await invoice(v);
+    const ended = await endedEmail(v, orderId, "failed");
+    const { answer, reads } = await readsDuring(SALE_LOCATION_READ, () => retry(v, orderId, ended));
+    expect(answer.status).toBe(200);
+    expect(reads).toBe(1);
+  });
+
+  it("reads the receipt original once to switch to paper", async () => {
+    const v = await venue();
+    const { orderId } = await invoice(v);
+    const a4 = (await printOnA4(v, orderId)).body!.id as string;
+    const { answer, reads } = await readsDuring(RECEIPT_ORIGINAL_READ, () =>
+      toReceipt(v, orderId, a4),
+    );
+    expect(answer.status).toBe(200);
+    expect(reads).toBe(1);
   });
 });
