@@ -35,9 +35,47 @@ describe("mergeAllergenMaps", () => {
       nuts: { presence: "may_contain" },
     });
   });
+
+  const gluten = (source: string) => ({ gluten: { presence: "contains" as const, source } });
+  const fold = (sources: string[]) =>
+    sources.map(gluten).reduce((acc, m) => mergeAllergenMaps(acc, m), {});
+
+  it("folds three or more sources into the same sorted list whatever their order", () => {
+    const expected = { gluten: { presence: "contains", source: "barley, rye, wheat" } };
+    expect(fold(["barley", "rye", "wheat"])).toEqual(expected);
+    expect(fold(["barley", "wheat", "rye"])).toEqual(expected);
+    expect(fold(["wheat", "rye", "barley"])).toEqual(expected);
+  });
+
+  it("lists a source once when a fold meets it again", () => {
+    expect(fold(["barley", "rye", "barley"])).toEqual({
+      gluten: { presence: "contains", source: "barley, rye" },
+    });
+  });
+
+  it("keeps a lone source exactly as written", () => {
+    expect(mergeAllergenMaps(gluten("wheat flour, spelt"), {})).toEqual(
+      gluten("wheat flour, spelt"),
+    );
+    expect(mergeAllergenMaps({}, gluten("wheat flour, spelt"))).toEqual(
+      gluten("wheat flour, spelt"),
+    );
+    expect(mergeAllergenMaps(gluten("wheat flour, spelt"), gluten("wheat flour, spelt"))).toEqual(
+      gluten("wheat flour, spelt"),
+    );
+  });
 });
 
 describe("republish", () => {
+  it("does not repeat a manual source the derived floor already lists", () => {
+    expect(
+      republish(
+        { gluten: { presence: "contains", source: "barley" } },
+        { allergens: { gluten: { presence: "contains", source: "barley, rye" } }, pending: false },
+      ),
+    ).toEqual({ gluten: { presence: "contains", source: "barley, rye" } });
+  });
+
   it("is PENDING (null) when nothing is reviewed", () => {
     expect(republish(null, null)).toBeNull();
   });

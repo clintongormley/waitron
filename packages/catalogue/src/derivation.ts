@@ -9,9 +9,9 @@ export interface RecipeDerivation {
 }
 
 /** Union two allergen maps. A code present in both takes `contains` if either does (contains
- * dominates may_contain); its `source` is the two sides' distinct non-empty sources, sorted and
- * comma-joined into one string. Only pairwise: a fold over three or more sources depends on their
- * order and can repeat one. */
+ * dominates may_contain). A lone source, or the same source on both sides, is kept as written;
+ * two different sources become one comma list of their parts, de-duplicated and sorted, so a fold
+ * gives the same text in any order. */
 export function mergeAllergenMaps(a: ProductAllergens, b: ProductAllergens): ProductAllergens {
   const out: ProductAllergens = {};
   for (const code of new Set([...Object.keys(a), ...Object.keys(b)])) {
@@ -19,14 +19,18 @@ export function mergeAllergenMaps(a: ProductAllergens, b: ProductAllergens): Pro
     const db = b[code];
     const presence: AllergenDeclaration["presence"] =
       da?.presence === "contains" || db?.presence === "contains" ? "contains" : "may_contain";
-    const sources = [
-      ...new Set([da?.source, db?.source].filter((s): s is string => Boolean(s))),
-    ].sort();
+    const sources = [...new Set([da?.source, db?.source].filter((s): s is string => Boolean(s)))];
     const decl: AllergenDeclaration = { presence };
-    if (sources.length > 0) decl.source = sources.join(", ");
+    if (sources.length === 1) decl.source = sources[0];
+    if (sources.length > 1) decl.source = mergeSourceLists(sources);
     out[code] = decl;
   }
   return out;
+}
+
+function mergeSourceLists(sources: string[]): string {
+  const parts = sources.flatMap((s) => s.split(",").map((part) => part.trim()));
+  return [...new Set(parts.filter((part) => part !== ""))].sort().join(", ");
 }
 
 /** Compute the published declaration from the two overlays. `null` = PENDING (unreviewed). */
