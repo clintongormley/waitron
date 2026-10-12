@@ -262,6 +262,41 @@ describe("drain — a chain stopped by the same-code brake sends its first held 
     expect(wire.sent).toEqual([[first], [second]]);
   });
 
+  it("keeps the alert at the third refusal's time through two later same-code probes", async () => {
+    const aeat = fakeAeat();
+    const seeded = await seedPendingEnvios(suite.db, { count: 1 });
+    aeat.reject(seeded.facturaKeys[0]!, RUN_CODE, `Rechazo ${RUN_CODE}`);
+    await drain(deps(aeat.client()), T0);
+    for (const number of [2, 3]) {
+      const row = await appendPendingAlta(suite.db, seeded, number);
+      aeat.reject(row.facturaKey, RUN_CODE, `Rechazo ${RUN_CODE}`);
+      await drain(deps(aeat.client()), at((number - 2) * MINUTE));
+    }
+    const first = await appendPendingAlta(suite.db, seeded, 4);
+    const second = await appendPendingAlta(suite.db, seeded, 5);
+    const last = await appendPendingAlta(suite.db, seeded, 6);
+    await drain(deps(aeat.client()), at(2 * MINUTE));
+    aeat.reject(first.facturaKey, RUN_CODE, `Rechazo ${RUN_CODE}`);
+    aeat.reject(second.facturaKey, RUN_CODE, `Rechazo ${RUN_CODE}`);
+    const read = async (now: Date) =>
+      (await withTransaction(suite.db, (tx) => fiscalSubmissionSource.read({ tx, now })))
+        .filter((alert) => alert.code === "fiscal.refusals_repeated")
+        .map(({ key, params, since }) => ({ key, params, since }));
+    const key = `fiscal.refusals_repeated:${seeded.sifId}`;
+    expect(await read(at(2 * MINUTE))).toEqual([
+      { key, params: { codigo: "1100", count: 3 }, since: "2026-07-21T00:03:00.000Z" },
+    ]);
+    await drain(deps(aeat.client()), at(HOUR + 2 * MINUTE));
+    expect(await read(at(HOUR + 2 * MINUTE))).toEqual([
+      { key, params: { codigo: "1100", count: 4 }, since: "2026-07-21T00:03:00.000Z" },
+    ]);
+    await drain(deps(aeat.client()), at(2 * HOUR + 2 * MINUTE));
+    expect(await read(at(2 * HOUR + 2 * MINUTE))).toEqual([
+      { key, params: { codigo: "1100", count: 5 }, since: "2026-07-21T00:03:00.000Z" },
+    ]);
+    expect(await envioOf(last.registroId)).toMatchObject({ estado: "detenido" });
+  });
+
   it("a probe refused with another code keeps its incident and case and releases the records behind it", async () => {
     const aeat = fakeAeat();
     const { seeded, held, heldKeys } = await brakeHold(aeat, 3);
