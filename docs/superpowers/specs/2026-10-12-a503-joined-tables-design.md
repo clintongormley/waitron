@@ -3,8 +3,13 @@
 A short design, asked for by the owner before a plan (`docs/backlog/till.md`, "A503"). It replaces
 the floor plan's saved joins with **joined tables**: a table, set up in the editor, that is made of
 other tables. Points marked **Default** are the driver's choice and stand unless the owner overrides
-them; points marked **Owner question** wait for an answer before the build starts, because they
-change what is stored or how the till splits tables.
+them; points marked **Owner** follow the owner's answers of 2026-10-12 to the four questions this
+design first raised (summed up under "Owner answers", below).
+
+The example used throughout: **Long table** (10 seats) is made of **Counter 3** (2 seats, 2 × 2),
+**Counter 4** (6 seats, 2 × 2) and **Counter 5** (4 seats, 2 × 2), drawn as one 6 × 2 rectangle by
+the window. A joined table has two or more parts; three is the example because a pair hides the
+cases where some parts stay joined.
 
 Two words used below: the **till's copy** is what each day's reset copies from the saved plan into
 today's plan on the till (a plan saved during the day reaches the till only at the next reset, spec
@@ -60,8 +65,9 @@ Every table on the saved plan becomes a live table at the reset, placed or not
 the till can put on the map (`placeSpareToday`, `floor-today-store.ts:520-542`), and a booking can
 be made at any table in today's plan, spares included (`tableInService`,
 `packages/db/src/table-in-service.ts:4-12`, used by `packages/bookings/src/bookings.ts:60`). The
-reset treats each table on its own: one with a party waits, a free one is put back at once
-(`planReset`, `floor-reset-plan.ts:80-96`).
+reset treats each table on its own: one with a party, one merged with a held table, one a module
+refuses or one in an unknown state waits; a free one is put back at once (`planReset`,
+`floor-reset-plan.ts:76-96`).
 
 ## What changes
 
@@ -76,16 +82,22 @@ reset treats each table on its own: one with a party waits, a free one is put ba
   and its own live table, so a party, its bills and a booking sit at it as at any table.
 - **What it is made of is a new table, `floor_plan_table_parts`**: the joined table's id and one
   part's id, both into `floor_plan_tables`, the part unique, so a table is part of at most one
-  joined table (Owner question 2). **Default:** a separate table rather than a column on
+  joined table (**Owner**: no table is in two joined tables). **Default:** a separate table rather than a column on
   `floor_plan_tables`. Whether adding a column with a foreign key would make the migration generator
   rebuild `floor_plan_tables` (which `floor_reset_tables` and `dining_tables` reference) was not
   measured; the separate table avoids the question. It goes in the core set because every floor
   table it references is there.
 - **The till's copy carries the parts** (`floor_reset_table_parts`, the same shape over
   `floor_reset_tables`), so a joined table saved during the day changes the till at the next reset.
-- **A split is recorded for the day**: one row per split joined table, so the till draws the parts in
-  its place and the reset or Join again (Owner question 3) can put it back. The plan names the
-  columns.
+- **A split is recorded for the day**: one row per part split off a joined table, so the till knows
+  which parts stand on their own and the reset or Join again can put them back. The plan names the
+  columns. The seats of a joined table that has lost some parts are today's seats, which today's
+  plan already holds per table (`floor_today_tables.seats`,
+  `packages/db/src/schema/floor-plans.ts:266`), so they need no new column.
+- **A part's size** has nowhere to live today: a part is a table not on the plan, and a table not on
+  the plan has no size (`floor_plan_tables`' placement check sets all six of x, y, width, height,
+  shape and rotation or none, `packages/db/src/schema/floor-plans.ts:52-73`). Owner question 5,
+  below, decides where it comes from; the split waits for the answer, nothing before it does.
 - New tables are classified `state`. `floor_plan_table_parts` joins configuration transfer
   (`packages/db/src/configuration-transfer.ts:48-51`, which carries the saved plan only); all of them
   join the zone and department delete (`apps/server/src/floor-delete.ts`), the live-subscription
@@ -94,18 +106,31 @@ reset treats each table on its own: one with a party waits, a free one is put ba
   every dropped table before writing the migration (CLAUDE.md §3).
 - Other places the dropped tables are named, all to change: `packages/db/src/index.ts:87-93`,
   `apps/server/src/floor-plan.ts` (read and save, :126-136, :323-387),
+  `apps/server/src/floor-delete.ts:76-85`, `apps/server/src/floor-today-merges.ts`, their tests and
+  `floor-delete.bookings.test.ts`, `packages/db/src/schema/floor-plans.test.ts`, both
+  `live-queries.test.ts`,
   `apps/server/src/service-delete.integration.test.ts`, `packages/venue-service/src/dashboard/client.test.ts`,
   the editor draft's joins (`apps/dashboard/src/screens/floor-plan-draft.ts`), and
   `apps/server/src/testing/floor-today-venue.ts`.
 
 ### Parts on the till
 
-**Default** (following the owner's "cannot be placed on their own"): while a joined table is whole,
-its parts are out of service on the till. They are not offered as spares, cannot be seated, booked
-or added to the map, and a request naming one is refused with a new code, `table.in_joined_table`.
-After a split the joined table is out of service and its parts are in service. The rule lives where
-"in service" is decided today (`tableInService`, `placeSpareToday`), so bookings and the till follow
-it without their own copies.
+**Default** (following the owner's "cannot be placed on their own"): a part that is still joined
+cannot stand on its own today. It is not offered as a spare and cannot be seated, joined to a party,
+moved to, given a bill or added to the map; a request naming it is refused with a new code,
+`table.in_joined_table`. A part split off stands on its own, as any table. The joined table stands
+while two or more of its parts are still joined, and not once fewer are (the same refusal names it
+then). `tableInService` (`packages/db/src/table-in-service.ts:4-12`) keeps its meaning, "on today's
+plan in an active zone"; the new check sits beside it on the paths that put a party, a bill or an
+order at a table. Its callers today are `apps/server/src/tables.ts:48, 288`,
+`apps/server/src/move-bill.ts:222`, `apps/server/src/working-order.ts:1292, 7324`,
+`apps/server/src/report-api.ts:156`, `packages/bookings/src/bookings.ts:60` and
+`packages/venue-service/src/department-transfers.ts:426`; the plan says for each whether it takes
+the new check.
+
+**Bookings follow the saved plan, not today's split. Default:** a booking can never name a part
+(refused `table.in_joined_table`, for any date) and can always name a joined table, whatever is
+split today. A split decides only who sits where today.
 
 ### The editor (dashboard)
 
@@ -138,16 +163,65 @@ it without their own copies.
 ### The till
 
 - **A joined table is drawn and used as one table**, under its own name, with its own seats.
-- **Split** is the action's name, as the owner wrote it. On a joined table that is also in a service
-  merge, Split first undoes the merge; pressed again, it splits the joined table. Split needs the
-  joined table on today's map (not taken off) and is subject to Owner question 1.
-- **Where the parts go** (Owner question 4): **default**, the outline is cut into equal slices along
-  its longer side, one per part, in number order, each with the joined table's rotation and shape
-  and the part's own saved seats and Moveable setting.
-- A part of a split joined table offers neither "Back to its saved place" (it has none) nor "Take off
-  for today": it goes back through Join again or the reset.
-- **The reset puts a split joined table back only when every part is free** and in no merge; until
-  then the parts stay and the joined table waits, as an occupied table waits today.
+- **Split takes tables off a joined table** (**Owner**). It asks which parts to split off, listed in
+  number order: one or more, never all. The parts split off become tables of their own, free. The
+  rest stay together: two or more stay one joined table under its own name; a single one left is just
+  that table, recorded as split off too. Split needs the joined table on today's map (not taken
+  off). **Default** for a joined table in a service merge: parts may be split off while two or more
+  stay joined, and the merge is untouched. A split down to one part first undoes the merge, which is
+  refused while a party holds it (`tab.already_open`, `refuseHeld`,
+  `apps/server/src/floor-today-table.ts:63-67`), as a merge's Split is today.
+- **A party stays with what remains** (**Owner**). Split is allowed while a party is seated: the party
+  and its bills stay at the joined table while two or more parts remain. When one part remains, the
+  party's hold on the joined table passes to that part and nothing else changes: any other table the
+  party holds stays held, and the joined table is not left needing clearing. (`moveGuests`,
+  `apps/server/src/table-actions.ts:71-108`, is not the model: it moves a party off ALL its tables
+  and leaves them needing clearing, :91-93.) **Default:** the kitchen is told the new table name, as
+  a move tells it. A party that wants to spread over a split-off table takes it as any other table
+  (seat it or join it, then split the bill if they want), and each table's seats for the day change
+  with the till's existing Seats action (`apps/server/src/floor-today-api.ts:107`); Split itself
+  never puts a party on a split-off part.
+- **Seats** (**Owner**: a table's seats are the most seats that can be assigned there, not a cap on
+  the party). Nothing is refused or warned because a party is larger than what remains. A split-off
+  part has its own saved seats. **Default:** when two or more parts remain, Split also asks the
+  remaining joined table's seats (empty, required, 1 to 999), as a merge asks, and they are today's
+  seats for it; the saved seats come back when it is whole again.
+- **A booking** at the joined table stays where it is. **Default:** the split dialog names a booking
+  due today ("Booked at 21:00"), and once the joined table is out of service the booking is seated
+  after Join again or the reset brings it back.
+- **Where the parts go** (**Owner**): each part keeps its own size (Owner question 5), laid side by
+  side from the joined table's left edge along its width, in number order, each centred on the
+  outline's middle line, with the joined table's rotation and shape and the part's own Moveable
+  setting. **Default:** the outline is where the joined table stands on today's map, turned about
+  its centre as the till turns any table; each part's place is worked out over the whole joined
+  table, whichever parts are split off, and kept in the part's own row of today's plan once it is
+  split off, so a part split off later does not move one already standing. Long table (6 × 2) gives
+  Counter 3 the left 2 × 2, Counter 4 the middle and Counter 5 the right.
+- **An overflow is drawn as it falls.** Parts wider in total than the outline run past its right
+  edge, and parts deeper than it stick out above and below; the till draws them there, over whatever
+  they reach, and staff move a Moveable part if it is in the way. Parts narrower in total leave the
+  rest of the outline empty. Nothing refuses either case, in the editor or on the till. **Default:**
+  a place that would fall off the map (past 0 or 999) is pulled back inside it.
+- **The joined table that remains is drawn over its remaining parts' places**: from the left edge of
+  the first to the right edge of the last, at the joined table's own depth. **Default:** when the
+  parts left are not next to each other (Counter 4 split off from between 3 and 5), the split-off
+  part is drawn on top of the remaining joined table until staff move it.
+- A part split off offers neither "Back to its saved place" (it has none) nor "Take off for today":
+  it goes back through Join again or the reset.
+- **Join again** (**Owner**), on the joined table itself or on any of its free split-off parts, puts
+  back that one joined table and touches no other table in the zone. **Default:** it takes back every
+  split-off part that is free (no party, not needing clearing, in no merge), with no choosing, and
+  is offered only when that leaves two or more parts joined. A part that is not free stays split
+  off, and the action says which ("Counter 4 stays apart: guests seated"); Join again never moves a
+  party. A part taken back leaves today's map wherever staff had moved it. The joined table, if it is
+  on the map, keeps where it stands (a merge it is in is untouched); if it was not, it comes back to
+  its saved place. When every part is back it has its saved seats; when some are still apart, Join
+  again asks its seats as Split does. A party already at the joined table keeps it. Pushing the same
+  tables together by hand makes an ordinary service merge instead, which never comes back under the
+  joined table's name.
+- **The reset puts a split joined table back whole only when it and every split-off part are free**
+  and in no merge; until then everything stays as it is and the joined table waits, as a held table
+  waits today (`planReset`, `apps/server/src/floor-reset-plan.ts:80-96`).
 
 ### Service merges ask for seats
 
@@ -166,38 +240,53 @@ with `merge.seats_required`.
 - The "A saved join's seats have no upper bound" bullet goes from `docs/backlog/till.md` and
   `docs/backlog.md`.
 
-## Owner questions
+## Owner answers (2026-10-12)
 
-These change what is stored or how the till splits, so the build waits for them. Each is in
-`~/waitron-campaign-c/questions.md` with a worked example.
+The four questions this design first raised, answered in the campaign's questions file
+(`~/waitron-campaign-c/questions.md`, "OWNER ANSWER … A503"):
 
-1. **Splitting a joined table with a party seated, or booked later today.** Default: refused while
-   a party is seated (as a free merge's Split is refused today while one of its tables is held,
-   `tab.already_open` from `refuseHeld`, `apps/server/src/floor-today-merges.ts:85-95` and
-   `apps/server/src/floor-today-table.ts:63-67`); allowed when it is only
-   booked, after a question naming the booking, and the booking can be seated once the joined table
-   is back.
-2. **One table in two joined tables** (Long table = Counter 3 + 4 and Big table = Counter 3 + 4 + 5,
-   one on the plan at a time). Default: no; the owner's "in <joined table>" already reads singular.
-3. **Putting a split joined table back during service.** Default: a **Join again** action on any of
-   its parts while every part is free and in no merge, putting the joined table back where it stood
-   with its saved seats. Without it, staff use "Reset to saved plan" (spec §6.2), which resets the
-   whole zone, or wait for the next day.
-4. **Where the parts go on a split.** Default: equal slices of the outline along its longer side.
+1. **Split while a party is seated: allowed, by splitting tables off.** The owner's words: "ask the
+   waiter which table(s) to split off from the joined table; the remaining table(s) remain joined (if
+   there are more than one); the party remains with the remaining (possibly joined) table; if the
+   party wants to split over more than one table, then they could take another table, assign the
+   seats for each of the two tables, and optionally split the bill". And on seats: "the seat number
+   is just the max full seats that can be assigned".
+2. **One table in two joined tables: no.**
+3. **Join again: yes, "specific to just that table".** Without it, pushing the same tables together
+   makes a service merge that does not come back under the joined table's name. (The first draft
+   said "Reset to saved plan" resets the whole zone; it does not: a held table waits and free ones
+   are put back, `planReset`, `apps/server/src/floor-reset-plan.ts:80-96`.)
+4. **Where the parts go: each keeps its own saved size, side by side from the left**, so the parts
+   may not fill the outline, or may overflow it.
+
+## Owner question
+
+5. **Where a part's own size comes from.** A part is a table not on the plan, and a table not on the
+   plan has no size today (see Storage). **Default (recommended):** a table keeps its width and
+   height when it is taken off the plan, and a table made by Add tables starts at the new-table size
+   (`NEW_TABLE_SIZE`, `packages/shared/src/floor-join.ts:15`), so a part's size is the size it last
+   had on the plan. To resize a part, staff take it out of the joined table, place and resize it, and
+   put it back. Alternative: the joined table's Made of list gives each part a Width and a Height of
+   its own, set in the dialog and the form. Parts 1 and 2 of the build do not depend on the answer;
+   the split (part 3) does.
 
 ## Path, migrations and testing
 
 - **Full path**: a migration dropping and adding core tables, and a contract between the server, the
-  dashboard and the till. Parties and bills do not change; bookings change only in refusing a part
-  of a whole joined table.
+  dashboard and the till. Parties and bills change only in a party moving to the one part left by a
+  split, as Move guests moves it; bookings change only in refusing a part still joined.
 - **Upgrade**: the migration drops any saved joins a box holds; before go-live that is accepted, and
   the PR says so in its first line if it needs a venue reset.
 - **Tests first** for each refusal (asserting the code and its field), the till's copy of the parts,
-  parts out of service, the split layout and its refusals, the reset waiting for free parts, and the
-  empty seats prompt on both merge paths. The golden huella test and `inmutabilidad` pass unedited.
+  parts out of service, the split layout (an overflow and a gap among them), splitting off some parts
+  with a party seated and the party moving when one part remains, Join again with a part held, the
+  reset waiting for free parts, and the empty seats prompt on both merge paths. Joined-table tests
+  use three or more parts, not only a pair. The golden huella test and `inmutabilidad` pass unedited.
 - **Rough cut** (the plan decides; each part leaves `main` working):
   1. Saved joins removed everywhere — storage, server, the editor's Joins section, the copy — and the
      seats prompt opening empty on both merge paths.
   2. Joined tables: storage, server checks, the till's copy, parts out of service, and the editor's
      Add joined table, list and form. A joined table works as one table; it cannot yet be split.
-  3. The till's Split, the reset waiting for free parts, and Join again.
+  3. The till's Split: splitting parts off, the party staying or moving, the layout (after owner
+     question 5).
+  4. Join again and the reset waiting for free parts.
