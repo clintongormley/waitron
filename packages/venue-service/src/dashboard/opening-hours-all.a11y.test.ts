@@ -33,7 +33,7 @@ function model(): OpeningHoursModel {
         id: "restaurant",
         name: "Restaurant",
         active: true,
-        zones: [{ id: "terrace", name: "Terrace", seasonWeeks: [], week: [], dates: [] }],
+        zones: [{ id: "terrace", name: "Terrace", seasonWeeks: [], dates: [] }],
         periods: [
           {
             id: "lunch",

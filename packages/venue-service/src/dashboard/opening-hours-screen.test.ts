@@ -1099,9 +1099,7 @@ it("sends an offset-only edit through the real period client and closes before a
 
 function pickerModel(): OpeningHoursModel {
   const data = model();
-  data.departments[0]!.zones = [
-    { id: "terrace", name: "Terrace", seasonWeeks: [], week: [], dates: [] },
-  ];
+  data.departments[0]!.zones = [{ id: "terrace", name: "Terrace", seasonWeeks: [], dates: [] }];
   return {
     ...data,
     departments: [

@@ -93,14 +93,12 @@ describe("zone closed times", () => {
         id: v.bar,
         name: "Bar",
         seasonWeeks: inEverySeason(week([{ startsAt: "06:00", endsAt: "06:00" }])),
-        week: week([{ startsAt: "06:00", endsAt: "06:00" }]),
         dates: [],
       },
       {
         id: v.terrace,
         name: "Terrace",
         seasonWeeks: inEverySeason(week([])),
-        week: week([]),
         dates: [{ specialDateId: day.id, ranges: night }],
       },
     ]);
@@ -129,7 +127,11 @@ describe("zone closed times", () => {
     const zone = model.departments
       .find((d) => d.id === v.departmentId)!
       .zones.find((z) => z.id === v.terrace)!;
-    expect(zone.week).toEqual(week());
+    expect(
+      zone.seasonWeeks.find(
+        (entry) => entry.seasonId === (model.currentSeasonId ?? model.seasons[0]!.id),
+      )!.week,
+    ).toEqual(week());
     expect(zone.dates).toEqual([{ specialDateId: copy!.id, ranges: night }]);
   });
   it("refuses a foreign or switched-off department's zone without changing its rows", async () => {
@@ -228,8 +230,12 @@ describe("zone closed times", () => {
     ).rejects.toMatchObject({ code: "zone_closed_time.invalid" });
     const model = await tx((db) => readOpeningHoursModel(db, v.cfg, at));
     expect(
-      model.departments.find((d) => d.id === v.departmentId)!.zones.find((z) => z.id === v.terrace)!
-        .week,
+      model.departments
+        .find((d) => d.id === v.departmentId)!
+        .zones.find((z) => z.id === v.terrace)!
+        .seasonWeeks.find(
+          (entry) => entry.seasonId === (model.currentSeasonId ?? model.seasons[0]!.id),
+        )!.week,
     ).toEqual(week());
   });
 });

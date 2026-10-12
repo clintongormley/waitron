@@ -3934,12 +3934,14 @@ languages staff may print in, with the venue's receipt language first. A new dep
 authored receipt content. Venue settings holds the receipt language; there is no venue receipt
 page or live venue fallback for receipt decoration.
 
-The zone editor shows its normal-week closed times and an Opening hours link. Identical ranges
-share a day group; more than two groups show a day count. Named-day exceptions stay in Opening
-hours. A zone with placed tables shows a read-only floor-plan preview above Edit floor plan;
-otherwise it offers Add floor plan. Failed reads show their own messages without clearing an
-action refusal. The floor-plan editor returns to the list. Its header ends with Undo and Redo,
-then Cancel beside Save, the owner's exception to Cancel on the left (A502).
+The zone editor shows an Opening hours link and the closed times of the current season (the
+first season when none is current), named first: "Winter: closed from 23:30 Monday to Thursday".
+A venue with no seasons gets the sentence without a name. Identical ranges share a day group; more
+than two groups show a day count. Named-day exceptions stay in Opening hours. A zone with placed
+tables shows a read-only floor-plan preview above Edit floor plan; otherwise it offers Add floor
+plan. Failed reads show their own messages without clearing an action refusal. The floor-plan
+editor returns to the list. Its header ends with Undo and Redo, then Cancel beside Save, the
+owner's exception to Cancel on the left (A502).
 
 A zone's grip moves it to another live department. The row stays visible while you drag it,
 and Escape cancels. Keyboard users pick up the grip with Space, choose with arrows and move

@@ -74,8 +74,6 @@ export interface OpeningHoursModel extends BusinessDayScheduleStatus {
         seasonId: string;
         week: readonly { weekday: number; ranges: readonly ClosedRange[] }[];
       }[];
-      /** The current season's week, the first season's when there is no current season; kept for the Departments and zones summary. */
-      week: readonly { weekday: number; ranges: readonly ClosedRange[] }[];
       dates: readonly { specialDateId: string; ranges: readonly ClosedRange[] }[];
     }[];
     periods: readonly {

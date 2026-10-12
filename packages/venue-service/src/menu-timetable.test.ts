@@ -1572,7 +1572,9 @@ describe("the opening-hours model's seasons", () => {
       { seasonId: id("Autumn"), week: empty("ranges") },
       { seasonId: id("Winter"), week: closedFriday },
     ]);
-    expect(sala.week).toEqual(closedFriday);
+    expect(
+      sala.seasonWeeks.find((entry) => entry.seasonId === december.currentSeasonId)!.week,
+    ).toEqual(closedFriday);
 
     const july = await scoped((tx) =>
       readOpeningHoursModel(tx, v.cfg, madrid("2026-07-03", "12:00")),
@@ -1582,7 +1584,11 @@ describe("the opening-hours model's seasons", () => {
     expect(
       summer.seasonWeeks.find((entry) => entry.seasonId === july.currentSeasonId)!.week[5],
     ).toEqual({ weekday: 5, slots: [] });
-    expect(summer.zones.find((zone) => zone.id === v.sala)!.week[5]).toEqual({
+    expect(
+      summer.zones
+        .find((zone) => zone.id === v.sala)!
+        .seasonWeeks.find((entry) => entry.seasonId === july.currentSeasonId)!.week[5],
+    ).toEqual({
       weekday: 5,
       ranges: [],
     });
@@ -2348,7 +2354,6 @@ describe("the editor's model", () => {
           seasonWeeks: inEverySeason(
             [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({ weekday, ranges: [] })),
           ),
-          week: [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({ weekday, ranges: [] })),
           dates: [],
         },
         {
@@ -2357,7 +2362,6 @@ describe("the editor's model", () => {
           seasonWeeks: inEverySeason(
             [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({ weekday, ranges: [] })),
           ),
-          week: [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({ weekday, ranges: [] })),
           dates: [],
         },
         {
@@ -2366,7 +2370,6 @@ describe("the editor's model", () => {
           seasonWeeks: inEverySeason(
             [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({ weekday, ranges: [] })),
           ),
-          week: [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({ weekday, ranges: [] })),
           dates: [],
         },
       ],
@@ -3174,7 +3177,6 @@ describe("department service periods", () => {
           seasonWeeks: inEverySeason(
             [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({ weekday, ranges: [] })),
           ),
-          week: [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({ weekday, ranges: [] })),
           dates: [],
         },
         {
@@ -3183,7 +3185,6 @@ describe("department service periods", () => {
           seasonWeeks: inEverySeason(
             [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({ weekday, ranges: [] })),
           ),
-          week: [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({ weekday, ranges: [] })),
           dates: [],
         },
         {
@@ -3192,7 +3193,6 @@ describe("department service periods", () => {
           seasonWeeks: inEverySeason(
             [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({ weekday, ranges: [] })),
           ),
-          week: [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({ weekday, ranges: [] })),
           dates: [],
         },
       ],

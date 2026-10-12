@@ -46,7 +46,6 @@ const model: OpeningHoursModel = {
               week: [{ weekday: 1, ranges: [{ startsAt: "10:00", endsAt: "11:00" }] }],
             },
           ],
-          week: [{ weekday: 1, ranges: [{ startsAt: "10:00", endsAt: "11:00" }] }],
           dates: [],
         },
       ],
@@ -340,7 +339,7 @@ it("draws the picked season's closed times over that season's department hours, 
             {
               ...zone,
               seasonWeeks: [
-                { seasonId: "autumn", week: zone.week },
+                { seasonId: "autumn", week: zone.seasonWeeks[0]!.week },
                 {
                   seasonId: "summer",
                   week: [{ weekday: 1, ranges: [{ startsAt: "13:00", endsAt: "14:00" }] }],

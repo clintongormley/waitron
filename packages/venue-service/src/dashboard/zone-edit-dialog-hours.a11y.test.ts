@@ -7,6 +7,20 @@ import { departmentHoursModel } from "../testing/department-hours-fixture.js";
 import { placedZonePlan, zonesModel } from "../testing/department-zones-fixture.js";
 import { VenueServiceApi } from "./client.js";
 import "./zone-edit-dialog.js";
+const shown = {
+  grouped: {
+    en: "Autumn: closed from 23:30 Monday to Thursday and Sunday; from 01:00 Friday and Saturday",
+    es: "Autumn: cerrada desde 23:30 lunes a jueves y domingo; desde 01:00 viernes y sábado",
+  },
+  open: {
+    en: "Autumn: open whenever the department is",
+    es: "Autumn: abierta cuando lo está el departamento",
+  },
+  count: {
+    en: "Autumn: closed at some times on 3 days",
+    es: "Autumn: cerrada en algunas franjas de 3 días",
+  },
+} as const;
 afterEach(() => {
   cleanup();
   setLocale("en");
@@ -14,7 +28,7 @@ afterEach(() => {
 it("renders the summary and hours link accessibly in EN/ES, both themes, desktop and phone", async () => {
   const old = [window.innerWidth, window.innerHeight];
   try {
-    for (const locale of ["en", "es"])
+    for (const locale of ["en", "es"] as const)
       for (const theme of ["light", "dark"] as const)
         for (const width of [1280, 390])
           for (const state of ["grouped", "open", "count", "failure", "deleted"] as const) {
@@ -22,9 +36,9 @@ it("renders the summary and hours link accessibly in EN/ES, both themes, desktop
             await page.viewport(width, 844);
             expect(window.innerWidth).toBe(width);
             const hours = departmentHoursModel();
-            if (state === "open") hours.departments[0]!.zones[0]!.week = [];
+            if (state === "open") hours.departments[0]!.zones[0]!.seasonWeeks[0]!.week = [];
             if (state === "count")
-              hours.departments[0]!.zones[0]!.week = [1, 2, 3].map((weekday) => ({
+              hours.departments[0]!.zones[0]!.seasonWeeks[0]!.week = [1, 2, 3].map((weekday) => ({
                 weekday,
                 ranges: [{ startsAt: `2${weekday}:00`, endsAt: "06:00" }],
               }));
@@ -69,7 +83,7 @@ it("renders the summary and hours link accessibly in EN/ES, both themes, desktop
                     .shadowRoot!.querySelector("[data-test=closed-week-summary]")
                     ?.textContent?.trim(),
                 )
-                .toBeTruthy();
+                .toBe(shown[state][locale]);
             await expectNoA11yViolations(host);
             {
               const summary = el.shadowRoot!.querySelector<HTMLElement>(

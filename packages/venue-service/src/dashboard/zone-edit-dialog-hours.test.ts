@@ -29,11 +29,71 @@ async function mount(hours: OpeningHoursModel, request?: DashboardRequest) {
 const summary = () =>
   el.shadowRoot!.querySelector("[data-test=closed-week-summary]")?.textContent?.trim();
 
-it("groups the Terrace's closing times by identical normal-week ranges", async () => {
+function twoSeasons(currentSeasonId: string | null) {
+  const hours = model();
+  hours.seasons = [
+    { id: "autumn", name: "Autumn", startsOn: "09-01" },
+    { id: "winter", name: "Winter", startsOn: "12-01" },
+  ];
+  hours.currentSeasonId = currentSeasonId;
+  hours.departments[0]!.zones[0]!.seasonWeeks = [
+    {
+      seasonId: "autumn",
+      week: [{ weekday: 5, ranges: [{ startsAt: "12:00", endsAt: "14:00" }] }],
+    },
+    {
+      seasonId: "winter",
+      week: [1, 2, 3, 4].map((weekday) => ({
+        weekday,
+        ranges: [{ startsAt: "23:30", endsAt: "06:00" }],
+      })),
+    },
+  ];
+  return hours;
+}
+it("summarises the current season's closed times and names the season", async () => {
+  await mount(twoSeasons("winter"));
+  await expect.poll(summary).toBe("Winter: closed from 23:30 Monday to Thursday");
+});
+it("names the season in Spanish with the season's stored name", async () => {
+  setLocale("es-ES");
+  await mount(twoSeasons("winter"));
+  await expect.poll(summary).toBe("Winter: cerrada desde 23:30 lunes a jueves");
+});
+it("summarises the first season when there is no current season", async () => {
+  await mount(twoSeasons(null));
+  await expect.poll(summary).toBe("Autumn: closed 12:00–14:00 Friday");
+});
+it("names the season when a season leaves the zone open, and when it counts days", async () => {
+  const open = twoSeasons("winter");
+  open.departments[0]!.zones[0]!.seasonWeeks[1]!.week = [];
+  await mount(open);
+  await expect.poll(summary).toBe("Winter: open whenever the department is");
+  el.remove();
+  const counted = twoSeasons("winter");
+  counted.departments[0]!.zones[0]!.seasonWeeks[1]!.week = [1, 2, 3].map((weekday) => ({
+    weekday,
+    ranges: [{ startsAt: `2${weekday}:00`, endsAt: "06:00" }],
+  }));
+  setLocale("es-ES");
+  await mount(counted);
+  await expect.poll(summary).toBe("Winter: cerrada en algunas franjas de 3 días");
+});
+it("keeps the unnamed sentence when the venue has no seasons", async () => {
+  const hours = model();
+  hours.seasons = [];
+  hours.currentSeasonId = null;
+  hours.departments[0]!.zones[0]!.seasonWeeks = [];
+  await mount(hours);
+  await expect.poll(summary).toBe("Open whenever the department is");
+});
+it("groups the Terrace's closing times in the shown season by identical ranges", async () => {
   await mount(model());
   await expect
     .poll(summary)
-    .toBe("Closed from 23:30 Monday to Thursday and Sunday; from 01:00 Friday and Saturday");
+    .toBe(
+      "Autumn: closed from 23:30 Monday to Thursday and Sunday; from 01:00 Friday and Saturday",
+    );
   expect(
     el
       .shadowRoot!.querySelector("[name=name]")!
@@ -41,24 +101,24 @@ it("groups the Terrace's closing times by identical normal-week ranges", async (
       Node.DOCUMENT_POSITION_FOLLOWING,
   ).toBeTruthy();
 });
-it("says the zone follows its department when its normal week has no closed ranges, ignoring named days", async () => {
+it("says the zone follows its department when the shown season's week has no closed ranges, ignoring named days", async () => {
   const hours = model();
   const zone = hours.departments[0]!.zones[0]!;
-  zone.week = [];
+  zone.seasonWeeks[0]!.week = [];
   zone.dates = [{ specialDateId: "holiday", ranges: [{ startsAt: "18:00", endsAt: "06:00" }] }];
   await mount(hours);
-  await expect.poll(summary).toBe("Open whenever the department is");
+  await expect.poll(summary).toBe("Autumn: open whenever the department is");
 });
 it("uses a day count when three distinct groups cannot fit the summary", async () => {
   const hours = model();
-  hours.departments[0]!.zones[0]!.week = [
+  hours.departments[0]!.zones[0]!.seasonWeeks[0]!.week = [
     { weekday: 1, ranges: [{ startsAt: "23:00", endsAt: "06:00" }] },
     { weekday: 2, ranges: [{ startsAt: "22:00", endsAt: "06:00" }] },
     { weekday: 3, ranges: [{ startsAt: "21:00", endsAt: "06:00" }] },
     { weekday: 4, ranges: [] },
   ];
   await mount(hours);
-  await expect.poll(summary).toBe("Closed at some times on 3 days");
+  await expect.poll(summary).toBe("Autumn: closed at some times on 3 days");
 });
 it("links to this zone's normal week with encoded department and zone ids", async () => {
   await mount(model());
@@ -81,14 +141,14 @@ it("localizes the grouped times and link in Spanish", async () => {
   await mount(model());
   await expect
     .poll(summary)
-    .toBe("Cerrada desde 23:30 lunes a jueves y domingo; desde 01:00 viernes y sábado");
+    .toBe("Autumn: cerrada desde 23:30 lunes a jueves y domingo; desde 01:00 viernes y sábado");
   expect(el.shadowRoot!.querySelector("[data-test=zone-opening-hours]")!.textContent).toBe(
     "Horario de apertura (semana normal)",
   );
 });
 it("keeps bounded and split closures distinct from closing until the day cutover", async () => {
   const hours = model();
-  hours.departments[0]!.zones[0]!.week = [
+  hours.departments[0]!.zones[0]!.seasonWeeks[0]!.week = [
     {
       weekday: 5,
       ranges: [
@@ -112,23 +172,23 @@ it("keeps bounded and split closures distinct from closing until the day cutover
     },
   ];
   await mount(hours);
-  await expect.poll(summary).toBe("Closed 12:00–14:00 and from 23:00 Friday to Sunday");
+  await expect.poll(summary).toBe("Autumn: closed 12:00–14:00 and from 23:00 Friday to Sunday");
 });
 it("keeps different reopening times in separate groups", async () => {
   const hours = model();
-  hours.departments[0]!.zones[0]!.week = [
+  hours.departments[0]!.zones[0]!.seasonWeeks[0]!.week = [
     { weekday: 1, ranges: [{ startsAt: "12:00", endsAt: "14:00" }] },
     { weekday: 3, ranges: [{ startsAt: "12:00", endsAt: "15:00" }] },
   ];
   await mount(hours);
-  await expect.poll(summary).toBe("Closed 12:00–14:00 Monday; 12:00–15:00 Wednesday");
+  await expect.poll(summary).toBe("Autumn: closed 12:00–14:00 Monday; 12:00–15:00 Wednesday");
 });
 it("selects the current zone instead of retaining the previous zone's summary", async () => {
   await mount(model());
   await expect.poll(summary).toContain("23:30");
   el.zoneId = "z2";
   await el.updateComplete;
-  await expect.poll(summary).toBe("Open whenever the department is");
+  await expect.poll(summary).toBe("Autumn: open whenever the department is");
   expect(el.shadowRoot!.querySelector("[data-test=zone-opening-hours]")!.getAttribute("href")).toBe(
     "/manage/opening-hours/view/week/department/d1/zone/z2",
   );
@@ -171,11 +231,11 @@ it("uses passive reads and refreshes the summary without resetting an unsaved se
   );
   await el.updateComplete;
   hours = model();
-  hours.departments[0]!.zones[0]!.week = [
+  hours.departments[0]!.zones[0]!.seasonWeeks[0]!.week = [
     { weekday: 0, ranges: [{ startsAt: "21:00", endsAt: "06:00" }] },
   ];
   el.api!.openingHours.rereadWatches();
-  await expect.poll(summary).toBe("Closed from 21:00 Sunday");
+  await expect.poll(summary).toBe("Autumn: closed from 21:00 Sunday");
   expect(fields.value.paidWhen).toBe("ticket_then_pay");
   expect(
     el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>("[data-test=save-editor]")!
@@ -228,15 +288,15 @@ it("detaches on removal and ignores a late answer after reconnecting with anothe
   expect(summary()).toBe("");
   el.remove();
   const hours = model();
-  hours.departments[0]!.zones[0]!.week = [];
+  hours.departments[0]!.zones[0]!.seasonWeeks[0]!.week = [];
   el.api = new VenueServiceApi((async () => hours) as DashboardRequest);
   document.body.append(el);
   await el.updateComplete;
-  await expect.poll(summary).toBe("Open whenever the department is");
+  await expect.poll(summary).toBe("Autumn: open whenever the department is");
   answer(model());
   await Promise.resolve();
   await el.updateComplete;
-  expect(summary()).toBe("Open whenever the department is");
+  expect(summary()).toBe("Autumn: open whenever the department is");
 });
 
 it("stops a connected component's previous API watch before a late read answers", async () => {
@@ -260,7 +320,7 @@ it("stops a connected component's previous API watch before a late read answers"
   await el.updateComplete;
   expect(summary()).toBe("");
   const changed = model();
-  changed.departments[0]!.zones[0]!.week = [
+  changed.departments[0]!.zones[0]!.seasonWeeks[0]!.week = [
     { weekday: 0, ranges: [{ startsAt: "21:00", endsAt: "06:00" }] },
   ];
   answer(changed);
