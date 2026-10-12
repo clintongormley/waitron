@@ -206,20 +206,20 @@ describe.each(["en", "es"])("Day draft (%s)", (locale) => {
       .poll(() => screen.shadowRoot!.querySelector("[data-test=read-error]"))
       .not.toBeNull();
     expect(app.writes[0]).toEqual([
-      "/management-api/venue-service/departments/d1/menu-week",
+      "/management-api/venue-service/special-days/day-2026-10-12",
       "PUT",
       {
-        expectedClockRevision: 0,
-        seasonId: "autumn",
-        days: [
-          { weekday: 0, slots: [] },
-          { weekday: 1, slots: [{ periodId: "p1", startsAt: "10:00", endsAt: "15:00" }] },
-          { weekday: 2, slots: [] },
-          { weekday: 3, slots: [] },
-          { weekday: 4, slots: [] },
-          { weekday: 5, slots: [] },
-          { weekday: 6, slots: [] },
+        name: "Special 2026-10-12",
+        repeatsYearly: false,
+        dates: [{ date: "2026-10-12", closedAllDay: false }],
+        paint: [
+          {
+            departmentId: "d1",
+            date: "2026-10-12",
+            ranges: [{ periodId: "p1", startsAt: "14:00", endsAt: "15:00" }],
+          },
         ],
+        expectedClockRevision: 0,
       },
     ]);
     expect(unload()).toBe(false);
