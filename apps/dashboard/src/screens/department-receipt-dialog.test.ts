@@ -283,3 +283,92 @@ it.each(["success", "refusal"])(
     expect(el.shadowRoot!.querySelector("wt-form-actions")!.error).toBe("");
   },
 );
+
+it("opens a host-selected subject once and returns to its host on close", async () => {
+  const { el, dialog, api } = await mountReceiptDialog();
+  const closed = dialogClosed(dialog);
+  await userEvent.click(
+    page.elementLocator(el.shadowRoot!.querySelector("[data-test=cancel-receipt]")!),
+  );
+  await closed;
+  const returned: string[] = [];
+  el.addEventListener("department-receipt-closed", (event) =>
+    returned.push((event as CustomEvent).detail.departmentId),
+  );
+  el.subject = { id: "terrace", name: "Terrace" };
+  await el.updateComplete;
+  await expect.poll(() => api.getDepartmentReceipt.mock.lastCall?.[0]).toBe("terrace");
+  await expect.poll(() => dialog.open).toBe(true);
+  const nextClosed = dialogClosed(dialog);
+  await userEvent.click(
+    page.elementLocator(el.shadowRoot!.querySelector("[data-test=cancel-receipt]")!),
+  );
+  await nextClosed;
+  expect(returned).toEqual(["terrace"]);
+  el.subject = { id: "terrace", name: "New name" };
+  await el.updateComplete;
+  expect(dialog.open).toBe(false);
+  expect(api.getDepartmentReceipt).toHaveBeenCalledTimes(2);
+});
+
+it("refreshes the selected subject name without replacing its dirty receipt or rereading", async () => {
+  const { el, api } = await mountReceiptDialog();
+  await editReceipt(el, "email", "draft@example.com");
+  el.subject = { id: "bar", name: "Renamed counter" };
+  await el.updateComplete;
+  expect(el.shadowRoot!.querySelector("wt-dialog")!.description).toBe("Renamed counter");
+  expect(receiptField(el, "email").value).toBe("draft@example.com");
+  expect(api.getDepartmentReceipt).toHaveBeenCalledTimes(1);
+});
+it("can reopen the same subject after its host clears a closed selection", async () => {
+  const { el, dialog, api } = await mountReceiptDialog();
+  el.subject = { id: "bar", name: "Bar" };
+  await el.updateComplete;
+  const closed = dialogClosed(dialog);
+  await userEvent.click(
+    page.elementLocator(el.shadowRoot!.querySelector("[data-test=cancel-receipt]")!),
+  );
+  await closed;
+  el.subject = undefined;
+  await el.updateComplete;
+  el.subject = { id: "bar", name: "Bar" };
+  await el.updateComplete;
+  await expect.poll(() => api.getDepartmentReceipt.mock.calls.length).toBe(2);
+  await expect.poll(() => dialog.open).toBe(true);
+});
+it("a selected department removed during its live read returns its identity to the host once", async () => {
+  const { el, api, dialog } = await mountReceiptDialog();
+  const returned: string[] = [];
+  el.addEventListener("department-receipt-closed", (event) =>
+    returned.push((event as CustomEvent).detail.departmentId),
+  );
+  api.getDepartmentReceipt.mockRejectedValue({ code: "department.not_found", status: 404 });
+  const closed = dialogClosed(dialog);
+  api.liveData.invalidate([{ type: "departments" }]);
+  await closed;
+  expect(returned).toEqual(["bar"]);
+  el.dismiss();
+  expect(returned).toEqual(["bar"]);
+});
+
+it("an ignored replacement subject does not overwrite a dirty receipt or consume its later opening", async () => {
+  const { el, dialog, api } = await mountReceiptDialog();
+  await editReceipt(el, "email", "draft@example.com");
+  el.subject = { id: "terrace", name: "Terrace" };
+  await el.updateComplete;
+  expect(api.getDepartmentReceipt).toHaveBeenCalledTimes(1);
+  expect(dialog.description).toBe("Bar");
+  expect(receiptField(el, "email").value).toBe("draft@example.com");
+  expect(receiptSave(el).disabled).toBe(false);
+  expect(receiptField(el, "operationDescription").value).toBe("Dining service");
+  await editReceipt(el, "email", "");
+  const closed = dialogClosed(dialog);
+  await userEvent.click(
+    page.elementLocator(el.shadowRoot!.querySelector("[data-test=cancel-receipt]")!),
+  );
+  await closed;
+  el.subject = { id: "terrace", name: "Terrace" };
+  await el.updateComplete;
+  await expect.poll(() => api.getDepartmentReceipt.mock.lastCall?.[0]).toBe("terrace");
+  await expect.poll(() => dialog.open).toBe(true);
+});

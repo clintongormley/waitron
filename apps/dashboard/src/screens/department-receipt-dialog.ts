@@ -1,4 +1,4 @@
-import { LitElement, css, html, nothing } from "lit";
+import { LitElement, css, html, nothing, type PropertyValues } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import {
   isValidTelephone,
@@ -17,7 +17,7 @@ import {
   type LeaveReason,
   type WtDialog,
 } from "@waitron/ui";
-import type { DashboardApi, ReceiptPreview, PrintPaperWidth } from "../api/client.js";
+import type { ReceiptPreview, PrintPaperWidth } from "../api/client.js";
 import { sameValue } from "../widgets/product-editor-model.js";
 import { PrintPaper, paperStyles } from "../widgets/print-paper.js";
 import { receiptLanguageName } from "../widgets/receipt-language.js";
@@ -32,27 +32,14 @@ import "@waitron/ui/src/components/wt-combobox.js";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
 
-export interface DepartmentReceiptDialogModel extends DepartmentReceiptWrite {
-  receiptLanguage: string;
-  languages: string[];
-  warningLanguages: string[];
-  venueAddress: string[];
-}
-export interface DepartmentReceiptDialogApi extends Pick<
-  DashboardApi,
-  "liveData" | "imageLibraryRequest"
-> {
-  getDepartmentReceipt(id: string): Promise<DepartmentReceiptDialogModel>;
-  putDepartmentReceipt(id: string, input: DepartmentReceiptWrite): Promise<void>;
-  previewReceiptDraft(
-    input: DepartmentReceiptWrite & {
-      departmentId: string;
-      language?: string;
-      paperWidth?: PrintPaperWidth;
-    },
-    options?: { passive?: boolean },
-  ): Promise<ReceiptPreview>;
-}
+export type {
+  DepartmentReceiptModel as DepartmentReceiptDialogModel,
+  DepartmentReceiptClient as DepartmentReceiptDialogApi,
+} from "../api/department-receipts.js";
+import type {
+  DepartmentReceiptModel as DepartmentReceiptDialogModel,
+  DepartmentReceiptClient as DepartmentReceiptDialogApi,
+} from "../api/department-receipts.js";
 function comparableReceipt(value: DepartmentReceiptWrite): DepartmentReceiptWrite {
   return {
     ...value,
@@ -106,6 +93,23 @@ export class DepartmentReceiptDialog extends LitElement {
     `,
   ];
   @property({ attribute: false }) api!: DepartmentReceiptDialogApi;
+  @property({ attribute: false }) subject?: { id: string; name: string };
+  #subjectId?: string;
+  protected override willUpdate(changed: PropertyValues<this>): void {
+    if (!changed.has("subject")) return;
+    if (!this.subject) {
+      if (this.department === null) this.#subjectId = undefined;
+      return;
+    }
+    if (this.department?.id === this.subject.id) {
+      this.department = { ...this.department, name: this.subject.name };
+      return;
+    }
+    if (this.department === null && this.subject.id !== this.#subjectId) {
+      this.#subjectId = this.subject.id;
+      this.show(this.subject);
+    }
+  }
   @property({ type: Boolean }) canManagePolicy = true;
   @property({ type: Boolean }) requiresDescription = true;
   @state() private department: { id: string; name: string } | null = null;
@@ -159,13 +163,14 @@ export class DepartmentReceiptDialog extends LitElement {
   }
   dismiss(): void {
     this.#dialog()?.closeAfter("security");
-    this.#close();
+    this.#close(true);
   }
   override disconnectedCallback(): void {
     this.dismiss();
     super.disconnectedCallback();
   }
-  #close(): void {
+  #close(notifyHost = false): void {
+    const departmentId = this.department?.id;
     this.#opening++;
     this.#previewGeneration++;
     clearTimeout(this.#previewTimer);
@@ -175,6 +180,14 @@ export class DepartmentReceiptDialog extends LitElement {
     this.#leave = undefined;
     this.department = null;
     this.saving = false;
+    if (notifyHost && departmentId && this.isConnected)
+      this.dispatchEvent(
+        new CustomEvent("department-receipt-closed", {
+          detail: { departmentId },
+          bubbles: true,
+          composed: true,
+        }),
+      );
   }
   #dialog(): WtDialog | null {
     return this.shadowRoot?.querySelector("wt-dialog") ?? null;
@@ -192,6 +205,7 @@ export class DepartmentReceiptDialog extends LitElement {
     const department = this.department;
     if (!department) return;
     const opening = this.#opening;
+    let initialRead = true;
     await this.#queries
       .watch(
         "receipt",
@@ -203,7 +217,11 @@ export class DepartmentReceiptDialog extends LitElement {
             { type: "locations" },
             { type: "content_languages" },
           ],
-          read: () => this.api.getDepartmentReceipt(department.id),
+          read: () => {
+            const client = initialRead ? this.api : (this.api.background ?? this.api);
+            initialRead = false;
+            return client.getDepartmentReceipt(department.id);
+          },
         },
         (model) => {
           if (opening !== this.#opening) return;
@@ -440,12 +458,13 @@ export class DepartmentReceiptDialog extends LitElement {
       : [];
     return html`<wt-dialog
       heading=${t("receipts.edit")}
+      description=${this.department?.name ?? ""}
       .open=${this.department !== null}
       .dismissible=${!this.saving}
       .beforeClose=${this.#beforeClose}
       @wt-close=${(event: Event) => {
         event.stopPropagation();
-        if (event.target === event.currentTarget) this.#close();
+        if (event.target === event.currentTarget) this.#close(true);
       }}
     >
       ${
