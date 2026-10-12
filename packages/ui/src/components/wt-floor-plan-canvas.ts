@@ -2,7 +2,7 @@ import { LitElement, type PropertyValues, type TemplateResult, css, html, nothin
 import { customElement, property, state } from "lit/decorators.js";
 import { repeat } from "lit/directives/repeat.js";
 import { styleMap } from "lit/directives/style-map.js";
-import { baseStyles } from "../base-styles.js";
+import { baseStyles, visuallyHiddenStyles } from "../base-styles.js";
 import { floorPlanTableStyles } from "../floor-plan-table-styles.js";
 import {
   GRID_SQUARE_PX,
@@ -113,10 +113,9 @@ const ARROWS: Record<string, { dx: number; dy: number }> = {
   ArrowUp: { dx: 0, dy: -1 },
 };
 
-interface Drag {
-  kind: "move" | "rotate" | "resize";
-  /** For a resize: the side whose dot was pressed. */
-  side: PlanSide;
+type Grab = { kind: "move" | "rotate" } | { kind: "resize"; side: PlanSide };
+
+type Drag = Grab & {
   table: PlanCanvasTable;
   pointerId: number;
   startX: number;
@@ -126,7 +125,7 @@ interface Drag {
   centreY: number;
   /** For a turn: the pointer's angle round the table's centre when it was pressed. */
   startAngle: number;
-}
+};
 
 interface Draft {
   key: string;
@@ -299,13 +298,8 @@ export class WtFloorPlanCanvas extends LitElement {
         pointer-events: none;
       }
 
-      .announcement {
-        position: absolute;
-        width: 1px;
-        height: 1px;
-        overflow: hidden;
-        clip-path: inset(50%);
-        text-wrap: nowrap;
+      .visually-hidden {
+        ${visuallyHiddenStyles}
       }
     `,
   ];
@@ -328,6 +322,8 @@ export class WtFloorPlanCanvas extends LitElement {
   @state() private keyResized: string | null = null;
 
   @state() private announcement = "";
+
+  @state() private resizing: { key: string; side: PlanSide } | null = null;
 
   #drag: Drag | null = null;
 
@@ -360,8 +356,7 @@ export class WtFloorPlanCanvas extends LitElement {
 
   #drewTables = false;
 
-  /** Squares kept above and left of the plan for a turn arrow: never read during a drag or its
-   *  hold, so nothing drawn moves under the pointer. */
+  /** Squares kept above and left of the plan for a turn arrow. */
   #margin = 0;
 
   #observer = new ResizeObserver(([entry]) => {
@@ -400,7 +395,8 @@ export class WtFloorPlanCanvas extends LitElement {
     const box = bounds(placements);
     const plan = gridExtent(placements, { columns: 0, rows: 0 });
     const hold = this.#holding(changed.has("tables"));
-    if (hold !== "drag") {
+    // Not while a drag holds the room, so nothing drawn moves under the pointer.
+    if (hold !== "drag" && (!this.hasUpdated || changed.has("tables"))) {
       const host = getComputedStyle(this);
       // The arrow's far corner sits on the table's corner diagonal, which a turn can point along
       // either axis, so its reach past the table's turned box is the side times √2.
@@ -494,7 +490,7 @@ export class WtFloorPlanCanvas extends LitElement {
         </div>
       </div>
       <span id="keys" hidden>${copy.keys}</span>
-      <span class="announcement" role="status">${this.announcement}</span>
+      <span class="visually-hidden" role="status">${this.announcement}</span>
     `;
   }
 
@@ -520,7 +516,7 @@ export class WtFloorPlanCanvas extends LitElement {
         ?data-refused=${t.refused !== undefined}
         style=${style}
         @click=${(e: Event) => this.#onTableClick(e, t.key)}
-        @pointerdown=${(e: PointerEvent) => this.#onPointerDown(e, t, "move")}
+        @pointerdown=${(e: PointerEvent) => this.#onPointerDown(e, t, { kind: "move" })}
         @keydown=${(e: KeyboardEvent) => this.#onTableKey(e, t)}
         @blur=${() => this.#onTableBlur(t.key)}
       >
@@ -568,7 +564,7 @@ export class WtFloorPlanCanvas extends LitElement {
     p: PlanPlacement,
     copy: Required<FloorPlanCanvasCopy>,
   ): TemplateResult {
-    const dragged = this.#drag?.kind === "resize" ? this.#drag.side : null;
+    const dragged = this.resizing?.side ?? null;
     return html`<div class="frame" style=${this.#frameStyle(p)}>
       <button
         type="button"
@@ -576,7 +572,7 @@ export class WtFloorPlanCanvas extends LitElement {
         part="rotate-handle"
         aria-label=${copy.rotate.replace("{name}", () => t.label)}
         @click=${(e: Event) => e.stopPropagation()}
-        @pointerdown=${(e: PointerEvent) => this.#onPointerDown(e, t, "rotate")}
+        @pointerdown=${(e: PointerEvent) => this.#onPointerDown(e, t, { kind: "rotate" })}
         @keydown=${(e: KeyboardEvent) => this.#onHandleKey(e, t)}
       >
         <wt-icon name="floor-plan-rotate" size="lg"></wt-icon>
@@ -602,9 +598,8 @@ export class WtFloorPlanCanvas extends LitElement {
             class="resize-handle"
             part="resize-handle"
             data-side=${side}
-            aria-hidden="true"
             @click=${(e: Event) => e.stopPropagation()}
-            @pointerdown=${(e: PointerEvent) => this.#onPointerDown(e, t, "resize", side)}
+            @pointerdown=${(e: PointerEvent) => this.#onPointerDown(e, t, { kind: "resize", side })}
           ></div>`,
       )}
     </div>`;
@@ -625,7 +620,7 @@ export class WtFloorPlanCanvas extends LitElement {
   /** The table whose size badge shows: a dot drag's, else the selected table's after a keyboard
    *  resize. */
   #badged(): string | null {
-    if (this.#drag?.kind === "resize") return this.#drag.table.key;
+    if (this.resizing !== null) return this.resizing.key;
     return this.keyResized === this.selected ? this.keyResized : null;
   }
 
@@ -736,12 +731,7 @@ export class WtFloorPlanCanvas extends LitElement {
     this.#rotate(t.key, rotation);
   }
 
-  #onPointerDown(
-    e: PointerEvent,
-    t: PlanCanvasTable,
-    kind: Drag["kind"],
-    side: PlanSide = "right",
-  ): void {
+  #onPointerDown(e: PointerEvent, t: PlanCanvasTable, grab: Grab): void {
     // Replacing a live drag's owner would leave the first pointer's pointerup unmatched.
     if (this.#drag !== null || e.button !== 0) return;
     // Cancelling the press also cancels the focus it would give, so give it back by hand.
@@ -752,8 +742,7 @@ export class WtFloorPlanCanvas extends LitElement {
     const centreX = grid.left + (this.#origin.x + p.x + p.width / 2) * GRID_SQUARE_PX;
     const centreY = grid.top + (this.#origin.y + p.y + p.height / 2) * GRID_SQUARE_PX;
     this.#drag = {
-      kind,
-      side,
+      ...grab,
       table: t,
       pointerId: e.pointerId,
       startX: e.clientX,
@@ -765,8 +754,7 @@ export class WtFloorPlanCanvas extends LitElement {
     window.addEventListener("pointermove", this.#onPointerMove);
     window.addEventListener("pointerup", this.#onPointerUp);
     window.addEventListener("pointercancel", this.#onPointerCancel);
-    // The badge and the dragged dot show from the press.
-    if (kind === "resize") this.requestUpdate();
+    if (grab.kind === "resize") this.resizing = { key: t.key, side: grab.side };
   }
 
   // The window listeners below are attached only while `#drag` is set.
@@ -830,9 +818,9 @@ export class WtFloorPlanCanvas extends LitElement {
         visible: this.visible,
         key: false,
       };
-      if (this.#drag.kind === "resize") this.requestUpdate();
     }
     this.#drag = null;
+    this.resizing = null;
     this.draft = null;
     window.removeEventListener("pointermove", this.#onPointerMove);
     window.removeEventListener("pointerup", this.#onPointerUp);

@@ -62,13 +62,7 @@ export type {
   FloorMapTap,
 } from "./components/wt-floor-map.js";
 export { WtSheet } from "./components/wt-sheet.js";
-export {
-  ROTATION_STEP,
-  buildZoneTabs,
-  resolveActiveTabKey,
-  snapRotation,
-  toFloorTable,
-} from "./floor.js";
+export { buildZoneTabs, resolveActiveTabKey, snapRotation, toFloorTable } from "./floor.js";
 export type {
   FloorChip,
   FloorChipTone,

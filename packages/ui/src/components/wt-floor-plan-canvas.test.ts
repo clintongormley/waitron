@@ -1056,7 +1056,7 @@ it("draws four side dots in the turn arrow's frame on the selected table only, o
   const found = [...dots(el)];
   expect(found.map((d) => d.dataset.side)).toEqual(["top", "right", "bottom", "left"]);
   for (const d of found) {
-    expect(d.getAttribute("aria-hidden")).toBe("true");
+    expect(d.parentElement!.getAttribute("aria-hidden")).toBe("true");
     expect(d.hasAttribute("tabindex")).toBe(false);
     expect(drawn(el, d.dataset.side!).parentElement).toBe(handles(el)[0]!.parentElement);
     expect(getComputedStyle(drawn(el, d.dataset.side!)).pointerEvents).toBe("none");

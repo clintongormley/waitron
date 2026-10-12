@@ -41,15 +41,13 @@ import type {
   PlanPlacement,
 } from "../api/client.js";
 import {
+  changePlacement,
   checkDraft,
   deleteTable,
   draftFromPlan,
-  moveTable,
   rekeyDraft,
   rekeyWith,
-  resizeTable,
   restoreTable,
-  rotateTable,
   sameDraft,
   saveFromDraft,
   tableName,
@@ -931,19 +929,20 @@ export class FloorPlanEditor extends LitElement {
 
   readonly #onMove = (event: CustomEvent<TableMove>): void => {
     if (this.draft === null) return;
-    const { key, x, y } = event.detail;
-    this.#change(moveTable(this.draft, key, x, y));
+    const { key, ...change } = event.detail;
+    this.#change(changePlacement(this.draft, key, change));
   };
 
   readonly #onRotate = (event: CustomEvent<TableRotate>): void => {
     if (this.draft === null) return;
-    this.#change(rotateTable(this.draft, event.detail.key, event.detail.rotation));
+    const { key, ...change } = event.detail;
+    this.#change(changePlacement(this.draft, key, change));
   };
 
   readonly #onResize = (event: CustomEvent<TableResize>): void => {
     if (this.draft === null) return;
-    const { key, ...box } = event.detail;
-    this.#change(resizeTable(this.draft, key, box));
+    const { key, ...change } = event.detail;
+    this.#change(changePlacement(this.draft, key, change));
   };
 
   readonly #onSelect = (event: CustomEvent<TableSelect>): void => {

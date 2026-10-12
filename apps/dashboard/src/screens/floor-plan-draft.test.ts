@@ -3,17 +3,15 @@ import type { FloorPlan } from "../api/client.js";
 import {
   addJoin,
   addTables,
+  changePlacement,
   checkDraft,
   deleteTable,
   draftFromPlan,
-  moveTable,
   patchTable,
   placeTable,
   rekeyDraft,
   removeJoin,
   restoreTable,
-  resizeTable,
-  rotateTable,
   sameDraft,
   saveFromDraft,
   withLiveTables,
@@ -159,15 +157,17 @@ describe("floor plan draft", () => {
 
   it("counts a draft moved and moved back as unchanged", () => {
     const d = open();
-    expect(sameDraft(d, moveTable(moveTable(d, "m1", 5, 4), "m1", 2, 3))).toBe(true);
-    expect(sameDraft(d, moveTable(d, "m1", 5, 4))).toBe(false);
+    expect(
+      sameDraft(d, changePlacement(changePlacement(d, "m1", { x: 5, y: 4 }), "m1", { x: 2, y: 3 })),
+    ).toBe(true);
+    expect(sameDraft(d, changePlacement(d, "m1", { x: 5, y: 4 }))).toBe(false);
   });
 
   it("counts a seat, a name, a turn or Fixed as a change", () => {
     const d = open();
     expect(sameDraft(d, patchTable(d, "m1", { seats: 5 }))).toBe(false);
     expect(sameDraft(d, patchTable(d, "m1", { label: "T1a" }))).toBe(false);
-    expect(sameDraft(d, rotateTable(d, "m1", 45))).toBe(false);
+    expect(sameDraft(d, changePlacement(d, "m1", { rotation: 45 }))).toBe(false);
     expect(sameDraft(d, patchTable(d, "m1", { fixed: true }))).toBe(false);
     expect(sameDraft(d, patchTable(d, "m2", { placement: m1Placement }))).toBe(false);
     expect(
@@ -230,13 +230,13 @@ describe("floor plan draft", () => {
   });
 
   it("moves a placed table and keeps its size, shape and turn", () => {
-    const d = rotateTable(
+    const d = changePlacement(
       patchTable(open(), "m1", { placement: { ...m1Placement, width: 6, shape: "round" } }),
       "m1",
-      30,
+      { rotation: 30 },
     );
     const before = structuredClone(d);
-    const moved = moveTable(d, "m1", 5, 4);
+    const moved = changePlacement(d, "m1", { x: 5, y: 4 });
     expect(table(moved, "m1").placement).toEqual({
       x: 5,
       y: 4,
@@ -246,7 +246,7 @@ describe("floor plan draft", () => {
       rotation: 30,
     });
     expect(d).toEqual(before);
-    expect(table(moveTable(open(), "m1", 5, 4), "m1").placement).toEqual({
+    expect(table(changePlacement(open(), "m1", { x: 5, y: 4 }), "m1").placement).toEqual({
       x: 5,
       y: 4,
       width: 8,
@@ -258,13 +258,13 @@ describe("floor plan draft", () => {
 
   it("leaves an unplaced table where it is when asked to move or turn it", () => {
     const d = open();
-    expect(moveTable(d, "m2", 5, 4)).toEqual(d);
-    expect(rotateTable(d, "m2", 45)).toEqual(d);
+    expect(changePlacement(d, "m2", { x: 5, y: 4 })).toEqual(d);
+    expect(changePlacement(d, "m2", { rotation: 45 })).toEqual(d);
   });
 
   it("turns a placed table and keeps its place", () => {
     const d = open();
-    expect(table(rotateTable(d, "m1", 45), "m1").placement).toEqual({
+    expect(table(changePlacement(d, "m1", { rotation: 45 }), "m1").placement).toEqual({
       ...m1Placement,
       rotation: 45,
     });
@@ -272,13 +272,13 @@ describe("floor plan draft", () => {
   });
 
   it("resizes a placed table, keeping its shape and turn, and leaves a spare as it was", () => {
-    const d = rotateTable(
+    const d = changePlacement(
       patchTable(open(), "m1", { placement: { ...m1Placement, shape: "round" } }),
       "m1",
-      30,
+      { rotation: 30 },
     );
     const before = structuredClone(d);
-    const resized = resizeTable(d, "m1", { x: 1, y: 4, width: 9, height: 3 });
+    const resized = changePlacement(d, "m1", { x: 1, y: 4, width: 9, height: 3 });
     expect(table(resized, "m1").placement).toEqual({
       x: 1,
       y: 4,
@@ -293,7 +293,7 @@ describe("floor plan draft", () => {
     });
     expect(table(resized, "m9")).toBe(table(d, "m9"));
     expect(d).toEqual(before);
-    expect(resizeTable(d, "m2", { x: 1, y: 4, width: 9, height: 3 })).toEqual(d);
+    expect(changePlacement(d, "m2", { x: 1, y: 4, width: 9, height: 3 })).toEqual(d);
   });
 
   it("places a table at the first free spot as an 8 × 8 rectangle", () => {
@@ -487,7 +487,7 @@ describe("floor plan draft", () => {
 
   it("restores a deleted table as it was opened, at the end, leaving the rest alone", () => {
     const opened = open();
-    const moved = moveTable(deleteTable(opened, "m1"), "m2", 0, 0);
+    const moved = changePlacement(deleteTable(opened, "m1"), "m2", { x: 0, y: 0 });
     const restored = restoreTable(moved, table(opened, "m1"));
     expect(restored.tables.map((t) => t.key)).toEqual(["m2", "m9", "m1"]);
     expect(table(restored, "m1")).toEqual(table(opened, "m1"));

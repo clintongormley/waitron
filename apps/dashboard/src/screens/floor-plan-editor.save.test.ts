@@ -9,8 +9,8 @@ import { currentLocale, setLocale } from "../i18n/t.js";
 import { codeMessage } from "../i18n/codes.js";
 import {
   addTables,
+  changePlacement,
   draftFromPlan,
-  moveTable,
   patchTable,
   rekeyDraft,
   saveFromDraft,
@@ -150,7 +150,7 @@ it("Save sends the draft with a key per table and joins as keys", async () => {
   const el = await open(api);
   await move(el, "m1", 5);
   await press(el, "save");
-  const moved = moveTable(draftFromPlan(plan()), "m1", 5, 4);
+  const moved = changePlacement(draftFromPlan(plan()), "m1", { x: 5, y: 4 });
   expect(api.saveFloorPlan).toHaveBeenCalledWith("z1", saveFromDraft(3, moved));
   const body = vi.mocked(api.saveFloorPlan).mock.calls[0]![1];
   expect(body.tables[0]!.placement!.x).toBe(5);
