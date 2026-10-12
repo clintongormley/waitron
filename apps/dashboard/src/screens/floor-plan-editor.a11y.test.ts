@@ -96,6 +96,23 @@ const offPlan: FloorPlan = {
   ],
 };
 
+/** Long table, placed, made of the three Counters. */
+const joinedPlan: FloorPlan = {
+  ...offPlan,
+  tables: [
+    ...offPlan.tables,
+    {
+      id: "long",
+      liveTableId: null,
+      label: "Long table",
+      seats: 10,
+      fixed: false,
+      placement: { x: 2, y: 14, width: 12, height: 6, shape: "rect", rotation: 0 },
+      partIds: ["m3", "m4", "m5"],
+    },
+  ],
+};
+
 async function openAddJoinedTable(el: FloorPlanEditor) {
   el.shadowRoot!.querySelector("floor-plan-tables-panel")!
     .shadowRoot!.querySelector<HTMLElement>("wt-button[data-action=add-joined-table]")!
@@ -173,6 +190,26 @@ describe.each(["light", "dark"] as const)("floor-plan-editor a11y (%s theme)", (
       new CustomEvent("wt-table-select", { detail: { key: "m1" }, bubbles: true, composed: true }),
     );
     await el.updateComplete;
+    await expectNoA11yViolations(host);
+  });
+
+  it("shows a selected joined table accessibly", async () => {
+    const locale = currentLocale();
+    setLocale("en-GB");
+    onTestFinished(() => setLocale(locale));
+    const { el, host } = await open(stubApi(vi.fn().mockResolvedValue(joinedPlan)), theme);
+    el.dispatchEvent(
+      new CustomEvent("floor-plan-select", {
+        detail: { key: "long" },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+    await el.updateComplete;
+    const panel = el.shadowRoot!.querySelector("floor-plan-table-panel")!;
+    await panel.updateComplete;
+    expect(panel.tableKey).toBe("long");
+    expect(panel.shadowRoot!.querySelector("[name=made-of]")).not.toBeNull();
     await expectNoA11yViolations(host);
   });
 

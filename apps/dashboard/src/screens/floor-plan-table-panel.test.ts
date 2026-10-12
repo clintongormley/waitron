@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, expect, it } from "vitest";
 import { userEvent } from "vitest/browser";
-import { chooseOption } from "@waitron/ui/src/test-helpers.js";
+import { chooseOption, chooseOptions } from "@waitron/ui/src/test-helpers.js";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import "./floor-plan-table-panel.js";
 import type { FloorPlanTablePanel } from "./floor-plan-table-panel.js";
@@ -373,4 +373,150 @@ it("has no Joins section and no Add join", async () => {
   expect(el.shadowRoot!.querySelector("[data-joins-heading]")).toBeNull();
   expect(el.shadowRoot!.querySelector("[data-test=add-join]")).toBeNull();
   expect(el.shadowRoot!.querySelector("[data-join]")).toBeNull();
+});
+
+/** Long table (10 seats) made of Counter 3 (2), Counter 4 (6) and Counter 5 (4); Counter 6 is
+ *  free, Counter 7 is in another joined table and T1 is on the plan. */
+const joined = (): FloorPlanDraft => ({
+  tables: [
+    ...opened().tables.filter((t) => t.key === "m1"),
+    ...(
+      [
+        ["c5", "Counter 5", 4],
+        ["c3", "Counter 3", 2],
+        ["c4", "Counter 4", 6],
+        ["c6", "Counter 6", 1],
+        ["c7", "Counter 7", 2],
+        ["c8", "Counter 8", 2],
+      ] as const
+    ).map(([key, label, seats]) => ({
+      key,
+      id: key,
+      liveTableId: `l${key}`,
+      label,
+      seats,
+      fixed: false,
+      placement: null,
+      parts: null,
+    })),
+    {
+      key: "long",
+      id: "long",
+      liveTableId: "llong",
+      label: "Long table",
+      seats: 10,
+      fixed: false,
+      placement: m1Placement,
+      parts: ["c3", "c4", "c5"],
+    },
+    {
+      key: "bar",
+      id: "bar",
+      liveTableId: "lbar",
+      label: "Bar",
+      seats: 4,
+      fixed: false,
+      placement: null,
+      parts: ["c7", "c8"],
+    },
+  ],
+});
+
+type MadeOf = HTMLElement & {
+  options: { value: string; label: string; description?: string }[];
+  values: string[];
+  error: string;
+  label: string;
+  required: boolean;
+  multiple: boolean;
+  countLabel: (count: number) => string;
+};
+
+const madeOf = (el: FloorPlanTablePanel) =>
+  el.shadowRoot!.querySelector<MadeOf>("wt-combobox[name=made-of]");
+
+const openJoined = () => open({ draft: joined(), tableKey: "long" });
+
+it("a joined table's form shows Made of with its parts chosen, and the free tables offered", async () => {
+  const el = await openJoined();
+  const box = madeOf(el)!;
+  expect([box.label, box.required, box.multiple]).toEqual(["Made of", true, true]);
+  expect(box.values).toEqual(["c3", "c4", "c5"]);
+  expect(
+    box.options.map(({ value, label, description }) => ({ value, label, description })),
+  ).toEqual([
+    { value: "c3", label: "Counter 3", description: "2 seats" },
+    { value: "c4", label: "Counter 4", description: "6 seats" },
+    { value: "c5", label: "Counter 5", description: "4 seats" },
+    { value: "c6", label: "Counter 6", description: "1 seat" },
+  ]);
+  expect(box.countLabel(3)).toBe("3 tables");
+  const named = [
+    ...el.shadowRoot!.querySelectorAll(".fields [name]:not(wt-icon), .fields [role=group]"),
+  ];
+  expect(named.map((n) => n.getAttribute("name") ?? n.getAttribute("data-field"))).toEqual([
+    "table-name",
+    "seats",
+    "shape",
+    "made-of",
+    "moveable",
+  ]);
+  const seats = field(el, "seats") as unknown as { required: boolean; clearable: boolean };
+  expect([seats.required, seats.clearable]).toEqual([true, false]);
+});
+
+it("taking Counter 5 out of Long table sends the change as one step", async () => {
+  const el = await openJoined();
+  const { changes } = listen(el);
+  await chooseOptions(madeOf(el)!, ["c3", "c4"]);
+  await el.updateComplete;
+  expect(changes).toHaveLength(1);
+  expect(changes[0]!.mergeKey).toBe("parts:long");
+  expect(tableOf(changes[0], "long")!.parts).toEqual(["c3", "c4"]);
+  expect(changes[0]!.draft.tables.filter((t) => t.key !== "long")).toEqual(
+    joined().tables.filter((t) => t.key !== "long"),
+  );
+  expect(madeOf(el)!.values).toEqual(["c3", "c4"]);
+  expect(madeOf(el)!.options.map((o) => o.value)).toEqual(["c3", "c4", "c5", "c6"]);
+});
+
+it("a plain table's form has no Made of", async () => {
+  for (const tableKey of ["m1", "c6"]) {
+    const el = await open({ draft: joined(), tableKey });
+    expect(madeOf(el)).toBeNull();
+    const seats = field(el, "seats") as unknown as { required: boolean; clearable: boolean };
+    expect([seats.required, seats.clearable]).toEqual([false, true]);
+    cleanupWidgets();
+  }
+});
+
+it("shows a refusal of the parts beside Made of", async () => {
+  const el = await open({
+    draft: joined(),
+    tableKey: "long",
+    fieldErrors: [{ field: "parts", message: "Choose at least 2 tables." }],
+  });
+  expect(madeOf(el)!.error).toBe("Choose at least 2 tables.");
+  expect(field(el, "seats")!.error).toBe("");
+  el.fieldErrors = [];
+  await el.updateComplete;
+  expect(madeOf(el)!.error).toBe("");
+});
+
+it("refuses 0 seats for a joined table", async () => {
+  const el = await openJoined();
+  const { changes } = listen(el);
+  const invalid = listenInvalid(el);
+  await typeInto(el, "seats", "0");
+  expect(changes).toEqual([]);
+  expect(invalid.at(-1)).toMatchObject({ key: "long", field: "seats", text: "0" });
+  expect(invalid.at(-1)!.message!()).toBe("Enter 1 to 999.");
+  await set(el, "seats", "");
+  expect(changes).toEqual([]);
+  expect(invalid.at(-1)).toMatchObject({ key: "long", field: "seats", text: "" });
+  expect(invalid.at(-1)!.message!()).toBe("Enter 1 to 999.");
+  await set(el, "seats", "12");
+  expect(invalid.at(-1)).toMatchObject({ key: "long", field: "seats", text: null });
+  expect(tableOf(changes.at(-1), "long")!.seats).toBe(12);
+  expect(changes.at(-1)!.mergeKey).toBe("seats:long");
 });

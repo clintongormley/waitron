@@ -1167,3 +1167,32 @@ it("a save refusal's sentence comes back when the draft changes after a no-room 
   expect(el.fieldError).toEqual(expect.objectContaining({ key: "m1", field: "seats" }));
   expect(message(el)).toBe("Correct the highlighted fields to continue.");
 });
+
+it("a server refusal of Long table's seats marks its Seats", async () => {
+  const el = await open(
+    stubApi({
+      getFloorPlan: vi.fn().mockResolvedValue(joinedPlan()),
+      saveFloorPlan: vi.fn().mockRejectedValue(invalid("tables.3.seats")),
+    }),
+  );
+  await change(el, patchTable(draftFromPlan(joinedPlan()), "long", { seats: 12 }));
+  await press(el, "save");
+  expect(canvas(el).selected).toBe("long");
+  expect(tablePanel(el).tableKey).toBe("long");
+  expect(panelField(el, "seats").error).toBe("Check the floor plan's tables and try again");
+  expect(panelField(el, "made-of").error).toBe("");
+});
+
+it("a server refusal of Long table's parts shows under its Made of", async () => {
+  const el = await open(
+    stubApi({
+      getFloorPlan: vi.fn().mockResolvedValue(joinedPlan()),
+      saveFloorPlan: vi.fn().mockRejectedValue(invalid("tables.3.partKeys")),
+    }),
+  );
+  await change(el, setParts(draftFromPlan(joinedPlan()), "long", ["c3", "c4"]));
+  await press(el, "save");
+  expect(tablePanel(el).tableKey).toBe("long");
+  expect(panelField(el, "made-of").error).toBe("Check the floor plan's tables and try again");
+  expect(panelField(el, "seats").error).toBe("");
+});

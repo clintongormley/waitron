@@ -53,12 +53,12 @@ function sameForm(a: JoinedForm, b: JoinedForm): boolean {
   );
 }
 
-const seatCount = (seats: number) =>
+export const seatCount = (seats: number) =>
   seats === 1
     ? t("floor_plan_editor.seat_count_one")
     : fill("floor_plan_editor.seat_count", { count: String(seats) });
 
-const tablesChosen = (count: number) =>
+export const tablesChosen = (count: number) =>
   fill("floor_plan_editor.tables_chosen", { count: String(count) });
 
 /** The editor's Add joined table dialog, owned by the page beside Add tables for the same reason. */

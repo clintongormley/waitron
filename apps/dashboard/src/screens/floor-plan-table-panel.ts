@@ -1,8 +1,9 @@
 import { LitElement, css, html, nothing } from "lit";
 import { customElement, property } from "lit/decorators.js";
 import { live } from "lit/directives/live.js";
-import { baseStyles, iconButtonStyles } from "@waitron/ui";
+import { baseStyles, iconButtonStyles, type ComboboxOption } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
+import "@waitron/ui/src/components/wt-combobox.js";
 import "@waitron/ui/src/components/wt-icon.js";
 import "@waitron/ui/src/components/wt-input.js";
 import "@waitron/ui/src/components/wt-number-stepper.js";
@@ -13,11 +14,15 @@ import { LocaleChangeController } from "../state/locale-controller.js";
 import type { PlanPlacement } from "../api/client.js";
 import {
   MAX_SEATS,
+  freeTables,
   patchTable,
   sendChange,
+  setParts,
+  tableName,
   type DraftTable,
   type FloorPlanDraft,
 } from "./floor-plan-draft.js";
+import { seatCount, tablesChosen } from "./floor-plan-add-joined-table.js";
 import type {
   FloorPlanInvalid,
   FloorPlanPanelError,
@@ -124,7 +129,11 @@ export class FloorPlanTablePanel extends LitElement {
     );
   }
 
-  #seats(value: string): void {
+  #seats(table: DraftTable, value: string): void {
+    if (table.parts !== null && wholeWithin(value, 1, MAX_SEATS) === null) {
+      this.#refuse("seats", value, () => t("floor_plan_editor.joined_seats_invalid"));
+      return;
+    }
     const seats = value === "" ? null : wholeWithin(value, 0, MAX_SEATS);
     if (value !== "" && seats === null) {
       this.#refuse("seats", value, () => t("floor_plan_editor.seats_invalid"));
@@ -165,10 +174,39 @@ export class FloorPlanTablePanel extends LitElement {
     </div>`;
   }
 
+  #madeOf(table: DraftTable) {
+    const options: ComboboxOption[] = freeTables(this.draft, table.key).map((part) => ({
+      value: part.key,
+      label: tableName(part),
+      ...(part.seats === null ? {} : { description: seatCount(part.seats) }),
+    }));
+    return html`<wt-combobox
+      multiple
+      required
+      name="made-of"
+      search="never"
+      label=${t("floor_plan_editor.made_of")}
+      placeholder=${options.length === 0 ? t("floor_plan_editor.no_free_tables") : ""}
+      .countLabel=${tablesChosen}
+      .options=${options}
+      .values=${[...table.parts!]}
+      .error=${this.#error("parts")}
+      @wt-change=${(e: CustomEvent<{ values: string[] }>) => {
+        e.stopPropagation();
+        sendChange(
+          this,
+          setParts(this.draft, this.tableKey, e.detail.values),
+          `parts:${this.tableKey}`,
+        );
+      }}
+    ></wt-combobox>`;
+  }
+
   override render() {
     const table = this.draft.tables.find((t) => t.key === this.tableKey);
     if (table === undefined) return nothing;
     const fixedError = this.#error("fixed");
+    const joined = table.parts !== null;
     return html`<div class="fields">
       <wt-input
         name="table-name"
@@ -182,16 +220,18 @@ export class FloorPlanTablePanel extends LitElement {
       <div class="pair">
         <wt-number-stepper
           name="seats"
-          clearable
+          ?required=${joined}
+          ?clearable=${!joined}
           label=${t("floor_plan_editor.seats")}
-          .min=${0}
+          .min=${joined ? 1 : 0}
           .max=${MAX_SEATS}
           .value=${this.#shown("seats", table.seats)}
           .error=${this.#error("seats")}
-          @wt-change=${(e: CustomEvent<{ value: string }>) => this.#seats(value(e))}
+          @wt-change=${(e: CustomEvent<{ value: string }>) => this.#seats(table, value(e))}
         ></wt-number-stepper>
         ${table.placement === null ? nothing : this.#shape(table)}
       </div>
+      ${joined ? this.#madeOf(table) : nothing}
       <wt-switch
         name="moveable"
         label=${t("floor_plan_editor.moveable")}
