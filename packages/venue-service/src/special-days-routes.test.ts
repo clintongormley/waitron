@@ -202,7 +202,7 @@ describe("the special-day routes", () => {
     expect(await response.json()).toEqual(expectedDetail(r, day.id));
   });
 
-  it("PUT replaces a special day and answers it", async () => {
+  it("PUT updates a special day and keeps paint the body leaves out", async () => {
     const r = await routed();
     const day = await seeded(r);
     const response = await r.send("PUT", `/${day.id}`, r.manager, {
@@ -315,6 +315,25 @@ describe("the special-day routes", () => {
     );
   });
 
+  it("refuses a write with no clock revision while the stored one is still 0, writing nothing", async () => {
+    const r = await routed();
+    const day = await seeded(r);
+    const error = { code: "hours.clock_changed", params: {} };
+    await answers(
+      await r.send("POST", "", r.manager, { ...christmas(r), name: "Nueva" }),
+      409,
+      error,
+    );
+    await answers(
+      await r.send("PUT", `/${day.id}`, r.manager, { ...christmas(r), name: "X" }),
+      409,
+      error,
+    );
+    await answers(await r.send("DELETE", `/${day.id}`, r.manager, {}), 409, error);
+    expect(await countDays(r)).toBe(1);
+    expect(await stored(r, day.id)).toEqual(day);
+  });
+
   it("answers special_day.date_taken with 409, naming the holder", async () => {
     const r = await routed();
     const day = await seeded(r);
@@ -342,6 +361,9 @@ describe("the special-day routes", () => {
       dates: [{ date: "2030-13-40", closedAllDay: false }],
       expectedClockRevision: 0,
     });
-    await refusedAs(response, 400, "special_day.invalid");
+    await answers(response, 400, {
+      code: "special_day.invalid",
+      params: { field: "dates.0.date" },
+    });
   });
 });
