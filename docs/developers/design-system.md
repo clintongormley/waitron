@@ -2072,7 +2072,7 @@ and nothing guards it across screens:
 - batch 5, the till: the party name dialog; the schedule's cover and time-off requests; the full
   invoice recipient dialog; the extras picker when it edits a line (adding a dish never waits for a
   change, through `savableAtOpen`); the station dialog's Make at (its Move keeps today's look); the
-  floor's seats dialog opened by Change seats (`apps/till/src/widgets/today-seats-dialog.ts`).
+  floor's seats dialog, opened by Change seats, or empty by a merge (`apps/till/src/widgets/today-seats-dialog.ts`).
   Every other till dialog that tracks unsaved changes takes an action — pay, refund, override, enrol,
   seat, send — and keeps its own rules; the list, with the reason for each, is in
   [the Batch 5 table](../superpowers/plans/2026-10-07-a331-save-follows-changes.md#batch-5--the-till-app-lane-c-a331-5).
@@ -2101,10 +2101,6 @@ These open already savable:
   untouched gives the option back to the list, which clears that option's refusal (`#refusedAtOpen`
   in `apps/dashboard/src/widgets/option-label-form.ts`; owner, 2026-10-08, A410). Opened by Add
   option, or by Edit on an option with no refusal, it opens quiet;
-- the till floor's seats dialog when a merge opens it with a suggested number of seats above 0:
-  pressing Join confirms the suggestion (`savableAtOpen`,
-  `apps/till/src/widgets/today-seats-dialog.ts`). With no suggestion, or one of 0, it opens
-  empty, and Join waits for a number;
 - a new canvas's editor, with no flag: its draft has no stored canvas to compare with, so it counts
   as changed from the start.
 

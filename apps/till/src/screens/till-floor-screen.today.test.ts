@@ -164,7 +164,7 @@ describe("till-floor-screen: dragging on today's plan", () => {
     const dialog = el.shadowRoot!.querySelector("till-today-seats-dialog")!;
     expect(dialog).not.toBeNull();
     expect(dialog.action).toBe("join");
-    expect(dialog.seats).toBe(8);
+    expect(dialog.seats).toBeNull();
     expect(dialog.heading).toBe("Seats for 1+2");
     expect(drawnAt(el, "t2")).toBe(4);
     expect(refusal(el)).toBeNull();
@@ -186,6 +186,25 @@ describe("till-floor-screen: dragging on today's plan", () => {
     expect(api.mergeToday).toHaveBeenCalledTimes(2);
     expect(el.shadowRoot!.querySelector("till-today-seats-dialog")).toBeNull();
     expect(refreshes.count).toBe(1);
+  });
+
+  it("a third table dropped on a merge asks for seats again, empty", async () => {
+    const api = stubApi();
+    api.mergeToday.mockRejectedValueOnce({ code: "merge.seats_required", status: 400 });
+    const el = await mount(
+      [
+        planned("t1", 2, { joinId: "j1", joinSeats: 6 }),
+        planned("t2", 4, { joinId: "j1", joinSeats: 6 }),
+        planned("t3", 20),
+      ],
+      api,
+    );
+    await drop(el, { tableId: "t3", x: 7, y: 3, targetId: "t2" });
+    await settle(el);
+    const dialog = el.shadowRoot!.querySelector("till-today-seats-dialog")!;
+    expect(dialog.action).toBe("join");
+    expect(dialog.seats).toBeNull();
+    expect(dialog.heading).toBe("Seats for 1+2+3");
   });
 
   it("a re-read while the seats are asked keeps the table where it was dropped", async () => {

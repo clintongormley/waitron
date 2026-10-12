@@ -8,11 +8,11 @@ afterEach(cleanupWidgets);
 afterEach(() => setLocale("en"));
 
 describe.each(["light", "dark"] as const)("till-today-seats-dialog a11y (%s theme)", (theme) => {
-  it("has no violations opened with a suggestion", async () => {
+  it("has no violations opened empty by a merge", async () => {
     setLocale("es-ES");
     const { host } = await mountWidget<TillTodaySeatsDialog>(
       "till-today-seats-dialog",
-      { heading: "Plazas para 4+5", seats: 8, action: "join" },
+      { heading: "Plazas para 4+5", seats: null, action: "join" },
       theme,
     );
     await expectNoA11yViolations(host);

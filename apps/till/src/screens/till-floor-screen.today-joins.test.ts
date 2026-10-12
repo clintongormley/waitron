@@ -181,7 +181,7 @@ describe("till-floor-screen: dragging on today's plan — joins and seating", ()
     const dialog = el.shadowRoot!.querySelector("till-today-seats-dialog")!;
     expect(dialog).not.toBeNull();
     expect(dialog.action).toBe("join");
-    expect(dialog.seats).toBe(9);
+    expect(dialog.seats).toBeNull();
     expect(dialog.heading).toBe("Seats for 1+2");
     expect(refreshes.count).toBe(0);
     expect(refusal(el)).toBeNull();
@@ -260,6 +260,7 @@ describe("till-floor-screen: dragging on today's plan — joins and seating", ()
       bills: "separate",
     });
     await settle(el);
+    expect(el.shadowRoot!.querySelector("till-today-seats-dialog")!.seats).toBeNull();
 
     send(el.shadowRoot!.querySelector("till-today-seats-dialog")!, "today-seats-confirm", {
       seats: 6,
@@ -273,6 +274,27 @@ describe("till-floor-screen: dragging on today's plan — joins and seating", ()
       { expectedPartyRevision: 7, otherPartyId: "P", expectedOtherPartyRevision: 3 },
       { moving: "t1", target: "t2", side: "left", seats: 6 },
     );
+  });
+
+  it("a seated table dropped on a merge of two asks for seats again, empty", async () => {
+    const R = party("R", 5, ["t3"]);
+    const api = stubApi();
+    api.joinTables.mockRejectedValueOnce(seatsRefusal);
+    const el = await mount(
+      [
+        planned("t1", 2, { joinId: "j1", joinSeats: 6 }),
+        planned("t2", 4, { joinId: "j1", joinSeats: 6 }),
+        planned("t3", 20, {}, "3", R),
+      ],
+      api,
+    );
+    await drop(el, { tableId: "t3", x: 7, y: 3, targetId: "t2" });
+    await settle(el);
+    expect(el.shadowRoot!.querySelector("till-bill-choice-dialog")).toBeNull();
+    const dialog = el.shadowRoot!.querySelector("till-today-seats-dialog")!;
+    expect(dialog.action).toBe("join");
+    expect(dialog.seats).toBeNull();
+    expect(dialog.heading).toBe("Seats for 1+2+3");
   });
 
   it("cancelling the bill choice puts the table back and sends nothing", async () => {

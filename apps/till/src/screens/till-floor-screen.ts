@@ -475,7 +475,7 @@ export class TillFloorScreen extends LitElement {
   /** A merge the server would not size, or Change seats, waiting for the seats prompt. */
   @state() private askingSeats: {
     heading: string;
-    seatsGuess: number;
+    seats: number | null;
     action: "join" | "save";
     resend: (seats: number) => void;
   } | null = null;
@@ -776,7 +776,7 @@ export class TillFloorScreen extends LitElement {
       case "seats":
         this.askingSeats = {
           heading: this.#mergeName(table) ?? table.label,
-          seatsGuess: seatsFor(table) ?? 0,
+          seats: seatsFor(table) ?? 0,
           action: "save",
           resend: (seats) => void this.#settle(api.setSeatsToday(table.id, seats)),
         };
@@ -884,7 +884,7 @@ export class TillFloorScreen extends LitElement {
         if (merge === null || seats !== undefined || !asksSeats(refused)) return false;
         this.askingSeats = {
           heading: action.heading,
-          seatsGuess: action.seatsGuess,
+          seats: null,
           action: "join",
           resend: (chosen) => void this.#join(api, action, bills, chosen),
         };
@@ -893,7 +893,7 @@ export class TillFloorScreen extends LitElement {
     );
   }
 
-  /** Sent without seats, a merge with no saved join is refused so the waiter can be asked. */
+  /** The server refuses a merge without seats (`merge.seats_required`), which opens the seats prompt. */
   async #merge(
     api: TillApi,
     action: Extract<DropAction, { kind: "merge" }>,
@@ -909,7 +909,7 @@ export class TillFloorScreen extends LitElement {
         if (seats !== undefined || !asksSeats(refused)) return false;
         this.askingSeats = {
           heading: action.heading,
-          seatsGuess: action.seatsGuess,
+          seats: null,
           action: "join",
           resend: (chosen) => void this.#merge(api, action, chosen),
         };
@@ -940,7 +940,7 @@ export class TillFloorScreen extends LitElement {
     return html`<till-today-seats-dialog
       .action=${asking.action}
       .heading=${t("floor.seats_title").replace("{table}", () => asking.heading)}
-      .seats=${asking.seatsGuess}
+      .seats=${asking.seats}
       @today-seats-confirm=${(event: Event) => {
         event.stopPropagation();
         this.askingSeats = null;
