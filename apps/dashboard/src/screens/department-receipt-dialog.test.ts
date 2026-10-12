@@ -185,24 +185,28 @@ it("shows missing translations in the offered languages and clears the warning a
   await editReceipt(el, "headerSubtitle-ca-ES", "Bar català");
   expect(el.shadowRoot!.querySelector("[data-test=translation-warning]")).toBeNull();
 });
-it("a policy refusal is visible beside its switch as well as in the bottom summary", async () => {
-  const api = receiptApi();
-  api.putDepartmentReceipt.mockRejectedValue({
-    code: "management.request_invalid",
-    params: { field: "printTradingName" },
-  });
-  const { el } = await mountReceiptDialog(api);
-  const toggle =
-    el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-switch"]>("[name=printTradingName]")!;
-  await toggle.updateComplete;
-  await userEvent.click(page.elementLocator(toggle.shadowRoot!.querySelector("label")!));
-  await clickReceiptSave(el);
-  await expect
-    .poll(() => el.shadowRoot!.querySelector("[data-field-error=printTradingName]")?.textContent)
-    .toBeTruthy();
-  expect(el.shadowRoot!.querySelector("wt-form-actions")!.error).toBe(t("form.fix_fields"));
-  expect(receiptSave(el).disabled).toBe(false);
-});
+it.each(["printTradingName", "receiptPrintMode"] as const)(
+  "a %s policy refusal is visible beside its switch as well as in the bottom summary",
+  async (field) => {
+    const api = receiptApi();
+    api.putDepartmentReceipt.mockRejectedValue({
+      code: "management.request_invalid",
+      params: { field },
+    });
+    const { el } = await mountReceiptDialog(api);
+    const toggle = el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-switch"]>(
+      `[name=${field}]`,
+    )!;
+    await toggle.updateComplete;
+    await userEvent.click(page.elementLocator(toggle.shadowRoot!.querySelector("label")!));
+    await clickReceiptSave(el);
+    await expect
+      .poll(() => el.shadowRoot!.querySelector(`[data-field-error=${field}]`)?.textContent)
+      .toBeTruthy();
+    expect(el.shadowRoot!.querySelector("wt-form-actions")!.error).toBe(t("form.fix_fields"));
+    expect(receiptSave(el).disabled).toBe(false);
+  },
+);
 it("draft address and policy switches affect both preview and the exact submitted receipt", async () => {
   const { el, api } = await mountReceiptDialog();
   for (const name of ["printAddress", "printTradingName", "receiptPrintMode"]) {
@@ -423,4 +427,84 @@ it("a live receipt response delivered after Cancel begins cannot reopen the clos
   await closed;
   expect(dialog.open).toBe(false);
   expect(el.shadowRoot!.querySelector("[name=email]")).toBeNull();
+});
+
+it.each(["success", "refusal"] as const)(
+  "a native receipt trading-name choice stays authored through %s at its new owner",
+  async (outcome) => {
+    const api = receiptApi();
+    if (outcome === "refusal") api.putDepartmentReceipt.mockRejectedValue(new Error("offline"));
+    const { el, dialog } = await mountReceiptDialog(api);
+    const toggle =
+      el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-switch"]>("[name=printTradingName]")!;
+    await toggle.updateComplete;
+    const native = toggle.shadowRoot!.querySelector<HTMLInputElement>("input")!;
+    expect(native.checked).toBe(true);
+    await userEvent.click(page.elementLocator(toggle.shadowRoot!.querySelector("label")!));
+    await el.updateComplete;
+    await clickReceiptSave(el);
+    await expect.poll(() => api.putDepartmentReceipt.mock.calls.length).toBe(1);
+    expect(api.putDepartmentReceipt.mock.calls).toEqual([
+      [
+        "bar",
+        {
+          receipt: {
+            operationDescription: "Dining service",
+            headerSubtitle: { "es-ES": "Bar", "eu-ES": "Retained" },
+          },
+          policy: { receiptPrintMode: "auto", printTradingName: false },
+        },
+      ],
+    ]);
+    if (outcome === "success") {
+      await expect.poll(() => dialog.open).toBe(false);
+      el.show({ id: "bar", name: "Bar" });
+      await expect.poll(() => dialog.open).toBe(true);
+      await expect
+        .poll(
+          () =>
+            el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-switch"]>(
+              "[name=printTradingName]",
+            )!.checked,
+        )
+        .toBe(false);
+    } else {
+      await expect
+        .poll(() => el.shadowRoot!.querySelector("wt-form-actions")!.error)
+        .toBe("Something went wrong, try again");
+      expect(dialog.open).toBe(true);
+      expect(native.checked).toBe(false);
+      expect(receiptSave(el).disabled).toBe(false);
+    }
+    expect(receiptModel.policy.printTradingName).toBe(true);
+  },
+);
+
+it("a refused receipt print choice returns to its baseline without another write", async () => {
+  const api = receiptApi();
+  api.putDepartmentReceipt.mockRejectedValue(new Error("offline"));
+  const { el } = await mountReceiptDialog(api);
+  const toggle =
+    el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-switch"]>("[name=receiptPrintMode]")!;
+  await toggle.updateComplete;
+  const label = toggle.shadowRoot!.querySelector("label")!;
+  const native = toggle.shadowRoot!.querySelector<HTMLInputElement>("input")!;
+  expect(native.checked).toBe(true);
+  await userEvent.click(page.elementLocator(label));
+  await el.updateComplete;
+  await clickReceiptSave(el);
+  await expect
+    .poll(() => el.shadowRoot!.querySelector("wt-form-actions")!.error)
+    .toBe("Something went wrong, try again");
+  expect(native.checked).toBe(false);
+  expect(api.putDepartmentReceipt.mock.calls).toHaveLength(1);
+  expect(api.putDepartmentReceipt.mock.lastCall?.[1].policy.receiptPrintMode).toBe("on_request");
+  await userEvent.click(page.elementLocator(label));
+  await el.updateComplete;
+  expect(native.checked).toBe(true);
+  await clickReceiptSave(el);
+  expect(api.putDepartmentReceipt.mock.calls).toHaveLength(1);
+  expect(receiptSave(el).disabled).toBe(true);
+  expect(receiptSave(el).variant).toBe("secondary");
+  expect(el.shadowRoot!.querySelector("wt-form-actions")!.error).toBe("");
 });

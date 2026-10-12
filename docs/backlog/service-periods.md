@@ -90,12 +90,13 @@ Disable with permanent Delete in the same screens
 mockup is the private canvas https://claude.ai/artifact/Tya5FcmK39ESBkQ2hTaA7s, which has four
 boards: the list, Edit department, Edit zone and Edit receipt.
 
-**Branch checkpoint, 2026-10-12.** Product issuance now uses department descriptions, with
+**Branch checkpoint, 2026-10-12.** Product issuance uses department descriptions, with
 readiness checked before new payment dispatch and the no-field fiscal slot handled at boot.
-Dashboard receipt dialogs, field visibility and old dashboard-editor retirement are connected.
-The server preview now accepts only department drafts, and zone editors have a single-request
-name/policy save. The full product look and one-list editors with drag moves remain.
-The branch is unpublished.
+Receipt dialogs, language settings and the public preview use department-owned content.
+Zone editors have an atomic name/policy API. Department settings now save name, trading name,
+service settings and transfers without writing receipt policy; the protected department dialog
+is implemented separately from the current page host. The unified list, zone dialog, dragging,
+full product look and whole-branch audit remain. The branch is unpublished.
 
 **The list.** "Departments and zones" becomes one list. Each department is a row, and its zones are
 indented beneath it. The columns are name, service style (how orders start), counter service (when
@@ -146,13 +147,11 @@ logo, subtitle, footer, address switch and tax-agency description. A new departm
 empty receipt. The venue's receipt language moves to Venue settings. Nothing is live, so stored
 venue defaults may be dropped rather than carried over (CLAUDE.md §3, last rule).
 
-**Remaining implementation:** finish the legacy receipt assertion ports and retire obsolete editors,
-route helpers, client methods and live queries; build the unified department/zone list and protected
-editors with zone dragging; complete managed visual checks and the whole-branch audit.
-The unpublished branch connects the department receipt dialog to the public client and dashboard
-host. It selects descriptions on the product issuance paths and checks readiness before provider
-dispatch. The legacy receipt suites are retained while their remaining behavior checks move; their
-old API types still prevent the dashboard type check from passing. It is not ready to publish.
+**Remaining implementation:** connect the protected department dialog and a protected zone editor
+to the unified list; retire the department page and its remaining helpers while preserving the
+behavioral assertions; add zone dragging; complete managed visual checks and the whole-branch audit.
+Receipt assertion ports and department write separation have focused passing checks; package-wide
+coverage and the final review remain part of the unpublished branch's acceptance.
 
 ## A506. Opening hours rebuilt around seasons and special days
 

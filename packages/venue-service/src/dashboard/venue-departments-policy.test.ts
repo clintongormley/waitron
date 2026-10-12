@@ -45,6 +45,12 @@ async function mount() {
     writes.push({ path, method, body: structuredClone(body) });
     if (path === "/management-api/venue-service/departments/d1/settings") {
       Object.assign(stored.salePolicies.departments[0]!, body);
+    } else if (
+      path === "/management-api/venue-service/departments/d1/sale-policy/receiptPrintMode"
+    ) {
+      stored.salePolicies.departments[0]!.receiptPrintMode = (
+        body as { value: "auto" | "on_request" }
+      ).value;
     } else if (path === "/management-api/venue-service/zones/z1/service-settings") {
       Object.assign(stored.salePolicies.zones[0]!, body);
     } else throw new Error(`Unexpected write: ${method} ${path}`);
@@ -109,26 +115,36 @@ it.each([
   async (field, changed, changedLabel, override, overrideLabel) => {
     const { shell, settings, writes } = await mount();
     const service = settings.shadowRoot!.querySelector("dashboard-service-settings-fields")!;
-    await pick(service, field, changed);
-    await expect.poll(() => service.value[field]).toBe(changed);
-    await settings.updateComplete;
-    settings.shadowRoot!.querySelector<HTMLElement>("[data-test=save-editor]")!.click();
+    if (field === "receiptPrintMode") {
+      await shell.api.setDepartmentSalePolicyField("d1", field, changed);
+      shell.model = await shell.api.background.load();
+      await shell.updateComplete;
+    } else {
+      await pick(service, field, changed);
+      await expect.poll(() => service.value[field]).toBe(changed);
+      await settings.updateComplete;
+      settings.shadowRoot!.querySelector<HTMLElement>("[data-test=save-editor]")!.click();
+    }
     await expect.poll(() => shell.model.salePolicies.departments[0]![field]).toBe(changed);
     await expect.poll(() => shell.getAttribute("aria-busy")).toBe("false");
     expect(writes).toEqual([
       {
-        path: "/management-api/venue-service/departments/d1/settings",
-        method: "PUT",
-        body: {
-          name: "Restaurant",
-          tradingName: "Casa",
-          orderStart: "table",
-          paidWhen: "prepay",
-          collectionNumber: "none",
-          receiptPrintMode: "auto",
-          printTradingName: false,
-          [field]: changed,
-        },
+        path:
+          field === "receiptPrintMode"
+            ? "/management-api/venue-service/departments/d1/sale-policy/receiptPrintMode"
+            : "/management-api/venue-service/departments/d1/settings",
+        method: field === "receiptPrintMode" ? "PATCH" : "PUT",
+        body:
+          field === "receiptPrintMode"
+            ? { value: "on_request" }
+            : {
+                name: "Restaurant",
+                tradingName: "Casa",
+                orderStart: "table",
+                paidWhen: "prepay",
+                collectionNumber: "none",
+                [field]: changed,
+              },
       },
     ]);
     const page = shell.shadowRoot!.querySelector("department-page")!;

@@ -153,3 +153,14 @@ whole-feature review, current-head CI and landing remain pending.
 Task 3 preview retirement checkpoint (2026-10-12): the public preview mount now accepts only active-department receipt/policy drafts. Legacy venue-only preview is removed; byte bounds, passive activity, printer width choice, saved rasters, QR and marks remain checked at this public boundary. The resumed five-file server run passes 216 cases; server types and focused lint pass, and formatting was corrected in the ported drafts suite. The fiscal golden/immutability pair passes 20 cases unedited. Seven installed controls each fail one assertion; restored candidate passes. All eight saved EN/ES, light/dark, 390/1280 receipt and Venue-language screenshot sheets were visually inspected. This completes preview retirement, not all of Task 3: full touched-prose audit and wider managed-flow LOOK remain alongside Tasks 4–5. No intermediate publication.
 
 Task 4 atomic zone-save prerequisite (2026-10-12): `ZoneEditInput` and `saveZoneSettings` now carry the name and four nullable policy overrides in one PUT. The route scopes an active assigned zone and separately requires `venue.configure` if its name changes; unchanged-name policy editing retains its module permission. Existing policy-only callers remain. New route status assertions failed before the route existed, and the new client case failed before its method existed. The final route/client run passes 198 cases; types/lint and five relevant root suites pass (2469 root cases). Three installed controls each fail an assertion for rename permission, persisted overrides and rollback after a forced policy refusal; restored suites pass 198. Existing test source prefixes are unchanged. No visible component changed. This is a Task 4 prerequisite inside the unpublished branch; list/dialog/department-write/drag work and wider Task 3 LOOK/audit remain.
+
+
+Task 4 department-editor checkpoint (2026-10-12): the current department PUT accepts only
+name, trading name, order start, paid when, collection ticket and optional transfers. Its transaction
+preserves existing receipt policy, and repairing a missing policy uses the receipt defaults the
+read model previously showed. The form moves trading name after name and omits receipt controls;
+its receipt-specific assertions now run at the receipt owner or the zone receipt picker. The new
+protected department dialog handles dirty Escape, pending Save, newer native edits, live deletion
+and stale native close events, but is not yet connected to the unified list. Existing department
+form validation, transfers and leave assertions remain. Whole Task 4 and Task 3's wider managed
+look/audit remain unfinished; no publication at this checkpoint.

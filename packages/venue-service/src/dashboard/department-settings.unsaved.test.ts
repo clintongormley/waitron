@@ -479,8 +479,6 @@ it.each(["tradingName", "receivingProfileId"] as const)(
           orderStart: "table",
           paidWhen: "prepay",
           collectionNumber: "none",
-          receiptPrintMode: "auto",
-          printTradingName: false,
           transfers: {
             receivingProfileId: kind === "receivingProfileId" ? "p1" : null,
             destinationDepartmentIds: [],
@@ -540,8 +538,6 @@ it.each(["tradingName", "receivingProfileId"] as const)(
           orderStart: "table",
           paidWhen: "prepay",
           collectionNumber: "none",
-          receiptPrintMode: "auto",
-          printTradingName: false,
           transfers: {
             receivingProfileId: kind === "receivingProfileId" ? "p1" : null,
             destinationDepartmentIds: [],
@@ -614,8 +610,6 @@ it("keeps native edits made during Save dirty against the submitted Settings sna
         orderStart: "table",
         paidWhen: "prepay",
         collectionNumber: "none",
-        receiptPrintMode: "auto",
-        printTradingName: false,
         transfers: { receivingProfileId: null, destinationDepartmentIds: [] },
       },
     ]);
@@ -700,8 +694,6 @@ it("a native receiving-profile edit during Save retains the submitted baseline a
           orderStart: "table",
           paidWhen: "prepay",
           collectionNumber: "none",
-          receiptPrintMode: "auto",
-          printTradingName: false,
           transfers: { receivingProfileId: "p1", destinationDepartmentIds: [] },
         },
       ],

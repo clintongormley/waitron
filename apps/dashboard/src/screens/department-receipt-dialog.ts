@@ -412,6 +412,7 @@ export class DepartmentReceiptDialog extends LitElement {
     delete errors[field];
     this.errors = errors;
     this.#scope?.changed();
+    if (saveActionState(this.#scope).unchanged) this.actionError = "";
     this.#queuePreview();
   }
   #problems(): Record<string, string> {

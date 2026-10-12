@@ -356,11 +356,9 @@ describe("combined settings requests", () => {
     await api.saveDepartmentSettings("d1", {
       name: "Dining",
       tradingName: "Receipt",
-      printTradingName: true,
       orderStart: "table",
       paidWhen: "ticket_then_pay",
       collectionNumber: "numbered",
-      receiptPrintMode: "on_request",
       transfers: { receivingProfileId: "p1", destinationDepartmentIds: ["d2"] },
     });
     expect(
@@ -376,11 +374,9 @@ describe("combined settings requests", () => {
         {
           name: "Dining",
           tradingName: "Receipt",
-          printTradingName: true,
           orderStart: "table",
           paidWhen: "ticket_then_pay",
           collectionNumber: "numbered",
-          receiptPrintMode: "on_request",
           transfers: { receivingProfileId: "p1", destinationDepartmentIds: ["d2"] },
         },
       ],

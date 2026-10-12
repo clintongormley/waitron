@@ -216,11 +216,9 @@ async function send(
 const departmentSettings = {
   name: "New dining",
   tradingName: "Dining receipt",
-  printTradingName: true,
   orderStart: "counter",
   paidWhen: "ticket_then_pay",
   collectionNumber: "numbered",
-  receiptPrintMode: "on_request",
 } as const;
 const zoneSettings = {
   orderStart: "counter",
@@ -236,6 +234,10 @@ async function settingsFixture() {
       name: "Dining",
       orderStart: "table",
     });
+    await tx
+      .update(departmentSalePolicies)
+      .set({ printTradingName: true, receiptPrintMode: "on_request" })
+      .where(eq(departmentSalePolicies.departmentId, department.id));
     await configureZone(tx, fx, {
       zoneId: fx.zoneId,
       departmentId: department.id,
@@ -322,8 +324,6 @@ describe("whole service settings saves", () => {
         await send(fx.app, "PUT", fx.departmentPath, fx.managerCookie, {
           ...departmentSettings,
           orderStart: "table",
-          receiptPrintMode: "auto",
-          printTradingName: false,
         })
       ).status,
     ).toBe(204);
@@ -341,7 +341,7 @@ describe("whole service settings saves", () => {
       read.model.salePolicies.departments.find(
         (row: { departmentId: string }) => row.departmentId === fx.departmentId,
       ).receiptPrintMode,
-    ).toBe("auto");
+    ).toBe("on_request");
     expect(
       (await send(fx.app, "PUT", fx.departmentPath, fx.managerCookie, departmentSettings)).status,
     ).toBe(204);
@@ -3717,5 +3717,92 @@ describe("atomic zone editor save", () => {
     } finally {
       await db.execute(sql`drop trigger refuse_editor_policy`);
     }
+  });
+});
+
+describe("department editor owns service settings separately from receipt policy", () => {
+  it("accepts only department fields and keeps the current receipt policy", async () => {
+    const fx = await settingsFixture();
+    await db
+      .update(departmentSalePolicies)
+      .set({ receiptPrintMode: "on_request", printTradingName: false })
+      .where(eq(departmentSalePolicies.departmentId, fx.departmentId));
+    const response = await send(fx.app, "PUT", fx.departmentPath, fx.managerCookie, {
+      name: "Service edit",
+      tradingName: "Shop",
+      orderStart: "counter",
+      paidWhen: "ticket_then_pay",
+      collectionNumber: "numbered",
+    });
+    expect(response.status).toBe(204);
+    const after = await settingsSnapshot(fx);
+    expect(
+      after.model.salePolicies.departments.find(
+        (row: { departmentId: string }) => row.departmentId === fx.departmentId,
+      ),
+    ).toEqual({
+      departmentId: fx.departmentId,
+      orderStart: "counter",
+      paidWhen: "ticket_then_pay",
+      collectionNumber: "numbered",
+      receiptPrintMode: "on_request",
+      printTradingName: false,
+    });
+    expect(
+      after.model.departments.find((row: { id: string }) => row.id === fx.departmentId),
+    ).toMatchObject({ name: "Service edit", tradingName: "Shop" });
+  });
+  it.each(["receiptPrintMode", "printTradingName"])(
+    "refuses receipt field %s without writes",
+    async (field) => {
+      const fx = await settingsFixture();
+      const before = await settingsSnapshot(fx);
+      const response = await send(fx.app, "PUT", fx.departmentPath, fx.managerCookie, {
+        name: "Service edit",
+        tradingName: "Shop",
+        orderStart: "counter",
+        paidWhen: "ticket_then_pay",
+        collectionNumber: "numbered",
+        [field]: field === "receiptPrintMode" ? "auto" : true,
+      });
+      expect(response.status).toBe(400);
+      expect(await response.json()).toMatchObject({
+        error: { code: "management.request_invalid", params: { field } },
+      });
+      expect(await settingsSnapshot(fx)).toEqual(before);
+    },
+  );
+});
+
+it("repairing an absent department policy preserves the previously read receipt defaults", async () => {
+  const fx = await settingsFixture();
+  await db
+    .delete(departmentSalePolicies)
+    .where(eq(departmentSalePolicies.departmentId, fx.departmentId));
+  const before = await settingsSnapshot(fx);
+  expect(
+    before.model.salePolicies.zones.find((row: { zoneId: string }) => row.zoneId === fx.zoneId)
+      .effective,
+  ).toMatchObject({ receiptPrintMode: "auto", printTradingName: false });
+  const response = await send(fx.app, "PUT", fx.departmentPath, fx.managerCookie, {
+    name: "Repaired",
+    tradingName: "Repair",
+    orderStart: "counter",
+    paidWhen: "ticket_then_pay",
+    collectionNumber: "numbered",
+  });
+  expect(response.status).toBe(204);
+  const after = await settingsSnapshot(fx);
+  expect(
+    after.model.salePolicies.departments.find(
+      (row: { departmentId: string }) => row.departmentId === fx.departmentId,
+    ),
+  ).toEqual({
+    departmentId: fx.departmentId,
+    orderStart: "counter",
+    paidWhen: "ticket_then_pay",
+    collectionNumber: "numbered",
+    receiptPrintMode: "auto",
+    printTradingName: false,
   });
 });

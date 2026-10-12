@@ -17,10 +17,10 @@ import {
 } from "@waitron/server-kit";
 import type { Logger } from "@waitron/server-kit";
 import {
-  saveDepartmentSettings,
+  saveDepartmentEditSettings,
   saveZoneServiceSettings,
   saveZoneSettings,
-  type DepartmentSettingsInput,
+  type DepartmentEditInput,
   type ZoneServiceSettingsInput,
   configureZone,
   createServiceZone,
@@ -650,46 +650,36 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
         onlyKeys(body, [
           "name",
           "tradingName",
-          "printTradingName",
           "orderStart",
           "paidWhen",
           "collectionNumber",
-          "receiptPrintMode",
           "transfers",
         ]);
-        const input: DepartmentSettingsInput = {
+        const input: DepartmentEditInput = {
           name: requireName(body.name, "name"),
           tradingName: requireName(body.tradingName, "tradingName"),
-          printTradingName: requireSalePolicyField(
-            "printTradingName",
-            body.printTradingName,
-            false,
-          ) as boolean,
           orderStart: requireSalePolicyField(
             "orderStart",
             body.orderStart,
             false,
-          ) as DepartmentSettingsInput["orderStart"],
+          ) as DepartmentEditInput["orderStart"],
           paidWhen: requireSalePolicyField(
             "paidWhen",
             body.paidWhen,
             false,
-          ) as DepartmentSettingsInput["paidWhen"],
+          ) as DepartmentEditInput["paidWhen"],
           collectionNumber: requireSalePolicyField(
             "collectionNumber",
             body.collectionNumber,
             false,
-          ) as DepartmentSettingsInput["collectionNumber"],
-          receiptPrintMode: requireSalePolicyField(
-            "receiptPrintMode",
-            body.receiptPrintMode,
-            false,
-          ) as DepartmentSettingsInput["receiptPrintMode"],
+          ) as DepartmentEditInput["collectionNumber"],
           ...(body.transfers === undefined
             ? {}
             : { transfers: requireTransferSettings(body.transfers) }),
         };
-        await gated(sessionId, (tx) => saveDepartmentSettings(tx, ctx.cfg, departmentId, input));
+        await gated(sessionId, (tx) =>
+          saveDepartmentEditSettings(tx, ctx.cfg, departmentId, input),
+        );
         return c.body(null, 204);
       }),
     );

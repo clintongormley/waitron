@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { userEvent } from "vitest/browser";
+import { page, userEvent } from "vitest/browser";
 import { applyTokens } from "@waitron/ui";
 import { setLocale } from "@waitron/dashboard-kit";
 import { cleanup, mountInShadowRoot } from "@waitron/ui/src/test-helpers.js";
@@ -296,5 +296,25 @@ it.each([false, true])(
           el.errors[field],
         );
     }
+  },
+);
+
+it.each([
+  ["en", "Search", "No results"],
+  ["es", "Buscar", "Sin resultados"],
+] as const)(
+  "the zone receipt picker's native search and empty result are localized in %s",
+  async (locale, search, empty) => {
+    setLocale(locale);
+    const el = await mount(inherited, department);
+    const control = box(el, "receiptPrintMode");
+    await userEvent.click(control.shadowRoot!.querySelector<HTMLButtonElement>("button")!);
+    await control.updateComplete;
+    const native = control.shadowRoot!.querySelector<HTMLInputElement>("input")!;
+    expect(native, "receipt search input is available").not.toBeNull();
+    expect(native.placeholder).toBe(search);
+    await userEvent.fill(page.elementLocator(native), "no receipt option has this name");
+    await control.updateComplete;
+    expect(control.shadowRoot!.textContent).toContain(empty);
   },
 );

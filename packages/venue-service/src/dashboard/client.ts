@@ -39,11 +39,15 @@ export interface ZoneSalePolicy {
   receiptPrintMode: ReceiptPrintMode | null;
   effective: Omit<DepartmentSalePolicy, "departmentId">;
 }
-export interface DepartmentSettingsInput extends Omit<DepartmentSalePolicy, "departmentId"> {
+export interface DepartmentSettingsInput extends Pick<
+  DepartmentSalePolicy,
+  "orderStart" | "paidWhen" | "collectionNumber"
+> {
   name: string;
   tradingName: string;
   transfers?: { receivingProfileId: string | null; destinationDepartmentIds: string[] };
 }
+export type DepartmentEditInput = DepartmentSettingsInput;
 export type ZoneServiceSettingsInput = Omit<ZoneSalePolicy, "zoneId" | "effective">;
 export type ZoneEditInput = ZoneServiceSettingsInput & { name: string };
 

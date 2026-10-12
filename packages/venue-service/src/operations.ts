@@ -714,6 +714,39 @@ export interface DepartmentSettingsInput extends DepartmentPolicyField {
   transfers?: { receivingProfileId: string | null; destinationDepartmentIds: string[] };
 }
 
+export type DepartmentEditInput = Pick<
+  DepartmentSettingsInput,
+  "name" | "tradingName" | "orderStart" | "paidWhen" | "collectionNumber" | "transfers"
+>;
+
+export async function saveDepartmentEditSettings(
+  tx: Transaction,
+  cfg: VenueScope,
+  departmentId: string,
+  input: DepartmentEditInput,
+): Promise<void> {
+  await updateDepartment(tx, cfg, departmentId, {
+    name: input.name,
+    tradingName: input.tradingName,
+  });
+  const settings = {
+    orderStart: input.orderStart,
+    paidWhen: input.paidWhen,
+    collectionNumber: input.collectionNumber,
+  };
+  await tx
+    .insert(departmentSalePolicies)
+    .values({
+      departmentId,
+      ...settings,
+      receiptPrintMode: "auto",
+      printTradingName: false,
+    })
+    .onConflictDoUpdate({ target: departmentSalePolicies.departmentId, set: settings });
+  if (input.transfers !== undefined)
+    await setDepartmentTransferSettings(tx, cfg, departmentId, input.transfers);
+}
+
 export async function saveDepartmentSettings(
   tx: Transaction,
   cfg: VenueScope,
